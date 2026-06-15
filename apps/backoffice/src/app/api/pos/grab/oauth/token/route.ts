@@ -18,6 +18,7 @@ import {
   issuePartnerToken,
   PARTNER_TOKEN_TTL_SECONDS,
 } from "@/lib/grab-partner";
+import { supabaseAdmin } from "@/lib/loyalty/supabase";
 
 export async function POST(req: NextRequest) {
   if (!partnerConfigured()) {
@@ -49,13 +50,24 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  if (!partnerCredsMatch(clientId, clientSecret)) {
-    // Diagnostic (no secrets): surfaces what Grab actually sends so an inbound 401
-    // can be pinned to a specific client_id / secret length in the runtime logs.
-    console.warn(
-      `[grab/oauth/token] invalid_client — incoming client_id="${String(clientId).slice(0, 12)}" ` +
-        `secret_len=${String(clientSecret).length}`,
-    );
+  const matched = partnerCredsMatch(clientId, clientSecret);
+  // TEMP capture (drop the grab_oauth_debug table once diagnosed): record what Grab
+  // actually sends so we can set GRAB_PARTNER_* to match. client_id + length only —
+  // the secret VALUE is never stored. Best-effort; never blocks the token response.
+  try {
+    await (supabaseAdmin as unknown as {
+      from: (t: string) => { insert: (v: Record<string, unknown>) => Promise<unknown> };
+    })
+      .from("grab_oauth_debug")
+      .insert({
+        client_id: String(clientId).slice(0, 200),
+        secret_len: String(clientSecret).length,
+        matched,
+      });
+  } catch {
+    /* ignore debug-write failures */
+  }
+  if (!matched) {
     return NextResponse.json({ error: "invalid_client" }, { status: 401 });
   }
 
