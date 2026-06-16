@@ -77,6 +77,9 @@ export default function GrabIntegrationPage() {
   // Manual "push latest menu to Grab": per-outlet busy flag + last result message.
   const [syncBusy, setSyncBusy] = useState<Record<string, boolean>>({});
   const [syncMsg, setSyncMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
+  // "Sync all menus" — push every connected outlet's menu to Grab in one click.
+  const [syncAllBusy, setSyncAllBusy] = useState(false);
+  const [syncAllMsg, setSyncAllMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -182,6 +185,38 @@ export default function GrabIntegrationPage() {
     }
   };
 
+  // Push the latest menu to every connected outlet at once (mirrors StoreHub's
+  // top-bar "Sync Menu"). Fans out to the same per-outlet endpoint so each store
+  // re-pulls its own menu (live 86 list + hours).
+  const syncAllMenus = async () => {
+    const linked = (data?.outlets ?? []).filter((o) => o.grabMerchantId);
+    if (linked.length === 0) return;
+    setSyncAllBusy(true);
+    setSyncAllMsg(null);
+    const results = await Promise.allSettled(
+      linked.map((o) =>
+        fetch("/api/pos/grab/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ merchantID: o.grabMerchantId }),
+        }).then(async (r) => {
+          const j = await r.json();
+          if (!r.ok || !j.ok) throw new Error(j.error_description || j.error || `HTTP ${r.status}`);
+        }),
+      ),
+    );
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - ok;
+    setSyncAllMsg({
+      ok: failed === 0,
+      text:
+        failed === 0
+          ? `Pushed menu to all ${ok} connected outlet${ok === 1 ? "" : "s"} — Grab will re-pull shortly.`
+          : `${ok} synced, ${failed} failed. Use the per-outlet button below to retry the failures.`,
+    });
+    setSyncAllBusy(false);
+  };
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -211,13 +246,37 @@ export default function GrabIntegrationPage() {
             Outlet linkage, sync activity, and operational status for the GrabFood Partner API integration.
           </p>
         </div>
-        <button
-          onClick={load}
-          className="inline-flex items-center gap-2 rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-        >
-          <RefreshCw className="h-4 w-4" /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {linkedCount > 0 ? (
+            <button
+              onClick={syncAllMenus}
+              disabled={syncAllBusy}
+              title="Push the latest backoffice menu to every connected outlet"
+              className="inline-flex items-center gap-2 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {syncAllBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Sync all menus
+            </button>
+          ) : null}
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-2 rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+          >
+            <RefreshCw className="h-4 w-4" /> Refresh
+          </button>
+        </div>
       </div>
+
+      {syncAllMsg ? (
+        <div
+          className={`rounded border p-3 text-sm ${
+            syncAllMsg.ok
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-amber-200 bg-amber-50 text-amber-800"
+          }`}
+        >
+          {syncAllMsg.text}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
