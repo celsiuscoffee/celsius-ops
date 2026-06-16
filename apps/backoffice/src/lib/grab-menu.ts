@@ -103,15 +103,21 @@ export function convertProductToGrabItem(product: RawProduct, sequence = 1): Gra
     "grab",
   ) as unknown as RawProduct["modifiers"];
 
+  const availableStatus: GrabMenuItem["availableStatus"] =
+    product.is_available === false ? "UNAVAILABLE" : "AVAILABLE";
   return {
     id: product.id,
     name: product.name,
     sequence,
-    availableStatus: product.is_available === false ? "UNAVAILABLE" : "AVAILABLE",
+    availableStatus,
     description: product.description || undefined,
     price: Math.round(resolveGrabPriceRM(product) * 100), // RM → sen
     campaignInfo: null,
     photos: product.image_url ? [product.image_url] : undefined,
+    // Grab REQUIRES maxStock:0 whenever availableStatus is UNAVAILABLE — omitting it
+    // makes Grab reject the entire menu push ("failed to push your menu"). AVAILABLE
+    // items leave maxStock unset (Grab treats absent maxStock as in-stock).
+    ...(availableStatus === "UNAVAILABLE" ? { maxStock: 0 } : {}),
     modifierGroups: convertToGrabModifiers(product.id, visibleMods),
   };
 }
@@ -188,7 +194,11 @@ export function buildGrabMenuPayload(
       items: prods.map((product, iIdx) => {
         const item = convertProductToGrabItem(product, iIdx + 1);
         // Per-outlet 86 overrides the global flag → out of stock on Grab too.
-        if (opts.unavailableProductIds?.has(product.id)) item.availableStatus = "UNAVAILABLE";
+        // Grab requires maxStock:0 alongside UNAVAILABLE (see convertProductToGrabItem).
+        if (opts.unavailableProductIds?.has(product.id)) {
+          item.availableStatus = "UNAVAILABLE";
+          item.maxStock = 0;
+        }
         return item;
       }),
     }),
