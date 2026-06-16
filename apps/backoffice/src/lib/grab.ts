@@ -158,6 +158,7 @@ export interface GrabMenuCategory {
   sequence?: number;
   nameTranslation?: Record<string, string>;
   availableStatus: "AVAILABLE" | "UNAVAILABLE";
+  sellingTimeID: string;
   items: GrabMenuItem[];
 }
 
@@ -171,21 +172,25 @@ type GrabServiceHours = {
   sun: { openPeriodType: string; periods: Array<{ startTime: string; endTime: string }> };
 };
 
-// GrabFood "Old Structure (Section Based Menu)": menu = list of sections;
-// each section has its own serviceHours + categories[] of items.
-export interface GrabMenuSection {
+// GrabFood "Selling Time Based" menu — the ONLY structure self-serve activation
+// accepts. Per the v1.1.3 docs, "section-based menus will not be able to proceed
+// with integration activation". Selling times are declared once at the top level
+// (each with a date window + per-day serviceHours); categories reference them by
+// sellingTimeID. This replaced the old section-based payload.
+export interface GrabSellingTime {
   id: string;
   name: string;
-  sequence?: number;
+  startTime: string; // "YYYY-MM-DD HH:mm:ss" (UTC)
+  endTime: string; //   "YYYY-MM-DD HH:mm:ss" (UTC)
   serviceHours: GrabServiceHours;
-  categories: GrabMenuCategory[];
 }
 
 export interface GrabMenuPayload {
   merchantID: string;
   partnerMerchantID?: string;
   currency: { code: string; symbol: string; exponent: number };
-  sections: GrabMenuSection[];
+  sellingTimes: GrabSellingTime[];
+  categories: GrabMenuCategory[];
 }
 
 /**

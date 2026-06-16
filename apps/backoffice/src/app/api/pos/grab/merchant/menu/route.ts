@@ -105,9 +105,9 @@ export async function GET(request: NextRequest) {
     serviceHours,
     unavailableProductIds: unavailableIds,
   });
-  const catCount = menu.sections.reduce((n, s) => n + s.categories.length, 0);
+  const catCount = menu.categories.length;
   console.log(
-    `[grab:get-menu] served menu merchant=${merchantId} sections=${menu.sections.length} categories=${catCount} items=${grabProducts.length}`,
+    `[grab:get-menu] served menu merchant=${merchantId} sellingTimes=${menu.sellingTimes.length} categories=${catCount} items=${grabProducts.length}`,
   );
   return NextResponse.json(menu);
 }
