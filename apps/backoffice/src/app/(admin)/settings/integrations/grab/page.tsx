@@ -74,6 +74,9 @@ export default function GrabIntegrationPage() {
   const [ssUrl, setSsUrl] = useState<Record<string, string>>({});
   const [ssErr, setSsErr] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<string | null>(null);
+  // Manual "push latest menu to Grab": per-outlet busy flag + last result message.
+  const [syncBusy, setSyncBusy] = useState<Record<string, boolean>>({});
+  const [syncMsg, setSyncMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -144,6 +147,38 @@ export default function GrabIntegrationPage() {
       setTimeout(() => setCopied((c) => (c === outletId ? null : c)), 1500);
     } catch {
       /* clipboard blocked — the URL is still visible to copy manually */
+    }
+  };
+
+  // Push the latest backoffice menu to Grab for a linked outlet. We call
+  // notifyMenuUpdate with the outlet's Grab merchant ID; Grab then re-pulls our
+  // get-menu webhook, which serves that outlet's current menu (live 86 list +
+  // service hours). Backoffice stays the source of truth — this just makes Grab
+  // follow on demand instead of waiting for its own next pull.
+  const syncMenu = async (outletId: string, merchantID: string) => {
+    setSyncBusy((s) => ({ ...s, [outletId]: true }));
+    setSyncMsg((s) => ({ ...s, [outletId]: { ok: true, text: "" } }));
+    try {
+      const res = await fetch("/api/pos/grab/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ merchantID }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error_description || json.error || `HTTP ${res.status}`);
+      }
+      setSyncMsg((s) => ({
+        ...s,
+        [outletId]: { ok: true, text: "Menu pushed — Grab will re-pull the latest backoffice menu shortly." },
+      }));
+    } catch (e) {
+      setSyncMsg((s) => ({
+        ...s,
+        [outletId]: { ok: false, text: e instanceof Error ? e.message : "Sync failed" },
+      }));
+    } finally {
+      setSyncBusy((s) => ({ ...s, [outletId]: false }));
     }
   };
 
@@ -272,6 +307,7 @@ export default function GrabIntegrationPage() {
           {data.outlets.map((o) => {
             const url = ssUrl[o.id];
             const err = ssErr[o.id];
+            const sync = syncMsg[o.id];
             return (
               <div key={o.id} className="px-5 py-3">
                 <div className="flex items-center gap-3">
@@ -284,6 +320,17 @@ export default function GrabIntegrationPage() {
                       Partner store ID: <code>{o.id}</code>
                     </div>
                   </div>
+                  {o.grabMerchantId ? (
+                    <button
+                      onClick={() => syncMenu(o.id, o.grabMerchantId!)}
+                      disabled={syncBusy[o.id]}
+                      title="Push the latest backoffice menu to Grab for this outlet"
+                      className="inline-flex items-center gap-1.5 rounded border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {syncBusy[o.id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      Sync menu
+                    </button>
+                  ) : null}
                   <button
                     onClick={() => generateSelfServe(o.id)}
                     disabled={ssBusy[o.id]}
@@ -313,6 +360,9 @@ export default function GrabIntegrationPage() {
                   </div>
                 ) : null}
                 {err ? <div className="mt-2 text-xs text-red-600">{err}</div> : null}
+                {sync && sync.text ? (
+                  <div className={`mt-2 text-xs ${sync.ok ? "text-emerald-700" : "text-red-600"}`}>{sync.text}</div>
+                ) : null}
               </div>
             );
           })}
