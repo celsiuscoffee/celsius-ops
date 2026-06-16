@@ -27,6 +27,8 @@ type OutletLinkRow = {
   storehubId: string | null;
   grabMerchantId: string | null;
   is_active: boolean;
+  grab_integration_status: string | null;
+  grab_integration_status_at: Date | null;
 };
 
 type RecentOrderRow = {
@@ -53,7 +55,9 @@ export async function GET(req: NextRequest) {
            city,
            "storehubId",
            "grabMerchantId",
-           (status = 'ACTIVE'::"OutletStatus") AS is_active
+           (status = 'ACTIVE'::"OutletStatus") AS is_active,
+           "grabIntegrationStatus"   AS grab_integration_status,
+           "grabIntegrationStatusAt" AS grab_integration_status_at
     FROM "Outlet"
     WHERE "loyaltyOutletId" IS NOT NULL
     ORDER BY name ASC
@@ -110,6 +114,8 @@ export async function GET(req: NextRequest) {
       storehubId: o.storehubId,
       grabMerchantId: o.grabMerchantId,
       isActive: o.is_active,
+      integrationStatus: o.grab_integration_status,
+      integrationStatusAt: o.grab_integration_status_at,
     })),
     recentOrders: recentOrders.map((o) => ({
       id: o.id,

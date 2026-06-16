@@ -34,6 +34,10 @@ type Outlet = {
   storehubId: string | null;
   grabMerchantId: string | null;
   isActive: boolean;
+  // Grab integration status, pushed by Grab to /api/pos/grab/status during/after
+  // self-serve activation: ACTIVE / SYNCING / FAILED / INACTIVE (null = never linked).
+  integrationStatus: string | null;
+  integrationStatusAt: string | null;
 };
 
 type RecentOrder = {
@@ -272,7 +276,10 @@ export default function GrabIntegrationPage() {
               <div key={o.id} className="px-5 py-3">
                 <div className="flex items-center gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-neutral-900">{o.name}</div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-neutral-900">
+                      {o.name}
+                      <ConnectionBadge status={o.integrationStatus} at={o.integrationStatusAt} />
+                    </div>
                     <div className="text-xs text-neutral-500">
                       Partner store ID: <code>{o.id}</code>
                     </div>
@@ -434,6 +441,27 @@ function StatusPill({ status }: { status: string | null }) {
   return (
     <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>
       {status || "—"}
+    </span>
+  );
+}
+
+// Grab integration connection state per outlet, from Grab's /status webhook
+// pushes (ACTIVE / SYNCING / FAILED / INACTIVE; null = never linked).
+function ConnectionBadge({ status, at }: { status: string | null; at: string | null }) {
+  const s = (status || "").toUpperCase();
+  const map: Record<string, { label: string; cls: string }> = {
+    ACTIVE: { label: "● Connected", cls: "bg-emerald-100 text-emerald-700" },
+    SYNCING: { label: "● Syncing", cls: "bg-blue-100 text-blue-700" },
+    FAILED: { label: "● Failed", cls: "bg-red-100 text-red-700" },
+    INACTIVE: { label: "● Inactive", cls: "bg-neutral-100 text-neutral-600" },
+  };
+  const m = map[s] ?? { label: "○ Not linked", cls: "bg-neutral-100 text-neutral-500" };
+  const title = at
+    ? `Grab reported "${s}" at ${new Date(at).toLocaleString("en-MY", { dateStyle: "short", timeStyle: "short" })}`
+    : "No integration status received from Grab yet";
+  return (
+    <span title={title} className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${m.cls}`}>
+      {m.label}
     </span>
   );
 }
