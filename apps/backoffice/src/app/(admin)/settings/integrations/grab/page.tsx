@@ -153,11 +153,10 @@ export default function GrabIntegrationPage() {
     }
   };
 
-  // Push the latest backoffice menu to Grab for a linked outlet. We call
-  // notifyMenuUpdate with the outlet's Grab merchant ID; Grab then re-pulls our
-  // get-menu webhook, which serves that outlet's current menu (live 86 list +
-  // service hours). Backoffice stays the source of truth — this just makes Grab
-  // follow on demand instead of waiting for its own next pull.
+  // Push the latest backoffice menu to Grab for a linked outlet. The endpoint
+  // builds that outlet's menu (live 86 list + service hours) and PUTs it straight
+  // to GrabFood. Backoffice stays the source of truth — this makes GrabFood match
+  // it on demand instead of waiting on Grab.
   const syncMenu = async (outletId: string, merchantID: string) => {
     setSyncBusy((s) => ({ ...s, [outletId]: true }));
     setSyncMsg((s) => ({ ...s, [outletId]: { ok: true, text: "" } }));
@@ -173,7 +172,7 @@ export default function GrabIntegrationPage() {
       }
       setSyncMsg((s) => ({
         ...s,
-        [outletId]: { ok: true, text: "Menu pushed — Grab will re-pull the latest backoffice menu shortly." },
+        [outletId]: { ok: true, text: "Menu pushed to GrabFood — the storefront will reflect it shortly." },
       }));
     } catch (e) {
       setSyncMsg((s) => ({
@@ -187,7 +186,7 @@ export default function GrabIntegrationPage() {
 
   // Push the latest menu to every connected outlet at once (mirrors StoreHub's
   // top-bar "Sync Menu"). Fans out to the same per-outlet endpoint so each store
-  // re-pulls its own menu (live 86 list + hours).
+  // gets its own menu pushed (live 86 list + hours).
   const syncAllMenus = async () => {
     const linked = (data?.outlets ?? []).filter((o) => o.grabMerchantId);
     if (linked.length === 0) return;
@@ -211,7 +210,7 @@ export default function GrabIntegrationPage() {
       ok: failed === 0,
       text:
         failed === 0
-          ? `Pushed menu to all ${ok} connected outlet${ok === 1 ? "" : "s"} — Grab will re-pull shortly.`
+          ? `Pushed menu to all ${ok} connected outlet${ok === 1 ? "" : "s"} — GrabFood will reflect it shortly.`
           : `${ok} synced, ${failed} failed. Use the per-outlet button below to retry the failures.`,
     });
     setSyncAllBusy(false);

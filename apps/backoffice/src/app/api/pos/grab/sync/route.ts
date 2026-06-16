@@ -1,19 +1,31 @@
 /**
- * Manual "Sync menu to Grab" — outbound (us → Grab).
+ * Manual "Sync menu to Grab" — outbound push (us → Grab).
  *
  * POST /api/pos/grab/sync   { merchantID }    (staff-auth)
- *   -> notifyMenuUpdate(merchantID)
  *
- * Tells GrabFood our menu changed for this store so Grab re-pulls our latest menu
- * via the get-menu webhook (which serves the per-outlet menu incl. the 86 list +
- * service hours). Backoffice stays the source of truth; this just makes Grab
- * follow on demand instead of waiting for its own next pull — so edits like a
- * hidden item, a new photo, or a price change show up on GrabFood right away.
+ * Builds the per-outlet menu (the SAME builder the get-menu webhook serves) and
+ * PUTs it straight to Grab via updateMenu. We PUSH rather than notify: these
+ * self-serve stores reject the notify→pull trigger — POST .../menu/notification
+ * returns {"target":"UnsupportedMenuSync","reason":"invalid_argument"}. Pushing
+ * makes GrabFood match backoffice on demand (corrected photos, hidden items,
+ * price changes) instead of waiting on Grab.
+ *
+ * Per-outlet data (hours, 86 list) is read with the service-role key, same as the
+ * inbound webhook; the route itself is staff-gated by requireAuth.
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { requireAuth } from "@/lib/auth";
-import { notifyMenuUpdate } from "@/lib/grab";
+import { updateMenu } from "@/lib/grab";
+import { buildOutletGrabMenu } from "@/lib/grab-menu-outlet";
+
+function serviceClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
+}
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -42,9 +54,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const menu = await buildOutletGrabMenu(serviceClient(), merchantID);
+  if (!menu) {
+    return NextResponse.json(
+      { ok: false, error: "build_failed", error_description: "Could not build the menu for this outlet." },
+      { status: 500 },
+    );
+  }
+
   try {
-    const result = await notifyMenuUpdate(merchantID);
-    return NextResponse.json({ ok: true, merchantID, result });
+    const result = await updateMenu(menu);
+    const items = menu.categories.reduce((n, c) => n + c.items.length, 0);
+    return NextResponse.json({ ok: true, merchantID, categories: menu.categories.length, items, result });
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: "sync_failed", error_description: err instanceof Error ? err.message : "Unknown error" },
