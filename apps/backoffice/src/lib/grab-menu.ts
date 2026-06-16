@@ -64,6 +64,25 @@ export function resolveGrabPriceRM(product: RawProduct): number {
   return Number.isFinite(base) && base > 0 ? base : 0;
 }
 
+/**
+ * Cap a product image for Grab's menu import. Grab's importer rejects oversized
+ * images — several of our Cloudinary product PNGs are 6–8MB, and a single
+ * over-limit image fails the WHOLE menu push ("failed to push your menu") even
+ * when every other field is valid. For Cloudinary URLs, insert an on-the-fly
+ * transform: downscale to ≤1280px (c_limit never upscales), auto-quality, force
+ * JPEG — bringing every image under ~200KB without re-uploading. Non-Cloudinary
+ * (or already-transformed) URLs pass through unchanged.
+ */
+export function grabSafeImageUrl(url: string): string {
+  const MARKER = "/image/upload/";
+  const i = url.indexOf(MARKER);
+  if (i === -1 || !url.includes("res.cloudinary.com")) return url;
+  const tail = url.slice(i + MARKER.length);
+  // Only transform the raw `v<version>/…` form so we never double-stack params.
+  if (!/^v\d+\//.test(tail)) return url;
+  return `${url.slice(0, i + MARKER.length)}c_limit,w_1280,q_auto:good,f_jpg/${tail}`;
+}
+
 export function convertToGrabModifiers(
   productId: string,
   rawModifiers: RawProduct["modifiers"],
@@ -113,7 +132,7 @@ export function convertProductToGrabItem(product: RawProduct, sequence = 1): Gra
     description: product.description || undefined,
     price: Math.round(resolveGrabPriceRM(product) * 100), // RM → sen
     campaignInfo: null,
-    photos: product.image_url ? [product.image_url] : undefined,
+    photos: product.image_url ? [grabSafeImageUrl(product.image_url)] : undefined,
     // Grab REQUIRES maxStock:0 whenever availableStatus is UNAVAILABLE — omitting it
     // makes Grab reject the entire menu push ("failed to push your menu"). AVAILABLE
     // items leave maxStock unset (Grab treats absent maxStock as in-stock).
