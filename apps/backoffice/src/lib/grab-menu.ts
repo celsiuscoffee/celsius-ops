@@ -66,11 +66,14 @@ export function resolveGrabPriceRM(product: RawProduct): number {
 /**
  * Cap a product image for Grab's menu import. Grab's importer rejects oversized
  * images — several of our Cloudinary product PNGs are 6–8MB, and a single
- * over-limit image fails the WHOLE menu push ("failed to push your menu") even
- * when every other field is valid. For Cloudinary URLs, insert an on-the-fly
- * transform: downscale to ≤1280px (c_limit never upscales), auto-quality, force
- * JPEG — bringing every image under ~200KB without re-uploading. Non-Cloudinary
- * (or already-transformed) URLs pass through unchanged.
+ * over-limit image fails the WHOLE menu push. For Cloudinary URLs, insert an
+ * on-the-fly downscale transform — FORMAT-AWARE so Grab's photo still matches the
+ * backoffice source:
+ *   - PNGs are product cut-outs WITH transparency. Forcing JPEG (or q_auto)
+ *     flattens it to a solid background, so they'd stop matching the BO image —
+ *     keep PNG (f_png, no q_auto), width-capped to ~900px (≈1MB, under Grab's cap).
+ *   - JPEGs are photographic — compress hard (q_auto + f_jpg) → ~100KB.
+ * Non-Cloudinary (or already-transformed) URLs pass through unchanged.
  */
 export function grabSafeImageUrl(url: string): string {
   const MARKER = "/image/upload/";
@@ -79,7 +82,11 @@ export function grabSafeImageUrl(url: string): string {
   const tail = url.slice(i + MARKER.length);
   // Only transform the raw `v<version>/…` form so we never double-stack params.
   if (!/^v\d+\//.test(tail)) return url;
-  return `${url.slice(0, i + MARKER.length)}c_limit,w_1280,q_auto:good,f_jpg/${tail}`;
+  // Transparent PNGs must stay PNG; photographic JPEGs compress hard.
+  const transform = /\.png(?:$|\?)/i.test(url)
+    ? "c_limit,w_900,f_png"
+    : "c_limit,w_1280,q_auto:good,f_jpg";
+  return `${url.slice(0, i + MARKER.length)}${transform}/${tail}`;
 }
 
 export function convertToGrabModifiers(
