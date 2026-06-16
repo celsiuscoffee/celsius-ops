@@ -52,8 +52,8 @@ export async function POST(request: NextRequest) {
     await notifyMenuUpdate(merchantId);
     return NextResponse.json({
       success: true,
-      sectionsCount: menuPayload.sections.length,
-      categoriesCount: menuPayload.sections.reduce((n, s) => n + s.categories.length, 0),
+      sellingTimesCount: menuPayload.sellingTimes.length,
+      categoriesCount: menuPayload.categories.length,
       itemsCount: productsRes.data.length,
       result,
     });

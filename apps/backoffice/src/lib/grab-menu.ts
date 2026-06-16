@@ -9,7 +9,6 @@
 import type {
   GrabMenuCategory,
   GrabMenuItem,
-  GrabMenuSection,
   GrabModifierGroup,
   GrabMenuPayload,
 } from "@/lib/grab";
@@ -204,12 +203,18 @@ export function buildGrabMenuPayload(
     if (!categoryMap.has(cat)) categoryMap.set(cat, []);
     categoryMap.get(cat)!.push(product);
   }
+  // GrabFood self-serve activation ONLY accepts the "Selling Time Based" menu —
+  // section-based payloads are rejected ("section-based menus will not be able to
+  // proceed with integration activation"). One all-day selling time; every
+  // category references it via sellingTimeID, all hung at the top level.
+  const SELLING_TIME_ID = "all-day";
   const categories: GrabMenuCategory[] = Array.from(categoryMap.entries()).map(
     ([slug, prods], cIdx) => ({
       id: `cat-${cIdx}`,
       name: opts.categoryNames?.[slug] || slug || "Uncategorized",
       sequence: cIdx + 1,
       availableStatus: "AVAILABLE" as const,
+      sellingTimeID: SELLING_TIME_ID,
       items: prods.map((product, iIdx) => {
         const item = convertProductToGrabItem(product, iIdx + 1);
         // Per-outlet 86 overrides the global flag → out of stock on Grab too.
@@ -222,17 +227,21 @@ export function buildGrabMenuPayload(
       }),
     }),
   );
-  const section: GrabMenuSection = {
-    id: "section-all-day",
-    name: "All Day",
-    sequence: 1,
-    serviceHours: opts.serviceHours ?? DEFAULT_SERVICE_HOURS,
-    categories,
-  };
   return {
     merchantID: merchantId,
     ...(opts.partnerMerchantId ? { partnerMerchantID: opts.partnerMerchantId } : {}),
     currency: opts.currency ?? { code: "MYR", symbol: "RM", exponent: 2 },
-    sections: [section],
+    sellingTimes: [
+      {
+        id: SELLING_TIME_ID,
+        name: "All Day",
+        // Date window must be present + wide so the selling time is always active;
+        // the per-day serviceHours carry the real open/close window.
+        startTime: "2020-01-01 00:00:00",
+        endTime: "2099-12-31 23:59:59",
+        serviceHours: opts.serviceHours ?? DEFAULT_SERVICE_HOURS,
+      },
+    ],
+    categories,
   };
 }
