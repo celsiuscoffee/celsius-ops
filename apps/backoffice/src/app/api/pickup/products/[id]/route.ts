@@ -37,6 +37,12 @@ export async function PATCH(
   if (typeof body.description === "string")  update.description  = body.description;
   if (typeof body.category_id === "string")  update.category     = body.category_id;
   if (typeof body.image === "string")        update.image_url    = body.image;
+  // Product-image zoom (percentage, 50–200; 100 = no zoom). Clamp to the
+  // slider's range so a stray value can't break the storefront layout. Not in
+  // GRAB_RELEVANT_COLUMNS — zoom is display-only and doesn't change the Grab menu.
+  if (typeof body.image_zoom === "number" && Number.isFinite(body.image_zoom)) {
+    update.image_zoom = Math.min(200, Math.max(50, Math.round(body.image_zoom)));
+  }
   if (typeof body.is_available === "boolean") update.is_available = body.is_available;
   if (typeof body.is_popular === "boolean")  update.is_featured  = body.is_popular;
   if (typeof body.position === "number" && Number.isFinite(body.position)) {

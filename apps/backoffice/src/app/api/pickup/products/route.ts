@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, track_stock, synced_at, position, featured_position, print_additional_docket, kitchen_station, e_invoice_classification_code, schedule_start_date, schedule_end_date, schedule_days_of_week, schedule_time_from, schedule_time_to, price_pickup, price_grab, price_foodpanda, price_dinein, tax_rate, tax_inclusive, grab_item_id")
+    .select("id, name, category, price, image_url, image_zoom, is_available, is_featured, modifiers, track_stock, synced_at, position, featured_position, print_additional_docket, kitchen_station, e_invoice_classification_code, schedule_start_date, schedule_end_date, schedule_days_of_week, schedule_time_from, schedule_time_to, price_pickup, price_grab, price_foodpanda, price_dinein, tax_rate, tax_inclusive, grab_item_id")
     .eq("brand_id", "brand-celsius")
     .order("category")
     .order("position")
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     description:  "",
     base_price:   Math.round((p.price as number) * 100),
     image:        (p.image_url as string) ?? "",
-    image_zoom:   100,
+    image_zoom:   (p.image_zoom as number) ?? 100,
     is_available: p.is_available ?? true,
     is_popular:   p.is_featured ?? false,
     is_new:       false,
@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
     image?: string;
     is_available?: boolean;
     is_popular?: boolean;
+    image_zoom?: number;
     modifiers?: unknown[];
     // Channel pricing + tax/e-Invoice (StoreHub-parity, added 2026-05-26).
     // All optional — empty/undefined channel price means "use base price".
@@ -152,13 +153,16 @@ export async function POST(request: NextRequest) {
       category,
       price:       body.base_price_rm,
       image_url:   body.image ?? "",
+      image_zoom:  typeof body.image_zoom === "number" && Number.isFinite(body.image_zoom)
+        ? Math.min(200, Math.max(50, Math.round(body.image_zoom)))
+        : 100,
       is_available: body.is_available ?? true,
       is_featured:  body.is_popular ?? false,
       modifiers:    body.modifiers ?? [],
       position:     nextPosition,
       ...channelTaxInsert,
     })
-    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, position")
+    .select("id, name, category, price, image_url, image_zoom, is_available, is_featured, modifiers, position")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -177,7 +181,7 @@ export async function POST(request: NextRequest) {
     description:  "",
     base_price:   Math.round(((data as Record<string,unknown>).price as number) * 100),
     image:        (data as Record<string,unknown>).image_url ?? "",
-    image_zoom:   100,
+    image_zoom:   ((data as Record<string,unknown>).image_zoom as number) ?? 100,
     is_available: (data as Record<string,unknown>).is_available ?? true,
     is_popular:   (data as Record<string,unknown>).is_featured ?? false,
     is_new:       false,
