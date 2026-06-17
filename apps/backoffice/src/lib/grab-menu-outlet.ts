@@ -25,7 +25,7 @@ export async function buildOutletGrabMenu(
   merchantId: string,
 ): Promise<ReturnType<typeof buildGrabMenuPayload> | null> {
   const [productsRes, categoriesRes] = await Promise.all([
-    supabase.from("products").select("*").order("category").order("name"),
+    supabase.from("products").select("*").order("category").order("position").order("name"),
     supabase.from("categories").select("id, slug, name").order("position", { ascending: true }),
   ]);
 
@@ -67,11 +67,16 @@ export async function buildOutletGrabMenu(
   }
 
   // Build slug→displayName map so Grab sees "Artisan Choc" instead of "artisan-choc".
+  // Also capture each category's rank (categoriesRes is ordered by position) so the
+  // Grab menu can mirror the pickup catalog's category order, not just A–Z.
   const categoryNames: Record<string, string> = {};
-  for (const c of categoriesRes.data || []) {
+  const categoryRank: Record<string, number> = {};
+  (categoriesRes.data || []).forEach((c, idx) => {
     if (c.slug && c.name) categoryNames[c.slug] = c.name;
     if (c.id && c.name) categoryNames[c.id] = c.name; // products.category might store id too
-  }
+    if (c.slug) categoryRank[c.slug] = idx;
+    if (c.id) categoryRank[c.id] = idx; // products.category might store id too
+  });
 
   // "Show on" placement: only products visible on the Grab channel ship (empty
   // visible_channels = everywhere — same allow-list rule as modifiers).
@@ -79,6 +84,22 @@ export async function buildOutletGrabMenu(
     const vc = (p as { visible_channels?: string[] }).visible_channels;
     return !Array.isArray(vc) || vc.length === 0 || vc.includes("grab");
   });
+
+  // Follow the pickup catalog's arrangement: category order by categories.position,
+  // then products by their per-category position (then name). buildGrabMenuPayload
+  // emits categories in first-seen order and items in array order, so sorting the
+  // array here is what drives the on-Grab ordering.
+  const rankOf = (p: RawProduct) => categoryRank[p.category] ?? Number.MAX_SAFE_INTEGER;
+  const posOf = (p: RawProduct) => {
+    const n = Number((p as { position?: number }).position);
+    return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+  };
+  grabProducts.sort(
+    (a, b) =>
+      rankOf(a) - rankOf(b) ||
+      posOf(a) - posOf(b) ||
+      (a.name || "").localeCompare(b.name || ""),
+  );
 
   return buildGrabMenuPayload(grabProducts, merchantId, {
     ...grabMenuOptionsFromEnv(),
