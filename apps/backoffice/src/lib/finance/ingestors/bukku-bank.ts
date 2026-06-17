@@ -9,7 +9,10 @@
 import { prisma } from "@/lib/prisma";
 import { ingestBankLines, type BankIngestResult } from "./bank-feed";
 import { mapBukkuTransactions, type BukkuBankTxn, type BukkuListResponse } from "./bukku-bank-map";
+import { probeBukkuOutlet, type BukkuProbe } from "./bukku-bank-probe";
 import type { BankLineInput } from "./bank-feed-build";
+
+export type { BukkuProbe } from "./bukku-bank-probe";
 
 const DEFAULT_BASE_URL = "https://api.bukku.my";
 const PAGE_SIZE = 100;
@@ -85,3 +88,19 @@ export async function syncBukkuBankFeed(opts: { from: string; to: string; baseUr
   const ingest = await ingestBankLines(all);
   return { from: opts.from, to: opts.to, outlets: perOutlet, ingest };
 }
+
+// Probe every Bukku-enabled outlet for a recent window (read-only, no ingest).
+// The per-token probe lives in bukku-bank-probe.ts (no prisma, so it's
+// unit-tested with a stubbed fetch); this just loads the tokens.
+export async function probeBukkuBankFeed(opts: { from: string; to: string; baseUrl?: string }): Promise<BukkuProbe[]> {
+  const outlets = await prisma.outlet.findMany({
+    where: { bukkuEnabled: true, bukkuToken: { not: null } },
+    select: { name: true, bukkuToken: true },
+  });
+  const results: BukkuProbe[] = [];
+  for (const o of outlets) {
+    results.push(await probeBukkuOutlet({ outlet: o.name, token: o.bukkuToken!, from: opts.from, to: opts.to, baseUrl: opts.baseUrl }));
+  }
+  return results;
+}
+
