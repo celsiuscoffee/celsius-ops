@@ -341,6 +341,73 @@ export async function listOrders(
   });
 }
 
+// ─── Edit Order (V2) ─────────────────────────────────────────────────────────
+// PUT /partner/v2/orders/{orderID} — edit a live order: delete items, change
+// quantities, change/remove modifiers, or add a replacement item. V1
+// (/partner/v1/orders/{orderID}) is deprecated. Grab re-emits the edited order
+// via the submit-order webhook (same orderID, featureFlags.isMexEditOrder=true).
+//
+// Rules baked into the contract (see Grab docs):
+//   • The payload MUST include EVERY item in the order (changed or not).
+//   • Item price is NOT editable — Grab keeps the original price.
+//   • A replacement (newly ADDED) item uses externalItemID (= our products.id)
+//     and must be appended to the END of the array. Adding items is unsupported
+//     in staging and may be feature-flagged in production.
+//   • Modifiers: omit the field if unchanged; send quantity 0 to remove one.
+//   • onlyRecalculate:true recalculates WITHOUT submitting — the safe way to
+//     validate a payload before mutating a real order.
+//
+// NOTE: Grab's published schema collapses the EditOrderItem object, so the field
+// names below are modelled on the order webhook's item shape + the documented
+// behaviour. Validate with onlyRecalculate:true before relying on a live edit.
+
+export interface EditOrderItemModifier {
+  /** Grab's modifier id (or our minted "<productId>-m-<g>-<i>"). */
+  id?: string;
+  /** Final quantity for this modifier; 0 removes it. */
+  quantity?: number;
+}
+
+export interface EditOrderItem {
+  /** Grab's item id for an EXISTING line. */
+  itemID?: string;
+  /** Our products.id — only for an ADDED replacement item (isExternalItemID:true). */
+  externalItemID?: string;
+  isExternalItemID?: boolean;
+  /** Final quantity for the line; 0 deletes it. */
+  quantity: number;
+  /** Item lifecycle for this edit; absent = unchanged. */
+  status?: "ADDED" | "DELETED" | "UPDATED" | "UNCHANGED";
+  /** Include only when modifiers change; omit to keep them as-is. */
+  modifiers?: EditOrderItemModifier[];
+}
+
+export interface EditOrderOptions {
+  /** true = recalculate only, do NOT submit (testing). Defaults to false. */
+  onlyRecalculate?: boolean;
+  /** STO-only: deposit amount, minor units. */
+  depositAmountInMin?: number;
+  /** STO-only: POS-side discount, minor units. */
+  offlinePOSDiscountInMin?: number;
+}
+
+export async function editOrder(
+  orderID: string,
+  items: EditOrderItem[],
+  opts: EditOrderOptions = {},
+) {
+  return grabRequest(`/partner/v2/orders/${encodeURIComponent(orderID)}`, {
+    method: "PUT",
+    body: {
+      orderID,
+      items,
+      onlyRecalculate: opts.onlyRecalculate ?? false,
+      ...(opts.depositAmountInMin != null ? { depositAmountInMin: opts.depositAmountInMin } : {}),
+      ...(opts.offlinePOSDiscountInMin != null ? { offlinePOSDiscountInMin: opts.offlinePOSDiscountInMin } : {}),
+    },
+  });
+}
+
 // ─── Store Management ────────────────────────────────────────────────────────
 
 /**

@@ -16,9 +16,12 @@ import {
   checkOrderCancelable,
   updateOrderReadyTime,
   listOrders,
+  editOrder,
+  type EditOrderItem,
 } from "@/lib/grab";
 
-type OrderAction = "accept" | "reject" | "ready" | "cancel" | "update_ready_time" | "check_cancelable" | "list";
+type OrderAction =
+  | "accept" | "reject" | "ready" | "cancel" | "update_ready_time" | "check_cancelable" | "list" | "edit";
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -90,6 +93,28 @@ export async function POST(request: NextRequest) {
           date: body.date,
         });
         return NextResponse.json({ success: true, orders: result });
+      }
+
+      case "edit": {
+        if (!orderID) return NextResponse.json({ error: "orderID required" }, { status: 400 });
+        const items = body.items as EditOrderItem[] | undefined;
+        // Grab requires the FULL item array (every line, changed or not) and
+        // rejects an empty payload ("nothing changed" / "can't remove all items").
+        if (!Array.isArray(items) || items.length === 0) {
+          return NextResponse.json(
+            { error: "items required: send ALL order items (changed and unchanged)" },
+            { status: 400 },
+          );
+        }
+        // onlyRecalculate=true validates/repricing WITHOUT submitting — the safe
+        // path to confirm a payload before mutating a real order.
+        const onlyRecalculate = body.onlyRecalculate === true;
+        const result = await editOrder(orderID, items, {
+          onlyRecalculate,
+          depositAmountInMin: body.depositAmountInMin,
+          offlinePOSDiscountInMin: body.offlinePOSDiscountInMin,
+        });
+        return NextResponse.json({ success: true, action: "edited", onlyRecalculate, result });
       }
 
       default:
