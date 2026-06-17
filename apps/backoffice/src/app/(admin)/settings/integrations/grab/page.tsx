@@ -25,6 +25,7 @@ import {
   Store,
   Activity,
   Rocket,
+  UploadCloud,
 } from "lucide-react";
 import { GrabItemLinker } from "./_GrabItemLinker";
 import { GrabModifierLinker } from "./_GrabModifierLinker";
@@ -79,6 +80,9 @@ export default function GrabIntegrationPage() {
   // Manual "push latest menu to Grab": per-outlet busy flag + last result message.
   const [syncBusy, setSyncBusy] = useState<Record<string, boolean>>({});
   const [syncMsg, setSyncMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
+  // Full-menu push (replaces Grab's menu with ours): per-outlet busy + result.
+  const [pushBusy, setPushBusy] = useState<Record<string, boolean>>({});
+  const [pushMsg, setPushMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
   // "Sync all menus" — push every connected outlet's menu to Grab in one click.
   const [syncAllBusy, setSyncAllBusy] = useState(false);
   const [syncAllMsg, setSyncAllMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -182,6 +186,51 @@ export default function GrabIntegrationPage() {
       }));
     } finally {
       setSyncBusy((s) => ({ ...s, [outletId]: false }));
+    }
+  };
+
+  // Push the FULL menu to this outlet (replaces Grab's menu with our catalogue,
+  // so Grab adopts our item ids → no per-item linking needed). Destructive if
+  // Grab accepts it; surfaces Grab's raw response so we learn whether a
+  // self-serve store allows a full replace ("UnsupportedMenuSync" if not).
+  const pushFullMenu = async (outletId: string, merchantID: string, outletName: string) => {
+    if (
+      !window.confirm(
+        `Push the FULL catalogue menu to "${outletName}" on GrabFood?\n\n` +
+          `If Grab accepts it, this REPLACES the current GrabFood menu (categories, ` +
+          `modifiers, photos) with ours and makes Grab use our item ids — after which ` +
+          `orders match the catalogue automatically. If Grab rejects it (common for ` +
+          `self-serve stores), nothing changes.`,
+      )
+    ) {
+      return;
+    }
+    setPushBusy((s) => ({ ...s, [outletId]: true }));
+    setPushMsg((s) => ({ ...s, [outletId]: { ok: true, text: "" } }));
+    try {
+      const res = await fetch("/api/pos/grab/menu/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ merchantID }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error_description || json.error || `HTTP ${res.status}`);
+      }
+      setPushMsg((s) => ({
+        ...s,
+        [outletId]: {
+          ok: true,
+          text: `Full menu accepted by Grab — ${json.items} items in ${json.categories} categories pushed${json.notified ? " + re-pull notified" : ""}. New orders should now match the catalogue automatically.`,
+        },
+      }));
+    } catch (e) {
+      setPushMsg((s) => ({
+        ...s,
+        [outletId]: { ok: false, text: e instanceof Error ? e.message : "Push failed" },
+      }));
+    } finally {
+      setPushBusy((s) => ({ ...s, [outletId]: false }));
     }
   };
 
@@ -396,6 +445,17 @@ export default function GrabIntegrationPage() {
                       Sync menu
                     </button>
                   ) : null}
+                  {o.grabMerchantId ? (
+                    <button
+                      onClick={() => pushFullMenu(o.id, o.grabMerchantId!, o.name)}
+                      disabled={pushBusy[o.id]}
+                      title="Push the FULL catalogue menu (replaces Grab's menu; makes Grab use our item ids)"
+                      className="inline-flex items-center gap-1.5 rounded border border-amber-300 bg-amber-50 px-2.5 py-1 text-sm font-medium text-amber-700 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {pushBusy[o.id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
+                      Push full menu
+                    </button>
+                  ) : null}
                   <button
                     onClick={() => generateSelfServe(o.id)}
                     disabled={ssBusy[o.id]}
@@ -427,6 +487,9 @@ export default function GrabIntegrationPage() {
                 {err ? <div className="mt-2 text-xs text-red-600">{err}</div> : null}
                 {sync && sync.text ? (
                   <div className={`mt-2 text-xs ${sync.ok ? "text-emerald-700" : "text-red-600"}`}>{sync.text}</div>
+                ) : null}
+                {pushMsg[o.id] && pushMsg[o.id].text ? (
+                  <div className={`mt-2 text-xs ${pushMsg[o.id].ok ? "text-emerald-700" : "text-red-600"}`}>{pushMsg[o.id].text}</div>
                 ) : null}
               </div>
             );
