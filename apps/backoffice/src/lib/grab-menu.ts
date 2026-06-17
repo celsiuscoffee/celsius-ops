@@ -28,6 +28,10 @@ export interface RawProduct {
   description?: string;
   image_url?: string;
   is_available?: boolean;
+  // Grab's own menu item id, set in BackOffice when the Grab menu was built in
+  // Grab's portal. Used to target outbound price/availability record pushes (and
+  // to resolve inbound order item names). See grab-order-items.ts / grab-auto-sync.ts.
+  grab_item_id?: string | null;
   // Real shape of products.modifiers (jsonb), aligned with @celsius/shared
   // ModifierGroupLike. Earlier we had `title`/`isMultiSelect`/nested `modifiers`
   // here — wrong; the DB stores `name`/`multiSelect`/`options`. That mismatch

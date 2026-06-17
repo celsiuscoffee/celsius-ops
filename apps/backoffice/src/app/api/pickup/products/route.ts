@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 import { requireAuth } from "@/lib/auth";
+import { autoSyncCatalogueToGrab } from "@/lib/grab-auto-sync";
 
 // GET /api/pickup/products
 // Maps the loyalty app's products table schema to the backoffice DbProduct interface.
@@ -161,6 +162,13 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // New product → push the catalogue to Grab (off the response's critical path).
+  after(() =>
+    autoSyncCatalogueToGrab(supabase)
+      .then((r) => console.log("[grab:auto-sync] product create →", JSON.stringify(r)))
+      .catch((e) => console.error("[grab:auto-sync] product create failed:", e)),
+  );
 
   const mapped = {
     id:           (data as Record<string,unknown>).id,
