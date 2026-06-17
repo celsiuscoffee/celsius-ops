@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, MapPin, CheckCircle2, Clock, Users } from "lucide-react";
+import { getDineInContext } from "@/lib/checkout-session";
 
 type Outlet = {
   store_id: string;
@@ -55,10 +56,14 @@ export function StoreList({ outlets }: { outlets: Outlet[] }) {
       state.outletIsBusy = o.is_busy;
       state.outletPickupTimeMins = o.pickup_time_mins;
       window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
-      // Choosing an outlet from the picker is an explicit pickup action —
-      // drop any dine-in context from a prior table scan so the order isn't
-      // mistakenly treated as dine-in.
-      window.localStorage.removeItem("celsius-dinein");
+      // Picking a DIFFERENT outlet is an explicit pickup action — drop any
+      // dine-in context from a prior table scan. But re-picking the SAME
+      // outlet a seated customer is already dining at must NOT strand them as
+      // pickup (web checkout is QR-table-only and would then reject the order).
+      const dine = getDineInContext();
+      if (!dine || dine.outletId !== o.store_id) {
+        window.localStorage.removeItem("celsius-dinein");
+      }
     } catch {
       /* ignore */
     }
