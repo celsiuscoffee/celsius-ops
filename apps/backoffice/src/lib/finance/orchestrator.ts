@@ -11,6 +11,7 @@
 // Anomaly sweep run, and vice versa — each is reported in the result.
 
 import { ingestAllOutletsEodRouted } from "./ingestors/eod-router";
+import { syncBukkuBankFeed, type BukkuSyncResult } from "./ingestors/bukku-bank";
 import { runMatcher, type MatcherSummary } from "./agents/matcher";
 import { runAnomalySweep, type AnomalySummary } from "./agents/anomaly";
 
@@ -31,6 +32,7 @@ export type NightlyResult = {
     bySource: { internal: number; storehub: number; skipped: number };
     totalAmount: number;
   };
+  bankFeed: BukkuSyncResult | { error: string } | { skipped: string };
   match: MatcherSummary | { error: string };
   anomaly: AnomalySummary | { error: string };
 };
@@ -38,6 +40,15 @@ export type NightlyResult = {
 export async function runNightlyClose(date: string, opts: { lookbackDays?: number } = {}): Promise<NightlyResult> {
   const lookback = opts.lookbackDays ?? 7;
   const from = addDays(date, -lookback);
+
+  // 0. Pull the Bukku bank feed over the window so the Matcher has fresh lines.
+  //    No-ops cleanly until a Bukku-enabled outlet has a valid token.
+  let bankFeed: NightlyResult["bankFeed"];
+  try {
+    bankFeed = await syncBukkuBankFeed({ from, to: date });
+  } catch (err) {
+    bankFeed = { error: err instanceof Error ? err.message : String(err) };
+  }
 
   // 1. EOD ingest for the day.
   const eodResults = await ingestAllOutletsEodRouted(date);
@@ -70,5 +81,5 @@ export async function runNightlyClose(date: string, opts: { lookbackDays?: numbe
     anomaly = { error: err instanceof Error ? err.message : String(err) };
   }
 
-  return { date, window: { from, to: date }, eod, match, anomaly };
+  return { date, window: { from, to: date }, eod, bankFeed, match, anomaly };
 }
