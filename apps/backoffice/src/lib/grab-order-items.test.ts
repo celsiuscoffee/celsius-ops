@@ -3,6 +3,8 @@ import {
   indexProductsByGrabKeys,
   resolveGrabItemProduct,
   fallbackGrabItemName,
+  fallbackGrabModifierName,
+  resolveGrabModifierName,
   type GrabItemProductRow,
 } from "./grab-order-items";
 
@@ -77,5 +79,29 @@ describe("fallbackGrabItemName", () => {
   it("omits the price when it is zero or missing", () => {
     expect(fallbackGrabItemName({ id: "MYITE202", price: 0 })).toBe("Item [MYITE202]");
     expect(fallbackGrabItemName({})).toBe("Item");
+  });
+});
+
+describe("resolveGrabModifierName", () => {
+  const links = new Map([["MYMOD-OAT", "Oat Milk"]]);
+
+  it("resolves a linked modifier to its real name", () => {
+    expect(resolveGrabModifierName({ id: "MYMOD-OAT", price: 200 }, links)).toBe("Oat Milk");
+  });
+
+  it("falls back to a priced add-on when unlinked", () => {
+    expect(resolveGrabModifierName({ id: "MYMOD-???", price: 97 }, links)).toBe("Add-on @ RM 0.97");
+  });
+
+  it("falls back to a bare add-on when free and unlinked", () => {
+    expect(resolveGrabModifierName({ id: "x", price: 0 }, links)).toBe("Add-on");
+    expect(resolveGrabModifierName({}, links)).toBe("Add-on");
+  });
+});
+
+describe("fallbackGrabModifierName", () => {
+  it("shows the price when set, bare otherwise", () => {
+    expect(fallbackGrabModifierName({ price: 300 })).toBe("Add-on @ RM 3.00");
+    expect(fallbackGrabModifierName({ price: 0 })).toBe("Add-on");
   });
 });

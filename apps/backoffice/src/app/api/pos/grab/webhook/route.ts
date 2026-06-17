@@ -18,6 +18,7 @@ import {
   indexProductsByGrabKeys,
   resolveGrabItemProduct,
   fallbackGrabItemName,
+  resolveGrabModifierName,
   type GrabItemProductRow,
 } from "@/lib/grab-order-items";
 import { createClient } from "@/lib/supabase-server";
@@ -284,6 +285,26 @@ export async function POST(request: NextRequest) {
       ];
       for (const [k, v] of indexProductsByGrabKeys(rows)) productIndex.set(k, v);
     }
+
+    // Modifier name resolution — Grab order modifiers carry only id + price.
+    // Resolve real labels (e.g. "Oat Milk") from grab_modifier_links by id;
+    // unmatched ones keep the "Add-on @ RM x" fallback. (We also persist the
+    // grab_modifier_id on each line so unmatched ones can be linked later.)
+    const modifierIds = Array.from(
+      new Set(
+        itemsArr.flatMap((i) => (i.modifiers ?? []).map((m) => m.id)).filter(Boolean) as string[],
+      ),
+    );
+    const modifierNameById = new Map<string, string>();
+    if (modifierIds.length > 0) {
+      const { data: links } = await supabase
+        .from("grab_modifier_links")
+        .select("grab_modifier_id, name")
+        .in("grab_modifier_id", modifierIds);
+      for (const l of (links ?? []) as Array<{ grab_modifier_id: string; name: string }>) {
+        modifierNameById.set(l.grab_modifier_id, l.name);
+      }
+    }
     const orderItems = itemsArr.map((item) => {
       const product = resolveGrabItemProduct(item, productIndex);
       const qty = item.quantity ?? 1;
@@ -300,8 +321,11 @@ export async function POST(request: NextRequest) {
         quantity: qty,
         unit_price: unitPrice,
         modifiers: (item.modifiers ?? []).map((m) => ({
-          // Grab order modifiers carry no name — show the price (real labels TODO).
-          name: m.price ? `Add-on @ RM ${((m.price ?? 0) / 100).toFixed(2)}` : "Add-on",
+          // Grab order modifiers carry no name — resolve from grab_modifier_links
+          // by id, else show the price. Persist grab_modifier_id so an unmatched
+          // add-on can be linked from BackOffice and backfilled.
+          grab_modifier_id: m.id ?? null,
+          name: resolveGrabModifierName(m, modifierNameById),
           price: m.price,
           qty: m.quantity,
         })),
