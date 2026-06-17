@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react";
+import NextLink from "next/link";
 import {
   Loader2,
   CheckCircle2,
@@ -245,6 +246,13 @@ export default function GrabIntegrationPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <NextLink
+            href="/settings/integrations/grab/item-links"
+            title="Map Grab item ids to POS products so order lines reach the kitchen with the right name + station"
+            className="inline-flex items-center gap-2 rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+          >
+            <Link2 className="h-4 w-4" /> Item linking
+          </NextLink>
           {linkedCount > 0 ? (
             <button
               onClick={syncAllMenus}

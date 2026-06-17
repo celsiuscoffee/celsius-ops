@@ -266,8 +266,36 @@ export async function POST(request: NextRequest) {
       const { data: prods } = await supabase.from("products").select("id, name").in("id", candidateIds);
       for (const p of (prods ?? []) as ProductLookupRow[]) products.set(p.id, p);
     }
+
+    // Item linking: Grab's order ids (item.id = "MYITE…") are Grab's OWN item
+    // ids and never match products.id, so the direct lookup above misses every
+    // time. grab_item_links maps each Grab id → our product; resolving through
+    // it gives the real product name AND lets us store OUR product_id on the
+    // line (below), which is what the kitchen-docket printer keys on to find
+    // the kitchen_station. Without this, dockets print "Item" with no station.
+    const linkByGrabId = new Map<string, string>(); // grab_item_id → our product_id
+    if (candidateIds.length > 0) {
+      const { data: links } = await supabase
+        .from("grab_item_links").select("grab_item_id, product_id").in("grab_item_id", candidateIds);
+      for (const l of (links ?? []) as { grab_item_id: string; product_id: string }[]) {
+        linkByGrabId.set(l.grab_item_id, l.product_id);
+      }
+      // Pull the linked products we haven't already loaded by direct id.
+      const linkedIds = Array.from(new Set(linkByGrabId.values())).filter((id) => !products.has(id));
+      if (linkedIds.length > 0) {
+        const { data: lp } = await supabase.from("products").select("id, name").in("id", linkedIds);
+        for (const p of (lp ?? []) as ProductLookupRow[]) products.set(p.id, p);
+      }
+    }
+
     const orderItems = itemsArr.map((item) => {
-      const product = products.get(item.id) || (item.grabItemID ? products.get(item.grabItemID) : undefined);
+      // Resolve directly (item.id already = a products.id) or via the link
+      // table (Grab id → our product). Either way `product` carries OUR id+name.
+      const linkedId = linkByGrabId.get(item.id) || (item.grabItemID ? linkByGrabId.get(item.grabItemID) : undefined);
+      const product =
+        products.get(item.id) ||
+        (item.grabItemID ? products.get(item.grabItemID) : undefined) ||
+        (linkedId ? products.get(linkedId) : undefined);
       const qty = item.quantity ?? 1;
       const unitPrice = item.price ?? 0;
       const modTotal = (item.modifiers ?? []).reduce((n, m) => n + (m.price ?? 0) * (m.quantity ?? 1), 0);
@@ -279,7 +307,10 @@ export async function POST(request: NextRequest) {
       return {
         id: randomUUID(),
         order_id: order.id,
-        product_id: item.id || item.grabItemID || randomUUID(),
+        // Store OUR product id whenever resolved (direct or via grab_item_links)
+        // so the kitchen-docket printer can look up the kitchen_station. Only an
+        // unlinked Grab item keeps the raw Grab id.
+        product_id: product?.id || item.id || item.grabItemID || randomUUID(),
         product_name: product?.name || fallbackName,
         quantity: qty,
         unit_price: unitPrice,
