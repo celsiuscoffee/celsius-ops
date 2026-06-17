@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { verifyWebhookSignature } from "@/lib/grab";
+import { acceptRejectOrder, verifyWebhookSignature } from "@/lib/grab";
 import { verifyGrabPartnerToken } from "@/lib/grab-partner";
 import { createClient } from "@/lib/supabase-server";
 
@@ -317,12 +317,34 @@ export async function POST(request: NextRequest) {
     });
     if (payErr) console.error("[grab:webhook] payment insert failed:", payErr);
 
-    console.log(`[grab:webhook] CREATED order=${order.id} external=${orderID} outlet=${outletId} total=${total}`);
+    // 8. Auto-accept the order on Grab so it leaves PENDING and the lifecycle
+    //    advances via the API — otherwise it sits "open" until someone accepts in
+    //    the GrabMerchant app. The order is already recorded + printing locally,
+    //    so this is best-effort: a failed or duplicate accept never fails the
+    //    webhook. Uses the OUTBOUND OAuth pair (us → Grab).
+    let grabAccepted = false;
+    if (process.env.GRAB_CLIENT_ID && process.env.GRAB_CLIENT_SECRET) {
+      try {
+        await acceptRejectOrder(orderID, "ACCEPTED");
+        grabAccepted = true;
+        console.log(`[grab:webhook] auto-accepted orderID=${orderID}`);
+      } catch (e) {
+        console.warn(
+          `[grab:webhook] auto-accept failed orderID=${orderID}:`,
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
+
+    console.log(
+      `[grab:webhook] CREATED order=${order.id} external=${orderID} outlet=${outletId} total=${total} accepted=${grabAccepted}`,
+    );
     return NextResponse.json({
       success: true,
       action: "created",
       orderId: order.id,
       orderNumber: `GF-${payload.shortOrderNumber}`,
+      grabAccepted,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
