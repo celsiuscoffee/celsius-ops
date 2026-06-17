@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, track_stock, synced_at, position, featured_position, print_additional_docket, kitchen_station, e_invoice_classification_code, schedule_start_date, schedule_end_date, schedule_days_of_week, schedule_time_from, schedule_time_to, price_pickup, price_grab, price_foodpanda, price_dinein, tax_rate, tax_inclusive")
+    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, track_stock, synced_at, position, featured_position, print_additional_docket, kitchen_station, e_invoice_classification_code, schedule_start_date, schedule_end_date, schedule_days_of_week, schedule_time_from, schedule_time_to, price_pickup, price_grab, price_foodpanda, price_dinein, tax_rate, tax_inclusive, grab_item_id")
     .eq("brand_id", "brand-celsius")
     .order("category")
     .order("position")
@@ -54,6 +54,9 @@ export async function GET(request: NextRequest) {
     // lives in e_invoice_classification_code above.
     tax_rate:                       p.tax_rate ?? 0,
     tax_inclusive:                  p.tax_inclusive ?? true,
+    // GrabFood menu item id — links this catalogue product to incoming Grab
+    // order lines (which carry only Grab's own item id). See grab-order-items.ts.
+    grab_item_id:                   p.grab_item_id ?? null,
   }));
 
   // Also fetch categories so the menu page can group/filter by category
@@ -93,6 +96,8 @@ export async function POST(request: NextRequest) {
     // Kitchen station routing for SUNMI POS-native docket split.
     kitchen_station?: string | null;
     print_additional_docket?: boolean;
+    // GrabFood menu item id (links Grab order lines back to this product).
+    grab_item_id?: string | null;
   };
 
   const supabase = getSupabaseAdmin();
@@ -128,6 +133,12 @@ export async function POST(request: NextRequest) {
   }
   if (typeof body.print_additional_docket === "boolean") {
     channelTaxInsert.print_additional_docket = body.print_additional_docket;
+  }
+  // Grab item id — empty string clears the link (store NULL so the unique
+  // partial index doesn't trip on multiple empty strings).
+  if (typeof body.grab_item_id === "string") {
+    const s = body.grab_item_id.trim();
+    channelTaxInsert.grab_item_id = s === "" ? null : s;
   }
 
   const { data, error } = await supabase

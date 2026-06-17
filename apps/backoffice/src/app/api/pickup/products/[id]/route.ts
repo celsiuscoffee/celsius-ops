@@ -51,6 +51,12 @@ export async function PATCH(
   if (typeof body.e_invoice_classification_code === "string" || body.e_invoice_classification_code === null) {
     update.e_invoice_classification_code = body.e_invoice_classification_code || null;
   }
+  // GrabFood menu item id — links Grab order lines back to this product.
+  // Empty/null clears the link (NULL keeps the unique partial index happy).
+  if (typeof body.grab_item_id === "string" || body.grab_item_id === null) {
+    const s = (body.grab_item_id ?? "").toString().trim();
+    update.grab_item_id = s === "" ? null : s;
+  }
   if ("schedule_start_date" in body) update.schedule_start_date = body.schedule_start_date || null;
   if ("schedule_end_date"   in body) update.schedule_end_date   = body.schedule_end_date   || null;
   if (Array.isArray(body.schedule_days_of_week)) {

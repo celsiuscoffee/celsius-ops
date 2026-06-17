@@ -14,6 +14,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { acceptRejectOrder, verifyWebhookSignature } from "@/lib/grab";
 import { verifyGrabPartnerToken } from "@/lib/grab-partner";
+import {
+  indexProductsByGrabKeys,
+  resolveGrabItemProduct,
+  fallbackGrabItemName,
+  type GrabItemProductRow,
+} from "@/lib/grab-order-items";
 import { createClient } from "@/lib/supabase-server";
 
 interface GrabOrderItemModifier {
@@ -254,33 +260,43 @@ export async function POST(request: NextRequest) {
     }
 
     // 6. Items. Grab order items carry NO name field — the product name is
-    //    resolved from our catalogue by the PARTNER id (item.id = products.id),
-    //    with grabItemID as a fallback. (Looking up by grabItemID first was the
-    //    "Item" bug: Grab's id never matches our UUIDs.) `itemsArr` is from §4.
+    //    resolved from our catalogue by the PARTNER id (item.id = products.id)
+    //    OR the catalogue's `grab_item_id` (set in BackOffice when the Grab menu
+    //    was created in Grab's portal, so the order only carries Grab's own id —
+    //    e.g. "MYITE2026..." — which never matches products.id). grabItemID is
+    //    the last fallback. (Looking up by grabItemID against products.id first
+    //    was the "Item" bug: Grab's id never matches our ids.) `itemsArr` is §4.
     const candidateIds = Array.from(
       new Set(itemsArr.flatMap((i) => [i.id, i.grabItemID]).filter(Boolean) as string[]),
     );
-    type ProductLookupRow = { id: string; name: string };
-    const products = new Map<string, ProductLookupRow>();
+    const productIndex = new Map<string, GrabItemProductRow>();
     if (candidateIds.length > 0) {
-      const { data: prods } = await supabase.from("products").select("id, name").in("id", candidateIds);
-      for (const p of (prods ?? []) as ProductLookupRow[]) products.set(p.id, p);
+      // Match on EITHER the product id or its linked grab_item_id. Two narrow
+      // queries (cheap, a handful of ids per order) avoid escaping arbitrary id
+      // values into a single PostgREST `.or()` filter.
+      const [byId, byGrab] = await Promise.all([
+        supabase.from("products").select("id, name, grab_item_id").in("id", candidateIds),
+        supabase.from("products").select("id, name, grab_item_id").in("grab_item_id", candidateIds),
+      ]);
+      const rows = [
+        ...((byId.data ?? []) as GrabItemProductRow[]),
+        ...((byGrab.data ?? []) as GrabItemProductRow[]),
+      ];
+      for (const [k, v] of indexProductsByGrabKeys(rows)) productIndex.set(k, v);
     }
     const orderItems = itemsArr.map((item) => {
-      const product = products.get(item.id) || (item.grabItemID ? products.get(item.grabItemID) : undefined);
+      const product = resolveGrabItemProduct(item, productIndex);
       const qty = item.quantity ?? 1;
       const unitPrice = item.price ?? 0;
       const modTotal = (item.modifiers ?? []).reduce((n, m) => n + (m.price ?? 0) * (m.quantity ?? 1), 0);
       const itemTotal = (unitPrice + modTotal) * qty;
-      // No catalogue match (an item Grab has that we don't) → price + id hint so
-      // the kitchen can still act, instead of a bare "Item".
-      const idHint = (item.id || item.grabItemID || "").slice(0, 8);
-      const fallbackName = unitPrice > 0 ? `Item @ RM ${(unitPrice / 100).toFixed(2)}${idHint ? ` [${idHint}]` : ""}` : `Item${idHint ? ` [${idHint}]` : ""}`;
       return {
         id: randomUUID(),
         order_id: order.id,
-        product_id: item.id || item.grabItemID || randomUUID(),
-        product_name: product?.name || fallbackName,
+        // Prefer the matched catalogue product id so the order line links back
+        // to the catalogue; fall back to whatever Grab sent.
+        product_id: product?.id || item.id || item.grabItemID || randomUUID(),
+        product_name: product?.name || fallbackGrabItemName(item),
         quantity: qty,
         unit_price: unitPrice,
         modifiers: (item.modifiers ?? []).map((m) => ({
