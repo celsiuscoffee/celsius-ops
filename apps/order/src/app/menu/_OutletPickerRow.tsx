@@ -3,20 +3,25 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { MapPin, ChevronDown } from "lucide-react";
+import { getDineInContext } from "@/lib/checkout-session";
 
 /**
  * Outlet picker row at the top of /menu. Shows the actual selected
  * outlet name from localStorage; same visual as apps/pickup-native
  * /app/menu.tsx:460-473 (MapPin terracotta + bold name + ChevronDown).
  *
- * In dine-in (table-QR) mode it shows "Table N · {outlet}" and is not
- * a link — the customer is seated, so there's no outlet to change.
+ * In dine-in (table-QR) mode it shows "Table N · {outlet}" and is NOT a
+ * link — the customer is seated, so there's no outlet to change, and
+ * routing them into /store would clear their dine-in context (the
+ * silent-pickup bug). Dine-in is read from the authoritative
+ * "celsius-dinein" key (via getDineInContext), NOT the shared
+ * "celsius-pickup" blob — the blob's orderType/tableNumber get stripped
+ * by the Expo store partialize, which used to flip this row back into a
+ * tappable pickup link mid-session.
  */
 type Persisted = {
   state?: {
     outletName?: string | null;
-    orderType?: "pickup" | "dine_in" | null;
-    tableNumber?: string | null;
   };
 };
 
@@ -31,8 +36,11 @@ export function OutletPickerRow() {
       if (raw) {
         const parsed = JSON.parse(raw) as Persisted;
         setName(parsed.state?.outletName ?? null);
-        setDineIn(parsed.state?.orderType === "dine_in");
-        setTable(parsed.state?.tableNumber ?? null);
+      }
+      const dine = getDineInContext();
+      if (dine) {
+        setDineIn(true);
+        setTable(dine.tableNumber);
       }
     } catch {
       /* ignore */
