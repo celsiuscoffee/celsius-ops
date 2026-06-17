@@ -16,14 +16,42 @@ import { verifyWebhookSignature } from "@/lib/grab";
 import { verifyGrabPartnerToken } from "@/lib/grab-partner";
 import { createClient } from "@/lib/supabase-server";
 
+interface GrabOrderItemModifier {
+  // Grab order modifiers carry NO name — only the partner modifier id + price + tax.
+  // The name is resolved from our product modifiers by id.
+  id?: string;
+  price?: number;
+  tax?: number;
+  quantity?: number;
+}
+
 interface GrabOrderItem {
+  // `id` = the item's externalID in OUR system (= products.id, what we shipped in
+  // the menu). `grabItemID` = Grab's internal id. Order items carry NO name field
+  // — the product name MUST be resolved from our catalogue by `id`.
   id: string;
-  grabItemID: string;
-  name: string;
+  grabItemID?: string;
   quantity: number;
-  price: number;
-  modifiers?: Array<{ id: string; name: string; quantity: number; price: number }>;
+  price: number; // single item + its modifiers, tax-inclusive, in minor units
+  tax?: number;
+  specifications?: string; // the consumer's note for this line
+  modifiers?: GrabOrderItemModifier[];
   comment?: string;
+}
+
+// Grab's order price object. The REAL payload key is `price`; the simulator
+// sometimes sent `orderPrice`. eaterPayment is 0 for cashless orders — never use
+// it as "the total". subtotal = tax-inclusive item+modifier total (the gross the
+// merchant fulfils + books).
+interface GrabOrderPrice {
+  subtotal?: number;
+  tax?: number;
+  merchantChargeFee?: number;
+  serviceChargeFee?: number;
+  deliveryFee?: number;
+  grabFundPromo?: number;
+  merchantFundPromo?: number;
+  eaterPayment?: number;
 }
 
 interface GrabWebhookPayload {
@@ -45,14 +73,8 @@ interface GrabWebhookPayload {
     phones?: string[];
     address?: { unitNumber?: string; deliveryInstruction?: string };
   };
-  orderPrice: {
-    subtotal: number;
-    tax: number;
-    deliveryFee: number;
-    eaterPayment: number;
-    grabFundPromo?: number;
-    merchantFundPromo?: number;
-  };
+  price?: GrabOrderPrice;
+  orderPrice?: GrabOrderPrice; // legacy / simulator alias
   orderType: "DELIVERY" | "PICKUP" | "DINE_IN";
 }
 
@@ -85,7 +107,8 @@ function extractOrderNote(p: GrabWebhookPayload): string | null {
 }
 function extractItemNote(it: GrabOrderItem): string | null {
   const x = it as unknown as Record<string, unknown>;
-  return firstStr(it.comment, x.comments, x.notes, x.note, x.instructions, x.remarks, x.specialInstructions);
+  // Grab's real field is `specifications`; the rest are simulator/legacy aliases.
+  return firstStr(it.specifications, it.comment, x.comments, x.notes, x.note, x.instructions, x.remarks, x.specialInstructions);
 }
 
 export async function POST(request: NextRequest) {
@@ -162,16 +185,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Totals (already in sen from Grab). Defensive — the simulator's
-    //    Submit Order can omit orderPrice; un-guarded access was 500'ing.
-    const price = payload.orderPrice ?? ({} as GrabWebhookPayload["orderPrice"]);
-    const subtotal = price.subtotal ?? 0;
+    // 4. Totals — minor units (sen). The REAL payload key is `price`; the
+    //    simulator used `orderPrice`. Reading the wrong key is why every live
+    //    order booked RM 0. `subtotal` is Grab's authoritative basket total;
+    //    `eaterPayment` is the consumer-paid figure and is 0 for cashless orders,
+    //    so it must NEVER be used as "the total".
+    const price: GrabOrderPrice = payload.price ?? payload.orderPrice ?? {};
+    const itemsArr = Array.isArray(payload.items) ? payload.items : [];
+    // Fallback only if Grab omits the price block — sum the lines so a clearly
+    // priced order never books 0.
+    const itemsSubtotal = itemsArr.reduce(
+      (n, it) =>
+        n +
+        ((it.price ?? 0) +
+          (it.modifiers ?? []).reduce((m, md) => m + (md.price ?? 0) * (md.quantity ?? 1), 0)) *
+          (it.quantity ?? 1),
+      0,
+    );
+    const subtotal = price.subtotal && price.subtotal > 0 ? price.subtotal : itemsSubtotal;
     const sst = price.tax ?? 0;
-    const total = price.eaterPayment ?? subtotal;
+    const merchantFees = (price.merchantChargeFee ?? 0) + (price.serviceChargeFee ?? 0);
     const discount = (price.grabFundPromo ?? 0) + (price.merchantFundPromo ?? 0);
+    const total = subtotal + merchantFees;
     const orderType =
       payload.orderType === "DINE_IN" ? "dine_in" :
       payload.orderType === "PICKUP" ? "pickup" : "takeaway";
+
+    // Capture the real money + id shape so the next live order confirms the
+    // mapping (which price key, whether item.price includes modifiers, which id
+    // matches our catalogue). Targeted — Vercel collapses long log lines.
+    console.log(
+      `[grab:webhook] money orderID=${orderID} key=${payload.price ? "price" : payload.orderPrice ? "orderPrice" : "none"} subtotal=${price.subtotal ?? "x"} tax=${price.tax ?? "x"} eater=${price.eaterPayment ?? "x"} itemsSubtotal=${itemsSubtotal} items=${JSON.stringify(itemsArr.map((i) => ({ id: i.id, gid: i.grabItemID, p: i.price, m: (i.modifiers ?? []).map((x) => x.price) })))}`,
+    );
 
     // 5. Insert order. shortOrderNumber sometimes arrives already prefixed
     //    with "GF-", so strip any existing prefix to avoid "GF-GF-6782".
@@ -208,48 +253,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. Items. Defensive defaults + products-table lookup so the docket
-    //    prints a real product name (not "Item") when Grab omits names.
-    const itemsArr = Array.isArray(payload.items) ? payload.items : [];
-    const productIds = Array.from(
-      new Set(itemsArr.map((i) => i.grabItemID || i.id).filter(Boolean) as string[]),
+    // 6. Items. Grab order items carry NO name field — the product name is
+    //    resolved from our catalogue by the PARTNER id (item.id = products.id),
+    //    with grabItemID as a fallback. (Looking up by grabItemID first was the
+    //    "Item" bug: Grab's id never matches our UUIDs.) `itemsArr` is from §4.
+    const candidateIds = Array.from(
+      new Set(itemsArr.flatMap((i) => [i.id, i.grabItemID]).filter(Boolean) as string[]),
     );
     type ProductLookupRow = { id: string; name: string };
-    let products: Map<string, ProductLookupRow> = new Map();
-    if (productIds.length > 0) {
-      const { data: prods } = await supabase
-        .from("products")
-        .select("id, name")
-        .in("id", productIds);
-      products = new Map(((prods ?? []) as ProductLookupRow[]).map((p) => [p.id, p]));
+    const products = new Map<string, ProductLookupRow>();
+    if (candidateIds.length > 0) {
+      const { data: prods } = await supabase.from("products").select("id, name").in("id", candidateIds);
+      for (const p of (prods ?? []) as ProductLookupRow[]) products.set(p.id, p);
     }
     const orderItems = itemsArr.map((item) => {
-      const productId = item.grabItemID || item.id || "";
-      const product = productId ? products.get(productId) : undefined;
+      const product = products.get(item.id) || (item.grabItemID ? products.get(item.grabItemID) : undefined);
       const qty = item.quantity ?? 1;
       const unitPrice = item.price ?? 0;
-      const modTotal = (item.modifiers ?? []).reduce((n, m) => n + ((m.price ?? 0) * (m.quantity ?? 1)), 0);
+      const modTotal = (item.modifiers ?? []).reduce((n, m) => n + (m.price ?? 0) * (m.quantity ?? 1), 0);
       const itemTotal = (unitPrice + modTotal) * qty;
-      // Real Grab orders carry our synced names + IDs. The simulator
-      // sends empty names + random IDs — render price + ID hint so the
-      // kitchen can still act.
-      const grabIdHint = productId ? ` [${productId.slice(0, 8)}]` : "";
-      const priceHint = unitPrice > 0 ? `Item @ RM ${(unitPrice / 100).toFixed(2)}${grabIdHint}` : `Item${grabIdHint}`;
+      // No catalogue match (an item Grab has that we don't) → price + id hint so
+      // the kitchen can still act, instead of a bare "Item".
+      const idHint = (item.id || item.grabItemID || "").slice(0, 8);
+      const fallbackName = unitPrice > 0 ? `Item @ RM ${(unitPrice / 100).toFixed(2)}${idHint ? ` [${idHint}]` : ""}` : `Item${idHint ? ` [${idHint}]` : ""}`;
       return {
         id: randomUUID(),
         order_id: order.id,
-        product_id: productId || randomUUID(),
-        product_name: item.name || product?.name || priceHint,
+        product_id: item.id || item.grabItemID || randomUUID(),
+        product_name: product?.name || fallbackName,
         quantity: qty,
         unit_price: unitPrice,
         modifiers: (item.modifiers ?? []).map((m) => ({
-          name: m.name || (m.price ? `Add-on @ RM ${((m.price ?? 0) / 100).toFixed(2)}` : "Add-on"),
+          // Grab order modifiers carry no name — show the price (real labels TODO).
+          name: m.price ? `Add-on @ RM ${((m.price ?? 0) / 100).toFixed(2)}` : "Add-on",
           price: m.price,
           qty: m.quantity,
         })),
         modifier_total: modTotal,
         discount_amount: 0,
-        tax_amount: 0,
+        tax_amount: item.tax ?? 0,
         item_total: itemTotal,
         notes: extractItemNote(item),
         kitchen_status: "pending",
