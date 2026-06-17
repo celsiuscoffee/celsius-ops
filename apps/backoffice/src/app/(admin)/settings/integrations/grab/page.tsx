@@ -26,6 +26,7 @@ import {
   Activity,
   Rocket,
 } from "lucide-react";
+import { GrabItemLinker } from "./_GrabItemLinker";
 
 type Outlet = {
   id: string;
@@ -349,6 +350,9 @@ export default function GrabIntegrationPage() {
           })}
         </div>
       </section>
+
+      {/* Unlinked GrabFood items → catalogue product linking */}
+      <GrabItemLinker />
 
       {/* Self-serve store activation */}
       <section className="rounded-lg border border-neutral-200 bg-white">
