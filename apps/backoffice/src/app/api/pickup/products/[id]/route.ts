@@ -1,6 +1,22 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 import { requireAuth } from "@/lib/auth";
+import { autoSyncCatalogueToGrab } from "@/lib/grab-auto-sync";
+
+// Columns that change what GrabFood shows — an edit touching any of these
+// triggers an auto-sync. Editing internal-only fields (schedule, kitchen
+// station, e-invoice code, tax) doesn't push to Grab.
+const GRAB_RELEVANT_COLUMNS = new Set([
+  "name",
+  "image_url",
+  "is_available",
+  "price",
+  "price_grab",
+  "category",
+  "modifiers",
+  "visible_channels",
+  "grab_item_id",
+]);
 
 // PATCH /api/pickup/products/[id]
 export async function PATCH(
@@ -50,6 +66,12 @@ export async function PATCH(
   }
   if (typeof body.e_invoice_classification_code === "string" || body.e_invoice_classification_code === null) {
     update.e_invoice_classification_code = body.e_invoice_classification_code || null;
+  }
+  // GrabFood menu item id — links Grab order lines back to this product.
+  // Empty/null clears the link (NULL keeps the unique partial index happy).
+  if (typeof body.grab_item_id === "string" || body.grab_item_id === null) {
+    const s = (body.grab_item_id ?? "").toString().trim();
+    update.grab_item_id = s === "" ? null : s;
   }
   if ("schedule_start_date" in body) update.schedule_start_date = body.schedule_start_date || null;
   if ("schedule_end_date"   in body) update.schedule_end_date   = body.schedule_end_date   || null;
@@ -117,6 +139,15 @@ export async function PATCH(
     .eq("id", id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Push to Grab when the edit touches anything Grab shows (off critical path).
+  if (Object.keys(update).some((k) => GRAB_RELEVANT_COLUMNS.has(k))) {
+    after(() =>
+      autoSyncCatalogueToGrab(supabase)
+        .then((r) => console.log(`[grab:auto-sync] product ${id} update →`, JSON.stringify(r)))
+        .catch((e) => console.error(`[grab:auto-sync] product ${id} update failed:`, e)),
+    );
+  }
   return NextResponse.json({ ok: true });
 }
 
@@ -132,5 +163,12 @@ export async function DELETE(
   const { error } = await supabase.from("products").delete().eq("id", id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Removed product → re-push the (now smaller) catalogue to Grab.
+  after(() =>
+    autoSyncCatalogueToGrab(supabase)
+      .then((r) => console.log(`[grab:auto-sync] product ${id} delete →`, JSON.stringify(r)))
+      .catch((e) => console.error(`[grab:auto-sync] product ${id} delete failed:`, e)),
+  );
   return NextResponse.json({ ok: true });
 }

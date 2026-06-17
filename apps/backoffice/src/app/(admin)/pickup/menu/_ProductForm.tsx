@@ -40,6 +40,9 @@ export interface DbProduct {
   tax_rate: number;
   tax_inclusive: boolean;
   visible_channels: string[] | null;
+  // GrabFood menu item id — links incoming Grab order lines (which carry only
+  // Grab's own item id) back to this catalogue product so they show the real name.
+  grab_item_id: string | null;
 }
 
 export interface Category { id: string; name: string; slug: string; position?: number }
@@ -72,6 +75,7 @@ function emptyForm(categories: Category[]) {
     tax_inclusive:                  true,
     modifiers:                      [] as ModifierGroup[],
     visible_channels:               [] as string[],
+    grab_item_id:                   "" as string,
   };
 }
 
@@ -114,6 +118,7 @@ export function ProductForm({ product, categories }: Props) {
       tax_inclusive:                  product.tax_inclusive ?? true,
       modifiers:                      product.modifiers ?? [],
       visible_channels:               product.visible_channels ?? [],
+      grab_item_id:                   product.grab_item_id ?? "",
     };
   });
 
@@ -502,6 +507,26 @@ export function ProductForm({ product, categories }: Props) {
           <p className="text-[11px] text-muted-foreground mt-1">
             MSIC classification code for LHDN e-Invoice compliance. Look up at{" "}
             <a href="https://sdk.myinvois.hasil.gov.my/codes/classification-codes/" target="_blank" rel="noopener" className="text-indigo-600 hover:underline">myinvois.hasil.gov.my</a>.
+          </p>
+        </Field>
+
+        {/* GrabFood item link — when the Grab menu was built in Grab's portal,
+            order lines arrive with Grab's own item id (e.g. "MYITE2026...")
+            which doesn't match our product id. Paste that id here and incoming
+            Grab orders for this item will show this product's name (instead of
+            "Item @ RM x") on the docket and receipt. */}
+        <Field label="GrabFood item ID">
+          <input
+            type="text"
+            value={form.grab_item_id}
+            onChange={(e) => setForm((f) => ({ ...f, grab_item_id: e.target.value }))}
+            placeholder="e.g. MYITE2026011703282830543"
+            className="w-full px-3 py-2 border rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Links incoming GrabFood orders to this product. Find it in the
+            GrabFood order log (the <code>[MYITE…]</code> code on an unmatched line)
+            or the Grab Merchant menu. Leave blank if Grab uses our menu push.
           </p>
         </Field>
 

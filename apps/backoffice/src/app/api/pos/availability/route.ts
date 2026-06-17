@@ -85,12 +85,24 @@ export async function POST(req: NextRequest) {
     } else if (!isGrabConfigured()) {
       grab = "grab-not-configured";
     } else {
+      // Records must target GRAB's item id, not ours — a portal-built (self-serve)
+      // menu keys items by Grab's id (e.g. "MYITE2026..."), so a record keyed by
+      // our product id matches nothing and the 86 silently never reaches Grab.
+      // Use products.grab_item_id when linked; fall back to our id (works only on
+      // stores that pulled our menu).
+      const { data: prod } = await supabase
+        .from("products")
+        .select("grab_item_id")
+        .eq("id", product_id)
+        .maybeSingle();
+      const grabItemId =
+        (prod as { grab_item_id?: string | null } | null)?.grab_item_id || product_id;
       // field is the record TYPE ("ITEM"), attributes go in the entity. To set
       // UNAVAILABLE Grab requires maxStock:0 alongside the status.
       await batchUpdateMenu(merchantId, "ITEM", [
         is_available
-          ? { id: product_id, availableStatus: "AVAILABLE" }
-          : { id: product_id, availableStatus: "UNAVAILABLE", maxStock: 0 },
+          ? { id: grabItemId, availableStatus: "AVAILABLE" }
+          : { id: grabItemId, availableStatus: "UNAVAILABLE", maxStock: 0 },
       ]);
       grab = "pushed";
     }
