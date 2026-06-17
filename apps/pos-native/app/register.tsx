@@ -129,10 +129,11 @@ type Panel = "none" | "customer" | "table";
 export default function Register() {
   const { staff, outletId, signOut, loggedInAt, shiftEndsAt, locked, lock } = usePos();
   const [activeCat, setActiveCat] = useState<string>("all");
-  // One "Orders" command center — four tabs: QR Tables (dine-in floor + QR
-  // self-orders) · Pickup · Grab · History (today, all channels, filterable).
+  // One "Orders" command center — five tabs: QR Tables (dine-in floor + QR
+  // self-orders) · Pickup · Grab · Counter (till dine-in Stand # + takeaway
+  // Queue #) · History (today, all channels, filterable).
   // `hub` is the active tab, or null when the panel is closed.
-  const [hub, setHub] = useState<"tables" | "pickup" | "grab" | "history" | null>(null);
+  const [hub, setHub] = useState<"tables" | "pickup" | "grab" | "counter" | "history" | null>(null);
   // QR Tables tab: which floor/zone is shown (null = first), and the table the
   // cashier tapped to inspect its order(s).
   const [activeFloor, setActiveFloor] = useState<string | null>(null);
@@ -285,18 +286,28 @@ export default function Register() {
   // while the modal is closed (drives the header badge count).
   const { orders: kdsOrders, reload: reloadOrders } = useOrdersPanel(outletId);
   // Serving-time alarm candidates: pickup orders not yet "ready" + QR-table
-  // orders not yet "done". Pressing Ready/Done drops the order from these
-  // lists, which silences the alarm for it. (Grab runs to its own SLA.)
+  // orders not yet "done" + counter (till) orders not yet "served". Pressing
+  // Ready/Done/Served drops the order from these lists, which silences the alarm
+  // for it. (Grab runs to its own SLA.) Counter orders are already filtered to
+  // un-served (served_at IS NULL) upstream in useOrdersPanel.
   const servingAlarmItems = useMemo<ServingItem[]>(() => {
     const pickup = kdsOrders
       .filter((o) => o.source === "pickup" && o.status !== "ready")
       .map((o) => ({ id: o.uid, createdAt: o.createdAt, channel: "pickup" as const, label: o.orderNumber }));
+    const counter = kdsOrders
+      .filter((o) => o.source === "counter")
+      .map((o) => ({
+        id: o.uid,
+        createdAt: o.createdAt,
+        channel: "counter" as const,
+        label: o.orderType === "dine_in" ? (o.tableNumber ? `Stand #${o.tableNumber}` : "Dine-in") : (o.queueNumber ? `Queue #${o.queueNumber}` : o.orderNumber),
+      }));
     const tables = tableSlots.flatMap((s) =>
       s.orders
         .filter((o) => o.source === "qr")
         .map((o) => ({ id: o.id, createdAt: o.createdAt, channel: "table" as const, label: s.label })),
     );
-    return [...pickup, ...tables];
+    return [...pickup, ...counter, ...tables];
   }, [kdsOrders, tableSlots]);
   // Orders past the 15-min serving target → drives the alarm sound + the popup.
   const overdueOrders = useServingAlarm(servingAlarmItems);
@@ -311,7 +322,10 @@ export default function Register() {
   const showOverduePopup = overdueOrders.length > 0 && !overdueAck && hub === null;
   const openOverdueHub = useCallback(() => {
     setOverdueAck(true);
-    setHub(overdueOrders.every((o) => o.channel === "table") ? "tables" : "pickup");
+    // Jump to the tab the overdue orders live on. Prefer the first overdue
+    // order's channel so a single late counter/pickup order opens the right tab.
+    const first = overdueOrders[0];
+    setHub(first?.channel === "table" ? "tables" : first?.channel === "counter" ? "counter" : "pickup");
   }, [overdueOrders]);
   // Today's order history (all channels) for the History tab. Refreshed each
   // time the tab is opened so the counter always sees the latest day's sales.
@@ -409,6 +423,26 @@ export default function Register() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadTables, shift, shiftLoading]);
+
+  // Mark a counter (till) order served. These are pos_orders that are already
+  // status='completed' (an exact sale) — the service-role route stamps served_at
+  // (status untouched), which drops the card off the live Counter KDS + silences
+  // its serving-time alarm. Same not-gated-on-store-open rule as above.
+  const markCounterServed = useCallback(async (order: KdsOrder) => {
+    setBumpingUid(order.uid);
+    try {
+      await apiPost("/api/pos/order-status", { source: "counter", id: order.id, status: "served" });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Force an immediate refetch rather than waiting on the Realtime round-trip
+      // (same as the pickup/Grab path) so the served order drops off at once and
+      // the serving-time alarm clears even if Realtime is lagging/dropped.
+      await reloadOrders();
+    } catch (e) {
+      alert(`Couldn't mark ${order.orderNumber} served.\n${e instanceof Error ? e.message : "Check the connection and try again."}`);
+    } finally {
+      setBumpingUid(null);
+    }
+  }, [reloadOrders]);
 
   // Reprint a past order's customer receipt from the History tab. The history
   // row only carries a summary, so we re-fetch the full order + items (with
@@ -1944,9 +1978,9 @@ export default function Register() {
                     : hub === "history"
                     ? (historyLoading ? "Loading today's orders…" : `${historyOrders.length} order${historyOrders.length === 1 ? "" : "s"} today · all channels`)
                     : (() => {
-                        const ch: "pickup" | "grab" = hub === "grab" ? "grab" : "pickup";
+                        const ch: "pickup" | "grab" | "counter" = hub === "grab" ? "grab" : hub === "counter" ? "counter" : "pickup";
                         const n = kdsOrders.filter((o) => o.source === ch).length;
-                        const label = ch === "grab" ? "Grab" : "pickup";
+                        const label = ch === "grab" ? "Grab" : ch === "counter" ? "counter" : "pickup";
                         return n === 0 ? `No live ${label} orders` : `${n} ${label} order${n === 1 ? "" : "s"} · live`;
                       })()}
                 </Text>
@@ -1962,10 +1996,11 @@ export default function Register() {
                 Full-width, large touch targets (SUNMI counter use). */}
             <View className="flex-row gap-2.5 mb-4">
               {(() => {
-                const tabs: { key: "tables" | "pickup" | "grab" | "history"; label: string; Icon: typeof Grid3x3; count: number }[] = [
+                const tabs: { key: "tables" | "pickup" | "grab" | "counter" | "history"; label: string; Icon: typeof Grid3x3; count: number }[] = [
                   { key: "tables", label: "QR Tables", Icon: Grid3x3, count: tableSlots.filter((t) => t.orders.length > 0).length },
                   { key: "pickup", label: "Pickup", Icon: ShoppingBag, count: kdsOrders.filter((o) => o.source === "pickup").length },
                   { key: "grab", label: "Grab", Icon: Bike, count: kdsOrders.filter((o) => o.source === "grab").length },
+                  { key: "counter", label: "Counter", Icon: Coffee, count: kdsOrders.filter((o) => o.source === "counter").length },
                   { key: "history", label: "History", Icon: ClipboardList, count: historyOrders.length },
                 ];
                 return tabs.map(({ key, label, Icon, count }) => (
@@ -2100,12 +2135,19 @@ export default function Register() {
               })()}
               {hub !== "tables" && (
               <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
-              {/* ── Pickup / Grab tabs — one dedicated on-register KDS per
-                  channel (separate top-level tabs). Status writes go through
-                  the service-role API (RLS blocks anon updates on printed rows). */}
-              {(hub === "pickup" || hub === "grab") && (() => {
-                const ch: "pickup" | "grab" = hub === "grab" ? "grab" : "pickup";
+              {/* ── Pickup / Grab / Counter tabs — one dedicated on-register KDS
+                  per channel (separate top-level tabs). Pickup/Grab advance
+                  through a status lifecycle; Counter (till) orders are already a
+                  completed sale, so their button stamps served_at instead. All
+                  writes go through the service-role API (RLS blocks anon updates
+                  on printed rows; the till's own served_at write is uniform). */}
+              {(hub === "pickup" || hub === "grab" || hub === "counter") && (() => {
+                const ch: "pickup" | "grab" | "counter" = hub === "grab" ? "grab" : hub === "counter" ? "counter" : "pickup";
                 const shown = kdsOrders.filter((o) => o.source === ch);
+                const empty =
+                  ch === "grab" ? "Grab orders will appear here as they come in."
+                  : ch === "counter" ? "Dine-in (Stand #) and takeaway (Queue #) orders rung up at the till appear here until served."
+                  : "Pickup orders will appear here as they come in.";
                 return (
                   <View className="flex-row flex-wrap" style={{ gap: 12 }}>
                     {shown.map((order) => (
@@ -2113,14 +2155,14 @@ export default function Register() {
                         key={order.uid}
                         order={order}
                         busy={bumpingUid === order.uid}
-                        onAdvance={(status) => advanceOrderStatus(order, status)}
+                        onAdvance={(status) => (ch === "counter" ? markCounterServed(order) : advanceOrderStatus(order, status))}
                       />
                     ))}
                     {shown.length === 0 && (
                       <View className="py-16 items-center w-full">
                         <ChefHat size={40} color="rgba(245,243,240,0.18)" />
-                        <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                          {ch === "grab" ? "Grab orders will appear here as they come in." : "Pickup orders will appear here as they come in."}
+                        <Text className="text-cream/40 text-sm mt-3 text-center" style={{ fontFamily: "SpaceGrotesk_500Medium", maxWidth: 360 }}>
+                          {empty}
                         </Text>
                       </View>
                     )}
@@ -2179,16 +2221,20 @@ export default function Register() {
               </Text>
             </View>
             <Text className="text-cream/60 text-sm mb-5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
-              Serving target exceeded — mark Ready / Done as soon as they're served.
+              Serving target exceeded — mark Ready / Done / Served as soon as they're handed over.
             </Text>
             <View className="gap-2 mb-6">
               {overdueOrders.map((o) => {
                 const mins = Math.max(0, Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 60000));
+                const chanTag =
+                  o.channel === "table" ? { color: "#3B82F6", text: "TABLE" }
+                  : o.channel === "counter" ? { color: "#FB923C", text: "COUNTER" }
+                  : { color: "#FBBF24", text: "PICKUP" };
                 return (
                   <View key={o.id} className="flex-row items-center justify-between rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(194,69,45,0.14)" }}>
                     <View className="flex-row items-center gap-3">
-                      <View className="rounded-lg px-2 py-1" style={{ backgroundColor: o.channel === "table" ? "#3B82F6" : "#FBBF24" }}>
-                        <Text className="text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#160800" }}>{o.channel === "table" ? "TABLE" : "PICKUP"}</Text>
+                      <View className="rounded-lg px-2 py-1" style={{ backgroundColor: chanTag.color }}>
+                        <Text className="text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#160800" }}>{chanTag.text}</Text>
                       </View>
                       <Text className="text-cream text-lg" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{o.label}</Text>
                     </View>
@@ -3322,17 +3368,33 @@ function KdsCard({
   onAdvance: (status: "preparing" | "ready" | "completed") => void;
 }) {
   const isGrab = order.source === "grab";
-  const accent = isGrab ? "#22C55E" : "#3B82F6";
+  const isCounter = order.source === "counter";
+  const isDineIn = order.orderType === "dine_in";
+  // Counter = amber (matches the Tables "Register" legend); Grab green; Pickup blue.
+  const accent = isCounter ? "#FBBF24" : isGrab ? "#22C55E" : "#3B82F6";
   const mins = Math.max(0, Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000));
   const ago = mins < 1 ? "just now" : `${mins} min ago`;
-  // Status → pill + the next bump action.
+  // Counter orders show the placard / queue number prominently (a runner needs
+  // it) with the order number underneath; Pickup/Grab lead with the order number.
+  const counterRef = isDineIn
+    ? (order.tableNumber ? `Stand #${order.tableNumber}` : "Dine-in")
+    : (order.queueNumber ? `Queue #${order.queueNumber}` : "Takeaway");
+  const title = isCounter ? counterRef : order.orderNumber;
+  const channel = isCounter ? (isDineIn ? "Dine-in" : "Takeaway") : isGrab ? "GrabFood" : "Pickup";
+  const subtitle = isCounter ? `${channel} · ${order.orderNumber} · ${ago}` : `${channel} · ${ago}`;
+  const HeaderIcon = isCounter ? (isDineIn ? Coffee : ShoppingBag) : isGrab ? Bike : ShoppingBag;
+  // Status → pill + the next bump action. Counter orders are already a completed
+  // sale, so there's no status lifecycle: they're "preparing" until a runner taps
+  // Served (which stamps served_at and clears the card off the queue).
   const pill =
-    order.status === "ready" ? { text: "READY", color: "#22C55E" }
+    isCounter ? { text: "PREPARING", color: accent }
+    : order.status === "ready" ? { text: "READY", color: "#22C55E" }
     : { text: "NEW", color: accent };
-  // Two-tap lifecycle: a new order goes straight to Ready (no separate
-  // "preparing" step), then Ready → Collected clears it off the queue.
+  // Counter: single Served tap. Pickup/Grab two-tap: a new order goes straight to
+  // Ready (no separate "preparing" step), then Ready → Collected clears it.
   const next =
-    order.status === "ready"
+    isCounter ? { label: "Mark Served", status: "completed" as const, color: "#22C55E" }
+    : order.status === "ready"
       ? { label: "Mark Collected", status: "completed" as const, color: "#22C55E" }
       : { label: "Mark Ready", status: "ready" as const, color: "#22C55E" };
 
@@ -3342,15 +3404,15 @@ function KdsCard({
       <View style={{ padding: 14 }}>
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center" style={{ gap: 7 }}>
-            {isGrab ? <Bike size={16} color={accent} /> : <ShoppingBag size={16} color={accent} />}
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: "#F5F3F0" }}>{order.orderNumber}</Text>
+            <HeaderIcon size={16} color={accent} />
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: "#F5F3F0" }}>{title}</Text>
           </View>
           <View style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: pill.color + "22" }}>
             <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 1, color: pill.color }}>{pill.text}</Text>
           </View>
         </View>
         <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(245,243,240,0.45)", marginTop: 3 }}>
-          {isGrab ? "GrabFood" : "Pickup"} · {ago}
+          {subtitle}
         </Text>
 
         <View style={{ marginTop: 10, gap: 4 }}>

@@ -6,8 +6,9 @@ import { playAlarm, primeSounds } from "./chime";
  * offending orders so the caller can show a popup — when an order has been open
  * past the serving-time TARGET without being actioned:
  *
- *   - pickup order → "Ready" not pressed within 15 min
- *   - QR table     → "Done"  not pressed within 15 min
+ *   - pickup order   → "Ready"  not pressed within 15 min
+ *   - QR table       → "Done"   not pressed within 15 min
+ *   - counter (Stand) → "Served" not pressed within 15 min
  *
  * The caller passes the currently-open serving items (already filtered to "not
  * yet ready / not yet done" upstream — see register.tsx). This hook owns the
@@ -27,8 +28,8 @@ const REPEAT_MS = 5 * 60 * 1000;                 // re-sound at most every 5 min
 export type ServingItem = {
   id: string;
   createdAt: string;
-  channel: "pickup" | "table";
-  label: string; // order number ("C-1234") or table label ("T5")
+  channel: "pickup" | "table" | "counter";
+  label: string; // order number ("C-1234"), table label ("T5"), or "Stand #5"
 };
 
 function pickOverdue(items: ServingItem[], now: number): ServingItem[] {
