@@ -28,8 +28,12 @@ type Unlinked = {
   grabItemId: string;
   sampleName: string | null;
   lastPriceRM: number | null;
+  basePriceRM: number | null;
   seen: number;
   lastSeen: string;
+  // Catalogue products at the same base price + the confident single match.
+  candidateIds: string[];
+  suggestedProductId: string | null;
 };
 type Data = { products: Product[]; links: LinkItem[]; unlinked: Unlinked[] };
 
@@ -48,7 +52,15 @@ export default function GrabItemLinksPage() {
     try {
       const res = await fetch("/api/integrations/grab/item-links", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setData((await res.json()) as Data);
+      const json = (await res.json()) as Data;
+      setData(json);
+      // Pre-fill each row with its confident single-match suggestion so staff
+      // just confirm. Ambiguous rows stay blank for a manual pick.
+      setPicks(
+        Object.fromEntries(
+          json.unlinked.filter((u) => u.suggestedProductId).map((u) => [u.grabItemId, u.suggestedProductId!]),
+        ),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -69,36 +81,62 @@ export default function GrabItemLinksPage() {
     () => (data?.products ?? []).slice().sort((a, b) => a.name.localeCompare(b.name)),
     [data?.products],
   );
+  const productById = useMemo(
+    () => new Map((data?.products ?? []).map((p) => [p.id, p] as const)),
+    [data?.products],
+  );
+  const uniqueMatchCount = useMemo(
+    () => (data?.unlinked ?? []).filter((u) => u.suggestedProductId).length,
+    [data?.unlinked],
+  );
+
+  // Single POST. Returns the linked product name on success (for the flash /
+  // bulk summary), or throws.
+  const postLink = async (grabItemId: string, productId: string, lastPriceRM: number | null, sampleName: string | null) => {
+    const res = await fetch("/api/integrations/grab/item-links", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grabItemId,
+        productId,
+        label: sampleName,
+        lastPrice: lastPriceRM != null ? Math.round(lastPriceRM * 100) : null,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || `HTTP ${res.status}`);
+    return json as { productName: string; backfilled: number };
+  };
 
   const link = async (grabItemId: string, lastPriceRM: number | null, sampleName: string | null) => {
     const productId = picks[grabItemId];
     if (!productId) return;
     setBusy((s) => ({ ...s, [grabItemId]: true }));
     try {
-      const res = await fetch("/api/integrations/grab/item-links", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          grabItemId,
-          productId,
-          label: sampleName,
-          lastPrice: lastPriceRM != null ? Math.round(lastPriceRM * 100) : null,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.error || `HTTP ${res.status}`);
+      const json = await postLink(grabItemId, productId, lastPriceRM, sampleName);
       setFlash(`Linked ${grabItemId} → ${json.productName}${json.backfilled ? ` · fixed ${json.backfilled} order line(s)` : ""}`);
-      setPicks((s) => {
-        const next = { ...s };
-        delete next[grabItemId];
-        return next;
-      });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Link failed");
     } finally {
       setBusy((s) => ({ ...s, [grabItemId]: false }));
     }
+  };
+
+  // One-click link every row that has a confident single price match.
+  const autoLinkUnique = async () => {
+    const targets = (data?.unlinked ?? []).filter((u) => u.suggestedProductId);
+    if (targets.length === 0) return;
+    setBusy((s) => ({ ...s, __bulk: true }));
+    setError(null);
+    const results = await Promise.allSettled(
+      targets.map((u) => postLink(u.grabItemId, u.suggestedProductId!, u.lastPriceRM, u.sampleName)),
+    );
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - ok;
+    setFlash(`Auto-linked ${ok} unique match${ok === 1 ? "" : "es"}${failed ? ` · ${failed} failed` : ""}.`);
+    setBusy((s) => ({ ...s, __bulk: false }));
+    await load();
   };
 
   const unlink = async (grabItemId: string) => {
@@ -143,12 +181,25 @@ export default function GrabItemLinksPage() {
             linking fixes recent orders and every future one.
           </p>
         </div>
-        <button
-          onClick={load}
-          className="inline-flex items-center gap-2 rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-        >
-          <RefreshCw className="h-4 w-4" /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {uniqueMatchCount > 0 ? (
+            <button
+              onClick={autoLinkUnique}
+              disabled={busy.__bulk}
+              title="Link every Grab item that matches exactly one product by price"
+              className="inline-flex items-center gap-2 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy.__bulk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+              Auto-link {uniqueMatchCount} unique match{uniqueMatchCount === 1 ? "" : "es"}
+            </button>
+          ) : null}
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-2 rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+          >
+            <RefreshCw className="h-4 w-4" /> Refresh
+          </button>
+        </div>
       </div>
 
       {flash ? (
@@ -168,6 +219,9 @@ export default function GrabItemLinksPage() {
           </h2>
           <p className="mt-0.5 text-sm text-neutral-600">
             Distinct Grab item ids seen on orders in the last 45 days that aren&apos;t mapped to a product yet.
+            We suggest catalogue products by base price (the item price minus add-ons). A single price match is
+            pre-selected — use <span className="font-medium">Auto-link</span> for those; pick from the shortlist
+            where several products share a price.
           </p>
         </header>
         {!data || data.unlinked.length === 0 ? (
@@ -199,18 +253,35 @@ export default function GrabItemLinksPage() {
                   </td>
                   <td className="px-5 py-2 text-right text-xs text-neutral-500">{u.seen}×</td>
                   <td className="px-5 py-2">
-                    <select
-                      value={picks[u.grabItemId] ?? ""}
-                      onChange={(e) => setPicks((s) => ({ ...s, [u.grabItemId]: e.target.value }))}
-                      className="w-72 rounded border border-neutral-300 px-2 py-1 text-sm focus:border-neutral-500 focus:outline-none"
-                    >
-                      <option value="">Select product…</option>
-                      {sortedProducts.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {productLabel(p)}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={picks[u.grabItemId] ?? ""}
+                        onChange={(e) => setPicks((s) => ({ ...s, [u.grabItemId]: e.target.value }))}
+                        className="w-72 rounded border border-neutral-300 px-2 py-1 text-sm focus:border-neutral-500 focus:outline-none"
+                      >
+                        <option value="">Select product…</option>
+                        {u.candidateIds.length > 0 ? (
+                          <optgroup label={`Price match${u.basePriceRM != null ? ` · RM ${u.basePriceRM.toFixed(2)}` : ""}`}>
+                            {u.candidateIds.map((id) => {
+                              const p = productById.get(id);
+                              return p ? (
+                                <option key={id} value={id}>
+                                  {productLabel(p)}
+                                </option>
+                              ) : null;
+                            })}
+                          </optgroup>
+                        ) : null}
+                        <optgroup label="All products">
+                          {sortedProducts.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {productLabel(p)}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                      <MatchBadge count={u.candidateIds.length} />
+                    </div>
                   </td>
                   <td className="px-5 py-2 text-right">
                     <button
@@ -277,5 +348,29 @@ export default function GrabItemLinksPage() {
         )}
       </section>
     </div>
+  );
+}
+
+// Confidence hint next to each unlinked row's product picker, driven by how
+// many catalogue products share the item's base price.
+function MatchBadge({ count }: { count: number }) {
+  if (count === 1) {
+    return (
+      <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+        1 match
+      </span>
+    );
+  }
+  if (count > 1) {
+    return (
+      <span className="whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+        {count} matches
+      </span>
+    );
+  }
+  return (
+    <span className="whitespace-nowrap rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-500">
+      no price match
+    </span>
   );
 }

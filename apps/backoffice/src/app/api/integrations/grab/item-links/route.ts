@@ -42,6 +42,9 @@ type UnlinkedRow = {
   grab_item_id: string;
   sample_name: string | null;
   last_price: number | null;
+  // Base price (sen) = unit_price − modifier_total. Grab bakes the chosen
+  // add-ons into item.price, so the base is what matches a catalogue product.
+  base_price: number | null;
   seen: bigint;
   last_seen: Date;
 };
@@ -72,6 +75,7 @@ export async function GET(req: NextRequest) {
     SELECT i.product_id AS grab_item_id,
            MAX(i.product_name) AS sample_name,
            MAX(i.unit_price)   AS last_price,
+           MAX(i.unit_price - COALESCE(i.modifier_total, 0)) AS base_price,
            COUNT(*)            AS seen,
            MAX(o.created_at)   AS last_seen
     FROM pos_order_items i
@@ -85,13 +89,24 @@ export async function GET(req: NextRequest) {
     LIMIT 200
   `);
 
+  // Catalogue match: index products by their Grab-facing price (sen). Grab gives
+  // us no item name on orders, so price is the only signal — we suggest the
+  // catalogue products at the item's base price. Exactly one ⇒ confident
+  // pre-fill; several ⇒ a shortlist the staff picks from.
+  const productOut = products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    category: p.category,
+    priceRM: Number(p.price_grab ?? p.grabfood_price ?? p.price ?? 0),
+  }));
+  const byPriceSen = new Map<number, typeof productOut>();
+  for (const p of productOut) {
+    const sen = Math.round(p.priceRM * 100);
+    (byPriceSen.get(sen) ?? byPriceSen.set(sen, []).get(sen)!).push(p);
+  }
+
   return NextResponse.json({
-    products: products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      category: p.category,
-      priceRM: Number(p.price_grab ?? p.grabfood_price ?? p.price ?? 0),
-    })),
+    products: productOut,
     links: links.map((l) => ({
       grabItemId: l.grab_item_id,
       productId: l.product_id,
@@ -100,13 +115,22 @@ export async function GET(req: NextRequest) {
       lastPriceRM: l.last_price != null ? l.last_price / 100 : null,
       updatedAt: l.updated_at,
     })),
-    unlinked: unlinked.map((u) => ({
-      grabItemId: u.grab_item_id,
-      sampleName: u.sample_name,
-      lastPriceRM: u.last_price != null ? Number(u.last_price) / 100 : null,
-      seen: Number(u.seen),
-      lastSeen: u.last_seen,
-    })),
+    unlinked: unlinked.map((u) => {
+      const baseSen = u.base_price != null ? Number(u.base_price) : null;
+      const candidates = baseSen != null ? byPriceSen.get(baseSen) ?? [] : [];
+      return {
+        grabItemId: u.grab_item_id,
+        sampleName: u.sample_name,
+        lastPriceRM: u.last_price != null ? Number(u.last_price) / 100 : null,
+        basePriceRM: baseSen != null ? baseSen / 100 : null,
+        seen: Number(u.seen),
+        lastSeen: u.last_seen,
+        // Catalogue products at the same base price, and a confident suggestion
+        // when there's exactly one.
+        candidateIds: candidates.map((c) => c.id),
+        suggestedProductId: candidates.length === 1 ? candidates[0].id : null,
+      };
+    }),
   });
 }
 
