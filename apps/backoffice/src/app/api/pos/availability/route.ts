@@ -85,8 +85,12 @@ export async function POST(req: NextRequest) {
     } else if (!isGrabConfigured()) {
       grab = "grab-not-configured";
     } else {
-      await batchUpdateMenu(merchantId, "availableStatus", [
-        { id: product_id, availableStatus: is_available ? "AVAILABLE" : "UNAVAILABLE" },
+      // field is the record TYPE ("ITEM"), attributes go in the entity. To set
+      // UNAVAILABLE Grab requires maxStock:0 alongside the status.
+      await batchUpdateMenu(merchantId, "ITEM", [
+        is_available
+          ? { id: product_id, availableStatus: "AVAILABLE" }
+          : { id: product_id, availableStatus: "UNAVAILABLE", maxStock: 0 },
       ]);
       grab = "pushed";
     }

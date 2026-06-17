@@ -153,10 +153,9 @@ export default function GrabIntegrationPage() {
     }
   };
 
-  // Push the latest backoffice menu to Grab for a linked outlet. The endpoint
-  // builds that outlet's menu (live 86 list + service hours) and PUTs it straight
-  // to GrabFood. Backoffice stays the source of truth — this makes GrabFood match
-  // it on demand instead of waiting on Grab.
+  // Push current prices + availability for this outlet's Grab-visible items to
+  // GrabFood (the on-demand record sync). Note: photos / item structure are NOT
+  // pushable via the API — those refresh only when Grab re-pulls our menu.
   const syncMenu = async (outletId: string, merchantID: string) => {
     setSyncBusy((s) => ({ ...s, [outletId]: true }));
     setSyncMsg((s) => ({ ...s, [outletId]: { ok: true, text: "" } }));
@@ -172,7 +171,7 @@ export default function GrabIntegrationPage() {
       }
       setSyncMsg((s) => ({
         ...s,
-        [outletId]: { ok: true, text: "Menu pushed to GrabFood — the storefront will reflect it shortly." },
+        [outletId]: { ok: true, text: "Prices & availability synced to GrabFood. (Photos refresh only on Grab's re-pull.)" },
       }));
     } catch (e) {
       setSyncMsg((s) => ({
@@ -186,7 +185,7 @@ export default function GrabIntegrationPage() {
 
   // Push the latest menu to every connected outlet at once (mirrors StoreHub's
   // top-bar "Sync Menu"). Fans out to the same per-outlet endpoint so each store
-  // gets its own menu pushed (live 86 list + hours).
+  // gets its prices + availability pushed.
   const syncAllMenus = async () => {
     const linked = (data?.outlets ?? []).filter((o) => o.grabMerchantId);
     if (linked.length === 0) return;
@@ -210,7 +209,7 @@ export default function GrabIntegrationPage() {
       ok: failed === 0,
       text:
         failed === 0
-          ? `Pushed menu to all ${ok} connected outlet${ok === 1 ? "" : "s"} — GrabFood will reflect it shortly.`
+          ? `Synced prices & availability to all ${ok} connected outlet${ok === 1 ? "" : "s"}.`
           : `${ok} synced, ${failed} failed. Use the per-outlet button below to retry the failures.`,
     });
     setSyncAllBusy(false);
@@ -250,7 +249,7 @@ export default function GrabIntegrationPage() {
             <button
               onClick={syncAllMenus}
               disabled={syncAllBusy}
-              title="Push the latest backoffice menu to every connected outlet"
+              title="Sync prices & availability to every connected outlet"
               className="inline-flex items-center gap-2 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {syncAllBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Sync all menus
@@ -382,7 +381,7 @@ export default function GrabIntegrationPage() {
                     <button
                       onClick={() => syncMenu(o.id, o.grabMerchantId!)}
                       disabled={syncBusy[o.id]}
-                      title="Push the latest backoffice menu to Grab for this outlet"
+                      title="Sync prices & availability to GrabFood for this outlet"
                       className="inline-flex items-center gap-1.5 rounded border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {syncBusy[o.id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}

@@ -204,16 +204,25 @@ export async function updateMenu(menu: GrabMenuPayload) {
 }
 
 /**
- * Batch update specific menu items (e.g. availability, price).
- * Field can be: "availableStatus", "price", "maxStock", etc.
+ * Batch update menu RECORDS — price / availability / stock for existing items.
+ * (Update Menu Record API: PUT /partner/v1/batch/menu.)
+ *
+ * IMPORTANT: `field` is the record TYPE — "ITEM" | "MODIFIER" | "CATEGORY" — NOT
+ * the attribute. The attributes (price, availableStatus, maxStock) live inside
+ * each menuEntity. Passing an attribute name here (e.g. "availableStatus") is
+ * malformed and Grab rejects it with `invalid_argument`.
+ *
+ * Note: to set an item UNAVAILABLE you must send BOTH availableStatus:"UNAVAILABLE"
+ * AND maxStock:0 (Grab treats maxStock>0 as AVAILABLE).
  */
 export async function batchUpdateMenu(
   merchantId: string,
-  field: string,
+  field: "ITEM" | "MODIFIER" | "CATEGORY",
   menuEntities: Array<{
     id: string;
     price?: number;
     availableStatus?: "AVAILABLE" | "UNAVAILABLE" | "HIDE";
+    maxStock?: number;
   }>,
 ) {
   return grabRequest("/partner/v1/batch/menu", {
