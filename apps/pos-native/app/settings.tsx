@@ -13,6 +13,7 @@ import { usePrintPrefs } from "@/lib/print-prefs";
 import { outletShort, outletFull } from "@/lib/outlets";
 import { getPrinterStatus, reconnectPrinter, testPrint, printerAvailable } from "@/lib/printer";
 import { getOrderingOpen, setOrderingOpen } from "@/lib/ordering";
+import { getGrabStore, setGrabStorePaused } from "@/lib/grab-store";
 import { useShift, openShift, closeShift, type ShiftTotals } from "@/lib/shift";
 
 const BRAND = "#A2492C";
@@ -93,8 +94,15 @@ export default function SettingsScreen() {
   const [orderingBusy, setOrderingBusy] = useState(false);
   const [orderingError, setOrderingError] = useState<string | null>(null);
 
+  // GrabFood store paused state for this outlet. null = not loaded; grabOnGrab
+  // = false hides the card (outlet isn't on GrabFood). Lives on Grab's side.
+  const [grabPaused, setGrabPausedState] = useState<boolean | null>(null);
+  const [grabOnGrab, setGrabOnGrab] = useState(true);
+  const [grabBusy, setGrabBusy] = useState(false);
+  const [grabError, setGrabError] = useState<string | null>(null);
+
   useEffect(() => {
-    if (outletId) { loadSettings(outletId); void loadOrdering(outletId); }
+    if (outletId) { loadSettings(outletId); void loadOrdering(outletId); void loadGrab(outletId); }
     refreshPrinter();
     void loadGridPrefs();
     void loadPrintPrefs();
@@ -107,6 +115,36 @@ export default function SettingsScreen() {
       setOrderingOpenState(await getOrderingOpen(id));
     } catch {
       setOrderingError("Couldn't load — check the connection.");
+    }
+  }
+
+  async function loadGrab(id: string) {
+    setGrabError(null);
+    try {
+      const { configured, paused } = await getGrabStore(id);
+      setGrabOnGrab(configured);
+      setGrabPausedState(configured ? paused : null);
+    } catch {
+      setGrabError("Couldn't load — check the connection.");
+    }
+  }
+
+  async function toggleGrab() {
+    if (grabBusy || grabPaused === null || !outletId) return;
+    const nextPaused = !grabPaused;
+    Haptics.selectionAsync();
+    setGrabBusy(true);
+    setGrabError(null);
+    setGrabPausedState(nextPaused); // optimistic
+    try {
+      setGrabPausedState(await setGrabStorePaused(outletId, nextPaused));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      setGrabPausedState(!nextPaused); // roll back to Grab's truth
+      setGrabError("Couldn't update — need a working connection.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setGrabBusy(false);
     }
   }
 
@@ -255,6 +293,48 @@ export default function SettingsScreen() {
               </>
             )}
           </Card>
+
+          {/* ── GrabFood store pause (per-outlet, only when the outlet is on GrabFood) ── */}
+          {grabOnGrab && (
+          <Card title="GrabFood Store" Icon={Store}>
+            <Text className="text-cream/45 text-[11px] mb-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+              Pause GrabFood for {outletShort(outletId) || "this outlet"} during a break or rush — customers can't place new GrabFood orders until you resume. Counter, QR & pickup are unaffected.
+            </Text>
+            {grabPaused === null ? (
+              grabError ? (
+                <View className="flex-row items-center justify-between py-2">
+                  <Text className="text-[#E5484D] text-sm flex-1 pr-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{grabError}</Text>
+                  <Pressable onPress={() => outletId && loadGrab(outletId)} className="active:opacity-60">
+                    <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Retry</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <ActivityIndicator color={WARN} style={{ marginVertical: 12 }} />
+              )
+            ) : (
+              <>
+                <View className="flex-row items-center gap-2 mb-1">
+                  {grabPaused ? <AlertCircle size={18} color={WARN} /> : <CheckCircle2 size={18} color={OK} />}
+                  <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                    {grabPaused ? "Paused on GrabFood" : "Open on GrabFood"}
+                  </Text>
+                  {grabBusy && <ActivityIndicator color={WARN} style={{ marginLeft: 4 }} />}
+                </View>
+                <ToggleRow
+                  label="Accept GrabFood orders"
+                  hint={grabPaused
+                    ? "Paused — no new GrabFood orders. Turn on to resume."
+                    : "Open. Turn off to pause GrabFood (e.g. during a break)."}
+                  value={!grabPaused}
+                  onToggle={toggleGrab}
+                />
+                {!!grabError && (
+                  <Text className="text-[#E5484D] text-[11px] mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{grabError}</Text>
+                )}
+              </>
+            )}
+          </Card>
+          )}
 
           {/* ── Printer ── */}
           <Card title="Receipt Printer" Icon={Printer}>
