@@ -70,6 +70,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Diagnostic: Grab's "Invalid parameters!" gives no field, so log the shape we
+  // send (top-level + a representative item/modifier) to pinpoint the bad field.
+  console.log(
+    `[grab:menu-push] merchant=${merchantID} cats=${menu.categories.length} items=${itemsCount} ` +
+      `sample=${JSON.stringify({
+        currency: menu.currency,
+        sellingTimes: menu.sellingTimes,
+        firstCategory: { ...menu.categories[0], items: undefined },
+        firstItem: menu.categories[0]?.items[0],
+      })}`,
+  );
+
   try {
     const result = await updateMenu(menu);
     // Best-effort nudge to re-pull (also the lever for photos/structure refresh).

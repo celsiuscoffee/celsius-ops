@@ -134,7 +134,6 @@ export function convertProductToGrabItem(product: RawProduct, sequence = 1): Gra
     availableStatus,
     description: product.description || undefined,
     price: Math.round(resolveGrabPriceRM(product) * 100), // RM → sen
-    campaignInfo: null,
     photos: product.image_url ? [grabSafeImageUrl(product.image_url)] : undefined,
     // Grab REQUIRES maxStock:0 whenever availableStatus is UNAVAILABLE — omitting it
     // makes Grab reject the entire menu push ("failed to push your menu"). AVAILABLE
