@@ -7,7 +7,23 @@
 
 ## Verdict
 
-**Tamarind can cut over tomorrow — the native path is already proven on Putrajaya (cut over Jun 8) and Shah Alam (cut over Jun 15), both ringing real-time `pos_orders` today.** But **"cancel StoreHub on the 27th" is not safe yet.** Three back-office systems still read StoreHub as their *only* source, and one of them — **daily finance/AR posting — has no native replacement at all.** The cutover itself is a 6-item checklist; the cancellation has 3 real blockers and a housekeeping tail. The 9-day buffer (Jun 18→27) is exactly enough to close them if work starts now.
+**Tamarind can cut over tomorrow — the native path is already proven on Putrajaya (cut over Jun 8) and Shah Alam (cut over Jun 15), both ringing real-time `pos_orders` today.** The 3 cancellation blockers are now largely closed in code (see the status update below); the cutover itself remains a 6-item operational checklist. The 9-day buffer (Jun 18→27) is enough to deploy + verify.
+
+---
+
+## Update — 2026-06-17 (implementation)
+
+Decisions confirmed by owner + work done this session:
+
+- **C3 Beep → resolved (no code).** Beep is already replaced by the Celsius App, so its orders now land in the `orders` table, not StoreHub. Only operational step left: retire the StoreHub Beep storefront link/QR so no customer hits a dead Beep page.
+- **C1 Finance → built.** New `pos-native-eod.ts` ingestor posts the daily AR journal from `pos_orders` (+ `pos_order_payments`) **and** the pickup `orders` table (where former-Beep revenue lives). `finance-eod` now routes per outlet by cutover (`ingestEodForDate`): native on/after cutover, StoreHub before. Validated against Putrajaya 2026-06-16 (95 till txns RM2,755.58 + 13 app orders ≈ RM489, tenders mapped correctly). **Pending: deploy + watch the first native run (4 AM MYT) reconcile to the dashboard before the 27th.**
+- **C2 Sales double-count → fixed.** `unified-sales` + staff `storehub-bridge` now count StoreHub for days *strictly before* cutover only; the live "today" pull is gated to still-pre-cutover outlets. No more `OFFLINE_PAYMENTS`/`GRABFOOD` post-cutover double-count.
+- **Housekeeping done:** integrations UI shows StoreHub as *Retired / archive-only* (+ "Tamarind Square"→"Tamarind", added Nilai); `.env.example` marks `STOREHUB_*` legacy; dropped the 3 orphan `*_test_del_20260615` tables.
+- **Housekeeping deferred (on purpose):**
+  - **`storehub-sync` cron** — keep until the 27th. Tamarind is on StoreHub until tomorrow and con/sa still have a small Grab tail; the archive (used for pre-cutover history) must stay fresh. Remove the entry from `apps/backoffice/vercel.json` at cancellation.
+  - **`*_backup_20260606` + `_outlets_backup` / `_outlet_settings_backup`** — kept. These are cutover safety snapshots; dropping them while the migration is still in flight is the wrong call. Drop after the 27th once validated.
+  - **Par-levels repoint — blocked on a mapping.** `inventory/par-levels/calculate` reads `SalesTransaction.menuId`; the only catalogue link is `Menu.storehubId`, and there is no `pos_order_items.product_id → menuId` path. Needs a POS-product↔inventory-menu mapping before it can be repointed. Until then par-levels go stale after the StoreHub `sync-sales` stops.
+  - **Loyalty StoreHub endpoints — still UI-wired, not orphaned.** `/api/storehub/match` (button in `apps/loyalty staff/page.tsx:563`), `/api/storehub/test` (`admin/settings/page.tsx:117`), and `dashboard/kpi` (`fetchTransactionCount`) all still reference `lib/storehub.ts`. Accrual is native, so they're harmless, but "retiring" them means removing those UI surfaces too — a small loyalty-app task, not a one-liner.
 
 ---
 
