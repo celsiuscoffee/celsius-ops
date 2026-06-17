@@ -19,7 +19,9 @@ import {
   resolveGrabItemProduct,
   fallbackGrabItemName,
   resolveGrabModifierName,
+  resolveModifierNameFromCatalogue,
   type GrabItemProductRow,
+  type CatalogueModifierGroup,
 } from "@/lib/grab-order-items";
 import { createClient } from "@/lib/supabase-server";
 
@@ -271,19 +273,25 @@ export async function POST(request: NextRequest) {
       new Set(itemsArr.flatMap((i) => [i.id, i.grabItemID]).filter(Boolean) as string[]),
     );
     const productIndex = new Map<string, GrabItemProductRow>();
+    // productId → catalogue modifier groups, for resolving add-on names from
+    // our own minted ids ("<productId>-m-<g>-<i>") without a manual link.
+    const modifiersByProductId = new Map<string, CatalogueModifierGroup[]>();
     if (candidateIds.length > 0) {
       // Match on EITHER the product id or its linked grab_item_id. Two narrow
       // queries (cheap, a handful of ids per order) avoid escaping arbitrary id
       // values into a single PostgREST `.or()` filter.
       const [byId, byGrab] = await Promise.all([
-        supabase.from("products").select("id, name, grab_item_id").in("id", candidateIds),
-        supabase.from("products").select("id, name, grab_item_id").in("grab_item_id", candidateIds),
+        supabase.from("products").select("id, name, grab_item_id, modifiers").in("id", candidateIds),
+        supabase.from("products").select("id, name, grab_item_id, modifiers").in("grab_item_id", candidateIds),
       ]);
       const rows = [
         ...((byId.data ?? []) as GrabItemProductRow[]),
         ...((byGrab.data ?? []) as GrabItemProductRow[]),
       ];
       for (const [k, v] of indexProductsByGrabKeys(rows)) productIndex.set(k, v);
+      for (const r of [...(byId.data ?? []), ...(byGrab.data ?? [])] as Array<{ id: string; modifiers?: unknown }>) {
+        if (Array.isArray(r.modifiers)) modifiersByProductId.set(r.id, r.modifiers as CatalogueModifierGroup[]);
+      }
     }
 
     // Modifier name resolution — Grab order modifiers carry only id + price.
@@ -321,11 +329,18 @@ export async function POST(request: NextRequest) {
         quantity: qty,
         unit_price: unitPrice,
         modifiers: (item.modifiers ?? []).map((m) => ({
-          // Grab order modifiers carry no name — resolve from grab_modifier_links
-          // by id, else show the price. Persist grab_modifier_id so an unmatched
-          // add-on can be linked from BackOffice and backfilled.
+          // Grab order modifiers carry no name. Resolve in priority order:
+          //   1. an explicit grab_modifier_links override (manual name), then
+          //   2. our own catalogue, when the id is "<productId>-m-<g>-<i>"
+          //      (auto — no link/manual naming needed since we minted it), then
+          //   3. the "Add-on @ RM x" price fallback.
+          // grab_modifier_id is still persisted so anything unmatched can be
+          // linked from BackOffice and backfilled.
           grab_modifier_id: m.id ?? null,
-          name: resolveGrabModifierName(m, modifierNameById),
+          name:
+            (m.id ? modifierNameById.get(m.id) : undefined) ??
+            resolveModifierNameFromCatalogue(m.id, modifiersByProductId) ??
+            resolveGrabModifierName(m, modifierNameById),
           price: m.price,
           qty: m.quantity,
         })),

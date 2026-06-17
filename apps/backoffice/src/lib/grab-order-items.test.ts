@@ -5,7 +5,10 @@ import {
   fallbackGrabItemName,
   fallbackGrabModifierName,
   resolveGrabModifierName,
+  parseGrabModifierId,
+  resolveModifierNameFromCatalogue,
   type GrabItemProductRow,
+  type CatalogueModifierGroup,
 } from "./grab-order-items";
 
 const LATTE: GrabItemProductRow = {
@@ -103,5 +106,39 @@ describe("fallbackGrabModifierName", () => {
   it("shows the price when set, bare otherwise", () => {
     expect(fallbackGrabModifierName({ price: 300 })).toBe("Add-on @ RM 3.00");
     expect(fallbackGrabModifierName({ price: 0 })).toBe("Add-on");
+  });
+});
+
+describe("parseGrabModifierId", () => {
+  it("parses our minted '<productId>-m-<g>-<i>' ids (productId may contain dashes)", () => {
+    expect(parseGrabModifierId("68ad6eac59357c00074fe2d5-m-0-0")).toEqual({
+      productId: "68ad6eac59357c00074fe2d5",
+      group: 0,
+      option: 0,
+    });
+    expect(parseGrabModifierId("iced-water-m-1-2")).toEqual({ productId: "iced-water", group: 1, option: 2 });
+  });
+
+  it("returns null for Grab-internal ids and junk", () => {
+    expect(parseGrabModifierId("MYITE2026011703270414937")).toBeNull();
+    expect(parseGrabModifierId(null)).toBeNull();
+    expect(parseGrabModifierId("")).toBeNull();
+  });
+});
+
+describe("resolveModifierNameFromCatalogue", () => {
+  const mods = new Map<string, CatalogueModifierGroup[]>([
+    ["68ad6eac59357c00074fe2d5", [{ options: [{ label: "Packaging" }] }, { options: [{ label: "Oat Milk" }] }]],
+  ]);
+
+  it("resolves the option label from our catalogue", () => {
+    expect(resolveModifierNameFromCatalogue("68ad6eac59357c00074fe2d5-m-0-0", mods)).toBe("Packaging");
+    expect(resolveModifierNameFromCatalogue("68ad6eac59357c00074fe2d5-m-1-0", mods)).toBe("Oat Milk");
+  });
+
+  it("returns undefined when the id isn't ours or the option is gone", () => {
+    expect(resolveModifierNameFromCatalogue("MYITE123", mods)).toBeUndefined();
+    expect(resolveModifierNameFromCatalogue("unknown-m-0-0", mods)).toBeUndefined();
+    expect(resolveModifierNameFromCatalogue("68ad6eac59357c00074fe2d5-m-9-9", mods)).toBeUndefined();
   });
 });
