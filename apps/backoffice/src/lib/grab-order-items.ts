@@ -75,3 +75,26 @@ export function fallbackGrabItemName(item: GrabOrderItemRef): string {
     ? `Item @ RM ${(unitPrice / 100).toFixed(2)}${suffix}`
     : `Item${suffix}`;
 }
+
+// ─── Modifiers (add-ons) ─────────────────────────────────────────────────────
+// Grab order modifiers also carry NO name — only an id + price. The real label
+// is resolved from grab_modifier_links by id; otherwise we surface the price so
+// the kitchen still sees the add-on cost.
+
+export interface GrabOrderModifierRef {
+  id?: string;
+  price?: number; // minor units (sen)
+}
+
+/** "Add-on @ RM x" (or bare "Add-on" when free) for an unlinked modifier. */
+export function fallbackGrabModifierName(m: GrabOrderModifierRef): string {
+  return m.price ? `Add-on @ RM ${((m.price ?? 0) / 100).toFixed(2)}` : "Add-on";
+}
+
+/** Resolve a modifier's display name from the id→name link map, else fallback. */
+export function resolveGrabModifierName(
+  m: GrabOrderModifierRef,
+  nameById: Map<string, string>,
+): string {
+  return (m.id ? nameById.get(m.id) : undefined) ?? fallbackGrabModifierName(m);
+}
