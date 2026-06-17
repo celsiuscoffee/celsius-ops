@@ -14,6 +14,22 @@ import type {
 } from "@/lib/grab";
 import { filterModifiersForChannel } from "@celsius/shared";
 
+/**
+ * Normalise a product / menu-item name for cross-system matching: lowercase,
+ * trim, collapse internal whitespace, drop punctuation. Used to auto-link a
+ * Grab menu item (from the PushGrabMenu webhook) to our product by name — Grab
+ * order webhooks never carry the item name, so the menu push is our one chance
+ * to learn it.
+ */
+export function normalizeMenuName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+
 export interface RawProduct {
   id: string;
   name: string;

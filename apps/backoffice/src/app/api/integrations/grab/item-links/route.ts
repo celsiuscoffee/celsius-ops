@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
+import { normalizeMenuName } from "@/lib/grab-menu";
 import { Prisma } from "@prisma/client";
 
 type ProductRow = {
@@ -45,6 +46,8 @@ type UnlinkedRow = {
   // Base price (sen) = unit_price − modifier_total. Grab bakes the chosen
   // add-ons into item.price, so the base is what matches a catalogue product.
   base_price: number | null;
+  // Grab's real item name, learned from the PushGrabMenu webhook (grab_menu_items).
+  grab_name: string | null;
   seen: bigint;
   last_seen: Date;
 };
@@ -76,10 +79,12 @@ export async function GET(req: NextRequest) {
            MAX(i.product_name) AS sample_name,
            MAX(i.unit_price)   AS last_price,
            MAX(i.unit_price - COALESCE(i.modifier_total, 0)) AS base_price,
+           MAX(gmi.name)       AS grab_name,
            COUNT(*)            AS seen,
            MAX(o.created_at)   AS last_seen
     FROM pos_order_items i
     JOIN pos_orders o ON o.id = i.order_id
+    LEFT JOIN grab_menu_items gmi ON gmi.grab_item_id = i.product_id
     WHERE o.source = 'grabfood'
       AND o.created_at > NOW() - INTERVAL '45 days'
       AND NOT EXISTS (SELECT 1 FROM products p WHERE p.id = i.product_id)
@@ -104,6 +109,14 @@ export async function GET(req: NextRequest) {
     const sen = Math.round(p.priceRM * 100);
     (byPriceSen.get(sen) ?? byPriceSen.set(sen, []).get(sen)!).push(p);
   }
+  // Name index for the strongest signal: when Grab's real item name (learned
+  // from the PushGrabMenu webhook) maps to exactly one product, that's a far
+  // more confident suggestion than price.
+  const byName = new Map<string, typeof productOut>();
+  for (const p of productOut) {
+    const key = normalizeMenuName(p.name);
+    (byName.get(key) ?? byName.set(key, []).get(key)!).push(p);
+  }
 
   return NextResponse.json({
     products: productOut,
@@ -117,18 +130,27 @@ export async function GET(req: NextRequest) {
     })),
     unlinked: unlinked.map((u) => {
       const baseSen = u.base_price != null ? Number(u.base_price) : null;
-      const candidates = baseSen != null ? byPriceSen.get(baseSen) ?? [] : [];
+      const priceCandidates = baseSen != null ? byPriceSen.get(baseSen) ?? [] : [];
+      const nameMatches = u.grab_name ? byName.get(normalizeMenuName(u.grab_name)) ?? [] : [];
+      // Prefer a unique name match; fall back to a unique price match.
+      const suggested =
+        nameMatches.length === 1 ? nameMatches[0].id : priceCandidates.length === 1 ? priceCandidates[0].id : null;
+      // Candidate shortlist = name matches first (best), then price matches.
+      const seen = new Set<string>();
+      const candidates = [...nameMatches, ...priceCandidates].filter((c) =>
+        seen.has(c.id) ? false : (seen.add(c.id), true),
+      );
       return {
         grabItemId: u.grab_item_id,
+        grabName: u.grab_name,
         sampleName: u.sample_name,
         lastPriceRM: u.last_price != null ? Number(u.last_price) / 100 : null,
         basePriceRM: baseSen != null ? baseSen / 100 : null,
         seen: Number(u.seen),
         lastSeen: u.last_seen,
-        // Catalogue products at the same base price, and a confident suggestion
-        // when there's exactly one.
         candidateIds: candidates.map((c) => c.id),
-        suggestedProductId: candidates.length === 1 ? candidates[0].id : null,
+        matchedByName: nameMatches.length === 1,
+        suggestedProductId: suggested,
       };
     }),
   });

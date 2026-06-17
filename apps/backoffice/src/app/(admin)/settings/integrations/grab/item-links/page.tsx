@@ -26,13 +26,15 @@ type LinkItem = {
 };
 type Unlinked = {
   grabItemId: string;
+  grabName: string | null;
   sampleName: string | null;
   lastPriceRM: number | null;
   basePriceRM: number | null;
   seen: number;
   lastSeen: string;
-  // Catalogue products at the same base price + the confident single match.
+  // Catalogue products matched by name/price + the confident single match.
   candidateIds: string[];
+  matchedByName: boolean;
   suggestedProductId: string | null;
 };
 type Data = { products: Product[]; links: LinkItem[]; unlinked: Unlinked[] };
@@ -243,7 +245,10 @@ export default function GrabItemLinksPage() {
               {data.unlinked.map((u) => (
                 <tr key={u.grabItemId} className="text-neutral-800">
                   <td className="px-5 py-2">
-                    <code className="text-xs">{u.grabItemId}</code>
+                    {u.grabName ? (
+                      <div className="text-sm font-medium text-neutral-900">{u.grabName}</div>
+                    ) : null}
+                    <code className="text-xs text-neutral-500">{u.grabItemId}</code>
                     <div className="text-xs text-neutral-400">
                       last seen {new Date(u.lastSeen).toLocaleString("en-MY", { dateStyle: "short", timeStyle: "short" })}
                     </div>
@@ -280,7 +285,7 @@ export default function GrabItemLinksPage() {
                           ))}
                         </optgroup>
                       </select>
-                      <MatchBadge count={u.candidateIds.length} />
+                      <MatchBadge count={u.candidateIds.length} byName={u.matchedByName} />
                     </div>
                   </td>
                   <td className="px-5 py-2 text-right">
@@ -353,7 +358,14 @@ export default function GrabItemLinksPage() {
 
 // Confidence hint next to each unlinked row's product picker, driven by how
 // many catalogue products share the item's base price.
-function MatchBadge({ count }: { count: number }) {
+function MatchBadge({ count, byName }: { count: number; byName?: boolean }) {
+  if (byName) {
+    return (
+      <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+        name match
+      </span>
+    );
+  }
   if (count === 1) {
     return (
       <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
