@@ -33,15 +33,16 @@ export async function PATCH(request: NextRequest) {
 
   const merchantId = process.env.GRAB_MERCHANT_ID!;
 
-  const menuEntities = items.map((item) => ({
-    id: item.id,
-    availableStatus: item.available
-      ? ("AVAILABLE" as const)
-      : ("UNAVAILABLE" as const),
-  }));
+  // field is the record TYPE ("ITEM"); attributes go in the entity. UNAVAILABLE
+  // requires maxStock:0 alongside the status.
+  const menuEntities = items.map((item) =>
+    item.available
+      ? { id: item.id, availableStatus: "AVAILABLE" as const }
+      : { id: item.id, availableStatus: "UNAVAILABLE" as const, maxStock: 0 },
+  );
 
   try {
-    const result = await batchUpdateMenu(merchantId, "availableStatus", menuEntities);
+    const result = await batchUpdateMenu(merchantId, "ITEM", menuEntities);
     return NextResponse.json({
       success: true,
       updated: items.length,
