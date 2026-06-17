@@ -282,6 +282,7 @@ async function resolveMatchException(
     amountMatched,
     confidence: 1.0, // human-confirmed
     agent: "manual",
+    agentVersion: "inbox-match",
   });
 
   await client

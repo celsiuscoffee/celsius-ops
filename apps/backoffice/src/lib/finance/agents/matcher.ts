@@ -1,16 +1,12 @@
 // Matcher agent — IO shell around the rules engine (matcher-rules.ts).
 //
 // Loads unmatched bank lines + open AR invoices / AP bills, runs the
-// deterministic engine per line, and on a confident match: writes fin_matches,
-// flips the bank line to `matched`, and advances the target's paid_amount /
-// payment_status. Sub-threshold lines become `match` exceptions in the inbox
+// deterministic engine per line, and on a confident match commits it via
+// commitMatch: posts the cash-clearing journal, writes fin_matches, advances
+// the target's paid_amount / payment_status, and flips the bank line to
+// `matched`. Sub-threshold lines become `match` exceptions in the inbox
 // carrying the engine's best proposal. Every decision is logged to
 // fin_agent_decisions for audit + future training of the LLM residual pass.
-//
-// NOT in v1 (deliberate): posting the cash-clearing journal (DR bank / CR
-// debtor) for a matched receipt. The match record + payment_status update is
-// the reconciliation state; the clearing journal is a separate accounting move
-// we don't auto-post unreviewed. Tracked as a follow-up.
 //
 // Scope: matches on amount/date/reference only; company scoping and the
 // fuzzy residual (fee-net card settlements, batched deposits, partial
@@ -18,15 +14,21 @@
 
 import { randomUUID } from "crypto";
 import { getFinanceClient, setActor } from "../supabase";
+import { postJournal } from "../ledger";
+import { buildClearingLines } from "./clearing";
 import { matchBankLine, settlementStatus, type BankLine, type Candidate, type MatchDecision } from "./matcher-rules";
+import type { AgentName } from "../types";
 
 export const MATCHER_VERSION = "matcher-v1";
 
-// Commit a single match to the ledger: write fin_matches, advance the target's
-// paid_amount / payment_status (invoice & bill only), and flip the bank line to
-// `matched`. Shared by the auto-Matcher and the inbox resolver so both apply a
-// match identically. Idempotency / double-match prevention is the caller's job
-// (the bank-line status guard + the engine's in-memory outstanding decrement).
+// Commit a single match to the ledger: post the cash-clearing journal (DR bank /
+// CR debtor for AR, DR payable / CR bank for AP), write fin_matches, advance the
+// target's paid_amount / payment_status, and flip the bank line to `matched`.
+// Shared by the auto-Matcher and the inbox resolver so both apply a match
+// identically. The clearing journal posts FIRST so a period-lock or balance
+// failure leaves the line unmatched (retryable) rather than half-applied.
+// Idempotency / double-match prevention is the caller's job (the bank-line
+// status guard + the engine's in-memory outstanding decrement).
 export async function commitMatch(
   client: ReturnType<typeof getFinanceClient>,
   m: {
@@ -35,9 +37,78 @@ export async function commitMatch(
     candidateId: string;
     amountMatched: number;
     confidence: number;
-    agent: string; // "matcher" | "manual"
+    agent: AgentName; // "matcher" | "manual"
+    agentVersion: string;
   }
 ): Promise<void> {
+  // Load the bank line (bank account + date for the clearing journal).
+  const { data: bank, error: bankErr } = await client
+    .from("fin_bank_transactions")
+    .select("bank_account_code, txn_date, reference")
+    .eq("id", m.bankTxnId)
+    .single();
+  if (bankErr) throw bankErr;
+
+  // Load target fields for paid-advance + the clearing split.
+  let target: { total: number; paid: number; outletId: string | null; companyId: string | null; channel: string | null; subtotal: number | null } | null = null;
+  if (m.candidateType === "invoice") {
+    const { data, error } = await client
+      .from("fin_invoices")
+      .select("total, paid_amount, outlet_id, company_id, channel, subtotal")
+      .eq("id", m.candidateId)
+      .single();
+    if (error) throw error;
+    target = {
+      total: Number(data.total),
+      paid: Number(data.paid_amount ?? 0),
+      outletId: (data.outlet_id as string) ?? null,
+      companyId: (data.company_id as string) ?? null,
+      channel: (data.channel as string) ?? null,
+      subtotal: data.subtotal != null ? Number(data.subtotal) : null,
+    };
+  } else if (m.candidateType === "bill") {
+    const { data, error } = await client
+      .from("fin_bills")
+      .select("total, paid_amount, outlet_id, company_id")
+      .eq("id", m.candidateId)
+      .single();
+    if (error) throw error;
+    target = {
+      total: Number(data.total),
+      paid: Number(data.paid_amount ?? 0),
+      outletId: (data.outlet_id as string) ?? null,
+      companyId: (data.company_id as string) ?? null,
+      channel: null,
+      subtotal: null,
+    };
+  }
+
+  // 1. Clearing journal first (most likely to fail on a closed period / balance).
+  const lines = buildClearingLines({
+    matchedToType: m.candidateType,
+    bankAccountCode: bank.bank_account_code as string,
+    amountMatched: m.amountMatched,
+    outletId: target?.outletId ?? null,
+    channel: target?.channel ?? null,
+    subtotal: target?.subtotal ?? null,
+    total: target?.total ?? null,
+    reference: (bank.reference as string) ?? null,
+  });
+  if (lines && target?.companyId) {
+    await postJournal({
+      companyId: target.companyId,
+      txnDate: bank.txn_date as string,
+      description: `Settlement: ${m.candidateType} ${m.candidateId} ↔ bank ${m.bankTxnId}`,
+      txnType: "payment",
+      outletId: target.outletId,
+      agent: m.agent,
+      agentVersion: m.agentVersion,
+      confidence: m.confidence,
+      lines,
+    });
+  }
+
+  // 2. Record the reconciliation.
   const { error: matchErr } = await client.from("fin_matches").insert({
     id: randomUUID(),
     bank_txn_id: m.bankTxnId,
@@ -49,19 +120,13 @@ export async function commitMatch(
   });
   if (matchErr) throw matchErr;
 
-  if (m.candidateType === "invoice" || m.candidateType === "bill") {
+  // 3. Advance the target's paid_amount / payment_status.
+  if (target && (m.candidateType === "invoice" || m.candidateType === "bill")) {
     const table = m.candidateType === "bill" ? "fin_bills" : "fin_invoices";
-    const { data: tgt, error: tErr } = await client
-      .from(table)
-      .select("total, paid_amount")
-      .eq("id", m.candidateId)
-      .single();
-    if (tErr) throw tErr;
-    const total = Number(tgt.total);
-    const newPaid = round2(Number(tgt.paid_amount ?? 0) + m.amountMatched);
+    const newPaid = round2(target.paid + m.amountMatched);
     const { error: uErr } = await client
       .from(table)
-      .update({ paid_amount: newPaid, payment_status: settlementStatus(total, newPaid) })
+      .update({ paid_amount: newPaid, payment_status: settlementStatus(target.total, newPaid) })
       .eq("id", m.candidateId);
     if (uErr) throw uErr;
   }
@@ -210,6 +275,7 @@ async function applyMatch(
     amountMatched: decision.amountMatched,
     confidence: decision.confidence,
     agent: "matcher",
+    agentVersion: MATCHER_VERSION,
   });
 
   // Keep the in-memory pool consistent so the engine can't re-propose this
