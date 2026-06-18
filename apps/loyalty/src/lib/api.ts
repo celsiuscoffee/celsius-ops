@@ -176,55 +176,6 @@ export async function fetchTransactions(
   }
 }
 
-// ─── Award Points ────────────────────────────────────
-export async function awardPoints(data: {
-  member_id: string;
-  brand_id?: string;
-  outlet_id: string;
-  points: number;
-  description: string;
-  reference_id?: string;
-  multiplier?: number;
-  amount?: number;
-}): Promise<{ success: boolean; transaction?: PointTransaction; error?: string }> {
-  try {
-    const res = await fetch("/api/points/award", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ brand_id: "brand-celsius", ...data }),
-    });
-    await handleAuthResponse(res);
-    return res.json();
-  } catch (err) {
-    if (err instanceof SessionExpiredError) return { success: false, error: SESSION_EXPIRED_ERROR };
-    return { success: false, error: "Network error" };
-  }
-}
-
-// ─── Redeem Reward ───────────────────────────────────
-export async function redeemReward(data: {
-  member_id: string;
-  reward_id: string;
-  brand_id?: string;
-  outlet_id?: string;
-  staff_redeem?: boolean;
-}): Promise<{ success: boolean; code?: string; error?: string }> {
-  try {
-    const res = await fetch("/api/redeem", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ brand_id: "brand-celsius", ...data }),
-    });
-    await handleAuthResponse(res);
-    return res.json();
-  } catch (err) {
-    if (err instanceof SessionExpiredError) return { success: false, error: SESSION_EXPIRED_ERROR };
-    return { success: false, error: "Network error" };
-  }
-}
-
 // ─── Dashboard Stats ─────────────────────────────────
 export async function fetchDashboardStats(): Promise<DashboardStats> {
   try {
@@ -384,23 +335,5 @@ export async function fetchMemberTierStatus(
     return res.json();
   } catch {
     return null;
-  }
-}
-
-// ─── Staff ───────────────────────────────────────────
-export async function verifyStaffPin(
-  outletId: string,
-  pin: string,
-): Promise<{ success: boolean; staff_name?: string; outlet_name?: string; error?: string }> {
-  try {
-    const res = await fetch("/api/staff/verify-pin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ outlet_id: outletId, pin }),
-    });
-    return res.json();
-  } catch {
-    return { success: false, error: "Network error" };
   }
 }
