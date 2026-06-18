@@ -13,6 +13,7 @@
     { "path": "/api/cron/auto-hours",                         "schedule": "*/10 * * * *" },
     { "path": "/api/cron/reconcile-pending",                  "schedule": "*/1 * * * *" },
     { "path": "/api/cron/expire-orders",                      "schedule": "*/15 * * * *" },
-    { "path": "/api/cron/promote-scheduled",                  "schedule": "*/2 * * * *" }
+    { "path": "/api/cron/promote-scheduled",                  "schedule": "*/2 * * * *" },
+    { "path": "/api/cron/sync-rm-payouts",                    "schedule": "0 21 * * *" }
   ]
 }

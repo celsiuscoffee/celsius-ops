@@ -1625,6 +1625,56 @@ enum BankLineDirection {
   DR
 }
 
+// Revenue Monster payout (daily settlement) batches, auto-synced from the RM
+// Open API (POST /v3/payment/settlement/csv) by apps/order /api/cron/sync-rm-payouts.
+// The finance Payouts page reads these read-only. One row per (date, method,
+// sequence, store) settlement batch. Created via supabase/migrations/023 — manual
+// SQL, never `prisma db push`. Columns are camelCase (matches BankStatement style).
+model RmPayout {
+  id               String   @id            // "<date>_<method>_<seq>_<storeId>"
+  settlementDate   DateTime
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  method           String                  // RM method code (FPX_MY / TNG_MY / card ...)
+  sequence         Int      @default(1)
+  storeId          String                  // our outlet slug
+  entityName       String?                 // bank beneficiary / operating company
+  bankAccountLast4 String?
+  txnCount         Int      @default(0)
+  grossTotal       Decimal  @default(0) @db.Decimal(12, 2)
+  mdrFee           Decimal  @default(0) @db.Decimal(12, 2)
+  netTotal         Decimal  @default(0) @db.Decimal(12, 2)
+  status           String   @default("success")
+  syncedAt         DateTime @default(now())
+  createdAt        DateTime @default(now())
+  lines            RmPayoutLine[]
+
+  @@index([settlementDate])
+  @@index([storeId])
+}
+
+// One settled transaction inside a payout. orderId links back to the Celsius
+// pickup order (orders.id) matched on rmTransactionId = orders.payment_provider_ref;
+// null when unmatched (e.g. POS-terminal sales until their refs are wired).
+model RmPayoutLine {
+  id              String   @id            // = rmTransactionId
+  payoutId        String
+  payout          RmPayout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  rmTransactionId String
+  rmOrderId       String?
+  orderId         String?
+  gross           Decimal  @default(0) @db.Decimal(12, 2)
+  mdrFee          Decimal  @default(0) @db.Decimal(12, 2)
+  net             Decimal  @default(0) @db.Decimal(12, 2)
+  method          String?
+  txnTime         DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([payoutId])
+  @@index([orderId])
+  @@unique([rmTransactionId])
+}
+
 // Cash-tracking categories — verbatim from the per-outlet spreadsheet
 // framework Finance uses. Same enum is used on both inflow and outflow
 // sides; direction is on the line itself. InterCo categories show on
