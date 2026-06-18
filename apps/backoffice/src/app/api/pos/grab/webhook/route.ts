@@ -309,8 +309,14 @@ export async function POST(request: NextRequest) {
       const product = resolveGrabItemProduct(item, productIndex);
       const qty = item.quantity ?? 1;
       const unitPrice = item.price ?? 0;
+      // Grab's item.price is ALREADY modifier-inclusive (see the GrabOrderItem
+      // type: "single item + its modifiers, tax-inclusive"). modTotal is kept
+      // for display + the catalogue base-price match (base = unitPrice − modTotal)
+      // — but must NOT be added to the line total, or the receipt double-counts
+      // the add-ons (e.g. RM11.80 item printed as RM13.70). The order subtotal
+      // comes from Grab's price.subtotal = Σ unitPrice, so the line must match it.
       const modTotal = (item.modifiers ?? []).reduce((n, m) => n + (m.price ?? 0) * (m.quantity ?? 1), 0);
-      const itemTotal = (unitPrice + modTotal) * qty;
+      const itemTotal = unitPrice * qty;
       return {
         id: randomUUID(),
         order_id: order.id,
