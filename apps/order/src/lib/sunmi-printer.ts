@@ -159,6 +159,8 @@ export function sunmiPrintReceipt(
     voucher_code?: string;
     reward_discount_amount?: number;
     reward_name?: string;
+    promo_discount?: number;
+    promo_name?: string;
     sst_amount?: number;
     payment_method?: string;
   },
@@ -206,6 +208,12 @@ export function sunmiPrintReceipt(
   if (order.reward_discount_amount && order.reward_discount_amount > 0) {
     lines.push({
       text: `Reward   -${fmt(order.reward_discount_amount)}`,
+      size: 20,
+    });
+  }
+  if (order.promo_discount && order.promo_discount > 0) {
+    lines.push({
+      text: `${order.promo_name || "Promo"}   -${fmt(order.promo_discount)}`,
       size: 20,
     });
   }

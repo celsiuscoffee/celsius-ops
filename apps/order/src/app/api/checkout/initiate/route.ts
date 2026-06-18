@@ -430,6 +430,16 @@ export async function POST(request: NextRequest) {
     rewardDiscountSenAmt = recv.rewardSen;
     fodDiscountSen       = recv.fodSen;
     const dropReward     = recv.droppedWallet;
+    // Human label for promo_discount (e.g. "Arba & Staff — 30% off"), so the
+    // receipt + reports can name the promo, not just its amount. When the tier
+    // perk won it's the only leg; otherwise it's the store/auto promo legs.
+    const promoName = promoDiscountSen > 0
+      ? (Array.from(new Set(
+          evaluated.discounts
+            .filter((d) => !dropReward || d.reason === "tier_perk")
+            .map((d) => d.promotion_name).filter(Boolean),
+        )).join(", ") || null)
+      : null;
 
     // ── Compute totals server-side ─────────────────────────────────────────
     const orderNumber          = generateOrderNumber();
@@ -486,6 +496,7 @@ export async function POST(request: NextRequest) {
         // already does. Without this, the PWA's order page showed a
         // bare total with no line explaining the gap.
         promo_discount:         promoDiscountSen,
+        promo_name:             promoName,
         total:                  totalSen,
         customer_phone:         loyaltyPhone ?? null,
         loyalty_phone:          loyaltyPhone ?? null,
