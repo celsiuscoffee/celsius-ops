@@ -24,6 +24,7 @@ import {
   type CatalogueModifierGroup,
 } from "@/lib/grab-order-items";
 import { createClient } from "@/lib/supabase-server";
+import { mapGrabStatusToPOS, resolveStatusTransition } from "@/lib/grab-order-status";
 
 interface GrabOrderItemModifier {
   // Grab order modifiers carry NO name — only the partner modifier id + price + tax.
@@ -87,17 +88,6 @@ interface GrabWebhookPayload {
   orderType: "DELIVERY" | "PICKUP" | "DINE_IN";
 }
 
-function mapGrabStatusToPOS(state: GrabWebhookPayload["orderState"]): string {
-  switch (state) {
-    case "PENDING": case "DRIVER_ALLOCATED": return "open";
-    case "ACCEPTED": return "sent_to_kitchen";
-    case "DRIVER_ARRIVED": return "ready";
-    case "COLLECTED": case "DELIVERED": return "completed";
-    case "CANCELLED": case "FAILED": return "cancelled";
-    default: return "open";
-  }
-}
-
 // Grab / the simulator put the order note in different places across API
 // versions (receiver.address.deliveryInstruction vs a top-level comment /
 // remarks / instructions). Capture the first non-empty candidate so it reaches
@@ -153,13 +143,22 @@ export async function POST(request: NextRequest) {
     const { data: existing } = await supabase
       .from("pos_orders").select("id, status").eq("external_id", orderID).maybeSingle();
     if (existing) {
-      const newStatus = mapGrabStatusToPOS(orderState);
-      if (existing.status !== newStatus) {
+      // Forward-only: only persist a status that ADVANCES the order. A late,
+      // duplicate or unrecognised state push is a no-op and can no longer drag a
+      // ready/collected order back to "open".
+      const newStatus = resolveStatusTransition(existing.status, mapGrabStatusToPOS(orderState));
+      if (newStatus) {
         await supabase.from("pos_orders")
           .update({ status: newStatus, updated_at: new Date().toISOString() })
           .eq("id", existing.id);
       }
-      return NextResponse.json({ success: true, action: "updated", orderId: existing.id, state: orderState });
+      return NextResponse.json({
+        success: true,
+        action: newStatus ? "updated" : "ignored",
+        orderId: existing.id,
+        state: orderState,
+        status: newStatus ?? existing.status,
+      });
     }
 
     // 2. Create whenever the payload carries items (Submit Order). Push
