@@ -11,6 +11,27 @@
 
 ---
 
+## Update — 2026-06-18 (Tamarind cut over — migration COMPLETE; finance backfill required)
+
+**Tamarind cut over.** Set `Outlet.posNativeCutoverAt = '2026-06-17 16:00:00+00'` (= Jun 18 00:00 MYT) for `outlet-tam`. Verified clean: StoreHub's last Tamarind txn was Jun 17 22:10 MYT, native till started Jun 18 07:54 MYT, native Grab already flowing — clean overnight boundary, nothing dropped/doubled. **Fleet now fully native** (Putrajaya Jun 8, Shah Alam Jun 15, Tamarind Jun 18; Nilai never on StoreHub). **Zero StoreHub transactions fleet-wide on/after Jun 18 00:00 MYT** — StoreHub is operationally dead.
+
+**🔴 Finance backfill required — AR understated ~RM46.5k since the cutovers.** The live `finance-eod` cron is still the old StoreHub-only code (the native ingestor is on this branch, not deployed), so since each outlet cut over, AR booked only the dying StoreHub Grab tail, not the native till/app revenue:
+
+| Outlet | Native revenue since cutover | Posted to AR | Understated |
+|---|---|---|---|
+| Putrajaya (since Jun 8) | RM40,818 (till 29,872 + app 10,947) | RM3,043 | **−RM37,776** |
+| Shah Alam (since Jun 15) | RM9,629 (till 7,196 + app 2,434) | RM875 | **−RM8,754** |
+
+Remediation, two parts:
+1. **Deploy this branch.** From Jun 18 the native ingestor is *complete* (till + app + native Grab; StoreHub dead) — go-forward needs nothing more.
+2. **Backfill Jun 8–17 (con) / Jun 15–17 (sa)** — one-time. For each post-cutover day: `reverseTransaction()` the stale StoreHub `ar_invoice` (it's `source_doc_id` → `fin_documents.source='storehub'`), then re-post via `ingestOutletNativeEod`. **Nuance:** Grab moved to native only ~Jun 17, so for con Jun 8–16 / sa Jun 15–16 the till was native but Grab was still StoreHub — recomputing from `pos_orders` alone misses that Grab. Those days must add the StoreHub GRABFOOD/BEEP rows (excluding the OFFLINE_PAYMENTS till residual, which native already has). Needs a finance-agreed method before running; the native ingestor's idempotency guard also needs to ignore `status='reversed'` so a reversed day can re-post.
+
+**Also:** Nilai is native-by-birth but has `posNativeCutoverAt = NULL` and 0 orders — the sales/finance native paths are cutover-gated, so when Nilai starts trading, set its cutover (= launch date) or its revenue won't be picked up.
+
+The 27th housekeeping (cancel StoreHub, remove `storehub-sync` cron, export StoreHub data, drop the Jun-06 backups) is unchanged.
+
+---
+
 ## Update — 2026-06-17 (implementation)
 
 Decisions confirmed by owner + work done this session:
