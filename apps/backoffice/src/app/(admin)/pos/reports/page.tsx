@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Download, ArrowUpDown, ArrowUp, ArrowDown, Info, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, Download, ArrowUpDown, ArrowUp, ArrowDown, Info, Search, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
 import { ReportsTabs } from "../_ReportsTabs";
@@ -84,7 +84,7 @@ export default function SalesReportsPage() {
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
+  const [categories, setCategories] = useState<string[]>([]);
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
@@ -97,7 +97,7 @@ export default function SalesReportsPage() {
       setData(json);
       setSort(null);
       setSearch("");
-      setCategory("all");
+      setCategories([]);
       setPage(1);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load report");
@@ -145,11 +145,11 @@ export default function SalesReportsPage() {
       const textKeys = columns.filter((c) => c.kind === "text").map((c) => c.key);
       rows = rows.filter((r) => textKeys.some((k) => String(r[k] ?? "").toLowerCase().includes(q)));
     }
-    if (hasCategory && category !== "all") rows = rows.filter((r) => String(r.category ?? "") === category);
+    if (hasCategory && categories.length > 0) rows = rows.filter((r) => categories.includes(String(r.category ?? "")));
     return rows;
-  }, [sortedRows, search, category, columns, hasCategory]);
+  }, [sortedRows, search, categories, columns, hasCategory]);
 
-  const isFiltered = search.trim() !== "" || category !== "all";
+  const isFiltered = search.trim() !== "" || categories.length > 0;
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const pagedRows = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -313,19 +313,15 @@ export default function SalesReportsPage() {
           />
         </div>
         {hasCategory && categoryOptions.length > 0 && (
-          <select
-            value={category}
-            onChange={(e) => { setCategory(e.target.value); setPage(1); }}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-[#160800] outline-none"
-          >
-            <option value="all">All categories</option>
-            {categoryOptions.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+          <MultiSelect
+            label="All categories"
+            options={categoryOptions}
+            selected={categories}
+            onChange={(v) => { setCategories(v); setPage(1); }}
+          />
         )}
         {isFiltered && (
-          <button onClick={() => { setSearch(""); setCategory("all"); setPage(1); }} className="text-xs text-[#A2492C] hover:underline">
+          <button onClick={() => { setSearch(""); setCategories([]); setPage(1); }} className="text-xs text-[#A2492C] hover:underline">
             Clear filters
           </button>
         )}
@@ -436,6 +432,66 @@ export default function SalesReportsPage() {
 function SortIcon({ active, dir }: { active?: boolean; dir?: "asc" | "desc" }) {
   if (!active) return <ArrowUpDown className="h-3 w-3 text-gray-300" />;
   return dir === "asc" ? <ArrowUp className="h-3 w-3 text-[#A2492C]" /> : <ArrowDown className="h-3 w-3 text-[#A2492C]" />;
+}
+
+function MultiSelect({
+  label, options, selected, onChange,
+}: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const toggle = (o: string) =>
+    onChange(selected.includes(o) ? selected.filter((x) => x !== o) : [...selected, o]);
+
+  const summary =
+    selected.length === 0 ? label : selected.length === 1 ? selected[0] : `${selected.length} categories`;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className={`inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm outline-none ${
+          selected.length ? "border-[#A2492C] text-[#A2492C]" : "border-gray-200 text-[#160800]"
+        }`}
+      >
+        {summary}
+        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 max-h-72 w-60 overflow-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg">
+          <div className="flex items-center justify-between px-2 py-1.5 text-xs text-gray-500">
+            <button onClick={() => onChange(options)} className="hover:text-[#A2492C]">Select all</button>
+            <button onClick={() => onChange([])} className="hover:text-[#A2492C]">Clear</button>
+          </div>
+          {options.map((o) => (
+            <label key={o} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[#160800] hover:bg-gray-50">
+              <input
+                type="checkbox"
+                checked={selected.includes(o)}
+                onChange={() => toggle(o)}
+                className="h-3.5 w-3.5 accent-[#A2492C]"
+              />
+              <span className="truncate">{o}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Chart({ data }: { data: { label: string; value: number }[] }) {
