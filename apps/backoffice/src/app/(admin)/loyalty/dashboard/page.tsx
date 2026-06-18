@@ -2,1053 +2,368 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  DollarSign,
-  Users,
-  Star,
-  Gift,
+  Trophy,
+  Phone,
   TrendingUp,
+  ClipboardCheck,
+  Trash2,
+  Clock,
+  RefreshCw,
   Loader2,
-  Activity as ActivityIcon,
-  Crown,
   Store,
   Target,
-  UserCheck,
-  Repeat,
-  UserX,
-  Zap,
-  TrendingDown,
-  PieChart,
+  CheckCircle2,
+  XCircle,
+  MinusCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
-// Types
+// Types — mirror /api/scorecard
 // ---------------------------------------------------------------------------
 
-type KpiPeriod = "daily" | "yesterday" | "last7days" | "last30days" | "weekly" | "monthly" | "custom";
-type KpiShift = "all" | "morning" | "evening";
+type KpiStatus = "hit" | "miss" | "nodata";
+type Period = "daily" | "yesterday" | "last7days" | "last30days" | "weekly" | "monthly";
 
-type OutletOption = { id: string; name: string };
+type Kpi = { value: number | null; target?: number; status: KpiStatus };
 
-type KpiData = {
-  period: { from: string; to: string; type: string };
-  collection_rate: {
-    pos_orders: number;
-    loyalty_claims: number;
-    rate: number;
-    outlets: { outlet_id: string; outlet_name: string; pos_orders: number; loyalty_claims: number; claim_rate: number }[];
+type OutletRow = {
+  id: string;
+  code: string;
+  name: string;
+  onPos: boolean;
+  revenue: number;
+  met: number;
+  measurable: number;
+  score: number | null;
+  kpis: {
+    collection: Kpi & { orders: number; collected: number };
+    upsell: Kpi & { orders: number; upsellOrders: number };
+    ops: Kpi & { completed: number; total: number; photoRate: number | null };
+    wastage: Kpi & { cost: number };
+    serving: Kpi & { orders: number };
   };
-  new_members: number;
-  returning_members: number;
-  returning_sales: number;
-  available_outlets: OutletOption[];
-  _debug?: string[];
 };
 
-type SegmentPeriod = "weekly" | "monthly" | "yearly";
-
-type SegmentData = {
-  period: string;
-  period_start: string;
-  total_members: number;
-  active_this_period: number;
-  repeat: number;
-  frequent: number;
-  ltv: number;
-  ltv_projected_months: number;
-  churned: number;
-  avg_spend: number;
-  total_spend: number;
+type Scorecard = {
+  period: { from: string; to: string; type: string; label: string };
+  generatedAt: string;
+  targets: {
+    collectionRate: number;
+    upsellRate: number;
+    opsCompletion: number;
+    wastagePctOfSales: number;
+    servingMins: number;
+  };
+  summary: {
+    totalOutlets: number;
+    measuredOutlets: number;
+    hittingAll: number;
+    totalRevenue: number;
+    avg: {
+      collection: number | null;
+      upsell: number | null;
+      ops: number | null;
+      wastagePct: number | null;
+      servingMins: number | null;
+    };
+  };
+  outlets: OutletRow[];
 };
 
-type DashboardStats = {
-  total_members: number;
-  new_members_today: number;
-  new_members_this_month: number;
-  total_points_issued: number;
-  total_points_redeemed: number;
-  total_redemptions: number;
-  total_revenue_attributed: number;
-  active_campaigns: number;
-  active_members_30d: number;
-  floating_points: number;
-  member_transaction_pct: number;
-  avg_lifetime_value_members: number;
-  avg_lifetime_value_nonmembers: number;
-  reward_redemption_rate: number;
-  top_spenders: TopSpender[];
-  recent_activity: Activity[];
-  new_members_by_month: { month: string; count: number }[];
-  redemptions_by_month: { month: string; count: number }[];
+// ---------------------------------------------------------------------------
+// KPI column metadata
+// ---------------------------------------------------------------------------
+
+type KpiKey = "collection" | "upsell" | "ops" | "wastage" | "serving";
+
+const KPI_META: Record<
+  KpiKey,
+  { label: string; short: string; icon: React.ElementType; unit: "pct" | "mins"; lowerBetter: boolean }
+> = {
+  collection: { label: "Loyalty capture", short: "Capture", icon: Phone, unit: "pct", lowerBetter: false },
+  upsell: { label: "Upsell", short: "Upsell", icon: TrendingUp, unit: "pct", lowerBetter: false },
+  ops: { label: "Ops compliance", short: "Ops", icon: ClipboardCheck, unit: "pct", lowerBetter: false },
+  wastage: { label: "Wastage", short: "Wastage", icon: Trash2, unit: "pct", lowerBetter: true },
+  serving: { label: "Serving time", short: "Serving", icon: Clock, unit: "mins", lowerBetter: true },
 };
 
-type TopSpender = {
-  id: string;
-  name: string;
-  phone: string;
-  total_spent: number;
-  total_visits: number;
-  total_points_earned: number;
-  total_rewards_redeemed: number;
-  last_visit_at: string;
-};
-
-type Activity = {
-  id: string;
-  name: string;
-  text: string;
-  type: "earn" | "redeem" | "bonus";
-  date: string;
-};
-
-const PERIOD_LABELS: Record<KpiPeriod, string> = {
-  daily: "Today",
-  yesterday: "Yesterday",
-  last7days: "Last 7 Days",
-  last30days: "Last 30 Days",
-  weekly: "This Week",
-  monthly: "This Month",
-  custom: "Custom",
-};
+const PERIODS: { value: Period; label: string }[] = [
+  { value: "daily", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "last7days", label: "Last 7 Days" },
+  { value: "last30days", label: "Last 30 Days" },
+  { value: "monthly", label: "This Month" },
+];
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatPoints(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+function fmtPct(v: number | null): string {
+  return v === null ? "—" : `${v}%`;
+}
+function fmtMins(v: number | null): string {
+  return v === null ? "—" : `${v}m`;
+}
+function fmtUnit(v: number | null, unit: "pct" | "mins"): string {
+  return unit === "mins" ? fmtMins(v) : fmtPct(v);
+}
+function fmtRM(v: number): string {
+  return `RM ${v.toLocaleString("en-MY", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-function formatPhone(phone: string): string {
-  const d = phone.replace(/\D/g, "");
-  if (d.length === 0) return phone;
-  const local = d.startsWith("60") ? d.slice(2) : d.startsWith("0") ? d.slice(1) : d;
-  if (local.length <= 2) return `+60 ${local}`;
-  if (local.length <= 5) return `+60 ${local.slice(0, 2)}-${local.slice(2)}`;
-  return `+60 ${local.slice(0, 2)}-${local.slice(2, 5)} ${local.slice(5)}`;
-}
-
-function getTimeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
-
-// ---------------------------------------------------------------------------
-// Activity color map
-// ---------------------------------------------------------------------------
-
-const activityColors: Record<string, string> = {
-  earn: "bg-green-100 text-green-700",
-  redeem: "bg-orange-100 text-orange-700",
-  bonus: "bg-blue-100 text-blue-700",
-};
-
-const activityDotColors: Record<string, string> = {
-  earn: "bg-green-500",
-  redeem: "bg-orange-500",
-  bonus: "bg-blue-500",
+const STATUS_STYLE: Record<KpiStatus, { pill: string; text: string; Icon: React.ElementType }> = {
+  hit: { pill: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", Icon: CheckCircle2 },
+  miss: { pill: "bg-red-50 border-red-200", text: "text-red-700", Icon: XCircle },
+  nodata: { pill: "bg-gray-50 border-gray-200", text: "text-gray-400", Icon: MinusCircle },
 };
 
 // ---------------------------------------------------------------------------
-// Horizontal Bar Chart
+// Small components
 // ---------------------------------------------------------------------------
 
-function HorizontalBarChart({
-  data,
+function SummaryTile({
+  icon: Icon,
   label,
-  icon,
+  value,
+  sub,
+  tone = "default",
 }: {
-  data: { month: string; count: number }[];
+  icon: React.ElementType;
   label: string;
-  icon: React.ReactNode;
+  value: string;
+  sub?: string;
+  tone?: "default" | "good";
 }) {
-  const maxCount = Math.max(...data.map((d) => d.count), 1);
-
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
-      <div className="flex items-center gap-2 mb-4">
-        {icon}
-        <h3 className="text-sm font-semibold text-gray-900">{label}</h3>
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className={cn("h-4 w-4", tone === "good" ? "text-emerald-500" : "text-gray-400")} />
+        <span className="text-xs font-medium text-gray-500">{label}</span>
       </div>
-      <div className="space-y-2.5">
-        {data.map((item) => (
-          <div key={item.month} className="flex items-center gap-3">
-            <span className="text-xs font-medium text-gray-500 w-16 shrink-0 text-right">
-              {item.month}
-            </span>
-            <div className="flex-1 h-6 bg-gray-100 rounded-md overflow-hidden">
-              <div
-                className="h-full rounded-md transition-all duration-500"
-                style={{
-                  width: `${(item.count / maxCount) * 100}%`,
-                  backgroundColor: "#C2452D",
-                  minWidth: item.count > 0 ? "8px" : "0px",
-                }}
-              />
-            </div>
-            <span className="text-xs font-bold text-gray-700 w-10 shrink-0">
-              {formatPoints(item.count)}
-            </span>
-          </div>
-        ))}
-        {data.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-4">No data available.</p>
-        )}
+      <div className={cn("text-2xl font-bold", tone === "good" ? "text-emerald-600" : "text-gray-900")}>
+        {value}
+      </div>
+      {sub && <div className="mt-0.5 text-xs text-gray-400">{sub}</div>}
+    </div>
+  );
+}
+
+function KpiCell({ kpiKey, kpi }: { kpiKey: KpiKey; kpi: Kpi }) {
+  const meta = KPI_META[kpiKey];
+  const style = STATUS_STYLE[kpi.status];
+  const valueText = fmtUnit(kpi.value, meta.unit);
+  const targetUnit = meta.unit === "mins" ? "m" : "%";
+  return (
+    <div className={cn("rounded-lg border px-2.5 py-2", style.pill)}>
+      <div className="flex items-center justify-between gap-1">
+        <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+          <meta.icon className="h-3 w-3" />
+          {meta.short}
+        </span>
+        <style.Icon className={cn("h-3.5 w-3.5", style.text)} />
+      </div>
+      <div className={cn("mt-1 text-base font-bold leading-none", style.text)}>{valueText}</div>
+      <div className="mt-1 text-[10px] text-gray-400">
+        {kpi.status === "nodata"
+          ? "no data"
+          : `target ${meta.lowerBetter ? "≤" : "≥"} ${kpi.target}${targetUnit}`}
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Page
 // ---------------------------------------------------------------------------
 
-export default function LoyaltyDashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [statsError, setStatsError] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+export default function AreaScorecardPage() {
+  const [period, setPeriod] = useState<Period>("last7days");
+  const [data, setData] = useState<Scorecard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Segment state
-  const [segments, setSegments] = useState<SegmentData | null>(null);
-  const [segPeriod, setSegPeriod] = useState<SegmentPeriod>("monthly");
-  const [segLoading, setSegLoading] = useState(false);
-
-  // KPI state
-  const [kpiPeriod, setKpiPeriod] = useState<KpiPeriod>("daily");
-  const [kpiOutlet, setKpiOutlet] = useState<string>("all");
-  const [kpi, setKpi] = useState<KpiData | null>(null);
-  const [kpiLoading, setKpiLoading] = useState(true);
-  const [kpiCustomFrom, setKpiCustomFrom] = useState(() => new Date().toISOString().split("T")[0]);
-  const [kpiCustomTo, setKpiCustomTo] = useState(() => new Date().toISOString().split("T")[0]);
-  const [kpiShift, setKpiShift] = useState<KpiShift>("all");
-
-  // Load KPI data when period or outlet changes
-  const loadKpi = useCallback(async (period: KpiPeriod, outlet: string, shift: KpiShift, customFrom?: string, customTo?: string) => {
-    setKpiLoading(true);
+  const load = useCallback(async (p: Period) => {
+    setLoading(true);
+    setError(null);
     try {
-      let url: string;
-      if (period === "custom" && customFrom && customTo) {
-        url = `/api/loyalty/dashboard/kpi?brand_id=brand-celsius&period=custom&from=${customFrom}&to=${customTo}`;
-      } else {
-        url = `/api/loyalty/dashboard/kpi?brand_id=brand-celsius&period=${period}`;
-      }
-      if (outlet !== "all") url += `&outlet_id=${outlet}`;
-      if (shift !== "all") url += `&shift=${shift}`;
-      const res = await fetch(url, { credentials: "include" });
-      if (res.ok) {
-        setKpi(await res.json());
-      }
-    } catch { /* ignore */ }
-    setKpiLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (kpiPeriod === "custom") {
-      loadKpi(kpiPeriod, kpiOutlet, kpiShift, kpiCustomFrom, kpiCustomTo);
-    } else {
-      loadKpi(kpiPeriod, kpiOutlet, kpiShift);
+      const res = await fetch(`/api/scorecard?period=${p}`, { credentials: "include" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to load");
+      setData(json);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setLoading(false);
     }
-  }, [kpiPeriod, kpiOutlet, kpiShift, kpiCustomFrom, kpiCustomTo, loadKpi]);
-
-  // Load segments when period changes — auto-refresh every 60s
-  const loadSegments = useCallback(async (p: SegmentPeriod) => {
-    setSegLoading(true);
-    try {
-      const res = await fetch(`/api/loyalty/dashboard/segments?brand_id=brand-celsius&period=${p}`, { credentials: "include" });
-      if (res.ok) setSegments(await res.json());
-    } catch { /* ignore */ }
-    setSegLoading(false);
   }, []);
 
   useEffect(() => {
-    loadSegments(segPeriod);
-    const interval = setInterval(() => loadSegments(segPeriod), 60_000);
-    return () => clearInterval(interval);
-  }, [segPeriod, loadSegments]);
+    load(period);
+  }, [period, load]);
 
-  // Load general stats — auto-refresh every 60s for realtime progress
-  useEffect(() => {
-    async function loadStats() {
-      try {
-        const res = await fetch("/api/loyalty/dashboard/stats?brand_id=brand-celsius", {
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        setStats(data);
-        setLastUpdated(new Date());
-        setActivities(
-          (data.recent_activity ?? []).map((a: Activity) => ({
-            ...a,
-            type: a.type as "earn" | "redeem" | "bonus",
-          }))
-        );
-      } catch {
-        setStatsError(true);
-      }
-    }
-    loadStats();
-    const interval = setInterval(loadStats, 60_000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Loading / error
-  if (!stats && !statsError && kpiLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-[#C2452D]" />
-          <p className="text-sm text-gray-500">Loading rewards dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+  const s = data?.summary;
 
   return (
-    <div className="p-3 sm:p-6 pb-10 min-h-0 w-full">
-      <div className="mb-8 flex items-start justify-between">
+    <div className="p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+      {/* Header */}
+      <div className="mb-5 flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">Overview of your rewards program performance</p>
+          <h1 className="font-heading text-xl sm:text-2xl font-bold text-foreground">Area Scorecard</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Which outlets are hitting KPI — live from the POS &amp; apps
+          </p>
         </div>
-        {lastUpdated && (
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <div className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-            <span>Live · updated {lastUpdated.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as Period)}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+          >
+            {PERIODS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => load(period)}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Refresh
+          </button>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-8">
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* KEY METRICS — Collection Rate, New Members, Returning Members, Sales */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
-          {/* Header + period toggle */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-            <div className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-[#C2452D]" />
-              <h2 className="text-sm font-semibold text-gray-900">Key Metrics</h2>
-              {kpi && (
-                <span className="text-xs text-gray-400">
-                  {kpi.period.from === kpi.period.to
-                    ? kpi.period.from
-                    : `${kpi.period.from} — ${kpi.period.to}`}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {/* Outlet filter */}
-              {kpi?.available_outlets && kpi.available_outlets.length > 1 && (
-                <select
-                  value={kpiOutlet}
-                  onChange={(e) => setKpiOutlet(e.target.value)}
-                  className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
-                >
-                  <option value="all">All Outlets</option>
-                  {kpi.available_outlets.map((o) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
-              )}
-              {/* Shift filter */}
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {([
-                  { value: "all", label: "All" },
-                  { value: "morning", label: "AM" },
-                  { value: "evening", label: "PM" },
-                ] as { value: KpiShift; label: string }[]).map((s) => (
-                  <button
-                    key={s.value}
-                    onClick={() => setKpiShift(s.value)}
-                    className={cn(
-                      "px-2.5 py-1.5 text-xs font-medium transition-colors",
-                      kpiShift === s.value
-                        ? "bg-gray-800 text-white"
-                        : "bg-white text-gray-600 hover:bg-gray-50"
-                    )}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-              {/* Period dropdown */}
-              <select
-                value={kpiPeriod}
-                onChange={(e) => setKpiPeriod(e.target.value as KpiPeriod)}
-                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
-              >
-                {(Object.entries(PERIOD_LABELS) as [KpiPeriod, string][]).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
+      )}
+
+      {/* Loading */}
+      {loading && !data && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-24 rounded-xl bg-gray-100 animate-pulse" />
+            ))}
           </div>
-
-          {/* Custom date pickers */}
-          {kpiPeriod === "custom" && (
-            <div className="flex items-center gap-2 mb-4">
-              <input
-                type="date"
-                value={kpiCustomFrom}
-                onChange={(e) => setKpiCustomFrom(e.target.value)}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
-              />
-              <span className="text-xs text-gray-400">to</span>
-              <input
-                type="date"
-                value={kpiCustomTo}
-                onChange={(e) => setKpiCustomTo(e.target.value)}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
-              />
-            </div>
-          )}
-
-          {/* KPI Cards */}
-          {kpiLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-[#C2452D]" />
-            </div>
-          ) : kpi ? (
-            <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-                {/* 1 — Collection Rate */}
-                <div className="rounded-lg bg-gray-50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Target className="h-4 w-4 text-[#C2452D]" />
-                    <p className="text-xs font-medium text-gray-500">Collection Rate</p>
-                  </div>
-                  <p
-                    className={`text-2xl font-bold font-sans ${
-                      kpi.collection_rate.rate >= 50
-                        ? "text-green-600"
-                        : kpi.collection_rate.rate >= 20
-                          ? "text-orange-500"
-                          : kpi.collection_rate.pos_orders === 0
-                            ? "text-gray-400"
-                            : "text-red-500"
-                    }`}
-                  >
-                    {kpi.collection_rate.pos_orders === 0 ? "—" : `${kpi.collection_rate.rate}%`}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    <span className="font-sans font-semibold text-gray-700">
-                      {kpi.collection_rate.loyalty_claims.toLocaleString()}
-                    </span>
-                    {" / "}
-                    <span className="font-sans">
-                      {kpi.collection_rate.pos_orders.toLocaleString()}
-                    </span>
-                    {" orders"}
-                  </p>
-                </div>
-
-                {/* 2 — New Members */}
-                <div className="rounded-lg bg-gray-50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <UserCheck className="h-4 w-4 text-blue-500" />
-                    <p className="text-xs font-medium text-gray-500">New Members</p>
-                  </div>
-                  <p className="text-2xl font-bold font-sans text-gray-900">
-                    {kpi.new_members.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">{PERIOD_LABELS[kpiPeriod]}</p>
-                </div>
-
-                {/* 3 — Returning Members */}
-                <div className="rounded-lg bg-gray-50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Repeat className="h-4 w-4 text-emerald-500" />
-                    <p className="text-xs font-medium text-gray-500">Returning Members</p>
-                  </div>
-                  <p className="text-2xl font-bold font-sans text-gray-900">
-                    {kpi.returning_members.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">2+ visits</p>
-                </div>
-
-                {/* 4 — Sales from Returning Members */}
-                <div className="rounded-lg bg-gray-50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <DollarSign className="h-4 w-4 text-green-500" />
-                    <p className="text-xs font-medium text-gray-500">Returning Sales</p>
-                  </div>
-                  <p className="text-2xl font-bold font-sans text-gray-900">
-                    RM {kpi.returning_sales.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">from returning members</p>
-                </div>
-              </div>
-
-              {/* Per-outlet collection rate breakdown */}
-              {kpi.collection_rate.outlets.length > 0 && kpi.collection_rate.pos_orders > 0 && (
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
-                    Collection Rate by Outlet
-                  </p>
-                  <div className="space-y-2">
-                    {kpi.collection_rate.outlets.map((o) => (
-                      <div key={o.outlet_name} className="flex items-center gap-3">
-                        <Store className="h-4 w-4 text-gray-400 shrink-0" />
-                        <span className="text-sm text-gray-700 w-32 truncate">{o.outlet_name}</span>
-                        <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              o.claim_rate >= 50 ? "bg-green-500" : o.claim_rate >= 20 ? "bg-orange-400" : "bg-red-400"
-                            }`}
-                            style={{ width: `${Math.min(o.claim_rate, 100)}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-sans text-gray-500 w-20 text-right">
-                            {o.loyalty_claims.toLocaleString()}/{o.pos_orders.toLocaleString()}
-                          </span>
-                          <span
-                            className={`text-xs font-bold font-sans w-10 text-right ${
-                              o.claim_rate >= 50 ? "text-green-600" : o.claim_rate >= 20 ? "text-orange-500" : "text-red-500"
-                            }`}
-                          >
-                            {o.claim_rate}%
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-gray-400 text-center py-4">Failed to load metrics</p>
-          )}
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-28 rounded-xl bg-gray-100 animate-pulse" />
+          ))}
         </div>
+      )}
 
-        {/* ─── Overview Stats ─── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
-                <Users className="h-5 w-5 text-blue-600" />
-              </div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Members</p>
-            </div>
-            <p className="font-sans text-2xl font-bold text-gray-900 mb-2">
-              {(stats?.total_members || 0).toLocaleString()}
-            </p>
-            <p className="text-xs text-gray-500">
-              <span className="font-sans font-semibold text-gray-700">
-                {formatPoints(stats?.active_members_30d ?? 0)}
-              </span>{" "}
-              active (30d)
-            </p>
+      {data && s && (
+        <>
+          {/* Summary tiles */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <SummaryTile
+              icon={Trophy}
+              label="Hitting every KPI"
+              value={`${s.hittingAll} / ${s.measuredOutlets}`}
+              sub="outlets at 100%"
+              tone={s.hittingAll > 0 ? "good" : "default"}
+            />
+            <SummaryTile icon={Phone} label="Avg loyalty capture" value={fmtPct(s.avg.collection)} sub={`target ${data.targets.collectionRate}%`} />
+            <SummaryTile icon={TrendingUp} label="Avg upsell" value={fmtPct(s.avg.upsell)} sub={`target ${data.targets.upsellRate}%`} />
+            <SummaryTile icon={ClipboardCheck} label="Avg ops compliance" value={fmtPct(s.avg.ops)} sub={`target ${data.targets.opsCompletion}%`} />
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100">
-                <Star className="h-5 w-5 text-orange-600" />
-              </div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Points Issued</p>
-            </div>
-            <p className="font-sans text-2xl font-bold text-gray-900 mb-2">
-              {formatPoints(stats?.total_points_issued ?? 0)}
-            </p>
-            <p className="text-xs text-gray-500">
-              <span className="font-sans font-semibold text-gray-700">
-                {formatPoints(stats?.total_points_redeemed ?? 0)}
-              </span>{" "}
-              redeemed
-            </p>
+          {/* Period note */}
+          <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+            <Target className="h-3.5 w-3.5" />
+            <span>
+              {data.period.label} ({data.period.from} → {data.period.to}) · {s.totalOutlets} outlets ·{" "}
+              {fmtRM(s.totalRevenue)} POS sales
+            </span>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-100">
-                <Gift className="h-5 w-5 text-purple-600" />
-              </div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Redemptions</p>
-            </div>
-            <p className="font-sans text-2xl font-bold text-gray-900 mb-2">
-              {(stats?.total_redemptions || 0).toLocaleString()}
-            </p>
-            <p className="text-xs text-gray-500">
-              <span className="font-sans font-semibold text-gray-700">
-                {(stats?.active_campaigns || 0).toLocaleString()}
-              </span>{" "}
-              active campaigns
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100">
-                <DollarSign className="h-5 w-5 text-green-600" />
-              </div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Sales</p>
-            </div>
-            <p className="font-sans text-2xl font-bold text-gray-900 mb-2">
-              RM {stats?.total_revenue_attributed?.toLocaleString() || "0"}
-            </p>
-            <p className="text-xs text-gray-500">attributed to loyalty</p>
-          </div>
-        </div>
-
-        {/* ─── Customer Segments ─── */}
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-            <div className="flex items-center gap-2">
-              <PieChart className="h-5 w-5 text-[#C2452D]" />
-              <h2 className="text-sm font-semibold text-gray-900">Customer Segments</h2>
-              {segments && (
-                <span className="text-xs text-gray-400">
-                  {segments.active_this_period.toLocaleString()} active customers
-                </span>
-              )}
-            </div>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {(["weekly", "monthly", "yearly"] as SegmentPeriod[]).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setSegPeriod(p)}
+          {/* Outlet ranking */}
+          <div className="mt-4 space-y-3">
+            {data.outlets.map((o, i) => {
+              const allHit = o.measurable > 0 && o.met === o.measurable;
+              return (
+                <div
+                  key={o.id}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-medium transition-colors capitalize",
-                    segPeriod === p
-                      ? "bg-gray-800 text-white"
-                      : "bg-white text-gray-600 hover:bg-gray-50"
+                    "rounded-xl border bg-white p-4 shadow-sm",
+                    allHit ? "border-emerald-200" : "border-gray-200",
                   )}
                 >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {segLoading && !segments ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-[#C2452D]" />
-            </div>
-          ) : segments ? (() => {
-            const base = segments.active_this_period || 0;
-            const pct = (n: number) => base > 0 ? ((n / base) * 100).toFixed(1) : "0";
-            return (
-            <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-                {/* Repeat */}
-                <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Repeat className="h-4 w-4 text-blue-500" />
-                    <p className="text-xs font-medium text-gray-600">Repeat</p>
-                  </div>
-                  <p className="text-2xl font-bold font-sans text-gray-900">
-                    {segments.repeat.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    <span className="font-sans font-semibold text-blue-600">{pct(segments.repeat)}%</span>{" "}
-                    of active · 2+ visits
-                  </p>
-                </div>
-
-                {/* Frequent */}
-                <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Zap className="h-4 w-4 text-emerald-500" />
-                    <p className="text-xs font-medium text-gray-600">Frequent</p>
-                  </div>
-                  <p className="text-2xl font-bold font-sans text-gray-900">
-                    {segments.frequent.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    <span className="font-sans font-semibold text-emerald-600">{pct(segments.frequent)}%</span>{" "}
-                    of active · 1+/week
-                  </p>
-                </div>
-
-                {/* LTV */}
-                <div className="rounded-lg border border-amber-100 bg-amber-50/50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Crown className="h-4 w-4 text-amber-500" />
-                    <p className="text-xs font-medium text-gray-600">Avg LTV</p>
-                  </div>
-                  <p className="text-2xl font-bold font-sans text-gray-900">
-                    RM {segments.ltv.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    projected over{" "}
-                    <span className="font-sans font-semibold text-amber-600">{segments.ltv_projected_months} months</span>
-                  </p>
-                </div>
-
-                {/* Churned */}
-                <div className="rounded-lg border border-red-100 bg-red-50/50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <UserX className="h-4 w-4 text-red-400" />
-                    <p className="text-xs font-medium text-gray-600">Churned</p>
-                  </div>
-                  <p className="text-2xl font-bold font-sans text-gray-900">
-                    {segments.churned.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    <span className="font-sans font-semibold text-red-500">{pct(segments.churned)}%</span>{" "}
-                    of active · no visit in period
-                  </p>
-                </div>
-              </div>
-
-              {/* Summary row */}
-              <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-                <div className="flex items-center gap-4 text-xs text-gray-500">
-                  <span>Total spend: <span className="font-sans font-semibold text-gray-700">RM {segments.total_spend.toLocaleString()}</span></span>
-                  <span>Avg/customer: <span className="font-sans font-semibold text-gray-700">RM {segments.avg_spend.toLocaleString()}</span></span>
-                  <span>LTV: <span className="font-sans font-semibold text-amber-600">RM {segments.ltv.toLocaleString()}</span></span>
-                </div>
-                {segLoading && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
-              </div>
-
-              {/* Segment bar visualization */}
-              {base > 0 && (
-                <div className="mt-3">
-                  <div className="flex h-3 rounded-full overflow-hidden bg-gray-100">
-                    {[
-                      { count: segments.frequent, color: "bg-emerald-500", label: "Frequent" },
-                      { count: segments.repeat - segments.frequent, color: "bg-blue-400", label: "Repeat" },
-                      { count: base - segments.repeat, color: "bg-gray-300", label: "One-time" },
-                    ].map((seg) => {
-                      const p = (Math.max(0, seg.count) / base) * 100;
-                      return p > 0 ? (
-                        <div
-                          key={seg.label}
-                          className={`${seg.color} transition-all duration-500`}
-                          style={{ width: `${p}%` }}
-                          title={`${seg.label}: ${Math.max(0, seg.count).toLocaleString()} (${p.toFixed(1)}%)`}
-                        />
-                      ) : null;
-                    })}
-                  </div>
-                  <div className="flex items-center gap-4 mt-2">
-                    {[
-                      { color: "bg-emerald-500", label: "Frequent (1+/week)" },
-                      { color: "bg-blue-400", label: "Repeat (2+ visits)" },
-                      { color: "bg-gray-300", label: "One-time" },
-                    ].map((seg) => (
-                      <div key={seg.label} className="flex items-center gap-1.5">
-                        <div className={`h-2 w-2 rounded-full ${seg.color}`} />
-                        <span className="text-[10px] text-gray-500">{seg.label}</span>
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                    {/* Rank + name */}
+                    <div className="flex items-center gap-3 lg:w-64 lg:shrink-0">
+                      <div
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold",
+                          i === 0 && o.measurable > 0
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-gray-100 text-gray-500",
+                        )}
+                      >
+                        {i + 1}
                       </div>
-                    ))}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Store className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <h3 className="truncate text-sm font-semibold text-gray-900">{o.name}</h3>
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-gray-400">
+                          <span>{fmtRM(o.revenue)}</span>
+                          {!o.onPos && <span className="text-amber-500">· not on POS</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Score */}
+                    <div className="lg:w-28 lg:shrink-0">
+                      <div
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+                          allHit
+                            ? "bg-emerald-100 text-emerald-700"
+                            : o.measurable === 0
+                              ? "bg-gray-100 text-gray-400"
+                              : "bg-amber-100 text-amber-700",
+                        )}
+                      >
+                        <Trophy className="h-3.5 w-3.5" />
+                        {o.measurable === 0 ? "no data" : `${o.met}/${o.measurable} KPIs`}
+                      </div>
+                    </div>
+
+                    {/* KPI cells */}
+                    <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                      <KpiCell kpiKey="collection" kpi={o.kpis.collection} />
+                      <KpiCell kpiKey="upsell" kpi={o.kpis.upsell} />
+                      <KpiCell kpiKey="ops" kpi={o.kpis.ops} />
+                      <KpiCell kpiKey="wastage" kpi={o.kpis.wastage} />
+                      <KpiCell kpiKey="serving" kpi={o.kpis.serving} />
+                    </div>
                   </div>
                 </div>
-              )}
-            </>
-            );
-          })() : null}
-        </div>
+              );
+            })}
+          </div>
 
-        {/* ─── Charts: Trends ─── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <HorizontalBarChart
-            data={stats?.new_members_by_month ?? []}
-            label="New Members Trend"
-            icon={<TrendingUp className="h-4 w-4 text-[#C2452D]" />}
-          />
-          <HorizontalBarChart
-            data={stats?.redemptions_by_month ?? []}
-            label="Redemptions Trend"
-            icon={<Gift className="h-4 w-4 text-[#C2452D]" />}
-          />
-        </div>
-
-        {/* ─── Top Spenders ─── */}
-        {(stats?.top_spenders?.length ?? 0) > 0 && (
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="border-b border-gray-200 px-4 py-3 flex items-center gap-2">
-              <Crown className="h-4 w-4 text-[#C2452D]" />
-              <h3 className="text-sm font-semibold text-gray-900">Top Spenders</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px] text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 text-left">
-                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500 w-12">#</th>
-                    <th className="px-3 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">Name</th>
-                    <th className="px-3 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">Phone</th>
-                    <th className="px-3 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">Total Spent</th>
-                    <th className="px-3 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">Visits</th>
-                    <th className="px-3 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">Points Earned</th>
-                    <th className="px-3 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">Last Visit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {stats?.top_spenders?.slice(0, 5).map((spender, idx) => (
-                    <tr key={spender.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <span
-                          className={cn(
-                            "inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
-                            idx === 0
-                              ? "bg-yellow-100 text-yellow-700"
-                              : idx === 1
-                                ? "bg-gray-100 text-gray-600"
-                                : idx === 2
-                                  ? "bg-orange-100 text-orange-700"
-                                  : "bg-gray-50 text-gray-500"
-                          )}
-                        >
-                          {idx + 1}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 font-medium text-gray-900 whitespace-nowrap">
-                        {spender.name || "No Name"}
-                      </td>
-                      <td className="px-3 py-3 font-sans text-gray-700 whitespace-nowrap">
-                        {formatPhone(spender.phone)}
-                      </td>
-                      <td className="px-3 py-3 font-sans font-bold text-gray-900 whitespace-nowrap">
-                        RM {spender.total_spent.toLocaleString()}
-                      </td>
-                      <td className="px-3 py-3 font-sans text-gray-700 whitespace-nowrap">
-                        {formatPoints(spender.total_visits)}
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        <span className="font-sans font-bold text-gray-900">
-                          {formatPoints(spender.total_points_earned)}
-                        </span>{" "}
-                        <span className="text-xs text-gray-400">pts</span>
-                      </td>
-                      <td className="px-3 py-3 text-gray-500 whitespace-nowrap">
-                        {spender.last_visit_at ? getTimeAgo(spender.last_visit_at) : "Never"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Serving-time scope note */}
+          <div className="mt-4 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
+            <div className="flex items-start gap-2">
+              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+              <div className="text-xs text-gray-500">
+                <span className="font-semibold text-gray-700">Serving time</span> measures order placed →
+                kitchen <em>Ready</em> (target ≤ {data.targets.servingMins}m) for <strong>queued pickup &amp; Grab
+                orders</strong> — the only ones with a kitchen bump. Dine-in sales are rung up already paid, so they
+                have no &ldquo;ready&rdquo; event to measure; an outlet with no queued orders shows <em>no data</em>.
+              </div>
             </div>
           </div>
-        )}
-
-        {/* ─── Recent Activity ─── */}
-        {activities.length > 0 && (
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="border-b border-gray-200 px-5 py-3 flex items-center gap-2">
-              <ActivityIcon className="h-4 w-4 text-[#C2452D]" />
-              <h2 className="text-sm font-semibold text-gray-900">Recent Activity</h2>
-              <span className="ml-auto text-xs text-gray-400">
-                Last {activities.length} transactions
-              </span>
-            </div>
-            <div className="divide-y divide-gray-100">
-              {activities.map((activity) => (
-                <div key={activity.id} className="flex items-center gap-3 px-5 py-3">
-                  <div
-                    className={cn(
-                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                      activityColors[activity.type]
-                    )}
-                  >
-                    {activity.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-gray-700 leading-snug">
-                      <span className="font-medium text-gray-900">{activity.name}</span>{" "}
-                      {activity.text}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-xs text-gray-400">{getTimeAgo(activity.date)}</span>
-                  <div className={cn("h-2 w-2 shrink-0 rounded-full", activityDotColors[activity.type])} />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Rewards mechanics — merged from the retired /loyalty/analytics
-            page so admins see mission/mystery/voucher/referral health
-            in the same view as core loyalty KPIs. Last 30 days. */}
-        <RewardsMechanicsSection />
-      </div>
-    </div>
-  );
-}
-
-interface MechanicsResponse {
-  range: { since: string; generated_at: string };
-  missions: {
-    total: number;
-    active: number;
-    rows: Array<{
-      id: string; title: string; difficulty: string;
-      picked: number; completed: number; completion_rate: number; is_active: boolean;
-    }>;
-  };
-  mystery: {
-    total_drops: number; revealed: number; reveal_rate: number;
-    distribution: Array<{ type: string; count: number; pct: number }>;
-  };
-  vouchers: {
-    total_issued: number; total_redeemed: number;
-    by_source: Array<{ source: string; issued: number; redeemed: number; expired: number; redemption_rate: number }>;
-  };
-  referrals: { total: number; pending: number; rewarded: number; voided: number };
-}
-
-function RewardsMechanicsSection() {
-  const [data, setData] = useState<MechanicsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`/api/loyalty/v2-analytics?brand_id=brand-celsius`, { credentials: "include" });
-        setData(await res.json());
-      } catch { /* ignore */ }
-      finally { setLoading(false); }
-    })();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="rounded-xl border bg-white p-5 text-sm text-gray-500">
-        Loading rewards mechanics…
-      </div>
-    );
-  }
-  if (!data) return null;
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">Rewards mechanics</h2>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Mission completion, mystery distribution, voucher funnel by source, referral attribution. Last 30 days.
-        </p>
-      </div>
-
-      {/* KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MechKpi label="Missions active"      value={`${data.missions.active}/${data.missions.total}`} />
-        <MechKpi label="Mystery reveal rate"  value={`${data.mystery.reveal_rate}%`} sub={`${data.mystery.revealed}/${data.mystery.total_drops}`} />
-        <MechKpi label="Vouchers issued"      value={data.vouchers.total_issued.toString()} sub={`${data.vouchers.total_redeemed} redeemed`} />
-        <MechKpi label="Referrals rewarded"   value={`${data.referrals.rewarded}`} sub={`${data.referrals.pending} pending`} />
-      </div>
-
-      {/* Mission completion table */}
-      <section className="rounded-xl border bg-white overflow-hidden">
-        <div className="px-4 py-3 border-b bg-gray-50">
-          <h3 className="text-sm font-semibold">Mission completion rates</h3>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50/60 text-xs uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="text-left px-4 py-2">Mission</th>
-              <th className="text-left px-4 py-2">Difficulty</th>
-              <th className="text-right px-4 py-2">Picked</th>
-              <th className="text-right px-4 py-2">Completed</th>
-              <th className="text-right px-4 py-2">Rate</th>
-              <th className="text-left px-4 py-2">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {data.missions.rows.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">No missions yet</td></tr>
-            ) : (
-              data.missions.rows.map((m) => (
-                <tr key={m.id} className="hover:bg-gray-50/60">
-                  <td className="px-4 py-2.5 font-medium">{m.title}</td>
-                  <td className="px-4 py-2.5">
-                    <span className={cn(
-                      "text-xs px-2 py-0.5 rounded font-medium",
-                      m.difficulty === "easy"   && "bg-emerald-50 text-emerald-700",
-                      m.difficulty === "medium" && "bg-amber-50 text-amber-700",
-                      m.difficulty === "hard"   && "bg-rose-50 text-rose-700",
-                    )}>{m.difficulty}</span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{m.picked}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{m.completed}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{m.completion_rate}%</td>
-                  <td className="px-4 py-2.5">
-                    <span className={cn("text-xs", m.is_active ? "text-emerald-600" : "text-gray-400")}>
-                      {m.is_active ? "● Active" : "○ Paused"}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </section>
-
-      {/* Mystery distribution + Voucher funnel side-by-side on md+ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <section className="rounded-xl border bg-white p-5">
-          <h3 className="text-sm font-semibold mb-3">Mystery outcome distribution</h3>
-          {data.mystery.distribution.length === 0 ? (
-            <div className="text-sm text-gray-500">No drops yet</div>
-          ) : (
-            <div className="space-y-2">
-              {data.mystery.distribution.map((d) => (
-                <div key={d.type}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-medium">{d.type}</span>
-                    <span className="text-gray-500 tabular-nums">{d.count} · {d.pct}%</span>
-                  </div>
-                  <div className="h-2 rounded bg-gray-100 overflow-hidden">
-                    <div className="h-full bg-gray-900" style={{ width: `${d.pct}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="rounded-xl border bg-white overflow-hidden">
-          <div className="px-4 py-3 border-b bg-gray-50">
-            <h3 className="text-sm font-semibold">Voucher funnel by source</h3>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50/60 text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="text-left px-4 py-2">Source</th>
-                <th className="text-right px-4 py-2">Issued</th>
-                <th className="text-right px-4 py-2">Redeemed</th>
-                <th className="text-right px-4 py-2">Expired</th>
-                <th className="text-right px-4 py-2">Rate</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {data.vouchers.by_source.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">No vouchers issued yet</td></tr>
-              ) : (
-                data.vouchers.by_source.map((v) => (
-                  <tr key={v.source} className="hover:bg-gray-50/60">
-                    <td className="px-4 py-2.5 font-medium capitalize">{v.source.replace("_", " ")}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{v.issued}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{v.redeemed}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-500">{v.expired}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{v.redemption_rate}%</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </section>
-      </div>
-    </div>
-  );
-}
-
-function MechKpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-xl border bg-white px-4 py-3">
-      <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
-      <div className="text-2xl font-semibold mt-1">{value}</div>
-      {sub && <div className="text-xs text-gray-500 mt-0.5">{sub}</div>}
+        </>
+      )}
     </div>
   );
 }
