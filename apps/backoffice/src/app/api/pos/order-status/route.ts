@@ -39,6 +39,13 @@ function getSupabase(): SupabaseClient {
 // "preparing" would 500 on the grab path. Keep the set tight.
 const ALLOWED = new Set(["ready", "completed"]);
 
+// True when an update failed only because the serving-time columns aren't
+// migrated yet (PostgREST schema-cache miss) — lets us degrade gracefully.
+function missingServingCol(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  return err.code === "PGRST204" || /ready_at|completed_at/i.test(err.message ?? "");
+}
+
 export async function POST(req: NextRequest) {
   const supabase = getSupabase();
   try {
@@ -76,7 +83,13 @@ export async function POST(req: NextRequest) {
 
     // pickup + qr dine-in both live in `orders`; only grab is `pos_orders`.
     const table = source === "grab" ? "pos_orders" : "orders";
-    const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = { status, updated_at: now };
+    // Serving-time instrumentation: stamp the kitchen-bump moments so the Area
+    // Scorecard can measure speed of service (ready_at - created_at). Both
+    // tables carry these columns (migrations 029 / orders-020).
+    if (status === "ready") patch.ready_at = now;
+    else if (status === "completed") patch.completed_at = now;
     // pos_orders carries the Grab order id in external_id; pickup orders
     // don't have that column, so only ask for it on the grab path.
     const selectCols = source === "grab" ? "id, order_number, status, external_id" : "id, order_number, status";
@@ -85,12 +98,24 @@ export async function POST(req: NextRequest) {
     // error. .single() instead throws PGRST116 → a misleading 500 for what is
     // really "order not found". Map the null case to a clean 404 so the
     // register can tell "gone" from "server broke".
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from(table)
       .update(patch)
       .eq("id", id)
       .select(selectCols)
       .maybeSingle();
+
+    // The serving-time columns are applied out-of-band (migrations 029 /
+    // orders-020). If they aren't live yet, retry with a status-only patch so a
+    // "Mark Ready" tap never 500s mid-service — serving data just starts later.
+    if (error && missingServingCol(error)) {
+      ({ data, error } = await supabase
+        .from(table)
+        .update({ status, updated_at: now })
+        .eq("id", id)
+        .select(selectCols)
+        .maybeSingle());
+    }
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: "order not found" }, { status: 404 });

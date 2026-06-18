@@ -41,7 +41,7 @@ type OutletRow = {
     upsell: Kpi & { orders: number; upsellOrders: number };
     ops: Kpi & { completed: number; total: number; photoRate: number | null };
     wastage: Kpi & { cost: number };
-    serving: { value: null; status: "nodata"; note: string };
+    serving: Kpi & { orders: number };
   };
 };
 
@@ -53,6 +53,7 @@ type Scorecard = {
     upsellRate: number;
     opsCompletion: number;
     wastagePctOfSales: number;
+    servingMins: number;
   };
   summary: {
     totalOutlets: number;
@@ -64,6 +65,7 @@ type Scorecard = {
       upsell: number | null;
       ops: number | null;
       wastagePct: number | null;
+      servingMins: number | null;
     };
   };
   outlets: OutletRow[];
@@ -77,13 +79,13 @@ type KpiKey = "collection" | "upsell" | "ops" | "wastage" | "serving";
 
 const KPI_META: Record<
   KpiKey,
-  { label: string; short: string; icon: React.ElementType; unit: "pct" | "none"; betterText: string }
+  { label: string; short: string; icon: React.ElementType; unit: "pct" | "mins"; lowerBetter: boolean }
 > = {
-  collection: { label: "Loyalty capture", short: "Capture", icon: Phone, unit: "pct", betterText: "≥ target" },
-  upsell: { label: "Upsell", short: "Upsell", icon: TrendingUp, unit: "pct", betterText: "≥ target" },
-  ops: { label: "Ops compliance", short: "Ops", icon: ClipboardCheck, unit: "pct", betterText: "≥ target" },
-  wastage: { label: "Wastage", short: "Wastage", icon: Trash2, unit: "pct", betterText: "≤ target" },
-  serving: { label: "Serving time", short: "Serving", icon: Clock, unit: "none", betterText: "" },
+  collection: { label: "Loyalty capture", short: "Capture", icon: Phone, unit: "pct", lowerBetter: false },
+  upsell: { label: "Upsell", short: "Upsell", icon: TrendingUp, unit: "pct", lowerBetter: false },
+  ops: { label: "Ops compliance", short: "Ops", icon: ClipboardCheck, unit: "pct", lowerBetter: false },
+  wastage: { label: "Wastage", short: "Wastage", icon: Trash2, unit: "pct", lowerBetter: true },
+  serving: { label: "Serving time", short: "Serving", icon: Clock, unit: "mins", lowerBetter: true },
 };
 
 const PERIODS: { value: Period; label: string }[] = [
@@ -100,6 +102,12 @@ const PERIODS: { value: Period; label: string }[] = [
 
 function fmtPct(v: number | null): string {
   return v === null ? "—" : `${v}%`;
+}
+function fmtMins(v: number | null): string {
+  return v === null ? "—" : `${v}m`;
+}
+function fmtUnit(v: number | null, unit: "pct" | "mins"): string {
+  return unit === "mins" ? fmtMins(v) : fmtPct(v);
 }
 function fmtRM(v: number): string {
   return `RM ${v.toLocaleString("en-MY", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -145,7 +153,8 @@ function SummaryTile({
 function KpiCell({ kpiKey, kpi }: { kpiKey: KpiKey; kpi: Kpi }) {
   const meta = KPI_META[kpiKey];
   const style = STATUS_STYLE[kpi.status];
-  const valueText = meta.unit === "pct" ? fmtPct(kpi.value) : "—";
+  const valueText = fmtUnit(kpi.value, meta.unit);
+  const targetUnit = meta.unit === "mins" ? "m" : "%";
   return (
     <div className={cn("rounded-lg border px-2.5 py-2", style.pill)}>
       <div className="flex items-center justify-between gap-1">
@@ -159,9 +168,7 @@ function KpiCell({ kpiKey, kpi }: { kpiKey: KpiKey; kpi: Kpi }) {
       <div className="mt-1 text-[10px] text-gray-400">
         {kpi.status === "nodata"
           ? "no data"
-          : kpiKey === "wastage"
-            ? `target ≤ ${kpi.target}%`
-            : `target ≥ ${kpi.target}%`}
+          : `target ${meta.lowerBetter ? "≤" : "≥"} ${kpi.target}${targetUnit}`}
       </div>
     </div>
   );
@@ -343,16 +350,15 @@ export default function AreaScorecardPage() {
             })}
           </div>
 
-          {/* Serving-time instrumentation note */}
+          {/* Serving-time scope note */}
           <div className="mt-4 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
             <div className="flex items-start gap-2">
               <Clock className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
               <div className="text-xs text-gray-500">
-                <span className="font-semibold text-gray-700">Serving time is not tracked yet.</span> POS orders
-                record when an order is <em>placed</em> but not when it is <em>ready/served</em>, so speed-of-service
-                can&apos;t be computed. Lighting it up needs a small POS change: stamp a <code>ready_at</code> /{" "}
-                <code>served_at</code> timestamp on <code>pos_orders</code> when the kitchen bumps the order. Say the
-                word and I&apos;ll wire it.
+                <span className="font-semibold text-gray-700">Serving time</span> measures order placed →
+                kitchen <em>Ready</em> (target ≤ {data.targets.servingMins}m) for <strong>queued pickup &amp; Grab
+                orders</strong> — the only ones with a kitchen bump. Dine-in sales are rung up already paid, so they
+                have no &ldquo;ready&rdquo; event to measure; an outlet with no queued orders shows <em>no data</em>.
               </div>
             </div>
           </div>

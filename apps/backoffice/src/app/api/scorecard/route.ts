@@ -36,6 +36,7 @@ export const KPI_TARGETS = {
   upsellRate: 10, // % of cashier-rung orders with a Pair-with-a-Bite add
   opsCompletion: 90, // % of checklists completed
   wastagePctOfSales: 3, // wastage cost ≤ 3% of POS sales
+  servingMins: 15, // avg minutes from order placed → kitchen "ready" (matches the on-register serving alarm)
 } as const;
 
 const CASHIER_SOURCES = ["pos"]; // till-rung only (excludes grab / pickup / qr)
@@ -143,14 +144,18 @@ export async function GET(request: NextRequest) {
   // ── Outlets: the join hub (active storefronts only) ─────────
   const outlets = await prisma.outlet.findMany({
     where: { status: "ACTIVE", type: "OUTLET" },
-    select: { id: true, code: true, name: true, loyaltyOutletId: true },
+    select: { id: true, code: true, name: true, loyaltyOutletId: true, pickupStoreId: true },
     orderBy: { name: "asc" },
   });
 
-  // Map loyaltyOutletId → Prisma outlet (for the POS-side joins)
+  // Map the cross-app outlet ids back to the Prisma outlet:
+  //  • loyaltyOutletId → pos_orders.outlet_id (POS / Grab)
+  //  • pickupStoreId   → orders.store_id      (pickup app / QR-table)
   const byLoyaltyId = new Map<string, (typeof outlets)[number]>();
+  const byPickupId = new Map<string, (typeof outlets)[number]>();
   for (const o of outlets) {
     if (o.loyaltyOutletId) byLoyaltyId.set(o.loyaltyOutletId, o);
+    if (o.pickupStoreId) byPickupId.set(o.pickupStoreId, o);
   }
 
   // ── 1+2+sales. POS orders → collection, upsell, revenue ─────
@@ -168,6 +173,28 @@ export async function GET(request: NextRequest) {
     .eq("source", "register")
     .gte("created_at", p.fromISO)
     .lte("created_at", p.toISO)
+    .limit(50000);
+
+  // ── 5. Serving time — orders that reached a kitchen "ready" bump ─────
+  // Only queued orders carry a ready event: Grab (pos_orders) + pickup/QR
+  // (orders). Dine-in POS sales are rung up already paid, so they have no bump.
+  // Defensive: these select ready_at, which may not exist until migrations
+  // 029 / orders-020 are applied — on error we just skip serving (nodata),
+  // never break the other KPIs.
+  const servingPosQ = supabase
+    .from("pos_orders")
+    .select("outlet_id, created_at, ready_at")
+    .not("ready_at", "is", null)
+    .gte("ready_at", p.fromISO)
+    .lte("ready_at", p.toISO)
+    .limit(50000);
+
+  const servingPickupQ = supabase
+    .from("orders")
+    .select("store_id, created_at, ready_at")
+    .not("ready_at", "is", null)
+    .gte("ready_at", p.fromISO)
+    .lte("ready_at", p.toISO)
     .limit(50000);
 
   // ── 3. Ops compliance — checklists in range ─────────────────
@@ -202,8 +229,8 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const [ordersRes, pairRes, checklists, adjustments, supplierPrices] =
-    await Promise.all([ordersQ, pairQ, checklistsP, adjustmentsP, supplierPricesP]);
+  const [ordersRes, pairRes, servingPosRes, servingPickupRes, checklists, adjustments, supplierPrices] =
+    await Promise.all([ordersQ, pairQ, servingPosQ, servingPickupQ, checklistsP, adjustmentsP, supplierPricesP]);
 
   if (ordersRes.error) {
     return NextResponse.json({ error: ordersRes.error.message }, { status: 500 });
@@ -223,6 +250,8 @@ export async function GET(request: NextRequest) {
     photoItems: number;
     totalItems: number;
     wasteCost: number;
+    servingSumMins: number; // Σ (ready_at − created_at) over bumped orders
+    servingCount: number;
   };
   const acc = new Map<string, Acc>();
   const ensure = (outletId: string): Acc => {
@@ -239,6 +268,8 @@ export async function GET(request: NextRequest) {
         photoItems: 0,
         totalItems: 0,
         wasteCost: 0,
+        servingSumMins: 0,
+        servingCount: 0,
       };
       acc.set(outletId, a);
     }
@@ -265,6 +296,32 @@ export async function GET(request: NextRequest) {
     const a = acc.get(outlet.id);
     const oid = pe.order_id as string | null;
     if (a && oid && a.posOrderIds.has(oid)) a.upsellOrderIds.add(oid);
+  }
+
+  // Serving time → avg (ready_at − created_at) in minutes. Grab via
+  // loyaltyOutletId, pickup/QR via pickupStoreId. Skip silently if the
+  // ready_at column isn't there yet (migration not applied) or values are junk.
+  const addServing = (a: Acc | undefined, createdAt: unknown, readyAt: unknown) => {
+    if (!a) return;
+    const start = Date.parse(createdAt as string);
+    const end = Date.parse(readyAt as string);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+    const mins = (end - start) / 60000;
+    if (mins < 0 || mins > 600) return; // drop clock-skew / stale-sweep outliers (>10h)
+    a.servingSumMins += mins;
+    a.servingCount++;
+  };
+  if (!servingPosRes.error) {
+    for (const o of servingPosRes.data ?? []) {
+      const outlet = byLoyaltyId.get(o.outlet_id as string);
+      if (outlet) addServing(ensure(outlet.id), o.created_at, o.ready_at);
+    }
+  }
+  if (!servingPickupRes.error) {
+    for (const o of servingPickupRes.data ?? []) {
+      const outlet = byPickupId.get(o.store_id as string);
+      if (outlet) addServing(ensure(outlet.id), o.created_at, o.ready_at);
+    }
   }
 
   // Checklists → ops compliance (key by Outlet.id)
@@ -315,6 +372,8 @@ export async function GET(request: NextRequest) {
     const totalItems = a?.totalItems ?? 0;
     const photoItems = a?.photoItems ?? 0;
     const wasteCost = round2(a?.wasteCost ?? 0);
+    const servingCount = a?.servingCount ?? 0;
+    const servingAvg = servingCount > 0 ? round2((a?.servingSumMins ?? 0) / servingCount) : null;
 
     const collectionVal = rate(collected, posOrders);
     const upsellVal = rate(upsellOrders, posOrders);
@@ -357,13 +416,21 @@ export async function GET(request: NextRequest) {
       status: wastageStatus,
       cost: wasteCost,
     };
+    // Serving time is lower-is-better; only queued (pickup/Grab) orders have a
+    // kitchen "ready" bump to measure — dine-in sales are paid at the till with
+    // no bump, so an outlet with no queued orders is "no data" here.
     const serving = {
-      value: null as number | null,
-      status: "nodata" as KpiStatus,
-      note: "Not tracked yet — needs a ready/served timestamp on pos_orders.",
+      value: servingAvg, // avg minutes placed → ready
+      target: KPI_TARGETS.servingMins,
+      status: (servingAvg === null
+        ? "nodata"
+        : servingAvg <= KPI_TARGETS.servingMins
+          ? "hit"
+          : "miss") as KpiStatus,
+      orders: servingCount,
     };
 
-    const tracked = [collection, upsell, ops, wastage];
+    const tracked = [collection, upsell, ops, wastage, serving];
     const met = tracked.filter((k) => k.status === "hit").length;
     const measurable = tracked.filter((k) => k.status !== "nodata").length;
 
@@ -410,6 +477,7 @@ export async function GET(request: NextRequest) {
         upsell: avg(rows.map((r) => r.kpis.upsell.value)),
         ops: avg(rows.map((r) => r.kpis.ops.value)),
         wastagePct: avg(rows.map((r) => r.kpis.wastage.value)),
+        servingMins: avg(rows.map((r) => r.kpis.serving.value)),
       },
     },
     outlets: rows,
