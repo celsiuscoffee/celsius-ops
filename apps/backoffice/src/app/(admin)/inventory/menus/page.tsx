@@ -279,6 +279,40 @@ export default function MenusPage() {
         </p>
       </div>
 
+      {/* Summary — reflects the current filter */}
+      {(() => {
+        const isFiltered = search !== "" || catFilter.length > 0 || statusFilter !== "all";
+        const withCogs = sorted.filter((m) => m.cogs > 0);
+        const avgCogs = withCogs.length > 0 ? withCogs.reduce((s, m) => s + m.cogsPercent, 0) / withCogs.length : 0;
+        const mapped = sorted.filter((m) => m.ingredientCount > 0).length;
+        return (
+          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Card className="px-4 py-3">
+              <p className="text-xs text-gray-500">{isFiltered ? "Items in View" : "Total Menu Items"}</p>
+              <p className="text-xl font-bold text-gray-900">{sorted.length}</p>
+              <p className="text-xs text-gray-400">{mapped} with recipes</p>
+            </Card>
+            <Card className="px-4 py-3">
+              <p className="text-xs text-gray-500">Ingredients Mapped</p>
+              <p className="text-xl font-bold text-gray-900">{sorted.reduce((a, m) => a + m.ingredientCount, 0)}</p>
+              <p className="text-xs text-gray-400">across {mapped} {mapped === 1 ? 'item' : 'items'}</p>
+            </Card>
+            <Card className="px-4 py-3">
+              <p className="text-xs text-gray-500">Avg COGS %</p>
+              <p className={`text-xl font-bold ${avgCogs > 40 ? "text-red-600" : avgCogs > 30 ? "text-amber-600" : "text-green-600"}`}>
+                {avgCogs > 0 ? `${avgCogs.toFixed(1)}%` : "—"}
+              </p>
+              <p className="text-xs text-gray-400">{withCogs.length} {withCogs.length === 1 ? 'item' : 'items'} costed</p>
+            </Card>
+            <Card className="px-4 py-3">
+              <p className="text-xs text-gray-500">No Recipe Yet</p>
+              <p className="text-xl font-bold text-gray-900">{sorted.length - mapped}</p>
+              <p className="text-xs text-gray-400">need ingredients</p>
+            </Card>
+          </div>
+        );
+      })()}
+
       {/* Menu table with expandable ingredients */}
       <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
@@ -484,39 +518,6 @@ export default function MenusPage() {
           </tbody>
         </table>
       </div>
-
-      {/* Summary */}
-      {(() => {
-        const withCogs = menus.filter((m) => m.cogs > 0);
-        const avgCogs = withCogs.length > 0 ? withCogs.reduce((s, m) => s + m.cogsPercent, 0) / withCogs.length : 0;
-        const mapped = menus.filter((m) => m.ingredientCount > 0).length;
-        return (
-          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">Total Menu Items</p>
-              <p className="text-xl font-bold text-gray-900">{menus.length}</p>
-              <p className="text-xs text-gray-400">{mapped} with recipes</p>
-            </Card>
-            <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">Ingredients Mapped</p>
-              <p className="text-xl font-bold text-gray-900">{menus.reduce((a, m) => a + m.ingredientCount, 0)}</p>
-              <p className="text-xs text-gray-400">across {mapped} {mapped === 1 ? 'item' : 'items'}</p>
-            </Card>
-            <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">Avg COGS %</p>
-              <p className={`text-xl font-bold ${avgCogs > 40 ? "text-red-600" : avgCogs > 30 ? "text-amber-600" : "text-green-600"}`}>
-                {avgCogs > 0 ? `${avgCogs.toFixed(1)}%` : "—"}
-              </p>
-              <p className="text-xs text-gray-400">{withCogs.length} {withCogs.length === 1 ? 'item' : 'items'} costed</p>
-            </Card>
-            <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">No Recipe Yet</p>
-              <p className="text-xl font-bold text-gray-900">{menus.length - mapped}</p>
-              <p className="text-xs text-gray-400">need ingredients</p>
-            </Card>
-          </div>
-        );
-      })()}
     </div>
   );
 }
