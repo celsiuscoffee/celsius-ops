@@ -356,7 +356,7 @@ export default function SalesReportsPage() {
                     <th
                       key={c.key}
                       onClick={() => toggleSort(c.key)}
-                      className={`cursor-pointer select-none px-4 py-3 whitespace-nowrap border-b border-gray-200 hover:text-[#160800] ${i === 0 ? "" : "text-right"}`}
+                      className={`cursor-pointer select-none px-3 py-2.5 border-b border-gray-200 hover:text-[#160800] ${i === 0 ? "min-w-[150px]" : "whitespace-nowrap text-right"}`}
                     >
                       <span className={`inline-flex items-center gap-1 ${i === 0 ? "" : "justify-end"}`}>
                         {c.label}
@@ -384,7 +384,7 @@ export default function SalesReportsPage() {
                       {columns.map((c, ci) => (
                         <td
                           key={c.key}
-                          className={`px-4 py-3 text-sm whitespace-nowrap border-b border-gray-100 ${ci === 0 ? "text-[#160800] font-medium" : "text-right text-[#160800]"}`}
+                          className={`px-3 py-2.5 text-sm border-b border-gray-100 ${ci === 0 ? "text-[#160800] font-medium" : "whitespace-nowrap text-right text-[#160800]"}`}
                         >
                           {fmtCell(r[c.key], c.kind)}
                         </td>
@@ -397,7 +397,7 @@ export default function SalesReportsPage() {
                 <tfoot className="sticky bottom-0">
                   <tr className="bg-gray-100 font-semibold">
                     {columns.map((c, ci) => (
-                      <td key={c.key} className={`px-4 py-3 text-sm whitespace-nowrap text-[#160800] border-t-2 border-gray-300 ${ci === 0 ? "" : "text-right"}`}>
+                      <td key={c.key} className={`px-3 py-2.5 text-sm text-[#160800] border-t-2 border-gray-300 ${ci === 0 ? "" : "whitespace-nowrap text-right"}`}>
                         {totalRow[c.key] === "" ? "" : fmtCell(totalRow[c.key], c.kind)}
                       </td>
                     ))}
@@ -439,24 +439,30 @@ function SortIcon({ active, dir }: { active?: boolean; dir?: "asc" | "desc" }) {
 }
 
 function Chart({ data }: { data: { label: string; value: number }[] }) {
-  const max = Math.max(...data.map((d) => d.value), 1);
   const bars = data.slice(0, 31);
+  const max = Math.max(...bars.map((d) => d.value), 1);
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4">
-      <div className="flex items-end gap-1.5 h-44">
+      {/* Plot: each column is full-height so the bar's % height resolves. */}
+      <div className="flex h-48 items-end gap-2">
         {bars.map((d, i) => (
-          <div key={i} className="group flex flex-1 flex-col items-center justify-end gap-1 min-w-0">
-            <div className="text-[10px] font-medium text-[#160800] opacity-0 group-hover:opacity-100 whitespace-nowrap">
+          <div key={i} className="group relative flex h-full min-w-0 flex-1 flex-col justify-end">
+            <span className="pointer-events-none absolute inset-x-0 bottom-full mb-1 whitespace-nowrap text-center text-[10px] font-medium text-[#160800] opacity-0 group-hover:opacity-100">
               {fmtRM(d.value)}
-            </div>
+            </span>
             <div
-              className="w-full max-w-[36px] rounded-t bg-[#A2492C]/85 hover:bg-[#A2492C] transition-colors"
-              style={{ height: `${Math.max((d.value / max) * 100, 1)}%` }}
+              className="mx-auto w-full max-w-[40px] rounded-t bg-[#A2492C] transition-colors hover:bg-[#7f3a1f]"
+              style={{ height: `${Math.max((d.value / max) * 100, 2)}%` }}
               title={`${d.label}: ${fmtRM(d.value)}`}
             />
-            <div className="text-[9px] text-gray-500 truncate w-full text-center" title={d.label}>
-              {d.label}
-            </div>
+          </div>
+        ))}
+      </div>
+      {/* Labels aligned under each bar via the same flex columns. */}
+      <div className="mt-2 flex gap-2">
+        {bars.map((d, i) => (
+          <div key={i} className="min-w-0 flex-1 truncate text-center text-[10px] text-gray-500" title={d.label}>
+            {d.label}
           </div>
         ))}
       </div>
