@@ -100,8 +100,16 @@ export function playChime(): void {
   play("chime");
   setTimeout(() => play("chime"), CHIME_REPEAT_MS);
 }
-/** Urgent warble — an order is past the serving-time target. */
-export function playAlarm(): void { play("alarm"); }
+/** Urgent warble — an order is past the serving-time target. Same rapid-fire
+ *  guard as the chime: the legit re-sound cadence is minutes apart, so 1.5s
+ *  never blocks a real alarm but stops any runaway loop from machine-gunning. */
+let lastAlarmAt = 0;
+export function playAlarm(): void {
+  const now = Date.now();
+  if (now - lastAlarmAt < CHIME_MIN_GAP_MS) return;
+  lastAlarmAt = now;
+  play("alarm");
+}
 
 // Back-compat alias (use-order-chime imports primeChime).
 export const primeChime = primeSounds;
