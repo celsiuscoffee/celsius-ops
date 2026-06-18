@@ -330,7 +330,7 @@ Specificity rules (this is what makes insights useful, not generic):
 Return ONLY valid JSON array, no markdown or explanation.`;
 
     const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 1500,
       messages: [{ role: "user", content: analysisPrompt }],
     });
