@@ -1,4 +1,4 @@
-import { Users, Gift, Monitor, ArrowRight } from "lucide-react";
+import { Users, Gift, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -87,22 +87,6 @@ export default function HomePage() {
                 </div>
                 <div className="text-sm text-neutral-400">
                   Check points & redeem
-                </div>
-              </div>
-            </Link>
-            <Link
-              href="/staff"
-              className="group flex items-center gap-4 rounded-xl border border-neutral-700 bg-neutral-800 p-6 transition hover:border-[#C2452D]"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#C2452D]/10">
-                <Monitor className="h-6 w-6 text-[#C2452D]" />
-              </div>
-              <div>
-                <div className="font-semibold group-hover:text-[#C2452D]">
-                  Staff Tablet
-                </div>
-                <div className="text-sm text-neutral-400">
-                  Register & award points
                 </div>
               </div>
             </Link>
