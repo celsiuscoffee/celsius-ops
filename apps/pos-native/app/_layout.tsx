@@ -12,6 +12,7 @@ import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
 import * as NavigationBar from "expo-navigation-bar";
 import { useKeepAwake } from "expo-keep-awake";
+import { useOtaAutoUpdate } from "@/lib/use-ota-auto-update";
 import { useFonts } from "expo-font";
 import {
   SpaceGrotesk_400Regular,
@@ -68,6 +69,10 @@ function applyDefaultFont() {
 function RootLayout() {
   // Register hardware must never sleep mid-shift.
   useKeepAwake();
+
+  // Self-apply OTA fixes on foreground — the tills stay open for days, so
+  // without this a published fix never loads until a manual relaunch.
+  useOtaAutoUpdate();
 
   const [fontsLoaded] = useFonts({
     "Peachi-Bold": require("../assets/fonts/Peachi-Bold.otf"),
