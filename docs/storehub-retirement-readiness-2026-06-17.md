@@ -28,7 +28,7 @@ Remediation, two parts:
 
 **Also:** Nilai is native-by-birth but has `posNativeCutoverAt = NULL` and 0 orders — the sales/finance native paths are cutover-gated, so when Nilai starts trading, set its cutover (= launch date) or its revenue won't be picked up.
 
-The 27th housekeeping (cancel StoreHub, remove `storehub-sync` cron, export StoreHub data, drop the Jun-06 backups) is unchanged.
+**`storehub-sync` cron removed** from `apps/backoffice/vercel.json` — StoreHub is dead (0 txns since Jun 18), the archive is history-only now, so there's nothing left to pull. (The route handler stays for manual/backfill use.) Remaining 27th housekeeping (cancel the StoreHub account, export portal-only data, drop the Jun-06 backups) is unchanged.
 
 ---
 

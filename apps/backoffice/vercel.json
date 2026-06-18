@@ -53,10 +53,6 @@
       "schedule": "0 20 * * *"
     },
     {
-      "path": "/api/cron/storehub-sync",
-      "schedule": "0 * * * *"
-    },
-    {
       "path": "/api/cron/music-alerts",
       "schedule": "*/5 * * * *"
     },
