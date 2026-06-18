@@ -107,7 +107,7 @@ export default function OrderDetailScreen() {
       const phone = order.supplierPhone?.replace(/\D/g, "");
       if (phone) {
         const msg = encodeURIComponent(
-          `Hi ${order.supplier},\n\nPlease find attached PO ${order.orderNumber} for ${order.outlet}. Total: RM ${order.totalAmount.toFixed(2)}.\n\nThanks!`,
+          `Hi ${order.supplier},\n\nPlease find attached PO ${order.orderNumber} for ${order.outlet}. Total: RM ${Number(order.totalAmount ?? 0).toFixed(2)}.\n\nThanks!`,
         );
         Linking.openURL(`https://wa.me/${phone}?text=${msg}`).catch(() => {});
       }
@@ -240,7 +240,7 @@ export default function OrderDetailScreen() {
           <View className="mt-3 flex-row items-center justify-between border-t border-border pt-3">
             <Text className="text-xs font-body text-muted-fg">Total</Text>
             <Text className="text-lg font-body-bold text-espresso tabular-nums">
-              RM {order.totalAmount.toFixed(2)}
+              RM {Number(order.totalAmount ?? 0).toFixed(2)}
             </Text>
           </View>
           {order.deliveryDate ? (
@@ -297,7 +297,7 @@ export default function OrderDetailScreen() {
                   ) : null}
                 </View>
                 <Text className="text-base font-body-bold text-espresso tabular-nums">
-                  RM {item.totalPrice.toFixed(2)}
+                  RM {Number(item.totalPrice ?? 0).toFixed(2)}
                 </Text>
               </View>
             </View>

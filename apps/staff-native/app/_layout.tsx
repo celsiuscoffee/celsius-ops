@@ -29,6 +29,7 @@ import { useStaff } from "../lib/store";
 import { registerForPush } from "../lib/push";
 import { useColorScheme } from "nativewind";
 import { themes, loadColorSchemePref } from "../lib/theme";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 initSentry();
@@ -195,15 +196,17 @@ function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: {
-                backgroundColor: scheme === "dark" ? "#1A0200" : "#FFFFFF",
-              },
-              animation: "slide_from_right",
-            }}
-          />
+          <ErrorBoundary>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: {
+                  backgroundColor: scheme === "dark" ? "#1A0200" : "#FFFFFF",
+                },
+                animation: "slide_from_right",
+              }}
+            />
+          </ErrorBoundary>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

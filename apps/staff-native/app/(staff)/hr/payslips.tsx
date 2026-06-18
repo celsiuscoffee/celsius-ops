@@ -104,7 +104,7 @@ function PayRow({ label, value }: { label: string; value: number }) {
           isNeg ? "text-danger" : "text-espresso"
         }`}
       >
-        {isNeg ? "−" : ""}RM {Math.abs(value).toFixed(2)}
+        {isNeg ? "−" : ""}RM {Math.abs(Number(value ?? 0)).toFixed(2)}
       </Text>
     </View>
   );

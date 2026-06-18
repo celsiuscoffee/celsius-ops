@@ -274,7 +274,7 @@ export default function ReceivingPage() {
               <Text className="text-xs font-body text-muted">
                 {po.orderNumber} · {po.items.length} item
                 {po.items.length === 1 ? "" : "s"} · RM{" "}
-                {po.totalAmount.toFixed(2)}
+                {Number(po.totalAmount ?? 0).toFixed(2)}
               </Text>
             </View>
             <View className="items-end gap-1">
@@ -426,7 +426,7 @@ function ReceiveDetail({
                       </Text>
                       <Text className="text-xs font-body text-muted">
                         Ordered {item.quantity} {item.uom} · RM{" "}
-                        {item.unitPrice.toFixed(2)}/{item.uom}
+                        {Number(item.unitPrice ?? 0).toFixed(2)}/{item.uom}
                       </Text>
                     </View>
                     {isMatch ? (

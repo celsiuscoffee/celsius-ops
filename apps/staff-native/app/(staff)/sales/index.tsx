@@ -95,7 +95,7 @@ export default function SalesScreen() {
 
   const s = data?.summary;
   const g = data?.growth;
-  const maxRound = data ? Math.max(1, ...data.rounds.map((r) => r.revenue)) : 1;
+  const maxRound = data?.rounds?.length ? Math.max(1, ...data.rounds.map((r) => r.revenue)) : 1;
 
   return (
     <SafeAreaView className="flex-1 bg-[#160800]" edges={["top", "left", "right"]}>

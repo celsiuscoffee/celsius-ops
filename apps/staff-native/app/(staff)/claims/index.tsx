@@ -110,7 +110,7 @@ function ClaimCard({ claim }: { claim: Claim }) {
         </View>
         <View className="items-end">
           <Text className="text-lg font-display-medium text-espresso">
-            RM {claim.amount.toFixed(2)}
+            RM {Number(claim.amount ?? 0).toFixed(2)}
           </Text>
           <StatusPill status={claim.status} />
         </View>

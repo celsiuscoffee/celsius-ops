@@ -216,7 +216,7 @@ function OrderCard({
           </Text>
           <View className="mt-1 flex-row items-center justify-between">
             <Text className="text-base font-body-bold text-espresso tabular-nums">
-              RM {order.totalAmount.toFixed(2)}
+              RM {Number(order.totalAmount ?? 0).toFixed(2)}
             </Text>
             <ChevronRight color="#9CA3AF" size={16} />
           </View>
