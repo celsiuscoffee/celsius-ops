@@ -85,24 +85,54 @@ export async function GET(request: NextRequest) {
     const fromD = new Date(fromDate + "T12:00:00+08:00");
     const toD = new Date(toDate + "T12:00:00+08:00");
     const periodDays = Math.round((toD.getTime() - fromD.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const prevToD = new Date(fromD);
-    prevToD.setDate(prevToD.getDate() - 1);
-    const prevFromD = new Date(prevToD);
-    prevFromD.setDate(prevFromD.getDate() - periodDays + 1);
+
+    // Anchor the previous period the SAME way the period itself is anchored, so
+    // the headline delta agrees with the comparison chart:
+    //  • monthly / weekly are calendar-anchored → compare against the *previous
+    //    calendar month / week*, aligned to the same number of elapsed days
+    //    (This Month 1st–18th vs Last Month 1st–18th — NOT the preceding N days,
+    //    which silently slid the window to mid-month and flipped the sign).
+    //  • every other filter is a rolling window → the preceding N days is right.
+    let prevFromD: Date;
+    let prevToD: Date;
+    if (period === "monthly") {
+      prevFromD = new Date(fromD);
+      prevFromD.setDate(0);  // last day of previous month
+      prevFromD.setDate(1);  // first day of previous month
+      // Last day of the previous month — clamp so a long current month never
+      // spills the window into the current month when the prev month is shorter.
+      const prevMonthLastDay = new Date(fromD);
+      prevMonthLastDay.setDate(0);
+      prevToD = new Date(prevFromD);
+      prevToD.setDate(prevToD.getDate() + periodDays - 1);
+      if (prevToD.getTime() > prevMonthLastDay.getTime()) prevToD = prevMonthLastDay;
+    } else if (period === "weekly") {
+      prevFromD = new Date(fromD);
+      prevFromD.setDate(prevFromD.getDate() - 7); // same weekday range, one week back
+      prevToD = new Date(prevFromD);
+      prevToD.setDate(prevToD.getDate() + periodDays - 1);
+    } else {
+      // Rolling window: the N days immediately before the current period.
+      prevToD = new Date(fromD);
+      prevToD.setDate(prevToD.getDate() - 1);
+      prevFromD = new Date(prevToD);
+      prevFromD.setDate(prevFromD.getDate() - periodDays + 1);
+    }
     const prevFromMYT = new Date(prevFromD.getTime() + 8 * 60 * 60 * 1000);
     const prevToMYT = new Date(prevToD.getTime() + 8 * 60 * 60 * 1000);
     const prevFromDate = prevFromMYT.toISOString().split("T")[0];
     const prevToDate = prevToMYT.toISOString().split("T")[0];
 
     // Like-for-like ("realtime") comparison: when the current period is still
-    // in progress (it runs up to today), the previous period must be measured
-    // to the SAME elapsed point — otherwise a partial day/week/month reads as a
-    // huge drop against the prior FULL one (e.g. today-so-far vs all of
-    // yesterday → "-70%"). Shifting `now` back exactly periodDays reproduces the
-    // same time-of-day / weekday offset the chart's running-total already uses,
-    // so the headline deltas match the Today-vs-Yesterday curve.
+    // in progress (it runs up to today), cap the previous period at the SAME
+    // elapsed point — otherwise a partial day/week/month reads as a huge drop
+    // against the prior FULL one (e.g. today-so-far vs all of yesterday →
+    // "-70%"). The shift is the gap between prevToDate and today (periodDays for
+    // a rolling window; a whole month/week for the calendar-anchored cases), so
+    // the cutoff lands at the same wall-clock time on prevToDate.
     const inProgress = toDate === todayMYT;
-    const prevCutoffMs = now.getTime() - periodDays * 24 * 60 * 60 * 1000;
+    const prevShiftDays = Math.round((toD.getTime() - prevToD.getTime()) / (1000 * 60 * 60 * 24));
+    const prevCutoffMs = now.getTime() - prevShiftDays * 24 * 60 * 60 * 1000;
 
     // Fetch outlets. Include every active outlet that sells on EITHER system:
     // StoreHub history (storehubId) OR the native POS (loyaltyOutletId). The
