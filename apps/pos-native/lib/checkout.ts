@@ -120,6 +120,13 @@ export type SaleParams = {
   // Cashier-applied manual discount (sen). Folds into discount_amount —
   // mirrors the web POS, which has no dedicated manual-discount column.
   manualDiscount?: number; // sen
+  // Why the ORDER-level manual discount was given + who authorised it. The
+  // reason is the composed text (label · note); discountBy is the staff/manager
+  // id (the manager when a staff override was used, else the cashier). Per-LINE
+  // comps carry their own reason/by on each cart line. Persisted to
+  // pos_orders.discount_reason / discount_by for the comps audit.
+  manualDiscountReason?: string | null;
+  discountBy?: string | null;
 };
 
 export type Sale = {
@@ -227,6 +234,10 @@ export async function createSale(params: SaleParams): Promise<Sale> {
     service_charge: serviceCharge,
     sst_amount: sstAmount,
     discount_amount: discount,
+    // Manual-discount audit: only meaningful when the cashier actually applied
+    // one, so don't stamp a reason/authoriser for a purely promo/reward bill.
+    discount_reason: (params.manualDiscount ?? 0) > 0 ? params.manualDiscountReason ?? null : null,
+    discount_by: (params.manualDiscount ?? 0) > 0 ? params.discountBy ?? null : null,
     promo_discount: promoDiscount,
     promo_name: params.promoName ?? null,
     total,
@@ -254,6 +265,10 @@ export async function createSale(params: SaleParams): Promise<Sale> {
       modifiers: l.modifiers.map((m) => ({ id: m.id, name: m.name, price: m.price_sen })),
       modifier_total: l.modifiers.reduce((s, m) => s + m.price_sen, 0),
       discount_amount: lineDiscount,
+      // Per-line comp audit — reason + who authorised it (null when the line
+      // wasn't discounted).
+      discount_reason: lineDiscount > 0 ? l.line_discount_reason ?? null : null,
+      discount_by: lineDiscount > 0 ? l.line_discount_by ?? null : null,
       item_total: Math.max(0, lineGross - lineDiscount),
       kitchen_station: l.product.kitchen_station ?? null,
       // Per-item kitchen note — printed under the item on the docket and kept

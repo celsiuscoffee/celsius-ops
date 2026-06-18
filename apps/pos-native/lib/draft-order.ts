@@ -36,6 +36,10 @@ export type DraftOrder = {
   member: Member | null;
   reward: DraftReward;
   manualDiscount: number;
+  // Order-level manual-discount reason (composed text) + authoriser id, kept so
+  // a recovered draft restores the comp audit, not just the amount.
+  manualDiscountReason: string | null;
+  manualDiscountBy: string | null;
   orderType: "dine_in" | "takeaway";
   tableNumber: string;
   memberAsked: boolean;

@@ -20,6 +20,13 @@ export type CartLine = {
   // pos_order_items.discount_amount on checkout, so reporting can split
   // line-level vs order-level promos.
   line_discount_sen?: number;
+  // Why the line was discounted + who authorised it — set together with
+  // line_discount_sen so a comp is never untraceable. `reason` is the composed
+  // reason text (label · note) persisted to pos_order_items.discount_reason;
+  // `by` is the staff/manager id (the manager when a staff override was used,
+  // else the cashier) persisted to pos_order_items.discount_by.
+  line_discount_reason?: string;
+  line_discount_by?: string;
   // Per-item kitchen note (e.g. "no sugar", "extra hot"). Persisted to
   // pos_order_items.notes and printed under the item on the kitchen docket
   // — the per-product replacement for the old single order-wide note.
@@ -38,10 +45,10 @@ type CartState = {
   inc: (key: string) => void;
   dec: (key: string) => void;
   remove: (key: string) => void;
-  /** Set a fixed-amount line discount in sen. Clamped to the line's
-   *  current subtotal (qty × unit_sen) so we never go negative. Pass 0
-   *  or omit to clear. */
-  setLineDiscount: (key: string, sen: number) => void;
+  /** Set a fixed-amount line discount in sen, with its reason + authoriser.
+   *  Clamped to the line's current subtotal (qty × unit_sen) so we never go
+   *  negative. Pass 0 (or sen ≤ 0) to clear the discount AND its reason/by. */
+  setLineDiscount: (key: string, sen: number, reason?: string | null, by?: string | null) => void;
   /** Set the per-item kitchen note. Trimmed; empty clears it. */
   setLineNote: (key: string, note: string) => void;
   /** Flip a line's fulfilment override (true = pack to-go on a dine-in order). */
@@ -80,13 +87,18 @@ export const useCart = create<CartState>((set) => ({
         .filter((l) => l.qty > 0),
     })),
   remove: (key) => set((s) => ({ lines: s.lines.filter((l) => l.key !== key) })),
-  setLineDiscount: (key, sen) =>
+  setLineDiscount: (key, sen, reason, by) =>
     set((s) => ({
       lines: s.lines.map((l) => {
         if (l.key !== key) return l;
         const ceiling = l.unit_sen * l.qty;
         const clamped = Math.max(0, Math.min(Math.round(sen), ceiling));
-        return { ...l, line_discount_sen: clamped > 0 ? clamped : undefined };
+        // Clearing the discount clears its reason/attribution too, so a stale
+        // reason can never outlive the discount it explained.
+        if (clamped <= 0) {
+          return { ...l, line_discount_sen: undefined, line_discount_reason: undefined, line_discount_by: undefined };
+        }
+        return { ...l, line_discount_sen: clamped, line_discount_reason: reason ?? undefined, line_discount_by: by ?? undefined };
       }),
     })),
   setLineNote: (key, note) =>

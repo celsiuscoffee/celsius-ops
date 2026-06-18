@@ -33,7 +33,9 @@ export async function POST(req: NextRequest) {
     for (const user of managers) {
       if (!user.pin) continue;
       const { match } = await verifyPin(pin, user.pin);
-      if (match) return NextResponse.json({ ok: true, name: user.name });
+      // Return the manager's id too — the POS records it as discount_by so a
+      // staff-applied comp is attributed to the manager who authorised it.
+      if (match) return NextResponse.json({ ok: true, id: user.id, name: user.name });
     }
     return NextResponse.json({ error: "Invalid manager PIN" }, { status: 401 });
   } catch (err) {

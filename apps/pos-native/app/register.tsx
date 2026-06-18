@@ -23,6 +23,7 @@ import LockScreen from "@/components/lock-screen";
 import { chargeMaybankCard, type MaybankTerminalResult } from "@/lib/maybank-terminal";
 import { fetchCategories, fetchProducts, type Product, type ModifierOption } from "@/lib/menu";
 import { useCart, cartSubtotal, type CartLine } from "@/lib/cart";
+import { DISCOUNT_REASONS, reasonById, isManagerRole, clampToReason, composeReasonText } from "@/lib/discount-reasons";
 import { useDisplay } from "@/lib/display";
 import { createSale, getNextQueueNumber } from "@/lib/checkout";
 import { startSyncLoop } from "@/lib/sale-sync";
@@ -189,7 +190,13 @@ export default function Register() {
   const [modEditKey, setModEditKey] = useState<string | null>(null);
 
   // Cashier-applied manual discount (sen) — stacks on top of loyalty/promo.
+  // Every manual discount carries a reason (composed text, persisted to
+  // pos_orders.discount_reason) and an authoriser id (the manager when a staff
+  // used a manager-PIN override, else the cashier — pos_orders.discount_by) so a
+  // comp is never an untraceable amount off the bill.
   const [manualDiscount, setManualDiscount] = useState(0);
+  const [manualDiscountReason, setManualDiscountReason] = useState<string | null>(null);
+  const [manualDiscountBy, setManualDiscountBy] = useState<string | null>(null);
   const [showDiscount, setShowDiscount] = useState(false);
 
   // Order context.
@@ -1012,8 +1019,8 @@ export default function Register() {
   // clears the draft (handled inside saveDraft).
   useEffect(() => {
     if (!draftChecked || recoverableDraft || paid) return;
-    saveDraft({ lines, member, reward, manualDiscount, orderType, tableNumber, memberAsked });
-  }, [draftChecked, recoverableDraft, paid, lines, member, reward, manualDiscount, orderType, tableNumber, memberAsked]);
+    saveDraft({ lines, member, reward, manualDiscount, manualDiscountReason, manualDiscountBy, orderType, tableNumber, memberAsked });
+  }, [draftChecked, recoverableDraft, paid, lines, member, reward, manualDiscount, manualDiscountReason, manualDiscountBy, orderType, tableNumber, memberAsked]);
 
   // Restore the saved order into the live cart + context. The existing
   // member/reward/orderType/table mirror effects re-sync the 2nd screen.
@@ -1025,6 +1032,8 @@ export default function Register() {
     setMember(d.member);
     setReward(d.reward);
     setManualDiscount(d.manualDiscount);
+    setManualDiscountReason(d.manualDiscountReason ?? null);
+    setManualDiscountBy(d.manualDiscountBy ?? null);
     setOrderType(d.orderType);
     setTableNumber(d.tableNumber);
     setMemberAsked(d.memberAsked || !!d.member);
@@ -1315,6 +1324,8 @@ export default function Register() {
     setReward(null);
     setAutoPromotions([]);
     setManualDiscount(0);
+    setManualDiscountReason(null);
+    setManualDiscountBy(null);
     setPayMethod(null);
     setCardStage("idle");
     setCardResult(null);
@@ -1378,6 +1389,9 @@ export default function Register() {
         promoDiscount,
         promoName,
         manualDiscount: effManualDiscount,
+        // Comp audit — only meaningful when a manual discount actually applies.
+        manualDiscountReason: effManualDiscount > 0 ? manualDiscountReason : null,
+        discountBy: effManualDiscount > 0 ? manualDiscountBy : null,
       });
       // The sale is now in the durable offline buffer → drop the recovery draft
       // immediately, so a hang on the thank-you screen can't offer to "resume"
@@ -1709,7 +1723,7 @@ export default function Register() {
           <View className="flex-row items-center justify-between">
             <Text className="text-cream text-lg" style={{ fontFamily: "Peachi-Bold" }}>Current Order</Text>
             {lines.length > 0 && (
-              <Pressable onPress={() => { Haptics.selectionAsync(); clear(); pairAddsRef.current = []; setReward(null); setManualDiscount(0); setMemberAsked(false); setOrderType("takeaway"); setTableNumber(""); setOrderConfirmed(false); setCoTouched(false); }} className="active:opacity-60">
+              <Pressable onPress={() => { Haptics.selectionAsync(); clear(); pairAddsRef.current = []; setReward(null); setManualDiscount(0); setManualDiscountReason(null); setManualDiscountBy(null); setMemberAsked(false); setOrderType("takeaway"); setTableNumber(""); setOrderConfirmed(false); setCoTouched(false); }} className="active:opacity-60">
                 <Text className="text-primary text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>CLEAR</Text>
               </Pressable>
             )}
@@ -1900,10 +1914,10 @@ export default function Register() {
           ))}
           {effManualDiscount > 0 && (
             <View className="flex-row justify-between items-center mb-1">
-              <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium", color: OK }} numberOfLines={1}>Discount</Text>
+              <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium", color: OK }} numberOfLines={1}>{manualDiscountReason || "Discount"}</Text>
               <View className="flex-row items-center gap-2">
                 <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: OK }}>−{rm(effManualDiscount)}</Text>
-                <Pressable onPress={() => { Haptics.selectionAsync(); setManualDiscount(0); }} className="active:opacity-60"><X size={14} color="rgba(245,243,240,0.6)" /></Pressable>
+                <Pressable onPress={() => { Haptics.selectionAsync(); setManualDiscount(0); setManualDiscountReason(null); setManualDiscountBy(null); }} className="active:opacity-60"><X size={14} color="rgba(245,243,240,0.6)" /></Pressable>
               </View>
             </View>
           )}
@@ -2676,9 +2690,10 @@ export default function Register() {
       <Modal visible={showDiscount} transparent animationType="fade" onRequestClose={() => setShowDiscount(false)}>
         <DiscountSheet
           subtotal={subtotal}
-          staffRole={staff?.role ?? "staff"}
+          staffRole={staff?.role ?? "STAFF"}
+          staffId={staff?.staffId ?? ""}
           onClose={() => setShowDiscount(false)}
-          onApply={(sen) => { setManualDiscount(sen); setShowDiscount(false); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }}
+          onApply={({ sen, reason, by }) => { setManualDiscount(sen); setManualDiscountReason(reason); setManualDiscountBy(by); setShowDiscount(false); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }}
         />
       </Modal>
 
@@ -2690,11 +2705,13 @@ export default function Register() {
           return (
             <LineEditorSheet
               line={line}
+              staffRole={staff?.role ?? "STAFF"}
+              staffId={staff?.staffId ?? ""}
               onClose={() => setEditLineKey(null)}
               onInc={() => inc(line.key)}
               onDec={() => dec(line.key)}
               onRemove={() => { remove(line.key); setEditLineKey(null); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); }}
-              onSetDiscount={(sen) => { setLineDiscount(line.key, sen); }}
+              onSetDiscount={(sen, reason, by) => { setLineDiscount(line.key, sen, reason, by); }}
               onSetNote={(note) => { setLineNote(line.key, note); }}
               onToggleTakeaway={(takeaway) => { setLineTakeaway(line.key, takeaway); }}
               onEditOptions={line.product.modifiers.length > 0 ? () => { setEditLineKey(null); setModEditKey(line.key); } : undefined}
@@ -3476,8 +3493,38 @@ function KdsCard({
  *  RM equivalent at set time so reporting always sees the actual sen
  *  taken off. Order-level manual discount is unchanged — that still
  *  lives behind the Discount tab in the cart panel. */
+/** Reason chips for a manual discount — shared by the order-level DiscountSheet
+ *  and the per-line editor. The cap is shown on each chip so the cashier sees
+ *  the ceiling before they type a value. */
+function ReasonPicker({ reasonId, onPick }: { reasonId: string | null; onPick: (id: string) => void }) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text className="text-cream/60 text-xs uppercase tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Reason</Text>
+      <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+        {DISCOUNT_REASONS.map((r) => {
+          const on = r.id === reasonId;
+          return (
+            <Pressable
+              key={r.id}
+              onPress={() => { Haptics.selectionAsync(); onPick(r.id); }}
+              className="px-3 h-10 rounded-xl items-center justify-center"
+              style={{ backgroundColor: on ? BRAND : "rgba(245,243,240,0.06)", borderWidth: on ? 0 : 1, borderColor: "rgba(245,243,240,0.12)" }}
+            >
+              <Text className={on ? "text-white" : "text-cream/75"} style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 13 }}>
+                {r.label}{r.maxSen != null ? ` · ≤${rm(r.maxSen)}` : ""}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function LineEditorSheet({
   line,
+  staffRole,
+  staffId,
   onClose,
   onInc,
   onDec,
@@ -3488,11 +3535,13 @@ function LineEditorSheet({
   onEditOptions,
 }: {
   line: CartLine;
+  staffRole: string;
+  staffId: string;
   onClose: () => void;
   onInc: () => void;
   onDec: () => void;
   onRemove: () => void;
-  onSetDiscount: (sen: number) => void;
+  onSetDiscount: (sen: number, reason: string | null, by: string | undefined) => void;
   onSetNote: (note: string) => void;
   onToggleTakeaway: (takeaway: boolean) => void;
   /** Present only when the product has modifier groups — opens the picker. */
@@ -3503,6 +3552,12 @@ function LineEditorSheet({
   const [mode, setMode] = useState<"percent" | "fixed">("fixed");
   const [value, setValue] = useState(currentDisc > 0 ? (currentDisc / 100).toFixed(2) : "");
   const [noteVal, setNoteVal] = useState(line.note ?? "");
+  // Discount-reason state (distinct from the kitchen note above).
+  const [reasonId, setReasonId] = useState<string | null>(null);
+  const [discNote, setDiscNote] = useState("");
+  const [managerPin, setManagerPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [verifying, setVerifying] = useState(false);
   // Keyboard-avoidance: when the soft keyboard opens (Item note focused) the
   // bottom of this centered sheet gets covered. Track the keyboard height and
   // anchor the card just above it, with a scrollable body so nothing clips.
@@ -3516,12 +3571,59 @@ function LineEditorSheet({
   }, []);
   const cardMaxH = kb > 0 ? Math.max(240, winH - kb - 28) : Math.round(winH * 0.92);
   const parsed = Number(value) || 0;
+  const reason = reasonById(reasonId);
   const computedDiscSen =
     mode === "percent"
       ? Math.round((lineGross * Math.min(100, Math.max(0, parsed))) / 100)
       : Math.round(parsed * 100);
-  const clampedDisc = Math.max(0, Math.min(computedDiscSen, lineGross));
+  // Clamp to BOTH the line ceiling and the reason's cap.
+  const clampedDisc = clampToReason(computedDiscSen, reason, lineGross);
   const net = Math.max(0, lineGross - clampedDisc);
+  const capped = reason?.maxSen != null && computedDiscSen > reason.maxSen;
+  // A NEW or CHANGED non-zero line discount must be justified (reason) and, for
+  // non-manager roles, authorised with a manager PIN — this is what closes the
+  // per-line discount hole. An unchanged discount (editing only qty/note) needs
+  // neither: we reuse the reason/authoriser already on the line.
+  const needsManagerOverride = !isManagerRole(staffRole);
+  const gateNeeded = clampedDisc > 0 && clampedDisc !== currentDisc;
+  const noteMissing = gateNeeded && !!reason?.requiresNote && !discNote.trim();
+  const reasonMissing = gateNeeded && !reason;
+
+  async function applyEdits() {
+    onSetNote(noteVal);
+    // Discount unchanged → keep whatever reason/authoriser the line already had.
+    if (clampedDisc === currentDisc) {
+      onClose();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return;
+    }
+    // Cleared → drop the discount (and its reason/by) outright.
+    if (clampedDisc <= 0) {
+      onSetDiscount(0, null, undefined);
+      onClose();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return;
+    }
+    // New/changed discount → require a reason (+ note when the reason needs one).
+    if (reasonMissing || noteMissing) return;
+    let by: string | undefined = staffId || undefined;
+    if (needsManagerOverride) {
+      if (managerPin.length < 4) { setPinError("Enter manager PIN"); return; }
+      setVerifying(true);
+      try {
+        const res = await apiPost<{ ok: boolean; id: string; name: string }>("/api/pos/auth/verify-manager", { pin: managerPin });
+        by = res?.id || by;
+      } catch {
+        setPinError("Invalid manager PIN");
+        setVerifying(false);
+        return;
+      }
+      setVerifying(false);
+    }
+    onSetDiscount(clampedDisc, composeReasonText(reason, discNote), by);
+    onClose();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
 
   return (
     <Pressable
@@ -3613,8 +3715,50 @@ function LineEditorSheet({
               {mode === "percent" ? "% off line" : "RM off line"}
             </Text>
           </View>
+
+          {/* Reason + authorisation — required whenever a new/changed discount is
+              being set, so a per-line comp is never an untraceable amount off. */}
+          {gateNeeded && (
+            <View style={{ gap: 10 }}>
+              <ReasonPicker reasonId={reasonId} onPick={(id) => { setReasonId(id); setDiscNote(""); }} />
+              {reason?.hint && (
+                <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{reason.hint}</Text>
+              )}
+              {capped && (
+                <Text className="text-[#D4A843] text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Capped at {rm(reason!.maxSen!)} for “{reason!.label}”.</Text>
+              )}
+              {reason?.requiresNote && (
+                <TextInput
+                  value={discNote}
+                  onChangeText={setDiscNote}
+                  placeholder={reason.id === "kol" ? "KOL name / @handle" : "Reason note"}
+                  placeholderTextColor="rgba(245,243,240,0.3)"
+                  className="rounded-xl px-3 py-2.5 text-cream text-base"
+                  style={{ backgroundColor: "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: "rgba(245,243,240,0.14)", fontFamily: "SpaceGrotesk_500Medium", minHeight: 44 }}
+                />
+              )}
+              {needsManagerOverride && (
+                <View>
+                  <Text className="text-[#D4A843] text-xs mb-1.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Manager PIN required</Text>
+                  <NumpadField
+                    value={managerPin}
+                    onChangeText={(t) => { setManagerPin(t); setPinError(""); }}
+                    mode="integer"
+                    secure
+                    maxLength={6}
+                    placeholder="Enter manager PIN"
+                    title="Manager PIN"
+                    className="h-12 px-3 rounded-xl border"
+                    style={{ backgroundColor: "rgba(245,243,240,0.06)", borderColor: pinError ? "#E5484D" : "rgba(245,243,240,0.15)" }}
+                  />
+                  {!!pinError && <Text className="text-[#E5484D] text-xs mt-1.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{pinError}</Text>}
+                </View>
+              )}
+            </View>
+          )}
+
           {currentDisc > 0 && (
-            <Pressable onPress={() => { onSetDiscount(0); setValue(""); Haptics.selectionAsync(); }} className="active:opacity-60">
+            <Pressable onPress={() => { onSetDiscount(0, null, undefined); setValue(""); setReasonId(null); setDiscNote(""); Haptics.selectionAsync(); }} className="active:opacity-60">
               <Text className="text-xs text-primary" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1 }}>CLEAR DISCOUNT</Text>
             </Pressable>
           )}
@@ -3653,10 +3797,15 @@ function LineEditorSheet({
             <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1.4, color: DANGER }}>REMOVE</Text>
           </Pressable>
           <Pressable
-            onPress={() => { onSetDiscount(clampedDisc); onSetNote(noteVal); onClose(); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }}
-            className="flex-1 h-12 rounded-2xl items-center justify-center bg-primary active:opacity-80"
+            disabled={verifying || reasonMissing || noteMissing}
+            onPress={applyEdits}
+            className={`flex-1 h-12 rounded-2xl items-center justify-center ${(reasonMissing || noteMissing) ? "bg-primary/30" : "bg-primary active:opacity-80"}`}
           >
-            <Text className="text-cream" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1.6 }}>APPLY</Text>
+            {verifying ? <ActivityIndicator color="#F5F3F0" /> : (
+              <Text className="text-cream" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1.6 }}>
+                {reasonMissing ? "PICK A REASON" : noteMissing ? "ADD A NOTE" : "APPLY"}
+              </Text>
+            )}
           </Pressable>
         </View>
         </ScrollView>
@@ -3668,26 +3817,50 @@ function LineEditorSheet({
 // Cashier-applied manual discount. Percentage is taken off the subtotal
 // (mirrors the web DiscountModal); the register clamps the result to what's
 // still owed. Staff-role cashiers must clear a manager PIN to apply one.
-function DiscountSheet({ subtotal, staffRole, onClose, onApply }: { subtotal: number; staffRole: string; onClose: () => void; onApply: (sen: number) => void }) {
+function DiscountSheet({
+  subtotal, staffRole, staffId, onClose, onApply,
+}: {
+  subtotal: number;
+  staffRole: string;
+  staffId: string;
+  onClose: () => void;
+  onApply: (r: { sen: number; reason: string | null; by: string | null }) => void;
+}) {
   const [type, setType] = useState<"percent" | "fixed">("percent");
   const [value, setValue] = useState("");
+  const [reasonId, setReasonId] = useState<string | null>(null);
+  const [note, setNote] = useState("");
   const [managerPin, setManagerPin] = useState("");
   const [pinError, setPinError] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const { height: winH } = useWindowDimensions();
 
-  const needsManagerOverride = staffRole === "staff";
+  // Managers/owners/admins comp freely; everyone else needs a manager PIN. The
+  // old check was `staffRole === "staff"`, but roles arrive UPPERCASE from
+  // /api/pos/auth/pin ("STAFF"), so it never matched and the PIN gate was a
+  // no-op — isManagerRole() is case-insensitive, which is what makes the gate
+  // actually fire.
+  const needsManagerOverride = !isManagerRole(staffRole);
+  const reason = reasonById(reasonId);
   const numValue = parseFloat(value) || 0;
   const raw = type === "percent" ? Math.round(subtotal * (numValue / 100)) : Math.round(numValue * 100);
-  const discountAmount = Math.max(0, Math.min(raw, subtotal));
+  // Clamp to BOTH the bill and the reason's cap, so a capped reason can't be
+  // typed past.
+  const discountAmount = clampToReason(raw, reason, subtotal);
   const after = Math.max(0, subtotal - discountAmount);
+  const capped = reason?.maxSen != null && raw > reason.maxSen;
+  const noteMissing = !!reason?.requiresNote && !note.trim();
+  const valid = discountAmount > 0 && !!reason && !noteMissing;
 
   async function apply() {
-    if (discountAmount <= 0) return;
+    if (!valid) return;
+    let by: string | null = staffId || null;
     if (needsManagerOverride) {
       if (managerPin.length < 4) { setPinError("Enter manager PIN"); return; }
       setVerifying(true);
       try {
-        await apiPost("/api/pos/auth/verify-manager", { pin: managerPin });
+        const res = await apiPost<{ ok: boolean; id: string; name: string }>("/api/pos/auth/verify-manager", { pin: managerPin });
+        by = res?.id || by;
       } catch {
         setPinError("Invalid manager PIN");
         setVerifying(false);
@@ -3695,91 +3868,116 @@ function DiscountSheet({ subtotal, staffRole, onClose, onApply }: { subtotal: nu
       }
       setVerifying(false);
     }
-    onApply(discountAmount);
+    onApply({ sen: discountAmount, reason: composeReasonText(reason, note), by });
   }
 
   return (
     <View className="flex-1 bg-black/70 items-center justify-center px-8">
       <Pressable onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-      <View className="w-[480px] rounded-3xl bg-surface border border-border p-6">
+      <View className="w-[480px] rounded-3xl bg-surface border border-border p-6" style={{ maxHeight: Math.round(winH * 0.92) }}>
         <View className="flex-row items-center justify-between mb-4">
           <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Apply Discount</Text>
           <Pressable onPress={onClose} className="active:opacity-60"><X size={22} color="rgba(245,243,240,0.7)" /></Pressable>
         </View>
 
-        {/* Type toggle */}
-        <View className="flex-row rounded-xl overflow-hidden border border-cream/15 mb-3">
-          <DiscToggle label="Percentage (%)" active={type === "percent"} onPress={() => { Haptics.selectionAsync(); setType("percent"); setValue(""); }} />
-          <DiscToggle label="Fixed (RM)" active={type === "fixed"} onPress={() => { Haptics.selectionAsync(); setType("fixed"); setValue(""); }} />
-        </View>
-
-        {/* Quick percentages */}
-        {type === "percent" && (
-          <View className="flex-row gap-2 mb-3">
-            {[5, 10, 15, 20, 50].map((pct) => {
-              const on = value === String(pct);
-              return (
-                <Pressable key={pct} onPress={() => { Haptics.selectionAsync(); setValue(String(pct)); }} className="flex-1 h-11 rounded-xl items-center justify-center" style={{ backgroundColor: on ? BRAND : "rgba(245,243,240,0.06)", borderWidth: on ? 0 : 1, borderColor: "rgba(245,243,240,0.12)" }}>
-                  <Text className={on ? "text-white" : "text-cream/75"} style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 14 }}>{pct}%</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Value input */}
-        <NumpadField
-          value={value}
-          onChangeText={setValue}
-          mode={type === "percent" ? "integer" : "decimal"}
-          placeholder={type === "percent" ? "e.g. 10" : "e.g. 5.00"}
-          title="Discount"
-          className="h-12 px-3 rounded-xl border border-cream/15 mb-3"
-          style={{ backgroundColor: "rgba(245,243,240,0.06)" }}
-        />
-
-        {/* Preview */}
-        {numValue > 0 && (
-          <View className="rounded-xl p-3 mb-3" style={{ backgroundColor: "rgba(245,243,240,0.04)" }}>
-            <View className="flex-row justify-between mb-1">
-              <Text className="text-cream/55 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Subtotal</Text>
-              <Text className="text-cream/80 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{rm(subtotal)}</Text>
-            </View>
-            <View className="flex-row justify-between mb-1">
-              <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium", color: OK }}>Discount{type === "percent" ? ` (${numValue}%)` : ""}</Text>
-              <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: OK }}>−{rm(discountAmount)}</Text>
-            </View>
-            <View className="flex-row justify-between border-t border-border pt-1">
-              <Text className="text-cream text-sm" style={{ fontFamily: "Peachi-Bold" }}>After</Text>
-              <Text className="text-cream text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(after)}</Text>
-            </View>
-          </View>
-        )}
-
-        {/* Manager PIN (staff role only) */}
-        {needsManagerOverride && (
-          <View className="mb-3">
-            <Text className="text-[#D4A843] text-xs mb-1.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Manager PIN required</Text>
-            <NumpadField
-              value={managerPin}
-              onChangeText={(t) => { setManagerPin(t); setPinError(""); }}
-              mode="integer"
-              secure
-              maxLength={6}
-              placeholder="Enter manager PIN"
-              title="Manager PIN"
-              className="h-12 px-3 rounded-xl border"
-              style={{ backgroundColor: "rgba(245,243,240,0.06)", borderColor: pinError ? "#E5484D" : "rgba(245,243,240,0.15)" }}
-            />
-            {!!pinError && <Text className="text-[#E5484D] text-xs mt-1.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{pinError}</Text>}
-          </View>
-        )}
-
-        <Pressable disabled={discountAmount <= 0 || verifying} onPress={apply} className={`h-14 rounded-2xl items-center justify-center ${discountAmount <= 0 ? "bg-primary/30" : "bg-primary active:opacity-80"}`}>
-          {verifying ? <ActivityIndicator color="#F5F3F0" /> : (
-            <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{discountAmount > 0 ? `Apply Discount · −${rm(discountAmount)}` : "Enter a discount"}</Text>
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12 }}>
+          {/* Reason (required) — drives the cap + the comp audit trail */}
+          <ReasonPicker reasonId={reasonId} onPick={(id) => { setReasonId(id); setNote(""); }} />
+          {reason?.hint && (
+            <Text className="text-cream/45 text-[11px] -mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{reason.hint}</Text>
           )}
-        </Pressable>
+
+          {/* Type toggle */}
+          <View className="flex-row rounded-xl overflow-hidden border border-cream/15">
+            <DiscToggle label="Percentage (%)" active={type === "percent"} onPress={() => { Haptics.selectionAsync(); setType("percent"); setValue(""); }} />
+            <DiscToggle label="Fixed (RM)" active={type === "fixed"} onPress={() => { Haptics.selectionAsync(); setType("fixed"); setValue(""); }} />
+          </View>
+
+          {/* Quick percentages */}
+          {type === "percent" && (
+            <View className="flex-row gap-2">
+              {[5, 10, 15, 20, 50].map((pct) => {
+                const on = value === String(pct);
+                return (
+                  <Pressable key={pct} onPress={() => { Haptics.selectionAsync(); setValue(String(pct)); }} className="flex-1 h-11 rounded-xl items-center justify-center" style={{ backgroundColor: on ? BRAND : "rgba(245,243,240,0.06)", borderWidth: on ? 0 : 1, borderColor: "rgba(245,243,240,0.12)" }}>
+                    <Text className={on ? "text-white" : "text-cream/75"} style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 14 }}>{pct}%</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Value input */}
+          <NumpadField
+            value={value}
+            onChangeText={setValue}
+            mode={type === "percent" ? "integer" : "decimal"}
+            placeholder={type === "percent" ? "e.g. 10" : "e.g. 5.00"}
+            title="Discount"
+            className="h-12 px-3 rounded-xl border border-cream/15"
+            style={{ backgroundColor: "rgba(245,243,240,0.06)" }}
+          />
+
+          {/* Note (required for KOL / Other) */}
+          {reason?.requiresNote && (
+            <TextInput
+              value={note}
+              onChangeText={setNote}
+              placeholder={reason.id === "kol" ? "KOL name / @handle" : "Reason note"}
+              placeholderTextColor="rgba(245,243,240,0.3)"
+              className="rounded-xl px-3 py-3 text-cream text-base border border-cream/15"
+              style={{ backgroundColor: "rgba(245,243,240,0.06)", fontFamily: "SpaceGrotesk_500Medium", minHeight: 48 }}
+            />
+          )}
+
+          {/* Preview */}
+          {numValue > 0 && (
+            <View className="rounded-xl p-3" style={{ backgroundColor: "rgba(245,243,240,0.04)" }}>
+              <View className="flex-row justify-between mb-1">
+                <Text className="text-cream/55 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Subtotal</Text>
+                <Text className="text-cream/80 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{rm(subtotal)}</Text>
+              </View>
+              <View className="flex-row justify-between mb-1">
+                <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium", color: OK }}>Discount{type === "percent" ? ` (${numValue}%)` : ""}</Text>
+                <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: OK }}>−{rm(discountAmount)}</Text>
+              </View>
+              {capped && (
+                <Text className="text-[#D4A843] text-[11px] mb-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Capped at {rm(reason!.maxSen!)} for “{reason!.label}”.</Text>
+              )}
+              <View className="flex-row justify-between border-t border-border pt-1">
+                <Text className="text-cream text-sm" style={{ fontFamily: "Peachi-Bold" }}>After</Text>
+                <Text className="text-cream text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(after)}</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Manager PIN (non-manager roles) */}
+          {needsManagerOverride && (
+            <View>
+              <Text className="text-[#D4A843] text-xs mb-1.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Manager PIN required</Text>
+              <NumpadField
+                value={managerPin}
+                onChangeText={(t) => { setManagerPin(t); setPinError(""); }}
+                mode="integer"
+                secure
+                maxLength={6}
+                placeholder="Enter manager PIN"
+                title="Manager PIN"
+                className="h-12 px-3 rounded-xl border"
+                style={{ backgroundColor: "rgba(245,243,240,0.06)", borderColor: pinError ? "#E5484D" : "rgba(245,243,240,0.15)" }}
+              />
+              {!!pinError && <Text className="text-[#E5484D] text-xs mt-1.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{pinError}</Text>}
+            </View>
+          )}
+
+          <Pressable disabled={!valid || verifying} onPress={apply} className={`h-14 rounded-2xl items-center justify-center ${!valid ? "bg-primary/30" : "bg-primary active:opacity-80"}`}>
+            {verifying ? <ActivityIndicator color="#F5F3F0" /> : (
+              <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
+                {!reason ? "Pick a reason" : noteMissing ? "Add a note" : discountAmount > 0 ? `Apply Discount · −${rm(discountAmount)}` : "Enter a discount"}
+              </Text>
+            )}
+          </Pressable>
+        </ScrollView>
       </View>
     </View>
   );
