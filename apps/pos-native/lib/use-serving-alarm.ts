@@ -40,13 +40,17 @@ function pickOverdue(items: ServingItem[], now: number): ServingItem[] {
 
 const idKey = (list: ServingItem[]) => list.map((o) => o.id).sort().join("|");
 
-// MODULE-LEVEL state — survives a screen REMOUNT. Held in per-component useRefs
-// before, which reset on every remount of the register: each remount then saw
-// every still-overdue order as "new" and re-sounded the alarm immediately (same
-// remount-reset bug as the new-order chime loop). Persisting them means a
-// remount no longer re-alarms an order we've already sounded for; the 5-min
-// REPEAT_MS cadence still drives the ongoing nag.
-let servingPrevOverdue = new Set<string>();
+// MODULE-LEVEL state — survives a screen REMOUNT (a per-component ref reset on
+// every remount, making every still-overdue order look "new" → re-alarm).
+//
+// servingAlarmedIds ACCUMULATES the ids we've already sounded the first overdue
+// alarm for; it is NOT reset to the current overdue set each tick. That matters:
+// an orders/tables reload can briefly drop an overdue order from the list and
+// re-add it — keying "new" off "overdue last tick" would re-alarm on that flap.
+// Served orders get fresh uuids and never reappear, so never re-alarming a known
+// id is correct; the 5-min REPEAT_MS cadence still drives the ongoing nag.
+// Capped so it can't grow unbounded over a long shift.
+const servingAlarmedIds = new Set<string>();
 let servingLastAlarmAt = 0;
 
 /** Returns the orders currently past the serving target (for a popup) and
@@ -60,17 +64,22 @@ export function useServingAlarm(items: ServingItem[]): ServingItem[] {
   const evaluate = useCallback(() => {
     const now = Date.now();
     const od = pickOverdue(itemsRef.current, now);
-    // An order that wasn't overdue a moment ago → ring straight away (don't
-    // wait out the repeat window). Otherwise re-ring only every REPEAT_MS.
-    // "new" is judged against MODULE state so a remount doesn't make every
-    // already-overdue order look new and re-alarm.
-    const hasNew = od.some((o) => !servingPrevOverdue.has(o.id));
-    servingPrevOverdue = new Set(od.map((o) => o.id));
+    // An order we've NEVER alarmed for → ring straight away (don't wait out the
+    // repeat window). Judged against the accumulating module set, so neither a
+    // remount nor a transient list refresh re-triggers a "first" alarm.
+    const hasNew = od.some((o) => !servingAlarmedIds.has(o.id));
+    for (const o of od) servingAlarmedIds.add(o.id);
+    if (servingAlarmedIds.size > 1000) {
+      for (const old of [...servingAlarmedIds].slice(0, 500)) servingAlarmedIds.delete(old);
+    }
     setOverdue((prev) => (idKey(prev) === idKey(od) ? prev : od)); // avoid no-op re-renders
     if (od.length > 0 && (hasNew || now - servingLastAlarmAt >= REPEAT_MS)) {
       servingLastAlarmAt = now;
       playAlarm();
     }
+    // Note: servingAlarmedIds intentionally keeps served orders' ids until the
+    // cap evicts them — re-adding the same id can't happen (uuids are unique),
+    // so a served order is never re-alarmed.
   }, []);
 
   useEffect(() => {
