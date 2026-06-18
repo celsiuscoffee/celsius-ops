@@ -49,7 +49,8 @@ type MaybankQrConfig = { enabled: boolean; outlets: Record<string, MaybankQrOutl
 const STORE_NAMES: Record<string, string> = {
   "shah-alam": "Shah Alam",
   conezion: "Putrajaya",
-  tamarind: "Tamarind Square",
+  tamarind: "Tamarind",
+  nilai: "Nilai",
 };
 
 type Provider = "stripe" | "revenue_monster";
@@ -574,7 +575,7 @@ export default function IntegrationsPage() {
           { label: "Payment Methods", value: `${enabledMethods}/${METHOD_DEFS.length}`, sub: "active", color: "bg-terracotta/10 text-terracotta" },
           { label: "Revenue Monster", value: `${rmConfiguredCount}/${outlets.length}`, sub: "outlets", color: "bg-blue-50 text-blue-600" },
           { label: "Bukku", value: `${bukkuConfiguredCount}/${outlets.length}`, sub: "outlets", color: "bg-purple-50 text-purple-600" },
-          { label: "StoreHub", value: "Active", sub: "syncing", color: "bg-green-50 text-green-600" },
+          { label: "StoreHub", value: "Legacy", sub: "archive only", color: "bg-gray-100 text-gray-500" },
         ].map((s) => (
           <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-3.5">
             <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">{s.label}</p>
@@ -945,9 +946,9 @@ export default function IntegrationsPage() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="font-semibold text-gray-900 text-sm">StoreHub POS</h2>
-              <StatusPill ok={true} label="Connected" />
+              <StatusPill ok={false} label="Retired" />
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">Source of truth for product catalog and sales data. Syncs automatically via cron.</p>
+            <p className="text-xs text-gray-500 mt-0.5">Legacy POS — fully replaced by the native POS for catalogue, sales, and loyalty. Kept read-only for historical sales reporting (the <code>storehub_sales</code> archive); no longer syncing.</p>
           </div>
         </div>
       </section>

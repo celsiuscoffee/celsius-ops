@@ -1,14 +1,15 @@
 // Unified sales source for the sales dashboard during/after the StoreHub →
 // POS-native migration. Per outlet, merges:
-//   • StoreHub: the local archive (storehub_sales) for PAST days + a LIVE pull
-//     for TODAY (so today is real-time like the old dashboard, while history
-//     stays fast on the DB). Cutover-routed: pre-cutover all channels,
-//     post-cutover external/online only (Grab/Beep — still on StoreHub).
-//   • POS-native (pos_orders): real-time, for transactions AT/AFTER cutover.
-// Each sale is counted once from the authoritative source for its time. The
-// live today-pull falls back to the archive if StoreHub is unreachable, and
-// disappears per outlet as it cuts over — so StoreHub can still be cancelled
-// once it's fully off (all tills + Grab on POS-native).
+//   • StoreHub: the local archive (storehub_sales) for days STRICTLY BEFORE the
+//     outlet's cutover, plus a LIVE pull for TODAY only while the outlet is
+//     still pre-cutover. StoreHub is never counted on/after cutover — Grab is
+//     native (pos_orders) and Beep is now the Celsius app (orders), so counting
+//     the StoreHub rows too would double-count (StoreHub tags till sales
+//     OFFLINE_PAYMENTS, i.e. they DO carry a channel).
+//   • POS-native (pos_orders) + pickup (orders): real-time, AT/AFTER cutover.
+// Each sale is counted once from the authoritative source for its time. Once an
+// outlet has cut over it touches StoreHub for history only — so StoreHub can be
+// cancelled with no effect on current numbers.
 
 import { prisma } from "@/lib/prisma";
 import { getTransactions, type StoreHubTransaction } from "@/lib/storehub";
@@ -79,15 +80,10 @@ export async function getUnifiedSalesForOutlet(
     Date.UTC(mytNow.getUTCFullYear(), mytNow.getUTCMonth(), mytNow.getUTCDate()) - 8 * 3600 * 1000,
   );
 
-  // Apply cutover routing to one StoreHub txn and push it. Pre-cutover: keep all.
-  // Post-cutover: keep only EXTERNAL/online orders (Grab, Beep — they carry a
-  // `channel`); drop post-cutover direct/till (no channel) — those are on
-  // POS-native now (counted below), so keeping them would double-count.
+  // Push one StoreHub txn. Callers only ever pass PRE-cutover rows (the archive
+  // window is capped at cutover and the live pull is gated to pre-cutover
+  // outlets), so there's no per-row cutover gate here — StoreHub is history only.
   const pushStorehub = (ts: string, total: number, raw: StoreHubTransaction) => {
-    if (outlet.cutoverAt && new Date(ts).getTime() >= outlet.cutoverAt.getTime()) {
-      const hasChannel = typeof raw?.channel === "string" && raw.channel.trim() !== "";
-      if (!hasChannel) return;
-    }
     sales.push({
       ts,
       total,
@@ -116,10 +112,6 @@ export async function getUnifiedSalesForOutlet(
       return;
     }
     const ts = toISO(r.ts);
-    if (outlet.cutoverAt && new Date(ts).getTime() >= outlet.cutoverAt.getTime()) {
-      const hasChannel = typeof r.channel === "string" && r.channel.trim() !== "";
-      if (!hasChannel) return;
-    }
     sales.push({
       ts,
       total: Number(r.total) || 0,
@@ -129,26 +121,35 @@ export async function getUnifiedSalesForOutlet(
     });
   };
 
-  // ── StoreHub PAST — local archive, up to (not including) today 00:00 MYT ──
-  const archiveTo = to.getTime() < todayStartMyt.getTime() ? to : new Date(todayStartMyt.getTime() - 1);
+  // ── StoreHub PAST — local archive, strictly BEFORE cutover and before today
+  // 00:00 MYT (today is served by the live pull below). On/after cutover the
+  // outlet is fully native, so the archive contributes history only. ──
+  const cutoverCapMs = outlet.cutoverAt ? outlet.cutoverAt.getTime() - 1 : Number.POSITIVE_INFINITY;
+  const archiveToBase = Math.min(to.getTime(), todayStartMyt.getTime() - 1);
+  const archiveTo = new Date(Math.min(archiveToBase, cutoverCapMs));
   // channel_class / is_delivery_qr are materialized at import (and
   // backfilled) so this no longer ships the heavy `raw` JSONB — only
   // rows that somehow missed classification fall back to it.
-  const shRows = await prisma.$queryRaw<Array<ArchiveRow>>`
-    SELECT transaction_time AS ts, total, channel, channel_class, is_delivery_qr,
-           CASE WHEN channel_class IS NULL THEN raw END AS raw
-    FROM storehub_sales
-    WHERE outlet_id = ${outlet.outletId}
-      AND NOT is_cancelled
-      AND transaction_time IS NOT NULL
-      AND transaction_time >= ${from}
-      AND transaction_time <= ${archiveTo}
-  `;
-  for (const r of shRows) pushArchive(r);
+  if (archiveTo.getTime() >= from.getTime()) {
+    const shRows = await prisma.$queryRaw<Array<ArchiveRow>>`
+      SELECT transaction_time AS ts, total, channel, channel_class, is_delivery_qr,
+             CASE WHEN channel_class IS NULL THEN raw END AS raw
+      FROM storehub_sales
+      WHERE outlet_id = ${outlet.outletId}
+        AND NOT is_cancelled
+        AND transaction_time IS NOT NULL
+        AND transaction_time >= ${from}
+        AND transaction_time <= ${archiveTo}
+    `;
+    for (const r of shRows) pushArchive(r);
+  }
 
-  // ── StoreHub TODAY — LIVE pull so today is real-time (outlets still on
-  // StoreHub). Falls back to the archive if StoreHub is unreachable. ──
-  if (outlet.storehubStoreId && to.getTime() >= todayStartMyt.getTime()) {
+  // ── StoreHub TODAY — LIVE pull so today is real-time, but ONLY while the
+  // outlet is still pre-cutover (its till is still on StoreHub). After cutover
+  // today comes from pos_orders/pickup below. Falls back to the archive if
+  // StoreHub is unreachable. ──
+  const preCutoverToday = !outlet.cutoverAt || todayStartMyt.getTime() < outlet.cutoverAt.getTime();
+  if (preCutoverToday && outlet.storehubStoreId && to.getTime() >= todayStartMyt.getTime()) {
     try {
       const liveTxns = await getTransactions(outlet.storehubStoreId, todayStartMyt, now);
       for (const t of liveTxns) {
