@@ -7,6 +7,7 @@ import { playAlarm, primeSounds } from "./chime";
  * past the serving-time TARGET without being actioned:
  *
  *   - pickup order → "Ready" not pressed within 15 min
+ *   - Grab order   → "Ready" not pressed within 15 min
  *   - QR table     → "Done"  not pressed within 15 min
  *
  * The caller passes the currently-open serving items (already filtered to "not
@@ -27,7 +28,7 @@ const REPEAT_MS = 5 * 60 * 1000;                 // re-sound at most every 5 min
 export type ServingItem = {
   id: string;
   createdAt: string;
-  channel: "pickup" | "table";
+  channel: "pickup" | "grab" | "table";
   label: string; // order number ("C-1234") or table label ("T5")
 };
 

@@ -284,19 +284,28 @@ export default function Register() {
   // Mounted persistently so it keeps catching up + receiving Realtime even
   // while the modal is closed (drives the header badge count).
   const { orders: kdsOrders, reload: reloadOrders } = useOrdersPanel(outletId);
-  // Serving-time alarm candidates: pickup orders not yet "ready" + QR-table
-  // orders not yet "done". Pressing Ready/Done drops the order from these
-  // lists, which silences the alarm for it. (Grab runs to its own SLA.)
+  // Serving-time alarm candidates — ALL fulfilment-wait order types:
+  //   pickup + Grab orders not yet "ready", QR-table orders not yet "done".
+  // (Register/counter sales complete the instant they're rung up, so they're
+  // never live here.) Pressing Ready/Done drops the order from these lists AND
+  // calls silenceServingAlarmOrder() on its id, which silences the alarm at
+  // once. Grab orders carry uid `grab:<id>` — the same id advanceStatus()
+  // silences when "ready" is pressed, so the dedupe path lines up.
   const servingAlarmItems = useMemo<ServingItem[]>(() => {
-    const pickup = kdsOrders
-      .filter((o) => o.source === "pickup" && o.status !== "ready")
-      .map((o) => ({ id: o.uid, createdAt: o.createdAt, channel: "pickup" as const, label: o.orderNumber }));
+    const online = kdsOrders
+      .filter((o) => o.status !== "ready")
+      .map((o) => ({
+        id: o.uid,
+        createdAt: o.createdAt,
+        channel: (o.source === "grab" ? "grab" : "pickup") as "grab" | "pickup",
+        label: o.orderNumber,
+      }));
     const tables = tableSlots.flatMap((s) =>
       s.orders
         .filter((o) => o.source === "qr")
         .map((o) => ({ id: o.id, createdAt: o.createdAt, channel: "table" as const, label: s.label })),
     );
-    return [...pickup, ...tables];
+    return [...online, ...tables];
   }, [kdsOrders, tableSlots]);
   // Orders past the 15-min serving target → drives the alarm sound + the popup.
   const overdueOrders = useServingAlarm(servingAlarmItems);
@@ -369,9 +378,10 @@ export default function Register() {
     // the shift closed — so a close can never freeze a customer's in-progress
     // order. (Ringing up a NEW sale still requires the store open; see onAdd.)
     setBumpingUid(order.uid);
-    // Pickup orders leave the serving alarm at "ready" — silence immediately so
-    // the alarm stops on tap, not after the orders list refreshes. (Grab uids
-    // aren't in the serving set, so silencing them is a harmless no-op.)
+    // Pickup AND Grab orders leave the serving alarm at "ready" — silence
+    // immediately on tap (keyed by uid `<source>:<id>`, which is exactly the id
+    // servingAlarmItems registers), so the alarm stops at once rather than after
+    // the orders list refreshes / a dropped Realtime event.
     if (status === "ready") silenceServingAlarmOrder(order.uid);
     console.log(`[order-status] tap ${order.source} ${order.orderNumber} -> ${status}`);
     try {
@@ -2198,8 +2208,8 @@ export default function Register() {
                 return (
                   <View key={o.id} className="flex-row items-center justify-between rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(194,69,45,0.14)" }}>
                     <View className="flex-row items-center gap-3">
-                      <View className="rounded-lg px-2 py-1" style={{ backgroundColor: o.channel === "table" ? "#3B82F6" : "#FBBF24" }}>
-                        <Text className="text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#160800" }}>{o.channel === "table" ? "TABLE" : "PICKUP"}</Text>
+                      <View className="rounded-lg px-2 py-1" style={{ backgroundColor: o.channel === "table" ? "#3B82F6" : o.channel === "grab" ? "#00B14F" : "#FBBF24" }}>
+                        <Text className="text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: o.channel === "grab" ? "#FFFFFF" : "#160800" }}>{o.channel === "table" ? "TABLE" : o.channel === "grab" ? "GRAB" : "PICKUP"}</Text>
                       </View>
                       <Text className="text-cream text-lg" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{o.label}</Text>
                     </View>
