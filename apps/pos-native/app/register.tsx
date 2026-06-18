@@ -1281,8 +1281,12 @@ export default function Register() {
     setCoTouched(false);
     setDisplayStatus("idle");
     useDisplay.getState().setMember(null);
-    useDisplay.getState().setExtraDiscount(null);
-    useDisplay.getState().setManualDiscount(null);
+    // Clear all cart-scoped display state between orders (mystery reveal +
+    // prize, beans, pay total, reward, redeem req…). Without this the paid
+    // screen kept mirroring the PREVIOUS order's "REVEALED" card while the
+    // customer hadn't revealed the new one. reset() keeps member, so the
+    // setMember(null) above still does the fresh-order logout.
+    useDisplay.getState().reset();
     // Surface any performance nudge queued at the last checkout.
     if (pendingNudgeRef.current) { setPerfNudge(pendingNudgeRef.current); pendingNudgeRef.current = null; }
   }

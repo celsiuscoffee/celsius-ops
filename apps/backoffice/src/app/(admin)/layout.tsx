@@ -345,6 +345,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Cashflow", href: "/finance/cashflow", icon: <LineChart className={ICON_SIZE} />, moduleKey: "finance:cashflow" },
       { label: "Cash Tracking", href: "/finance/cash-tracking", icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
       { label: "Bank Statements", href: "/finance/bank-statements", icon: <Banknote className={ICON_SIZE} />, moduleKey: "finance:bank-statements" },
+      { label: "Payouts", href: "/finance/payouts", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "finance:payouts" },
       { label: "Recurring Expenses", href: "/finance/recurring-expenses", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "finance:recurring-expenses" },
     ],
   },
