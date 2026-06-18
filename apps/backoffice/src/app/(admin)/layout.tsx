@@ -935,8 +935,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (pathname === "/dashboard" || pathname === "/") return;
     // OWNER and ADMIN bypass all checks
     if (user.role === "ADMIN" || user.role === "OWNER") return;
-    // Empty moduleAccess = full access (legacy behavior)
-    if (!user.moduleAccess || user.moduleAccess.length === 0) return;
+    // NOTE: there is no "empty moduleAccess = full access" escape here. The
+    // sidebar render path (canAccess) already denies every gated item when
+    // moduleAccess is empty, so such a manager only ever sees Dashboard in the
+    // nav. Letting the URL guard fall through to the same canAccess check below
+    // keeps direct-URL access consistent with what the sidebar exposes —
+    // previously an empty-moduleAccess manager had a blank sidebar but could
+    // still reach every non-finance page by typing the URL.
 
     // Match the current path to the MOST SPECIFIC (longest-href) nav item,
     // then gate on that item's module. A first-match loop let a broad parent
