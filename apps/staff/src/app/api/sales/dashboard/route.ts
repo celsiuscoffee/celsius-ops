@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase";
+import { Prisma } from "@prisma/client";
 import {
   type Mode, type ChannelKey, type PayKey, type RoundKey,
   rangesForMode, getMYTToday, getMYTHourNow, getMYTDateStr, getMYTHour, getRound,
@@ -76,36 +77,67 @@ export async function GET(req: NextRequest) {
   const winEnd = mytDayEndUTC(cur.to);
   const priorCut = mytDayStartUTC(prev.from); // "before previous period" boundary
 
-  const [posRes, appRes, priorRes] = await Promise.all([
-    supabaseAdmin
-      .from("pos_orders")
-      .select("id, outlet_id, created_at, subtotal, total, status, order_type, source, customer_phone, refund_of_order_id")
-      .in("outlet_id", posCodes)
-      .gte("created_at", winStart).lte("created_at", winEnd)
-      .limit(20000),
+  // pos_orders + pickup orders via RAW SQL — NOT the Supabase REST client.
+  // PostgREST is capped at ~1000 rows on this project (the server `max-rows`
+  // setting), so `.limit(20000)` was silently ignored: a wide window (this
+  // period carries ~1.5k native orders) came back truncated to the OLDEST
+  // ~1000, dropping the most RECENT orders and undercounting the headline by
+  // the latest day or two. The StoreHub bridge was already moved off PostgREST
+  // for this exact reason; the till/app queries hadn't been.
+  const warn: string[] = [];
+  const winStartD = new Date(winStart);
+  const winEndD = new Date(winEnd);
+
+  const [posRows, appRows, priorRes] = await Promise.all([
+    posCodes.length
+      ? prisma
+          .$queryRaw<Array<Omit<PosRow, "created_at"> & { created_at: Date }>>`
+            SELECT id, outlet_id, created_at, subtotal, total, status, order_type, source, customer_phone, refund_of_order_id
+            FROM pos_orders
+            WHERE outlet_id IN (${Prisma.join(posCodes)})
+              AND created_at >= ${winStartD} AND created_at <= ${winEndD}
+          `
+          .then((rows) =>
+            rows.map((r): PosRow => ({
+              ...r,
+              created_at: r.created_at.toISOString(),
+              subtotal: r.subtotal == null ? null : Number(r.subtotal),
+              total: r.total == null ? null : Number(r.total),
+            })),
+          )
+          .catch((e: unknown) => {
+            warn.push(`pos_orders: ${e instanceof Error ? e.message : "query failed"}`);
+            return [] as PosRow[];
+          })
+      : Promise.resolve([] as PosRow[]),
     storeIds.length
-      ? supabaseAdmin
-          .from("orders")
-          .select("id, created_at, subtotal, total, status, order_type, customer_phone, payment_method, table_number, source")
-          .in("store_id", storeIds)
-          .gte("created_at", winStart).lte("created_at", winEnd)
-          .limit(20000)
-      : Promise.resolve({ data: [], error: null }),
-    // Distinct prior phones via RPC — replaces two raw 50k-row fetches
-    // that JS only ever collapsed into Sets. Dedup happens in SQL.
+      ? prisma
+          .$queryRaw<Array<Omit<AppRow, "created_at"> & { created_at: Date }>>`
+            SELECT id, created_at, subtotal, total, status, order_type, customer_phone, payment_method, table_number, source
+            FROM orders
+            WHERE store_id IN (${Prisma.join(storeIds)})
+              AND created_at >= ${winStartD} AND created_at <= ${winEndD}
+          `
+          .then((rows) =>
+            rows.map((r): AppRow => ({
+              ...r,
+              created_at: r.created_at.toISOString(),
+              subtotal: r.subtotal == null ? null : Number(r.subtotal),
+              total: r.total == null ? null : Number(r.total),
+            })),
+          )
+          .catch((e: unknown) => {
+            warn.push(`orders: ${e instanceof Error ? e.message : "query failed"}`);
+            return [] as AppRow[];
+          })
+      : Promise.resolve([] as AppRow[]),
+    // Distinct prior phones via RPC — deduped in SQL (count-style, not row-capped).
     supabaseAdmin.rpc("prior_customer_phones", {
       p_before: priorCut,
       p_pos_codes: posCodes,
       p_store_ids: storeIds,
     }),
   ]);
-
-  const warn: string[] = [];
-  for (const [name, r] of [["pos_orders", posRes], ["orders", appRes]] as const) {
-    if (r.error) warn.push(`${name}: ${r.error.message}`);
-  }
-  const posRows = (posRes.data || []) as PosRow[];
-  const appRows = (appRes.data || []) as AppRow[];
 
   // ── Date axis ──
   const curDates = dateRange(cur.from, cur.to);
@@ -225,15 +257,21 @@ export async function GET(req: NextRequest) {
 
   // ── POS payment split (current period) ──
   if (curPosIds.length) {
-    const payRes = await supabaseAdmin
-      .from("pos_order_payments")
-      .select("order_id, payment_method, amount, refund_amount")
-      .in("order_id", curPosIds.slice(0, 5000))
-      .limit(20000);
-    if (payRes.error) warn.push(`pos_order_payments: ${payRes.error.message}`);
-    for (const p of (payRes.data || []) as PayRow[]) {
+    // Raw SQL again — PostgREST's ~1000-row cap would otherwise truncate the
+    // payment split for a busy period (curPosIds can be well over 1000).
+    const payRows = await prisma
+      .$queryRaw<PayRow[]>`
+        SELECT order_id, payment_method, amount, refund_amount
+        FROM pos_order_payments
+        WHERE order_id IN (${Prisma.join(curPosIds)})
+      `
+      .catch((e: unknown) => {
+        warn.push(`pos_order_payments: ${e instanceof Error ? e.message : "query failed"}`);
+        return [] as PayRow[];
+      });
+    for (const p of payRows) {
       const pk = normalizePayment(p.payment_method);
-      payAmt[pk] = (payAmt[pk] || 0) + ((p.amount || 0) - (p.refund_amount || 0));
+      payAmt[pk] = (payAmt[pk] || 0) + ((Number(p.amount) || 0) - (Number(p.refund_amount) || 0));
     }
   }
 
