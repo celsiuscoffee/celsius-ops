@@ -10,6 +10,7 @@ import {
   getDailySettlementReport,
   parseSettlementCsv,
   SETTLEMENT_METHODS,
+  SETTLEMENT_STORES,
   type SettlementLine,
 } from "@/lib/revenue-monster/client";
 
@@ -52,17 +53,31 @@ export async function GET(request: NextRequest) {
   const p = request.nextUrl.searchParams;
 
   // ── Probe: one call, raw + parsed, no DB writes. Fail-fast endpoint check. ──
+  // ?storeId=<rm store id> scopes to one store; ?store=conezion|shah-alam|tamarind
+  // resolves via SETTLEMENT_STORES. ?allStores=true sweeps all three.
   if (p.get("probe") === "true") {
     const date = p.get("date") || mytDate(7);
     const method = p.get("method") || "FPX_MY";
-    const r = await getDailySettlementReport({ date, method, sequence: 1 });
-    const parsed = parseSettlementCsv(r.body);
-    return NextResponse.json({
-      probe: { date, method },
-      http: { ok: r.ok, status: r.status, bodyLength: r.body.length },
-      bodyHead: r.body.slice(0, 3000),
-      parsed: { lineCount: parsed.lines.length, grossSen: parsed.grossSen, mdrSen: parsed.mdrSen, netSen: parsed.netSen, sample: parsed.lines.slice(0, 3) },
-    });
+    const storeParam = p.get("store");
+    const explicitStoreId = p.get("storeId")
+      || (storeParam ? SETTLEMENT_STORES.find((s) => s.slug === storeParam)?.storeId : undefined);
+
+    const targets = p.get("allStores") === "true"
+      ? SETTLEMENT_STORES.map((s) => ({ label: s.slug, storeId: s.storeId }))
+      : [{ label: storeParam || "default", storeId: explicitStoreId }];
+
+    const out = [];
+    for (const t of targets) {
+      const r = await getDailySettlementReport({ date, method, sequence: 1, storeId: t.storeId });
+      const parsed = parseSettlementCsv(r.body);
+      out.push({
+        store: t.label, storeId: t.storeId ?? null,
+        http: { ok: r.ok, status: r.status, bodyLength: r.body.length },
+        bodyHead: r.body.slice(0, 2500),
+        parsed: { lineCount: parsed.lines.length, grossSen: parsed.grossSen, netSen: parsed.netSen, sample: parsed.lines.slice(0, 3) },
+      });
+    }
+    return NextResponse.json({ probe: { date, method }, results: out });
   }
 
   // ── Determine the date window ──
