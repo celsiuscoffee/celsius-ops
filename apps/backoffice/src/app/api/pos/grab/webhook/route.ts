@@ -146,7 +146,15 @@ export async function POST(request: NextRequest) {
       // Forward-only: only persist a status that ADVANCES the order. A late,
       // duplicate or unrecognised state push is a no-op and can no longer drag a
       // ready/collected order back to "open".
-      const newStatus = resolveStatusTransition(existing.status, mapGrabStatusToPOS(orderState));
+      const mapped = mapGrabStatusToPOS(orderState);
+      // Capture any state Grab sends that we don't model yet — logged with a
+      // stable marker so the real string is greppable and the mapping can be
+      // extended precisely (rather than guessed). Was previously swallowed by a
+      // default → "open" fallback.
+      if (mapped === null && orderState != null && String(orderState).trim() !== "") {
+        console.warn(`[grab:webhook] UNMAPPED_STATE orderID=${orderID} state=${JSON.stringify(orderState)}`);
+      }
+      const newStatus = resolveStatusTransition(existing.status, mapped);
       if (newStatus) {
         await supabase.from("pos_orders")
           .update({ status: newStatus, updated_at: new Date().toISOString() })
