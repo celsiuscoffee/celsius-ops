@@ -1,0 +1,854 @@
+month,item,qty,revenue_rm
+2025-08,"Almond Crepe Cake",13,219.70
+2025-08,"Almond Croissant",6,89.40
+2025-08,"Berry Berries",6,39.60
+2025-08,"Black",43,292.10
+2025-08,"Burnt Cheesecake",22,371.80
+2025-08,"Buttercream Chocolate",25,317.37
+2025-08,"Buttercream Latte",79,1056.45
+2025-08,"Cappucino",3,36.70
+2025-08,"Caramel Latte",26,350.50
+2025-08,"Caramel Latte (Bottle)",9,116.10
+2025-08,"Caramel Macchiato",23,277.32
+2025-08,"Chocolate",25,315.70
+2025-08,"Chocolate (Bottle)",9,116.10
+2025-08,"Chocolate Mudslide",37,625.30
+2025-08,"Citrus Iced Lemon Tea",3,23.80
+2025-08,"Citrus Mojito",6,24.75
+2025-08,"Classic Croissant",6,59.40
+2025-08,"Classic Latte (Bottle)",13,167.70
+2025-08,"Dirty Latte",16,208.50
+2025-08,"Doppio Freddo",11,111.20
+2025-08,"Earl Grey",2,18.82
+2025-08,"Egg Sando",12,120.80
+2025-08,"Half Boiled Eggs",6,22.05
+2025-08,"Hazelnut Latte",16,181.70
+2025-08,"Latte",71,684.22
+2025-08,"Matcha",23,277.00
+2025-08,"Matcha (Bottle)",1,12.90
+2025-08,"Matcha Cream Latte",20,260.75
+2025-08,"Mineral Water",20,60.00
+2025-08,"Mini Biscoff (3 pcs)",2,20.85
+2025-08,"Mini Choc Chip No Nuts (3 pcs)",2,27.80
+2025-08,"Mini Double Choc (3 pcs)",1,13.90
+2025-08,"Mini Matcha Macademia (3 pcs)",1,13.90
+2025-08,"Mini Red Velvet (3 pcs)",3,41.70
+2025-08,"Mint Chocolate",11,96.30
+2025-08,"Mint Matcha",10,145.00
+2025-08,"Mocha",9,96.30
+2025-08,"Mocha (Bottle)",16,206.40
+2025-08,"NYC Double Choc Dulcey",4,55.60
+2025-08,"NYC Hazelut Seasalt",2,27.80
+2025-08,"NYC Red Velvet Biscoff",2,27.80
+2025-08,"NYC Smores",2,27.80
+2025-08,"Peanut Butter Mocha",11,160.90
+2025-08,"Peppermint",5,31.70
+2025-08,"Piccolo",14,136.25
+2025-08,"Roti Bakar Brioche",30,207.00
+2025-08,"Roti Bakar Brioche with Half Boiled Eggs",12,113.85
+2025-08,"Salted Caramel Latte",10,27.80
+2025-08,"Smoked Pulled Lamb",6,157.40
+2025-08,"Spanish Latte",28,283.00
+2025-08,"Streaky Beef Pesto",8,126.75
+2025-08,"Summer Lagoon",6,49.50
+2025-08,"Unknown",36,70.50
+2025-08,"Vanilla Latte",17,204.50
+2025-08,"White Mocha",8,94.30
+2025-09,"Almond Crepe Cake",81,1360.45
+2025-09,"Almond Croissant",25,372.50
+2025-09,"Berry Berries",45,415.80
+2025-09,"Black",414,3503.00
+2025-09,"Burnt Cheesecake",145,2429.35
+2025-09,"Buttercream Chocolate",184,2558.25
+2025-09,"Buttercream Latte",725,9984.71
+2025-09,"Cappucino",147,1522.17
+2025-09,"Caramel Latte",139,1551.80
+2025-09,"Caramel Latte (Bottle)",6,77.40
+2025-09,"Caramel Macchiato",180,2408.70
+2025-09,"Chocolate",201,2200.75
+2025-09,"Chocolate Cake Bars",41,610.90
+2025-09,"Chocolate Mudslide",132,2209.90
+2025-09,"Citrus Iced Lemon Tea",43,452.20
+2025-09,"Citrus Mojito",32,227.70
+2025-09,"Classic Croissant",30,293.00
+2025-09,"Classic Latte (Bottle)",11,141.90
+2025-09,"Dirty Latte",75,954.20
+2025-09,"Doppio Freddo",113,1274.38
+2025-09,"Earl Grey",25,236.70
+2025-09,"Egg Sando",70,694.05
+2025-09,"Espresso",17,117.30
+2025-09,"Half Boiled Eggs",38,186.20
+2025-09,"Hazelnut Latte",129,1530.32
+2025-09,"Latte",850,9550.32
+2025-09,"Matcha",256,3221.45
+2025-09,"Matcha Batik Indulgence",25,422.50
+2025-09,"Matcha Burnt Cheesecake",8,143.20
+2025-09,"Matcha Cream Latte",293,4155.51
+2025-09,"Mineral Water",63,189.00
+2025-09,"Mini Biscoff (3 pcs)",3,41.70
+2025-09,"Mini Choc Chip No Nuts (3 pcs)",17,236.30
+2025-09,"Mini Double Choc (3 pcs)",15,208.50
+2025-09,"Mini Hazelnut Seasalt (3 pcs)",7,97.30
+2025-09,"Mini Matcha Macademia (3 pcs)",5,69.50
+2025-09,"Mini Red Velvet (3 pcs)",13,173.75
+2025-09,"Mint Chocolate",100,1238.00
+2025-09,"Mint Matcha",67,847.90
+2025-09,"Mocha",94,1119.41
+2025-09,"Mocha (Bottle)",12,154.80
+2025-09,"NYC Double Choc Dulcey",15,208.50
+2025-09,"NYC Hazelut Seasalt",10,135.00
+2025-09,"NYC Red Velvet Biscoff",11,152.90
+2025-09,"NYC Smores",25,347.50
+2025-09,"Peanut Butter Mocha",107,1503.35
+2025-09,"Peppermint",35,307.05
+2025-09,"Piccolo",113,1074.10
+2025-09,"Red Velvet Cake",13,219.70
+2025-09,"Roti Bakar Brioche",162,1107.48
+2025-09,"Roti Bakar Brioche with Curry",5,31.05
+2025-09,"Roti Bakar Brioche with Half Boiled Eggs",101,979.05
+2025-09,"Salted Caramel Latte",194,2374.80
+2025-09,"Salted Egg Croissant",45,490.50
+2025-09,"Smoked Pulled Lamb",15,372.37
+2025-09,"Spanish Latte",287,3408.99
+2025-09,"Streaky Beef Pesto",85,1421.60
+2025-09,"Summer Lagoon",40,336.60
+2025-09,"Unknown",119,1571.42
+2025-09,"Vanilla Latte",131,1564.80
+2025-09,"White Mocha",53,633.40
+2025-10,"Almond Crepe Cake",73,1233.70
+2025-10,"Almond Croissant",53,805.70
+2025-10,"Berry Berries",44,432.60
+2025-10,"Black",405,3941.72
+2025-10,"Burnt Cheesecake",124,2088.31
+2025-10,"Buttercream Chocolate",174,2594.60
+2025-10,"Buttercream Latte",625,9382.10
+2025-10,"Cappucino",173,2121.37
+2025-10,"Caramel Latte",175,2414.60
+2025-10,"Caramel Latte (Bottle)",2,25.80
+2025-10,"Caramel Macchiato",152,2259.31
+2025-10,"Chocolate",202,2737.80
+2025-10,"Chocolate (Bottle)",1,12.90
+2025-10,"Chocolate Cake Bars",115,1773.91
+2025-10,"Chocolate Mudslide",110,1864.31
+2025-10,"Citrus Iced Lemon Tea",58,696.20
+2025-10,"Citrus Mojito",25,247.50
+2025-10,"Classic Croissant",86,861.40
+2025-10,"Dirty Latte",55,770.50
+2025-10,"Doppio Freddo",114,1551.80
+2025-10,"Earl Grey",25,256.50
+2025-10,"Ebi Sando",1,19.90
+2025-10,"Egg Sando",71,728.90
+2025-10,"Espresso",23,156.70
+2025-10,"Half Boiled Eggs",31,151.90
+2025-10,"Hazelnut Latte",147,1996.41
+2025-10,"Latte",814,10331.82
+2025-10,"Matcha",226,3169.51
+2025-10,"Matcha Batik Indulgence",70,1183.00
+2025-10,"Matcha Burnt Cheesecake",34,605.02
+2025-10,"Matcha Cream Latte",252,3800.80
+2025-10,"Mineral Water",86,258.00
+2025-10,"Mini Biscoff (3 pcs)",5,71.50
+2025-10,"Mini Choc Chip No Nuts (3 pcs)",14,196.60
+2025-10,"Mini Double Choc (3 pcs)",5,69.50
+2025-10,"Mini Hazelnut Seasalt (3 pcs)",10,149.00
+2025-10,"Mini Matcha Macademia (3 pcs)",7,99.30
+2025-10,"Mini Pavlova",74,656.82
+2025-10,"Mini Red Velvet (3 pcs)",7,97.30
+2025-10,"Mint Chocolate",77,1043.30
+2025-10,"Mint Matcha",58,809.20
+2025-10,"Mocha",86,1184.40
+2025-10,"Mocha (Bottle)",2,25.80
+2025-10,"NYC Double Choc Dulcey",23,316.71
+2025-10,"NYC Hazelut Seasalt",19,272.10
+2025-10,"NYC Red Velvet Biscoff",21,285.90
+2025-10,"NYC Smores",21,297.90
+2025-10,"Peanut Butter Mocha",86,1270.40
+2025-10,"Peppermint",59,606.15
+2025-10,"Piccolo",96,1062.40
+2025-10,"Red Velvet Cake",9,152.10
+2025-10,"Roti Bakar Brioche",169,1200.65
+2025-10,"Roti Bakar Brioche with Curry",1,6.90
+2025-10,"Roti Bakar Brioche with Half Boiled Eggs",118,1163.21
+2025-10,"Salted Caramel Latte",194,2705.60
+2025-10,"Salted Egg Croissant",50,543.00
+2025-10,"Smoked Pulled Lamb",13,332.70
+2025-10,"Spanish Latte",281,3933.90
+2025-10,"Streaky Beef Pesto",61,1052.90
+2025-10,"Summer Lagoon",50,495.00
+2025-10,"Unknown",103,1496.70
+2025-10,"Vanilla Latte",105,1464.50
+2025-10,"White Mocha",39,532.15
+2025-11,"Almond Crepe Cake",49,828.10
+2025-11,"Almond Croissant",46,686.40
+2025-11,"Berry Berries",51,498.96
+2025-11,"Black",399,3825.28
+2025-11,"Burnt Cheesecake",121,2045.07
+2025-11,"Buttercream Chocolate",171,2556.41
+2025-11,"Buttercream Latte",675,10146.13
+2025-11,"Cappucino",188,2344.20
+2025-11,"Caramel Latte",148,2039.20
+2025-11,"Caramel Macchiato",142,2095.85
+2025-11,"Chocolate",194,2607.63
+2025-11,"Chocolate Cake Bars",118,1865.07
+2025-11,"Chocolate Mudslide",128,2172.20
+2025-11,"Citrus Iced Lemon Tea",44,514.19
+2025-11,"Citrus Mojito",36,351.45
+2025-11,"Classic Croissant",98,972.22
+2025-11,"Dirty Latte",46,651.40
+2025-11,"Doppio Freddo",94,1313.26
+2025-11,"Earl Grey",40,400.00
+2025-11,"Egg Sando",73,746.84
+2025-11,"Espresso",31,213.90
+2025-11,"Half Boiled Eggs",30,147.00
+2025-11,"Hazelnut Latte",136,1859.40
+2025-11,"Latte",816,10296.26
+2025-11,"Matcha",181,2503.77
+2025-11,"Matcha Batik Indulgence",57,963.30
+2025-11,"Matcha Burnt Cheesecake",3,53.70
+2025-11,"Matcha Cream Latte",282,4237.41
+2025-11,"Mineral Water",83,249.00
+2025-11,"Mini Biscoff (3 pcs)",1,13.90
+2025-11,"Mini Choc Chip No Nuts (3 pcs)",8,105.20
+2025-11,"Mini Double Choc (3 pcs)",14,198.60
+2025-11,"Mini Hazelnut Seasalt (3 pcs)",9,133.10
+2025-11,"Mini Matcha Macademia (3 pcs)",13,186.70
+2025-11,"Mini Pavlova",96,849.95
+2025-11,"Mini Red Velvet (3 pcs)",9,127.10
+2025-11,"Mint Chocolate",85,1156.55
+2025-11,"Mint Matcha",34,473.60
+2025-11,"Mocha",82,1111.35
+2025-11,"NYC Double Choc Dulcey",21,293.90
+2025-11,"NYC Hazelut Seasalt",15,208.50
+2025-11,"NYC Red Velvet Biscoff",17,229.35
+2025-11,"NYC Smores",26,365.40
+2025-11,"Peanut Butter Mocha",103,1511.72
+2025-11,"Peppermint",61,627.90
+2025-11,"Piccolo",95,1031.70
+2025-11,"Red Velvet Cake",39,659.10
+2025-11,"Roti Bakar Brioche",187,1336.71
+2025-11,"Roti Bakar Brioche with Curry",1,8.90
+2025-11,"Roti Bakar Brioche with Half Boiled Eggs",105,1027.70
+2025-11,"Salted Caramel Latte",177,2444.30
+2025-11,"Salted Egg Croissant",84,913.60
+2025-11,"Smoked Pulled Lamb",15,396.50
+2025-11,"Spanish Latte",324,4560.26
+2025-11,"Streaky Beef Pesto",70,1238.55
+2025-11,"Summer Lagoon",52,514.80
+2025-11,"Unknown",133,1931.21
+2025-11,"Vanilla Latte",103,1423.70
+2025-11,"White Mocha",51,696.90
+2025-12,"Almond Crepe Cake",101,1690.00
+2025-12,"Almond Croissant",60,886.55
+2025-12,"Berry Berries",43,420.75
+2025-12,"Black",425,4096.85
+2025-12,"Burnt Cheesecake",109,1834.10
+2025-12,"Buttercream Chocolate",189,2803.73
+2025-12,"Buttercream Latte",623,9350.43
+2025-12,"Cappucino",169,2083.10
+2025-12,"Caramel Latte",142,1948.01
+2025-12,"Caramel Macchiato",137,2034.51
+2025-12,"Chocolate",198,2671.64
+2025-12,"Chocolate Cake Bars",117,1860.30
+2025-12,"Chocolate Mudslide",128,2160.75
+2025-12,"Citrus Iced Lemon Tea",67,786.35
+2025-12,"Citrus Mojito",41,405.90
+2025-12,"Classic Croissant",114,1132.60
+2025-12,"Dirty Latte",60,835.61
+2025-12,"Doppio Freddo",107,1484.08
+2025-12,"Earl Grey",32,304.90
+2025-12,"Egg Sando",64,669.60
+2025-12,"Espresso",34,227.70
+2025-12,"Half Boiled Eggs",27,129.85
+2025-12,"Hazelnut Latte",124,1711.60
+2025-12,"Latte",812,10340.02
+2025-12,"Matcha",145,2016.50
+2025-12,"Matcha Batik Indulgence",62,1047.80
+2025-12,"Matcha Burnt Cheesecake",1,17.90
+2025-12,"Matcha Cream Latte",229,3456.72
+2025-12,"Mineral Water",104,309.00
+2025-12,"Mini Biscoff (3 pcs)",8,117.20
+2025-12,"Mini Choc Chip No Nuts (3 pcs)",7,87.40
+2025-12,"Mini Double Choc (3 pcs)",10,141.00
+2025-12,"Mini Hazelnut Seasalt (3 pcs)",7,97.30
+2025-12,"Mini Matcha Macademia (3 pcs)",8,113.20
+2025-12,"Mini Pavlova",67,595.23
+2025-12,"Mini Red Velvet (3 pcs)",4,55.60
+2025-12,"Mint Chocolate",91,1237.63
+2025-12,"Mint Matcha",31,438.90
+2025-12,"Mocha",101,1360.45
+2025-12,"NYC Double Choc Dulcey",23,327.70
+2025-12,"NYC Hazelut Seasalt",8,111.20
+2025-12,"NYC Red Velvet Biscoff",18,254.20
+2025-12,"NYC Smores",32,446.80
+2025-12,"Peanut Butter Mocha",109,1614.16
+2025-12,"Peppermint",63,652.61
+2025-12,"Piccolo",122,1351.55
+2025-12,"Roti Bakar Brioche",179,1263.80
+2025-12,"Roti Bakar Brioche with Half Boiled Eggs",160,1551.43
+2025-12,"Salted Caramel Latte",196,2709.27
+2025-12,"Salted Egg Croissant",56,602.95
+2025-12,"Smoked Pulled Lamb",32,847.85
+2025-12,"Spanish Latte",247,3483.55
+2025-12,"Streaky Beef Pesto",90,1539.59
+2025-12,"Summer Lagoon",44,422.65
+2025-12,"Unknown",160,1747.00
+2025-12,"Vanilla Latte",114,1569.65
+2025-12,"White Mocha",51,692.51
+2026-01,"Affogato",21,259.29
+2026-01,"Almond Crepe Cake",209,3495.76
+2026-01,"Almond Croissant",204,2996.51
+2026-01,"Amber Citrus",27,398.32
+2026-01,"Beef Bolognese",89,1857.20
+2026-01,"Berry Berries",137,1658.06
+2026-01,"Bihun Kari",9,150.41
+2026-01,"Bihun Kari Asam",3,50.70
+2026-01,"Black",1159,11116.89
+2026-01,"Burnt Cheesecake",283,4696.94
+2026-01,"Buttercream Chocolate",294,4364.51
+2026-01,"Buttercream Latte",1306,19234.93
+2026-01,"Cappucino",426,5292.89
+2026-01,"Caramel Latte",284,3850.73
+2026-01,"Caramel Latte (Bottle)",9,105.78
+2026-01,"Caramel Macchiato",372,5488.25
+2026-01,"Chicken Tomyam Carbonara",127,3298.51
+2026-01,"Chocolate",520,7023.57
+2026-01,"Chocolate (Bottle)",5,58.05
+2026-01,"Chocolate Cake Bars",258,4028.23
+2026-01,"Chocolate Freddo",58,823.48
+2026-01,"Chocolate Mudslide",261,4436.97
+2026-01,"Citrus Iced Lemon Tea",182,2316.99
+2026-01,"Citrus Mojito",81,871.71
+2026-01,"Classic Croissant",236,2282.13
+2026-01,"Classic Fries",105,1454.66
+2026-01,"Classic Latte (Bottle)",11,135.45
+2026-01,"Cloudy Matcha",69,993.83
+2026-01,"Crispy Prawn Creamy Carbonara",56,1520.60
+2026-01,"Dirty Latte",215,2969.15
+2026-01,"Doppio Freddo",288,3965.25
+2026-01,"Earl Grey",112,1151.79
+2026-01,"Ebi Sando",22,479.56
+2026-01,"Egg Sando",210,2001.28
+2026-01,"Espresso",56,368.81
+2026-01,"Half Boiled Eggs",117,550.27
+2026-01,"Hazelnut Latte",293,4062.13
+2026-01,"Iced Water",218,610.87
+2026-01,"Korean Crispy Chicken",65,1162.26
+2026-01,"Korean Spicy Fries",46,680.60
+2026-01,"Latte",2234,28071.20
+2026-01,"Loaded Fries",45,797.24
+2026-01,"Matcha",363,5046.14
+2026-01,"Matcha (Bottle)",1,12.90
+2026-01,"Matcha Affogato",16,205.11
+2026-01,"Matcha Batik Indulgence",161,2693.83
+2026-01,"Matcha Burnt Cheesecake",27,472.30
+2026-01,"Matcha Cream Latte",419,6319.50
+2026-01,"Mee Kari",43,686.01
+2026-01,"Mee Kari Asam",4,67.60
+2026-01,"Mineral Water",245,721.00
+2026-01,"Mini Biscoff (3 pcs)",30,402.90
+2026-01,"Mini Choc Chip No Nuts (3 pcs)",76,988.16
+2026-01,"Mini Double Choc (3 pcs)",49,689.15
+2026-01,"Mini Hazelnut Seasalt (3 pcs)",39,552.89
+2026-01,"Mini Matcha Macademia (3 pcs)",31,435.58
+2026-01,"Mini Pavlova",251,2182.64
+2026-01,"Mini Red Velvet (3 pcs)",71,973.32
+2026-01,"Mint Chocolate",174,2372.62
+2026-01,"Mint Matcha",74,1036.38
+2026-01,"Mocha",258,3479.58
+2026-01,"Mocha (Bottle)",5,54.18
+2026-01,"Mont Blanc",116,1598.79
+2026-01,"Nasi Lemak 2 Sambal",196,1607.86
+2026-01,"Nasi Lemak 2 Sambal + Ayam Crispy",260,4161.17
+2026-01,"Nasi Lemak 2 Sambal + Ayam Grilled",61,1024.86
+2026-01,"Nasi Lemak 2 Sambal + Sambal Udang",36,603.89
+2026-01,"Nasi Lemak 2 Sambal + Udang Crispy",21,329.41
+2026-01,"NYC Double Choc Dulcey",74,1026.42
+2026-01,"NYC Hazelut Seasalt",64,903.45
+2026-01,"NYC Red Velvet Biscoff",69,910.57
+2026-01,"NYC Smores",94,1316.89
+2026-01,"Peanut Butter Mocha",207,3040.48
+2026-01,"Peppermint",57,608.55
+2026-01,"Piccolo",214,2195.35
+2026-01,"Pomegranate Iced Tea",77,1060.40
+2026-01,"Roti Bakar Brioche",400,2860.54
+2026-01,"Roti Bakar Brioche with Curry",37,233.02
+2026-01,"Roti Bakar Brioche with Half Boiled Eggs",303,2937.31
+2026-01,"Salted Caramel Latte",310,4235.48
+2026-01,"Salted Egg Croissant",156,1670.16
+2026-01,"Samyang Pasta",21,388.13
+2026-01,"Smoked Duck Aglio Olio",155,4197.10
+2026-01,"Smoked Pulled Lamb",78,2001.62
+2026-01,"Spanish Latte",534,7506.78
+2026-01,"Strawberry Matcha",214,3326.06
+2026-01,"Streaky Beef Pesto",192,3256.50
+2026-01,"Summer Lagoon",100,1043.85
+2026-01,"Truffle Fries",110,1625.01
+2026-01,"Truffle Mac n Cheese",88,1757.27
+2026-01,"Unknown",127,1304.96
+2026-01,"Vanilla Latte",242,3340.03
+2026-01,"White Mocha",146,1979.56
+2026-02,"Affogato",15,180.60
+2026-02,"Almond Crepe Cake",245,4110.08
+2026-02,"Almond Croissant",176,2615.38
+2026-02,"Amber Citrus",43,592.48
+2026-02,"Beef Bolognese",104,2075.52
+2026-02,"Berry Berries",123,1704.41
+2026-02,"Bihun Kari",13,224.70
+2026-02,"Bihun Kari Asam",6,98.87
+2026-02,"Black",995,9541.04
+2026-02,"Burnt Cheesecake",246,4144.91
+2026-02,"Buttercream Chocolate",362,5341.10
+2026-02,"Buttercream Latte",1274,19085.77
+2026-02,"Buttermilk Chicken",19,333.52
+2026-02,"Cappucino",389,4884.56
+2026-02,"Caramel Latte",252,3373.98
+2026-02,"Caramel Latte (Bottle)",11,141.90
+2026-02,"Caramel Macchiato",335,4949.32
+2026-02,"Chicken Chop",37,694.51
+2026-02,"Chicken Tomyam Carbonara",182,5076.24
+2026-02,"Chocolate",552,7452.94
+2026-02,"Chocolate Cake Bars",301,4763.64
+2026-02,"Chocolate Freddo",130,1910.73
+2026-02,"Chocolate Mudslide",372,6321.52
+2026-02,"Citrus Iced Lemon Tea",162,2182.87
+2026-02,"Citrus Mojito",44,515.27
+2026-02,"Classic Croissant",256,2535.82
+2026-02,"Classic Fries",109,1496.43
+2026-02,"Classic Latte (Bottle)",8,103.20
+2026-02,"Cloudy Matcha",175,2534.49
+2026-02,"Colek",77,1923.42
+2026-02,"Crispy Prawn Creamy Carbonara",74,2047.67
+2026-02,"Dirty Latte",298,4101.60
+2026-02,"Doppio Freddo",249,3457.96
+2026-02,"Earl Grey",81,895.57
+2026-02,"Ebi Sando",38,820.85
+2026-02,"Egg Sando",141,1443.46
+2026-02,"Espresso",75,501.77
+2026-02,"FreeFlow Drinks",73,2353.82
+2026-02,"Half Boiled Eggs",54,255.78
+2026-02,"Hazelnut Latte",277,3790.50
+2026-02,"Iced Water",660,1871.63
+2026-02,"Korean Crispy Chicken",97,1890.27
+2026-02,"Korean Spicy Fries",63,977.83
+2026-02,"Latte",2293,29040.81
+2026-02,"Loaded Fries",58,1027.19
+2026-02,"Matcha",470,6603.30
+2026-02,"Matcha (Bottle)",1,12.90
+2026-02,"Matcha Affogato",25,322.50
+2026-02,"Matcha Batik Indulgence",203,3448.43
+2026-02,"Matcha Burnt Cheesecake",7,119.93
+2026-02,"Matcha Cream Latte",450,6790.94
+2026-02,"Mee Kari",48,794.30
+2026-02,"Mee Kari Asam",2,38.80
+2026-02,"Mineral Water",58,171.10
+2026-02,"Mini Biscoff (3 pcs)",49,685.80
+2026-02,"Mini Choc Chip No Nuts (3 pcs)",64,907.42
+2026-02,"Mini Double Choc (3 pcs)",57,810.10
+2026-02,"Mini Hazelnut Seasalt (3 pcs)",66,933.20
+2026-02,"Mini Matcha Macademia (3 pcs)",30,429.85
+2026-02,"Mini Pavlova",213,1876.12
+2026-02,"Mini Red Velvet (3 pcs)",81,1129.44
+2026-02,"Mint Chocolate",152,2077.74
+2026-02,"Mint Matcha",57,788.64
+2026-02,"Mocha",228,3030.14
+2026-02,"Mocha (Bottle)",7,88.36
+2026-02,"Mont Blanc",240,3502.84
+2026-02,"Nasi Lemak 2 Sambal",116,1064.61
+2026-02,"Nasi Lemak 2 Sambal + Ayam Crispy",228,3770.67
+2026-02,"Nasi Lemak 2 Sambal + Ayam Grilled",71,1224.55
+2026-02,"Nasi Lemak 2 Sambal + Sambal Udang",29,470.00
+2026-02,"Nasi Lemak 2 Sambal + Udang Crispy",32,545.73
+2026-02,"NYC Double Choc Dulcey",106,1499.80
+2026-02,"NYC Hazelut Seasalt",114,1628.99
+2026-02,"NYC Red Velvet Biscoff",100,1391.54
+2026-02,"NYC Smores",98,1380.02
+2026-02,"Peanut Butter Mocha",192,2832.37
+2026-02,"Peppermint",49,528.65
+2026-02,"Piccolo",134,1451.39
+2026-02,"Pomegranate Iced Tea",163,2226.61
+2026-02,"Red Velvet Cake",1,16.90
+2026-02,"Refill FreeFlow",174,0.00
+2026-02,"Roti Bakar Brioche",378,2717.38
+2026-02,"Roti Bakar Brioche with Curry",13,89.70
+2026-02,"Roti Bakar Brioche with Half Boiled Eggs",295,2893.27
+2026-02,"Salted Caramel Latte",298,3958.35
+2026-02,"Salted Egg Croissant",191,2110.41
+2026-02,"Samyang Pasta",34,666.75
+2026-02,"Smoked Duck Aglio Olio",135,3985.57
+2026-02,"Smoked Pulled Lamb",65,1716.84
+2026-02,"Spanish Latte",621,8725.83
+2026-02,"Strawberry Matcha",463,7301.60
+2026-02,"Streaky Beef Pesto",210,4173.18
+2026-02,"Summer Lagoon",70,1016.91
+2026-02,"Truffle Fries",141,2232.21
+2026-02,"Truffle Mac n Cheese",106,2087.42
+2026-02,"Vanilla Latte",264,3606.63
+2026-02,"White Mocha",115,1593.19
+2026-03,"Affogato",11,130.00
+2026-03,"Almond Crepe Cake",143,2416.70
+2026-03,"Almond Croissant",121,1804.28
+2026-03,"Amber Citrus",83,1203.65
+2026-03,"Beef Bolognese",97,1937.09
+2026-03,"Berry Berries",142,2078.58
+2026-03,"Bihun Kari",4,64.22
+2026-03,"Bihun Kari Asam",6,94.64
+2026-03,"Black",840,8038.28
+2026-03,"Burnt Cheesecake",354,5936.35
+2026-03,"Buttercream Chocolate",412,5990.70
+2026-03,"Buttercream Latte",1293,19131.57
+2026-03,"Buttermilk Chicken",64,1245.74
+2026-03,"Cappucino",277,3419.87
+2026-03,"Caramel Latte",256,3450.42
+2026-03,"Caramel Latte (Bottle)",1,12.90
+2026-03,"Caramel Macchiato",402,5824.38
+2026-03,"Chicken Chop",76,1473.20
+2026-03,"Chicken Tomyam Carbonara",154,4256.29
+2026-03,"Chocolate",581,7596.11
+2026-03,"Chocolate Cake Bars",247,3891.86
+2026-03,"Chocolate Freddo",161,2309.77
+2026-03,"Chocolate Mudslide",274,4607.34
+2026-03,"Citrus Iced Lemon Tea",240,3087.35
+2026-03,"Citrus Mojito",81,1067.07
+2026-03,"Classic Croissant",186,1842.00
+2026-03,"Classic Fries",183,2544.86
+2026-03,"Classic Latte (Bottle)",2,25.80
+2026-03,"Cloudy Matcha",200,2804.18
+2026-03,"Colek",224,5831.45
+2026-03,"Crispy Prawn Creamy Carbonara",39,1058.06
+2026-03,"Dirty Latte",243,3326.92
+2026-03,"Doppio Freddo",270,3770.23
+2026-03,"Earl Grey",94,967.95
+2026-03,"Ebi Sando",24,505.41
+2026-03,"Egg Sando",85,913.21
+2026-03,"Espresso",52,312.57
+2026-03,"FreeFlow Drinks",124,3610.83
+2026-03,"Google Review",51,0.00
+2026-03,"Half Boiled Eggs",32,156.80
+2026-03,"Hazelnut Latte",271,3701.27
+2026-03,"Iced Water",649,1825.85
+2026-03,"Korean Crispy Chicken",68,1347.31
+2026-03,"Korean Spicy Fries",76,1205.64
+2026-03,"Latte",1942,24907.53
+2026-03,"Loaded Fries",83,1474.96
+2026-03,"Matcha",477,6591.84
+2026-03,"Matcha Affogato",15,180.60
+2026-03,"Matcha Batik Indulgence",160,2705.86
+2026-03,"Matcha Cream Latte",461,6769.76
+2026-03,"Mee Kari",38,663.92
+2026-03,"Mee Kari Asam",5,84.50
+2026-03,"Mineral Water",28,80.10
+2026-03,"Mini Biscoff (3 pcs)",42,567.68
+2026-03,"Mini Choc Chip No Nuts (3 pcs)",76,1059.75
+2026-03,"Mini Double Choc (3 pcs)",48,675.60
+2026-03,"Mini Hazelnut Seasalt (3 pcs)",64,896.70
+2026-03,"Mini Matcha Macademia (3 pcs)",33,439.98
+2026-03,"Mini Pavlova",207,1828.55
+2026-03,"Mini Red Velvet (3 pcs)",60,823.45
+2026-03,"Mint Chocolate",195,2491.95
+2026-03,"Mint Matcha",60,834.80
+2026-03,"Mocha",237,3172.83
+2026-03,"Mocha (Bottle)",1,12.90
+2026-03,"Mont Blanc",288,4230.28
+2026-03,"Nasi Lemak 2 Sambal",100,940.13
+2026-03,"Nasi Lemak 2 Sambal + Ayam Crispy",184,3091.18
+2026-03,"Nasi Lemak 2 Sambal + Ayam Grilled",87,1476.85
+2026-03,"Nasi Lemak 2 Sambal + Sambal Udang",24,411.41
+2026-03,"Nasi Lemak 2 Sambal + Udang Crispy",11,190.90
+2026-03,"NYC Double Choc Dulcey",82,1139.95
+2026-03,"NYC Hazelut Seasalt",68,939.39
+2026-03,"NYC Red Velvet Biscoff",83,1119.14
+2026-03,"NYC Smores",110,1545.29
+2026-03,"Peanut Butter Mocha",194,2823.00
+2026-03,"Peppermint",46,508.89
+2026-03,"Piccolo",95,1000.58
+2026-03,"Pomegranate Iced Tea",260,3481.86
+2026-03,"Red Velvet Cake",1,16.90
+2026-03,"Refill FreeFlow",301,0.00
+2026-03,"Roti Bakar Brioche",316,2252.46
+2026-03,"Roti Bakar Brioche with Curry",21,149.05
+2026-03,"Roti Bakar Brioche with Half Boiled Eggs",149,1466.68
+2026-03,"Salted Caramel Latte",309,4221.62
+2026-03,"Salted Egg Croissant",154,1698.43
+2026-03,"Samyang Pasta",35,708.50
+2026-03,"Smoked Duck Aglio Olio",134,4042.69
+2026-03,"Smoked Pulled Lamb",33,869.19
+2026-03,"Spanish Latte",724,10166.80
+2026-03,"Strawberry Matcha",503,7760.03
+2026-03,"Streaky Beef Pesto",81,1614.59
+2026-03,"Summer Lagoon",68,993.59
+2026-03,"Truffle Fries",142,2250.22
+2026-03,"Truffle Mac n Cheese",52,1020.77
+2026-03,"Vanilla Latte",236,3231.60
+2026-03,"White Mocha",111,1570.88
+2026-04,"Affogato",9,103.20
+2026-04,"Almond Crepe Cake",221,3716.31
+2026-04,"Almond Croissant",166,2517.54
+2026-04,"Amber Citrus",59,927.82
+2026-04,"Beef Bolognese",108,2153.95
+2026-04,"Berry Berries",123,1921.78
+2026-04,"Bihun Kari",16,270.40
+2026-04,"Bihun Kari Asam",5,84.50
+2026-04,"Black",1435,13831.49
+2026-04,"Burnt Cheesecake",307,5225.86
+2026-04,"Buttercream Chocolate",454,6779.47
+2026-04,"Buttercream Latte",1643,24895.67
+2026-04,"Cappucino",481,6053.55
+2026-04,"Caramel Latte",309,4291.63
+2026-04,"Caramel Macchiato",359,5319.62
+2026-04,"Chicken Tomyam Carbonara",267,7487.32
+2026-04,"Chocolate",597,8109.92
+2026-04,"Chocolate (Bottle)",1,12.90
+2026-04,"Chocolate Cake Bars",267,4235.76
+2026-04,"Chocolate Freddo",156,2287.72
+2026-04,"Chocolate Mudslide",243,4147.90
+2026-04,"Citrus Iced Lemon Tea",193,2703.10
+2026-04,"Citrus Mojito",70,973.39
+2026-04,"Classic Croissant",245,2445.06
+2026-04,"Classic Fries",215,3029.04
+2026-04,"Classic Latte (Bottle)",360,3564.00
+2026-04,"Cloudy Matcha",180,2587.38
+2026-04,"Crispy Prawn Creamy Carbonara",111,3085.06
+2026-04,"Dirty Latte",313,4359.77
+2026-04,"Doppio Freddo",280,3943.10
+2026-04,"Earl Grey",123,1387.28
+2026-04,"Ebi Sando",48,1005.81
+2026-04,"Egg Sando",146,1536.37
+2026-04,"Espresso",133,898.90
+2026-04,"Google Review",83,0.00
+2026-04,"Half Boiled Eggs",116,561.54
+2026-04,"Hazelnut Latte",354,4910.25
+2026-04,"Iced Water",626,1800.64
+2026-04,"Korean Crispy Chicken",152,2974.35
+2026-04,"Korean Spicy Fries",86,1357.55
+2026-04,"Latte",2867,36979.71
+2026-04,"Loaded Fries",112,1976.22
+2026-04,"Matcha",511,7245.44
+2026-04,"Matcha Affogato",5,64.50
+2026-04,"Matcha Batik Indulgence",187,3169.78
+2026-04,"Matcha Burnt Cheesecake",1,17.90
+2026-04,"Matcha Cream Latte",540,8246.15
+2026-04,"Mee Kari",55,931.37
+2026-04,"Mee Kari Asam",6,101.40
+2026-04,"Mineral Water",10,30.00
+2026-04,"Mini Biscoff (3 pcs)",36,512.05
+2026-04,"Mini Choc Chip No Nuts (3 pcs)",59,819.83
+2026-04,"Mini Double Choc (3 pcs)",82,1147.32
+2026-04,"Mini Hazelnut Seasalt (3 pcs)",39,560.83
+2026-04,"Mini Matcha Macademia (3 pcs)",34,466.39
+2026-04,"Mini Pavlova",212,1867.22
+2026-04,"Mini Red Velvet (3 pcs)",82,1161.50
+2026-04,"Mint Chocolate",181,2532.28
+2026-04,"Mint Matcha",92,1271.21
+2026-04,"Mocha",292,3960.11
+2026-04,"Mocha (Bottle)",1,12.90
+2026-04,"Mont Blanc",483,7222.72
+2026-04,"Nasi Lemak 2 Sambal",227,2056.10
+2026-04,"Nasi Lemak 2 Sambal + Ayam Crispy",366,6159.66
+2026-04,"Nasi Lemak 2 Sambal + Ayam Grilled",202,3435.70
+2026-04,"Nasi Lemak 2 Sambal + Sambal Udang",49,844.10
+2026-04,"Nasi Lemak 2 Sambal + Udang Crispy",49,843.10
+2026-04,"NYC Double Choc Dulcey",68,967.78
+2026-04,"NYC Hazelut Seasalt",77,1126.61
+2026-04,"NYC Red Velvet Biscoff",66,913.00
+2026-04,"NYC Smores",97,1401.55
+2026-04,"Peanut Butter Mocha",181,2673.29
+2026-04,"Peppermint",65,729.29
+2026-04,"Piccolo",182,1938.94
+2026-04,"Pomegranate Iced Tea",217,3015.21
+2026-04,"Roti Bakar Brioche",629,4611.94
+2026-04,"Roti Bakar Brioche with Curry",21,144.90
+2026-04,"Roti Bakar Brioche with Half Boiled Eggs",357,3485.50
+2026-04,"Salted Caramel Latte",353,4947.64
+2026-04,"Salted Egg Croissant",357,3951.71
+2026-04,"Samyang Pasta",89,1775.40
+2026-04,"Smoked Duck Aglio Olio",233,6979.08
+2026-04,"Smoked Pulled Lamb",89,2341.65
+2026-04,"Spanish Latte",827,11930.39
+2026-04,"Strawberry Matcha",654,10410.32
+2026-04,"Streaky Beef Pesto",250,4949.11
+2026-04,"Summer Lagoon",73,1159.62
+2026-04,"Truffle Fries",176,2853.83
+2026-04,"Truffle Mac n Cheese",141,2848.48
+2026-04,"Vanilla Latte",340,4752.01
+2026-04,"White Mocha",149,2088.08
+2026-05,"Affogato",6,77.40
+2026-05,"Almond Crepe Cake",281,4750.59
+2026-05,"Almond Croissant",202,3072.20
+2026-05,"Amber Citrus",53,835.75
+2026-05,"Beef Bolognese",133,2653.30
+2026-05,"Berry Berries",146,2320.68
+2026-05,"Bihun Kari",22,371.80
+2026-05,"Bihun Kari Asam",7,118.30
+2026-05,"Black",1370,13279.50
+2026-05,"Burnt Cheesecake",359,6132.25
+2026-05,"Buttercream Chocolate",516,7782.70
+2026-05,"Buttercream Latte",1579,24226.22
+2026-05,"Cappucino",542,6872.74
+2026-05,"Caramel Latte",284,3972.25
+2026-05,"Caramel Macchiato",336,5028.09
+2026-05,"Chicken Tomyam Carbonara",343,9614.91
+2026-05,"Chocolate",660,8996.26
+2026-05,"Chocolate (Bottle)",1,9.03
+2026-05,"Chocolate Cake Bars",296,4679.37
+2026-05,"Chocolate Freddo",172,2535.37
+2026-05,"Chocolate Mudslide",367,6256.84
+2026-05,"Citrus Iced Lemon Tea",265,3697.13
+2026-05,"Citrus Mojito",57,786.16
+2026-05,"Classic Croissant",266,2704.36
+2026-05,"Classic Fries",221,3089.01
+2026-05,"Classic Latte (Bottle)",6,54.18
+2026-05,"Cloudy Matcha",208,3073.87
+2026-05,"Crispy Prawn Creamy Carbonara",118,3291.56
+2026-05,"Dirty Latte",316,4404.11
+2026-05,"Doppio Freddo",267,3806.98
+2026-05,"Earl Grey",115,1262.58
+2026-05,"Ebi Sando",54,1156.91
+2026-05,"Egg Sando",206,2107.53
+2026-05,"Espresso",137,929.57
+2026-05,"Google Review",72,0.00
+2026-05,"Half Boiled Eggs",119,576.36
+2026-05,"Hazelnut Latte",311,4383.81
+2026-05,"Iced Water",763,2193.09
+2026-05,"Korean Crispy Chicken",146,2911.89
+2026-05,"Korean Spicy Fries",69,1122.41
+2026-05,"Latte",2807,36760.56
+2026-05,"Loaded Fries",84,1498.96
+2026-05,"Matcha",438,6260.41
+2026-05,"Matcha Affogato",7,87.70
+2026-05,"Matcha Batik Indulgence",219,3724.50
+2026-05,"Matcha Burnt Cheesecake",3,53.70
+2026-05,"Matcha Cream Latte",449,6954.70
+2026-05,"Mee Kari",89,1510.89
+2026-05,"Mee Kari Asam",13,219.13
+2026-05,"Mineral Water",20,59.00
+2026-05,"Mini Biscoff (3 pcs)",65,906.30
+2026-05,"Mini Choc Chip No Nuts (3 pcs)",96,1351.60
+2026-05,"Mini Double Choc (3 pcs)",90,1262.42
+2026-05,"Mini Hazelnut Seasalt (3 pcs)",53,801.94
+2026-05,"Mini Matcha Macademia (3 pcs)",60,883.98
+2026-05,"Mini Pavlova",221,1953.10
+2026-05,"Mini Red Velvet (3 pcs)",90,1274.70
+2026-05,"Mint Chocolate",166,2307.78
+2026-05,"Mint Matcha",74,1043.53
+2026-05,"Mocha",280,3836.44
+2026-05,"Mont Blanc",531,7948.61
+2026-05,"Nasi Lemak 2 Sambal",269,2425.54
+2026-05,"Nasi Lemak 2 Sambal + Ayam Crispy",452,7665.51
+2026-05,"Nasi Lemak 2 Sambal + Ayam Grilled",209,3524.48
+2026-05,"Nasi Lemak 2 Sambal + Sambal Udang",64,1133.24
+2026-05,"Nasi Lemak 2 Sambal + Udang Crispy",35,611.50
+2026-05,"NYC Double Choc Dulcey",131,1854.83
+2026-05,"NYC Hazelut Seasalt",101,1448.32
+2026-05,"NYC Red Velvet Biscoff",82,1102.65
+2026-05,"NYC Smores",114,1601.42
+2026-05,"Peanut Butter Mocha",217,3267.97
+2026-05,"Peppermint",77,852.91
+2026-05,"Piccolo",177,1914.00
+2026-05,"Pomegranate Iced Tea",219,3000.57
+2026-05,"Red Velvet Cake",1,16.90
+2026-05,"Roti Bakar Brioche",749,5488.47
+2026-05,"Roti Bakar Brioche with Curry",31,220.75
+2026-05,"Roti Bakar Brioche with Half Boiled Eggs",426,4164.20
+2026-05,"Salted Caramel Latte",344,4929.38
+2026-05,"Salted Egg Croissant",367,4072.68
+2026-05,"Samyang Pasta",91,1827.03
+2026-05,"Smoked Duck Aglio Olio",251,7433.94
+2026-05,"Smoked Pulled Lamb",121,3169.32
+2026-05,"Spanish Latte",731,10501.27
+2026-05,"Strawberry Matcha",699,11152.40
+2026-05,"Streaky Beef Pesto",309,6182.52
+2026-05,"Summer Lagoon",85,1346.11
+2026-05,"Truffle Fries",152,2438.32
+2026-05,"Truffle Mac n Cheese",171,3421.36
+2026-05,"Vanilla Latte",257,3644.35
+2026-05,"White Mocha",124,1738.15
+2026-06,"Affogato",11,141.90
+2026-06,"Almond Crepe Cake",83,1387.44
+2026-06,"Almond Croissant",80,1217.18
+2026-06,"Amber Citrus",24,378.83
+2026-06,"Beef Bolognese",57,1133.72
+2026-06,"Berry Berries",45,723.46
+2026-06,"Bihun Kari",7,123.30
+2026-06,"Bihun Kari Asam",6,106.40
+2026-06,"Biscoff Batik",54,947.98
+2026-06,"Black",526,5164.34
+2026-06,"Burnt Cheesecake",91,1566.88
+2026-06,"Buttercream Chocolate",201,3022.45
+2026-06,"Buttercream Latte",686,10554.60
+2026-06,"Cappucino",196,2530.18
+2026-06,"Caramel Latte",139,1918.49
+2026-06,"Caramel Latte (Bottle)",30,348.30
+2026-06,"Caramel Macchiato",152,2293.84
+2026-06,"Chicken Tomyam Carbonara",131,3709.04
+2026-06,"Chocolate",235,3164.03
+2026-06,"Chocolate Cake Bars",94,1489.83
+2026-06,"Chocolate Freddo",64,960.60
+2026-06,"Chocolate Mudslide",112,1920.89
+2026-06,"Citrus Iced Lemon Tea",107,1488.84
+2026-06,"Citrus Mojito",34,478.42
+2026-06,"Classic Croissant",128,1295.69
+2026-06,"Classic Fries",81,1152.37
+2026-06,"Classic Latte (Bottle)",1,12.90
+2026-06,"Cloudy Matcha",81,1192.00
+2026-06,"Crispy Prawn Creamy Carbonara",54,1529.60
+2026-06,"Dirty Latte",152,2113.71
+2026-06,"Doppio Freddo",123,1760.09
+2026-06,"Earl Grey",51,566.78
+2026-06,"Ebi Sando",30,638.70
+2026-06,"Egg Sando",113,1191.82
+2026-06,"Espresso",48,325.64
+2026-06,"Google Review",25,0.00
+2026-06,"Half Boiled Eggs",49,237.65
+2026-06,"Hazelnut Latte",140,1968.89
+2026-06,"Iced Water",282,815.27
+2026-06,"Korean Crispy Chicken",81,1618.26
+2026-06,"Korean Spicy Fries",26,416.30
+2026-06,"Latte",1086,14383.81
+2026-06,"Loaded Fries",49,870.62
+2026-06,"Matcha",182,2651.84
+2026-06,"Matcha Affogato",4,51.60
+2026-06,"Matcha Batik Indulgence",89,1522.17
+2026-06,"Matcha Cream Latte",208,3257.98
+2026-06,"Mee Kari",36,611.24
+2026-06,"Mee Kari Asam",10,173.93
+2026-06,"Mineral Water",58,174.00
+2026-06,"Mini Biscoff (3 pcs)",15,219.35
+2026-06,"Mini Choc Chip No Nuts (3 pcs)",37,521.89
+2026-06,"Mini Double Choc (3 pcs)",34,486.88
+2026-06,"Mini Hazelnut Seasalt (3 pcs)",29,418.08
+2026-06,"Mini Matcha Macademia (3 pcs)",19,278.89
+2026-06,"Mini Pavlova",59,522.43
+2026-06,"Mini Red Velvet (3 pcs)",29,417.89
+2026-06,"Mint Chocolate",84,1155.28
+2026-06,"Mint Matcha",31,443.75
+2026-06,"Mocha",105,1453.95
+2026-06,"Mont Blanc",297,4464.42
+2026-06,"Nasi Lemak 2 Sambal",104,946.40
+2026-06,"Nasi Lemak 2 Sambal + Ayam Crispy",135,2324.77
+2026-06,"Nasi Lemak 2 Sambal + Ayam Grilled",69,1168.78
+2026-06,"Nasi Lemak 2 Sambal + Sambal Udang",16,278.68
+2026-06,"Nasi Lemak 2 Sambal + Udang Crispy",17,292.30
+2026-06,"NYC Double Choc Dulcey",42,602.47
+2026-06,"NYC Hazelut Seasalt",50,716.64
+2026-06,"NYC Red Velvet Biscoff",34,498.91
+2026-06,"NYC Smores",44,627.19
+2026-06,"Peanut Butter Mocha",50,767.67
+2026-06,"Peppermint",22,247.44
+2026-06,"Piccolo",72,802.42
+2026-06,"Pomegranate Iced Tea",124,1726.60
+2026-06,"Roti Bakar Brioche",248,1829.05
+2026-06,"Roti Bakar Brioche with Curry",10,69.00
+2026-06,"Roti Bakar Brioche with Half Boiled Eggs",146,1435.53
+2026-06,"Salted Caramel Latte",182,2637.70
+2026-06,"Salted Egg Croissant",119,1325.59
+2026-06,"Samyang Pasta",27,545.36
+2026-06,"Smoked Duck Aglio Olio",90,2651.23
+2026-06,"Smoked Pulled Lamb",31,823.22
+2026-06,"Spanish Latte",337,4983.57
+2026-06,"Strawberry Matcha",248,3945.27
+2026-06,"Streaky Beef Pesto",112,2247.90
+2026-06,"Summer Lagoon",35,557.47
+2026-06,"Truffle Fries",54,880.39
+2026-06,"Truffle Mac n Cheese",60,1182.46
+2026-06,"Vanilla Latte",104,1471.86
+2026-06,"White Mocha",52,721.65
