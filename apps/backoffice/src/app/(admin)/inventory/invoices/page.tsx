@@ -507,8 +507,15 @@ export default function InvoicesPage() {
                 toast.success(`AI detected ${formatRM(capped)} on the receipt`);
               }
             }
+          } else {
+            toast.error("AI couldn't read the receipt — enter the amount manually.");
           }
-        } catch { /* AI extract is best-effort — user can type the amount */ }
+        } catch {
+          // Surface transport failures instead of swallowing them — a silent
+          // catch here is what made the model retirement look like the dialog
+          // freezing rather than the AI being down.
+          toast.error("AI couldn't read the receipt — enter the amount manually.");
+        }
       }
     } catch { /* ignore */ }
     setPayUploading(false);
@@ -775,8 +782,15 @@ export default function InvoicesPage() {
             if (filled.length > 0) {
               toast.success(`AI filled ${filled.join(", ")} from the invoice — review before attaching.`);
             }
+          } else {
+            toast.error("AI couldn't read the invoice — enter the details manually.");
           }
-        } catch { /* AI extract is best-effort */ }
+        } catch {
+          // Surface transport failures instead of swallowing them — a silent
+          // catch here is what made the model retirement look like the dialog
+          // freezing rather than the AI being down.
+          toast.error("AI couldn't read the invoice — enter the details manually.");
+        }
       }
     } catch { /* ignore */ }
     setAttachUploading(false);
