@@ -10,6 +10,7 @@
 // rows) and its Grab never shares a day with native Grab, so no double-count.
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { getTransactions, type StoreHubTransaction } from "@/lib/storehub";
 import { classifyChannel, isDeliveryOrQR } from "./storehub-helpers";
 
@@ -185,8 +186,15 @@ export async function getUnifiedSalesForOutlet(
     }
   }
 
-  // ── POS-native — everything AT/AFTER cutover (only once the outlet cut over) ──
-  if (!opts.storehubOnly && outlet.cutoverAt && outlet.loyaltyOutletId) {
+  // ── POS-native — native till orders. For a transitioned StoreHub outlet keep
+  // only those AT/AFTER its cutover (pre-cutover sales live in the StoreHub
+  // archive above, so a floor avoids double-counting). For a native-only outlet
+  // — never on StoreHub, no cutover (e.g. Nilai) — there's no archive to clash
+  // with, so count EVERY completed order (no floor). ──
+  if (!opts.storehubOnly && outlet.loyaltyOutletId) {
+    const cutoverFloor = outlet.cutoverAt
+      ? Prisma.sql`AND created_at >= ${outlet.cutoverAt}`
+      : Prisma.empty;
     const posRows = await prisma.$queryRaw<
       Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null }>
     >`
@@ -196,7 +204,7 @@ export async function getUnifiedSalesForOutlet(
         AND status = 'completed'
         AND created_at >= ${from}
         AND created_at <= ${to}
-        AND created_at >= ${outlet.cutoverAt}
+        ${cutoverFloor}
     `;
     for (const r of posRows) {
       sales.push({

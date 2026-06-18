@@ -104,10 +104,17 @@ export async function GET(request: NextRequest) {
     const inProgress = toDate === todayMYT;
     const prevCutoffMs = now.getTime() - periodDays * 24 * 60 * 60 * 1000;
 
-    // Fetch outlets
+    // Fetch outlets. Include every active outlet that sells on EITHER system:
+    // StoreHub history (storehubId) OR the native POS (loyaltyOutletId). The
+    // dashboard used to be scoped to storehubId-only, which silently dropped
+    // native-only outlets that were never on StoreHub (e.g. Nilai) — the staff
+    // dashboard already counts them, so this keeps the two on one source of truth.
     const outletWhere = outletId
-      ? { id: outletId, storehubId: { not: null } }
-      : { storehubId: { not: null }, status: "ACTIVE" as const };
+      ? { id: outletId }
+      : {
+          status: "ACTIVE" as const,
+          OR: [{ storehubId: { not: null } }, { loyaltyOutletId: { not: null } }],
+        };
 
     const outlets = await prisma.outlet.findMany({
       where: outletWhere,
@@ -115,7 +122,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (outlets.length === 0) {
-      return NextResponse.json({ error: "No outlets with StoreHub configured" }, { status: 404 });
+      return NextResponse.json({ error: "No outlets configured" }, { status: 404 });
     }
 
     // Load active (AI-set) targets — used for per-round % calculations and day cells
@@ -148,6 +155,12 @@ export async function GET(request: NextRequest) {
       }),
     );
 
+    // Count outlets that actually traded in the current period — the per-round
+    // targets are per-outlet and scaled by this count. Using it (instead of the
+    // raw scope size) means an in-scope but not-yet-trading outlet, e.g. Nilai
+    // before it opens, doesn't inflate the all-outlets target denominator.
+    let tradingOutletCount = 0;
+
     for (const result of outletResults) {
       if (result.status === "rejected") {
         const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
@@ -156,6 +169,7 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
+      let outletTradedThisPeriod = false;
       for (const ev of result.value.sales) {
         const dateStr = getMYTDateStr(ev.ts);
 
@@ -166,6 +180,7 @@ export async function GET(request: NextRequest) {
         channelBreakdown[ch].revenue = Math.round((channelBreakdown[ch].revenue + ev.total) * 100) / 100;
 
         if (dateStr >= fromDate && dateStr <= toDate) {
+          outletTradedThisPeriod = true;
           allSales.push(ev);
           if (ev.isDeliveryQR) {
             deliveryQRRevenue += ev.total;
@@ -184,7 +199,12 @@ export async function GET(request: NextRequest) {
           }
         }
       }
+      if (outletTradedThisPeriod) tradingOutletCount++;
     }
+
+    // Per-outlet targets scale by the number of outlets that actually traded
+    // (falls back to the full scope when nothing sold yet, to avoid 0 targets).
+    const targetOutletCount = tradingOutletCount || outlets.length;
 
     // Previous period totals for comparison
     let prevRevenue = 0;
@@ -267,8 +287,8 @@ export async function GET(request: NextRequest) {
       }
 
       // Blended target based on weekday/weekend mix of the date range
-      // Targets are per-outlet, so scale by outlet count when viewing multiple
-      const outletCount = outlets.length;
+      // Targets are per-outlet, so scale by the number of outlets that traded
+      const outletCount = targetOutletCount;
       const singleBlended = getBlendedTarget(r.key, dates, activeTargets);
       const blendedTarget = {
         revenue: singleBlended.revenue * outletCount,
@@ -339,7 +359,10 @@ export async function GET(request: NextRequest) {
 
     // All outlets for dropdown
     const allOutlets = await prisma.outlet.findMany({
-      where: { storehubId: { not: null }, status: "ACTIVE" },
+      where: {
+        status: "ACTIVE",
+        OR: [{ storehubId: { not: null } }, { loyaltyOutletId: { not: null } }],
+      },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
@@ -381,7 +404,7 @@ export async function GET(request: NextRequest) {
       },
       deliveryTarget: (() => {
         const base = getBlendedDeliveryTarget(dates);
-        const oc = outlets.length;
+        const oc = targetOutletCount;
         return { revenue: base.revenue * oc, orders: base.orders * oc, aov: base.aov };
       })(),
       deliveryQR: {
