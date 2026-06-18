@@ -332,6 +332,10 @@ export async function POST(request: NextRequest) {
         // to the catalogue; fall back to whatever Grab sent.
         product_id: product?.id || item.id || item.grabItemID || randomUUID(),
         product_name: product?.name || fallbackGrabItemName(item),
+        // Grab's own line-level item id, kept verbatim for the Edit Order payload
+        // (which keys existing lines by Grab's itemID). Distinct from product_id,
+        // which we resolve to our catalogue for naming/kitchen routing.
+        grab_item_id: item.grabItemID || item.id || null,
         quantity: qty,
         unit_price: unitPrice,
         modifiers: (item.modifiers ?? []).map((m) => ({
