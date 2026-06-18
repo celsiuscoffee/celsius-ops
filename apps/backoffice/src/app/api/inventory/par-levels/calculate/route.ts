@@ -39,16 +39,32 @@ export async function POST(req: NextRequest) {
   const since = new Date();
   since.setDate(since.getDate() - lookbackDays);
 
+  // POS-native sales source (StoreHub retired). pos_orders.outlet_id is the
+  // native/loyalty id (e.g. "outlet-con"); the inventory `outletId` here is the
+  // Outlet uuid, so resolve across. The native POS reuses StoreHub product ids,
+  // so pos_order_items.product_id maps to Menu.storehubId — the same join the
+  // old StoreHub sync used to set SalesTransaction.menuId.
+  const outletRow = await prisma.outlet.findUnique({
+    where: { id: outletId },
+    select: { loyaltyOutletId: true },
+  });
+  const loyaltyOutletId = outletRow?.loyaltyOutletId ?? null;
+
   // ── Parallel data fetches ──────────────────────────────────────────
-  const [salesCount, salesByMenu, bom, supplierProducts, existingParLevels, productPackages] = await Promise.all([
-    prisma.salesTransaction.count({
-      where: { outletId, transactedAt: { gte: since } },
-    }),
-    prisma.salesTransaction.groupBy({
-      by: ["menuId"],
-      where: { outletId, transactedAt: { gte: since }, menuId: { not: null } },
-      _sum: { quantity: true },
-    }),
+  const [salesByMenuRaw, bom, supplierProducts, existingParLevels, productPackages] = await Promise.all([
+    loyaltyOutletId
+      ? prisma.$queryRaw<Array<{ menuId: string; quantity: number }>>`
+          SELECT m.id AS "menuId", COALESCE(SUM(i.quantity), 0)::int AS quantity
+          FROM pos_order_items i
+          JOIN pos_orders o ON o.id = i.order_id
+          JOIN "Menu" m ON m."storehubId" = i.product_id
+          WHERE o.outlet_id = ${loyaltyOutletId}
+            AND o.status = 'completed'
+            AND o.refund_of_order_id IS NULL
+            AND o.created_at >= ${since}
+          GROUP BY m.id
+        `
+      : Promise.resolve([] as Array<{ menuId: string; quantity: number }>),
     prisma.menuIngredient.findMany({
       include: { menu: true, product: true },
     }),
@@ -75,11 +91,15 @@ export async function POST(req: NextRequest) {
     }),
   ]);
 
+  // Shape native rows like the old SalesTransaction.groupBy result + a units total.
+  const salesByMenu = salesByMenuRaw.map((r) => ({ menuId: r.menuId, _sum: { quantity: Number(r.quantity) } }));
+  const salesCount = salesByMenu.reduce((s, r) => s + (r._sum.quantity ?? 0), 0);
+
   if (salesCount === 0) {
     return NextResponse.json(
       {
         error: "No sales data found",
-        message: `No sales transactions for this outlet in the last ${lookbackDays} days. Import sales data from StoreHub first.`,
+        message: `No POS sales for this outlet in the last ${lookbackDays} days.`,
       },
       { status: 422 },
     );

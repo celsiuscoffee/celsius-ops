@@ -1,11 +1,13 @@
-// Daily cron — runs at 4 AM MYT to ingest yesterday's StoreHub EOD across
-// all outlets and post AR journals via the AR agent.
+// Daily cron — runs at 4 AM MYT to ingest yesterday's EOD across all outlets
+// and post AR journals via the AR agent. Each outlet is routed by ingestEodForDate
+// to the POS that owned it that day: POS-native on/after its cutover, StoreHub
+// before (historical). Once every outlet has cut over this is fully native.
 //
 // Idempotent: re-running for a date that's already been posted skips the
-// outlet (see ingestOutletEod's existing-txn guard).
+// outlet (shared outlet+date guard in the ingestors).
 
 import { NextRequest, NextResponse } from "next/server";
-import { ingestAllOutletsEod } from "@/lib/finance/ingestors/storehub-eod";
+import { ingestEodForDate } from "@/lib/finance/ingestors/pos-native-eod";
 import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +25,7 @@ export async function GET(req: NextRequest) {
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   const date = yesterdayMyt();
-  const results = await ingestAllOutletsEod(date);
+  const results = await ingestEodForDate(date);
 
   const summary = {
     date,

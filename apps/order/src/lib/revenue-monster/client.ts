@@ -505,6 +505,167 @@ export async function queryTransaction(transactionId: string): Promise<RmTransac
   };
 }
 
+// ─── Daily settlement (payout) report ──────────────────────────────────────────
+//
+// RM batches settled transactions into daily payouts to the merchant's bank
+// account. The Open API exposes this via POST /v3/payment/settlement/csv (same
+// host + signing as everything above; confirmed against RM's official JS SDK
+// `getDailySettlementReport`). The merchant portal's Payouts page uses a
+// dashboard-session endpoint we can't call from the server — this is the
+// programmatic equivalent. Used by apps/order /api/cron/sync-rm-payouts to fill
+// the backoffice finance Payouts tab.
+//
+// RM filters settlements per payment method, so a full day means iterating the
+// active method codes; `sequence` walks multiple batches within one day.
+
+// RM method codes accepted by the settlement endpoint, keyed by our app method.
+// Mirrors PAYMENT_METHOD_MAP but card settles under its acquirer code.
+export const SETTLEMENT_METHODS: string[] = [
+  "FPX_MY", "TNG_MY", "BOOST_MY", "SHOPEEPAY_MY", "GRABPAY_MY", "DUITNOW_MY", "CARD",
+];
+
+// The active per-outlet RM stores to pull settlement for. The bare
+// settlement call (no storeId) only returns the merchant's default store —
+// a legacy "Celsius Coffee SDN BHD" record with no transaction volume — so
+// the sync iterates these explicitly. slug = our orders.store_id.
+export const SETTLEMENT_STORES: { slug: string; storeId: string; entity: string }[] = [
+  { slug: "shah-alam", storeId: PROD_STORE_MAP["shah-alam"], entity: "Celsius Coffee Sdn Bhd" },
+  { slug: "conezion",  storeId: PROD_STORE_MAP["conezion"],  entity: "Celsius Coffee Conezion Sdn Bhd" },
+  { slug: "tamarind",  storeId: PROD_STORE_MAP["tamarind"],  entity: "Celsius Coffee Tamarind Sdn Bhd" },
+];
+
+export interface SettlementParams {
+  date: string;        // "YYYY-MM-DD"
+  method: string;      // an RM method code from SETTLEMENT_METHODS
+  sequence?: number;   // settlement batch sequence within the day (default 1)
+  storeId?: string;    // RM store id to scope the settlement to (see SETTLEMENT_STORES)
+}
+
+// Raw fetch of the settlement report. Returns the response body as text — RM may
+// answer with CSV directly or a small JSON envelope; the caller (and the probe)
+// inspects it. Never throws on a non-2xx; returns { ok:false, body } so a sweep
+// over many method/sequence combinations can't be wedged by one bad batch.
+export async function getDailySettlementReport(
+  params: SettlementParams,
+): Promise<{ ok: boolean; status: number; body: string }> {
+  const token     = await getToken();
+  const endpoint  = `${BASE_URL}/v3/payment/settlement/csv`;
+  const body: Record<string, unknown> = { date: params.date, method: params.method, region: "MALAYSIA", sequence: params.sequence ?? 1 };
+  // Scope to a specific store when given — the bare call only returns the
+  // merchant default store (empty). Probing whether RM honours storeId here.
+  if (params.storeId) body.storeId = params.storeId;
+  const nonceStr  = nonce();
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const sig       = buildSignature("POST", endpoint, nonceStr, timestamp, body);
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization:  `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "X-Nonce-Str":  nonceStr,
+      "X-Timestamp":  timestamp,
+      "X-Signature":  sig,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(RM_TIMEOUT_MS),
+  });
+  const text = await res.text().catch(() => "");
+  return { ok: res.ok, status: res.status, body: text };
+}
+
+export interface SettlementLine {
+  rmTransactionId: string;
+  rmOrderId:       string | null;
+  store:           string | null;   // RM store name/id, when the CSV carries it
+  grossSen:        number;   // integer sen
+  mdrFeeSen:       number;   // integer sen
+  netSen:          number;   // integer sen
+  txnTime:         string | null;
+}
+
+export interface ParsedSettlement {
+  lines:    SettlementLine[];
+  grossSen: number;
+  mdrSen:   number;
+  netSen:   number;
+}
+
+// Tolerant CSV parser for the settlement report. RM's column headers vary, so we
+// match by fuzzy header name (like the bank-statement parser) instead of fixed
+// positions. Money columns are RM-formatted decimals (e.g. "12.90") → integer
+// sen. Returns empty lines for an empty/headers-only body (a day with no
+// settlement for that method) so the caller treats it as "nothing to sync".
+export function parseSettlementCsv(csv: string): ParsedSettlement {
+  const empty: ParsedSettlement = { lines: [], grossSen: 0, mdrSen: 0, netSen: 0 };
+  const text = (csv ?? "").trim();
+  if (!text || text.startsWith("{") || text.startsWith("<")) return empty; // JSON envelope / HTML error, not CSV
+
+  const rows = text.split(/\r?\n/).map(splitCsvRow).filter((r) => r.some((c) => c.trim() !== ""));
+  if (rows.length < 2) return empty;
+
+  const header = rows[0].map((h) => h.toLowerCase().trim());
+  const find = (...names: string[]) =>
+    header.findIndex((h) => names.some((n) => h.includes(n)));
+
+  const txIdx    = find("transaction id", "transactionid", "transaction no", "trace");
+  const ordIdx   = find("order id", "orderid", "reference", "order no");
+  const grossIdx = find("transaction amount", "gross", "amount", "sales amount");
+  const feeIdx   = find("mdr", "fee", "charge", "commission", "discount rate");
+  const netIdx   = find("net", "settlement amount", "settle amount", "payout amount");
+  const timeIdx  = find("transaction time", "transaction date", "paid", "created", "date time");
+  const storeIdx = find("store name", "store id", "store", "outlet", "branch");
+
+  const toSen = (s: string | undefined): number => {
+    if (!s) return 0;
+    const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+    return Number.isFinite(n) ? Math.round(n * 100) : 0;
+  };
+
+  const lines: SettlementLine[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const rmTransactionId = (txIdx >= 0 ? r[txIdx] : "")?.trim();
+    if (!rmTransactionId) continue; // skip footer/total rows that have no txn id
+    const grossSen = toSen(grossIdx >= 0 ? r[grossIdx] : undefined);
+    const mdrFeeSen = toSen(feeIdx >= 0 ? r[feeIdx] : undefined);
+    const netSen = netIdx >= 0 ? toSen(r[netIdx]) : grossSen - mdrFeeSen;
+    lines.push({
+      rmTransactionId,
+      rmOrderId: (ordIdx >= 0 ? r[ordIdx] : "")?.trim() || null,
+      store: (storeIdx >= 0 ? r[storeIdx] : "")?.trim() || null,
+      grossSen,
+      mdrFeeSen,
+      netSen,
+      txnTime: (timeIdx >= 0 ? r[timeIdx] : "")?.trim() || null,
+    });
+  }
+
+  return {
+    lines,
+    grossSen: lines.reduce((s, l) => s + l.grossSen, 0),
+    mdrSen:   lines.reduce((s, l) => s + l.mdrFeeSen, 0),
+    netSen:   lines.reduce((s, l) => s + l.netSen, 0),
+  };
+}
+
+// Minimal CSV row splitter — handles quoted fields with embedded commas/quotes.
+function splitCsvRow(line: string): string[] {
+  const out: string[] = [];
+  let cur = "", inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQ) {
+      if (c === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; } else inQ = false;
+      } else cur += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ",") { out.push(cur); cur = ""; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+
 // ─── Webhook validation ───────────────────────────────────────────────────────
 //
 // RM signs callback bodies with their server's private key. We verify

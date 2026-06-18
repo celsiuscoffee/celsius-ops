@@ -98,10 +98,28 @@ export async function PATCH(
       );
     }
 
-    const { error: updateError } = await supabase
+    // Serving-time instrumentation: stamp the kitchen-bump moments so the Area
+    // Scorecard can measure speed of service (ready_at - created_at). `updated_at`
+    // can't carry this — a trigger overwrites it on every later write. (migration
+    // orders-020.)
+    const patch: Record<string, unknown> = { status: newStatus };
+    if (newStatus === "ready") patch.ready_at = new Date().toISOString();
+    else if (newStatus === "completed") patch.completed_at = new Date().toISOString();
+
+    let { error: updateError } = await supabase
       .from("orders")
-      .update({ status: newStatus })
+      .update(patch)
       .eq("id", orderId);
+
+    // ready_at/completed_at are applied out-of-band (migration orders-020). If
+    // they aren't live yet, retry with a status-only update so the customer's
+    // order flow never breaks — serving data just starts accruing later.
+    if (updateError && (updateError.code === "PGRST204" || /ready_at|completed_at/i.test(updateError.message ?? ""))) {
+      ({ error: updateError } = await supabase
+        .from("orders")
+        .update({ status: newStatus })
+        .eq("id", orderId));
+    }
 
     if (updateError) {
       return NextResponse.json({ error: "Update failed" }, { status: 500 });

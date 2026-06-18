@@ -243,15 +243,15 @@ const NAV_SECTIONS: NavSection[] = [
     dividerBefore: true,
     subgroups: [
       {
-        // Single Overview entry — was three (Dashboard, v2 Analytics,
-        // AI Insights). Dashboard is the canonical operator view; the
-        // mechanic-specific Analytics and AI Insights pages remain
-        // available via deep-link (/loyalty/analytics, /loyalty/insights)
-        // for the rare admin who needs them, but don't crowd the
-        // sidebar for daily ops.
+        // The rewards-program Overview was replaced by the Area Scorecard:
+        // a per-outlet KPI scoreboard (loyalty capture, upsell, ops
+        // compliance, wastage) sourced from the live POS / apps system —
+        // answers "which area is hitting KPI". The mechanic-specific
+        // rewards Analytics / AI Insights pages remain available via
+        // deep-link (/loyalty/analytics, /loyalty/insights).
         label: "Overview",
         items: [
-          { label: "Overview", href: "/loyalty/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "loyalty:dashboard" },
+          { label: "Area Scorecard", href: "/loyalty/dashboard", icon: <Trophy className={ICON_SIZE} />, moduleKey: "loyalty:dashboard" },
         ],
       },
       {
@@ -345,6 +345,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Cashflow", href: "/finance/cashflow", icon: <LineChart className={ICON_SIZE} />, moduleKey: "finance:cashflow" },
       { label: "Cash Tracking", href: "/finance/cash-tracking", icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
       { label: "Bank Statements", href: "/finance/bank-statements", icon: <Banknote className={ICON_SIZE} />, moduleKey: "finance:bank-statements" },
+      { label: "Payouts", href: "/finance/payouts", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "finance:payouts" },
       { label: "Recurring Expenses", href: "/finance/recurring-expenses", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "finance:recurring-expenses" },
     ],
   },

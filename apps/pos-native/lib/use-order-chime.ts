@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { playChime, primeChime } from "./chime";
 
@@ -30,11 +30,22 @@ const GRAB_ACTIONABLE = new Set(["sent_to_kitchen", "preparing", "ready"]);
 
 type ChangeRow = { id?: string; status?: string; source?: string } | undefined;
 
+// MODULE-LEVEL dedup — survives a screen REMOUNT. A per-component ref reset on
+// every remount of the register, which let a SINGLE order re-chime on each later
+// Realtime event (Grab orders get many Push-Order-State updates) → the chime
+// "looped". A module set is the source of truth for "already rang this order".
+// Capped so it can't grow unbounded over a long shift.
+const chimedIds = new Set<string>();
+function markChimedOnce(id: string): boolean {
+  if (chimedIds.has(id)) return false;
+  chimedIds.add(id);
+  if (chimedIds.size > 1000) {
+    for (const old of [...chimedIds].slice(0, 500)) chimedIds.delete(old);
+  }
+  return true;
+}
+
 export function useOrderChime(outletId: string | null | undefined) {
-  // Order ids already chimed this session → never chime the same order twice
-  // (an order INSERTs pending then UPDATEs to paid; only the first actionable
-  // event rings).
-  const chimedRef = useRef<Set<string>>(new Set());
   const [storeId, setStoreId] = useState<string | null>(null);
 
   // POS outlet → pickup store_id (same mapping the printers / orders-panel use).
@@ -61,8 +72,7 @@ export function useOrderChime(outletId: string | null | undefined) {
       const id = row?.id;
       const status = row?.status;
       if (!id || !status || !actionable.has(status)) return;
-      if (chimedRef.current.has(id)) return;
-      chimedRef.current.add(id);
+      if (!markChimedOnce(id)) return; // already rang this order (even before a remount)
       playChime();
     };
 

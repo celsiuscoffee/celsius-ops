@@ -3,11 +3,11 @@
  * shared `storehub_sales` archive (same DB the route already queries for
  * pos_orders/orders). No cross-app bridge, no JWT — so it can't 401.
  *
- * Cutover-routed like the backoffice unified reader: pre-cutover keep ALL
- * StoreHub; post-cutover keep ONLY external/online rows (Grab/Beep/offline —
- * they carry a `channel`) and drop channel-less till rows, which are on
- * pos_orders now (keeping them would double-count). Returns SEN so the dashboard
- * route adds it straight onto the native pos+pickup totals.
+ * Cutover-routed like the backoffice unified reader: pre-cutover keep every
+ * StoreHub row; post-cutover keep ONLY external delivery (Grab/Beep) that was
+ * still on StoreHub before it went native. The till (OFFLINE_PAYMENTS) is on
+ * pos_orders post-cutover, so keeping it would double-count. Returns SEN so the
+ * dashboard route adds it straight onto the native totals.
  *
  * "Today" freshness depends on the storehub-sync cron (now hourly) populating
  * the archive — the staff app has no live StoreHub client, so today can lag
@@ -103,12 +103,12 @@ export async function getStorehubFromDB(opts: {
   for (const r of data) {
     if (r.is_cancelled === true) continue;
     const ts = typeof r.transaction_time === "string" ? r.transaction_time : r.transaction_time.toISOString();
-    // Cutover routing: after cutover keep only channel-carrying (external) rows;
-    // channel-less till rows are on pos_orders now → keeping them double-counts.
+    // StoreHub is history only. Pre-cutover keep every row; post-cutover keep
+    // ONLY external delivery (Grab/Beep) that was still on StoreHub before it
+    // went native — the till (OFFLINE_PAYMENTS) is on pos_orders now, so keeping
+    // it would double-count.
     const co = cutover.get(r.outlet_id);
-    if (co && new Date(ts).getTime() >= co.getTime()) {
-      if (!(r.channel && r.channel.trim() !== "")) continue;
-    }
+    if (co && new Date(ts).getTime() >= co.getTime() && !/grab|panda|shopee|beep|deliver/i.test(r.channel ?? "")) continue;
     const d = getMYTDateStr(ts);
     const h = getMYTHour(ts);
     // Revenue = `total` (net of discounts), matching the backoffice unified

@@ -50,6 +50,14 @@ export async function GET(req: NextRequest) {
       WHERE o.source = 'grabfood'
         AND m->>'grab_modifier_id' IS NOT NULL
         AND m->>'grab_modifier_id' NOT IN (SELECT grab_modifier_id FROM grab_modifier_links)
+        -- Hide add-ons whose id is one we minted ("<productId>-m-<g>-<i>"): the
+        -- order webhook resolves those names straight from products.modifiers,
+        -- so there's nothing to name manually.
+        AND NOT EXISTS (
+          SELECT 1 FROM products p
+          WHERE p.brand_id = 'brand-celsius'
+            AND m->>'grab_modifier_id' LIKE p.id || '-m-%'
+        )
       GROUP BY 1
       ORDER BY COUNT(*) DESC, MAX(oi.created_at) DESC
       LIMIT 100
