@@ -40,14 +40,21 @@ function pickOverdue(items: ServingItem[], now: number): ServingItem[] {
 
 const idKey = (list: ServingItem[]) => list.map((o) => o.id).sort().join("|");
 
+// MODULE-LEVEL state — survives a screen REMOUNT. Held in per-component useRefs
+// before, which reset on every remount of the register: each remount then saw
+// every still-overdue order as "new" and re-sounded the alarm immediately (same
+// remount-reset bug as the new-order chime loop). Persisting them means a
+// remount no longer re-alarms an order we've already sounded for; the 5-min
+// REPEAT_MS cadence still drives the ongoing nag.
+let servingPrevOverdue = new Set<string>();
+let servingLastAlarmAt = 0;
+
 /** Returns the orders currently past the serving target (for a popup) and
  *  sounds the alarm while any remain. */
 export function useServingAlarm(items: ServingItem[]): ServingItem[] {
   // Always read the latest items inside the interval without re-arming it.
   const itemsRef = useRef<ServingItem[]>(items);
   itemsRef.current = items;
-  const lastAlarmRef = useRef(0);
-  const prevOverdueRef = useRef<Set<string>>(new Set());
   const [overdue, setOverdue] = useState<ServingItem[]>([]);
 
   const evaluate = useCallback(() => {
@@ -55,11 +62,13 @@ export function useServingAlarm(items: ServingItem[]): ServingItem[] {
     const od = pickOverdue(itemsRef.current, now);
     // An order that wasn't overdue a moment ago → ring straight away (don't
     // wait out the repeat window). Otherwise re-ring only every REPEAT_MS.
-    const hasNew = od.some((o) => !prevOverdueRef.current.has(o.id));
-    prevOverdueRef.current = new Set(od.map((o) => o.id));
+    // "new" is judged against MODULE state so a remount doesn't make every
+    // already-overdue order look new and re-alarm.
+    const hasNew = od.some((o) => !servingPrevOverdue.has(o.id));
+    servingPrevOverdue = new Set(od.map((o) => o.id));
     setOverdue((prev) => (idKey(prev) === idKey(od) ? prev : od)); // avoid no-op re-renders
-    if (od.length > 0 && (hasNew || now - lastAlarmRef.current >= REPEAT_MS)) {
-      lastAlarmRef.current = now;
+    if (od.length > 0 && (hasNew || now - servingLastAlarmAt >= REPEAT_MS)) {
+      servingLastAlarmAt = now;
       playAlarm();
     }
   }, []);
