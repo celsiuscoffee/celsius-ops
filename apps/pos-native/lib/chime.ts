@@ -81,32 +81,22 @@ export function primeSounds(): void {
   getPlayer("alarm");
 }
 
-/** Soft bell — a new external order arrived. Rings TWICE: the cue plays, then
- *  replays once the ~2.4s clip has finished so the two rings are distinct (a
- *  single play() can't overlap — native DeviceSpeaker restarts the MediaPlayer
- *  and the expo-audio path seeks to 0 — so we space them by the clip length).
- *  Works on both playback paths and ships over OTA, no asset/rebuild needed. */
-const CHIME_CLIP_MS = 2400;   // chime.wav length (~2.40s)
-const CHIME_REPEAT_MS = 2700; // ring #2 — AFTER ring #1's clip has fully ended (was
-                              // 2500: with native prepare latency that could land
-                              // while ring #1 was still sounding and chop its tail).
-// A chime CUE is the two rings together — it occupies the speaker for the whole
-// span below. The native DeviceSpeaker drives ONE shared MediaPlayer and every
-// play() release()s it, so ANY trigger landing mid-cue restarts the clip and
-// chops the bell into a stutter — the "lagging / never-finishes" chime, heard
-// whenever orders arrive in a burst (Grab + pickup + table together). So we
-// reserve the full cue: a new trigger before it ends is dropped, not played.
-// Bursts coalesce into one CLEAN cue, which is all an audible alert needs.
-// (The intended ring #2 is scheduled via setTimeout→play, NOT playChime, so the
-// reservation never blocks the cue's own second ring.)
-const CHIME_CUE_MS = CHIME_REPEAT_MS + CHIME_CLIP_MS + 200; // both rings + prepare slack
+/** Soft bell — a new external order arrived. Rings ONCE.
+ *  It used to ring twice (a 2nd play() ~2.7s after the first), but on the SUNMI
+ *  the native DeviceSpeaker drives ONE shared MediaPlayer and every play()
+ *  release()s + re-prepares it — so the second ring restarted the player and
+ *  staff heard a stutter / "lagging" chime. A single clean ring is all a
+ *  new-order alert needs and has nothing left to stutter. We still reserve the
+ *  clip duration so a burst of orders (Grab + pickup + table together) coalesces
+ *  into one clean ring instead of each play() chopping the previous mid-clip.
+ *  JS-only → ships over OTA, no asset/rebuild needed. */
+const CHIME_CLIP_MS = 2400; // chime.wav length (~2.40s)
 let chimeBusyUntil = 0;
 export function playChime(): void {
   const now = Date.now();
-  if (now < chimeBusyUntil) return; // a cue is still sounding — let it finish
-  chimeBusyUntil = now + CHIME_CUE_MS;
+  if (now < chimeBusyUntil) return; // the ring is still sounding — let it finish
+  chimeBusyUntil = now + CHIME_CLIP_MS + 200;
   play("chime");
-  setTimeout(() => play("chime"), CHIME_REPEAT_MS);
 }
 /** Urgent warble — an order is past the serving-time target. Reserves the clip
  *  duration so a re-trigger can't chop it mid-warble (same shared-MediaPlayer
