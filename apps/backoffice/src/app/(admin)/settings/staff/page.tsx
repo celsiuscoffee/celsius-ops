@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useConfirm, toast } from "@celsius/ui";
 import { Plus, Loader2, Eye, EyeOff, Key, Lock, Hash, Check, X, Search, Trash2, RotateCcw } from "lucide-react";
-import { APP_MODULES, MODULE_GROUPS, BACKOFFICE_SUB_APPS, APP_ORDER, APP_SECTION_LABELS } from "@/lib/modules";
+import { NAV_TABS, BACKOFFICE_SUB_APPS, type GrantModule } from "@/lib/modules";
 
 type ModuleAccess = Record<string, string[]>;
 
@@ -273,17 +273,38 @@ export default function StaffPage() {
     });
   };
 
-  const toggleAllModules = (app: string) => {
-    const modules = APP_MODULES[app] || [];
-    const current = form.moduleAccess[app] || [];
-    const allSelected = modules.every((m) => current.includes(m.key));
-    setForm((prev) => ({
-      ...prev,
-      moduleAccess: {
-        ...prev.moduleAccess,
-        [app]: allSelected ? [] : modules.map((m) => m.key),
-      },
-    }));
+  // Is a module's owning app available to grant? Direct apps come from
+  // appAccess; settings/hr/reviews/ads are backoffice sub-apps, surfaced
+  // whenever the user holds "backoffice".
+  const appVisible = (app: string) =>
+    form.appAccess.includes(app) ||
+    ((BACKOFFICE_SUB_APPS as readonly string[]).includes(app) && form.appAccess.includes("backoffice"));
+
+  // The grantable modules in a tab the current editor can actually show:
+  // app available + (for managers) within the caller's own grants.
+  const tabGrantableModules = (mods: GrantModule[]) =>
+    mods.filter((mod) => appVisible(mod.app) && canGrantModule(mod.app, mod.key));
+
+  const moduleSelected = (mod: GrantModule) =>
+    (form.moduleAccess[mod.app] ?? []).includes(mod.key);
+
+  // Select/clear every grantable module in a tab at once. Operates across the
+  // tab's apps, writing each module into its own moduleAccess[app] array.
+  const toggleAllInTab = (mods: GrantModule[]) => {
+    const grantable = tabGrantableModules(mods);
+    const allSelected = grantable.every(moduleSelected);
+    setForm((prev) => {
+      const next = { ...prev.moduleAccess };
+      for (const mod of grantable) {
+        const current = next[mod.app] ?? [];
+        next[mod.app] = allSelected
+          ? current.filter((k) => k !== mod.key)
+          : current.includes(mod.key)
+            ? current
+            : [...current, mod.key];
+      }
+      return { ...prev, moduleAccess: next };
+    });
   };
 
   if (loading) {
@@ -548,29 +569,31 @@ export default function StaffPage() {
                 </div>
               </div>
 
-              {/* Module Access — per-app toggles */}
+              {/* Module Access — one card per sidebar tab (mirrors NAV_SECTIONS) */}
               {!isOwnerOrAdmin && form.appAccess.length > 0 && (
                 <div className="mb-5">
                   <h3 className="text-sm font-semibold text-gray-900 mb-1">Module Access</h3>
-                  <p className="text-xs text-gray-400 mb-3">Control which modules this user can see within each app. Empty = full access.</p>
+                  <p className="text-xs text-gray-400 mb-3">
+                    Check the modules this user can see, grouped the same way as the sidebar. Some
+                    permissions power more than one tab — toggling one updates it everywhere it appears.
+                  </p>
                   <div className="space-y-4">
-                    {Array.from(new Set([...form.appAccess.filter((app) => APP_MODULES[app]), ...(form.appAccess.includes("backoffice") ? BACKOFFICE_SUB_APPS.filter((a) => APP_MODULES[a]) : [])]))
-                      .sort((a, b) => (APP_ORDER.indexOf(a) + 1 || 99) - (APP_ORDER.indexOf(b) + 1 || 99))
-                      .filter((app) => APP_MODULES[app].some((m) => canGrantModule(app, m.key)))
-                      .map((app) => {
-                      const modules = APP_MODULES[app].filter((m) => canGrantModule(app, m.key));
-                      const selected = Array.isArray(form.moduleAccess[app]) ? form.moduleAccess[app] : [];
-                      const allSelected = modules.every((m) => selected.includes(m.key));
-                      const noneSelected = selected.length === 0;
-                      const groups = MODULE_GROUPS[app];
-                      const modByKey = new Map(modules.map((m) => [m.key, m]));
-                      const renderToggle = (mod: { key: string; label: string }) => {
-                        const isOn = selected.includes(mod.key);
+                    {NAV_TABS.map((tab) => {
+                      // Only this tab's modules whose app the user holds and the
+                      // caller may grant. Hide the whole card if nothing's left.
+                      const groups = tab.groups
+                        .map((g) => ({ label: g.label, modules: tabGrantableModules(g.modules) }))
+                        .filter((g) => g.modules.length > 0);
+                      if (groups.length === 0) return null;
+                      const tabMods = groups.flatMap((g) => g.modules);
+                      const allSelected = tabMods.every(moduleSelected);
+                      const renderToggle = (mod: GrantModule) => {
+                        const isOn = moduleSelected(mod);
                         return (
                           <button
-                            key={mod.key}
+                            key={`${mod.app}:${mod.key}`}
                             type="button"
-                            onClick={() => toggleModule(app, mod.key)}
+                            onClick={() => toggleModule(mod.app, mod.key)}
                             className={`flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors ${
                               isOn
                                 ? "bg-terracotta/5 text-gray-900"
@@ -585,40 +608,29 @@ export default function StaffPage() {
                         );
                       };
                       return (
-                        <div key={app} className="rounded-lg border border-gray-200 p-3">
+                        <div key={tab.label} className="rounded-lg border border-gray-200 p-3">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{APP_SECTION_LABELS[app] ?? app}</span>
+                            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{tab.label}</span>
                             <button
                               type="button"
-                              onClick={() => toggleAllModules(app)}
+                              onClick={() => toggleAllInTab(tabMods)}
                               className="text-[10px] text-terracotta hover:underline"
                             >
-                              {allSelected ? "Deselect all" : noneSelected ? "Full access (no restriction)" : "Select all"}
+                              {allSelected ? "Deselect all" : "Select all"}
                             </button>
                           </div>
-                          {noneSelected && (
-                            <p className="text-[10px] text-gray-400 mb-2 italic">No restrictions — full access to all modules</p>
-                          )}
-                          {groups ? (
-                            <div className="space-y-2">
-                              {groups.map((g) => {
-                                const groupMods = g.keys.map((k) => modByKey.get(k)).filter((m): m is { key: string; label: string } => !!m);
-                                if (groupMods.length === 0) return null;
-                                return (
-                                  <div key={g.label}>
-                                    <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400 mb-1">{g.label}</p>
-                                    <div className="grid grid-cols-2 gap-1">
-                                      {groupMods.map(renderToggle)}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-2 gap-1">
-                              {modules.map(renderToggle)}
-                            </div>
-                          )}
+                          <div className="space-y-2">
+                            {groups.map((g, gi) => (
+                              <div key={g.label ?? gi}>
+                                {g.label && (
+                                  <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400 mb-1">{g.label}</p>
+                                )}
+                                <div className="grid grid-cols-2 gap-1">
+                                  {g.modules.map(renderToggle)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       );
                     })}

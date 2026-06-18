@@ -88,84 +88,233 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
   ],
 };
 
-// Visual sub-groupings for the Staff & Access module picker. Keys map to
-// APP_MODULES keys; an app listed here renders grouped sections (with these
-// labels, in this order) instead of a flat grid — mirroring the backoffice
-// sidebar's information architecture so granting access reads the same way the
-// nav does.
+// ─── Tab-mirrored view (Staff & Access editor) ───────────────────────────
 //
-// INVARIANT: every APP_MODULES[app] key MUST appear in exactly one group below,
-// otherwise the editor silently drops the ungrouped toggle (admins could no
-// longer grant that module). When you add a module key above, slot it into a
-// group here too.
-export const MODULE_GROUPS: Record<string, { label: string; keys: string[] }[]> = {
-  // Catalog + POS (the customer/register channel app)
-  pickup: [
-    { label: "Catalog", keys: ["menu"] },
-    { label: "Orders & Customers", keys: ["orders", "customers"] },
-    { label: "Settings", keys: ["settings"] },
-  ],
-  // Procurement
-  inventory: [
-    { label: "Master Data", keys: ["products", "perishables", "suppliers", "categories", "menus"] },
-    { label: "Ordering", keys: ["orders", "transfers", "receivings", "invoices", "pay-and-claim"] },
-    { label: "Operations", keys: ["stock-count", "wastage", "par-levels"] },
-    { label: "Analytics", keys: ["reports"] },
-  ],
-  // Marketing → Loyalty
-  loyalty: [
-    { label: "Overview", keys: ["dashboard"] },
-    { label: "Members", keys: ["members"] },
-    { label: "Rewards & Promotions", keys: ["rewards"] },
-    { label: "History", keys: ["redemptions"] },
-    { label: "Campaigns", keys: ["campaigns", "engage"] },
-  ],
-  // Mirrors the BrioHR-style sidebar IA (see (admin)/layout.tsx HR section):
-  // module = subgroup; sub-pages are reached via the in-module tab strip.
-  hr: [
-    { label: "Overview", keys: ["dashboard"] },
-    { label: "People", keys: ["employees", "memos"] },
-    { label: "Leave", keys: ["leave"] },
-    { label: "Time & Attendance", keys: ["attendance", "overtime"] },
-    { label: "Scheduling", keys: ["schedules"] },
-    { label: "Payroll", keys: ["payroll", "allowances"] },
-    { label: "Performance", keys: ["performance", "review-penalties"] },
-    { label: "Admin", keys: ["settings"] },
-  ],
-  settings: [
-    { label: "Business", keys: ["outlets", "staff", "rules"] },
-    { label: "System", keys: ["integrations", "stock-count", "system"] },
-  ],
-};
+// The Staff & Access editor presents grantable modules grouped EXACTLY the way
+// the backoffice sidebar is (NAV_SECTIONS in app/(admin)/layout.tsx): one card
+// per sidebar tab (Catalog, Sales, Procurement, Rewards, …), with the same
+// sub-group headings. Granting access then reads the same way the nav looks,
+// instead of being grouped by the underlying app.
+//
+// A grantable `${app}:${key}` is referenced here by app + key; the editor still
+// writes toggles into moduleAccess[app] (storage is unchanged). Because the
+// sidebar reuses one permission for several pages (e.g. pickup:settings powers
+// both Sales → Reports and Settings → POS), a single key can legitimately
+// appear in more than one tab — toggling it anywhere updates it everywhere.
+//
+// INVARIANT (enforced by the dev-time check below): every entry's `${app}:${key}`
+// must be grantable (present in GRANTABLE_MODULE_KEYS), and every grantable key
+// must appear in at least one tab — otherwise the editor silently drops a
+// toggle and admins lose the ability to grant that module. finance:* is
+// intentionally absent (OWNER/ADMIN-only, not grantable).
 
-// Order the module-access sections follow in the Staff & Access editor, mirroring
-// the sidebar top-to-bottom: Catalog/POS → Procurement → Marketing (Loyalty,
-// Reviews, Ads) → Sales → Ops → HR → Settings. Apps not listed sort to the end.
-export const APP_ORDER: readonly string[] = [
-  "pickup",
-  "inventory",
-  "loyalty",
-  "reviews",
-  "ads",
-  "sales",
-  "ops",
-  "hr",
-  "settings",
+export type GrantModule = { app: string; key: string; label: string };
+export type GrantGroup = { label?: string; modules: GrantModule[] };
+export type GrantTab = { label: string; groups: GrantGroup[] };
+
+const m = (app: string, key: string, label: string): GrantModule => ({ app, key, label });
+
+export const NAV_TABS: GrantTab[] = [
+  {
+    label: "Catalog",
+    groups: [
+      {
+        modules: [
+          m("pickup", "menu", "Products & Splash Posters"),
+          m("inventory", "menus", "Menu & BOM"),
+        ],
+      },
+    ],
+  },
+  {
+    label: "Sales",
+    groups: [
+      {
+        modules: [
+          m("sales", "dashboard", "Dashboard & Compare"),
+          m("pickup", "orders", "Orders"),
+          m("loyalty", "members", "Customers"),
+          m("pickup", "settings", "Reports & Cashier Performance"),
+        ],
+      },
+    ],
+  },
+  {
+    label: "Procurement",
+    groups: [
+      {
+        label: "Master Data",
+        modules: [
+          m("inventory", "products", "Ingredients & Dashboard"),
+          m("inventory", "perishables", "Perishables"),
+          m("inventory", "suppliers", "Suppliers"),
+          m("inventory", "categories", "Groups & Storage"),
+        ],
+      },
+      {
+        label: "Ordering",
+        modules: [
+          m("inventory", "orders", "Purchase Orders"),
+          m("inventory", "transfers", "Transfers"),
+          m("inventory", "receivings", "Receivings"),
+          m("inventory", "invoices", "Invoices"),
+          m("inventory", "pay-and-claim", "Payment Requests"),
+        ],
+      },
+      {
+        label: "Operations",
+        modules: [
+          m("inventory", "stock-count", "Stock Count"),
+          m("inventory", "wastage", "Wastage"),
+          m("inventory", "par-levels", "Par Levels"),
+        ],
+      },
+      {
+        label: "Analytics",
+        modules: [m("inventory", "reports", "Reports")],
+      },
+    ],
+  },
+  {
+    label: "Rewards",
+    groups: [
+      {
+        label: "Overview",
+        modules: [m("loyalty", "dashboard", "Area Scorecard")],
+      },
+      {
+        label: "Rewards & Promotions",
+        modules: [m("loyalty", "rewards", "Challenges, Mystery, Manual Grant & Setup")],
+      },
+      {
+        label: "History",
+        modules: [m("loyalty", "redemptions", "Vouchers, Redemptions & Points Log")],
+      },
+      {
+        label: "Campaigns",
+        modules: [
+          m("loyalty", "campaigns", "Campaigns"),
+          m("loyalty", "engage", "Engage"),
+        ],
+      },
+    ],
+  },
+  {
+    label: "Marketing",
+    groups: [
+      {
+        label: "Reviews",
+        modules: [m("reviews", "list", "All Reviews")],
+      },
+      {
+        label: "Google Ads",
+        modules: [
+          m("ads", "overview", "Overview"),
+          m("ads", "campaigns", "Campaigns"),
+          m("ads", "invoices", "Invoices"),
+        ],
+      },
+    ],
+  },
+  {
+    label: "Ops",
+    groups: [
+      {
+        modules: [
+          m("ops", "performance", "Dashboard & Performance"),
+          m("ops", "audit", "Audits"),
+          m("ops", "sops", "SOPs & Templates"),
+          m("ops", "categories", "Categories"),
+        ],
+      },
+    ],
+  },
+  {
+    label: "HR",
+    groups: [
+      {
+        label: "Overview",
+        modules: [m("hr", "dashboard", "Dashboard & Analytics")],
+      },
+      {
+        label: "People",
+        modules: [
+          m("hr", "employees", "Employees & Certifications"),
+          m("hr", "memos", "Memos"),
+        ],
+      },
+      {
+        label: "Leave",
+        modules: [m("hr", "leave", "Leave Requests")],
+      },
+      {
+        label: "Time & Attendance",
+        modules: [
+          m("hr", "attendance", "Attendance"),
+          m("hr", "overtime", "Overtime"),
+        ],
+      },
+      {
+        label: "Scheduling",
+        modules: [m("hr", "schedules", "Schedules, Availability & Coverage")],
+      },
+      {
+        label: "Payroll",
+        modules: [
+          m("hr", "payroll", "Payroll Runs & Statutory"),
+          m("hr", "allowances", "Allowances"),
+        ],
+      },
+      {
+        label: "Performance",
+        modules: [
+          m("hr", "performance", "Monthly Scores"),
+          m("hr", "review-penalties", "Review Penalties"),
+        ],
+      },
+    ],
+  },
+  {
+    label: "Settings",
+    groups: [
+      {
+        label: "Business",
+        modules: [
+          m("settings", "outlets", "Hub & Outlets"),
+          m("settings", "staff", "Staff & Access"),
+          m("settings", "rules", "Approval Rules"),
+        ],
+      },
+      {
+        label: "POS & Pickup",
+        modules: [m("pickup", "settings", "POS, Printers, Table QR & Pickup Settings")],
+      },
+      {
+        label: "Loyalty",
+        modules: [m("loyalty", "rewards", "Tiers, Discount Engine & Rewards Setup")],
+      },
+      {
+        label: "Marketing",
+        modules: [
+          m("reviews", "settings", "Reviews Settings"),
+          m("ads", "settings", "Google Ads Settings"),
+        ],
+      },
+      {
+        label: "People",
+        modules: [m("hr", "settings", "HR Settings")],
+      },
+      {
+        label: "System",
+        modules: [
+          m("settings", "stock-count", "Stock Count"),
+          m("settings", "integrations", "Integrations"),
+          m("settings", "system", "System"),
+        ],
+      },
+    ],
+  },
 ];
-
-// Display label for each app's module-access section header — the sidebar's
-// vocabulary instead of the raw app key (e.g. inventory → Procurement).
-export const APP_SECTION_LABELS: Record<string, string> = {
-  pickup: "POS & Pickup",
-  inventory: "Procurement",
-  loyalty: "Rewards",
-  reviews: "Reviews",
-  ads: "Google Ads",
-  sales: "Sales",
-  ops: "Ops",
-  hr: "HR",
-  settings: "Settings",
-};
 
 // Apps that live INSIDE the backoffice app (gated by their own modules, not a
 // separate login). The picker surfaces these whenever a user has "backoffice"
@@ -174,5 +323,22 @@ export const BACKOFFICE_SUB_APPS = ["settings", "hr", "reviews", "ads"] as const
 
 // Every grantable `${app}:${key}`. Used by the sidebar's dev-time drift check.
 export const GRANTABLE_MODULE_KEYS: ReadonlySet<string> = new Set(
-  Object.entries(APP_MODULES).flatMap(([app, mods]) => mods.map((m) => `${app}:${m.key}`)),
+  Object.entries(APP_MODULES).flatMap(([app, mods]) => mods.map((mod) => `${app}:${mod.key}`)),
 );
+
+// Dev-time guard: keep NAV_TABS and the grantable registry in lock-step. A
+// stray key here (typo / removed module) would render a dead toggle; a missing
+// key would hide a grantable module from the editor entirely.
+if (process.env.NODE_ENV !== "production") {
+  const tabKeys = new Set(
+    NAV_TABS.flatMap((t) => t.groups.flatMap((g) => g.modules.map((mod) => `${mod.app}:${mod.key}`))),
+  );
+  const unknown = [...tabKeys].filter((k) => !GRANTABLE_MODULE_KEYS.has(k));
+  const uncovered = [...GRANTABLE_MODULE_KEYS].filter((k) => !tabKeys.has(k));
+  if (unknown.length) {
+    console.warn("[perms] NAV_TABS references non-grantable keys (fix lib/modules.ts):", unknown);
+  }
+  if (uncovered.length) {
+    console.warn("[perms] grantable modules missing from NAV_TABS (add a tab entry):", uncovered);
+  }
+}
