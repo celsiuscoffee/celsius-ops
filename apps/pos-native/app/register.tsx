@@ -35,7 +35,7 @@ import { usePrintPrefs } from "@/lib/print-prefs";
 import { useTablesPanel, type TableSlot, type TableOrderRef } from "@/lib/use-tables-panel";
 import { useOrdersPanel, type KdsOrder } from "@/lib/use-orders-panel";
 import { useOrderChime } from "@/lib/use-order-chime";
-import { useServingAlarm, type ServingItem } from "@/lib/use-serving-alarm";
+import { useServingAlarm, silenceServingAlarmOrder, type ServingItem } from "@/lib/use-serving-alarm";
 import { useOrderHistory, type HistoryOrder, type HistoryChannel } from "@/lib/use-order-history";
 import { useShift, openShift, closeShift, reopenShift, findRecentClosedShift, shiftTotals, type Shift, type ShiftTotals } from "@/lib/shift";
 import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/printer";
@@ -285,15 +285,21 @@ export default function Register() {
   // Mounted persistently so it keeps catching up + receiving Realtime even
   // while the modal is closed (drives the header badge count).
   const { orders: kdsOrders, reload: reloadOrders } = useOrdersPanel(outletId);
-  // Serving-time alarm candidates: pickup orders not yet "ready" + QR-table
-  // orders not yet "done" + counter (till) orders not yet "served". Pressing
-  // Ready/Done/Served drops the order from these lists, which silences the alarm
-  // for it. (Grab runs to its own SLA.) Counter orders are already filtered to
-  // un-served (served_at IS NULL) upstream in useOrdersPanel.
+  // Serving-time alarm candidates — ALL fulfilment-wait order types:
+  //   pickup + Grab orders not yet "ready", QR-table orders not yet "done",
+  //   counter (till) orders not yet "served". Pressing Ready/Done/Served drops
+  //   the order from these lists AND calls silenceServingAlarmOrder() on its id,
+  //   which silences the alarm at once. Grab/pickup/counter carry uid
+  //   `<source>:<id>` — the same id advanceOrderStatus() silences on "ready" —
+  //   so the dedupe path lines up. Counter orders are already filtered to
+  //   un-served (served_at IS NULL) upstream in useOrdersPanel.
   const servingAlarmItems = useMemo<ServingItem[]>(() => {
     const pickup = kdsOrders
       .filter((o) => o.source === "pickup" && o.status !== "ready")
       .map((o) => ({ id: o.uid, createdAt: o.createdAt, channel: "pickup" as const, label: o.orderNumber }));
+    const grab = kdsOrders
+      .filter((o) => o.source === "grab" && o.status !== "ready")
+      .map((o) => ({ id: o.uid, createdAt: o.createdAt, channel: "grab" as const, label: o.orderNumber }));
     const counter = kdsOrders
       .filter((o) => o.source === "counter")
       .map((o) => ({
@@ -307,7 +313,7 @@ export default function Register() {
         .filter((o) => o.source === "qr")
         .map((o) => ({ id: o.id, createdAt: o.createdAt, channel: "table" as const, label: s.label })),
     );
-    return [...pickup, ...counter, ...tables];
+    return [...pickup, ...grab, ...counter, ...tables];
   }, [kdsOrders, tableSlots]);
   // Orders past the 15-min serving target → drives the alarm sound + the popup.
   const overdueOrders = useServingAlarm(servingAlarmItems);
@@ -383,6 +389,11 @@ export default function Register() {
     // the shift closed — so a close can never freeze a customer's in-progress
     // order. (Ringing up a NEW sale still requires the store open; see onAdd.)
     setBumpingUid(order.uid);
+    // Pickup AND Grab orders leave the serving alarm at "ready" — silence
+    // immediately on tap (keyed by uid `<source>:<id>`, which is exactly the id
+    // servingAlarmItems registers), so the alarm stops at once rather than after
+    // the orders list refreshes / a dropped Realtime event.
+    if (status === "ready") silenceServingAlarmOrder(order.uid);
     console.log(`[order-status] tap ${order.source} ${order.orderNumber} -> ${status}`);
     try {
       const res = await apiPost<{ ok?: boolean; grabPushed?: boolean }>("/api/pos/order-status", { source: order.source, id: order.id, status });
@@ -407,6 +418,9 @@ export default function Register() {
     // Not gated on store-open — see advanceOrderStatus: a table order must be
     // serve-able / clearable even after the shift closed.
     setBumpingUid(`qr:${order.id}`);
+    // Silence the serving alarm for this order AT ONCE — before the network
+    // round-trip — so it stops even if the tables list is slow to refresh.
+    silenceServingAlarmOrder(order.id);
     try {
       await apiPost("/api/pos/order-status", { source: "qr", id: order.id, status: "completed" });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -2231,14 +2245,15 @@ export default function Register() {
               {overdueOrders.map((o) => {
                 const mins = Math.max(0, Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 60000));
                 const chanTag =
-                  o.channel === "table" ? { color: "#3B82F6", text: "TABLE" }
-                  : o.channel === "counter" ? { color: "#FB923C", text: "COUNTER" }
-                  : { color: "#FBBF24", text: "PICKUP" };
+                  o.channel === "table" ? { color: "#3B82F6", text: "TABLE", fg: "#160800" }
+                  : o.channel === "grab" ? { color: "#00B14F", text: "GRAB", fg: "#FFFFFF" }
+                  : o.channel === "counter" ? { color: "#FB923C", text: "COUNTER", fg: "#160800" }
+                  : { color: "#FBBF24", text: "PICKUP", fg: "#160800" };
                 return (
                   <View key={o.id} className="flex-row items-center justify-between rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(194,69,45,0.14)" }}>
                     <View className="flex-row items-center gap-3">
                       <View className="rounded-lg px-2 py-1" style={{ backgroundColor: chanTag.color }}>
-                        <Text className="text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#160800" }}>{chanTag.text}</Text>
+                        <Text className="text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: chanTag.fg }}>{chanTag.text}</Text>
                       </View>
                       <Text className="text-cream text-lg" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{o.label}</Text>
                     </View>
