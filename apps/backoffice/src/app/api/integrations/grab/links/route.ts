@@ -59,6 +59,11 @@ export async function GET(req: NextRequest) {
         AND oi.product_id NOT IN (
           SELECT grab_item_id FROM products WHERE grab_item_id IS NOT NULL
         )
+        -- Already resolved: Grab now sends our own product id, so the line
+        -- links straight to the catalogue (name + kitchen station already work).
+        -- Don't list these as "unlinked" — there's nothing to do, and
+        -- re-linking them to a different product would only break them.
+        AND NOT EXISTS (SELECT 1 FROM products p2 WHERE p2.id = oi.product_id)
       GROUP BY oi.product_id
       ORDER BY COUNT(*) DESC, MAX(oi.created_at) DESC
       LIMIT 100

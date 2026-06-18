@@ -98,3 +98,39 @@ export function resolveGrabModifierName(
 ): string {
   return (m.id ? nameById.get(m.id) : undefined) ?? fallbackGrabModifierName(m);
 }
+
+// ─── Auto-resolve add-ons from OUR catalogue ids ─────────────────────────────
+// When the Grab menu was built from our catalogue, modifier option ids are
+// minted as "<productId>-m-<group>-<option>" (see grab-menu.ts
+// convertToGrabModifiers). Grab echoes that id back on the order, so we can read
+// the real add-on name straight from products.modifiers — no grab_modifier_links
+// row or manual naming needed.
+
+/** Parse a catalogue-minted modifier id "<productId>-m-<g>-<i>". */
+export function parseGrabModifierId(
+  id: string | null | undefined,
+): { productId: string; group: number; option: number } | null {
+  if (!id) return null;
+  const m = /^(.+)-m-(\d+)-(\d+)$/.exec(id);
+  if (!m) return null;
+  return { productId: m[1], group: Number(m[2]), option: Number(m[3]) };
+}
+
+/** Shape of products.modifiers we read for add-on labels. */
+export type CatalogueModifierGroup = { options?: Array<{ label?: string | null }> };
+
+/**
+ * Resolve an add-on's display name from our own catalogue, given a
+ * productId → modifier-groups map. Returns undefined when the id isn't one of
+ * ours or the referenced option no longer exists.
+ */
+export function resolveModifierNameFromCatalogue(
+  id: string | null | undefined,
+  modifiersByProductId: Map<string, CatalogueModifierGroup[]>,
+): string | undefined {
+  const parsed = parseGrabModifierId(id);
+  if (!parsed) return undefined;
+  const label = modifiersByProductId.get(parsed.productId)?.[parsed.group]?.options?.[parsed.option]?.label;
+  return label ? label : undefined;
+}
+
