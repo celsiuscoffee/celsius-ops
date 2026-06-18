@@ -44,7 +44,7 @@ export default function MenusPage() {
   const { data: menus = [], isLoading: loading, mutate: loadMenus } = useFetch<MenuItem[]>("/api/inventory/menus");
   const { data: products = [] } = useFetch<ProductOption[]>("/api/inventory/products");
   const [search, setSearch] = useState("");
-  const [catFilter, setCatFilter] = useState("All");
+  const [catFilter, setCatFilter] = useState<string[]>([]); // empty = All categories
   const [statusFilter, setStatusFilter] = useState<"all" | "recipe" | "norecipe" | "high">("all");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -58,11 +58,15 @@ export default function MenusPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number } | null>(null);
 
-  const categories = ["All", ...new Set(menus.map((m) => m.category).filter(Boolean))];
+  const categories = [...new Set(menus.map((m) => m.category).filter(Boolean))].sort();
+
+  const toggleCat = (c: string) => {
+    setCatFilter((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+  };
 
   const filtered = menus.filter((m) => {
     const matchSearch = m.name.toLowerCase().includes(search.toLowerCase());
-    const matchCat = catFilter === "All" || m.category === catFilter;
+    const matchCat = catFilter.length === 0 || catFilter.includes(m.category);
     const matchStatus =
       statusFilter === "all" ||
       (statusFilter === "recipe" && m.ingredientCount > 0) ||
@@ -272,17 +276,33 @@ export default function MenusPage() {
             ))}
           </div>
         </div>
-        {/* Category filter — wraps instead of overflowing */}
+        {/* Category filter — multi-select; wraps instead of overflowing */}
         <div className="flex flex-wrap gap-1.5">
-          {categories.map((c) => (
-            <button key={c} onClick={() => setCatFilter(c)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter === c ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>{c}</button>
-          ))}
+          <button
+            onClick={() => setCatFilter([])}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter.length === 0 ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+          >
+            All
+          </button>
+          {categories.map((c) => {
+            const active = catFilter.includes(c);
+            return (
+              <button
+                key={c}
+                onClick={() => toggleCat(c)}
+                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+              >
+                {c}
+                {active && <X className="h-3 w-3" />}
+              </button>
+            );
+          })}
         </div>
         <p className="text-xs text-gray-400">
           Showing {sorted.length} of {menus.length} items
-          {(search || catFilter !== "All" || statusFilter !== "all") && (
+          {(search || catFilter.length > 0 || statusFilter !== "all") && (
             <button
-              onClick={() => { setSearch(""); setCatFilter("All"); setStatusFilter("all"); }}
+              onClick={() => { setSearch(""); setCatFilter([]); setStatusFilter("all"); }}
               className="ml-2 text-terracotta hover:underline"
             >
               Clear filters
