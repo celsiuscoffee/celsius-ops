@@ -20,6 +20,7 @@ import {
 } from "../_lib/storehub-helpers";
 import { getUnifiedSalesForOutlet, type UnifiedSale } from "../_lib/unified-sales";
 import { getActiveTargets } from "../_lib/targets";
+import { startOfWeekMYT, startOfMonthMYT } from "@celsius/shared";
 
 // ─── GET /api/sales/dashboard ────────────────────────────────────────────
 
@@ -64,15 +65,14 @@ export async function GET(request: NextRequest) {
       fromDate = d.toISOString().split("T")[0];
       toDate = todayMYT;
     } else if (period === "weekly") {
-      // Last 7 days including today
-      const d = new Date(mytNow);
-      d.setDate(d.getDate() - 6);
-      fromDate = d.toISOString().split("T")[0];
+      // Calendar week to date (Sunday-start, MYT) — shared definition so the
+      // headline, the comparison chart, and the staff app all mean the same
+      // "this week". (Was a trailing-7-day window, which disagreed with both.)
+      fromDate = startOfWeekMYT(todayMYT);
       toDate = todayMYT;
     } else if (period === "monthly") {
-      // Current month
-      const d = new Date(mytNow.getUTCFullYear(), mytNow.getUTCMonth(), 1);
-      fromDate = d.toISOString().split("T")[0];
+      // Calendar month to date (MYT).
+      fromDate = startOfMonthMYT(todayMYT);
       toDate = todayMYT;
     } else {
       // daily — today only
