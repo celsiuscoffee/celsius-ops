@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Pencil, ChevronDown, Coffee, Search, Loader2, Trash2, X, Check, RefreshCw, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
+import { Pencil, ChevronDown, Coffee, Search, Loader2, Trash2, X, Check, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 type Ingredient = { product: string; productId: string; sku: string; qty: number; uom: string; unitCost: number; cost: number };
@@ -44,7 +44,7 @@ export default function MenusPage() {
   const { data: menus = [], isLoading: loading, mutate: loadMenus } = useFetch<MenuItem[]>("/api/inventory/menus");
   const { data: products = [] } = useFetch<ProductOption[]>("/api/inventory/products");
   const [search, setSearch] = useState("");
-  const [catFilter, setCatFilter] = useState("All");
+  const [catFilter, setCatFilter] = useState<string[]>([]); // empty = All categories
   const [statusFilter, setStatusFilter] = useState<"all" | "recipe" | "norecipe" | "high">("all");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -55,14 +55,16 @@ export default function MenusPage() {
   const [editIngredients, setEditIngredients] = useState<EditIngredient[]>([]);
   const [saving, setSaving] = useState(false);
   const [addSearch, setAddSearch] = useState("");
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ created: number; updated: number } | null>(null);
 
-  const categories = ["All", ...new Set(menus.map((m) => m.category).filter(Boolean))];
+  const categories = [...new Set(menus.map((m) => m.category).filter(Boolean))].sort();
+
+  const toggleCat = (c: string) => {
+    setCatFilter((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+  };
 
   const filtered = menus.filter((m) => {
     const matchSearch = m.name.toLowerCase().includes(search.toLowerCase());
-    const matchCat = catFilter === "All" || m.category === catFilter;
+    const matchCat = catFilter.length === 0 || catFilter.includes(m.category);
     const matchStatus =
       statusFilter === "all" ||
       (statusFilter === "recipe" && m.ingredientCount > 0) ||
@@ -207,40 +209,10 @@ export default function MenusPage() {
 
   return (
     <div className="p-3 sm:p-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Menu & Recipes (BOM)</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{menus.length} menu items with ingredient costing</p>
-        </div>
-        <Button
-          onClick={async () => {
-            setSyncing(true);
-            setSyncResult(null);
-            try {
-              const res = await fetch("/api/inventory/storehub/sync-products", { method: "POST" });
-              const data = await res.json();
-              if (res.ok) {
-                setSyncResult({ created: data.created, updated: data.updated });
-                loadMenus();
-              }
-            } finally {
-              setSyncing(false);
-            }
-          }}
-          disabled={syncing}
-          variant="outline"
-          className="gap-1.5"
-        >
-          <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-          {syncing ? "Syncing..." : "Sync from StoreHub"}
-        </Button>
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900">Menu & Recipes (BOM)</h2>
+        <p className="mt-0.5 text-sm text-gray-500">{menus.length} menu items with ingredient costing</p>
       </div>
-      {syncResult && (
-        <div className="mt-2 flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
-          <Check className="h-3.5 w-3.5" />
-          Synced — {syncResult.created} new, {syncResult.updated} updated
-        </div>
-      )}
 
       <div className="mt-4 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
@@ -272,17 +244,33 @@ export default function MenusPage() {
             ))}
           </div>
         </div>
-        {/* Category filter — wraps instead of overflowing */}
+        {/* Category filter — multi-select; wraps instead of overflowing */}
         <div className="flex flex-wrap gap-1.5">
-          {categories.map((c) => (
-            <button key={c} onClick={() => setCatFilter(c)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter === c ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>{c}</button>
-          ))}
+          <button
+            onClick={() => setCatFilter([])}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter.length === 0 ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+          >
+            All
+          </button>
+          {categories.map((c) => {
+            const active = catFilter.includes(c);
+            return (
+              <button
+                key={c}
+                onClick={() => toggleCat(c)}
+                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+              >
+                {c}
+                {active && <X className="h-3 w-3" />}
+              </button>
+            );
+          })}
         </div>
         <p className="text-xs text-gray-400">
           Showing {sorted.length} of {menus.length} items
-          {(search || catFilter !== "All" || statusFilter !== "all") && (
+          {(search || catFilter.length > 0 || statusFilter !== "all") && (
             <button
-              onClick={() => { setSearch(""); setCatFilter("All"); setStatusFilter("all"); }}
+              onClick={() => { setSearch(""); setCatFilter([]); setStatusFilter("all"); }}
               className="ml-2 text-terracotta hover:underline"
             >
               Clear filters
@@ -290,6 +278,40 @@ export default function MenusPage() {
           )}
         </p>
       </div>
+
+      {/* Summary — reflects the current filter */}
+      {(() => {
+        const isFiltered = search !== "" || catFilter.length > 0 || statusFilter !== "all";
+        const withCogs = sorted.filter((m) => m.cogs > 0);
+        const avgCogs = withCogs.length > 0 ? withCogs.reduce((s, m) => s + m.cogsPercent, 0) / withCogs.length : 0;
+        const mapped = sorted.filter((m) => m.ingredientCount > 0).length;
+        return (
+          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Card className="px-4 py-3">
+              <p className="text-xs text-gray-500">{isFiltered ? "Items in View" : "Total Menu Items"}</p>
+              <p className="text-xl font-bold text-gray-900">{sorted.length}</p>
+              <p className="text-xs text-gray-400">{mapped} with recipes</p>
+            </Card>
+            <Card className="px-4 py-3">
+              <p className="text-xs text-gray-500">Ingredients Mapped</p>
+              <p className="text-xl font-bold text-gray-900">{sorted.reduce((a, m) => a + m.ingredientCount, 0)}</p>
+              <p className="text-xs text-gray-400">across {mapped} {mapped === 1 ? 'item' : 'items'}</p>
+            </Card>
+            <Card className="px-4 py-3">
+              <p className="text-xs text-gray-500">Avg COGS %</p>
+              <p className={`text-xl font-bold ${avgCogs > 40 ? "text-red-600" : avgCogs > 30 ? "text-amber-600" : "text-green-600"}`}>
+                {avgCogs > 0 ? `${avgCogs.toFixed(1)}%` : "—"}
+              </p>
+              <p className="text-xs text-gray-400">{withCogs.length} {withCogs.length === 1 ? 'item' : 'items'} costed</p>
+            </Card>
+            <Card className="px-4 py-3">
+              <p className="text-xs text-gray-500">No Recipe Yet</p>
+              <p className="text-xl font-bold text-gray-900">{sorted.length - mapped}</p>
+              <p className="text-xs text-gray-400">need ingredients</p>
+            </Card>
+          </div>
+        );
+      })()}
 
       {/* Menu table with expandable ingredients */}
       <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
@@ -496,39 +518,6 @@ export default function MenusPage() {
           </tbody>
         </table>
       </div>
-
-      {/* Summary */}
-      {(() => {
-        const withCogs = menus.filter((m) => m.cogs > 0);
-        const avgCogs = withCogs.length > 0 ? withCogs.reduce((s, m) => s + m.cogsPercent, 0) / withCogs.length : 0;
-        const mapped = menus.filter((m) => m.ingredientCount > 0).length;
-        return (
-          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">Total Menu Items</p>
-              <p className="text-xl font-bold text-gray-900">{menus.length}</p>
-              <p className="text-xs text-gray-400">{mapped} with recipes</p>
-            </Card>
-            <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">Ingredients Mapped</p>
-              <p className="text-xl font-bold text-gray-900">{menus.reduce((a, m) => a + m.ingredientCount, 0)}</p>
-              <p className="text-xs text-gray-400">across {mapped} {mapped === 1 ? 'item' : 'items'}</p>
-            </Card>
-            <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">Avg COGS %</p>
-              <p className={`text-xl font-bold ${avgCogs > 40 ? "text-red-600" : avgCogs > 30 ? "text-amber-600" : "text-green-600"}`}>
-                {avgCogs > 0 ? `${avgCogs.toFixed(1)}%` : "—"}
-              </p>
-              <p className="text-xs text-gray-400">{withCogs.length} {withCogs.length === 1 ? 'item' : 'items'} costed</p>
-            </Card>
-            <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">No Recipe Yet</p>
-              <p className="text-xl font-bold text-gray-900">{menus.length - mapped}</p>
-              <p className="text-xs text-gray-400">need ingredients</p>
-            </Card>
-          </div>
-        );
-      })()}
     </div>
   );
 }
