@@ -524,10 +524,21 @@ export const SETTLEMENT_METHODS: string[] = [
   "FPX_MY", "TNG_MY", "BOOST_MY", "SHOPEEPAY_MY", "GRABPAY_MY", "DUITNOW_MY", "CARD",
 ];
 
+// The active per-outlet RM stores to pull settlement for. The bare
+// settlement call (no storeId) only returns the merchant's default store —
+// a legacy "Celsius Coffee SDN BHD" record with no transaction volume — so
+// the sync iterates these explicitly. slug = our orders.store_id.
+export const SETTLEMENT_STORES: { slug: string; storeId: string; entity: string }[] = [
+  { slug: "shah-alam", storeId: PROD_STORE_MAP["shah-alam"], entity: "Celsius Coffee Sdn Bhd" },
+  { slug: "conezion",  storeId: PROD_STORE_MAP["conezion"],  entity: "Celsius Coffee Conezion Sdn Bhd" },
+  { slug: "tamarind",  storeId: PROD_STORE_MAP["tamarind"],  entity: "Celsius Coffee Tamarind Sdn Bhd" },
+];
+
 export interface SettlementParams {
   date: string;        // "YYYY-MM-DD"
   method: string;      // an RM method code from SETTLEMENT_METHODS
   sequence?: number;   // settlement batch sequence within the day (default 1)
+  storeId?: string;    // RM store id to scope the settlement to (see SETTLEMENT_STORES)
 }
 
 // Raw fetch of the settlement report. Returns the response body as text — RM may
@@ -539,7 +550,10 @@ export async function getDailySettlementReport(
 ): Promise<{ ok: boolean; status: number; body: string }> {
   const token     = await getToken();
   const endpoint  = `${BASE_URL}/v3/payment/settlement/csv`;
-  const body      = { date: params.date, method: params.method, region: "MALAYSIA", sequence: params.sequence ?? 1 };
+  const body: Record<string, unknown> = { date: params.date, method: params.method, region: "MALAYSIA", sequence: params.sequence ?? 1 };
+  // Scope to a specific store when given — the bare call only returns the
+  // merchant default store (empty). Probing whether RM honours storeId here.
+  if (params.storeId) body.storeId = params.storeId;
   const nonceStr  = nonce();
   const timestamp = String(Math.floor(Date.now() / 1000));
   const sig       = buildSignature("POST", endpoint, nonceStr, timestamp, body);
