@@ -13,7 +13,14 @@
 import type { OrderRow, OrderItemRow } from "@/lib/supabase/types";
 import { hasSunmiPrinter, sunmiPrintKitchenSlip, sunmiPrintReceipt } from "./sunmi-printer";
 
-type OrderWithItems = OrderRow & { order_items: OrderItemRow[] };
+// promo_discount / promo_name aren't in the generated OrderRow type yet (the
+// API writes them via a cast); declare them here so the receipt can render the
+// promo line + label.
+type OrderWithItems = OrderRow & {
+  order_items: OrderItemRow[];
+  promo_discount?: number | null;
+  promo_name?: string | null;
+};
 
 const STORE_NAMES: Record<string, string> = {
   "shah-alam": "Shah Alam",
@@ -162,6 +169,8 @@ function toPrintableOrder(order: OrderWithItems) {
     voucher_code: order.voucher_code ?? undefined,
     reward_discount_amount: order.reward_discount_amount,
     reward_name: order.reward_name ?? undefined,
+    promo_discount: order.promo_discount ?? undefined,
+    promo_name: order.promo_name ?? undefined,
     sst_amount: order.sst_amount,
     payment_method: order.payment_method ?? undefined,
     items: order.order_items.map((item) => ({
@@ -249,6 +258,8 @@ export function printReceipt(order: OrderWithItems) {
     ? `<div class="row"><span>Voucher (${order.voucher_code ?? ""})</span><span>- ${fmt(order.discount_amount)}</span></div>` : "";
   const rewardRow = order.reward_discount_amount > 0
     ? `<div class="row"><span>Reward (${order.reward_name ?? ""})</span><span>- ${fmt(order.reward_discount_amount)}</span></div>` : "";
+  const promoRow = (order.promo_discount ?? 0) > 0
+    ? `<div class="row"><span>${order.promo_name || "Promo"}</span><span>- ${fmt(order.promo_discount ?? 0)}</span></div>` : "";
   const sstRow = order.sst_amount > 0
     ? `<div class="row"><span>SST (6%)</span><span>${fmt(order.sst_amount)}</span></div>` : "";
 
@@ -272,6 +283,7 @@ export function printReceipt(order: OrderWithItems) {
     <div class="row"><span>Subtotal</span><span>${fmt(order.subtotal)}</span></div>
     ${discountRow}
     ${rewardRow}
+    ${promoRow}
     ${sstRow}
     <div class="dash"></div>
     <div class="row total"><span>TOTAL</span><span>${fmt(order.total)}</span></div>

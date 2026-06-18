@@ -549,6 +549,12 @@ export async function POST(request: NextRequest) {
     evaluated.total = round2cents(evaluated.subtotal - evaluated.total_discount);
 
     const promoDiscountSen = rec.promoDiscountSen;
+    // Human label for promo_discount: the winning promo-engine leg(s) after
+    // non-stack reconciliation (e.g. "Arba & Staff — 30% off"). Stored so the
+    // receipt + reports can name WHY the discount applied, not just its amount.
+    const promoName = promoDiscountSen > 0
+      ? (Array.from(new Set(evaluated.discounts.map((d) => d.promotion_name).filter(Boolean))).join(", ") || null)
+      : null;
 
     const totalDiscountSen   = voucherDiscountSen + rewardDiscountSenAmt + fodDiscountSen + promoDiscountSen;
     const afterDiscount      = Math.max(0, subtotalSen - totalDiscountSen);
@@ -605,6 +611,7 @@ export async function POST(request: NextRequest) {
         // RM 8.90 line item with no idea where the gap went. Persist
         // it so the order detail screen can render the breakdown.
         promo_discount:         promoDiscountSen,
+        promo_name:             promoName,
         total:                  totalSen,
         customer_phone:         loyaltyPhone ?? null,
         loyalty_phone:          loyaltyPhone ?? null,
