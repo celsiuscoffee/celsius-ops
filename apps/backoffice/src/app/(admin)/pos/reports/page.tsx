@@ -38,7 +38,6 @@ const REPORTS = [
   { id: "channel", label: "By Channel" },
   { id: "product", label: "By Product" },
   { id: "category", label: "By Category" },
-  { id: "sku", label: "By SKU" },
   { id: "payment", label: "By Payment" },
   { id: "promotion", label: "Promotions" },
   { id: "shift", label: "Shifts" },

@@ -6,7 +6,6 @@ import {
   buildByChannel,
   buildByProduct,
   buildByCategory,
-  buildBySku,
   buildByPayment,
   buildByPromotion,
   buildByShift,
@@ -32,7 +31,6 @@ const VALID_REPORTS: ReportKind[] = [
   "channel",
   "product",
   "category",
-  "sku",
   "payment",
   "promotion",
   "shift",
@@ -91,7 +89,6 @@ export async function GET(request: NextRequest) {
     if (report === "channel") result = await buildByChannel(picked, from, to);
     else if (report === "product") result = await buildByProduct(picked, from, to);
     else if (report === "category") result = await buildByCategory(picked, from, to);
-    else if (report === "sku") result = await buildBySku(picked, from, to);
     else if (report === "payment") result = await buildByPayment(picked, from, to);
     else if (report === "promotion") result = await buildByPromotion(picked, from, to);
     else if (report === "shift") result = await buildByShift(picked, from, to);

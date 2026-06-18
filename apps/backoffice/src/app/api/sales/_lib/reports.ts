@@ -44,7 +44,6 @@ export type ReportKind =
   | "channel"
   | "product"
   | "category"
-  | "sku"
   | "payment"
   | "promotion"
   | "shift";
@@ -269,56 +268,81 @@ export async function buildByChannel(outlets: OutletPick[], from: string, to: st
   };
 }
 
+// Per-menu BOM cost (RM), keyed by lower(name). Mirrors /api/inventory/menus:
+// COGS = Σ ingredient qty × cheapest non-ADHOC supplier price ÷ pack conversion.
+// This is the canonical cost source — products.cost is empty and the StoreHub
+// catalog only ever costed ~28 items. Menus with no recipe → cost 0 (100% GP).
+async function bomCostByName(): Promise<Map<string, number>> {
+  const [menus, supplierProducts] = await Promise.all([
+    prisma.menu.findMany({ select: { name: true, ingredients: { select: { productId: true, quantityUsed: true } } } }),
+    prisma.supplierProduct.findMany({
+      where: { isActive: true },
+      select: {
+        productId: true,
+        price: true,
+        productPackage: { select: { conversionFactor: true } },
+        supplier: { select: { supplierCode: true } },
+      },
+    }),
+  ]);
+  const costPerBase = new Map<string, number>();
+  for (const sp of supplierProducts) {
+    if (sp.supplier?.supplierCode === "ADHOC") continue; // RM0 placeholder supplier
+    const price = Number(sp.price);
+    if (price <= 0) continue;
+    const conv = sp.productPackage?.conversionFactor ? Number(sp.productPackage.conversionFactor) : 0;
+    if (conv <= 0) continue;
+    const c = price / conv;
+    const ex = costPerBase.get(sp.productId);
+    if (ex == null || c < ex) costPerBase.set(sp.productId, c);
+  }
+  const byName = new Map<string, number>();
+  for (const m of menus) {
+    if (!m.name) continue;
+    const cogs = m.ingredients.reduce(
+      (s, ing) => s + Number(ing.quantityUsed) * (costPerBase.get(ing.productId) ?? 0),
+      0,
+    );
+    byName.set(m.name.trim().toLowerCase(), Math.round(cogs * 100) / 100);
+  }
+  return byName;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Line-item gathering (shared by product + category), cutover-routed.
 // Returns one entry per source line, in RM, with category + unit cost resolved.
 // ─────────────────────────────────────────────────────────────────────────────
-type GatheredItem = { name: string; category: string; sku: string; qty: number; sales: number; cost: number };
+type GatheredItem = { name: string; category: string; qty: number; sales: number; cost: number };
 
 async function gatherItems(outlets: OutletPick[], from: string, to: string): Promise<GatheredItem[]> {
   const supabase = getSupabaseAdmin();
   const fromD = dayStart(from);
   const toD = dayEnd(to);
 
-  // Product reference (category + unit cost in RM), keyed by lower(name) —
-  // the only reliable join across sources (our products carry no
-  // storehub_product_id link). Category prefers our canonical catalog;
-  // unit cost prefers the archived StoreHub catalog, which is the only place
-  // costs were ever recorded (our `products.cost` is empty). Made-to-order
-  // drinks legitimately have no unit cost → gross profit shows as 100%,
-  // exactly as StoreHub reported them.
-  const [{ data: products }, { data: shProducts }] = await Promise.all([
-    supabase.from("products").select("name, category, cost, sku"),
-    supabase.from("storehub_products").select("name, category, cost, sku"),
+  // Category from our catalog (the StoreHub archive fills gaps); unit cost from
+  // the BOM (recipe). Keyed by lower(name) — the reliable join across sources.
+  const [{ data: products }, { data: shProducts }, costByName] = await Promise.all([
+    supabase.from("products").select("name, category"),
+    supabase.from("storehub_products").select("name, category"),
+    bomCostByName(),
   ]);
   const norm = (n: string) => n.trim().toLowerCase();
   const prettyCat = (c: string) =>
     c.replace(/[-_]+/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 
   const catByName = new Map<string, string>();
-  const costByName = new Map<string, number>();
-  const skuByName = new Map<string, string>();
   for (const p of shProducts ?? []) {
     const name = (p.name as string) || "";
-    if (!name) continue;
-    const cost = Number(p.cost) || 0;
-    if (cost > 0) costByName.set(norm(name), cost);
-    if (p.category) catByName.set(norm(name), prettyCat(p.category as string));
-    if (p.sku) skuByName.set(norm(name), p.sku as string);
+    if (name && p.category) catByName.set(norm(name), prettyCat(p.category as string));
   }
   for (const p of products ?? []) {
     const name = (p.name as string) || "";
-    if (!name) continue;
     // our catalog is the canonical category source — it overrides StoreHub's.
-    if (p.category) catByName.set(norm(name), prettyCat(p.category as string));
-    const cost = Number(p.cost) || 0;
-    if (cost > 0 && !costByName.has(norm(name))) costByName.set(norm(name), cost);
-    if (p.sku) skuByName.set(norm(name), p.sku as string);
+    if (name && p.category) catByName.set(norm(name), prettyCat(p.category as string));
   }
   const refByName = (name: string) => ({
     category: catByName.get(norm(name)) ?? "Uncategorized",
     cost: costByName.get(norm(name)) ?? 0,
-    sku: skuByName.get(norm(name)) ?? "N/A",
   });
 
   type ShRow = { name: string | null; quantity: unknown; total: unknown; ts: Date; channel: string | null };
@@ -372,12 +396,12 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
         if (!(tsMs < cutoverMs || isExternalDelivery(r.channel))) continue; // cutover gate
         const name = (r.name || "Unknown").trim();
         const ref = refByName(name);
-        out.push({ name, category: ref.category, sku: ref.sku, qty: Number(r.quantity) || 0, sales: Number(r.total) || 0, cost: ref.cost });
+        out.push({ name, category: ref.category, qty: Number(r.quantity) || 0, sales: Number(r.total) || 0, cost: ref.cost });
       }
       for (const r of [...(posRows as NativeRow[]), ...(appRows as NativeRow[])]) {
         const name = (r.product_name || "Unknown").trim();
         const ref = refByName(name);
-        out.push({ name, category: ref.category, sku: ref.sku, qty: Number(r.quantity) || 0, sales: (Number(r.item_total) || 0) / 100, cost: ref.cost });
+        out.push({ name, category: ref.category, qty: Number(r.quantity) || 0, sales: (Number(r.item_total) || 0) / 100, cost: ref.cost });
       }
       return out;
     }),
@@ -386,18 +410,18 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
   return perOutlet.flat();
 }
 
-const GP_TIP = "Gross profit = sales − (qty × unit cost). Items with no cost in the catalog show 100%.";
+const GP_TIP = "Gross profit = sales − (qty × BOM unit cost). Items with no recipe show 100%.";
 const COST_NOTE =
-  "Unit cost comes from the StoreHub catalog (by product name); only ~28 items have it, so made-to-order drinks read as 100% gross profit.";
+  "Unit cost is the BOM recipe cost (ingredient supplier prices). Items without a recipe yet read as 100% gross profit.";
 
 export async function buildByProduct(outlets: OutletPick[], from: string, to: string): Promise<ReportResult> {
   const items = await gatherItems(outlets, from, to);
-  type Agg = { name: string; category: string; sku: string; qty: number; sales: number; costTotal: number };
+  type Agg = { name: string; category: string; qty: number; sales: number; costTotal: number };
   const map = new Map<string, Agg>();
   for (const it of items) {
     let a = map.get(it.name);
     if (!a) {
-      a = { name: it.name, category: it.category, sku: it.sku, qty: 0, sales: 0, costTotal: 0 };
+      a = { name: it.name, category: it.category, qty: 0, sales: 0, costTotal: 0 };
       map.set(it.name, a);
     }
     a.qty += it.qty;
@@ -410,7 +434,6 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
       return {
         name: a.name,
         category: a.category,
-        sku: a.sku,
         qty: round2(a.qty),
         totalSales: round2(a.sales),
         avgCost: a.qty ? round2(a.costTotal / a.qty) : 0,
@@ -426,7 +449,6 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
   const total: Row = {
     name: "Total",
     category: "",
-    sku: "",
     qty: round2(tQty),
     totalSales: round2(tSales),
     avgCost: tQty ? round2(tCost / tQty) : 0,
@@ -439,7 +461,6 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
     columns: [
       { key: "name", label: "Product", kind: "text" },
       { key: "category", label: "Category", kind: "text" },
-      { key: "sku", label: "SKU", kind: "text" },
       { key: "qty", label: "Qty Sold", kind: "int" },
       { key: "totalSales", label: "Total Sales", kind: "rm" },
       { key: "avgCost", label: "Avg Cost", kind: "rm", tip: COST_NOTE },
@@ -449,67 +470,6 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
     rows,
     total,
     note: COST_NOTE,
-  };
-}
-
-export async function buildBySku(outlets: OutletPick[], from: string, to: string): Promise<ReportResult> {
-  const items = await gatherItems(outlets, from, to);
-  // Group by SKU where present; items without one each stay a row keyed by name
-  // (so "N/A" products don't collapse into a single bucket) — mirrors StoreHub.
-  type Agg = { sku: string; name: string; category: string; qty: number; sales: number; costTotal: number };
-  const map = new Map<string, Agg>();
-  for (const it of items) {
-    const key = it.sku !== "N/A" ? `sku:${it.sku}` : `name:${it.name}`;
-    let a = map.get(key);
-    if (!a) {
-      a = { sku: it.sku, name: it.name, category: it.category, qty: 0, sales: 0, costTotal: 0 };
-      map.set(key, a);
-    }
-    a.qty += it.qty;
-    a.sales += it.sales;
-    a.costTotal += it.qty * it.cost;
-  }
-  const rows: Row[] = [...map.values()]
-    .map((a) => {
-      const gp = a.sales - a.costTotal;
-      return {
-        sku: a.sku,
-        name: a.name,
-        category: a.category,
-        qty: round2(a.qty),
-        totalSales: round2(a.sales),
-        grossProfit: round2(gp),
-        gpPct: a.sales ? round2((gp / a.sales) * 100) : 0,
-      };
-    })
-    .sort((x, y) => (y.totalSales as number) - (x.totalSales as number));
-
-  const tSales = rows.reduce((s, r) => s + (r.totalSales as number), 0);
-  const tCost = [...map.values()].reduce((s, a) => s + a.costTotal, 0);
-  const total: Row = {
-    sku: "Total",
-    name: "",
-    category: "",
-    qty: round2(rows.reduce((s, r) => s + (r.qty as number), 0)),
-    totalSales: round2(tSales),
-    grossProfit: round2(tSales - tCost),
-    gpPct: tSales ? round2(((tSales - tCost) / tSales) * 100) : 0,
-  };
-
-  return {
-    report: "sku",
-    columns: [
-      { key: "sku", label: "SKU", kind: "text" },
-      { key: "name", label: "Product", kind: "text" },
-      { key: "category", label: "Category", kind: "text" },
-      { key: "qty", label: "Qty Sold", kind: "int" },
-      { key: "totalSales", label: "Total Sales", kind: "rm" },
-      { key: "grossProfit", label: "Gross Profit", kind: "rm", tip: GP_TIP },
-      { key: "gpPct", label: "Gross Profit %", kind: "pct", tip: GP_TIP },
-    ],
-    rows,
-    total,
-    note: "SKUs come from the StoreHub catalog (matched by product name); items without a SKU there show N/A.",
   };
 }
 
