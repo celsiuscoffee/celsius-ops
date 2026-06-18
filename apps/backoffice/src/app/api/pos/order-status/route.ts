@@ -16,7 +16,7 @@ import { isGrabConfigured, markOrderReady } from "@/lib/grab";
  * through a status lifecycle — instead the cashier taps Served and we stamp
  * served_at, which is what drops them off the live Counter KDS + serving alarm.
  * status is deliberately left untouched so the Z-report / sales totals are
- * unaffected (see migration 027).
+ * unaffected (see migration 030).
  *
  * Why service-role: the customer `orders` table (pickup app) only lets
  * the anon key UPDATE rows where kitchen_docket_printed_at IS NULL (the

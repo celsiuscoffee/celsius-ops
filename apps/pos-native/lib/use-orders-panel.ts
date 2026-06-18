@@ -15,7 +15,7 @@ import { supabase } from "./supabase";
  *
  * Pickup/Grab use a STATUS lifecycle (paid → … → ready → completed). Counter
  * orders are a completed sale the instant they're rung up (so the Z-report /
- * sales totals stay exact — see migration 027), so their live state is the
+ * sales totals stay exact — see migration 030), so their live state is the
  * separate `served_at` timestamp instead: served_at IS NULL = still being
  * served. Marking one served stamps served_at and it drops off here.
  *
