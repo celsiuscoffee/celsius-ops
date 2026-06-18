@@ -35,7 +35,7 @@ import { usePrintPrefs } from "@/lib/print-prefs";
 import { useTablesPanel, type TableSlot, type TableOrderRef } from "@/lib/use-tables-panel";
 import { useOrdersPanel, type KdsOrder } from "@/lib/use-orders-panel";
 import { useOrderChime } from "@/lib/use-order-chime";
-import { useServingAlarm, type ServingItem } from "@/lib/use-serving-alarm";
+import { useServingAlarm, silenceServingAlarmOrder, type ServingItem } from "@/lib/use-serving-alarm";
 import { useOrderHistory, type HistoryOrder, type HistoryChannel } from "@/lib/use-order-history";
 import { useShift, openShift, closeShift, reopenShift, findRecentClosedShift, shiftTotals, type Shift, type ShiftTotals } from "@/lib/shift";
 import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/printer";
@@ -369,6 +369,10 @@ export default function Register() {
     // the shift closed — so a close can never freeze a customer's in-progress
     // order. (Ringing up a NEW sale still requires the store open; see onAdd.)
     setBumpingUid(order.uid);
+    // Pickup orders leave the serving alarm at "ready" — silence immediately so
+    // the alarm stops on tap, not after the orders list refreshes. (Grab uids
+    // aren't in the serving set, so silencing them is a harmless no-op.)
+    if (status === "ready") silenceServingAlarmOrder(order.uid);
     console.log(`[order-status] tap ${order.source} ${order.orderNumber} -> ${status}`);
     try {
       const res = await apiPost<{ ok?: boolean; grabPushed?: boolean }>("/api/pos/order-status", { source: order.source, id: order.id, status });
@@ -393,6 +397,9 @@ export default function Register() {
     // Not gated on store-open — see advanceOrderStatus: a table order must be
     // serve-able / clearable even after the shift closed.
     setBumpingUid(`qr:${order.id}`);
+    // Silence the serving alarm for this order AT ONCE — before the network
+    // round-trip — so it stops even if the tables list is slow to refresh.
+    silenceServingAlarmOrder(order.id);
     try {
       await apiPost("/api/pos/order-status", { source: "qr", id: order.id, status: "completed" });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

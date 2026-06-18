@@ -33,12 +33,29 @@ export type ServingItem = {
 
 function pickOverdue(items: ServingItem[], now: number): ServingItem[] {
   return items.filter((o) => {
+    if (silencedIds.has(o.id)) return false; // cashier already actioned it
     const t = new Date(o.createdAt).getTime();
     return Number.isFinite(t) && now - t > SERVING_TARGET_MS;
   });
 }
 
 const idKey = (list: ServingItem[]) => list.map((o) => o.id).sort().join("|");
+
+// Orders the cashier has ALREADY actioned (Done / Ready). Silenced immediately
+// on tap so the alarm + popup stop AT ONCE — without waiting for the orders/
+// tables list to refresh. That refresh can lag or be missed (dropped Realtime),
+// which is what left a "done" order still sounding the serving alarm. Module-
+// level (survives remounts) + capped. Order ids are unique uuids, so a silenced
+// id can never suppress a future order.
+const silencedIds = new Set<string>();
+/** Stop the serving alarm for an order the moment it's actioned (Done/Ready). */
+export function silenceServingAlarmOrder(id: string | null | undefined): void {
+  if (!id) return;
+  silencedIds.add(id);
+  if (silencedIds.size > 1000) {
+    for (const old of [...silencedIds].slice(0, 500)) silencedIds.delete(old);
+  }
+}
 
 // MODULE-LEVEL state — survives a screen REMOUNT (a per-component ref reset on
 // every remount, making every still-overdue order look "new" → re-alarm).
