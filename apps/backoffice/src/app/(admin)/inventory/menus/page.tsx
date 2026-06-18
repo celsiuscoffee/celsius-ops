@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Pencil, ChevronDown, Coffee, Search, Loader2, Trash2, X, Check, RefreshCw } from "lucide-react";
+import { Pencil, ChevronDown, Coffee, Search, Loader2, Trash2, X, Check, RefreshCw, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 type Ingredient = { product: string; productId: string; sku: string; qty: number; uom: string; unitCost: number; cost: number };
@@ -38,11 +38,16 @@ type EditIngredient = {
   uom: string;
 };
 
+type SortKey = "name" | "category" | "sellingPrice" | "cogs" | "cogsPercent" | "ingredientCount";
+
 export default function MenusPage() {
   const { data: menus = [], isLoading: loading, mutate: loadMenus } = useFetch<MenuItem[]>("/api/inventory/menus");
   const { data: products = [] } = useFetch<ProductOption[]>("/api/inventory/products");
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState<"all" | "recipe" | "norecipe" | "high">("all");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Editing state
@@ -58,8 +63,36 @@ export default function MenusPage() {
   const filtered = menus.filter((m) => {
     const matchSearch = m.name.toLowerCase().includes(search.toLowerCase());
     const matchCat = catFilter === "All" || m.category === catFilter;
-    return matchSearch && matchCat;
+    const matchStatus =
+      statusFilter === "all" ||
+      (statusFilter === "recipe" && m.ingredientCount > 0) ||
+      (statusFilter === "norecipe" && m.ingredientCount === 0) ||
+      (statusFilter === "high" && m.cogsPercent > 40);
+    return matchSearch && matchCat && matchStatus;
   });
+
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp: number;
+    if (sortKey === "name" || sortKey === "category") {
+      cmp = String(a[sortKey]).localeCompare(String(b[sortKey]));
+    } else {
+      cmp = (a[sortKey] as number) - (b[sortKey] as number);
+    }
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      // Numeric columns are most useful highest-first; text ascending.
+      setSortDir(key === "name" || key === "category" ? "asc" : "desc");
+    }
+  };
+
+  const highCogsCount = menus.filter((m) => m.cogsPercent > 40).length;
+  const noRecipeCount = menus.filter((m) => m.ingredientCount === 0).length;
 
   // ── Edit helpers ────────────────────────────────────────────────────────
 
@@ -142,6 +175,26 @@ export default function MenusPage() {
         .slice(0, 8)
     : [];
 
+  // Sortable column header
+  const SortHeader = ({ label, sortKey: key, align = "left" }: { label: string; sortKey: SortKey; align?: "left" | "right" }) => {
+    const active = sortKey === key;
+    return (
+      <th className={`px-4 py-3 font-medium text-gray-500 ${align === "right" ? "text-right" : "text-left"}`}>
+        <button
+          onClick={() => toggleSort(key)}
+          className={`inline-flex items-center gap-1 transition-colors hover:text-gray-900 ${align === "right" ? "flex-row-reverse" : ""} ${active ? "text-gray-900" : ""}`}
+        >
+          {label}
+          {active ? (
+            sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+          ) : (
+            <ChevronsUpDown className="h-3 w-3 text-gray-300" />
+          )}
+        </button>
+      </th>
+    );
+  };
+
   // ── Render ──────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -189,16 +242,53 @@ export default function MenusPage() {
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input placeholder="Search menu items..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      <div className="mt-4 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Input placeholder="Search menu items..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          {/* Quick status filters */}
+          <div className="flex flex-wrap gap-1.5">
+            {([
+              { key: "all", label: "All" },
+              { key: "recipe", label: "Has recipe" },
+              { key: "norecipe", label: `No recipe${noRecipeCount ? ` · ${noRecipeCount}` : ""}` },
+              { key: "high", label: `High COGS${highCogsCount ? ` · ${highCogsCount}` : ""}` },
+            ] as const).map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setStatusFilter(f.key)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  statusFilter === f.key
+                    ? f.key === "high"
+                      ? "border-red-300 bg-red-50 text-red-600"
+                      : "border-terracotta bg-terracotta/5 text-terracotta-dark"
+                    : "border-gray-200 text-gray-500 hover:border-gray-300"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex gap-1.5">
+        {/* Category filter — wraps instead of overflowing */}
+        <div className="flex flex-wrap gap-1.5">
           {categories.map((c) => (
-            <button key={c} onClick={() => setCatFilter(c)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter === c ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>{c}</button>
+            <button key={c} onClick={() => setCatFilter(c)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter === c ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>{c}</button>
           ))}
         </div>
+        <p className="text-xs text-gray-400">
+          Showing {sorted.length} of {menus.length} items
+          {(search || catFilter !== "All" || statusFilter !== "all") && (
+            <button
+              onClick={() => { setSearch(""); setCatFilter("All"); setStatusFilter("all"); }}
+              className="ml-2 text-terracotta hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
+        </p>
       </div>
 
       {/* Menu table with expandable ingredients */}
@@ -207,17 +297,24 @@ export default function MenusPage() {
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="w-8 px-3 py-3"></th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Menu Item</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Category</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Selling Price</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Product Cost</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">COGS %</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Ingredients</th>
+              <SortHeader label="Menu Item" sortKey="name" />
+              <SortHeader label="Category" sortKey="category" />
+              <SortHeader label="Selling Price" sortKey="sellingPrice" align="right" />
+              <SortHeader label="Product Cost" sortKey="cogs" align="right" />
+              <SortHeader label="COGS %" sortKey="cogsPercent" align="right" />
+              <SortHeader label="Ingredients" sortKey="ingredientCount" />
               <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((menu) => {
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
+                  No menu items match your filters.
+                </td>
+              </tr>
+            )}
+            {sorted.map((menu) => {
               const isEditing = editingMenuId === menu.id;
               return (
                 <Fragment key={menu.id}>
