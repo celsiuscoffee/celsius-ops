@@ -35,6 +35,9 @@ type Data = {
   overall: { orders: number; collected: number; newMembers: number; repeatMembers: number; rate: number; pairAdds: number; upsellOrders: number; upsellRate: number | null };
   cashiers: Cashier[];
 };
+// `id` here is the POS outlet identifier (Outlet.loyaltyOutletId), which is what
+// pos_orders.outlet_id / pos_pair_events.outlet_id store — NOT the Prisma Outlet
+// CUID. Filtering by the CUID matches nothing, so we key the dropdown on this.
 type Outlet = { id: string; name: string };
 
 const DAYS_OPTIONS = [7, 30, 90];
@@ -54,12 +57,18 @@ export default function CashierPerformancePage() {
   const [sortKey, setSortKey] = useState<SortKey>("rate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  // Outlet list for the filter dropdown (loaded once).
+  // Outlet list for the filter dropdown (loaded once). We key options on
+  // loyaltyOutletId — the POS outlet id stored on pos_orders/pos_pair_events —
+  // and drop outlets without one (they have no counter-rung POS data to filter).
   useEffect(() => {
     adminFetch("/api/settings/outlets")
       .then((r) => (r.ok ? r.json() : []))
-      .then((rows: Array<{ id: string; name: string }>) =>
-        setOutlets((rows ?? []).map((o) => ({ id: o.id, name: o.name }))))
+      .then((rows: Array<{ id: string; name: string; loyaltyOutletId?: string | null }>) =>
+        setOutlets(
+          (rows ?? [])
+            .filter((o) => o.loyaltyOutletId)
+            .map((o) => ({ id: o.loyaltyOutletId as string, name: o.name }))
+        ))
       .catch(() => setOutlets([]));
   }, []);
 

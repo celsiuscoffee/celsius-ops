@@ -82,6 +82,34 @@ const MODE_META: Record<Mode, { cur: string; prev: string }> = {
   month: { cur: "This Month", prev: "Last Month" },
 };
 
+// The dashboard's Period filter drives the chart's granularity (single source of
+// truth — the chart has no own day/week/month toggle). Today/Yesterday read as a
+// Day comparison, This Week / Last 7 Days as Week, This Month / Last 30 Days as
+// Month; a custom range picks the closest granularity by its length.
+type DashPeriod = "daily" | "yesterday" | "last7days" | "last30days" | "weekly" | "monthly" | "custom";
+
+function modeForPeriod(period: DashPeriod, customFrom?: string, customTo?: string): Mode {
+  switch (period) {
+    case "weekly":
+    case "last7days":
+      return "week";
+    case "monthly":
+    case "last30days":
+      return "month";
+    case "custom": {
+      if (customFrom && customTo) {
+        const days = Math.round((Date.parse(customTo) - Date.parse(customFrom)) / 86_400_000) + 1;
+        if (days <= 1) return "day";
+        if (days <= 10) return "week";
+        return "month";
+      }
+      return "day";
+    }
+    default: // daily | yesterday
+      return "day";
+  }
+}
+
 /** The current + previous calendar period (from:to) for each mode. */
 function periodsForMode(mode: Mode): { cur: [string, string]; prev: [string, string] } {
   const today = mytToday();
@@ -99,8 +127,19 @@ function periodsForMode(mode: Mode): { cur: [string, string]; prev: [string, str
   return { cur: [mStart, monthEnd(today)], prev: [monthStart(lastEnd), lastEnd] };
 }
 
-export function AccumulativeChart({ outletId }: { outletId: string }) {
-  const [mode, setMode] = useState<Mode>("day");
+export function AccumulativeChart({
+  outletId,
+  period,
+  customFrom,
+  customTo,
+}: {
+  outletId: string;
+  period: DashPeriod;
+  customFrom?: string;
+  customTo?: string;
+}) {
+  // Granularity follows the dashboard Period filter — no independent toggle.
+  const mode = modeForPeriod(period, customFrom, customTo);
   const [metric, setMetric] = useState<Metric>("revenue");
   const [data, setData] = useState<CompareResp | null>(null);
   const [loading, setLoading] = useState(true);
@@ -185,11 +224,6 @@ export function AccumulativeChart({ outletId }: { outletId: string }) {
           <p className="mt-0.5 text-xs text-gray-500">{meta.cur} vs {meta.prev} · running total</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
-            {(["day", "week", "month"] as Mode[]).map((mt) => (
-              <button key={mt} onClick={() => setMode(mt)} className={toggle(mode === mt)}>{mt}</button>
-            ))}
-          </div>
           <div className="flex gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
             {(["revenue", "orders"] as Metric[]).map((mt) => (
               <button key={mt} onClick={() => setMetric(mt)} className={toggle(metric === mt)}>{mt}</button>
