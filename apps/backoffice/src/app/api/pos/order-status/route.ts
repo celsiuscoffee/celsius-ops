@@ -4,12 +4,19 @@ import { isGrabConfigured, markOrderReady } from "@/lib/grab";
 
 /**
  * POST /api/pos/order-status
- * Body: { source: "pickup" | "grab" | "qr", id: string, status: string }
+ * Body: { source: "pickup" | "grab" | "qr" | "counter", id: string, status: string }
  *
- * Advances the kitchen/fulfilment status of a Grab, Pickup or QR-table
- * dine-in order from the POS register's order-management panel (the
- * on-register KDS). "qr" rows live in the same `orders` table as pickup
- * (order_type=dine_in) — the cashier taps Done to mark them served.
+ * Advances the kitchen/fulfilment status of a Grab, Pickup, QR-table
+ * dine-in or counter (till) order from the POS register's order-management
+ * panel (the on-register KDS). "qr" rows live in the same `orders` table as
+ * pickup (order_type=dine_in) — the cashier taps Done to mark them served.
+ *
+ * "counter" rows are till sales in `pos_orders` (source='pos') that are ALREADY
+ * status='completed' (an exact sale the moment they're rung up). They don't move
+ * through a status lifecycle — instead the cashier taps Served and we stamp
+ * served_at, which is what drops them off the live Counter KDS + serving alarm.
+ * status is deliberately left untouched so the Z-report / sales totals are
+ * unaffected (see migration 030).
  *
  * Why service-role: the customer `orders` table (pickup app) only lets
  * the anon key UPDATE rows where kitchen_docket_printed_at IS NULL (the
@@ -50,12 +57,30 @@ export async function POST(req: NextRequest) {
   const supabase = getSupabase();
   try {
     const { source, id, status } = await req.json();
-    if (source !== "pickup" && source !== "grab" && source !== "qr") {
-      return NextResponse.json({ error: "source must be 'pickup', 'grab' or 'qr'" }, { status: 400 });
+    if (source !== "pickup" && source !== "grab" && source !== "qr" && source !== "counter") {
+      return NextResponse.json({ error: "source must be 'pickup', 'grab', 'qr' or 'counter'" }, { status: 400 });
     }
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "id required" }, { status: 400 });
     }
+
+    // Counter (till) order → mark served. The row is already a completed sale,
+    // so we only stamp served_at (status untouched). No payment guard: it was
+    // paid at the till before this row ever existed. Idempotent — re-serving an
+    // already-served row just re-stamps the time, harmlessly.
+    if (source === "counter") {
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from("pos_orders")
+        .update({ served_at: now, updated_at: now })
+        .eq("id", id)
+        .select("id, order_number, served_at")
+        .maybeSingle();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (!data) return NextResponse.json({ error: "order not found" }, { status: 404 });
+      return NextResponse.json({ ok: true, order: data });
+    }
+
     if (!ALLOWED.has(status)) {
       return NextResponse.json({ error: `status must be one of ${[...ALLOWED].join(", ")}` }, { status: 400 });
     }
