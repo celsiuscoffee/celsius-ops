@@ -1,15 +1,13 @@
 // Unified sales source for the sales dashboard during/after the StoreHub →
 // POS-native migration. Per outlet, merges:
-//   • StoreHub: the local archive (storehub_sales) for days STRICTLY BEFORE the
-//     outlet's cutover, plus a LIVE pull for TODAY only while the outlet is
-//     still pre-cutover. StoreHub is never counted on/after cutover — Grab is
-//     native (pos_orders) and Beep is now the Celsius app (orders), so counting
-//     the StoreHub rows too would double-count (StoreHub tags till sales
-//     OFFLINE_PAYMENTS, i.e. they DO carry a channel).
+//   • StoreHub: the local archive (storehub_sales) for HISTORY. Pre-cutover:
+//     every row. Post-cutover: ONLY external delivery (Grab/Beep) that was still
+//     on StoreHub during the brief window before it went native — the till
+//     (OFFLINE_PAYMENTS) is on pos_orders now, so keeping it would double-count.
+//     A live "today" pull runs only while the outlet is still pre-cutover.
 //   • POS-native (pos_orders) + pickup (orders): real-time, AT/AFTER cutover.
-// Each sale is counted once from the authoritative source for its time. Once an
-// outlet has cut over it touches StoreHub for history only — so StoreHub can be
-// cancelled with no effect on current numbers.
+// Each sale is counted once. StoreHub is frozen after the final cutover (no new
+// rows) and its Grab never shares a day with native Grab, so no double-count.
 
 import { prisma } from "@/lib/prisma";
 import { getTransactions, type StoreHubTransaction } from "@/lib/storehub";
@@ -55,6 +53,13 @@ function posIsDeliveryQR(orderType: string | null, source: string | null): boole
 
 const toISO = (ts: unknown): string => (ts instanceof Date ? ts.toISOString() : String(ts));
 
+/** External delivery aggregator still settling through StoreHub (Grab/Beep/
+ *  Panda/Shopee) vs the in-store till (OFFLINE_PAYMENTS). Post-cutover only the
+ *  former is kept — the till is on pos_orders. Matches the StoreHub raw
+ *  `channel` values (GRABFOOD, BEEP_ORDERS, FOODPANDA, SHOPEEFOOD). */
+const isExternalDelivery = (channel: string | null | undefined): boolean =>
+  !!channel && /grab|panda|shopee|beep|deliver/i.test(channel);
+
 /**
  * All sales for one outlet across [from, to], routed by the outlet's cutover.
  * Returns a flat, source-agnostic list the dashboard aggregates exactly as it
@@ -80,10 +85,15 @@ export async function getUnifiedSalesForOutlet(
     Date.UTC(mytNow.getUTCFullYear(), mytNow.getUTCMonth(), mytNow.getUTCDate()) - 8 * 3600 * 1000,
   );
 
-  // Push one StoreHub txn. Callers only ever pass PRE-cutover rows (the archive
-  // window is capped at cutover and the live pull is gated to pre-cutover
-  // outlets), so there's no per-row cutover gate here — StoreHub is history only.
+  // StoreHub is HISTORY only. Pre-cutover keep every row; post-cutover keep ONLY
+  // external delivery (Grab/Beep) — the till (OFFLINE_PAYMENTS) is on pos_orders
+  // now, so keeping it would double-count.
+  const cutoverMs = outlet.cutoverAt ? outlet.cutoverAt.getTime() : Number.POSITIVE_INFINITY;
+  const keepStorehub = (ts: string, channel: string | null | undefined): boolean =>
+    new Date(ts).getTime() < cutoverMs || isExternalDelivery(channel);
+
   const pushStorehub = (ts: string, total: number, raw: StoreHubTransaction) => {
+    if (!keepStorehub(ts, raw?.channel as string | null | undefined)) return;
     sales.push({
       ts,
       total,
@@ -112,6 +122,7 @@ export async function getUnifiedSalesForOutlet(
       return;
     }
     const ts = toISO(r.ts);
+    if (!keepStorehub(ts, r.channel)) return;
     sales.push({
       ts,
       total: Number(r.total) || 0,
@@ -121,12 +132,10 @@ export async function getUnifiedSalesForOutlet(
     });
   };
 
-  // ── StoreHub PAST — local archive, strictly BEFORE cutover and before today
-  // 00:00 MYT (today is served by the live pull below). On/after cutover the
-  // outlet is fully native, so the archive contributes history only. ──
-  const cutoverCapMs = outlet.cutoverAt ? outlet.cutoverAt.getTime() - 1 : Number.POSITIVE_INFINITY;
-  const archiveToBase = Math.min(to.getTime(), todayStartMyt.getTime() - 1);
-  const archiveTo = new Date(Math.min(archiveToBase, cutoverCapMs));
+  // ── StoreHub PAST — local archive up to today 00:00 MYT (today is the live
+  // pull below). pushArchive applies the cutover rule per row: all rows
+  // pre-cutover, delivery-only post-cutover. ──
+  const archiveTo = new Date(Math.min(to.getTime(), todayStartMyt.getTime() - 1));
   // channel_class / is_delivery_qr are materialized at import (and
   // backfilled) so this no longer ships the heavy `raw` JSONB — only
   // rows that somehow missed classification fall back to it.
