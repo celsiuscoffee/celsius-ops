@@ -243,15 +243,15 @@ const NAV_SECTIONS: NavSection[] = [
     dividerBefore: true,
     subgroups: [
       {
-        // Single Overview entry — was three (Dashboard, v2 Analytics,
-        // AI Insights). Dashboard is the canonical operator view; the
-        // mechanic-specific Analytics and AI Insights pages remain
-        // available via deep-link (/loyalty/analytics, /loyalty/insights)
-        // for the rare admin who needs them, but don't crowd the
-        // sidebar for daily ops.
+        // The rewards-program Overview was replaced by the Area Scorecard:
+        // a per-outlet KPI scoreboard (loyalty capture, upsell, ops
+        // compliance, wastage) sourced from the live POS / apps system —
+        // answers "which area is hitting KPI". The mechanic-specific
+        // rewards Analytics / AI Insights pages remain available via
+        // deep-link (/loyalty/analytics, /loyalty/insights).
         label: "Overview",
         items: [
-          { label: "Overview", href: "/loyalty/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "loyalty:dashboard" },
+          { label: "Area Scorecard", href: "/loyalty/dashboard", icon: <Trophy className={ICON_SIZE} />, moduleKey: "loyalty:dashboard" },
         ],
       },
       {
