@@ -81,43 +81,35 @@ export function primeSounds(): void {
   getPlayer("alarm");
 }
 
-/** Soft bell — a new external order arrived. Rings TWICE: the cue plays, then
- *  replays once the ~2.4s clip has finished so the two rings are distinct (a
- *  single play() can't overlap — native DeviceSpeaker restarts the MediaPlayer
- *  and the expo-audio path seeks to 0 — so we space them by the clip length).
- *  Works on both playback paths and ships over OTA, no asset/rebuild needed. */
-const CHIME_CLIP_MS = 2400;   // chime.wav length (~2.40s)
-const CHIME_REPEAT_MS = 2700; // ring #2 — AFTER ring #1's clip has fully ended (was
-                              // 2500: with native prepare latency that could land
-                              // while ring #1 was still sounding and chop its tail).
-// A chime CUE is the two rings together — it occupies the speaker for the whole
-// span below. The native DeviceSpeaker drives ONE shared MediaPlayer and every
-// play() release()s it, so ANY trigger landing mid-cue restarts the clip and
-// chops the bell into a stutter — the "lagging / never-finishes" chime, heard
-// whenever orders arrive in a burst (Grab + pickup + table together). So we
-// reserve the full cue: a new trigger before it ends is dropped, not played.
-// Bursts coalesce into one CLEAN cue, which is all an audible alert needs.
-// (The intended ring #2 is scheduled via setTimeout→play, NOT playChime, so the
-// reservation never blocks the cue's own second ring.)
-const CHIME_CUE_MS = CHIME_REPEAT_MS + CHIME_CLIP_MS + 200; // both rings + prepare slack
-let chimeBusyUntil = 0;
+// ONE shared speaker reservation for BOTH cues. The chime rings once (a previous
+// double-ring restarted the shared native MediaPlayer mid-clip and staff heard a
+// stutter). The native DeviceSpeaker drives a SINGLE MediaPlayer, so chime and
+// alarm would otherwise cut each other off when they land together — "a new
+// order chimes just as another goes overdue". With one reservation, whichever
+// cue starts first holds the speaker for its clip; any cue — chime OR alarm —
+// arriving within the window is dropped, never restarting the player mid-clip.
+// Both clips are ~2.4s. A dropped alarm re-fires on its 5-min cadence; a dropped
+// chime's order is still on screen — so nothing important is lost. Also coalesces
+// a burst of orders (Grab + pickup + table together) into one clean ring.
+// JS-only → ships over OTA, no asset/rebuild needed.
+const SOUND_CLIP_MS = 2400;                  // chime.wav / alarm.wav length (~2.40s)
+const SPEAKER_HOLD_MS = SOUND_CLIP_MS + 200; // + native prepare slack
+let speakerBusyUntil = 0;
+/** Soft bell — a new external order arrived. Rings once; dropped if the speaker
+ *  is mid-cue (see shared reservation above). */
 export function playChime(): void {
   const now = Date.now();
-  if (now < chimeBusyUntil) return; // a cue is still sounding — let it finish
-  chimeBusyUntil = now + CHIME_CUE_MS;
+  if (now < speakerBusyUntil) return;
+  speakerBusyUntil = now + SPEAKER_HOLD_MS;
   play("chime");
-  setTimeout(() => play("chime"), CHIME_REPEAT_MS);
 }
-/** Urgent warble — an order is past the serving-time target. Reserves the clip
- *  duration so a re-trigger can't chop it mid-warble (same shared-MediaPlayer
- *  hazard as the chime); the legit re-sound cadence is minutes apart, so this
- *  never blocks a real alarm. */
-const ALARM_CLIP_MS = 2400; // alarm.wav length (~2.4s) — reserve so it plays in full
-let alarmBusyUntil = 0;
+/** Urgent warble — an order is past the serving-time target. Same shared
+ *  reservation: dropped if a cue is mid-play; its 5-min re-sound cadence means a
+ *  dropped instance is re-tried shortly, so a real overdue order is never missed. */
 export function playAlarm(): void {
   const now = Date.now();
-  if (now < alarmBusyUntil) return;
-  alarmBusyUntil = now + ALARM_CLIP_MS + 200;
+  if (now < speakerBusyUntil) return;
+  speakerBusyUntil = now + SPEAKER_HOLD_MS;
   play("alarm");
 }
 
