@@ -457,8 +457,8 @@ export default function SalesDashboard() {
             })()}
           </div>
 
-          {/* ─── Accumulative Sales (Day / Week / Month, current vs previous) ─── */}
-          <AccumulativeChart outletId={outletId} />
+          {/* ─── Accumulative Sales — granularity follows the Period filter ─── */}
+          <AccumulativeChart outletId={outletId} period={period} customFrom={customFrom} customTo={customTo} />
 
           {/* ─── AI Sales Targets (progressive) ─── */}
           {(() => {
