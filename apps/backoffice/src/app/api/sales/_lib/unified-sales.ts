@@ -195,13 +195,29 @@ export async function getUnifiedSalesForOutlet(
     const cutoverFloor = outlet.cutoverAt
       ? Prisma.sql`AND created_at >= ${outlet.cutoverAt}`
       : Prisma.empty;
+    // Till orders only count once `completed` — an `open`/`sent_to_kitchen` row
+    // is an in-progress cart, not a sale. Delivery-aggregator orders (native
+    // Grab/Panda/Shopee) are different: they arrive prepaid and confirmed via
+    // webhook the moment we receive them, yet the docket lifecycle rarely
+    // advances them past `open` (the COLLECTED/DELIVERED state push is
+    // unreliable). Gating those on `completed` silently dropped ~all delivery
+    // revenue from the dashboard ("delivery data not available"). Count delivery
+    // orders in any live (non-cancelled) status — the source/order_type match
+    // mirrors the delivery detection in posChannel/posIsDeliveryQR below.
     const posRows = await prisma.$queryRaw<
       Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null }>
     >`
       SELECT created_at AS ts, total, source, order_type
       FROM pos_orders
       WHERE outlet_id = ${outlet.loyaltyOutletId}
-        AND status = 'completed'
+        AND (
+          status = 'completed'
+          OR (
+            (COALESCE(source, '') ~* 'grab|foodpanda|shopee|deliveroo|deliver'
+             OR lower(COALESCE(order_type, '')) = 'delivery')
+            AND COALESCE(status, '') NOT IN ('cancelled', 'failed', 'voided', 'refunded')
+          )
+        )
         AND created_at >= ${from}
         AND created_at <= ${to}
         ${cutoverFloor}
