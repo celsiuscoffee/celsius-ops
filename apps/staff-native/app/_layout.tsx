@@ -27,6 +27,7 @@ import {
 import { API_BASE_URL } from "../lib/env";
 import { useStaff } from "../lib/store";
 import { registerForPush } from "../lib/push";
+import { useOtaAutoUpdate } from "../lib/use-ota-auto-update";
 import { useColorScheme } from "nativewind";
 import { themes, loadColorSchemePref } from "../lib/theme";
 
@@ -69,6 +70,11 @@ function RootLayout() {
 
   const setSession = useStaff((s) => s.setSession);
   const [sessionHydrated, setSessionHydrated] = useState(false);
+
+  // Self-apply OTA updates on foreground so staff devices that stay resident
+  // for days don't keep running a stale JS bundle (e.g. an old Sales screen
+  // showing a frozen total). Mirrors the pos-native till hook.
+  useOtaAutoUpdate();
 
   // Restore the saved appearance preference (light/dark/system) on
   // launch so the user's choice persists across app restarts.

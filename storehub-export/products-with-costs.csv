@@ -1,0 +1,103 @@
+id,name,sku,barcode,category,unit_price,cost,snapshot_at
+696a611d591c2700078bdfac,Affogato,,,Classic,12.90,,2026-06-08
+68b1e1185296d20007fa0c4f,Almond Crepe Cake,,,Cakes,16.90,9.50,2026-06-08
+68ad6eac59357c00074fe28d,Almond Croissant,SH00062,,Croissant,14.90,8.50,2026-06-08
+696a6319591c2700078bf88f,Amber Citrus,,,Mocktails,15.90,,2026-06-08
+68ad6eac59357c00074fe19d,Beef Bolognese,SH00042,,Pasta,19.90,,2026-06-08
+68ad6eac59357c00074fe149,Berry Berries,SH00035,,Mocktails,15.90,,2026-06-08
+696a56829c73a00007008c52,Bihun Kari,,,Noodle,16.90,,2026-06-08
+696a57459c73a00007009c25,Bihun Kari Asam,,,Noodle,16.90,,2026-06-08
+6a191506d87ea500076330bd,Biscoff Batik,,,Cakes,17.90,,2026-06-08
+68ad6eaa59357c00074fdfac,Black,SH00001,,Classic,8.90,,2026-06-08
+68ad6eac59357c00074fe299,Burnt Cheesecake,SH00063,,Cakes,16.90,8.40,2026-06-08
+68ad6eab59357c00074fe090,Buttercream Chocolate,SH00020,,Artisan Choc,14.90,,2026-06-08
+68ad6eab59357c00074fe000,Buttercream Latte,SH00008,,Flavoured,14.90,,2026-06-08
+699ae1710adad2000737e644,Buttermilk Chicken,,,,19.90,,2026-06-08
+68ad6eaa59357c00074fdfd0,Cappucino,SH00004,,Classic,11.90,3.10,2026-06-08
+68ad6eab59357c00074fe024,Caramel Latte,SH00011,,Flavoured,12.90,3.50,2026-06-08
+68ad6eab59357c00074fe0cc,Caramel Latte (Bottle),SH00025,,Bottles,12.90,,2026-06-08
+68ad6eab59357c00074fe018,Caramel Macchiato,SH00010,,Flavoured,13.90,,2026-06-08
+699ae1ebdc6b39000769294e,Chicken Chop,,,,19.90,,2026-06-08
+68ad6eac59357c00074fe1b5,Chicken Tomyam Carbonara,SH00044,,Pasta,27.90,,2026-06-08
+68ad6eab59357c00074fe078,Chocolate,SH00018,,Artisan Choc,12.90,,2026-06-08
+68ad6eab59357c00074fe0e6,Chocolate (Bottle),SH00027,,Bottles,12.90,,2026-06-08
+68cab8603b56810007733586,Chocolate Cake Bars,,,Cakes,15.90,,2026-06-08
+696a63fcb3191b0007f8f2b2,Chocolate Freddo,,,Artisan Choc,14.90,,2026-06-08
+68ad6eac59357c00074fe2a5,Chocolate Mudslide,SH00064,,Cakes,16.90,10.50,2026-06-08
+68ad6eab59357c00074fe13d,Citrus Iced Lemon Tea,SH00034,,Fruit Tea,13.90,,2026-06-08
+68ad6eac59357c00074fe161,Citrus Mojito,SH00037,,Mocktails,13.90,,2026-06-08
+68ad6eac59357c00074fe275,Classic Croissant,SH00060,,Croissant,9.90,5.00,2026-06-08
+68ad6eac59357c00074fe251,Classic Fries,SH00057,,Fries,13.90,,2026-06-08
+68ad6eab59357c00074fe0c0,Classic Latte (Bottle),SH00024,,Bottles,12.90,,2026-06-08
+696a64986a3ea00007849e97,Cloudy Matcha,,,Artisan Matcha,14.90,,2026-06-08
+6999aacb13201a000608864a,Colek,,,,0.00,,2026-06-08
+696a559100d9400007a36727,Crispy Prawn Creamy Carbonara,,,Pasta,27.90,,2026-06-08
+68ad6eaa59357c00074fdfdc,Dirty Latte,SH00005,,Classic,13.90,,2026-06-08
+68ad6eab59357c00074fdff4,Doppio Freddo,SH00007,,Flavoured,13.90,,2026-06-08
+68ad6eab59357c00074fe125,Earl Grey,SH00032,,Gourmet Tea,10.90,,2026-06-08
+68ad6eac59357c00074fe239,Ebi Sando,SH00055,,Sandwiches,19.90,10.00,2026-06-08
+68ad6eac59357c00074fe221,Egg Sando,SH00053,,Sandwiches,9.90,4.50,2026-06-08
+68c40200cf5d380007f1a873,Espresso,,,Classic,6.90,,2026-06-08
+69987ea9b1d9cc0007446e94,Free Flow,,,,0.00,,2026-06-08
+69981e3bac61340007514f1c,FreeFlow Drinks,,,,29.90,,2026-06-08
+69a959c77b731a0006e57877,Google Review,,,,0.00,,2026-06-08
+68ad6eac59357c00074fe1f1,Half Boiled Eggs,SH00049,,Roti Bakar,4.90,,2026-06-08
+68ad6eab59357c00074fe03c,Hazelnut Latte,SH00013,,Flavoured,12.90,3.50,2026-06-08
+696b02f69e452e0007708938,Iced Water,,,Classic,2.90,,2026-06-08
+696a5ad900d9400007a3d9d2,Korean Crispy Chicken,,,Sandwiches,19.90,,2026-06-08
+68ad6eac59357c00074fe269,Korean Spicy Fries,SH00059,,Fries,15.90,,2026-06-08
+68ad6eaa59357c00074fdfc4,Latte,SH00003,,Classic,11.90,3.10,2026-06-08
+696a5b8c00d9400007a3ead4,Loaded Fries,,,Fries,17.90,,2026-06-08
+68ad6eab59357c00074fe09c,Matcha,SH00021,,Artisan Matcha,12.90,,2026-06-08
+68ad6eab59357c00074fe100,Matcha (Bottle),SH00029,,Bottles,12.90,,2026-06-08
+696a65179c73a0000701af39,Matcha Affogato,,,Artisan Matcha,12.90,,2026-06-08
+68cabee4971b6900073c5351,Matcha Batik Indulgence,,,Cakes,16.90,,2026-06-08
+68ccc0f3cf5d380007c2ecac,Matcha Burnt Cheesecake,,,,17.90,,2026-06-08
+68ad6eab59357c00074fe0b4,Matcha Cream Latte,SH00023,,Artisan Matcha,14.90,,2026-06-08
+68ad6eac59357c00074fe1c1,Mee Kari,SH00045,,Noodle,16.90,,2026-06-08
+696a56fc00d9400007a38ac8,Mee Kari Asam,,,Noodle,16.90,,2026-06-08
+68b277a81d40b90008880572,Mineral Water,,,Classic,3.00,,2026-06-08
+68ad6ead59357c00074fe311,Mini Biscoff (3 pcs),SH00073,,Cookies,13.90,7.50,2026-06-08
+68ad6ead59357c00074fe2ed,Mini Choc Chip No Nuts (3 pcs),SH00070,,Cookies,13.90,7.50,2026-06-08
+68ad6eac59357c00074fe2e1,Mini Double Choc (3 pcs),SH00069,,Cookies,13.90,9.00,2026-06-08
+68ad6ead59357c00074fe305,Mini Hazelnut Seasalt (3 pcs),SH00072,,Cookies,13.90,7.50,2026-06-08
+68ad6ead59357c00074fe31d,Mini Matcha Macademia (3 pcs),SH00074,,Cookies,13.90,7.50,2026-06-08
+68d92fd799cecc0007dafb92,Mini Pavlova,,,Cakes,8.90,,2026-06-08
+68ad6ead59357c00074fe2f9,Mini Red Velvet (3 pcs),SH00071,,Cookies,13.90,7.50,2026-06-08
+68ad6eab59357c00074fe084,Mint Chocolate,SH00019,,Artisan Choc,12.90,,2026-06-08
+68ad6eab59357c00074fe0f3,Mint Chocolate (Bottle),SH00028,,Bottles,12.90,,2026-06-08
+68ad6eab59357c00074fe0a8,Mint Matcha,SH00022,,Artisan Matcha,12.90,,2026-06-08
+68ad6eab59357c00074fe054,Mocha,SH00015,,Mocha,12.90,,2026-06-08
+68ad6eab59357c00074fe0d9,Mocha (Bottle),SH00026,,Bottles,12.90,,2026-06-08
+696a614eb3191b0007f8cc82,Mont Blanc,,,Classic,14.90,,2026-06-08
+68ad6eac59357c00074fe1cd,Nasi Lemak 2 Sambal,SH00046,,Nasi Lemak,8.90,,2026-06-08
+68ad6eac59357c00074fe1d9,Nasi Lemak 2 Sambal + Ayam Crispy,SH00047,,Nasi Lemak,16.90,,2026-06-08
+696a58976a3ea0000783d756,Nasi Lemak 2 Sambal + Ayam Grilled,,,Nasi Lemak,16.90,,2026-06-08
+68ad6eac59357c00074fe1e5,Nasi Lemak 2 Sambal + Sambal Udang,SH00048,,Nasi Lemak,16.90,,2026-06-08
+696a584c00d9400007a3a20c,Nasi Lemak 2 Sambal + Udang Crispy,,,Nasi Lemak,16.90,,2026-06-08
+68ad6eac59357c00074fe2b1,NYC Double Choc Dulcey,SH00065,,Cookies,13.90,9.00,2026-06-08
+68ad6eac59357c00074fe2d5,NYC Hazelut Seasalt,SH00068,,Cookies,13.90,9.00,2026-06-08
+68ad6eac59357c00074fe2c9,NYC Red Velvet Biscoff,SH00067,,Cookies,13.90,8.00,2026-06-08
+68ad6eac59357c00074fe2bd,NYC Smores,SH00066,,Cookies,13.90,8.00,2026-06-08
+68ad6eab59357c00074fe06c,Peanut Butter Mocha,SH00017,,Mocha,13.90,,2026-06-08
+68ad6eab59357c00074fe131,Peppermint,SH00033,,Gourmet Tea,10.90,,2026-06-08
+68ad6eaa59357c00074fdfb8,Piccolo,SH00002,,Classic,10.90,3.00,2026-06-08
+696a660bb3191b0007f90e9b,Pomegranate Iced Tea,,,Fruit Tea,13.90,,2026-06-08
+68b9a027e20b000007aa0bcc,Red Velvet Cake,,,Cakes,16.90,8.50,2026-06-08
+69981f656865370007e74b72,Refill FreeFlow,,,,0.00,,2026-06-08
+68ad6eac59357c00074fe1fd,Roti Bakar Brioche,SH00050,,Roti Bakar,6.90,,2026-06-08
+68ad6eac59357c00074fe209,Roti Bakar Brioche with Curry,SH00051,,Roti Bakar,6.90,,2026-06-08
+68ad6eac59357c00074fe215,Roti Bakar Brioche with Half Boiled Eggs,SH00052,,Roti Bakar,9.90,,2026-06-08
+68ad6eab59357c00074fe048,Salted Caramel Latte,SH00014,,Flavoured,12.90,3.50,2026-06-08
+68ad6eac59357c00074fe281,Salted Egg Croissant,SH00061,,Croissant,10.90,5.30,2026-06-08
+696a54b76ee05300075b1424,Samyang Pasta,,,Pasta,19.90,,2026-06-08
+68ad6eac59357c00074fe1a9,Smoked Duck Aglio Olio,SH00043,,Pasta,29.90,,2026-06-08
+68ad6eac59357c00074fe245,Smoked Pulled Lamb,SH00056,,Sandwiches,25.90,17.00,2026-06-08
+68ad6eaa59357c00074fdfe8,Spanish Latte,SH00006,,Flavoured,13.90,,2026-06-08
+696a64eab3191b0007f8fe9a,Strawberry Matcha,,,Artisan Matcha,15.90,,2026-06-08
+68ad6eac59357c00074fe22d,Streaky Beef Pesto,SH00054,,Sandwiches,19.90,7.50,2026-06-08
+68ad6eac59357c00074fe155,Summer Lagoon,SH00036,,Mocktails,15.90,,2026-06-08
+68ad6eac59357c00074fe25d,Truffle Fries,SH00058,,Fries,15.90,,2026-06-08
+68ad6eac59357c00074fe191,Truffle Mac n Cheese,SH00041,,Pasta,19.90,,2026-06-08
+68ad6eab59357c00074fe030,Vanilla Latte,SH00012,,Flavoured,12.90,3.50,2026-06-08
+68ad6eab59357c00074fe060,White Mocha,SH00016,,Mocha,12.90,,2026-06-08

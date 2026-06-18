@@ -16,6 +16,11 @@ import { getStorehubFromDB } from "../_lib/storehub-bridge";
 // Consolidated native POS (pos_orders + pos_order_payments) + pickup (orders).
 // Auth: getSession (cookie for web staff, Bearer for native staff).
 
+// Always recompute — never serve a cached body. The native app's HTTP layer
+// (esp. iOS NSURLCache) would otherwise heuristically cache this GET and show a
+// frozen "to-date" total long after sales have moved on.
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -371,7 +376,7 @@ export async function GET(req: NextRequest) {
       pairAdds: curPair, pairAddsDelta: pctChange(curPair, prevPair),
     },
     ...(warn.length ? { warnings: warn } : {}),
-  });
+  }, { headers: { "Cache-Control": "no-store, must-revalidate" } });
 }
 
 // ── local types + tiny helpers ──
