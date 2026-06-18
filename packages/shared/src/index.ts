@@ -194,3 +194,15 @@ export { scrubSecrets, scrubSentryEvent } from "./sentry-scrub";
 
 // ─── Startup env validation ─────────────────────────
 export { validateEnv, formatEnvReport, checkEnvAtBoot, type EnvSpec, type EnvProblems, type EnvCheckResult } from "./env";
+
+// ─── Sales period definitions (one source of truth for "this week/month") ───
+export {
+  mytToday,
+  dowMYT,
+  addDaysMYT,
+  startOfWeekMYT,
+  startOfMonthMYT,
+  endOfMonthMYT,
+  salesPeriodRange,
+} from "./sales-periods";
+export type { SalesMode, SalesRange } from "./sales-periods";

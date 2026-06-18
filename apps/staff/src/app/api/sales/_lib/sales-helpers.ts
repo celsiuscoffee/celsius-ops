@@ -5,6 +5,8 @@
  * Day boundaries + dayparts are MYT (UTC+8, no DST).
  */
 
+import { dowMYT, startOfMonthMYT, endOfMonthMYT } from "@celsius/shared";
+
 // ─── MYT time ──────────────────────────────────────────────────────────────
 export function getMYTToday(): string {
   return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split("T")[0];
@@ -36,17 +38,18 @@ export function addDays(dateStr: string, n: number): string {
   d.setDate(d.getDate() + n);
   return d.toISOString().split("T")[0];
 }
+// Week/month boundaries come from @celsius/shared so the staff dashboard,
+// the backoffice headline, and the comparison chart share ONE definition of
+// "this week" (calendar week, Sun-start) and "this month". These thin wrappers
+// keep the local call sites unchanged.
 export function dayOfWeek(dateStr: string): number {
-  return new Date(`${dateStr}T12:00:00+08:00`).getDay(); // 0=Sun
+  return dowMYT(dateStr); // 0=Sun
 }
 export function monthStart(dateStr: string): string {
-  const d = new Date(`${dateStr}T12:00:00+08:00`);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  return startOfMonthMYT(dateStr);
 }
 export function monthEnd(dateStr: string): string {
-  const d = new Date(`${dateStr}T12:00:00+08:00`);
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, "0")}-${String(last.getDate()).padStart(2, "0")}`;
+  return endOfMonthMYT(dateStr);
 }
 export function daysBetween(from: string, to: string): number {
   const a = new Date(`${from}T12:00:00+08:00`);
