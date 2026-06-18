@@ -30,6 +30,12 @@ Remediation, two parts:
 
 **`storehub-sync` cron removed** from `apps/backoffice/vercel.json` — StoreHub is dead (0 txns since Jun 18), the archive is history-only now, so there's nothing left to pull. (The route handler stays for manual/backfill use.) Remaining 27th housekeeping (cancel the StoreHub account, export portal-only data, drop the Jun-06 backups) is unchanged.
 
+**Data preservation + cleanups done (2026-06-18):**
+- **StoreHub data is fully owned in-DB.** `storehub_sales` (67,535 rows, every row with full `raw` payload, Aug 2025→Jun 17), `storehub_products` (with cost), and EOD blobs survive cancellation. **Rebuilt the `storehub_sale_items` Jun 9–17 gap from `raw`** (3,348 items, all named) — the line-item archive is now complete. See `docs/storehub-export-checklist.md` for the portal-only artifacts (settlements/stock/customers) to export before the 27th.
+- **Par-levels repointed to native** (`inventory/par-levels/calculate`): now reads `pos_order_items` via `Menu.storehubId = product_id` (the native POS reuses StoreHub product ids; 96% of sales quantity maps) instead of the StoreHub-fed `SalesTransaction`. The StoreHub `sync-sales` route + `SalesTransaction` are now unused (kept as historical).
+- **Finance backfill tool built** (`/api/cron/finance-eod-backfill?from=&to=&dryRun=`): reverses each stale StoreHub partial and re-posts native, folding in StoreHub GRABFOOD/BEEP for the days before Grab went native (and skipping it when native Grab exists, to avoid double-count). **Dry-run by default.** Run after the branch deploys: `?from=2026-06-08&to=2026-06-17&dryRun=false`. The native ingestor's idempotency guard now ignores `status='reversed'` so reversed days can re-post.
+- **Consolidation:** not needed as a DB merge. StoreHub data is already consolidated into the main DB as a frozen archive; native POS is now the single source for sales/finance/inventory. (Two Supabase projects exist — main + celsius-inventory — but merging them is orthogonal to StoreHub retirement.)
+
 ---
 
 ## Update — 2026-06-17 (implementation)

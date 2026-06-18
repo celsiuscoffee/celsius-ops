@@ -208,10 +208,13 @@ async function persistDoc(
 export async function ingestOutletNativeEod(
   outlet: { id: string; name: string; loyaltyOutletId: string | null; pickupStoreId: string | null },
   date: string,
+  opts: { includeStorehubDelivery?: boolean } = {},
 ): Promise<IngestEodResult> {
   const { id: outletId, name: outletName } = outlet;
 
-  // Already posted for this outlet/day? (matches storehub-eod's guard.)
+  // Already posted for this outlet/day? (matches storehub-eod's guard.) A
+  // REVERSED journal doesn't count — that's how the cutover backfill re-posts a
+  // day after reversing its stale StoreHub partial.
   const client = getFinanceClient();
   const { data: existingTxn } = await client
     .from("fin_transactions")
@@ -220,6 +223,7 @@ export async function ingestOutletNativeEod(
     .eq("txn_date", date)
     .eq("txn_type", "ar_invoice")
     .eq("posted_by_agent", "ar")
+    .neq("status", "reversed")
     .maybeSingle();
   if (existingTxn?.id) {
     return {
@@ -289,6 +293,30 @@ export async function ingestOutletNativeEod(
   const docId = await persistDoc(companyId, outletId, date, orders);
   const summary = aggregateNativeEod(companyId, outletId, outletName, date, orders, paymentsByOrder, docId);
 
+  // Backfill only: Grab went native (~Jun 17) AFTER the till cutovers, so for
+  // historical cut-over days Grab still flowed through StoreHub. Fold those
+  // StoreHub delivery-channel archive rows into grabfood — UNLESS the day
+  // already has native Grab in pos_orders (counted above; avoid double). For
+  // current dates StoreHub is empty, so this adds nothing.
+  if (opts.includeStorehubDelivery) {
+    const hasNativeGrab = orders.some((o) => classifySourceOverride(o.source) === "grabfood");
+    if (!hasNativeGrab) {
+      const shRows = await prisma.$queryRaw<Array<{ total: number | null }>>`
+        SELECT total FROM storehub_sales
+        WHERE outlet_id = ${outletId}
+          AND NOT is_cancelled
+          AND channel IN ('GRABFOOD', 'BEEP_ORDERS')
+          AND transaction_time >= ${from} AND transaction_time <= ${to}
+      `;
+      const shNet = round2(shRows.reduce((s, r) => s + Number(r.total ?? 0), 0));
+      if (shNet > 0) {
+        summary.channels.grabfood = round2(summary.channels.grabfood + shNet);
+        summary.netSales = round2(summary.netSales + shNet);
+        summary.transactions += shRows.length;
+      }
+    }
+  }
+
   if (summary.netSales <= 0) {
     return { outletId, outletName, date, transactionsFetched: orders.length, skipped: "zero net sales" };
   }
@@ -309,7 +337,7 @@ export async function ingestOutletNativeEod(
 
 // True if `date` (YYYY-MM-DD, MYT) is on/after the outlet's POS-native cutover.
 // Cutover is stored at midnight MYT, so a date-string compare is exact.
-function isNativeOnDate(date: string, cutoverAt: Date | null): boolean {
+export function isNativeOnDate(date: string, cutoverAt: Date | null): boolean {
   if (!cutoverAt) return false;
   const cutoverDateMyt = new Date(cutoverAt.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   return date >= cutoverDateMyt;
