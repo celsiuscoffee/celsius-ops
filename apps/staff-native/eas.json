@@ -14,26 +14,38 @@
       "distribution": "internal",
       "ios": { "simulator": false },
       "channel": "preview",
-      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://37f0a20903a2e28f4f7ec19b46ff5931@o4511247029043200.ingest.us.sentry.io/4511247091630080"
+      }
     },
     "simulator": {
       "distribution": "internal",
       "ios": { "simulator": true },
       "channel": "preview",
-      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://37f0a20903a2e28f4f7ec19b46ff5931@o4511247029043200.ingest.us.sentry.io/4511247091630080"
+      }
     },
     "internal": {
       "distribution": "internal",
       "ios": { "simulator": false },
       "channel": "production",
-      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://37f0a20903a2e28f4f7ec19b46ff5931@o4511247029043200.ingest.us.sentry.io/4511247091630080"
+      }
     },
     "production": {
       "channel": "production",
       "android": {
         "buildType": "app-bundle"
       },
-      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://37f0a20903a2e28f4f7ec19b46ff5931@o4511247029043200.ingest.us.sentry.io/4511247091630080"
+      }
     }
   },
   "submit": {
