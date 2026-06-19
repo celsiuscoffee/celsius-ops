@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
       category: r.category,
       menuIds: r.menuIds,
       channel: r.channel,
+      modifier: r.modifier, // null = any temperature; "Iced" / "Hot"
       perOrder: r.perOrder,
       isActive: r.isActive,
       notes: r.notes,
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
   if (auth.error) return auth.error;
 
   const body = await req.json();
-  const { productId, quantity, scope, category, menuIds, channel, perOrder, isActive, notes } = body;
+  const { productId, quantity, scope, category, menuIds, channel, modifier, perOrder, isActive, notes } = body;
 
   if (!productId) {
     return NextResponse.json({ error: "productId is required" }, { status: 400 });
@@ -108,6 +109,7 @@ export async function POST(req: NextRequest) {
       category: scopeVal === "CATEGORY" ? category || null : null,
       menuIds: scopeVal === "ITEMS" && Array.isArray(menuIds) ? menuIds : [],
       channel: channelVal,
+      modifier: modifier || null,
       perOrder: !!perOrder,
       isActive: isActive ?? true,
       notes: notes || null,

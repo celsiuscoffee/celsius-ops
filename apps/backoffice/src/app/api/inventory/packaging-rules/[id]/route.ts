@@ -25,6 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (Array.isArray(body.menuIds)) data.menuIds = body.menuIds;
   }
   if (body.channel && CHANNELS.includes(body.channel)) data.channel = body.channel;
+  if (body.modifier !== undefined) data.modifier = body.modifier || null;
   if (body.perOrder !== undefined) data.perOrder = !!body.perOrder;
   if (body.isActive !== undefined) data.isActive = !!body.isActive;
   if (body.notes !== undefined) data.notes = body.notes || null;

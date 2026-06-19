@@ -43,6 +43,7 @@ type Rule = {
   category: string | null;
   menuIds: string[];
   channel: Channel;
+  modifier: string | null; // null = any temperature; "Iced" / "Hot"
   perOrder: boolean;
   isActive: boolean;
   notes: string | null;
@@ -63,6 +64,7 @@ type Form = {
   category: string;
   menuIds: string[];
   channel: Channel;
+  modifier: string; // "" = any; "Iced" / "Hot"
   perOrder: boolean;
   isActive: boolean;
   notes: string;
@@ -71,7 +73,7 @@ type Form = {
 const emptyForm: Form = {
   productId: "", productName: "", productSku: "", quantity: "1",
   scope: "ALL", category: "", menuIds: [], channel: "ALL",
-  perOrder: false, isActive: true, notes: "",
+  modifier: "", perOrder: false, isActive: true, notes: "",
 };
 
 export default function PackagingPage() {
@@ -94,7 +96,8 @@ export default function PackagingPage() {
     setForm({
       productId: r.productId, productName: r.productName, productSku: r.productSku,
       quantity: String(r.quantity), scope: r.scope, category: r.category ?? "",
-      menuIds: r.menuIds, channel: r.channel, perOrder: r.perOrder, isActive: r.isActive,
+      menuIds: r.menuIds, channel: r.channel, modifier: r.modifier ?? "",
+      perOrder: r.perOrder, isActive: r.isActive,
       notes: r.notes ?? "",
     });
     setEditingId(r.id); setProductSearch(""); setMenuSearch(""); setDialogOpen(true);
@@ -115,6 +118,7 @@ export default function PackagingPage() {
           category: form.category,
           menuIds: form.menuIds,
           channel: form.channel,
+          modifier: form.modifier,
           perOrder: form.perOrder,
           isActive: form.isActive,
           notes: form.notes,
@@ -229,7 +233,14 @@ export default function PackagingPage() {
                               <code className="text-[11px] text-gray-400">{r.productSku}</code>
                             </div>
                           </td>
-                          <td className="px-2 py-2.5"><Badge variant="outline" className={`text-xs ${CHANNEL_BADGE[r.channel]}`}>{CHANNEL_LABEL[r.channel]}</Badge></td>
+                          <td className="px-2 py-2.5">
+                            <span className="inline-flex items-center gap-1">
+                              <Badge variant="outline" className={`text-xs ${CHANNEL_BADGE[r.channel]}`}>{CHANNEL_LABEL[r.channel]}</Badge>
+                              {r.modifier && (
+                                <Badge variant="outline" className={`text-xs ${r.modifier === "Iced" ? "border-sky-200 bg-sky-50 text-sky-600" : "border-orange-200 bg-orange-50 text-orange-600"}`}>{r.modifier}</Badge>
+                              )}
+                            </span>
+                          </td>
                           <td className="px-2 py-2.5 text-xs text-gray-500">{r.perOrder ? "per order" : "per item"}</td>
                           <td className="px-2 py-2.5 text-right text-gray-700">×{r.quantity}</td>
                           <td className="px-2 py-2.5 text-right font-medium text-gray-900">{r.lineCost > 0 ? formatRM(r.lineCost) : <span className="text-gray-300">—</span>}</td>
@@ -313,6 +324,20 @@ export default function PackagingPage() {
                   <option value="order">Per order</option>
                 </select>
               </div>
+            </div>
+
+            {/* When (temperature) */}
+            <div>
+              <label className="text-sm font-medium text-gray-700">When (temperature)</label>
+              <div className="mt-1.5 flex gap-1.5">
+                {[{ v: "", label: "Any" }, { v: "Iced", label: "Iced" }, { v: "Hot", label: "Hot" }].map((o) => (
+                  <button key={o.v} onClick={() => set("modifier", o.v)}
+                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${form.modifier === o.v ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-gray-400">Matches the Iced / Hot modifier on the sale. “Any” applies to both.</p>
             </div>
 
             {/* Scope */}

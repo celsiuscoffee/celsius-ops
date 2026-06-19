@@ -877,6 +877,11 @@ model PackagingRule {
   // When it applies. DINE_IN/TAKEAWAY/ALL cost into per-item menu COGS;
   // GRAB/DELIVERY are order-source channels (typically per-order overhead).
   channel   PackagingChannel @default(ALL)
+  // Optional order-line modifier condition (matches pos_order_items.modifiers
+  // .name). null = applies regardless of temperature; "Iced" / "Hot" scope the
+  // rule to that variant. This is how Hot vs Iced packaging is captured without
+  // splitting the menu item — the diff lives on the rule, not a duplicate recipe.
+  modifier  String?
   // false = charged per matching item sold (a cup per drink);
   // true  = charged once per order (a carrier bag per Grab order).
   perOrder  Boolean @default(false)

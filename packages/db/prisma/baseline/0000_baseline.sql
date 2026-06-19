@@ -592,6 +592,7 @@ CREATE TABLE "PackagingRule" (
     "category" TEXT,
     "menuIds" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "channel" "PackagingChannel" NOT NULL DEFAULT 'ALL',
+    "modifier" TEXT,
     "perOrder" BOOLEAN NOT NULL DEFAULT false,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "notes" TEXT,
