@@ -850,6 +850,11 @@ model MenuIngredient {
   // product can appear once per (menu, serviceMode) — e.g. a straw used both
   // ways is one ALL line, while a takeaway-only cup is a separate TAKEAWAY line.
   serviceMode  ServiceMode @default(ALL)
+  // Optional temperature condition (matches pos_order_items.modifiers[].name).
+  // null = applies to both; "Iced" / "Hot" scope the line to that variant — so a
+  // recipe can differ by temperature (e.g. vanilla syrup on Hot, caramel on Iced)
+  // without duplicating the whole recipe.
+  modifier     String?
 
   @@unique([menuId, productId, serviceMode])
 }

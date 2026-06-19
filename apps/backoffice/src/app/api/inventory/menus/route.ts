@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
         qty: Number(ing.quantityUsed),
         uom: ing.uom,
         serviceMode: ing.serviceMode, // ALL | DINE_IN | TAKEAWAY
-        modifier: null, // BOM lines apply regardless of temperature
+        modifier: ing.modifier, // null = both temperatures; "Iced" / "Hot"
         kind: ing.product.itemType === "PACKAGING" ? "packaging" : "ingredient",
         source: "bom",
         unitCost: Math.round(unitCost * 10000) / 10000,
@@ -133,49 +133,42 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Recipe (ingredient) cost — temperature-agnostic. Channel-tagged ingredient
-    // BOM lines are rare but supported.
-    let ingredientCost = 0;
-    let ingredientDineExtra = 0;
-    let ingredientTakeExtra = 0;
-    let packagingCount = 0;
-    for (const ing of ingredients) {
-      if (ing.kind === "packaging") {
-        packagingCount += 1;
-      } else if (ing.serviceMode === "DINE_IN") ingredientDineExtra += ing.cost;
-      else if (ing.serviceMode === "TAKEAWAY") ingredientTakeExtra += ing.cost;
-      else ingredientCost += ing.cost;
-    }
-    const recipeCost = round2(ingredientCost + ingredientDineExtra + ingredientTakeExtra);
+    // A line applies to a given temperature × channel when its channel is ALL or
+    // C, and its temperature is null (both) or V. Works for ingredient AND
+    // packaging lines, so a recipe can differ by Hot/Iced (e.g. different syrup)
+    // just like packaging does.
+    const lineApplies = (l: Line, variant: "Hot" | "Iced", chan: "DINE_IN" | "TAKEAWAY") =>
+      (l.serviceMode === "ALL" || l.serviceMode === chan) &&
+      (l.modifier == null || l.modifier === variant);
 
-    // Packaging by (temperature × channel). A line applies to variant V and
-    // channel C when its channel is ALL or C, and its modifier is null (any) or V.
-    const pkgFor = (variant: "Hot" | "Iced", chan: "DINE_IN" | "TAKEAWAY") =>
-      round2(
-        ingredients
-          .filter((l) => l.kind === "packaging"
-            && (l.serviceMode === "ALL" || l.serviceMode === chan)
-            && (l.modifier == null || l.modifier === variant))
-          .reduce((s, l) => s + l.cost, 0),
-      );
+    let packagingCount = 0;
+    let ingredientTotal = 0; // recipe list total (informational; matrix is authoritative)
+    for (const l of ingredients) {
+      if (l.kind === "packaging") packagingCount += 1;
+      else ingredientTotal += l.cost;
+    }
 
     const sellingPrice = Number(m.sellingPrice ?? 0);
     const pct = (cogs: number) => (sellingPrice > 0 ? round1((cogs / sellingPrice) * 100) : 0);
-    const ingBase = (chan: "DINE_IN" | "TAKEAWAY") =>
-      ingredientCost + (chan === "DINE_IN" ? ingredientDineExtra : ingredientTakeExtra);
 
     // 2×2 all-in COGS matrix: temperature (Hot/Iced) × channel (dine-in/takeaway).
     const cell = (variant: "Hot" | "Iced", chan: "DINE_IN" | "TAKEAWAY") => {
-      const pkg = pkgFor(variant, chan);
-      const cogs = round2(ingBase(chan) + pkg);
-      return { pkg, cogs, cogsPercent: pct(cogs) };
+      let cogs = 0;
+      let pkg = 0;
+      for (const l of ingredients) {
+        if (!lineApplies(l, variant, chan)) continue;
+        cogs += l.cost;
+        if (l.kind === "packaging") pkg += l.cost;
+      }
+      cogs = round2(cogs);
+      return { pkg: round2(pkg), cogs, cogsPercent: pct(cogs) };
     };
     const matrix = {
       hot: { dineIn: cell("Hot", "DINE_IN"), takeaway: cell("Hot", "TAKEAWAY") },
       iced: { dineIn: cell("Iced", "DINE_IN"), takeaway: cell("Iced", "TAKEAWAY") },
     };
-    // Does packaging actually differ by temperature for this item?
-    const hasIcedHotSplit = ingredients.some((l) => l.kind === "packaging" && l.modifier != null);
+    // Does anything (ingredient or packaging) differ by temperature for this item?
+    const hasIcedHotSplit = ingredients.some((l) => l.modifier != null);
     // Headline = worst case across the matrix (keeps High-COGS sort meaningful).
     const allIn = [matrix.hot.dineIn, matrix.hot.takeaway, matrix.iced.dineIn, matrix.iced.takeaway];
     const worst = allIn.reduce((a, b) => (b.cogs > a.cogs ? b : a));
@@ -185,7 +178,7 @@ export async function GET(request: NextRequest) {
       name: m.name,
       category: m.category ?? "",
       sellingPrice,
-      ingredientCost: recipeCost,
+      ingredientCost: round2(ingredientTotal),
       matrix,
       hasIcedHotSplit,
       cogs: worst.cogs,

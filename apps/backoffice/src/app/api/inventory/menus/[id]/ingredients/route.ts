@@ -9,9 +9,10 @@ const SERVICE_MODES: ServiceMode[] = ["ALL", "DINE_IN", "TAKEAWAY"];
  * PUT /api/menus/[id]/ingredients
  *
  * Replace all BOM lines (ingredients + packaging) for a menu item.
- * Body: { ingredients: [{ productId, quantityUsed, uom, serviceMode? }] }
- * serviceMode defaults to ALL; packaging lines use DINE_IN / TAKEAWAY to scope
- * a line to one fulfillment channel.
+ * Body: { ingredients: [{ productId, quantityUsed, uom, serviceMode?, modifier? }] }
+ * serviceMode defaults to ALL (DINE_IN / TAKEAWAY scope a line to one channel);
+ * modifier is an optional temperature condition ("Iced" / "Hot"; null = both) so
+ * a recipe can differ by temperature without duplicating it.
  */
 export async function PUT(
   req: NextRequest,
@@ -37,7 +38,7 @@ export async function PUT(
   await prisma.$transaction([
     prisma.menuIngredient.deleteMany({ where: { menuId } }),
     ...ingredients.map(
-      (ing: { productId: string; quantityUsed: number; uom: string; serviceMode?: string }) =>
+      (ing: { productId: string; quantityUsed: number; uom: string; serviceMode?: string; modifier?: string }) =>
         prisma.menuIngredient.create({
           data: {
             menuId,
@@ -47,6 +48,7 @@ export async function PUT(
             serviceMode: SERVICE_MODES.includes(ing.serviceMode as ServiceMode)
               ? (ing.serviceMode as ServiceMode)
               : "ALL",
+            modifier: ing.modifier ? ing.modifier : null,
           },
         }),
     ),

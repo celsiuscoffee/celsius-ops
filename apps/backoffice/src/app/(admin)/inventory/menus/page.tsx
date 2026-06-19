@@ -67,6 +67,7 @@ type EditIngredient = {
   quantityUsed: number;
   uom: string;
   serviceMode: ServiceMode;
+  modifier: string; // "" = both temperatures; "Iced" / "Hot"
   kind: "ingredient" | "packaging";
 };
 
@@ -145,6 +146,7 @@ export default function MenusPage() {
           quantityUsed: ing.qty,
           uom: ing.uom,
           serviceMode: ing.serviceMode,
+          modifier: ing.modifier ?? "",
           kind: ing.kind,
         }))
     );
@@ -177,6 +179,12 @@ export default function MenusPage() {
     );
   };
 
+  const updateIngredientModifier = (productId: string, modifier: string) => {
+    setEditIngredients((prev) =>
+      prev.map((ing) => (ing.productId === productId ? { ...ing, modifier } : ing))
+    );
+  };
+
   const addIngredient = (product: ProductOption) => {
     if (editIngredients.some((ing) => ing.productId === product.id)) return;
     setEditIngredients((prev) => [
@@ -188,6 +196,7 @@ export default function MenusPage() {
         quantityUsed: 0,
         uom: product.baseUom,
         serviceMode: "ALL",
+        modifier: "",
         kind: product.itemType === "PACKAGING" ? "packaging" : "ingredient",
       },
     ]);
@@ -207,6 +216,7 @@ export default function MenusPage() {
             quantityUsed: ing.quantityUsed,
             uom: ing.uom,
             serviceMode: ing.serviceMode,
+            modifier: ing.modifier,
           })),
         }),
       });
@@ -452,6 +462,7 @@ export default function MenusPage() {
                                   <th className="pb-1 text-left font-medium w-20">SKU</th>
                                   <th className="pb-1 w-28 text-right font-medium">Qty</th>
                                   <th className="pb-1 w-16 text-center font-medium">UOM</th>
+                                  <th className="pb-1 w-24 text-center font-medium">When</th>
                                   <th className="pb-1 w-28 text-center font-medium">Channel</th>
                                   <th className="pb-1 w-8"></th>
                                 </tr>
@@ -485,6 +496,17 @@ export default function MenusPage() {
                                     </td>
                                     <td className="py-1.5 text-center">
                                       <select
+                                        value={ing.modifier}
+                                        onChange={(e) => updateIngredientModifier(ing.productId, e.target.value)}
+                                        className="rounded border border-gray-200 px-1.5 py-1 text-xs text-gray-600"
+                                      >
+                                        <option value="">Both</option>
+                                        <option value="Iced">Iced</option>
+                                        <option value="Hot">Hot</option>
+                                      </select>
+                                    </td>
+                                    <td className="py-1.5 text-center">
+                                      <select
                                         value={ing.serviceMode}
                                         onChange={(e) => updateIngredientMode(ing.productId, e.target.value as ServiceMode)}
                                         className="rounded border border-gray-200 px-1.5 py-1 text-xs text-gray-600"
@@ -503,7 +525,7 @@ export default function MenusPage() {
                                 ))}
                                 {editIngredients.length === 0 && (
                                   <tr>
-                                    <td colSpan={6} className="py-4 text-center text-gray-400">
+                                    <td colSpan={7} className="py-4 text-center text-gray-400">
                                       No items yet. Search below to add ingredients or packaging.
                                     </td>
                                   </tr>
