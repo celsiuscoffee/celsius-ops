@@ -33,7 +33,12 @@ import { supabase } from "./supabase";
 // Statuses that are "in the kitchen / awaiting handover" — what the
 // cashier still needs to act on. completed / cancelled / failed drop off.
 const PICKUP_LIVE = ["paid", "sent_to_kitchen", "preparing", "ready"];
-const GRAB_LIVE = ["sent_to_kitchen", "preparing", "ready"];
+// "open" is included so a Grab order that an out-of-order webhook push re-maps
+// to "open" still surfaces here for the cashier to action, instead of silently
+// vanishing off the live panel — which is what stranded orders at "open" with
+// no way to advance them. Bounded by GRAB_WINDOW_MS below so a backlog of stale
+// "open" orders can't flood the live KDS (and its serving-time alarm).
+const GRAB_LIVE = ["open", "sent_to_kitchen", "preparing", "ready"];
 // Counter orders are status='completed' from the start, so "live" is served_at
 // IS NULL — but a voided/refunded sale must still drop off. These statuses are
 // "dead" and are filtered out regardless of served_at.
@@ -42,6 +47,10 @@ const COUNTER_DEAD = new Set(["cancelled", "failed", "refunded", "voided"]);
 // mark served eventually falls off the live queue (and stops the alarm) instead
 // of lingering — and the partial-index query stays bounded.
 const COUNTER_WINDOW_MS = 6 * 60 * 60 * 1000; // last 6h
+// Bound the live Grab list to recent orders. GrabFood orders fulfil within ~1h,
+// so a live order is always well inside this window; the bound just stops a
+// historical backlog of un-advanced "open" orders from flooding the panel.
+const GRAB_WINDOW_MS = 12 * 60 * 60 * 1000; // last 12h
 const SAFETY_REFRESH_MS = 60 * 1000; // backstop refetch if a Realtime event is dropped
 
 export type KdsSource = "pickup" | "grab" | "counter";
@@ -131,12 +140,14 @@ export function useOrdersPanel(outletId: string | null | undefined) {
     }
 
     // ── Grab orders + their items ──
+    const grabSince = new Date(Date.now() - GRAB_WINDOW_MS).toISOString();
     const { data: grabRows } = await supabase
       .from("pos_orders")
       .select("id, order_number, status, order_type, total, created_at")
       .eq("source", "grabfood")
       .eq("outlet_id", outletId)
       .in("status", GRAB_LIVE)
+      .gte("created_at", grabSince)
       .order("created_at", { ascending: true });
     const grabs = (grabRows ?? []) as GrabRow[];
 

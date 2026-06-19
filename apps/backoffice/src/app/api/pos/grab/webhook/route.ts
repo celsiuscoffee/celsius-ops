@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { acceptRejectOrder, verifyWebhookSignature } from "@/lib/grab";
 import { verifyGrabPartnerToken } from "@/lib/grab-partner";
+import { mapGrabStatusToPOS, shouldApplyStatus, type GrabOrderState } from "@/lib/grab-order-status";
 import {
   indexProductsByGrabKeys,
   resolveGrabItemProduct,
@@ -71,9 +72,7 @@ interface GrabWebhookPayload {
   paymentType: "CASH" | "CASHLESS";
   orderTime: string;
   submitTime: string;
-  orderState:
-    | "PENDING" | "ACCEPTED" | "DRIVER_ALLOCATED" | "DRIVER_ARRIVED"
-    | "COLLECTED" | "DELIVERED" | "CANCELLED" | "FAILED";
+  orderState: GrabOrderState;
   currency: { code: string; symbol: string; exponent: number };
   featureFlags: Record<string, boolean>;
   items: GrabOrderItem[];
@@ -85,17 +84,6 @@ interface GrabWebhookPayload {
   price?: GrabOrderPrice;
   orderPrice?: GrabOrderPrice; // legacy / simulator alias
   orderType: "DELIVERY" | "PICKUP" | "DINE_IN";
-}
-
-function mapGrabStatusToPOS(state: GrabWebhookPayload["orderState"]): string {
-  switch (state) {
-    case "PENDING": case "DRIVER_ALLOCATED": return "open";
-    case "ACCEPTED": return "sent_to_kitchen";
-    case "DRIVER_ARRIVED": return "ready";
-    case "COLLECTED": case "DELIVERED": return "completed";
-    case "CANCELLED": case "FAILED": return "cancelled";
-    default: return "open";
-  }
 }
 
 // Grab / the simulator put the order note in different places across API
@@ -154,12 +142,27 @@ export async function POST(request: NextRequest) {
       .from("pos_orders").select("id, status").eq("external_id", orderID).maybeSingle();
     if (existing) {
       const newStatus = mapGrabStatusToPOS(orderState);
-      if (existing.status !== newStatus) {
+      const apply = shouldApplyStatus(existing.status, newStatus);
+      if (apply) {
         await supabase.from("pos_orders")
           .update({ status: newStatus, updated_at: new Date().toISOString() })
           .eq("id", existing.id);
+      } else {
+        // Logged so a blocked backward push is visible in the webhook trace
+        // instead of looking identical to a no-op.
+        console.log(
+          `[grab:webhook] status push not applied orderID=${orderID} from=${existing.status} to=${newStatus} state=${orderState}`,
+        );
       }
-      return NextResponse.json({ success: true, action: "updated", orderId: existing.id, state: orderState });
+      return NextResponse.json({
+        success: true,
+        action: apply ? "updated" : "skipped",
+        orderId: existing.id,
+        from: existing.status,
+        to: newStatus,
+        applied: apply,
+        state: orderState,
+      });
     }
 
     // 2. Create whenever the payload carries items (Submit Order). Push
@@ -388,21 +391,41 @@ export async function POST(request: NextRequest) {
     //    so this is best-effort: a failed or duplicate accept never fails the
     //    webhook. Uses the OUTBOUND OAuth pair (us → Grab).
     let grabAccepted = false;
+    // Record WHY an order did/didn't get auto-accepted so a silent outbound
+    // failure (bad creds, wrong GRAB_ENV, OAuth error) is a queryable fact on the
+    // order — not a console.warn that vanishes. This is the signal that this whole
+    // class of "stuck at open" bug went undetected for days.
+    let acceptStatus: string;
+    let acceptError: string | null = null;
     if (process.env.GRAB_CLIENT_ID && process.env.GRAB_CLIENT_SECRET) {
       try {
         await acceptRejectOrder(orderID, "ACCEPTED");
         grabAccepted = true;
+        acceptStatus = "accepted";
         console.log(`[grab:webhook] auto-accepted orderID=${orderID}`);
       } catch (e) {
-        console.warn(
-          `[grab:webhook] auto-accept failed orderID=${orderID}:`,
-          e instanceof Error ? e.message : e,
-        );
+        acceptStatus = "failed";
+        acceptError = (e instanceof Error ? e.message : String(e)).slice(0, 500);
+        console.warn(`[grab:webhook] auto-accept failed orderID=${orderID}:`, acceptError);
       }
+    } else {
+      acceptStatus = "skipped_no_creds";
+      console.warn(`[grab:webhook] auto-accept skipped orderID=${orderID} — GRAB_CLIENT_ID/SECRET not set`);
+    }
+
+    // Persist the accept outcome. Best-effort + separate from the order insert:
+    // if the columns aren't live yet (PostgREST schema-cache miss on a fresh
+    // migration) this fails harmlessly and the order is still created/printed.
+    {
+      const { error: acceptColErr } = await supabase
+        .from("pos_orders")
+        .update({ grab_accept_status: acceptStatus, grab_accept_error: acceptError })
+        .eq("id", order.id);
+      if (acceptColErr) console.warn("[grab:webhook] accept-outcome write skipped:", acceptColErr.message);
     }
 
     console.log(
-      `[grab:webhook] CREATED order=${order.id} external=${orderID} outlet=${outletId} total=${total} accepted=${grabAccepted}`,
+      `[grab:webhook] CREATED order=${order.id} external=${orderID} outlet=${outletId} total=${total} accept=${acceptStatus}`,
     );
     return NextResponse.json({
       success: true,
@@ -410,6 +433,7 @@ export async function POST(request: NextRequest) {
       orderId: order.id,
       orderNumber: `GF-${payload.shortOrderNumber}`,
       grabAccepted,
+      acceptStatus,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
