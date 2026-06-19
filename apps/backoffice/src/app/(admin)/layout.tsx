@@ -16,6 +16,7 @@ import {
   ClipboardList,
   UtensilsCrossed,
   BarChart3,
+  Power,
   Users,
   Package,
   PackageOpen,
@@ -189,6 +190,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Compare",             href: "/sales/compare",           icon: <Scale className={ICON_SIZE} />,           moduleKey: "sales:dashboard" },
       { label: "Reports",             href: "/pos/reports",             icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "pickup:settings" },
       { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,           moduleKey: "pickup:settings" },
+      { label: "Store / Menu Status", href: "/pos/store-menu-status",    icon: <Power className={ICON_SIZE} />,           moduleKey: "pickup:settings" },
     ],
   },
   {
