@@ -268,13 +268,40 @@ export async function buildByChannel(outlets: OutletPick[], from: string, to: st
   };
 }
 
-// Per-menu BOM cost (RM), keyed by lower(name). Mirrors /api/inventory/menus:
-// COGS = Σ ingredient qty × cheapest non-ADHOC supplier price ÷ pack conversion.
-// This is the canonical cost source — products.cost is empty and the StoreHub
-// catalog only ever costed ~28 items. Menus with no recipe → cost 0 (100% GP).
-async function bomCostByName(): Promise<Map<string, number>> {
-  const [menus, supplierProducts] = await Promise.all([
-    prisma.menu.findMany({ select: { name: true, ingredients: { select: { productId: true, quantityUsed: true } } } }),
+// Per-menu cost model, keyed by lower(name) — the reliable join across sources.
+//   • ingredientCostByName — recipe (BOM) unit cost: Σ ingredient qty × cheapest
+//     non-ADHOC supplier price ÷ pack conversion. (products.cost is empty.)
+//   • pkgUnitCost(name, channel, temp) — packaging unit cost, applied exactly like
+//     the Menu BOM / Packaging-rules screens: conditional on channel (dine-in vs
+//     takeaway) and temperature (Hot/Iced), so a dine-in hot drink and a takeaway
+//     iced drink carry different packaging. Sources: PACKAGING-type BOM lines +
+//     per-item PackagingRule rows (per-order rules like a Grab bag are excluded —
+//     they're order-level, not per item). Menus with no recipe → ingredient 0.
+type PkgChannel = "ALL" | "DINE_IN" | "TAKEAWAY";
+type PkgEntry = { cost: number; channel: PkgChannel; modifier: "Iced" | "Hot" | null };
+type CostModel = {
+  ingredientCostByName: Map<string, number>;
+  pkgUnitCost: (nameKey: string, channel: "DINE_IN" | "TAKEAWAY", temp: "Iced" | "Hot") => number;
+};
+
+async function buildCostModel(): Promise<CostModel> {
+  const [menus, supplierProducts, rules] = await Promise.all([
+    prisma.menu.findMany({
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        ingredients: {
+          select: {
+            productId: true,
+            quantityUsed: true,
+            serviceMode: true,
+            modifier: true,
+            product: { select: { itemType: true } },
+          },
+        },
+      },
+    }),
     prisma.supplierProduct.findMany({
       where: { isActive: true },
       select: {
@@ -284,7 +311,12 @@ async function bomCostByName(): Promise<Map<string, number>> {
         supplier: { select: { supplierCode: true } },
       },
     }),
+    prisma.packagingRule.findMany({
+      where: { isActive: true, perOrder: false },
+      select: { productId: true, quantity: true, scope: true, category: true, menuIds: true, channel: true, modifier: true },
+    }),
   ]);
+
   const costPerBase = new Map<string, number>();
   for (const sp of supplierProducts) {
     if (sp.supplier?.supplierCode === "ADHOC") continue; // RM0 placeholder supplier
@@ -296,16 +328,70 @@ async function bomCostByName(): Promise<Map<string, number>> {
     const ex = costPerBase.get(sp.productId);
     if (ex == null || c < ex) costPerBase.set(sp.productId, c);
   }
-  const byName = new Map<string, number>();
+
+  // GRAB / DELIVERY / TAKEAWAY all collapse to "takeaway" packaging (disposable
+  // cup etc.); only dine-in is distinct. Mirrors the Menu BOM 2×2 matrix.
+  const normChan = (c: string): PkgChannel => (c === "ALL" ? "ALL" : c === "DINE_IN" ? "DINE_IN" : "TAKEAWAY");
+
+  const ingredientCostByName = new Map<string, number>();
+  const pkgByName = new Map<string, PkgEntry[]>();
+  const keyByMenuId = new Map<string, string>();
+  const keysByCategory = new Map<string, string[]>();
+  const allKeys: string[] = [];
+  const addEntry = (key: string, e: PkgEntry) => {
+    const arr = pkgByName.get(key);
+    if (arr) arr.push(e);
+    else pkgByName.set(key, [e]);
+  };
+
   for (const m of menus) {
     if (!m.name) continue;
-    const cogs = m.ingredients.reduce(
-      (s, ing) => s + Number(ing.quantityUsed) * (costPerBase.get(ing.productId) ?? 0),
-      0,
-    );
-    byName.set(m.name.trim().toLowerCase(), Math.round(cogs * 100) / 100);
+    const key = m.name.trim().toLowerCase();
+    keyByMenuId.set(m.id, key);
+    allKeys.push(key);
+    if (m.category) {
+      const arr = keysByCategory.get(m.category);
+      if (arr) arr.push(key);
+      else keysByCategory.set(m.category, [key]);
+    }
+    let ing = 0;
+    for (const li of m.ingredients) {
+      const unit = costPerBase.get(li.productId) ?? 0;
+      const c = Number(li.quantityUsed) * unit;
+      if (li.product.itemType === "PACKAGING") {
+        if (c > 0) addEntry(key, { cost: c, channel: normChan(li.serviceMode), modifier: (li.modifier as "Iced" | "Hot" | null) ?? null });
+      } else {
+        ing += c;
+      }
+    }
+    ingredientCostByName.set(key, round2(ing));
   }
-  return byName;
+
+  for (const r of rules) {
+    const unit = costPerBase.get(r.productId) ?? 0;
+    const cost = Number(r.quantity) * unit;
+    if (cost <= 0) continue;
+    const entry: PkgEntry = { cost, channel: normChan(r.channel), modifier: (r.modifier as "Iced" | "Hot" | null) ?? null };
+    const keys =
+      r.scope === "ALL" ? allKeys :
+      r.scope === "CATEGORY" ? (keysByCategory.get(r.category ?? "") ?? []) :
+      r.menuIds.map((id) => keyByMenuId.get(id)).filter((k): k is string => !!k);
+    for (const k of keys) addEntry(k, entry);
+  }
+
+  const pkgUnitCost = (nameKey: string, channel: "DINE_IN" | "TAKEAWAY", temp: "Iced" | "Hot"): number => {
+    const entries = pkgByName.get(nameKey);
+    if (!entries) return 0;
+    let s = 0;
+    for (const e of entries) {
+      if (e.channel !== "ALL" && e.channel !== channel) continue;
+      if (e.modifier !== null && e.modifier !== temp) continue;
+      s += e.cost;
+    }
+    return s;
+  };
+
+  return { ingredientCostByName, pkgUnitCost };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -320,11 +406,11 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
   const toD = dayEnd(to);
 
   // Category from our catalog (the StoreHub archive fills gaps); unit cost from
-  // the BOM (recipe). Keyed by lower(name) — the reliable join across sources.
-  const [{ data: products }, { data: shProducts }, costByName] = await Promise.all([
+  // the cost model (recipe + packaging). Keyed by lower(name) across sources.
+  const [{ data: products }, { data: shProducts }, costModel] = await Promise.all([
     supabase.from("products").select("name, category"),
     supabase.from("storehub_products").select("name, category"),
-    bomCostByName(),
+    buildCostModel(),
   ]);
   const norm = (n: string) => n.trim().toLowerCase();
   const prettyCat = (c: string) =>
@@ -340,13 +426,28 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
     // our catalog is the canonical category source — it overrides StoreHub's.
     if (name && p.category) catByName.set(norm(name), prettyCat(p.category as string));
   }
-  const refByName = (name: string) => ({
-    category: catByName.get(norm(name)) ?? "Uncategorized",
-    cost: costByName.get(norm(name)) ?? 0,
-  });
+  const catOf = (name: string) => catByName.get(norm(name)) ?? "Uncategorized";
+
+  // Temperature drives which cup/lid/straw rule applies. POS lines carry it in
+  // modifiers ([{name:"Iced"|"Hot"}]); pickup + archive don't record it, so we
+  // fall back to Iced — the dominant variant — to keep packaging costed.
+  const tempFromModifiers = (mods: unknown): "Iced" | "Hot" => {
+    if (Array.isArray(mods)) {
+      for (const m of mods) {
+        const n = m && typeof m === "object" && "name" in m ? String((m as { name: unknown }).name) : "";
+        if (n === "Iced") return "Iced";
+        if (n === "Hot") return "Hot";
+      }
+    }
+    return "Iced";
+  };
+  // All-in unit cost (RM) = recipe + packaging for this line's channel & temp.
+  const unitCost = (name: string, channel: "DINE_IN" | "TAKEAWAY", temp: "Iced" | "Hot") =>
+    (costModel.ingredientCostByName.get(norm(name)) ?? 0) + costModel.pkgUnitCost(norm(name), channel, temp);
 
   type ShRow = { name: string | null; quantity: unknown; total: unknown; ts: Date; channel: string | null };
-  type NativeRow = { product_name: string | null; quantity: unknown; item_total: unknown };
+  type PosRow = { product_name: string | null; quantity: unknown; item_total: unknown; fulfillment: string | null; source: string | null; modifiers: unknown };
+  type AppRow = { product_name: string | null; quantity: unknown; item_total: unknown; order_type: string | null; modifiers: unknown };
   const empty = Promise.resolve([] as never[]);
 
   // One outlet's lines; its three source queries run concurrently.
@@ -367,8 +468,8 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
           : empty,
         // POS-native — at/after cutover (no native rows exist pre-cutover).
         o.loyaltyOutletId
-          ? prisma.$queryRaw<NativeRow[]>`
-              SELECT i.product_name, i.quantity, i.item_total
+          ? prisma.$queryRaw<PosRow[]>`
+              SELECT i.product_name, i.quantity, i.item_total, i.fulfillment, o.source, i.modifiers
               FROM pos_order_items i
               JOIN pos_orders o ON o.id = i.order_id
               WHERE o.outlet_id = ${o.loyaltyOutletId}
@@ -379,8 +480,8 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
           : empty,
         // Pickup app — always included (never lived in StoreHub).
         o.pickupStoreId
-          ? prisma.$queryRaw<NativeRow[]>`
-              SELECT i.product_name, i.quantity, i.item_total
+          ? prisma.$queryRaw<AppRow[]>`
+              SELECT i.product_name, i.quantity, i.item_total, o.order_type, i.modifiers
               FROM order_items i
               JOIN orders o ON o.id = i.order_id
               WHERE o.store_id = ${o.pickupStoreId}
@@ -395,13 +496,19 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
         const tsMs = r.ts instanceof Date ? r.ts.getTime() : new Date(String(r.ts)).getTime();
         if (!(tsMs < cutoverMs || isExternalDelivery(r.channel))) continue; // cutover gate
         const name = (r.name || "Unknown").trim();
-        const ref = refByName(name);
-        out.push({ name, category: ref.category, qty: Number(r.quantity) || 0, sales: Number(r.total) || 0, cost: ref.cost });
+        const channel = /dine/i.test(r.channel ?? "") ? "DINE_IN" : "TAKEAWAY";
+        out.push({ name, category: catOf(name), qty: Number(r.quantity) || 0, sales: Number(r.total) || 0, cost: unitCost(name, channel, "Iced") });
       }
-      for (const r of [...(posRows as NativeRow[]), ...(appRows as NativeRow[])]) {
+      for (const r of posRows as PosRow[]) {
         const name = (r.product_name || "Unknown").trim();
-        const ref = refByName(name);
-        out.push({ name, category: ref.category, qty: Number(r.quantity) || 0, sales: (Number(r.item_total) || 0) / 100, cost: ref.cost });
+        // Grab is delivery (takeaway-style packaging) regardless of fulfillment tag.
+        const channel = r.source === "grabfood" ? "TAKEAWAY" : r.fulfillment === "dine_in" ? "DINE_IN" : "TAKEAWAY";
+        out.push({ name, category: catOf(name), qty: Number(r.quantity) || 0, sales: (Number(r.item_total) || 0) / 100, cost: unitCost(name, channel, tempFromModifiers(r.modifiers)) });
+      }
+      for (const r of appRows as AppRow[]) {
+        const name = (r.product_name || "Unknown").trim();
+        const channel = r.order_type === "dine_in" ? "DINE_IN" : "TAKEAWAY";
+        out.push({ name, category: catOf(name), qty: Number(r.quantity) || 0, sales: (Number(r.item_total) || 0) / 100, cost: unitCost(name, channel, tempFromModifiers(r.modifiers)) });
       }
       return out;
     }),
@@ -410,10 +517,10 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
   return perOutlet.flat();
 }
 
-const GP_TIP = "Gross profit = sales − (qty × BOM unit cost). Items with no recipe show 100%.";
-const COGS_TIP = "Cost of goods sold = qty × BOM unit cost (sales − gross profit). Items with no recipe show 0.";
+const GP_TIP = "Gross profit = sales − COGS (recipe + packaging cost). Items with no recipe or packaging show 100%.";
+const COGS_TIP = "Cost of goods sold = qty × unit cost (recipe ingredients + packaging). Packaging (cup / lid / straw) is applied per the sale's channel (dine-in vs takeaway) and Hot/Iced.";
 const COST_NOTE =
-  "Unit cost / COGS come from the BOM recipe (ingredient supplier prices). Items without a recipe yet read as 0 cost / 100% gross profit.";
+  "Unit cost / COGS come from the BOM recipe (ingredient supplier prices) plus packaging rules, applied by each sale's channel (dine-in vs takeaway) and temperature (Hot/Iced). Where temperature isn't recorded (pickup app, archived sales) it defaults to Iced. Per-order packaging (e.g. a Grab carrier bag) isn't included. Items without a recipe read as recipe cost 0.";
 
 export async function buildByProduct(outlets: OutletPick[], from: string, to: string): Promise<ReportResult> {
   const items = await gatherItems(outlets, from, to);
