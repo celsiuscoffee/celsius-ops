@@ -579,6 +579,7 @@ CREATE TABLE "MenuIngredient" (
     "quantityUsed" DECIMAL(65,30) NOT NULL,
     "uom" TEXT NOT NULL,
     "serviceMode" "ServiceMode" NOT NULL DEFAULT 'ALL',
+    "modifier" TEXT,
 
     CONSTRAINT "MenuIngredient_pkey" PRIMARY KEY ("id")
 );
