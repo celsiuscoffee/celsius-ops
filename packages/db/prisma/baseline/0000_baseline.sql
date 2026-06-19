@@ -53,6 +53,12 @@ CREATE TYPE "AdjustmentType" AS ENUM ('WASTAGE', 'BREAKAGE', 'EXPIRED', 'THEFT',
 CREATE TYPE "TransferStatus" AS ENUM ('DRAFT', 'PENDING_APPROVAL', 'PENDING', 'APPROVED', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED', 'CANCELLED');
 
 -- CreateEnum
+CREATE TYPE "PackagingScope" AS ENUM ('ALL', 'CATEGORY', 'ITEMS');
+
+-- CreateEnum
+CREATE TYPE "PackagingChannel" AS ENUM ('ALL', 'DINE_IN', 'TAKEAWAY', 'GRAB', 'DELIVERY');
+
+-- CreateEnum
 CREATE TYPE "SyncType" AS ENUM ('PRODUCTS', 'SALES', 'EMPLOYEES');
 
 -- CreateEnum
@@ -575,6 +581,25 @@ CREATE TABLE "MenuIngredient" (
     "serviceMode" "ServiceMode" NOT NULL DEFAULT 'ALL',
 
     CONSTRAINT "MenuIngredient_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "PackagingRule" (
+    "id" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "quantity" DECIMAL(65,30) NOT NULL DEFAULT 1,
+    "scope" "PackagingScope" NOT NULL DEFAULT 'ALL',
+    "category" TEXT,
+    "menuIds" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "channel" "PackagingChannel" NOT NULL DEFAULT 'ALL',
+    "modifier" TEXT,
+    "perOrder" BOOLEAN NOT NULL DEFAULT false,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "PackagingRule_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1318,6 +1343,15 @@ CREATE UNIQUE INDEX "Menu_storehubId_key" ON "Menu"("storehubId");
 CREATE UNIQUE INDEX "MenuIngredient_menuId_productId_serviceMode_key" ON "MenuIngredient"("menuId", "productId", "serviceMode");
 
 -- CreateIndex
+CREATE INDEX "PackagingRule_isActive_idx" ON "PackagingRule"("isActive");
+
+-- CreateIndex
+CREATE INDEX "PackagingRule_scope_idx" ON "PackagingRule"("scope");
+
+-- CreateIndex
+CREATE INDEX "PackagingRule_productId_idx" ON "PackagingRule"("productId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "SalesTransaction_storehubTxId_key" ON "SalesTransaction"("storehubTxId");
 
 -- CreateIndex
@@ -1751,6 +1785,9 @@ ALTER TABLE "MenuIngredient" ADD CONSTRAINT "MenuIngredient_menuId_fkey" FOREIGN
 
 -- AddForeignKey
 ALTER TABLE "MenuIngredient" ADD CONSTRAINT "MenuIngredient_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PackagingRule" ADD CONSTRAINT "PackagingRule_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "SalesTransaction" ADD CONSTRAINT "SalesTransaction_outletId_fkey" FOREIGN KEY ("outletId") REFERENCES "Outlet"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

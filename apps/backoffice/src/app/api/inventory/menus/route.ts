@@ -5,7 +5,7 @@ import { requireAuth } from "@/lib/auth";
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
-  const [menus, supplierProducts] = await Promise.all([
+  const [menus, supplierProducts, packagingRules] = await Promise.all([
     prisma.menu.findMany({
       include: {
         ingredients: {
@@ -21,6 +21,15 @@ export async function GET(request: NextRequest) {
         price: true,
         productPackage: { select: { conversionFactor: true } },
         supplier: { select: { supplierCode: true } },
+      },
+    }),
+    // Per-item packaging rules that fold into a menu item's dine-in/takeaway
+    // cost. Per-order and Grab/Delivery rules are order-level, not per item.
+    prisma.packagingRule.findMany({
+      where: { isActive: true, perOrder: false, channel: { in: ["ALL", "DINE_IN", "TAKEAWAY"] } },
+      select: {
+        productId: true, quantity: true, scope: true, category: true, menuIds: true, channel: true, modifier: true,
+        product: { select: { name: true, sku: true, baseUom: true } },
       },
     }),
   ]);
@@ -45,14 +54,46 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Pre-resolve per-item packaging rules so each menu just checks applicability.
+  const rules = packagingRules.map((r) => {
+    const unitCost = costMap.get(r.productId) ?? 0;
+    return {
+      productId: r.productId,
+      name: r.product.name,
+      sku: r.product.sku,
+      uom: r.product.baseUom,
+      qty: Number(r.quantity),
+      unitCost,
+      cost: Number(r.quantity) * unitCost,
+      scope: r.scope,
+      category: r.category,
+      menuIdSet: new Set(r.menuIds),
+      channel: r.channel as "ALL" | "DINE_IN" | "TAKEAWAY",
+      modifier: r.modifier, // null = any temperature; "Iced" / "Hot"
+    };
+  });
+
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const round1 = (n: number) => Math.round(n * 10) / 10;
 
+  type Line = {
+    productId: string;
+    product: string;
+    sku: string;
+    qty: number;
+    uom: string;
+    serviceMode: "ALL" | "DINE_IN" | "TAKEAWAY";
+    modifier: string | null; // null = any temperature; "Iced" / "Hot"
+    kind: "ingredient" | "packaging";
+    source: "bom" | "rule"; // "rule" lines are managed on the Packaging page
+    unitCost: number;
+    cost: number;
+  };
+
   const mapped = menus.map((m) => {
-    const ingredients = m.ingredients.map((ing) => {
+    const ingredients: Line[] = m.ingredients.map((ing): Line => {
       const unitCost = costMap.get(ing.productId) ?? 0;
       const cost = Number(ing.quantityUsed) * unitCost;
-      const kind = ing.product.itemType === "PACKAGING" ? "packaging" : "ingredient";
       return {
         productId: ing.productId,
         product: ing.product.name,
@@ -60,55 +101,95 @@ export async function GET(request: NextRequest) {
         qty: Number(ing.quantityUsed),
         uom: ing.uom,
         serviceMode: ing.serviceMode, // ALL | DINE_IN | TAKEAWAY
-        kind, // "ingredient" | "packaging"
+        modifier: null, // BOM lines apply regardless of temperature
+        kind: ing.product.itemType === "PACKAGING" ? "packaging" : "ingredient",
+        source: "bom",
         unitCost: Math.round(unitCost * 10000) / 10000,
         cost: round2(cost),
       };
     });
 
-    // Bucket each BOM line by kind × channel. ALL lines are billed on every
-    // sale; DINE_IN / TAKEAWAY lines only on that channel. Channel COGS =
-    // (ALL + that-channel ingredient) + (ALL + that-channel packaging).
-    let ingredientCost = 0; // channel-agnostic recipe cost (the food/drink)
-    let packagingDineIn = 0;
-    let packagingTakeaway = 0;
+    // Append matching packaging-rule lines (cup/lid/straw on a category or all
+    // drinks). Read-only here — managed on the Packaging page — but they cost in
+    // exactly like a BOM packaging line.
+    for (const r of rules) {
+      const applies =
+        r.scope === "ALL" ? true :
+        r.scope === "CATEGORY" ? (m.category ?? "") === (r.category ?? "") :
+        r.menuIdSet.has(m.id);
+      if (!applies) continue;
+      ingredients.push({
+        productId: r.productId,
+        product: r.name,
+        sku: r.sku,
+        qty: r.qty,
+        uom: r.uom,
+        serviceMode: r.channel,
+        modifier: r.modifier,
+        kind: "packaging",
+        source: "rule",
+        unitCost: Math.round(r.unitCost * 10000) / 10000,
+        cost: round2(r.cost),
+      });
+    }
+
+    // Recipe (ingredient) cost — temperature-agnostic. Channel-tagged ingredient
+    // BOM lines are rare but supported.
+    let ingredientCost = 0;
     let ingredientDineExtra = 0;
     let ingredientTakeExtra = 0;
     let packagingCount = 0;
     for (const ing of ingredients) {
       if (ing.kind === "packaging") {
         packagingCount += 1;
-        if (ing.serviceMode !== "TAKEAWAY") packagingDineIn += ing.cost;
-        if (ing.serviceMode !== "DINE_IN") packagingTakeaway += ing.cost;
-      } else {
-        if (ing.serviceMode === "DINE_IN") ingredientDineExtra += ing.cost;
-        else if (ing.serviceMode === "TAKEAWAY") ingredientTakeExtra += ing.cost;
-        else ingredientCost += ing.cost;
-      }
+      } else if (ing.serviceMode === "DINE_IN") ingredientDineExtra += ing.cost;
+      else if (ing.serviceMode === "TAKEAWAY") ingredientTakeExtra += ing.cost;
+      else ingredientCost += ing.cost;
     }
+    const recipeCost = round2(ingredientCost + ingredientDineExtra + ingredientTakeExtra);
 
-    const dineInCogs = ingredientCost + ingredientDineExtra + packagingDineIn;
-    const takeawayCogs = ingredientCost + ingredientTakeExtra + packagingTakeaway;
+    // Packaging by (temperature × channel). A line applies to variant V and
+    // channel C when its channel is ALL or C, and its modifier is null (any) or V.
+    const pkgFor = (variant: "Hot" | "Iced", chan: "DINE_IN" | "TAKEAWAY") =>
+      round2(
+        ingredients
+          .filter((l) => l.kind === "packaging"
+            && (l.serviceMode === "ALL" || l.serviceMode === chan)
+            && (l.modifier == null || l.modifier === variant))
+          .reduce((s, l) => s + l.cost, 0),
+      );
+
     const sellingPrice = Number(m.sellingPrice ?? 0);
-    const pct = (cogs: number) => (sellingPrice > 0 ? (cogs / sellingPrice) * 100 : 0);
+    const pct = (cogs: number) => (sellingPrice > 0 ? round1((cogs / sellingPrice) * 100) : 0);
+    const ingBase = (chan: "DINE_IN" | "TAKEAWAY") =>
+      ingredientCost + (chan === "DINE_IN" ? ingredientDineExtra : ingredientTakeExtra);
+
+    // 2×2 all-in COGS matrix: temperature (Hot/Iced) × channel (dine-in/takeaway).
+    const cell = (variant: "Hot" | "Iced", chan: "DINE_IN" | "TAKEAWAY") => {
+      const pkg = pkgFor(variant, chan);
+      const cogs = round2(ingBase(chan) + pkg);
+      return { pkg, cogs, cogsPercent: pct(cogs) };
+    };
+    const matrix = {
+      hot: { dineIn: cell("Hot", "DINE_IN"), takeaway: cell("Hot", "TAKEAWAY") },
+      iced: { dineIn: cell("Iced", "DINE_IN"), takeaway: cell("Iced", "TAKEAWAY") },
+    };
+    // Does packaging actually differ by temperature for this item?
+    const hasIcedHotSplit = ingredients.some((l) => l.kind === "packaging" && l.modifier != null);
+    // Headline = worst case across the matrix (keeps High-COGS sort meaningful).
+    const allIn = [matrix.hot.dineIn, matrix.hot.takeaway, matrix.iced.dineIn, matrix.iced.takeaway];
+    const worst = allIn.reduce((a, b) => (b.cogs > a.cogs ? b : a));
 
     return {
       id: m.id,
       name: m.name,
       category: m.category ?? "",
       sellingPrice,
-      // Recipe/ingredient cost only (what the old `cogs` meant).
-      ingredientCost: round2(ingredientCost + ingredientDineExtra + ingredientTakeExtra),
-      packagingDineIn: round2(packagingDineIn),
-      packagingTakeaway: round2(packagingTakeaway),
-      dineInCogs: round2(dineInCogs),
-      takeawayCogs: round2(takeawayCogs),
-      dineInCogsPercent: round1(pct(dineInCogs)),
-      takeawayCogsPercent: round1(pct(takeawayCogs)),
-      // Headline COGS = all-in worst case (takeaway). Keeps the "High COGS"
-      // filter and sort meaningful now that packaging is included.
-      cogs: round2(takeawayCogs),
-      cogsPercent: round1(pct(takeawayCogs)),
+      ingredientCost: recipeCost,
+      matrix,
+      hasIcedHotSplit,
+      cogs: worst.cogs,
+      cogsPercent: worst.cogsPercent,
       ingredientCount: ingredients.length - packagingCount,
       packagingCount,
       ingredients,

@@ -268,6 +268,7 @@ model Product {
   parLevels         ParLevel[]
   menuIngredients   MenuIngredient[]
   transferItems     StockTransferItem[]
+  packagingRules    PackagingRule[]
 }
 
 // ─── PRODUCT PACKAGES (Multi-UOM) ──────────────────────────
@@ -851,6 +852,61 @@ model MenuIngredient {
   serviceMode  ServiceMode @default(ALL)
 
   @@unique([menuId, productId, serviceMode])
+}
+
+// ─── PACKAGING RULES ────────────────────────────────────────
+// Central, rule-based packaging assignment — the counterpart to the per-recipe
+// MenuIngredient BOM. Packaging (cups, lids, straws, bags) repeats across many
+// menus, so instead of adding it to every recipe you define a rule once:
+// "this product applies to <scope> on <channel>, N per <item|order>". The
+// linked product is just an existing inventory item (typically a perishable);
+// its cost is resolved from the cheapest supplier price like any ingredient.
+//
+//   Iced cup + lid → scope CATEGORY "Drinks", channel TAKEAWAY, per item
+//   Straw          → scope CATEGORY "Drinks", channel ALL,      per item
+//   Paper bag      → scope ALL,               channel GRAB,     per order
+model PackagingRule {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Decimal @default(1)
+  // What it applies to.
+  scope     PackagingScope @default(ALL)
+  category  String?        // Menu.category value when scope = CATEGORY
+  menuIds   String[] @default([]) // specific Menu ids when scope = ITEMS
+  // When it applies. DINE_IN/TAKEAWAY/ALL cost into per-item menu COGS;
+  // GRAB/DELIVERY are order-source channels (typically per-order overhead).
+  channel   PackagingChannel @default(ALL)
+  // Optional order-line modifier condition (matches pos_order_items.modifiers
+  // .name). null = applies regardless of temperature; "Iced" / "Hot" scope the
+  // rule to that variant. This is how Hot vs Iced packaging is captured without
+  // splitting the menu item — the diff lives on the rule, not a duplicate recipe.
+  modifier  String?
+  // false = charged per matching item sold (a cup per drink);
+  // true  = charged once per order (a carrier bag per Grab order).
+  perOrder  Boolean @default(false)
+  isActive  Boolean @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([scope])
+  @@index([productId])
+}
+
+enum PackagingScope {
+  ALL
+  CATEGORY
+  ITEMS
+}
+
+enum PackagingChannel {
+  ALL
+  DINE_IN
+  TAKEAWAY
+  GRAB
+  DELIVERY
 }
 
 // ─── SALES TRANSACTIONS (from StoreHub) ─────────────────────

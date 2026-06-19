@@ -24,6 +24,7 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
   inventory: [
     { label: "Products", key: "products" },
     { label: "Perishables", key: "perishables" },
+    { label: "Packaging", key: "packaging" },
     { label: "Suppliers", key: "suppliers" },
     { label: "Categories", key: "categories" },
     { label: "Menu & BOM", key: "menus" },
@@ -147,6 +148,7 @@ export const NAV_TABS: GrantTab[] = [
         modules: [
           m("inventory", "products", "Ingredients & Dashboard"),
           m("inventory", "perishables", "Perishables"),
+          m("inventory", "packaging", "Packaging"),
           m("inventory", "suppliers", "Suppliers"),
           m("inventory", "categories", "Groups & Storage"),
         ],

@@ -26,7 +26,15 @@ type Ingredient = {
   unitCost: number;
   cost: number;
   serviceMode: ServiceMode;
+  modifier?: string | null; // null = any temperature; "Iced" / "Hot"
   kind: "ingredient" | "packaging";
+  source?: "bom" | "rule"; // "rule" = applied from a Packaging rule (read-only)
+};
+
+type Cell = { pkg: number; cogs: number; cogsPercent: number };
+type CostMatrix = {
+  hot: { dineIn: Cell; takeaway: Cell };
+  iced: { dineIn: Cell; takeaway: Cell };
 };
 
 type MenuItem = {
@@ -34,15 +42,11 @@ type MenuItem = {
   name: string;
   category: string;
   sellingPrice: number;
-  cogs: number; // all-in (takeaway) — headline
+  cogs: number; // all-in worst case — headline
   cogsPercent: number;
   ingredientCost: number;
-  packagingDineIn: number;
-  packagingTakeaway: number;
-  dineInCogs: number;
-  takeawayCogs: number;
-  dineInCogsPercent: number;
-  takeawayCogsPercent: number;
+  matrix: CostMatrix; // COGS by temperature × channel
+  hasIcedHotSplit: boolean;
   ingredientCount: number;
   packagingCount: number;
   ingredients: Ingredient[];
@@ -130,15 +134,19 @@ export default function MenusPage() {
     setEditingMenuId(menu.id);
     setExpandedId(menu.id);
     setEditIngredients(
-      menu.ingredients.map((ing) => ({
-        productId: ing.productId,
-        productName: ing.product,
-        sku: ing.sku,
-        quantityUsed: ing.qty,
-        uom: ing.uom,
-        serviceMode: ing.serviceMode,
-        kind: ing.kind,
-      }))
+      // Rule-applied packaging is managed on the Packaging page — only the
+      // menu's own BOM lines are editable here.
+      menu.ingredients
+        .filter((ing) => ing.source !== "rule")
+        .map((ing) => ({
+          productId: ing.productId,
+          productName: ing.product,
+          sku: ing.sku,
+          quantityUsed: ing.qty,
+          uom: ing.uom,
+          serviceMode: ing.serviceMode,
+          kind: ing.kind,
+        }))
     );
     setAddSearch("");
   };
@@ -566,6 +574,16 @@ export default function MenusPage() {
                                           Packaging
                                         </Badge>
                                       )}
+                                      {ing.modifier && (
+                                        <Badge variant="outline" className={`text-[9px] ${ing.modifier === "Iced" ? "border-sky-200 bg-sky-50 text-sky-600" : "border-orange-200 bg-orange-50 text-orange-600"}`}>
+                                          {ing.modifier}
+                                        </Badge>
+                                      )}
+                                      {ing.source === "rule" && (
+                                        <Badge variant="outline" className="border-gray-200 bg-gray-50 text-[9px] text-gray-500">
+                                          via rule
+                                        </Badge>
+                                      )}
                                     </span>
                                   </td>
                                   <td className="py-1.5"><code className="text-gray-500">{ing.sku}</code></td>
@@ -595,30 +613,38 @@ export default function MenusPage() {
                                     <td colSpan={6} className="py-1.5 text-right font-medium text-gray-500">Ingredient cost</td>
                                     <td className="py-1.5 text-right font-medium text-gray-700">RM {menu.ingredientCost.toFixed(2)}</td>
                                   </tr>
-                                  {menu.packagingCount > 0 && (
+                                  {menu.packagingCount > 0 ? (
                                     <>
-                                      <tr>
-                                        <td colSpan={6} className="py-1 text-right text-gray-500">+ Packaging · Dine-in</td>
-                                        <td className="py-1 text-right text-gray-700">RM {menu.packagingDineIn.toFixed(2)}</td>
+                                      <tr className="border-t border-gray-200">
+                                        <td colSpan={5} className="py-1 text-right text-[10px] uppercase tracking-wide text-gray-400">All-in COGS (incl. packaging)</td>
+                                        <td className="py-1 text-right text-[10px] uppercase tracking-wide text-gray-400">Dine-in</td>
+                                        <td className="py-1 text-right text-[10px] uppercase tracking-wide text-gray-400">Takeaway</td>
                                       </tr>
-                                      <tr>
-                                        <td colSpan={6} className="py-1 text-right text-gray-500">+ Packaging · Takeaway</td>
-                                        <td className="py-1 text-right text-gray-700">RM {menu.packagingTakeaway.toFixed(2)}</td>
-                                      </tr>
+                                      {(menu.hasIcedHotSplit
+                                        ? ([["Iced", menu.matrix.iced], ["Hot", menu.matrix.hot]] as const)
+                                        : ([["", menu.matrix.iced]] as const)
+                                      ).map(([label, row]) => (
+                                        <tr key={label || "all"}>
+                                          <td colSpan={5} className="py-1.5 text-right font-semibold text-gray-600">
+                                            {label ? <span className={label === "Iced" ? "text-sky-600" : "text-orange-600"}>{label} drink</span> : "Total"}
+                                          </td>
+                                          <td className="py-1.5 text-right font-bold text-gray-900">
+                                            RM {row.dineIn.cogs.toFixed(2)}{row.dineIn.cogsPercent > 0 && <span className="ml-1 text-[10px] font-normal text-gray-400">{row.dineIn.cogsPercent.toFixed(0)}%</span>}
+                                          </td>
+                                          <td className="py-1.5 text-right font-bold text-gray-900">
+                                            RM {row.takeaway.cogs.toFixed(2)}{row.takeaway.cogsPercent > 0 && <span className="ml-1 text-[10px] font-normal text-gray-400">{row.takeaway.cogsPercent.toFixed(0)}%</span>}
+                                          </td>
+                                        </tr>
+                                      ))}
                                     </>
+                                  ) : (
+                                    <tr className="border-t border-gray-200">
+                                      <td colSpan={6} className="py-1.5 text-right font-semibold text-gray-600">
+                                        Total COGS{menu.matrix.iced.takeaway.cogsPercent > 0 ? ` (${menu.matrix.iced.takeaway.cogsPercent.toFixed(1)}%)` : ""}
+                                      </td>
+                                      <td className="py-1.5 text-right font-bold text-gray-900">RM {menu.matrix.iced.takeaway.cogs.toFixed(2)}</td>
+                                    </tr>
                                   )}
-                                  <tr className="border-t border-gray-200">
-                                    <td colSpan={6} className="py-1.5 text-right font-semibold text-gray-600">
-                                      Dine-in COGS{menu.dineInCogsPercent > 0 ? ` (${menu.dineInCogsPercent.toFixed(1)}%)` : ""}
-                                    </td>
-                                    <td className="py-1.5 text-right font-bold text-gray-900">RM {menu.dineInCogs.toFixed(2)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td colSpan={6} className="py-1.5 text-right font-semibold text-gray-600">
-                                      Takeaway COGS{menu.takeawayCogsPercent > 0 ? ` (${menu.takeawayCogsPercent.toFixed(1)}%)` : ""}
-                                    </td>
-                                    <td className="py-1.5 text-right font-bold text-gray-900">RM {menu.takeawayCogs.toFixed(2)}</td>
-                                  </tr>
                                 </>
                               )}
                             </tbody>
