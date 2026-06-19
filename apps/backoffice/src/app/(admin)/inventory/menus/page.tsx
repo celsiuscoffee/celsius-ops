@@ -10,16 +10,41 @@ import { Card } from "@/components/ui/card";
 import { Pencil, ChevronDown, Coffee, Search, Loader2, Trash2, X, Check, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
-type Ingredient = { product: string; productId: string; sku: string; qty: number; uom: string; unitCost: number; cost: number };
+type ServiceMode = "ALL" | "DINE_IN" | "TAKEAWAY";
+const SERVICE_MODE_LABEL: Record<ServiceMode, string> = {
+  ALL: "Both",
+  DINE_IN: "Dine-in",
+  TAKEAWAY: "Takeaway",
+};
+
+type Ingredient = {
+  product: string;
+  productId: string;
+  sku: string;
+  qty: number;
+  uom: string;
+  unitCost: number;
+  cost: number;
+  serviceMode: ServiceMode;
+  kind: "ingredient" | "packaging";
+};
 
 type MenuItem = {
   id: string;
   name: string;
   category: string;
   sellingPrice: number;
-  cogs: number;
+  cogs: number; // all-in (takeaway) — headline
   cogsPercent: number;
+  ingredientCost: number;
+  packagingDineIn: number;
+  packagingTakeaway: number;
+  dineInCogs: number;
+  takeawayCogs: number;
+  dineInCogsPercent: number;
+  takeawayCogsPercent: number;
   ingredientCount: number;
+  packagingCount: number;
   ingredients: Ingredient[];
 };
 
@@ -28,6 +53,7 @@ type ProductOption = {
   name: string;
   sku: string;
   baseUom: string;
+  itemType: string; // INGREDIENT | PERISHABLE | PACKAGING
 };
 
 type EditIngredient = {
@@ -36,6 +62,8 @@ type EditIngredient = {
   sku: string;
   quantityUsed: number;
   uom: string;
+  serviceMode: ServiceMode;
+  kind: "ingredient" | "packaging";
 };
 
 type SortKey = "name" | "category" | "sellingPrice" | "cogs" | "cogsPercent" | "ingredientCount";
@@ -108,6 +136,8 @@ export default function MenusPage() {
         sku: ing.sku,
         quantityUsed: ing.qty,
         uom: ing.uom,
+        serviceMode: ing.serviceMode,
+        kind: ing.kind,
       }))
     );
     setAddSearch("");
@@ -133,11 +163,25 @@ export default function MenusPage() {
     setEditIngredients((prev) => prev.filter((ing) => ing.productId !== productId));
   };
 
+  const updateIngredientMode = (productId: string, mode: ServiceMode) => {
+    setEditIngredients((prev) =>
+      prev.map((ing) => (ing.productId === productId ? { ...ing, serviceMode: mode } : ing))
+    );
+  };
+
   const addIngredient = (product: ProductOption) => {
     if (editIngredients.some((ing) => ing.productId === product.id)) return;
     setEditIngredients((prev) => [
       ...prev,
-      { productId: product.id, productName: product.name, sku: product.sku, quantityUsed: 0, uom: product.baseUom },
+      {
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku,
+        quantityUsed: 0,
+        uom: product.baseUom,
+        serviceMode: "ALL",
+        kind: product.itemType === "PACKAGING" ? "packaging" : "ingredient",
+      },
     ]);
     setAddSearch("");
   };
@@ -154,6 +198,7 @@ export default function MenusPage() {
             productId: ing.productId,
             quantityUsed: ing.quantityUsed,
             uom: ing.uom,
+            serviceMode: ing.serviceMode,
           })),
         }),
       });
@@ -211,7 +256,7 @@ export default function MenusPage() {
     <div className="p-3 sm:p-6">
       <div>
         <h2 className="text-xl font-semibold text-gray-900">Menu & Recipes (BOM)</h2>
-        <p className="mt-0.5 text-sm text-gray-500">{menus.length} menu items with ingredient costing</p>
+        <p className="mt-0.5 text-sm text-gray-500">{menus.length} menu items · ingredient + packaging costing (dine-in / takeaway)</p>
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
@@ -322,7 +367,7 @@ export default function MenusPage() {
               <SortHeader label="Menu Item" sortKey="name" />
               <SortHeader label="Category" sortKey="category" />
               <SortHeader label="Selling Price" sortKey="sellingPrice" align="right" />
-              <SortHeader label="Product Cost" sortKey="cogs" align="right" />
+              <SortHeader label="All-in Cost" sortKey="cogs" align="right" />
               <SortHeader label="COGS %" sortKey="cogsPercent" align="right" />
               <SortHeader label="Ingredients" sortKey="ingredientCount" />
               <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
@@ -395,17 +440,27 @@ export default function MenusPage() {
                             <table className="w-full text-xs">
                               <thead>
                                 <tr className="text-gray-400">
-                                  <th className="pb-1 text-left font-medium">Ingredient</th>
+                                  <th className="pb-1 text-left font-medium">Item</th>
                                   <th className="pb-1 text-left font-medium w-20">SKU</th>
                                   <th className="pb-1 w-28 text-right font-medium">Qty</th>
-                                  <th className="pb-1 w-20 text-center font-medium">UOM</th>
+                                  <th className="pb-1 w-16 text-center font-medium">UOM</th>
+                                  <th className="pb-1 w-28 text-center font-medium">Channel</th>
                                   <th className="pb-1 w-8"></th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {editIngredients.map((ing) => (
                                   <tr key={ing.productId} className="border-t border-gray-200/50">
-                                    <td className="py-1.5 text-gray-700">{ing.productName}</td>
+                                    <td className="py-1.5 text-gray-700">
+                                      <span className="inline-flex items-center gap-1.5">
+                                        {ing.productName}
+                                        {ing.kind === "packaging" && (
+                                          <Badge variant="outline" className="border-amber-300 bg-amber-50 text-[9px] text-amber-700">
+                                            Packaging
+                                          </Badge>
+                                        )}
+                                      </span>
+                                    </td>
                                     <td className="py-1.5"><code className="text-gray-500">{ing.sku}</code></td>
                                     <td className="py-1.5 text-right">
                                       <input
@@ -421,6 +476,17 @@ export default function MenusPage() {
                                       {ing.uom}
                                     </td>
                                     <td className="py-1.5 text-center">
+                                      <select
+                                        value={ing.serviceMode}
+                                        onChange={(e) => updateIngredientMode(ing.productId, e.target.value as ServiceMode)}
+                                        className="rounded border border-gray-200 px-1.5 py-1 text-xs text-gray-600"
+                                      >
+                                        <option value="ALL">Both</option>
+                                        <option value="DINE_IN">Dine-in</option>
+                                        <option value="TAKEAWAY">Takeaway</option>
+                                      </select>
+                                    </td>
+                                    <td className="py-1.5 text-center">
                                       <button onClick={() => removeIngredient(ing.productId)} className="text-red-400 hover:text-red-600">
                                         <Trash2 className="h-3 w-3" />
                                       </button>
@@ -429,8 +495,8 @@ export default function MenusPage() {
                                 ))}
                                 {editIngredients.length === 0 && (
                                   <tr>
-                                    <td colSpan={5} className="py-4 text-center text-gray-400">
-                                      No ingredients yet. Search below to add products.
+                                    <td colSpan={6} className="py-4 text-center text-gray-400">
+                                      No items yet. Search below to add ingredients or packaging.
                                     </td>
                                   </tr>
                                 )}
@@ -457,7 +523,14 @@ export default function MenusPage() {
                                       onClick={() => addIngredient(product)}
                                       className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-gray-50"
                                     >
-                                      <span className="font-medium text-gray-700">{product.name}</span>
+                                      <span className="flex items-center gap-1.5 font-medium text-gray-700">
+                                        {product.name}
+                                        {product.itemType === "PACKAGING" && (
+                                          <Badge variant="outline" className="border-amber-300 bg-amber-50 text-[9px] text-amber-700">
+                                            Packaging
+                                          </Badge>
+                                        )}
+                                      </span>
                                       <span className="text-gray-400">{product.sku} &middot; {product.baseUom}</span>
                                     </button>
                                   ))}
@@ -470,21 +543,37 @@ export default function MenusPage() {
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="text-gray-400">
-                                <th className="pb-1 text-left font-medium">Ingredient</th>
+                                <th className="pb-1 text-left font-medium">Item</th>
                                 <th className="pb-1 text-left font-medium">SKU</th>
                                 <th className="pb-1 text-right font-medium">Qty</th>
                                 <th className="pb-1 text-left font-medium">UOM</th>
+                                <th className="pb-1 text-center font-medium">Channel</th>
                                 <th className="pb-1 text-right font-medium">Unit Cost</th>
                                 <th className="pb-1 text-right font-medium">Cost</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {menu.ingredients.map((ing, i) => (
+                              {/* Ingredients first, then packaging */}
+                              {[...menu.ingredients]
+                                .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "ingredient" ? -1 : 1))
+                                .map((ing, i) => (
                                 <tr key={i} className="border-t border-gray-200/50">
-                                  <td className="py-1.5 text-gray-700">{ing.product}</td>
+                                  <td className="py-1.5 text-gray-700">
+                                    <span className="inline-flex items-center gap-1.5">
+                                      {ing.product}
+                                      {ing.kind === "packaging" && (
+                                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-[9px] text-amber-700">
+                                          Packaging
+                                        </Badge>
+                                      )}
+                                    </span>
+                                  </td>
                                   <td className="py-1.5"><code className="text-gray-500">{ing.sku}</code></td>
                                   <td className="py-1.5 text-right text-gray-700">{ing.qty}</td>
                                   <td className="py-1.5 text-gray-500">{ing.uom}</td>
+                                  <td className="py-1.5 text-center text-gray-500">
+                                    {ing.kind === "packaging" ? SERVICE_MODE_LABEL[ing.serviceMode] : "—"}
+                                  </td>
                                   <td className="py-1.5 text-right text-gray-500">
                                     {ing.unitCost > 0 ? `RM ${ing.unitCost.toFixed(4)}` : "—"}
                                   </td>
@@ -495,16 +584,42 @@ export default function MenusPage() {
                               ))}
                               {menu.ingredients.length === 0 && (
                                 <tr>
-                                  <td colSpan={6} className="py-4 text-center text-gray-400">
-                                    No ingredients mapped. Click the pencil icon to add.
+                                  <td colSpan={7} className="py-4 text-center text-gray-400">
+                                    No recipe yet. Click the pencil icon to add ingredients or packaging.
                                   </td>
                                 </tr>
                               )}
                               {menu.ingredients.length > 0 && (
-                                <tr className="border-t border-gray-300">
-                                  <td colSpan={5} className="py-1.5 text-right font-semibold text-gray-600">Total Product Cost</td>
-                                  <td className="py-1.5 text-right font-bold text-gray-900">RM {menu.cogs.toFixed(2)}</td>
-                                </tr>
+                                <>
+                                  <tr className="border-t border-gray-300">
+                                    <td colSpan={6} className="py-1.5 text-right font-medium text-gray-500">Ingredient cost</td>
+                                    <td className="py-1.5 text-right font-medium text-gray-700">RM {menu.ingredientCost.toFixed(2)}</td>
+                                  </tr>
+                                  {menu.packagingCount > 0 && (
+                                    <>
+                                      <tr>
+                                        <td colSpan={6} className="py-1 text-right text-gray-500">+ Packaging · Dine-in</td>
+                                        <td className="py-1 text-right text-gray-700">RM {menu.packagingDineIn.toFixed(2)}</td>
+                                      </tr>
+                                      <tr>
+                                        <td colSpan={6} className="py-1 text-right text-gray-500">+ Packaging · Takeaway</td>
+                                        <td className="py-1 text-right text-gray-700">RM {menu.packagingTakeaway.toFixed(2)}</td>
+                                      </tr>
+                                    </>
+                                  )}
+                                  <tr className="border-t border-gray-200">
+                                    <td colSpan={6} className="py-1.5 text-right font-semibold text-gray-600">
+                                      Dine-in COGS{menu.dineInCogsPercent > 0 ? ` (${menu.dineInCogsPercent.toFixed(1)}%)` : ""}
+                                    </td>
+                                    <td className="py-1.5 text-right font-bold text-gray-900">RM {menu.dineInCogs.toFixed(2)}</td>
+                                  </tr>
+                                  <tr>
+                                    <td colSpan={6} className="py-1.5 text-right font-semibold text-gray-600">
+                                      Takeaway COGS{menu.takeawayCogsPercent > 0 ? ` (${menu.takeawayCogsPercent.toFixed(1)}%)` : ""}
+                                    </td>
+                                    <td className="py-1.5 text-right font-bold text-gray-900">RM {menu.takeawayCogs.toFixed(2)}</td>
+                                  </tr>
+                                </>
                               )}
                             </tbody>
                           </table>

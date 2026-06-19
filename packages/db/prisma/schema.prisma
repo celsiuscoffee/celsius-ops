@@ -223,6 +223,18 @@ model StorageArea {
 enum ItemType {
   INGREDIENT
   PERISHABLE
+  PACKAGING // cups, lids, straws, napkins/tissues, carrier bags, cup holders
+}
+
+// Which fulfillment channel a BOM line applies to. Ingredients are ALL (the
+// drink is the same however it's served); packaging differs — a takeaway latte
+// needs a plastic cup + lid, a dine-in latte uses a (reusable) mug + a napkin.
+// Mirrors pos_order_items.fulfillment (dine_in / takeaway) so per-channel COGS
+// can be costed exactly from native POS lines.
+enum ServiceMode {
+  ALL
+  DINE_IN
+  TAKEAWAY
 }
 
 // ─── INVENTORY ITEMS (Ingredients + Perishables) ────────────
@@ -821,16 +833,24 @@ model Menu {
   salesData   SalesTransaction[]
 }
 
+// A single line on a menu item's bill of materials. Despite the name this is
+// the generic BOM line — it holds both INGREDIENT/PERISHABLE products and
+// PACKAGING (cups, lids, straws, tissues). The product's itemType distinguishes
+// them; serviceMode scopes packaging to a fulfillment channel.
 model MenuIngredient {
-  id           String  @id @default(uuid())
+  id           String      @id @default(uuid())
   menuId       String
-  menu         Menu    @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  menu         Menu        @relation(fields: [menuId], references: [id], onDelete: Cascade)
   productId    String
-  product      Product @relation(fields: [productId], references: [id])
+  product      Product     @relation(fields: [productId], references: [id])
   quantityUsed Decimal
   uom          String
+  // ALL = costed on every sale; DINE_IN / TAKEAWAY = only that channel. A
+  // product can appear once per (menu, serviceMode) — e.g. a straw used both
+  // ways is one ALL line, while a takeaway-only cup is a separate TAKEAWAY line.
+  serviceMode  ServiceMode @default(ALL)
 
-  @@unique([menuId, productId])
+  @@unique([menuId, productId, serviceMode])
 }
 
 // ─── SALES TRANSACTIONS (from StoreHub) ─────────────────────

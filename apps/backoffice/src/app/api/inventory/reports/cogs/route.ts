@@ -2,6 +2,12 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 
+// StoreHub sales carry no per-item fulfillment channel, so channel-scoped
+// packaging (a takeaway-only cup, a dine-in-only tissue) is blended by an
+// assumed takeaway share. ALL lines are always billed. Tier 2 replaces this
+// blend with the exact per-line split from pos_order_items.fulfillment.
+const DEFAULT_TAKEAWAY_RATIO = 0.5;
+
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
   if (auth.error) return auth.error;
@@ -38,11 +44,11 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // 2. Fetch all menu ingredient records (recipes)
+    // 2. Fetch all menu BOM lines (ingredients + packaging)
     const menuIngredients = await prisma.menuIngredient.findMany({
       include: {
         menu: { select: { id: true, name: true, category: true } },
-        product: { select: { id: true, name: true, baseUom: true } },
+        product: { select: { id: true, name: true, baseUom: true, itemType: true } },
       },
     });
 
@@ -72,16 +78,23 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Build recipe map: menuItemId -> array of { productId, quantityUsed }
+    // Build recipe map: menuItemId -> array of BOM lines (with kind + channel)
     const recipeMap = new Map<
       string,
-      Array<{ productId: string; quantityUsed: number }>
+      Array<{
+        productId: string;
+        quantityUsed: number;
+        isPackaging: boolean;
+        serviceMode: "ALL" | "DINE_IN" | "TAKEAWAY";
+      }>
     >();
     for (const mi of menuIngredients) {
       const existing = recipeMap.get(mi.menuId) || [];
       existing.push({
         productId: mi.productId,
         quantityUsed: Number(mi.quantityUsed),
+        isPackaging: mi.product.itemType === "PACKAGING",
+        serviceMode: mi.serviceMode,
       });
       recipeMap.set(mi.menuId, existing);
     }
@@ -144,6 +157,8 @@ export async function GET(req: NextRequest) {
       qtySold: number;
       revenue: number;
       expectedCogs: number;
+      ingredientCogs: number;
+      packagingCogs: number;
       margin: number;
       marginPercent: number;
       outletId: string;
@@ -152,21 +167,36 @@ export async function GET(req: NextRequest) {
 
     let totalRevenue = 0;
     let totalCogs = 0;
+    let totalPackagingCogs = 0;
+
+    // Channel weight for a line: ALL bills every sale; TAKEAWAY / DINE_IN are
+    // blended by the assumed takeaway share (no per-sale channel in StoreHub).
+    const channelWeight = (mode: "ALL" | "DINE_IN" | "TAKEAWAY") =>
+      mode === "TAKEAWAY"
+        ? DEFAULT_TAKEAWAY_RATIO
+        : mode === "DINE_IN"
+          ? 1 - DEFAULT_TAKEAWAY_RATIO
+          : 1;
 
     for (const agg of salesAgg.values()) {
       const recipe = recipeMap.get(agg.menuId);
       const menuInfo = menuInfoMap.get(agg.menuId);
 
-      // Calculate cost per unit from recipe
-      let costPerUnit = 0;
+      // Cost per unit, split into ingredient vs packaging
+      let ingredientPerUnit = 0;
+      let packagingPerUnit = 0;
       if (recipe) {
         for (const ing of recipe) {
           const costPerBaseUnit = priceMap.get(ing.productId) || 0;
-          costPerUnit += ing.quantityUsed * costPerBaseUnit;
+          const lineCost = ing.quantityUsed * costPerBaseUnit * channelWeight(ing.serviceMode);
+          if (ing.isPackaging) packagingPerUnit += lineCost;
+          else ingredientPerUnit += lineCost;
         }
       }
 
-      const expectedCogs = Math.round(costPerUnit * agg.qtySold * 100) / 100;
+      const ingredientCogs = Math.round(ingredientPerUnit * agg.qtySold * 100) / 100;
+      const packagingCogs = Math.round(packagingPerUnit * agg.qtySold * 100) / 100;
+      const expectedCogs = Math.round((ingredientCogs + packagingCogs) * 100) / 100;
       const revenue = Math.round(agg.revenue * 100) / 100;
       const margin = Math.round((revenue - expectedCogs) * 100) / 100;
       const marginPercent =
@@ -174,6 +204,7 @@ export async function GET(req: NextRequest) {
 
       totalRevenue += revenue;
       totalCogs += expectedCogs;
+      totalPackagingCogs += packagingCogs;
 
       items.push({
         menuName: menuInfo?.name || "Unknown Item",
@@ -181,6 +212,8 @@ export async function GET(req: NextRequest) {
         qtySold: agg.qtySold,
         revenue,
         expectedCogs,
+        ingredientCogs,
+        packagingCogs,
         margin,
         marginPercent,
         outletId: agg.outletId,
@@ -193,6 +226,8 @@ export async function GET(req: NextRequest) {
 
     totalRevenue = Math.round(totalRevenue * 100) / 100;
     totalCogs = Math.round(totalCogs * 100) / 100;
+    totalPackagingCogs = Math.round(totalPackagingCogs * 100) / 100;
+    const totalIngredientCogs = Math.round((totalCogs - totalPackagingCogs) * 100) / 100;
     const grossMargin = Math.round((totalRevenue - totalCogs) * 100) / 100;
     const grossMarginPercent =
       totalRevenue > 0
@@ -203,6 +238,8 @@ export async function GET(req: NextRequest) {
       summary: {
         totalRevenue,
         totalCogs,
+        totalIngredientCogs,
+        totalPackagingCogs,
         grossMargin,
         grossMarginPercent,
         menuItemCount: items.length,
