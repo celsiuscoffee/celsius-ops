@@ -419,7 +419,14 @@ export async function POST(request: NextRequest) {
     {
       const { error: acceptColErr } = await supabase
         .from("pos_orders")
-        .update({ grab_accept_status: acceptStatus, grab_accept_error: acceptError })
+        .update({
+          grab_accept_status: acceptStatus,
+          grab_accept_error: acceptError,
+          // Merchant-funded promo only — the marketing cost we own (grabFundPromo
+          // is Grab paying, not us). discount_amount above keeps the combined
+          // figure for receipts/books; this column powers the Marketing module.
+          grab_merchant_promo: price.merchantFundPromo ?? 0,
+        })
         .eq("id", order.id);
       if (acceptColErr) console.warn("[grab:webhook] accept-outcome write skipped:", acceptColErr.message);
     }

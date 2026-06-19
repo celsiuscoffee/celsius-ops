@@ -408,6 +408,38 @@ export async function editOrder(
   });
 }
 
+// ─── Marketing / Campaigns ───────────────────────────────────────────────────
+
+export interface GrabCampaign {
+  id?: string;
+  campaignID?: string;
+  name?: string;
+  createdBy?: string; // PARTNER | MERCHANT | GRAB
+  status?: string;
+  discount?: { type?: string; value?: number; cap?: number; [k: string]: unknown };
+  conditions?: Record<string, unknown>;
+  quotas?: Record<string, unknown>;
+  startTime?: string;
+  endTime?: string;
+  [k: string]: unknown;
+}
+
+/**
+ * List GrabFood campaigns (promotions) for a merchant.
+ * Read-only mirror — GrabFood "campaigns" are merchant/partner/Grab-funded
+ * promos, NOT paid GrabAds advertising (which isn't in the Partner API).
+ * The response shape varies by version, so tolerate both a bare array and a
+ * `{ campaigns: [] }` envelope.
+ */
+export async function listCampaigns(merchantID: string): Promise<GrabCampaign[]> {
+  const res = await grabRequest<{ campaigns?: GrabCampaign[] } | GrabCampaign[]>(
+    "/partner/v1/campaigns",
+    { params: { merchantID } },
+  );
+  if (Array.isArray(res)) return res;
+  return res?.campaigns ?? [];
+}
+
 // ─── Store Management ────────────────────────────────────────────────────────
 
 /**

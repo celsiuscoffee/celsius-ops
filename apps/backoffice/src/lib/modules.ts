@@ -86,6 +86,7 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
     { label: "Campaigns", key: "campaigns" },
     { label: "Invoices", key: "invoices" },
     { label: "Ad Settings", key: "settings" },
+    { label: "GrabFood Marketing", key: "grab" },
   ],
 };
 
@@ -215,6 +216,12 @@ export const NAV_TABS: GrantTab[] = [
           m("ads", "overview", "Overview"),
           m("ads", "campaigns", "Campaigns"),
           m("ads", "invoices", "Invoices"),
+        ],
+      },
+      {
+        label: "GrabFood",
+        modules: [
+          m("ads", "grab", "Campaigns & Ad Spend"),
         ],
       },
     ],

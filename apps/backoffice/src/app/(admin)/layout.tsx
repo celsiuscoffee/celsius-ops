@@ -333,6 +333,12 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "Invoices",  href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,          moduleKey: "ads:invoices" },
         ],
       },
+      {
+        label: "GrabFood",
+        items: [
+          { label: "Campaigns & Ad Spend", href: "/ads/grab", icon: <Megaphone className={ICON_SIZE} />, moduleKey: "ads:grab" },
+        ],
+      },
     ],
   },
   {
