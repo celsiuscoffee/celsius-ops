@@ -17,6 +17,7 @@
 
 import { getFinanceClient } from "../supabase";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { getDefaultCompanyId } from "../companies";
 import type { PnlReport, PnlLine } from "./pnl";
 
@@ -120,6 +121,49 @@ export async function buildSourcedPnl(input: {
     if (adsSpend) {
       expenseLines.push({ code: "MKT-ADS", name: "Marketing — Digital ads (Google)", amount: adsSpend, parentCode: null });
       totalExpenses += adsSpend;
+    }
+  }
+
+  // Marketing — GrabFood: merchant-funded promo cost (per completed order) +
+  // manually entered GrabAds spend, for THIS company's outlets. GrabFood revenue
+  // is booked GROSS in income (pos-native EOD sends the whole order total to the
+  // grabfood channel without deducting the promo), so the merchant-funded promo
+  // must be recognized as a cost here — it is NOT double-counted. grab_merchant_promo
+  // is the merchant-funded part only (Grab-funded promo is Grab's cost, excluded).
+  // fin_outlet_companies/invoices key outlets by the Outlet UUID, but
+  // pos_orders/grab_ads_spend use the loyalty outlet id (e.g. "outlet-sa") —
+  // bridge UUID → loyaltyOutletId before querying the Grab tables.
+  if (outletIds.length) {
+    const loyaltyRows = await prisma.$queryRaw<{ loyalty_id: string }[]>(Prisma.sql`
+      SELECT "loyaltyOutletId" AS loyalty_id FROM "Outlet"
+      WHERE id IN (${Prisma.join(outletIds)}) AND "loyaltyOutletId" IS NOT NULL
+    `);
+    const loyaltyIds = loyaltyRows.map((r) => r.loyalty_id);
+    if (loyaltyIds.length) {
+      const promoAgg = await prisma.$queryRaw<{ promo_sen: bigint }[]>(Prisma.sql`
+        SELECT COALESCE(SUM(grab_merchant_promo), 0) AS promo_sen
+        FROM pos_orders
+        WHERE source = 'grabfood' AND status = 'completed'
+          AND outlet_id IN (${Prisma.join(loyaltyIds)})
+          AND created_at::date BETWEEN ${start}::date AND ${end}::date
+      `);
+      const grabPromo = round2(Number(promoAgg[0]?.promo_sen ?? 0) / 100);
+      if (grabPromo) {
+        expenseLines.push({ code: "MKT-GRAB-PROMO", name: "Marketing — GrabFood promos", amount: grabPromo, parentCode: null });
+        totalExpenses += grabPromo;
+      }
+
+      const adAgg = await prisma.$queryRaw<{ ad_sen: bigint }[]>(Prisma.sql`
+        SELECT COALESCE(SUM(amount_sen), 0) AS ad_sen
+        FROM grab_ads_spend
+        WHERE outlet_id IN (${Prisma.join(loyaltyIds)})
+          AND period_start BETWEEN ${start}::date AND ${end}::date
+      `);
+      const grabAds = round2(Number(adAgg[0]?.ad_sen ?? 0) / 100);
+      if (grabAds) {
+        expenseLines.push({ code: "MKT-GRAB-ADS", name: "Marketing — GrabAds", amount: grabAds, parentCode: null });
+        totalExpenses += grabAds;
+      }
     }
   }
 
