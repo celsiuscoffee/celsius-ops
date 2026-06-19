@@ -66,11 +66,14 @@ type GrabPosOrderItemRow = {
   notes: string | null;
 };
 
-/** Statuses that mean "Grab is sending this to the kitchen." Submit Order
- *  webhook initially writes 'sent_to_kitchen'; ACCEPTED / DRIVER_ALLOCATED
- *  state transitions can flip it but should still print on the first
- *  printable status seen. */
+/** Statuses that mean "the kitchen should be making this Grab order." The
+ *  Submit Order webhook writes 'sent_to_kitchen'; later state pushes can flip
+ *  it — including back to 'open' if Grab re-pushes PENDING/DRIVER_ALLOCATED.
+ *  'open' is included (mirroring the live KDS panel) so a re-mapped order still
+ *  gets its docket instead of silently never printing. The atomic printed_at
+ *  claim guarantees the docket prints at most once regardless of status churn. */
 const PRINTABLE_STATUSES = new Set([
+  "open",
   "sent_to_kitchen",
   "preparing",
   "ready",
