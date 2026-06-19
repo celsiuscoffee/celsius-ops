@@ -2241,7 +2241,12 @@ export default function Register() {
             <Text className="text-cream/60 text-sm mb-5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
               Serving target exceeded — mark Ready / Done / Served as soon as they're handed over.
             </Text>
-            <View className="gap-2 mb-6">
+            <ScrollView
+              style={{ maxHeight: 360 }}
+              className="mb-6"
+              contentContainerStyle={{ gap: 8 }}
+              showsVerticalScrollIndicator
+            >
               {overdueOrders.map((o) => {
                 const mins = Math.max(0, Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 60000));
                 const chanTag =
@@ -2261,7 +2266,7 @@ export default function Register() {
                   </View>
                 );
               })}
-            </View>
+            </ScrollView>
             <View className="flex-row gap-3">
               <Pressable onPress={() => { Haptics.selectionAsync(); setOverdueAck(true); }} className="flex-1 items-center justify-center rounded-2xl py-4 border border-cream/15 active:opacity-60">
                 <Text className="text-cream/70 text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Dismiss</Text>
