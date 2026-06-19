@@ -398,7 +398,7 @@ async function buildCostModel(): Promise<CostModel> {
 // Line-item gathering (shared by product + category), cutover-routed.
 // Returns one entry per source line, in RM, with category + unit cost resolved.
 // ─────────────────────────────────────────────────────────────────────────────
-type GatheredItem = { name: string; category: string; qty: number; sales: number; cost: number };
+type GatheredItem = { name: string; category: string; qty: number; sales: number; cost: number; pkg: number; temp: "Iced" | "Hot" };
 
 async function gatherItems(outlets: OutletPick[], from: string, to: string): Promise<GatheredItem[]> {
   const supabase = getSupabaseAdmin();
@@ -441,9 +441,12 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
     }
     return "Iced";
   };
-  // All-in unit cost (RM) = recipe + packaging for this line's channel & temp.
-  const unitCost = (name: string, channel: "DINE_IN" | "TAKEAWAY", temp: "Iced" | "Hot") =>
-    (costModel.ingredientCostByName.get(norm(name)) ?? 0) + costModel.pkgUnitCost(norm(name), channel, temp);
+  // Unit cost (RM) split into recipe + packaging for this line's channel & temp.
+  const lineCost = (name: string, channel: "DINE_IN" | "TAKEAWAY", temp: "Iced" | "Hot") => {
+    const ing = costModel.ingredientCostByName.get(norm(name)) ?? 0;
+    const pkg = costModel.pkgUnitCost(norm(name), channel, temp);
+    return { cost: ing + pkg, pkg };
+  };
 
   type ShRow = { name: string | null; quantity: unknown; total: unknown; ts: Date; channel: string | null };
   type PosRow = { product_name: string | null; quantity: unknown; item_total: unknown; fulfillment: string | null; source: string | null; modifiers: unknown };
@@ -497,18 +500,23 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
         if (!(tsMs < cutoverMs || isExternalDelivery(r.channel))) continue; // cutover gate
         const name = (r.name || "Unknown").trim();
         const channel = /dine/i.test(r.channel ?? "") ? "DINE_IN" : "TAKEAWAY";
-        out.push({ name, category: catOf(name), qty: Number(r.quantity) || 0, sales: Number(r.total) || 0, cost: unitCost(name, channel, "Iced") });
+        const c = lineCost(name, channel, "Iced"); // archive doesn't record temperature
+        out.push({ name, category: catOf(name), qty: Number(r.quantity) || 0, sales: Number(r.total) || 0, cost: c.cost, pkg: c.pkg, temp: "Iced" });
       }
       for (const r of posRows as PosRow[]) {
         const name = (r.product_name || "Unknown").trim();
         // Grab is delivery (takeaway-style packaging) regardless of fulfillment tag.
         const channel = r.source === "grabfood" ? "TAKEAWAY" : r.fulfillment === "dine_in" ? "DINE_IN" : "TAKEAWAY";
-        out.push({ name, category: catOf(name), qty: Number(r.quantity) || 0, sales: (Number(r.item_total) || 0) / 100, cost: unitCost(name, channel, tempFromModifiers(r.modifiers)) });
+        const temp = tempFromModifiers(r.modifiers);
+        const c = lineCost(name, channel, temp);
+        out.push({ name, category: catOf(name), qty: Number(r.quantity) || 0, sales: (Number(r.item_total) || 0) / 100, cost: c.cost, pkg: c.pkg, temp });
       }
       for (const r of appRows as AppRow[]) {
         const name = (r.product_name || "Unknown").trim();
         const channel = r.order_type === "dine_in" ? "DINE_IN" : "TAKEAWAY";
-        out.push({ name, category: catOf(name), qty: Number(r.quantity) || 0, sales: (Number(r.item_total) || 0) / 100, cost: unitCost(name, channel, tempFromModifiers(r.modifiers)) });
+        const temp = tempFromModifiers(r.modifiers);
+        const c = lineCost(name, channel, temp);
+        out.push({ name, category: catOf(name), qty: Number(r.quantity) || 0, sales: (Number(r.item_total) || 0) / 100, cost: c.cost, pkg: c.pkg, temp });
       }
       return out;
     }),
@@ -520,22 +528,27 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
 const GP_TIP = "Gross profit = sales − COGS (recipe + packaging cost). Items with no recipe or packaging show 100%.";
 const COGS_TIP = "Cost of goods sold = qty × unit cost (recipe ingredients + packaging). Packaging (cup / lid / straw) is applied per the sale's channel (dine-in vs takeaway) and Hot/Iced.";
 const COGS_PCT_TIP = "COGS as a % of sales (COGS ÷ sales) — the complement of gross profit %.";
+const PKG_TIP = "Packaging portion of COGS (cup / lid / straw / box / bag), applied by channel + Hot/Iced. Ingredient cost = COGS − packaging.";
+const TEMP_TIP = "COGS from units sold Iced vs Hot (each split sums to total COGS). Food and untagged sales default to Iced.";
 const COST_NOTE =
   "Unit cost / COGS come from the BOM recipe (ingredient supplier prices) plus packaging rules, applied by each sale's channel (dine-in vs takeaway) and temperature (Hot/Iced). Where temperature isn't recorded (pickup app, archived sales) it defaults to Iced. Per-order packaging (e.g. a Grab carrier bag) isn't included. Items without a recipe read as recipe cost 0.";
 
 export async function buildByProduct(outlets: OutletPick[], from: string, to: string): Promise<ReportResult> {
   const items = await gatherItems(outlets, from, to);
-  type Agg = { name: string; category: string; qty: number; sales: number; costTotal: number };
+  type Agg = { name: string; category: string; qty: number; sales: number; costTotal: number; pkgTotal: number; icedTotal: number; hotTotal: number };
   const map = new Map<string, Agg>();
   for (const it of items) {
     let a = map.get(it.name);
     if (!a) {
-      a = { name: it.name, category: it.category, qty: 0, sales: 0, costTotal: 0 };
+      a = { name: it.name, category: it.category, qty: 0, sales: 0, costTotal: 0, pkgTotal: 0, icedTotal: 0, hotTotal: 0 };
       map.set(it.name, a);
     }
     a.qty += it.qty;
     a.sales += it.sales;
     a.costTotal += it.qty * it.cost;
+    a.pkgTotal += it.qty * it.pkg;
+    if (it.temp === "Hot") a.hotTotal += it.qty * it.cost;
+    else a.icedTotal += it.qty * it.cost;
   }
   const rows: Row[] = [...map.values()]
     .map((a) => {
@@ -547,6 +560,9 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
         totalSales: round2(a.sales),
         cogs: round2(a.costTotal),
         cogsPct: a.sales ? round2((a.costTotal / a.sales) * 100) : 0,
+        packaging: round2(a.pkgTotal),
+        cogsIced: round2(a.icedTotal),
+        cogsHot: round2(a.hotTotal),
         avgCost: a.qty ? round2(a.costTotal / a.qty) : 0,
         grossProfit: round2(gp),
         gpPct: a.sales ? round2((gp / a.sales) * 100) : 0,
@@ -555,7 +571,11 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
     .sort((x, y) => (y.totalSales as number) - (x.totalSales as number));
 
   const tSales = rows.reduce((s, r) => s + (r.totalSales as number), 0);
-  const tCost = [...map.values()].reduce((s, a) => s + a.costTotal, 0);
+  const aggs = [...map.values()];
+  const tCost = aggs.reduce((s, a) => s + a.costTotal, 0);
+  const tPkg = aggs.reduce((s, a) => s + a.pkgTotal, 0);
+  const tIced = aggs.reduce((s, a) => s + a.icedTotal, 0);
+  const tHot = aggs.reduce((s, a) => s + a.hotTotal, 0);
   const tQty = rows.reduce((s, r) => s + (r.qty as number), 0);
   const total: Row = {
     name: "Total",
@@ -564,6 +584,9 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
     totalSales: round2(tSales),
     cogs: round2(tCost),
     cogsPct: tSales ? round2((tCost / tSales) * 100) : 0,
+    packaging: round2(tPkg),
+    cogsIced: round2(tIced),
+    cogsHot: round2(tHot),
     avgCost: tQty ? round2(tCost / tQty) : 0,
     grossProfit: round2(tSales - tCost),
     gpPct: tSales ? round2(((tSales - tCost) / tSales) * 100) : 0,
@@ -578,6 +601,9 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
       { key: "totalSales", label: "Total Sales", kind: "rm" },
       { key: "cogs", label: "COGS", kind: "rm", tip: COGS_TIP },
       { key: "cogsPct", label: "COGS %", kind: "pct", tip: COGS_PCT_TIP },
+      { key: "packaging", label: "Packaging", kind: "rm", tip: PKG_TIP },
+      { key: "cogsIced", label: "COGS · Iced", kind: "rm", tip: TEMP_TIP },
+      { key: "cogsHot", label: "COGS · Hot", kind: "rm", tip: TEMP_TIP },
       { key: "avgCost", label: "Avg Cost", kind: "rm", tip: COST_NOTE },
       { key: "grossProfit", label: "Gross Profit", kind: "rm", tip: GP_TIP },
       { key: "gpPct", label: "Gross Profit %", kind: "pct", tip: GP_TIP },
@@ -590,17 +616,20 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
 
 export async function buildByCategory(outlets: OutletPick[], from: string, to: string): Promise<ReportResult> {
   const items = await gatherItems(outlets, from, to);
-  type Agg = { category: string; qty: number; sales: number; costTotal: number };
+  type Agg = { category: string; qty: number; sales: number; costTotal: number; pkgTotal: number; icedTotal: number; hotTotal: number };
   const map = new Map<string, Agg>();
   for (const it of items) {
     let a = map.get(it.category);
     if (!a) {
-      a = { category: it.category, qty: 0, sales: 0, costTotal: 0 };
+      a = { category: it.category, qty: 0, sales: 0, costTotal: 0, pkgTotal: 0, icedTotal: 0, hotTotal: 0 };
       map.set(it.category, a);
     }
     a.qty += it.qty;
     a.sales += it.sales;
     a.costTotal += it.qty * it.cost;
+    a.pkgTotal += it.qty * it.pkg;
+    if (it.temp === "Hot") a.hotTotal += it.qty * it.cost;
+    else a.icedTotal += it.qty * it.cost;
   }
   const grand = [...map.values()].reduce((s, a) => s + a.sales, 0) || 1;
   const rows: Row[] = [...map.values()]
@@ -612,6 +641,9 @@ export async function buildByCategory(outlets: OutletPick[], from: string, to: s
         totalSales: round2(a.sales),
         cogs: round2(a.costTotal),
         cogsPct: a.sales ? round2((a.costTotal / a.sales) * 100) : 0,
+        packaging: round2(a.pkgTotal),
+        cogsIced: round2(a.icedTotal),
+        cogsHot: round2(a.hotTotal),
         grossProfit: round2(gp),
         gpPct: a.sales ? round2((gp / a.sales) * 100) : 0,
         sharePct: round2((a.sales / grand) * 100),
@@ -620,7 +652,11 @@ export async function buildByCategory(outlets: OutletPick[], from: string, to: s
     .sort((x, y) => (y.totalSales as number) - (x.totalSales as number));
 
   const tSales = rows.reduce((s, r) => s + (r.totalSales as number), 0);
-  const tCost = [...map.values()].reduce((s, a) => s + a.costTotal, 0);
+  const aggs = [...map.values()];
+  const tCost = aggs.reduce((s, a) => s + a.costTotal, 0);
+  const tPkg = aggs.reduce((s, a) => s + a.pkgTotal, 0);
+  const tIced = aggs.reduce((s, a) => s + a.icedTotal, 0);
+  const tHot = aggs.reduce((s, a) => s + a.hotTotal, 0);
   const tQty = rows.reduce((s, r) => s + (r.qty as number), 0);
   const total: Row = {
     category: "Total",
@@ -628,6 +664,9 @@ export async function buildByCategory(outlets: OutletPick[], from: string, to: s
     totalSales: round2(tSales),
     cogs: round2(tCost),
     cogsPct: tSales ? round2((tCost / tSales) * 100) : 0,
+    packaging: round2(tPkg),
+    cogsIced: round2(tIced),
+    cogsHot: round2(tHot),
     grossProfit: round2(tSales - tCost),
     gpPct: tSales ? round2(((tSales - tCost) / tSales) * 100) : 0,
     sharePct: 100,
@@ -641,6 +680,9 @@ export async function buildByCategory(outlets: OutletPick[], from: string, to: s
       { key: "totalSales", label: "Total Sales", kind: "rm" },
       { key: "cogs", label: "COGS", kind: "rm", tip: COGS_TIP },
       { key: "cogsPct", label: "COGS %", kind: "pct", tip: COGS_PCT_TIP },
+      { key: "packaging", label: "Packaging", kind: "rm", tip: PKG_TIP },
+      { key: "cogsIced", label: "COGS · Iced", kind: "rm", tip: TEMP_TIP },
+      { key: "cogsHot", label: "COGS · Hot", kind: "rm", tip: TEMP_TIP },
       { key: "grossProfit", label: "Gross Profit", kind: "rm", tip: GP_TIP },
       { key: "gpPct", label: "Gross Profit %", kind: "pct", tip: GP_TIP },
       { key: "sharePct", label: "% of Sales", kind: "pct" },
