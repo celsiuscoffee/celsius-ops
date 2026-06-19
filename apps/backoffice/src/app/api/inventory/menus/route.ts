@@ -5,7 +5,7 @@ import { requireAuth } from "@/lib/auth";
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
-  const [menus, supplierProducts] = await Promise.all([
+  const [menus, supplierProducts, packagingRules] = await Promise.all([
     prisma.menu.findMany({
       include: {
         ingredients: {
@@ -22,6 +22,12 @@ export async function GET(request: NextRequest) {
         productPackage: { select: { conversionFactor: true } },
         supplier: { select: { supplierCode: true } },
       },
+    }),
+    // Per-item packaging rules that fold into a menu item's dine-in/takeaway
+    // cost. Per-order and Grab/Delivery rules are order-level, not per item.
+    prisma.packagingRule.findMany({
+      where: { isActive: true, perOrder: false, channel: { in: ["ALL", "DINE_IN", "TAKEAWAY"] } },
+      select: { productId: true, quantity: true, scope: true, category: true, menuIds: true, channel: true },
     }),
   ]);
 
@@ -44,6 +50,16 @@ export async function GET(request: NextRequest) {
       costMap.set(sp.productId, costPerBase);
     }
   }
+
+  // Pre-resolve per-item packaging rules to {cost, scope, channel} so each
+  // menu just checks applicability.
+  const rules = packagingRules.map((r) => ({
+    cost: Number(r.quantity) * (costMap.get(r.productId) ?? 0),
+    scope: r.scope,
+    category: r.category,
+    menuIdSet: new Set(r.menuIds),
+    channel: r.channel as "ALL" | "DINE_IN" | "TAKEAWAY",
+  }));
 
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -87,6 +103,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fold in matching per-item packaging rules (cup/lid/straw on a category or
+    // all drinks). ALL bills both channels; DINE_IN / TAKEAWAY only that one.
+    let ruleMatches = 0;
+    for (const r of rules) {
+      const applies =
+        r.scope === "ALL" ? true :
+        r.scope === "CATEGORY" ? (m.category ?? "") === (r.category ?? "") :
+        r.menuIdSet.has(m.id);
+      if (!applies) continue;
+      ruleMatches += 1;
+      if (r.channel !== "TAKEAWAY") packagingDineIn += r.cost;
+      if (r.channel !== "DINE_IN") packagingTakeaway += r.cost;
+    }
+
     const dineInCogs = ingredientCost + ingredientDineExtra + packagingDineIn;
     const takeawayCogs = ingredientCost + ingredientTakeExtra + packagingTakeaway;
     const sellingPrice = Number(m.sellingPrice ?? 0);
@@ -110,7 +140,7 @@ export async function GET(request: NextRequest) {
       cogs: round2(takeawayCogs),
       cogsPercent: round1(pct(takeawayCogs)),
       ingredientCount: ingredients.length - packagingCount,
-      packagingCount,
+      packagingCount: packagingCount + ruleMatches,
       ingredients,
     };
   });

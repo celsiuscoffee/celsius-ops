@@ -18,6 +18,7 @@ import {
   BarChart3,
   Users,
   Package,
+  PackageOpen,
   Truck,
   Tag,
   Tags,
@@ -202,6 +203,7 @@ const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Ingredients", href: "/inventory/products", icon: <Package className={ICON_SIZE} />, moduleKey: "inventory:products" },
           { label: "Perishables", href: "/inventory/perishables", icon: <Box className={ICON_SIZE} />, moduleKey: "inventory:perishables" },
+          { label: "Packaging", href: "/inventory/packaging", icon: <PackageOpen className={ICON_SIZE} />, moduleKey: "inventory:packaging" },
           { label: "Suppliers", href: "/inventory/suppliers", icon: <Truck className={ICON_SIZE} />, moduleKey: "inventory:suppliers" },
           { label: "Groups & Storage", href: "/inventory/groups", icon: <Tags className={ICON_SIZE} />, moduleKey: "inventory:categories" },
         ],
