@@ -45,33 +45,72 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+
   const mapped = menus.map((m) => {
     const ingredients = m.ingredients.map((ing) => {
       const unitCost = costMap.get(ing.productId) ?? 0;
       const cost = Number(ing.quantityUsed) * unitCost;
+      const kind = ing.product.itemType === "PACKAGING" ? "packaging" : "ingredient";
       return {
         productId: ing.productId,
         product: ing.product.name,
         sku: ing.product.sku,
         qty: Number(ing.quantityUsed),
         uom: ing.uom,
+        serviceMode: ing.serviceMode, // ALL | DINE_IN | TAKEAWAY
+        kind, // "ingredient" | "packaging"
         unitCost: Math.round(unitCost * 10000) / 10000,
-        cost: Math.round(cost * 100) / 100,
+        cost: round2(cost),
       };
     });
 
-    const cogs = ingredients.reduce((sum, ing) => sum + ing.cost, 0);
+    // Bucket each BOM line by kind × channel. ALL lines are billed on every
+    // sale; DINE_IN / TAKEAWAY lines only on that channel. Channel COGS =
+    // (ALL + that-channel ingredient) + (ALL + that-channel packaging).
+    let ingredientCost = 0; // channel-agnostic recipe cost (the food/drink)
+    let packagingDineIn = 0;
+    let packagingTakeaway = 0;
+    let ingredientDineExtra = 0;
+    let ingredientTakeExtra = 0;
+    let packagingCount = 0;
+    for (const ing of ingredients) {
+      if (ing.kind === "packaging") {
+        packagingCount += 1;
+        if (ing.serviceMode !== "TAKEAWAY") packagingDineIn += ing.cost;
+        if (ing.serviceMode !== "DINE_IN") packagingTakeaway += ing.cost;
+      } else {
+        if (ing.serviceMode === "DINE_IN") ingredientDineExtra += ing.cost;
+        else if (ing.serviceMode === "TAKEAWAY") ingredientTakeExtra += ing.cost;
+        else ingredientCost += ing.cost;
+      }
+    }
+
+    const dineInCogs = ingredientCost + ingredientDineExtra + packagingDineIn;
+    const takeawayCogs = ingredientCost + ingredientTakeExtra + packagingTakeaway;
     const sellingPrice = Number(m.sellingPrice ?? 0);
-    const cogsPercent = sellingPrice > 0 ? (cogs / sellingPrice) * 100 : 0;
+    const pct = (cogs: number) => (sellingPrice > 0 ? (cogs / sellingPrice) * 100 : 0);
 
     return {
       id: m.id,
       name: m.name,
       category: m.category ?? "",
       sellingPrice,
-      cogs: Math.round(cogs * 100) / 100,
-      cogsPercent: Math.round(cogsPercent * 10) / 10,
-      ingredientCount: ingredients.length,
+      // Recipe/ingredient cost only (what the old `cogs` meant).
+      ingredientCost: round2(ingredientCost + ingredientDineExtra + ingredientTakeExtra),
+      packagingDineIn: round2(packagingDineIn),
+      packagingTakeaway: round2(packagingTakeaway),
+      dineInCogs: round2(dineInCogs),
+      takeawayCogs: round2(takeawayCogs),
+      dineInCogsPercent: round1(pct(dineInCogs)),
+      takeawayCogsPercent: round1(pct(takeawayCogs)),
+      // Headline COGS = all-in worst case (takeaway). Keeps the "High COGS"
+      // filter and sort meaningful now that packaging is included.
+      cogs: round2(takeawayCogs),
+      cogsPercent: round1(pct(takeawayCogs)),
+      ingredientCount: ingredients.length - packagingCount,
+      packagingCount,
       ingredients,
     };
   });

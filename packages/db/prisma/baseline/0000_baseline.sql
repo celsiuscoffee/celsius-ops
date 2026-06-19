@@ -14,7 +14,10 @@ CREATE TYPE "UserRole" AS ENUM ('OWNER', 'ADMIN', 'MANAGER', 'STAFF');
 CREATE TYPE "UserStatus" AS ENUM ('ACTIVE', 'DEACTIVATED');
 
 -- CreateEnum
-CREATE TYPE "ItemType" AS ENUM ('INGREDIENT', 'PERISHABLE');
+CREATE TYPE "ItemType" AS ENUM ('INGREDIENT', 'PERISHABLE', 'PACKAGING');
+
+-- CreateEnum
+CREATE TYPE "ServiceMode" AS ENUM ('ALL', 'DINE_IN', 'TAKEAWAY');
 
 -- CreateEnum
 CREATE TYPE "SupplierStatus" AS ENUM ('ACTIVE', 'INACTIVE');
@@ -569,6 +572,7 @@ CREATE TABLE "MenuIngredient" (
     "productId" TEXT NOT NULL,
     "quantityUsed" DECIMAL(65,30) NOT NULL,
     "uom" TEXT NOT NULL,
+    "serviceMode" "ServiceMode" NOT NULL DEFAULT 'ALL',
 
     CONSTRAINT "MenuIngredient_pkey" PRIMARY KEY ("id")
 );
@@ -1150,6 +1154,45 @@ CREATE TABLE "BankStatementLine" (
 );
 
 -- CreateTable
+CREATE TABLE "RmPayout" (
+    "id" TEXT NOT NULL,
+    "settlementDate" TIMESTAMP(3) NOT NULL,
+    "periodStart" TIMESTAMP(3),
+    "periodEnd" TIMESTAMP(3),
+    "method" TEXT NOT NULL,
+    "sequence" INTEGER NOT NULL DEFAULT 1,
+    "storeId" TEXT NOT NULL,
+    "entityName" TEXT,
+    "bankAccountLast4" TEXT,
+    "txnCount" INTEGER NOT NULL DEFAULT 0,
+    "grossTotal" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "mdrFee" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "netTotal" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "status" TEXT NOT NULL DEFAULT 'success',
+    "syncedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "RmPayout_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "RmPayoutLine" (
+    "id" TEXT NOT NULL,
+    "payoutId" TEXT NOT NULL,
+    "rmTransactionId" TEXT NOT NULL,
+    "rmOrderId" TEXT,
+    "orderId" TEXT,
+    "gross" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "mdrFee" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "net" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "method" TEXT,
+    "txnTime" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "RmPayoutLine_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "RecurringExpense" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -1230,10 +1273,22 @@ CREATE UNIQUE INDEX "Order_orderNumber_key" ON "Order"("orderNumber");
 CREATE UNIQUE INDEX "Order_clientRequestId_key" ON "Order"("clientRequestId");
 
 -- CreateIndex
+CREATE INDEX "Order_outletId_createdAt_idx" ON "Order"("outletId", "createdAt" DESC);
+
+-- CreateIndex
+CREATE INDEX "Order_status_createdAt_idx" ON "Order"("status", "createdAt" DESC);
+
+-- CreateIndex
 CREATE UNIQUE INDEX "OrderItem_orderId_productId_productPackageId_key" ON "OrderItem"("orderId", "productId", "productPackageId");
 
 -- CreateIndex
 CREATE INDEX "Invoice_aiPrefilledAt_idx" ON "Invoice"("aiPrefilledAt");
+
+-- CreateIndex
+CREATE INDEX "Invoice_outletId_idx" ON "Invoice"("outletId");
+
+-- CreateIndex
+CREATE INDEX "Invoice_status_dueDate_idx" ON "Invoice"("status", "dueDate");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Invoice_supplierId_invoiceNumber_key" ON "Invoice"("supplierId", "invoiceNumber");
@@ -1260,7 +1315,7 @@ CREATE UNIQUE INDEX "ParLevel_productId_outletId_key" ON "ParLevel"("productId",
 CREATE UNIQUE INDEX "Menu_storehubId_key" ON "Menu"("storehubId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "MenuIngredient_menuId_productId_key" ON "MenuIngredient"("menuId", "productId");
+CREATE UNIQUE INDEX "MenuIngredient_menuId_productId_serviceMode_key" ON "MenuIngredient"("menuId", "productId", "serviceMode");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "SalesTransaction_storehubTxId_key" ON "SalesTransaction"("storehubTxId");
@@ -1504,6 +1559,21 @@ CREATE INDEX "BankStatementLine_txnDate_idx" ON "BankStatementLine"("txnDate");
 
 -- CreateIndex
 CREATE INDEX "BankStatementLine_category_outletId_idx" ON "BankStatementLine"("category", "outletId");
+
+-- CreateIndex
+CREATE INDEX "RmPayout_settlementDate_idx" ON "RmPayout"("settlementDate");
+
+-- CreateIndex
+CREATE INDEX "RmPayout_storeId_idx" ON "RmPayout"("storeId");
+
+-- CreateIndex
+CREATE INDEX "RmPayoutLine_payoutId_idx" ON "RmPayoutLine"("payoutId");
+
+-- CreateIndex
+CREATE INDEX "RmPayoutLine_orderId_idx" ON "RmPayoutLine"("orderId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "RmPayoutLine_rmTransactionId_key" ON "RmPayoutLine"("rmTransactionId");
 
 -- CreateIndex
 CREATE INDEX "RecurringExpense_isActive_nextDueDate_idx" ON "RecurringExpense"("isActive", "nextDueDate");
@@ -1798,6 +1868,9 @@ ALTER TABLE "BankStatementLine" ADD CONSTRAINT "BankStatementLine_statementId_fk
 
 -- AddForeignKey
 ALTER TABLE "BankStatementLine" ADD CONSTRAINT "BankStatementLine_outletId_fkey" FOREIGN KEY ("outletId") REFERENCES "Outlet"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RmPayoutLine" ADD CONSTRAINT "RmPayoutLine_payoutId_fkey" FOREIGN KEY ("payoutId") REFERENCES "RmPayout"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "RecurringExpense" ADD CONSTRAINT "RecurringExpense_outletId_fkey" FOREIGN KEY ("outletId") REFERENCES "Outlet"("id") ON DELETE SET NULL ON UPDATE CASCADE;

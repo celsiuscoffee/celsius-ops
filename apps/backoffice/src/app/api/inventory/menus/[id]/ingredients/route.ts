@@ -2,11 +2,16 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 
+type ServiceMode = "ALL" | "DINE_IN" | "TAKEAWAY";
+const SERVICE_MODES: ServiceMode[] = ["ALL", "DINE_IN", "TAKEAWAY"];
+
 /**
  * PUT /api/menus/[id]/ingredients
  *
- * Replace all ingredients for a menu item.
- * Body: { ingredients: [{ productId, quantityUsed, uom }] }
+ * Replace all BOM lines (ingredients + packaging) for a menu item.
+ * Body: { ingredients: [{ productId, quantityUsed, uom, serviceMode? }] }
+ * serviceMode defaults to ALL; packaging lines use DINE_IN / TAKEAWAY to scope
+ * a line to one fulfillment channel.
  */
 export async function PUT(
   req: NextRequest,
@@ -28,17 +33,20 @@ export async function PUT(
     return NextResponse.json({ error: "Menu not found" }, { status: 404 });
   }
 
-  // Replace all ingredients in a transaction
+  // Replace all BOM lines in a transaction
   await prisma.$transaction([
     prisma.menuIngredient.deleteMany({ where: { menuId } }),
     ...ingredients.map(
-      (ing: { productId: string; quantityUsed: number; uom: string }) =>
+      (ing: { productId: string; quantityUsed: number; uom: string; serviceMode?: string }) =>
         prisma.menuIngredient.create({
           data: {
             menuId,
             productId: ing.productId,
             quantityUsed: ing.quantityUsed,
             uom: ing.uom,
+            serviceMode: SERVICE_MODES.includes(ing.serviceMode as ServiceMode)
+              ? (ing.serviceMode as ServiceMode)
+              : "ALL",
           },
         }),
     ),
