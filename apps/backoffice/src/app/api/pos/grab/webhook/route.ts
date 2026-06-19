@@ -89,13 +89,45 @@ interface GrabWebhookPayload {
 
 function mapGrabStatusToPOS(state: GrabWebhookPayload["orderState"]): string {
   switch (state) {
-    case "PENDING": case "DRIVER_ALLOCATED": return "open";
-    case "ACCEPTED": return "sent_to_kitchen";
+    // PENDING is the only genuine pre-acceptance state.
+    case "PENDING": return "open";
+    // DRIVER_ALLOCATED is a POST-acceptance state — Grab assigns a driver only
+    // AFTER the merchant accepts. Mapping it to "open" (as it was) demoted an
+    // already-accepted order below the on-register KDS floor (GRAB_LIVE), where
+    // staff could no longer see it to mark it Ready/Collected — so it sat "open"
+    // forever. It belongs in the active kitchen bucket alongside ACCEPTED.
+    case "ACCEPTED": case "DRIVER_ALLOCATED": return "sent_to_kitchen";
     case "DRIVER_ARRIVED": return "ready";
     case "COLLECTED": case "DELIVERED": return "completed";
     case "CANCELLED": case "FAILED": return "cancelled";
     default: return "open";
   }
+}
+
+// POS fulfilment lifecycle order. A Grab "Push Order State" must only ever move
+// an order FORWARD — a late, duplicate, or out-of-order push (e.g. a stray
+// PENDING arriving after the order was already accepted) must never demote it.
+// That demotion is exactly what stranded orders at "open", off the KDS.
+const STATUS_RANK: Record<string, number> = {
+  open: 0,
+  sent_to_kitchen: 1,
+  preparing: 2,
+  ready: 3,
+  completed: 4,
+};
+
+// Decide whether an inbound mapped status should overwrite the current one.
+// Cancellation/failure is terminal and can arrive at any live stage, so it wins
+// over a forward status — but never resurrects an already-finished order.
+// Forward-only otherwise; unknown statuses pass through (forward-compatible).
+function shouldApplyStatus(current: string | null, next: string): boolean {
+  const cur = current ?? "";
+  if (cur === next) return false;
+  if (next === "cancelled") return cur !== "completed" && cur !== "cancelled";
+  const c = STATUS_RANK[cur];
+  const n = STATUS_RANK[next];
+  if (c === undefined || n === undefined) return true;
+  return n > c;
 }
 
 // Grab / the simulator put the order note in different places across API
@@ -154,12 +186,27 @@ export async function POST(request: NextRequest) {
       .from("pos_orders").select("id, status").eq("external_id", orderID).maybeSingle();
     if (existing) {
       const newStatus = mapGrabStatusToPOS(orderState);
-      if (existing.status !== newStatus) {
+      const apply = shouldApplyStatus(existing.status, newStatus);
+      if (apply) {
         await supabase.from("pos_orders")
           .update({ status: newStatus, updated_at: new Date().toISOString() })
           .eq("id", existing.id);
+      } else {
+        // Logged so a blocked backward push is visible in the webhook trace
+        // instead of looking identical to a no-op.
+        console.log(
+          `[grab:webhook] status push not applied orderID=${orderID} from=${existing.status} to=${newStatus} state=${orderState}`,
+        );
       }
-      return NextResponse.json({ success: true, action: "updated", orderId: existing.id, state: orderState });
+      return NextResponse.json({
+        success: true,
+        action: apply ? "updated" : "skipped",
+        orderId: existing.id,
+        from: existing.status,
+        to: newStatus,
+        applied: apply,
+        state: orderState,
+      });
     }
 
     // 2. Create whenever the payload carries items (Submit Order). Push
