@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Settings, BarChart3, QrCode, Printer, ClipboardList, Receipt, Users, type LucideIcon } from "lucide-react";
+import { Settings, BarChart3, QrCode, Printer, ClipboardList, Receipt, Users, Power, type LucideIcon } from "lucide-react";
 
 /**
  * POS section landing — quick links into the POS admin surfaces, grouped by
@@ -30,6 +30,12 @@ const GROUPS: PosGroup[] = [
         Icon: Users,
         title: "Cashier Performance",
         blurb: "Phone-collection rate per cashier — the loyalty top-of-funnel, tracked against the 70% target.",
+      },
+      {
+        href: "/pos/store-menu-status",
+        Icon: Power,
+        title: "Store / Menu Status",
+        blurb: "Live board: which outlets are open vs paused, today's orders vs the weekday norm, and what's 86'd.",
       },
       {
         href: "/pos/z-report",
