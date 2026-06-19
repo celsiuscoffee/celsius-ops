@@ -88,6 +88,26 @@ const rowKey = () =>
 
 type SortKey = "name" | "category" | "sellingPrice" | "cogs" | "cogsPercent" | "ingredientCount";
 
+// One all-in COGS figure with its ingredients-vs-packaging split. The packaging
+// sub-line shows how much of the cost is packaging and its share of COGS (the
+// rest is ingredients) so the two are easy to compare at a glance.
+const CogsCell = ({ c }: { c: Cell }) => {
+  const pkgShare = c.cogs > 0 ? Math.round((c.pkg / c.cogs) * 100) : 0;
+  return (
+    <div className="leading-tight">
+      <div className="font-bold text-gray-900">
+        RM {c.cogs.toFixed(2)}
+        {c.cogsPercent > 0 && <span className="ml-1 text-[10px] font-normal text-gray-400">{c.cogsPercent.toFixed(0)}%</span>}
+      </div>
+      {c.pkg > 0 && (
+        <div className="text-[10px] font-normal text-amber-600">
+          pkg RM {c.pkg.toFixed(2)} · {pkgShare}%
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function MenusPage() {
   const { data: menus = [], isLoading: loading, mutate: loadMenus } = useFetch<MenuItem[]>("/api/inventory/menus");
   const { data: products = [] } = useFetch<ProductOption[]>("/api/inventory/products");
@@ -803,24 +823,18 @@ export default function MenusPage() {
                                         : ([["", menu.matrix.iced]] as const)
                                       ).map(([label, row]) => (
                                         <tr key={label || "all"}>
-                                          <td colSpan={5} className="py-1.5 text-right font-semibold text-gray-600">
+                                          <td colSpan={5} className="py-1.5 text-right align-top font-semibold text-gray-600">
                                             {label ? <span className={label === "Iced" ? "text-sky-600" : "text-orange-600"}>{label} drink</span> : "Total"}
                                           </td>
-                                          <td className="py-1.5 text-right font-bold text-gray-900">
-                                            RM {row.dineIn.cogs.toFixed(2)}{row.dineIn.cogsPercent > 0 && <span className="ml-1 text-[10px] font-normal text-gray-400">{row.dineIn.cogsPercent.toFixed(0)}%</span>}
-                                          </td>
-                                          <td className="py-1.5 text-right font-bold text-gray-900">
-                                            RM {row.takeaway.cogs.toFixed(2)}{row.takeaway.cogsPercent > 0 && <span className="ml-1 text-[10px] font-normal text-gray-400">{row.takeaway.cogsPercent.toFixed(0)}%</span>}
-                                          </td>
+                                          <td className="py-1.5 text-right align-top"><CogsCell c={row.dineIn} /></td>
+                                          <td className="py-1.5 text-right align-top"><CogsCell c={row.takeaway} /></td>
                                         </tr>
                                       ))}
                                     </>
                                   ) : (
                                     <tr className="border-t border-gray-200">
-                                      <td colSpan={6} className="py-1.5 text-right font-semibold text-gray-600">
-                                        Total COGS{menu.matrix.iced.takeaway.cogsPercent > 0 ? ` (${menu.matrix.iced.takeaway.cogsPercent.toFixed(1)}%)` : ""}
-                                      </td>
-                                      <td className="py-1.5 text-right font-bold text-gray-900">RM {menu.matrix.iced.takeaway.cogs.toFixed(2)}</td>
+                                      <td colSpan={6} className="py-1.5 text-right align-top font-semibold text-gray-600">Total COGS</td>
+                                      <td className="py-1.5 text-right align-top"><CogsCell c={menu.matrix.iced.takeaway} /></td>
                                     </tr>
                                   )}
                                 </>
