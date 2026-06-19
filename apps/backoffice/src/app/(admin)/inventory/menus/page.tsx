@@ -27,6 +27,7 @@ type Ingredient = {
   cost: number;
   serviceMode: ServiceMode;
   kind: "ingredient" | "packaging";
+  source?: "bom" | "rule"; // "rule" = applied from a Packaging rule (read-only)
 };
 
 type MenuItem = {
@@ -130,15 +131,19 @@ export default function MenusPage() {
     setEditingMenuId(menu.id);
     setExpandedId(menu.id);
     setEditIngredients(
-      menu.ingredients.map((ing) => ({
-        productId: ing.productId,
-        productName: ing.product,
-        sku: ing.sku,
-        quantityUsed: ing.qty,
-        uom: ing.uom,
-        serviceMode: ing.serviceMode,
-        kind: ing.kind,
-      }))
+      // Rule-applied packaging is managed on the Packaging page — only the
+      // menu's own BOM lines are editable here.
+      menu.ingredients
+        .filter((ing) => ing.source !== "rule")
+        .map((ing) => ({
+          productId: ing.productId,
+          productName: ing.product,
+          sku: ing.sku,
+          quantityUsed: ing.qty,
+          uom: ing.uom,
+          serviceMode: ing.serviceMode,
+          kind: ing.kind,
+        }))
     );
     setAddSearch("");
   };
@@ -564,6 +569,11 @@ export default function MenusPage() {
                                       {ing.kind === "packaging" && (
                                         <Badge variant="outline" className="border-amber-300 bg-amber-50 text-[9px] text-amber-700">
                                           Packaging
+                                        </Badge>
+                                      )}
+                                      {ing.source === "rule" && (
+                                        <Badge variant="outline" className="border-gray-200 bg-gray-50 text-[9px] text-gray-500">
+                                          via rule
                                         </Badge>
                                       )}
                                     </span>

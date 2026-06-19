@@ -27,7 +27,10 @@ export async function GET(request: NextRequest) {
     // cost. Per-order and Grab/Delivery rules are order-level, not per item.
     prisma.packagingRule.findMany({
       where: { isActive: true, perOrder: false, channel: { in: ["ALL", "DINE_IN", "TAKEAWAY"] } },
-      select: { productId: true, quantity: true, scope: true, category: true, menuIds: true, channel: true },
+      select: {
+        productId: true, quantity: true, scope: true, category: true, menuIds: true, channel: true,
+        product: { select: { name: true, sku: true, baseUom: true } },
+      },
     }),
   ]);
 
@@ -51,24 +54,44 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Pre-resolve per-item packaging rules to {cost, scope, channel} so each
-  // menu just checks applicability.
-  const rules = packagingRules.map((r) => ({
-    cost: Number(r.quantity) * (costMap.get(r.productId) ?? 0),
-    scope: r.scope,
-    category: r.category,
-    menuIdSet: new Set(r.menuIds),
-    channel: r.channel as "ALL" | "DINE_IN" | "TAKEAWAY",
-  }));
+  // Pre-resolve per-item packaging rules so each menu just checks applicability.
+  const rules = packagingRules.map((r) => {
+    const unitCost = costMap.get(r.productId) ?? 0;
+    return {
+      productId: r.productId,
+      name: r.product.name,
+      sku: r.product.sku,
+      uom: r.product.baseUom,
+      qty: Number(r.quantity),
+      unitCost,
+      cost: Number(r.quantity) * unitCost,
+      scope: r.scope,
+      category: r.category,
+      menuIdSet: new Set(r.menuIds),
+      channel: r.channel as "ALL" | "DINE_IN" | "TAKEAWAY",
+    };
+  });
 
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const round1 = (n: number) => Math.round(n * 10) / 10;
 
+  type Line = {
+    productId: string;
+    product: string;
+    sku: string;
+    qty: number;
+    uom: string;
+    serviceMode: "ALL" | "DINE_IN" | "TAKEAWAY";
+    kind: "ingredient" | "packaging";
+    source: "bom" | "rule"; // "rule" lines are managed on the Packaging page
+    unitCost: number;
+    cost: number;
+  };
+
   const mapped = menus.map((m) => {
-    const ingredients = m.ingredients.map((ing) => {
+    const ingredients: Line[] = m.ingredients.map((ing): Line => {
       const unitCost = costMap.get(ing.productId) ?? 0;
       const cost = Number(ing.quantityUsed) * unitCost;
-      const kind = ing.product.itemType === "PACKAGING" ? "packaging" : "ingredient";
       return {
         productId: ing.productId,
         product: ing.product.name,
@@ -76,14 +99,38 @@ export async function GET(request: NextRequest) {
         qty: Number(ing.quantityUsed),
         uom: ing.uom,
         serviceMode: ing.serviceMode, // ALL | DINE_IN | TAKEAWAY
-        kind, // "ingredient" | "packaging"
+        kind: ing.product.itemType === "PACKAGING" ? "packaging" : "ingredient",
+        source: "bom",
         unitCost: Math.round(unitCost * 10000) / 10000,
         cost: round2(cost),
       };
     });
 
-    // Bucket each BOM line by kind × channel. ALL lines are billed on every
-    // sale; DINE_IN / TAKEAWAY lines only on that channel. Channel COGS =
+    // Append matching packaging-rule lines (cup/lid/straw on a category or all
+    // drinks). Read-only here — managed on the Packaging page — but they cost in
+    // exactly like a BOM packaging line.
+    for (const r of rules) {
+      const applies =
+        r.scope === "ALL" ? true :
+        r.scope === "CATEGORY" ? (m.category ?? "") === (r.category ?? "") :
+        r.menuIdSet.has(m.id);
+      if (!applies) continue;
+      ingredients.push({
+        productId: r.productId,
+        product: r.name,
+        sku: r.sku,
+        qty: r.qty,
+        uom: r.uom,
+        serviceMode: r.channel,
+        kind: "packaging",
+        source: "rule",
+        unitCost: Math.round(r.unitCost * 10000) / 10000,
+        cost: round2(r.cost),
+      });
+    }
+
+    // Bucket each line by kind × channel. ALL lines are billed on every sale;
+    // DINE_IN / TAKEAWAY lines only on that channel. Channel COGS =
     // (ALL + that-channel ingredient) + (ALL + that-channel packaging).
     let ingredientCost = 0; // channel-agnostic recipe cost (the food/drink)
     let packagingDineIn = 0;
@@ -101,20 +148,6 @@ export async function GET(request: NextRequest) {
         else if (ing.serviceMode === "TAKEAWAY") ingredientTakeExtra += ing.cost;
         else ingredientCost += ing.cost;
       }
-    }
-
-    // Fold in matching per-item packaging rules (cup/lid/straw on a category or
-    // all drinks). ALL bills both channels; DINE_IN / TAKEAWAY only that one.
-    let ruleMatches = 0;
-    for (const r of rules) {
-      const applies =
-        r.scope === "ALL" ? true :
-        r.scope === "CATEGORY" ? (m.category ?? "") === (r.category ?? "") :
-        r.menuIdSet.has(m.id);
-      if (!applies) continue;
-      ruleMatches += 1;
-      if (r.channel !== "TAKEAWAY") packagingDineIn += r.cost;
-      if (r.channel !== "DINE_IN") packagingTakeaway += r.cost;
     }
 
     const dineInCogs = ingredientCost + ingredientDineExtra + packagingDineIn;
@@ -140,7 +173,7 @@ export async function GET(request: NextRequest) {
       cogs: round2(takeawayCogs),
       cogsPercent: round1(pct(takeawayCogs)),
       ingredientCount: ingredients.length - packagingCount,
-      packagingCount: packagingCount + ruleMatches,
+      packagingCount,
       ingredients,
     };
   });

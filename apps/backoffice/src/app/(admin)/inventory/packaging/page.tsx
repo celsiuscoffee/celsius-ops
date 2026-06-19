@@ -158,11 +158,6 @@ export default function PackagingPage() {
       ).slice(0, 8)
     : [];
 
-  const scopeSummary = (r: Rule) =>
-    r.scope === "ALL" ? "All menu items"
-    : r.scope === "CATEGORY" ? `Category: ${r.category || "—"}`
-    : `${r.menuIds.length} item${r.menuIds.length === 1 ? "" : "s"}`;
-
   return (
     <div className="p-3 sm:p-6">
       {/* Header */}
@@ -178,65 +173,86 @@ export default function PackagingPage() {
         </Button>
       </div>
 
-      {/* Table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
-        <table className="w-full text-sm min-w-[820px]">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50 text-left">
-              <th className="px-4 py-3 font-medium text-gray-500">Packaging Item</th>
-              <th className="px-4 py-3 font-medium text-gray-500">Applies to</th>
-              <th className="px-4 py-3 font-medium text-gray-500">Channel</th>
-              <th className="px-4 py-3 font-medium text-gray-500">Per</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Qty</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Cost / use</th>
-              <th className="px-4 py-3 font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr><td colSpan={8} className="px-4 py-12 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-terracotta" /></td></tr>
-            )}
-            {!loading && rules.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-400">No packaging rules yet. Click “Add Packaging Rule”.</td></tr>
-            )}
-            {!loading && rules.map((r) => (
-              <tr key={r.id} className={`border-b border-gray-50 hover:bg-gray-50/50 ${!r.isActive ? "opacity-50" : ""}`}>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100"><Package className="h-4 w-4 text-gray-400" /></div>
-                    <div>
-                      <p className="font-medium text-gray-900">{r.productName}</p>
-                      <code className="text-[11px] text-gray-400">{r.productSku}</code>
+      {/* Packaging BOM — grouped by scope (category / all / specific items) */}
+      {loading ? (
+        <div className="mt-4 flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-terracotta" /></div>
+      ) : rules.length === 0 ? (
+        <div className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-12 text-center text-sm text-gray-400">
+          No packaging rules yet. Click “Add Packaging Rule” to start — e.g. add a plastic cup to the <em>Drinks</em> category on the <em>Takeaway</em> channel.
+        </div>
+      ) : (
+        (() => {
+          const cats = new Map<string, Rule[]>();
+          const allRules: Rule[] = [];
+          const itemRules: Rule[] = [];
+          for (const r of rules) {
+            if (r.scope === "CATEGORY") {
+              const k = r.category || "Uncategorised";
+              if (!cats.has(k)) cats.set(k, []);
+              cats.get(k)!.push(r);
+            } else if (r.scope === "ALL") allRules.push(r);
+            else itemRules.push(r);
+          }
+          const groups: { label: string; meta: string; rules: Rule[] }[] = [];
+          for (const k of [...cats.keys()].sort()) {
+            const rs = cats.get(k)!;
+            groups.push({ label: k, meta: `${rs[0].matchedMenuCount} menu item${rs[0].matchedMenuCount === 1 ? "" : "s"}`, rules: rs });
+          }
+          if (allRules.length) groups.push({ label: "All menu items", meta: `${allRules[0].matchedMenuCount} items`, rules: allRules });
+          if (itemRules.length) groups.push({ label: "Specific items", meta: "hand-picked", rules: itemRules });
+
+          return groups.map((g) => {
+            const perItemTotal = g.rules.filter((r) => r.isActive && !r.perOrder).reduce((s, r) => s + r.lineCost, 0);
+            return (
+              <div key={g.label} className="mt-4 rounded-xl border border-gray-200 bg-white">
+                <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-4 py-2.5">
+                  <div>
+                    <p className="font-semibold text-gray-900">{g.label}</p>
+                    <p className="text-xs text-gray-400">{g.meta} · {g.rules.length} packaging line{g.rules.length === 1 ? "" : "s"}</p>
+                  </div>
+                  {perItemTotal > 0 && (
+                    <div className="text-right">
+                      <p className="text-[11px] text-gray-400">Per-item packaging</p>
+                      <p className="text-sm font-semibold text-gray-900">{formatRM(perItemTotal)}</p>
                     </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-gray-600">{scopeSummary(r)}</td>
-                <td className="px-4 py-3"><Badge variant="outline" className={`text-xs ${CHANNEL_BADGE[r.channel]}`}>{CHANNEL_LABEL[r.channel]}</Badge></td>
-                <td className="px-4 py-3 text-gray-600">{r.perOrder ? "Per order" : "Per item"}</td>
-                <td className="px-4 py-3 text-right text-gray-700">{r.quantity}</td>
-                <td className="px-4 py-3 text-right font-medium text-gray-900">
-                  {r.lineCost > 0 ? formatRM(r.lineCost) : <span className="text-gray-300">—</span>}
-                  {!r.perOrder && r.matchedMenuCount > 0 && (
-                    <p className="text-[11px] font-normal text-gray-400">× {r.matchedMenuCount} items</p>
                   )}
-                </td>
-                <td className="px-4 py-3">
-                  <button onClick={() => toggleActive(r)} className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${r.isActive ? "border-green-200 bg-green-50 text-green-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
-                    {r.isActive ? "Active" : "Off"}
-                  </button>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-1">
-                    <button onClick={() => openEdit(r)} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-terracotta"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => remove(r.id)} className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {g.rules.map((r) => (
+                        <tr key={r.id} className={`border-b border-gray-50 last:border-0 hover:bg-gray-50/50 ${!r.isActive ? "opacity-50" : ""}`}>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <Package className="h-4 w-4 text-gray-400" />
+                              <span className="font-medium text-gray-900">{r.productName}</span>
+                              <code className="text-[11px] text-gray-400">{r.productSku}</code>
+                            </div>
+                          </td>
+                          <td className="px-2 py-2.5"><Badge variant="outline" className={`text-xs ${CHANNEL_BADGE[r.channel]}`}>{CHANNEL_LABEL[r.channel]}</Badge></td>
+                          <td className="px-2 py-2.5 text-xs text-gray-500">{r.perOrder ? "per order" : "per item"}</td>
+                          <td className="px-2 py-2.5 text-right text-gray-700">×{r.quantity}</td>
+                          <td className="px-2 py-2.5 text-right font-medium text-gray-900">{r.lineCost > 0 ? formatRM(r.lineCost) : <span className="text-gray-300">—</span>}</td>
+                          <td className="px-2 py-2.5 text-xs text-gray-400">{r.scope === "ITEMS" ? `${r.menuIds.length} item${r.menuIds.length === 1 ? "" : "s"}` : ""}</td>
+                          <td className="px-2 py-2.5">
+                            <button onClick={() => toggleActive(r)} className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${r.isActive ? "border-green-200 bg-green-50 text-green-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>{r.isActive ? "On" : "Off"}</button>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => openEdit(r)} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-terracotta"><Pencil className="h-3.5 w-3.5" /></button>
+                              <button onClick={() => remove(r.id)} className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          });
+        })()
+      )}
 
       {/* Add/Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setEditingId(null); setForm(emptyForm); } }}>
