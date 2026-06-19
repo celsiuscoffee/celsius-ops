@@ -918,7 +918,7 @@ export default function Register() {
   const gridPrefsLoaded = useGridPrefs((s) => s.loaded);
   const cols = activeCat === "all" ? allCols : gridColumns(settings);
 
-  const { width: screenW } = useWindowDimensions();
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const GRID_PAD = 12, GRID_GAP = 10;
   const productAreaW = Math.max(0, screenW - CART_W);
   const tileW = Math.floor((productAreaW - GRID_PAD * 2 - GRID_GAP * (cols - 1)) / cols);
@@ -2255,7 +2255,15 @@ export default function Register() {
             <Text className="text-cream/60 text-sm mb-5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
               Serving target exceeded — mark Ready / Done / Served as soon as they're handed over.
             </Text>
-            <View className="gap-2 mb-6">
+            {/* Scrollable so a long backlog (e.g. 15+ un-served counter orders)
+                never pushes the Dismiss / Open buttons off-screen — the list
+                caps at ~45% of the screen height and scrolls within. */}
+            <ScrollView
+              style={{ maxHeight: Math.round(screenH * 0.45) }}
+              contentContainerStyle={{ gap: 8 }}
+              showsVerticalScrollIndicator
+              className="mb-6"
+            >
               {overdueOrders.map((o) => {
                 const mins = Math.max(0, Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 60000));
                 const chanTag =
@@ -2275,7 +2283,7 @@ export default function Register() {
                   </View>
                 );
               })}
-            </View>
+            </ScrollView>
             <View className="flex-row gap-3">
               <Pressable onPress={() => { Haptics.selectionAsync(); setOverdueAck(true); }} className="flex-1 items-center justify-center rounded-2xl py-4 border border-cream/15 active:opacity-60">
                 <Text className="text-cream/70 text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Dismiss</Text>
