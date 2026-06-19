@@ -391,21 +391,41 @@ export async function POST(request: NextRequest) {
     //    so this is best-effort: a failed or duplicate accept never fails the
     //    webhook. Uses the OUTBOUND OAuth pair (us → Grab).
     let grabAccepted = false;
+    // Record WHY an order did/didn't get auto-accepted so a silent outbound
+    // failure (bad creds, wrong GRAB_ENV, OAuth error) is a queryable fact on the
+    // order — not a console.warn that vanishes. This is the signal that this whole
+    // class of "stuck at open" bug went undetected for days.
+    let acceptStatus: string;
+    let acceptError: string | null = null;
     if (process.env.GRAB_CLIENT_ID && process.env.GRAB_CLIENT_SECRET) {
       try {
         await acceptRejectOrder(orderID, "ACCEPTED");
         grabAccepted = true;
+        acceptStatus = "accepted";
         console.log(`[grab:webhook] auto-accepted orderID=${orderID}`);
       } catch (e) {
-        console.warn(
-          `[grab:webhook] auto-accept failed orderID=${orderID}:`,
-          e instanceof Error ? e.message : e,
-        );
+        acceptStatus = "failed";
+        acceptError = (e instanceof Error ? e.message : String(e)).slice(0, 500);
+        console.warn(`[grab:webhook] auto-accept failed orderID=${orderID}:`, acceptError);
       }
+    } else {
+      acceptStatus = "skipped_no_creds";
+      console.warn(`[grab:webhook] auto-accept skipped orderID=${orderID} — GRAB_CLIENT_ID/SECRET not set`);
+    }
+
+    // Persist the accept outcome. Best-effort + separate from the order insert:
+    // if the columns aren't live yet (PostgREST schema-cache miss on a fresh
+    // migration) this fails harmlessly and the order is still created/printed.
+    {
+      const { error: acceptColErr } = await supabase
+        .from("pos_orders")
+        .update({ grab_accept_status: acceptStatus, grab_accept_error: acceptError })
+        .eq("id", order.id);
+      if (acceptColErr) console.warn("[grab:webhook] accept-outcome write skipped:", acceptColErr.message);
     }
 
     console.log(
-      `[grab:webhook] CREATED order=${order.id} external=${orderID} outlet=${outletId} total=${total} accepted=${grabAccepted}`,
+      `[grab:webhook] CREATED order=${order.id} external=${orderID} outlet=${outletId} total=${total} accept=${acceptStatus}`,
     );
     return NextResponse.json({
       success: true,
@@ -413,6 +433,7 @@ export async function POST(request: NextRequest) {
       orderId: order.id,
       orderNumber: `GF-${payload.shortOrderNumber}`,
       grabAccepted,
+      acceptStatus,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
