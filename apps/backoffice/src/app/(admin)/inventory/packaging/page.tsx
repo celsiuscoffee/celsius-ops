@@ -55,13 +55,16 @@ type Rule = {
 type ProductOption = { id: string; name: string; sku: string; baseUom: string; itemType: string };
 type MenuLite = { id: string; name: string; category: string };
 
+type PickedItem = { id: string; name: string; sku: string };
+
 type Form = {
-  productId: string;
-  productName: string;
-  productSku: string;
+  // One or more packaging items (Add can fan out into a rule per item). Edit
+  // keeps exactly one.
+  items: PickedItem[];
   quantity: string;
   scope: Scope;
-  category: string;
+  // One or more categories when scope = CATEGORY (Add can fan out per category).
+  categories: string[];
   menuIds: string[];
   channel: Channel;
   modifier: string; // "" = any; "Iced" / "Hot"
@@ -71,8 +74,8 @@ type Form = {
 };
 
 const emptyForm: Form = {
-  productId: "", productName: "", productSku: "", quantity: "1",
-  scope: "ALL", category: "", menuIds: [], channel: "ALL",
+  items: [], quantity: "1",
+  scope: "ALL", categories: [], menuIds: [], channel: "ALL",
   modifier: "", perOrder: false, isActive: true, notes: "",
 };
 
@@ -94,8 +97,8 @@ export default function PackagingPage() {
   const openAdd = () => { setForm(emptyForm); setEditingId(null); setProductSearch(""); setMenuSearch(""); setDialogOpen(true); };
   const openEdit = (r: Rule) => {
     setForm({
-      productId: r.productId, productName: r.productName, productSku: r.productSku,
-      quantity: String(r.quantity), scope: r.scope, category: r.category ?? "",
+      items: [{ id: r.productId, name: r.productName, sku: r.productSku }],
+      quantity: String(r.quantity), scope: r.scope, categories: r.category ? [r.category] : [],
       menuIds: r.menuIds, channel: r.channel, modifier: r.modifier ?? "",
       perOrder: r.perOrder, isActive: r.isActive,
       notes: r.notes ?? "",
@@ -103,26 +106,32 @@ export default function PackagingPage() {
     setEditingId(r.id); setProductSearch(""); setMenuSearch(""); setDialogOpen(true);
   };
 
+  // How many rules a submit will create: one per (item × category) for Add.
+  const targetCount = form.scope === "CATEGORY" ? Math.max(form.categories.length, 1) : 1;
+  const createCount = form.items.length * targetCount;
+
   const save = async () => {
-    if (!form.productId) return;
+    if (!form.items.length) return;
     setSaving(true);
     try {
+      const common = {
+        quantity: parseFloat(form.quantity) || 1,
+        scope: form.scope,
+        menuIds: form.menuIds,
+        channel: form.channel,
+        modifier: form.modifier,
+        perOrder: form.perOrder,
+        isActive: form.isActive,
+        notes: form.notes,
+      };
       const url = editingId ? `/api/inventory/packaging-rules/${editingId}` : "/api/inventory/packaging-rules";
+      const body = editingId
+        ? { ...common, productId: form.items[0].id, category: form.categories[0] ?? "" }
+        : { ...common, productIds: form.items.map((i) => i.id), categories: form.categories };
       const res = await fetch(url, {
         method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId: form.productId,
-          quantity: parseFloat(form.quantity) || 1,
-          scope: form.scope,
-          category: form.category,
-          menuIds: form.menuIds,
-          channel: form.channel,
-          modifier: form.modifier,
-          perOrder: form.perOrder,
-          isActive: form.isActive,
-          notes: form.notes,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) { alert("Failed to save packaging rule."); return; }
       setDialogOpen(false);
@@ -150,8 +159,9 @@ export default function PackagingPage() {
 
   const productResults = productSearch.trim().length >= 2
     ? products.filter((p) =>
-        p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-        p.sku.toLowerCase().includes(productSearch.toLowerCase())
+        !form.items.some((i) => i.id === p.id) &&
+        (p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+         p.sku.toLowerCase().includes(productSearch.toLowerCase()))
       ).slice(0, 8)
     : [];
 
@@ -273,15 +283,23 @@ export default function PackagingPage() {
           </DialogHeader>
 
           <div className="grid gap-5 py-3 overflow-y-auto flex-1 min-h-0">
-            {/* Packaging item */}
+            {/* Packaging item(s) */}
             <div>
-              <label className="text-sm font-medium text-gray-700">Packaging item</label>
-              {form.productId ? (
-                <div className="mt-1.5 flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
-                  <span className="text-sm text-gray-700">{form.productName} <code className="ml-1 text-xs text-gray-400">{form.productSku}</code></span>
-                  <button onClick={() => { set("productId", ""); set("productName", ""); set("productSku", ""); }} className="text-gray-400 hover:text-red-500"><X className="h-4 w-4" /></button>
+              <label className="text-sm font-medium text-gray-700">
+                {editingId ? "Packaging item" : "Packaging item(s)"}
+              </label>
+              {form.items.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {form.items.map((it) => (
+                    <span key={it.id} className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-sm text-gray-700">
+                      {it.name} <code className="text-xs text-gray-400">{it.sku}</code>
+                      <button onClick={() => set("items", form.items.filter((x) => x.id !== it.id))} className="text-gray-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
+                    </span>
+                  ))}
                 </div>
-              ) : (
+              )}
+              {/* Add mode keeps the search open so you can pick several; Edit caps at one. */}
+              {(!editingId || form.items.length === 0) && (
                 <div className="relative mt-1.5">
                   <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <input
@@ -293,7 +311,11 @@ export default function PackagingPage() {
                   {productResults.length > 0 && (
                     <div className="absolute z-10 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg">
                       {productResults.map((p) => (
-                        <button key={p.id} onClick={() => { set("productId", p.id); set("productName", p.name); set("productSku", p.sku); setProductSearch(""); }}
+                        <button key={p.id} onClick={() => {
+                            const picked = { id: p.id, name: p.name, sku: p.sku };
+                            set("items", editingId ? [picked] : [...form.items, picked]);
+                            setProductSearch("");
+                          }}
                           className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-gray-50">
                           <span className="font-medium text-gray-700">{p.name}</span>
                           <span className="text-gray-400">{p.sku} · {p.baseUom}</span>
@@ -302,6 +324,9 @@ export default function PackagingPage() {
                     </div>
                   )}
                 </div>
+              )}
+              {!editingId && form.items.length > 0 && (
+                <p className="mt-1 text-[11px] text-gray-400">A separate rule is created for each item — e.g. cup + lid + straw.</p>
               )}
             </div>
 
@@ -353,10 +378,25 @@ export default function PackagingPage() {
               </div>
 
               {form.scope === "CATEGORY" && (
-                <select className="mt-2.5 h-10 w-full rounded-md border border-gray-200 px-3 text-sm" value={form.category} onChange={(e) => set("category", e.target.value)}>
-                  <option value="">Select category…</option>
-                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <div className="mt-2.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {categories.map((c) => {
+                      const active = form.categories.includes(c);
+                      return (
+                        <button key={c} onClick={() => {
+                            if (editingId) set("categories", active ? [] : [c]); // Edit = single category
+                            else set("categories", active ? form.categories.filter((x) => x !== c) : [...form.categories, c]);
+                          }}
+                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
+                          {c}{active && <Check className="h-3 w-3" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {!editingId && (
+                    <p className="mt-1 text-[11px] text-gray-400">Select one or more categories — a rule is created for each.</p>
+                  )}
+                </div>
               )}
 
               {form.scope === "ITEMS" && (
@@ -401,9 +441,9 @@ export default function PackagingPage() {
           </div>
 
           <div className="flex-shrink-0 border-t pt-4">
-            <Button onClick={save} disabled={saving || !form.productId} className="h-11 w-full bg-terracotta text-base hover:bg-terracotta-dark disabled:opacity-50">
+            <Button onClick={save} disabled={saving || !form.items.length} className="h-11 w-full bg-terracotta text-base hover:bg-terracotta-dark disabled:opacity-50">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
-              {editingId ? "Save Changes" : "Add Rule"}
+              {editingId ? "Save Changes" : `Add ${createCount} Rule${createCount === 1 ? "" : "s"}`}
             </Button>
           </div>
         </DialogContent>

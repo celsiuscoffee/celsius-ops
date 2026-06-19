@@ -93,28 +93,50 @@ export async function POST(req: NextRequest) {
   if (auth.error) return auth.error;
 
   const body = await req.json();
-  const { productId, quantity, scope, category, menuIds, channel, modifier, perOrder, isActive, notes } = body;
+  const { productId, productIds, quantity, scope, category, categories, menuIds, channel, modifier, perOrder, isActive, notes } = body;
 
-  if (!productId) {
-    return NextResponse.json({ error: "productId is required" }, { status: 400 });
+  // Accept either a single productId / category (back-compat) or arrays so one
+  // submit can fan out into several rules — e.g. cup + lid + straw across
+  // several drink categories. We create the cross product of the two.
+  const productList: string[] = Array.isArray(productIds) && productIds.length
+    ? productIds.filter((x: unknown): x is string => typeof x === "string" && !!x)
+    : productId ? [productId] : [];
+  if (!productList.length) {
+    return NextResponse.json({ error: "productId(s) required" }, { status: 400 });
   }
   const scopeVal: Scope = SCOPES.includes(scope) ? scope : "ALL";
   const channelVal: Channel = CHANNELS.includes(channel) ? channel : "ALL";
 
-  const rule = await prisma.packagingRule.create({
-    data: {
-      productId,
-      quantity: quantity != null ? Number(quantity) : 1,
-      scope: scopeVal,
-      category: scopeVal === "CATEGORY" ? category || null : null,
-      menuIds: scopeVal === "ITEMS" && Array.isArray(menuIds) ? menuIds : [],
-      channel: channelVal,
-      modifier: modifier || null,
-      perOrder: !!perOrder,
-      isActive: isActive ?? true,
-      notes: notes || null,
-    },
-  });
+  // Target categories only matter for CATEGORY scope; [null] = one rule with no
+  // category (ALL / ITEMS scope, or a CATEGORY rule left blank).
+  const catList: (string | null)[] =
+    scopeVal === "CATEGORY"
+      ? (Array.isArray(categories) && categories.length
+          ? categories.filter((c: unknown): c is string => typeof c === "string" && !!c)
+          : category ? [category] : [null])
+      : [null];
+  const targets = catList.length ? catList : [null];
 
-  return NextResponse.json(rule, { status: 201 });
+  const menuIdsVal = scopeVal === "ITEMS" && Array.isArray(menuIds) ? menuIds : [];
+  const common = {
+    quantity: quantity != null ? Number(quantity) : 1,
+    scope: scopeVal,
+    menuIds: menuIdsVal,
+    channel: channelVal,
+    modifier: modifier || null,
+    perOrder: !!perOrder,
+    isActive: isActive ?? true,
+    notes: notes || null,
+  };
+
+  const data = productList.flatMap((pid) =>
+    targets.map((cat) => ({
+      ...common,
+      productId: pid,
+      category: scopeVal === "CATEGORY" ? cat : null,
+    })),
+  );
+
+  const result = await prisma.packagingRule.createMany({ data });
+  return NextResponse.json({ count: result.count }, { status: 201 });
 }
