@@ -123,6 +123,7 @@ export const NAV_TABS: GrantTab[] = [
         modules: [
           m("pickup", "menu", "Products & Splash Posters"),
           m("inventory", "menus", "Menu & BOM"),
+          m("inventory", "packaging", "Packaging"),
         ],
       },
     ],
