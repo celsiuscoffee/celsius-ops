@@ -519,6 +519,7 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
 
 const GP_TIP = "Gross profit = sales − COGS (recipe + packaging cost). Items with no recipe or packaging show 100%.";
 const COGS_TIP = "Cost of goods sold = qty × unit cost (recipe ingredients + packaging). Packaging (cup / lid / straw) is applied per the sale's channel (dine-in vs takeaway) and Hot/Iced.";
+const COGS_PCT_TIP = "COGS as a % of sales (COGS ÷ sales) — the complement of gross profit %.";
 const COST_NOTE =
   "Unit cost / COGS come from the BOM recipe (ingredient supplier prices) plus packaging rules, applied by each sale's channel (dine-in vs takeaway) and temperature (Hot/Iced). Where temperature isn't recorded (pickup app, archived sales) it defaults to Iced. Per-order packaging (e.g. a Grab carrier bag) isn't included. Items without a recipe read as recipe cost 0.";
 
@@ -545,6 +546,7 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
         qty: round2(a.qty),
         totalSales: round2(a.sales),
         cogs: round2(a.costTotal),
+        cogsPct: a.sales ? round2((a.costTotal / a.sales) * 100) : 0,
         avgCost: a.qty ? round2(a.costTotal / a.qty) : 0,
         grossProfit: round2(gp),
         gpPct: a.sales ? round2((gp / a.sales) * 100) : 0,
@@ -561,6 +563,7 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
     qty: round2(tQty),
     totalSales: round2(tSales),
     cogs: round2(tCost),
+    cogsPct: tSales ? round2((tCost / tSales) * 100) : 0,
     avgCost: tQty ? round2(tCost / tQty) : 0,
     grossProfit: round2(tSales - tCost),
     gpPct: tSales ? round2(((tSales - tCost) / tSales) * 100) : 0,
@@ -574,6 +577,7 @@ export async function buildByProduct(outlets: OutletPick[], from: string, to: st
       { key: "qty", label: "Qty Sold", kind: "int" },
       { key: "totalSales", label: "Total Sales", kind: "rm" },
       { key: "cogs", label: "COGS", kind: "rm", tip: COGS_TIP },
+      { key: "cogsPct", label: "COGS %", kind: "pct", tip: COGS_PCT_TIP },
       { key: "avgCost", label: "Avg Cost", kind: "rm", tip: COST_NOTE },
       { key: "grossProfit", label: "Gross Profit", kind: "rm", tip: GP_TIP },
       { key: "gpPct", label: "Gross Profit %", kind: "pct", tip: GP_TIP },
@@ -607,6 +611,7 @@ export async function buildByCategory(outlets: OutletPick[], from: string, to: s
         qty: round2(a.qty),
         totalSales: round2(a.sales),
         cogs: round2(a.costTotal),
+        cogsPct: a.sales ? round2((a.costTotal / a.sales) * 100) : 0,
         grossProfit: round2(gp),
         gpPct: a.sales ? round2((gp / a.sales) * 100) : 0,
         sharePct: round2((a.sales / grand) * 100),
@@ -622,6 +627,7 @@ export async function buildByCategory(outlets: OutletPick[], from: string, to: s
     qty: round2(tQty),
     totalSales: round2(tSales),
     cogs: round2(tCost),
+    cogsPct: tSales ? round2((tCost / tSales) * 100) : 0,
     grossProfit: round2(tSales - tCost),
     gpPct: tSales ? round2(((tSales - tCost) / tSales) * 100) : 0,
     sharePct: 100,
@@ -634,6 +640,7 @@ export async function buildByCategory(outlets: OutletPick[], from: string, to: s
       { key: "qty", label: "Qty Sold", kind: "int" },
       { key: "totalSales", label: "Total Sales", kind: "rm" },
       { key: "cogs", label: "COGS", kind: "rm", tip: COGS_TIP },
+      { key: "cogsPct", label: "COGS %", kind: "pct", tip: COGS_PCT_TIP },
       { key: "grossProfit", label: "Gross Profit", kind: "rm", tip: GP_TIP },
       { key: "gpPct", label: "Gross Profit %", kind: "pct", tip: GP_TIP },
       { key: "sharePct", label: "% of Sales", kind: "pct" },
