@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/pos-loyalty-reconcile",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/grab-campaigns-sync",
+      "schedule": "0 18 * * *"
     }
   ]
 }
