@@ -1341,7 +1341,7 @@ CREATE UNIQUE INDEX "ParLevel_productId_outletId_key" ON "ParLevel"("productId",
 CREATE UNIQUE INDEX "Menu_storehubId_key" ON "Menu"("storehubId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "MenuIngredient_menuId_productId_serviceMode_key" ON "MenuIngredient"("menuId", "productId", "serviceMode");
+CREATE UNIQUE INDEX "MenuIngredient_menuId_productId_serviceMode_modifier_key" ON "MenuIngredient"("menuId", "productId", "serviceMode", "modifier");
 
 -- CreateIndex
 CREATE INDEX "PackagingRule_isActive_idx" ON "PackagingRule"("isActive");
