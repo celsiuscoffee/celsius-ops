@@ -3,6 +3,7 @@
 import { formatRM } from "@celsius/shared";
 
 import { useState, Fragment } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +62,7 @@ type ProductOption = {
 };
 
 type EditIngredient = {
+  key: string; // stable per-row id — a product can appear on more than one row
   productId: string;
   productName: string;
   sku: string;
@@ -70,6 +72,13 @@ type EditIngredient = {
   modifier: string; // "" = both temperatures; "Iced" / "Hot"
   kind: "ingredient" | "packaging";
 };
+
+// Stable id for an edit row. A product can appear more than once (e.g. one line
+// per temperature), so rows are keyed by this, not by productId.
+const rowKey = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `row-${Math.random().toString(36).slice(2)}-${Date.now()}`;
 
 type SortKey = "name" | "category" | "sellingPrice" | "cogs" | "cogsPercent" | "ingredientCount";
 
@@ -140,6 +149,7 @@ export default function MenusPage() {
       menu.ingredients
         .filter((ing) => ing.source !== "rule")
         .map((ing) => ({
+          key: rowKey(),
           productId: ing.productId,
           productName: ing.product,
           sku: ing.sku,
@@ -159,37 +169,38 @@ export default function MenusPage() {
     setAddSearch("");
   };
 
-  const updateIngredientQty = (productId: string, value: string) => {
+  const updateIngredientQty = (key: string, value: string) => {
     const num = parseFloat(value);
     if (isNaN(num)) return;
     setEditIngredients((prev) =>
-      prev.map((ing) =>
-        ing.productId === productId ? { ...ing, quantityUsed: num } : ing
-      )
+      prev.map((ing) => (ing.key === key ? { ...ing, quantityUsed: num } : ing))
     );
   };
 
-  const removeIngredient = (productId: string) => {
-    setEditIngredients((prev) => prev.filter((ing) => ing.productId !== productId));
+  const removeIngredient = (key: string) => {
+    setEditIngredients((prev) => prev.filter((ing) => ing.key !== key));
   };
 
-  const updateIngredientMode = (productId: string, mode: ServiceMode) => {
+  const updateIngredientMode = (key: string, mode: ServiceMode) => {
     setEditIngredients((prev) =>
-      prev.map((ing) => (ing.productId === productId ? { ...ing, serviceMode: mode } : ing))
+      prev.map((ing) => (ing.key === key ? { ...ing, serviceMode: mode } : ing))
     );
   };
 
-  const updateIngredientModifier = (productId: string, modifier: string) => {
+  const updateIngredientModifier = (key: string, modifier: string) => {
     setEditIngredients((prev) =>
-      prev.map((ing) => (ing.productId === productId ? { ...ing, modifier } : ing))
+      prev.map((ing) => (ing.key === key ? { ...ing, modifier } : ing))
     );
   };
 
+  // Add a product as a new row. The same product can be added more than once —
+  // e.g. one line per temperature (milk 120ml Hot, 150ml Iced) — so there is no
+  // dedupe guard here.
   const addIngredient = (product: ProductOption) => {
-    if (editIngredients.some((ing) => ing.productId === product.id)) return;
     setEditIngredients((prev) => [
       ...prev,
       {
+        key: rowKey(),
         productId: product.id,
         productName: product.name,
         sku: product.sku,
@@ -229,13 +240,13 @@ export default function MenusPage() {
     }
   };
 
-  // Product search results for adding
+  // Product search results for adding. A product can appear on more than one
+  // row (one per temperature), so already-added products are not filtered out.
   const addSearchResults = addSearch.trim().length >= 2
     ? products
         .filter((p) =>
-          !editIngredients.some((ing) => ing.productId === p.id) &&
-          (p.name.toLowerCase().includes(addSearch.toLowerCase()) ||
-           p.sku.toLowerCase().includes(addSearch.toLowerCase()))
+          p.name.toLowerCase().includes(addSearch.toLowerCase()) ||
+          p.sku.toLowerCase().includes(addSearch.toLowerCase())
         )
         .slice(0, 8)
     : [];
@@ -469,7 +480,7 @@ export default function MenusPage() {
                               </thead>
                               <tbody>
                                 {editIngredients.map((ing) => (
-                                  <tr key={ing.productId} className="border-t border-gray-200/50">
+                                  <tr key={ing.key} className="border-t border-gray-200/50">
                                     <td className="py-1.5 text-gray-700">
                                       <span className="inline-flex items-center gap-1.5">
                                         {ing.productName}
@@ -487,7 +498,7 @@ export default function MenusPage() {
                                         step="any"
                                         min="0"
                                         value={ing.quantityUsed}
-                                        onChange={(e) => updateIngredientQty(ing.productId, e.target.value)}
+                                        onChange={(e) => updateIngredientQty(ing.key, e.target.value)}
                                         className="w-24 rounded border border-gray-200 px-2 py-1 text-right text-xs"
                                       />
                                     </td>
@@ -497,7 +508,7 @@ export default function MenusPage() {
                                     <td className="py-1.5 text-center">
                                       <select
                                         value={ing.modifier}
-                                        onChange={(e) => updateIngredientModifier(ing.productId, e.target.value)}
+                                        onChange={(e) => updateIngredientModifier(ing.key, e.target.value)}
                                         className="rounded border border-gray-200 px-1.5 py-1 text-xs text-gray-600"
                                       >
                                         <option value="">Both</option>
@@ -508,7 +519,7 @@ export default function MenusPage() {
                                     <td className="py-1.5 text-center">
                                       <select
                                         value={ing.serviceMode}
-                                        onChange={(e) => updateIngredientMode(ing.productId, e.target.value as ServiceMode)}
+                                        onChange={(e) => updateIngredientMode(ing.key, e.target.value as ServiceMode)}
                                         className="rounded border border-gray-200 px-1.5 py-1 text-xs text-gray-600"
                                       >
                                         <option value="ALL">Both</option>
@@ -517,7 +528,7 @@ export default function MenusPage() {
                                       </select>
                                     </td>
                                     <td className="py-1.5 text-center">
-                                      <button onClick={() => removeIngredient(ing.productId)} className="text-red-400 hover:text-red-600">
+                                      <button onClick={() => removeIngredient(ing.key)} className="text-red-400 hover:text-red-600">
                                         <Trash2 className="h-3 w-3" />
                                       </button>
                                     </td>
@@ -567,6 +578,45 @@ export default function MenusPage() {
                                 </div>
                               )}
                             </div>
+
+                            {/* Auto-applied packaging (cup / lid / straw etc.) comes from
+                                shared Packaging rules, not this recipe — show it read-only so
+                                it's clear it's already costed and where to change it. */}
+                            {(() => {
+                              const rulePkg = menu.ingredients.filter((ing) => ing.source === "rule");
+                              if (rulePkg.length === 0) return null;
+                              return (
+                                <div className="mt-3 rounded-md border border-dashed border-amber-200 bg-amber-50/40 px-3 py-2">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                                      Auto-applied packaging
+                                    </p>
+                                    <Link href="/inventory/packaging" className="text-[11px] font-medium text-terracotta hover:underline">
+                                      Manage rules →
+                                    </Link>
+                                  </div>
+                                  <p className="mt-0.5 text-[11px] text-gray-500">
+                                    Added automatically by Packaging rules and already included in the all-in cost. Edit these on the Packaging page.
+                                  </p>
+                                  <ul className="mt-1.5 space-y-0.5">
+                                    {rulePkg.map((ing, i) => (
+                                      <li key={i} className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                                        <span className="font-medium text-gray-700">{ing.product}</span>
+                                        <span className="text-gray-400">{ing.qty} {ing.uom}</span>
+                                        <Badge variant="outline" className="border-gray-200 bg-white text-[9px] text-gray-500">
+                                          {SERVICE_MODE_LABEL[ing.serviceMode]}
+                                        </Badge>
+                                        {ing.modifier && (
+                                          <Badge variant="outline" className={`text-[9px] ${ing.modifier === "Iced" ? "border-sky-200 bg-sky-50 text-sky-600" : "border-orange-200 bg-orange-50 text-orange-600"}`}>
+                                            {ing.modifier}
+                                          </Badge>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              );
+                            })()}
                           </div>
                         ) : (
                           /* ── Read-only mode ── */

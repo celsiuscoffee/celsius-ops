@@ -856,7 +856,9 @@ model MenuIngredient {
   // without duplicating the whole recipe.
   modifier     String?
 
-  @@unique([menuId, productId, serviceMode])
+  // Unique per (menu, product, channel, temperature) so the SAME ingredient can
+  // appear once per temperature — e.g. milk 120ml Hot and milk 150ml Iced.
+  @@unique([menuId, productId, serviceMode, modifier])
 }
 
 // ─── PACKAGING RULES ────────────────────────────────────────
