@@ -61,20 +61,26 @@ type ProductOption = {
   itemType: string; // INGREDIENT | PERISHABLE | PACKAGING
 };
 
-type EditIngredient = {
-  key: string; // stable per-row id — a product can appear on more than one row
+// One editor row = one ingredient (per channel). By default a single quantity
+// applies to both temperatures; "split" reveals separate Iced / Hot quantities
+// so the same ingredient stays on ONE row instead of two — e.g. Monin Caramel
+// 17ml Iced / 12ml Hot reads as a single line. On save a row expands back to the
+// underlying BOM lines (one "Both" line, or an Iced + Hot pair).
+type EditRow = {
+  key: string; // stable per-row id
   productId: string;
   productName: string;
   sku: string;
-  quantityUsed: number;
   uom: string;
   serviceMode: ServiceMode;
-  modifier: string; // "" = both temperatures; "Iced" / "Hot"
   kind: "ingredient" | "packaging";
+  split: boolean; // false = one qty for both temps; true = separate Iced / Hot
+  bothQty: number; // used when !split
+  icedQty: number; // used when split (0 / blank = not used on Iced)
+  hotQty: number; // used when split (0 / blank = not used on Hot)
 };
 
-// Stable id for an edit row. A product can appear more than once (e.g. one line
-// per temperature), so rows are keyed by this, not by productId.
+// Stable id for an edit row.
 const rowKey = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
@@ -94,7 +100,7 @@ export default function MenusPage() {
 
   // Editing state
   const [editingMenuId, setEditingMenuId] = useState<string | null>(null);
-  const [editIngredients, setEditIngredients] = useState<EditIngredient[]>([]);
+  const [editRows, setEditRows] = useState<EditRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [addSearch, setAddSearch] = useState("");
 
@@ -143,75 +149,122 @@ export default function MenusPage() {
   const startEditing = (menu: MenuItem) => {
     setEditingMenuId(menu.id);
     setExpandedId(menu.id);
-    setEditIngredients(
-      // Rule-applied packaging is managed on the Packaging page — only the
-      // menu's own BOM lines are editable here.
-      menu.ingredients
-        .filter((ing) => ing.source !== "rule")
-        .map((ing) => ({
-          key: rowKey(),
-          productId: ing.productId,
-          productName: ing.product,
-          sku: ing.sku,
-          quantityUsed: ing.qty,
-          uom: ing.uom,
-          serviceMode: ing.serviceMode,
-          modifier: ing.modifier ?? "",
-          kind: ing.kind,
-        }))
-    );
+    // Rule-applied packaging is managed on the Packaging page — only the menu's
+    // own BOM lines are editable here. Collapse the lines into one row per
+    // (product, channel): a temperature-specific pair (Iced + Hot, or a lone
+    // Iced/Hot) becomes a single split row; a plain "Both" line stays unsplit.
+    const own = menu.ingredients.filter((ing) => ing.source !== "rule");
+    const groups = new Map<string, Ingredient[]>();
+    for (const ing of own) {
+      const k = `${ing.productId}|${ing.serviceMode}`;
+      const arr = groups.get(k);
+      if (arr) arr.push(ing);
+      else groups.set(k, [ing]);
+    }
+    const rows: EditRow[] = [];
+    for (const lines of groups.values()) {
+      const first = lines[0];
+      const both = lines.find((l) => !l.modifier);
+      const iced = lines.find((l) => l.modifier === "Iced");
+      const hot = lines.find((l) => l.modifier === "Hot");
+      const base = {
+        key: rowKey(),
+        productId: first.productId,
+        productName: first.product,
+        sku: first.sku,
+        uom: first.uom,
+        serviceMode: first.serviceMode,
+        kind: first.kind,
+      };
+      if (iced || hot) {
+        // Differs by temperature — show as a split row. A lone "Both" line in
+        // the same group (unusual) seeds whichever side is missing.
+        rows.push({
+          ...base,
+          split: true,
+          bothQty: 0,
+          icedQty: iced?.qty ?? both?.qty ?? 0,
+          hotQty: hot?.qty ?? both?.qty ?? 0,
+        });
+      } else {
+        rows.push({ ...base, split: false, bothQty: both?.qty ?? 0, icedQty: 0, hotQty: 0 });
+      }
+    }
+    setEditRows(rows);
     setAddSearch("");
   };
 
   const cancelEditing = () => {
     setEditingMenuId(null);
-    setEditIngredients([]);
+    setEditRows([]);
     setAddSearch("");
   };
 
-  const updateIngredientQty = (key: string, value: string) => {
-    const num = parseFloat(value);
+  const patchRow = (key: string, patch: Partial<EditRow>) =>
+    setEditRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+
+  const updateRowQty = (key: string, field: "bothQty" | "icedQty" | "hotQty", value: string) => {
+    const num = value === "" ? 0 : parseFloat(value);
     if (isNaN(num)) return;
-    setEditIngredients((prev) =>
-      prev.map((ing) => (ing.key === key ? { ...ing, quantityUsed: num } : ing))
+    patchRow(key, { [field]: num });
+  };
+
+  const updateRowChannel = (key: string, mode: ServiceMode) => patchRow(key, { serviceMode: mode });
+
+  // Toggle the Hot/Iced split. Splitting seeds both sides from the single qty;
+  // merging collapses back to one qty (prefers the Iced side, then Hot).
+  const toggleSplit = (key: string) =>
+    setEditRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== key) return r;
+        if (r.split) {
+          return { ...r, split: false, bothQty: r.icedQty || r.hotQty || 0 };
+        }
+        return { ...r, split: true, icedQty: r.bothQty, hotQty: r.bothQty };
+      })
     );
-  };
 
-  const removeIngredient = (key: string) => {
-    setEditIngredients((prev) => prev.filter((ing) => ing.key !== key));
-  };
+  const removeRow = (key: string) => setEditRows((prev) => prev.filter((r) => r.key !== key));
 
-  const updateIngredientMode = (key: string, mode: ServiceMode) => {
-    setEditIngredients((prev) =>
-      prev.map((ing) => (ing.key === key ? { ...ing, serviceMode: mode } : ing))
-    );
-  };
-
-  const updateIngredientModifier = (key: string, modifier: string) => {
-    setEditIngredients((prev) =>
-      prev.map((ing) => (ing.key === key ? { ...ing, modifier } : ing))
-    );
-  };
-
-  // Add a product as a new row. The same product can be added more than once —
-  // e.g. one line per temperature (milk 120ml Hot, 150ml Iced) — so there is no
-  // dedupe guard here.
   const addIngredient = (product: ProductOption) => {
-    setEditIngredients((prev) => [
+    setEditRows((prev) => [
       ...prev,
       {
         key: rowKey(),
         productId: product.id,
         productName: product.name,
         sku: product.sku,
-        quantityUsed: 0,
         uom: product.baseUom,
         serviceMode: "ALL",
-        modifier: "",
         kind: product.itemType === "PACKAGING" ? "packaging" : "ingredient",
+        split: false,
+        bothQty: 0,
+        icedQty: 0,
+        hotQty: 0,
       },
     ]);
     setAddSearch("");
+  };
+
+  // Expand each row back into BOM lines. Unsplit → one "Both" line. Split →
+  // an Iced and/or Hot line, but if both sides are equal it collapses to a
+  // single "Both" line (no redundant duplicate). Zero / blank sides are dropped.
+  const rowsToLines = (rows: EditRow[]) => {
+    const lines: { productId: string; quantityUsed: number; uom: string; serviceMode: ServiceMode; modifier: string }[] = [];
+    for (const r of rows) {
+      const base = { productId: r.productId, uom: r.uom, serviceMode: r.serviceMode };
+      if (!r.split) {
+        if (r.bothQty > 0) lines.push({ ...base, quantityUsed: r.bothQty, modifier: "" });
+        continue;
+      }
+      if (r.icedQty > 0 && r.icedQty === r.hotQty) {
+        lines.push({ ...base, quantityUsed: r.icedQty, modifier: "" });
+        continue;
+      }
+      if (r.icedQty > 0) lines.push({ ...base, quantityUsed: r.icedQty, modifier: "Iced" });
+      if (r.hotQty > 0) lines.push({ ...base, quantityUsed: r.hotQty, modifier: "Hot" });
+    }
+    return lines;
   };
 
   const saveIngredients = async () => {
@@ -221,15 +274,7 @@ export default function MenusPage() {
       const res = await fetch(`/api/inventory/menus/${editingMenuId}/ingredients`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ingredients: editIngredients.map((ing) => ({
-            productId: ing.productId,
-            quantityUsed: ing.quantityUsed,
-            uom: ing.uom,
-            serviceMode: ing.serviceMode,
-            modifier: ing.modifier,
-          })),
-        }),
+        body: JSON.stringify({ ingredients: rowsToLines(editRows) }),
       });
       if (res.ok) {
         cancelEditing();
@@ -471,55 +516,78 @@ export default function MenusPage() {
                                 <tr className="text-gray-400">
                                   <th className="pb-1 text-left font-medium">Item</th>
                                   <th className="pb-1 text-left font-medium w-20">SKU</th>
-                                  <th className="pb-1 w-28 text-right font-medium">Qty</th>
+                                  <th className="pb-1 w-32 text-right font-medium">Qty</th>
                                   <th className="pb-1 w-16 text-center font-medium">UOM</th>
-                                  <th className="pb-1 w-24 text-center font-medium">When</th>
+                                  <th className="pb-1 w-24 text-center font-medium">Hot / Iced</th>
                                   <th className="pb-1 w-28 text-center font-medium">Channel</th>
                                   <th className="pb-1 w-8"></th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {editIngredients.map((ing) => (
-                                  <tr key={ing.key} className="border-t border-gray-200/50">
+                                {editRows.map((r) => (
+                                  <tr key={r.key} className="border-t border-gray-200/50">
                                     <td className="py-1.5 text-gray-700">
                                       <span className="inline-flex items-center gap-1.5">
-                                        {ing.productName}
-                                        {ing.kind === "packaging" && (
+                                        {r.productName}
+                                        {r.kind === "packaging" && (
                                           <Badge variant="outline" className="border-amber-300 bg-amber-50 text-[9px] text-amber-700">
                                             Packaging
                                           </Badge>
                                         )}
                                       </span>
                                     </td>
-                                    <td className="py-1.5"><code className="text-gray-500">{ing.sku}</code></td>
+                                    <td className="py-1.5"><code className="text-gray-500">{r.sku}</code></td>
                                     <td className="py-1.5 text-right">
-                                      <input
-                                        type="number"
-                                        step="any"
-                                        min="0"
-                                        value={ing.quantityUsed}
-                                        onChange={(e) => updateIngredientQty(ing.key, e.target.value)}
-                                        className="w-24 rounded border border-gray-200 px-2 py-1 text-right text-xs"
-                                      />
+                                      {r.split ? (
+                                        <div className="flex flex-col items-end gap-1">
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            <span className="w-7 text-right text-[9px] font-semibold text-sky-600">Iced</span>
+                                            <input
+                                              type="number" step="any" min="0"
+                                              value={r.icedQty}
+                                              onChange={(e) => updateRowQty(r.key, "icedQty", e.target.value)}
+                                              className="w-20 rounded border border-sky-200 px-2 py-1 text-right text-xs"
+                                            />
+                                          </div>
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            <span className="w-7 text-right text-[9px] font-semibold text-orange-600">Hot</span>
+                                            <input
+                                              type="number" step="any" min="0"
+                                              value={r.hotQty}
+                                              onChange={(e) => updateRowQty(r.key, "hotQty", e.target.value)}
+                                              className="w-20 rounded border border-orange-200 px-2 py-1 text-right text-xs"
+                                            />
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <input
+                                          type="number" step="any" min="0"
+                                          value={r.bothQty}
+                                          onChange={(e) => updateRowQty(r.key, "bothQty", e.target.value)}
+                                          className="w-24 rounded border border-gray-200 px-2 py-1 text-right text-xs"
+                                        />
+                                      )}
                                     </td>
                                     <td className="py-1.5 text-center text-xs text-gray-500">
-                                      {ing.uom}
+                                      {r.uom}
                                     </td>
                                     <td className="py-1.5 text-center">
-                                      <select
-                                        value={ing.modifier}
-                                        onChange={(e) => updateIngredientModifier(ing.key, e.target.value)}
-                                        className="rounded border border-gray-200 px-1.5 py-1 text-xs text-gray-600"
+                                      <button
+                                        onClick={() => toggleSplit(r.key)}
+                                        title={r.split ? "Use one quantity for both temperatures" : "Set different quantities for Hot and Iced"}
+                                        className={`rounded border px-2 py-1 text-[10px] font-medium transition-colors ${
+                                          r.split
+                                            ? "border-terracotta bg-terracotta/5 text-terracotta-dark hover:bg-terracotta/10"
+                                            : "border-gray-200 text-gray-500 hover:border-gray-300"
+                                        }`}
                                       >
-                                        <option value="">Both</option>
-                                        <option value="Iced">Iced</option>
-                                        <option value="Hot">Hot</option>
-                                      </select>
+                                        {r.split ? "Merge" : "Split"}
+                                      </button>
                                     </td>
                                     <td className="py-1.5 text-center">
                                       <select
-                                        value={ing.serviceMode}
-                                        onChange={(e) => updateIngredientMode(ing.key, e.target.value as ServiceMode)}
+                                        value={r.serviceMode}
+                                        onChange={(e) => updateRowChannel(r.key, e.target.value as ServiceMode)}
                                         className="rounded border border-gray-200 px-1.5 py-1 text-xs text-gray-600"
                                       >
                                         <option value="ALL">Both</option>
@@ -528,13 +596,13 @@ export default function MenusPage() {
                                       </select>
                                     </td>
                                     <td className="py-1.5 text-center">
-                                      <button onClick={() => removeIngredient(ing.key)} className="text-red-400 hover:text-red-600">
+                                      <button onClick={() => removeRow(r.key)} className="text-red-400 hover:text-red-600">
                                         <Trash2 className="h-3 w-3" />
                                       </button>
                                     </td>
                                   </tr>
                                 ))}
-                                {editIngredients.length === 0 && (
+                                {editRows.length === 0 && (
                                   <tr>
                                     <td colSpan={7} className="py-4 text-center text-gray-400">
                                       No items yet. Search below to add ingredients or packaging.
@@ -633,45 +701,83 @@ export default function MenusPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {/* Ingredients first, then packaging */}
-                              {[...menu.ingredients]
-                                .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "ingredient" ? -1 : 1))
-                                .map((ing, i) => (
-                                <tr key={i} className="border-t border-gray-200/50">
-                                  <td className="py-1.5 text-gray-700">
-                                    <span className="inline-flex items-center gap-1.5">
-                                      {ing.product}
-                                      {ing.kind === "packaging" && (
-                                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-[9px] text-amber-700">
-                                          Packaging
-                                        </Badge>
-                                      )}
-                                      {ing.modifier && (
-                                        <Badge variant="outline" className={`text-[9px] ${ing.modifier === "Iced" ? "border-sky-200 bg-sky-50 text-sky-600" : "border-orange-200 bg-orange-50 text-orange-600"}`}>
-                                          {ing.modifier}
-                                        </Badge>
-                                      )}
-                                      {ing.source === "rule" && (
-                                        <Badge variant="outline" className="border-gray-200 bg-gray-50 text-[9px] text-gray-500">
-                                          via rule
-                                        </Badge>
-                                      )}
-                                    </span>
-                                  </td>
-                                  <td className="py-1.5"><code className="text-gray-500">{ing.sku}</code></td>
-                                  <td className="py-1.5 text-right text-gray-700">{ing.qty}</td>
-                                  <td className="py-1.5 text-gray-500">{ing.uom}</td>
-                                  <td className="py-1.5 text-center text-gray-500">
-                                    {ing.kind === "packaging" ? SERVICE_MODE_LABEL[ing.serviceMode] : "—"}
-                                  </td>
-                                  <td className="py-1.5 text-right text-gray-500">
-                                    {ing.unitCost > 0 ? `RM ${ing.unitCost.toFixed(4)}` : "—"}
-                                  </td>
-                                  <td className="py-1.5 text-right font-medium text-gray-700">
-                                    {ing.cost > 0 ? `${formatRM(ing.cost)}` : "—"}
-                                  </td>
-                                </tr>
-                              ))}
+                              {/* Same ingredient on Hot + Iced is shown on ONE row (quantities
+                                  stacked) so the recipe is easy to read; ingredients first,
+                                  then packaging. */}
+                              {(() => {
+                                const groups = new Map<string, Ingredient[]>();
+                                for (const ing of menu.ingredients) {
+                                  const k = `${ing.source ?? "bom"}|${ing.productId}|${ing.serviceMode}`;
+                                  const arr = groups.get(k);
+                                  if (arr) arr.push(ing);
+                                  else groups.set(k, [ing]);
+                                }
+                                const modOrder = (m?: string | null) => (m === "Iced" ? 0 : m === "Hot" ? 1 : 2);
+                                const rows = [...groups.values()].sort((a, b) =>
+                                  a[0].kind === b[0].kind ? 0 : a[0].kind === "ingredient" ? -1 : 1
+                                );
+                                return rows.map((lines, i) => {
+                                  const f = lines[0];
+                                  const parts = [...lines].sort((a, b) => modOrder(a.modifier) - modOrder(b.modifier));
+                                  const tempSplit = parts.some((p) => p.modifier);
+                                  return (
+                                    <tr key={i} className="border-t border-gray-200/50 align-top">
+                                      <td className="py-1.5 text-gray-700">
+                                        <span className="inline-flex items-center gap-1.5">
+                                          {f.product}
+                                          {f.kind === "packaging" && (
+                                            <Badge variant="outline" className="border-amber-300 bg-amber-50 text-[9px] text-amber-700">
+                                              Packaging
+                                            </Badge>
+                                          )}
+                                          {f.source === "rule" && (
+                                            <Badge variant="outline" className="border-gray-200 bg-gray-50 text-[9px] text-gray-500">
+                                              via rule
+                                            </Badge>
+                                          )}
+                                        </span>
+                                      </td>
+                                      <td className="py-1.5"><code className="text-gray-500">{f.sku}</code></td>
+                                      <td className="py-1.5 text-right text-gray-700">
+                                        {tempSplit ? (
+                                          <div className="flex flex-col items-end gap-0.5">
+                                            {parts.map((p, j) => (
+                                              <span key={j} className="inline-flex items-center gap-1">
+                                                {p.modifier && (
+                                                  <span className={`text-[9px] font-semibold ${p.modifier === "Iced" ? "text-sky-600" : "text-orange-600"}`}>
+                                                    {p.modifier}
+                                                  </span>
+                                                )}
+                                                <span>{p.qty}</span>
+                                              </span>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          f.qty
+                                        )}
+                                      </td>
+                                      <td className="py-1.5 text-gray-500">{f.uom}</td>
+                                      <td className="py-1.5 text-center text-gray-500">
+                                        {f.kind === "packaging" ? SERVICE_MODE_LABEL[f.serviceMode] : "—"}
+                                      </td>
+                                      <td className="py-1.5 text-right text-gray-500">
+                                        {f.unitCost > 0 ? `RM ${f.unitCost.toFixed(4)}` : "—"}
+                                      </td>
+                                      <td className="py-1.5 text-right font-medium text-gray-700">
+                                        {tempSplit ? (
+                                          <div className="flex flex-col items-end gap-0.5">
+                                            {parts.map((p, j) => (
+                                              <span key={j}>{p.cost > 0 ? formatRM(p.cost) : "—"}</span>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          f.cost > 0 ? `${formatRM(f.cost)}` : "—"
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                });
+                              })()}
                               {menu.ingredients.length === 0 && (
                                 <tr>
                                   <td colSpan={7} className="py-4 text-center text-gray-400">

@@ -161,6 +161,10 @@ const NAV_SECTIONS: NavSection[] = [
       // Menu & BOM (recipe/BOM editor) lives with the catalog/menu definition,
       // not under Procurement. Gate stays inventory:menus so access is unchanged.
       { label: "Menu & BOM", href: "/inventory/menus", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "inventory:menus" },
+      // Packaging rules attach cups/lids/straws to menu items & channels — part
+      // of the menu definition, so surfaced here too (also under Procurement →
+      // Master Data). Gate stays inventory:packaging.
+      { label: "Packaging", href: "/inventory/packaging", icon: <PackageOpen className={ICON_SIZE} />, moduleKey: "inventory:packaging" },
     ],
   },
   // Sales — one rail tab for everything sales/POS. Used to be two sections
