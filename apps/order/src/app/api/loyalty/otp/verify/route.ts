@@ -1,34 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyOTP } from "@/lib/otp";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { ensureNewMemberRewards } from "@/lib/loyalty/welcome";
 import { findOrCreateMember } from "@/lib/loyalty/member-direct";
 
-// .trim() guards against accidental trailing newlines in env var values
-const LOYALTY_BASE = (process.env.LOYALTY_BASE_URL ?? "https://loyalty.celsiuscoffee.com").trim();
-
-// POST /api/loyalty/otp/verify — verify OTP then fetch/create member
+// POST /api/loyalty/otp/verify — legacy alias for /api/otp/verify.
 //
-// Step 1 (OTP code validation) still proxies to the loyalty app
-// because the SMS gateway lives there. Step 2/3 (member lookup +
-// auto-register) NOW write to Supabase directly via
-// findOrCreateMember — the loyalty proxy used to silently drop
-// email/birthday and produce a different row shape from
-// backoffice-admin signups, which was the root cause of the
-// "Complete profile" pill resurfacing across mounts.
+// OTP code validation now runs natively (shared OTP store via @/lib/otp)
+// instead of proxying to the loyalty app, so it no longer depends on
+// loyalty.celsiuscoffee.com. Member lookup/create + welcome rewards are
+// unchanged (Supabase-direct via findOrCreateMember). Current clients call
+// /api/otp/verify directly; this stays as a thin back-compat endpoint.
 export async function POST(request: NextRequest) {
   try {
     const { phone, code } = await request.json();
     if (!phone || !code) return NextResponse.json({ success: false, error: "Phone and code required" }, { status: 400 });
 
-    // Step 1: Verify OTP (still via loyalty app — SMS gateway lives there)
-    const verifyRes = await fetch(`${LOYALTY_BASE}/api/otp/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, code, purpose: "login" }),
-    });
-    const verifyData = await verifyRes.json();
+    // Rate-limit by phone (the loyalty endpoint used to enforce this).
+    const rate = await checkRateLimit(phone, RATE_LIMITS.OTP_VERIFY);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { success: false, error: `Too many verification attempts. Try again in ${Math.ceil((rate.retryAfter || 300) / 60)} minutes.` },
+        { status: 429 },
+      );
+    }
 
-    if (!verifyData.success) {
-      return NextResponse.json({ success: false, error: verifyData.error ?? "Invalid or expired code" });
+    // Step 1: Verify the OTP code natively against the shared store.
+    const valid = await verifyOTP(phone, code, "login");
+    if (!valid) {
+      return NextResponse.json({ success: false, error: "Invalid or expired code" });
     }
 
     // Step 2/3: Find or create the member row in Supabase directly.
