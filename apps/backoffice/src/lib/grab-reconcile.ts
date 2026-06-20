@@ -17,7 +17,7 @@
 import { randomUUID } from "crypto";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 import { isGrabConfigured, listOrders } from "@/lib/grab";
-import { ingestGrabOrder, type GrabWebhookPayload } from "@/lib/grab-ingest";
+import { ingestGrabOrder, insertGrabPosOrder, type GrabWebhookPayload } from "@/lib/grab-ingest";
 
 type GrabListOrder = Record<string, unknown>;
 
@@ -236,26 +236,27 @@ export async function reconcileGrabOrders(): Promise<ReconcileSummary> {
       }
 
       // 2. Minimal backfill — order + total + status, so the sale isn't lost.
-      try {
-        const short = extractShort(go).replace(/^GF-/i, "");
-        const totalSen = extractTotalSen(go);
-        const { error } = await db.from("pos_orders").insert({
-          external_id: ext,
-          order_number: `GF-${short || ext.slice(0, 6)}`,
-          outlet_id: o.id,
-          source: "grabfood",
-          order_type: "takeaway",
-          status,
-          subtotal: totalSen, sst_amount: 0, discount_amount: 0, total: totalSen,
-          customer_name: "Grab Customer",
-          notes: "[reconciled] backfilled from Grab order list — item detail unavailable",
-        });
-        if (error && (error as { code?: string }).code !== "23505") throw error;
-        summary.backfilledMinimal++;
-        summary.detail.push({ order: ext, outlet: o.id, via: "minimal", status, totalSen });
-      } catch (e) {
+      // Uses the shared insert helper so a recurring short number disambiguates
+      // its order_number instead of silently colliding (the bug that previously
+      // let this branch "succeed" without persisting a row).
+      const short = extractShort(go).replace(/^GF-/i, "");
+      const totalSen = extractTotalSen(go);
+      const ins = await insertGrabPosOrder(db, {
+        external_id: ext,
+        outlet_id: o.id,
+        source: "grabfood",
+        order_type: "takeaway",
+        status,
+        subtotal: totalSen, sst_amount: 0, discount_amount: 0, total: totalSen,
+        customer_name: "Grab Customer",
+        notes: "[reconciled] backfilled from Grab order list — item detail unavailable",
+      }, short, ext);
+      if (ins.status === "error") {
         summary.errors++;
-        summary.detail.push({ order: ext, error: e instanceof Error ? e.message : String(e) });
+        summary.detail.push({ order: ext, error: ins.error });
+      } else {
+        summary.backfilledMinimal++;
+        summary.detail.push({ order: ext, outlet: o.id, via: "minimal", status, totalSen, dup: ins.status === "duplicate" });
       }
     }
   }
