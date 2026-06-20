@@ -116,6 +116,56 @@ export interface IngestOpts {
 }
 
 /**
+ * Candidate order_numbers for a Grab order, in preference order. pos_orders has
+ * a GLOBAL unique constraint on order_number, but GrabFood "short" numbers
+ * (e.g. 445) are only unique per-merchant-per-day and recur — so the clean
+ * GF-<short> collides with an older order. We fall back to the globally-unique
+ * Grab order id (external_id) to disambiguate, so the order is never dropped.
+ */
+function grabOrderNumberCandidates(shortNo: string, orderID: string): string[] {
+  const base = `GF-${shortNo || orderID.slice(0, 6)}`;
+  const tail = orderID.replace(/[^A-Za-z0-9]/g, "").slice(-6).toUpperCase();
+  const out = [base];
+  if (tail) out.push(`${base}-${tail}`);
+  out.push(`GF-${orderID}`); // last resort: external_id is globally unique
+  return out;
+}
+
+export type InsertOrderResult =
+  | { status: "created"; id: string }
+  | { status: "duplicate"; id: string | null }
+  | { status: "error"; error: string };
+
+/**
+ * Insert a grabfood pos_orders row, choosing a unique order_number. On a 23505
+ * we distinguish a REAL duplicate (this external_id already exists → idempotent
+ * no-op) from an order_number collision with a DIFFERENT order (recurring short
+ * number → try the next candidate). Previously a collision was misread as a
+ * duplicate and the order was silently dropped (no docket, no revenue).
+ * `row` must include external_id and must NOT include order_number.
+ */
+export async function insertGrabPosOrder(
+  supabase: SupabaseClient,
+  row: Record<string, unknown>,
+  shortNo: string,
+  orderID: string,
+): Promise<InsertOrderResult> {
+  for (const order_number of grabOrderNumberCandidates(shortNo, orderID)) {
+    const { data, error } = await supabase
+      .from("pos_orders").insert({ ...row, order_number }).select("id").single();
+    if (!error && data) return { status: "created", id: (data as { id: string }).id };
+    if ((error as { code?: string } | null)?.code === "23505") {
+      const { data: dup } = await supabase
+        .from("pos_orders").select("id").eq("external_id", row.external_id as string).maybeSingle();
+      if (dup) return { status: "duplicate", id: (dup as { id: string }).id };
+      continue; // order_number taken by a different order — disambiguate
+    }
+    return { status: "error", error: error?.message || "insert failed" };
+  }
+  return { status: "error", error: "order_number candidates exhausted (all collided)" };
+}
+
+/**
  * Idempotent ingest: update an existing order's status (forward-only), skip a
  * no-items state push, or create the order + items + payment. Safe to call from
  * the webhook or a replay.
@@ -178,33 +228,27 @@ export async function ingestGrabOrder(
     payload.orderType === "DINE_IN" ? "dine_in" :
     payload.orderType === "PICKUP" ? "pickup" : "takeaway";
 
-  // 5. Insert order.
+  // 5. Insert order. order_number carries a GLOBAL unique constraint, but
+  // GrabFood short numbers recur across days — insertGrabPosOrder keeps the
+  // clean GF-<short> when free and disambiguates on collision, so an order is
+  // never silently dropped as a false "duplicate".
   const shortNo = (payload.shortOrderNumber ?? "").replace(/^GF-/i, "");
   const baseNote = extractOrderNote(payload);
   const notes = opts.originTag ? `${opts.originTag}${baseNote ? ` ${baseNote}` : ""}` : baseNote;
-  const { data: order, error: orderErr } = await supabase
-    .from("pos_orders")
-    .insert({
-      external_id: orderID,
-      order_number: `GF-${shortNo || orderID.slice(0, 6)}`,
-      outlet_id: outletId,
-      source: "grabfood",
-      order_type: orderType,
-      status: opts.statusOverride ?? "sent_to_kitchen",
-      subtotal, sst_amount: sst, discount_amount: discount, total,
-      customer_name: payload.receiver?.name || "Grab Customer",
-      customer_phone: payload.receiver?.phones?.[0] || null,
-      notes,
-    })
-    .select("id").single();
-  if (orderErr || !order) {
-    if ((orderErr as { code?: string } | null)?.code === "23505") {
-      const { data: dup } = await supabase
-        .from("pos_orders").select("id").eq("external_id", orderID).maybeSingle();
-      return { action: "duplicate", orderId: dup?.id ?? null };
-    }
-    return { action: "error", error: orderErr?.message || "insert failed" };
-  }
+  const ins = await insertGrabPosOrder(supabase, {
+    external_id: orderID,
+    outlet_id: outletId,
+    source: "grabfood",
+    order_type: orderType,
+    status: opts.statusOverride ?? "sent_to_kitchen",
+    subtotal, sst_amount: sst, discount_amount: discount, total,
+    customer_name: payload.receiver?.name || "Grab Customer",
+    customer_phone: payload.receiver?.phones?.[0] || null,
+    notes,
+  }, shortNo, orderID);
+  if (ins.status === "duplicate") return { action: "duplicate", orderId: ins.id };
+  if (ins.status === "error") return { action: "error", error: ins.error };
+  const order = { id: ins.id };
 
   // 6. Items — resolved from our catalogue by partner id / grab_item_id.
   const candidateIds = Array.from(
