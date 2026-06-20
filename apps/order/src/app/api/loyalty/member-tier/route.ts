@@ -4,8 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { notifyTierUpgrade } from "@/lib/push/templates";
 
 // .trim() guards against accidental trailing newlines in env var values
-const LOYALTY_BASE = (process.env.LOYALTY_BASE_URL ?? "https://loyalty.celsiuscoffee.com").trim();
-const BRAND_ID     = (process.env.LOYALTY_BRAND_ID  ?? "brand-celsius").trim();
+const BRAND_ID = (process.env.LOYALTY_BRAND_ID ?? "brand-celsius").trim();
 
 // Sort order matters for "is the new tier HIGHER than the old one?".
 // The loyalty RPC walks tiers by sort_order, so we mirror that here
@@ -77,14 +76,12 @@ async function evaluateMemberTierNative(memberId: string, brandId: string): Prom
 }
 
 // GET /api/loyalty/member-tier?member_id=xxx
-// Proxies to the loyalty app's /api/member-tier so the pickup app can
-// surface the tier badge, multiplier, and progress-to-next-tier.
+// Runs the evaluate_member_tier RPC against the shared Supabase so the pickup
+// app can surface the tier badge, multiplier, and progress-to-next-tier.
 //
-// Side effect: when the response shows the customer is now at a
-// HIGHER tier than they were before the proxy call (the RPC updates
-// current_tier_id atomically inside the loyalty app), fire a
-// tier-upgrade push. Fire-and-forget — a push miss never fails the
-// API call.
+// Side effect: when the result shows the customer is now at a HIGHER tier
+// than before (the RPC updates current_tier_id atomically), fire a
+// tier-upgrade push. Fire-and-forget — a push miss never fails the API call.
 export async function GET(request: NextRequest) {
   try {
     const memberId = request.nextUrl.searchParams.get("member_id");
@@ -109,28 +106,10 @@ export async function GET(request: NextRequest) {
     const liveBalance = (pre as { points_balance?: number | null } | null)?.points_balance ?? null;
     const liveEarned  = (pre as { total_points_earned?: number | null } | null)?.total_points_earned ?? null;
 
-    // Resolve the tier. Native path runs the same RPC + query the loyalty app
-    // did, against the shared Supabase. Falls back to the loyalty proxy on any
-    // error, or when LOYALTY_TIER_USE_PROXY=1 forces it (instant kill-switch
-    // while the loyalty app is still deployed).
-    let data: Record<string, unknown> | null = null;
-    if (process.env.LOYALTY_TIER_USE_PROXY !== "1") {
-      try {
-        data = await evaluateMemberTierNative(memberId, BRAND_ID);
-      } catch (e) {
-        console.warn("[member-tier] native path failed; falling back to loyalty proxy:", e);
-      }
-    }
-    if (data === null) {
-      const res = await fetch(
-        `${LOYALTY_BASE}/api/member-tier?member_id=${encodeURIComponent(memberId)}&brand_id=${BRAND_ID}`,
-        { headers: { "Content-Type": "application/json" } }
-      );
-      data = (await res.json()) as Record<string, unknown>;
-      if (!res.ok) {
-        return NextResponse.json(data, { status: res.status });
-      }
-    }
+    // Resolve the tier — runs the evaluate_member_tier RPC + post-purchase
+    // reward query against the shared Supabase (the same work the retired
+    // loyalty app's /api/member-tier did).
+    const data = await evaluateMemberTierNative(memberId, BRAND_ID);
 
     // Tier-upgrade detection. Compare sort_order so we only push on
     // a real promotion (not a same-tier re-evaluation, not a demote).
