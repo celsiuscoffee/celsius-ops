@@ -467,6 +467,7 @@ export async function GET(req: NextRequest) {
       capturedOrders: curCapOrd, collectionRatePct: curCapRate,
       collectionDeltaPts: curCapRate - prevCapRate,
       collectionRatePos: curCapRatePos, collectionRateNative: curCapRateNative, collectionRateWeb: curCapRateWeb,
+      capturedPos: curPosCap, capturedNative: curAppNativeCap, capturedWeb: curAppWebCap,
       pairAdds: curPair, pairAddsDelta: pctChange(curPair, prevPair),
       pairInstore: curPairInstore, pairNative: curPairNative, pairWeb: curPairWeb,
     },
