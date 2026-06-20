@@ -75,6 +75,14 @@ type CommandData = {
 type ReviewsData = {
   outlets?: { outletId: string; google?: { averageRating?: number } }[];
 };
+type ServeStat = { avgMins: number; maxMins: number; tracked: number };
+type LensData = {
+  serving: { company: ServeStat | null; byOutlet: Record<string, ServeStat> } | null;
+  cogs: { rm: number; pct: number; gpPct: number } | null;
+  wastage: { companyRM: number; byOutlet: Record<string, number> } | null;
+  peopleCost: { label: string; costRM: number; pct: number | null } | null;
+  churn: { atRisk: number; winBack: number } | null;
+};
 
 const AOV_TARGET = 40;
 const PERIODS = [
@@ -138,6 +146,7 @@ export default function DashboardPage() {
   const [outlet, setOutlet] = useState("all");
   const { data, mutate } = useFetch<CommandData>(`/api/command?period=${period}`);
   const { data: reviews, mutate: mutateReviews } = useFetch<ReviewsData>(`/api/reviews/dashboard?period=${period}`);
+  const { data: lenses, mutate: mutateLenses } = useFetch<LensData>(`/api/command/lenses?period=${period}`);
 
   const ratingByOutlet = useMemo(() => {
     const m = new Map<string, number>();
@@ -163,7 +172,7 @@ export default function DashboardPage() {
   const now = new Date();
   const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 17 ? "Good afternoon" : "Good evening";
 
-  const refreshAll = () => { mutate(); mutateReviews(); loadCached(); };
+  const refreshAll = () => { mutate(); mutateReviews(); mutateLenses(); loadCached(); };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 overflow-x-hidden space-y-7">
@@ -287,7 +296,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Sales" value={view ? formatRM(view.revenue) : "—"}
             sub={view ? `${view.pctOfTarget}% of ${formatRM(selected ? selected.periodTarget : data?.company.target ?? 0)}` : ""}
-            good={view ? view.pctOfTarget >= 90 : undefined} />
+            good={view ? view.pctOfTarget >= 90 : undefined} progress={view?.pctOfTarget} />
           <Stat label="Avg order" value={view ? `RM ${view.aov}` : "—"} sub={`target RM ${AOV_TARGET}`}
             good={view ? view.aov >= AOV_TARGET : undefined} />
           <Stat label="Orders" value={view ? view.orders.toLocaleString() : "—"} sub={data ? `${data.period.days} days` : ""} />
@@ -310,12 +319,14 @@ export default function DashboardPage() {
                     <th className="pb-2 text-right font-normal">Sales / target</th>
                     <th className="pb-2 text-right font-normal">AOV</th>
                     <th className="pb-2 text-right font-normal">Growth</th>
+                    <th className="pb-2 text-right font-normal">Serve</th>
                     <th className="pb-2 text-right font-normal">★</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.outlets.map((o) => {
                     const rating = ratingByOutlet.get(o.id);
+                    const serve = lenses?.serving?.byOutlet[o.id];
                     return (
                       <tr key={o.id} className="border-t">
                         <td className="py-2.5 font-medium">{o.name}</td>
@@ -323,6 +334,9 @@ export default function DashboardPage() {
                         <td className={`py-2.5 text-right ${o.aov >= AOV_TARGET ? "" : "text-red-600"}`}>RM {o.aov}</td>
                         <td className={`py-2.5 text-right ${o.growthPct == null ? "text-muted-foreground" : o.growthPct >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                           {o.growthPct == null ? "—" : `${o.growthPct > 0 ? "+" : ""}${o.growthPct}%`}
+                        </td>
+                        <td className={`py-2.5 text-right ${serve == null ? "text-muted-foreground" : serve.avgMins <= 10 ? "text-emerald-600" : "text-red-600"}`}>
+                          {serve == null ? "—" : `${serve.avgMins}m`}
                         </td>
                         <td className={`py-2.5 text-right ${rating == null ? "text-muted-foreground" : rating >= 4.5 ? "" : "text-red-600"}`}>
                           {rating == null ? "—" : rating.toFixed(1)}
@@ -373,14 +387,32 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Wiring next */}
+        {/* The other lenses — live */}
         <div>
-          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Wiring next</div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <NextTile icon={Timer} label="Serving time" sub="<10-min promise" href="/ops/dashboard" />
-            <NextTile icon={Users} label="People cost" sub="vs 15% target" href="/hr" />
-            <NextTile icon={Boxes} label="Wastage & COGS" sub="vs 35% target" href="/inventory/dashboard" />
-            <NextTile icon={HeartHandshake} label="Win-back" sub="churn signals" href="/loyalty/dashboard" />
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Cost · service · people · customers</div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <LensCard icon={Timer} label="Serve time"
+              value={lenses?.serving?.company ? `${lenses.serving.company.avgMins}m` : "—"}
+              sub={lenses?.serving?.company ? `max ${lenses.serving.company.maxMins}m · <10 target` : "no data yet"}
+              tone={lenses?.serving?.company ? (lenses.serving.company.avgMins <= 10 ? "good" : "bad") : "muted"}
+              href="/pos/store-menu-status" loading={!lenses} />
+            <LensCard icon={Boxes} label="COGS"
+              value={lenses?.cogs ? `${lenses.cogs.pct}%` : "—"}
+              sub={lenses?.cogs ? `GP ${lenses.cogs.gpPct}% · target 35%` : "no data yet"}
+              tone={lenses?.cogs ? (lenses.cogs.pct <= 35 ? "good" : "bad") : "muted"}
+              href="/inventory/reports" loading={!lenses} />
+            <LensCard icon={Users} label="People cost"
+              value={lenses?.peopleCost?.pct != null ? `${lenses.peopleCost.pct}%` : lenses?.peopleCost ? formatRM(lenses.peopleCost.costRM) : "—"}
+              sub={lenses?.peopleCost ? `${lenses.peopleCost.label} · target 15%` : "no data yet"}
+              tone={lenses?.peopleCost?.pct != null ? (lenses.peopleCost.pct <= 15 ? "good" : "bad") : "muted"}
+              href="/hr/payroll" loading={!lenses} />
+            <LensCard icon={Trash2} label="Wastage"
+              value={lenses?.wastage ? formatRM(lenses.wastage.companyRM) : "—"}
+              sub="this period" tone="muted" href="/inventory/wastage" loading={!lenses} />
+            <LensCard icon={HeartHandshake} label="Win-back"
+              value={lenses?.churn ? lenses.churn.winBack.toLocaleString() : "—"}
+              sub={lenses?.churn ? `of ${lenses.churn.atRisk.toLocaleString()} quiet 28d+` : "no data yet"}
+              tone="muted" href="/loyalty/dashboard" loading={!lenses} />
           </div>
         </div>
       </section>
@@ -388,13 +420,18 @@ export default function DashboardPage() {
   );
 }
 
-function Stat({ label, value, sub, good }: { label: string; value: string; sub?: string; good?: boolean }) {
+function Stat({ label, value, sub, good, progress }: { label: string; value: string; sub?: string; good?: boolean; progress?: number }) {
   const tone = good === undefined ? "" : good ? "text-emerald-600" : "text-red-600";
   return (
     <div className="rounded-lg bg-muted/50 p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={`text-2xl font-medium leading-tight ${tone}`}>{value}</div>
       {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
+      {progress != null && (
+        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, progress))}%`, background: progress >= 90 ? "#16a34a" : "#C2452D" }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -408,12 +445,20 @@ function ChannelRow({ color, label, pct }: { color: string; label: string; pct: 
   );
 }
 
-function NextTile({ icon: Icon, label, sub, href }: { icon: React.ElementType; label: string; sub: string; href: string }) {
+function LensCard({ icon: Icon, label, value, sub, tone, href, loading }: {
+  icon: React.ElementType; label: string; value: string; sub: string;
+  tone: "good" | "bad" | "muted"; href: string; loading?: boolean;
+}) {
+  const toneCls = tone === "good" ? "text-emerald-600" : tone === "bad" ? "text-red-600" : "text-foreground";
   return (
-    <Link href={href} className="rounded-lg border border-dashed p-3 hover:bg-muted/50">
-      <Icon className="mb-1 h-4 w-4 text-muted-foreground" />
-      <div className="text-sm">{label}</div>
-      <div className="text-xs text-muted-foreground">{sub}</div>
+    <Link href={href} className="rounded-lg border bg-card p-3 transition-colors hover:bg-muted/40">
+      <div className="mb-1 flex items-center gap-1.5 text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" /><span className="text-xs">{label}</span>
+      </div>
+      {loading
+        ? <div className="h-6 w-12 rounded bg-muted animate-pulse" />
+        : <div className={`text-xl font-medium leading-tight ${toneCls}`}>{value}</div>}
+      <div className="text-[11px] text-muted-foreground">{sub}</div>
     </Link>
   );
 }
