@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-
-// .trim() guards against accidental trailing newlines in env var values
-const LOYALTY_BASE = (process.env.LOYALTY_BASE_URL ?? "https://loyalty.celsiuscoffee.com").trim();
+import { sendOTP } from "@/lib/otp";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 // Match every common stored shape — "+60123456789", "60123456789", "0123456789",
 // "123456789", etc. — so the existing-member lookup doesn't miss a customer
@@ -47,32 +46,37 @@ async function isReturningCustomer(phone: string): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
-// POST /api/loyalty/otp/send — proxy to loyalty app
+// POST /api/loyalty/otp/send — legacy alias for /api/otp/send.
+//
+// Resolves natively (shared OTP store + SMS via @/lib/otp) instead of proxying
+// to the loyalty app, so it no longer depends on loyalty.celsiuscoffee.com.
+// Current clients call /api/otp/send directly; this stays as a thin back-compat
+// endpoint for any older build still on the old path. The OTP store is the same
+// shared Supabase the native route uses, so codes are interchangeable.
 export async function POST(request: NextRequest) {
   try {
     const { phone } = await request.json();
     if (!phone) return NextResponse.json({ success: false, error: "Phone required" }, { status: 400 });
 
-    // Probe the customer's account state in parallel with the OTP send so
-    // we don't add latency to the SMS dispatch. The response carries
-    // `is_new_member` so the OTP screen can conditionally render the
-    // referral-code field.
-    const [proxyRes, returning] = await Promise.all([
-      fetch(`${LOYALTY_BASE}/api/otp/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, purpose: "login" }),
-      }),
+    // Rate-limit by phone (the loyalty endpoint used to enforce this).
+    const rate = await checkRateLimit(phone, RATE_LIMITS.OTP_SEND);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { success: false, error: `Too many OTP requests. Try again in ${Math.ceil((rate.retryAfter || 300) / 60)} minutes.` },
+        { status: 429 },
+      );
+    }
+
+    // Probe the customer's account state in parallel with the OTP send so we
+    // don't add latency to the SMS dispatch. `is_new_member` drives the OTP
+    // screen's referral-code field visibility.
+    const [data, returning] = await Promise.all([
+      sendOTP(phone, "login"),
       isReturningCustomer(phone).catch(() => false),
     ]);
-
-    const data = await proxyRes.json();
-    return NextResponse.json(
-      { ...data, is_new_member: !returning },
-      { status: proxyRes.status },
-    );
+    return NextResponse.json({ ...data, is_new_member: !returning });
   } catch (err) {
-    console.error("Loyalty OTP send error:", err);
+    console.error("OTP send error:", err);
     return NextResponse.json({ success: false, error: "Failed to send OTP" }, { status: 500 });
   }
 }
