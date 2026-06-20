@@ -209,9 +209,9 @@ export default function SalesScreen() {
                   <Text className={`font-body-bold text-[13px] ${g.collectionDeltaPts >= 0 ? "text-[#34d399]" : "text-[#f87171]"}`}>{g.collectionDeltaPts >= 0 ? "+" : ""}{g.collectionDeltaPts}%</Text>
                 </View>
                 <View className="mt-2.5 flex-row gap-2">
-                  <ChannelChip label="In-store" v={g.collectionRatePos} suffix="%" />
-                  <ChannelChip label="Native" v={g.collectionRateNative} suffix="%" />
-                  <ChannelChip label="Web" v={g.collectionRateWeb} suffix="%" />
+                  <ChannelChip label="In-store" v={g.collectionRatePos} suffix="%" sub={`${numF(g.capturedPos)} w/ phone`} />
+                  <ChannelChip label="Native" v={g.collectionRateNative} suffix="%" sub={`${numF(g.capturedNative)} w/ phone`} />
+                  <ChannelChip label="Web" v={g.collectionRateWeb} suffix="%" sub={`${numF(g.capturedWeb)} w/ phone`} />
                 </View>
               </View>
               <View className="mt-3.5 border-t border-[#F5F3F00f] pt-3.5">
@@ -301,10 +301,11 @@ function Tile({ icon: Icon, color, v, k, delta }: { icon: any; color: string; v:
     </View>
   );
 }
-function ChannelChip({ label, v, suffix = "" }: { label: string; v: number; suffix?: string }) {
+function ChannelChip({ label, v, suffix = "", sub }: { label: string; v: number; suffix?: string; sub?: string }) {
   return (
     <View className="flex-1 rounded-xl border border-[#F5F3F01a] bg-[#160800] px-3 py-2">
       <Text className="font-display text-base text-[#F5F3F0]">{numF(v)}{suffix}</Text>
+      {sub ? <Text className="font-body text-[11px] text-[#F5F3F057]">{sub}</Text> : null}
       <Text className="mt-0.5 font-body-semi text-[11px] uppercase tracking-wide text-[#F5F3F08a]">{label}</Text>
     </View>
   );
