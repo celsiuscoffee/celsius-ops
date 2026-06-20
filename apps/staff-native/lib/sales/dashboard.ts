@@ -29,6 +29,7 @@ export type SalesDashboard = {
     newCustomers: number; newCustomersDelta: number | null;
     newAppCustomers: number; newAppDelta: number | null;
     appOrders: number; appOrdersDelta: number | null;
+    appOrdersNative: number; appOrdersWeb: number;
     appSharePct: number; appShareDeltaPts: number;
     capturedOrders: number; collectionRatePct: number; collectionDeltaPts: number;
     pairAdds: number; pairAddsDelta: number | null;

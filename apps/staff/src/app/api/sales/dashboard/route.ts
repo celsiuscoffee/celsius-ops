@@ -178,6 +178,7 @@ export async function GET(req: NextRequest) {
   const curPhones = new Set<string>(), prevPhones = new Set<string>();
   const curAppPhones = new Set<string>(), prevAppPhones = new Set<string>();
   let curAppOrd = 0, curPosOrd = 0, prevAppOrd = 0, prevPosOrd = 0;
+  let curAppNative = 0, curAppWeb = 0; // app-order split by origin (orders.source)
   let curCapOrd = 0, prevCapOrd = 0; // orders with a customer phone (points captured)
   const curPosIds: string[] = [];
   const nativeCodes = new Set<string>(); // pos outlet-codes with native sales this period
@@ -232,6 +233,9 @@ export async function GET(req: NextRequest) {
     const counts = (r.status || "").toLowerCase() === "completed";
     if (inCur(d)) {
       curAppOrd++;
+      // Native = the iOS/Android binary (orders.source app_ios|app_android);
+      // everything else (web, web_qr table, legacy null) counts as Web.
+      if (r.source === "app_ios" || r.source === "app_android") curAppNative++; else curAppWeb++;
       if (r.customer_phone) { curPhones.add(r.customer_phone); curAppPhones.add(r.customer_phone); curCapOrd++; }
       if (counts) {
         curRev += net; curOrd++;
@@ -448,6 +452,7 @@ export async function GET(req: NextRequest) {
       newCustomers, newCustomersDelta: pctChange(newCustomers, prevNewCustomers),
       newAppCustomers, newAppDelta: pctChange(newAppCustomers, prevNewApp),
       appOrders: curAppOrd, appOrdersDelta: pctChange(curAppOrd, prevAppOrd),
+      appOrdersNative: curAppNative, appOrdersWeb: curAppWeb,
       appSharePct: curShare, appShareDeltaPts: curShare - prevShare,
       capturedOrders: curCapOrd, collectionRatePct: curCapRate,
       collectionDeltaPts: curCapRate - prevCapRate,
