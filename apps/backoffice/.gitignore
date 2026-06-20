@@ -2,3 +2,6 @@
 
 # Grab production secrets (filled from .grab-prod.env.example)
 .grab-prod.env
+
+# Orphan list dumped by scripts/audit-cloudinary-posters.mjs --json
+cloudinary-orphans.json
