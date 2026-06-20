@@ -71,6 +71,14 @@
     {
       "path": "/api/cron/prune-poster-assets",
       "schedule": "30 3 * * 1"
+    },
+    {
+      "path": "/api/cron/grant-birthday",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/grant-monthly",
+      "schedule": "0 1 1 * *"
     }
   ]
 }
