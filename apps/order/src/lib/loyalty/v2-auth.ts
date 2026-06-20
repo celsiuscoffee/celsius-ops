@@ -3,9 +3,7 @@
 
 import type { NextRequest } from "next/server";
 import { requireCustomerSession } from "@/lib/customer-jwt";
-
-const LOYALTY_BASE = (process.env.LOYALTY_BASE_URL ?? "https://loyalty.celsiuscoffee.com").trim();
-const BRAND_ID     = (process.env.LOYALTY_BRAND_ID  ?? "brand-celsius").trim();
+import { lookupMemberIdByPhone } from "./member-direct";
 
 export type ResolvedMember = {
   memberId: string;
@@ -33,20 +31,19 @@ export async function resolveMember(req: NextRequest): Promise<
     return { member: { memberId: guard.session.sub, phone: guard.session.phone }, error: null };
   }
 
+  // Legacy fallback: a session token minted before member rows were always
+  // created at OTP verify can carry an empty `sub`. Resolve phone → member id
+  // directly against the shared Supabase (same store the rest of the app uses)
+  // instead of proxying to loyalty.celsiuscoffee.com.
   try {
-    const res = await fetch(
-      `${LOYALTY_BASE}/api/members?brand_id=${BRAND_ID}&phone=${encodeURIComponent(guard.session.phone)}`,
-      { headers: { "Content-Type": "application/json" } },
-    );
-    const rows = await res.json();
-    const member = Array.isArray(rows) && rows[0];
-    if (!member?.id) {
+    const memberId = await lookupMemberIdByPhone(guard.session.phone);
+    if (!memberId) {
       return {
         member: null,
         error: Response.json({ error: "Member not found" }, { status: 404 }),
       };
     }
-    return { member: { memberId: member.id as string, phone: guard.session.phone }, error: null };
+    return { member: { memberId, phone: guard.session.phone }, error: null };
   } catch {
     return {
       member: null,

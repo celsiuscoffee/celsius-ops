@@ -134,3 +134,17 @@ export async function findOrCreateMember(phone: string): Promise<MemberRow | nul
     total_visits:        (brandRow?.total_visits as number | null)         ?? 0,
   };
 }
+
+/** Resolve a phone to an existing member id WITHOUT creating one. Returns
+ *  null when no member matches any phone variant. Used by the v2 /me/*
+ *  session resolver's fallback when a (legacy) session token carries no
+ *  member_id — replaces a proxy hop to loyalty.celsiuscoffee.com/api/members. */
+export async function lookupMemberIdByPhone(phone: string): Promise<string | null> {
+  const supabase = getSupabaseAdmin();
+  const { data } = await supabase
+    .from("members")
+    .select("id")
+    .in("phone", phoneVariants(phone))
+    .limit(1);
+  return data && data.length > 0 ? (data[0] as { id: string }).id : null;
+}
