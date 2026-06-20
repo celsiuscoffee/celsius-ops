@@ -26,6 +26,56 @@ async function fetchTierSortOrder(tierId: string | null): Promise<number> {
   }
 }
 
+// Native port of the loyalty app's GET /api/member-tier — runs the
+// evaluate_member_tier RPC (which updates member_brands.current_tier_id) and
+// attaches the active post-purchase issued reward, reading the SAME shared
+// Supabase the loyalty app uses. Part of retiring the loyalty app: removes the
+// proxy hop to loyalty.celsiuscoffee.com. The order app already calls this exact
+// RPC elsewhere (lib/loyalty/points.ts), so no new infra is involved.
+async function evaluateMemberTierNative(memberId: string, brandId: string): Promise<Record<string, unknown>> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: tierData, error: tierError } = await supabase.rpc("evaluate_member_tier", {
+    p_member_id: memberId,
+    p_brand_id: brandId,
+  });
+  if (tierError) throw new Error(`evaluate_member_tier: ${tierError.message}`);
+  const tier = (tierData ?? {}) as Record<string, unknown>;
+
+  // Active post-purchase issued reward (if any) — mirrors the loyalty endpoint.
+  const now = new Date().toISOString();
+  const { data: issued } = await supabase
+    .from("issued_rewards")
+    .select("id, expires_at, reward:rewards(name, discount_value)")
+    .eq("member_id", memberId)
+    .eq("brand_id", brandId)
+    .eq("status", "active")
+    .eq("rewards.reward_type", "post_purchase")
+    .gt("expires_at", now)
+    .order("expires_at", { ascending: true })
+    .limit(1);
+
+  const coupon = issued?.[0] as
+    | { id: string; expires_at: string; reward: { name: string; discount_value: number | null } | null }
+    | undefined;
+  if (coupon?.reward) {
+    const hoursRemaining = Math.max(
+      0,
+      Math.ceil((new Date(coupon.expires_at).getTime() - Date.now()) / (1000 * 60 * 60)),
+    );
+    tier.active_post_purchase = {
+      id: coupon.id,
+      reward_name: coupon.reward.name,
+      multiplier: coupon.reward.discount_value ?? 2,
+      expires_at: coupon.expires_at,
+      hours_remaining: hoursRemaining,
+    };
+  } else {
+    tier.active_post_purchase = null;
+  }
+  return tier;
+}
+
 // GET /api/loyalty/member-tier?member_id=xxx
 // Proxies to the loyalty app's /api/member-tier so the pickup app can
 // surface the tier badge, multiplier, and progress-to-next-tier.
@@ -59,20 +109,34 @@ export async function GET(request: NextRequest) {
     const liveBalance = (pre as { points_balance?: number | null } | null)?.points_balance ?? null;
     const liveEarned  = (pre as { total_points_earned?: number | null } | null)?.total_points_earned ?? null;
 
-    const res = await fetch(
-      `${LOYALTY_BASE}/api/member-tier?member_id=${encodeURIComponent(memberId)}&brand_id=${BRAND_ID}`,
-      { headers: { "Content-Type": "application/json" } }
-    );
-    const data = await res.json();
-    if (!res.ok) {
-      return NextResponse.json(data, { status: res.status });
+    // Resolve the tier. Native path runs the same RPC + query the loyalty app
+    // did, against the shared Supabase. Falls back to the loyalty proxy on any
+    // error, or when LOYALTY_TIER_USE_PROXY=1 forces it (instant kill-switch
+    // while the loyalty app is still deployed).
+    let data: Record<string, unknown> | null = null;
+    if (process.env.LOYALTY_TIER_USE_PROXY !== "1") {
+      try {
+        data = await evaluateMemberTierNative(memberId, BRAND_ID);
+      } catch (e) {
+        console.warn("[member-tier] native path failed; falling back to loyalty proxy:", e);
+      }
+    }
+    if (data === null) {
+      const res = await fetch(
+        `${LOYALTY_BASE}/api/member-tier?member_id=${encodeURIComponent(memberId)}&brand_id=${BRAND_ID}`,
+        { headers: { "Content-Type": "application/json" } }
+      );
+      data = await res.json();
+      if (!res.ok) {
+        return NextResponse.json(data, { status: res.status });
+      }
     }
 
     // Tier-upgrade detection. Compare sort_order so we only push on
     // a real promotion (not a same-tier re-evaluation, not a demote).
-    const newTierId   = (data as { tier_id?: string | null }).tier_id ?? null;
-    const newTierName = (data as { tier_name?: string | null }).tier_name ?? null;
-    const newTierMul  = Number((data as { tier_multiplier?: number | null }).tier_multiplier ?? 1);
+    const newTierId   = (data.tier_id as string | null | undefined) ?? null;
+    const newTierName = (data.tier_name as string | null | undefined) ?? null;
+    const newTierMul  = Number((data.tier_multiplier as number | null | undefined) ?? 1);
 
     if (newTierId && newTierId !== prevTierId && newTierName) {
       const [prevOrder, newOrder] = await Promise.all([
