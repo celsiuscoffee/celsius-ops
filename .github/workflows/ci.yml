@@ -29,7 +29,7 @@ jobs:
       matrix:
         # staff-native is an Expo app but lives in the npm workspace, so
         # the root npm ci covers it — no per-app install needed.
-        app: [backoffice, staff, order, loyalty, pickup, staff-native]
+        app: [backoffice, staff, order, pickup, staff-native]
     env:
       DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
       DIRECT_URL: "postgresql://fake:fake@localhost:5432/fake"
@@ -119,7 +119,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [order, loyalty, staff, backoffice]
+        app: [order, staff, backoffice]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -139,7 +139,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [backoffice, staff, order, loyalty, pickup]
+        app: [backoffice, staff, order, pickup]
     env:
       DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
       DIRECT_URL: "postgresql://fake:fake@localhost:5432/fake"
