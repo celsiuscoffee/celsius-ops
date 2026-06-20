@@ -10,7 +10,9 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "audit:posters": "node scripts/audit-cloudinary-posters.mjs",
+    "prune:posters": "node scripts/prune-cloudinary-posters.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.87.0",
