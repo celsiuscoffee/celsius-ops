@@ -80,6 +80,11 @@ export type {
 } from "./loyalty/discount-engine";
 export { isPromoLiveNow } from "./loyalty/promo-eligibility";
 export type { PromoSchedule } from "./loyalty/promo-eligibility";
+// NOTE: the promotion engine lives in ./loyalty/promo-engine but is
+// deliberately NOT re-exported here. It imports node `crypto` (ledger row
+// ids), so — like ./otp — it must be imported via its subpath
+// `@celsius/shared/src/loyalty/promo-engine` from server code only, to keep
+// it out of client bundles.
 // Discount-spec helpers (voucher_templates row → engine spec; order items →
 // engine cart) — moved here so POS, native, and QR-table build them identically.
 export {

@@ -3,10 +3,29 @@
 // stack and to record promotion applications post-fulfillment.
 
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import {
+  evaluateCart as evaluateCartShared,
+  recordApplications as recordApplicationsShared,
+  type CartContext as PromoCartContext,
+} from "@celsius/shared/src/loyalty/promo-engine";
 
 const LOYALTY_BASE = (process.env.LOYALTY_BASE_URL ?? "https://loyalty.celsiuscoffee.com").trim();
 const BRAND_ID     = (process.env.LOYALTY_BRAND_ID  ?? "brand-celsius").trim();
 const CRON_SECRET  = (process.env.CRON_SECRET ?? "").trim();
+
+/** Cohort tags (members.tags) for tag-gated promos like "staff price".
+ *  Resolved server-side — never trusted from the client — mirroring the
+ *  loyalty /api/promotions/evaluate route's own lookup. Empty on any miss. */
+async function lookupMemberTags(memberId: string | null | undefined): Promise<string[]> {
+  if (!memberId) return [];
+  const supabase = getSupabaseAdmin();
+  const { data } = await supabase
+    .from("members")
+    .select("tags")
+    .eq("id", memberId)
+    .single();
+  return (data?.tags as string[] | null) ?? [];
+}
 
 export interface CartLine {
   product_id: string;
@@ -158,34 +177,59 @@ export async function evaluatePromotions(
     total: subtotal,
   };
 
-  let data: EvaluatedCart = empty;
-  try {
-    const res = await fetch(`${LOYALTY_BASE}/api/promotions/evaluate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // Server-to-server calls don't set Origin by default, but the
-        // loyalty app's CSRF middleware enforces an Origin allowlist on
-        // every POST and silently 403s without one — which is exactly
-        // why tag-based discounts (Boss promo, etc.) silently dropped
-        // out at checkout while the client preview kept showing them
-        // (preview goes through /api/loyalty/promotions/evaluate which
-        // already injects this header). celsiuscoffee.com is on the
-        // loyalty CSRF allowlist.
-        Origin: "https://celsiuscoffee.com",
-      },
-      body: JSON.stringify({ brand_id: BRAND_ID, ...input }),
-    });
-    if (res.ok) {
-      data = (await res.json()) as EvaluatedCart;
+  // Native first: run the shared promo engine in-process against the same
+  // Supabase the loyalty app used. Falls back to the loyalty proxy on any
+  // error, or instantly when LOYALTY_PROMO_USE_PROXY=1 (kill-switch — revert
+  // without a deploy). `data === null` is the sentinel for "native didn't
+  // produce a result", which routes us to the proxy.
+  let data: EvaluatedCart | null = null;
+
+  if (process.env.LOYALTY_PROMO_USE_PROXY !== "1") {
+    try {
+      const ctx: PromoCartContext = {
+        brand_id: BRAND_ID,
+        member_id: input.member_id ?? null,
+        outlet_id: input.outlet_id ?? null,
+        member_tier_id: input.member_tier_id ?? null,
+        member_tags: await lookupMemberTags(input.member_id),
+        reward_promotion_ids: input.reward_promotion_ids ?? [],
+        channel: input.channel ?? null,
+      };
+      data = await evaluateCartShared(getSupabaseAdmin(), input.lines, ctx);
+    } catch (err) {
+      console.warn("[loyalty] native promo eval failed; falling back to proxy:", err);
     }
-  } catch {
-    data = empty;
+  }
+
+  if (data === null) {
+    try {
+      const res = await fetch(`${LOYALTY_BASE}/api/promotions/evaluate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // Server-to-server calls don't set Origin by default, but the
+          // loyalty app's CSRF middleware enforces an Origin allowlist on
+          // every POST and silently 403s without one — which is exactly
+          // why tag-based discounts (Boss promo, etc.) silently dropped
+          // out at checkout while the client preview kept showing them
+          // (preview goes through /api/loyalty/promotions/evaluate which
+          // already injects this header). celsiuscoffee.com is on the
+          // loyalty CSRF allowlist.
+          Origin: "https://celsiuscoffee.com",
+        },
+        body: JSON.stringify({ brand_id: BRAND_ID, ...input }),
+      });
+      if (res.ok) {
+        data = (await res.json()) as EvaluatedCart;
+      }
+    } catch {
+      data = null;
+    }
   }
 
   // Layer the tier % discount on top. Lookups against tiers.id are tiny
   // and only run once per cart evaluation.
-  return applyTierDiscount(data, input.member_tier_id);
+  return applyTierDiscount(data ?? empty, input.member_tier_id);
 }
 
 /**
@@ -202,6 +246,37 @@ export async function recordPromotionApplications(args: {
   reward_promotion_ids?: string[];
 }): Promise<void> {
   if (args.evaluated.discounts.length === 0) return;
+
+  // Native first: re-evaluate the cart with the shared engine (engine-only,
+  // WITHOUT the synthetic tier line — matching the loyalty /apply route, so
+  // only real promotions land in the ledger) and record straight to Supabase.
+  // No CRON_SECRET needed for the in-process path. Falls back to the proxy on
+  // error, or instantly when LOYALTY_PROMO_USE_PROXY=1.
+  if (process.env.LOYALTY_PROMO_USE_PROXY !== "1") {
+    try {
+      const supabase = getSupabaseAdmin();
+      const ctx: PromoCartContext = {
+        brand_id: BRAND_ID,
+        member_id: args.member_id ?? null,
+        outlet_id: args.outlet_id ?? null,
+        member_tier_id: args.member_tier_id ?? null,
+        member_tags: await lookupMemberTags(args.member_id),
+        reward_promotion_ids: args.reward_promotion_ids ?? [],
+      };
+      const reEvaluated = await evaluateCartShared(supabase, args.lines, ctx);
+      await recordApplicationsShared(supabase, {
+        evaluated: reEvaluated,
+        brand_id: BRAND_ID,
+        member_id: args.member_id ?? null,
+        outlet_id: args.outlet_id ?? null,
+        reference_id: args.reference_id,
+      });
+      return;
+    } catch (err) {
+      console.warn("[loyalty] native promo record failed; falling back to proxy:", err);
+    }
+  }
+
   if (!CRON_SECRET) {
     console.warn(
       "[loyalty] recordPromotionApplications: CRON_SECRET unset, skipping"

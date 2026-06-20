@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  evaluateCart as evaluateCartShared,
+  type CartContext as PromoCartContext,
+} from "@celsius/shared/src/loyalty/promo-engine";
 
 /**
  * POST /api/loyalty/evaluate-promotions
@@ -293,28 +297,69 @@ export async function POST(req: NextRequest) {
       total: subtotal,
     };
 
-    let data: EvaluatedCart = empty;
-    try {
-      const res = await fetch(`${LOYALTY_BASE}/api/promotions/evaluate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // The engine's CSRF middleware allowlists celsiuscoffee.com —
-          // every other Origin gets a silent 403. Without this header,
-          // tag-based and auto promos silently drop out and the cart
-          // looks like there's no discount even when one applies.
-          Origin: "https://celsiuscoffee.com",
-        },
-        // channel:"pos" is authoritative here — this endpoint only ever
-        // serves the POS register, so channel-scoped promos gate correctly.
-        body: JSON.stringify({ brand_id: BRAND_ID, ...body, channel: "pos" }),
-      });
-      if (res.ok) {
-        data = (await res.json()) as EvaluatedCart;
+    // Native first: run the shared promo engine in-process against the same
+    // Supabase the loyalty app used. Falls back to the loyalty proxy on any
+    // error, or instantly when LOYALTY_PROMO_USE_PROXY=1 (kill-switch). A
+    // null `data` is the sentinel that routes us to the proxy.
+    let data: EvaluatedCart | null = null;
+
+    if (process.env.LOYALTY_PROMO_USE_PROXY !== "1") {
+      try {
+        const supabase = getAdmin();
+        // Cohort tags resolved server-side — never trust client-supplied tags,
+        // since promos like "staff price" key off them. Mirrors the loyalty
+        // /api/promotions/evaluate route's own lookup.
+        let memberTags: string[] = [];
+        if (body.member_id) {
+          const { data: m } = await supabase
+            .from("members")
+            .select("tags")
+            .eq("id", body.member_id)
+            .single();
+          memberTags = (m?.tags as string[] | null) ?? [];
+        }
+        const ctx: PromoCartContext = {
+          brand_id: BRAND_ID,
+          member_id: body.member_id ?? null,
+          outlet_id: body.outlet_id ?? null,
+          member_tier_id: body.member_tier_id ?? null,
+          member_tags: memberTags,
+          reward_promotion_ids: body.reward_promotion_ids ?? [],
+          // channel:"pos" is authoritative here — this endpoint only ever
+          // serves the POS register, so channel-scoped promos gate correctly.
+          channel: "pos",
+        };
+        data = (await evaluateCartShared(supabase, body.lines, ctx)) as EvaluatedCart;
+      } catch (err) {
+        console.warn("[POS] native promo eval failed; falling back to proxy:", err);
       }
-    } catch {
-      data = empty;
     }
+
+    if (data === null) {
+      try {
+        const res = await fetch(`${LOYALTY_BASE}/api/promotions/evaluate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            // The engine's CSRF middleware allowlists celsiuscoffee.com —
+            // every other Origin gets a silent 403. Without this header,
+            // tag-based and auto promos silently drop out and the cart
+            // looks like there's no discount even when one applies.
+            Origin: "https://celsiuscoffee.com",
+          },
+          // channel:"pos" is authoritative here — this endpoint only ever
+          // serves the POS register, so channel-scoped promos gate correctly.
+          body: JSON.stringify({ brand_id: BRAND_ID, ...body, channel: "pos" }),
+        });
+        if (res.ok) {
+          data = (await res.json()) as EvaluatedCart;
+        }
+      } catch {
+        data = null;
+      }
+    }
+
+    if (data === null) data = empty;
 
     // Drop First Order Discount when the member isn't actually on
     // their first order. The central engine returns this promo for
