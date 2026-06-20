@@ -400,6 +400,7 @@ export default function ProductScreen() {
           modifiers: pairSelections,
           specialInstructions: undefined,
           totalPrice: pair.price + pairModTotal,
+          isPair: true,
         });
         trackEvent("cart_add", {
           productId:   pair.id,

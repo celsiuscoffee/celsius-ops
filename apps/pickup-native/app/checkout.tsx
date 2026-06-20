@@ -758,6 +758,7 @@ export default function Checkout() {
             priceDelta: m.priceDelta,
           })),
           specialInstructions: i.specialInstructions,
+          isPair: i.isPair ?? false,
         })),
         rewardId: appliedReward?.id ?? null,
         rewardName: appliedReward?.name ?? null,

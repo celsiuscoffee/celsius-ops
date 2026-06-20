@@ -355,25 +355,65 @@ export async function GET(req: NextRequest) {
   const prevNewCustomers = [...prevPhones].filter((p) => !priorAll.has(p)).length;
   const newAppCustomers = [...curAppPhones].filter((p) => !priorApp.has(p) && !prevAppPhones.has(p)).length;
   const prevNewApp = [...prevAppPhones].filter((p) => !priorApp.has(p)).length;
-  // Pair adds (upsell): each pos_pair_events row = a suggested pair the cashier
-  // ADDED to the cart. Count-only queries (head:true) — immune to the PostgREST
-  // row cap. Prev clipped to the same elapsed time (like-for-like).
-  let curPair = 0, prevPair = 0;
+  // Pair adds (upsell) — pairs that actually CHECKED OUT, split 3 ways:
+  //   In-store  → pos_pair_events stamped with an order_id at payment
+  //               (stampPairOrder). Unstamped rows are add-to-cart taps that
+  //               never converted, so they're excluded.
+  //   Native    → order_items.is_pair lines on app orders from app_ios/android.
+  //   Web       → order_items.is_pair lines on app orders from the web PWA.
+  // Prev side clipped to the same elapsed time (like-for-like).
+  const prevPairEnd = Number.isFinite(prevCutoffMs)
+    ? new Date(Math.min(prevCutoffMs, Date.parse(mytDayEndUTC(prev.to)))).toISOString()
+    : mytDayEndUTC(prev.to);
+
+  // ── In-store (POS) — count-only queries (head:true), immune to the row cap.
+  let curPairInstore = 0, prevPairInstore = 0;
   if (posCodes.length) {
-    const prevPairEnd = Number.isFinite(prevCutoffMs)
-      ? new Date(Math.min(prevCutoffMs, Date.parse(mytDayEndUTC(prev.to)))).toISOString()
-      : mytDayEndUTC(prev.to);
     const [pc, pp] = await Promise.all([
       supabaseAdmin.from("pos_pair_events").select("id", { count: "exact", head: true })
-        .in("outlet_id", posCodes)
+        .in("outlet_id", posCodes).not("order_id", "is", null)
         .gte("created_at", mytDayStartUTC(cur.from)).lte("created_at", mytDayEndUTC(cur.to)),
       supabaseAdmin.from("pos_pair_events").select("id", { count: "exact", head: true })
-        .in("outlet_id", posCodes)
+        .in("outlet_id", posCodes).not("order_id", "is", null)
         .gte("created_at", mytDayStartUTC(prev.from)).lte("created_at", prevPairEnd),
     ]);
-    if (pc.error) warn.push(`pos_pair_events: ${pc.error.message}`); else curPair = pc.count || 0;
-    if (pp.error) warn.push(`pos_pair_events(prev): ${pp.error.message}`); else prevPair = pp.count || 0;
+    if (pc.error) warn.push(`pos_pair_events: ${pc.error.message}`); else curPairInstore = pc.count || 0;
+    if (pp.error) warn.push(`pos_pair_events(prev): ${pp.error.message}`); else prevPairInstore = pp.count || 0;
   }
+
+  // ── Pickup app (native vs web) — one is_pair line = one purchased pair.
+  // Forward-only: is_pair is false for orders placed before this shipped.
+  let curPairNative = 0, curPairWeb = 0, prevPairNative = 0, prevPairWeb = 0;
+  if (storeIds.length) {
+    type PairRow = { source: string | null; status: string | null; created_at: Date };
+    const pairRows = await prisma
+      .$queryRaw<PairRow[]>`
+        SELECT o.source, o.status, o.created_at
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        WHERE o.store_id IN (${Prisma.join(storeIds)})
+          AND o.created_at >= ${winStartD} AND o.created_at <= ${winEndD}
+          AND oi.is_pair = true
+      `
+      .catch((e: unknown) => {
+        warn.push(`order_items(pair): ${e instanceof Error ? e.message : "query failed"}`);
+        return [] as PairRow[];
+      });
+    for (const r of pairRows) {
+      if (!isAppSale(r.status)) continue;
+      const ts = r.created_at.toISOString();
+      const d = getMYTDateStr(ts);
+      const isNative = r.source === "app_ios" || r.source === "app_android";
+      if (inCur(d)) {
+        if (isNative) curPairNative++; else curPairWeb++;
+      } else if (inPrev(d) && Date.parse(ts) <= prevCutoffMs) {
+        if (isNative) prevPairNative++; else prevPairWeb++;
+      }
+    }
+  }
+
+  const curPair = curPairInstore + curPairNative + curPairWeb;
+  const prevPair = prevPairInstore + prevPairNative + prevPairWeb;
 
   const curShare = curOrd ? Math.round((curAppOrd / curOrd) * 100) : 0;
   const prevShare = prevOrd ? Math.round((prevAppOrd / prevOrd) * 100) : 0;
@@ -412,6 +452,7 @@ export async function GET(req: NextRequest) {
       capturedOrders: curCapOrd, collectionRatePct: curCapRate,
       collectionDeltaPts: curCapRate - prevCapRate,
       pairAdds: curPair, pairAddsDelta: pctChange(curPair, prevPair),
+      pairInstore: curPairInstore, pairNative: curPairNative, pairWeb: curPairWeb,
     },
     ...(warn.length ? { warnings: warn } : {}),
   }, { headers: { "Cache-Control": "no-store, must-revalidate" } });

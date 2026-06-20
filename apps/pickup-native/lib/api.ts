@@ -118,6 +118,9 @@ export const api = {
       totalPrice: number;
       modifiers: Array<{ groupName: string; label: string; priceDelta: number }>;
       specialInstructions?: string;
+      /** Line came from a "Pair with a Bite" upsell suggestion. Persisted on
+       *  the order line so the sales dashboard can count purchased pairs. */
+      isPair?: boolean;
     }>;
     // Method id the customer picked in checkout (e.g. "card", "apple_pay",
     // "tng", "boost", "grabpay", "fpx"). Kept as a wide string so we don't

@@ -27,6 +27,10 @@ export type CartItem = {
   modifiers: ModifierSelection[];
   specialInstructions?: string;
   totalPrice: number;
+  /** True when this line was added from a "Pair with a Bite" upsell
+   *  suggestion (vs. a direct product add). Carried through to the order so
+   *  the sales dashboard can count pairs that actually checked out. */
+  isPair?: boolean;
 };
 
 export type AppliedReward = {

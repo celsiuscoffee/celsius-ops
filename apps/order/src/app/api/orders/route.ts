@@ -643,6 +643,7 @@ export async function POST(request: NextRequest) {
       specialInstructions?: string;
       quantity:    number;
       totalPrice:  number;
+      isPair?:     boolean;
     };
     const orderItems = (items as AnyItem[]).map((item) => {
       const productId   = item.product?.id ?? item.productId ?? "";
@@ -668,6 +669,10 @@ export async function POST(request: NextRequest) {
         quantity:     item.quantity,
         item_total:   Math.round(item.totalPrice * 100),
         modifiers:    { selections, specialInstructions },
+        // Upsell attribution — true when the customer accepted a "Pair with a
+        // Bite" suggestion. Lets the sales dashboard count purchased pairs and
+        // split them native vs web via orders.source.
+        is_pair:      !!item.isPair,
       };
     });
 

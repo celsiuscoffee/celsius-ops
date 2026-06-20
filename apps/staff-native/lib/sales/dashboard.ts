@@ -32,6 +32,7 @@ export type SalesDashboard = {
     appSharePct: number; appShareDeltaPts: number;
     capturedOrders: number; collectionRatePct: number; collectionDeltaPts: number;
     pairAdds: number; pairAddsDelta: number | null;
+    pairInstore: number; pairNative: number; pairWeb: number;
   };
   warnings?: string[];
 };
