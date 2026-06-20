@@ -8,10 +8,8 @@ import {
   getMYTDateStr,
   getRound,
   getDateRange,
-  getBlendedTarget,
 } from "../sales/_lib/storehub-helpers";
 import { getUnifiedSalesForOutlet, type UnifiedSale } from "../sales/_lib/unified-sales";
-import { getActiveTargets } from "../sales/_lib/targets";
 import { startOfWeekMYT, startOfMonthMYT } from "@celsius/shared";
 
 // ─── GET /api/command ──────────────────────────────────────────────────────
@@ -35,9 +33,9 @@ type OutletKpi = {
   aov: number;
   prevRevenue: number;
   growthPct: number | null;
-  dailyTarget: number;
   periodTarget: number;
   pctOfTarget: number;
+  onPace: boolean;
   traded: boolean;
   rounds: Record<RoundKey, RoundAgg>;
 };
@@ -131,13 +129,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No outlets in scope" }, { status: 404 });
     }
 
-    const { targets: activeTargets } = await getActiveTargets();
-    // Per-outlet blended daily target = sum of every round's blended day target.
-    const dailyTargetPerOutlet = ROUNDS.reduce(
-      (sum, r) => sum + getBlendedTarget(r.key, dates, activeTargets).revenue,
-      0,
-    );
-    const periodTargetPerOutlet = dailyTargetPerOutlet * dates.length;
+    // Per-outlet monthly sales targets (business model): RM120k default,
+    // Putrajaya/Conezion RM140k. Scaled to the selected period — a full month
+    // shows the full goal, not a prorated pace figure (operators think monthly).
+    const MONTHLY_TARGET_DEFAULT = 120000;
+    const MONTHLY_TARGET_OVERRIDES: Record<string, number> = { "outlet-con": 140000 }; // Putrajaya
+    const monthlyTargetFor = (o: { loyaltyOutletId: string | null }) =>
+      (o.loyaltyOutletId && MONTHLY_TARGET_OVERRIDES[o.loyaltyOutletId]) || MONTHLY_TARGET_DEFAULT;
+    const periodTargetFor = (monthly: number) =>
+      period === "month" ? monthly
+      : period === "week" ? Math.round((monthly * 7) / 30.44)
+      : Math.round(monthly / 30.44);
+    // paceFraction = how far through the period we are, so "on pace" colouring
+    // isn't misleadingly red all month (e.g. 70% of the month elapsed → you'd
+    // expect ~70% of the monthly goal banked).
+    const daysInMonth = new Date(Date.UTC(mytNow.getUTCFullYear(), mytNow.getUTCMonth() + 1, 0)).getUTCDate();
+    const mytHour = mytNow.getUTCHours();
+    const paceFraction =
+      period === "today" ? Math.min(1, Math.max(0.05, (mytHour - 8) / 14)) // ~8am–10pm trading day
+      : period === "week" ? Math.min(1, dates.length / 7)
+      : Math.min(1, dates.length / daysInMonth);
 
     const fetchFrom = new Date(prevFromDate + "T00:00:00+08:00");
     const fetchTo = new Date(toDate + "T23:59:59+08:00");
@@ -202,8 +213,9 @@ export async function GET(request: NextRequest) {
       }
 
       const traded = orders > 0;
-      const pctOfTarget =
-        periodTargetPerOutlet > 0 ? Math.round((revenue / periodTargetPerOutlet) * 100) : 0;
+      const periodTarget = periodTargetFor(monthlyTargetFor(outlet));
+      const pctOfTarget = periodTarget > 0 ? Math.round((revenue / periodTarget) * 100) : 0;
+      const onPace = revenue >= periodTarget * paceFraction;
       const growthPct =
         prevRevenue > 0 ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100) : null;
 
@@ -215,9 +227,9 @@ export async function GET(request: NextRequest) {
         aov: orders > 0 ? Math.round(revenue / orders) : 0,
         prevRevenue: Math.round(prevRevenue),
         growthPct,
-        dailyTarget: Math.round(dailyTargetPerOutlet),
-        periodTarget: Math.round(periodTargetPerOutlet),
+        periodTarget: Math.round(periodTarget),
         pctOfTarget,
+        onPace,
         traded,
         rounds,
       });
@@ -227,14 +239,15 @@ export async function GET(request: NextRequest) {
     const compRevenue = outletKpis.reduce((s, o) => s + o.revenue, 0);
     const compOrders = outletKpis.reduce((s, o) => s + o.orders, 0);
     const compPrev = outletKpis.reduce((s, o) => s + o.prevRevenue, 0);
-    const tradingCount = outletKpis.filter((o) => o.traded).length || outletKpis.length;
-    const compTarget = Math.round(periodTargetPerOutlet * tradingCount);
+    const tradingKpis = outletKpis.filter((o) => o.traded);
+    const compTarget = (tradingKpis.length ? tradingKpis : outletKpis).reduce((s, o) => s + o.periodTarget, 0);
     const company = {
       revenue: compRevenue,
       orders: compOrders,
       aov: compOrders > 0 ? Math.round(compRevenue / compOrders) : 0,
       target: compTarget,
       pctOfTarget: compTarget > 0 ? Math.round((compRevenue / compTarget) * 100) : 0,
+      onPace: compTarget > 0 && compRevenue >= compTarget * paceFraction,
       prevRevenue: compPrev,
       growthPct: compPrev > 0 ? Math.round(((compRevenue - compPrev) / compPrev) * 100) : null,
       channel: {
@@ -257,15 +270,16 @@ export async function GET(request: NextRequest) {
     // PACE — the outlet tracking furthest behind its target (only meaningful
     // for trading outlets; skip when looking at a single outlet's own view).
     const laggards = outletKpis
-      .filter((o) => o.traded && o.pctOfTarget < 90)
+      .filter((o) => o.traded && !o.onPace)
       .sort((a, b) => a.pctOfTarget - b.pctOfTarget);
     if (laggards.length > 0) {
       const w = laggards[0];
+      const behindBy = Math.round(paceFraction * 100) - w.pctOfTarget;
       alerts.push({
         id: `pace-${w.id}`,
         family: "pace",
-        severity: w.pctOfTarget < 75 ? "high" : "med",
-        title: `${w.name} tracking at ${w.pctOfTarget}% of target`,
+        severity: behindBy >= 20 ? "high" : "med",
+        title: `${w.name} behind pace — ${w.pctOfTarget}% of its RM ${w.periodTarget.toLocaleString()} target`,
         detail: `RM ${w.revenue.toLocaleString()} of RM ${w.periodTarget.toLocaleString()} this ${period}`,
         impactRM: Math.max(0, w.periodTarget - w.revenue),
         href: `/sales/dashboard?outletId=${w.id}`,
