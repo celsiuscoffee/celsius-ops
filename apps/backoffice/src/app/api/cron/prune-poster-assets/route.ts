@@ -7,6 +7,7 @@ import {
   loadReferencedUrls,
   partitionOrphans,
   selectDeletableOrphans,
+  referencesLookSafe,
   POSTER_PREFIX,
 } from "@/lib/pickup/cloudinary-posters";
 
@@ -59,6 +60,16 @@ export async function GET(req: NextRequest) {
     listPosterAssets(cloudinary),
     loadReferencedUrls(supabase),
   ]);
+  // Circuit breaker: never mass-delete when the reference query came back
+  // empty while Cloudinary has assets — that signals a failed/misconfigured
+  // query, not that every poster is genuinely orphaned.
+  if (!referencesLookSafe(assets.length, refs.length)) {
+    return NextResponse.json(
+      { error: "Aborting: poster assets exist but zero references loaded" },
+      { status: 500 },
+    );
+  }
+
   const { orphans } = partitionOrphans(assets, refs);
   const deletable = selectDeletableOrphans(orphans, GRACE_DAYS * 86_400_000);
 

@@ -38,6 +38,18 @@ const [assets, refs] = await Promise.all([
   listPosterAssets(),
   loadReferencedUrls(sb),
 ]);
+
+// Circuit breaker: if Cloudinary has poster assets but Supabase returned
+// zero references, the query almost certainly failed/misconfigured. Refuse
+// to treat everything as an orphan and mass-delete.
+if (assets.length > 0 && refs.length === 0) {
+  console.error(
+    `Aborting: found ${assets.length} poster assets but 0 references in splash_posters.\n` +
+      "That looks like a failed/misconfigured Supabase query, not a real cleanup.",
+  );
+  process.exit(1);
+}
+
 const { orphans } = partitionOrphans(assets, refs);
 const orphanBytes = sumBytes(orphans);
 

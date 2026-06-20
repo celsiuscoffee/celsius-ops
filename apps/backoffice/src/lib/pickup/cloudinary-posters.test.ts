@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   partitionOrphans,
   selectDeletableOrphans,
+  referencesLookSafe,
   type PosterAsset,
 } from "./cloudinary-posters";
 
@@ -70,5 +71,19 @@ describe("selectDeletableOrphans", () => {
     const noDate = asset("celsius-coffee/posters/x", { createdAt: null });
     const badDate = asset("celsius-coffee/posters/y", { createdAt: "not-a-date" });
     expect(selectDeletableOrphans([noDate, badDate], graceMs, now)).toHaveLength(0);
+  });
+});
+
+describe("referencesLookSafe", () => {
+  it("flags the catastrophic case: assets exist but zero references loaded", () => {
+    expect(referencesLookSafe(42, 0)).toBe(false);
+  });
+
+  it("allows a normal run with references present", () => {
+    expect(referencesLookSafe(42, 10)).toBe(true);
+  });
+
+  it("allows an empty Cloudinary (nothing to delete anyway)", () => {
+    expect(referencesLookSafe(0, 0)).toBe(true);
   });
 });

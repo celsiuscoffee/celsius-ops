@@ -122,3 +122,12 @@ export function selectDeletableOrphans(
     return now - created >= graceMs;
   });
 }
+
+// Circuit breaker against catastrophic mass-deletion. If Cloudinary holds
+// poster assets but the Supabase reference query came back EMPTY, the query
+// almost certainly failed or is misconfigured (wrong project, renamed
+// table, outage) rather than every poster genuinely being orphaned. In that
+// case every asset would look like an orphan — refuse to proceed instead.
+export function referencesLookSafe(assetCount: number, referenceCount: number): boolean {
+  return !(assetCount > 0 && referenceCount === 0);
+}
