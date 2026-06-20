@@ -13,6 +13,7 @@ import {
   ChevronRight,
   LogOut,
   LayoutDashboard,
+  Gauge,
   ClipboardList,
   UtensilsCrossed,
   BarChart3,
@@ -147,6 +148,16 @@ const ICON_SIZE = "h-4 w-4";
 const RAIL_ICON_SIZE = "h-5 w-5";
 
 const NAV_SECTIONS: NavSection[] = [
+  // Command Center — the unified glance/work layer over every module. Gated on
+  // sales:dashboard (owners/admins bypass; sales-permitted managers see it).
+  {
+    label: "Command",
+    icon: <Gauge className={ICON_SIZE} />,
+    railIcon: <Gauge className={RAIL_ICON_SIZE} />,
+    items: [
+      { label: "Command Center", href: "/command", icon: <Gauge className={ICON_SIZE} />, moduleKey: "sales:dashboard" },
+    ],
+  },
   // Menu (= product catalog) is shared across POS, Pickup app, and
   // Grab integration — promoted to a top-level "Catalog" section so it
   // doesn't read as Pickup-only. URLs stay at /pickup/* to avoid
