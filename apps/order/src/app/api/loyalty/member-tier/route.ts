@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
         `${LOYALTY_BASE}/api/member-tier?member_id=${encodeURIComponent(memberId)}&brand_id=${BRAND_ID}`,
         { headers: { "Content-Type": "application/json" } }
       );
-      data = await res.json();
+      data = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
         return NextResponse.json(data, { status: res.status });
       }
