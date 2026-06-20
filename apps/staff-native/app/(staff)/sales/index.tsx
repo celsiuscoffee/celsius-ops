@@ -200,12 +200,19 @@ export default function SalesScreen() {
                   <ChannelChip label="Web" v={g.appOrdersWeb} />
                 </View>
               </View>
-              <View className="mt-3.5 flex-row items-center justify-between border-t border-[#F5F3F00f] pt-3.5">
-                <View>
-                  <Text className="font-body-semi text-xs text-[#F5F3F08a]">Collection rate</Text>
-                  <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{g.collectionRatePct}%<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {numF(g.capturedOrders)} with phone</Text></Text>
+              <View className="mt-3.5 border-t border-[#F5F3F00f] pt-3.5">
+                <View className="flex-row items-center justify-between">
+                  <View>
+                    <Text className="font-body-semi text-xs text-[#F5F3F08a]">Collection rate</Text>
+                    <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{g.collectionRatePct}%<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {numF(g.capturedOrders)} with phone</Text></Text>
+                  </View>
+                  <Text className={`font-body-bold text-[13px] ${g.collectionDeltaPts >= 0 ? "text-[#34d399]" : "text-[#f87171]"}`}>{g.collectionDeltaPts >= 0 ? "+" : ""}{g.collectionDeltaPts}%</Text>
                 </View>
-                <Text className={`font-body-bold text-[13px] ${g.collectionDeltaPts >= 0 ? "text-[#34d399]" : "text-[#f87171]"}`}>{g.collectionDeltaPts >= 0 ? "+" : ""}{g.collectionDeltaPts}%</Text>
+                <View className="mt-2.5 flex-row gap-2">
+                  <ChannelChip label="In-store" v={g.collectionRatePos} suffix="%" />
+                  <ChannelChip label="Native" v={g.collectionRateNative} suffix="%" />
+                  <ChannelChip label="Web" v={g.collectionRateWeb} suffix="%" />
+                </View>
               </View>
               <View className="mt-3.5 border-t border-[#F5F3F00f] pt-3.5">
                 <View className="flex-row items-center justify-between">
@@ -294,10 +301,10 @@ function Tile({ icon: Icon, color, v, k, delta }: { icon: any; color: string; v:
     </View>
   );
 }
-function ChannelChip({ label, v }: { label: string; v: number }) {
+function ChannelChip({ label, v, suffix = "" }: { label: string; v: number; suffix?: string }) {
   return (
     <View className="flex-1 rounded-xl border border-[#F5F3F01a] bg-[#160800] px-3 py-2">
-      <Text className="font-display text-base text-[#F5F3F0]">{numF(v)}</Text>
+      <Text className="font-display text-base text-[#F5F3F0]">{numF(v)}{suffix}</Text>
       <Text className="mt-0.5 font-body-semi text-[11px] uppercase tracking-wide text-[#F5F3F08a]">{label}</Text>
     </View>
   );

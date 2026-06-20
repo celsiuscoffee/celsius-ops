@@ -32,6 +32,7 @@ export type SalesDashboard = {
     appOrdersNative: number; appOrdersWeb: number;
     appSharePct: number; appShareDeltaPts: number;
     capturedOrders: number; collectionRatePct: number; collectionDeltaPts: number;
+    collectionRatePos: number; collectionRateNative: number; collectionRateWeb: number;
     pairAdds: number; pairAddsDelta: number | null;
     pairInstore: number; pairNative: number; pairWeb: number;
   };
