@@ -58,6 +58,20 @@ function reconcileStatus(state: string): string {
   return "completed";
 }
 
+// How many recent days of Grab order history to reconcile each run — today +
+// yesterday (MYT) covers the local business day and the UTC-midnight boundary.
+const RECONCILE_DAYS = 2;
+
+// Recent dates as YYYY-MM-DD in Asia/Kuala_Lumpur (UTC+8), newest first.
+function recentMytDates(days: number): string[] {
+  const out: string[] = [];
+  const now = Date.now();
+  for (let i = 0; i < days; i++) {
+    out.push(new Date(now - i * 86_400_000 + 8 * 3_600_000).toISOString().slice(0, 10));
+  }
+  return out;
+}
+
 export interface ReconcileSummary {
   outlets: number;
   grabOrders: number;
@@ -83,21 +97,36 @@ export async function reconcileGrabOrders(): Promise<ReconcileSummary> {
   const { data: outlets } = await db
     .from("outlets").select("id, grab_merchant_id").not("grab_merchant_id", "is", null);
 
+  // Grab's GET /partner/v1/orders REQUIRES a `date` (YYYY-MM-DD) and returns
+  // one day at a time, so query the last few MYT days and merge (deduped by
+  // order id). MYT covers the local business day + the UTC-midnight boundary.
+  const dates = recentMytDates(RECONCILE_DAYS);
+
   for (const o of (outlets ?? []) as Array<{ id: string; grab_merchant_id: string }>) {
     summary.outlets++;
-    let orders: GrabListOrder[] = [];
-    try {
-      const res = await listOrders(o.grab_merchant_id);
-      orders = Array.isArray(res)
-        ? (res as GrabListOrder[])
-        : (((res as Record<string, unknown>)?.orders
-            ?? (res as Record<string, unknown>)?.statement
-            ?? (res as Record<string, unknown>)?.data
-            ?? []) as GrabListOrder[]);
-    } catch (e) {
-      summary.errors++;
-      summary.detail.push({ outlet: o.id, error: e instanceof Error ? e.message : String(e) });
-      continue;
+    const orders: GrabListOrder[] = [];
+    const seen = new Set<string>();
+    for (const date of dates) {
+      try {
+        const res = await listOrders(o.grab_merchant_id, { date });
+        const arr = (Array.isArray(res)
+          ? res
+          : ((res as Record<string, unknown>)?.orders
+              ?? (res as Record<string, unknown>)?.statement
+              ?? (res as Record<string, unknown>)?.data
+              ?? [])) as GrabListOrder[];
+        for (const go of arr) {
+          const id = extractOrderId(go);
+          if (id) {
+            if (seen.has(id)) continue;
+            seen.add(id);
+          }
+          orders.push(go);
+        }
+      } catch (e) {
+        summary.errors++;
+        summary.detail.push({ outlet: o.id, date, error: e instanceof Error ? e.message : String(e) });
+      }
     }
     summary.grabOrders += orders.length;
 
