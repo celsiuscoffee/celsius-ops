@@ -23,14 +23,15 @@ config({ path: resolve(__dirname, '../.env.local') });
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+// Read from env (.env.local) — never hardcode secrets in source.
+const CLOUDINARY_CLOUD = process.env.CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
+const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
+
+if (!SUPABASE_URL || !SUPABASE_KEY || !CLOUDINARY_CLOUD || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
+  console.error('Missing required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET');
   process.exit(1);
 }
-
-const CLOUDINARY_CLOUD = 'dxxzt7k6i';
-const CLOUDINARY_API_KEY = '657996329467423';
-const CLOUDINARY_API_SECRET = 'pt5FZsyXdPKU1KPsNmJAPlGc2zs';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
