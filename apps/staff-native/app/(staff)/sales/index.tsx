@@ -187,12 +187,18 @@ export default function SalesScreen() {
                 <Tile icon={UserPlus} color="#34d399" v={numF(g.newCustomers)} k="New customers" delta={g.newCustomersDelta} />
                 <Tile icon={Smartphone} color="#8FB3F0" v={numF(g.newAppCustomers)} k="New app customers" delta={g.newAppDelta} />
               </View>
-              <View className="mt-3.5 flex-row items-center justify-between border-t border-[#F5F3F00f] pt-3.5">
-                <View>
-                  <Text className="font-body-semi text-xs text-[#F5F3F08a]">Orders via app</Text>
-                  <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.appOrders)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {g.appSharePct}% of all</Text></Text>
+              <View className="mt-3.5 border-t border-[#F5F3F00f] pt-3.5">
+                <View className="flex-row items-center justify-between">
+                  <View>
+                    <Text className="font-body-semi text-xs text-[#F5F3F08a]">Orders via app</Text>
+                    <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.appOrders)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {g.appSharePct}% of all</Text></Text>
+                  </View>
+                  <Text className={`font-body-bold text-[13px] ${deltaUp(g.appOrdersDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.appOrdersDelta)}</Text>
                 </View>
-                <Text className={`font-body-bold text-[13px] ${deltaUp(g.appOrdersDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.appOrdersDelta)}</Text>
+                <View className="mt-2.5 flex-row gap-2">
+                  <ChannelChip label="Native" v={g.appOrdersNative} />
+                  <ChannelChip label="Web" v={g.appOrdersWeb} />
+                </View>
               </View>
               <View className="mt-3.5 flex-row items-center justify-between border-t border-[#F5F3F00f] pt-3.5">
                 <View>
@@ -210,9 +216,9 @@ export default function SalesScreen() {
                   <Text className={`font-body-bold text-[13px] ${deltaUp(g.pairAddsDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.pairAddsDelta)}</Text>
                 </View>
                 <View className="mt-2.5 flex-row gap-2">
-                  <PairChip label="In-store" v={g.pairInstore} />
-                  <PairChip label="Native" v={g.pairNative} />
-                  <PairChip label="Web" v={g.pairWeb} />
+                  <ChannelChip label="In-store" v={g.pairInstore} />
+                  <ChannelChip label="Native" v={g.pairNative} />
+                  <ChannelChip label="Web" v={g.pairWeb} />
                 </View>
               </View>
             </View>
@@ -288,7 +294,7 @@ function Tile({ icon: Icon, color, v, k, delta }: { icon: any; color: string; v:
     </View>
   );
 }
-function PairChip({ label, v }: { label: string; v: number }) {
+function ChannelChip({ label, v }: { label: string; v: number }) {
   return (
     <View className="flex-1 rounded-xl border border-[#F5F3F01a] bg-[#160800] px-3 py-2">
       <Text className="font-display text-base text-[#F5F3F0]">{numF(v)}</Text>
