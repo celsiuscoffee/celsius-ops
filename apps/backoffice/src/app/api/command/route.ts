@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     const todayMYT = mytNow.toISOString().split("T")[0];
 
     let fromDate: string;
-    let toDate = todayMYT;
+    const toDate = todayMYT;
     if (period === "today") {
       fromDate = todayMYT;
     } else if (period === "week") {
