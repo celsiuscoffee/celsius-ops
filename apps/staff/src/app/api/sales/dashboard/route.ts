@@ -180,6 +180,7 @@ export async function GET(req: NextRequest) {
   let curAppOrd = 0, curPosOrd = 0, prevAppOrd = 0, prevPosOrd = 0;
   let curAppNative = 0, curAppWeb = 0; // app-order split by origin (orders.source)
   let curCapOrd = 0, prevCapOrd = 0; // orders with a customer phone (points captured)
+  let curPosCap = 0, curAppNativeCap = 0, curAppWebCap = 0; // captured, per channel
   const curPosIds: string[] = [];
   const nativeCodes = new Set<string>(); // pos outlet-codes with native sales this period
 
@@ -200,7 +201,7 @@ export async function GET(req: NextRequest) {
     const counts = (r.status || "").toLowerCase() === "completed";
     if (inCur(d)) {
       nativeCodes.add(r.outlet_id);
-      if (r.customer_phone) { curPhones.add(r.customer_phone); curCapOrd++; }
+      if (r.customer_phone) { curPhones.add(r.customer_phone); curCapOrd++; curPosCap++; }
       curPosOrd++;
       curPosIds.push(r.id);
       if (counts) {
@@ -235,8 +236,12 @@ export async function GET(req: NextRequest) {
       curAppOrd++;
       // Native = the iOS/Android binary (orders.source app_ios|app_android);
       // everything else (web, web_qr table, legacy null) counts as Web.
-      if (r.source === "app_ios" || r.source === "app_android") curAppNative++; else curAppWeb++;
-      if (r.customer_phone) { curPhones.add(r.customer_phone); curAppPhones.add(r.customer_phone); curCapOrd++; }
+      const appNative = r.source === "app_ios" || r.source === "app_android";
+      if (appNative) curAppNative++; else curAppWeb++;
+      if (r.customer_phone) {
+        curPhones.add(r.customer_phone); curAppPhones.add(r.customer_phone); curCapOrd++;
+        if (appNative) curAppNativeCap++; else curAppWebCap++;
+      }
       if (counts) {
         curRev += net; curOrd++;
         curByDate[d] = (curByDate[d] || 0) + net;
@@ -428,6 +433,11 @@ export async function GET(req: NextRequest) {
   const prevNativeOrd = prevPosOrd + prevAppOrd;
   const curCapRate = curNativeOrd ? Math.round((curCapOrd / curNativeOrd) * 100) : 0;
   const prevCapRate = prevNativeOrd ? Math.round((prevCapOrd / prevNativeOrd) * 100) : 0;
+  // Same capture rate, split by channel: each channel's captured orders over its
+  // own order count (in-store POS, native app, web/PWA).
+  const curCapRatePos = curPosOrd ? Math.round((curPosCap / curPosOrd) * 100) : 0;
+  const curCapRateNative = curAppNative ? Math.round((curAppNativeCap / curAppNative) * 100) : 0;
+  const curCapRateWeb = curAppWeb ? Math.round((curAppWebCap / curAppWeb) * 100) : 0;
 
   return NextResponse.json({
     outletId: scopeId,
@@ -456,6 +466,7 @@ export async function GET(req: NextRequest) {
       appSharePct: curShare, appShareDeltaPts: curShare - prevShare,
       capturedOrders: curCapOrd, collectionRatePct: curCapRate,
       collectionDeltaPts: curCapRate - prevCapRate,
+      collectionRatePos: curCapRatePos, collectionRateNative: curCapRateNative, collectionRateWeb: curCapRateWeb,
       pairAdds: curPair, pairAddsDelta: pctChange(curPair, prevPair),
       pairInstore: curPairInstore, pairNative: curPairNative, pairWeb: curPairWeb,
     },
