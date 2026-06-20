@@ -72,6 +72,45 @@ function recentMytDates(days: number): string[] {
   return out;
 }
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// Grab's GET /partner/v1/orders returns { orders: [...], more: bool } per the
+// official SDK. Tolerate a couple of alternate envelopes; describeShape() below
+// surfaces anything we still don't recognise so we fix it from real data, not a
+// guess.
+function extractOrderArray(res: unknown): GrabListOrder[] {
+  if (Array.isArray(res)) return res as GrabListOrder[];
+  const o = (res ?? {}) as Record<string, unknown>;
+  const cand = o.orders ?? o.statement ?? o.data;
+  return (Array.isArray(cand) ? cand : []) as GrabListOrder[];
+}
+
+// Compact, PII-free description of a list-orders response: top-level key names,
+// the length of any array-valued field, and the field names (not values) of the
+// first array element. Recorded when a call yields zero orders so a parser/param
+// mismatch is visible in grab_reconcile_runs instead of a silent empty backfill.
+function describeShape(res: unknown): Record<string, unknown> {
+  if (Array.isArray(res)) {
+    const first = res[0];
+    return {
+      type: "array",
+      len: res.length,
+      itemKeys: first && typeof first === "object" ? Object.keys(first as object).slice(0, 40) : [],
+    };
+  }
+  if (res && typeof res === "object") {
+    const o = res as Record<string, unknown>;
+    const keys = Object.keys(o);
+    const arrayCounts: Record<string, number> = {};
+    for (const k of keys) if (Array.isArray(o[k])) arrayCounts[k] = (o[k] as unknown[]).length;
+    const firstArrKey = keys.find((k) => Array.isArray(o[k]) && (o[k] as unknown[]).length > 0);
+    const firstItem = firstArrKey ? (o[firstArrKey] as unknown[])[0] : undefined;
+    const itemKeys = firstItem && typeof firstItem === "object" ? Object.keys(firstItem as object).slice(0, 40) : [];
+    return { type: "object", keys, arrayCounts, itemKeys };
+  }
+  return { type: res === null ? "null" : typeof res };
+}
+
 export interface ReconcileSummary {
   outlets: number;
   grabOrders: number;
@@ -107,26 +146,39 @@ export async function reconcileGrabOrders(): Promise<ReconcileSummary> {
     const orders: GrabListOrder[] = [];
     const seen = new Set<string>();
     for (const date of dates) {
-      try {
-        const res = await listOrders(o.grab_merchant_id, { date });
-        const arr = (Array.isArray(res)
-          ? res
-          : ((res as Record<string, unknown>)?.orders
-              ?? (res as Record<string, unknown>)?.statement
-              ?? (res as Record<string, unknown>)?.data
-              ?? [])) as GrabListOrder[];
-        for (const go of arr) {
-          const id = extractOrderId(go);
-          if (id) {
-            if (seen.has(id)) continue;
-            seen.add(id);
-          }
-          orders.push(go);
+      // Grab rate-limits bursts of list-order calls (429); pace them and retry
+      // once on a 429 so throttling doesn't blank out an outlet/day.
+      let res: unknown;
+      let ok = false;
+      for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+        try {
+          res = await listOrders(o.grab_merchant_id, { date });
+          ok = true;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (attempt === 0 && /\(429\)/.test(msg)) { await sleep(1500); continue; }
+          summary.errors++;
+          summary.detail.push({ outlet: o.id, date, error: msg });
         }
-      } catch (e) {
-        summary.errors++;
-        summary.detail.push({ outlet: o.id, date, error: e instanceof Error ? e.message : String(e) });
       }
+      if (!ok) continue;
+
+      const arr = extractOrderArray(res);
+      // A linked outlet returning zero orders for a recent day is suspicious —
+      // record the response shape (key names + array lengths only) so a
+      // parser/param mismatch surfaces instead of a silent empty backfill.
+      if (arr.length === 0) {
+        summary.detail.push({ outlet: o.id, date, empty: true, shape: describeShape(res) });
+      }
+      for (const go of arr) {
+        const id = extractOrderId(go);
+        if (id) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+        }
+        orders.push(go);
+      }
+      await sleep(400);
     }
     summary.grabOrders += orders.length;
 
