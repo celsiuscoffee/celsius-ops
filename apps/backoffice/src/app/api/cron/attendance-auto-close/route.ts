@@ -13,10 +13,16 @@ export const dynamic = "force-dynamic";
 //   D) Outlet closed + auto_close_at_outlet_close_minutes passed
 //
 // Clock-out time is set to:
-//   - For (A) → timestamp of last in-zone ping
+//   - For (A) → last in-zone ping, but floored at the rostered scheduled end
+//     (the PWA can't background-ping, so the last in-zone ping often lands
+//     seconds after clock-in and would truncate a full shift to ~0h)
 //   - For (B), (C), (D) → scheduled end or now (whichever earlier)
 //
-// ai_flags gets "auto_closed_<reason>" so the manager review queue surfaces these.
+// ai_flags always gets "auto_closed_<reason>" for the audit trail. The two
+// PING-BASED reasons (A geofence_exit, B no_pings_stale) are unreliable on the
+// PWA, so they AUTO-RESOLVE (approved + excused, penalty waived) rather than
+// flooding the manager review queue. The deterministic reasons (C, D) still
+// surface as flagged for a manager glance.
 export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
@@ -118,6 +124,16 @@ export async function GET(req: NextRequest) {
 
     if (!closeAt || !reason) continue;
 
+    // Ping-based rules misfire on the PWA (can't background-ping): the last
+    // in-zone ping can land seconds after clock-in, truncating a real shift to
+    // ~0h. For these, prefer the rostered scheduled end so hours aren't
+    // under-counted (and payroll isn't shorted).
+    const isPingRule = reason === "geofence_exit" || reason === "no_pings_stale";
+    if (isPingRule && log.scheduled_end) {
+      const schedEnd = new Date(log.scheduled_end);
+      if (schedEnd > closeAt && schedEnd <= now) closeAt = schedEnd;
+    }
+
     // Don't close in the future or before clock_in
     if (closeAt > now) closeAt = now;
     if (closeAt < clockIn) closeAt = clockIn;
@@ -125,16 +141,28 @@ export async function GET(req: NextRequest) {
     const totalHours = Math.round(((closeAt.getTime() - clockIn.getTime()) / 3600000) * 100) / 100;
     flags.push(`auto_closed_${reason}`);
 
+    // A system auto-close is not a staff violation. Ping-based closes are
+    // false positives on the PWA → auto-resolve (penalty waived) and keep the
+    // audit flag for the "All" tab, instead of flooding the review queue.
+    // Deterministic closes (past scheduled end / outlet closed) still flag.
+    const update: Record<string, unknown> = {
+      clock_out: closeAt.toISOString(),
+      clock_out_method: "system",
+      total_hours: totalHours,
+      ai_flags: flags,
+      ai_status: isPingRule ? "approved" : "flagged",
+      final_status: isPingRule ? "approved" : null,
+    };
+    if (isPingRule) {
+      update.excused = true;
+      update.excused_reason = "Auto-resolved — app ping limitation";
+      update.reviewed_at = now.toISOString();
+      update.review_notes = "System auto-close (PWA ping limitation); penalty waived";
+    }
+
     await hrSupabaseAdmin
       .from("hr_attendance_logs")
-      .update({
-        clock_out: closeAt.toISOString(),
-        clock_out_method: "system",
-        total_hours: totalHours,
-        ai_flags: flags,
-        ai_status: "flagged",
-        final_status: null, // force manager review
-      })
+      .update(update)
       .eq("id", log.id);
 
     closed++;
