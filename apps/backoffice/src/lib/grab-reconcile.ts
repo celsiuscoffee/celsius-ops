@@ -62,6 +62,10 @@ function reconcileStatus(state: string): string {
 // yesterday (MYT) covers the local business day and the UTC-midnight boundary.
 const RECONCILE_DAYS = 2;
 
+// Safety cap on pagination of GET /partner/v1/orders (server sets the page
+// size; we walk pages while `more` is true). A busy day stays well under this.
+const MAX_ORDER_PAGES = 25;
+
 // Recent dates as YYYY-MM-DD in Asia/Kuala_Lumpur (UTC+8), newest first.
 function recentMytDates(days: number): string[] {
   const out: string[] = [];
@@ -146,37 +150,51 @@ export async function reconcileGrabOrders(): Promise<ReconcileSummary> {
     const orders: GrabListOrder[] = [];
     const seen = new Set<string>();
     for (const date of dates) {
-      // Grab rate-limits bursts of list-order calls (429); pace them and retry
-      // once on a 429 so throttling doesn't blank out an outlet/day.
-      let res: unknown;
-      let ok = false;
-      for (let attempt = 0; attempt < 2 && !ok; attempt++) {
-        try {
-          res = await listOrders(o.grab_merchant_id, { date });
-          ok = true;
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          if (attempt === 0 && /\(429\)/.test(msg)) { await sleep(1500); continue; }
-          summary.errors++;
-          summary.detail.push({ outlet: o.id, date, error: msg });
+      // GET /partner/v1/orders requires `page` (1-indexed) when querying by date
+      // and paginates via the response `more` flag — there is no pageSize.
+      // Crucially, omitting `page` makes Grab return an EMPTY orders array with
+      // NO error, which is exactly the silent-empty backfill we hit before. Walk
+      // pages until `more` is false (capped for safety).
+      let page = 1;
+      let more = true;
+      while (more && page <= MAX_ORDER_PAGES) {
+        // Grab rate-limits bursts of list-order calls (429); pace them and retry
+        // once on a 429 so throttling doesn't blank out an outlet/day.
+        let res: unknown;
+        let ok = false;
+        for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+          try {
+            res = await listOrders(o.grab_merchant_id, { date, page });
+            ok = true;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (attempt === 0 && /\(429\)/.test(msg)) { await sleep(1500); continue; }
+            summary.errors++;
+            summary.detail.push({ outlet: o.id, date, page, error: msg });
+          }
         }
-      }
-      if (!ok) continue;
+        if (!ok) break;
 
-      const arr = extractOrderArray(res);
-      // A linked outlet returning zero orders for a recent day is suspicious —
-      // record the response shape (key names + array lengths only) so a
-      // parser/param mismatch surfaces instead of a silent empty backfill.
-      if (arr.length === 0) {
-        summary.detail.push({ outlet: o.id, date, empty: true, shape: describeShape(res) });
-      }
-      for (const go of arr) {
-        const id = extractOrderId(go);
-        if (id) {
-          if (seen.has(id)) continue;
-          seen.add(id);
+        const arr = extractOrderArray(res);
+        more = Boolean((res as Record<string, unknown> | null)?.more);
+        if (arr.length === 0) {
+          // No orders on this page — record a compact diagnostic on the first
+          // page (so a future param/shape regression surfaces) and stop walking.
+          if (page === 1) {
+            summary.detail.push({ outlet: o.id, date, empty: true, more, shape: describeShape(res) });
+          }
+          break;
         }
-        orders.push(go);
+        for (const go of arr) {
+          const id = extractOrderId(go);
+          if (id) {
+            if (seen.has(id)) continue;
+            seen.add(id);
+          }
+          orders.push(go);
+        }
+        page++;
+        if (more) await sleep(400);
       }
       await sleep(400);
     }
