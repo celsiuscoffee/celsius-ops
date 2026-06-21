@@ -89,27 +89,66 @@ export async function GET(request: NextRequest) {
   })();
 
   // ── People cost (latest confirmed monthly payroll, vs that month's sales) ─
+  // Company figure = whole payroll vs whole-company sales. Per-outlet figure =
+  // only the staff directly assigned to that outlet (User.outletId) vs that
+  // outlet's sales — HQ / rotating / unassigned staff have no single outlet, so
+  // they sit in `unassignedRM` and the company total, never in one outlet's %.
   const peopleCost = (async () => {
     try {
       const { data: runs } = await supabase
         .from("hr_payroll_runs")
-        .select("period_month, period_year, total_gross, total_employer_cost")
+        .select("id, period_month, period_year, total_gross, total_employer_cost")
         .in("status", ["confirmed", "paid"]).eq("cycle_type", "monthly")
         .order("period_year", { ascending: false }).order("period_month", { ascending: false }).limit(1);
       const run = runs?.[0];
       if (!run) return null;
-      const costRM = (Number(run.total_gross) || 0) + (Number(run.total_employer_cost) || 0);
+      const companyCostRM = (Number(run.total_gross) || 0) + (Number(run.total_employer_cost) || 0);
       const mFrom = new Date(`${run.period_year}-${String(run.period_month).padStart(2, "0")}-01T00:00:00+08:00`);
       const mTo = new Date(Date.UTC(run.period_year, run.period_month, 0, 23, 59, 59)); // last day of month
-      const sales = await Promise.all(outlets.map((o) =>
-        getUnifiedSalesForOutlet({ outletId: o.id, storehubStoreId: o.storehubId, loyaltyOutletId: o.loyaltyOutletId, pickupStoreId: o.pickupStoreId, cutoverAt: o.posNativeCutoverAt }, mFrom, mTo)
-          .then((s) => s.reduce((sum, e) => sum + e.total, 0)).catch(() => 0),
-      ));
-      const monthSales = sales.reduce((a, b) => a + b, 0);
+
+      // Per-outlet sales for the payroll month.
+      const salesByOutlet: Record<string, number> = {};
+      await Promise.all(outlets.map(async (o) => {
+        salesByOutlet[o.id] = await getUnifiedSalesForOutlet({ outletId: o.id, storehubStoreId: o.storehubId, loyaltyOutletId: o.loyaltyOutletId, pickupStoreId: o.pickupStoreId, cutoverAt: o.posNativeCutoverAt }, mFrom, mTo)
+          .then((s) => s.reduce((sum, e) => sum + e.total, 0)).catch(() => 0);
+      }));
+      const monthSales = Object.values(salesByOutlet).reduce((a, b) => a + b, 0);
+
+      // Per-outlet labour cost = payroll items mapped to each staff's assigned outlet.
+      const { data: items } = await supabase
+        .from("hr_payroll_items")
+        .select("user_id, total_gross, epf_employer, socso_employer, eis_employer")
+        .eq("payroll_run_id", run.id);
+      const users = await prisma.user.findMany({
+        where: { id: { in: (items ?? []).map((i) => i.user_id) } },
+        select: { id: true, outletId: true },
+      });
+      const outletByUser = new Map(users.map((u) => [u.id, u.outletId]));
+      const inScope = new Set(outlets.map((o) => o.id));
+      const costByOutlet: Record<string, number> = {};
+      let unassignedRM = 0;
+      for (const it of items ?? []) {
+        const cost = (Number(it.total_gross) || 0) + (Number(it.epf_employer) || 0) + (Number(it.socso_employer) || 0) + (Number(it.eis_employer) || 0);
+        const oid = outletByUser.get(it.user_id);
+        if (oid && inScope.has(oid)) costByOutlet[oid] = (costByOutlet[oid] || 0) + cost;
+        else unassignedRM += cost;
+      }
+      const byOutlet: Record<string, { costRM: number; pct: number | null }> = {};
+      for (const o of outlets) {
+        const c = Math.round(costByOutlet[o.id] || 0);
+        const s = salesByOutlet[o.id] || 0;
+        byOutlet[o.id] = { costRM: c, pct: s > 0 ? Math.round((c / s) * 100) : null };
+      }
+
+      // When the request is already scoped to one outlet (manager view), surface
+      // that outlet's figure at the top level; otherwise show the company roll-up.
+      const scoped = scopeOutletId ? byOutlet[scopeOutletId] : null;
       return {
         label: `${MONTHS[run.period_month - 1]} ${run.period_year}`,
-        costRM: Math.round(costRM),
-        pct: monthSales > 0 ? Math.round((costRM / monthSales) * 100) : null,
+        costRM: scoped ? scoped.costRM : Math.round(companyCostRM),
+        pct: scoped ? scoped.pct : monthSales > 0 ? Math.round((companyCostRM / monthSales) * 100) : null,
+        unassignedRM: Math.round(unassignedRM),
+        byOutlet,
       };
     } catch (e) { console.error("[lenses] peopleCost", e); return null; }
   })();
