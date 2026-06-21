@@ -80,6 +80,8 @@ export type {
 } from "./loyalty/discount-engine";
 export { isPromoLiveNow } from "./loyalty/promo-eligibility";
 export type { PromoSchedule } from "./loyalty/promo-eligibility";
+export { suggestPairs } from "./loyalty/suggest-pairs";
+export type { SuggestedPair, PairChannel } from "./loyalty/suggest-pairs";
 // NOTE: the promotion engine lives in ./loyalty/promo-engine but is
 // deliberately NOT re-exported here. It imports node `crypto` (ledger row
 // ids), so — like ./otp — it must be imported via its subpath
