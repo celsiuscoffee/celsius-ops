@@ -1,8 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getMenuData } from "@/lib/menu-data";
+import { selectHomePosters } from "@/lib/poster/select-home";
 import { GlobalCartPill } from "./_GlobalCartPill";
 import { BottomNav } from "./_BottomNav";
 import { PosterCarousel } from "./_PosterCarousel";
@@ -27,39 +27,11 @@ import { ActiveOrderTracker } from "./_ActiveOrderTracker";
 
 export const revalidate = 60;
 
-type HomePoster = {
-  id: string;
-  image_url: string;
-  title: string | null;
-  deeplink: string | null;
-};
-
-async function fetchPosters(): Promise<HomePoster[]> {
-  try {
-    const supabase = getSupabaseAdmin();
-    const now = new Date().toISOString();
-    const { data } = await supabase
-      .from("splash_posters")
-      .select("id, image_url, title, deeplink, starts_at, ends_at, sort_order")
-      .eq("brand_id", "brand-celsius")
-      .eq("active", true)
-      .eq("placement", "home")
-      .order("sort_order", { ascending: true, nullsFirst: false });
-    if (!data) return [];
-    return data
-      .filter((p) => {
-        if (p.starts_at && new Date(p.starts_at).toISOString() > now) return false;
-        if (p.ends_at && new Date(p.ends_at).toISOString() < now) return false;
-        return true;
-      })
-      .map((p) => ({ id: p.id, image_url: p.image_url, title: p.title, deeplink: p.deeplink }));
-  } catch {
-    return [];
-  }
-}
-
 export default async function HomePage() {
-  const [posters, menu] = await Promise.all([fetchPosters(), getMenuData()]);
+  // Tight, day-part-targeted carousel — the shared selector windows by current
+  // round and trims to a few high-AOV picks + a signature drink (same logic the
+  // native app's /api/home-posters uses, so web + native never drift).
+  const [posters, menu] = await Promise.all([selectHomePosters({ limit: 3 }), getMenuData()]);
   const bestSellers = menu.products
     .filter((p) => p.isPopular && p.isAvailable)
     .sort((a, b) => (a.featuredPosition ?? 9999) - (b.featuredPosition ?? 9999))
