@@ -62,6 +62,9 @@ function mapDiscountType(
     case "free_item":         return "free_item";
     case "flat":              return "flat";
     case "percent":           return "percent";
+    case "bogo":              return "bogo";
+    case "combo":             return "combo";
+    case "override_price":    return "override_price";
     case "beans_multiplier":  return "none";       // applied post-payment
     default:                  return "none";
   }
@@ -390,6 +393,11 @@ export function VoucherRow({ voucher }: { voucher: Voucher }) {
       applicable_categories: voucher.applicable_categories ?? null,
       applicable_products: voucher.applicable_products ?? null,
       free_product_name: voucher.free_product_name ?? null,
+      free_product_ids: voucher.free_product_ids ?? null,
+      bogo_buy_qty: voucher.bogo_buy_qty ?? undefined,
+      bogo_free_qty: voucher.bogo_free_qty ?? undefined,
+      combo_price_sen: voucher.combo_price_sen ?? null,
+      override_price_sen: voucher.override_price_sen ?? null,
       min_order_value: voucher.min_order_value ?? null,
       voucher_id: voucher.id,    // marks this as a wallet voucher (not a points redemption)
     });
