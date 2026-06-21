@@ -18,6 +18,7 @@ import { getSetting } from "../lib/settings";
 import { supabase, type Outlet } from "../lib/supabase";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { ProductImage } from "../components/ProductImage";
+import { CartUpsell } from "../components/CartUpsell";
 import { OrderTypeBar } from "@/components/OrderTypeBar";
 
 /**
@@ -437,6 +438,14 @@ export default function Cart() {
               </Pressable>
             ))}
             </View>
+
+            {/* Basket-targeted upsell — "Goes well with your order" (drinks →
+                a bite, personalized by member). Scrolls below the items. */}
+            <CartUpsell
+              productIds={cart.map((i) => i.productId)}
+              loyaltyId={loyaltyId}
+              outletId={outletId}
+            />
             </CartItemsScroll>
 
           {/* Summary + checkout footer. NATIVE: sits OUTSIDE the items
