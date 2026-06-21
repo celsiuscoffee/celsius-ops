@@ -43,8 +43,11 @@ type Poster = {
   // canonical anchor so AI compose can reopen on a clean image even
   // when composer_state is missing (legacy posters, designer uploads).
   original_bg_url: string | null;
-  // Day-part round for pos-display posters (breakfast..supper). NULL = always.
+  // Legacy single day-part round (breakfast..supper). NULL = always.
   round: string | null;
+  // Day-part WINDOW — the set of rounds this poster appears in. NULL/empty =
+  // fall back to `round` (and a null round = always). Preferred going forward.
+  rounds: string[] | null;
 };
 
 type Form = {
@@ -64,9 +67,28 @@ type Form = {
   // Mirrors poster.original_bg_url — overwritten by Re-crop uploads,
   // preserved across AI compose saves.
   originalBgUrl: string | null;
-  // Day-part round (pos-display only). "" = always.
-  round: string;
+  // Day-part window — set of rounds this poster appears in. [] = always.
+  rounds: string[];
 };
+
+// Day-part rounds for the window picker.
+const ROUND_OPTIONS: { id: string; label: string }[] = [
+  { id: "breakfast", label: "Breakfast" },
+  { id: "brunch",    label: "Brunch" },
+  { id: "lunch",     label: "Lunch" },
+  { id: "midday",    label: "Midday" },
+  { id: "evening",   label: "Evening" },
+  { id: "dinner",    label: "Dinner" },
+  { id: "supper",    label: "Supper" },
+];
+const ROUND_LABEL: Record<string, string> = Object.fromEntries(ROUND_OPTIONS.map((r) => [r.id, r.label]));
+// The eligibility window for a poster: explicit `rounds`, else legacy single
+// `round`, else [] (always-on / every round).
+function posterWindow(p: { round: string | null; rounds: string[] | null }): string[] {
+  if (p.rounds && p.rounds.length) return p.rounds;
+  if (p.round) return [p.round];
+  return [];
+}
 
 // Cache-bust IMG URLs against the poster's updated_at. Browsers
 // otherwise hold the prior bytes after a re-upload (especially for
@@ -152,7 +174,7 @@ const empty: Form = {
   placement: "home",
   composerState: null,
   originalBgUrl: null,
-  round: "",
+  rounds: [],
 };
 
 // ---- Schedule helpers ---------------------------------------------------
@@ -348,7 +370,9 @@ export default function SplashPostersPage() {
       placement: p.placement ?? "home",
       composerState: p.composer_state ?? null,
       originalBgUrl: p.original_bg_url ?? null,
-      round: p.round ?? "",
+      // Pre-fill the window from `rounds`; fall back to a legacy single `round`
+      // so editing an old poster migrates it cleanly to the multi-round model.
+      rounds: p.rounds?.length ? p.rounds : (p.round ? [p.round] : []),
     });
     setDeeplinkMode(null);
     setShowForm(true);
@@ -376,7 +400,7 @@ export default function SplashPostersPage() {
         placement:      p.placement ?? "home",
         composerState:  p.composer_state ?? null,
         originalBgUrl:  p.original_bg_url ?? null,
-        round:          p.round ?? null,
+        rounds:         p.rounds?.length ? p.rounds : (p.round ? [p.round] : null),
       };
       const res = await adminFetch("/api/pickup/splash-posters", {
         method: "POST",
@@ -466,10 +490,11 @@ export default function SplashPostersPage() {
         placement:     form.placement,
         composerState: form.composerState,
         originalBgUrl: form.originalBgUrl,
-        // Round applies to every surface now — the home carousel, splash
-        // launch, and POS screen readers all filter by current day-part
-        // round (round-less = always). Lets the autopilot schedule by round.
-        round:         form.round || null,
+        // Day-part window for every surface (home carousel, splash launch, POS
+        // screen). Empty = always. Stored in `rounds`; `round` is cleared so the
+        // multi-round window is the single source of truth going forward.
+        rounds:        form.rounds.length ? form.rounds : null,
+        round:         null,
       };
       const url = form.id
         ? `/api/pickup/splash-posters?id=${encodeURIComponent(form.id)}`
@@ -642,8 +667,8 @@ export default function SplashPostersPage() {
         ];
         const countFor = (id: string) =>
           id === "all" ? pos.length
-            : id === "always" ? pos.filter((p) => !p.round).length
-              : pos.filter((p) => p.round === id).length;
+            : id === "always" ? pos.filter((p) => posterWindow(p).length === 0).length
+              : pos.filter((p) => posterWindow(p).includes(id)).length;
         return (
           <div className="mb-4 flex flex-wrap gap-1.5">
             {opts.map((r) => {
@@ -678,8 +703,8 @@ export default function SplashPostersPage() {
             roundFilter === "all"
               ? true
               : roundFilter === "always"
-                ? !p.round
-                : p.round === roundFilter,
+                ? posterWindow(p).length === 0
+                : posterWindow(p).includes(roundFilter),
           );
 
         if (loading) {
@@ -754,11 +779,18 @@ export default function SplashPostersPage() {
                   <span className={`rounded-full ${placementColor} px-2 py-0.5 text-[10px] font-semibold text-white`}>
                     {placementLabel}
                   </span>
-                  {p.round && (
-                    <span className="rounded-full bg-orange-500 px-2 py-0.5 text-[10px] font-semibold capitalize text-white">
-                      {p.round}
-                    </span>
-                  )}
+                  {(() => {
+                    const w = posterWindow(p);
+                    if (!w.length) return null;
+                    const label = w.length > 3
+                      ? `${w.length} rounds`
+                      : w.map((r) => ROUND_LABEL[r] ?? r).join(", ");
+                    return (
+                      <span className="rounded-full bg-orange-500 px-2 py-0.5 text-[10px] font-semibold capitalize text-white">
+                        {label}
+                      </span>
+                    );
+                  })()}
                   {/* Schedule status pill — replaces the bare ACTIVE
                       pill with one that conveys the real live state:
                       LIVE NOW, SCHEDULED · Apr 12, EXPIRED · Mar 30,
@@ -961,28 +993,43 @@ export default function SplashPostersPage() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-700">Round (time of day)</label>
-                <select
-                  value={form.round}
-                  onChange={(e) => setForm((f) => ({ ...f, round: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                >
-                  <option value="">Always — show in every round</option>
-                  <option value="breakfast">Breakfast · 8–10AM</option>
-                  <option value="brunch">Brunch · 10AM–12PM</option>
-                  <option value="lunch">Lunch · 12–3PM</option>
-                  <option value="midday">Midday · 3–5PM</option>
-                  <option value="evening">Evening · 5–7PM</option>
-                  <option value="dinner">Dinner · 7–9PM</option>
-                  <option value="supper">Supper · 9–11PM</option>
-                </select>
-                <p className="mt-1 text-[11px] text-gray-500">
-                  {form.placement === "home"
-                    ? "Home carousel only shows this poster during this day-part. "
-                    : form.placement === "splash"
-                      ? "App launch splash only shows this poster during this day-part. "
-                      : "Customer screen only shows this poster during this day-part. "}
-                  &quot;Always&quot; shows in every round.
+                <label className="text-xs font-medium text-gray-700">Rounds (time of day)</label>
+                <p className="mt-0.5 text-[11px] text-gray-500">
+                  Pick the day-parts this poster appears in (a span is fine, e.g.
+                  Lunch→Supper). Leave all off for <span className="font-semibold">Always</span>.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {ROUND_OPTIONS.map((r) => {
+                    const on = form.rounds.includes(r.id);
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            rounds: on
+                              ? f.rounds.filter((x) => x !== r.id)
+                              : [...f.rounds, r.id],
+                          }))
+                        }
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                          on
+                            ? "bg-terracotta text-white"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                      >
+                        {r.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-[11px] text-gray-500">
+                  {form.rounds.length === 0
+                    ? "Showing in every round (Always)."
+                    : `Showing only during: ${form.rounds
+                        .map((r) => ROUND_LABEL[r] ?? r)
+                        .join(", ")}.`}
                 </p>
               </div>
 
