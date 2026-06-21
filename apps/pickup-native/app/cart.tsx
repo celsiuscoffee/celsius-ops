@@ -19,6 +19,7 @@ import { supabase, type Outlet } from "../lib/supabase";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { ProductImage } from "../components/ProductImage";
 import { CartUpsell } from "../components/CartUpsell";
+import { CartChallengeNudge } from "../components/CartChallengeNudge";
 import { OrderTypeBar } from "@/components/OrderTypeBar";
 
 /**
@@ -438,6 +439,14 @@ export default function Cart() {
               </Pressable>
             ))}
             </View>
+
+            {/* AOV challenge nudge — "Spend RM12 more to unlock Free Coffee".
+                Closest single-order mission for this basket; sits above the
+                upsell rail which suggests what to add. */}
+            <CartChallengeNudge
+              items={cart.map((i) => ({ product_id: i.productId, quantity: i.quantity, total_sen: Math.round(i.totalPrice * 100) }))}
+              loyaltyId={loyaltyId}
+            />
 
             {/* Basket-targeted upsell — "Goes well with your order" (drinks →
                 a bite, personalized by member). Scrolls below the items. */}

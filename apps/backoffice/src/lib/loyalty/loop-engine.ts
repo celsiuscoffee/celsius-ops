@@ -16,6 +16,7 @@ import { sendSMS } from "@/lib/loyalty/sms";
 
 const BRAND = "brand-celsius";
 const SMS_COST_RM = 0.1; // SMS Niaga ~RM0.10/SMS
+const GP = 0.72; // gross-profit rate for incremental-margin read
 
 export type ArmDef = {
   key: string; // e.g. 'free_tea'
@@ -322,4 +323,158 @@ export async function measureRound(roundId: string) {
     .eq("id", roundId);
 
   return { round_id: roundId, holdout_conversion_rate: +(holdoutRate * 100).toFixed(1), stats };
+}
+
+// ============================================================================
+// ADAPTIVE OPTIMIZER — the loop "learns" instead of running a fixed template.
+//
+// Offer SPACE (not 3 frozen arms): a grid across logic × value × threshold.
+// Each round = the current CHAMPION (best cumulative incremental margin with
+// enough evidence) + CHALLENGERS (least-tested / new logics) so the engine
+// keeps exploring. A persistent leaderboard over all measured rounds is what
+// makes it better over time. proposeArms() returns the next round's arm set;
+// the operator approves before any SMS goes out.
+// ============================================================================
+
+export type OfferCandidate = {
+  key: string;
+  label: string;
+  logic: "% discount" | "flat discount" | "BOGO";
+  voucher_template_id: string;
+  message: string;
+};
+
+// The explorable offer space. Extend freely — every new voucher_template added
+// here becomes a candidate the optimizer can test. Round-robin diversity +
+// least-tested-first selection means new entries get explored automatically.
+export const OFFER_CANDIDATES: OfferCandidate[] = [
+  { key: "pct10_min25", label: "10% off RM25+", logic: "% discount", voucher_template_id: "a0000010-0000-4000-8000-000000000010", message: "We miss you at Celsius! Enjoy 10% off when you spend RM25+. Tap to use — valid 14 days." },
+  { key: "pct15_min40", label: "15% off RM40+", logic: "% discount", voucher_template_id: "eb47fd73-42ab-4eb6-ade4-a12f96912d00", message: "We miss you at Celsius! Enjoy 15% off when you spend RM40+. Tap to use — valid 14 days." },
+  { key: "pct20_min40", label: "20% off RM40+", logic: "% discount", voucher_template_id: "a0000020-0000-4000-8000-000000000020", message: "We miss you at Celsius! Enjoy 20% off when you spend RM40+ (max RM12). Tap to use — valid 14 days." },
+  { key: "flat5_min25", label: "RM5 off RM25+", logic: "flat discount", voucher_template_id: "a0000005-0000-4000-8000-000000000005", message: "We miss you at Celsius! Here's RM5 off your next RM25+ order. Tap to use — valid 14 days." },
+  { key: "flat10_min30", label: "RM10 off RM30+", logic: "flat discount", voucher_template_id: "02ca62f1-171d-41d2-b6d6-9ca2d67ca3b9", message: "We miss you at Celsius! Here's RM10 off your next RM30+ order. Tap to use — valid 14 days." },
+  { key: "flat15_min50", label: "RM15 off RM50+", logic: "flat discount", voucher_template_id: "3c0288b5-51db-4e82-a583-6ed1dbc351b5", message: "We miss you at Celsius! Here's RM15 off your next RM50+ order. Tap to use — valid 14 days." },
+  { key: "b1f1_drinks", label: "Buy 1 Free 1 drinks", logic: "BOGO", voucher_template_id: "ed33eb26-4ead-414d-b1ee-179999a33940", message: "We miss you at Celsius! Buy 1 Free 1 on any drink — bring a friend! Valid 30 days." },
+];
+
+function toArmDef(c: OfferCandidate): ArmDef {
+  return { key: c.key, label: c.label, voucher_template_id: c.voucher_template_id, message: c.message };
+}
+
+type StoredArm = { key: string; label: string; voucher_template_id: string; message: string };
+type StoredStat = {
+  arm: string; n: number; lift_pp: number; revenue_per_recipient_rm: number;
+};
+
+export type LeaderboardEntry = {
+  template_id: string;
+  key: string | null;
+  label: string;
+  logic: string | null;
+  rounds: number;
+  recipients: number;
+  avg_lift_pp: number;
+  incr_margin_per_recipient_rm: number;
+  cum_incr_margin_rm: number;
+};
+
+// Aggregate every MEASURED round into a per-offer leaderboard. Incremental
+// margin is measured against each round's OWN holdout, then pooled across
+// rounds (recipient-weighted) so a champion only emerges with real evidence.
+export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
+  const { data: rounds } = await supabaseAdmin
+    .from("loop_rounds")
+    .select("arms, stats, holdout_pct")
+    .eq("loop_key", "winback")
+    .eq("status", "measured");
+
+  type Agg = { label: string; key: string | null; logic: string | null; n: number; liftW: number; incrMargin: number; rounds: number };
+  const agg = new Map<string, Agg>();
+
+  for (const r of (rounds ?? []) as Array<{ arms: StoredArm[] | null; stats: StoredStat[] | null }>) {
+    const stats = r.stats; const arms = r.arms;
+    if (!stats || !arms) continue;
+    const holdout = stats.find((s) => s.arm === "holdout");
+    const baseRev = holdout?.revenue_per_recipient_rm ?? 0;
+    for (const s of stats) {
+      if (s.arm === "holdout") continue;
+      const arm = arms.find((a) => a.key === s.arm);
+      if (!arm) continue;
+      const tid = arm.voucher_template_id;
+      const cand = OFFER_CANDIDATES.find((c) => c.voucher_template_id === tid);
+      const incrMargin = (s.revenue_per_recipient_rm - baseRev) * s.n * GP;
+      const e = agg.get(tid) ?? { label: cand?.label ?? arm.label, key: cand?.key ?? null, logic: cand?.logic ?? null, n: 0, liftW: 0, incrMargin: 0, rounds: 0 };
+      e.n += s.n; e.liftW += s.lift_pp * s.n; e.incrMargin += incrMargin; e.rounds += 1;
+      agg.set(tid, e);
+    }
+  }
+
+  const out: LeaderboardEntry[] = [...agg.entries()].map(([tid, e]) => ({
+    template_id: tid, key: e.key, label: e.label, logic: e.logic, rounds: e.rounds,
+    recipients: e.n,
+    avg_lift_pp: +(e.liftW / Math.max(1, e.n)).toFixed(1),
+    incr_margin_per_recipient_rm: +(e.incrMargin / Math.max(1, e.n)).toFixed(2),
+    cum_incr_margin_rm: +e.incrMargin.toFixed(2),
+  }));
+  out.sort((a, b) => b.incr_margin_per_recipient_rm - a.incr_margin_per_recipient_rm);
+  return out;
+}
+
+export type ProposalArm = ArmDef & { role: "champion" | "challenger"; reason: string };
+export type Proposal = { arms: ProposalArm[] };
+
+// Minimum cumulative recipients before an offer can be crowned champion —
+// guards against declaring a winner off noise from a tiny first round.
+const CHAMPION_MIN_RECIPIENTS = 300;
+
+// Pick the next round's arms: champion (best proven offer) + challengers
+// (least-tested first, diverse logic) so the search never stalls.
+export async function proposeArms(opts?: { count?: number }): Promise<Proposal> {
+  const count = Math.max(1, opts?.count ?? 3); // champion + 2 challengers
+  const lb = await getLeaderboard();
+  const byTemplate = new Map(lb.map((e) => [e.template_id, e]));
+
+  const chosen: ProposalArm[] = [];
+  const usedTemplates = new Set<string>();
+  const usedLogics = new Set<string>();
+
+  // champion: best incremental margin/recipient with enough evidence
+  const champ = lb.find((e) => e.recipients >= CHAMPION_MIN_RECIPIENTS);
+  if (champ) {
+    const cand = OFFER_CANDIDATES.find((c) => c.voucher_template_id === champ.template_id);
+    if (cand) {
+      const sign = champ.incr_margin_per_recipient_rm >= 0 ? "+" : "";
+      chosen.push({ ...toArmDef(cand), role: "champion", reason: `Best so far: ${sign}RM${champ.incr_margin_per_recipient_rm}/recipient, ${sign}${champ.avg_lift_pp}pp over ${champ.recipients.toLocaleString()} sent (${champ.rounds} ${champ.rounds === 1 ? "round" : "rounds"}).` });
+      usedTemplates.add(cand.voucher_template_id);
+      usedLogics.add(cand.logic);
+    }
+  }
+
+  // challengers: least-tested first, preferring an untested logic for spread.
+  const pool = OFFER_CANDIDATES
+    .filter((c) => !usedTemplates.has(c.voucher_template_id))
+    .sort((a, b) => (byTemplate.get(a.voucher_template_id)?.recipients ?? 0) - (byTemplate.get(b.voucher_template_id)?.recipients ?? 0));
+
+  const addChallenger = (c: OfferCandidate) => {
+    const seen = byTemplate.get(c.voucher_template_id);
+    const reason = seen
+      ? `Re-test — ${seen.recipients.toLocaleString()} sent so far, ${seen.avg_lift_pp >= 0 ? "+" : ""}${seen.avg_lift_pp}pp.`
+      : "New logic — never tested yet.";
+    chosen.push({ ...toArmDef(c), role: "challenger", reason });
+    usedTemplates.add(c.voucher_template_id);
+    usedLogics.add(c.logic);
+  };
+
+  // pass 1: diversify logic
+  for (const c of pool) {
+    if (chosen.length >= count) break;
+    if (!usedLogics.has(c.logic)) addChallenger(c);
+  }
+  // pass 2: fill remaining slots regardless of logic
+  for (const c of pool) {
+    if (chosen.length >= count) break;
+    if (!usedTemplates.has(c.voucher_template_id)) addChallenger(c);
+  }
+
+  return { arms: chosen.slice(0, count) };
 }
