@@ -7,12 +7,28 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 // every time the app cold-starts.
 export const revalidate = 60;
 
+// Current MYT day-part round (mirrors /api/home-posters & /api/pos/posters).
+// A round-less poster shows always; a round-tagged poster only during its
+// round — lets the autopilot schedule the launch splash by day-part.
+function currentRound(): string {
+  const h = (new Date().getUTCHours() + 8) % 24;
+  if (h >= 8 && h < 10) return "breakfast";
+  if (h >= 10 && h < 12) return "brunch";
+  if (h >= 12 && h < 15) return "lunch";
+  if (h >= 15 && h < 17) return "midday";
+  if (h >= 17 && h < 19) return "evening";
+  if (h >= 19 && h < 21) return "dinner";
+  if (h >= 21 && h < 23) return "supper";
+  return "";
+}
+
 export async function GET(request: NextRequest) {
   const brandId = request.nextUrl.searchParams.get("brand_id") ?? "brand-celsius";
 
   try {
     const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
+    const round = currentRound();
 
     const { data, error } = await supabase
       .from("splash_posters")
@@ -21,6 +37,8 @@ export async function GET(request: NextRequest) {
       .eq("active", true)
       // Splash surface only — home posters stay on the home carousel.
       .eq("placement", "splash")
+      // Recurring day-part round: round-less shows always; tagged shows in-round.
+      .or(round ? `round.is.null,round.eq.${round}` : "round.is.null")
       .order("updated_at", { ascending: false });
 
     if (error) {

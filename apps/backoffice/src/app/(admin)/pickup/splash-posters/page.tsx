@@ -466,7 +466,10 @@ export default function SplashPostersPage() {
         placement:     form.placement,
         composerState: form.composerState,
         originalBgUrl: form.originalBgUrl,
-        round:         form.placement === "pos-display" ? (form.round || null) : null,
+        // Round applies to every surface now — the home carousel, splash
+        // launch, and POS screen readers all filter by current day-part
+        // round (round-less = always). Lets the autopilot schedule by round.
+        round:         form.round || null,
       };
       const url = form.id
         ? `/api/pickup/splash-posters?id=${encodeURIComponent(form.id)}`
@@ -604,7 +607,7 @@ export default function SplashPostersPage() {
             {tabs.map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id)}
+                onClick={() => { setTab(t.id); setRoundFilter("all"); }}
                 className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                   tab === t.id
                     ? "bg-white text-gray-900 shadow-sm"
@@ -621,10 +624,11 @@ export default function SplashPostersPage() {
         );
       })()}
 
-      {/* POS-screen round sub-filter — narrow the list to one day-part round
-          so it's easy to arrange that round's posters. View only. */}
-      {!loading && tab === "pos-display" && posters.some((p) => (p.placement ?? "home") === "pos-display") && (() => {
-        const pos = posters.filter((p) => (p.placement ?? "home") === "pos-display");
+      {/* Round sub-filter — narrow the current surface's list to one
+          day-part round so it's easy to arrange that round's posters.
+          Works for every placement (home / splash / POS). View only. */}
+      {!loading && posters.some((p) => (p.placement ?? "home") === tab) && (() => {
+        const pos = posters.filter((p) => (p.placement ?? "home") === tab);
         const opts: { id: string; label: string }[] = [
           { id: "all", label: "All" },
           { id: "always", label: "Always" },
@@ -671,7 +675,7 @@ export default function SplashPostersPage() {
         const filtered = posters
           .filter((p) => (p.placement ?? "home") === tab)
           .filter((p) =>
-            tab !== "pos-display" || roundFilter === "all"
+            roundFilter === "all"
               ? true
               : roundFilter === "always"
                 ? !p.round
@@ -956,28 +960,31 @@ export default function SplashPostersPage() {
                 </p>
               </div>
 
-              {form.placement === "pos-display" && (
-                <div>
-                  <label className="text-xs font-medium text-gray-700">Round (time of day)</label>
-                  <select
-                    value={form.round}
-                    onChange={(e) => setForm((f) => ({ ...f, round: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  >
-                    <option value="">Always — show in every round</option>
-                    <option value="breakfast">Breakfast · 8–10AM</option>
-                    <option value="brunch">Brunch · 10AM–12PM</option>
-                    <option value="lunch">Lunch · 12–3PM</option>
-                    <option value="midday">Midday · 3–5PM</option>
-                    <option value="evening">Evening · 5–7PM</option>
-                    <option value="dinner">Dinner · 7–9PM</option>
-                    <option value="supper">Supper · 9–11PM</option>
-                  </select>
-                  <p className="mt-1 text-[11px] text-gray-500">
-                    Only shows on the customer screen during this day-part. &quot;Always&quot; shows in every round.
-                  </p>
-                </div>
-              )}
+              <div>
+                <label className="text-xs font-medium text-gray-700">Round (time of day)</label>
+                <select
+                  value={form.round}
+                  onChange={(e) => setForm((f) => ({ ...f, round: e.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Always — show in every round</option>
+                  <option value="breakfast">Breakfast · 8–10AM</option>
+                  <option value="brunch">Brunch · 10AM–12PM</option>
+                  <option value="lunch">Lunch · 12–3PM</option>
+                  <option value="midday">Midday · 3–5PM</option>
+                  <option value="evening">Evening · 5–7PM</option>
+                  <option value="dinner">Dinner · 7–9PM</option>
+                  <option value="supper">Supper · 9–11PM</option>
+                </select>
+                <p className="mt-1 text-[11px] text-gray-500">
+                  {form.placement === "home"
+                    ? "Home carousel only shows this poster during this day-part. "
+                    : form.placement === "splash"
+                      ? "App launch splash only shows this poster during this day-part. "
+                      : "Customer screen only shows this poster during this day-part. "}
+                  &quot;Always&quot; shows in every round.
+                </p>
+              </div>
 
               <div>
                 <label className="text-xs font-medium text-gray-700">
