@@ -6,6 +6,7 @@ import Image from "next/image";
 import { ArrowLeft, Trash2, Plus, Minus, Gift, X, Coffee, ChevronRight } from "lucide-react";
 import { calcRewardDiscount, formatRewardValue, type AppliedReward } from "@/lib/reward-discount";
 import { CartUpsell } from "./_CartUpsell";
+import { CartChallengeNudge } from "./_CartChallengeNudge";
 
 type BestSeller = {
   id: string;
@@ -443,6 +444,14 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
           </li>
         ))}
       </ul>
+
+      {/* AOV challenge nudge — "Spend RM12 more to unlock Free Coffee". Shows
+          the member's closest single-order mission so a bigger basket completes
+          a reward now. Sits above the upsell rail, which suggests what to add. */}
+      <CartChallengeNudge
+        items={items.map((i) => ({ product_id: i.productId, quantity: i.quantity, total_sen: Math.round(i.totalPrice * 100) }))}
+        loyaltyId={loyaltyId}
+      />
 
       {/* Basket-targeted upsell — "goes well with your order" (drinks → a bite,
           personalized by member). Reactive to the cart contents. */}
