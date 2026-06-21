@@ -288,6 +288,7 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Members",
         items: [
           { label: "Manual Grant",  href: "/loyalty/manual-grant",  icon: <HandCoins className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
+          { label: "Credit Order",  href: "/loyalty/credit-order",  icon: <Coins className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
         ],
       },
       {
