@@ -16,16 +16,15 @@ import Link from "next/link";
 
 interface Diagnostics {
   provider: string;
-  provider_raw_length?: number;
-  provider_trimmed_length?: number;
+  configured: boolean;
   api_key_set: boolean;
   api_key_prefix: string | null;
+  sender_id: string;
+  balance: string | null;
+  balance_error: string | null;
   email_set: boolean;
   email_value?: string | null;
-  sender_id: string;
-  sms123_balance: number | null;
-  balance_error: string | null;
-  balance_raw_response?: Record<string, unknown>;
+  endpoint?: string | null;
   recent_test_logs?: TestLog[];
 }
 
@@ -45,6 +44,15 @@ interface SendResult {
   error?: string;
   message_sent: string;
   diagnostics: Diagnostics;
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  smsniaga: "SMS Niaga",
+  sms123: "SMS123",
+  console: "Console (dev)",
+};
+function providerLabel(p?: string) {
+  return p ? PROVIDER_LABELS[p] ?? p : "—";
 }
 
 function StatusIcon({ ok }: { ok: boolean }) {
@@ -80,8 +88,6 @@ export default function SmsTestPage() {
     setDiagLoading(false);
   }
 
-  // Load diagnostics on mount (placed after the declaration so hooks
-  // lint can order-check it).
   useEffect(() => {
     loadDiagnostics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,8 +109,7 @@ export default function SmsTestPage() {
       });
       const data = await res.json();
       setSendResult(data);
-      setDiagnostics(data.diagnostics);
-      // Refresh logs
+      if (data.diagnostics) setDiagnostics(data.diagnostics);
       loadDiagnostics();
     } catch {
       setSendResult({ success: false, error: "Network error", message_sent: "", diagnostics: diagnostics! });
@@ -112,8 +117,14 @@ export default function SmsTestPage() {
     setSending(false);
   }
 
-  const smsPrefix = `RM0 [${senderId || "CelsiusCoffee"}] `;
-  const previewMessage = message.startsWith("RM0 ") ? message : `${smsPrefix}${message}`;
+  const provider = diagnostics?.provider;
+  const isSmsNiaga = provider === "smsniaga";
+  // SMS Niaga prepends "RM0 <SenderID>:" at the gateway; SMS123 needs the app prefix.
+  const previewMessage = isSmsNiaga
+    ? message
+    : message.startsWith("RM0 ")
+      ? message
+      : `RM0 [${senderId || "CelsiusCoffee"}] ${message}`;
 
   return (
     <div className="space-y-6">
@@ -128,7 +139,7 @@ export default function SmsTestPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">SMS Test Console</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Diagnose SMS123 configuration and send test messages
+            Diagnose the active SMS gateway and send test messages
           </p>
         </div>
       </div>
@@ -136,15 +147,22 @@ export default function SmsTestPage() {
       {/* Diagnostics Card */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">SMS123 Configuration</h2>
-          <button
-            onClick={loadDiagnostics}
-            disabled={diagLoading}
-            className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <RefreshCw className={cn("h-4 w-4", diagLoading && "animate-spin")} />
-            Refresh
-          </button>
+          <h2 className="text-lg font-semibold text-gray-900">
+            {diagnostics ? `${providerLabel(provider)} Configuration` : "SMS Configuration"}
+          </h2>
+          <div className="flex items-center gap-3">
+            <Link href="/settings/integrations" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
+              Change gateway
+            </Link>
+            <button
+              onClick={loadDiagnostics}
+              disabled={diagLoading}
+              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              <RefreshCw className={cn("h-4 w-4", diagLoading && "animate-spin")} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {diagLoading && !diagnostics ? (
@@ -154,25 +172,18 @@ export default function SmsTestPage() {
           </div>
         ) : diagnostics ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Provider */}
+            {/* Provider (active, from the toggle) */}
             <div className="flex items-center gap-2">
-              <StatusIcon ok={diagnostics.provider === "sms123"} />
-              <span className="text-sm text-gray-600">Provider:</span>
+              <StatusIcon ok={diagnostics.configured} />
+              <span className="text-sm text-gray-600">Active provider:</span>
               <span
                 className={cn(
-                  "text-sm font-mono px-2 py-0.5 rounded",
-                  diagnostics.provider === "sms123"
-                    ? "bg-green-50 text-green-700"
-                    : "bg-red-50 text-red-700"
+                  "text-sm font-medium px-2 py-0.5 rounded",
+                  diagnostics.configured ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"
                 )}
               >
-                {diagnostics.provider}
+                {providerLabel(diagnostics.provider)}
               </span>
-              {diagnostics.provider !== "sms123" && (
-                <span className="text-xs text-red-500">
-                  (should be &quot;sms123&quot;)
-                </span>
-              )}
             </div>
 
             {/* API Key */}
@@ -184,23 +195,23 @@ export default function SmsTestPage() {
               </span>
             </div>
 
-            {/* Email */}
-            <div className="flex items-center gap-2">
-              <StatusIcon ok={diagnostics.email_set} />
-              <span className="text-sm text-gray-600">Email:</span>
-              <span className="text-sm font-mono">
-                {diagnostics.email_set ? diagnostics.email_value || "Set" : "NOT SET"}
-              </span>
-            </div>
+            {/* Email — SMS123 only */}
+            {diagnostics.provider === "sms123" && (
+              <div className="flex items-center gap-2">
+                <StatusIcon ok={diagnostics.email_set} />
+                <span className="text-sm text-gray-600">Email:</span>
+                <span className="text-sm font-mono">
+                  {diagnostics.email_set ? diagnostics.email_value || "Set" : "NOT SET"}
+                </span>
+              </div>
+            )}
 
             {/* Balance */}
             <div className="flex items-center gap-2">
-              <StatusIcon ok={diagnostics.sms123_balance !== null && diagnostics.sms123_balance > 0} />
+              <StatusIcon ok={!!diagnostics.balance && !diagnostics.balance_error} />
               <span className="text-sm text-gray-600">Balance:</span>
               <span className="text-sm font-semibold">
-                {diagnostics.sms123_balance !== null
-                  ? `${diagnostics.sms123_balance.toLocaleString()} credits`
-                  : diagnostics.balance_error || "Unknown"}
+                {diagnostics.balance ?? diagnostics.balance_error ?? "Unknown"}
               </span>
             </div>
 
@@ -211,30 +222,33 @@ export default function SmsTestPage() {
               <span className="text-sm font-mono">{diagnostics.sender_id}</span>
             </div>
 
-            {/* Raw length check */}
-            {diagnostics.provider_raw_length !== undefined &&
-              diagnostics.provider_raw_length !== diagnostics.provider_trimmed_length && (
-                <div className="flex items-center gap-2 col-span-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  <span className="text-sm text-amber-700">
-                    SMS_PROVIDER env var has trailing whitespace/newline (raw length:{" "}
-                    {diagnostics.provider_raw_length}, trimmed: {diagnostics.provider_trimmed_length})
-                  </span>
-                </div>
-              )}
+            {/* Endpoint */}
+            {diagnostics.endpoint && (
+              <div className="flex items-center gap-2 col-span-1 sm:col-span-2">
+                <CheckCircle2 className="h-4 w-4 text-blue-500" />
+                <span className="text-sm text-gray-600">Endpoint:</span>
+                <span className="text-sm font-mono truncate">{diagnostics.endpoint}</span>
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-sm text-red-500">Failed to load diagnostics</p>
         )}
 
-        {/* Warnings */}
-        {diagnostics && diagnostics.provider !== "sms123" && (
+        {/* Not-configured warning */}
+        {diagnostics && !diagnostics.configured && (
           <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-amber-800">
-              <p className="font-medium">SMS_PROVIDER is not set to &quot;sms123&quot;</p>
+              <p className="font-medium">{providerLabel(diagnostics.provider)} isn&apos;t fully configured</p>
               <p className="mt-1">
-                Messages are being logged to console only. Set the <code className="font-mono bg-amber-100 px-1 rounded">SMS_PROVIDER</code> environment variable to <code className="font-mono bg-amber-100 px-1 rounded">sms123</code> in your Vercel project settings to enable real sending.
+                {diagnostics.provider === "smsniaga"
+                  ? "Set SMSNIAGA_API_KEY in the backoffice + order Vercel env."
+                  : diagnostics.provider === "sms123"
+                    ? "Set SMS123_API_KEY and SMS123_EMAIL in Vercel env."
+                    : "Messages are logged to the server console only (no SMS sent)."}{" "}
+                Switch gateways under{" "}
+                <Link href="/settings/integrations" className="underline font-medium">Settings → Integrations</Link>.
               </p>
             </div>
           </div>
@@ -273,8 +287,14 @@ export default function SmsTestPage() {
               value={senderId}
               onChange={(e) => setSenderId(e.target.value)}
               placeholder="CelsiusCoffee"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              disabled={isSmsNiaga}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
             />
+            {isSmsNiaga && (
+              <p className="text-xs text-gray-400 mt-1">
+                Ignored on SMS Niaga — the gateway uses your registered Sender ID ({diagnostics?.sender_id}).
+              </p>
+            )}
           </div>
 
           {/* Message */}
@@ -302,6 +322,11 @@ export default function SmsTestPage() {
             <p className="text-sm font-mono text-gray-800 whitespace-pre-wrap break-all">
               {previewMessage}
             </p>
+            {isSmsNiaga && (
+              <p className="text-xs text-gray-400 mt-1">
+                SMS Niaga automatically prepends &quot;RM0 {(diagnostics?.sender_id || "").replace(/ \(.*\)$/, "")}: &quot;.
+              </p>
+            )}
           </div>
 
           {/* Send Button */}
