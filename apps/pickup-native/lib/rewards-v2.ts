@@ -28,6 +28,7 @@ export type Voucher = {
   // customer reserves a wallet voucher and proceeds to checkout.
   discount_type?: "flat" | "percent" | "free_item" | "bogo" | "combo" | "override_price" | "beans_multiplier" | "none" | null;
   discount_value?: number | null;
+  max_discount_value?: number | null;
   min_order_value?: number | null;
   applicable_categories?: string[] | null;
   applicable_products?: string[] | null;

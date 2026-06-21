@@ -390,6 +390,7 @@ export function VoucherRow({ voucher }: { voucher: Voucher }) {
         ? mapDiscountType(voucher.discount_type)
         : null,
       discount_value: voucher.discount_value ?? null,
+      max_discount_value: voucher.max_discount_value ?? null,
       applicable_categories: voucher.applicable_categories ?? null,
       applicable_products: voucher.applicable_products ?? null,
       free_product_name: voucher.free_product_name ?? null,

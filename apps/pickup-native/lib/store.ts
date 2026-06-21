@@ -41,6 +41,8 @@ export type AppliedReward = {
     | "flat" | "percent" | "free_item" | "fixed_amount"
     | "percentage" | "bogo" | "combo" | "override_price" | "none" | null;
   discount_value: number | null;
+  /** Percent-discount cap, in SEN (e.g. "20% off, max RM10"). null = uncapped. */
+  max_discount_value?: number | null;
   bogo_buy_qty?: number;
   bogo_free_qty?: number;
   /** combo bundle price / override single-item price, in SEN. */
