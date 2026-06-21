@@ -308,6 +308,12 @@ export default function IntegrationsPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
+  // SMS gateway provider toggle (app_settings.sms_provider)
+  const [smsProvider, setSmsProvider] = useState<string>("");
+  const [smsOpen, setSmsOpen] = useState(false);
+  const [smsSaving, setSmsSaving] = useState(false);
+  const [smsMsg, setSmsMsg] = useState<string | null>(null);
+
   /* ── Load ──────────────────────────────────────────────────────────────── */
 
   const loadOutlets = useCallback(async () => {
@@ -348,7 +354,15 @@ export default function IntegrationsPage() {
     } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { loadOutlets(); loadPgConfig(); loadQr(); }, [loadOutlets, loadPgConfig, loadQr]);
+  const loadSmsProvider = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings?key=sms_provider");
+      const data = await res.json();
+      if (typeof data === "string" && data) setSmsProvider(data);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { loadOutlets(); loadPgConfig(); loadQr(); loadSmsProvider(); }, [loadOutlets, loadPgConfig, loadQr, loadSmsProvider]);
 
   /* ── Maybank QR + config sync ──────────────────────────────────────────── */
 
@@ -368,6 +382,26 @@ export default function IntegrationsPage() {
       setQrMsg("Save failed");
     }
     setQrSaving(false);
+  }
+
+  /* ── SMS gateway provider toggle ───────────────────────────────────────── */
+
+  async function saveSmsProvider(next: string) {
+    setSmsProvider(next);
+    setSmsSaving(true);
+    setSmsMsg(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "sms_provider", value: next }),
+      });
+      if (!res.ok) throw new Error();
+      setSmsMsg("Saved");
+    } catch {
+      setSmsMsg("Save failed");
+    }
+    setSmsSaving(false);
   }
 
   /** Read a File as a data: URL. We store the Maybank poster image
@@ -586,6 +620,60 @@ export default function IntegrationsPage() {
           </div>
         ))}
       </div>
+
+      {/* ── SMS Gateway ─────────────────────────────────────────────────── */}
+      <SectionCard
+        icon={<Smartphone className="h-5 w-5 text-emerald-600" />}
+        iconBg="bg-emerald-50"
+        title="SMS Gateway"
+        subtitle="Choose which provider sends OTP and marketing SMS"
+        badge={
+          <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
+            {smsProvider === "smsniaga" ? "SMS Niaga"
+              : smsProvider === "sms123" ? "SMS123"
+              : smsProvider === "console" ? "Console (dev)"
+              : "Env default"}
+          </span>
+        }
+        open={smsOpen}
+        onToggle={() => setSmsOpen(!smsOpen)}
+      >
+        <div className="mt-4 space-y-3">
+          <p className="text-xs text-gray-500">
+            Switches the active gateway for OTP and loyalty blasts instantly — no redeploy. Applies
+            everywhere via <code className="text-[11px] bg-gray-100 px-1 py-0.5 rounded">app_settings.sms_provider</code>.
+          </p>
+          <div className="grid gap-2">
+            {[
+              { id: "smsniaga", label: "SMS Niaga", note: "manage.smsniaga.com · sender CELSIUSCOFFEE · RM0.10/SMS" },
+              { id: "sms123", label: "SMS123", note: "sms123.net · legacy provider" },
+              { id: "console", label: "Console (dev)", note: "Logs to server console — no SMS sent" },
+            ].map((opt) => {
+              const active = smsProvider === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => saveSmsProvider(opt.id)}
+                  disabled={smsSaving}
+                  className={`flex items-center justify-between rounded-lg border px-4 py-3 text-left transition-colors disabled:opacity-60 ${active ? "border-emerald-500 bg-emerald-50/50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900">{opt.label}</div>
+                    <div className="text-xs text-gray-500 truncate">{opt.note}</div>
+                  </div>
+                  {active && <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+          {!smsProvider && (
+            <p className="text-[11px] text-amber-600">
+              No override set — using the <code className="text-[11px] bg-gray-100 px-1 py-0.5 rounded">SMS_PROVIDER</code> env var as default.
+            </p>
+          )}
+          {smsMsg && <p className="text-xs text-gray-500">{smsMsg}</p>}
+        </div>
+      </SectionCard>
 
       {/* ── Payment Methods ─────────────────────────────────────────────── */}
       <SectionCard

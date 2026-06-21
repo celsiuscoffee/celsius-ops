@@ -11,7 +11,7 @@
 // triggers "Ecmascript file had an error" when the chain reaches
 // middleware via packages/shared/src/index.ts).
 import { timingSafeEqual, randomInt } from 'node:crypto';
-import { sendSMS } from './sms';
+import { sendSMS, resolveSmsProvider, providerAutoPrependsSender } from './sms';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
@@ -85,12 +85,17 @@ export async function sendOTP(
     return { success: false, error: 'Failed to store OTP' };
   }
 
-  // Send via SMS (must match approved SMS123 templates with RM0 prefix and [CelsiusCoffee] header)
+  // Resolve the active gateway (app_settings toggle → env fallback). SMS123
+  // needs the "RM0 [CelsiusCoffee]" prefix to match approved templates; SMS
+  // Niaga prepends its own "RM0 <SenderID>:" at the gateway, so omit ours there
+  // to avoid a double prefix.
+  const provider = await resolveSmsProvider(supabaseAdmin);
+  const prefix = providerAutoPrependsSender(provider) ? '' : 'RM0 [CelsiusCoffee] ';
   const message = purpose === 'login'
-    ? `RM0 [CelsiusCoffee] Your Celsius Coffee verification code is: ${code}. Valid for 5 minutes.`
-    : `RM0 [CelsiusCoffee] Your Celsius Coffee redemption code is: ${code}. Valid for 5 minutes.`;
+    ? `${prefix}Your Celsius Coffee verification code is: ${code}. Valid for 5 minutes.`
+    : `${prefix}Your Celsius Coffee redemption code is: ${code}. Valid for 5 minutes.`;
 
-  const result = await sendSMS(normalizedPhone, message);
+  const result = await sendSMS(normalizedPhone, message, { provider });
 
   return {
     success: result.success,

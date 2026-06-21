@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/loyalty/supabase';
-import { sendSMS } from '@/lib/loyalty/sms';
+import { sendSMS, providerAutoPrependsSender, getActiveSmsProvider } from '@/lib/loyalty/sms';
 import { requireAuth } from '@/lib/auth';
 
 const BATCH_SIZE = 10; // Send 10 SMS concurrently per batch
@@ -64,10 +64,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Auto-prepend RM0 [<SenderID>] prefix if not already present
+    // Active gateway from the backoffice toggle (app_settings → env fallback).
+    const provider = await getActiveSmsProvider();
+
+    // Auto-prepend RM0 [<SenderID>] prefix if not already present.
+    // SMS Niaga adds its own "RM0.00 <SenderID>:" at the gateway, so skip ours there.
     const senderLabel = sender_id || 'CelsiusCoffee';
     const SMS_PREFIX = `RM0 [${senderLabel}] `;
-    const baseMessage = message.startsWith('RM0 ') ? message : `${SMS_PREFIX}${message}`;
+    const baseMessage =
+      providerAutoPrependsSender(provider) || message.startsWith('RM0 ') ? message : `${SMS_PREFIX}${message}`;
 
     // Per-recipient template substitution: if the message contains {name} or {points},
     // fetch each member's data and substitute before sending. Without this, customers
@@ -124,7 +129,12 @@ export async function POST(request: NextRequest) {
 
       const batchResults = await Promise.all(
         batch.map((phone, idx) =>
-          sendSMS(phone, batchMessages[idx], sender_id ? { senderId: sender_id } : undefined),
+          sendSMS(phone, batchMessages[idx], {
+            provider,
+            // SMS Niaga requires a registered Sender ID — let the provider use its
+            // configured default rather than forwarding a free-text label.
+            ...(!providerAutoPrependsSender(provider) && sender_id ? { senderId: sender_id } : {}),
+          }),
         ),
       );
 
@@ -143,7 +153,7 @@ export async function POST(request: NextRequest) {
           phone: batch[j],
           message: batchMessages[j],
           status: result.success ? 'sent' : 'failed',
-          provider: (process.env.SMS_PROVIDER || 'console').trim(),
+          provider,
           provider_message_id: result.messageId || null,
           error: result.error || null,
         });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
-import { sendSMS } from "@/lib/loyalty/sms";
+import { sendSMS, providerAutoPrependsSender, getActiveSmsProvider } from "@/lib/loyalty/sms";
 import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
@@ -297,7 +297,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const provider = (process.env.SMS_PROVIDER || "console").trim();
+    const provider = await getActiveSmsProvider();
     const template = campaign.message!;
     let sent = 0;
     let failed = 0;
@@ -321,12 +321,13 @@ export async function GET(req: NextRequest) {
       const rendered = batch.map((m) =>
         renderMessage(template, { name: m.name, points: m.points_balance })
       );
-      const finalMessages = rendered.map(
-        (body) => `RM0 [${SENDER_LABEL}] ${body}`
+      // SMS Niaga adds its own "RM0.00 <SenderID>:" at the gateway, so skip ours there.
+      const finalMessages = rendered.map((body) =>
+        providerAutoPrependsSender(provider) ? body : `RM0 [${SENDER_LABEL}] ${body}`
       );
 
       const batchResults = await Promise.all(
-        batch.map((m, idx) => sendSMS(m.phone, finalMessages[idx]))
+        batch.map((m, idx) => sendSMS(m.phone, finalMessages[idx], { provider }))
       );
 
       for (let j = 0; j < batch.length; j++) {

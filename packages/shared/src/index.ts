@@ -45,8 +45,8 @@ export {
   getProgressPercentage,
   getTimeAgo,
 } from "./format";
-export { sendSMS, getSMSProvider } from "./sms";
-export type { SMSProvider } from "./sms";
+export { sendSMS, getSMSProvider, providerAutoPrependsSender, resolveSmsProvider } from "./sms";
+export type { SMSProvider, SMSProviderName } from "./sms";
 export { filterModifiersForChannel } from "./modifier-channels";
 export type { ModifierChannel, ModifierGroupLike, ModifierOptionLike } from "./modifier-channels";
 // OTP is intentionally NOT re-exported here — it imports node:crypto,

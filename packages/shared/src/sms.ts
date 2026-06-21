@@ -1,7 +1,16 @@
 // ==========================================
 // SMS Provider Interface
-// Pluggable SMS gateway — swap providers by changing SMS_PROVIDER env var
+// Pluggable SMS gateway. The active provider is resolved at runtime from the
+// `app_settings.sms_provider` row (see resolveSmsProvider) so it can be toggled
+// from the backoffice without a redeploy; the SMS_PROVIDER env var is the
+// fallback default.
 // ==========================================
+
+// Type-only import — erased at compile time, so this never pulls the Supabase
+// client into Edge/middleware bundles.
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+export type SMSProviderName = 'smsniaga' | 'sms123' | 'console';
 
 export interface SMSProvider {
   sendSMS(phone: string, message: string, opts?: { senderId?: string }): Promise<{ success: boolean; messageId?: string; error?: string }>;
@@ -20,58 +29,79 @@ class ConsoleSMSProvider implements SMSProvider {
 // Malaysian SMS gateway — https://smsniaga.com
 class SMSNiagaProvider implements SMSProvider {
   private apiUrl: string;
-  private username: string;
   private apiKey: string;
   private senderId: string;
 
   constructor() {
-    this.apiUrl = process.env.SMSNIAGA_API_URL || 'https://api.smsniaga.com/v1/send';
-    this.username = process.env.SMSNIAGA_USERNAME || '';
+    // SMS Niaga v2 REST API. Auth is a single Bearer token created at
+    // manage.smsniaga.com → Profile → API Token. Endpoint + contract:
+    // https://smsniaga.stoplight.io/docs/api-reference (POST /api/send).
+    this.apiUrl = process.env.SMSNIAGA_API_URL || 'https://manage.smsniaga.com/api/send';
     this.apiKey = process.env.SMSNIAGA_API_KEY || '';
-    this.senderId = process.env.SMSNIAGA_SENDER_ID || 'CelsiusCoffee';
+    // Leave blank to use the account's default registered Sender ID
+    // (e.g. "CELSIUS COFFEE SDN. BHD."). Must match a registered Sender ID.
+    this.senderId = process.env.SMSNIAGA_SENDER_ID || '';
   }
 
+  // SMS Niaga expects MSISDN in 60XXXXXXXXX form (no leading +).
   private formatPhone(phone: string): string {
     let cleaned = phone.replace(/[\s\-()]/g, '');
-    if (cleaned.startsWith('+60')) return cleaned;
-    if (cleaned.startsWith('60')) return `+${cleaned}`;
-    if (cleaned.startsWith('0')) return `+60${cleaned.slice(1)}`;
+    if (cleaned.startsWith('+')) cleaned = cleaned.slice(1);
+    if (cleaned.startsWith('60')) return cleaned;
+    if (cleaned.startsWith('0')) return `60${cleaned.slice(1)}`;
     return cleaned;
   }
 
-  async sendSMS(phone: string, message: string) {
-    if (!this.username || !this.apiKey) {
-      console.error('SMS Niaga: Missing SMSNIAGA_USERNAME or SMSNIAGA_API_KEY');
-      return { success: false, error: 'SMS Niaga credentials not configured' };
+  async sendSMS(phone: string, message: string, opts?: { senderId?: string }) {
+    if (!this.apiKey) {
+      console.error('SMS Niaga: Missing SMSNIAGA_API_KEY');
+      return { success: false, error: 'SMS Niaga API token not configured' };
     }
 
     const to = this.formatPhone(phone);
-    const authToken = Buffer.from(`${this.username}:${this.apiKey}`).toString('base64');
+    const senderId = opts?.senderId || this.senderId;
 
     try {
       const response = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Basic ${authToken}`,
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
         signal: AbortSignal.timeout(10000),
         body: JSON.stringify({
-          to,
-          message,
-          from: this.senderId,
+          body: message,
+          phones: [to],
+          // preview must be 0 to actually send; 1 = dry-run preview only.
+          preview: 0,
+          ...(senderId ? { sender_id: senderId } : {}),
         }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.error(`SMS Niaga error (${response.status}): ${errorText}`);
-        return { success: false, error: `SMS Niaga error: ${response.status}` };
+      const rawBody = await response.text();
+      let data: {
+        data?: { uuid?: string; total_charge?: number; credit_balance_after?: string };
+        message?: string;
+        error?: string;
+      } = {};
+      try {
+        data = JSON.parse(rawBody);
+      } catch {
+        // Non-JSON response — keep rawBody for the error string below.
       }
 
-      const data = await response.json();
-      console.log(`SMS Niaga: Message sent successfully (ID: ${data.message_id})`);
-      return { success: true, messageId: data.message_id };
+      if (!response.ok) {
+        const detail = data.message || data.error || `HTTP ${response.status}: ${rawBody.slice(0, 200)}`;
+        console.error(`SMS Niaga error (${response.status}): ${detail}`);
+        return { success: false, error: `SMS Niaga: ${detail}` };
+      }
+
+      const messageId = data.data?.uuid;
+      console.log(
+        `SMS Niaga: sent (uuid: ${messageId}, charge: ${data.data?.total_charge}, balance after: ${data.data?.credit_balance_after})`,
+      );
+      return { success: true, messageId };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error(`SMS Niaga: Failed to send SMS — ${errorMessage}`);
@@ -157,8 +187,9 @@ class SMS123Provider implements SMSProvider {
 }
 
 // ─── Provider Factory ────────────────────────────────
-export function getSMSProvider(): SMSProvider {
-  const provider = (process.env.SMS_PROVIDER || 'console').trim().toLowerCase();
+export function getSMSProvider(name?: string): SMSProvider {
+  // Explicit name (from the app_settings toggle) wins; else fall back to env.
+  const provider = (name || process.env.SMS_PROVIDER || 'console').trim().toLowerCase();
 
   switch (provider) {
     case 'smsniaga':
@@ -174,7 +205,45 @@ export function getSMSProvider(): SMSProvider {
 }
 
 // ─── Convenience function ────────────────────────────
-export async function sendSMS(phone: string, message: string, opts?: { senderId?: string }) {
-  const provider = getSMSProvider();
+// opts.provider overrides which gateway to use (from the app_settings toggle);
+// without it, getSMSProvider falls back to the SMS_PROVIDER env var.
+export async function sendSMS(
+  phone: string,
+  message: string,
+  opts?: { senderId?: string; provider?: string },
+) {
+  const provider = getSMSProvider(opts?.provider);
   return provider.sendSMS(phone, message, opts);
+}
+
+// ─── Sender-prefix behaviour ─────────────────────────
+// SMS Niaga prepends "RM0.00 <SenderID>:" to every message body at the gateway,
+// and only accepts a registered Sender ID. So on SMS Niaga, app code must NOT
+// add its own "RM0 [label]" prefix (it would double up) and must NOT pass a
+// free-text sender label. Other providers (e.g. SMS123) still need the app to
+// add the "RM0 [label]" prefix itself. Pass the active provider name (from the
+// toggle); falls back to the SMS_PROVIDER env var.
+export function providerAutoPrependsSender(provider?: string): boolean {
+  return (provider || process.env.SMS_PROVIDER || 'console').trim().toLowerCase() === 'smsniaga';
+}
+
+// ─── Active-provider resolver ────────────────────────
+// Reads the `app_settings.sms_provider` row (set from the backoffice
+// Integrations toggle) and returns the active gateway name. Falls back to the
+// SMS_PROVIDER env var, then 'console'. Pass the Supabase admin client the
+// caller already holds — keeps this package free of a runtime Supabase import.
+export async function resolveSmsProvider(supabase: SupabaseClient): Promise<SMSProviderName> {
+  try {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'sms_provider')
+      .maybeSingle();
+    const v = (data?.value ?? '').toString().trim().toLowerCase();
+    if (v === 'smsniaga' || v === 'sms123' || v === 'console') return v;
+  } catch {
+    // fall through to env default
+  }
+  const env = (process.env.SMS_PROVIDER || 'console').trim().toLowerCase();
+  return env === 'smsniaga' || env === 'sms123' ? env : 'console';
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/loyalty/supabase';
 import { requireAuth } from '@/lib/auth';
+import { getActiveSmsProvider } from '@/lib/loyalty/sms';
 
 // GET /api/sms/credits?brand_id=X — get credit balance from SMS123 + usage stats
 export async function GET(request: NextRequest) {
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       balance: sms123Balance,
-      provider: process.env.SMS_PROVIDER || 'console',
+      provider: await getActiveSmsProvider(),
       total_sent: totalSent ?? 0,
       sent_this_month: sentThisMonth ?? 0,
       history: history ?? [],
