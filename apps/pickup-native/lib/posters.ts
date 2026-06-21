@@ -21,21 +21,24 @@ export type HomePoster = {
 // Network race: 4s timeout (longer than the 2.5s we used for cache-
 // first since the network IS now the primary source). If it loses,
 // fall back to whatever's in AsyncStorage. If both fail, return [].
-export async function getHomePosters(): Promise<HomePoster[]> {
+export async function getHomePosters(memberId: string | null = null): Promise<HomePoster[]> {
+  // Personalized sets cache per-member so a guest and a signed-in member don't
+  // overwrite each other's snapshot (guest keeps the legacy base key).
+  const cacheKey = memberId ? `${CACHE_KEY}:${memberId}` : CACHE_KEY;
   let resolved = false;
   let cached: HomePoster[] | null = null;
 
   // Read cache in parallel with the fetch.
   const cacheRead: Promise<HomePoster[] | null> = (async () => {
     try {
-      const raw = await AsyncStorage.getItem(CACHE_KEY);
+      const raw = await AsyncStorage.getItem(cacheKey);
       return raw ? (JSON.parse(raw) as HomePoster[]) : null;
     } catch {
       return null;
     }
   })();
 
-  const network = fetchPosters().then((posters) => {
+  const network = fetchPosters(memberId).then((posters) => {
     resolved = true;
     return posters;
   });
@@ -68,25 +71,24 @@ export async function getHomePosters(): Promise<HomePoster[]> {
   return [];
 }
 
-async function fetchPosters(): Promise<HomePoster[]> {
+async function fetchPosters(memberId: string | null = null): Promise<HomePoster[]> {
+  const cacheKey = memberId ? `${CACHE_KEY}:${memberId}` : CACHE_KEY;
   try {
-    const res = await fetch(
-      `${API_BASE}/api/home-posters?brand_id=brand-celsius`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Origin: API_BASE,
-          Referer: API_BASE + "/",
-        },
+    const url = `${API_BASE}/api/home-posters?brand_id=brand-celsius${memberId ? `&member=${encodeURIComponent(memberId)}` : ""}`;
+    const res = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+        Origin: API_BASE,
+        Referer: API_BASE + "/",
       },
-    );
+    });
     if (!res.ok) return [];
     const json = (await res.json()) as { posters: HomePoster[] };
     const posters = json.posters ?? [];
     if (posters.length > 0) {
-      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(posters)).catch(() => {});
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(posters)).catch(() => {});
     } else {
-      await AsyncStorage.removeItem(CACHE_KEY).catch(() => {});
+      await AsyncStorage.removeItem(cacheKey).catch(() => {});
     }
     return posters;
   } catch {

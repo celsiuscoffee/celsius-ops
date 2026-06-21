@@ -338,8 +338,8 @@ export default function Home() {
   // getHomePosters() still provides instant first paint on cold
   // launch; this just makes refresh aggressive.
   const postersQ = useQuery({
-    queryKey: ["home-posters"],
-    queryFn: getHomePosters,
+    queryKey: ["home-posters", loyaltyId],
+    queryFn: () => getHomePosters(loyaltyId),
     staleTime: 30_000,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
