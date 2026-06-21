@@ -35,7 +35,10 @@ type LensData = {
   serving: { company: ServeStat | null; byOutlet: Record<string, ServeStat> } | null;
   cogs: { rm: number; pct: number; gpPct: number } | null;
   wastage: { companyRM: number; byOutlet: Record<string, number> } | null;
-  peopleCost: { label: string; costRM: number; pct: number | null } | null;
+  peopleCost: {
+    label: string; costRM: number; pct: number | null; unassignedRM?: number;
+    byOutlet?: Record<string, { costRM: number; pct: number | null }>;
+  } | null;
   churn: { atRisk: number; winBack: number } | null;
 };
 
@@ -66,6 +69,15 @@ export default function DashboardPage() {
 
   const selected = outlet === "all" ? null : data?.outlets.find((o) => o.id === outlet);
   const view = selected ?? data?.company ?? null;
+
+  // People cost follows the outlet filter: a selected outlet shows only its
+  // directly-assigned staff; "all" shows the company roll-up (incl. HQ/rotating).
+  const people = lenses?.peopleCost ?? null;
+  const peopleView = people
+    ? selected
+      ? people.byOutlet?.[selected.id] ?? { costRM: 0, pct: null }
+      : { costRM: people.costRM, pct: people.pct }
+    : null;
   const rounds = selected ? selected.rounds : data?.company.rounds ?? [];
   const maxRound = Math.max(1, ...rounds.map((r) => r.revenue));
   const channel = data?.company.channel;
@@ -233,9 +245,9 @@ export default function DashboardPage() {
             tone={lenses?.cogs ? (lenses.cogs.pct <= 35 ? "good" : "bad") : "muted"}
             href="/inventory/reports" loading={!lenses} />
           <LensCard icon={Users} label="People cost"
-            value={lenses?.peopleCost?.pct != null ? `${lenses.peopleCost.pct}%` : lenses?.peopleCost ? formatRM(lenses.peopleCost.costRM) : "—"}
-            sub={lenses?.peopleCost ? `${lenses.peopleCost.label} · target 15%` : "no data yet"}
-            tone={lenses?.peopleCost?.pct != null ? (lenses.peopleCost.pct <= 15 ? "good" : "bad") : "muted"}
+            value={peopleView?.pct != null ? `${peopleView.pct}%` : peopleView ? formatRM(peopleView.costRM) : "—"}
+            sub={people ? `${people.label}${selected ? " · assigned staff" : ""} · target 15%` : "no data yet"}
+            tone={peopleView?.pct != null ? (peopleView.pct <= 15 ? "good" : "bad") : "muted"}
             href="/hr/payroll" loading={!lenses} />
           <LensCard icon={Trash2} label="Wastage"
             value={lenses?.wastage ? formatRM(lenses.wastage.companyRM) : "—"}
