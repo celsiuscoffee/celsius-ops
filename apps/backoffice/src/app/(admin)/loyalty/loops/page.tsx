@@ -18,7 +18,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Repeat, RefreshCw, Send, FlaskConical, Loader2,
-  CheckCircle2, AlertTriangle, Trophy, Users, ShieldOff, Coins, Plus, X, Crown, Sparkles,
+  CheckCircle2, AlertTriangle, Trophy, Users, ShieldOff, Coins, Plus, X, Crown, Sparkles, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +39,7 @@ type Round = {
   holdout_pct: number; arms: RoundArm[]; attribution_window_days: number;
   status: "prepared" | "sent" | "measured"; stats: ArmStat[] | null;
   prepared_at: string | null; sent_at: string | null; measured_at: string | null;
+  scheduled_send_at: string | null; send_window: string | null;
 };
 type Preview = {
   round_id: string; round_no: number; segment_label: string; total: number;
@@ -52,13 +53,27 @@ type LeaderboardEntry = {
   incr_margin_per_recipient_rm: number; cum_incr_margin_rm: number;
 };
 type LoopMeta = { key: string; label: string; objective: string; defaultHoldoutPct: number; defaultWindowDays: number };
-type Optimizer = { loop_key: string; leaderboard: LeaderboardEntry[]; proposal: { arms: ProposalArm[] }; candidates: Candidate[]; loops: LoopMeta[] };
+type SendTimeEntry = { send_window: string; rounds: number; recipients: number; avg_lift_pp: number; avg_order_rate: number };
+type Optimizer = {
+  loop_key: string; leaderboard: LeaderboardEntry[]; proposal: { arms: ProposalArm[] };
+  candidates: Candidate[]; loops: LoopMeta[];
+  send_time_leaderboard: SendTimeEntry[]; send_window_proposal: { window: string; reason: string }; send_windows: string[];
+};
 
 const CHAMPION_MIN_RECIPIENTS = 300;
 
 // ---- helpers ----------------------------------------------------------------
 function rm(n: number) {
   return `RM${n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+function windowLabel(w: string | null | undefined): string {
+  if (!w) return "—";
+  return w.split("_").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
+}
+function defaultLocalDatetime(): string {
+  const d = new Date(Date.now() + 3600000); // ~1h from now
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function reachableFromLabel(label: string): number | null {
   const m = label.match(/\(([\d,]+)\s+reachable/);
@@ -227,6 +242,18 @@ export default function LoopsPage() {
                 } catch (e) { setErr(e instanceof Error ? e.message : "Measure failed"); }
                 finally { setBusy(null); }
               }}
+              onSchedule={async (scheduledSendAt, sendWindow) => {
+                setBusy(r.id); setErr(null);
+                try {
+                  const res = await fetch("/api/loyalty/loops/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ round_id: r.id, scheduled_send_at: scheduledSendAt, send_window: sendWindow }) });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data?.error ?? "Schedule failed");
+                  await load();
+                } catch (e) { setErr(e instanceof Error ? e.message : "Schedule failed"); }
+                finally { setBusy(null); }
+              }}
+              proposedWindow={opt?.send_window_proposal?.window}
+              windows={opt?.send_windows ?? []}
             />
           ))}
         </div>
@@ -301,6 +328,24 @@ function OptimizerPanel({ opt }: { opt: Optimizer }) {
           </div>
         </>
       )}
+
+      {/* Send-time learning — best window + per-window lift (unknown #3). */}
+      <div className="mt-4 border-t border-gray-100 pt-3">
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+          <Clock className="h-4 w-4 text-[#A2492C]" />
+          <span className="font-medium">Best send time</span>
+          <span className="text-gray-500">— {windowLabel(opt.send_window_proposal?.window)}. {opt.send_window_proposal?.reason}</span>
+        </div>
+        {opt.send_time_leaderboard.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {opt.send_time_leaderboard.map((s) => (
+              <span key={s.send_window} className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                {windowLabel(s.send_window)}: {s.avg_lift_pp >= 0 ? "+" : ""}{s.avg_lift_pp}pp ({s.recipients.toLocaleString()})
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -436,10 +481,13 @@ function NumInput({ v, set }: { v: number; set: (n: number) => void }) {
 }
 
 // ---- Round card -------------------------------------------------------------
-function RoundCard({ round, busy, onSend, onMeasure }: {
+function RoundCard({ round, busy, onSend, onMeasure, onSchedule, proposedWindow, windows }: {
   round: Round; busy: boolean; onSend: () => void; onMeasure: () => void;
+  onSchedule: (scheduledSendAt: string, sendWindow: string) => void; proposedWindow?: string; windows: string[];
 }) {
   const est = estSmsCost(round);
+  const [when, setWhen] = useState(() => defaultLocalDatetime());
+  const [win, setWin] = useState(proposedWindow ?? "weekday_evening");
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -467,12 +515,39 @@ function RoundCard({ round, busy, onSend, onMeasure }: {
             <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" /> vouchers issued, awaiting send</span>
             {est != null && <span>Est. SMS cost: <strong>{rm(est)}</strong></span>}
           </div>
+
+          {round.scheduled_send_at && (
+            <div className="mb-2 inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-xs text-amber-900">
+              <Clock className="h-3.5 w-3.5" /> Scheduled for {new Date(round.scheduled_send_at).toLocaleString("en-MY")} ({windowLabel(round.send_window)}) — the cron fires it automatically.
+            </div>
+          )}
+
+          {/* Schedule: approve now, engine fires at the chosen window. */}
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <label className="text-xs text-gray-600">Send at
+              <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="mt-1 block rounded-md border border-gray-200 px-2 py-1 text-sm" />
+            </label>
+            <label className="text-xs text-gray-600">Window
+              <select value={win} onChange={(e) => setWin(e.target.value)} className="mt-1 block rounded-md border border-gray-200 px-2 py-1 text-sm">
+                {windows.map((w) => <option key={w} value={w}>{windowLabel(w)}</option>)}
+              </select>
+            </label>
+            <button
+              disabled={busy}
+              onClick={() => onSchedule(new Date(when).toISOString(), win)}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#A2492C] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4" />} {round.scheduled_send_at ? "Reschedule" : "Schedule send"}
+            </button>
+          </div>
+          {proposedWindow && <p className="mb-2 text-xs text-gray-500">Engine suggests <strong>{windowLabel(proposedWindow)}</strong> as the best-known window.</p>}
+
           <button
             disabled={busy}
-            onClick={() => { if (confirm(`Send SMS for round ${round.round_no}? This fires ${est != null ? `~${rm(est)} of` : ""} live SMS to all treatment arms.`)) onSend(); }}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            onClick={() => { if (confirm(`Send SMS NOW for round ${round.round_no}? Fires ${est != null ? `~${rm(est)} of` : ""} live SMS immediately.`)) onSend(); }}
+            className="inline-flex items-center gap-2 rounded-lg border border-blue-600 px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-50"
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Approve &amp; send SMS
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send now
           </button>
         </div>
       )}
