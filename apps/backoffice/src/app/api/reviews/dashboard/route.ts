@@ -57,6 +57,12 @@ export async function GET(request: NextRequest) {
   // Sort outlets: Putrajaya first, Nilai last
   outlets.sort((a, b) => outletSortKey(a.name) - outletSortKey(b.name));
 
+  // Cached Nearby Competitor Ranking (refreshed by the daily cron, not live here)
+  const competitorSnapshots = await prisma.competitorSnapshot.findMany({
+    where: { outletId: { in: outlets.map((o) => o.id) } },
+  });
+  const competitorByOutlet = new Map(competitorSnapshots.map((s) => [s.outletId, s]));
+
   // Fetch Google reviews for all connected outlets in parallel
   const googlePromises = outlets.map(async (outlet) => {
     const settings = outlet.reviewSettings;
@@ -107,6 +113,8 @@ export async function GET(request: NextRequest) {
       if (key in fbStats && key !== "total") (fbStats[key] as number)++;
     }
 
+    const snap = competitorByOutlet.get(outlet.id);
+
     return {
       outletId: outlet.id,
       outletName: outlet.name,
@@ -121,6 +129,19 @@ export async function GET(request: NextRequest) {
         feedbacks: outletFeedbacks,
         stats: fbStats,
       },
+      competitor: snap
+        ? {
+            capturedAt: snap.capturedAt.toISOString(),
+            radiusM: snap.radiusM,
+            selfFound: snap.selfFound,
+            selfRating: snap.selfRating,
+            selfReviewCount: snap.selfReviewCount,
+            rankByReviews: snap.rankByReviews,
+            rankByRating: snap.rankByRating,
+            totalNearby: snap.totalNearby,
+            competitors: snap.competitors,
+          }
+        : null,
     };
   });
 

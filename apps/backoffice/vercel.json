@@ -91,6 +91,10 @@
     {
       "path": "/api/cron/pos-poster-autopilot",
       "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/reviews/competitors/refresh",
+      "schedule": "0 4 * * *"
     }
   ]
 }
