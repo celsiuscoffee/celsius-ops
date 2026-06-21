@@ -21,14 +21,18 @@ type Reward = {
   description?: string;
   points_required?: number;
   discount_type?:
-    | "flat" | "percent" | "free_item" | "bogo" | "fixed_amount" | "percentage" | "none" | null;
+    | "flat" | "percent" | "free_item" | "bogo" | "combo" | "override_price" | "fixed_amount" | "percentage" | "none" | null;
   discount_value?: number | null;
+  max_discount_value?: number | null;
   min_order_value?: number | null;
   applicable_products?: string[] | null;
   applicable_categories?: string[] | null;
   free_product_name?: string | null;
+  free_product_ids?: string[] | null;
   bogo_buy_qty?: number;
   bogo_free_qty?: number;
+  combo_price_sen?: number | null;
+  override_price_sen?: number | null;
 };
 
 // Write the chosen catalog reward into the SPA's persisted state as the
@@ -45,12 +49,16 @@ function applyCatalogReward(r: Reward) {
       points_required: r.points_required ?? 0,
       discount_type: r.discount_type ?? null,
       discount_value: r.discount_value ?? null,
+      max_discount_value: r.max_discount_value ?? null,
       applicable_categories: r.applicable_categories ?? null,
       applicable_products: r.applicable_products ?? null,
       free_product_name: r.free_product_name ?? null,
+      free_product_ids: r.free_product_ids ?? null,
       min_order_value: r.min_order_value ?? null,
       bogo_buy_qty: r.bogo_buy_qty,
       bogo_free_qty: r.bogo_free_qty,
+      combo_price_sen: r.combo_price_sen ?? null,
+      override_price_sen: r.override_price_sen ?? null,
     };
     state.reservedVoucher = {
       id: r.id,

@@ -80,6 +80,9 @@ export type ActiveVoucher = {
    *  issued_rewards). Without these the cart engine computes a RM0 free item. */
   bogo_buy_qty: number | null;
   bogo_free_qty: number | null;
+  /** Combo bundle price / single-item override price (SEN) — template-only. */
+  combo_price_sen: number | null;
+  override_price_sen: number | null;
   /** Whether this voucher stacks with bean redemptions in the same cart */
   stacks_with_beans: boolean;
   /** Optional per-voucher visual override from the linked reward_kind */
@@ -178,16 +181,16 @@ export async function fetchActiveVouchersForMember(args: {
   // Discount mechanics that live ONLY on voucher_templates (not denormalized
   // onto issued_rewards): BOGO quantities + free_product_ids. The cart engine
   // needs these to compute a bogo / free-item discount.
-  const mechByTemplateId = new Map<string, { bogo_buy_qty: number | null; bogo_free_qty: number | null; free_product_ids: string[] | null }>();
+  const mechByTemplateId = new Map<string, { bogo_buy_qty: number | null; bogo_free_qty: number | null; free_product_ids: string[] | null; max_discount_value: number | null; combo_price_sen: number | null; override_price_sen: number | null }>();
   if (templateIds.length > 0) {
     const { data: tpls } = await args.supabase
       .from("voucher_templates")
-      .select("id, reward_kind_id, bogo_buy_qty, bogo_free_qty, free_product_ids")
+      .select("id, reward_kind_id, bogo_buy_qty, bogo_free_qty, free_product_ids, max_discount_value, combo_price_sen, override_price_sen")
       .in("id", templateIds);
-    type TplRow = { id: string; reward_kind_id: string | null; bogo_buy_qty: number | null; bogo_free_qty: number | null; free_product_ids: string[] | null };
+    type TplRow = { id: string; reward_kind_id: string | null; bogo_buy_qty: number | null; bogo_free_qty: number | null; free_product_ids: string[] | null; max_discount_value: number | null; combo_price_sen: number | null; override_price_sen: number | null };
     const tplRows = (tpls ?? []) as TplRow[];
     for (const t of tplRows) {
-      mechByTemplateId.set(t.id, { bogo_buy_qty: t.bogo_buy_qty, bogo_free_qty: t.bogo_free_qty, free_product_ids: t.free_product_ids });
+      mechByTemplateId.set(t.id, { bogo_buy_qty: t.bogo_buy_qty, bogo_free_qty: t.bogo_free_qty, free_product_ids: t.free_product_ids, max_discount_value: t.max_discount_value, combo_price_sen: t.combo_price_sen, override_price_sen: t.override_price_sen });
     }
     const kindIds = Array.from(new Set(
       tplRows.map((t) => t.reward_kind_id).filter((id): id is string => !!id),
@@ -229,9 +232,8 @@ export async function fetchActiveVouchersForMember(args: {
       redeemed_at: v.redeemed_at,
       discount_type: (v.discount_type as VoucherDiscountType | null) ?? null,
       discount_value: v.discount_value ?? null,
-      // Not denormalised onto issued_rewards — lives only on
-      // voucher_templates / rewards. Always null here.
-      max_discount_value: null,
+      // Resolved from the linked template (only lives there, not on issued_rewards).
+      max_discount_value: mech?.max_discount_value ?? null,
       min_order_value: v.min_order_value ?? null,
       applicable_categories: v.applicable_categories ?? null,
       applicable_products: v.applicable_products ?? null,
@@ -240,6 +242,8 @@ export async function fetchActiveVouchersForMember(args: {
       free_product_ids: mech?.free_product_ids ?? null,
       bogo_buy_qty: mech?.bogo_buy_qty ?? null,
       bogo_free_qty: mech?.bogo_free_qty ?? null,
+      combo_price_sen: mech?.combo_price_sen ?? null,
+      override_price_sen: mech?.override_price_sen ?? null,
       stacks_with_beans: v.stacks_with_beans ?? true,
       kind_color: kind?.color ?? null,
       illustration_url: kind?.illustration_url ?? null,
