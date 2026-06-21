@@ -299,9 +299,12 @@ export async function sendRound(roundId: string) {
     if (res.success) sent++; else failed++;
   }
 
+  const sentAt = new Date();
   await supabaseAdmin
     .from("loop_rounds")
-    .update({ status: "sent", sent_at: new Date().toISOString() })
+    // Stamp the window it actually went out in (kept if pre-scheduled) so the
+    // send-time leaderboard can attribute conversion to a time of day.
+    .update({ status: "sent", sent_at: sentAt.toISOString(), send_window: round.send_window ?? deriveWindow(sentAt) })
     .eq("id", roundId);
 
   return { round_id: roundId, sent, failed };
@@ -554,4 +557,104 @@ export async function proposeArms(loopKey: LoopKey = "winback", opts?: { count?:
   }
 
   return { arms: chosen.slice(0, count) };
+}
+
+// ============================================================================
+// SEND-TIME — schedule a round + learn the best window (unknown #3).
+//
+// A round is approved by scheduling it: scheduleRound() sets scheduled_send_at
+// and a derived send_window. The /api/cron/loops-send cron calls sendDueRounds()
+// every few minutes and fires any prepared round whose time has arrived. Over
+// rounds, getSendTimeLeaderboard() pools conversion by window so proposeSendWindow()
+// can suggest the best time — the same champion/challenger idea, on the clock.
+// ============================================================================
+
+// Day-part windows (Malaysia, UTC+8). Coarse on purpose — enough to learn from.
+export const SEND_WINDOWS = [
+  "weekday_morning", "weekday_midday", "weekday_evening",
+  "weekend_morning", "weekend_midday", "weekend_evening",
+] as const;
+
+function deriveWindow(d: Date): string {
+  const myt = new Date(d.getTime() + 8 * 3600000); // shift UTC → UTC+8
+  const day = myt.getUTCDay(); // 0 Sun .. 6 Sat
+  const weekend = day === 0 || day === 6;
+  const h = myt.getUTCHours();
+  const part = h < 12 ? "morning" : h < 17 ? "midday" : "evening";
+  return `${weekend ? "weekend" : "weekday"}_${part}`;
+}
+
+// Approve + schedule a prepared round to fire at a chosen time.
+export async function scheduleRound(roundId: string, scheduledSendAt: string, sendWindow?: string | null) {
+  const { data: round } = await supabaseAdmin.from("loop_rounds").select("status").eq("id", roundId).single();
+  if (!round) throw new Error("round not found");
+  if (round.status !== "prepared") throw new Error(`can only schedule a prepared round (is ${round.status})`);
+  const when = new Date(scheduledSendAt);
+  if (Number.isNaN(when.getTime())) throw new Error("invalid scheduled time");
+  const win = sendWindow ?? deriveWindow(when);
+  const { error } = await supabaseAdmin.from("loop_rounds")
+    .update({ scheduled_send_at: when.toISOString(), send_window: win })
+    .eq("id", roundId);
+  if (error) throw new Error(error.message);
+  return { round_id: roundId, scheduled_send_at: when.toISOString(), send_window: win };
+}
+
+// Cron entrypoint: fire every prepared round whose scheduled time has passed.
+export async function sendDueRounds(nowIso?: string) {
+  const now = nowIso ?? new Date().toISOString();
+  const { data: due } = await supabaseAdmin.from("loop_rounds")
+    .select("id")
+    .eq("status", "prepared")
+    .not("scheduled_send_at", "is", null)
+    .lte("scheduled_send_at", now);
+  const results: Array<{ round_id: string; sent?: number; failed?: number; error?: string }> = [];
+  for (const r of (due ?? []) as Array<{ id: string }>) {
+    try { results.push(await sendRound(r.id)); }
+    catch (e) { results.push({ round_id: r.id, error: e instanceof Error ? e.message : "send failed" }); }
+  }
+  return { fired: results.length, results };
+}
+
+type FullStat = { arm: string; n: number; lift_pp: number; conversion_rate: number };
+export type SendTimeEntry = { send_window: string; rounds: number; recipients: number; avg_lift_pp: number; avg_order_rate: number };
+
+// Pool measured rounds by the window they were sent in → learn the best time.
+export async function getSendTimeLeaderboard(loopKey: LoopKey = "winback"): Promise<SendTimeEntry[]> {
+  const { data: rounds } = await supabaseAdmin.from("loop_rounds")
+    .select("send_window, stats")
+    .eq("loop_key", loopKey).eq("status", "measured").not("send_window", "is", null);
+
+  type Agg = { n: number; liftW: number; orderW: number; rounds: number };
+  const agg = new Map<string, Agg>();
+  for (const r of (rounds ?? []) as Array<{ send_window: string | null; stats: FullStat[] | null }>) {
+    if (!r.send_window || !r.stats) continue;
+    let roundN = 0, liftW = 0, orderW = 0;
+    for (const s of r.stats) {
+      if (s.arm === "holdout") continue;
+      roundN += s.n; liftW += (s.lift_pp ?? 0) * s.n; orderW += (s.conversion_rate ?? 0) * s.n;
+    }
+    if (roundN === 0) continue;
+    const e = agg.get(r.send_window) ?? { n: 0, liftW: 0, orderW: 0, rounds: 0 };
+    e.n += roundN; e.liftW += liftW; e.orderW += orderW; e.rounds += 1;
+    agg.set(r.send_window, e);
+  }
+  const out: SendTimeEntry[] = [...agg.entries()].map(([w, e]) => ({
+    send_window: w, rounds: e.rounds, recipients: e.n,
+    avg_lift_pp: +(e.liftW / Math.max(1, e.n)).toFixed(1),
+    avg_order_rate: +(e.orderW / Math.max(1, e.n)).toFixed(1),
+  }));
+  out.sort((a, b) => b.avg_lift_pp - a.avg_lift_pp);
+  return out;
+}
+
+// Suggest the next send window: best proven (enough evidence) → else explore an
+// untested window → else an F&B-sensible default.
+export async function proposeSendWindow(loopKey: LoopKey = "winback"): Promise<{ window: string; reason: string }> {
+  const lb = await getSendTimeLeaderboard(loopKey);
+  const best = lb.find((e) => e.recipients >= CHAMPION_MIN_RECIPIENTS);
+  if (best) return { window: best.send_window, reason: `Best window so far: ${best.avg_lift_pp >= 0 ? "+" : ""}${best.avg_lift_pp}pp over ${best.recipients.toLocaleString()} sent.` };
+  const tested = new Set(lb.map((e) => e.send_window));
+  const untested = SEND_WINDOWS.find((w) => !tested.has(w));
+  if (untested) return { window: untested, reason: "New window — never tested yet." };
+  return { window: "weekday_evening", reason: "Default — F&B evening peak." };
 }
