@@ -44,6 +44,7 @@ function expiresLabel(iso: string | null | undefined): string | null {
 function toneFor(v: Voucher): "gold" | "terracotta" {
   if (v.source_type === "welcome" || v.source_type === "birthday") return "gold";
   if (v.source_type === "mystery" || v.source_type === "mission") return "gold";
+  if (v.source_type === "campaign") return "gold";
   return "terracotta";
 }
 
@@ -56,6 +57,7 @@ function eyebrowFor(v: Voucher): string {
     case "referral":          return "Referral";
     case "points_redemption": return "Bean reward";
     case "promo":             return "Promo";
+    case "campaign":          return "Welcome back";
     default:                  return "Reward";
   }
 }
@@ -87,7 +89,7 @@ export function VoucherRail() {
           list.filter(
             (v) =>
               (v.status === "active" || !v.status) &&
-              ["mystery", "manual", "birthday"].includes(v.source_type ?? ""),
+              ["mystery", "manual", "birthday", "campaign"].includes(v.source_type ?? ""),
           ),
         );
       })

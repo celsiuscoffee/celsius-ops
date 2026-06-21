@@ -21,7 +21,8 @@ export type VoucherSource =
   | "manual"
   | "points_redemption"
   | "welcome"
-  | "promo";
+  | "promo"
+  | "campaign";
 
 /** Discount mechanic on a voucher. Mirrors the DB CHECK constraint
  *  on voucher_templates.discount_type. */
