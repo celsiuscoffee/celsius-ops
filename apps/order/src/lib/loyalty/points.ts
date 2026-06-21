@@ -169,6 +169,19 @@ export async function earnLoyaltyPoints(
     const cappedCouponMul = Math.min(couponMultiplier, 20);
     const effectivePoints = Math.max(0, Math.round(points * cappedCouponMul));
 
+    // Net RM spent on this order (total − SST), in ringgit — drives the
+    // member_brands.total_spent increment in the RPC. Without this the pickup
+    // earn path left total_spent at 0 (only the in-store path wrote it), so the
+    // member "Spent" stat undercounted every pickup customer.
+    const { data: orderRow } = await supabase
+      .from("orders")
+      .select("total, sst_amount")
+      .eq("id", orderId)
+      .maybeSingle();
+    const spendRm = orderRow
+      ? Math.max(0, (Number(orderRow.total ?? 0) - Number(orderRow.sst_amount ?? 0))) / 100
+      : 0;
+
     // Atomic increment + ledger write via add_loyalty_points RPC.
     // Replaces an OCC retry pattern where a missed retry was silently
     // dropped — caller never knew points didn't land. The RPC raises
@@ -183,6 +196,7 @@ export async function earnLoyaltyPoints(
       p_order_id:   orderId,
       p_multiplier: cappedCouponMul,
       p_description: "Points earned for pickup order",
+      p_spend:      spendRm,
     });
     if (rpcErr) {
       console.error("[loyalty] earnLoyaltyPoints: add_loyalty_points rpc error", rpcErr.message);
