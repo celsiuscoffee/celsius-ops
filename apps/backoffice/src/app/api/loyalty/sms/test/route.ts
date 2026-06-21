@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendSMS, getSMSProvider } from '@/lib/loyalty/sms';
+import { sendSMS, getSMSProvider, providerAutoPrependsSender, getActiveSmsProvider } from '@/lib/loyalty/sms';
 import { supabaseAdmin } from '@/lib/loyalty/supabase';
 import { requireAuth } from '@/lib/auth';
 
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'phone and message required' }, { status: 400 });
     }
 
-    const provider = (process.env.SMS_PROVIDER || 'console').trim();
+    const provider = await getActiveSmsProvider();
     const apiKey = process.env.SMS123_API_KEY;
     const email = process.env.SMS123_EMAIL;
 
@@ -46,13 +46,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Auto-prepend RM0 prefix
+    // Auto-prepend RM0 prefix.
+    // SMS Niaga adds its own "RM0.00 <SenderID>:" at the gateway, so skip ours there.
     const senderLabel = sender_id || 'CelsiusCoffee';
     const SMS_PREFIX = `RM0 [${senderLabel}] `;
-    const finalMessage = message.startsWith('RM0 ') ? message : `${SMS_PREFIX}${message}`;
+    const finalMessage =
+      providerAutoPrependsSender(provider) || message.startsWith('RM0 ') ? message : `${SMS_PREFIX}${message}`;
 
-    // Send the test SMS
-    const result = await sendSMS(phone, finalMessage, sender_id ? { senderId: sender_id } : undefined);
+    // Send the test SMS. SMS Niaga needs a registered Sender ID, so don't forward a free-text label.
+    const result = await sendSMS(phone, finalMessage, {
+      provider,
+      ...(!providerAutoPrependsSender(provider) && sender_id ? { senderId: sender_id } : {}),
+    });
 
     // Log to sms_logs
     await supabaseAdmin.from('sms_logs').insert({
@@ -90,6 +95,7 @@ export async function GET(request: NextRequest) {
 
     const diagnostics: Record<string, unknown> = {
       provider,
+      active_provider: await getActiveSmsProvider(),
       provider_raw_length: (process.env.SMS_PROVIDER || '').length,
       provider_trimmed_length: provider.length,
       api_key_set: !!apiKey,
