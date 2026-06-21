@@ -79,6 +79,10 @@
     {
       "path": "/api/cron/grant-monthly",
       "schedule": "0 1 1 * *"
+    },
+    {
+      "path": "/api/cron/pos-poster-autopilot",
+      "schedule": "0 23 * * *"
     }
   ]
 }
