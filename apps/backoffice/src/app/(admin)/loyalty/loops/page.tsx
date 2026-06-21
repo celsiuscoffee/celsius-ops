@@ -8,8 +8,9 @@
 //             → review → POST /send (fire SMS per arm) → wait window
 //             → POST /measure (per-arm conversion + lift vs holdout)
 //
-// Agreed economics (round 1): SMS budget RM400/round, scale an arm only at
-// >=3pp order-rate lift over the holdout, margins read at 72% GP.
+// Agreed economics: start small (RM200/round SMS) then scale; scale an arm
+// only at >=3pp order-rate lift over the holdout, margins read at 72% GP.
+// The per-round budget caps recipient count so spend can't run over.
 // ============================================================================
 
 import { useState, useEffect, useCallback } from "react";
@@ -21,7 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 
 // ---- agreed knobs -----------------------------------------------------------
-const BUDGET_PER_ROUND_RM = 400;
+const DEFAULT_BUDGET_RM = 200; // round-1 default; raise to scale
 const SUCCESS_BAR_PP = 3;
 const SMS_COST_RM = 0.1;
 const GP = 0.72; // gross-profit rate for margin read
@@ -153,7 +154,7 @@ export default function LoopsPage() {
 
       {/* agreed economics banner */}
       <div className="mb-6 flex flex-wrap gap-x-6 gap-y-1 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-        <span><span className="text-gray-500">SMS budget</span> <strong>{rm(BUDGET_PER_ROUND_RM)}/round</strong></span>
+        <span><span className="text-gray-500">SMS budget</span> <strong>set per round</strong> (start {rm(DEFAULT_BUDGET_RM)}, scale up)</span>
         <span><span className="text-gray-500">Scale an arm at</span> <strong>≥{SUCCESS_BAR_PP}pp lift</strong> vs holdout</span>
         <span><span className="text-gray-500">Margin read at</span> <strong>{Math.round(GP * 100)}% GP</strong></span>
         <span><span className="text-gray-500">SMS</span> <strong>{rm(SMS_COST_RM)}</strong>/msg · rewards self-funding (need a paid order)</span>
@@ -193,9 +194,6 @@ export default function LoopsPage() {
             ))}
             <span>Est. SMS cost: <strong>{rm(lastPreview.est_sms_cost_rm)}</strong></span>
           </div>
-          {lastPreview.est_sms_cost_rm > BUDGET_PER_ROUND_RM && (
-            <div className="mt-1 flex items-center gap-1 text-red-700"><AlertTriangle className="h-3.5 w-3.5" /> Over the {rm(BUDGET_PER_ROUND_RM)} budget — narrow the lapsed window before sending.</div>
-          )}
         </div>
       )}
 
@@ -254,9 +252,13 @@ function NewRoundCard({ busy, onPrepare }: { busy: boolean; onPrepare: (p: unkno
   const [maxD, setMaxD] = useState(60);
   const [holdout, setHoldout] = useState(20);
   const [windowD, setWindowD] = useState(7);
+  const [budget, setBudget] = useState(DEFAULT_BUDGET_RM);
   const [arms, setArms] = useState<ArmPreset[]>(ARM_PRESETS.map((a) => ({ ...a })));
 
   const activeArms = arms.filter((a) => a.on);
+  // Budget → recipient cap. SMS only hits treatment, so reach = treatment / (1 - holdout).
+  const maxSms = Math.max(0, Math.floor(budget / SMS_COST_RM));
+  const maxRecipients = Math.floor(maxSms / Math.max(0.01, 1 - holdout / 100));
 
   return (
     <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -265,12 +267,16 @@ function NewRoundCard({ busy, onPrepare }: { busy: boolean; onPrepare: (p: unkno
         <h2 className="text-lg font-semibold">New round</h2>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="mb-2 grid grid-cols-2 gap-4 sm:grid-cols-5">
         <Field label="Lapsed from (days)"><NumInput v={minD} set={setMinD} /></Field>
         <Field label="Lapsed to (days)"><NumInput v={maxD} set={setMaxD} /></Field>
         <Field label="Holdout %"><NumInput v={holdout} set={setHoldout} /></Field>
         <Field label="Attribution window (days)"><NumInput v={windowD} set={setWindowD} /></Field>
+        <Field label="SMS budget (RM)"><NumInput v={budget} set={setBudget} /></Field>
       </div>
+      <p className="mb-4 text-xs text-gray-500">
+        Budget {rm(budget)} → up to <strong>{maxSms.toLocaleString()}</strong> SMS (~{maxRecipients.toLocaleString()} reached incl. holdout). Caps the round if the lapsed segment is larger. Scale later by raising the budget. Exact cost shown after prepare.
+      </p>
 
       <div className="mb-2 text-sm font-medium text-gray-700">Offer arms to test ({activeArms.length} on)</div>
       <div className="space-y-2">
@@ -301,6 +307,7 @@ function NewRoundCard({ busy, onPrepare }: { busy: boolean; onPrepare: (p: unkno
         onClick={() => onPrepare({
           arms: activeArms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message })),
           holdoutPct: holdout, minDaysLapsed: minD, maxDaysLapsed: maxD, attributionWindowDays: windowD,
+          maxRecipients,
         })}
         className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#A2492C] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
       >
@@ -333,7 +340,6 @@ function RoundCard({ round, busy, onSend, onMeasure }: {
   round: Round; busy: boolean; onSend: () => void; onMeasure: () => void;
 }) {
   const est = estSmsCost(round);
-  const overBudget = est != null && est > BUDGET_PER_ROUND_RM;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -361,7 +367,7 @@ function RoundCard({ round, busy, onSend, onMeasure }: {
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-amber-900">
             <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" /> vouchers issued, awaiting send</span>
-            {est != null && <span>Est. SMS cost: <strong>{rm(est)}</strong> {overBudget && <span className="text-red-700">(over {rm(BUDGET_PER_ROUND_RM)})</span>}</span>}
+            {est != null && <span>Est. SMS cost: <strong>{rm(est)}</strong></span>}
           </div>
           <button
             disabled={busy}

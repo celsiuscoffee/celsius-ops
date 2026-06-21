@@ -119,6 +119,7 @@ export async function prepareWinbackRound(opts: {
   attributionWindowDays?: number;
   createdBy?: string;
   suppressPhones?: string[]; // PDPA opt-outs / recent contacts
+  maxRecipients?: number; // cap total segment size to fit an SMS budget (start small, scale later)
 }) {
   const holdoutPct = opts.holdoutPct ?? 20;
   const minD = opts.minDaysLapsed ?? 30;
@@ -131,6 +132,11 @@ export async function prepareWinbackRound(opts: {
   let segment = await lapsedSegment(minD, maxD);
   segment = segment.filter((m) => !suppress.has(m.phone));
   segment = shuffle(segment);
+  // Budget cap — take the first N of the shuffled (random) segment so the
+  // SMS spend stays within the chosen budget. Scaling later = raise the cap.
+  const rawReach = segment.length;
+  const capped = !!(opts.maxRecipients && opts.maxRecipients > 0 && opts.maxRecipients < rawReach);
+  if (capped) segment = segment.slice(0, opts.maxRecipients);
 
   // next round number for this loop
   const { data: last } = await supabaseAdmin
@@ -148,7 +154,7 @@ export async function prepareWinbackRound(opts: {
   const holdout = segment.slice(0, holdoutN);
   const treatment = segment.slice(holdoutN);
 
-  const segmentLabel = `Lapsed ${minD}–${maxD}d (${segment.length} reachable, ${holdoutPct}% holdout)`;
+  const segmentLabel = `Lapsed ${minD}–${maxD}d (${segment.length} reachable, ${holdoutPct}% holdout)${capped ? ` · budget-capped from ${rawReach}` : ""}`;
 
   await supabaseAdmin.from("loop_rounds").insert({
     id: roundId,

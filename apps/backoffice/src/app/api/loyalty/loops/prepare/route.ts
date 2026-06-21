@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
       maxDaysLapsed: body.maxDaysLapsed,
       attributionWindowDays: body.attributionWindowDays,
       suppressPhones: body.suppressPhones,
+      maxRecipients: body.maxRecipients,
       createdBy: auth.user?.id,
     });
     return NextResponse.json(preview);
