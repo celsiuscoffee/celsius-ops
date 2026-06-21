@@ -2,6 +2,36 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { CATEGORY_GROUPS } from "./v2";
 
 export type CartLine = { product_id: string; quantity: number; total_sen: number };
+export type NudgeVariant = "treatment" | "holdout";
+
+/**
+ * Member-level holdout for measuring the nudge's incremental lift. Reads the
+ * `challenge_nudge_holdout` flag ({enabled, pct}); assigns + stores a stable
+ * variant per member on first eligible cart moment (random by pct). Holdout
+ * members never see the nudge — the report compares their AOV/completion to
+ * treatment. Defaults to "treatment" when the flag is off (everyone sees it).
+ */
+export async function resolveNudgeVariant(memberId: string): Promise<NudgeVariant> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data: flag } = await supabase
+      .from("app_settings").select("value").eq("key", "challenge_nudge_holdout").maybeSingle();
+    const cfg = (flag?.value ?? {}) as { enabled?: boolean; pct?: number };
+    if (!cfg.enabled) return "treatment";
+    const pct = Math.max(0, Math.min(100, Math.round(cfg.pct ?? 20)));
+    if (pct === 0) return "treatment";
+
+    const { data: row } = await supabase
+      .from("challenge_nudge_assignment").select("variant").eq("member_id", memberId).maybeSingle();
+    if (row?.variant === "treatment" || row?.variant === "holdout") return row.variant;
+
+    const variant: NudgeVariant = Math.random() * 100 < pct ? "holdout" : "treatment";
+    await supabase.from("challenge_nudge_assignment").insert({ member_id: memberId, variant });
+    return variant;
+  } catch {
+    return "treatment"; // never block the nudge on a measurement error
+  }
+}
 
 export type CartChallenge = {
   title: string;       // mission title (internal-ish, e.g. "Make it a Meal")
