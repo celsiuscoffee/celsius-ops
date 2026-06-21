@@ -109,9 +109,19 @@ const DEFAULT_TOPK: Record<Placement, number> = { "pos-display": 3, home: 5, spl
 // keeps its food-attach logic untouched (we WANT to push a bite in-store).
 const RESERVE_DRINKS: Record<Placement, number> = { home: 2, splash: 0, "pos-display": 0 };
 
-// Group key for a poster row: POS rotates by day-part round; app placements
-// usually have no round (one '__all__' group) but support rounds once tagged.
-const GROUP_ALL = "__all__";
+// A poster's eligibility window — which day-part rounds it may appear in:
+//   • rounds[] set     → exactly those rounds (the day-part window, e.g. a
+//                        pasta tagged lunch→supper, breakfast food all morning)
+//   • else round (one) → that single round (legacy + POS)
+//   • else (both null) → every round (always-on anchor)
+function windowOf(po: { round: string | null; rounds: string[] | null }): Round[] {
+  if (po.rounds && po.rounds.length) {
+    return po.rounds.filter((r): r is Round => (ROUNDS as string[]).includes(r));
+  }
+  if (po.round && (ROUNDS as string[]).includes(po.round)) return [po.round as Round];
+  if (po.round) return [];
+  return ROUNDS;
+}
 
 /**
  * Build the active/sort_order plan for one placement. Pure read — returns
@@ -134,7 +144,7 @@ export async function planPosterRotation(
 
   let postersQuery = supabase
     .from("splash_posters")
-    .select("id,title,round,product_id")
+    .select("id,title,round,rounds,product_id")
     .eq("brand_id", "brand-celsius")
     .eq("placement", placement);
   // POS posters are always round-tagged; app posters may be round-less.
@@ -166,30 +176,48 @@ export async function planPosterRotation(
     prodById.set(p.id, { name: p.name, category: p.category, price: Number(p.price ?? 0) });
   }
 
-  // Group posters by round (or one '__all__' bucket for round-less app posters).
-  const postersByGroup = new Map<string, { id: string; title: string | null; product_id: string | null; round: string | null }[]>();
+  // Normalise rows once, keeping each poster's eligibility window.
+  type Row = { id: string; title: string | null; product_id: string | null; round: string | null; rounds: string[] | null };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
-  for (const po of (postersRes.data ?? []) as any[]) {
-    const key = po.round ?? GROUP_ALL;
-    const arr = postersByGroup.get(key) ?? [];
-    arr.push({ id: po.id, title: po.title ?? null, product_id: po.product_id ?? null, round: po.round ?? null });
-    postersByGroup.set(key, arr);
+  const rows: Row[] = ((postersRes.data ?? []) as any[]).map((po) => ({
+    id: po.id,
+    title: po.title ?? null,
+    product_id: po.product_id ?? null,
+    round: po.round ?? null,
+    rounds: (po.rounds ?? null) as string[] | null,
+  }));
+
+  // Bucket posters by the rounds they're eligible to appear in (a poster with a
+  // multi-round window lands in several buckets; an always-on poster in all).
+  const eligibleByRound = new Map<Round, Row[]>();
+  for (const po of rows) {
+    for (const r of windowOf(po)) {
+      const arr = eligibleByRound.get(r) ?? [];
+      arr.push(po);
+      eligibleByRound.set(r, arr);
+    }
   }
 
-  const decisions: PosterDecision[] = [];
-  for (const [groupKey, posters] of postersByGroup) {
-    if (!posters.length) continue;
-    const round = (groupKey === GROUP_ALL ? null : (groupKey as Round));
-    const drinkHeavy = round ? (roundStats[round]?.single_rate ?? 0) >= DRINK_HEAVY_SINGLE_RATE : false;
+  const minDrinks = RESERVE_DRINKS[placement] ?? 0;
+  // active = union of each round's top-K (with a per-round drink reserve so a
+  // round's carousel isn't all-food). A poster wins a slot if it ranks top-K in
+  // ANY round it's eligible for; the reader then shows active ∩ current round.
+  const activeIds = new Set<string>();
+  const bestScore = new Map<string, number>();
 
-    const scored = posters.map((po) => {
+  for (const round of ROUNDS) {
+    const pool = eligibleByRound.get(round);
+    if (!pool || !pool.length) continue;
+    const drinkHeavy = (roundStats[round]?.single_rate ?? 0) >= DRINK_HEAVY_SINGLE_RATE;
+
+    const scored = pool.map((po) => {
       const prod = po.product_id ? prodById.get(po.product_id) : null;
       const priceRM = prod?.price ?? 0;
       // Fallback to a 35%-COGS assumption when a poster isn't linked / cost unknown.
       const costRM = prod ? costByName.get(prod.name.trim().toLowerCase()) ?? priceRM * 0.35 : priceRM * 0.35;
       const marginRM = Math.max(0, priceRM - costRM);
       const isFood = prod?.category ? FOOD_CATEGORIES.has(prod.category) : false;
-      const units = po.product_id ? unitsByRoundProduct.get(`${round ?? ""}|${po.product_id}`) ?? 0 : 0;
+      const units = po.product_id ? unitsByRoundProduct.get(`${round}|${po.product_id}`) ?? 0 : 0;
       const measured = measuredByPoster.get(po.id) ?? { orders: 0, aov: 0 };
       return { po, prod, priceRM, marginRM, isFood, units, measured, attach: isFood && drinkHeavy };
     });
@@ -205,64 +233,49 @@ export async function planPosterRotation(
         const priceN = s.priceRM / maxPrice;
         const unitsN = s.units / maxUnits;
         let score: number;
-        let reason: string;
         if (opts.mode === "control") {
           score = unitsN;
-          reason = "popularity (control)";
         } else {
           const heuristic = 0.45 * marginN + 0.3 * (s.attach ? 1 : 0) + 0.15 * priceN + 0.1 * unitsN;
-          const bits: string[] = [];
-          if (s.attach) bits.push("fills drink-only gap");
-          if (marginN > 0.7) bits.push(`RM${s.marginRM.toFixed(2)} margin`);
-          if (priceN > 0.7) bits.push("premium anchor");
-          if (!s.prod) bits.push("unlinked");
-          // Blend in MEASURED order AOV as attributed orders accrue (app only):
+          // Blend MEASURED order AOV as attributed orders accrue (app only):
           // weight ramps 0→1 over the first ~10 orders, then measured dominates.
           const w = Math.min(s.measured.orders / 10, 1);
-          if (w > 0) {
-            score = w * (s.measured.aov / maxMeasuredAov) + (1 - w) * heuristic;
-            bits.unshift(`measured AOV RM${s.measured.aov.toFixed(2)} (${s.measured.orders} ord)`);
-          } else {
-            score = heuristic;
-          }
-          reason = bits.join(", ") || "balanced";
+          score = w > 0 ? w * (s.measured.aov / maxMeasuredAov) + (1 - w) * heuristic : heuristic;
         }
-        return { s, score, reason };
+        return { s, score };
       })
       .sort((a, b) => b.score - a.score);
 
-    // Active set = top-K by score, but guarantee RESERVE_DRINKS drink slots:
-    // swap the lowest-scoring foods in the top-K for the best benched drinks so
-    // the carousel isn't 100% food. No-op when the natural top-K already has
-    // enough drinks, or when the pool has no benched drinks to promote.
-    const activeIds = new Set(ranked.slice(0, topK).map((r) => r.s.po.id));
-    const minDrinks = RESERVE_DRINKS[placement] ?? 0;
+    // Top-K for this round, with the drink reserve (swap lowest-scoring foods
+    // in the top-K for the best benched drinks). No-op without enough drinks.
+    const chosen = new Set(ranked.slice(0, topK).map((r) => r.s.po.id));
     if (minDrinks > 0) {
       const top = ranked.slice(0, topK);
       const need = minDrinks - top.filter((r) => !r.s.isFood).length;
       if (need > 0) {
         const benchDrinks = ranked.slice(topK).filter((r) => !r.s.isFood).slice(0, need);
-        const dropFoods = top
-          .filter((r) => r.s.isFood)
-          .sort((a, b) => a.score - b.score)
-          .slice(0, benchDrinks.length);
-        for (const r of dropFoods) activeIds.delete(r.s.po.id);
-        for (const r of benchDrinks) activeIds.add(r.s.po.id);
+        const dropFoods = top.filter((r) => r.s.isFood).sort((a, b) => a.score - b.score).slice(0, benchDrinks.length);
+        for (const r of dropFoods) chosen.delete(r.s.po.id);
+        for (const r of benchDrinks) chosen.add(r.s.po.id);
       }
     }
-
-    ranked.forEach((r, i) => {
-      decisions.push({
-        round,
-        posterId: r.s.po.id,
-        title: r.s.po.title,
-        productId: r.s.po.product_id,
-        active: activeIds.has(r.s.po.id),
-        sortOrder: (i + 1) * 10,
-        score: Math.round(r.score * 1000) / 1000,
-        reason: r.reason,
-      });
-    });
+    for (const id of chosen) activeIds.add(id);
+    for (const r of ranked) bestScore.set(r.s.po.id, Math.max(bestScore.get(r.s.po.id) ?? 0, r.score));
   }
+
+  // One decision per poster: active if it won a slot in any eligible round;
+  // sort_order by overall best score (the reader caps + orders the per-round
+  // eligible subset by this, so the strongest posters surface first).
+  const ranked = rows.slice().sort((a, b) => (bestScore.get(b.id) ?? 0) - (bestScore.get(a.id) ?? 0));
+  const decisions: PosterDecision[] = ranked.map((po, i) => ({
+    round: po.round ? (po.round as Round) : null,
+    posterId: po.id,
+    title: po.title,
+    productId: po.product_id,
+    active: activeIds.has(po.id),
+    sortOrder: (i + 1) * 10,
+    score: Math.round((bestScore.get(po.id) ?? 0) * 1000) / 1000,
+    reason: activeIds.has(po.id) ? "top-K in an eligible round" : "benched",
+  }));
   return decisions;
 }

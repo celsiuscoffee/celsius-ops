@@ -36,13 +36,11 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from("splash_posters")
-      .select("id, image_url, title, deeplink, duration_ms, starts_at, ends_at, sort_order")
+      .select("id, image_url, title, deeplink, duration_ms, starts_at, ends_at, sort_order, round, rounds")
       .eq("brand_id", brandId)
       .eq("active", true)
       // Home carousel only — splash posters stay on the launch screen.
       .eq("placement", "home")
-      // Recurring day-part round: round-less shows always; tagged shows in-round.
-      .or(round ? `round.is.null,round.eq.${round}` : "round.is.null")
       // Operator-controlled sequence first (lower number = appears earlier
       // in the carousel rotation). NULL sort_order is treated as "unordered"
       // and falls to the back of the rotation, ordered by recency.
@@ -54,12 +52,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ posters: [] }, { status: 200 });
     }
 
+    // Day-part window: a poster shows when the current round is in its `rounds`
+    // set; if `rounds` is empty it falls back to the legacy single `round`
+    // (and a null round = always-on). Done in JS so the multi-round array is
+    // simple to evaluate (PostgREST array-contains + legacy fallback is messy).
+    const inWindow = (p: { round: string | null; rounds: string[] | null }): boolean => {
+      if (p.rounds && p.rounds.length) return round !== "" && p.rounds.includes(round);
+      if (p.round) return p.round === round;
+      return true; // always-on
+    };
+
+    const HOME_CAP = 6; // keep the carousel tight even when many posters qualify
     const posters = (data ?? [])
       .filter((p) => {
         const startOk = !p.starts_at || p.starts_at <= now;
         const endOk   = !p.ends_at   || p.ends_at   >= now;
         return startOk && endOk;
       })
+      .filter((p) => inWindow(p as { round: string | null; rounds: string[] | null }))
+      .slice(0, HOME_CAP)
       .map((p) => ({
         id:         p.id as string,
         imageUrl:   p.image_url as string,

@@ -32,13 +32,11 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from("splash_posters")
-      .select("id, image_url, deeplink, duration_ms, starts_at, ends_at")
+      .select("id, image_url, deeplink, duration_ms, starts_at, ends_at, round, rounds")
       .eq("brand_id", brandId)
       .eq("active", true)
       // Splash surface only — home posters stay on the home carousel.
       .eq("placement", "splash")
-      // Recurring day-part round: round-less shows always; tagged shows in-round.
-      .or(round ? `round.is.null,round.eq.${round}` : "round.is.null")
       .order("updated_at", { ascending: false });
 
     if (error) {
@@ -46,11 +44,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ poster: null }, { status: 200 });
     }
 
-    // Pick the first active poster whose schedule window includes now()
+    // Day-part window: shows when the current round is in `rounds`; empty falls
+    // back to the legacy single `round` (null round = always-on).
+    const inWindow = (p: { round: string | null; rounds: string[] | null }): boolean => {
+      if (p.rounds && p.rounds.length) return round !== "" && p.rounds.includes(round);
+      if (p.round) return p.round === round;
+      return true;
+    };
+
+    // Pick the first active poster in-window whose schedule includes now()
     const poster = (data ?? []).find((p) => {
       const startOk = !p.starts_at || p.starts_at <= now;
       const endOk = !p.ends_at || p.ends_at >= now;
-      return startOk && endOk;
+      return startOk && endOk && inWindow(p as { round: string | null; rounds: string[] | null });
     });
 
     return NextResponse.json({
