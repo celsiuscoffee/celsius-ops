@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { bestCartChallenge, type CartLine } from "@/lib/loyalty/cart-challenge";
+import { bestCartChallenge, resolveNudgeVariant, type CartLine } from "@/lib/loyalty/cart-challenge";
 
 // POST /api/loyalty/me/cart-challenge
 // Body: { member: loyaltyId, items: [{ product_id, quantity, total_sen }] }
@@ -22,6 +22,14 @@ export async function POST(req: NextRequest) {
           }))
       : [];
     const challenge = await bestCartChallenge(member, items);
+    // Holdout: a random slice of members never see the nudge so we can measure
+    // its incremental lift (treatment vs holdout AOV/completion). Only assign a
+    // variant once there's actually a nudge to withhold.
+    if (challenge && member) {
+      const variant = await resolveNudgeVariant(member);
+      if (variant === "holdout") return NextResponse.json({ challenge: null, variant });
+      return NextResponse.json({ challenge, variant });
+    }
     return NextResponse.json({ challenge });
   } catch (err) {
     console.error("[cart-challenge] route error:", err);
