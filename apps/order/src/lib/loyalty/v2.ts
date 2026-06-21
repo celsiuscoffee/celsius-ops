@@ -483,7 +483,7 @@ type OrderForMission = {
 // Group fine-grained product categories into the broad buckets the
 // challenge engine cares about. New menu categories can be added here
 // without touching mission seed JSON.
-const CATEGORY_GROUPS: Record<string, ReadonlyArray<string>> = {
+export const CATEGORY_GROUPS: Record<string, ReadonlyArray<string>> = {
   drinks: [
     "classic", "flavoured", "mocha", "artisan-choc", "artisan-matcha",
     "fruit-tea", "gourmet-tea", "mocktails",
