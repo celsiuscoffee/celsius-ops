@@ -265,7 +265,7 @@ export default function DashboardPage() {
 function Stat({ label, value, sub, good, progress }: { label: string; value: string; sub?: string; good?: boolean; progress?: number }) {
   const tone = good === undefined ? "" : good ? "text-emerald-600" : "text-red-600";
   return (
-    <div className="rounded-lg bg-muted/50 p-3">
+    <div className="rounded-lg border bg-card p-4">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={`text-2xl font-medium leading-tight ${tone}`}>{value}</div>
       {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
