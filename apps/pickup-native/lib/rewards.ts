@@ -290,6 +290,7 @@ export function calcRewardDiscount(
   reward: {
     discount_type?: string | null;
     discount_value?: number | null;
+    max_discount_value?: number | null;
     bogo_buy_qty?: number;
     bogo_free_qty?: number;
     combo_price_sen?: number | null;
@@ -383,7 +384,12 @@ export function calcRewardDiscount(
     return freed;
   }
   if ((t === "percent" || t === "percentage") && reward.discount_value) {
-    return subtotal * (reward.discount_value / 100);
+    const raw = subtotal * (reward.discount_value / 100);
+    // Cap at max_discount_value (SEN) when set — e.g. "20% off, max RM10".
+    // Mirrors @celsius/shared computeVoucherDiscount's max_discount_value_sen.
+    return reward.max_discount_value != null
+      ? Math.min(raw, reward.max_discount_value / 100)
+      : raw;
   }
   if (t === "flat" && reward.discount_value) {
     return reward.discount_value / 100;
