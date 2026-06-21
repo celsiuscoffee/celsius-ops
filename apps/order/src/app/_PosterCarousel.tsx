@@ -37,22 +37,48 @@ function logPosterTap(posterId: string, deeplink: string | null) {
 
 export function PosterCarousel({ posters }: { posters: Poster[] }) {
   const [idx, setIdx] = useState(0);
+  // Server render gives a tight, day-part set (same for everyone, cached). Once
+  // mounted, if the customer is signed in we swap in a PERSONALIZED set
+  // (high-AOV items they haven't tried) from /api/home-posters?member=. Falls
+  // back silently to the server set for guests or on any error.
+  const [list, setList] = useState<Poster[]>(posters);
 
   useEffect(() => {
-    if (posters.length <= 1) return;
+    let loyaltyId: string | null = null;
+    try {
+      const raw = localStorage.getItem("celsius-pickup");
+      if (raw) loyaltyId = (JSON.parse(raw)?.state?.loyaltyId as string | undefined) ?? null;
+    } catch { /* ignore */ }
+    if (!loyaltyId) return;
+    let cancelled = false;
+    fetch(`/api/home-posters?member=${encodeURIComponent(loyaltyId)}`)
+      .then((r) => r.json())
+      .then((j) => {
+        const next = Array.isArray(j?.posters)
+          ? (j.posters as { id: string; imageUrl: string; title: string | null; deeplink: string | null }[])
+              .map((p) => ({ id: p.id, image_url: p.imageUrl, title: p.title, deeplink: p.deeplink }))
+          : [];
+        if (!cancelled && next.length) { setList(next); setIdx(0); }
+      })
+      .catch(() => { /* keep server set */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (list.length <= 1) return;
     const id = window.setInterval(() => {
-      setIdx((i) => (i + 1) % posters.length);
+      setIdx((i) => (i + 1) % list.length);
     }, 5000);
     return () => window.clearInterval(id);
-  }, [posters.length]);
+  }, [list.length]);
 
-  if (posters.length === 0) {
+  if (list.length === 0) {
     return <div className="relative w-full aspect-[1.07] bg-[#160800]" />;
   }
 
   return (
     <div className="relative w-full aspect-[1.07] bg-[#160800] overflow-hidden">
-      {posters.map((p, i) => (
+      {list.map((p, i) => (
         <Link
           key={p.id}
           href={p.deeplink || "/menu"}
@@ -74,9 +100,9 @@ export function PosterCarousel({ posters }: { posters: Poster[] }) {
           />
         </Link>
       ))}
-      {posters.length > 1 && (
+      {list.length > 1 && (
         <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
-          {posters.map((_, i) => (
+          {list.map((_, i) => (
             <span
               key={i}
               className="rounded-full"
