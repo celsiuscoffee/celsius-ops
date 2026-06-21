@@ -7,6 +7,7 @@ import { Gift, Sparkles, Coffee, Tag, Cookie, Ticket } from "lucide-react";
 import { BeansHero } from "./_BeansHero";
 import { ActiveChallenges } from "./_ActiveChallenges";
 import { Claimables } from "./_Claimables";
+import { YourVouchers } from "./_YourVouchers";
 
 type Persisted = {
   state?: {
@@ -123,6 +124,11 @@ export function RewardsView() {
 
       {/* Claimable offers (one-tap welcome / promo / mystery). */}
       <Claimables />
+
+      {/* Held wallet vouchers (mystery / campaign / birthday / manual) —
+          mirrors the native "Yours" wallet so the web rewards screen is
+          at parity. Tapping Use applies the voucher to the next order. */}
+      <YourVouchers />
 
       {/* This week's challenges (3 weekly missions). */}
       <ActiveChallenges />
