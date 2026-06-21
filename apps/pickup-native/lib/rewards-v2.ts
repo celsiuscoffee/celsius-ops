@@ -26,12 +26,19 @@ export type Voucher = {
   stacks_with_beans: boolean;
   // Discount metadata — drives the client-side discount engine when the
   // customer reserves a wallet voucher and proceeds to checkout.
-  discount_type?: "flat" | "percent" | "free_item" | "beans_multiplier" | "none" | null;
+  discount_type?: "flat" | "percent" | "free_item" | "bogo" | "combo" | "override_price" | "beans_multiplier" | "none" | null;
   discount_value?: number | null;
   min_order_value?: number | null;
   applicable_categories?: string[] | null;
   applicable_products?: string[] | null;
   free_product_name?: string | null;
+  // BOGO / combo / override mechanics — resolved from the linked template by
+  // the wallet API (active-vouchers.ts). Needed for the cart discount engine.
+  free_product_ids?: string[] | null;
+  bogo_buy_qty?: number | null;
+  bogo_free_qty?: number | null;
+  combo_price_sen?: number | null;
+  override_price_sen?: number | null;
   // Optional visual overrides — sourced from a linked reward_kind row
   // in the backoffice. When null the native card falls back to the
   // source-bucket theme + Lucide glyph.
