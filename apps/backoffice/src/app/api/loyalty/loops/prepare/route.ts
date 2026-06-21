@@ -2,19 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prepareWinbackRound, type ArmDef } from "@/lib/loyalty/loop-engine";
 
-// Default Win Back arms: Free Tea (cheap foot-in-door) vs B1F1 (purchase-required).
+// Default Win Back arms — sales-driving offer logics compared head to head
+// (every arm needs a real basket; no claim-and-leave freebies):
+//   % discount · flat discount · BOGO. Override via the request body / the
+//   backoffice "Win-back Loops" page.
 const DEFAULT_ARMS: ArmDef[] = [
   {
-    key: "free_tea",
-    label: "Free Tea",
-    voucher_template_id: "1b9a465a-8411-4299-a2e2-8034f2b0ea45",
-    message: "We miss you at Celsius! Your FREE TEA is waiting — claim within 30 days. See you soon!",
+    key: "pct15",
+    label: "15% off RM40+",
+    voucher_template_id: "eb47fd73-42ab-4eb6-ade4-a12f96912d00",
+    message: "We miss you at Celsius! Enjoy 15% off when you spend RM40+. Tap to use — valid 14 days.",
+  },
+  {
+    key: "flat10",
+    label: "RM10 off RM30+",
+    voucher_template_id: "02ca62f1-171d-41d2-b6d6-9ca2d67ca3b9",
+    message: "We miss you at Celsius! Here's RM10 off your next RM30+ order. Tap to use — valid 14 days.",
   },
   {
     key: "b1f1",
-    label: "Buy 1 Free 1",
+    label: "Buy 1 Free 1 drinks",
     voucher_template_id: "ed33eb26-4ead-414d-b1ee-179999a33940",
-    message: "We miss you at Celsius! Buy 1 Free 1 on any drink — bring a friend! Claim within 30 days.",
+    message: "We miss you at Celsius! Buy 1 Free 1 on any drink — bring a friend! Valid 30 days.",
   },
 ];
 

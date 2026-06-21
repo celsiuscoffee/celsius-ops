@@ -32,6 +32,7 @@ import {
   TrendingUp,
   AlertTriangle,
   LineChart,
+  Repeat,
   Star,
   Crown,
   TicketPercent,
@@ -309,6 +310,8 @@ const NAV_SECTIONS: NavSection[] = [
           // Push reminders (auto, triggered) + SMS broadcasts (manual)
           // live as tabs inside this page; no separate nav entries.
           { label: "Engage",    href: "/loyalty/engage",    icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
+          // Win-back SMS loops — multi-arm reactivation with holdout + ROI.
+          { label: "Win-back Loops", href: "/loyalty/loops", icon: <Repeat className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
         ],
       },
     ],
