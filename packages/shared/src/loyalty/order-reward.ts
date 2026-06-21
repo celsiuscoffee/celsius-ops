@@ -50,6 +50,7 @@ type IssuedRewardRow = {
   applicable_categories: string[] | null;
   applicable_products: string[] | null;
   free_product_name: string | null;
+  source_type: string | null;
 };
 
 /** Resolve a catalog / points-shop reward from voucher_templates (by
@@ -176,7 +177,7 @@ export async function resolveOrderReward(args: {
       .select(`
         member_id, status, expires_at, voucher_template_id, min_order_value,
         discount_type, discount_value,
-        applicable_categories, applicable_products, free_product_name
+        applicable_categories, applicable_products, free_product_name, source_type
       `)
       .eq("id", candidateWalletId)
       .maybeSingle<IssuedRewardRow>();
@@ -201,6 +202,30 @@ export async function resolveOrderReward(args: {
         } else {
           spec = inlineSpecFromIssued(voucher);
         }
+        // Daily cap: at most ONE mission free-drink reward redeemed per member
+        // per day. Members can bank several earned free-drink vouchers, but
+        // only burn one a day — so the rewards pace repeat visits instead of
+        // being cleared in a single sitting (the Yousef case: 2 free coffees
+        // in 4 minutes). Only mission free_item vouchers are capped; mystery /
+        // welcome / points rewards are unaffected. The voucher being applied
+        // isn't marked 'used' until post-payment, so this counts only EARLIER
+        // redemptions today and never blocks itself.
+        if (voucher.source_type === "mission" && voucher.discount_type === "free_item") {
+          const dayStr = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10); // MYT day
+          const { count } = await supabase
+            .from("issued_rewards")
+            .select("id", { count: "exact", head: true })
+            .eq("member_id", memberId)
+            .eq("source_type", "mission")
+            .eq("discount_type", "free_item")
+            .eq("status", "used")
+            .gte("redeemed_at", new Date(`${dayStr}T00:00:00+08:00`).toISOString())
+            .lte("redeemed_at", new Date(`${dayStr}T23:59:59.999+08:00`).toISOString());
+          if ((count ?? 0) >= 1) {
+            return { ok: false, error: "You've already redeemed a free-drink reward today — your other reward is saved for tomorrow." };
+          }
+        }
+
         const cart = await buildEngineCart(
           supabase,
           items,

@@ -548,6 +548,7 @@ function evalGoalOnOrder(goal: Goal, order: OrderForMission): number {
     case "spend_amount":               return order.total_sen;
     case "distinct_outlets":           return 0; // dedup: see evalDedupedGoal
     case "distinct_new_products":      return 0; // dedup: see evalDedupedGoal
+    case "distinct_order_days":        return 0; // dedup: see evalDedupedGoal (one tick per new paid day)
     case "referrals_count":            return 0; // referral mission is config-only; vouchers fire from maybeRewardReferralOnFirstOrder
     default:                            return 0;
   }
@@ -591,6 +592,28 @@ async function evalDedupedGoal(
     const priorIds = new Set<string>((prior ?? []).map((p) => p.product_id as string));
     const hasNew = order.item_ids.some((p) => !priorIds.has(p));
     return hasNew ? 1 : 0;
+  }
+  if (goal.type === "distinct_order_days") {
+    // Frequency goal: +1 the FIRST paid order on each calendar day (MYT),
+    // so progress = number of distinct days the member ordered this week.
+    // Unlike orders_count (which counts every order, completable in one
+    // sitting), this can only be cleared by returning on separate days —
+    // the lever for repeat-visit frequency. Caller already filtered free
+    // orders (applyOrderToMission), so this order is paid.
+    const d = new Date(order.created_at);
+    const dayStr = new Date(d.getTime() + 8 * 3_600_000).toISOString().slice(0, 10); // MYT calendar day
+    const dayStartUtc = new Date(`${dayStr}T00:00:00+08:00`).toISOString();
+    const dayEndUtc   = new Date(`${dayStr}T23:59:59.999+08:00`).toISOString();
+    const { count } = await supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("loyalty_id", memberId)
+      .neq("id", order.id)
+      .gt("total", 0)
+      .in("status", ["preparing", "ready", "completed"])
+      .gte("created_at", dayStartUtc)
+      .lte("created_at", dayEndUtc);
+    return (count ?? 0) === 0 ? 1 : 0; // first paid order today → new distinct day
   }
   return 0;
 }
@@ -644,6 +667,15 @@ export async function applyOrderToMission(args: {
 }): Promise<{ completedMissionIds: string[] }> {
   const supabase = getSupabaseAdmin();
 
+  // Paid-only: a fully-free order (RM0 — a reward/voucher redemption) must
+  // NOT advance any mission. Otherwise a redeemed free drink completes the
+  // next mission and mints another free drink — a self-feeding chain (the
+  // Yousef case: free order completed "Try Something New" → 2nd free coffee).
+  // Real money must change hands for a visit/spend/new-product to count.
+  if (args.order.total_sen <= 0) {
+    return { completedMissionIds: [] };
+  }
+
   const { data: assignments } = await supabase
     .from("mission_assignments")
     .select("id, mission_id, progress_current, progress_target")
@@ -666,7 +698,7 @@ export async function applyOrderToMission(args: {
 
     const goal = mission.goal as Goal;
     let inc = evalGoalOnOrder(goal, args.order);
-    if (inc === 0 && (goal.type === "distinct_outlets" || goal.type === "distinct_new_products")) {
+    if (inc === 0 && (goal.type === "distinct_outlets" || goal.type === "distinct_new_products" || goal.type === "distinct_order_days")) {
       inc = await evalDedupedGoal(supabase, args.memberId, goal, args.order);
     }
     if (inc === 0) continue;
