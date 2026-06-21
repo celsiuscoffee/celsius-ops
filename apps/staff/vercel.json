@@ -2,7 +2,7 @@
   "regions": [
     "sin1"
   ],
-  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- . ../../packages/ ../../turbo.json ../../package.json ../../package-lock.json",
+  "ignoreCommand": "npx turbo-ignore @celsius-ops/staff",
   "crons": [
     {
       "path": "/api/cron/reset-checklists",
