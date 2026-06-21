@@ -51,7 +51,8 @@ type LeaderboardEntry = {
   rounds: number; recipients: number; avg_lift_pp: number;
   incr_margin_per_recipient_rm: number; cum_incr_margin_rm: number;
 };
-type Optimizer = { leaderboard: LeaderboardEntry[]; proposal: { arms: ProposalArm[] }; candidates: Candidate[] };
+type LoopMeta = { key: string; label: string; objective: string; defaultHoldoutPct: number; defaultWindowDays: number };
+type Optimizer = { loop_key: string; leaderboard: LeaderboardEntry[]; proposal: { arms: ProposalArm[] }; candidates: Candidate[]; loops: LoopMeta[] };
 
 const CHAMPION_MIN_RECIPIENTS = 300;
 
@@ -92,12 +93,14 @@ export default function LoopsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [lastPreview, setLastPreview] = useState<Preview | null>(null);
+  const [loopKey, setLoopKey] = useState("winback");
 
   const load = useCallback(async () => {
     try {
+      const qs = `?loop_key=${encodeURIComponent(loopKey)}`;
       const [rRes, oRes] = await Promise.all([
-        fetch("/api/loyalty/loops"),
-        fetch("/api/loyalty/loops/optimizer"),
+        fetch(`/api/loyalty/loops${qs}`),
+        fetch(`/api/loyalty/loops/optimizer${qs}`),
       ]);
       if (!rRes.ok) throw new Error(`list failed (${rRes.status})`);
       setRounds((await rRes.json()) as Round[]);
@@ -106,8 +109,8 @@ export default function LoopsPage() {
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load");
     }
-  }, []);
-  useEffect(() => { void load(); }, [load]);
+  }, [loopKey]);
+  useEffect(() => { setRounds(null); setOpt(null); setLastPreview(null); void load(); }, [load]);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
@@ -120,8 +123,23 @@ export default function LoopsPage() {
         <h1 className="text-2xl font-semibold">Win-back loops</h1>
       </div>
       <p className="mb-4 text-sm text-gray-500">
-        Re-activate lapsed customers, measured honestly against a holdout. The engine proposes each round&apos;s offers and learns which logic wins — the setup sharpens over time.
+        Every campaign is a loop: the engine proposes each round&apos;s offers against a holdout and learns which logic wins — the setup sharpens over time. Pick an objective:
       </p>
+
+      {opt && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {opt.loops.map((l) => (
+            <button
+              key={l.key}
+              onClick={() => setLoopKey(l.key)}
+              title={l.objective}
+              className={cn("rounded-full border px-3 py-1.5 text-sm", loopKey === l.key ? "border-[#A2492C] bg-[#A2492C] text-white" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300")}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mb-6 flex flex-wrap gap-x-6 gap-y-1 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
         <span><span className="text-gray-500">SMS budget</span> <strong>set per round</strong> (start {rm(DEFAULT_BUDGET_RM)}, scale up)</span>
@@ -140,6 +158,9 @@ export default function LoopsPage() {
 
       {opt ? (
         <NewRoundCard
+          key={loopKey}
+          loopKey={loopKey}
+          loopMeta={opt.loops.find((l) => l.key === loopKey)}
           proposal={opt.proposal.arms}
           candidates={opt.candidates}
           busy={busy === "prepare"}
@@ -287,19 +308,31 @@ function OptimizerPanel({ opt }: { opt: Optimizer }) {
 // ---- New round (seeded by the optimizer's proposal) -------------------------
 type FormArm = { key: string; label: string; voucher_template_id: string; message: string; role: "champion" | "challenger"; reason: string };
 
-function NewRoundCard({ proposal, candidates, busy, onPrepare }: {
-  proposal: ProposalArm[]; candidates: Candidate[]; busy: boolean; onPrepare: (p: unknown) => void;
+function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare }: {
+  loopKey: string; loopMeta?: LoopMeta; proposal: ProposalArm[]; candidates: Candidate[]; busy: boolean; onPrepare: (p: unknown) => void;
 }) {
   const [minD, setMinD] = useState(30);
   const [maxD, setMaxD] = useState(60);
-  const [holdout, setHoldout] = useState(20);
-  const [windowD, setWindowD] = useState(7);
+  const [joinedD, setJoinedD] = useState(30);
+  const [bdayD, setBdayD] = useState(14);
+  const [outletId, setOutletId] = useState("");
+  const [activeD, setActiveD] = useState(45);
+  const [holdout, setHoldout] = useState(loopMeta?.defaultHoldoutPct ?? 20);
+  const [windowD, setWindowD] = useState(loopMeta?.defaultWindowDays ?? 7);
   const [budget, setBudget] = useState(DEFAULT_BUDGET_RM);
   const [arms, setArms] = useState<FormArm[]>(proposal.map((a) => ({ ...a })));
 
   const logicOf = (tid: string) => candidates.find((c) => c.voucher_template_id === tid)?.logic ?? "—";
   const maxSms = Math.max(0, Math.floor(budget / SMS_COST_RM));
   const maxRecipients = Math.floor(maxSms / Math.max(0.01, 1 - holdout / 100));
+  const segmentOpts = (): Record<string, unknown> => {
+    switch (loopKey) {
+      case "welcome": return { joinedWithinDays: joinedD };
+      case "birthday": return { birthdayWithinDays: bdayD };
+      case "round_gap": return { outletId, activeWithinDays: activeD };
+      default: return { minDaysLapsed: minD, maxDaysLapsed: maxD };
+    }
+  };
 
   const swapArm = (i: number, tid: string) => {
     const c = candidates.find((x) => x.voucher_template_id === tid);
@@ -321,14 +354,22 @@ function NewRoundCard({ proposal, candidates, busy, onPrepare }: {
       </div>
 
       <div className="mb-2 grid grid-cols-2 gap-4 sm:grid-cols-5">
-        <Field label="Lapsed from (days)"><NumInput v={minD} set={setMinD} /></Field>
-        <Field label="Lapsed to (days)"><NumInput v={maxD} set={setMaxD} /></Field>
+        {loopKey === "winback" && (<>
+          <Field label="Lapsed from (days)"><NumInput v={minD} set={setMinD} /></Field>
+          <Field label="Lapsed to (days)"><NumInput v={maxD} set={setMaxD} /></Field>
+        </>)}
+        {loopKey === "welcome" && <Field label="Joined within (days)"><NumInput v={joinedD} set={setJoinedD} /></Field>}
+        {loopKey === "birthday" && <Field label="Birthday within (days)"><NumInput v={bdayD} set={setBdayD} /></Field>}
+        {loopKey === "round_gap" && (<>
+          <Field label="Outlet ID"><input value={outletId} onChange={(e) => setOutletId(e.target.value)} placeholder="outlet uuid" className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm" /></Field>
+          <Field label="Active within (days)"><NumInput v={activeD} set={setActiveD} /></Field>
+        </>)}
         <Field label="Holdout %"><NumInput v={holdout} set={setHoldout} /></Field>
         <Field label="Attribution window (days)"><NumInput v={windowD} set={setWindowD} /></Field>
         <Field label="SMS budget (RM)"><NumInput v={budget} set={setBudget} /></Field>
       </div>
       <p className="mb-4 text-xs text-gray-500">
-        Budget {rm(budget)} → up to <strong>{maxSms.toLocaleString()}</strong> SMS (~{maxRecipients.toLocaleString()} reached incl. holdout). Caps the round if the lapsed segment is larger. Scale later by raising the budget.
+        Budget {rm(budget)} → up to <strong>{maxSms.toLocaleString()}</strong> SMS (~{maxRecipients.toLocaleString()} reached incl. holdout). Caps the round if the segment is larger. Scale later by raising the budget.
       </p>
 
       <div className="mb-2 flex items-center justify-between">
@@ -366,8 +407,10 @@ function NewRoundCard({ proposal, candidates, busy, onPrepare }: {
       <button
         disabled={busy || arms.length === 0}
         onClick={() => onPrepare({
+          loop_key: loopKey,
           arms: arms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message })),
-          holdoutPct: holdout, minDaysLapsed: minD, maxDaysLapsed: maxD, attributionWindowDays: windowD, maxRecipients,
+          holdoutPct: holdout, attributionWindowDays: windowD, maxRecipients,
+          segment: segmentOpts(),
         })}
         className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#A2492C] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
       >
