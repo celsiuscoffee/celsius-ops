@@ -1,22 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import { Plus } from "lucide-react";
 
-type Pair = { id: string; name: string; basePrice: number; image: string | null; reason: string; discountLabel?: string | null };
+type Pair = { id: string; name: string; basePrice: number; image: string | null; reason: string };
 
 /**
- * In-cart upsell — "Goes well with your order". Targeted by the basket
+ * In-cart upsell rail — "Goes well with your order". Targeted by the basket
  * (drinks cart → a bite, etc.) via /api/suggest-pairs, personalized by member.
- * Rendered as full-width rows in the SAME card style as the cart items above it
- * (contained, both-side margins) so it reads as part of the order, not an
- * edge-to-edge side rail. Tapping a row opens the product (one tap to add).
- * Renders nothing until it has a suggestion, so it never adds noise.
+ * Cards link to the product page (one tap to add, same flow as the best-seller
+ * rail). Renders nothing until it has a suggestion, so it never adds noise.
  */
 export function CartUpsell({ productIds, loyaltyId }: { productIds: string[]; loyaltyId: string | null }) {
-  const router = useRouter();
   const [pairs, setPairs] = useState<Pair[]>([]);
   const key = productIds.slice().sort().join(",");
 
@@ -32,39 +29,48 @@ export function CartUpsell({ productIds, loyaltyId }: { productIds: string[]; lo
       .then((j) => { if (!cancelled) setPairs(Array.isArray(j?.pairs) ? j.pairs : []); })
       .catch(() => { if (!cancelled) setPairs([]); });
     return () => { cancelled = true; };
+    // Re-fetch when the cart contents change (key) or the member resolves.
   }, [key, loyaltyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (pairs.length === 0) return null;
 
   return (
-    <div className="mt-1 mb-4">
+    <div className="mt-2 mb-4">
       <p className="uppercase px-4 mb-2" style={{ color: "#1A0200", fontSize: 13, fontWeight: 700, letterSpacing: 1.2 }}>
         Goes well with your order
       </p>
-      <div className="px-4 flex flex-col gap-3">
+      <div
+        className="flex gap-3 px-4 overflow-x-auto pb-1"
+        style={{ scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}
+      >
         {pairs.map((p) => (
-          <button
+          <Link
             key={p.id}
-            onClick={() => router.push(`/product/${p.id}`)}
-            className="bg-white flex gap-3 items-center text-left active:opacity-70"
-            style={{ border: "1px solid rgba(26,2,0,0.10)", borderRadius: 16, padding: 12 }}
+            href={`/product/${p.id}`}
+            className="flex-shrink-0 bg-white overflow-hidden active:opacity-70"
+            style={{ width: 150, borderRadius: 16, border: "1px solid rgba(26,2,0,0.10)", boxShadow: "0 3px 8px rgba(0,0,0,0.06)", scrollSnapAlign: "start" }}
           >
-            <div className="relative flex-shrink-0 bg-[#F2EDE5]" style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden" }}>
-              {p.image ? <Image src={p.image} alt={p.name} fill sizes="56px" className="object-cover" /> : null}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-peachi font-bold truncate" style={{ color: "#1A0200", fontSize: 14 }}>{p.name}</p>
-              <p className="uppercase truncate" style={{ color: "#A2492C", fontSize: 9, fontWeight: 700, letterSpacing: 0.5, marginTop: 2 }}>
-                {p.discountLabel ?? p.reason}
-              </p>
-            </div>
-            <div className="flex flex-shrink-0 items-center gap-2">
-              <span className="font-peachi font-bold" style={{ color: "#A2492C", fontSize: 14 }}>RM{p.basePrice.toFixed(2)}</span>
-              <span className="rounded-full flex items-center justify-center" style={{ width: 28, height: 28, backgroundColor: "#160800" }}>
-                <Plus size={15} color="#FFFFFF" />
+            <div className="relative bg-[#F2EDE5]" style={{ width: 150, height: 130 }}>
+              {p.image ? <Image src={p.image} alt={p.name} fill sizes="150px" className="object-cover" /> : null}
+              <span
+                className="absolute uppercase"
+                style={{ top: 8, left: 8, backgroundColor: "rgba(22,8,0,0.82)", color: "#FBBF24", fontSize: 8, fontWeight: 700, letterSpacing: 0.6, padding: "3px 6px", borderRadius: 999 }}
+              >
+                {p.reason}
               </span>
             </div>
-          </button>
+            <div style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 10 }}>
+              <p className="font-peachi font-bold truncate" style={{ color: "#1A0200", fontSize: 13 }}>{p.name}</p>
+              <div className="flex items-center justify-between" style={{ marginTop: 4 }}>
+                <span className="font-peachi font-bold" style={{ color: "#A2492C", fontSize: 14 }}>
+                  RM{p.basePrice.toFixed(2)}
+                </span>
+                <span className="rounded-full flex items-center justify-center" style={{ width: 24, height: 24, backgroundColor: "#160800" }}>
+                  <Plus size={14} color="#FFFFFF" />
+                </span>
+              </div>
+            </div>
+          </Link>
         ))}
       </div>
     </div>
