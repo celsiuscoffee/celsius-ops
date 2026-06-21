@@ -130,7 +130,8 @@ function toPoster(p: Row): HomePoster {
 
 // Distinct product_ids a member has ordered (last ~100 orders). Best-effort —
 // any failure returns an empty set so the carousel falls back to the AOV order.
-async function triedProductIds(
+// Exported so the in-cart upsell can reuse the same "what they've tried" signal.
+export async function triedProductIds(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   memberId: string | null,
 ): Promise<Set<string>> {

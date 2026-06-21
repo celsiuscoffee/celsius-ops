@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Trash2, Plus, Minus, Gift, X, Coffee, ChevronRight } from "lucide-react";
 import { calcRewardDiscount, formatRewardValue, type AppliedReward } from "@/lib/reward-discount";
+import { CartUpsell } from "./_CartUpsell";
 
 type BestSeller = {
   id: string;
@@ -442,6 +443,10 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
           </li>
         ))}
       </ul>
+
+      {/* Basket-targeted upsell — "goes well with your order" (drinks → a bite,
+          personalized by member). Reactive to the cart contents. */}
+      <CartUpsell productIds={items.map((i) => i.productId)} loyaltyId={loyaltyId} />
 
       {reward ? (
         <div
