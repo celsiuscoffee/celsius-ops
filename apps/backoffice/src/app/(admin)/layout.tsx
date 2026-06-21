@@ -305,13 +305,14 @@ const NAV_SECTIONS: NavSection[] = [
       {
         label: "Campaigns",
         items: [
-          { label: "Campaigns", href: "/loyalty/campaigns", icon: <Megaphone className={ICON_SIZE} />,     moduleKey: "loyalty:campaigns" },
+          // Campaigns = Loops. The legacy preset editor (/loyalty/campaigns)
+          // is retired (redirects here); every objective now runs as an
+          // adaptive loop (holdout + offer/voucher/send-time learning).
+          { label: "Campaigns", href: "/loyalty/loops", icon: <Repeat className={ICON_SIZE} />, moduleKey: "loyalty:campaigns" },
           // Engage = unified surface for "how we reach customers".
           // Push reminders (auto, triggered) + SMS broadcasts (manual)
           // live as tabs inside this page; no separate nav entries.
           { label: "Engage",    href: "/loyalty/engage",    icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
-          // Win-back SMS loops — multi-arm reactivation with holdout + ROI.
-          { label: "Win-back Loops", href: "/loyalty/loops", icon: <Repeat className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
         ],
       },
     ],
