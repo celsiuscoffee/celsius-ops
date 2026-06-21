@@ -210,7 +210,7 @@ export default function Home() {
   const walletVouchers = (myVouchersQ.data ?? []).filter(
     (v) =>
       v.status === "active" &&
-      ["mystery", "manual", "birthday"].includes(v.source_type ?? ""),
+      ["mystery", "manual", "birthday", "campaign"].includes(v.source_type ?? ""),
   );
   const claimables     = claimableQ.data ?? [];
   // Home rail surfaces only IN-PROGRESS missions (status === 'active').
@@ -1562,6 +1562,7 @@ function describeVoucherTicket(v: Voucher): TicketDescriptor {
   else if (v.source_type === "mission")       { eyebrow = "Challenge reward"; }
   else if (v.source_type === "mystery")       { eyebrow = "Mystery bonus"; }
   else if (v.source_type === "referral")      { eyebrow = "Referral gift"; }
+  else if (v.source_type === "campaign")      { eyebrow = "Welcome back"; }
 
   const dv = Number(v.discount_value ?? 0);
   if (v.discount_type === "flat" && dv > 0) {

@@ -15,7 +15,7 @@ export type Voucher = {
   icon: string;
   category: "free_item" | "upgrade" | "discount" | "multiplier" | "special";
   status: "active" | "used" | "expired";
-  source_type: "mission" | "mystery" | "birthday" | "referral" | "manual" | "points_redemption" | null;
+  source_type: "mission" | "mystery" | "birthday" | "referral" | "manual" | "points_redemption" | "campaign" | null;
   // Back-reference to whatever issued the voucher — e.g. a
   // mission_assignments.id for source_type='mission'. Lets the Challenge
   // card find its linked wallet voucher and route Use without a picker.
@@ -212,7 +212,7 @@ export async function fetchClaimableVouchers(): Promise<ClaimableVoucher[]> {
 // claimables. Bean-shop + referral are NOT wallet items. The home "Rewards"
 // KPI ALSO counts affordable redeemable catalogue items (countAffordableRewards
 // below); the UNaffordable catalogue is never counted.
-const WALLET_COUNT_SOURCES = ["mystery", "manual", "birthday"];
+const WALLET_COUNT_SOURCES = ["mystery", "manual", "birthday", "campaign"];
 export function countRewardsWaiting(
   vouchers: ReadonlyArray<{ status?: string | null; source_type?: string | null }> | null | undefined,
   claimables: ReadonlyArray<unknown> | null | undefined,

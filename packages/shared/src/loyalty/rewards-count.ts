@@ -20,7 +20,7 @@
 // (points-shop rewards the member can claim with their current balance) — via a
 // separate countAffordableRewards() term the caller adds on top of this
 // wallet+claimables tally. The UNaffordable catalogue is still never counted.
-const WALLET_COUNT_SOURCES = ["mystery", "manual", "birthday"];
+const WALLET_COUNT_SOURCES = ["mystery", "manual", "birthday", "campaign"];
 
 /** Minimal wallet-voucher shape the count needs. */
 export type CountableVoucher = { status?: string | null; source_type?: string | null };
