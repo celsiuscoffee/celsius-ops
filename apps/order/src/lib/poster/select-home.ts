@@ -44,8 +44,9 @@ type Row = {
  * drink. A passive carousel only gets 1-2 posters of real attention, so we
  * show few and sharp rather than the whole catalogue.
  */
-export async function selectHomePosters(opts?: { limit?: number }): Promise<HomePoster[]> {
+export async function selectHomePosters(opts?: { limit?: number; memberId?: string | null }): Promise<HomePoster[]> {
   const limit = Math.max(1, opts?.limit ?? 3);
+  const memberId = opts?.memberId ?? null;
   try {
     const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
@@ -88,10 +89,21 @@ export async function selectHomePosters(opts?: { limit?: number }): Promise<Home
       return c ? !FOOD_CATEGORIES.has(c) : false;
     };
 
-    // Tight pick: top (limit-1) foods + top 1 drink (all already AOV-sorted),
+    // Personalize: surface what the member HASN'T tried first (discovery →
+    // trial → AOV) — a regular who always orders pasta gets shown the items
+    // they haven't had, not their usual. Untried sort ahead of tried; AOV order
+    // is preserved within each group (stable sort over the sort_order list).
+    const tried = await triedProductIds(supabase, memberId);
+    const untriedFirst = (a: Row, b: Row) => {
+      const at = a.product_id && tried.has(a.product_id) ? 1 : 0;
+      const bt = b.product_id && tried.has(b.product_id) ? 1 : 0;
+      return at - bt;
+    };
+
+    // Tight pick: top (limit-1) foods + top 1 drink (untried-first, then AOV),
     // then fill any shortfall from the rest, capped at `limit`, in sort order.
-    const foods = eligible.filter((p) => !isDrink(p));
-    const drinks = eligible.filter((p) => isDrink(p));
+    const foods = eligible.filter((p) => !isDrink(p)).sort(untriedFirst);
+    const drinks = eligible.filter((p) => isDrink(p)).sort(untriedFirst);
     const keep = new Set<string>([
       ...foods.slice(0, Math.max(1, limit - 1)).map((p) => p.id),
       ...drinks.slice(0, 1).map((p) => p.id),
@@ -114,4 +126,34 @@ function toPoster(p: Row): HomePoster {
     deeplink: p.deeplink ?? null,
     duration_ms: (p.duration_ms as number | null) ?? 5000,
   };
+}
+
+// Distinct product_ids a member has ordered (last ~100 orders). Best-effort —
+// any failure returns an empty set so the carousel falls back to the AOV order.
+async function triedProductIds(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  memberId: string | null,
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (!memberId) return out;
+  try {
+    const { data: orders } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("loyalty_id", memberId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    const ids = (orders ?? []).map((o: { id: string }) => o.id);
+    if (!ids.length) return out;
+    const { data: items } = await supabase
+      .from("order_items")
+      .select("product_id")
+      .in("order_id", ids);
+    for (const it of (items ?? []) as { product_id: string | null }[]) {
+      if (it.product_id) out.add(it.product_id);
+    }
+  } catch {
+    /* personalization is best-effort */
+  }
+  return out;
 }
