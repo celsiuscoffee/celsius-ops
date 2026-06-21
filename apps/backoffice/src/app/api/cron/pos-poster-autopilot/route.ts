@@ -54,13 +54,12 @@ export async function GET(req: NextRequest) {
   const today = mytShift(now);
   const mode = modeFor(today);
 
-  // 1. Plan + apply. HOME only for now — it learns from deeplink-attributed
-  //    AOV (poster_events) and is safe to auto-manage. The pos-display
-  //    autopilot (in-store customer screens) is intentionally DEFERRED: turning
-  //    over the counter screens to auto-rotation is a separate operator
-  //    decision. To enable it, add `{ placement: "pos-display", mode }` back to
-  //    this list. Splash is not auto-managed by the cron either.
+  // 1. Plan + apply for POS + home. POS rotates on the switchback A/B (no
+  //    per-poster conversion signal) and keeps its food-attach push; home runs
+  //    autopilot and learns from deeplink-attributed AOV (poster_events) with a
+  //    reserved-drink quota so its carousel isn't all-food. Splash deferred.
   const placements = [
+    { placement: "pos-display" as const, mode },
     { placement: "home" as const, mode: "autopilot" as const },
   ];
   let applied = 0;
