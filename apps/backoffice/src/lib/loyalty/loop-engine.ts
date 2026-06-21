@@ -31,29 +31,83 @@ function rid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// ── Segment: lapsed members (last visit between min..max days ago) with a phone.
-async function lapsedSegment(minDays: number, maxDays: number): Promise<SegmentRow[]> {
-  const sinceMax = new Date(Date.now() - maxDays * 86400000).toISOString();
-  const sinceMin = new Date(Date.now() - minDays * 86400000).toISOString();
+// Segment inputs — each loop reads the few it needs (see LOOPS below).
+export type SegmentOpts = {
+  minDaysLapsed?: number; maxDaysLapsed?: number;   // winback
+  joinedWithinDays?: number;                        // welcome
+  birthdayWithinDays?: number;                      // birthday
+  outletId?: string; activeWithinDays?: number;     // round_gap
+};
 
-  const { data, error } = await supabaseAdmin
-    .from("member_brands")
-    .select("member_id, members!inner(id, phone, name)")
-    .eq("brand_id", BRAND)
-    .gte("last_visit_at", sinceMax)
-    .lt("last_visit_at", sinceMin);
-  if (error) throw new Error(`segment query: ${error.message}`);
+type MemberRow = { id: string; phone: string | null; name: string | null; sms_opt_out: boolean | null; birthday: string | null; preferred_outlet_id: string | null };
+const MEMBER_SELECT = "member_id, members!inner(id, phone, name, sms_opt_out, birthday, preferred_outlet_id)";
 
-  const rows: SegmentRow[] = [];
+// Dedupe by phone, drop unreachable + PDPA opt-outs, apply an optional predicate.
+function reachable(rows: Array<{ member_id: string; members: MemberRow | null }>, pred?: (m: MemberRow) => boolean): SegmentRow[] {
+  const out: SegmentRow[] = [];
   const seen = new Set<string>();
-  for (const r of (data ?? []) as unknown as Array<{ member_id: string; members: { id: string; phone: string | null; name: string | null } }>) {
-    const phone = (r.members?.phone ?? "").trim();
-    if (!phone) continue; // unreachable
-    if (seen.has(phone)) continue; // dedupe by phone
+  for (const r of rows) {
+    const m = r.members;
+    if (!m) continue;
+    if (m.sms_opt_out === true) continue;          // PDPA: never message opt-outs
+    const phone = (m.phone ?? "").trim();
+    if (!phone || seen.has(phone)) continue;
+    if (pred && !pred(m)) continue;
     seen.add(phone);
-    rows.push({ member_id: r.member_id, phone, name: r.members?.name ?? null });
+    out.push({ member_id: r.member_id, phone, name: m.name ?? null });
   }
-  return rows;
+  return out;
+}
+
+function daysUntilBirthday(iso: string): number {
+  const d = new Date(iso);
+  const now = new Date(Date.now());
+  const y = now.getUTCFullYear();
+  let next = new Date(Date.UTC(y, d.getUTCMonth(), d.getUTCDate()));
+  if (next.getTime() < now.getTime()) next = new Date(Date.UTC(y + 1, d.getUTCMonth(), d.getUTCDate()));
+  return Math.ceil((next.getTime() - now.getTime()) / 86400000);
+}
+
+// ── Reactivation: lapsed members (last visit between min..max days ago).
+async function winbackSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
+  const minD = o.minDaysLapsed ?? 30, maxD = o.maxDaysLapsed ?? 60;
+  const sinceMax = new Date(Date.now() - maxD * 86400000).toISOString();
+  const sinceMin = new Date(Date.now() - minD * 86400000).toISOString();
+  const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT)
+    .eq("brand_id", BRAND).gte("last_visit_at", sinceMax).lt("last_visit_at", sinceMin);
+  if (error) throw new Error(`winback segment: ${error.message}`);
+  return { rows: reachable((data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>), label: `Lapsed ${minD}–${maxD}d` };
+}
+
+// ── Welcome: members with a single visit, joined within N days (1st → 2nd).
+async function welcomeSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
+  const days = o.joinedWithinDays ?? 30;
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT)
+    .eq("brand_id", BRAND).eq("total_visits", 1).gte("joined_at", since);
+  if (error) throw new Error(`welcome segment: ${error.message}`);
+  return { rows: reachable((data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>), label: `New members · 1 visit, joined ≤${days}d` };
+}
+
+// ── Birthday: members whose birthday falls within the next K days.
+async function birthdaySegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
+  const k = o.birthdayWithinDays ?? 14;
+  const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT).eq("brand_id", BRAND);
+  if (error) throw new Error(`birthday segment: ${error.message}`);
+  const rows = reachable((data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>, (m) => !!m.birthday && daysUntilBirthday(m.birthday) <= k);
+  return { rows, label: `Birthdays in next ${k}d` };
+}
+
+// ── Weekly round-gap: active customers of one outlet (nudge to a weak round).
+async function roundGapSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
+  if (!o.outletId) throw new Error("round_gap needs an outletId");
+  const days = o.activeWithinDays ?? 45;
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT)
+    .eq("brand_id", BRAND).gte("last_visit_at", since);
+  if (error) throw new Error(`round_gap segment: ${error.message}`);
+  const rows = reachable((data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>, (m) => m.preferred_outlet_id === o.outletId);
+  return { rows, label: `Outlet actives ≤${days}d` };
 }
 
 // Fisher–Yates with a seeded-ish shuffle (index-varied; Math.random is fine here).
@@ -112,26 +166,25 @@ async function issueReward(memberId: string, templateId: string, roundId: string
 // ── PREPARE ─────────────────────────────────────────────────────────────────
 // Builds the round: segment → holdout + arm split → issue rewards for treatment
 // → log every assignment. Returns a preview for owner approval. No SMS sent.
-export async function prepareWinbackRound(opts: {
+export async function prepareRound(loopKey: LoopKey, opts: {
   arms: ArmDef[];
   holdoutPct?: number;
-  minDaysLapsed?: number;
-  maxDaysLapsed?: number;
   attributionWindowDays?: number;
   createdBy?: string;
   suppressPhones?: string[]; // PDPA opt-outs / recent contacts
   maxRecipients?: number; // cap total segment size to fit an SMS budget (start small, scale later)
+  segment?: SegmentOpts; // loop-specific audience controls
 }) {
-  const holdoutPct = opts.holdoutPct ?? 20;
-  const minD = opts.minDaysLapsed ?? 30;
-  const maxD = opts.maxDaysLapsed ?? 60;
-  const windowDays = opts.attributionWindowDays ?? 7;
+  const def = LOOPS[loopKey];
+  if (!def) throw new Error(`unknown loop: ${loopKey}`);
+  const holdoutPct = opts.holdoutPct ?? def.defaultHoldoutPct;
+  const windowDays = opts.attributionWindowDays ?? def.defaultWindowDays;
   const arms = opts.arms;
   if (!arms.length) throw new Error("at least one arm required");
 
   const suppress = new Set((opts.suppressPhones ?? []).map((p) => p.trim()));
-  let segment = await lapsedSegment(minD, maxD);
-  segment = segment.filter((m) => !suppress.has(m.phone));
+  const seg = await def.segment(opts.segment ?? {});
+  let segment = seg.rows.filter((m) => !suppress.has(m.phone));
   segment = shuffle(segment);
   // Budget cap — take the first N of the shuffled (random) segment so the
   // SMS spend stays within the chosen budget. Scaling later = raise the cap.
@@ -143,7 +196,7 @@ export async function prepareWinbackRound(opts: {
   const { data: last } = await supabaseAdmin
     .from("loop_rounds")
     .select("round_no")
-    .eq("loop_key", "winback")
+    .eq("loop_key", loopKey)
     .order("round_no", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -155,12 +208,12 @@ export async function prepareWinbackRound(opts: {
   const holdout = segment.slice(0, holdoutN);
   const treatment = segment.slice(holdoutN);
 
-  const segmentLabel = `Lapsed ${minD}–${maxD}d (${segment.length} reachable, ${holdoutPct}% holdout)${capped ? ` · budget-capped from ${rawReach}` : ""}`;
+  const segmentLabel = `${seg.label} (${segment.length} reachable, ${holdoutPct}% holdout)${capped ? ` · budget-capped from ${rawReach}` : ""}`;
 
   await supabaseAdmin.from("loop_rounds").insert({
     id: roundId,
     brand_id: BRAND,
-    loop_key: "winback",
+    loop_key: loopKey,
     round_no: roundNo,
     segment_label: segmentLabel,
     holdout_pct: holdoutPct,
@@ -339,7 +392,7 @@ export async function measureRound(roundId: string) {
 export type OfferCandidate = {
   key: string;
   label: string;
-  logic: "% discount" | "flat discount" | "BOGO";
+  logic: "% discount" | "flat discount" | "BOGO" | "free item";
   voucher_template_id: string;
   message: string;
 };
@@ -355,7 +408,29 @@ export const OFFER_CANDIDATES: OfferCandidate[] = [
   { key: "flat10_min30", label: "RM10 off RM30+", logic: "flat discount", voucher_template_id: "02ca62f1-171d-41d2-b6d6-9ca2d67ca3b9", message: "We miss you at Celsius! Here's RM10 off your next RM30+ order. Tap to use — valid 14 days." },
   { key: "flat15_min50", label: "RM15 off RM50+", logic: "flat discount", voucher_template_id: "3c0288b5-51db-4e82-a583-6ed1dbc351b5", message: "We miss you at Celsius! Here's RM15 off your next RM50+ order. Tap to use — valid 14 days." },
   { key: "b1f1_drinks", label: "Buy 1 Free 1 drinks", logic: "BOGO", voucher_template_id: "ed33eb26-4ead-414d-b1ee-179999a33940", message: "We miss you at Celsius! Buy 1 Free 1 on any drink — bring a friend! Valid 30 days." },
+  { key: "free_drink", label: "Free Tea", logic: "free item", voucher_template_id: "1b9a465a-8411-4299-a2e2-8034f2b0ea45", message: "Happy birthday from Celsius! Your free tea is on us — enjoy. Valid 14 days." },
 ];
+
+// ── Loop registry: each campaign objective is a loop. Same machinery
+// (holdout → optimise offers → auto-issue voucher → measure lift), different
+// audience + candidate subset. Add a loop here and it inherits the whole engine.
+export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap";
+export type LoopDef = {
+  key: LoopKey;
+  label: string;
+  objective: string;
+  defaultHoldoutPct: number;
+  defaultWindowDays: number;
+  candidateKeys: string[]; // which OFFER_CANDIDATES this loop explores
+  segment: (o: SegmentOpts) => Promise<{ rows: SegmentRow[]; label: string }>;
+};
+
+export const LOOPS: Record<LoopKey, LoopDef> = {
+  winback: { key: "winback", label: "Reactivation", objective: "Win back lapsed customers", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["pct10_min25", "pct15_min40", "pct20_min40", "flat5_min25", "flat10_min30", "flat15_min50", "b1f1_drinks"], segment: winbackSegment },
+  welcome: { key: "welcome", label: "Welcome", objective: "Turn the 1st visit into a 2nd", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks", "free_drink"], segment: welcomeSegment },
+  birthday: { key: "birthday", label: "Birthday", objective: "Bring members in on their birthday", defaultHoldoutPct: 15, defaultWindowDays: 14, candidateKeys: ["free_drink", "b1f1_drinks", "pct20_min40"], segment: birthdaySegment },
+  round_gap: { key: "round_gap", label: "Weekly round-gap", objective: "Fill an underperforming day-part", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["pct15_min40", "flat10_min30", "b1f1_drinks"], segment: roundGapSegment },
+};
 
 function toArmDef(c: OfferCandidate): ArmDef {
   return { key: c.key, label: c.label, voucher_template_id: c.voucher_template_id, message: c.message };
@@ -381,11 +456,11 @@ export type LeaderboardEntry = {
 // Aggregate every MEASURED round into a per-offer leaderboard. Incremental
 // margin is measured against each round's OWN holdout, then pooled across
 // rounds (recipient-weighted) so a champion only emerges with real evidence.
-export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
+export async function getLeaderboard(loopKey: LoopKey = "winback"): Promise<LeaderboardEntry[]> {
   const { data: rounds } = await supabaseAdmin
     .from("loop_rounds")
     .select("arms, stats, holdout_pct")
-    .eq("loop_key", "winback")
+    .eq("loop_key", loopKey)
     .eq("status", "measured");
 
   type Agg = { label: string; key: string | null; logic: string | null; n: number; liftW: number; incrMargin: number; rounds: number };
@@ -429,19 +504,21 @@ const CHAMPION_MIN_RECIPIENTS = 300;
 
 // Pick the next round's arms: champion (best proven offer) + challengers
 // (least-tested first, diverse logic) so the search never stalls.
-export async function proposeArms(opts?: { count?: number }): Promise<Proposal> {
+export async function proposeArms(loopKey: LoopKey = "winback", opts?: { count?: number }): Promise<Proposal> {
   const count = Math.max(1, opts?.count ?? 3); // champion + 2 challengers
-  const lb = await getLeaderboard();
+  const lb = await getLeaderboard(loopKey);
   const byTemplate = new Map(lb.map((e) => [e.template_id, e]));
+  // explore only this loop's offer subset
+  const space = OFFER_CANDIDATES.filter((c) => LOOPS[loopKey].candidateKeys.includes(c.key));
 
   const chosen: ProposalArm[] = [];
   const usedTemplates = new Set<string>();
   const usedLogics = new Set<string>();
 
-  // champion: best incremental margin/recipient with enough evidence
-  const champ = lb.find((e) => e.recipients >= CHAMPION_MIN_RECIPIENTS);
+  // champion: best incremental margin/recipient with enough evidence (within this loop's space)
+  const champ = lb.find((e) => e.recipients >= CHAMPION_MIN_RECIPIENTS && space.some((c) => c.voucher_template_id === e.template_id));
   if (champ) {
-    const cand = OFFER_CANDIDATES.find((c) => c.voucher_template_id === champ.template_id);
+    const cand = space.find((c) => c.voucher_template_id === champ.template_id);
     if (cand) {
       const sign = champ.incr_margin_per_recipient_rm >= 0 ? "+" : "";
       chosen.push({ ...toArmDef(cand), role: "champion", reason: `Best so far: ${sign}RM${champ.incr_margin_per_recipient_rm}/recipient, ${sign}${champ.avg_lift_pp}pp over ${champ.recipients.toLocaleString()} sent (${champ.rounds} ${champ.rounds === 1 ? "round" : "rounds"}).` });
@@ -451,7 +528,7 @@ export async function proposeArms(opts?: { count?: number }): Promise<Proposal> 
   }
 
   // challengers: least-tested first, preferring an untested logic for spread.
-  const pool = OFFER_CANDIDATES
+  const pool = space
     .filter((c) => !usedTemplates.has(c.voucher_template_id))
     .sort((a, b) => (byTemplate.get(a.voucher_template_id)?.recipients ?? 0) - (byTemplate.get(b.voucher_template_id)?.recipients ?? 0));
 
