@@ -335,6 +335,7 @@ export async function POST(req: NextRequest) {
             p_order_id: order_id,
             p_multiplier: tierMul,
             p_description: "Points earned for in-store order",
+            p_spend: netSen / 100, // net RM (pre-SST) → member_brands.total_spent
           });
           if (rpcErr) {
             console.warn("[pos/loyalty/complete] add_loyalty_points failed:", rpcErr.message);
