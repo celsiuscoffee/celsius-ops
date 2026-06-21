@@ -65,6 +65,9 @@ function mapDiscountTypeForApply(
     case "free_item":          return "free_item";
     case "flat":               return "flat";
     case "percent":            return "percent";
+    case "bogo":               return "bogo";
+    case "combo":              return "combo";
+    case "override_price":     return "override_price";
     case "beans_multiplier":   return "none";
     default:                    return "none";
   }
@@ -297,6 +300,11 @@ export default function RewardsTab() {
       applicable_categories: v.applicable_categories ?? null,
       applicable_products: v.applicable_products ?? null,
       free_product_name: v.free_product_name ?? null,
+      free_product_ids: v.free_product_ids ?? null,
+      bogo_buy_qty: v.bogo_buy_qty ?? undefined,
+      bogo_free_qty: v.bogo_free_qty ?? undefined,
+      combo_price_sen: v.combo_price_sen ?? null,
+      override_price_sen: v.override_price_sen ?? null,
       min_order_value: v.min_order_value ?? null,
       voucher_id: v.id,
     });
