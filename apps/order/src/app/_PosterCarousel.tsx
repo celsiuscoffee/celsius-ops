@@ -16,6 +16,25 @@ type Poster = {
   deeplink: string | null;
 };
 
+// Best-effort tap log → /api/poster-tap so the home autopilot can attribute the
+// resulting order's AOV to this poster. keepalive lets it survive the
+// navigation the <Link> triggers; never blocks the tap.
+function logPosterTap(posterId: string, deeplink: string | null) {
+  try {
+    let loyaltyId: string | null = null;
+    const raw = localStorage.getItem("celsius-pickup");
+    if (raw) loyaltyId = (JSON.parse(raw)?.state?.loyaltyId as string | undefined) ?? null;
+    void fetch("/api/poster-tap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ posterId, placement: "home", deeplink, loyaltyId }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    /* never block navigation */
+  }
+}
+
 export function PosterCarousel({ posters }: { posters: Poster[] }) {
   const [idx, setIdx] = useState(0);
 
@@ -37,6 +56,7 @@ export function PosterCarousel({ posters }: { posters: Poster[] }) {
         <Link
           key={p.id}
           href={p.deeplink || "/menu"}
+          onClick={() => logPosterTap(p.id, p.deeplink)}
           className="absolute inset-0"
           style={{
             opacity: i === idx ? 1 : 0,

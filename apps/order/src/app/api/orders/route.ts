@@ -17,6 +17,7 @@ import {
 } from "@/lib/loyalty/promotions";
 import { requireCustomerSession } from "@/lib/customer-jwt";
 import { attributeOrderToCampaign } from "@/lib/push/attribution";
+import { attributeOrderToPoster } from "@/lib/poster/attribution";
 import { getOutletSst } from "@/lib/outlet-sst";
 
 function normalisePhoneForLookup(phone: string): string {
@@ -716,6 +717,15 @@ export async function POST(request: NextRequest) {
     // order so the backoffice campaign stats can show "orders driven"
     // per campaign. Fire-and-forget; never blocks the response.
     void attributeOrderToCampaign({
+      orderId:   order.id,
+      memberId:  loyaltyId ?? null,
+      revenueRm: totalSen / 100,
+    });
+
+    // Poster → order attribution. Tag the most recent unattributed poster tap
+    // for this member (within 24h) so the home autopilot learns which poster
+    // drives the highest-AOV orders. Fire-and-forget.
+    void attributeOrderToPoster({
       orderId:   order.id,
       memberId:  loyaltyId ?? null,
       revenueRm: totalSen / 100,
