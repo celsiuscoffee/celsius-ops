@@ -102,6 +102,13 @@ export type Placement = "pos-display" | "home" | "splash";
 // rotates ~5, splash is a single launch poster (pick the one best one).
 const DEFAULT_TOPK: Record<Placement, number> = { "pos-display": 3, home: 5, splash: 1 };
 
+// Minimum drink (non-food) posters guaranteed in the active set per surface.
+// A pure margin/AOV ranking skews all-food (high-ticket pasta wins every slot),
+// which makes the app home hero read like a food court, not a cafe. Reserving a
+// couple of slots keeps signature drinks (matcha, etc.) in rotation. POS screen
+// keeps its food-attach logic untouched (we WANT to push a bite in-store).
+const RESERVE_DRINKS: Record<Placement, number> = { home: 2, splash: 0, "pos-display": 0 };
+
 // Group key for a poster row: POS rotates by day-part round; app placements
 // usually have no round (one '__all__' group) but support rounds once tagged.
 const GROUP_ALL = "__all__";
@@ -224,13 +231,33 @@ export async function planPosterRotation(
       })
       .sort((a, b) => b.score - a.score);
 
+    // Active set = top-K by score, but guarantee RESERVE_DRINKS drink slots:
+    // swap the lowest-scoring foods in the top-K for the best benched drinks so
+    // the carousel isn't 100% food. No-op when the natural top-K already has
+    // enough drinks, or when the pool has no benched drinks to promote.
+    const activeIds = new Set(ranked.slice(0, topK).map((r) => r.s.po.id));
+    const minDrinks = RESERVE_DRINKS[placement] ?? 0;
+    if (minDrinks > 0) {
+      const top = ranked.slice(0, topK);
+      const need = minDrinks - top.filter((r) => !r.s.isFood).length;
+      if (need > 0) {
+        const benchDrinks = ranked.slice(topK).filter((r) => !r.s.isFood).slice(0, need);
+        const dropFoods = top
+          .filter((r) => r.s.isFood)
+          .sort((a, b) => a.score - b.score)
+          .slice(0, benchDrinks.length);
+        for (const r of dropFoods) activeIds.delete(r.s.po.id);
+        for (const r of benchDrinks) activeIds.add(r.s.po.id);
+      }
+    }
+
     ranked.forEach((r, i) => {
       decisions.push({
         round,
         posterId: r.s.po.id,
         title: r.s.po.title,
         productId: r.s.po.product_id,
-        active: i < topK,
+        active: activeIds.has(r.s.po.id),
         sortOrder: (i + 1) * 10,
         score: Math.round(r.score * 1000) / 1000,
         reason: r.reason,
