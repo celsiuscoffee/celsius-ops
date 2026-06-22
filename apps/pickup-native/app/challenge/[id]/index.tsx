@@ -46,32 +46,28 @@ function howToWin(m: ActiveMission): string[] {
         "Every order this week adds up — no single big bill needed.",
         "Discounts and vouchers don't reduce the qualifying amount.",
       ];
-    case "drinks_count":
-    case "cups_count":
-      return [
-        `Order ${m.goal_threshold} drinks before the challenge ends.`,
-        "Drinks can be on the same order or split across visits.",
-        "Both hot and iced count.",
-      ];
-    case "distinct_products":
-    case "distinct_drinks_count":
-      return [
-        `Try ${m.goal_threshold} different items you haven't ordered before.`,
-        "We only count the first time you ever buy a given item.",
-        "Both drinks and food count unless the description says otherwise.",
-      ];
-    case "single_order_items_count":
+    case "single_order_item_count":
       return [
         `Order ${m.goal_threshold}+ items in a single transaction.`,
         "Each individual cup or plate counts as one item.",
         "Mix and match across drinks and food.",
       ];
-    case "drink_and_food":
+    case "distinct_new_products":
       return [
-        "Order at least one drink and one food item in the same order.",
-        "Roti bakar, pastries and cakes all count as food.",
+        `Try ${m.goal_threshold} different items you haven't ordered before.`,
+        "Only the first time you ever buy a given item counts.",
+        "Spread them across visits — they don't need to be one order.",
+      ];
+    case "referrals_count":
+      return [
+        "Share your referral link with a friend.",
+        "You earn the reward when they place their first paid order.",
       ];
     default:
+      // orders_count (with time/day windows), single_order_has_groups and
+      // single_order_group_count carry their specifics in goal.filter /
+      // goal.groups, which aren't on this shape — the mission description
+      // states them precisely, so it's the most accurate copy here.
       return [m.description];
   }
 }
