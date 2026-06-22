@@ -815,7 +815,17 @@ export type LoopEval = {
   redemptions: number; redemption_rate: number; avg_lift_pp: number;
   incremental_orders: number; incremental_margin_rm: number; sms_cost_rm: number; roi: number;
 };
-export type Evaluation = { per_loop: LoopEval[]; totals: Omit<LoopEval, "loop_key" | "label"> };
+// Live activity — available immediately (every sent/measured round), so the
+// operator isn't blind during the attribution window before "measured" results.
+export type LiveLoop = {
+  loop_key: string; label: string;
+  rounds: number; in_flight: number;       // rounds total / still measuring
+  sent: number; vouchers: number; redeemed: number;
+  sms_cost_rm: number; redeemed_rate: number;
+  next_results_at: string | null;          // ISO — when the earliest in-flight round measures
+};
+export type LiveRollup = { per_loop: LiveLoop[]; totals: Omit<LiveLoop, "loop_key" | "label"> };
+export type Evaluation = { per_loop: LoopEval[]; totals: Omit<LoopEval, "loop_key" | "label">; live: LiveRollup };
 
 export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Evaluation> {
   let query = supabaseAdmin
@@ -867,5 +877,72 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
   for (const a of byLoop.values()) { tAcc.rounds += a.rounds; tAcc.sent += a.sent; tAcc.redemptions += a.redemptions; tAcc.liftW += a.liftW; tAcc.incrOrders += a.incrOrders; tAcc.incrMargin += a.incrMargin; }
   const { loop_key: _k, label: _l, ...totals } = toEval("__totals__", tAcc);
   void _k; void _l;
-  return { per_loop, totals };
+
+  // ── LIVE activity ───────────────────────────────────────────────────────────
+  // Every sent + measured round, available immediately (not gated on the
+  // attribution window). This is what keeps the scorecard populated the moment a
+  // round goes out: SMS sent, vouchers, redemptions-to-date, what's still measuring.
+  let liveQ = supabaseAdmin
+    .from("loop_rounds")
+    .select("id, loop_key, status, sent_at, attribution_window_days")
+    .in("status", ["sent", "measured"]);
+  if (opts?.sinceDays && opts.sinceDays > 0) {
+    liveQ = liveQ.gte("sent_at", new Date(Date.now() - opts.sinceDays * 86400000).toISOString());
+  }
+  const liveRounds = ((await liveQ).data ?? []) as Array<{ id: string; loop_key: string; status: string; sent_at: string | null; attribution_window_days: number }>;
+  const liveIds = liveRounds.map((r) => r.id);
+
+  const sentByRound = new Map<string, number>();
+  const vouchByRound = new Map<string, number>();
+  const redByRound = new Map<string, number>();
+  if (liveIds.length) {
+    const { data: la } = await supabaseAdmin.from("loop_assignments").select("round_id, sms_status").in("round_id", liveIds);
+    for (const a of (la ?? []) as Array<{ round_id: string; sms_status: string | null }>) {
+      if (a.sms_status === "sent") sentByRound.set(a.round_id, (sentByRound.get(a.round_id) ?? 0) + 1);
+    }
+    const { data: ir } = await supabaseAdmin.from("issued_rewards").select("source_ref_id, redeemed_at, status").in("source_ref_id", liveIds);
+    for (const v of (ir ?? []) as Array<{ source_ref_id: string; redeemed_at: string | null; status: string | null }>) {
+      vouchByRound.set(v.source_ref_id, (vouchByRound.get(v.source_ref_id) ?? 0) + 1);
+      if (v.redeemed_at || v.status === "redeemed") redByRound.set(v.source_ref_id, (redByRound.get(v.source_ref_id) ?? 0) + 1);
+    }
+  }
+
+  type LAcc = { rounds: number; in_flight: number; sent: number; vouchers: number; redeemed: number; next: number | null };
+  const lblank = (): LAcc => ({ rounds: 0, in_flight: 0, sent: 0, vouchers: 0, redeemed: 0, next: null });
+  const liveByLoop = new Map<string, LAcc>();
+  for (const r of liveRounds) {
+    const acc = liveByLoop.get(r.loop_key) ?? lblank();
+    acc.rounds += 1;
+    acc.sent += sentByRound.get(r.id) ?? 0;
+    acc.vouchers += vouchByRound.get(r.id) ?? 0;
+    acc.redeemed += redByRound.get(r.id) ?? 0;
+    if (r.status === "sent") {
+      acc.in_flight += 1;
+      if (r.sent_at) {
+        const due = new Date(r.sent_at).getTime() + r.attribution_window_days * 86400000;
+        acc.next = acc.next === null ? due : Math.min(acc.next, due);
+      }
+    }
+    liveByLoop.set(r.loop_key, acc);
+  }
+  const toLive = (loop_key: string, a: LAcc): LiveLoop => ({
+    loop_key, label: LOOPS[loop_key as LoopKey]?.label ?? loop_key,
+    rounds: a.rounds, in_flight: a.in_flight,
+    sent: a.sent, vouchers: a.vouchers, redeemed: a.redeemed,
+    sms_cost_rm: +(a.sent * SMS_COST_RM).toFixed(2),
+    redeemed_rate: +(a.vouchers ? (a.redeemed / a.vouchers) * 100 : 0).toFixed(1),
+    next_results_at: a.next ? new Date(a.next).toISOString() : null,
+  });
+  const livePerLoop = [...liveByLoop.entries()].map(([k, a]) => toLive(k, a)).sort((x, y) => y.sent - x.sent);
+  const ltAcc = lblank();
+  for (const a of liveByLoop.values()) {
+    ltAcc.rounds += a.rounds; ltAcc.in_flight += a.in_flight; ltAcc.sent += a.sent;
+    ltAcc.vouchers += a.vouchers; ltAcc.redeemed += a.redeemed;
+    if (a.next !== null) ltAcc.next = ltAcc.next === null ? a.next : Math.min(ltAcc.next, a.next);
+  }
+  const { loop_key: _lk, label: _ll, ...liveTotals } = toLive("__totals__", ltAcc);
+  void _lk; void _ll;
+  const live: LiveRollup = { per_loop: livePerLoop, totals: liveTotals };
+
+  return { per_loop, totals, live };
 }
