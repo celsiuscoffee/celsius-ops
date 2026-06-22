@@ -299,6 +299,7 @@ export default function NotificationsPage() {
 
   // SMS credits & log state
   const [smsBalance, setSmsBalance] = useState<number | null>(null);
+  const [smsProvider, setSmsProvider] = useState<string>("sms123"); // active gateway
   const [smsBalanceLoading, setSmsBalanceLoading] = useState(false);
   const [smsSentThisMonth, setSmsSentThisMonth] = useState(0);
   const [smsLogs, setSmsLogs] = useState<{ id: string; phone: string; message: string; status: string; created_at: string }[]>([]);
@@ -320,6 +321,7 @@ export default function NotificationsPage() {
       .then((data) => {
         if (data) {
           setSmsBalance(data.balance);
+          if (data.provider) setSmsProvider(data.provider);
           setSmsSentThisMonth(data.sent_this_month);
         }
       })
@@ -527,14 +529,16 @@ export default function NotificationsPage() {
 
   const previewText = useMemo(() => {
     if (!fullMessage) return "Your message preview will appear here...";
-    // Show the actual message that will be sent (with RM0 prefix the API adds)
-    const SMS_PREFIX = `RM0 [${formSenderId || "CelsiusCoffee"}] `;
-    let text = fullMessage.startsWith(SMS_PREFIX) ? fullMessage : `${SMS_PREFIX}${fullMessage}`;
+    // Show the actual message that will be sent, with the active gateway's prefix:
+    // SMS Niaga prepends "RM0 <SENDERID>:"; SMS123 uses "RM0 [<SenderID>] ".
+    const sender = formSenderId || "CelsiusCoffee";
+    const SMS_PREFIX = smsProvider === "smsniaga" ? `RM0 ${sender.toUpperCase()}: ` : `RM0 [${sender}] `;
+    let text = fullMessage.startsWith("RM0 ") ? fullMessage : `${SMS_PREFIX}${fullMessage}`;
     variables.forEach((v) => {
       text = text.replaceAll(v.key, v.preview);
     });
     return text;
-  }, [fullMessage, formSenderId]);
+  }, [fullMessage, formSenderId, smsProvider]);
 
   // KPI data
   const totalSent = messages.reduce((acc, m) => acc + (m.sent ?? 0), 0);
@@ -595,7 +599,7 @@ export default function NotificationsPage() {
               <CreditCard className="h-5 w-5 text-green-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">SMS credits</p>
+              <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">SMS credits · <span className="uppercase">{smsProvider === "smsniaga" ? "SMS Niaga" : smsProvider}</span></p>
               <div className="flex items-center gap-2">
                 <p className={`font-sans text-xl font-bold ${smsBalance !== null && smsBalance < 100 ? "text-red-500" : "text-gray-900 dark:text-white"}`}>
                   {smsBalance !== null ? Math.floor(smsBalance).toLocaleString() : "—"}
@@ -604,9 +608,13 @@ export default function NotificationsPage() {
                   <RefreshCw className={`h-3.5 w-3.5 ${smsBalanceLoading ? "animate-spin" : ""}`} />
                 </button>
               </div>
-              <a href="https://www.sms123.net" target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium text-[#C2452D] hover:underline inline-flex items-center gap-0.5">
-                Top up on SMS123 <ExternalLink className="h-2.5 w-2.5" />
-              </a>
+              {smsProvider === "sms123" ? (
+                <a href="https://www.sms123.net" target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium text-[#C2452D] hover:underline inline-flex items-center gap-0.5">
+                  Top up on SMS123 <ExternalLink className="h-2.5 w-2.5" />
+                </a>
+              ) : (
+                <span className="text-[10px] text-gray-400">Live gateway · balance managed in SMS Niaga</span>
+              )}
             </div>
           </div>
         </div>
@@ -1394,7 +1402,7 @@ export default function NotificationsPage() {
                         )}
                       >
                         {fullMessage.length}/{charLimit} characters
-                        <span className="text-gray-300"> (auto-prefix: RM0 [{formSenderId || "CelsiusCoffee"}])</span>
+                        <span className="text-gray-300"> (auto-prefix: {smsProvider === "smsniaga" ? `RM0 ${(formSenderId || "CelsiusCoffee").toUpperCase()}:` : `RM0 [${formSenderId || "CelsiusCoffee"}]`})</span>
                       </span>
                       {(formChannel === "sms" || formChannel === "both") && formScheduleType === "now" && smsBalance !== null && (
                         <span className="text-xs text-gray-400">

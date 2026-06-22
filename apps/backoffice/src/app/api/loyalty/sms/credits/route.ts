@@ -12,24 +12,29 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const brandId = searchParams.get('brand_id') || 'brand-celsius';
 
-    // Fetch real balance from SMS123
-    const apiKey = process.env.SMS123_API_KEY;
-    const email = process.env.SMS123_EMAIL;
-    let sms123Balance: number | null = null;
+    const provider = await getActiveSmsProvider();
 
-    if (apiKey && email) {
-      try {
-        const params = new URLSearchParams({ apiKey, email });
-        const res = await fetch(`https://www.sms123.net/api/getBalance.php?${params.toString()}`, {
-          next: { revalidate: 0 },
-        });
-        const data = await res.json();
-        if (data.status === 'ok' && data.balance != null) {
-          // SMS123 returns formatted numbers like "2,000.00" — strip commas before parsing
-          sms123Balance = parseFloat(String(data.balance).replace(/,/g, ''));
+    // Balance is only meaningful for the active gateway. SMS123 exposes a balance
+    // API; SMS Niaga doesn't have one wired here, so we report null (no false
+    // SMS123 number when SMS Niaga is live).
+    let balance: number | null = null;
+    if (provider === 'sms123') {
+      const apiKey = process.env.SMS123_API_KEY;
+      const email = process.env.SMS123_EMAIL;
+      if (apiKey && email) {
+        try {
+          const params = new URLSearchParams({ apiKey, email });
+          const res = await fetch(`https://www.sms123.net/api/getBalance.php?${params.toString()}`, {
+            next: { revalidate: 0 },
+          });
+          const data = await res.json();
+          if (data.status === 'ok' && data.balance != null) {
+            // SMS123 returns formatted numbers like "2,000.00" — strip commas before parsing
+            balance = parseFloat(String(data.balance).replace(/,/g, ''));
+          }
+        } catch (err) {
+          console.error('Failed to fetch SMS123 balance:', err);
         }
-      } catch (err) {
-        console.error('Failed to fetch SMS123 balance:', err);
       }
     }
 
@@ -54,8 +59,8 @@ export async function GET(request: NextRequest) {
       .limit(50);
 
     return NextResponse.json({
-      balance: sms123Balance,
-      provider: await getActiveSmsProvider(),
+      balance,
+      provider,
       total_sent: totalSent ?? 0,
       sent_this_month: sentThisMonth ?? 0,
       history: history ?? [],
