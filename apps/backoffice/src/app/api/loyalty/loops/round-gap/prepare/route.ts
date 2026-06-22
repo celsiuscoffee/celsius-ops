@@ -7,25 +7,30 @@ export const maxDuration = 60;
 
 // Curated round-gap campaigns per the office-hours design (docs/design/
 // personalised-round-gap-loop.md). Offer = low-COGS "free coffee when you spend
-// RM20+" (free_item gated by min_order_value) — NOT a discount, and the RM20
-// basket forces a real order beyond a lone coffee (food attach) at the weak
-// round. Margin-safe: the give is ~RM3 coffee COGS, carried by the basket. Each
-// keeps a 10% holdout. The prepare RPC tags the treatment group + auto-creates
-// the time-boxed, tag-restricted, outlet-scoped promo. Status 'prepared' → the
-// operator reviews + sends from the round card (no SMS here).
+// RM<min>+" (free_item gated by min_order_value) — NOT a discount. The min is
+// anchored ~20% ABOVE each round's own AOV (NOT below it), so the free coffee is
+// the lever that pulls the basket UP toward the RM40 target — the original
+// "lift this round 20%" objective. Below-AOV would just leak margin on baskets
+// people already make. Margin-safe: the give is ~RM3 coffee COGS, carried by the
+// larger basket. Each keeps a 10% holdout. The prepare RPC tags the treatment
+// group + auto-creates the time-boxed, tag-restricted, outlet-scoped promo.
+// Status 'prepared' → the operator reviews + sends from the round card.
+//
+// Thresholds (60-day data): Conezion Breakfast AOV RM29 → RM35 (+20%); Shah Alam
+// Evening AOV RM33 → RM40 (+21%, lands on target). Retune as AOV moves.
 const CAMPAIGNS: Record<string, {
   outlet: string; round_start: number; round_end: number;
-  name: string; offer_label: string; message: string;
+  name: string; offer_label: string; message: string; min_order: number;
 }> = {
   "conezion-breakfast": {
-    outlet: "conezion", round_start: 7, round_end: 9,
-    name: "Conezion · Breakfast", offer_label: "Free coffee when you spend RM20+ (7–9am)",
-    message: "Free coffee with breakfast at Celsius Conezion, 7-9am this week. Spend RM20+ and your coffee's on us. Show your number to redeem.",
+    outlet: "conezion", round_start: 7, round_end: 9, min_order: 35,
+    name: "Conezion · Breakfast", offer_label: "Free coffee when you spend RM35+ (7–9am)",
+    message: "Free coffee with breakfast at Celsius Conezion, 7-9am this week. Spend RM35+ and your coffee's on us. Show your number to redeem.",
   },
   "shah-alam-evening": {
-    outlet: "shah-alam", round_start: 17, round_end: 19,
-    name: "Shah Alam · Evening", offer_label: "Free coffee when you spend RM20+ (5–7pm)",
-    message: "Free coffee at Celsius Shah Alam, 5-7pm this week. Spend RM20+ and your coffee's on us. Show your number to redeem.",
+    outlet: "shah-alam", round_start: 17, round_end: 19, min_order: 40,
+    name: "Shah Alam · Evening", offer_label: "Free coffee when you spend RM40+ (5–7pm)",
+    message: "Free coffee at Celsius Shah Alam, 5-7pm this week. Spend RM40+ and your coffee's on us. Show your number to redeem.",
   },
 };
 
@@ -48,6 +53,7 @@ export async function POST(request: NextRequest) {
       p_round_name: cfg.name,
       p_offer_label: cfg.offer_label,
       p_message: cfg.message,
+      p_min_order: cfg.min_order,
     });
     if (error) throw new Error(error.message);
     const row = Array.isArray(data) ? data[0] : data;

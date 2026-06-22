@@ -16,7 +16,7 @@ DROP FUNCTION IF EXISTS loyalty_round_gap_prepare(text, int, int, text, text, te
 CREATE OR REPLACE FUNCTION loyalty_round_gap_prepare(
   p_outlet text, p_round_start int, p_round_end int,
   p_round_name text, p_offer_label text, p_message text,
-  p_free_category text DEFAULT 'classic', p_min_order numeric DEFAULT 20,
+  p_free_category text DEFAULT 'classic', p_min_order numeric DEFAULT 35,
   p_holdout_pct int DEFAULT 10, p_window_days int DEFAULT 7
 )
 RETURNS TABLE(round_id text, treated int, holdout int, promo_id text, member_tag text)
