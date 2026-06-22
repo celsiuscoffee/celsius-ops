@@ -204,7 +204,7 @@ export default function LoopsPage() {
         Every campaign is a loop: the engine proposes each round&apos;s offers against a holdout and learns which logic wins — the setup sharpens over time. Pick an objective:
       </p>
 
-      {evalData && <EvaluationPanel data={evalData} days={evalDays} onDays={setEvalDays} />}
+      {evalData && <EvaluationPanel data={evalData} days={evalDays} onDays={setEvalDays} loops={opt?.loops ?? []} />}
 
       {/* Fire all auto-triggered loops on demand (first run / catch-up). They
           also run themselves daily at 9am; this is for an immediate send. */}
@@ -393,15 +393,21 @@ function Kpi({ label, value, sub, highlight }: { label: string; value: string; s
 const EVAL_PRESETS: Array<{ label: string; val: number | null }> = [
   { label: "7d", val: 7 }, { label: "30d", val: 30 }, { label: "90d", val: 90 }, { label: "All", val: null },
 ];
-function EvaluationPanel({ data, days, onDays }: { data: Evaluation; days: number | null; onDays: (d: number | null) => void }) {
-  const t = data.totals;       // measured (lift / ROI)
-  const lv = data.live.totals; // live (sent / vouchers / redeemed)
-  const nextResults = lv.next_results_at ? new Date(lv.next_results_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" }) : null;
+function EvaluationPanel({ data, days, onDays, loops }: { data: Evaluation; days: number | null; onDays: (d: number | null) => void; loops: LoopMeta[] }) {
+  const lv = data.live.totals;
+  const liveByKey = new Map(data.live.per_loop.map((l) => [l.loop_key, l]));
+  const measByKey = new Map(data.per_loop.map((l) => [l.loop_key, l]));
+  // One board per campaign — driven off the loops list so idle campaigns
+  // (e.g. Birthday before it fires today) still show a board.
+  const campaigns = loops.length
+    ? loops.map((l) => ({ key: l.key, label: l.label, objective: l.objective, triggered: l.triggered }))
+    : data.live.per_loop.map((l) => ({ key: l.loop_key, label: l.label, objective: "", triggered: false }));
+  const totalReturn = lv.sms_cost_rm > 0 ? `${(lv.revenue_rm / lv.sms_cost_rm).toFixed(1)}×` : "—";
   return (
-    <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+    <div className="mb-6 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
         <BarChart3 className="h-5 w-5 text-[#A2492C]" />
-        <h2 className="text-lg font-semibold">Campaign scorecard</h2>
+        <h2 className="text-lg font-semibold">Campaign scorecards</h2>
         <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700" title="Auto-updates every 20s">
           <span className="relative flex h-1.5 w-1.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
@@ -409,110 +415,87 @@ function EvaluationPanel({ data, days, onDays }: { data: Evaluation; days: numbe
           </span>
           Live
         </span>
-        <span className="text-xs text-gray-400">all loops{days ? ` · last ${days}d` : ""}</span>
+        {days ? <span className="text-xs text-gray-400">last {days}d</span> : null}
         <div className="ml-auto flex items-center gap-1">
           {EVAL_PRESETS.map((p) => (
-            <button
-              key={p.label}
-              onClick={() => onDays(p.val)}
-              className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", days === p.val ? "bg-[#A2492C] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}
-            >
-              {p.label}
-            </button>
+            <button key={p.label} onClick={() => onDays(p.val)} className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", days === p.val ? "bg-[#A2492C] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}>{p.label}</button>
           ))}
         </div>
       </div>
-      {/* LIVE activity — populated the moment a round goes out (no window wait). */}
-      {lv.sent === 0 ? (
-        <p className="text-sm text-gray-500">No SMS sent {days ? `in the last ${days} days` : "yet"}. Fire a loop and activity shows here instantly.</p>
+
+      {/* All-campaigns total */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">All campaigns</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <Kpi label="SMS sent" value={lv.sent.toLocaleString()} sub={`${rm(lv.sms_cost_rm)} spent`} />
+          <Kpi label="Redeemed" value={lv.redeemed.toLocaleString()} sub={`${lv.redeemed_rate}%`} />
+          <Kpi label="Orders" value={lv.orders.toLocaleString()} sub="so far" />
+          <Kpi label="RM Orders" value={rm(lv.revenue_rm)} sub="gross · in window" />
+          <Kpi label="Return" value={totalReturn} sub="RM per RM1 SMS" highlight />
+        </div>
+        <p className="mt-2 text-[11px] text-gray-400">Orders, RM &amp; return are <strong>gross attributed so far</strong>. True ROI vs the holdout shows per campaign once each window closes.</p>
+      </div>
+
+      {/* One board per campaign */}
+      <div className="grid gap-3 md:grid-cols-2">
+        {campaigns.map((c) => (
+          <CampaignBoard key={c.key} meta={c} live={liveByKey.get(c.key) ?? null} meas={measByKey.get(c.key) ?? null} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CampaignBoard({ meta, live, meas }: {
+  meta: { key: string; label: string; objective: string; triggered?: boolean };
+  live: LiveLoop | null; meas: LoopEval | null;
+}) {
+  const sent = live?.sent ?? 0;
+  const measuring = (live?.in_flight ?? 0) > 0;
+  const hasResults = !!meas && meas.rounds > 0;
+  const next = live?.next_results_at ? new Date(live.next_results_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" }) : null;
+  const ret = live && live.sms_cost_rm > 0 ? `${(live.revenue_rm / live.sms_cost_rm).toFixed(1)}×` : "—";
+  const status = measuring ? { t: "Measuring", c: "bg-blue-100 text-blue-800" }
+    : hasResults ? { t: "Measured", c: "bg-green-100 text-green-800" }
+    : sent > 0 ? { t: "Sent", c: "bg-gray-100 text-gray-600" }
+    : { t: "Idle", c: "bg-gray-100 text-gray-400" };
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-gray-900">{meta.label}</h3>
+          {meta.objective && <p className="truncate text-xs text-gray-400">{meta.objective}</p>}
+        </div>
+        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", status.c)}>{status.t}</span>
+      </div>
+      {sent === 0 ? (
+        <p className="mt-3 text-sm text-gray-400">{meta.triggered ? "Runs automatically — fires when customers qualify." : "No sends yet."}</p>
       ) : (
         <>
-          <div className="mb-1 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Kpi label="SMS sent" value={lv.sent.toLocaleString()} sub={`${rm(lv.sms_cost_rm)} spent`} />
-            <Kpi label="Redeemed so far" value={lv.redeemed.toLocaleString()} sub={`${lv.redeemed_rate}% of vouchers`} />
-            <Kpi label="Measuring" value={`${lv.in_flight} round${lv.in_flight === 1 ? "" : "s"}`} sub={nextResults ? `results from ${nextResults}` : "all measured"} />
-            <Kpi label="Orders so far" value={lv.orders.toLocaleString()} sub="from messaged customers" />
-            <Kpi label="RM Orders so far" value={rm(lv.revenue_rm)} sub="gross · in window" />
-            <Kpi label="Return so far" value={lv.sms_cost_rm > 0 ? `${(lv.revenue_rm / lv.sms_cost_rm).toFixed(1)}×` : "—"} sub="RM orders per RM1 SMS" highlight />
+          <div className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2">
+            <MiniStat label="Sent" value={sent.toLocaleString()} />
+            <MiniStat label="Redeemed" value={`${live!.redeemed} (${live!.redeemed_rate}%)`} />
+            <MiniStat label="Orders" value={live!.orders.toLocaleString()} />
+            <MiniStat label="RM Orders" value={rm(live!.revenue_rm)} />
+            <MiniStat label="Return" value={ret} />
+            <MiniStat label="Spent" value={rm(live!.sms_cost_rm)} />
           </div>
-          <p className="mb-4 text-[11px] text-gray-400">Orders, RM &amp; return are <strong>gross attributed so far</strong> (everyone messaged, within their window — not yet net of who&apos;d have ordered anyway). True ROI vs the holdout shows under <em>Results</em> once windows close.</p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-                  <th className="py-2 pr-3">Loop</th>
-                  <th className="py-2 pr-3 text-right">Sent</th>
-                  <th className="py-2 pr-3 text-right">Redeemed</th>
-                  <th className="py-2 pr-3 text-right">Orders</th>
-                  <th className="py-2 pr-3 text-right">RM Orders</th>
-                  <th className="py-2 pr-3 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.live.per_loop.map((l) => (
-                  <tr key={l.loop_key} className="border-b border-gray-100">
-                    <td className="py-2 pr-3 font-medium">{l.label}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{l.sent.toLocaleString()}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{l.redeemed.toLocaleString()} <span className="text-gray-400">({l.redeemed_rate}%)</span></td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{l.orders.toLocaleString()}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{rm(l.revenue_rm)}</td>
-                    <td className="py-2 pr-3 text-right text-xs">{l.in_flight > 0 ? <span className="text-blue-700">{l.in_flight} measuring</span> : <span className="text-green-700">measured</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {hasResults ? (
+            <div className="mt-3 rounded-lg bg-green-50 px-2.5 py-1.5 text-xs text-green-900"><strong>Results:</strong> ROI {meas!.roi > 0 ? `${meas!.roi}×` : "—"} · {meas!.avg_lift_pp > 0 ? "+" : ""}{meas!.avg_lift_pp}pp lift · {rm(meas!.incremental_margin_rm)} incr. margin</div>
+          ) : measuring && next ? (
+            <p className="mt-2 text-xs text-blue-700">Measuring — results vs holdout from {next}</p>
+          ) : null}
         </>
       )}
+    </div>
+  );
+}
 
-      {/* MEASURED results — lift / margin / ROI vs holdout (needs the window). */}
-      <div className="mt-5 border-t border-gray-100 pt-4">
-        <h3 className="mb-2 text-sm font-semibold text-gray-700">Results vs holdout <span className="font-normal text-gray-400">— incremental orders, margin &amp; ROI</span></h3>
-        {t.rounds === 0 ? (
-          <p className="text-sm text-gray-500">
-            {lv.in_flight > 0 && nextResults
-              ? `No results yet — the first round finishes its window around ${nextResults}. Lift & ROI need the full attribution window vs the holdout, so they can't show sooner.`
-              : `No measured rounds ${days ? `in the last ${days} days` : "yet"}.`}
-          </p>
-        ) : (
-          <>
-            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Kpi label="Incremental orders" value={`+${t.incremental_orders.toLocaleString()}`} sub="vs holdout" />
-              <Kpi label="Incremental margin" value={rm(t.incremental_margin_rm)} sub="vs holdout" />
-              <Kpi label="ROI" value={t.roi > 0 ? `${t.roi}×` : "—"} sub="margin ÷ SMS cost" highlight />
-              <Kpi label="Avg lift" value={`${t.avg_lift_pp > 0 ? "+" : ""}${t.avg_lift_pp}pp`} sub="order rate" />
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-                    <th className="py-2 pr-3">Loop</th>
-                    <th className="py-2 pr-3 text-right">Rounds</th>
-                    <th className="py-2 pr-3 text-right">Sent</th>
-                    <th className="py-2 pr-3 text-right">Redeemed</th>
-                    <th className="py-2 pr-3 text-right">Avg lift</th>
-                    <th className="py-2 pr-3 text-right">Incr. margin</th>
-                    <th className="py-2 pr-3 text-right">ROI</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.per_loop.map((l) => (
-                    <tr key={l.loop_key} className="border-b border-gray-100">
-                      <td className="py-2 pr-3 font-medium">{l.label}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{l.rounds}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{l.sent.toLocaleString()}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{l.redemption_rate}%</td>
-                      <td className={cn("py-2 pr-3 text-right tabular-nums", l.avg_lift_pp >= SUCCESS_BAR_PP ? "text-green-700" : l.avg_lift_pp > 0 ? "text-gray-700" : "text-red-600")}>{l.avg_lift_pp > 0 ? "+" : ""}{l.avg_lift_pp}pp</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{rm(l.incremental_margin_rm)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{l.roi > 0 ? `${l.roi}×` : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </div>
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[11px] uppercase tracking-wide text-gray-400">{label}</p>
+      <p className="text-sm font-semibold tabular-nums text-gray-900">{value}</p>
     </div>
   );
 }
