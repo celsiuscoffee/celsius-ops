@@ -268,6 +268,8 @@ export default function LoopsPage() {
         </div>
       )}
 
+      {opt && <MessagesPanel arms={opt.proposal.arms} />}
+
       {opt && <OptimizerPanel opt={opt} />}
 
       {!activeTriggered && (opt ? (
@@ -496,6 +498,35 @@ function MiniStat({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-[11px] uppercase tracking-wide text-gray-400">{label}</p>
       <p className="text-sm font-semibold tabular-nums text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+// ---- Messages panel: the actual SMS copy each customer receives -------------
+function MessagesPanel({ arms }: { arms: ProposalArm[] }) {
+  if (!arms.length) return null;
+  return (
+    <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Send className="h-5 w-5 text-[#A2492C]" />
+        <h2 className="text-lg font-semibold">Messages going out</h2>
+        <span className="text-xs text-gray-400">exactly what each customer receives · {arms.length} in rotation</span>
+      </div>
+      <div className="space-y-3">
+        {arms.map((a) => {
+          const seg = smsSegments(a.message);
+          return (
+            <div key={a.key} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                <RoleBadge role={a.role} />
+                <span className="text-sm font-medium">{a.label}</span>
+              </div>
+              <p className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800">{SMS_PREFIX}{a.message}</p>
+              <p className="mt-1 text-[11px] text-gray-400">{seg.chars}/{seg.gsm7 ? 160 : 70} chars · {seg.segments} SMS{a.reason ? ` · ${a.reason}` : ""}</p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
