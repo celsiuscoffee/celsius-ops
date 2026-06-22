@@ -100,7 +100,8 @@ model Outlet {
   sopOutlets        SopOutlet[]
   checklists        Checklist[]
   sopSchedules      SopSchedule[]
-  reviewSettings    ReviewSettings?
+  reviewSettings     ReviewSettings?
+  competitorSnapshot CompetitorSnapshot?
   internalFeedbacks InternalFeedback[]
   auditReports      AuditReport[]
   recurringExpenses RecurringExpense[]
@@ -1315,6 +1316,26 @@ model ReviewSettings {
   logoUrl         String?
   // Feedback form fields config (JSON array of {question, type, required, active})
   feedbackFields  Json?   @default("[]")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Cached "Nearby Competitor Ranking" per outlet — one current row, refreshed by
+// the daily cron from Google Places Nearby Search. See lib/reviews/places.ts.
+model CompetitorSnapshot {
+  id              String   @id @default(uuid())
+  outletId        String   @unique
+  outlet          Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  capturedAt      DateTime @default(now())
+  radiusM         Int
+  selfFound       Boolean  @default(false)
+  selfPlaceId     String?
+  selfRating      Float?
+  selfReviewCount Int?
+  rankByReviews   Int?
+  rankByRating    Int?
+  totalNearby     Int      @default(0)
+  competitors     Json     @default("[]")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

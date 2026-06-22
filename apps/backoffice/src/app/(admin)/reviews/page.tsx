@@ -16,6 +16,9 @@ import {
   Check,
   X,
   Send,
+  Trophy,
+  MapPin,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
@@ -46,6 +49,26 @@ type Feedback = {
 type DashboardGoogleReview = GoogleReview & { outletName: string; outletId: string };
 type DashboardFeedback = Feedback & { outletName: string };
 
+type Competitor = {
+  placeId: string;
+  name: string;
+  rating: number | null;
+  reviewCount: number;
+  distanceM: number;
+};
+
+type CompetitorData = {
+  capturedAt: string;
+  radiusM: number;
+  selfFound: boolean;
+  selfRating: number | null;
+  selfReviewCount: number | null;
+  rankByReviews: number | null;
+  rankByRating: number | null;
+  totalNearby: number;
+  competitors: Competitor[];
+};
+
 type OutletSummary = {
   outletId: string;
   outletName: string;
@@ -60,6 +83,7 @@ type OutletSummary = {
     feedbacks: Feedback[];
     stats: { total: number; star5: number; star4: number; star3: number; star2: number; star1: number };
   };
+  competitor: CompetitorData | null;
 };
 
 type DashboardResponse = {
@@ -855,6 +879,159 @@ function BatchAutoReplyModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ─── Nearby Competitor Ranking ─────────────────────────────
+
+type RankRow = { name: string; rating: number | null; reviewCount: number; distanceM: number; isSelf: boolean };
+
+function CompetitorPanel({
+  outlet,
+  onRefreshed,
+}: {
+  outlet: OutletSummary | null;
+  onRefreshed: () => void;
+}) {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refresh = async () => {
+    if (!outlet) return;
+    setRefreshing(true);
+    try {
+      await fetch(`/api/reviews/competitors/refresh?outletId=${outlet.outletId}`, { method: "POST" });
+      onRefreshed();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // No outlet selected — mirror the empty state from the spec.
+  if (!outlet) {
+    return (
+      <div className="mt-4 rounded-xl border border-border bg-white p-8 text-center">
+        <Trophy className="mx-auto h-8 w-8 text-muted-foreground/40" />
+        <p className="mt-3 text-sm font-semibold">Select a location to view competitors</p>
+        <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
+          Nearby competitor rankings are location-specific. Pick an outlet above to see its nearby cafés and market position.
+        </p>
+      </div>
+    );
+  }
+
+  const c = outlet.competitor;
+
+  // Selected but never refreshed yet.
+  if (!c) {
+    return (
+      <div className="mt-4 rounded-xl border border-border bg-white p-6 text-center">
+        <Trophy className="mx-auto h-7 w-7 text-muted-foreground/40" />
+        <p className="mt-2 text-sm font-semibold">No competitor data yet for {outlet.outletName}</p>
+        <p className="mt-1 text-xs text-muted-foreground">Pull nearby cafés from Google to compute this outlet&apos;s ranking.</p>
+        <button
+          onClick={refresh}
+          disabled={refreshing}
+          className="mx-auto mt-3 flex items-center gap-1.5 rounded-lg bg-brand-dark px-4 py-2 text-xs font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50 transition-colors"
+        >
+          {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          Refresh competitors
+        </button>
+      </div>
+    );
+  }
+
+  const radiusKm = (c.radiusM / 1000).toFixed(1).replace(/\.0$/, "");
+
+  // Merge self into the rival list and rank the whole set by review volume.
+  const rows: RankRow[] = [
+    ...c.competitors.map((x) => ({ name: x.name, rating: x.rating, reviewCount: x.reviewCount, distanceM: x.distanceM, isSelf: false })),
+  ];
+  if (c.selfFound) {
+    rows.push({ name: `${outlet.outletName} (You)`, rating: c.selfRating, reviewCount: c.selfReviewCount ?? 0, distanceM: 0, isSelf: true });
+  }
+  rows.sort((a, b) => b.reviewCount - a.reviewCount || (b.rating ?? 0) - (a.rating ?? 0));
+
+  return (
+    <div className="mt-4 grid gap-4 lg:grid-cols-[260px_1fr]">
+      {/* Rank summary */}
+      <div className="rounded-xl border border-border bg-white p-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <MapPin className="h-4 w-4" />
+            <span className="text-xs font-medium">Within {radiusKm}km</span>
+          </div>
+          <button
+            onClick={refresh}
+            disabled={refreshing}
+            title="Refresh from Google"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+
+        {c.selfFound && c.rankByReviews ? (
+          <>
+            <div className="mt-3 flex items-end gap-1.5">
+              <span className="text-4xl font-bold leading-none">#{c.rankByReviews}</span>
+              <span className="mb-1 text-sm text-muted-foreground">of {c.totalNearby}</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">nearby cafés, by review volume</p>
+            <div className="mt-3 flex items-center gap-4 border-t border-border pt-3 text-sm">
+              <div>
+                <span className="font-bold">#{c.rankByRating ?? "–"}</span>
+                <p className="text-[10px] text-muted-foreground">by rating</p>
+              </div>
+              <div>
+                <span className="font-bold">{c.selfRating?.toFixed(1) ?? "–"}</span>
+                <Star className="ml-0.5 inline h-3 w-3 fill-amber-400 text-amber-400" />
+                <p className="text-[10px] text-muted-foreground">{c.selfReviewCount ?? 0} reviews</p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="mt-3">
+            <p className="text-2xl font-bold">N/A</p>
+            <p className="mt-1 text-xs text-amber-600">
+              Your Google listing wasn&apos;t found within {radiusKm}km — showing nearby cafés only.
+            </p>
+          </div>
+        )}
+        <p className="mt-3 text-[10px] text-muted-foreground">Updated {timeAgo(c.capturedAt)}</p>
+      </div>
+
+      {/* Competitor leaderboard */}
+      <div className="rounded-xl border border-border bg-white p-4">
+        <p className="mb-2 px-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Nearby cafés ({c.totalNearby})
+        </p>
+        {rows.length === 0 ? (
+          <p className="px-1 py-6 text-center text-sm text-muted-foreground">No nearby cafés found.</p>
+        ) : (
+          <div className="divide-y divide-border">
+            {rows.map((r, i) => (
+              <div
+                key={`${r.name}-${i}`}
+                className={`flex items-center gap-3 px-1 py-2 ${r.isSelf ? "rounded-lg bg-terracotta/5" : ""}`}
+              >
+                <span className={`w-6 shrink-0 text-center text-sm font-bold ${r.isSelf ? "text-terracotta" : "text-muted-foreground"}`}>
+                  {i + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className={`truncate text-sm ${r.isSelf ? "font-semibold text-terracotta" : "font-medium"}`}>{r.name}</p>
+                  {!r.isSelf && <p className="text-[10px] text-muted-foreground">{r.distanceM}m away</p>}
+                </div>
+                <div className="flex items-center gap-1 text-sm">
+                  <span className="font-semibold">{r.rating?.toFixed(1) ?? "–"}</span>
+                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                </div>
+                <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">{r.reviewCount.toLocaleString()} rev</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Dashboard View ────────────────────────────────────────
 
 function DashboardView() {
@@ -874,7 +1051,11 @@ function DashboardView() {
       ? `/api/reviews/dashboard?period=${period}`
       : null;
 
-  const { data, isLoading } = useFetch<DashboardResponse>(fetchUrl);
+  const { data, isLoading, mutate } = useFetch<DashboardResponse>(fetchUrl);
+
+  const selectedOutlet = filterOutletId
+    ? data?.outlets?.find((o) => o.outletId === filterOutletId) ?? null
+    : null;
 
   const periodLabel = period === "day" ? "Today" : period === "week" ? "Last 7 days" : period === "month" ? "Last 30 days" : customFrom ? `${customFrom} to ${customTo || "now"}` : "Custom";
 
@@ -1047,6 +1228,13 @@ function DashboardView() {
           </button>
         </div>
       )}
+
+      {/* Nearby Competitor Ranking */}
+      <div className="mt-6 flex items-center gap-2">
+        <Trophy className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-sm font-semibold">Nearby Competitor Ranking</h2>
+      </div>
+      <CompetitorPanel outlet={selectedOutlet} onRefreshed={() => mutate()} />
 
       {/* Sub-tabs + toolbar */}
       <div className="mt-6 flex items-center justify-between">
