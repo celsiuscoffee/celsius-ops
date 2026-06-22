@@ -18,17 +18,27 @@ export const maxDuration = 60;
 //
 // Thresholds (60-day data): Conezion Breakfast AOV RM29 → RM35 (+20%); Shah Alam
 // Evening AOV RM33 → RM40 (+21%, lands on target). Retune as AOV moves.
+//
+// AUDIENCE (segment v3): the behavioral round-skippers PLUS the dormant imported
+// StoreHub base for the outlet that never ordered native (~15k tagged Putrajaya /
+// Shah Alam). Each run is capped at `limit` (default 100) and takes the warmest
+// slice first — skippers, then StoreHub-tier imports, then points, then the rest
+// — so this doubles as the "100/day" reactivation drip that bleeds the dormant
+// base into the weak rounds. Imports are one-shot; skippers have a 14-day
+// cooldown. The `source` column lets us read skipper vs import lift separately.
+// Run ONE campaign per day for ~100/day total (or split the limit across both).
+const DAILY_LIMIT = 100;
 const CAMPAIGNS: Record<string, {
   outlet: string; round_start: number; round_end: number;
-  name: string; offer_label: string; message: string; min_order: number;
+  name: string; offer_label: string; message: string; min_order: number; limit: number;
 }> = {
   "conezion-breakfast": {
-    outlet: "conezion", round_start: 7, round_end: 9, min_order: 35,
+    outlet: "conezion", round_start: 7, round_end: 9, min_order: 35, limit: DAILY_LIMIT,
     name: "Conezion · Breakfast", offer_label: "Free coffee when you spend RM35+ (7–9am)",
     message: "Free coffee with breakfast at Celsius Conezion, 7-9am this week. Spend RM35+ and your coffee's on us. Show your number to redeem.",
   },
   "shah-alam-evening": {
-    outlet: "shah-alam", round_start: 17, round_end: 19, min_order: 40,
+    outlet: "shah-alam", round_start: 17, round_end: 19, min_order: 40, limit: DAILY_LIMIT,
     name: "Shah Alam · Evening", offer_label: "Free coffee when you spend RM40+ (5–7pm)",
     message: "Free coffee at Celsius Shah Alam, 5-7pm this week. Spend RM40+ and your coffee's on us. Show your number to redeem.",
   },
@@ -54,6 +64,7 @@ export async function POST(request: NextRequest) {
       p_offer_label: cfg.offer_label,
       p_message: cfg.message,
       p_min_order: cfg.min_order,
+      p_limit: cfg.limit,
     });
     if (error) throw new Error(error.message);
     const row = Array.isArray(data) ? data[0] : data;
