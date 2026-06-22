@@ -372,6 +372,21 @@ export async function measureRound(roundId: string) {
 
   const windowMs = (round.attribution_window_days as number) * 86400000;
 
+  // Round-gap rounds measure round-specifically: only orders placed AT THE TARGET
+  // OUTLET during the TARGET ROUND (day-part) count as conversions — that's the
+  // behaviour the campaign moves, so lift vs holdout isn't diluted by "any order".
+  const RG_OUTLET_IDS: Record<string, string[]> = {
+    conezion: ["conezion", "outlet-con"],
+    "shah-alam": ["shah-alam", "outlet-sa"],
+    tamarind: ["tamarind", "outlet-tam"],
+  };
+  const meta = (round.meta ?? {}) as { kind?: string; outlet?: string; round_start?: number; round_end?: number; promo_id?: string; member_tag?: string };
+  const rgMeta =
+    meta.kind === "round_gap" && meta.outlet != null && meta.round_start != null && meta.round_end != null
+      ? { round_start: meta.round_start, round_end: meta.round_end, outletIds: RG_OUTLET_IDS[meta.outlet] ?? [meta.outlet] }
+      : null;
+  const mytHour = (iso: string) => new Date(new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur" })).getHours();
+
   type Acc = { n: number; converted: number; redeemed: number; revenueRm: number };
   const byArm: Record<string, Acc> = {};
 
@@ -384,10 +399,20 @@ export async function measureRound(roundId: string) {
 
     // orders by phone in the window (online + POS)
     const [{ data: o1 }, { data: o2 }] = await Promise.all([
-      supabaseAdmin.from("orders").select("total").eq("customer_phone", r.phone).gte("created_at", start).lte("created_at", end),
-      supabaseAdmin.from("pos_orders").select("total").eq("customer_phone", r.phone).gte("created_at", start).lte("created_at", end),
+      supabaseAdmin.from("orders").select("total, created_at, store_id").eq("customer_phone", r.phone).gte("created_at", start).lte("created_at", end),
+      supabaseAdmin.from("pos_orders").select("total, created_at, outlet_id").eq("customer_phone", r.phone).gte("created_at", start).lte("created_at", end),
     ]);
-    const orders = [...(o1 ?? []), ...(o2 ?? [])] as Array<{ total: number | null }>;
+    let orders = [
+      ...((o1 ?? []) as Array<{ total: number | null; created_at: string; store_id: string | null }>).map((o) => ({ total: o.total, created_at: o.created_at, outlet: o.store_id })),
+      ...((o2 ?? []) as Array<{ total: number | null; created_at: string; outlet_id: string | null }>).map((o) => ({ total: o.total, created_at: o.created_at, outlet: o.outlet_id })),
+    ];
+    if (rgMeta) {
+      orders = orders.filter((o) => {
+        if (!o.outlet || !rgMeta.outletIds.includes(o.outlet)) return false;
+        const h = mytHour(o.created_at);
+        return h >= rgMeta.round_start && h < rgMeta.round_end;
+      });
+    }
     if (orders.length) {
       acc.converted++;
       acc.revenueRm += orders.reduce((s, o) => s + (o.total ?? 0), 0) / 100; // total is cents
@@ -424,6 +449,12 @@ export async function measureRound(roundId: string) {
     .from("loop_rounds")
     .update({ status: "measured", measured_at: new Date().toISOString(), stats })
     .eq("id", roundId);
+
+  // Round-gap: once measured, retire the auto-created promo + strip the campaign
+  // tag so the offer can't linger past its window.
+  if (rgMeta && meta.promo_id) {
+    await supabaseAdmin.rpc("loyalty_round_gap_cleanup", { p_promo_id: meta.promo_id, p_tag: meta.member_tag ?? null });
+  }
 
   return { round_id: roundId, holdout_conversion_rate: +(holdoutRate * 100).toFixed(1), stats };
 }
