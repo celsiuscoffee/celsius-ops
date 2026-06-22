@@ -165,6 +165,20 @@ export default function LoopsPage() {
   }, [loopKey]);
   useEffect(() => { setRounds(null); setOpt(null); setLastPreview(null); void load(); }, [load]);
 
+  // Fire all triggered loops on demand. force=true ignores the once-a-day guard.
+  const runNow = async (force: boolean) => {
+    setBusy("run"); setErr(null); setRunResult(null);
+    try {
+      const res = await fetch("/api/loyalty/loops/run-triggered", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ force }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Run failed");
+      const fired = ((data.triggered ?? []) as Array<{ loop: string; sent?: number; failed?: number; error?: string; skipped?: boolean }>).map((t) => t.skipped ? `${t.loop}: already ran today` : `${t.loop}: ${t.sent ?? 0} sent${t.failed ? `, ${t.failed} failed` : ""}${t.error ? ` (${t.error})` : ""}`).join(" · ");
+      setRunResult(fired || "Nothing qualified right now.");
+      await load();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Run failed"); }
+    finally { setBusy(null); }
+  };
+
   // Scorecard rollup is fetched separately so the date filter only refetches it.
   const loadEval = useCallback(async () => {
     try {
@@ -213,22 +227,23 @@ export default function LoopsPage() {
           disabled={busy === "run"}
           onClick={async () => {
             if (!confirm("Fire all auto-triggered loops NOW? This sends LIVE SMS to everyone who currently qualifies (Reactivation / Welcome / Birthday).")) return;
-            setBusy("run"); setErr(null); setRunResult(null);
-            try {
-              const res = await fetch("/api/loyalty/loops/run-triggered", { method: "POST" });
-              const data = await res.json();
-              if (!res.ok) throw new Error(data?.error ?? "Run failed");
-              const fired = ((data.triggered ?? []) as Array<{ loop: string; sent?: number; failed?: number; error?: string; skipped?: boolean }>).map((t) => t.skipped ? `${t.loop}: already ran today` : `${t.loop}: ${t.sent ?? 0} sent${t.failed ? `, ${t.failed} failed` : ""}${t.error ? ` (${t.error})` : ""}`).join(" · ");
-              setRunResult(fired || "Nothing qualified right now.");
-              await load();
-            } catch (e) { setErr(e instanceof Error ? e.message : "Run failed"); }
-            finally { setBusy(null); }
+            await runNow(false);
           }}
           className="inline-flex items-center gap-2 rounded-lg bg-[#A2492C] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {busy === "run" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Run all triggered loops now
         </button>
-        <span className="text-xs text-gray-500">{runResult ?? "Fires Reactivation + Welcome + Birthday immediately. They also run automatically at 9am daily."}</span>
+        <button
+          disabled={busy === "run"}
+          onClick={async () => {
+            if (!confirm("FORCE run NOW? Ignores the once-a-day guard and fires every triggered loop's current qualifiers immediately. Already-messaged customers are still protected by the cooldown. Sends LIVE SMS.")) return;
+            await runNow(true);
+          }}
+          className="inline-flex items-center gap-2 rounded-lg border border-[#A2492C] px-3 py-2 text-sm font-medium text-[#A2492C] disabled:opacity-50"
+        >
+          {busy === "run" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Force run now
+        </button>
+        <span className="text-xs text-gray-500">{runResult ?? "Fires Reactivation + Welcome + Birthday immediately (also auto at 9am daily). “Force” ignores the once-a-day skip — use after changing a segment."}</span>
       </div>
 
       {opt && (
