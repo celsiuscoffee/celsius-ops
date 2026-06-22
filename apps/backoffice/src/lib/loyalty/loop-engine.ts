@@ -64,20 +64,32 @@ async function winbackSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; lab
   const minD = o.minDaysLapsed ?? 30, maxD = o.maxDaysLapsed ?? 60;
   const sinceMax = new Date(Date.now() - maxD * 86400000).toISOString();
   const sinceMin = new Date(Date.now() - minD * 86400000).toISOString();
-  const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT)
-    .eq("brand_id", BRAND).gte("last_visit_at", sinceMax).lt("last_visit_at", sinceMin);
-  if (error) throw new Error(`winback segment: ${error.message}`);
-  return { rows: reachable((data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>), label: `Lapsed ${minD}–${maxD}d` };
+  const rows: Array<{ member_id: string; members: MemberRow | null }> = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT)
+      .eq("brand_id", BRAND).gte("last_visit_at", sinceMax).lt("last_visit_at", sinceMin).range(from, from + 999);
+    if (error) throw new Error(`winback segment: ${error.message}`);
+    const batch = (data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>;
+    rows.push(...batch);
+    if (batch.length < 1000) break; // page past Supabase's 1000-row cap so wide windows aren't truncated
+  }
+  return { rows: reachable(rows), label: `Lapsed ${minD}–${maxD}d` };
 }
 
 // ── Welcome: members with a single visit, joined within N days (1st → 2nd).
 async function welcomeSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
   const days = o.joinedWithinDays ?? 30;
   const since = new Date(Date.now() - days * 86400000).toISOString();
-  const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT)
-    .eq("brand_id", BRAND).eq("total_visits", 1).gte("joined_at", since);
-  if (error) throw new Error(`welcome segment: ${error.message}`);
-  return { rows: reachable((data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>), label: `New members · 1 visit, joined ≤${days}d` };
+  const rows: Array<{ member_id: string; members: MemberRow | null }> = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT)
+      .eq("brand_id", BRAND).eq("total_visits", 1).gte("joined_at", since).range(from, from + 999);
+    if (error) throw new Error(`welcome segment: ${error.message}`);
+    const batch = (data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>;
+    rows.push(...batch);
+    if (batch.length < 1000) break;
+  }
+  return { rows: reachable(rows), label: `New members · 1 visit, joined ≤${days}d` };
 }
 
 // ── Birthday: members whose birthday falls within the next K days.
@@ -104,10 +116,16 @@ async function roundGapSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; la
   if (!o.outletId) throw new Error("round_gap needs an outletId");
   const days = o.activeWithinDays ?? 45;
   const since = new Date(Date.now() - days * 86400000).toISOString();
-  const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT)
-    .eq("brand_id", BRAND).gte("last_visit_at", since);
-  if (error) throw new Error(`round_gap segment: ${error.message}`);
-  const rows = reachable((data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>, (m) => m.preferred_outlet_id === o.outletId);
+  const raw: Array<{ member_id: string; members: MemberRow | null }> = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT)
+      .eq("brand_id", BRAND).gte("last_visit_at", since).range(from, from + 999);
+    if (error) throw new Error(`round_gap segment: ${error.message}`);
+    const batch = (data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>;
+    raw.push(...batch);
+    if (batch.length < 1000) break;
+  }
+  const rows = reachable(raw, (m) => m.preferred_outlet_id === o.outletId);
   return { rows, label: `Outlet actives ≤${days}d` };
 }
 
@@ -760,6 +778,10 @@ async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: Lo
     createdBy: "cron:loops-trigger",
   });
   if (!preview.round_id || preview.total === 0) return { loop: def.key, qualified: 0 };
+  // Backstop: mark it due now so the loops-send cron finishes the send if this
+  // request is interrupted mid-way (large batches can exceed the function limit).
+  // sendRound is idempotent, so the cron only sends what didn't go out here.
+  await supabaseAdmin.from("loop_rounds").update({ scheduled_send_at: new Date().toISOString() }).eq("id", preview.round_id);
   const res = await sendRound(preview.round_id);
   return { loop: def.key, qualified: preview.total, sent: res.sent, failed: res.failed, round_id: preview.round_id, error: res.error };
 }
