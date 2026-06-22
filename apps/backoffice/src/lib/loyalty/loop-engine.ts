@@ -397,21 +397,25 @@ export type OfferCandidate = {
   label: string;
   logic: "% discount" | "flat discount" | "BOGO" | "free item";
   voucher_template_id: string;
-  message: string;
+  /** The deal phrase, objective-NEUTRAL — slotted into each loop's
+   *  messageTemplate (see LOOPS) so the same offer reads right in a
+   *  Welcome vs Birthday vs Win-back SMS. e.g. "15% off when you spend RM40+". */
+  offer: string;
 };
 
 // The explorable offer space. Extend freely — every new voucher_template added
 // here becomes a candidate the optimizer can test. Round-robin diversity +
 // least-tested-first selection means new entries get explored automatically.
+// `offer` is the deal only; the per-loop template supplies the framing.
 export const OFFER_CANDIDATES: OfferCandidate[] = [
-  { key: "pct10_min25", label: "10% off RM25+", logic: "% discount", voucher_template_id: "a0000010-0000-4000-8000-000000000010", message: "We miss you at Celsius! Enjoy 10% off when you spend RM25+. Tap to use — valid 14 days." },
-  { key: "pct15_min40", label: "15% off RM40+", logic: "% discount", voucher_template_id: "eb47fd73-42ab-4eb6-ade4-a12f96912d00", message: "We miss you at Celsius! Enjoy 15% off when you spend RM40+. Tap to use — valid 14 days." },
-  { key: "pct20_min40", label: "20% off RM40+", logic: "% discount", voucher_template_id: "a0000020-0000-4000-8000-000000000020", message: "We miss you at Celsius! Enjoy 20% off when you spend RM40+ (max RM12). Tap to use — valid 14 days." },
-  { key: "flat5_min25", label: "RM5 off RM25+", logic: "flat discount", voucher_template_id: "a0000005-0000-4000-8000-000000000005", message: "We miss you at Celsius! Here's RM5 off your next RM25+ order. Tap to use — valid 14 days." },
-  { key: "flat10_min30", label: "RM10 off RM30+", logic: "flat discount", voucher_template_id: "02ca62f1-171d-41d2-b6d6-9ca2d67ca3b9", message: "We miss you at Celsius! Here's RM10 off your next RM30+ order. Tap to use — valid 14 days." },
-  { key: "flat15_min50", label: "RM15 off RM50+", logic: "flat discount", voucher_template_id: "3c0288b5-51db-4e82-a583-6ed1dbc351b5", message: "We miss you at Celsius! Here's RM15 off your next RM50+ order. Tap to use — valid 14 days." },
-  { key: "b1f1_drinks", label: "Buy 1 Free 1 drinks", logic: "BOGO", voucher_template_id: "ed33eb26-4ead-414d-b1ee-179999a33940", message: "We miss you at Celsius! Buy 1 Free 1 on any drink — bring a friend! Valid 30 days." },
-  { key: "free_drink", label: "Free Tea", logic: "free item", voucher_template_id: "1b9a465a-8411-4299-a2e2-8034f2b0ea45", message: "Happy birthday from Celsius! Your free tea is on us — enjoy. Valid 14 days." },
+  { key: "pct10_min25", label: "10% off RM25+", logic: "% discount", voucher_template_id: "a0000010-0000-4000-8000-000000000010", offer: "10% off when you spend RM25+" },
+  { key: "pct15_min40", label: "15% off RM40+", logic: "% discount", voucher_template_id: "eb47fd73-42ab-4eb6-ade4-a12f96912d00", offer: "15% off when you spend RM40+" },
+  { key: "pct20_min40", label: "20% off RM40+", logic: "% discount", voucher_template_id: "a0000020-0000-4000-8000-000000000020", offer: "20% off when you spend RM40+ (capped at RM12)" },
+  { key: "flat5_min25", label: "RM5 off RM25+", logic: "flat discount", voucher_template_id: "a0000005-0000-4000-8000-000000000005", offer: "RM5 off when you spend RM25+" },
+  { key: "flat10_min30", label: "RM10 off RM30+", logic: "flat discount", voucher_template_id: "02ca62f1-171d-41d2-b6d6-9ca2d67ca3b9", offer: "RM10 off when you spend RM30+" },
+  { key: "flat15_min50", label: "RM15 off RM50+", logic: "flat discount", voucher_template_id: "3c0288b5-51db-4e82-a583-6ed1dbc351b5", offer: "RM15 off when you spend RM50+" },
+  { key: "b1f1_drinks", label: "Buy 1 Free 1 drinks", logic: "BOGO", voucher_template_id: "ed33eb26-4ead-414d-b1ee-179999a33940", offer: "buy 1 free 1 on any drink" },
+  { key: "free_drink", label: "Free Tea", logic: "free item", voucher_template_id: "1b9a465a-8411-4299-a2e2-8034f2b0ea45", offer: "a free tea, on us" },
 ];
 
 // ── Loop registry: each campaign objective is a loop. Same machinery
@@ -425,18 +429,28 @@ export type LoopDef = {
   defaultHoldoutPct: number;
   defaultWindowDays: number;
   candidateKeys: string[]; // which OFFER_CANDIDATES this loop explores
+  /** Objective-specific SMS copy. "{offer}" is replaced with the arm's
+   *  offer phrase so each campaign reads right (a Welcome ≠ a Win-back).
+   *  Keep it GSM-7 (no emoji) + short — the gateway prepends ~20 chars. */
+  messageTemplate: string;
   segment: (o: SegmentOpts) => Promise<{ rows: SegmentRow[]; label: string }>;
 };
 
 export const LOOPS: Record<LoopKey, LoopDef> = {
-  winback: { key: "winback", label: "Reactivation", objective: "Win back lapsed customers", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["pct10_min25", "pct15_min40", "pct20_min40", "flat5_min25", "flat10_min30", "flat15_min50", "b1f1_drinks"], segment: winbackSegment },
-  welcome: { key: "welcome", label: "Welcome", objective: "Turn the 1st visit into a 2nd", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks", "free_drink"], segment: welcomeSegment },
-  birthday: { key: "birthday", label: "Birthday", objective: "Bring members in on their birthday", defaultHoldoutPct: 15, defaultWindowDays: 14, candidateKeys: ["free_drink", "b1f1_drinks", "pct20_min40"], segment: birthdaySegment },
-  round_gap: { key: "round_gap", label: "Weekly round-gap", objective: "Fill an underperforming day-part", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["pct15_min40", "flat10_min30", "b1f1_drinks"], segment: roundGapSegment },
+  winback:   { key: "winback",   label: "Reactivation",      objective: "Win back lapsed customers",        defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct10_min25", "pct15_min40", "pct20_min40", "flat5_min25", "flat10_min30", "flat15_min50", "b1f1_drinks"], messageTemplate: "We miss you at Celsius! Come back and enjoy {offer}. Tap to use.", segment: winbackSegment },
+  welcome:   { key: "welcome",   label: "Welcome",           objective: "Turn the 1st visit into a 2nd",    defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks", "free_drink"], messageTemplate: "Welcome to Celsius! Enjoy {offer} on your next visit. See you again soon.", segment: welcomeSegment },
+  birthday:  { key: "birthday",  label: "Birthday",          objective: "Bring members in on their birthday", defaultHoldoutPct: 15, defaultWindowDays: 14, candidateKeys: ["free_drink", "b1f1_drinks", "pct20_min40"], messageTemplate: "Happy birthday from Celsius! Enjoy {offer}. Tap to use.", segment: birthdaySegment },
+  round_gap: { key: "round_gap", label: "Weekly round-gap",  objective: "Fill an underperforming day-part",  defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct15_min40", "flat10_min30", "b1f1_drinks"], messageTemplate: "Celsius misses you! Enjoy {offer} this week. Drop by.", segment: roundGapSegment },
 };
 
-function toArmDef(c: OfferCandidate): ArmDef {
-  return { key: c.key, label: c.label, voucher_template_id: c.voucher_template_id, message: c.message };
+// Curated SMS per (loop × offer): slot the offer phrase into the loop's
+// objective copy so Welcome/Birthday/round-gap read right — not win-back copy.
+export function composeMessage(loopKey: LoopKey, c: OfferCandidate): string {
+  return LOOPS[loopKey].messageTemplate.replace("{offer}", c.offer);
+}
+
+function toArmDef(c: OfferCandidate, message: string): ArmDef {
+  return { key: c.key, label: c.label, voucher_template_id: c.voucher_template_id, message };
 }
 
 type StoredArm = { key: string; label: string; voucher_template_id: string; message: string };
@@ -524,7 +538,7 @@ export async function proposeArms(loopKey: LoopKey = "winback", opts?: { count?:
     const cand = space.find((c) => c.voucher_template_id === champ.template_id);
     if (cand) {
       const sign = champ.incr_margin_per_recipient_rm >= 0 ? "+" : "";
-      chosen.push({ ...toArmDef(cand), role: "champion", reason: `Best so far: ${sign}RM${champ.incr_margin_per_recipient_rm}/recipient, ${sign}${champ.avg_lift_pp}pp over ${champ.recipients.toLocaleString()} sent (${champ.rounds} ${champ.rounds === 1 ? "round" : "rounds"}).` });
+      chosen.push({ ...toArmDef(cand, composeMessage(loopKey, cand)), role: "champion", reason: `Best so far: ${sign}RM${champ.incr_margin_per_recipient_rm}/recipient, ${sign}${champ.avg_lift_pp}pp over ${champ.recipients.toLocaleString()} sent (${champ.rounds} ${champ.rounds === 1 ? "round" : "rounds"}).` });
       usedTemplates.add(cand.voucher_template_id);
       usedLogics.add(cand.logic);
     }
@@ -540,7 +554,7 @@ export async function proposeArms(loopKey: LoopKey = "winback", opts?: { count?:
     const reason = seen
       ? `Re-test — ${seen.recipients.toLocaleString()} sent so far, ${seen.avg_lift_pp >= 0 ? "+" : ""}${seen.avg_lift_pp}pp.`
       : "New logic — never tested yet.";
-    chosen.push({ ...toArmDef(c), role: "challenger", reason });
+    chosen.push({ ...toArmDef(c, composeMessage(loopKey, c)), role: "challenger", reason });
     usedTemplates.add(c.voucher_template_id);
     usedLogics.add(c.logic);
   };
