@@ -64,7 +64,15 @@ type LoopEval = {
   redemptions: number; redemption_rate: number; avg_lift_pp: number;
   incremental_orders: number; incremental_margin_rm: number; sms_cost_rm: number; roi: number;
 };
-type Evaluation = { per_loop: LoopEval[]; totals: Omit<LoopEval, "loop_key" | "label"> };
+type LiveLoop = {
+  loop_key: string; label: string; rounds: number; in_flight: number;
+  sent: number; vouchers: number; redeemed: number; sms_cost_rm: number;
+  redeemed_rate: number; next_results_at: string | null;
+};
+type Evaluation = {
+  per_loop: LoopEval[]; totals: Omit<LoopEval, "loop_key" | "label">;
+  live: { per_loop: LiveLoop[]; totals: Omit<LiveLoop, "loop_key" | "label"> };
+};
 
 const CHAMPION_MIN_RECIPIENTS = 300;
 
@@ -382,7 +390,9 @@ const EVAL_PRESETS: Array<{ label: string; val: number | null }> = [
   { label: "7d", val: 7 }, { label: "30d", val: 30 }, { label: "90d", val: 90 }, { label: "All", val: null },
 ];
 function EvaluationPanel({ data, days, onDays }: { data: Evaluation; days: number | null; onDays: (d: number | null) => void }) {
-  const t = data.totals;
+  const t = data.totals;       // measured (lift / ROI)
+  const lv = data.live.totals; // live (sent / vouchers / redeemed)
+  const nextResults = lv.next_results_at ? new Date(lv.next_results_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" }) : null;
   return (
     <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -395,7 +405,7 @@ function EvaluationPanel({ data, days, onDays }: { data: Evaluation; days: numbe
           </span>
           Live
         </span>
-        <span className="text-xs text-gray-400">all loops · measured rounds{days ? ` · sent in last ${days}d` : ""}</span>
+        <span className="text-xs text-gray-400">all loops{days ? ` · last ${days}d` : ""}</span>
         <div className="ml-auto flex items-center gap-1">
           {EVAL_PRESETS.map((p) => (
             <button
@@ -408,15 +418,16 @@ function EvaluationPanel({ data, days, onDays }: { data: Evaluation; days: numbe
           ))}
         </div>
       </div>
-      {t.rounds === 0 ? (
-        <p className="text-sm text-gray-500">No measured rounds {days ? `in the last ${days} days` : "yet"} — the scorecard fills in here once rounds complete their attribution window (incremental orders, margin and ROI vs the holdout).</p>
+      {/* LIVE activity — populated the moment a round goes out (no window wait). */}
+      {lv.sent === 0 ? (
+        <p className="text-sm text-gray-500">No SMS sent {days ? `in the last ${days} days` : "yet"}. Fire a loop and activity shows here instantly.</p>
       ) : (
         <>
           <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Kpi label="SMS sent" value={t.sent.toLocaleString()} sub={`${rm(t.sms_cost_rm)} spent`} />
-            <Kpi label="Redemption" value={`${t.redemption_rate}%`} sub={`${t.redemptions.toLocaleString()} redeemed`} />
-            <Kpi label="Incremental orders" value={`+${t.incremental_orders.toLocaleString()}`} sub="vs holdout" />
-            <Kpi label="Incremental margin" value={rm(t.incremental_margin_rm)} sub={`ROI ${t.roi > 0 ? `${t.roi}×` : "—"}`} highlight />
+            <Kpi label="SMS sent" value={lv.sent.toLocaleString()} sub={`${rm(lv.sms_cost_rm)} spent`} />
+            <Kpi label="Vouchers issued" value={lv.vouchers.toLocaleString()} />
+            <Kpi label="Redeemed so far" value={lv.redeemed.toLocaleString()} sub={`${lv.redeemed_rate}% of vouchers`} highlight />
+            <Kpi label="Measuring" value={`${lv.in_flight} round${lv.in_flight === 1 ? "" : "s"}`} sub={nextResults ? `results from ${nextResults}` : "all measured"} />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -425,22 +436,20 @@ function EvaluationPanel({ data, days, onDays }: { data: Evaluation; days: numbe
                   <th className="py-2 pr-3">Loop</th>
                   <th className="py-2 pr-3 text-right">Rounds</th>
                   <th className="py-2 pr-3 text-right">Sent</th>
+                  <th className="py-2 pr-3 text-right">Vouchers</th>
                   <th className="py-2 pr-3 text-right">Redeemed</th>
-                  <th className="py-2 pr-3 text-right">Avg lift</th>
-                  <th className="py-2 pr-3 text-right">Incr. margin</th>
-                  <th className="py-2 pr-3 text-right">ROI</th>
+                  <th className="py-2 pr-3 text-right">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {data.per_loop.map((l) => (
+                {data.live.per_loop.map((l) => (
                   <tr key={l.loop_key} className="border-b border-gray-100">
                     <td className="py-2 pr-3 font-medium">{l.label}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{l.rounds}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{l.sent.toLocaleString()}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{l.redemption_rate}%</td>
-                    <td className={cn("py-2 pr-3 text-right tabular-nums", l.avg_lift_pp >= SUCCESS_BAR_PP ? "text-green-700" : l.avg_lift_pp > 0 ? "text-gray-700" : "text-red-600")}>{l.avg_lift_pp > 0 ? "+" : ""}{l.avg_lift_pp}pp</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{rm(l.incremental_margin_rm)}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{l.roi > 0 ? `${l.roi}×` : "—"}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{l.vouchers.toLocaleString()}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{l.redeemed.toLocaleString()} <span className="text-gray-400">({l.redeemed_rate}%)</span></td>
+                    <td className="py-2 pr-3 text-right text-xs">{l.in_flight > 0 ? <span className="text-blue-700">{l.in_flight} measuring</span> : <span className="text-green-700">measured</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -448,6 +457,55 @@ function EvaluationPanel({ data, days, onDays }: { data: Evaluation; days: numbe
           </div>
         </>
       )}
+
+      {/* MEASURED results — lift / margin / ROI vs holdout (needs the window). */}
+      <div className="mt-5 border-t border-gray-100 pt-4">
+        <h3 className="mb-2 text-sm font-semibold text-gray-700">Results vs holdout <span className="font-normal text-gray-400">— incremental orders, margin &amp; ROI</span></h3>
+        {t.rounds === 0 ? (
+          <p className="text-sm text-gray-500">
+            {lv.in_flight > 0 && nextResults
+              ? `No results yet — the first round finishes its window around ${nextResults}. Lift & ROI need the full attribution window vs the holdout, so they can't show sooner.`
+              : `No measured rounds ${days ? `in the last ${days} days` : "yet"}.`}
+          </p>
+        ) : (
+          <>
+            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Kpi label="Incremental orders" value={`+${t.incremental_orders.toLocaleString()}`} sub="vs holdout" />
+              <Kpi label="Incremental margin" value={rm(t.incremental_margin_rm)} sub="vs holdout" />
+              <Kpi label="ROI" value={t.roi > 0 ? `${t.roi}×` : "—"} sub="margin ÷ SMS cost" highlight />
+              <Kpi label="Avg lift" value={`${t.avg_lift_pp > 0 ? "+" : ""}${t.avg_lift_pp}pp`} sub="order rate" />
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
+                    <th className="py-2 pr-3">Loop</th>
+                    <th className="py-2 pr-3 text-right">Rounds</th>
+                    <th className="py-2 pr-3 text-right">Sent</th>
+                    <th className="py-2 pr-3 text-right">Redeemed</th>
+                    <th className="py-2 pr-3 text-right">Avg lift</th>
+                    <th className="py-2 pr-3 text-right">Incr. margin</th>
+                    <th className="py-2 pr-3 text-right">ROI</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.per_loop.map((l) => (
+                    <tr key={l.loop_key} className="border-b border-gray-100">
+                      <td className="py-2 pr-3 font-medium">{l.label}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{l.rounds}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{l.sent.toLocaleString()}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{l.redemption_rate}%</td>
+                      <td className={cn("py-2 pr-3 text-right tabular-nums", l.avg_lift_pp >= SUCCESS_BAR_PP ? "text-green-700" : l.avg_lift_pp > 0 ? "text-gray-700" : "text-red-600")}>{l.avg_lift_pp > 0 ? "+" : ""}{l.avg_lift_pp}pp</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{rm(l.incremental_margin_rm)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{l.roi > 0 ? `${l.roi}×` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
