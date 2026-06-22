@@ -157,6 +157,9 @@ export default function LoopsPage() {
   }, [loopKey]);
   useEffect(() => { setRounds(null); setOpt(null); setLastPreview(null); void load(); }, [load]);
 
+  // Auto-triggered loops run themselves — no manual "New round" form, no budget.
+  const activeTriggered = !!opt?.loops.find((l) => l.key === loopKey)?.triggered;
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       <Link href="/loyalty/engage" className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
@@ -192,13 +195,13 @@ export default function LoopsPage() {
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
           <Repeat className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span>
-            <strong>Auto-triggered daily.</strong> This loop fires by itself — it auto-issues the voucher + SMS to each new qualifier (birthday today · ~1 day after a 1st visit · just lapsed), no budget or approval. The form below is only if you want an extra manual round.
+            <strong>Auto-triggered daily.</strong> This loop fires by itself — it auto-issues the voucher + SMS to each new qualifier (birthday today · ~1 day after a 1st visit · just lapsed), no budget or approval. Nothing to do here — just watch the scorecard and rounds below.
           </span>
         </div>
       )}
 
       <div className="mb-6 flex flex-wrap gap-x-6 gap-y-1 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-        <span><span className="text-gray-500">SMS budget</span> <strong>set per round</strong> (start {rm(DEFAULT_BUDGET_RM)}, scale up)</span>
+        {!activeTriggered && <span><span className="text-gray-500">SMS budget</span> <strong>set per round</strong> (start {rm(DEFAULT_BUDGET_RM)}, scale up)</span>}
         <span><span className="text-gray-500">Scale an arm at</span> <strong>≥{SUCCESS_BAR_PP}pp lift</strong> vs holdout</span>
         <span><span className="text-gray-500">Margin read at</span> <strong>{Math.round(GP * 100)}% GP</strong></span>
         <span><span className="text-gray-500">SMS</span> <strong>{rm(SMS_COST_RM)}</strong>/msg · rewards self-funding (need a paid order)</span>
@@ -212,7 +215,7 @@ export default function LoopsPage() {
 
       {opt && <OptimizerPanel opt={opt} />}
 
-      {opt ? (
+      {!activeTriggered && (opt ? (
         <NewRoundCard
           key={loopKey}
           loopKey={loopKey}
@@ -238,7 +241,7 @@ export default function LoopsPage() {
         <div className="mb-6 rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400 shadow-sm">
           <Loader2 className="mx-auto h-5 w-5 animate-spin" /> Loading optimizer…
         </div>
-      )}
+      ))}
 
       {lastPreview && (
         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -257,7 +260,7 @@ export default function LoopsPage() {
       {rounds === null ? (
         <div className="py-10 text-center text-gray-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
       ) : rounds.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-10 text-center text-sm text-gray-400">No rounds yet — configure one above.</div>
+        <div className="rounded-lg border border-dashed border-gray-300 py-10 text-center text-sm text-gray-400">{activeTriggered ? "No rounds yet — this loop runs automatically; rounds appear here after the next daily run (~9am)." : "No rounds yet — configure one above."}</div>
       ) : (
         <div className="space-y-4">
           {rounds.map((r) => (
