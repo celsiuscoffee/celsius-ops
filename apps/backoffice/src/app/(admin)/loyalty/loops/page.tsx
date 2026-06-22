@@ -311,6 +311,9 @@ export default function LoopsPage() {
         </div>
       )}
 
+      {activeTriggered ? (
+        <p className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500">This loop runs automatically — every send and its results roll up into the <strong>live scoreboard</strong> at the top of the page. Nothing to manage here.</p>
+      ) : (<>
       <h2 className="mb-3 mt-2 text-lg font-semibold">Rounds</h2>
       {rounds === null ? (
         <div className="py-10 text-center text-gray-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
@@ -368,6 +371,7 @@ export default function LoopsPage() {
           ))}
         </div>
       )}
+      </>)}
 
       <button onClick={() => void load()} className="mt-6 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
         <RefreshCw className="h-3.5 w-3.5" /> Refresh
