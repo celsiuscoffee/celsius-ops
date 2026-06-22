@@ -66,6 +66,27 @@ const CHAMPION_MIN_RECIPIENTS = 300;
 function rm(n: number) {
   return `RM${n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+// SMS segment counter. The gateway prepends "RM0 CELSIUSCOFFEE: ", so the
+// recipient sees prefix+body. 1 segment = ≤160 GSM-7 chars; a single non-GSM
+// char (em-dash, smart quote, emoji) flips the whole message to UCS-2 (≤70).
+// Every loop SMS must stay 1 segment so cost is predictable.
+const SMS_PREFIX = "RM0 CELSIUSCOFFEE: ";
+const GSM7_BASIC = "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
+const GSM7_EXT = "^{}\\[]~|€";
+function smsSegments(body: string): { chars: number; segments: number; gsm7: boolean } {
+  const text = SMS_PREFIX + body;
+  let gsm7 = true, units = 0;
+  for (const ch of text) {
+    if (GSM7_BASIC.includes(ch)) units += 1;
+    else if (GSM7_EXT.includes(ch)) units += 2;
+    else { gsm7 = false; break; }
+  }
+  if (!gsm7) {
+    const cu = [...text].reduce((n, c) => n + ((c.codePointAt(0) ?? 0) > 0xffff ? 2 : 1), 0);
+    return { chars: cu, segments: cu <= 70 ? 1 : Math.ceil(cu / 67), gsm7: false };
+  }
+  return { chars: units, segments: units <= 160 ? 1 : Math.ceil(units / 153), gsm7: true };
+}
 function windowLabel(w: string | null | undefined): string {
   if (!w) return "—";
   return w.split("_").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
@@ -378,6 +399,7 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
 
   const logicOf = (tid: string) => candidates.find((c) => c.voucher_template_id === tid)?.logic ?? "—";
   const triggered = !!loopMeta?.triggered; // auto loops have no budget cap
+  const anyOverLimit = arms.some((a) => smsSegments(a.message).segments > 1); // block >1-segment sends
   const maxSms = Math.max(0, Math.floor(budget / SMS_COST_RM));
   const maxRecipients = Math.floor(maxSms / Math.max(0.01, 1 - holdout / 100));
   const segmentOpts = (): Record<string, unknown> => {
@@ -461,12 +483,23 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
               rows={2}
               className="w-full rounded-md border border-gray-200 p-2 text-sm"
             />
+            {(() => {
+              const s = smsSegments(a.message);
+              return (
+                <p className={cn("mt-1 text-xs", s.segments > 1 ? "font-medium text-red-600" : "text-gray-400")}>
+                  {s.chars}/{s.gsm7 ? 160 : 70} incl. sender · {s.segments === 1 ? "1 SMS" : `${s.segments} SMS — shorten to fit 1`}{!s.gsm7 && " · non-GSM char (halves the limit)"}
+                </p>
+              );
+            })()}
           </div>
         ))}
       </div>
 
+      {anyOverLimit && (
+        <p className="mb-2 text-xs font-medium text-red-600">One or more messages exceed a single SMS — shorten them before preparing (keeps cost at 1 SMS each).</p>
+      )}
       <button
-        disabled={busy || arms.length === 0}
+        disabled={busy || arms.length === 0 || anyOverLimit}
         onClick={() => onPrepare({
           loop_key: loopKey,
           arms: arms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message })),
