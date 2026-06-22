@@ -373,11 +373,23 @@ export async function POST(request: NextRequest) {
     // here. Customer-typed promo codes were removed end-to-end. Voucher
     // (legacy) and reward discounts stay separate since they predate
     // the engine.
-    const cartLinesBare = typedItems.map((item) => ({
-      product_id: (item.product?.id ?? item.product_id) as string,
-      quantity: item.quantity,
-      unit_price: priceMap.get((item.product?.id ?? item.product_id) as string) ?? 0,
-    }));
+    const cartLinesBare = typedItems.map((item) => {
+      const pid = (item.product?.id ?? item.product_id) as string;
+      // Per-unit price INCLUDING modifier upcharges (e.g. Iced +RM1), matching
+      // serverSubtotalSen above. The promo/tier engine discounts on this, so a
+      // % perk applies to what the customer actually pays. Using the bare
+      // catalogue price here under-discounted % perks by (percent × modifier)
+      // — Black Card 50% on an Iced (+RM1) drink lost RM0.50, charging RM14.40
+      // where the quote showed RM13.90.
+      const modifierDeltaRm = (item.modifiers?.selections ?? []).reduce(
+        (sum, s) => sum + Math.max(0, s.priceDelta ?? 0), 0,
+      );
+      return {
+        product_id: pid,
+        quantity: item.quantity,
+        unit_price: (priceMap.get(pid) ?? 0) + modifierDeltaRm,
+      };
+    });
     // Categories needed for category-gated combos. Same pattern as
     // /api/orders — server-side lookup so the client can't spoof.
     const productIdsForCategory = Array.from(

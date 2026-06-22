@@ -470,15 +470,24 @@ export async function POST(request: NextRequest) {
       quantity: number;
       basePrice?: number;
       totalPrice?: number;
+      modifiers?: unknown;
     };
     const cartLinesBare = (items as IncomingItem[]).map((i) => {
       const pid = i.product?.id ?? i.productId ?? i.product_id ?? "";
       // Use the authoritative DB price (not client basePrice) so a crafted
       // basePrice can't inflate a percentage-off promo discount.
-      const unit = pricedMap.get(pid) ?? (i.basePrice != null
+      const base = pricedMap.get(pid) ?? (i.basePrice != null
         ? i.basePrice
         : (i.totalPrice ?? 0) / Math.max(1, i.quantity));
-      return { product_id: pid, quantity: i.quantity, unit_price: unit };
+      // Add modifier upcharges so a % perk (e.g. Black Card 50%) discounts the
+      // price the customer actually pays — bare base price under-discounted by
+      // percent×modifier. Handle both shapes (native array / PWA {selections}),
+      // same as serverSubtotalSen above.
+      const mods = Array.isArray(i.modifiers)
+        ? (i.modifiers as Array<{ priceDelta?: number }>)
+        : (((i.modifiers as { selections?: Array<{ priceDelta?: number }> } | null)?.selections) ?? []);
+      const modifierDeltaRm = mods.reduce((s, m) => s + Math.max(0, m.priceDelta ?? 0), 0);
+      return { product_id: pid, quantity: i.quantity, unit_price: base + modifierDeltaRm };
     });
     // Batch-look-up product categories so the loyalty evaluator can
     // honor category-gated combos ("any classic drink + any roti
