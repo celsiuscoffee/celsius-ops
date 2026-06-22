@@ -61,7 +61,7 @@ export function ActiveChallengeCard() {
   if (!mission) return null;
 
   const progressLabel =
-    mission.goal_type === "single_order_total_at_least"
+    mission.goal_type === "single_order_total_at_least" || mission.goal_type === "spend_amount"
       ? `RM${Math.floor((mission.progress_current ?? 0) / 100)}/RM${Math.floor((mission.goal_threshold ?? 0) / 100)}`
       : `${mission.progress_current ?? 0}/${mission.goal_threshold ?? 0}`;
 

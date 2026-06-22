@@ -40,7 +40,7 @@ const THEME = {
 function progressLabel(m: Mission): string {
   const cur = m.progress_current ?? 0;
   const goal = m.goal_threshold ?? 0;
-  if (m.goal_type === "single_order_total_at_least") {
+  if (m.goal_type === "single_order_total_at_least" || m.goal_type === "spend_amount") {
     return `RM${Math.floor(cur / 100)} of RM${Math.floor(goal / 100)}`;
   }
   return `${cur} of ${goal}`;
@@ -49,7 +49,7 @@ function progressLabel(m: Mission): string {
 function remainingHint(m: Mission): string {
   const remaining = Math.max(0, (m.goal_threshold ?? 0) - (m.progress_current ?? 0));
   if (remaining === 0) return "You're done — claim your reward!";
-  if (m.goal_type === "single_order_total_at_least") {
+  if (m.goal_type === "single_order_total_at_least" || m.goal_type === "spend_amount") {
     return `RM${Math.ceil(remaining / 100)} more to unlock`;
   }
   return remaining === 1 ? "1 more to unlock" : `${remaining} more to unlock`;
@@ -72,6 +72,12 @@ function howToWin(m: Mission): string[] {
       return [
         `Spend at least RM${Math.floor(goal / 100)} in a single order.`,
         "Add-ons, sides and pastries all count toward the total.",
+        "Discounts and vouchers don't reduce the qualifying amount.",
+      ];
+    case "spend_amount":
+      return [
+        `Spend RM${Math.floor(goal / 100)} in total this week.`,
+        "Every order this week adds up — no single big bill needed.",
         "Discounts and vouchers don't reduce the qualifying amount.",
       ];
     case "drinks_count":
