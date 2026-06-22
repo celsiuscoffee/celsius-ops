@@ -210,7 +210,7 @@ export default function LoopsPage() {
               const res = await fetch("/api/loyalty/loops/run-triggered", { method: "POST" });
               const data = await res.json();
               if (!res.ok) throw new Error(data?.error ?? "Run failed");
-              const fired = ((data.triggered ?? []) as Array<{ loop: string; sent?: number; failed?: number; error?: string }>).map((t) => `${t.loop}: ${t.sent ?? 0} sent${t.failed ? `, ${t.failed} failed` : ""}${t.error ? ` (${t.error})` : ""}`).join(" · ");
+              const fired = ((data.triggered ?? []) as Array<{ loop: string; sent?: number; failed?: number; error?: string; skipped?: boolean }>).map((t) => t.skipped ? `${t.loop}: already ran today` : `${t.loop}: ${t.sent ?? 0} sent${t.failed ? `, ${t.failed} failed` : ""}${t.error ? ` (${t.error})` : ""}`).join(" · ");
               setRunResult(fired || "Nothing qualified right now.");
               await load();
             } catch (e) { setErr(e instanceof Error ? e.message : "Run failed"); }
