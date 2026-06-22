@@ -37,7 +37,6 @@ export async function GET(req: NextRequest) {
 
   const mysteryClaimables = ((drops ?? []) as unknown as DropRow[]).map((d) => ({
     id: d.id,
-    order_id: d.order_id,
     title: d.mystery_pool.label,
     description: "Tap to reveal your reward",
     icon: d.mystery_pool.icon ?? "sparkle",
