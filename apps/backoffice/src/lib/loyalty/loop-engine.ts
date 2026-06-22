@@ -904,117 +904,46 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
   const { loop_key: _k, label: _l, ...totals } = toEval("__totals__", tAcc);
   void _k; void _l;
 
-  // ── LIVE activity ───────────────────────────────────────────────────────────
-  // Every sent + measured round, available immediately (not gated on the
-  // attribution window). This is what keeps the scorecard populated the moment a
-  // round goes out: SMS sent, vouchers, redemptions-to-date, what's still measuring.
-  let liveQ = supabaseAdmin
-    .from("loop_rounds")
-    .select("id, loop_key, status, sent_at, attribution_window_days")
-    .in("status", ["sent", "measured"]);
-  if (opts?.sinceDays && opts.sinceDays > 0) {
-    liveQ = liveQ.gte("sent_at", new Date(Date.now() - opts.sinceDays * 86400000).toISOString());
-  }
-  const liveRounds = ((await liveQ).data ?? []) as Array<{ id: string; loop_key: string; status: string; sent_at: string | null; attribution_window_days: number }>;
-  const liveIds = liveRounds.map((r) => r.id);
-
-  const sentByRound = new Map<string, number>();
-  const vouchByRound = new Map<string, number>();
-  const redByRound = new Map<string, number>();
-  if (liveIds.length) {
-    const { data: la } = await supabaseAdmin.from("loop_assignments").select("round_id, sms_status").in("round_id", liveIds);
-    for (const a of (la ?? []) as Array<{ round_id: string; sms_status: string | null }>) {
-      if (a.sms_status === "sent") sentByRound.set(a.round_id, (sentByRound.get(a.round_id) ?? 0) + 1);
-    }
-    const { data: ir } = await supabaseAdmin.from("issued_rewards").select("source_ref_id, redeemed_at, status").in("source_ref_id", liveIds);
-    for (const v of (ir ?? []) as Array<{ source_ref_id: string; redeemed_at: string | null; status: string | null }>) {
-      vouchByRound.set(v.source_ref_id, (vouchByRound.get(v.source_ref_id) ?? 0) + 1);
-      if (v.redeemed_at || v.status === "redeemed") redByRound.set(v.source_ref_id, (redByRound.get(v.source_ref_id) ?? 0) + 1);
-    }
-  }
-
-  // Attributed orders/revenue SO FAR (gross — not incremental; that's the
-  // measured section). Scoped to in-flight rounds + people we actually reached,
-  // so the order scan stays cheap and tracks what's currently running.
-  const ordersByLoop = new Map<string, { orders: number; revenue: number }>();
-  const inflight = liveRounds.filter((r) => r.status === "sent" && r.sent_at);
-  if (inflight.length) {
-    const metaById = new Map(inflight.map((r) => [r.id, r]));
-    const { data: tre } = await supabaseAdmin
-      .from("loop_assignments").select("round_id, phone, sms_status, arm").in("round_id", inflight.map((r) => r.id)).neq("arm", "holdout");
-    const winByPhone = new Map<string, Array<{ loop: string; start: number; end: number }>>();
-    let earliest = Infinity;
-    for (const a of (tre ?? []) as Array<{ round_id: string; phone: string; sms_status: string | null }>) {
-      if (a.sms_status !== "sent") continue; // only people the SMS actually reached
-      const r = metaById.get(a.round_id); if (!r?.sent_at) continue;
-      const start = new Date(r.sent_at).getTime();
-      const end = start + r.attribution_window_days * 86400000;
-      earliest = Math.min(earliest, start);
-      const arr = winByPhone.get(a.phone) ?? []; arr.push({ loop: r.loop_key, start, end }); winByPhone.set(a.phone, arr);
-    }
-    const phones = [...winByPhone.keys()];
-    if (phones.length) {
-      const since = new Date(earliest).toISOString();
-      const [{ data: o1 }, { data: o2 }] = await Promise.all([
-        supabaseAdmin.from("orders").select("customer_phone, total, created_at").in("customer_phone", phones).gte("created_at", since),
-        supabaseAdmin.from("pos_orders").select("customer_phone, total, created_at").in("customer_phone", phones).gte("created_at", since),
-      ]);
-      for (const o of [...(o1 ?? []), ...(o2 ?? [])] as Array<{ customer_phone: string; total: number | null; created_at: string }>) {
-        const wins = winByPhone.get(o.customer_phone); if (!wins) continue;
-        const t = new Date(o.created_at).getTime();
-        const hit = new Set<string>();
-        for (const w of wins) if (t >= w.start && t <= w.end) hit.add(w.loop); // dedupe per loop
-        for (const loop of hit) {
-          const acc = ordersByLoop.get(loop) ?? { orders: 0, revenue: 0 };
-          acc.orders += 1; acc.revenue += (o.total ?? 0) / 100; // total is in cents
-          ordersByLoop.set(loop, acc);
-        }
-      }
-    }
-  }
-
-  type LAcc = { rounds: number; in_flight: number; sent: number; vouchers: number; redeemed: number; orders: number; revenue: number; next: number | null };
-  const lblank = (): LAcc => ({ rounds: 0, in_flight: 0, sent: 0, vouchers: 0, redeemed: 0, orders: 0, revenue: 0, next: null });
-  const liveByLoop = new Map<string, LAcc>();
-  for (const r of liveRounds) {
-    const acc = liveByLoop.get(r.loop_key) ?? lblank();
-    acc.rounds += 1;
-    acc.sent += sentByRound.get(r.id) ?? 0;
-    acc.vouchers += vouchByRound.get(r.id) ?? 0;
-    acc.redeemed += redByRound.get(r.id) ?? 0;
-    if (r.status === "sent") {
-      acc.in_flight += 1;
-      if (r.sent_at) {
-        const due = new Date(r.sent_at).getTime() + r.attribution_window_days * 86400000;
-        acc.next = acc.next === null ? due : Math.min(acc.next, due);
-      }
-    }
-    liveByLoop.set(r.loop_key, acc);
-  }
-  for (const [loop, ov] of ordersByLoop) {
-    const acc = liveByLoop.get(loop) ?? lblank();
-    acc.orders = ov.orders; acc.revenue = ov.revenue;
-    liveByLoop.set(loop, acc);
-  }
-  const toLive = (loop_key: string, a: LAcc): LiveLoop => ({
-    loop_key, label: LOOPS[loop_key as LoopKey]?.label ?? loop_key,
-    rounds: a.rounds, in_flight: a.in_flight,
-    sent: a.sent, vouchers: a.vouchers, redeemed: a.redeemed,
-    orders: a.orders, revenue_rm: +a.revenue.toFixed(2),
-    sms_cost_rm: +(a.sent * SMS_COST_RM).toFixed(2),
-    redeemed_rate: +(a.vouchers ? (a.redeemed / a.vouchers) * 100 : 0).toFixed(1),
-    next_results_at: a.next ? new Date(a.next).toISOString() : null,
+  // ── LIVE activity (server-side aggregate via RPC; UNCAPPED) ──────────────────
+  // Available immediately (not gated on the attribution window). The old JS path
+  // fetched assignment / voucher / order rows via .in(...), which Supabase caps at
+  // 1000 rows — so the scorecard silently undercounted once volume passed ~1000
+  // (it read 881 when 1904 had actually sent). The RPC aggregates uncapped in one
+  // query: SMS sent, vouchers, redemptions, attributed orders/revenue, next window.
+  const { data: liveRows, error: liveErr } = await supabaseAdmin.rpc("loyalty_loops_live_rollup", {
+    p_since_days: opts?.sinceDays && opts.sinceDays > 0 ? opts.sinceDays : null,
   });
-  const livePerLoop = [...liveByLoop.entries()].map(([k, a]) => toLive(k, a)).sort((x, y) => y.sent - x.sent);
-  const ltAcc = lblank();
-  for (const a of liveByLoop.values()) {
-    ltAcc.rounds += a.rounds; ltAcc.in_flight += a.in_flight; ltAcc.sent += a.sent;
-    ltAcc.vouchers += a.vouchers; ltAcc.redeemed += a.redeemed;
-    ltAcc.orders += a.orders; ltAcc.revenue += a.revenue;
-    if (a.next !== null) ltAcc.next = ltAcc.next === null ? a.next : Math.min(ltAcc.next, a.next);
-  }
-  const { loop_key: _lk, label: _ll, ...liveTotals } = toLive("__totals__", ltAcc);
-  void _lk; void _ll;
+  if (liveErr) throw new Error(`live rollup: ${liveErr.message}`);
+  type RollupRow = { loop_key: string; rounds: number; in_flight: number; sent: number; vouchers: number; redeemed: number; orders: number; revenue_rm: number | string; next_results_at: string | null };
+  const toLive = (row: RollupRow): LiveLoop => {
+    const sent = Number(row.sent), vouchers = Number(row.vouchers), redeemed = Number(row.redeemed);
+    return {
+      loop_key: row.loop_key, label: LOOPS[row.loop_key as LoopKey]?.label ?? row.loop_key,
+      rounds: Number(row.rounds), in_flight: Number(row.in_flight),
+      sent, vouchers, redeemed, orders: Number(row.orders),
+      revenue_rm: +Number(row.revenue_rm).toFixed(2),
+      sms_cost_rm: +(sent * SMS_COST_RM).toFixed(2),
+      redeemed_rate: +(vouchers ? (redeemed / vouchers) * 100 : 0).toFixed(1),
+      next_results_at: row.next_results_at ?? null,
+    };
+  };
+  const livePerLoop = ((liveRows ?? []) as RollupRow[]).map(toLive).sort((x, y) => y.sent - x.sent);
+  const lt = livePerLoop.reduce(
+    (a, l) => {
+      a.rounds += l.rounds; a.in_flight += l.in_flight; a.sent += l.sent; a.vouchers += l.vouchers;
+      a.redeemed += l.redeemed; a.orders += l.orders; a.revenue_rm += l.revenue_rm;
+      if (l.next_results_at && (a.next === null || l.next_results_at < a.next)) a.next = l.next_results_at;
+      return a;
+    },
+    { rounds: 0, in_flight: 0, sent: 0, vouchers: 0, redeemed: 0, orders: 0, revenue_rm: 0, next: null as string | null },
+  );
+  const liveTotals: Omit<LiveLoop, "loop_key" | "label"> = {
+    rounds: lt.rounds, in_flight: lt.in_flight, sent: lt.sent, vouchers: lt.vouchers, redeemed: lt.redeemed,
+    orders: lt.orders, revenue_rm: +lt.revenue_rm.toFixed(2),
+    sms_cost_rm: +(lt.sent * SMS_COST_RM).toFixed(2),
+    redeemed_rate: +(lt.vouchers ? (lt.redeemed / lt.vouchers) * 100 : 0).toFixed(1),
+    next_results_at: lt.next,
+  };
   const live: LiveRollup = { per_loop: livePerLoop, totals: liveTotals };
 
   return { per_loop, totals, live };
