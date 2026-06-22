@@ -20,12 +20,12 @@ const CAMPAIGNS: Record<string, {
   "conezion-breakfast": {
     outlet: "conezion", round_start: 7, round_end: 9,
     name: "Conezion · Breakfast", offer_label: "Free coffee when you spend RM20+ (7–9am)",
-    message: "Free coffee with breakfast at Celsius Conezion, 7-9am this week — spend RM20+ and your coffee's on us. Show your number to redeem.",
+    message: "Free coffee with breakfast at Celsius Conezion, 7-9am this week. Spend RM20+ and your coffee's on us. Show your number to redeem.",
   },
   "shah-alam-evening": {
     outlet: "shah-alam", round_start: 17, round_end: 19,
     name: "Shah Alam · Evening", offer_label: "Free coffee when you spend RM20+ (5–7pm)",
-    message: "Free coffee at Celsius Shah Alam, 5-7pm this week — spend RM20+ and your coffee's on us. Show your number to redeem.",
+    message: "Free coffee at Celsius Shah Alam, 5-7pm this week. Spend RM20+ and your coffee's on us. Show your number to redeem.",
   },
 };
 
