@@ -282,6 +282,16 @@ export default function LoopsPage() {
                 } catch (e) { setErr(e instanceof Error ? e.message : "Schedule failed"); }
                 finally { setBusy(null); }
               }}
+              onCancel={async () => {
+                setBusy(r.id); setErr(null);
+                try {
+                  const res = await fetch("/api/loyalty/loops/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ round_id: r.id }) });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data?.error ?? "Cancel failed");
+                  await load();
+                } catch (e) { setErr(e instanceof Error ? e.message : "Cancel failed"); }
+                finally { setBusy(null); }
+              }}
               proposedWindow={opt?.send_window_proposal?.window}
               windows={opt?.send_windows ?? []}
             />
@@ -530,9 +540,9 @@ function NumInput({ v, set }: { v: number; set: (n: number) => void }) {
 }
 
 // ---- Round card -------------------------------------------------------------
-function RoundCard({ round, busy, onSend, onMeasure, onSchedule, proposedWindow, windows }: {
+function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, proposedWindow, windows }: {
   round: Round; busy: boolean; onSend: () => void; onMeasure: () => void;
-  onSchedule: (scheduledSendAt: string, sendWindow: string) => void; proposedWindow?: string; windows: string[];
+  onSchedule: (scheduledSendAt: string, sendWindow: string) => void; onCancel: () => void; proposedWindow?: string; windows: string[];
 }) {
   const est = estSmsCost(round);
   const [when, setWhen] = useState(() => defaultLocalDatetime());
@@ -597,6 +607,13 @@ function RoundCard({ round, busy, onSend, onMeasure, onSchedule, proposedWindow,
             className="inline-flex items-center gap-2 rounded-lg border border-blue-600 px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send now
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => { if (confirm(`Cancel round ${round.round_no}? This deletes the un-sent vouchers + the round. No SMS has gone out.`)) onCancel(); }}
+            className="ml-2 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-500 hover:text-red-600 disabled:opacity-50"
+          >
+            <X className="h-4 w-4" /> Cancel round
           </button>
         </div>
       )}

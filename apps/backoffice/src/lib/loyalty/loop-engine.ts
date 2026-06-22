@@ -767,3 +767,17 @@ export async function autoMeasureDueRounds(): Promise<{ measured: number }> {
   }
   return { measured };
 }
+
+// Revert a PREPARED round — delete the un-sent (active) vouchers it issued, its
+// assignments, and the round itself. Only valid before send: a sent round has
+// live SMS in customers' hands, so it can't be un-done. Redeemed vouchers (rare
+// pre-send) are left intact so order history isn't broken.
+export async function cancelRound(roundId: string): Promise<{ vouchers: number; assignments: number }> {
+  const { data: round } = await supabaseAdmin.from("loop_rounds").select("status").eq("id", roundId).single();
+  if (!round) throw new Error("round not found");
+  if (round.status !== "prepared") throw new Error(`can only cancel a prepared round (this one is '${round.status}')`);
+  const { data: ir } = await supabaseAdmin.from("issued_rewards").delete().eq("source_ref_id", roundId).eq("status", "active").select("id");
+  const { data: la } = await supabaseAdmin.from("loop_assignments").delete().eq("round_id", roundId).select("id");
+  await supabaseAdmin.from("loop_rounds").delete().eq("id", roundId);
+  return { vouchers: (ir ?? []).length, assignments: (la ?? []).length };
+}
