@@ -781,3 +781,65 @@ export async function cancelRound(roundId: string): Promise<{ vouchers: number; 
   await supabaseAdmin.from("loop_rounds").delete().eq("id", roundId);
   return { vouchers: (ir ?? []).length, assignments: (la ?? []).length };
 }
+
+// ============================================================================
+// EVALUATION — cross-loop rollup for the campaigns overview dashboard.
+// Pools every MEASURED round across all loops into a grand total + per-loop
+// breakdown: SMS sent/cost, redemptions, incremental orders + margin vs the
+// holdout, and ROI. Answers "is the whole programme working?" at a glance.
+// ============================================================================
+type EvalStat = { arm: string; n: number; lift_pp: number; redemption_rate: number; revenue_per_recipient_rm: number };
+export type LoopEval = {
+  loop_key: string; label: string; rounds: number; sent: number;
+  redemptions: number; redemption_rate: number; avg_lift_pp: number;
+  incremental_orders: number; incremental_margin_rm: number; sms_cost_rm: number; roi: number;
+};
+export type Evaluation = { per_loop: LoopEval[]; totals: Omit<LoopEval, "loop_key" | "label"> };
+
+export async function getEvaluation(): Promise<Evaluation> {
+  const { data: rounds } = await supabaseAdmin
+    .from("loop_rounds").select("loop_key, stats").eq("status", "measured");
+
+  type Acc = { rounds: number; sent: number; redemptions: number; liftW: number; incrOrders: number; incrMargin: number };
+  const blank = (): Acc => ({ rounds: 0, sent: 0, redemptions: 0, liftW: 0, incrOrders: 0, incrMargin: 0 });
+  const byLoop = new Map<string, Acc>();
+
+  for (const r of (rounds ?? []) as Array<{ loop_key: string; stats: EvalStat[] | null }>) {
+    if (!r.stats) continue;
+    const baseRev = r.stats.find((s) => s.arm === "holdout")?.revenue_per_recipient_rm ?? 0;
+    const acc = byLoop.get(r.loop_key) ?? blank();
+    let counted = false;
+    for (const s of r.stats) {
+      if (s.arm === "holdout") continue;
+      counted = true;
+      acc.sent += s.n;
+      acc.redemptions += Math.round(s.n * (s.redemption_rate ?? 0) / 100);
+      acc.liftW += (s.lift_pp ?? 0) * s.n;
+      acc.incrOrders += s.n * (s.lift_pp ?? 0) / 100;
+      acc.incrMargin += ((s.revenue_per_recipient_rm ?? 0) - baseRev) * s.n * GP;
+    }
+    if (counted) acc.rounds += 1;
+    byLoop.set(r.loop_key, acc);
+  }
+
+  const toEval = (loop_key: string, a: Acc): LoopEval => {
+    const sms = +(a.sent * SMS_COST_RM).toFixed(2);
+    return {
+      loop_key, label: LOOPS[loop_key as LoopKey]?.label ?? loop_key,
+      rounds: a.rounds, sent: a.sent, redemptions: a.redemptions,
+      redemption_rate: +(a.sent ? (a.redemptions / a.sent) * 100 : 0).toFixed(1),
+      avg_lift_pp: +(a.sent ? a.liftW / a.sent : 0).toFixed(1),
+      incremental_orders: Math.round(a.incrOrders),
+      incremental_margin_rm: +a.incrMargin.toFixed(2),
+      sms_cost_rm: sms,
+      roi: sms > 0 ? +(a.incrMargin / sms).toFixed(1) : 0,
+    };
+  };
+
+  const per_loop = [...byLoop.entries()].map(([k, a]) => toEval(k, a)).sort((x, y) => y.incremental_margin_rm - x.incremental_margin_rm);
+  const tAcc = blank();
+  for (const a of byLoop.values()) { tAcc.rounds += a.rounds; tAcc.sent += a.sent; tAcc.redemptions += a.redemptions; tAcc.liftW += a.liftW; tAcc.incrOrders += a.incrOrders; tAcc.incrMargin += a.incrMargin; }
+  const { loop_key: _k, label: _l, ...totals } = toEval("__totals__", tAcc);
+  void _k; void _l;
+  return { per_loop, totals };
+}

@@ -18,7 +18,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Repeat, RefreshCw, Send, FlaskConical, Loader2,
-  CheckCircle2, AlertTriangle, Trophy, Users, ShieldOff, Coins, Plus, X, Crown, Sparkles, Clock,
+  CheckCircle2, AlertTriangle, Trophy, Users, ShieldOff, Coins, Plus, X, Crown, Sparkles, Clock, BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +59,12 @@ type Optimizer = {
   candidates: Candidate[]; loops: LoopMeta[];
   send_time_leaderboard: SendTimeEntry[]; send_window_proposal: { window: string; reason: string }; send_windows: string[];
 };
+type LoopEval = {
+  loop_key: string; label: string; rounds: number; sent: number;
+  redemptions: number; redemption_rate: number; avg_lift_pp: number;
+  incremental_orders: number; incremental_margin_rm: number; sms_cost_rm: number; roi: number;
+};
+type Evaluation = { per_loop: LoopEval[]; totals: Omit<LoopEval, "loop_key" | "label"> };
 
 const CHAMPION_MIN_RECIPIENTS = 300;
 
@@ -126,6 +132,7 @@ function RoleBadge({ role }: { role: "champion" | "challenger" }) {
 export default function LoopsPage() {
   const [rounds, setRounds] = useState<Round[] | null>(null);
   const [opt, setOpt] = useState<Optimizer | null>(null);
+  const [evalData, setEvalData] = useState<Evaluation | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [lastPreview, setLastPreview] = useState<Preview | null>(null);
@@ -134,13 +141,15 @@ export default function LoopsPage() {
   const load = useCallback(async () => {
     try {
       const qs = `?loop_key=${encodeURIComponent(loopKey)}`;
-      const [rRes, oRes] = await Promise.all([
+      const [rRes, oRes, sRes] = await Promise.all([
         fetch(`/api/loyalty/loops${qs}`),
         fetch(`/api/loyalty/loops/optimizer${qs}`),
+        fetch(`/api/loyalty/loops/summary`),
       ]);
       if (!rRes.ok) throw new Error(`list failed (${rRes.status})`);
       setRounds((await rRes.json()) as Round[]);
       if (oRes.ok) setOpt((await oRes.json()) as Optimizer);
+      if (sRes.ok) setEvalData((await sRes.json()) as Evaluation);
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load");
@@ -161,6 +170,8 @@ export default function LoopsPage() {
       <p className="mb-4 text-sm text-gray-500">
         Every campaign is a loop: the engine proposes each round&apos;s offers against a holdout and learns which logic wins — the setup sharpens over time. Pick an objective:
       </p>
+
+      {evalData && <EvaluationPanel data={evalData} />}
 
       {opt && (
         <div className="mb-4 flex flex-wrap gap-2">
@@ -302,6 +313,69 @@ export default function LoopsPage() {
       <button onClick={() => void load()} className="mt-6 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
         <RefreshCw className="h-3.5 w-3.5" /> Refresh
       </button>
+    </div>
+  );
+}
+
+// ---- Evaluation overview: cross-loop scorecard ------------------------------
+function Kpi({ label, value, sub, highlight }: { label: string; value: string; sub?: string; highlight?: boolean }) {
+  return (
+    <div className={cn("rounded-lg border p-3", highlight ? "border-[#A2492C]/30 bg-[#A2492C]/5" : "border-gray-200 bg-gray-50")}>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="mt-0.5 text-xl font-semibold tabular-nums">{value}</p>
+      {sub && <p className="text-xs text-gray-400">{sub}</p>}
+    </div>
+  );
+}
+function EvaluationPanel({ data }: { data: Evaluation }) {
+  const t = data.totals;
+  return (
+    <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        <BarChart3 className="h-5 w-5 text-[#A2492C]" />
+        <h2 className="text-lg font-semibold">Campaign scorecard</h2>
+        <span className="text-xs text-gray-400">all loops · measured rounds</span>
+      </div>
+      {t.rounds === 0 ? (
+        <p className="text-sm text-gray-500">No measured rounds yet — your scorecard fills in here once rounds complete their attribution window (incremental orders, margin and ROI vs the holdout).</p>
+      ) : (
+        <>
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Kpi label="SMS sent" value={t.sent.toLocaleString()} sub={`${rm(t.sms_cost_rm)} spent`} />
+            <Kpi label="Redemption" value={`${t.redemption_rate}%`} sub={`${t.redemptions.toLocaleString()} redeemed`} />
+            <Kpi label="Incremental orders" value={`+${t.incremental_orders.toLocaleString()}`} sub="vs holdout" />
+            <Kpi label="Incremental margin" value={rm(t.incremental_margin_rm)} sub={`ROI ${t.roi > 0 ? `${t.roi}×` : "—"}`} highlight />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
+                  <th className="py-2 pr-3">Loop</th>
+                  <th className="py-2 pr-3 text-right">Rounds</th>
+                  <th className="py-2 pr-3 text-right">Sent</th>
+                  <th className="py-2 pr-3 text-right">Redeemed</th>
+                  <th className="py-2 pr-3 text-right">Avg lift</th>
+                  <th className="py-2 pr-3 text-right">Incr. margin</th>
+                  <th className="py-2 pr-3 text-right">ROI</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.per_loop.map((l) => (
+                  <tr key={l.loop_key} className="border-b border-gray-100">
+                    <td className="py-2 pr-3 font-medium">{l.label}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{l.rounds}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{l.sent.toLocaleString()}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{l.redemption_rate}%</td>
+                    <td className={cn("py-2 pr-3 text-right tabular-nums", l.avg_lift_pp >= SUCCESS_BAR_PP ? "text-green-700" : l.avg_lift_pp > 0 ? "text-gray-700" : "text-red-600")}>{l.avg_lift_pp > 0 ? "+" : ""}{l.avg_lift_pp}pp</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{rm(l.incremental_margin_rm)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{l.roi > 0 ? `${l.roi}×` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }
