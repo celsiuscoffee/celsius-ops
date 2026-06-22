@@ -137,6 +137,7 @@ export default function LoopsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [lastPreview, setLastPreview] = useState<Preview | null>(null);
   const [loopKey, setLoopKey] = useState("winback");
+  const [runResult, setRunResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -175,6 +176,31 @@ export default function LoopsPage() {
       </p>
 
       {evalData && <EvaluationPanel data={evalData} />}
+
+      {/* Fire all auto-triggered loops on demand (first run / catch-up). They
+          also run themselves daily at 9am; this is for an immediate send. */}
+      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3">
+        <button
+          disabled={busy === "run"}
+          onClick={async () => {
+            if (!confirm("Fire all auto-triggered loops NOW? This sends LIVE SMS to everyone who currently qualifies (Reactivation / Welcome / Birthday).")) return;
+            setBusy("run"); setErr(null); setRunResult(null);
+            try {
+              const res = await fetch("/api/loyalty/loops/run-triggered", { method: "POST" });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data?.error ?? "Run failed");
+              const fired = ((data.triggered ?? []) as Array<{ loop: string; sent?: number }>).map((t) => `${t.loop}: ${t.sent ?? 0} sent`).join(" · ");
+              setRunResult(fired || "Nothing qualified right now.");
+              await load();
+            } catch (e) { setErr(e instanceof Error ? e.message : "Run failed"); }
+            finally { setBusy(null); }
+          }}
+          className="inline-flex items-center gap-2 rounded-lg bg-[#A2492C] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        >
+          {busy === "run" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Run all triggered loops now
+        </button>
+        <span className="text-xs text-gray-500">{runResult ?? "Fires Reactivation + Welcome + Birthday immediately. They also run automatically at 9am daily."}</span>
+      </div>
 
       {opt && (
         <div className="mb-4 flex flex-wrap gap-2">
