@@ -12,7 +12,7 @@
 // ============================================================================
 
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
-import { sendSMS } from "@/lib/loyalty/sms";
+import { sendSMS, getActiveSmsProvider } from "@/lib/loyalty/sms";
 
 const BRAND = "brand-celsius";
 const SMS_COST_RM = 0.1; // SMS Niaga ~RM0.10/SMS
@@ -286,6 +286,10 @@ export async function sendRound(roundId: string) {
   if (!round) throw new Error("round not found");
   if (round.status === "sent" || round.status === "measured") throw new Error(`round already ${round.status}`);
 
+  // Honor the app_settings SMS toggle (smsniaga) — sendSMS otherwise falls back
+  // to the env default (sms123), which fails marketing blasts.
+  const provider = await getActiveSmsProvider();
+
   const armMsg: Record<string, string> = {};
   for (const a of (round.arms as ArmDef[])) armMsg[a.key] = a.message;
 
@@ -297,16 +301,19 @@ export async function sendRound(roundId: string) {
 
   let sent = 0;
   let failed = 0;
+  let firstError: string | undefined;
   for (const r of (rows ?? []) as Array<{ id: string; phone: string; arm: string; sms_status: string | null }>) {
     if (r.sms_status === "sent") continue; // idempotent
     const message = armMsg[r.arm] ?? "";
     if (!message) { failed++; continue; }
-    const res = await sendSMS(r.phone, message); // provider resolved from app_settings toggle
+    const res = await sendSMS(r.phone, message, { provider });
     await supabaseAdmin
       .from("loop_assignments")
-      .update({ sms_status: res.success ? "sent" : "failed", sms_message_id: res.messageId ?? null })
+      // On failure, stash the error in sms_message_id so it's queryable (no
+      // silent fails like the SMS123 misroute).
+      .update({ sms_status: res.success ? "sent" : "failed", sms_message_id: res.success ? (res.messageId ?? null) : (res.error?.slice(0, 200) ?? "failed") })
       .eq("id", r.id);
-    if (res.success) sent++; else failed++;
+    if (res.success) { sent++; } else { failed++; if (!firstError) firstError = res.error; }
   }
 
   const sentAt = new Date();
@@ -317,7 +324,7 @@ export async function sendRound(roundId: string) {
     .update({ status: "sent", sent_at: sentAt.toISOString(), send_window: round.send_window ?? deriveWindow(sentAt) })
     .eq("id", roundId);
 
-  return { round_id: roundId, sent, failed };
+  return { round_id: roundId, sent, failed, error: firstError };
 }
 
 // ── MEASURE ───────────────────────────────────────────────────────────────────
@@ -723,7 +730,7 @@ async function recentlyTargetedPhones(loopKey: LoopKey, cooldownDays: number): P
 
 // Run one triggered loop: auto-prepare a round over today's new qualifiers,
 // then auto-send. Returns a small summary.
-async function runTriggeredLoop(def: LoopDef): Promise<{ loop: LoopKey; qualified: number; sent?: number; failed?: number; round_id?: string }> {
+async function runTriggeredLoop(def: LoopDef): Promise<{ loop: LoopKey; qualified: number; sent?: number; failed?: number; round_id?: string; error?: string }> {
   const trig = def.trigger!;
   const arms = (await proposeArms(def.key)).arms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message }));
   const suppressPhones = await recentlyTargetedPhones(def.key, trig.cooldownDays);
@@ -737,7 +744,7 @@ async function runTriggeredLoop(def: LoopDef): Promise<{ loop: LoopKey; qualifie
   });
   if (!preview.round_id || preview.total === 0) return { loop: def.key, qualified: 0 };
   const res = await sendRound(preview.round_id);
-  return { loop: def.key, qualified: preview.total, sent: res.sent, failed: res.failed, round_id: preview.round_id };
+  return { loop: def.key, qualified: preview.total, sent: res.sent, failed: res.failed, round_id: preview.round_id, error: res.error };
 }
 
 // Cron entrypoint: fire every triggered loop (skip batch/manual ones).
