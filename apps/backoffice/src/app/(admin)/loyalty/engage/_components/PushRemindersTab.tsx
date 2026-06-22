@@ -117,8 +117,9 @@ export default function PushRemindersTab() {
   const [editing, setEditing]       = useState<Campaign | null>(null);
   const [creating, setCreating]     = useState(false);
 
-  async function load() {
-    setLoading(true);
+  // silent=true → background auto-refresh: no loading flash, no error toast.
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch("/api/loyalty/push-campaigns");
       if (!res.ok) throw new Error(await res.text());
@@ -126,13 +127,21 @@ export default function PushRemindersTab() {
       setCampaigns(json.campaigns ?? []);
     } catch (err) {
       console.error(err);
-      toast.error("Failed to load campaigns");
+      if (!silent) toast.error("Failed to load campaigns");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => { load(); }, []);
+
+  // Realtime: silently refetch every 20s while the tab is visible, so sent /
+  // open / order / revenue stay live without a manual refresh.
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === "visible") void load(true); };
+    const id = setInterval(tick, 20000);
+    return () => clearInterval(id);
+  }, []);
 
   async function toggle(key: string, next: boolean) {
     setBusyKey(key);
@@ -203,6 +212,13 @@ export default function PushRemindersTab() {
           Built-in campaigns ship with the app; custom ones you build yourself.
         </p>
         <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700" title="Auto-updates every 20s">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+            </span>
+            Live
+          </span>
           <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-white text-xs">
             <button
               onClick={() => setWindowMode("7d")}
