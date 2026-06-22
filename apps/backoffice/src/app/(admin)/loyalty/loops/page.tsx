@@ -377,6 +377,7 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
   const [arms, setArms] = useState<FormArm[]>(proposal.map((a) => ({ ...a })));
 
   const logicOf = (tid: string) => candidates.find((c) => c.voucher_template_id === tid)?.logic ?? "—";
+  const triggered = !!loopMeta?.triggered; // auto loops have no budget cap
   const maxSms = Math.max(0, Math.floor(budget / SMS_COST_RM));
   const maxRecipients = Math.floor(maxSms / Math.max(0.01, 1 - holdout / 100));
   const segmentOpts = (): Record<string, unknown> => {
@@ -420,11 +421,17 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
         </>)}
         <Field label="Holdout %"><NumInput v={holdout} set={setHoldout} /></Field>
         <Field label="Attribution window (days)"><NumInput v={windowD} set={setWindowD} /></Field>
-        <Field label="SMS budget (RM)"><NumInput v={budget} set={setBudget} /></Field>
+        {!triggered && <Field label="SMS budget (RM)"><NumInput v={budget} set={setBudget} /></Field>}
       </div>
-      <p className="mb-4 text-xs text-gray-500">
-        Budget {rm(budget)} → up to <strong>{maxSms.toLocaleString()}</strong> SMS (~{maxRecipients.toLocaleString()} reached incl. holdout). Caps the round if the segment is larger. Scale later by raising the budget.
-      </p>
+      {triggered ? (
+        <p className="mb-4 text-xs text-gray-500">
+          Auto-triggered loop — sends to everyone who qualifies, no budget cap. A manual round here does the same.
+        </p>
+      ) : (
+        <p className="mb-4 text-xs text-gray-500">
+          Budget {rm(budget)} → up to <strong>{maxSms.toLocaleString()}</strong> SMS (~{maxRecipients.toLocaleString()} reached incl. holdout). Caps the round if the segment is larger. Scale later by raising the budget.
+        </p>
+      )}
 
       <div className="mb-2 flex items-center justify-between">
         <span className="text-sm font-medium text-gray-700">Proposed arms ({arms.length})</span>
@@ -463,7 +470,7 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
         onClick={() => onPrepare({
           loop_key: loopKey,
           arms: arms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message })),
-          holdoutPct: holdout, attributionWindowDays: windowD, maxRecipients,
+          holdoutPct: holdout, attributionWindowDays: windowD, maxRecipients: triggered ? undefined : maxRecipients,
           segment: segmentOpts(),
         })}
         className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#A2492C] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
