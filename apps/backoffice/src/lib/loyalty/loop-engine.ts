@@ -139,7 +139,13 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-async function issueReward(memberId: string, templateId: string, roundId: string): Promise<{ id: string; cogsRm: number } | null> {
+// sourceType tags the voucher's origin on issued_rewards. Most loops use
+// "campaign" (the generic win-back/round-gap bucket), but lifecycle loops pass
+// their own (e.g. Birthday → "birthday") so the native wallet shows the right
+// eyebrow + styling ("Birthday gift", gift icon) instead of a generic
+// "Welcome back" campaign card. Attribution keys off source_ref_id (the round
+// id), NOT source_type, so this is display-only and safe to vary per loop.
+async function issueReward(memberId: string, templateId: string, roundId: string, sourceType: string): Promise<{ id: string; cogsRm: number } | null> {
   const { data: tpl } = await supabaseAdmin
     .from("voucher_templates")
     .select(`id, title, description, icon, category, validity_days, discount_type, discount_value, min_order_value, applicable_categories, applicable_products, free_product_name, stacks_with_beans`)
@@ -159,7 +165,7 @@ async function issueReward(memberId: string, templateId: string, roundId: string
     brand_id: BRAND,
     member_id: memberId,
     voucher_template_id: tpl.id,
-    source_type: "campaign",
+    source_type: sourceType,
     source_ref_id: roundId, // ties the reward to this loop round for attribution
     title: tpl.title,
     description: tpl.description,
@@ -252,6 +258,11 @@ export async function prepareRound(loopKey: LoopKey, opts: {
     created_by: opts.createdBy ?? null,
   });
 
+  // Voucher source bucket per loop — Birthday vouchers read as a birthday
+  // gift in the wallet; every other loop stays in the generic "campaign"
+  // bucket. Display-only (attribution joins on source_ref_id).
+  const sourceType = loopKey === "birthday" ? "birthday" : "campaign";
+
   const armCounts: Record<string, number> = {};
   let rewardCogs = 0;
 
@@ -270,7 +281,7 @@ export async function prepareRound(loopKey: LoopKey, opts: {
   for (let i = 0; i < treatment.length; i++) {
     const m = treatment[i];
     const arm = arms[i % arms.length];
-    const issued = await issueReward(m.member_id, arm.voucher_template_id, roundId);
+    const issued = await issueReward(m.member_id, arm.voucher_template_id, roundId, sourceType);
     if (issued) rewardCogs += issued.cogsRm;
     await supabaseAdmin.from("loop_assignments").insert({
       id: rid("la"),

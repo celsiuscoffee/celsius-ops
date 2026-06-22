@@ -1572,8 +1572,11 @@ function describeVoucherTicket(v: Voucher): TicketDescriptor {
     eyebrow = "Discount";
     headline = `${dv}% off`;
   } else if (v.discount_type === "free_item") {
-    if (v.source_type === "birthday") headline = "Free drink";
-    else if (v.category === "free_item") headline = "Free drink";
+    // Use the voucher's own title — a birthday "Free Coffee" must NOT be
+    // flattened to "Free drink" (it left customers hunting for a coffee
+    // reward the card had renamed). free_product_name wins when set
+    // ("Free Croissant"); otherwise the title already carries the value.
+    headline = v.free_product_name ? `Free ${v.free_product_name}` : v.title;
   } else if (v.discount_type === "beans_multiplier") {
     // "2× Points" rather than "2× Points Boost" — the second word wraps
     // a 144-wide top stub at 19pt Peachi and tips the card taller than
