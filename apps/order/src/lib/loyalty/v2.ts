@@ -507,11 +507,15 @@ function evalGoalOnOrder(goal: Goal, order: OrderForMission): number {
   // the per-referral voucher is issued directly in
   // maybeRewardReferralOnFirstOrder, so the mission's only role is
   // to hold the voucher templates as config.
-  const created = new Date(order.created_at);
-  if (goal.filter?.order_hour_lt !== undefined && created.getHours() >= goal.filter.order_hour_lt) {
+  // Time/day filters are MYT (UTC+8) wall-clock. The server runs in UTC
+  // (Vercel), so shift the instant by +8h and read the UTC fields — same
+  // trick distinct_order_days uses below. Without this, "before 11am" and
+  // "Sat/Sun" were evaluated against UTC, i.e. 8h / one day off.
+  const createdMyt = new Date(new Date(order.created_at).getTime() + 8 * 3_600_000);
+  if (goal.filter?.order_hour_lt !== undefined && createdMyt.getUTCHours() >= goal.filter.order_hour_lt) {
     return 0;
   }
-  if (goal.filter?.order_day_in && !goal.filter.order_day_in.includes(created.getDay())) {
+  if (goal.filter?.order_day_in && !goal.filter.order_day_in.includes(createdMyt.getUTCDay())) {
     return 0;
   }
   switch (goal.type) {
