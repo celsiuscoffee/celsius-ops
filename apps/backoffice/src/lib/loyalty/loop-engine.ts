@@ -59,18 +59,6 @@ function reachable(rows: Array<{ member_id: string; members: MemberRow | null }>
   return out;
 }
 
-function daysUntilBirthday(iso: string): number {
-  const d = new Date(iso);
-  const now = new Date(Date.now());
-  // Compare at DATE granularity, not timestamp — otherwise today's birthday
-  // (whose 00:00 is already past) rolls to next year and reads as 365, so the
-  // birthdayWithinDays:0 trigger would never fire on the actual day.
-  const today0 = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  let next = Date.UTC(now.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  if (next < today0) next = Date.UTC(now.getUTCFullYear() + 1, d.getUTCMonth(), d.getUTCDate());
-  return Math.round((next - today0) / 86400000);
-}
-
 // ── Reactivation: lapsed members (last visit between min..max days ago).
 async function winbackSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
   const minD = o.minDaysLapsed ?? 30, maxD = o.maxDaysLapsed ?? 60;
@@ -93,12 +81,22 @@ async function welcomeSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; lab
 }
 
 // ── Birthday: members whose birthday falls within the next K days.
+// Filtered server-side via the loyalty_birthday_members RPC — member_brands has
+// 20k+ rows, so the old "fetch all + filter in JS" silently hit the 1000-row
+// default cap and missed qualifiers. The RPC matches by MM-DD in MYT.
 async function birthdaySegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
-  const k = o.birthdayWithinDays ?? 14;
-  const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT).eq("brand_id", BRAND);
+  const k = o.birthdayWithinDays ?? 0;
+  const { data, error } = await supabaseAdmin.rpc("loyalty_birthday_members", { p_brand: BRAND, p_within_days: k });
   if (error) throw new Error(`birthday segment: ${error.message}`);
-  const rows = reachable((data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>, (m) => !!m.birthday && daysUntilBirthday(m.birthday) <= k);
-  return { rows, label: `Birthdays in next ${k}d` };
+  const seen = new Set<string>();
+  const rows: SegmentRow[] = [];
+  for (const r of (data ?? []) as Array<{ member_id: string; phone: string; member_name: string | null }>) {
+    const phone = (r.phone ?? "").trim();
+    if (!phone || seen.has(phone)) continue; // dedupe by phone (PDPA opt-outs already excluded in the RPC)
+    seen.add(phone);
+    rows.push({ member_id: r.member_id, phone, name: r.member_name ?? null });
+  }
+  return { rows, label: k === 0 ? "Birthdays today" : `Birthdays in next ${k}d` };
 }
 
 // ── Weekly round-gap: active customers of one outlet (nudge to a weak round).
@@ -731,10 +729,23 @@ async function recentlyTargetedPhones(loopKey: LoopKey, cooldownDays: number): P
   return Array.from(new Set(((rows ?? []) as Array<{ phone: string }>).map((r) => r.phone)));
 }
 
+// Has this loop already produced a round today (MYT)? Keeps the cadence at one
+// round per loop per day and makes "Run all triggered loops now" idempotent —
+// repeat clicks only fire loops that haven't run yet today (no round-stacking),
+// while a loop that failed/produced nothing earlier still gets retried.
+async function ranToday(loopKey: LoopKey): Promise<boolean> {
+  const MYT = 8 * 3600000;
+  const since = new Date(Math.floor((Date.now() + MYT) / 86400000) * 86400000 - MYT).toISOString();
+  const { data } = await supabaseAdmin
+    .from("loop_rounds").select("id").eq("loop_key", loopKey).gte("prepared_at", since).limit(1);
+  return (data?.length ?? 0) > 0;
+}
+
 // Run one triggered loop: auto-prepare a round over today's new qualifiers,
 // then auto-send. Returns a small summary.
-async function runTriggeredLoop(def: LoopDef): Promise<{ loop: LoopKey; qualified: number; sent?: number; failed?: number; round_id?: string; error?: string }> {
+async function runTriggeredLoop(def: LoopDef): Promise<{ loop: LoopKey; qualified: number; sent?: number; failed?: number; round_id?: string; error?: string; skipped?: boolean }> {
   const trig = def.trigger!;
+  if (await ranToday(def.key)) return { loop: def.key, qualified: 0, skipped: true };
   const arms = (await proposeArms(def.key)).arms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message }));
   const suppressPhones = await recentlyTargetedPhones(def.key, trig.cooldownDays);
   const preview = await prepareRound(def.key, {
@@ -751,8 +762,8 @@ async function runTriggeredLoop(def: LoopDef): Promise<{ loop: LoopKey; qualifie
 }
 
 // Cron entrypoint: fire every triggered loop (skip batch/manual ones).
-export async function runTriggeredLoops(): Promise<Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string }>> {
-  const out: Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string }> = [];
+export async function runTriggeredLoops(): Promise<Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string; skipped?: boolean }>> {
+  const out: Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string; skipped?: boolean }> = [];
   for (const def of Object.values(LOOPS)) {
     if (!def.trigger) continue;
     try { out.push(await runTriggeredLoop(def)); }
