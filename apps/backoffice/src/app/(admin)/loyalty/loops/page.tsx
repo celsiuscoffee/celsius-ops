@@ -52,7 +52,7 @@ type LeaderboardEntry = {
   rounds: number; recipients: number; avg_lift_pp: number;
   incr_margin_per_recipient_rm: number; cum_incr_margin_rm: number;
 };
-type LoopMeta = { key: string; label: string; objective: string; defaultHoldoutPct: number; defaultWindowDays: number };
+type LoopMeta = { key: string; label: string; objective: string; defaultHoldoutPct: number; defaultWindowDays: number; triggered?: boolean };
 type SendTimeEntry = { send_window: string; rounds: number; recipients: number; avg_lift_pp: number; avg_order_rate: number };
 type Optimizer = {
   loop_key: string; leaderboard: LeaderboardEntry[]; proposal: { arms: ProposalArm[] };
@@ -153,6 +153,15 @@ export default function LoopsPage() {
               {l.label}
             </button>
           ))}
+        </div>
+      )}
+
+      {opt?.loops.find((l) => l.key === loopKey)?.triggered && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+          <Repeat className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <span>
+            <strong>Auto-triggered daily.</strong> This loop fires by itself — it auto-issues the voucher + SMS to each new qualifier (birthday today · ~1 day after a 1st visit · just lapsed), no budget or approval. The form below is only if you want an extra manual round.
+          </span>
         </div>
       )}
 
