@@ -166,6 +166,19 @@ export default function LoopsPage() {
   }, [evalDays]);
   useEffect(() => { void loadEval(); }, [loadEval]);
 
+  // Realtime: silently refetch the scorecard + rounds every 20s while the tab is
+  // visible, so the dashboard stays live without a manual refresh (rounds flip to
+  // measured / scorecard fills in on their own). Skipped while hidden or busy.
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      void load();
+      void loadEval();
+    };
+    const id = setInterval(tick, 20000);
+    return () => clearInterval(id);
+  }, [load, loadEval]);
+
   // Auto-triggered loops run themselves — no manual "New round" form, no budget.
   const activeTriggered = !!opt?.loops.find((l) => l.key === loopKey)?.triggered;
 
@@ -375,6 +388,13 @@ function EvaluationPanel({ data, days, onDays }: { data: Evaluation; days: numbe
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <BarChart3 className="h-5 w-5 text-[#A2492C]" />
         <h2 className="text-lg font-semibold">Campaign scorecard</h2>
+        <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700" title="Auto-updates every 20s">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+          </span>
+          Live
+        </span>
         <span className="text-xs text-gray-400">all loops · measured rounds{days ? ` · sent in last ${days}d` : ""}</span>
         <div className="ml-auto flex items-center gap-1">
           {EVAL_PRESETS.map((p) => (
