@@ -41,31 +41,36 @@ export async function POST(request: NextRequest) {
     }
 
     // Check SMS123 balance before sending
-    const apiKey = process.env.SMS123_API_KEY;
-    const email = process.env.SMS123_EMAIL;
-    if (apiKey && email) {
-      try {
-        const params = new URLSearchParams({ apiKey, email });
-        const res = await fetch(`https://www.sms123.net/api/getBalance.php?${params.toString()}`);
-        const data = await res.json();
-        if (data.status === 'ok') {
-          const balance = parseFloat(String(data.balance).replace(/,/g, ''));
-          // Balance is in message credits (1 credit = 1 SMS)
-          if (balance < uniquePhones.length) {
-            return NextResponse.json({
-              error: `Insufficient SMS123 credits. Need ${uniquePhones.length}, have ${Math.floor(balance)}. Top up at sms123.net.`,
-              balance: Math.floor(balance),
-              needed: uniquePhones.length,
-            }, { status: 400 });
-          }
-        }
-      } catch {
-        // Continue even if balance check fails
-      }
-    }
-
     // Active gateway from the backoffice toggle (app_settings → env fallback).
     const provider = await getActiveSmsProvider();
+
+    // Pre-flight credit check is SMS123-specific — only gate the send on it when
+    // SMS123 is the active gateway. (SMS Niaga has its own balance; it rejects
+    // per-message if short, which we record as failures.)
+    if (provider === 'sms123') {
+      const apiKey = process.env.SMS123_API_KEY;
+      const email = process.env.SMS123_EMAIL;
+      if (apiKey && email) {
+        try {
+          const params = new URLSearchParams({ apiKey, email });
+          const res = await fetch(`https://www.sms123.net/api/getBalance.php?${params.toString()}`);
+          const data = await res.json();
+          if (data.status === 'ok') {
+            const balance = parseFloat(String(data.balance).replace(/,/g, ''));
+            // Balance is in message credits (1 credit = 1 SMS)
+            if (balance < uniquePhones.length) {
+              return NextResponse.json({
+                error: `Insufficient SMS123 credits. Need ${uniquePhones.length}, have ${Math.floor(balance)}. Top up at sms123.net.`,
+                balance: Math.floor(balance),
+                needed: uniquePhones.length,
+              }, { status: 400 });
+            }
+          }
+        } catch {
+          // Continue even if balance check fails
+        }
+      }
+    }
 
     // Auto-prepend RM0 [<SenderID>] prefix if not already present.
     // SMS Niaga adds its own "RM0.00 <SenderID>:" at the gateway, so skip ours there.
