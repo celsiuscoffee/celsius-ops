@@ -133,6 +133,7 @@ export default function LoopsPage() {
   const [rounds, setRounds] = useState<Round[] | null>(null);
   const [opt, setOpt] = useState<Optimizer | null>(null);
   const [evalData, setEvalData] = useState<Evaluation | null>(null);
+  const [evalDays, setEvalDays] = useState<number | null>(null); // null = all-time
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [lastPreview, setLastPreview] = useState<Preview | null>(null);
@@ -142,21 +143,28 @@ export default function LoopsPage() {
   const load = useCallback(async () => {
     try {
       const qs = `?loop_key=${encodeURIComponent(loopKey)}`;
-      const [rRes, oRes, sRes] = await Promise.all([
+      const [rRes, oRes] = await Promise.all([
         fetch(`/api/loyalty/loops${qs}`),
         fetch(`/api/loyalty/loops/optimizer${qs}`),
-        fetch(`/api/loyalty/loops/summary`),
       ]);
       if (!rRes.ok) throw new Error(`list failed (${rRes.status})`);
       setRounds((await rRes.json()) as Round[]);
       if (oRes.ok) setOpt((await oRes.json()) as Optimizer);
-      if (sRes.ok) setEvalData((await sRes.json()) as Evaluation);
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load");
     }
   }, [loopKey]);
   useEffect(() => { setRounds(null); setOpt(null); setLastPreview(null); void load(); }, [load]);
+
+  // Scorecard rollup is fetched separately so the date filter only refetches it.
+  const loadEval = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/loyalty/loops/summary${evalDays ? `?since_days=${evalDays}` : ""}`);
+      if (res.ok) setEvalData((await res.json()) as Evaluation);
+    } catch { /* non-fatal */ }
+  }, [evalDays]);
+  useEffect(() => { void loadEval(); }, [loadEval]);
 
   // Auto-triggered loops run themselves — no manual "New round" form, no budget.
   const activeTriggered = !!opt?.loops.find((l) => l.key === loopKey)?.triggered;
@@ -175,7 +183,7 @@ export default function LoopsPage() {
         Every campaign is a loop: the engine proposes each round&apos;s offers against a holdout and learns which logic wins — the setup sharpens over time. Pick an objective:
       </p>
 
-      {evalData && <EvaluationPanel data={evalData} />}
+      {evalData && <EvaluationPanel data={evalData} days={evalDays} onDays={setEvalDays} />}
 
       {/* Fire all auto-triggered loops on demand (first run / catch-up). They
           also run themselves daily at 9am; this is for an immediate send. */}
@@ -357,17 +365,31 @@ function Kpi({ label, value, sub, highlight }: { label: string; value: string; s
     </div>
   );
 }
-function EvaluationPanel({ data }: { data: Evaluation }) {
+const EVAL_PRESETS: Array<{ label: string; val: number | null }> = [
+  { label: "7d", val: 7 }, { label: "30d", val: 30 }, { label: "90d", val: 90 }, { label: "All", val: null },
+];
+function EvaluationPanel({ data, days, onDays }: { data: Evaluation; days: number | null; onDays: (d: number | null) => void }) {
   const t = data.totals;
   return (
     <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <BarChart3 className="h-5 w-5 text-[#A2492C]" />
         <h2 className="text-lg font-semibold">Campaign scorecard</h2>
-        <span className="text-xs text-gray-400">all loops · measured rounds</span>
+        <span className="text-xs text-gray-400">all loops · measured rounds{days ? ` · sent in last ${days}d` : ""}</span>
+        <div className="ml-auto flex items-center gap-1">
+          {EVAL_PRESETS.map((p) => (
+            <button
+              key={p.label}
+              onClick={() => onDays(p.val)}
+              className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", days === p.val ? "bg-[#A2492C] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
       {t.rounds === 0 ? (
-        <p className="text-sm text-gray-500">No measured rounds yet — your scorecard fills in here once rounds complete their attribution window (incremental orders, margin and ROI vs the holdout).</p>
+        <p className="text-sm text-gray-500">No measured rounds {days ? `in the last ${days} days` : "yet"} — the scorecard fills in here once rounds complete their attribution window (incremental orders, margin and ROI vs the holdout).</p>
       ) : (
         <>
           <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">

@@ -62,10 +62,13 @@ function reachable(rows: Array<{ member_id: string; members: MemberRow | null }>
 function daysUntilBirthday(iso: string): number {
   const d = new Date(iso);
   const now = new Date(Date.now());
-  const y = now.getUTCFullYear();
-  let next = new Date(Date.UTC(y, d.getUTCMonth(), d.getUTCDate()));
-  if (next.getTime() < now.getTime()) next = new Date(Date.UTC(y + 1, d.getUTCMonth(), d.getUTCDate()));
-  return Math.ceil((next.getTime() - now.getTime()) / 86400000);
+  // Compare at DATE granularity, not timestamp — otherwise today's birthday
+  // (whose 00:00 is already past) rolls to next year and reads as 365, so the
+  // birthdayWithinDays:0 trigger would never fire on the actual day.
+  const today0 = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  let next = Date.UTC(now.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  if (next < today0) next = Date.UTC(now.getUTCFullYear() + 1, d.getUTCMonth(), d.getUTCDate());
+  return Math.round((next - today0) / 86400000);
 }
 
 // ── Reactivation: lapsed members (last visit between min..max days ago).
@@ -803,9 +806,14 @@ export type LoopEval = {
 };
 export type Evaluation = { per_loop: LoopEval[]; totals: Omit<LoopEval, "loop_key" | "label"> };
 
-export async function getEvaluation(): Promise<Evaluation> {
-  const { data: rounds } = await supabaseAdmin
+export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Evaluation> {
+  let query = supabaseAdmin
     .from("loop_rounds").select("loop_key, stats").eq("status", "measured");
+  // Optional date window — filter to campaigns SENT within the last N days.
+  if (opts?.sinceDays && opts.sinceDays > 0) {
+    query = query.gte("sent_at", new Date(Date.now() - opts.sinceDays * 86400000).toISOString());
+  }
+  const { data: rounds } = await query;
 
   type Acc = { rounds: number; sent: number; redemptions: number; liftW: number; incrOrders: number; incrMargin: number };
   const blank = (): Acc => ({ rounds: 0, sent: 0, redemptions: 0, liftW: 0, incrOrders: 0, incrMargin: 0 });

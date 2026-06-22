@@ -8,7 +8,8 @@ export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
   try {
-    return NextResponse.json(await getEvaluation());
+    const sinceDays = Number(request.nextUrl.searchParams.get("since_days")) || undefined;
+    return NextResponse.json(await getEvaluation({ sinceDays }));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to load evaluation";
     return NextResponse.json({ error: msg }, { status: 500 });
