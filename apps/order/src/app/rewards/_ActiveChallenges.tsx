@@ -39,7 +39,8 @@ const THEME = {
 type Persisted = { state?: { sessionToken?: string | null } };
 
 function progressLabel(m: Mission): string {
-  if (m.goal_type === "single_order_total_at_least") {
+  // Both these goals store sen → show as RM (e.g. RM0/RM80), not raw 0/8000.
+  if (m.goal_type === "single_order_total_at_least" || m.goal_type === "spend_amount") {
     return `RM${Math.floor((m.progress_current ?? 0) / 100)}/RM${Math.floor((m.goal_threshold ?? 0) / 100)}`;
   }
   return `${m.progress_current ?? 0}/${m.goal_threshold ?? 0}`;

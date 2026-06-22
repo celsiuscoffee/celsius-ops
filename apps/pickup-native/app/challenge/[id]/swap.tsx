@@ -30,6 +30,8 @@ function formatGoal(option: SwapOption): string {
   switch (option.goal_type) {
     case "single_order_total_at_least":
       return `Spend RM${Math.floor(option.goal_threshold / 100)} in one order`;
+    case "spend_amount":
+      return `Spend RM${Math.floor(option.goal_threshold / 100)} this week`;
     case "drinks_count":
     case "cups_count":
       return option.goal_threshold === 1

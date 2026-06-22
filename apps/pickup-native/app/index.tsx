@@ -844,12 +844,12 @@ export default function Home() {
                 numberOfLines={1}
               >
                 Active challenge · {
-                  // `single_order_total_at_least` stores the threshold in
-                  // sen (e.g. RM100 → 10000) — render it as Ringgit so
-                  // the customer doesn't see a giant "0/10000" instead
-                  // of "RM0/RM100". Matches the formatting compactProgressLabel
-                  // uses on the rewards tab + the challenge detail page.
-                  activeMission.goal_type === "single_order_total_at_least"
+                  // `single_order_total_at_least` AND `spend_amount` store the
+                  // threshold in sen (e.g. RM100 → 10000, RM80 → 8000) — render
+                  // as Ringgit so the customer doesn't see a giant "0/8000"
+                  // instead of "RM0/RM80". Matches compactProgressLabel on the
+                  // rewards tab + the challenge detail page.
+                  activeMission.goal_type === "single_order_total_at_least" || activeMission.goal_type === "spend_amount"
                     ? `RM${Math.floor(activeMission.progress_current / 100)}/RM${Math.floor(activeMission.goal_threshold / 100)}`
                     : `${activeMission.progress_current}/${activeMission.goal_threshold}`
                 }

@@ -134,7 +134,7 @@ function formatMissionExpiry(iso: string): string {
 function compactProgressLabel(m: ActiveMission): string {
   const cur = m.progress_current;
   const tgt = m.goal_threshold;
-  if (m.goal_type === "single_order_total_at_least") {
+  if (m.goal_type === "single_order_total_at_least" || m.goal_type === "spend_amount") {
     return `RM${Math.floor(cur / 100)}/${Math.floor(tgt / 100)}`;
   }
   return `${cur}/${tgt}`;

@@ -40,6 +40,12 @@ function howToWin(m: ActiveMission): string[] {
         "Add-ons, sides and pastries all count toward the total.",
         "Discounts and vouchers don't reduce the qualifying amount.",
       ];
+    case "spend_amount":
+      return [
+        `Spend RM${Math.floor(m.goal_threshold / 100)} in total this week.`,
+        "Every order this week adds up — no single big bill needed.",
+        "Discounts and vouchers don't reduce the qualifying amount.",
+      ];
     case "drinks_count":
     case "cups_count":
       return [
@@ -71,7 +77,7 @@ function howToWin(m: ActiveMission): string[] {
 }
 
 function progressLabel(m: ActiveMission): string {
-  if (m.goal_type === "single_order_total_at_least") {
+  if (m.goal_type === "single_order_total_at_least" || m.goal_type === "spend_amount") {
     return `RM${Math.floor(m.progress_current / 100)} of RM${Math.floor(m.goal_threshold / 100)}`;
   }
   return `${m.progress_current} of ${m.goal_threshold}`;
@@ -80,7 +86,7 @@ function progressLabel(m: ActiveMission): string {
 function remainingHint(m: ActiveMission): string {
   const remaining = Math.max(0, m.goal_threshold - m.progress_current);
   if (remaining === 0) return "You're done — claim your reward!";
-  if (m.goal_type === "single_order_total_at_least") {
+  if (m.goal_type === "single_order_total_at_least" || m.goal_type === "spend_amount") {
     return `RM${Math.ceil(remaining / 100)} more to unlock`;
   }
   return remaining === 1 ? "1 more to unlock" : `${remaining} more to unlock`;
