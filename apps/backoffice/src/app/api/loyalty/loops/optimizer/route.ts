@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { getLeaderboard, proposeArms, getSendTimeLeaderboard, proposeSendWindow, SEND_WINDOWS, OFFER_CANDIDATES, LOOPS, type LoopKey } from "@/lib/loyalty/loop-engine";
+import { getLeaderboard, proposeArms, getSendTimeLeaderboard, proposeSendWindow, composeMessage, SEND_WINDOWS, OFFER_CANDIDATES, LOOPS, type LoopKey } from "@/lib/loyalty/loop-engine";
 
 // GET /api/loyalty/loops/optimizer?loop_key= — the adaptive layer per loop:
 //   - leaderboard: every offer ranked by cumulative incremental margin (learns over time)
@@ -17,7 +17,11 @@ export async function GET(request: NextRequest) {
     const [leaderboard, proposal, sendTimeLeaderboard, sendWindowProposal] = await Promise.all([
       getLeaderboard(loopKey), proposeArms(loopKey), getSendTimeLeaderboard(loopKey), proposeSendWindow(loopKey),
     ]);
-    const candidates = OFFER_CANDIDATES.filter((c) => def.candidateKeys.includes(c.key));
+    // Curate the swap-list copy for THIS objective — a candidate's message
+    // reads as a Welcome/Birthday/etc. SMS, not the win-back default.
+    const candidates = OFFER_CANDIDATES
+      .filter((c) => def.candidateKeys.includes(c.key))
+      .map((c) => ({ key: c.key, label: c.label, logic: c.logic, voucher_template_id: c.voucher_template_id, message: composeMessage(loopKey, c) }));
     const loops = Object.values(LOOPS).map((l) => ({ key: l.key, label: l.label, objective: l.objective, defaultHoldoutPct: l.defaultHoldoutPct, defaultWindowDays: l.defaultWindowDays }));
     return NextResponse.json({
       loop_key: loopKey, leaderboard, proposal, candidates, loops,
