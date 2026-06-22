@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { runTriggeredLoops, autoMeasureDueRounds } from "@/lib/loyalty/loop-engine";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 300; // sending hundreds of SMS sequentially needs headroom
+
 // POST /api/loyalty/loops/run-triggered — manually fire all auto-triggered
 // loops NOW (same work the daily cron does), for an on-demand first run or
 // catch-up. Admin-gated; sends LIVE SMS to everyone who currently qualifies.
