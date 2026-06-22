@@ -66,8 +66,8 @@ type LoopEval = {
 };
 type LiveLoop = {
   loop_key: string; label: string; rounds: number; in_flight: number;
-  sent: number; vouchers: number; redeemed: number; sms_cost_rm: number;
-  redeemed_rate: number; next_results_at: string | null;
+  sent: number; vouchers: number; redeemed: number; orders: number; revenue_rm: number;
+  sms_cost_rm: number; redeemed_rate: number; next_results_at: string | null;
 };
 type Evaluation = {
   per_loop: LoopEval[]; totals: Omit<LoopEval, "loop_key" | "label">;
@@ -427,21 +427,24 @@ function EvaluationPanel({ data, days, onDays }: { data: Evaluation; days: numbe
         <p className="text-sm text-gray-500">No SMS sent {days ? `in the last ${days} days` : "yet"}. Fire a loop and activity shows here instantly.</p>
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mb-1 grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Kpi label="SMS sent" value={lv.sent.toLocaleString()} sub={`${rm(lv.sms_cost_rm)} spent`} />
-            <Kpi label="Vouchers issued" value={lv.vouchers.toLocaleString()} />
-            <Kpi label="Redeemed so far" value={lv.redeemed.toLocaleString()} sub={`${lv.redeemed_rate}% of vouchers`} highlight />
+            <Kpi label="Redeemed so far" value={lv.redeemed.toLocaleString()} sub={`${lv.redeemed_rate}% of vouchers`} />
             <Kpi label="Measuring" value={`${lv.in_flight} round${lv.in_flight === 1 ? "" : "s"}`} sub={nextResults ? `results from ${nextResults}` : "all measured"} />
+            <Kpi label="Orders so far" value={lv.orders.toLocaleString()} sub="from messaged customers" />
+            <Kpi label="RM Orders so far" value={rm(lv.revenue_rm)} sub="gross · in window" />
+            <Kpi label="Return so far" value={lv.sms_cost_rm > 0 ? `${(lv.revenue_rm / lv.sms_cost_rm).toFixed(1)}×` : "—"} sub="RM orders per RM1 SMS" highlight />
           </div>
+          <p className="mb-4 text-[11px] text-gray-400">Orders, RM &amp; return are <strong>gross attributed so far</strong> (everyone messaged, within their window — not yet net of who&apos;d have ordered anyway). True ROI vs the holdout shows under <em>Results</em> once windows close.</p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
                   <th className="py-2 pr-3">Loop</th>
-                  <th className="py-2 pr-3 text-right">Rounds</th>
                   <th className="py-2 pr-3 text-right">Sent</th>
-                  <th className="py-2 pr-3 text-right">Vouchers</th>
                   <th className="py-2 pr-3 text-right">Redeemed</th>
+                  <th className="py-2 pr-3 text-right">Orders</th>
+                  <th className="py-2 pr-3 text-right">RM Orders</th>
                   <th className="py-2 pr-3 text-right">Status</th>
                 </tr>
               </thead>
@@ -449,10 +452,10 @@ function EvaluationPanel({ data, days, onDays }: { data: Evaluation; days: numbe
                 {data.live.per_loop.map((l) => (
                   <tr key={l.loop_key} className="border-b border-gray-100">
                     <td className="py-2 pr-3 font-medium">{l.label}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{l.rounds}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{l.sent.toLocaleString()}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{l.vouchers.toLocaleString()}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{l.redeemed.toLocaleString()} <span className="text-gray-400">({l.redeemed_rate}%)</span></td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{l.orders.toLocaleString()}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{rm(l.revenue_rm)}</td>
                     <td className="py-2 pr-3 text-right text-xs">{l.in_flight > 0 ? <span className="text-blue-700">{l.in_flight} measuring</span> : <span className="text-green-700">measured</span>}</td>
                   </tr>
                 ))}
