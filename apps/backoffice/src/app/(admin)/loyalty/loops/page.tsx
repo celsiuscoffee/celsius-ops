@@ -283,6 +283,26 @@ export default function LoopsPage() {
         </div>
       )}
 
+      {loopKey === "round_gap" && (
+        <RoundGapPrepareCard
+          busy={busy === "rg"}
+          onPrepare={async (campaign) => {
+            setBusy("rg"); setErr(null); setRunResult(null);
+            try {
+              const res = await fetch("/api/loyalty/loops/round-gap/prepare", {
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaign }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data?.error ?? "Prepare failed");
+              setRunResult(data.message ?? "Prepared.");
+              await load();
+            } catch (e) { setErr(e instanceof Error ? e.message : "Prepare failed"); }
+            finally { setBusy(null); }
+          }}
+          note={runResult}
+        />
+      )}
+
       {opt && <MessagesPanel arms={opt.proposal.arms} />}
 
       {opt && <OptimizerPanel opt={opt} />}
@@ -513,6 +533,42 @@ function MiniStat({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-[11px] uppercase tracking-wide text-gray-400">{label}</p>
       <p className="text-sm font-semibold tabular-nums text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+// ---- Round-gap prepare: tag audience + auto-create the time-boxed promo ------
+function RoundGapPrepareCard({ busy, onPrepare, note }: { busy: boolean; onPrepare: (campaign: string) => void; note: string | null }) {
+  const campaigns = [
+    { id: "conezion-breakfast", title: "Conezion · Breakfast (7–9am)", offer: "Free coffee with any breakfast — drives food attach, margin-safe (it's a free low-COGS item, not a discount)", audience: "Conezion regulars who skip breakfast" },
+    { id: "shah-alam-evening", title: "Shah Alam · Evening (5–7pm)", offer: "Free coffee with any bite — de-concentrate the midday peak", audience: "Shah Alam regulars who skip evenings" },
+  ];
+  return (
+    <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="mb-1 flex items-center gap-2">
+        <Coins className="h-5 w-5 text-[#A2492C]" />
+        <h2 className="text-lg font-semibold">Prepare a round-gap campaign</h2>
+      </div>
+      <p className="mb-3 text-xs text-gray-500">
+        Auto-tags the audience and creates a time-boxed, tag-restricted promo — no manual promotions to set. Prepares a round you review + send below (10% held back as control; no SMS until you approve).
+      </p>
+      <div className="grid gap-3 md:grid-cols-2">
+        {campaigns.map((c) => (
+          <div key={c.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <div className="text-sm font-semibold text-gray-900">{c.title}</div>
+            <p className="mt-0.5 text-xs text-gray-600">{c.offer}</p>
+            <p className="mt-1 text-[11px] text-gray-400">{c.audience}</p>
+            <button
+              disabled={busy}
+              onClick={() => { if (confirm(`Prepare "${c.title}"? This tags the audience + creates the promo. No SMS until you send the round.`)) onPrepare(c.id); }}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[#A2492C] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />} Prepare
+            </button>
+          </div>
+        ))}
+      </div>
+      {note && <p className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-900">{note}</p>}
     </div>
   );
 }
