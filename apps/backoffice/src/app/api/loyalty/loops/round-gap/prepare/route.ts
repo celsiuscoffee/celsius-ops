@@ -6,47 +6,54 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // Curated round-gap campaigns per the office-hours design (docs/design/
-// personalised-round-gap-loop.md). Offer = low-COGS "free coffee when you spend
-// RM<min>+" (free_item gated by min_order_value) — NOT a discount. The min is
-// anchored ~20% ABOVE each round's own AOV (NOT below it), so the free coffee is
-// the lever that pulls the basket UP toward the RM40 target — the original
-// "lift this round 20%" objective. Below-AOV would just leak margin on baskets
-// people already make. Margin-safe: the give is ~RM3 coffee COGS, carried by the
-// larger basket. Each keeps a 10% holdout. The prepare RPC tags the treatment
-// group + auto-creates the time-boxed, tag-restricted, outlet-scoped promo.
-// Status 'prepared' → the operator reviews + sends from the round card.
+// personalised-round-gap-loop.md). Offer = low-COGS "free coffee + min spend"
+// (free_item gated by min_order_value) — NOT a discount; the basket carries the
+// ~RM3 coffee COGS, so it's margin-safe and lifts AOV.
 //
-// Thresholds (60-day data): Conezion Breakfast AOV RM29 → RM35 (+20%); Shah Alam
-// Evening AOV RM33 → RM40 (+21%, lands on target). Retune as AOV moves.
-//
-// AUDIENCE (segment v3): the behavioral round-skippers PLUS the dormant imported
-// StoreHub base for the outlet that never ordered native (~15k tagged Putrajaya /
-// Shah Alam). Each run is capped at `limit` (default 100) and takes the warmest
-// slice first — skippers, then StoreHub-tier imports, then points, then the rest
-// — so this doubles as the "100/day" reactivation drip that bleeds the dormant
-// base into the weak rounds. Imports are one-shot; skippers have a 14-day
-// cooldown. The `source` column lets us read skipper vs import lift separately.
-// Run ONE campaign per day for ~100/day total (or split the limit across both).
+// PERSONALISED + CURATED PER SEGMENT. The audience (segment v3) is the outlet's
+// behavioral round-skippers PLUS its dormant imported StoreHub base that never
+// ordered native (~15k tagged Putrajaya / Shah Alam). Each run is capped at
+// `limit` (default 100, the "100/day" reactivation drip) taking the warmest
+// slice first. Each of those two groups gets its OWN arm — its own copy AND its
+// own offer:
+//   • rg_skipper — a warm regular who skips this round. Goal: shift them into the
+//     round + push AOV → higher bar (Conezion RM35 / Shah Alam RM40, ~20% above
+//     the round's AOV).
+//   • rg_import  — a dormant customer we're winning back. Goal: just get the
+//     first native order → easier bar (RM25, near the overall median).
+// Copy uses {name} (substituted to the member's first name at send time). The
+// prepare RPC tags each arm's members, auto-creates one time-boxed, tag-gated,
+// outlet-scoped promo PER ARM at that arm's min_order, and records the round
+// 'prepared'. Operator reviews + sends from the round card (no SMS here).
+// measureRound reads skipper-vs-import lift separately via the arm.
 const DAILY_LIMIT = 100;
+type Arm = { key: "rg_skipper" | "rg_import"; label: string; message: string; min_order: number };
 const CAMPAIGNS: Record<string, {
-  outlet: string; round_start: number; round_end: number;
-  name: string; offer_label: string; message: string; min_order: number; limit: number;
+  outlet: string; round_start: number; round_end: number; name: string; limit: number; arms: Arm[];
 }> = {
   "conezion-breakfast": {
-    outlet: "conezion", round_start: 7, round_end: 9, min_order: 35, limit: DAILY_LIMIT,
-    name: "Conezion · Breakfast", offer_label: "Free coffee when you spend RM35+ (7–9am)",
-    message: "Free coffee with breakfast at Celsius Conezion, 7-9am this week. Spend RM35+ and your coffee's on us. Show your number to redeem.",
+    outlet: "conezion", round_start: 7, round_end: 9, name: "Conezion · Breakfast", limit: DAILY_LIMIT,
+    arms: [
+      { key: "rg_skipper", min_order: 35, label: "Regular · free coffee, spend RM35 (7-9am)",
+        message: "Hi {name}! Free coffee at Celsius Conezion breakfast (7-9am) this week, spend RM35. We miss you in the AM! Show your number." },
+      { key: "rg_import", min_order: 25, label: "Win-back · free coffee, spend RM25 (7-9am)",
+        message: "Hi {name}! We miss you at Celsius Conezion. Free coffee at breakfast (7-9am) this week, spend RM25. Show your number." },
+    ],
   },
   "shah-alam-evening": {
-    outlet: "shah-alam", round_start: 17, round_end: 19, min_order: 40, limit: DAILY_LIMIT,
-    name: "Shah Alam · Evening", offer_label: "Free coffee when you spend RM40+ (5–7pm)",
-    message: "Free coffee at Celsius Shah Alam, 5-7pm this week. Spend RM40+ and your coffee's on us. Show your number to redeem.",
+    outlet: "shah-alam", round_start: 17, round_end: 19, name: "Shah Alam · Evening", limit: DAILY_LIMIT,
+    arms: [
+      { key: "rg_skipper", min_order: 40, label: "Regular · free coffee, spend RM40 (5-7pm)",
+        message: "Hi {name}! Free coffee at Celsius Shah Alam (5-7pm) this week, spend RM40. We rarely see you in the evening! Show your number." },
+      { key: "rg_import", min_order: 25, label: "Win-back · free coffee, spend RM25 (5-7pm)",
+        message: "Hi {name}! We miss you at Celsius Shah Alam. Free coffee (5-7pm) this week, spend RM25. Show your number." },
+    ],
   },
 };
 
 // POST /api/loyalty/loops/round-gap/prepare  { campaign: "conezion-breakfast" }
-// Admin-gated. Creates a 'prepared' round-gap round (segment + tag + auto-promo).
-// Does NOT send — review + approve the round to fire the SMS.
+// Admin-gated. Creates a 'prepared' round-gap round (segment + per-arm tag +
+// per-arm auto-promo). Does NOT send — review + approve the round to fire the SMS.
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
@@ -61,9 +68,7 @@ export async function POST(request: NextRequest) {
       p_round_start: cfg.round_start,
       p_round_end: cfg.round_end,
       p_round_name: cfg.name,
-      p_offer_label: cfg.offer_label,
-      p_message: cfg.message,
-      p_min_order: cfg.min_order,
+      p_arms: cfg.arms,
       p_limit: cfg.limit,
     });
     if (error) throw new Error(error.message);
@@ -76,8 +81,7 @@ export async function POST(request: NextRequest) {
       round_id: row.round_id,
       treated: row.treated,
       holdout: row.holdout,
-      promo_id: row.promo_id,
-      member_tag: row.member_tag,
+      promos: row.promos,
       message: `Prepared ${cfg.name}: ${row.treated} treated + ${row.holdout} holdout. Review the round below, then Send to fire the SMS.`,
     });
   } catch (err) {
