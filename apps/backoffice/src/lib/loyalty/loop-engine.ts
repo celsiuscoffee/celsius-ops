@@ -325,17 +325,37 @@ export async function sendRound(roundId: string) {
 
   const { data: rows } = await supabaseAdmin
     .from("loop_assignments")
-    .select("id, phone, arm, sms_status")
+    .select("id, phone, arm, sms_status, member_id")
     .eq("round_id", roundId)
     .neq("arm", "holdout");
+
+  // Per-recipient {name} personalisation: substitute the member's FIRST name
+  // (short, to stay within one GSM-7 segment). Only fetch names if any arm copy
+  // actually uses {name}, so loops without it pay nothing.
+  const needsName = Object.values(armMsg).some((m) => m.includes("{name}"));
+  const firstNameById = new Map<string, string>();
+  if (needsName) {
+    const ids = [...new Set(((rows ?? []) as Array<{ member_id: string | null }>).map((r) => r.member_id).filter(Boolean))] as string[];
+    for (let i = 0; i < ids.length; i += 1000) {
+      const { data: ms } = await supabaseAdmin.from("members").select("id, name").in("id", ids.slice(i, i + 1000));
+      for (const m of (ms ?? []) as Array<{ id: string; name: string | null }>) {
+        const first = (m.name ?? "").trim().split(/\s+/)[0];
+        if (first) firstNameById.set(m.id, first);
+      }
+    }
+  }
 
   let sent = 0;
   let failed = 0;
   let firstError: string | undefined;
-  for (const r of (rows ?? []) as Array<{ id: string; phone: string; arm: string; sms_status: string | null }>) {
+  for (const r of (rows ?? []) as Array<{ id: string; phone: string; arm: string; sms_status: string | null; member_id: string | null }>) {
     if (r.sms_status === "sent") continue; // idempotent
-    const message = armMsg[r.arm] ?? "";
+    let message = armMsg[r.arm] ?? "";
     if (!message) { failed++; continue; }
+    if (needsName) {
+      const first = (r.member_id && firstNameById.get(r.member_id)) || "there";
+      message = message.replace(/\{name\}/g, first);
+    }
     const res = await sendSMS(r.phone, message, { provider });
     await supabaseAdmin
       .from("loop_assignments")
@@ -380,7 +400,11 @@ export async function measureRound(roundId: string) {
     "shah-alam": ["shah-alam", "outlet-sa"],
     tamarind: ["tamarind", "outlet-tam"],
   };
-  const meta = (round.meta ?? {}) as { kind?: string; outlet?: string; round_start?: number; round_end?: number; promo_id?: string; member_tag?: string };
+  const meta = (round.meta ?? {}) as {
+    kind?: string; outlet?: string; round_start?: number; round_end?: number;
+    promo_id?: string; member_tag?: string; // legacy single-promo rounds
+    promos?: Array<{ promo_id?: string; tag?: string }>; // per-arm offers (v5+)
+  };
   const rgMeta =
     meta.kind === "round_gap" && meta.outlet != null && meta.round_start != null && meta.round_end != null
       ? { round_start: meta.round_start, round_end: meta.round_end, outletIds: RG_OUTLET_IDS[meta.outlet] ?? [meta.outlet] }
@@ -450,10 +474,18 @@ export async function measureRound(roundId: string) {
     .update({ status: "measured", measured_at: new Date().toISOString(), stats })
     .eq("id", roundId);
 
-  // Round-gap: once measured, retire the auto-created promo + strip the campaign
-  // tag so the offer can't linger past its window.
-  if (rgMeta && meta.promo_id) {
-    await supabaseAdmin.rpc("loyalty_round_gap_cleanup", { p_promo_id: meta.promo_id, p_tag: meta.member_tag ?? null });
+  // Round-gap: once measured, retire every auto-created promo + strip its tag so
+  // no offer lingers past its window. v5 rounds carry one promo per arm
+  // (meta.promos); legacy rounds carried a single (meta.promo_id, meta.member_tag).
+  if (rgMeta) {
+    const toClean = meta.promos?.length
+      ? meta.promos.map((p) => ({ promo_id: p.promo_id, tag: p.tag }))
+      : meta.promo_id
+        ? [{ promo_id: meta.promo_id, tag: meta.member_tag }]
+        : [];
+    for (const c of toClean) {
+      await supabaseAdmin.rpc("loyalty_round_gap_cleanup", { p_promo_id: c.promo_id ?? null, p_tag: c.tag ?? null });
+    }
   }
 
   return { round_id: roundId, holdout_conversion_rate: +(holdoutRate * 100).toFixed(1), stats };
