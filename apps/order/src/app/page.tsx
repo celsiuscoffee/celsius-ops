@@ -6,7 +6,6 @@ import { selectHomePosters } from "@/lib/poster/select-home";
 import { GlobalCartPill } from "./_GlobalCartPill";
 import { BottomNav } from "./_BottomNav";
 import { PosterCarousel } from "./_PosterCarousel";
-import { RewardWaiting } from "./_RewardWaiting";
 import { HeroInfoCard } from "./_HeroInfoCard";
 import { OutletRow } from "./_OutletRow";
 import { ActiveChallengeCard } from "./_ActiveChallengeCard";
@@ -80,11 +79,6 @@ export default async function HomePage() {
         <PosterCarousel posters={posters} />
         <HeroInfoCard />
       </div>
-
-      {/* Reward waiting — pulls the customer to an unrevealed mystery reward
-          (the reveal otherwise only lives on the order screen, so ~1/3 are
-          never tapped). Renders nothing when there's nothing to reveal. */}
-      <RewardWaiting />
 
       {/* Outlet row — under the hero, brand voice. Client component
           reads chosen outlet from localStorage so customers see their
