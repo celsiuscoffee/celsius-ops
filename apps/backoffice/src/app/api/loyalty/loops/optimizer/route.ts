@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const candidates = OFFER_CANDIDATES
       .filter((c) => def.candidateKeys.includes(c.key))
       .map((c) => ({ key: c.key, label: c.label, logic: c.logic, voucher_template_id: c.voucher_template_id, message: composeMessage(loopKey, c) }));
-    const loops = Object.values(LOOPS).map((l) => ({ key: l.key, label: l.label, objective: l.objective, defaultHoldoutPct: l.defaultHoldoutPct, defaultWindowDays: l.defaultWindowDays }));
+    const loops = Object.values(LOOPS).map((l) => ({ key: l.key, label: l.label, objective: l.objective, defaultHoldoutPct: l.defaultHoldoutPct, defaultWindowDays: l.defaultWindowDays, triggered: !!l.trigger }));
     return NextResponse.json({
       loop_key: loopKey, leaderboard, proposal, candidates, loops,
       send_time_leaderboard: sendTimeLeaderboard, send_window_proposal: sendWindowProposal, send_windows: SEND_WINDOWS,

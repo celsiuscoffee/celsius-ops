@@ -192,6 +192,16 @@ export async function prepareRound(loopKey: LoopKey, opts: {
   const capped = !!(opts.maxRecipients && opts.maxRecipients > 0 && opts.maxRecipients < rawReach);
   if (capped) segment = segment.slice(0, opts.maxRecipients);
 
+  // No one qualifies — don't create an empty round (keeps the daily trigger
+  // cron from littering rounds on days with no birthdays/lapses/new members).
+  if (segment.length === 0) {
+    return {
+      round_id: "", round_no: 0, segment_label: `${seg.label} (0 reachable)`,
+      total: 0, holdout: 0, arm_counts: {}, est_sms_cost_rm: 0, est_reward_cogs_rm: 0,
+      status: "prepared" as const,
+    };
+  }
+
   // next round number for this loop
   const { data: last } = await supabaseAdmin
     .from("loop_rounds")
@@ -415,7 +425,10 @@ export const OFFER_CANDIDATES: OfferCandidate[] = [
   { key: "flat10_min30", label: "RM10 off RM30+", logic: "flat discount", voucher_template_id: "02ca62f1-171d-41d2-b6d6-9ca2d67ca3b9", offer: "RM10 off when you spend RM30+" },
   { key: "flat15_min50", label: "RM15 off RM50+", logic: "flat discount", voucher_template_id: "3c0288b5-51db-4e82-a583-6ed1dbc351b5", offer: "RM15 off when you spend RM50+" },
   { key: "b1f1_drinks", label: "Buy 1 Free 1 drinks", logic: "BOGO", voucher_template_id: "ed33eb26-4ead-414d-b1ee-179999a33940", offer: "buy 1 free 1 on any drink" },
-  { key: "free_drink", label: "Free Tea", logic: "free item", voucher_template_id: "1b9a465a-8411-4299-a2e2-8034f2b0ea45", offer: "a free tea, on us" },
+  // Free-item crowd-pullers — NOT tea (Celsius isn't a tea brand). Free Coffee
+  // covers classics; Free Drink covers any drink category.
+  { key: "free_coffee", label: "Free Coffee", logic: "free item", voucher_template_id: "206b5fbf-c12a-44e5-ad30-85a9e8a81439", offer: "a free coffee, on us" },
+  { key: "free_drink", label: "Free Drink", logic: "free item", voucher_template_id: "9cb1a485-4e68-46a9-a8f1-0dec4519c641", offer: "a free drink, on us" },
 ];
 
 // ── Loop registry: each campaign objective is a loop. Same machinery
@@ -433,13 +446,22 @@ export type LoopDef = {
    *  offer phrase so each campaign reads right (a Welcome ≠ a Win-back).
    *  Keep it GSM-7 (no emoji) + short — the gateway prepends ~20 chars. */
   messageTemplate: string;
+  /** When set, this loop fires AUTOMATICALLY: a daily cron issues + sends to
+   *  each newly-qualifying member (no budget cap, no manual approval). The
+   *  segmentOpts narrow the segment to TODAY's new qualifiers; cooldownDays
+   *  prevents re-targeting the same member for the same event. Undefined =
+   *  batch/manual (operator prepares + budgets + schedules a round). */
+  trigger?: { holdoutPct: number; cooldownDays: number; segmentOpts: SegmentOpts };
   segment: (o: SegmentOpts) => Promise<{ rows: SegmentRow[]; label: string }>;
 };
 
 export const LOOPS: Record<LoopKey, LoopDef> = {
-  winback:   { key: "winback",   label: "Reactivation",      objective: "Win back lapsed customers",        defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct10_min25", "pct15_min40", "pct20_min40", "flat5_min25", "flat10_min30", "flat15_min50", "b1f1_drinks"], messageTemplate: "We miss you at Celsius! Come back and enjoy {offer}. Tap to use.", segment: winbackSegment },
-  welcome:   { key: "welcome",   label: "Welcome",           objective: "Turn the 1st visit into a 2nd",    defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks", "free_drink"], messageTemplate: "Welcome to Celsius! Enjoy {offer} on your next visit. See you again soon.", segment: welcomeSegment },
-  birthday:  { key: "birthday",  label: "Birthday",          objective: "Bring members in on their birthday", defaultHoldoutPct: 15, defaultWindowDays: 14, candidateKeys: ["free_drink", "b1f1_drinks", "pct20_min40"], messageTemplate: "Happy birthday from Celsius! Enjoy {offer}. Tap to use.", segment: birthdaySegment },
+  // Triggered (auto): reactivation fires when a member crosses ~30d inactive;
+  // welcome ~1 day after the 1st visit; birthday on the day. round_gap stays
+  // batch/manual (an operator-driven, budget-capped weekly push).
+  winback:   { key: "winback",   label: "Reactivation",      objective: "Win back lapsed customers",        defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct10_min25", "pct15_min40", "pct20_min40", "flat5_min25", "flat10_min30", "flat15_min50", "b1f1_drinks"], messageTemplate: "We miss you at Celsius! Come back and enjoy {offer}. Tap to use.", trigger: { holdoutPct: 10, cooldownDays: 60, segmentOpts: { minDaysLapsed: 30, maxDaysLapsed: 32 } }, segment: winbackSegment },
+  welcome:   { key: "welcome",   label: "Welcome",           objective: "Turn the 1st visit into a 2nd",    defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks", "free_drink"], messageTemplate: "Welcome to Celsius! Enjoy {offer} on your next visit. See you again soon.", trigger: { holdoutPct: 10, cooldownDays: 365, segmentOpts: { joinedWithinDays: 2 } }, segment: welcomeSegment },
+  birthday:  { key: "birthday",  label: "Birthday",          objective: "Bring members in on their birthday", defaultHoldoutPct: 0,  defaultWindowDays: 14, candidateKeys: ["free_coffee", "free_drink"], messageTemplate: "Happy birthday from Celsius! Enjoy {offer}. Tap to use.", trigger: { holdoutPct: 0, cooldownDays: 300, segmentOpts: { birthdayWithinDays: 0 } }, segment: birthdaySegment },
   round_gap: { key: "round_gap", label: "Weekly round-gap",  objective: "Fill an underperforming day-part",  defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct15_min40", "flat10_min30", "b1f1_drinks"], messageTemplate: "Celsius misses you! Enjoy {offer} this week. Drop by.", segment: roundGapSegment },
 };
 
@@ -671,4 +693,77 @@ export async function proposeSendWindow(loopKey: LoopKey = "winback"): Promise<{
   const untested = SEND_WINDOWS.find((w) => !tested.has(w));
   if (untested) return { window: untested, reason: "New window — never tested yet." };
   return { window: "weekday_evening", reason: "Default — F&B evening peak." };
+}
+
+// ============================================================================
+// TRIGGERED LOOPS — lifecycle campaigns that fire automatically.
+//
+// Birthday / Welcome / Reactivation aren't operator-prepared budget blasts;
+// they fire per-member as each one crosses the trigger (birthday today / ~1
+// day after the 1st visit / just past the inactivity threshold). A daily cron
+// calls runTriggeredLoops(): for each, it auto-prepares a round over today's
+// NEW qualifiers (minus a cooldown so nobody's hit twice for the same event),
+// auto-issues the voucher, and sends immediately. No budget cap, no approval —
+// but still a loop: it rotates offers (champion + challengers) and (where set)
+// holds out a slice so we keep learning which offer/copy wins.
+// ============================================================================
+
+// Phones already targeted by this loop within the cooldown — so a member isn't
+// re-birthday'd / re-welcomed / re-reactivated for the same lifecycle event.
+async function recentlyTargetedPhones(loopKey: LoopKey, cooldownDays: number): Promise<string[]> {
+  const since = new Date(Date.now() - cooldownDays * 86400000).toISOString();
+  const { data: rounds } = await supabaseAdmin
+    .from("loop_rounds").select("id").eq("loop_key", loopKey).gte("prepared_at", since);
+  const roundIds = ((rounds ?? []) as Array<{ id: string }>).map((r) => r.id);
+  if (roundIds.length === 0) return [];
+  const { data: rows } = await supabaseAdmin
+    .from("loop_assignments").select("phone").in("round_id", roundIds);
+  return Array.from(new Set(((rows ?? []) as Array<{ phone: string }>).map((r) => r.phone)));
+}
+
+// Run one triggered loop: auto-prepare a round over today's new qualifiers,
+// then auto-send. Returns a small summary.
+async function runTriggeredLoop(def: LoopDef): Promise<{ loop: LoopKey; qualified: number; sent?: number; failed?: number; round_id?: string }> {
+  const trig = def.trigger!;
+  const arms = (await proposeArms(def.key)).arms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message }));
+  const suppressPhones = await recentlyTargetedPhones(def.key, trig.cooldownDays);
+  const preview = await prepareRound(def.key, {
+    arms,
+    holdoutPct: trig.holdoutPct,
+    attributionWindowDays: def.defaultWindowDays,
+    segment: trig.segmentOpts,
+    suppressPhones,
+    createdBy: "cron:loops-trigger",
+  });
+  if (!preview.round_id || preview.total === 0) return { loop: def.key, qualified: 0 };
+  const res = await sendRound(preview.round_id);
+  return { loop: def.key, qualified: preview.total, sent: res.sent, failed: res.failed, round_id: preview.round_id };
+}
+
+// Cron entrypoint: fire every triggered loop (skip batch/manual ones).
+export async function runTriggeredLoops(): Promise<Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string }>> {
+  const out: Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string }> = [];
+  for (const def of Object.values(LOOPS)) {
+    if (!def.trigger) continue;
+    try { out.push(await runTriggeredLoop(def)); }
+    catch (e) { out.push({ loop: def.key, qualified: 0, error: e instanceof Error ? e.message : "trigger failed" }); }
+  }
+  return out;
+}
+
+// Auto-measure: close the loop for any SENT round whose attribution window has
+// elapsed (triggered rounds have no operator to click "Measure"). Idempotent —
+// measureRound flips status to 'measured' so it's picked once.
+export async function autoMeasureDueRounds(): Promise<{ measured: number }> {
+  const { data: rounds } = await supabaseAdmin
+    .from("loop_rounds").select("id, sent_at, attribution_window_days").eq("status", "sent");
+  let measured = 0;
+  const nowMs = Date.now();
+  for (const r of (rounds ?? []) as Array<{ id: string; sent_at: string | null; attribution_window_days: number }>) {
+    if (!r.sent_at) continue;
+    const dueMs = new Date(r.sent_at).getTime() + r.attribution_window_days * 86400000;
+    if (nowMs < dueMs) continue;
+    try { await measureRound(r.id); measured++; } catch { /* leave for next run */ }
+  }
+  return { measured };
 }
