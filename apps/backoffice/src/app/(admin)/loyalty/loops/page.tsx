@@ -189,7 +189,7 @@ export default function LoopsPage() {
               const res = await fetch("/api/loyalty/loops/run-triggered", { method: "POST" });
               const data = await res.json();
               if (!res.ok) throw new Error(data?.error ?? "Run failed");
-              const fired = ((data.triggered ?? []) as Array<{ loop: string; sent?: number }>).map((t) => `${t.loop}: ${t.sent ?? 0} sent`).join(" · ");
+              const fired = ((data.triggered ?? []) as Array<{ loop: string; sent?: number; failed?: number; error?: string }>).map((t) => `${t.loop}: ${t.sent ?? 0} sent${t.failed ? `, ${t.failed} failed` : ""}${t.error ? ` (${t.error})` : ""}`).join(" · ");
               setRunResult(fired || "Nothing qualified right now.");
               await load();
             } catch (e) { setErr(e instanceof Error ? e.message : "Run failed"); }
@@ -334,6 +334,7 @@ export default function LoopsPage() {
               }}
               proposedWindow={opt?.send_window_proposal?.window}
               windows={opt?.send_windows ?? []}
+              triggered={activeTriggered}
             />
           ))}
         </div>
@@ -643,9 +644,9 @@ function NumInput({ v, set }: { v: number; set: (n: number) => void }) {
 }
 
 // ---- Round card -------------------------------------------------------------
-function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, proposedWindow, windows }: {
+function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, proposedWindow, windows, triggered }: {
   round: Round; busy: boolean; onSend: () => void; onMeasure: () => void;
-  onSchedule: (scheduledSendAt: string, sendWindow: string) => void; onCancel: () => void; proposedWindow?: string; windows: string[];
+  onSchedule: (scheduledSendAt: string, sendWindow: string) => void; onCancel: () => void; proposedWindow?: string; windows: string[]; triggered?: boolean;
 }) {
   const est = estSmsCost(round);
   const [when, setWhen] = useState(() => defaultLocalDatetime());
@@ -723,10 +724,16 @@ function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, propo
 
       {round.status === "sent" && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-          <div className="mb-2 text-sm text-blue-900">SMS sent{round.sent_at ? ` ${new Date(round.sent_at).toLocaleDateString("en-MY")}` : ""}. Measure after the {round.attribution_window_days}-day window closes.</div>
-          <button disabled={busy} onClick={onMeasure} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Measure results
-          </button>
+          {triggered ? (
+            <div className="text-sm text-blue-900">SMS sent{round.sent_at ? ` ${new Date(round.sent_at).toLocaleDateString("en-MY")}` : ""}. <strong>Auto-measures</strong> when the {round.attribution_window_days}-day window closes — nothing to do.</div>
+          ) : (
+            <>
+              <div className="mb-2 text-sm text-blue-900">SMS sent{round.sent_at ? ` ${new Date(round.sent_at).toLocaleDateString("en-MY")}` : ""}. Auto-measures when the {round.attribution_window_days}-day window closes, or measure now:</div>
+              <button disabled={busy} onClick={onMeasure} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Measure results
+              </button>
+            </>
+          )}
         </div>
       )}
 
