@@ -743,9 +743,12 @@ async function ranToday(loopKey: LoopKey): Promise<boolean> {
 
 // Run one triggered loop: auto-prepare a round over today's new qualifiers,
 // then auto-send. Returns a small summary.
-async function runTriggeredLoop(def: LoopDef): Promise<{ loop: LoopKey; qualified: number; sent?: number; failed?: number; round_id?: string; error?: string; skipped?: boolean }> {
+async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: LoopKey; qualified: number; sent?: number; failed?: number; round_id?: string; error?: string; skipped?: boolean }> {
   const trig = def.trigger!;
-  if (await ranToday(def.key)) return { loop: def.key, qualified: 0, skipped: true };
+  // Once-a-day guard — unless the operator forces a run (e.g. after widening a
+  // segment and wanting it out now). Cooldown still protects already-messaged
+  // customers, so a forced run only reaches genuinely new qualifiers.
+  if (!force && await ranToday(def.key)) return { loop: def.key, qualified: 0, skipped: true };
   const arms = (await proposeArms(def.key)).arms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message }));
   const suppressPhones = await recentlyTargetedPhones(def.key, trig.cooldownDays);
   const preview = await prepareRound(def.key, {
@@ -762,11 +765,11 @@ async function runTriggeredLoop(def: LoopDef): Promise<{ loop: LoopKey; qualifie
 }
 
 // Cron entrypoint: fire every triggered loop (skip batch/manual ones).
-export async function runTriggeredLoops(): Promise<Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string; skipped?: boolean }>> {
+export async function runTriggeredLoops(opts?: { force?: boolean }): Promise<Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string; skipped?: boolean }>> {
   const out: Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string; skipped?: boolean }> = [];
   for (const def of Object.values(LOOPS)) {
     if (!def.trigger) continue;
-    try { out.push(await runTriggeredLoop(def)); }
+    try { out.push(await runTriggeredLoop(def, opts?.force)); }
     catch (e) { out.push({ loop: def.key, qualified: 0, error: e instanceof Error ? e.message : "trigger failed" }); }
   }
   return out;

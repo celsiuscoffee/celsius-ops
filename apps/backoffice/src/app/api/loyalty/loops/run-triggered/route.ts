@@ -9,7 +9,10 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
   try {
-    const triggered = await runTriggeredLoops();
+    // force:true bypasses the once-a-day guard (cooldown still applies).
+    const body = await request.json().catch(() => ({}));
+    const force = body?.force === true;
+    const triggered = await runTriggeredLoops({ force });
     const measured = await autoMeasureDueRounds();
     return NextResponse.json({ triggered, measured: measured.measured });
   } catch (err) {
