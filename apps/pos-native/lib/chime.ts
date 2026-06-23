@@ -11,10 +11,30 @@
  * native module isn't compiled in. Every call is fire-and-forget + fully
  * crash-safe — a sound must never be able to break the order / print flow.
  */
-import { createAudioPlayer, type AudioPlayer } from "expo-audio";
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import DeviceSpeaker from "@/modules/device-speaker";
 
 type Sound = "chime" | "alarm";
+
+// Make our cues NON-exclusive so the café's Bluetooth music keeps playing while
+// the POS app is open. expo-audio's default takes exclusive Android audio focus
+// the moment a player exists/plays, which PAUSES every other app's audio for as
+// long as the POS is foregrounded — staff reported music wouldn't play with the
+// app open. "duckOthers" lets a cue briefly dip the music instead of killing it,
+// and never seizes focus. Set once, fire-and-forget, never throws into callers.
+let audioModeReady = false;
+function ensureMixableAudioMode(): void {
+  if (audioModeReady) return;
+  audioModeReady = true;
+  try {
+    void setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: "duckOthers",
+      interruptionModeAndroid: "duckOthers",
+    }).catch(() => { /* best-effort: a cue must never break the order flow */ });
+  } catch { /* ignore */ }
+}
 
 const SOURCES: Record<Sound, number> = {
   chime: require("../assets/chime.wav"),
@@ -43,6 +63,7 @@ function getPlayer(sound: Sound): AudioPlayer | null {
  * native DeviceSpeaker module isn't compiled in.
  */
 function playViaExpoAudio(sound: Sound): void {
+  ensureMixableAudioMode();
   const p = getPlayer(sound);
   if (!p) return;
   try {
@@ -75,8 +96,15 @@ function play(sound: Sound): void {
   playViaExpoAudio(sound);
 }
 
-/** Pre-create the players at mount so the first real sound has no decode lag. */
+/** Pre-create the players at mount so the first real sound has no decode lag.
+ *  On the SUNMI the cues play through the native DeviceSpeaker, so creating the
+ *  expo-audio players there is pure overhead AND activates the Android audio
+ *  session that blocked the café music — so we DON'T prime them when the native
+ *  module is present (the expo-audio path is a fallback, primed lazily only if
+ *  native playback ever fails). */
 export function primeSounds(): void {
+  ensureMixableAudioMode();
+  if (DeviceSpeaker) return; // native handles playback — don't touch the audio session
   getPlayer("chime");
   getPlayer("alarm");
 }
