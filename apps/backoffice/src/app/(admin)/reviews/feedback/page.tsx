@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Gift,
   Phone,
+  RefreshCw,
 } from "lucide-react";
 
 type Case = {
@@ -84,6 +85,8 @@ export default function FeedbackManagementPage() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [comp, setComp] = useState<Record<string, { phone: string; name: string }>>({});
+  const [ctx, setCtx] = useState<Record<string, string>>({});
+  const [regen, setRegen] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async (sync: boolean) => {
     if (sync) setSyncing(true);
@@ -127,6 +130,22 @@ export default function FeedbackManagementPage() {
       }
     } finally {
       setBusy((b) => ({ ...b, [c.id]: false }));
+    }
+  };
+
+  const regenerate = async (c: Case) => {
+    setRegen((r) => ({ ...r, [c.id]: true }));
+    try {
+      const res = await fetch("/api/reviews/negatives/regenerate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: c.id, context: ctx[c.id] ?? "" }),
+      });
+      const d = await res.json();
+      if (res.ok && d.draftReply) setEdits((m) => ({ ...m, [c.id]: d.draftReply }));
+      else alert(d.error || "Could not regenerate");
+    } finally {
+      setRegen((r) => ({ ...r, [c.id]: false }));
     }
   };
 
@@ -217,6 +236,27 @@ export default function FeedbackManagementPage() {
                       className="w-full rounded-lg border border-border bg-white p-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
                     />
                     <p className="mt-1 text-[11px] text-muted-foreground">A recovery link is added automatically when you approve.</p>
+
+                    {/* Approver context → regenerate a more honest, specific reply */}
+                    <div className="mt-2 rounded-lg border border-dashed border-border p-2">
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">What actually happened? (optional — gives a better, less generic reply)</p>
+                      <textarea
+                        value={ctx[c.id] ?? ""}
+                        onChange={(e) => setCtx((m) => ({ ...m, [c.id]: e.target.value }))}
+                        rows={2}
+                        placeholder="e.g. sink was broken so drinks went out in takeaway cups; repair booked for Friday"
+                        className="w-full rounded-lg border border-border bg-white p-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                      />
+                      <button
+                        onClick={() => regenerate(c)}
+                        disabled={regen[c.id]}
+                        className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                      >
+                        {regen[c.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        Regenerate draft
+                      </button>
+                    </div>
+
                     <div className="mt-2 flex items-center gap-2">
                       <button
                         onClick={() => act(c, "approve", { reply: draftVal })}
