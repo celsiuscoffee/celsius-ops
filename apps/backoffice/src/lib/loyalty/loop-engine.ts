@@ -917,6 +917,19 @@ export const ROUND_GAP_CAMPAIGNS: Record<string, {
         message: "Hi {name}! We miss you at Celsius Shah Alam. Free coffee (5-7pm) this week, spend RM25. Show your number." },
     ],
   },
+  // Tamarind: low-volume outlet with no weak-round gap, but ~554 dormant customers
+  // recovered from the StoreHub archive (tag 'Tamarind', never ordered native). This
+  // is a WIN-BACK play, not a daypart fill — so a WIDE all-day window (11am-9pm) makes
+  // the promo flexible; the skipper arm is ~empty by design, the import arm is the point.
+  "tamarind-winback": {
+    outlet: "tamarind", round_start: 11, round_end: 21, name: "Tamarind · Win-back", daily_limit: 50,
+    arms: [
+      { key: "rg_skipper", min_order: 30, label: "Regular · free coffee, spend RM30",
+        message: "Hi {name}! Free coffee at Celsius Tamarind this week, spend RM30. We miss you - show your number to redeem." },
+      { key: "rg_import", min_order: 25, label: "Win-back · free coffee, spend RM25",
+        message: "Hi {name}! We miss you at Celsius Tamarind. Free coffee this week when you spend RM25 - show your number to redeem." },
+    ],
+  },
 };
 
 // Auto-run the round-gap campaigns: prepare the next capped batch per campaign
