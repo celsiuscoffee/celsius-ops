@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { replyToReview } from "@/lib/reviews/gbp";
-import { genRecoveryCode, compensateReviewCase } from "@/lib/reviews/recovery";
+import { genRecoveryCode, compensateReviewCase, compensateInternalFeedback } from "@/lib/reviews/recovery";
 
 export const dynamic = "force-dynamic";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://backoffice.celsiuscoffee.com";
+// Base for the customer recovery link placed in the public reply. Defaults to
+// the backoffice domain; set RECOVERY_URL_BASE to a short vanity URL (e.g.
+// https://celsiuscoffee.com/sorry) once a redirect to /recover/<code> exists,
+// so the link is easy to type off a plain-text Google reply.
+const RECOVERY_URL_BASE =
+  process.env.RECOVERY_URL_BASE ||
+  `${process.env.NEXT_PUBLIC_APP_URL || "https://backoffice.celsiuscoffee.com"}/recover`;
 
 // POST /api/reviews/negatives/decide
 // Body: { id, action, reply?, phone?, name?, note? }
@@ -19,10 +25,40 @@ export async function POST(request: NextRequest) {
   const user = await getUserFromHeaders(request.headers);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id, action, reply, phone, name, note } = await request.json();
+  const { id, source, action, reply, phone, name, note } = await request.json();
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const decidedBy = user.name || user.id;
+  const now = new Date();
+
+  // ── QR feedback cases: no Google reply; we already have their phone ───────
+  if (source === "qr") {
+    if (action === "compensate") {
+      const result = await compensateInternalFeedback(
+        id,
+        typeof phone === "string" ? phone : null,
+        typeof name === "string" ? name : null,
+      );
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json({ id, status: "compensated", ...result });
+    }
+    if (action === "resolve" || action === "dismiss") {
+      const fb = await prisma.internalFeedback.findUnique({ where: { id } });
+      if (!fb) return NextResponse.json({ error: "Feedback not found" }, { status: 404 });
+      const status = action === "resolve" ? "resolved" : "dismissed";
+      await prisma.internalFeedback.update({
+        where: { id },
+        data: { status, resolvedAt: now, resolvedBy: decidedBy, resolutionNote: note ?? null },
+      });
+      return NextResponse.json({ id, status });
+    }
+    return NextResponse.json({ error: "Invalid action for feedback" }, { status: 400 });
+  }
+
+  // ── Google review cases ──────────────────────────────────────────────────
   const VALID = ["approve", "reject", "compensate", "resolve", "expire"];
-  if (!id || !VALID.includes(action)) {
-    return NextResponse.json({ error: "id and valid action required" }, { status: 400 });
+  if (!VALID.includes(action)) {
+    return NextResponse.json({ error: "valid action required" }, { status: 400 });
   }
 
   const draft = await prisma.reviewReplyDraft.findUnique({
@@ -30,9 +66,6 @@ export async function POST(request: NextRequest) {
     include: { outlet: { include: { reviewSettings: true } } },
   });
   if (!draft) return NextResponse.json({ error: "Case not found" }, { status: 404 });
-
-  const decidedBy = user.name || user.id;
-  const now = new Date();
 
   // ── approve / reject: only from the NEW (pending) state ──────────────────
   if (action === "reject") {
@@ -58,7 +91,7 @@ export async function POST(request: NextRequest) {
     const code = genRecoveryCode();
     // Deterministic recovery CTA — the link/code are appended in code, never by
     // the LLM, so they can't be mangled. Google replies are plain text.
-    const finalReply = `${base}\n\nWe'd like to make this right. Please visit ${APP_URL}/recover/${code} so we can reach you personally.`;
+    const finalReply = `${base}\n\nWe'd like to make this right. Please visit ${RECOVERY_URL_BASE}/${code} so we can reach you personally.`;
 
     try {
       await replyToReview(settings.gbpAccountId, settings.gbpLocationName, draft.reviewId, finalReply);

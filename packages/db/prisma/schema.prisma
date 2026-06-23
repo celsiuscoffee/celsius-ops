@@ -1329,9 +1329,18 @@ model InternalFeedback {
   phone     String?
   feedback  String?
   source    String   @default("qr") // "qr" | "manual"
+  // Case lifecycle (managed in the feedback board): open | compensated | resolved | dismissed
+  status           String    @default("open")
+  recoveryMemberId String?
+  recoveryRewardId String?
+  compensatedAt    DateTime?
+  resolvedAt       DateTime?
+  resolvedBy       String?
+  resolutionNote   String?
   createdAt DateTime @default(now())
 
   @@index([outletId, createdAt])
+  @@index([status])
 }
 
 // Backoffice approval gate for NEGATIVE (1-3★) Google reviews.
