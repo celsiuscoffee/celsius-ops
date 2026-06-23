@@ -1348,9 +1348,21 @@ model ReviewReplyDraft {
   comment      String?
   draftReply   String // AI-generated draft
   finalReply   String? // what was actually posted (if edited on approval)
-  status       String    @default("pending") // pending | approved | rejected | resolved
+  // pending(new) | approved(awaiting customer) | compensated | resolved | rejected | expired
+  status       String    @default("pending")
   decidedBy    String? // user who approved/rejected
   decidedAt    DateTime?
+  // Recovery: single-use code in the approved reply → public form → voucher
+  recoveryCode     String?   @unique
+  recoveryCodeAt   DateTime?
+  claimedAt        DateTime? // customer submitted the recovery form
+  recoveryMemberId String? // loyalty member captured
+  recoveryRewardId String? // issued voucher (tagged to this review)
+  redeemedAt       DateTime? // voucher actually used — true recovery
+  // Resolution
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  resolutionNote String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

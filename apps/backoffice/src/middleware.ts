@@ -66,6 +66,7 @@ export async function middleware(request: NextRequest) {
     pathname === "/reset-password" ||
     pathname.startsWith("/r/") ||
     pathname.startsWith("/review/") ||
+    pathname.startsWith("/recover/") ||
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||
