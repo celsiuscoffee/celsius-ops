@@ -25,10 +25,25 @@ export type ArmDef = {
   message: string; // SMS body (may contain {name})
 };
 
-type SegmentRow = { member_id: string; phone: string; name: string | null };
+type SegmentRow = {
+  member_id: string; phone: string; name: string | null;
+  // Reminder loops (noIssue) carry the member's EXISTING voucher so the
+  // round attributes redemption of THAT reward instead of minting a new one.
+  existing_reward_id?: string | null;
+  reward_label?: string | null;
+};
 
 function rid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// "today" / "tomorrow" / "in N days" for SMS expiry urgency (null → "soon").
+function expiryPhrase(iso: string | null | undefined): string {
+  if (!iso) return "soon";
+  const d = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
+  if (d <= 0) return "today";
+  if (d === 1) return "tomorrow";
+  return `in ${d} days`;
 }
 
 // Segment inputs — each loop reads the few it needs (see LOOPS below).
@@ -37,6 +52,7 @@ export type SegmentOpts = {
   joinedWithinDays?: number;                        // welcome
   birthdayWithinDays?: number;                      // birthday
   outletId?: string; activeWithinDays?: number;     // round_gap
+  expiringWithinDays?: number;                      // reward_expiring
 };
 
 type MemberRow = { id: string; phone: string | null; name: string | null; sms_opt_out: boolean | null; birthday: string | null; preferred_outlet_id: string | null };
@@ -127,6 +143,76 @@ async function roundGapSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; la
   }
   const rows = reachable(raw, (m) => m.preferred_outlet_id === o.outletId);
   return { rows, label: `Outlet actives ≤${days}d` };
+}
+
+// ── Reward-expiring (REMINDER, noIssue): members holding an active wallet
+// voucher about to expire. We don't mint anything — the lure already exists;
+// the SMS just pulls them back to redeem it before it's gone. One row per
+// member (their SOONEST-expiring voucher), carrying that voucher's id + title
+// so prepareRound attributes redemption of THAT reward and sendRound fills the
+// {reward}/{expiry} tokens. Scoped to organically-won wallet sources — campaign
+// (win-back/round-gap) vouchers are owned by their own loops, so excluded here
+// to avoid double-messaging + double-counting.
+const REMINDER_SOURCES = ["mystery", "mission", "birthday", "manual", "points_redemption"];
+async function rewardExpiringSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
+  const days = o.expiringWithinDays ?? 7;
+  const nowIso = new Date().toISOString();
+  const untilIso = new Date(Date.now() + days * 86400000).toISOString();
+
+  // Active vouchers entering the expiry window, soonest first.
+  type IrRow = { id: string; member_id: string; title: string | null; expires_at: string | null };
+  const irs: IrRow[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabaseAdmin
+      .from("issued_rewards")
+      .select("id, member_id, title, expires_at")
+      .eq("brand_id", BRAND)
+      .eq("status", "active")
+      .in("source_type", REMINDER_SOURCES)
+      .not("expires_at", "is", null)
+      .gte("expires_at", nowIso)
+      .lt("expires_at", untilIso)
+      .order("expires_at", { ascending: true })
+      .range(from, from + 999);
+    if (error) throw new Error(`reward_expiring segment: ${error.message}`);
+    const batch = (data ?? []) as IrRow[];
+    irs.push(...batch);
+    if (batch.length < 1000) break;
+  }
+  // Keep each member's soonest-expiring voucher only (irs already asc by expiry).
+  const byMember = new Map<string, IrRow>();
+  for (const ir of irs) if (!byMember.has(ir.member_id)) byMember.set(ir.member_id, ir);
+  const memberIds = [...byMember.keys()];
+  if (memberIds.length === 0) return { rows: [], label: `Vouchers expiring ≤${days}d` };
+
+  // Resolve phone / opt-out for those members.
+  const memberById = new Map<string, MemberRow>();
+  for (let i = 0; i < memberIds.length; i += 1000) {
+    const { data, error } = await supabaseAdmin
+      .from("members")
+      .select("id, phone, name, sms_opt_out, birthday, preferred_outlet_id")
+      .in("id", memberIds.slice(i, i + 1000));
+    if (error) throw new Error(`reward_expiring members: ${error.message}`);
+    for (const m of (data ?? []) as MemberRow[]) memberById.set(m.id, m);
+  }
+
+  const seen = new Set<string>();
+  const rows: SegmentRow[] = [];
+  for (const [memberId, ir] of byMember) {
+    const m = memberById.get(memberId);
+    if (!m || m.sms_opt_out === true) continue;
+    const phone = (m.phone ?? "").trim();
+    if (!phone || seen.has(phone)) continue;
+    seen.add(phone);
+    rows.push({
+      member_id: memberId,
+      phone,
+      name: m.name ?? null,
+      existing_reward_id: ir.id,
+      reward_label: ir.title ?? "reward",
+    });
+  }
+  return { rows, label: `Vouchers expiring ≤${days}d` };
 }
 
 // Fisher–Yates with a seeded-ish shuffle (index-varied; Math.random is fine here).
@@ -266,30 +352,40 @@ export async function prepareRound(loopKey: LoopKey, opts: {
   const armCounts: Record<string, number> = {};
   let rewardCogs = 0;
 
-  // holdout assignments (no reward, no SMS)
+  // holdout assignments (no reward, no SMS). For reminder loops, still pin the
+  // member's EXISTING expiring voucher so measureRound compares redemption of
+  // the same reward across treatment vs holdout (fair lift, not 0 by omission).
   const holdoutRows = holdout.map((m) => ({
     id: rid("la"),
     round_id: roundId,
     member_id: m.member_id,
     phone: m.phone,
     arm: "holdout",
+    ...(def.noIssue ? { issued_reward_id: m.existing_reward_id ?? null } : {}),
   }));
   if (holdoutRows.length) await supabaseAdmin.from("loop_assignments").insert(holdoutRows);
   armCounts["holdout"] = holdoutRows.length;
 
-  // treatment: round-robin, issue reward, log assignment
+  // treatment: round-robin. Standard loops MINT the arm's voucher; reminder
+  // loops (noIssue) attribute the member's existing voucher and mint nothing.
   for (let i = 0; i < treatment.length; i++) {
     const m = treatment[i];
     const arm = arms[i % arms.length];
-    const issued = await issueReward(m.member_id, arm.voucher_template_id, roundId, sourceType);
-    if (issued) rewardCogs += issued.cogsRm;
+    let issuedRewardId: string | null;
+    if (def.noIssue) {
+      issuedRewardId = m.existing_reward_id ?? null;
+    } else {
+      const issued = await issueReward(m.member_id, arm.voucher_template_id, roundId, sourceType);
+      if (issued) rewardCogs += issued.cogsRm;
+      issuedRewardId = issued?.id ?? null;
+    }
     await supabaseAdmin.from("loop_assignments").insert({
       id: rid("la"),
       round_id: roundId,
       member_id: m.member_id,
       phone: m.phone,
       arm: arm.key,
-      issued_reward_id: issued?.id ?? null,
+      issued_reward_id: issuedRewardId,
     });
     armCounts[arm.key] = (armCounts[arm.key] ?? 0) + 1;
   }
@@ -325,7 +421,7 @@ export async function sendRound(roundId: string) {
 
   const { data: rows } = await supabaseAdmin
     .from("loop_assignments")
-    .select("id, phone, arm, sms_status, member_id")
+    .select("id, phone, arm, sms_status, member_id, issued_reward_id")
     .eq("round_id", roundId)
     .neq("arm", "holdout");
 
@@ -345,16 +441,37 @@ export async function sendRound(roundId: string) {
     }
   }
 
+  // Per-recipient {reward}/{expiry} personalisation for reminder loops: resolve
+  // the assignment's attributed voucher (title + expiry) so each SMS names the
+  // member's own reward. Same pay-nothing-unless-used guard as {name}.
+  const needsReward = Object.values(armMsg).some((m) => m.includes("{reward}") || m.includes("{expiry}"));
+  const rewardByIrId = new Map<string, { title: string | null; expires_at: string | null }>();
+  if (needsReward) {
+    const irIds = [...new Set(((rows ?? []) as Array<{ issued_reward_id: string | null }>).map((r) => r.issued_reward_id).filter(Boolean))] as string[];
+    for (let i = 0; i < irIds.length; i += 1000) {
+      const { data: irs } = await supabaseAdmin.from("issued_rewards").select("id, title, expires_at").in("id", irIds.slice(i, i + 1000));
+      for (const ir of (irs ?? []) as Array<{ id: string; title: string | null; expires_at: string | null }>) {
+        rewardByIrId.set(ir.id, { title: ir.title, expires_at: ir.expires_at });
+      }
+    }
+  }
+
   let sent = 0;
   let failed = 0;
   let firstError: string | undefined;
-  for (const r of (rows ?? []) as Array<{ id: string; phone: string; arm: string; sms_status: string | null; member_id: string | null }>) {
+  for (const r of (rows ?? []) as Array<{ id: string; phone: string; arm: string; sms_status: string | null; member_id: string | null; issued_reward_id: string | null }>) {
     if (r.sms_status === "sent") continue; // idempotent
     let message = armMsg[r.arm] ?? "";
     if (!message) { failed++; continue; }
     if (needsName) {
       const first = (r.member_id && firstNameById.get(r.member_id)) || "there";
       message = message.replace(/\{name\}/g, first);
+    }
+    if (needsReward) {
+      const rw = r.issued_reward_id ? rewardByIrId.get(r.issued_reward_id) : undefined;
+      message = message
+        .replace(/\{reward\}/g, (rw?.title ?? "reward").trim())
+        .replace(/\{expiry\}/g, expiryPhrase(rw?.expires_at));
     }
     const res = await sendSMS(r.phone, message, { provider });
     await supabaseAdmin
@@ -534,7 +651,7 @@ export const OFFER_CANDIDATES: OfferCandidate[] = [
 // ── Loop registry: each campaign objective is a loop. Same machinery
 // (holdout → optimise offers → auto-issue voucher → measure lift), different
 // audience + candidate subset. Add a loop here and it inherits the whole engine.
-export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap";
+export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap" | "reward_expiring";
 export type LoopDef = {
   key: LoopKey;
   label: string;
@@ -552,6 +669,11 @@ export type LoopDef = {
    *  prevents re-targeting the same member for the same event. Undefined =
    *  batch/manual (operator prepares + budgets + schedules a round). */
   trigger?: { holdoutPct: number; cooldownDays: number; segmentOpts: SegmentOpts };
+  /** REMINDER loop: the lure already exists in the member's wallet, so the
+   *  round does NOT mint a voucher. prepareRound attributes the member's
+   *  existing expiring voucher (carried on the segment row) instead. Arms are
+   *  message-only; candidateKeys is empty (no offer to optimise). */
+  noIssue?: boolean;
   segment: (o: SegmentOpts) => Promise<{ rows: SegmentRow[]; label: string }>;
 };
 
@@ -563,6 +685,10 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   welcome:   { key: "welcome",   label: "Welcome",           objective: "Turn the 1st visit into a 2nd",    defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks", "free_drink"], messageTemplate: "Welcome to Celsius! Enjoy {offer} on your next visit - just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 365, segmentOpts: { joinedWithinDays: 10 } }, segment: welcomeSegment },
   birthday:  { key: "birthday",  label: "Birthday",          objective: "Bring members in on their birthday", defaultHoldoutPct: 0,  defaultWindowDays: 14, candidateKeys: ["free_coffee", "free_drink"], messageTemplate: "Happy birthday from Celsius! Enjoy {offer} - just show your number at any outlet to redeem.", trigger: { holdoutPct: 0, cooldownDays: 300, segmentOpts: { birthdayWithinDays: 0 } }, segment: birthdaySegment },
   round_gap: { key: "round_gap", label: "Weekly round-gap",  objective: "Fill an underperforming day-part",  defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct15_min40", "flat10_min30", "b1f1_drinks"], messageTemplate: "Celsius misses you! Enjoy {offer} this week - just show your number at any outlet to redeem.", segment: roundGapSegment },
+  // Reminder loop (manual/operator-gated — no trigger): pull members back to
+  // redeem a voucher they ALREADY won before it expires. noIssue → attributes
+  // the existing voucher; {reward}/{expiry} filled per-recipient in sendRound.
+  reward_expiring: { key: "reward_expiring", label: "Reward expiring", objective: "Redeem an unused voucher before it expires", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Your {reward} at Celsius expires {expiry}! Show your number at any outlet to redeem before it's gone.", segment: rewardExpiringSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
