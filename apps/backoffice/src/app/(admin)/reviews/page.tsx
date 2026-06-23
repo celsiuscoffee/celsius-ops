@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Star,
   Search,
@@ -71,18 +71,6 @@ type DashboardResponse = {
   outlets: OutletSummary[];
   allGoogleReviews: DashboardGoogleReview[];
   allFeedbacks: DashboardFeedback[];
-};
-
-type PendingDraft = {
-  id: string;
-  reviewId: string;
-  outletId: string;
-  outletName: string;
-  reviewerName: string | null;
-  rating: number;
-  comment: string | null;
-  draftReply: string;
-  createdAt: string;
 };
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -869,140 +857,9 @@ function BatchAutoReplyModal({ onClose }: { onClose: () => void }) {
 
 // ─── Dashboard View ────────────────────────────────────────
 
-// ─── Negative Review Approval Queue ────────────────────────
-
-function NegativeApprovalQueue({ onCountChange }: { onCountChange?: (n: number) => void }) {
-  const [items, setItems] = useState<PendingDraft[] | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [edits, setEdits] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState<Record<string, "approve" | "reject" | null>>({});
-
-  const load = async (sync: boolean) => {
-    setSyncing(true);
-    try {
-      const res = await fetch(`/api/reviews/negatives${sync ? "?sync=1" : ""}`);
-      const data = await res.json();
-      const pending: PendingDraft[] = data.pending ?? [];
-      setItems(pending);
-      onCountChange?.(pending.length);
-    } catch {
-      setItems([]);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  useEffect(() => {
-    load(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const decide = async (item: PendingDraft, action: "approve" | "reject") => {
-    setBusy((b) => ({ ...b, [item.id]: action }));
-    try {
-      const res = await fetch("/api/reviews/negatives/decide", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: item.id,
-          action,
-          reply: action === "approve" ? (edits[item.id] ?? item.draftReply) : undefined,
-        }),
-      });
-      if (res.ok) {
-        setItems((prev) => {
-          const next = (prev ?? []).filter((x) => x.id !== item.id);
-          onCountChange?.(next.length);
-          return next;
-        });
-      } else {
-        const e = await res.json().catch(() => ({}));
-        alert(e.error || "Failed to save decision");
-      }
-    } finally {
-      setBusy((b) => ({ ...b, [item.id]: null }));
-    }
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-        <p className="text-sm text-amber-900">
-          Negative (1-3★) reviews are drafted by AI and{" "}
-          <span className="font-semibold">held here for your approval</span> — nothing posts to Google until you approve it.
-        </p>
-        <button
-          onClick={() => load(true)}
-          disabled={syncing}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50"
-        >
-          {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          Check Google for new
-        </button>
-      </div>
-
-      {items === null ? (
-        <div className="flex items-center justify-center py-10">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : items.length === 0 ? (
-        <div className="rounded-xl border border-border bg-white p-10 text-center">
-          <Check className="mx-auto h-10 w-10 text-muted-foreground/30" />
-          <p className="mt-3 text-sm text-muted-foreground">No negative reviews waiting for approval</p>
-          <p className="mt-1 text-xs text-muted-foreground">Click “Check Google for new” to pull the latest.</p>
-        </div>
-      ) : (
-        items.map((item) => {
-          const value = edits[item.id] ?? item.draftReply;
-          const itemBusy = busy[item.id];
-          return (
-            <div key={item.id} className="rounded-xl border border-border bg-white p-4">
-              <div className="flex items-center gap-2">
-                <StarRating rating={item.rating} />
-                <span className="text-sm font-medium text-foreground">{item.reviewerName || "Anonymous"}</span>
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">{item.outletName} · {timeAgo(item.createdAt)}</p>
-              {item.comment && (
-                <p className="mt-2 rounded-lg bg-muted/50 p-2 text-sm text-foreground">{item.comment}</p>
-              )}
-              <div className="mt-3">
-                <p className="mb-1 text-xs font-medium text-muted-foreground">AI draft reply (edit before approving)</p>
-                <textarea
-                  value={value}
-                  onChange={(e) => setEdits((m) => ({ ...m, [item.id]: e.target.value }))}
-                  rows={3}
-                  className="w-full rounded-lg border border-border bg-white p-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
-                />
-              </div>
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  onClick={() => decide(item, "approve")}
-                  disabled={!!itemBusy || !value.trim()}
-                  className="flex items-center gap-1.5 rounded-lg bg-brand-dark px-3 py-2 text-sm font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50"
-                >
-                  {itemBusy === "approve" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  Approve &amp; Post
-                </button>
-                <button
-                  onClick={() => decide(item, "reject")}
-                  disabled={!!itemBusy}
-                  className="flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
-                >
-                  {itemBusy === "reject" ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                  Reject
-                </button>
-              </div>
-            </div>
-          );
-        })
-      )}
-    </div>
-  );
-}
-
 function DashboardView() {
   const [period, setPeriod] = useState<"day" | "week" | "month" | "custom">("month");
-  const [dashTab, setDashTab] = useState<"google" | "internal" | "approvals">("google");
+  const [dashTab, setDashTab] = useState<"google" | "internal">("google");
   const [search, setSearch] = useState("");
   const [filterRating, setFilterRating] = useState<number | null>(null);
   const [showFilter, setShowFilter] = useState(false);
@@ -1010,14 +867,6 @@ function DashboardView() {
   const [customTo, setCustomTo] = useState("");
   const [showBatchReply, setShowBatchReply] = useState(false);
   const [filterOutletId, setFilterOutletId] = useState<string | null>(null);
-  const [approvalCount, setApprovalCount] = useState<number | null>(null);
-
-  useEffect(() => {
-    fetch("/api/reviews/negatives")
-      .then((r) => r.json())
-      .then((d) => setApprovalCount(d.pending?.length ?? 0))
-      .catch(() => setApprovalCount(0));
-  }, []);
 
   const fetchUrl = period === "custom" && customFrom
     ? `/api/reviews/dashboard?period=custom&from=${customFrom}${customTo ? `&to=${customTo}` : ""}`
@@ -1218,14 +1067,6 @@ function DashboardView() {
           >
             Feedback ({combinedFeedback.length})
           </button>
-          <button
-            onClick={() => setDashTab("approvals")}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              dashTab === "approvals" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Needs approval{approvalCount ? ` (${approvalCount})` : ""}
-          </button>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -1273,10 +1114,6 @@ function DashboardView() {
 
       {/* Review list */}
       <div className="mt-4 space-y-3">
-        {dashTab === "approvals" ? (
-          <NegativeApprovalQueue onCountChange={setApprovalCount} />
-        ) : (
-        <>
         {isLoading && (
           <div className="flex items-center justify-center py-10">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -1326,8 +1163,6 @@ function DashboardView() {
               )
             )}
           </>
-        )}
-        </>
         )}
       </div>
     </>

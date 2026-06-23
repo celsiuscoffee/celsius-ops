@@ -17,10 +17,12 @@ import {
 
 type Case = {
   id: string;
+  source: "google" | "qr";
   reviewId: string;
   outletId: string;
   outletName: string;
   reviewerName: string | null;
+  phone: string | null;
   rating: number;
   comment: string | null;
   draftReply: string;
@@ -37,21 +39,23 @@ type Case = {
 };
 
 const FILTERS: { key: string; label: string; match: (s: string) => boolean }[] = [
-  { key: "needs_reply", label: "Needs reply", match: (s) => s === "pending" },
+  { key: "needs_action", label: "Needs action", match: (s) => s === "pending" || s === "open" },
   { key: "awaiting", label: "Awaiting customer", match: (s) => s === "approved" },
   { key: "compensated", label: "Compensated", match: (s) => s === "compensated" },
   { key: "resolved", label: "Resolved", match: (s) => s === "resolved" },
-  { key: "closed", label: "Closed", match: (s) => s === "rejected" || s === "expired" },
+  { key: "closed", label: "Closed", match: (s) => s === "rejected" || s === "expired" || s === "dismissed" },
   { key: "all", label: "All", match: () => true },
 ];
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   pending: { label: "Needs reply", cls: "bg-amber-100 text-amber-800" },
+  open: { label: "New feedback", cls: "bg-amber-100 text-amber-800" },
   approved: { label: "Awaiting customer", cls: "bg-blue-100 text-blue-800" },
   compensated: { label: "Compensated", cls: "bg-emerald-100 text-emerald-800" },
   resolved: { label: "Resolved", cls: "bg-neutral-200 text-neutral-700" },
   rejected: { label: "Rejected", cls: "bg-neutral-200 text-neutral-500" },
   expired: { label: "Expired", cls: "bg-neutral-200 text-neutral-500" },
+  dismissed: { label: "Dismissed", cls: "bg-neutral-200 text-neutral-500" },
 };
 
 function StarRow({ rating }: { rating: number }) {
@@ -81,7 +85,7 @@ function timeAgo(d: string | null): string {
 export default function FeedbackManagementPage() {
   const [cases, setCases] = useState<Case[] | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [filter, setFilter] = useState("needs_reply");
+  const [filter, setFilter] = useState("needs_action");
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [comp, setComp] = useState<Record<string, { phone: string; name: string }>>({});
@@ -115,7 +119,7 @@ export default function FeedbackManagementPage() {
       const res = await fetch("/api/reviews/negatives/decide", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: c.id, action, ...extra }),
+        body: JSON.stringify({ id: c.id, source: c.source, action, ...extra }),
       });
       if (res.ok) {
         await load(false);
@@ -162,7 +166,7 @@ export default function FeedbackManagementPage() {
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Reviews
           </Link>
           <h1 className="font-heading text-2xl font-bold text-foreground">Feedback Management</h1>
-          <p className="text-sm text-muted-foreground">Every negative review, worked through to a compensated customer.</p>
+          <p className="text-sm text-muted-foreground">Every negative Google review and QR feedback, worked through to a compensated customer.</p>
         </div>
         <button
           onClick={() => load(true)}
@@ -218,7 +222,10 @@ export default function FeedbackManagementPage() {
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground">{c.outletName} · {timeAgo(c.createdAt)}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${badge.cls}`}>{badge.label}</span>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span className="rounded-full bg-neutral-100 px-2 py-1 text-[11px] font-medium text-neutral-600">{c.source === "qr" ? "QR" : "Google"}</span>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${badge.cls}`}>{badge.label}</span>
+                  </div>
                 </div>
 
                 {c.comment && (
@@ -337,6 +344,54 @@ export default function FeedbackManagementPage() {
                   </div>
                 )}
 
+                {/* QR FEEDBACK (open) — we already have their phone; compensate directly */}
+                {c.status === "open" && (
+                  <div className="mt-3 space-y-2">
+                    {c.phone ? (
+                      <p className="text-xs text-muted-foreground">Contact: <span className="font-medium text-foreground">{c.phone}</span></p>
+                    ) : (
+                      <p className="text-xs text-amber-700">No phone on this feedback — enter one to compensate.</p>
+                    )}
+                    {compForm ? (
+                      <div className="rounded-lg border border-border p-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            value={compForm.phone}
+                            onChange={(e) => setComp((m) => ({ ...m, [c.id]: { ...compForm, phone: e.target.value } }))}
+                            placeholder="01XXXXXXXX"
+                            inputMode="tel"
+                            className="w-40 rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                          />
+                          <button
+                            onClick={() => act(c, "compensate", { phone: compForm.phone, name: compForm.name })}
+                            disabled={isBusy || !compForm.phone.trim()}
+                            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            <Gift className="h-4 w-4" /> Issue voucher
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => (c.phone ? act(c, "compensate", {}) : setComp((m) => ({ ...m, [c.id]: { phone: "", name: c.reviewerName ?? "" } })))}
+                          disabled={isBusy}
+                          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          <Gift className="h-4 w-4" /> Compensate (free coffee)
+                        </button>
+                        <button
+                          onClick={() => act(c, "dismiss")}
+                          disabled={isBusy}
+                          className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* COMPENSATED — show capture + resolve */}
                 {c.status === "compensated" && (
                   <div className="mt-3 space-y-2">
@@ -354,7 +409,7 @@ export default function FeedbackManagementPage() {
                 )}
 
                 {/* CLOSED states */}
-                {(c.status === "resolved" || c.status === "rejected" || c.status === "expired") && c.resolvedAt && (
+                {(c.status === "resolved" || c.status === "rejected" || c.status === "expired" || c.status === "dismissed") && c.resolvedAt && (
                   <p className="mt-2 text-xs text-muted-foreground">
                     {badge.label}{c.decidedBy ? ` by ${c.decidedBy}` : ""} · {timeAgo(c.resolvedAt)}
                   </p>

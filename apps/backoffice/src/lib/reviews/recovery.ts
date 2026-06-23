@@ -194,3 +194,55 @@ export async function compensateReviewCase(
 
   return { ok: true, alreadyCompensated: false, memberId: member.id, rewardId };
 }
+
+/**
+ * Compensate an internal QR-feedback case. Unlike a Google review we already
+ * have the customer's phone, so there's no recovery code — a manager issues the
+ * voucher directly. Falls back to the phone stored on the feedback row.
+ */
+export async function compensateInternalFeedback(
+  feedbackId: string,
+  phoneOverride?: string | null,
+  name?: string | null,
+): Promise<CompensateResult> {
+  const fb = await prisma.internalFeedback.findUnique({ where: { id: feedbackId } });
+  if (!fb) return { ok: false, error: "Feedback not found" };
+  if (fb.status === "compensated" || fb.status === "resolved") {
+    return {
+      ok: true,
+      alreadyCompensated: true,
+      memberId: fb.recoveryMemberId ?? "",
+      rewardId: fb.recoveryRewardId,
+    };
+  }
+  if (fb.status !== "open") {
+    return { ok: false, error: `This feedback is ${fb.status}` };
+  }
+
+  const phone = (phoneOverride && phoneOverride.trim()) || fb.phone || "";
+  if (!isValidMyPhone(phone)) {
+    return { ok: false, error: "No valid phone on this feedback — enter one" };
+  }
+
+  const member = await findOrCreateMemberByPhone(phone, name ?? fb.name);
+  if (!member) return { ok: false, error: "Could not create loyalty member" };
+
+  let rewardId: string | null = null;
+  if (!(await hasRecoveryVoucher(member.id))) {
+    const voucher = await issueRecoveryVoucher(member.id, feedbackId);
+    if (!voucher) return { ok: false, error: "Could not issue voucher" };
+    rewardId = voucher.id;
+  }
+
+  await prisma.internalFeedback.update({
+    where: { id: feedbackId },
+    data: {
+      status: "compensated",
+      compensatedAt: new Date(),
+      recoveryMemberId: member.id,
+      recoveryRewardId: rewardId ?? fb.recoveryRewardId,
+    },
+  });
+
+  return { ok: true, alreadyCompensated: false, memberId: member.id, rewardId };
+}
