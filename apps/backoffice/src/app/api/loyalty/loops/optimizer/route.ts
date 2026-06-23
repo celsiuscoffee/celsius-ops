@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { getLeaderboard, proposeArms, getSendTimeLeaderboard, proposeSendWindow, composeMessage, SEND_WINDOWS, OFFER_CANDIDATES, LOOPS, type LoopKey } from "@/lib/loyalty/loop-engine";
+import { getLeaderboard, proposeArms, getSendTimeLeaderboard, proposeSendWindow, composeMessage, SEND_WINDOWS, OFFER_CANDIDATES, LOOPS, ROUND_GAP_CAMPAIGNS, type LoopKey } from "@/lib/loyalty/loop-engine";
 
 // GET /api/loyalty/loops/optimizer?loop_key= — the adaptive layer per loop:
 //   - leaderboard: every offer ranked by cumulative incremental margin (learns over time)
@@ -14,9 +14,23 @@ export async function GET(request: NextRequest) {
     const loopKey = (new URL(request.url).searchParams.get("loop_key") ?? "winback") as LoopKey;
     const def = LOOPS[loopKey];
     if (!def) return NextResponse.json({ error: `unknown loop: ${loopKey}` }, { status: 400 });
-    const [leaderboard, proposal, sendTimeLeaderboard, sendWindowProposal] = await Promise.all([
+    const [leaderboard, proposalRaw, sendTimeLeaderboard, sendWindowProposal] = await Promise.all([
       getLeaderboard(loopKey), proposeArms(loopKey), getSendTimeLeaderboard(loopKey), proposeSendWindow(loopKey),
     ]);
+    // round_gap doesn't use the A/B optimizer — it runs fixed per-segment campaigns
+    // (ROUND_GAP_CAMPAIGNS). Surface THOSE as the "messages going out" so the UI
+    // shows exactly what auto-run sends (per-outlet skipper + win-back free-coffee
+    // copy), not the legacy discount candidate template.
+    const proposal = loopKey === "round_gap"
+      ? { arms: Object.values(ROUND_GAP_CAMPAIGNS).flatMap((cfg) => cfg.arms.map((a) => ({
+          key: `${cfg.outlet}:${a.key}`,
+          label: `${cfg.name} — ${a.label}`,
+          voucher_template_id: "",
+          message: a.message,
+          role: a.key === "rg_import" ? "win-back" : "regular",
+          reason: a.key === "rg_import" ? "dormant customers" : "regulars who skip this round",
+        }))) }
+      : proposalRaw;
     // Curate the swap-list copy for THIS objective — a candidate's message
     // reads as a Welcome/Birthday/etc. SMS, not the win-back default.
     const candidates = OFFER_CANDIDATES
