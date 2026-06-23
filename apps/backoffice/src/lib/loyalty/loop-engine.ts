@@ -688,7 +688,7 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // Reminder loop (manual/operator-gated — no trigger): pull members back to
   // redeem a voucher they ALREADY won before it expires. noIssue → attributes
   // the existing voucher; {reward}/{expiry} filled per-recipient in sendRound.
-  reward_expiring: { key: "reward_expiring", label: "Reward expiring", objective: "Redeem an unused voucher before it expires", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Your {reward} at Celsius expires {expiry}! Show your number at any outlet to redeem before it's gone.", segment: rewardExpiringSegment },
+  reward_expiring: { key: "reward_expiring", label: "Reward expiring", objective: "Redeem an unused voucher before it expires", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Your {reward} at Celsius expires {expiry}! Show your number at any outlet to redeem before it's gone.", trigger: { holdoutPct: 20, cooldownDays: 7, segmentOpts: { expiringWithinDays: 7 } }, segment: rewardExpiringSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
@@ -967,7 +967,15 @@ async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: Lo
   // segment and wanting it out now). Cooldown still protects already-messaged
   // customers, so a forced run only reaches genuinely new qualifiers.
   if (!force && await ranToday(def.key)) return { loop: def.key, qualified: 0, skipped: true };
-  const arms = (await proposeArms(def.key)).arms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message }));
+  // Optimizer-driven loops build arms from their offer candidates; fixed-message
+  // reminder loops (e.g. reward_expiring, candidateKeys: []) have none, so use the
+  // loop's messageTemplate as a single arm ({reward}/{expiry}/{name} fill at send).
+  const proposed = def.candidateKeys.length > 0
+    ? (await proposeArms(def.key)).arms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message }))
+    : [];
+  const arms = proposed.length > 0
+    ? proposed
+    : [{ key: "reminder", label: def.label, voucher_template_id: "", message: def.messageTemplate }];
   const suppressPhones = await recentlyTargetedPhones(def.key, trig.cooldownDays);
   const preview = await prepareRound(def.key, {
     arms,
