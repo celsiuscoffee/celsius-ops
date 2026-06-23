@@ -225,11 +225,31 @@ async function rewardExpiringSegment(o: SegmentOpts): Promise<{ rows: SegmentRow
     for (const m of (data ?? []) as MemberRow[]) memberById.set(m.id, m);
   }
 
+  // Exclude non-stackable-tier members (Black Card / Staff): their flat tier
+  // discount REPLACES any voucher at the till, so they can NEVER redeem the
+  // reward we'd remind them about — reminding is wasted SMS + a guaranteed
+  // non-redemption. (Same rule the POS applies; see evaluate-promotions.)
+  const nonStackable = new Set<string>();
+  const { data: nsTiers } = await supabaseAdmin.from("tiers").select("id").eq("brand_id", BRAND).eq("stackable", false);
+  const nsTierIds = (nsTiers ?? []).map((t: { id: string }) => t.id);
+  if (nsTierIds.length) {
+    for (let i = 0; i < memberIds.length; i += 1000) {
+      const { data } = await supabaseAdmin
+        .from("member_brands")
+        .select("member_id")
+        .eq("brand_id", BRAND)
+        .in("member_id", memberIds.slice(i, i + 1000))
+        .in("current_tier_id", nsTierIds);
+      for (const r of (data ?? []) as { member_id: string }[]) nonStackable.add(r.member_id);
+    }
+  }
+
   const seen = new Set<string>();
   const rows: SegmentRow[] = [];
   for (const [memberId, ir] of byMember) {
     const m = memberById.get(memberId);
     if (!m || m.sms_opt_out === true) continue;
+    if (nonStackable.has(memberId)) continue; // tier wipes the voucher — can't redeem
     const phone = (m.phone ?? "").trim();
     if (!phone || seen.has(phone)) continue;
     seen.add(phone);
