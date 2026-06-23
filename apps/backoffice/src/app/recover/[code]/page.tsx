@@ -69,18 +69,18 @@ export default function RecoverPage({ params }: { params: Promise<{ code: string
 
         {state.phase === "invalid" && (
           <div className="mt-6 text-center">
-            <p className="text-base font-semibold text-[#1A0200]">This link isn't valid</p>
+            <p className="text-base font-semibold text-[#1A0200]">This link isn’t valid</p>
             <p className="mt-2 text-sm text-neutral-500">
-              The recovery link may have expired or been mistyped. Please reply to our message on Google and we'll sort it out.
+              The recovery link may have expired or been mistyped. Please reply to our message on Google and we’ll sort it out.
             </p>
           </div>
         )}
 
         {state.phase === "claimed" && (
           <div className="mt-6 text-center">
-            <p className="text-base font-semibold text-[#1A0200]">You're all set</p>
+            <p className="text-base font-semibold text-[#1A0200]">You’re all set</p>
             <p className="mt-2 text-sm text-neutral-500">
-              You've already claimed this — your free coffee is in your account. See you soon.
+              You’ve already claimed this — your free coffee is in your account. See you soon.
             </p>
           </div>
         )}
@@ -96,8 +96,8 @@ export default function RecoverPage({ params }: { params: Promise<{ code: string
         {state.phase === "form" && (
           <div className="mt-6">
             <p className="text-center text-sm text-neutral-600">
-              We're sorry your visit to <span className="font-medium text-[#1A0200]">{state.outletName}</span> fell short.
-              Leave your number and we'll put <span className="font-medium text-[#1A0200]">a free coffee</span> in your account to make it right.
+              We’re sorry your visit to <span className="font-medium text-[#1A0200]">{state.outletName}</span> fell short.
+              Leave your number and we’ll put <span className="font-medium text-[#1A0200]">a free coffee</span> in your account to make it right.
             </p>
             <div className="mt-5 space-y-3">
               <input
