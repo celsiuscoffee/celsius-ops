@@ -531,11 +531,13 @@ export async function sendRound(roundId: string) {
     }
   }
 
-  // Per-recipient {beans} personalisation (beans-idle loop): the member's live
-  // points balance, so the nudge names the concrete value sitting unused.
+  // Per-recipient {beans} = the member's live points balance; {redeem} = the
+  // priciest points-shop reward that balance can afford right now ("you have N
+  // points, enough for <best reward>"). Both need the member's balance.
   const needsBeans = Object.values(armMsg).some((m) => m.includes("{beans}"));
+  const needsRedeem = Object.values(armMsg).some((m) => m.includes("{redeem}"));
   const beansById = new Map<string, number>();
-  if (needsBeans) {
+  if (needsBeans || needsRedeem) {
     const ids = [...new Set(((rows ?? []) as Array<{ member_id: string | null }>).map((r) => r.member_id).filter(Boolean))] as string[];
     for (let i = 0; i < ids.length; i += 1000) {
       const { data: bs } = await supabaseAdmin.from("member_brands").select("member_id, points_balance").eq("brand_id", BRAND).in("member_id", ids.slice(i, i + 1000));
@@ -544,6 +546,18 @@ export async function sendRound(roundId: string) {
       }
     }
   }
+  // Points-shop catalogue (active templates with a points_cost), priciest first,
+  // so the first one a balance clears is the highest redemption they can do.
+  const redeemTiers: Array<{ cost: number; title: string }> = [];
+  if (needsRedeem) {
+    const { data: cat } = await supabaseAdmin.from("voucher_templates")
+      .select("title, points_cost").eq("brand_id", BRAND).eq("is_active", true)
+      .gt("points_cost", 0).order("points_cost", { ascending: false });
+    for (const c of (cat ?? []) as Array<{ title: string | null; points_cost: number | null }>) {
+      if (c.title && c.points_cost != null) redeemTiers.push({ cost: c.points_cost, title: c.title.trim() });
+    }
+  }
+  const topRedeemFor = (balance: number): string => (redeemTiers.find((t) => t.cost <= balance)?.title ?? "a reward");
 
   // Push-preferred delivery: a member with a registered device gets a FREE push;
   // everyone else falls back to (paid) SMS. Same holdout + attribution either
@@ -571,9 +585,9 @@ export async function sendRound(roundId: string) {
         .replace(/\{reward\}/g, (rw?.title ?? "reward").trim())
         .replace(/\{expiry\}/g, expiryPhrase(rw?.expires_at));
     }
-    if (needsBeans) {
+    if (needsBeans || needsRedeem) {
       const beans = (r.member_id && beansById.get(r.member_id)) || 0;
-      message = message.replace(/\{beans\}/g, String(beans));
+      message = message.replace(/\{beans\}/g, String(beans)).replace(/\{redeem\}/g, topRedeemFor(beans));
     }
 
     const tokens = r.member_id ? tokensByMember.get(r.member_id) : undefined;
@@ -807,7 +821,7 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // Reminder loop (noIssue, auto-triggered daily): nudge members sitting on
   // idle Points the moment they go quiet (~5d). Mints nothing — the value
   // already exists. Push-first (free) + SMS fallback, 10% holdout measures lift.
-  beans_idle: { key: "beans_idle", label: "Points sitting unused", objective: "Bring back members with idle Points", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Hi {name}! You have {beans} Points waiting at Celsius. Order this week to put them to use before they slip away.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minBeans: 100, idleMinDays: 5, idleMaxDays: 9 } }, segment: beansIdleSegment },
+  beans_idle: { key: "beans_idle", label: "Points sitting unused", objective: "Bring back members with idle Points", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Hi {name}! You have {beans} points at Celsius - enough for {redeem}. Redeem this week before they slip away. Show your number.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minBeans: 100, idleMinDays: 5, idleMaxDays: 9 } }, segment: beansIdleSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
