@@ -102,6 +102,7 @@ model Outlet {
   sopSchedules      SopSchedule[]
   reviewSettings    ReviewSettings?
   internalFeedbacks InternalFeedback[]
+  reviewReplyDrafts ReviewReplyDraft[]
   auditReports      AuditReport[]
   recurringExpenses RecurringExpense[]
   bankStatementLines BankStatementLine[]
@@ -1331,6 +1332,30 @@ model InternalFeedback {
   createdAt DateTime @default(now())
 
   @@index([outletId, createdAt])
+}
+
+// Backoffice approval gate for NEGATIVE (1-3★) Google reviews.
+// AI drafts a reply, a human approves/rejects it in backoffice, and only
+// then is it posted to GBP. Positives never enter this table — they
+// auto-post via /api/cron/reviews-auto-reply.
+model ReviewReplyDraft {
+  id           String    @id @default(uuid())
+  reviewId     String    @unique // GBP review id
+  outletId     String
+  outlet       Outlet    @relation(fields: [outletId], references: [id])
+  reviewerName String?
+  rating       Int
+  comment      String?
+  draftReply   String // AI-generated draft
+  finalReply   String? // what was actually posted (if edited on approval)
+  status       String    @default("pending") // pending | approved | rejected | resolved
+  decidedBy    String? // user who approved/rejected
+  decidedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status])
+  @@index([outletId])
 }
 
 // ─── ADS MODULE ─────────────────────────────────────────────
