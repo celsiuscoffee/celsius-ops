@@ -306,7 +306,7 @@ function shuffle<T>(arr: T[]): T[] {
 // eyebrow + styling ("Birthday gift", gift icon) instead of a generic
 // "Welcome back" campaign card. Attribution keys off source_ref_id (the round
 // id), NOT source_type, so this is display-only and safe to vary per loop.
-async function issueReward(memberId: string, templateId: string, roundId: string, sourceType: string): Promise<{ id: string; cogsRm: number } | null> {
+export async function issueReward(memberId: string, templateId: string, roundId: string, sourceType: string): Promise<{ id: string; cogsRm: number } | null> {
   const { data: tpl } = await supabaseAdmin
     .from("voucher_templates")
     .select(`id, title, description, icon, category, validity_days, discount_type, discount_value, min_order_value, applicable_categories, applicable_products, free_product_name, stacks_with_beans`)

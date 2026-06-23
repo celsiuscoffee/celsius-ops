@@ -1348,6 +1348,13 @@ export default function ReviewsPage() {
         </div>
         <div className="flex items-center gap-3">
           <Link
+            href="/reviews/feedback"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
+          >
+            <MessageSquare className="h-4 w-4" />
+            Feedback management
+          </Link>
+          <Link
             href="/reviews/settings"
             className="flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
           >

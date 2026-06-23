@@ -100,26 +100,38 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const pending = await prisma.reviewReplyDraft.findMany({
-    where: { status: "pending" },
+  // scope=all → the full case board (every status). Default → pending only,
+  // which keeps the existing "Needs approval" tab working unchanged.
+  const scopeAll = new URL(request.url).searchParams.get("scope") === "all";
+
+  const rows = await prisma.reviewReplyDraft.findMany({
+    where: scopeAll ? {} : { status: "pending" },
     include: { outlet: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({
-    synced: sync,
-    created,
-    resolved,
-    pending: pending.map((d) => ({
-      id: d.id,
-      reviewId: d.reviewId,
-      outletId: d.outletId,
-      outletName: d.outlet.name,
-      reviewerName: d.reviewerName,
-      rating: d.rating,
-      comment: d.comment,
-      draftReply: d.draftReply,
-      createdAt: d.createdAt,
-    })),
-  });
+  const cases = rows.map((d) => ({
+    id: d.id,
+    reviewId: d.reviewId,
+    outletId: d.outletId,
+    outletName: d.outlet.name,
+    reviewerName: d.reviewerName,
+    rating: d.rating,
+    comment: d.comment,
+    draftReply: d.draftReply,
+    finalReply: d.finalReply,
+    status: d.status,
+    recoveryCode: d.recoveryCode,
+    claimedAt: d.claimedAt,
+    recoveryMemberId: d.recoveryMemberId,
+    recoveryRewardId: d.recoveryRewardId,
+    redeemedAt: d.redeemedAt,
+    resolvedAt: d.resolvedAt,
+    decidedBy: d.decidedBy,
+    createdAt: d.createdAt,
+  }));
+
+  const pending = cases.filter((c) => c.status === "pending");
+
+  return NextResponse.json({ synced: sync, created, resolved, pending, cases });
 }
