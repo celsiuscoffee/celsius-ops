@@ -265,7 +265,10 @@ export default function LoopsPage() {
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
           <Repeat className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span>
-            <strong>Auto-triggered daily.</strong> This loop fires by itself — it auto-issues the voucher + SMS to each new qualifier (birthday today · ~1 day after a 1st visit · just lapsed), no budget or approval. Nothing to do here — just watch the scorecard and rounds below.
+            <strong>Auto-triggered daily.</strong>{" "}
+            {loopKey === "round_gap"
+              ? "This loop fires by itself — each day it auto-prepares + sends the next ~100 SMS (warmest first) with a per-segment offer to fill the weak round, 10% holdout, no approval. Nothing to do here — just watch the scorecard below."
+              : "This loop fires by itself — it auto-issues the voucher + SMS to each new qualifier (birthday today · ~1 day after a 1st visit · just lapsed), no budget or approval. Nothing to do here — just watch the scorecard and rounds below."}
           </span>
         </div>
       )}
