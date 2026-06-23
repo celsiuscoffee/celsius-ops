@@ -688,7 +688,12 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // Reminder loop (manual/operator-gated — no trigger): pull members back to
   // redeem a voucher they ALREADY won before it expires. noIssue → attributes
   // the existing voucher; {reward}/{expiry} filled per-recipient in sendRound.
-  reward_expiring: { key: "reward_expiring", label: "Reward expiring", objective: "Redeem an unused voucher before it expires", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Your {reward} at Celsius expires {expiry}! Show your number at any outlet to redeem before it's gone.", segment: rewardExpiringSegment },
+  // Auto-triggered daily (no budget cap, no manual approval): each day, members
+  // whose unused voucher just entered the ≤3-day urgency window get one SMS
+  // naming their own reward. 10% holdout keeps measuring whether the reminder
+  // lifts redemption/orders vs not-reminding (ROI shows in the campaign
+  // scorecard); 30-day cooldown stops re-messaging the same member.
+  reward_expiring: { key: "reward_expiring", label: "Reward expiring", objective: "Redeem an unused voucher before it expires", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Your {reward} at Celsius expires {expiry}! Show your number at any outlet to redeem before it's gone.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { expiringWithinDays: 3 } }, segment: rewardExpiringSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
@@ -967,7 +972,13 @@ async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: Lo
   // segment and wanting it out now). Cooldown still protects already-messaged
   // customers, so a forced run only reaches genuinely new qualifiers.
   if (!force && await ranToday(def.key)) return { loop: def.key, qualified: 0, skipped: true };
-  const arms = (await proposeArms(def.key)).arms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message }));
+  // Reminder loops (noIssue) have no offer space to optimise — the lure is the
+  // member's existing voucher — so use the loop's single message arm instead of
+  // proposeArms (which returns nothing for an empty candidate set). The holdout
+  // still measures whether the reminder lifts ROI vs not-reminding.
+  const arms = def.noIssue
+    ? [{ key: "reminder", label: "Expiry reminder", voucher_template_id: "", message: def.messageTemplate }]
+    : (await proposeArms(def.key)).arms.map((a) => ({ key: a.key, label: a.label, voucher_template_id: a.voucher_template_id, message: a.message }));
   const suppressPhones = await recentlyTargetedPhones(def.key, trig.cooldownDays);
   const preview = await prepareRound(def.key, {
     arms,
