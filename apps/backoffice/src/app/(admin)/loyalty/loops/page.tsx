@@ -46,7 +46,7 @@ type Preview = {
   holdout: number; arm_counts: Record<string, number>; est_sms_cost_rm: number; est_reward_cogs_rm: number;
 };
 type Candidate = { key: string; label: string; logic: string; voucher_template_id: string; message: string };
-type ProposalArm = { key: string; label: string; voucher_template_id: string; message: string; role: "champion" | "challenger"; reason: string };
+type ProposalArm = { key: string; label: string; voucher_template_id: string; message: string; role: string; reason: string };
 type LeaderboardEntry = {
   template_id: string; key: string | null; label: string; logic: string | null;
   rounds: number; recipients: number; avg_lift_pp: number;
@@ -128,11 +128,16 @@ function StatusBadge({ status }: { status: Round["status"] }) {
   const s = map[status];
   return <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", s.cls)}>{s.label}</span>;
 }
-function RoleBadge({ role }: { role: "champion" | "challenger" }) {
-  return role === "champion" ? (
+function RoleBadge({ role }: { role: string }) {
+  if (role === "champion") return (
     <span className="inline-flex items-center gap-1 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-800"><Crown className="h-3 w-3" /> champion</span>
-  ) : (
+  );
+  if (role === "challenger") return (
     <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800"><Sparkles className="h-3 w-3" /> challenger</span>
+  );
+  // round_gap segments (regular / win-back) and any other fixed-campaign role
+  return (
+    <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"><Sparkles className="h-3 w-3" /> {role}</span>
   );
 }
 
@@ -287,7 +292,7 @@ export default function LoopsPage() {
         </div>
       )}
 
-      {loopKey === "round_gap" && (
+      {loopKey === "round_gap" && !activeTriggered && (
         <RoundGapPrepareCard
           busy={busy === "rg"}
           onPrepare={async (campaign) => {
@@ -309,7 +314,8 @@ export default function LoopsPage() {
 
       {opt && <MessagesPanel arms={opt.proposal.arms} />}
 
-      {opt && <OptimizerPanel opt={opt} />}
+      {/* round_gap runs fixed per-segment campaigns, not the A/B optimizer — hide it */}
+      {opt && loopKey !== "round_gap" && <OptimizerPanel opt={opt} />}
 
       {!activeTriggered && (opt ? (
         <NewRoundCard
@@ -691,7 +697,7 @@ function OptimizerPanel({ opt }: { opt: Optimizer }) {
 }
 
 // ---- New round (seeded by the optimizer's proposal) -------------------------
-type FormArm = { key: string; label: string; voucher_template_id: string; message: string; role: "champion" | "challenger"; reason: string };
+type FormArm = { key: string; label: string; voucher_template_id: string; message: string; role: string; reason: string };
 
 function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare }: {
   loopKey: string; loopMeta?: LoopMeta; proposal: ProposalArm[]; candidates: Candidate[]; busy: boolean; onPrepare: (p: unknown) => void;
