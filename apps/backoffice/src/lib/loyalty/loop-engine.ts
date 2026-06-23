@@ -13,6 +13,7 @@
 
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
 import { sendSMS, getActiveSmsProvider } from "@/lib/loyalty/sms";
+import { pushTokensByMember, sendPushToTokens } from "@/lib/loyalty/push";
 
 const BRAND = "brand-celsius";
 const SMS_COST_RM = 0.1; // SMS Niaga ~RM0.10/SMS
@@ -505,11 +506,20 @@ export async function sendRound(roundId: string) {
     }
   }
 
-  let sent = 0;
+  // Push-preferred delivery: a member with a registered device gets a FREE push;
+  // everyone else falls back to (paid) SMS. Same holdout + attribution either
+  // way — only the channel differs. Resolve all treatment members' tokens up
+  // front in one query.
+  const treatmentMemberIds = ((rows ?? []) as Array<{ member_id: string | null }>)
+    .map((r) => r.member_id).filter((x): x is string => !!x);
+  const tokensByMember = await pushTokensByMember(treatmentMemberIds);
+
+  let sentPush = 0;
+  let sentSms = 0;
   let failed = 0;
   let firstError: string | undefined;
   for (const r of (rows ?? []) as Array<{ id: string; phone: string; arm: string; sms_status: string | null; member_id: string | null; issued_reward_id: string | null }>) {
-    if (r.sms_status === "sent") continue; // idempotent
+    if (r.sms_status === "sent") continue; // idempotent (covers push + SMS)
     let message = armMsg[r.arm] ?? "";
     if (!message) { failed++; continue; }
     if (needsName) {
@@ -522,14 +532,22 @@ export async function sendRound(roundId: string) {
         .replace(/\{reward\}/g, (rw?.title ?? "reward").trim())
         .replace(/\{expiry\}/g, expiryPhrase(rw?.expires_at));
     }
-    const res = await sendSMS(r.phone, message, { provider });
-    await supabaseAdmin
-      .from("loop_assignments")
-      // On failure, stash the error in sms_message_id so it's queryable (no
-      // silent fails like the SMS123 misroute).
-      .update({ sms_status: res.success ? "sent" : "failed", sms_message_id: res.success ? (res.messageId ?? null) : (res.error?.slice(0, 200) ?? "failed") })
-      .eq("id", r.id);
-    if (res.success) { sent++; } else { failed++; if (!firstError) firstError = res.error; }
+
+    const tokens = r.member_id ? tokensByMember.get(r.member_id) : undefined;
+    if (tokens && tokens.length) {
+      const pr = await sendPushToTokens(tokens, message);
+      await supabaseAdmin.from("loop_assignments")
+        .update({ channel: "push", sms_status: pr.ok ? "sent" : "failed", sms_message_id: pr.ok ? "push" : `push:${(pr.error ?? "failed").slice(0, 180)}` })
+        .eq("id", r.id);
+      if (pr.ok) { sentPush++; } else { failed++; if (!firstError) firstError = `push: ${pr.error}`; }
+    } else {
+      // On failure, stash the error in sms_message_id so it's queryable.
+      const res = await sendSMS(r.phone, message, { provider });
+      await supabaseAdmin.from("loop_assignments")
+        .update({ channel: "sms", sms_status: res.success ? "sent" : "failed", sms_message_id: res.success ? (res.messageId ?? null) : (res.error?.slice(0, 200) ?? "failed") })
+        .eq("id", r.id);
+      if (res.success) { sentSms++; } else { failed++; if (!firstError) firstError = res.error; }
+    }
   }
 
   const sentAt = new Date();
@@ -540,7 +558,7 @@ export async function sendRound(roundId: string) {
     .update({ status: "sent", sent_at: sentAt.toISOString(), send_window: round.send_window ?? deriveWindow(sentAt) })
     .eq("id", roundId);
 
-  return { round_id: roundId, sent, failed, error: firstError };
+  return { round_id: roundId, sent: sentPush + sentSms, sent_push: sentPush, sent_sms: sentSms, failed, error: firstError };
 }
 
 // ── MEASURE ───────────────────────────────────────────────────────────────────
@@ -1232,6 +1250,9 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
   }
 
   const toEval = (loop_key: string, a: Acc): LoopEval => {
+    // Conservative: bills every send as SMS. Push sends are free, so this is an
+    // UPPER bound on cost (→ ROI is understated, never overstated). Make it
+    // channel-accurate via loop_assignments.channel once push volume is material.
     const sms = +(a.sent * SMS_COST_RM).toFixed(2);
     return {
       loop_key, label: LOOPS[loop_key as LoopKey]?.label ?? loop_key,
