@@ -805,9 +805,9 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // scorecard); 30-day cooldown stops re-messaging the same member.
   reward_expiring: { key: "reward_expiring", label: "Reward expiring", objective: "Redeem an unused voucher before it expires", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Your {reward} at Celsius expires {expiry}! Show your number at any outlet to redeem before it's gone.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { expiringWithinDays: 3 } }, segment: rewardExpiringSegment },
   // Reminder loop (noIssue, auto-triggered daily): nudge members sitting on
-  // idle Beans the moment they go quiet (~5d). Mints nothing — the value
+  // idle Points the moment they go quiet (~5d). Mints nothing — the value
   // already exists. Push-first (free) + SMS fallback, 10% holdout measures lift.
-  beans_idle: { key: "beans_idle", label: "Beans sitting unused", objective: "Bring back members with idle Beans", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Hi {name}! You have {beans} Beans waiting at Celsius. Order this week to put them to use before they slip away.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minBeans: 100, idleMinDays: 5, idleMaxDays: 9 } }, segment: beansIdleSegment },
+  beans_idle: { key: "beans_idle", label: "Points sitting unused", objective: "Bring back members with idle Points", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Hi {name}! You have {beans} Points waiting at Celsius. Order this week to put them to use before they slip away.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minBeans: 100, idleMinDays: 5, idleMaxDays: 9 } }, segment: beansIdleSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's

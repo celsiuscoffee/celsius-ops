@@ -143,7 +143,7 @@ export function RewardsView() {
             Sign in to claim rewards
           </p>
           <p className="text-sm text-[#6E6E73] mt-1 text-center">
-            Earn beans on every order. Trade beans for free drinks.
+            Earn points on every order. Trade points for free drinks.
           </p>
           <Link
             href="/account"
@@ -164,7 +164,7 @@ export function RewardsView() {
             No rewards available yet
           </p>
           <p className="text-sm text-[#6E6E73] mt-1 text-center">
-            Keep ordering — rewards unlock as you earn beans.
+            Keep ordering — rewards unlock as you earn points.
           </p>
         </div>
       ) : (
@@ -181,7 +181,7 @@ export function RewardsView() {
                 paddingLeft: 4,
               }}
             >
-              Spend your beans
+              Spend your points
             </p>
           </li>
           {rewards.map((r) => (
@@ -300,7 +300,7 @@ function CatalogCard({ reward, balance }: { reward: Reward; balance: number }) {
           >
             {canUse
               ? required > 0 ? `Spend ${required.toLocaleString()} beans` : "Free to claim"
-              : `${(required - balance).toLocaleString()} beans to go`}
+              : `${(required - balance).toLocaleString()} points to go`}
           </p>
         </div>
         <button

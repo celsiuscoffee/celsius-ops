@@ -557,7 +557,7 @@ export type MysteryReveal = {
   outcome_type: "voucher" | "flat_beans" | "beans_multiplier" | "no_bonus" | "surprise_in_store" | "promo";
   multiplier_value: number | null;
   flat_beans_value: number | null;
-  label: string;             // mystery_pool label (e.g. "Just your Beans")
+  label: string;             // mystery_pool label (e.g. "Just your Points")
   voucher_title: string | null; // the won voucher's title, if any
   emoji: string;             // pool reveal_emoji, or 🎁 fallback
 };
