@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { runTriggeredLoops, autoMeasureDueRounds } from "@/lib/loyalty/loop-engine";
+import { runTriggeredLoops, autoMeasureDueRounds, runRoundGapDaily } from "@/lib/loyalty/loop-engine";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // sending hundreds of SMS sequentially needs headroom
@@ -16,8 +16,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const force = body?.force === true;
     const triggered = await runTriggeredLoops({ force });
+    const roundGap = await runRoundGapDaily({ force });
     const measured = await autoMeasureDueRounds();
-    return NextResponse.json({ triggered, measured: measured.measured });
+    return NextResponse.json({ triggered, roundGap, measured: measured.measured });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to run triggered loops";
     return NextResponse.json({ error: msg }, { status: 500 });

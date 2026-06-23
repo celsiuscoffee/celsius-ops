@@ -888,6 +888,77 @@ export async function autoMeasureDueRounds(): Promise<{ measured: number }> {
   return { measured };
 }
 
+// ============================================================================
+// ROUND-GAP AUTO-RUN — same daily lifecycle as the triggered loops, but its own
+// mechanic (per-segment promo via loyalty_round_gap_prepare, not vouchers). The
+// daily cron prepares the next capped batch per campaign and auto-sends it, so
+// round-gap "follows the same as the other SMS loops" — no manual round cards.
+// Kill-switch: app_settings.round_gap_auto_enabled = 'false' pauses it.
+// ============================================================================
+export type RoundGapArm = { key: "rg_skipper" | "rg_import"; label: string; message: string; min_order: number };
+export const ROUND_GAP_CAMPAIGNS: Record<string, {
+  outlet: string; round_start: number; round_end: number; name: string; daily_limit: number; arms: RoundGapArm[];
+}> = {
+  "conezion-breakfast": {
+    outlet: "conezion", round_start: 7, round_end: 9, name: "Conezion · Breakfast", daily_limit: 50,
+    arms: [
+      { key: "rg_skipper", min_order: 35, label: "Regular · free coffee, spend RM35 (7-9am)",
+        message: "Hi {name}! Free coffee at Celsius Conezion breakfast (7-9am) this week, spend RM35. We miss you in the AM! Show your number." },
+      { key: "rg_import", min_order: 25, label: "Win-back · free coffee, spend RM25 (7-9am)",
+        message: "Hi {name}! We miss you at Celsius Conezion. Free coffee at breakfast (7-9am) this week, spend RM25. Show your number." },
+    ],
+  },
+  "shah-alam-evening": {
+    outlet: "shah-alam", round_start: 17, round_end: 19, name: "Shah Alam · Evening", daily_limit: 50,
+    arms: [
+      { key: "rg_skipper", min_order: 40, label: "Regular · free coffee, spend RM40 (5-7pm)",
+        message: "Hi {name}! Free coffee at Celsius Shah Alam (5-7pm) this week, spend RM40. We rarely see you in the evening! Show your number." },
+      { key: "rg_import", min_order: 25, label: "Win-back · free coffee, spend RM25 (5-7pm)",
+        message: "Hi {name}! We miss you at Celsius Shah Alam. Free coffee (5-7pm) this week, spend RM25. Show your number." },
+    ],
+  },
+};
+
+// Auto-run the round-gap campaigns: prepare the next capped batch per campaign
+// and send it immediately. Idempotent — skips a campaign already run in the last
+// 20h, so the daily cron (or a manual re-trigger) can't double-send; force
+// bypasses that guard. Holdout + measurement are handled by the prepare RPC +
+// autoMeasureDueRounds, exactly like the other loops.
+export async function runRoundGapDaily(opts?: { force?: boolean }): Promise<Array<{ campaign: string; prepared?: number; sent?: number; failed?: number; skipped?: boolean; error?: string }>> {
+  const out: Array<{ campaign: string; prepared?: number; sent?: number; failed?: number; skipped?: boolean; error?: string }> = [];
+  try {
+    const { data: s } = await supabaseAdmin.from("app_settings").select("value").eq("key", "round_gap_auto_enabled").maybeSingle();
+    if ((s?.value ?? "").toString().trim().toLowerCase() === "false") {
+      return [{ campaign: "all", skipped: true, error: "round_gap_auto_enabled=false" }];
+    }
+  } catch { /* missing setting → default enabled */ }
+
+  const sinceIso = new Date(Date.now() - 20 * 3600 * 1000).toISOString();
+  for (const [key, cfg] of Object.entries(ROUND_GAP_CAMPAIGNS)) {
+    try {
+      if (!opts?.force) {
+        const { data: recent } = await supabaseAdmin
+          .from("loop_rounds").select("id")
+          .eq("loop_key", "round_gap").filter("meta->>outlet", "eq", cfg.outlet)
+          .gte("prepared_at", sinceIso).limit(1);
+        if (recent && recent.length) { out.push({ campaign: key, skipped: true }); continue; }
+      }
+      const { data, error } = await supabaseAdmin.rpc("loyalty_round_gap_prepare", {
+        p_outlet: cfg.outlet, p_round_start: cfg.round_start, p_round_end: cfg.round_end,
+        p_round_name: cfg.name, p_arms: cfg.arms, p_holdout_pct: 10, p_window_days: 7, p_limit: cfg.daily_limit,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row?.round_id) { out.push({ campaign: key, prepared: 0 }); continue; } // pool drained
+      const res = await sendRound(row.round_id);
+      out.push({ campaign: key, prepared: row.treated, sent: res.sent, failed: res.failed });
+    } catch (e) {
+      out.push({ campaign: key, error: e instanceof Error ? e.message : "failed" });
+    }
+  }
+  return out;
+}
+
 // Revert a PREPARED round — delete the un-sent (active) vouchers it issued, its
 // assignments, and the round itself. Only valid before send: a sent round has
 // live SMS in customers' hands, so it can't be un-done. Redeemed vouchers (rare
