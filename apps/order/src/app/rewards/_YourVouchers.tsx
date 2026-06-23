@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Gift, Sparkles, Coffee, Tag, Ticket, Percent } from "lucide-react";
+import { applyWalletVoucherToState } from "@/lib/loyalty/apply-wallet-voucher";
 
 /**
  * "Your vouchers" — the web mirror of apps/pickup-native's "Yours" wallet
@@ -100,47 +101,10 @@ function themeFor(v: Voucher): {
 }
 
 // Write the chosen wallet voucher into the SPA's persisted state as the
-// applied reward + reserved-voucher banner. Mirrors native VoucherWallet's
-// "Use Now" mapping — carries every discount mechanic so flat/percent/
-// free_item/bogo/combo/override all preview + charge correctly.
-function applyWalletVoucher(v: Voucher) {
-  try {
-    const raw = window.localStorage.getItem("celsius-pickup");
-    const parsed = raw ? JSON.parse(raw) : { state: {} };
-    const state = parsed.state ?? {};
-    // beans_multiplier is applied post-payment, never a cart discount.
-    const discountType =
-      v.discount_type && v.discount_type !== "beans_multiplier" ? v.discount_type : null;
-    state.appliedReward = {
-      id: v.id,
-      name: v.title ?? v.name ?? "Reward",
-      points_required: 0,
-      discount_type: discountType,
-      discount_value: v.discount_value ?? null,
-      max_discount_value: v.max_discount_value ?? null,
-      applicable_categories: v.applicable_categories ?? null,
-      applicable_products: v.applicable_products ?? null,
-      free_product_name: v.free_product_name ?? null,
-      free_product_ids: v.free_product_ids ?? null,
-      min_order_value: v.min_order_value ?? null,
-      bogo_buy_qty: v.bogo_buy_qty ?? undefined,
-      bogo_free_qty: v.bogo_free_qty ?? undefined,
-      combo_price_sen: v.combo_price_sen ?? null,
-      override_price_sen: v.override_price_sen ?? null,
-      voucher_id: v.id, // marks this as a wallet voucher (issued_rewards burn)
-    };
-    state.reservedVoucher = {
-      id: v.id,
-      title: v.title ?? v.name ?? "Reward",
-      category: v.category ?? "special",
-      icon: v.icon ?? "ticket",
-      expires_at: v.expires_at ?? null,
-    };
-    window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
-  } catch {
-    /* ignore */
-  }
-}
+// applied reward + reserved-voucher banner — shared with the home
+// expiring-reward banner via applyWalletVoucherToState so both close the
+// loop identically (carries flat/percent/free_item/bogo/combo/override).
+const applyWalletVoucher = applyWalletVoucherToState;
 
 export function YourVouchers() {
   const router = useRouter();

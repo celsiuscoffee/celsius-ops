@@ -12,6 +12,7 @@ import { ActiveChallengeCard } from "./_ActiveChallengeCard";
 import { VoucherRail } from "./_VoucherRail";
 import { GuestSignInCTA } from "./_GuestSignInCTA";
 import { ActiveOrderTracker } from "./_ActiveOrderTracker";
+import { ExpiringRewardBanner } from "./_ExpiringRewardBanner";
 
 /**
  * Customer home — Next.js Server Component. Plain HTML so iOS Safari
@@ -79,6 +80,12 @@ export default async function HomePage() {
         <PosterCarousel posters={posters} />
         <HeroInfoCard />
       </div>
+
+      {/* Expiring-reward urgency banner — the REDEEM half of the reward
+          loop. Surfaces the soonest-expiring unused voucher above the
+          fold with a one-tap "use now" (pre-applies + routes to menu).
+          Renders nothing for guests / no expiring reward. */}
+      <ExpiringRewardBanner />
 
       {/* Outlet row — under the hero, brand voice. Client component
           reads chosen outlet from localStorage so customers see their
