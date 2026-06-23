@@ -173,7 +173,8 @@ export default function LoopsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Run failed");
       const fired = ((data.triggered ?? []) as Array<{ loop: string; sent?: number; failed?: number; error?: string; skipped?: boolean }>).map((t) => t.skipped ? `${t.loop}: already ran today` : `${t.loop}: ${t.sent ?? 0} sent${t.failed ? `, ${t.failed} failed` : ""}${t.error ? ` (${t.error})` : ""}`).join(" · ");
-      setRunResult(fired || "Nothing qualified right now.");
+      const rg = ((data.roundGap ?? []) as Array<{ campaign: string; prepared?: number; sent?: number; failed?: number; error?: string; skipped?: boolean }>).map((t) => t.skipped ? `${t.campaign}: skipped` : `${t.campaign}: ${t.sent ?? 0} sent${t.failed ? `, ${t.failed} failed` : ""}${t.error ? ` (${t.error})` : ""}`).join(" · ");
+      setRunResult([fired, rg].filter(Boolean).join(" · ") || "Nothing qualified right now.");
       await load();
     } catch (e) { setErr(e instanceof Error ? e.message : "Run failed"); }
     finally { setBusy(null); }
@@ -188,16 +189,16 @@ export default function LoopsPage() {
   }, [evalDays]);
   useEffect(() => { void loadEval(); }, [loadEval]);
 
-  // Realtime: silently refetch the scorecard + rounds every 20s while the tab is
-  // visible, so the dashboard stays live without a manual refresh (rounds flip to
-  // measured / scorecard fills in on their own). Skipped while hidden or busy.
+  // Realtime: silently refetch the scorecard + rounds every 5s while the tab is
+  // visible, so the dashboard tracks a live send near-instantly (sent counts climb,
+  // rounds flip to measured, scorecard fills in). Skipped while hidden or busy.
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState !== "visible") return;
       void load();
       void loadEval();
     };
-    const id = setInterval(tick, 20000);
+    const id = setInterval(tick, 5000);
     return () => clearInterval(id);
   }, [load, loadEval]);
 
@@ -226,7 +227,7 @@ export default function LoopsPage() {
         <button
           disabled={busy === "run"}
           onClick={async () => {
-            if (!confirm("Fire all auto-triggered loops NOW? This sends LIVE SMS to everyone who currently qualifies (Reactivation / Welcome / Birthday).")) return;
+            if (!confirm("Fire all auto-triggered loops NOW? Sends LIVE SMS to everyone who currently qualifies — Reactivation / Welcome / Birthday AND the Round-gap batch (Conezion / Shah Alam / Tamarind, ~150). Loops that already ran today are skipped.")) return;
             await runNow(false);
           }}
           className="inline-flex items-center gap-2 rounded-lg bg-[#A2492C] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
