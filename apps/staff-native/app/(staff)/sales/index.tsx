@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -9,6 +9,7 @@ import {
 } from "lucide-react-native";
 import { useStaff } from "@/lib/store";
 import { hasAccess } from "@/lib/access";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchSalesDashboard, type Mode, type SalesDashboard } from "@/lib/sales/dashboard";
 import { AccumChart } from "@/components/sales/AccumChart";
 import { RangeSheet } from "@/components/sales/RangeSheet";
@@ -60,26 +61,56 @@ export default function SalesScreen() {
   const [outletId, setOutletId] = useState<string | undefined>(undefined);
   const selectedOutlet = isAdmin ? outletId ?? "all" : undefined;
   const [outletSheet, setOutletSheet] = useState(false);
-  const [data, setData] = useState<SalesDashboard | null>(null);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const prefetchedRef = useRef<string | null>(null);
+  const focusedOnce = useRef(false);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const res = await fetchSalesDashboard(mode, selectedOutlet, mode === "custom" ? cFrom : undefined, mode === "custom" ? cTo : undefined);
-      setData(res);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  // One react-query entry per (mode, outlet, custom range). Switching Day/Week/
+  // Month just swaps the queryKey, so a tab you've already opened comes back from
+  // cache instantly instead of re-fetching — the slow part the user hit.
+  const queryKey = useMemo(
+    () => ["sales-dashboard", mode, selectedOutlet ?? "self", mode === "custom" ? cFrom : "", mode === "custom" ? cTo : ""] as const,
+    [mode, selectedOutlet, cFrom, cTo],
+  );
+  const { data, isLoading, isFetching, isError, error: qError, refetch } = useQuery({
+    queryKey,
+    queryFn: () => fetchSalesDashboard(mode, selectedOutlet, mode === "custom" ? cFrom : undefined, mode === "custom" ? cTo : undefined),
+    staleTime: 60_000,
+  });
+  const error = isError ? (qError instanceof Error ? qError.message : "Failed to load") : null;
+
+  // Warm Day/Week/Month in the background once the active tab has data, so the
+  // FIRST switch is instant too (not a cold fetch). Once per outlet; the active
+  // mode and any already-cached tab dedupe via staleTime.
+  useEffect(() => {
+    if (!data) return;
+    const oKey = selectedOutlet ?? "self";
+    if (prefetchedRef.current === oKey) return;
+    prefetchedRef.current = oKey;
+    for (const m of ["day", "week", "month"] as Mode[]) {
+      queryClient.prefetchQuery({
+        queryKey: ["sales-dashboard", m, oKey, "", ""],
+        queryFn: () => fetchSalesDashboard(m, selectedOutlet),
+        staleTime: 60_000,
+      });
     }
-  }, [mode, cFrom, cTo, selectedOutlet]);
+  }, [data, selectedOutlet, queryClient]);
 
-  useEffect(() => { setLoading(true); load(); }, [load]);
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  // Revalidate the active tab when the screen regains focus (cached data stays on
+  // screen, a background refetch updates it). Skip the initial focus so the first
+  // load is a single fetch; stable callback so switching tabs doesn't re-trigger.
+  useFocusEffect(
+    useCallback(() => {
+      if (!focusedOnce.current) { focusedOnce.current = true; return; }
+      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"], refetchType: "active" });
+    }, [queryClient]),
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await refetch(); } finally { setRefreshing(false); }
+  }, [refetch]);
 
   if (!canView) {
     return (
@@ -139,14 +170,23 @@ export default function SalesScreen() {
             );
           })}
         </View>
+
+        {/* Background-refresh indicator (cached tab being revalidated). First load
+            of a tab shows the full spinner below instead. */}
+        {isFetching && !isLoading && !refreshing ? (
+          <View className="mb-3 -mt-1 flex-row items-center justify-center gap-1.5">
+            <ActivityIndicator size="small" color="#FBBF24" />
+            <Text className="font-body text-[11px] text-[#F5F3F08a]">Updating…</Text>
+          </View>
+        ) : null}
       </View>
 
       <ScrollView
         contentContainerClassName="px-4 pb-16"
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#FBBF24" colors={["#FBBF24"]} progressBackgroundColor="#2a1508" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FBBF24" colors={["#FBBF24"]} progressBackgroundColor="#2a1508" />}
       >
-        {loading && !data ? (
+        {isLoading ? (
           <View className="items-center justify-center py-24"><ActivityIndicator color="#FBBF24" /></View>
         ) : error ? (
           <View className="rounded-2xl border border-[#F5F3F01a] bg-[#2a1508] p-5"><Text className="font-body text-sm text-[#f87171]">{error}</Text></View>
