@@ -54,6 +54,7 @@ export type SegmentOpts = {
   birthdayWithinDays?: number;                      // birthday
   outletId?: string; activeWithinDays?: number;     // round_gap
   expiringWithinDays?: number;                      // reward_expiring
+  minBeans?: number; idleMinDays?: number; idleMaxDays?: number; // beans_idle
 };
 
 type MemberRow = { id: string; phone: string | null; name: string | null; sms_opt_out: boolean | null; birthday: string | null; preferred_outlet_id: string | null };
@@ -91,6 +92,30 @@ async function winbackSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; lab
     if (batch.length < 1000) break; // page past Supabase's 1000-row cap so wide windows aren't truncated
   }
   return { rows: reachable(rows), label: `Lapsed ${minD}–${maxD}d` };
+}
+
+// ── Beans idle (REMINDER, noIssue): members sitting on >= minBeans loyalty
+// points who've just gone quiet (idle idleMin..idleMax days). A gentle "you've
+// got value waiting" nudge at the ~5-day mark — earlier + lighter than win-back
+// (30-60d) and mints nothing (the beans already exist). {beans} is filled
+// per-recipient in sendRound. The narrow trigger window keeps it to the daily
+// flow crossing the idle mark, not a backlog dump.
+async function beansIdleSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
+  const minBeans = o.minBeans ?? 100;
+  const idleMin = o.idleMinDays ?? 5, idleMax = o.idleMaxDays ?? 9;
+  const sinceMax = new Date(Date.now() - idleMax * 86400000).toISOString();
+  const sinceMin = new Date(Date.now() - idleMin * 86400000).toISOString();
+  const rows: Array<{ member_id: string; members: MemberRow | null }> = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabaseAdmin.from("member_brands").select(MEMBER_SELECT)
+      .eq("brand_id", BRAND).gte("points_balance", minBeans)
+      .gte("last_visit_at", sinceMax).lt("last_visit_at", sinceMin).range(from, from + 999);
+    if (error) throw new Error(`beans_idle segment: ${error.message}`);
+    const batch = (data ?? []) as unknown as Array<{ member_id: string; members: MemberRow | null }>;
+    rows.push(...batch);
+    if (batch.length < 1000) break;
+  }
+  return { rows: reachable(rows), label: `${minBeans}+ Beans · idle ${idleMin}-${idleMax}d` };
 }
 
 // ── Welcome: members with a single visit, joined within N days (1st → 2nd).
@@ -506,6 +531,20 @@ export async function sendRound(roundId: string) {
     }
   }
 
+  // Per-recipient {beans} personalisation (beans-idle loop): the member's live
+  // points balance, so the nudge names the concrete value sitting unused.
+  const needsBeans = Object.values(armMsg).some((m) => m.includes("{beans}"));
+  const beansById = new Map<string, number>();
+  if (needsBeans) {
+    const ids = [...new Set(((rows ?? []) as Array<{ member_id: string | null }>).map((r) => r.member_id).filter(Boolean))] as string[];
+    for (let i = 0; i < ids.length; i += 1000) {
+      const { data: bs } = await supabaseAdmin.from("member_brands").select("member_id, points_balance").eq("brand_id", BRAND).in("member_id", ids.slice(i, i + 1000));
+      for (const b of (bs ?? []) as Array<{ member_id: string; points_balance: number | null }>) {
+        beansById.set(b.member_id, Math.max(0, Math.floor(b.points_balance ?? 0)));
+      }
+    }
+  }
+
   // Push-preferred delivery: a member with a registered device gets a FREE push;
   // everyone else falls back to (paid) SMS. Same holdout + attribution either
   // way — only the channel differs. Resolve all treatment members' tokens up
@@ -531,6 +570,10 @@ export async function sendRound(roundId: string) {
       message = message
         .replace(/\{reward\}/g, (rw?.title ?? "reward").trim())
         .replace(/\{expiry\}/g, expiryPhrase(rw?.expires_at));
+    }
+    if (needsBeans) {
+      const beans = (r.member_id && beansById.get(r.member_id)) || 0;
+      message = message.replace(/\{beans\}/g, String(beans));
     }
 
     const tokens = r.member_id ? tokensByMember.get(r.member_id) : undefined;
@@ -718,7 +761,7 @@ export const OFFER_CANDIDATES: OfferCandidate[] = [
 // ── Loop registry: each campaign objective is a loop. Same machinery
 // (holdout → optimise offers → auto-issue voucher → measure lift), different
 // audience + candidate subset. Add a loop here and it inherits the whole engine.
-export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap" | "reward_expiring";
+export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap" | "reward_expiring" | "beans_idle";
 export type LoopDef = {
   key: LoopKey;
   label: string;
@@ -761,6 +804,10 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // lifts redemption/orders vs not-reminding (ROI shows in the campaign
   // scorecard); 30-day cooldown stops re-messaging the same member.
   reward_expiring: { key: "reward_expiring", label: "Reward expiring", objective: "Redeem an unused voucher before it expires", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Your {reward} at Celsius expires {expiry}! Show your number at any outlet to redeem before it's gone.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { expiringWithinDays: 3 } }, segment: rewardExpiringSegment },
+  // Reminder loop (noIssue, auto-triggered daily): nudge members sitting on
+  // idle Beans the moment they go quiet (~5d). Mints nothing — the value
+  // already exists. Push-first (free) + SMS fallback, 10% holdout measures lift.
+  beans_idle: { key: "beans_idle", label: "Beans sitting unused", objective: "Bring back members with idle Beans", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Hi {name}! You have {beans} Beans waiting at Celsius. Order this week to put them to use before they slip away.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minBeans: 100, idleMinDays: 5, idleMaxDays: 9 } }, segment: beansIdleSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
