@@ -23,7 +23,7 @@ const TIERS: Tier[] = [
     multiplier: 1,
     bg: "#A2492C",
     fg: "#FFFFFF",
-    perks: ["1× beans on every order", "Free welcome drink"],
+    perks: ["1× points on every order", "Free welcome drink"],
   },
   {
     name: "Silver",
@@ -31,7 +31,7 @@ const TIERS: Tier[] = [
     multiplier: 1.25,
     bg: "#C0C8D0",
     fg: "#160800",
-    perks: ["1.25× beans on every order", "Birthday treat", "Mystery drop weekly"],
+    perks: ["1.25× points on every order", "Birthday treat", "Mystery drop weekly"],
   },
   {
     name: "Gold",
@@ -39,7 +39,7 @@ const TIERS: Tier[] = [
     multiplier: 1.5,
     bg: "#FBBF24",
     fg: "#160800",
-    perks: ["1.5× beans on every order", "Two mystery drops weekly", "Exclusive challenges"],
+    perks: ["1.5× points on every order", "Two mystery drops weekly", "Exclusive challenges"],
   },
   {
     name: "Black",
@@ -47,7 +47,7 @@ const TIERS: Tier[] = [
     multiplier: 2,
     bg: "#160800",
     fg: "#FBBF24",
-    perks: ["2× beans on every order", "Daily mystery drop", "Early access to new drinks", "Birthday week, not just day"],
+    perks: ["2× points on every order", "Daily mystery drop", "Early access to new drinks", "Birthday week, not just day"],
   },
 ];
 
@@ -77,7 +77,7 @@ export default function TierBenefitsPage() {
                 className="text-[11px] uppercase tracking-widest"
                 style={{ opacity: 0.7 }}
               >
-                {t.beansFloor.toLocaleString()}+ beans · {t.multiplier}× earn
+                {t.beansFloor.toLocaleString()}+ points · {t.multiplier}× earn
               </span>
             </div>
             <ul className="mt-3 flex flex-col gap-2">
@@ -94,7 +94,7 @@ export default function TierBenefitsPage() {
 
       <p className="px-5 pt-5 text-[11px] text-[#8E8E93]">
         <Lock size={11} className="inline mr-1" />
-        Tier status reviewed every 90 days based on rolling-window beans earned.
+        Tier status reviewed every 90 days based on rolling-window points earned.
       </p>
     </main>
   );

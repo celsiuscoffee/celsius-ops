@@ -119,7 +119,7 @@ export type ReceiptOrder = {
   notes?: string | null;
   pos_order_items?: ReceiptItem[];
   pos_order_payments?: { payment_method: string; amount: number }[];
-  /** Loyalty Beans earned on this order (members only) + the resulting
+  /** Loyalty Points earned on this order (members only) + the resulting
    *  balance, printed in a small block under the payment so the customer
    *  has a record of what they earned. */
   beans_earned?: number | null;
@@ -256,7 +256,7 @@ export function formatReceipt(
     bodyLines.push(twoColumn(method, rm(p.amount)));
   }
 
-  // Loyalty Beans earned (members only) — a small record under the payment.
+  // Loyalty Points earned (members only) — a small record under the payment.
   const ptsEarned = order.beans_earned ?? 0;
   const ptsSpent = order.points_spent ?? 0;
   if (ptsEarned > 0 || ptsSpent > 0) {

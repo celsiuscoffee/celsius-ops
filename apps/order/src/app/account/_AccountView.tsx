@@ -562,7 +562,7 @@ function SignOutRow({ onConfirm }: { onConfirm: () => void }) {
     <div className="rounded-2xl bg-white border border-[#EBE5DE] p-4">
       <p className="font-peachi font-bold text-[15px]">Sign out of Celsius?</p>
       <p className="text-[12px] text-[#6E6E73] mt-1">
-        Your cart, beans, and rewards stay on the account — sign in again any time.
+        Your cart, points, and rewards stay on the account — sign in again any time.
       </p>
       <div className="mt-4 flex gap-2">
         <button

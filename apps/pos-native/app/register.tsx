@@ -229,7 +229,7 @@ export default function Register() {
   const [pairs, setPairs] = useState<SuggestedPair[]>([]);
   const [claimables, setClaimables] = useState<ClaimableCard[]>([]);
   // Points shop — what the member can redeem with their Beans (mirrors the
-  // customer display's "Redeem your Beans"). Tapping a card applies it to the
+  // customer display's "Redeem your Points"). Tapping a card applies it to the
   // cart, so the cashier can redeem on request.
   const [shop, setShop] = useState<ShopCard[]>([]);
   // Owned vouchers (birthday / mystery-bag wins / promo gifts), mirrored from the
@@ -1330,7 +1330,7 @@ export default function Register() {
     setDisplayStatus("idle");
     useDisplay.getState().setMember(null);
     // Clear all cart-scoped display state between orders (mystery reveal +
-    // prize, beans, pay total, reward, redeem req…). Without this the paid
+    // prize, points, pay total, reward, redeem req…). Without this the paid
     // screen kept mirroring the PREVIOUS order's "REVEALED" card while the
     // customer hadn't revealed the new one. reset() keeps member, so the
     // setMember(null) above still does the fresh-order logout.
