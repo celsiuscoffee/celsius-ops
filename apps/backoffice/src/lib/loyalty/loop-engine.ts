@@ -154,18 +154,45 @@ async function roundGapSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; la
 // (win-back/round-gap) vouchers are owned by their own loops, so excluded here
 // to avoid double-messaging + double-counting.
 const REMINDER_SOURCES = ["mystery", "mission", "birthday", "manual", "points_redemption"];
+const DRINK_CATEGORIES = new Set(["classic", "flavoured", "mocha", "artisan-choc", "artisan-matcha", "fruit-tea", "gourmet-tea", "mocktails"]);
+const REMINDER_MIN_GATE_SEN = 3000; // RM30 — discounts must lift the basket above AOV to be worth a reminder
+
+type IrRow = {
+  id: string; member_id: string; title: string | null; expires_at: string | null;
+  discount_type: string | null; applicable_categories: string[] | null; min_order_value: number | null;
+};
+
+// Decide whether an expiring voucher is worth an SMS. Reminding costs money +
+// realises the reward's COGS, so only the on-strategy ones qualify:
+//   • a FREE DRINK (low COGS, visit-driving) — scoped entirely to drink
+//     categories; free food/pastry (croissant/cake, RM6.50-9.60 COGS) is skipped
+//     as claim-and-leave bait.
+//   • a DISCOUNT gated at >= RM30 — it lifts the basket above AOV. Sub-RM30
+//     discounts (e.g. the retired "RM3 off RM15+") pull below-median orders and
+//     are skipped.
+// Everything else (beans multiplier, ungated/loose discounts) is not reminded.
+function worthReminding(ir: IrRow): boolean {
+  if (ir.discount_type === "free_item") {
+    const cats = ir.applicable_categories ?? [];
+    return cats.length > 0 && cats.every((c) => DRINK_CATEGORIES.has(c));
+  }
+  if (["percent", "percentage", "flat", "fixed_amount", "combo", "override_price"].includes(ir.discount_type ?? "")) {
+    return (ir.min_order_value ?? 0) >= REMINDER_MIN_GATE_SEN;
+  }
+  return false;
+}
+
 async function rewardExpiringSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
   const days = o.expiringWithinDays ?? 7;
   const nowIso = new Date().toISOString();
   const untilIso = new Date(Date.now() + days * 86400000).toISOString();
 
   // Active vouchers entering the expiry window, soonest first.
-  type IrRow = { id: string; member_id: string; title: string | null; expires_at: string | null };
   const irs: IrRow[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabaseAdmin
       .from("issued_rewards")
-      .select("id, member_id, title, expires_at")
+      .select("id, member_id, title, expires_at, discount_type, applicable_categories, min_order_value")
       .eq("brand_id", BRAND)
       .eq("status", "active")
       .in("source_type", REMINDER_SOURCES)
@@ -179,9 +206,11 @@ async function rewardExpiringSegment(o: SegmentOpts): Promise<{ rows: SegmentRow
     irs.push(...batch);
     if (batch.length < 1000) break;
   }
-  // Keep each member's soonest-expiring voucher only (irs already asc by expiry).
+  // Keep each member's soonest-expiring WORTH-REMINDING voucher (irs asc by
+  // expiry) — skip free food/pastry + sub-RM30 discounts so we never burn an
+  // SMS giving away a croissant or pulling a below-median order.
   const byMember = new Map<string, IrRow>();
-  for (const ir of irs) if (!byMember.has(ir.member_id)) byMember.set(ir.member_id, ir);
+  for (const ir of irs) if (worthReminding(ir) && !byMember.has(ir.member_id)) byMember.set(ir.member_id, ir);
   const memberIds = [...byMember.keys()];
   if (memberIds.length === 0) return { rows: [], label: `Vouchers expiring ≤${days}d` };
 
