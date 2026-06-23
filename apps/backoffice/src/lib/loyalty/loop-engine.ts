@@ -1065,13 +1065,15 @@ export type RoundGapArm = { key: "rg_skipper" | "rg_import"; label: string; mess
 export const ROUND_GAP_CAMPAIGNS: Record<string, {
   outlet: string; round_start: number; round_end: number; name: string; daily_limit: number; arms: RoundGapArm[];
 }> = {
+  // Breakfast round = 08-10 MYT (outlets open at 8, not 7) per the canonical
+  // rounds (reference: celsius-rounds memory / ROUNDS in storehub-helpers).
   "conezion-breakfast": {
-    outlet: "conezion", round_start: 7, round_end: 9, name: "Conezion · Breakfast", daily_limit: 50,
+    outlet: "conezion", round_start: 8, round_end: 10, name: "Conezion · Breakfast", daily_limit: 50,
     arms: [
-      { key: "rg_skipper", min_order: 35, label: "Regular · free coffee, spend RM35 (7-9am)",
-        message: "Hi {name}! Free coffee at Celsius Conezion breakfast (7-9am) this week, spend RM35. We miss you in the AM! Show your number." },
-      { key: "rg_import", min_order: 25, label: "Win-back · free coffee, spend RM25 (7-9am)",
-        message: "Hi {name}! We miss you at Celsius Conezion. Free coffee at breakfast (7-9am) this week, spend RM25. Show your number." },
+      { key: "rg_skipper", min_order: 35, label: "Regular · free coffee, spend RM35 (8-10am)",
+        message: "Hi {name}! Free coffee at Celsius Conezion breakfast (8-10am) this week, spend RM35. We miss you in the AM! Show your number." },
+      { key: "rg_import", min_order: 25, label: "Win-back · free coffee, spend RM25 (8-10am)",
+        message: "Hi {name}! We miss you at Celsius Conezion. Free coffee at breakfast (8-10am) this week, spend RM25. Show your number." },
     ],
   },
   "shah-alam-evening": {
@@ -1085,10 +1087,11 @@ export const ROUND_GAP_CAMPAIGNS: Record<string, {
   },
   // Tamarind: low-volume outlet with no weak-round gap, but ~554 dormant customers
   // recovered from the StoreHub archive (tag 'Tamarind', never ordered native). This
-  // is a WIN-BACK play, not a daypart fill — so a WIDE all-day window (11am-9pm) makes
-  // the promo flexible; the skipper arm is ~empty by design, the import arm is the point.
+  // is a WIN-BACK play, not a daypart fill — so the window spans the full open day
+  // (08-23 MYT per the canonical rounds) for max redemption flexibility; the skipper
+  // arm is ~empty by design, the import arm is the point.
   "tamarind-winback": {
-    outlet: "tamarind", round_start: 11, round_end: 21, name: "Tamarind · Win-back", daily_limit: 50,
+    outlet: "tamarind", round_start: 8, round_end: 23, name: "Tamarind · Win-back", daily_limit: 50,
     arms: [
       { key: "rg_skipper", min_order: 30, label: "Regular · free coffee, spend RM30",
         message: "Hi {name}! Free coffee at Celsius Tamarind this week, spend RM30. We miss you - show your number to redeem." },
