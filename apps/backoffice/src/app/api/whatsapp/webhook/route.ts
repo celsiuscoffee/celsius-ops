@@ -30,7 +30,13 @@ export async function GET(request: NextRequest) {
     // Meta expects the raw challenge string echoed back with 200.
     return new NextResponse(challenge ?? "", { status: 200 });
   }
-  console.warn(`[whatsapp:webhook] verify failed mode=${mode} token_match=${token === verifyToken}`);
+  // Observability for webhook-setup debugging. Logs LENGTHS only, never the
+  // token values: env_set/env_len reveal whether WHATSAPP_VERIFY_TOKEN reached
+  // this deployment (env_len=0 ⇒ unset or wrong env-scope in Vercel), got_len is
+  // what the caller sent. Distinguishes "env missing" from "value mismatch".
+  console.warn(
+    `[whatsapp:webhook] verify failed mode=${mode} token_match=${token === verifyToken} env_set=${!!verifyToken} env_len=${verifyToken?.length ?? 0} got_len=${token?.length ?? 0}`,
+  );
   return new NextResponse("Forbidden", { status: 403 });
 }
 
