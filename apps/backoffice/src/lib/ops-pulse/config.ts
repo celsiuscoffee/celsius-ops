@@ -65,14 +65,14 @@ function splitNames(v: string | undefined, def: string): string[] {
   return (v || def).split(",").map((s) => s.trim()).filter(Boolean);
 }
 
-// Each entry is a User name OR a raw phone number (+60…/01…) for people without
-// an app account. NOTE: "Syafiq Kaberi" and "Ibrahim Zakir" have no User record
-// yet — until they're added (or replaced here with their phone numbers) the
-// barista/kitchen routes fall back to the owner.
+// Each entry is a User name OR a raw phone number (+60…/01…). Confirmed against
+// the production DB: barista lead = "Syafiq Kaberi" (+601137506488), kitchen =
+// "Chef Bo" (+60126057787) — both active MANAGERs, so name routing resolves and
+// their "DONE" replies attribute correctly.
 export const RECIPIENTS: Record<string, string[]> = {
   operations: splitNames(process.env.OPS_PULSE_OPS_RECIPIENTS, "Ariff,Adam Kelvin"),
   barista: splitNames(process.env.OPS_PULSE_BARISTA_RECIPIENTS, "Syafiq Kaberi"),
-  kitchen: splitNames(process.env.OPS_PULSE_KITCHEN_RECIPIENTS, "Ibrahim Zakir"),
+  kitchen: splitNames(process.env.OPS_PULSE_KITCHEN_RECIPIENTS, "Chef Bo"),
 };
 
 // Map an auditor roleType to its routing discipline.

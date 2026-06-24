@@ -370,6 +370,16 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
   - **Procurement signals added** → operations: `detectStockCount` (no SUBMITTED/REVIEWED count
     in 7d, LOW), `detectReceivings` (DISPUTED=MED/PARTIAL=LOW in 7d, **escalates**),
     `detectMenuSnoozed` (86'd item count via `outlet_product_availability`, MED).
+- **2026-06-24 — DB correction + recipients confirmed.** The production Prisma DB is the
+  loyalty Supabase project (`kqdcdhpnyuwrxqhbuyfl`); earlier manual spot-checks mistakenly hit a
+  separate `celsius-inventory` project. The **code was always correct** — every detector uses
+  `prisma` / `hrSupabaseAdmin` / `getSupabaseAdmin`, which all point at the real DB. Corrected
+  facts: all four recipients are active **MANAGERs** with phones, each on 5 outlets via
+  `outletIds` — Ariff, Adam Kelvin, **Syafiq Kaberi** (`+601137506488`), **Chef Bo**
+  (`+60126057787`); names resolve, so routing + ack attribute correctly (kitchen route set to
+  "Chef Bo", the account name). Audits/training ARE happening (Barista Station 30, Barista Skills
+  14, Kitchen+Food audits 24, Kitchen Crew Skills 6) — the earlier "0 everywhere" was the stale
+  project. ⚠️ Apply the `OpsAlert` migration to the **loyalty project**, not celsius-inventory.
 - **Go-live checklist (before flipping to armed).** (1) apply the `OpsAlert` migration to the
   DB; (2) get `ops_breach_digest` + `ops_escalation` templates APPROVED and set
   `OPS_PULSE_TPL_*`; (3) confirm manager + owner `User.phone`; (4) bump the cron from hourly to
