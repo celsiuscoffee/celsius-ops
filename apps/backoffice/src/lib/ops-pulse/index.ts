@@ -7,7 +7,7 @@
 //            escalates any incident sitting unacked past the SLA to the owner.
 
 import { prisma } from "@/lib/prisma";
-import { pulseMode, dailyMode, THRESHOLDS } from "./config";
+import { pulseMode, dailyMode, REALTIME_SIGNALS, THRESHOLDS } from "./config";
 import {
   detectPhoneCapture,
   detectChecklist,
@@ -75,7 +75,9 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
     return { mode, ranAt: now.toISOString(), breachCount: 0, routed: [], sent: 0, escalated: 0 };
   }
 
-  const breaches = await detectAll(now);
+  // Real-time tier only — the fast pulse alerts on the instant signals (reviews,
+  // menu-snoozed, …); everything else surfaces in the daily digest.
+  const breaches = (await detectAll(now)).filter((b) => REALTIME_SIGNALS.has(b.signal));
   const routed = await routeAll(breaches);
 
   // ── SHADOW: log what we *would* page; never message anyone, never persist. ──

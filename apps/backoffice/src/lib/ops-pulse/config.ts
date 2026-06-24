@@ -23,6 +23,17 @@ export function dailyMode(): PulseMode {
   return m === "off" || m === "armed" ? m : "shadow";
 }
 
+// Signals that fire on the FAST real-time pulse (every ~5 min). Everything else
+// surfaces only in the daily digest. Owner: Google reviews + menu-snoozed must be
+// instant; incidents (checklist, receiving) are good candidates too. Override via
+// OPS_PULSE_REALTIME_SIGNALS (comma-separated).
+export const REALTIME_SIGNALS: Set<string> = new Set(
+  (process.env.OPS_PULSE_REALTIME_SIGNALS || "REVIEW,MENU_SNOOZED")
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean),
+);
+
 export const THRESHOLDS = {
   phoneCapture: {
     // Breach if the day's completed-order phone-capture rate for an outlet is
