@@ -50,11 +50,14 @@ export const THRESHOLDS = {
 // (a reminder/scorecard line — never escalated). Kept separate from THRESHOLDS
 // so `roles` stays a mutable string[] for Prisma `in:` filters.
 export const AUDIT = {
-  // 30 = monthly. Owner-set frequency (7 weekly, 90 quarterly).
-  cadenceDays: 30,
-  // AuditTemplate.roleType values to watch. Confirmed in data: "barista_head".
-  // Override with OPS_PULSE_AUDIT_ROLES (comma-separated, e.g. "barista_head,food_director").
-  roles: (process.env.OPS_PULSE_AUDIT_ROLES || "barista_head")
+  // Owner-set frequency: 7 = weekly (chosen 2026-06-24), 30 monthly, 90 quarterly.
+  cadenceDays: 7,
+  // AuditTemplate.roleType values to watch (confirmed against live data):
+  //   barista_head — barista lead (Barista Station Audit / Barista Skills)
+  //   chef_head    — food director  (Kitchen Quality Audit / Kitchen Crew Skills)
+  // Coverage counts a COMPLETED report of either the OUTLET or STAFF template for
+  // that role. Override with OPS_PULSE_AUDIT_ROLES (comma-separated).
+  roles: (process.env.OPS_PULSE_AUDIT_ROLES || "barista_head,chef_head")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
