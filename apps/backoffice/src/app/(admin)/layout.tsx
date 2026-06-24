@@ -164,6 +164,8 @@ const NAV_SECTIONS: NavSection[] = [
       // Menu & BOM (recipe/BOM editor) lives with the catalog/menu definition,
       // not under Procurement. Gate stays inventory:menus so access is unchanged.
       { label: "Menu & BOM", href: "/inventory/menus", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "inventory:menus" },
+      // Printable per-item BOM. Sub-route of Menu & BOM, gated on the same module.
+      { label: "Recipe Cards", href: "/inventory/menus/cards", icon: <Printer className={ICON_SIZE} />, moduleKey: "inventory:menus" },
       // Packaging rules attach cups/lids/straws to menu items & channels — part
       // of the menu definition, so surfaced here too (also under Procurement →
       // Master Data). Gate stays inventory:packaging.
