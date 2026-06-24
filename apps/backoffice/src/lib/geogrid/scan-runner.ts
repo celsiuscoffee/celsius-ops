@@ -56,7 +56,7 @@ export async function runScan(opts: {
 
   const points = buildGrid(centerLat, centerLng, gridSize, rangeMiles);
   const radiusM = Math.min(Math.max(rangeMiles * METERS_PER_MILE, 500), 5000);
-  const { points: scanned, failures } = await scanGrid(apiKey, keyword, points, radiusM, geo.placeId, targetTitle);
+  const { points: scanned, failures, competitors } = await scanGrid(apiKey, keyword, points, radiusM, geo.placeId, targetTitle);
   const metrics = computeMetrics(scanned, centerLat, centerLng);
 
   const scan = await prisma.geoGridScan.create({
@@ -75,6 +75,7 @@ export async function runScan(opts: {
       foundPoints: metrics.foundPoints,
       totalPoints: metrics.totalPoints,
       greenRadiusM: metrics.greenRadiusM,
+      competitors,
       createdBy: createdBy ?? null,
     },
   });

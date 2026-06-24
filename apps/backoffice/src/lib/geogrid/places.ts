@@ -45,7 +45,10 @@ export function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: n
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/** Rank of the target business in Places results for `keyword` at a point, or null if not in top 20. */
+export type PointResult = { name: string; placeId: string; isUs: boolean };
+export type Competitor = { name: string; top3Points: number; avgRank: number };
+
+/** Our rank + the ranked businesses (for the competitor reference) at one point. */
 export async function rankAtPoint(
   apiKey: string,
   keyword: string,
@@ -54,7 +57,7 @@ export async function rankAtPoint(
   radiusM: number,
   targetPlaceId: string | null,
   targetTitle: string | null,
-): Promise<number | null> {
+): Promise<{ rank: number | null; results: PointResult[] }> {
   const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
     headers: {
@@ -75,12 +78,16 @@ export async function rankAtPoint(
   const data = await res.json();
   const places: { id?: string; displayName?: { text?: string } }[] = data.places ?? [];
   const title = targetTitle?.toLowerCase();
-  const idx = places.findIndex(
-    (p) =>
-      (targetPlaceId && p.id === targetPlaceId) ||
-      (title && p.displayName?.text?.toLowerCase().includes(title)),
-  );
-  return idx >= 0 ? idx + 1 : null;
+  const isUs = (p: { id?: string; displayName?: { text?: string } }) =>
+    (!!targetPlaceId && p.id === targetPlaceId) ||
+    (!!title && !!p.displayName?.text?.toLowerCase().includes(title));
+  const idx = places.findIndex(isUs);
+  const results: PointResult[] = places.slice(0, 8).map((p) => ({
+    name: p.displayName?.text ?? "",
+    placeId: p.id ?? "",
+    isUs: isUs(p),
+  }));
+  return { rank: idx >= 0 ? idx + 1 : null, results };
 }
 
 export function computeMetrics(points: GridPoint[], centerLat: number, centerLng: number) {
@@ -97,7 +104,7 @@ export function computeMetrics(points: GridPoint[], centerLat: number, centerLng
   };
 }
 
-/** Run all grid points with limited concurrency so we don't hammer the Places API. */
+/** Run all grid points with limited concurrency, also tallying who out-ranks us. */
 export async function scanGrid(
   apiKey: string,
   keyword: string,
@@ -106,14 +113,26 @@ export async function scanGrid(
   targetPlaceId: string | null,
   targetTitle: string | null,
   concurrency = 8,
-): Promise<{ points: GridPoint[]; failures: number }> {
+): Promise<{ points: GridPoint[]; failures: number; competitors: Competitor[] }> {
   let failures = 0;
+  const tally = new Map<string, { name: string; top3: number; rankSum: number; count: number }>();
+
   for (let i = 0; i < points.length; i += concurrency) {
     const batch = points.slice(i, i + concurrency);
     await Promise.all(
       batch.map(async (p) => {
         try {
-          p.rank = await rankAtPoint(apiKey, keyword, p.lat, p.lng, radiusM, targetPlaceId, targetTitle);
+          const { rank, results } = await rankAtPoint(apiKey, keyword, p.lat, p.lng, radiusM, targetPlaceId, targetTitle);
+          p.rank = rank;
+          results.forEach((r, i2) => {
+            if (r.isUs || !r.name) return;
+            const key = r.placeId || r.name.toLowerCase();
+            const t = tally.get(key) ?? { name: r.name, top3: 0, rankSum: 0, count: 0 };
+            t.count++;
+            t.rankSum += i2 + 1;
+            if (i2 < 3) t.top3++;
+            tally.set(key, t);
+          });
         } catch (err) {
           failures++;
           console.error(`[geogrid] point ${p.row},${p.col} failed:`, (err as Error).message);
@@ -122,5 +141,11 @@ export async function scanGrid(
       }),
     );
   }
-  return { points, failures };
+
+  const competitors: Competitor[] = [...tally.values()]
+    .map((t) => ({ name: t.name, top3Points: t.top3, avgRank: t.count ? t.rankSum / t.count : 0 }))
+    .sort((a, b) => b.top3Points - a.top3Points || a.avgRank - b.avgRank)
+    .slice(0, 6);
+
+  return { points, failures, competitors };
 }

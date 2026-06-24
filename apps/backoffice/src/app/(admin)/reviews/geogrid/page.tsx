@@ -19,6 +19,7 @@ type Scan = {
   foundPoints: number;
   totalPoints: number;
   greenRadiusM: number | null;
+  competitors: { name: string; top3Points: number; avgRank: number }[];
   createdAt: string;
 };
 type Outlet = { id: string; name: string };
@@ -33,9 +34,9 @@ function rankColor(rank: number | null): { bg: string; fg: string; label: string
   return { bg: "#dc2626", fg: "#fff", label };
 }
 
-function miles(m: number | null): string {
+function km(m: number | null): string {
   if (m == null) return "–";
-  return (m / 1609.34).toFixed(2) + " mi";
+  return (m / 1000).toFixed(2) + " km";
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -53,7 +54,7 @@ export default function GeogridPage() {
   const [outletId, setOutletId] = useState("");
   const [keyword, setKeyword] = useState("");
   const [gridSize, setGridSize] = useState(9);
-  const [rangeMiles, setRangeMiles] = useState(0.1);
+  const [radiusKm, setRadiusKm] = useState(2);
   const [scans, setScans] = useState<Scan[]>([]);
   const [active, setActive] = useState<Scan | null>(null);
   const [running, setRunning] = useState(false);
@@ -91,6 +92,8 @@ export default function GeogridPage() {
       return;
     }
     setRunning(true);
+    // radius (km, store→edge) → spacing (miles) between the gridSize points
+    const rangeMiles = radiusKm / ((gridSize - 1) / 2) / 1.60934;
     try {
       const res = await fetch("/api/geogrid/scan", {
         method: "POST",
@@ -158,8 +161,8 @@ export default function GeogridPage() {
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground">Range (mi)</label>
-          <input type="number" step="0.05" min="0.05" value={rangeMiles} onChange={(e) => setRangeMiles(Number(e.target.value))} className="mt-1 w-24 rounded-lg border border-border bg-white px-3 py-2 text-sm" />
+          <label className="block text-xs font-medium text-muted-foreground">Radius (km)</label>
+          <input type="number" step="0.5" min="0.5" value={radiusKm} onChange={(e) => setRadiusKm(Number(e.target.value))} className="mt-1 w-24 rounded-lg border border-border bg-white px-3 py-2 text-sm" />
         </div>
         <button onClick={run} disabled={running || !outletId} className="flex items-center gap-1.5 rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50">
           {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
@@ -174,7 +177,7 @@ export default function GeogridPage() {
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Avg rank" value={active.avgRank != null ? active.avgRank.toFixed(1) : "–"} sub="lower is better" />
             <Stat label="% in top 3" value={`${Math.round(active.pctTop3 ?? 0)}%`} sub="more green = better" />
-            <Stat label="Green radius" value={miles(active.greenRadiusM)} sub="rank ≤3 reach (goal #2)" />
+            <Stat label="Green radius" value={km(active.greenRadiusM)} sub="rank ≤3 reach (goal #2)" />
             <Stat label="Coverage" value={`${active.foundPoints}/${active.totalPoints}`} sub="points ranking ≤20" />
           </div>
 
@@ -182,7 +185,7 @@ export default function GeogridPage() {
           <div className="mt-5 rounded-xl border border-border bg-white p-4">
             <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
               <MapPin className="h-4 w-4" />
-              <span className="font-medium text-foreground">&ldquo;{active.keyword}&rdquo;</span> · {active.gridSize}×{active.gridSize} · {active.rangeMiles} mi spacing
+              <span className="font-medium text-foreground">&ldquo;{active.keyword}&rdquo;</span> · {active.gridSize}×{active.gridSize} · ~{(active.rangeMiles * ((active.gridSize - 1) / 2) * 1.60934).toFixed(1)} km radius
             </div>
             <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${active.gridSize}, minmax(0, 1fr))`, maxWidth: 520 }}>
               {grid.flat().map((p) => {
@@ -198,6 +201,32 @@ export default function GeogridPage() {
               Center = your storefront. Rank approximated from the Places API (proxy for the Maps local pack) — use it for trend, not exact position.
             </p>
           </div>
+
+          {/* Competitors — who out-ranks us, for reference */}
+          {active.competitors && active.competitors.length > 0 && (
+            <div className="mt-5 rounded-xl border border-border bg-white p-4">
+              <div className="mb-2 text-sm font-medium text-foreground">Top competitors here (for reference)</div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground">
+                    <th className="py-1">Competitor</th><th>In top-3 at</th><th>Avg rank</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {active.competitors.map((c, i) => (
+                    <tr key={i} className="border-t border-border">
+                      <td className="py-1.5">{c.name}</td>
+                      <td>{c.top3Points} / {active.totalPoints} pts</td>
+                      <td>{c.avgRank.toFixed(1)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Who shows above you across the grid. You climb past them with prominence — more reviews, faster.
+              </p>
+            </div>
+          )}
 
           {/* History / trend — the loop */}
           {scans.length > 1 && (
@@ -220,7 +249,7 @@ export default function GeogridPage() {
                       <td className="text-muted-foreground">{s.keyword}</td>
                       <td>{s.avgRank != null ? s.avgRank.toFixed(1) : "–"}</td>
                       <td>{Math.round(s.pctTop3 ?? 0)}%</td>
-                      <td>{miles(s.greenRadiusM)}</td>
+                      <td>{km(s.greenRadiusM)}</td>
                     </tr>
                   ))}
                 </tbody>

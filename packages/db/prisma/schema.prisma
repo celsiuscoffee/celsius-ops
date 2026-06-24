@@ -1400,6 +1400,7 @@ model GeoGridScan {
   foundPoints  Int      @default(0)
   totalPoints  Int      @default(0)
   greenRadiusM Float? // farthest point (m) still ranking ≤3
+  competitors  Json     @default("[]") // [{name, top3Points, avgRank}] who out-ranks us
   createdAt    DateTime @default(now())
   createdBy    String?
 
