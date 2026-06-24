@@ -154,12 +154,39 @@ until B proves the gap-targeting works.** Build the scoreboard before the robot.
 5. **Is the GBP `localPosts` write API still live** for these 4 locations? (Carries over from
    [[reviews-reply-recovery-loop]].)
 
+## The Goal (what the loop is graded on)
+Three tiers, set on the **generic "near me" keywords** (the radius game), **per outlet**, and
+**calibrated after a 2-sweep baseline** — a mall outlet (Putrajaya/IOI) and a standalone
+(Nilai) start in very different places, so flat absolutes would be trivial for one and
+impossible for another. Encoded in `lib/seo/geogrid-goals.ts`; surfaced as progress bars on
+the Local Rank page and as goal pills on the SEO dashboard.
+
+| Tier | Metric | Target (starting hypothesis — recalibrate off baseline) | Why this tier |
+|------|--------|--------------------------------------------------------|---------------|
+| **Floor** (never lose) | top-3 across the inner 3×3 | **100%** | Own your doorstep. If this slips, something broke. |
+| **Committed** (the grade) | Share of Local Voice (% of cells in top-3) | **+15–20pp/quarter, aim ≥55–65%** per outlet | Top-3 = in the 3-pack = shown & clicked. The order-driving number, and the one the levers actually move. |
+| **Stretch** (the ask) | **#1-reach (km)** | **≈ double the baseline** within 2 quarters | The "wide radius of #1" headline. Proximity-capped, so it's the motivator, not the grade. |
+
+**Why #1-reach is the stretch, not the grade:** a competitor physically closer to the
+searcher often takes #1 no matter what you do — proximity is the dominant, *fixed* factor. So
+"#1 on a wide radius" has a natural per-outlet ceiling. Chase top-3 *coverage* (movable, and
+what converts); let #1-reach be the headline you celebrate when it climbs.
+
+**The real outcome sits one level down** (ads-loop logic): geogrid rank is a *leading
+indicator* — the proof is **organic-discovery orders trending up**. The grid is the weekly
+steering wheel; new customers from organic search is the destination.
+
 ## Success Criteria (measurable)
-- Within 2 sweeps: per-outlet geogrid visible in backoffice with ATRP / SoLV / **#1-reach (km)**.
-- Within 60 days: **#1-reach trending up** for ≥2 outlets off a deliberate lever pull
-  (category fix or targeted review seeding), confirmed on the grid — not vibes.
-- The reviews loop's output (new reviews) shows up as widened relevance reach on the grid
-  (the two loops visibly compound).
+- Within 2 sweeps: per-outlet geogrid visible in backoffice with ATRP / SoLV / **#1-reach
+  (km)**, baselines recorded, and per-outlet targets set in `geogrid-goals.ts` off those
+  baselines (not the placeholder defaults).
+- Floor holds: **100% top-3 in the inner 3×3** for every outlet, every sweep.
+- Within 60 days: **SoLV up ≥15pp** (committed goal) for ≥2 outlets off a deliberate lever
+  pull (category fix or targeted review seeding), confirmed on the grid — not vibes.
+- **#1-reach trending up** for ≥2 outlets (stretch goal), shown on the dashboard's
+  "meeting #1-reach goal" count.
+- The reviews loop's output (new reviews) shows up as widened SoLV on the grid (the two loops
+  visibly compound).
 - ≥1 Command Center alert (Approach B) fires on a real reach drop that the owner acts on.
 
 ## The Assignment (one concrete next step)

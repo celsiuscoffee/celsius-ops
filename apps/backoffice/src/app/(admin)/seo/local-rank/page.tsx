@@ -23,13 +23,24 @@ type Snapshot = {
   capturedAt: string;
 };
 type HistoryPoint = { capturedAt: string; atrp: number; solv: number; oneReachKm: number };
+type Goal = { innerTop3Pct: number; solvTarget: number; oneReachTargetKm: number };
 type GeogridData = {
   outlets: Outlet[];
   keywords: Keyword[];
   selectedKeyword?: string;
   latest: Snapshot | null;
   history: HistoryPoint[];
+  goal: Goal | null;
 };
+
+// Inner 3×3 (the doorstep) — % of those cells that are top-3. The "floor" goal.
+function innerTop3Pct(cells: Cell[], size: number): number {
+  const c = (size - 1) / 2;
+  const inner = cells.filter((x) => Math.abs(x.row - c) <= 1 && Math.abs(x.col - c) <= 1);
+  if (inner.length === 0) return 0;
+  const top3 = inner.filter((x) => x.rank != null && x.rank <= 3).length;
+  return (top3 / inner.length) * 100;
+}
 
 // ─── Rank → colour (mirrors the geogrid heatmap) ───────────
 
@@ -98,10 +109,51 @@ function MetricCard({
   );
 }
 
+// ─── Goal progress (floor / committed / stretch) ───────────
+
+function GoalRow({
+  tier,
+  label,
+  current,
+  target,
+  unit,
+  met,
+}: {
+  tier: string;
+  label: string;
+  current: number;
+  target: number;
+  unit: string;
+  met: boolean;
+}) {
+  const pct = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+  return (
+    <div className="py-2">
+      <div className="flex items-baseline justify-between text-xs">
+        <span className="font-medium text-gray-700">
+          <span className="mr-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gray-500">
+            {tier}
+          </span>
+          {label}
+        </span>
+        <span className={met ? "text-green-600" : "text-gray-500"}>
+          {met ? "✓ " : ""}
+          {current.toFixed(unit === "km" ? 2 : 0)} / {target.toFixed(unit === "km" ? 1 : 0)} {unit}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+        <div className={`h-full rounded-full ${met ? "bg-green-500" : "bg-gray-400"}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ──────────────────────────────────────────────────
 
 export default function LocalRankPage() {
-  const [outletId, setOutletId] = useState<string | null>(null);
+  // Honour ?outletId= from the dashboard drill-down link.
+  const initialOutlet = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("outletId") : null;
+  const [outletId, setOutletId] = useState<string | null>(initialOutlet);
   const [keyword, setKeyword] = useState<string | null>(null);
 
   const qs = new URLSearchParams();
@@ -115,8 +167,10 @@ export default function LocalRankPage() {
   const history = data?.history ?? [];
   const prev = history.length >= 2 ? history[history.length - 2] : null;
 
+  const goal = data?.goal ?? null;
   const grid = latest?.cells ?? [];
   const size = latest?.gridSize ?? 0;
+  const floorPct = latest ? innerTop3Pct(grid, size) : 0;
 
   return (
     <div className="mx-auto max-w-5xl p-6">
@@ -224,6 +278,20 @@ export default function LocalRankPage() {
               hint="Average rank across every cell (lower is better). Not-in-top-20 counts as 21."
             />
           </div>
+
+          {/* Progress to goal */}
+          {goal && (
+            <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+              <div className="mb-1 flex items-center gap-2 text-gray-700">
+                <Target className="h-4 w-4" />
+                <span className="text-sm font-medium">Progress to goal</span>
+                <span className="text-[11px] text-gray-400">(targets calibrate after baseline — see geogrid-goals.ts)</span>
+              </div>
+              <GoalRow tier="Floor" label="Doorstep top-3 (inner 3×3)" current={floorPct} target={goal.innerTop3Pct} unit="%" met={floorPct >= goal.innerTop3Pct} />
+              <GoalRow tier="Committed" label="Share of Voice (top-3 coverage)" current={latest.solv} target={goal.solvTarget} unit="%" met={latest.solv >= goal.solvTarget} />
+              <GoalRow tier="Stretch" label="#1-reach" current={latest.oneReachKm} target={goal.oneReachTargetKm} unit="km" met={latest.oneReachKm >= goal.oneReachTargetKm} />
+            </div>
+          )}
 
           {/* Heatmap grid */}
           <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">

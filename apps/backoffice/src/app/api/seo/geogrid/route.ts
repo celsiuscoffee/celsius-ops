@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { goalForOutlet } from "@/lib/seo/geogrid-goals";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +23,11 @@ export async function GET(request: NextRequest) {
 
   const outletId = request.nextUrl.searchParams.get("outletId") || outlets[0]?.id || null;
   if (!outletId) {
-    return NextResponse.json({ outlets, keywords: [], latest: null, history: [] });
+    return NextResponse.json({ outlets, keywords: [], latest: null, history: [], goal: null });
   }
+
+  const outletName = outlets.find((o) => o.id === outletId)?.name ?? "";
+  const goal = goalForOutlet(outletName);
 
   // Keywords that actually have snapshots for this outlet (most-recent first).
   const recent = await prisma.geoRankSnapshot.findMany({
@@ -43,7 +47,7 @@ export async function GET(request: NextRequest) {
 
   const keyword = request.nextUrl.searchParams.get("keyword") || keywords[0]?.text || null;
   if (!keyword) {
-    return NextResponse.json({ outlets, keywords, latest: null, history: [] });
+    return NextResponse.json({ outlets, keywords, latest: null, history: [], goal });
   }
 
   const latest = await prisma.geoRankSnapshot.findFirst({
@@ -59,5 +63,5 @@ export async function GET(request: NextRequest) {
   });
   const history = historyRows.reverse(); // chronological for the chart
 
-  return NextResponse.json({ outlets, keywords, selectedKeyword: keyword, latest, history });
+  return NextResponse.json({ outlets, keywords, selectedKeyword: keyword, latest, history, goal });
 }

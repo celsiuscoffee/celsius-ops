@@ -79,8 +79,11 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
   ],
   reviews: [
     { label: "All Reviews", key: "list" },
-    { label: "Local Rank (SEO)", key: "local-rank" },
     { label: "Settings", key: "settings" },
+  ],
+  seo: [
+    { label: "Dashboard", key: "dashboard" },
+    { label: "Local Rank (Geogrid)", key: "local-rank" },
   ],
   ads: [
     { label: "Marketing (Google)", key: "overview" },
@@ -209,9 +212,13 @@ export const NAV_TABS: GrantTab[] = [
     groups: [
       {
         label: "Reviews",
+        modules: [m("reviews", "list", "All Reviews")],
+      },
+      {
+        label: "Local SEO",
         modules: [
-          m("reviews", "list", "All Reviews"),
-          m("reviews", "local-rank", "Local Rank (Geogrid)"),
+          m("seo", "dashboard", "SEO Dashboard"),
+          m("seo", "local-rank", "Local Rank (Geogrid)"),
         ],
       },
       {
@@ -333,7 +340,7 @@ export const NAV_TABS: GrantTab[] = [
 // Apps that live INSIDE the backoffice app (gated by their own modules, not a
 // separate login). The picker surfaces these whenever a user has "backoffice"
 // app access, in addition to the apps listed in their appAccess.
-export const BACKOFFICE_SUB_APPS = ["settings", "hr", "reviews", "ads"] as const;
+export const BACKOFFICE_SUB_APPS = ["settings", "hr", "reviews", "ads", "seo"] as const;
 
 // Every grantable `${app}:${key}`. Used by the sidebar's dev-time drift check.
 export const GRANTABLE_MODULE_KEYS: ReadonlySet<string> = new Set(

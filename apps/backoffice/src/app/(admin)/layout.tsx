@@ -330,7 +330,6 @@ const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "All Reviews", href: "/reviews", icon: <Star className={ICON_SIZE} />, moduleKey: "reviews:list" },
           { label: "Feedback Management", href: "/reviews/feedback", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "reviews:list" },
-          { label: "Local Rank", href: "/seo/local-rank", icon: <Target className={ICON_SIZE} />, moduleKey: "reviews:local-rank" },
         ],
       },
       {
@@ -347,6 +346,15 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "Campaigns & Ad Spend", href: "/ads/grab", icon: <Megaphone className={ICON_SIZE} />, moduleKey: "ads:grab" },
         ],
       },
+    ],
+  },
+  {
+    label: "Local SEO",
+    icon: <Target className={ICON_SIZE} />,
+    railIcon: <Target className={RAIL_ICON_SIZE} />,
+    items: [
+      { label: "Dashboard", href: "/seo", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "seo:dashboard" },
+      { label: "Local Rank", href: "/seo/local-rank", icon: <Target className={ICON_SIZE} />, moduleKey: "seo:local-rank" },
     ],
   },
   {
