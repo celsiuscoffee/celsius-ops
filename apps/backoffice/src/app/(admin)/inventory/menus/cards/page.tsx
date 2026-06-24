@@ -232,14 +232,14 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
         ) : hasTempSplit ? (
           <div className="grid grid-cols-2 gap-x-4 divide-x divide-gray-100">
             <BuildColumn
-              title="Hot build"
+              title="Hot recipe"
               accent="text-orange-600"
               icon={<Flame className="h-3 w-3" />}
               steps={hotSteps}
             />
             <div className="pl-4">
               <BuildColumn
-                title="Iced build"
+                title="Iced recipe"
                 accent="text-sky-600"
                 icon={<Snowflake className="h-3 w-3" />}
                 steps={icedSteps}
@@ -247,7 +247,7 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
             </div>
           </div>
         ) : (
-          <BuildColumn title="Build" steps={singleSteps} />
+          <BuildColumn title="Recipe" steps={singleSteps} />
         )}
       </div>
 
@@ -393,7 +393,7 @@ export default function RecipeCardsPage() {
           <h2 className="text-xl font-semibold text-gray-900">Recipe Cards</h2>
         </div>
         <p className="mt-0.5 text-sm text-gray-500">
-          Barista build cards from the Bill of Materials — reference photo, Hot &amp; Iced builds, and plating notes. {filtered.length} of {menus.length} shown.
+          Barista recipe cards from the Bill of Materials — reference photo, Hot &amp; Iced recipes, and plating notes. {filtered.length} of {menus.length} shown.
         </p>
 
         <div className="mt-4 flex flex-col gap-3">
