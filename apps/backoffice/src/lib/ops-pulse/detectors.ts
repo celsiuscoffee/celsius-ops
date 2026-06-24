@@ -271,8 +271,9 @@ export async function detectOutletAudit(now: Date): Promise<Breach[]> {
 // eligible staff (by HR position) at an outlet have a COMPLETED skill audit
 // vs. how many should. The number trained is the metric. Cross-DB: positions
 // live in hr_employee_profiles (HR Supabase), staff→outlet + reports in Prisma.
-// "Trained" is cumulative (any completed skill audit), re-nudged once per cadence
-// window. LOW severity, never escalated — a scorecard/coaching number.
+// "Trained" means skill-audited WITHIN the cadence window — skill = 1/week/staff,
+// so each eligible staff needs a fresh skill audit every week (not just ever).
+// LOW severity, never escalated — a scorecard/coaching number.
 export async function detectSkillTraining(now: Date): Promise<Breach[]> {
   if (AUDIT.roles.length === 0) return [];
 
@@ -301,6 +302,7 @@ export async function detectSkillTraining(now: Date): Promise<Breach[]> {
   }
 
   const { ymd } = mytToday(now);
+  const cutoff = new Date(now.getTime() - AUDIT.cadenceDays * 86_400_000);
   const bucket = Math.floor(
     new Date(`${ymd}T00:00:00+08:00`).getTime() / (AUDIT.cadenceDays * 86_400_000),
   );
@@ -318,7 +320,12 @@ export async function detectSkillTraining(now: Date): Promise<Breach[]> {
         select: { id: true, outletId: true, outlet: { select: { name: true, status: true } } },
       }),
       prisma.auditReport.findMany({
-        where: { templateId: t.id, status: "COMPLETED", auditeeId: { in: eligibleList } },
+        where: {
+          templateId: t.id,
+          status: "COMPLETED",
+          auditeeId: { in: eligibleList },
+          date: { gte: cutoff }, // skill = 1/week/staff → only THIS week's audits count
+        },
         select: { auditeeId: true },
       }),
     ]);
@@ -344,11 +351,12 @@ export async function detectSkillTraining(now: Date): Promise<Breach[]> {
         severity: "LOW",
         routeKey: routeForRole(t.roleType),
         dedupeKey: `SKILL:${t.roleType}:${outletId}:${bucket}`,
-        summary: `${t.name}: ${agg.trained}/${agg.eligible} staff trained — ${agg.name} (${untrained} to go)`,
+        summary: `${t.name}: ${agg.trained}/${agg.eligible} staff skill-audited this week — ${agg.name} (${untrained} to go)`,
         detail: {
           kind: "skill_training",
           template: t.name,
           role: t.roleType,
+          cadenceDays: AUDIT.cadenceDays,
           eligible: agg.eligible,
           trained: agg.trained,
           untrained,
