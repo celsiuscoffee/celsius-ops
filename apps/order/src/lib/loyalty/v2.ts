@@ -680,11 +680,19 @@ export async function applyOrderToMission(args: {
     return { completedMissionIds: [] };
   }
 
+  // Week-window guard: only credit this order to assignments whose week
+  // actually contains the order time. Without this, a member accumulates one
+  // active assignment per week and a single order completes the same mission
+  // for EVERY un-expired past week at once (the stale-week stacking bug:
+  // e.g. one order minting 3× Free Coffee for weeks it didn't earn). Pairs
+  // with the daily expiry sweep that flips past-week assignments to 'expired'.
   const { data: assignments } = await supabase
     .from("mission_assignments")
     .select("id, mission_id, progress_current, progress_target")
     .eq("member_id", args.memberId)
-    .eq("status", "active");
+    .eq("status", "active")
+    .lte("week_start_at", args.order.created_at)
+    .gte("week_end_at", args.order.created_at);
 
   if (!assignments || assignments.length === 0) {
     return { completedMissionIds: [] };
