@@ -37,6 +37,10 @@ export async function middleware(request: NextRequest) {
       // Compat alias: Grab's portal has this store's webhook at the non-/pos
       // path. Same handler (api/grab/webhook/route re-exports the /pos one).
       "/api/grab/webhook",
+      // WhatsApp Cloud API webhook — Meta posts inbound messages/statuses with
+      // no browser Origin, authenticated by X-Hub-Signature-256 (verified in
+      // the route against WHATSAPP_APP_SECRET).
+      "/api/whatsapp/webhook",
     ],
   });
   if (csrfFail) {
