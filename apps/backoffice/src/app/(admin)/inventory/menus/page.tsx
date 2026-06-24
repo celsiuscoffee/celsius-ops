@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Pencil, ChevronDown, Coffee, Search, Loader2, Trash2, X, Check, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
+import { Pencil, ChevronDown, Coffee, Search, Loader2, Trash2, X, Check, ArrowUp, ArrowDown, ChevronsUpDown, Printer } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 type ServiceMode = "ALL" | "DINE_IN" | "TAKEAWAY";
@@ -348,9 +348,17 @@ export default function MenusPage() {
 
   return (
     <div className="p-3 sm:p-6">
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900">Menu & Recipes (BOM)</h2>
-        <p className="mt-0.5 text-sm text-gray-500">{menus.length} menu items · ingredient + packaging costing (dine-in / takeaway)</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Menu & Recipes (BOM)</h2>
+          <p className="mt-0.5 text-sm text-gray-500">{menus.length} menu items · ingredient + packaging costing (dine-in / takeaway)</p>
+        </div>
+        <Link
+          href="/inventory/menus/cards"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:border-terracotta hover:text-terracotta"
+        >
+          <Printer className="h-4 w-4" /> Recipe cards
+        </Link>
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
