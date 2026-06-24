@@ -15,6 +15,14 @@ export function pulseMode(): PulseMode {
   return m === "off" || m === "armed" ? m : "shadow";
 }
 
+// Controls the DAILY pulse — a once-a-day digest per recipient, the habit-builder
+// shipped first. Independent of OPS_PULSE_MODE so the daily digest can go live
+// while the real-time path stays in shadow. off | shadow | armed; unset ⇒ shadow.
+export function dailyMode(): PulseMode {
+  const m = (process.env.OPS_PULSE_DAILY_MODE || "shadow").trim().toLowerCase();
+  return m === "off" || m === "armed" ? m : "shadow";
+}
+
 export const THRESHOLDS = {
   phoneCapture: {
     // Breach if the day's completed-order phone-capture rate for an outlet is
@@ -110,5 +118,6 @@ export const AUDIT = {
 export const TEMPLATES = {
   managerDigest: process.env.OPS_PULSE_TPL_DIGEST || "",
   ownerEscalation: process.env.OPS_PULSE_TPL_ESCALATION || "",
+  dailyDigest: process.env.OPS_PULSE_TPL_DAILY || "",
   languageCode: process.env.OPS_PULSE_TPL_LANG || "en",
 } as const;

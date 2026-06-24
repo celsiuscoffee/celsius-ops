@@ -32,6 +32,14 @@ export function composeEscalation(lines: string[]): string {
   return [header, ...lines.map((l) => `• ${l}`)].join("\n");
 }
 
+// The daily roundup — a once-a-day snapshot of everything outstanding in the
+// recipient's lane. The predictable cadence is what builds the discipline.
+export function composeDailyDigest(lines: string[]): string {
+  const n = lines.length;
+  const header = `☀️ Daily Ops Pulse — ${n} open item${n === 1 ? "" : "s"}`;
+  return [header, ...lines.map((l) => `• ${l}`), "", "Clear them today. Reply DONE as you go."].join("\n");
+}
+
 async function sendProactive(
   to: string,
   templateName: string,
@@ -53,4 +61,9 @@ export function sendManagerDigest(phone: string, lines: string[]): Promise<Whats
 export function sendOwnerEscalation(phone: string, lines: string[]): Promise<WhatsAppSendResult> {
   if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
   return sendProactive(phone, TEMPLATES.ownerEscalation, composeEscalation(lines));
+}
+
+export function sendDailyDigest(phone: string, lines: string[]): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
+  return sendProactive(phone, TEMPLATES.dailyDigest, composeDailyDigest(lines));
 }

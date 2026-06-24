@@ -387,7 +387,17 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
   most once per week. Skill coverage is now window-based (audited within 7d, not ever) — skill =
   1/week/staff; outlet audit = 1/week (unchanged). PHONE_CAPTURE / STOCK_COUNT / MENU_SNOOZED
   stay non-escalating.
-- **Go-live checklist (before flipping to armed).** (1) apply the `OpsAlert` migration to the
+- **2026-06-24 — daily pulse (ship first) + full review text.** Added `runDailyPulse` + cron
+  `/api/cron/ops-pulse-daily` (~9am MYT): once a day, each lead gets ONE roundup of everything
+  outstanding in their lane — no ledger, no escalation, just a predictable daily cadence to build
+  the discipline. Controlled by `OPS_PULSE_DAILY_MODE`, **independent** of `OPS_PULSE_MODE`, so the
+  daily digest can go live while real-time stays in shadow — and it needs **no OpsAlert migration**.
+  Review alerts now carry the **full review text** (up to 1000 chars; was a 60-char clip).
+  - **Recommended rollout: daily first.** Set `OPS_PULSE_DAILY_MODE=armed` + approve one
+    `ops_daily_pulse` template → the team gets a daily habit-forming digest with zero migration.
+    Once that's a discipline, arm the real-time + escalation path (`OPS_PULSE_MODE=armed`,
+    needs the OpsAlert migration + the breach/escalation templates).
+- **Go-live checklist for the REAL-TIME path (before `OPS_PULSE_MODE=armed`).** (1) apply the `OpsAlert` migration to the
   DB; (2) get `ops_breach_digest` + `ops_escalation` templates APPROVED and set
   `OPS_PULSE_TPL_*`; (3) confirm manager + owner `User.phone`; (4) bump the cron from hourly to
   15-min in `vercel.json`; (5) set `OPS_PULSE_MODE=armed`. Until then it stays in shadow.

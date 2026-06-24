@@ -166,7 +166,7 @@ export async function detectReviews(now: Date): Promise<Breach[]> {
       severity: f.rating <= 1 ? "HIGH" : "MED",
       routeKey: "operations",
       dedupeKey: `REVIEW:IF:${f.id}`,
-      summary: `${f.rating}★ feedback — ${f.outlet.name}: "${clip(f.feedback)}"`,
+      summary: `${f.rating}★ feedback — ${f.outlet.name}: "${clip(f.feedback, 1000)}"`,
       detail: { source: "internal_feedback", feedbackId: f.id, rating: f.rating },
     });
   }
@@ -196,7 +196,7 @@ export async function detectReviews(now: Date): Promise<Breach[]> {
       severity: d.rating <= 1 ? "HIGH" : "MED",
       routeKey: "operations",
       dedupeKey: `REVIEW:GBP:${d.id}`,
-      summary: `${d.rating}★ Google review awaiting reply — ${d.outlet.name}: "${clip(d.comment)}"`,
+      summary: `${d.rating}★ Google review awaiting reply — ${d.outlet.name}: "${clip(d.comment, 1000)}"`,
       detail: { source: "google_review", draftId: d.id, rating: d.rating },
     });
   }

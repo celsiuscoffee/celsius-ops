@@ -7,7 +7,7 @@
 //            escalates any incident sitting unacked past the SLA to the owner.
 
 import { prisma } from "@/lib/prisma";
-import { pulseMode, THRESHOLDS } from "./config";
+import { pulseMode, dailyMode, THRESHOLDS } from "./config";
 import {
   detectPhoneCapture,
   detectChecklist,
@@ -20,7 +20,7 @@ import {
 } from "./detectors";
 import { resolveRecipients, resolveOwner } from "./router";
 import { findEscalatable, markEscalated, markSent, recordBreach } from "./ledger";
-import { sendManagerDigest, sendOwnerEscalation } from "./sender";
+import { sendManagerDigest, sendOwnerEscalation, sendDailyDigest } from "./sender";
 import type { Assignee, Breach, PulseRunResult, RoutedBreach } from "./types";
 
 // Last-4 only — shadow output goes to plaintext logs / cron responses.
@@ -37,13 +37,8 @@ function detectorFailed(name: string) {
   };
 }
 
-export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
-  const mode = pulseMode();
-  if (mode === "off") {
-    return { mode, ranAt: now.toISOString(), breachCount: 0, routed: [], sent: 0, escalated: 0 };
-  }
-
-  // Detectors are isolated: one failing must not sink the run.
+// Run every detector (isolated — one failing can't sink the run) and flatten.
+async function detectAll(now: Date): Promise<Breach[]> {
   const results = await Promise.all([
     detectPhoneCapture(now).catch(detectorFailed("phone-capture")),
     detectChecklist(now).catch(detectorFailed("checklist")),
@@ -54,9 +49,11 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
     detectReceivings(now).catch(detectorFailed("receivings")),
     detectMenuSnoozed(now).catch(detectorFailed("menu-snoozed")),
   ]);
-  const breaches: Breach[] = results.flat();
+  return results.flat();
+}
 
-  // Resolve recipients once per discipline (routeKey).
+// Attach each breach's discipline recipients (resolved once per routeKey).
+async function routeAll(breaches: Breach[]): Promise<RoutedBreach[]> {
   const recipientsByRoute = new Map<string, Assignee[]>();
   const routed: RoutedBreach[] = [];
   for (const b of breaches) {
@@ -65,9 +62,21 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
     }
     routed.push({ ...b, assignees: recipientsByRoute.get(b.routeKey) ?? [] });
   }
+  return routed;
+}
 
-  const maskedRouted = (): RoutedBreach[] =>
-    routed.map((r) => ({ ...r, assignees: r.assignees.map((a) => ({ ...a, phone: maskPhone(a.phone) })) }));
+function maskRouted(routed: RoutedBreach[]): RoutedBreach[] {
+  return routed.map((r) => ({ ...r, assignees: r.assignees.map((a) => ({ ...a, phone: maskPhone(a.phone) })) }));
+}
+
+export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
+  const mode = pulseMode();
+  if (mode === "off") {
+    return { mode, ranAt: now.toISOString(), breachCount: 0, routed: [], sent: 0, escalated: 0 };
+  }
+
+  const breaches = await detectAll(now);
+  const routed = await routeAll(breaches);
 
   // ── SHADOW: log what we *would* page; never message anyone, never persist. ──
   if (mode === "shadow") {
@@ -84,7 +93,7 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
         }),
       );
     }
-    return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskedRouted(), sent: 0, escalated: 0 };
+    return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskRouted(routed), sent: 0, escalated: 0 };
   }
 
   // ── ARMED: persist + page new alerts + escalate stale ones. ──
@@ -151,5 +160,54 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
     }
   }
 
-  return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskedRouted(), sent, escalated };
+  return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskRouted(routed), sent, escalated };
+}
+
+// Daily pulse — once a day, one digest per recipient of EVERYTHING currently
+// outstanding in their lane (full snapshot, not just new items). No ledger, no
+// escalation; the predictable daily cadence is the point — it builds the
+// discipline. Controlled independently by OPS_PULSE_DAILY_MODE, so the daily
+// digest can go live while the real-time path stays in shadow.
+export async function runDailyPulse(now = new Date()): Promise<PulseRunResult> {
+  const mode = dailyMode();
+  if (mode === "off") {
+    return { mode, ranAt: now.toISOString(), breachCount: 0, routed: [], sent: 0, escalated: 0 };
+  }
+
+  const breaches = await detectAll(now);
+  const routed = await routeAll(breaches);
+
+  // Group ALL current items by recipient.
+  const byUser = new Map<string, { phone: string | null; name: string; lines: string[] }>();
+  for (const r of routed) {
+    for (const a of r.assignees) {
+      const key = a.userId || a.phone || a.name;
+      const bucket = byUser.get(key) ?? { phone: a.phone, name: a.name, lines: [] };
+      bucket.lines.push(r.summary);
+      byUser.set(key, bucket);
+    }
+  }
+
+  if (mode === "shadow") {
+    for (const [, bucket] of byUser) {
+      console.log(
+        "[ops-pulse:daily:shadow]",
+        JSON.stringify({ to: bucket.name, phone: maskPhone(bucket.phone), items: bucket.lines.length, lines: bucket.lines }),
+      );
+    }
+    return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskRouted(routed), sent: 0, escalated: 0 };
+  }
+
+  // ARMED: one daily digest per recipient who has items.
+  let sent = 0;
+  for (const [key, bucket] of byUser) {
+    if (!bucket.phone) {
+      console.warn(`[ops-pulse:daily] items for ${bucket.name} (${key}) but no phone on file — not sent`);
+      continue;
+    }
+    const res = await sendDailyDigest(bucket.phone, bucket.lines);
+    if (res.ok) sent += 1;
+    else console.error(`[ops-pulse:daily] digest to ${bucket.name} failed:`, res.error);
+  }
+  return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskRouted(routed), sent, escalated: 0 };
 }
