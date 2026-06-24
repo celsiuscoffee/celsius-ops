@@ -258,7 +258,7 @@ export default function SalesScreen() {
                 <View className="flex-row items-center justify-between">
                   <View>
                     <Text className="font-body-semi text-xs text-[#F5F3F08a]">Pair adds</Text>
-                    <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.pairAdds)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · upsell added to cart</Text></Text>
+                    <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.pairAdds)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · upsells purchased</Text></Text>
                   </View>
                   <Text className={`font-body-bold text-[13px] ${deltaUp(g.pairAddsDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.pairAddsDelta)}</Text>
                 </View>
