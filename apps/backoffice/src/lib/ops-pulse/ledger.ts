@@ -37,21 +37,35 @@ export async function recordBreach(
   });
   if (existing) return { alert: existing, isNew: false };
 
-  const created = await prisma.opsAlert.create({
-    data: {
-      signal: breach.signal,
-      outletId: breach.outletId,
-      severity: breach.severity,
-      dedupeKey: breach.dedupeKey,
-      summary: breach.summary,
-      detail: breach.detail as Prisma.InputJsonValue,
-      status: "OPEN",
-      // || (not ??) so a phone-only recipient (userId "") stores null, not "".
-      assigneeUserId: assignee?.userId || null,
-    },
-    select: ALERT_SELECT,
-  });
-  return { alert: created, isNew: true };
+  try {
+    const created = await prisma.opsAlert.create({
+      data: {
+        signal: breach.signal,
+        outletId: breach.outletId,
+        severity: breach.severity,
+        dedupeKey: breach.dedupeKey,
+        summary: breach.summary,
+        detail: breach.detail as Prisma.InputJsonValue,
+        status: "OPEN",
+        // || (not ??) so a phone-only recipient (userId "") stores null, not "".
+        assigneeUserId: assignee?.userId || null,
+      },
+      select: ALERT_SELECT,
+    });
+    return { alert: created, isNew: true };
+  } catch (err) {
+    // Concurrent run won the race on the @unique dedupeKey (overlapping cron):
+    // Prisma P2002 = unique-constraint violation. Re-read and treat as not-new
+    // so we never double-page or crash the run.
+    if ((err as { code?: string } | null)?.code === "P2002") {
+      const row = await prisma.opsAlert.findUnique({
+        where: { dedupeKey: breach.dedupeKey },
+        select: ALERT_SELECT,
+      });
+      if (row) return { alert: row, isNew: false };
+    }
+    throw err;
+  }
 }
 
 export async function markSent(id: string, providerMessageId: string | null): Promise<void> {
@@ -69,17 +83,17 @@ export interface EscalatableAlert {
   assigneeUserId: string | null;
 }
 
-// OPEN alerts sent but unacked past the SLA. Escalate the accountability signals
-// the owner wants enforced: CHECKLIST, REVIEW, RECEIVING (incidents) PLUS AUDIT —
-// outlet audits AND staff skill training — because the owner wants proof the work
-// is actually being done. PHONE_CAPTURE / STOCK_COUNT / MENU_SNOOZED stay
-// non-escalating (fluctuating rates that self-clear).
+// OPEN alerts sent but unacked past the SLA. Escalates only signals that
+// actually enter the ledger (the real-time tier): CHECKLIST, REVIEW, RECEIVING,
+// NO_CLOCK_IN, POS_NOT_OPEN. MENU_SNOOZED is real-time but self-clears, so it's
+// excluded. AUDIT/skill escalation is pending the routine-ledger path (they're
+// daily, not real-time, so they aren't persisted here yet).
 export async function findEscalatable(slaMinutes: number, now: Date): Promise<EscalatableAlert[]> {
   const cutoff = new Date(now.getTime() - slaMinutes * 60_000);
   return prisma.opsAlert.findMany({
     where: {
       status: "OPEN",
-      signal: { in: ["CHECKLIST", "REVIEW", "RECEIVING", "AUDIT", "NO_CLOCK_IN", "POS_NOT_OPEN"] },
+      signal: { in: ["CHECKLIST", "REVIEW", "RECEIVING", "NO_CLOCK_IN", "POS_NOT_OPEN"] },
       escalatedAt: null,
       sentAt: { not: null, lt: cutoff },
     },

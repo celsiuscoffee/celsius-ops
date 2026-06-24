@@ -28,7 +28,7 @@ export function dailyMode(): PulseMode {
 // instant; incidents (checklist, receiving) are good candidates too. Override via
 // OPS_PULSE_REALTIME_SIGNALS (comma-separated).
 export const REALTIME_SIGNALS: Set<string> = new Set(
-  (process.env.OPS_PULSE_REALTIME_SIGNALS || "REVIEW,MENU_SNOOZED,NO_CLOCK_IN,POS_NOT_OPEN")
+  (process.env.OPS_PULSE_REALTIME_SIGNALS || "REVIEW,MENU_SNOOZED,NO_CLOCK_IN,POS_NOT_OPEN,CHECKLIST,RECEIVING")
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),

@@ -412,6 +412,15 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
 - **Roster-aware sending (next):** `hr_schedule_shifts` is live (110 published shifts/7d, 3 of ~5
   outlets rostered) — enough to route the open-ready loop to the on-shift person and time sends to
   shift start/end, falling back to the lead where no roster is published.
+- **2026-06-24 — QA pass (PR #510) + fixes.** Independent correctness review validated the SQL
+  joins/columns/enums/MYT math/shadow-safety. Fixed: (C2) `recordBreach` find-then-create race →
+  catch P2002 and treat as not-new (no double-page/crash on overlapping crons); (C1) escalation
+  dead config → promoted **checklist + receiving to real-time** so they enter the ledger and
+  actually escalate, dropped AUDIT from the escalatable set (audit/skill escalation pending the
+  routine-ledger path); (M1) menu-snooze now excludes globally-disabled products (no false 86'd
+  pages); (M3/N1) no-clock-in query guards null `start_time` + orders by start. Real-time tier is
+  now REVIEW, MENU_SNOOZED, NO_CLOCK_IN, POS_NOT_OPEN, CHECKLIST, RECEIVING. CI (GitHub Actions)
+  needs maintainer **"Approve and run"** on the PR; Vercel backoffice preview built clean.
 - **Go-live checklist for the REAL-TIME path (before `OPS_PULSE_MODE=armed`).** (1) apply the `OpsAlert` migration to the
   DB; (2) get `ops_breach_digest` + `ops_escalation` templates APPROVED and set
   `OPS_PULSE_TPL_*`; (3) confirm manager + owner `User.phone`; (4) bump the cron from hourly to

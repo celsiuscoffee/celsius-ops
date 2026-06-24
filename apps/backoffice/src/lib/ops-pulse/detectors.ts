@@ -457,13 +457,28 @@ export async function detectMenuSnoozed(now: Date): Promise<Breach[]> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("outlet_product_availability")
-    .select("outlet_id")
+    .select("outlet_id, product_id")
     .eq("is_available", false);
   if (error) throw new Error(`outlet_product_availability: ${error.message}`);
+  const rows = (data ?? []) as Array<{ outlet_id: string | null; product_id: string | null }>;
+  if (rows.length === 0) return [];
+
+  // Exclude products that are globally off-menu (is_available=false on the
+  // product) — those aren't an outlet 86'ing a live item. Mirrors the store-menu
+  // board's "ignore globally-disabled items".
+  const productIds = [...new Set(rows.map((r) => r.product_id).filter((x): x is string => !!x))];
+  const disabled = new Set<string>();
+  if (productIds.length > 0) {
+    const { data: prods } = await supabase.from("products").select("id, is_available").in("id", productIds);
+    for (const p of (prods ?? []) as Array<{ id: string; is_available: boolean | null }>) {
+      if (p.is_available === false) disabled.add(p.id);
+    }
+  }
 
   const countBySlug = new Map<string, number>();
-  for (const row of (data ?? []) as Array<{ outlet_id: string | null }>) {
+  for (const row of rows) {
     if (!row.outlet_id) continue;
+    if (row.product_id && disabled.has(row.product_id)) continue; // globally off-menu
     countBySlug.set(row.outlet_id, (countBySlug.get(row.outlet_id) ?? 0) + 1);
   }
   if (countBySlug.size === 0) return [];
@@ -510,6 +525,8 @@ export async function detectNoClockIn(now: Date): Promise<Breach[]> {
     JOIN hr_schedules sch ON sch.id = s.schedule_id
     WHERE s.shift_date = ${ymd}::date
       AND sch.published_at IS NOT NULL
+      AND s.start_time IS NOT NULL
+    ORDER BY s.start_time ASC
   `;
   if (shifts.length === 0) return [];
 
