@@ -164,11 +164,11 @@ function BuildColumn({
 // crop (c_fill) at a sensible width with auto quality/format, so every card's
 // hero photo fills edge-to-edge — no letterboxing, no zoom over-crop, uniform
 // across the grid. Non-Cloudinary URLs pass through unchanged.
-function fitPhoto(url: string): string {
+function fitPhoto(url: string, ar: string): string {
   const marker = "/image/upload/";
   const at = url.indexOf(marker);
   if (at === -1) return url;
-  const tx = "c_fill,ar_4:3,w_640,q_auto,f_auto";
+  const tx = `c_fill,ar_${ar},w_480,q_auto,f_auto`;
   return `${url.slice(0, at + marker.length)}${tx}/${url.slice(at + marker.length)}`;
 }
 
@@ -205,22 +205,27 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
   };
 
   return (
-    <div className="recipe-card flex break-inside-avoid flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      {/* Reference photo (plating expectation) — pulled from the customer
-          catalogue by name; graceful placeholder when there's no match. */}
-      {menu.imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={fitPhoto(menu.imageUrl)}
-          alt={`${menu.name} — plating reference`}
-          className="aspect-[4/3] w-full bg-[#F5F1EA] object-cover"
-        />
-      ) : (
-        <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 bg-[#F5F1EA] text-[#160800]/25">
-          <Coffee className="h-7 w-7" />
-          <span className="text-[10px] font-medium uppercase tracking-wide print:hidden">No reference photo</span>
-        </div>
-      )}
+    <div className="recipe-card flex break-inside-avoid overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      {/* Left: full-height reference photo (plating expectation) from the
+          customer catalogue by name; graceful placeholder when there's no match. */}
+      <div className="relative w-28 shrink-0 self-stretch bg-[#F5F1EA] sm:w-36">
+        {menu.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={fitPhoto(menu.imageUrl, "3:4")}
+            alt={`${menu.name} — plating reference`}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-[#160800]/25">
+            <Coffee className="h-6 w-6" />
+            <span className="px-1 text-center text-[9px] font-medium uppercase tracking-wide print:hidden">No photo</span>
+          </div>
+        )}
+      </div>
+
+      {/* Right column: name, recipe, packaging, plating, cost */}
+      <div className="flex min-w-0 flex-1 flex-col">
 
       {/* Header band — espresso fill, cream text */}
       <div className="rc-head flex items-start justify-between gap-3 bg-[#160800] px-4 py-3 text-[#F5F1EA]">
@@ -241,14 +246,14 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
         {empty ? (
           <p className="py-3 text-center text-gray-400">No recipe yet</p>
         ) : hasTempSplit ? (
-          <div className="grid grid-cols-2 gap-x-4 divide-x divide-gray-100">
+          <div className="space-y-2">
             <BuildColumn
               title="Hot recipe"
               accent="text-orange-600"
               icon={<Flame className="h-3 w-3" />}
               steps={hotSteps}
             />
-            <div className="pl-4">
+            <div className="border-t border-gray-100 pt-2">
               <BuildColumn
                 title="Iced recipe"
                 accent="text-sky-600"
@@ -343,6 +348,7 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }
