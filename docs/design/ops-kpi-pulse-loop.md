@@ -16,11 +16,20 @@ these in real time and, in his words, **"keep the ops manager in check."** That 
 is the whole design. The goal is not *notification*; it's *accountability*.
 
 ## Objective (owner directive 2026-06-24)
-Make the ops manager's misses **visible, owned, and time-bound** — to the manager AND to
-the owner — so a slipped standard cannot quietly stay slipped. North-Star metric for this
-loop: **breach rate trending DOWN and time-to-resolve shrinking, per manager, week over
-week.** If alerts fire forever at a flat rate, the loop is failing and we'll see it in the
-number — that is the point of building it as a loop, not a feed.
+Two things, in the owner's words:
+1. **"Make sure every ops is in check"** — *comprehensive* coverage. The target state watches
+   all four standards (checklist, phone capture, reviews, audit/training), not one. Nothing
+   slips silently anywhere.
+2. **"Use this alert to monitor and remind the management / ops team"** — the day-to-day job
+   is *monitoring + reminding*, not only catching failures after the fact. So every signal
+   gets **two beats**: a **reminder** before/at the deadline (a low-friction nudge — "checklist
+   due in 15 min", "phone-capture running low this shift") and an **alert** after the grace
+   window (a logged, escalatable breach). Remind first; escalate only what the reminder didn't fix.
+
+Underneath both sits one rule that gives it teeth: misses are **visible, owned, and
+time-bound** — to the manager AND to the owner. North-Star metric: **breach rate trending DOWN
+and time-to-resolve shrinking, per manager, week over week.** If alerts fire forever at a flat
+rate, the loop is failing and we'll see it in the number — the point of a loop, not a feed.
 
 ## Status Quo (what happens now)
 - Checklists, audits live in backoffice/staff DB; nobody is paged when one lapses — the daily
@@ -111,6 +120,23 @@ fields (`packages/db/prisma/schema.prisma`):
   event ([[project_reviews_reply_recovery_loop]]); a 1★/risk-flagged review with no decision
   after SLA becomes an `OpsAlert`. Reuse, don't duplicate.
 
+### Alert catalog — proposed defaults (approve or adjust, don't block on these)
+Two beats per signal: **Remind** (nudge, no escalation) → **Alert** (logged breach, escalatable).
+All paged to the outlet's manager; **escalates to the owner** when the alert sits unacked past
+its SLA. Numbers below are my suggested starting values, tuned in the shadow week.
+
+| Signal | Remind (nudge) | Alert (breach) | Severity | Owner escalation SLA |
+|---|---|---|---|---|
+| **Phone capture** | Mid-shift, if rolling capture < 70% | Shift close < **60%** for the outlet | Med | 2 shifts below floor |
+| **Checklist** | 15 min before `dueAt` | **30 min** past `dueAt`, still `PENDING` | High (opening/food-safety), else Med | 90 min past due |
+| **Review** | — (reviews arrive unscheduled) | New `InternalFeedback` ≤ 2★ or risk-flagged GBP negative, **status open** | High if risk-flagged, else Med | 4 h unaddressed (same-day) |
+| **Audit / training** | When the cadence window opens | Cadence window closes with no `COMPLETED` `AuditReport` | Low (lagging) — scorecard line + single reminder, **not** a real-time ping | On the weekly scorecard |
+
+Defaults behind the catalog: **business hours** = outlet operating window (quiet hours queue
+to open); **ack window** = 90 min high / same-day low; **dedupe** = one alert per
+`dedupeKey`; **coalesce** = multiple new breaches in one sweep → one digest per manager, never
+N pings; **morning open-items digest** + **end-of-shift summary** per manager.
+
 ### The engine (mirror the live loop-engine)
 Reuse the proven shape of `apps/backoffice/src/lib/loyalty/loop-engine.ts` +
 `api/cron/loops-send`:
@@ -136,6 +162,20 @@ From `lib/whatsapp.ts`:
   TODO routing hook): match `providerMessageId` / button payload → flip `OpsAlert` to
   `ACKED`/`RESOLVED`, stop the escalation timer.
 
+### Draft WhatsApp templates (submit for approval first — they have lead time)
+Five templates cover everything; each variable is a Cloud API body param. Quick-reply buttons
+open the 24h window so the rest of the exchange is free-form.
+- **`ops_reminder`** (nudge, manager): _"⏰ {{outlet}} — {{what}} due {{when}}. A quick heads-up."_
+- **`ops_breach_digest`** (alert, manager): _"🔴 Ops Pulse — {{outlet}}\n{{count}} item(s) need
+  you:\n{{lines}}"_ · buttons: **[Acknowledge] [Fixing now] [Snooze 1h]**
+- **`ops_escalation`** (owner): _"⚠️ Escalation — {{outlet}}\n{{manager}} hasn't actioned:
+  {{detail}}\nOpen {{duration}}."_ · button: **[View board]**
+- **`ops_scorecard`** (weekly, manager + owner): _"📊 Scorecard — wk {{date}} · {{manager}}\nPhone
+  {{cap}} (tgt {{capTgt}}) · Checklists {{chk}} on-time · Reviews {{revOpen}} open/{{revRec}}
+  recovered · Audits {{audOverdue}} overdue · Alerts {{sent}} sent/{{esc}} escalated"_
+- **`ops_resolved_ack`** (free-form, inside window): plain `sendWhatsAppText` confirmation — no
+  template needed once the manager has replied.
+
 ### The scorecard
 - `GET /api/cron/ops-scorecard` (weekly; daily owner digest optional) aggregates `OpsAlert` +
   raw rates per manager → `ops_scorecard` template to manager **and** owner.
@@ -153,7 +193,7 @@ owner-facing escalation + approve flows** (richer, instant). One ledger, two sen
 - There is effectively **one ops manager** today; routing = `User.role=MANAGER` whose
   `outletId`/`outletIds` covers the breach outlet, **owner as fallback/escalation.** There is
   **no region/area hierarchy** in the schema — fine for one manager, a gap when you add a
-  second (see Open Questions).
+  second (see Decisions #3).
 - `User.phone` is populated and WhatsApp-reachable for the manager and owner.
 - `pos_orders.customer_phone` is the live capture field post-POS-native cutover (it is, per
   `lib/finance/ingestors/pos-native-eod.ts`); legacy `SalesTransaction` has **no** phone and
@@ -179,21 +219,36 @@ severity, drafts the manager message and the owner escalation, learns which aler
 resolved, and tunes thresholds. Same ledger underneath.
 
 ## Recommended Approach
-**A now → B once the loop mechanics are proven on one signal → C later.** The discipline that
-makes this work — the ledger, the ack state machine, the escalation rule, the scorecard — is
-built *once* in A and is identical for all four signals. Adding signals (B) is then cheap.
-Resist shipping all four as a notifier on day one: that's the exact firehose that gets muted.
+The destination is **all four signals in check** (objective #1). The sequence is only how we
+get there without shipping a day-one firehose that gets muted:
 
-## Open Questions
-1. **SLA before escalation to owner** — propose 90 min in business hours. Acceptable?
-2. **Thresholds** — phone-capture floor (propose 80%/outlet/shift)? Checklist grace past
-   `dueAt`? Audit cadence per template?
-3. **One manager or several?** If several are coming, we need an outlet→manager mapping
-   (`Outlet.managerId` or a join table) — the schema has none today.
-4. **Quiet hours** — operating window per outlet, or one global window?
-5. **Scorecard cadence** — weekly to manager + owner; also a short daily owner digest?
-6. **Snooze policy** — can the manager snooze, and does a snooze still surface on the scorecard?
-   (It should — a silenced alert is still a miss.)
+- **Phase 1 (the spine + 2 clean real-time signals) — start here.** `OpsAlert` ledger + engine
+  + escalation sweep + WhatsApp templates, wired to **phone capture + checklist** (the two
+  cleanest real-time signals, with reminder *and* alert beats). Run **one week in shadow** (log
+  what it would page, read it, confirm each breach is real), then arm escalation.
+- **Phase 2 (full coverage).** Add **reviews** (subscribe to the existing recovery pipeline,
+  don't rebuild) + **audit/training** (scorecard line + single reminder, not a real-time ping)
+  + the **weekly scorecard** + the backoffice **Ops Pulse** tab. This is "every ops in check."
+- **Phase 3 (later).** Fold drafting/prioritising/threshold-tuning into the existing
+  `ai-agent/celsius-overview`.
+
+The discipline that makes this a loop — the ledger, the ack state machine, the escalation rule,
+the scorecard — is built **once** in Phase 1 and is identical for all four signals, so Phase 2
+is mostly adding detectors. Comprehensive *coverage*, sequenced *rollout*.
+
+## Decisions — proposed defaults (these are my suggestions; adjust any)
+Owner said "suggest first," so these are decided defaults, not questions. Tune in the shadow week.
+1. **Escalation SLA** → **90 min** business hours (high-severity); same-day for low. ✅ proposed.
+2. **Thresholds** → phone-capture breach < **60%**/outlet/shift (target 80%); checklist grace
+   **30 min** past `dueAt`; audit = cadence window closes unmet. ✅ proposed (per Alert Catalog).
+3. **Routing** → single ops manager today = default assignee for all outlets, owner = escalation.
+   ✅ works now. ⚠️ **the one real gap:** the schema has **no outlet→manager map** (no
+   `Outlet.managerId`, no region hierarchy). The moment a *second* manager exists, we need to
+   add that mapping. Flagging now; not a Phase-1 blocker.
+4. **Quiet hours** → per-outlet operating window; out-of-hours breaches queue and send at open. ✅.
+5. **Scorecard** → **weekly** to manager + owner, plus a short **daily owner digest**. ✅.
+6. **Snooze** → manager may snooze 1h, **but the snooze still counts on the scorecard** — a
+   silenced alert is still a miss. ✅ (this is what stops snooze becoming a mute button).
 
 ## Success Criteria (measurable)
 - Loop ships with the **phone-capture detector** live: breaches logged to `OpsAlert`, paged to
@@ -205,10 +260,10 @@ Resist shipping all four as a notifier on day one: that's the exact firehose tha
   The falling number — not the message stream — is the deliverable.
 
 ## The Assignment (one concrete next step)
-Decide the two things only the owner can: (1) the **escalation SLA** (how long the manager has
-before it lands on your phone — propose 90 min) and (2) the **phone-capture floor** that counts
-as a breach (propose 80% per outlet per shift). Then we wire `OpsAlert` + the phone-capture
-detector + the escalation sweep + the first scorecard — the full loop on one signal. Before
-turning escalation on, run the detector in **shadow mode for one week**: log the breaches it
-*would* have paged, read them, confirm the manager would agree each is real. Watch before you
-arm it.
+Defaults are proposed above — **approve them as-is, or adjust any number** — and I build
+**Phase 1**: the `OpsAlert` ledger + the phone-capture and checklist detectors (reminder +
+alert beats) + the escalation sweep + the WhatsApp templates. It runs **one week in shadow** —
+logging the breaches it *would* have paged so you read them and confirm each is real — and only
+then do we arm escalation. Two lead-time items to kick off in parallel: **submit the five
+WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsApp numbers**
+(`User.phone`). Watch before you arm it.
