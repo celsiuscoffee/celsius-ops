@@ -107,6 +107,7 @@ model Outlet {
   recurringExpenses RecurringExpense[]
   bankStatementLines BankStatementLine[]
   indeedAdsJobs     IndeedAdsJob[]
+  geoRankSnapshots  GeoRankSnapshot[]
 }
 
 enum OutletType {
@@ -1318,6 +1319,30 @@ model ReviewSettings {
   feedbackFields  Json?   @default("[]")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// One row per (outlet, keyword) geogrid sweep. The cells JSON is the raw rank
+// field; atrp/solv/oneReachKm are the precomputed headline metrics so the
+// backoffice can chart trends without re-reducing every cell.
+// See docs/design/gbp-geogrid-rank-loop.md and lib/seo/geogrid.ts.
+model GeoRankSnapshot {
+  id          String   @id @default(uuid())
+  outletId    String
+  outlet      Outlet   @relation(fields: [outletId], references: [id])
+  keyword     String
+  keywordKind String   @default("generic") // "generic" | "locale"
+  gridSize    Int
+  spacingKm   Float
+  biasRadiusM Int
+  cells       Json     // [{ row, col, lat, lng, rank }] — rank null = not in top 20
+  atrp        Float    // average total rank position (lower is better)
+  solv        Float    // share of local voice: % of cells in the top 3
+  oneReachKm  Float    // radius of the largest concentric #1 zone (the objective)
+  foundCells  Int
+  totalCells  Int
+  capturedAt  DateTime @default(now())
+
+  @@index([outletId, keyword, capturedAt])
 }
 
 model InternalFeedback {

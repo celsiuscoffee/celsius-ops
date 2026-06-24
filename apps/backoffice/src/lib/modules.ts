@@ -79,6 +79,7 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
   ],
   reviews: [
     { label: "All Reviews", key: "list" },
+    { label: "Local Rank (SEO)", key: "local-rank" },
     { label: "Settings", key: "settings" },
   ],
   ads: [
@@ -208,7 +209,10 @@ export const NAV_TABS: GrantTab[] = [
     groups: [
       {
         label: "Reviews",
-        modules: [m("reviews", "list", "All Reviews")],
+        modules: [
+          m("reviews", "list", "All Reviews"),
+          m("reviews", "local-rank", "Local Rank (Geogrid)"),
+        ],
       },
       {
         label: "Google Ads",

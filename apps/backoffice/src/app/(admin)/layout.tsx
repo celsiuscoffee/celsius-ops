@@ -330,6 +330,7 @@ const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "All Reviews", href: "/reviews", icon: <Star className={ICON_SIZE} />, moduleKey: "reviews:list" },
           { label: "Feedback Management", href: "/reviews/feedback", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "reviews:list" },
+          { label: "Local Rank", href: "/seo/local-rank", icon: <Target className={ICON_SIZE} />, moduleKey: "reviews:local-rank" },
         ],
       },
       {
