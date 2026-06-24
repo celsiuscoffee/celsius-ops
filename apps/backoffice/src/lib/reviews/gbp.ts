@@ -244,3 +244,68 @@ export async function replyToReview(
     throw new Error(`GBP reply error ${res.status}: ${body}`);
   }
 }
+
+const GBP_INFO_BASE = "https://mybusinessbusinessinformation.googleapis.com/v1";
+
+// Resolve an outlet's precise centre (lat/lng) + Google Places id, so a geogrid
+// scan can place its grid and find the business in each point's results.
+export async function getLocationGeo(
+  locationName: string,
+): Promise<{ lat: number; lng: number; placeId: string | null; title: string | null }> {
+  const token = await getAccessToken();
+  const res = await fetch(
+    `${GBP_INFO_BASE}/${locationName}?readMask=latlng,metadata,title`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GBP location info error ${res.status}: ${body}`);
+  }
+  const data = await res.json();
+  return {
+    lat: data.latlng?.latitude,
+    lng: data.latlng?.longitude,
+    placeId: data.metadata?.placeId ?? null,
+    title: data.title ?? null,
+  };
+}
+
+const GBP_PERF_BASE = "https://businessprofileperformance.googleapis.com/v1";
+
+// The actual search terms customers used to find this location, with monthly
+// impressions — the data source for auto-selecting which keywords to track.
+export async function getTopSearchKeywords(
+  locationName: string,
+  monthsBack = 5,
+): Promise<{ keyword: string; impressions: number }[]> {
+  const token = await getAccessToken();
+  const now = new Date();
+  // Use complete months: end = last month, start = end - (monthsBack-1).
+  const end = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const start = new Date(end.getFullYear(), end.getMonth() - (monthsBack - 1), 1);
+  const params = new URLSearchParams({
+    "monthlyRange.startMonth.year": String(start.getFullYear()),
+    "monthlyRange.startMonth.month": String(start.getMonth() + 1),
+    "monthlyRange.endMonth.year": String(end.getFullYear()),
+    "monthlyRange.endMonth.month": String(end.getMonth() + 1),
+  });
+  const res = await fetch(
+    `${GBP_PERF_BASE}/${locationName}/searchkeywords/impressions/monthly?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GBP performance error ${res.status}: ${body}`);
+  }
+  const data = await res.json();
+  const rows: { searchKeyword?: string; insightsValue?: { value?: string; threshold?: string } }[] =
+    data.searchKeywordsCounts ?? [];
+  return rows
+    .map((r) => ({
+      keyword: (r.searchKeyword ?? "").trim(),
+      // "value" is the real count; "threshold" means "fewer than N" (low volume).
+      impressions: Number(r.insightsValue?.value ?? r.insightsValue?.threshold ?? 0),
+    }))
+    .filter((r) => r.keyword)
+    .sort((a, b) => b.impressions - a.impressions);
+}

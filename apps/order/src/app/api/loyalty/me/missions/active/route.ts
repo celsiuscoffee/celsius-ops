@@ -145,6 +145,20 @@ export async function GET(req: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { startIso, endIso } = currentWeekWindow();
 
+  // 0) Self-healing expiry: flip this member's leftover past-week active
+  //    assignments to 'expired'. Weekly assignments used to linger 'active'
+  //    forever, so a single order could complete the same mission for every
+  //    un-expired past week at once (the stale-week stacking bug — one visit
+  //    minting 3× Free Coffee). The order hook's week-window guard already
+  //    blocks crediting them; this keeps the data clean on each visit, matching
+  //    the lazy "opening the screen IS the rotation trigger" model (no cron).
+  await supabase
+    .from("mission_assignments")
+    .update({ status: "expired", expired_at: new Date().toISOString() })
+    .eq("member_id", r.member.memberId)
+    .eq("status", "active")
+    .lt("week_end_at", startIso);
+
   // 1) Fetch existing assignments for the current week.
   const { data: existing } = await supabase
     .from("mission_assignments")

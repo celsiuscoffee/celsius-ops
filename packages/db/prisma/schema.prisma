@@ -103,6 +103,9 @@ model Outlet {
   reviewSettings    ReviewSettings?
   internalFeedbacks InternalFeedback[]
   reviewReplyDrafts ReviewReplyDraft[]
+  geoGridScans      GeoGridScan[]
+  geoGridKeywords   GeoGridKeyword[]
+  reviewDailySnapshots ReviewDailySnapshot[]
   auditReports      AuditReport[]
   recurringExpenses RecurringExpense[]
   bankStatementLines BankStatementLine[]
@@ -826,6 +829,9 @@ model Menu {
   category     String?
   sellingPrice Decimal?
   storehubId   String   @unique
+  // Plating / presentation note shown on the Recipe Card — the "this is how it
+  // should look / be served" expectation for baristas. Free text, nullable.
+  platingNote  String?
   isActive     Boolean  @default(true)
   lastSyncedAt DateTime @default(now())
   createdAt    DateTime @default(now())
@@ -1408,6 +1414,73 @@ model OpsAlert {
   @@index([status])
   @@index([assigneeUserId, status])
   @@index([outletId])
+}
+
+// Local-rank geogrid scoreboard for the GBP ranking loop. One row per scan
+// (an N×N grid of simulated searches around an outlet for a keyword).
+model GeoGridScan {
+  id           String   @id @default(uuid())
+  outletId     String
+  outlet       Outlet   @relation(fields: [outletId], references: [id])
+  keyword      String
+  gridSize     Int // N for an N×N grid
+  rangeMiles   Float // spacing between points, miles
+  centerLat    Float
+  centerLng    Float
+  placeId      String? // target business Places id
+  status       String   @default("complete") // complete | partial | failed
+  points       Json // [{row,col,lat,lng,rank}] rank null = unranked
+  avgRank      Float? // mean rank over ranked points
+  pctTop3      Float? // % of points ranking 1-3
+  foundPoints  Int      @default(0)
+  totalPoints  Int      @default(0)
+  greenRadiusM Float? // farthest point (m) still ranking ≤3
+  competitors  Json     @default("[]") // [{name, top3Points, avgRank}] who out-ranks us
+  createdAt    DateTime @default(now())
+  createdBy    String?
+
+  @@index([outletId, keyword, createdAt])
+}
+
+// Daily snapshot of our review prominence vs the top nearby competitor.
+// The "daily rank lever": reviews acquired per day vs the rate needed to
+// out-review the leader. Populated by /api/cron/reviews-daily-snapshot.
+model ReviewDailySnapshot {
+  id                String   @id @default(uuid())
+  outletId          String
+  outlet            Outlet   @relation(fields: [outletId], references: [id])
+  snapshotDate      DateTime @db.Date
+  reviewCount       Int // our total Google review count
+  averageRating     Float?
+  recentFetched     Int      @default(0) // # recent reviews fetched (response-rate denominator)
+  recentResponded   Int      @default(0) // of those, # we have replied to
+  reviews7d         Int      @default(0) // reviews created in the last 7 days
+  reviews30d        Int      @default(0) // reviews created in the last 30 days
+  competitorName    String? // top nearby cafe by review count (not us)
+  competitorPlaceId String?
+  competitorReviews Int?
+  competitorRating  Float?
+  createdAt         DateTime @default(now())
+
+  @@unique([outletId, snapshotDate])
+  @@index([outletId, snapshotDate])
+}
+
+// Tracked keyword set per outlet for the automated geogrid loop. Auto-selected
+// monthly from the GBP Performance API (terms customers actually search).
+model GeoGridKeyword {
+  id          String   @id @default(uuid())
+  outletId    String
+  outlet      Outlet   @relation(fields: [outletId], references: [id])
+  keyword     String
+  source      String   @default("auto") // auto | manual
+  impressions Int? // monthly impressions (importance)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([outletId, keyword])
+  @@index([outletId, active])
 }
 
 // ─── ADS MODULE ─────────────────────────────────────────────

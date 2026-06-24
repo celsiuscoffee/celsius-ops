@@ -103,6 +103,18 @@
     {
       "path": "/api/cron/ops-pulse-daily",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/geogrid-keywords",
+      "schedule": "0 6 1 * *"
+    },
+    {
+      "path": "/api/cron/geogrid-scan",
+      "schedule": "0 5 * * 1"
+    },
+    {
+      "path": "/api/cron/reviews-daily-snapshot",
+      "schedule": "0 6 * * *"
     }
   ]
 }
