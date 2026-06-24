@@ -33,11 +33,15 @@ export function composeEscalation(lines: string[]): string {
 }
 
 // The daily roundup — a once-a-day snapshot of everything outstanding in the
-// recipient's lane. The predictable cadence is what builds the discipline.
-export function composeDailyDigest(lines: string[]): string {
-  const n = lines.length;
-  const header = `☀️ Daily Ops Pulse — ${n} open item${n === 1 ? "" : "s"}`;
-  return [header, ...lines.map((l) => `• ${l}`), "", "Clear them today. Reply DONE as you go."].join("\n");
+// recipient's lane, grouped Routine vs Adhoc. The predictable cadence builds the
+// discipline.
+export function composeDailyDigest(routine: string[], adhoc: string[]): string {
+  const total = routine.length + adhoc.length;
+  const parts = [`☀️ Daily Ops Pulse — ${total} open item${total === 1 ? "" : "s"}`];
+  if (routine.length) parts.push("", "🔁 Routine", ...routine.map((l) => `• ${l}`));
+  if (adhoc.length) parts.push("", "⚡ Adhoc", ...adhoc.map((l) => `• ${l}`));
+  parts.push("", "Clear them today. Reply DONE as you go.");
+  return parts.join("\n");
 }
 
 async function sendProactive(
@@ -63,7 +67,7 @@ export function sendOwnerEscalation(phone: string, lines: string[]): Promise<Wha
   return sendProactive(phone, TEMPLATES.ownerEscalation, composeEscalation(lines));
 }
 
-export function sendDailyDigest(phone: string, lines: string[]): Promise<WhatsAppSendResult> {
+export function sendDailyDigest(phone: string, routine: string[], adhoc: string[]): Promise<WhatsAppSendResult> {
   if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
-  return sendProactive(phone, TEMPLATES.dailyDigest, composeDailyDigest(lines));
+  return sendProactive(phone, TEMPLATES.dailyDigest, composeDailyDigest(routine, adhoc));
 }

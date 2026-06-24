@@ -403,6 +403,15 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
   shift today whose `start_time` + 15-min grace passed with no `hr_attendance_logs.clock_in`;
   routed to operations, MED, escalates. (Menu-snooze is truly live; Google reviews are bounded by
   GBP polling — a frequent negative-review fetch is still needed for true real-time there.)
+- **2026-06-24 — POS-open signal + routine/adhoc taxonomy.** `detectPosNotOpen` — an active
+  outlet open today whose `openTime` + 15-min grace passed with no `pos_shifts` session opened
+  (the till isn't logged in → can't trade). HIGH, ops, real-time, escalates; part of "open-ready".
+  Added a **routine vs adhoc** taxonomy (`SIGNAL_CATEGORY`): routine = scheduled expectations
+  (clock-in, POS open, checklist, audit, skill, stock, phone), adhoc = spontaneous events
+  (**reviews**, menu-snoozed, receiving). The daily digest now groups items under 🔁 Routine / ⚡ Adhoc.
+- **Roster-aware sending (next):** `hr_schedule_shifts` is live (110 published shifts/7d, 3 of ~5
+  outlets rostered) — enough to route the open-ready loop to the on-shift person and time sends to
+  shift start/end, falling back to the lead where no roster is published.
 - **Go-live checklist for the REAL-TIME path (before `OPS_PULSE_MODE=armed`).** (1) apply the `OpsAlert` migration to the
   DB; (2) get `ops_breach_digest` + `ops_escalation` templates APPROVED and set
   `OPS_PULSE_TPL_*`; (3) confirm manager + owner `User.phone`; (4) bump the cron from hourly to

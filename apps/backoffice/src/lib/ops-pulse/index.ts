@@ -7,7 +7,7 @@
 //            escalates any incident sitting unacked past the SLA to the owner.
 
 import { prisma } from "@/lib/prisma";
-import { pulseMode, dailyMode, REALTIME_SIGNALS, THRESHOLDS } from "./config";
+import { pulseMode, dailyMode, REALTIME_SIGNALS, THRESHOLDS, categoryFor } from "./config";
 import {
   detectPhoneCapture,
   detectChecklist,
@@ -18,6 +18,7 @@ import {
   detectReceivings,
   detectMenuSnoozed,
   detectNoClockIn,
+  detectPosNotOpen,
 } from "./detectors";
 import { resolveRecipients, resolveOwner } from "./router";
 import { findEscalatable, markEscalated, markSent, recordBreach } from "./ledger";
@@ -50,6 +51,7 @@ async function detectAll(now: Date): Promise<Breach[]> {
     detectReceivings(now).catch(detectorFailed("receivings")),
     detectMenuSnoozed(now).catch(detectorFailed("menu-snoozed")),
     detectNoClockIn(now).catch(detectorFailed("no-clock-in")),
+    detectPosNotOpen(now).catch(detectorFailed("pos-not-open")),
   ]);
   return results.flat();
 }
@@ -181,22 +183,23 @@ export async function runDailyPulse(now = new Date()): Promise<PulseRunResult> {
   const breaches = await detectAll(now);
   const routed = await routeAll(breaches);
 
-  // Group ALL current items by recipient.
-  const byUser = new Map<string, { phone: string | null; name: string; lines: string[] }>();
+  // Group ALL current items by recipient, split routine vs adhoc.
+  const byUser = new Map<string, { phone: string | null; name: string; routine: string[]; adhoc: string[] }>();
   for (const r of routed) {
+    const cat = categoryFor(r.signal);
     for (const a of r.assignees) {
       const key = a.userId || a.phone || a.name;
-      const bucket = byUser.get(key) ?? { phone: a.phone, name: a.name, lines: [] };
-      bucket.lines.push(r.summary);
+      const bucket = byUser.get(key) ?? { phone: a.phone, name: a.name, routine: [], adhoc: [] };
+      (cat === "adhoc" ? bucket.adhoc : bucket.routine).push(r.summary);
       byUser.set(key, bucket);
     }
   }
 
   if (mode === "shadow") {
-    for (const [, bucket] of byUser) {
+    for (const [, b] of byUser) {
       console.log(
         "[ops-pulse:daily:shadow]",
-        JSON.stringify({ to: bucket.name, phone: maskPhone(bucket.phone), items: bucket.lines.length, lines: bucket.lines }),
+        JSON.stringify({ to: b.name, phone: maskPhone(b.phone), routine: b.routine, adhoc: b.adhoc }),
       );
     }
     return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskRouted(routed), sent: 0, escalated: 0 };
@@ -204,14 +207,14 @@ export async function runDailyPulse(now = new Date()): Promise<PulseRunResult> {
 
   // ARMED: one daily digest per recipient who has items.
   let sent = 0;
-  for (const [key, bucket] of byUser) {
-    if (!bucket.phone) {
-      console.warn(`[ops-pulse:daily] items for ${bucket.name} (${key}) but no phone on file — not sent`);
+  for (const [key, b] of byUser) {
+    if (!b.phone) {
+      console.warn(`[ops-pulse:daily] items for ${b.name} (${key}) but no phone on file — not sent`);
       continue;
     }
-    const res = await sendDailyDigest(bucket.phone, bucket.lines);
+    const res = await sendDailyDigest(b.phone, b.routine, b.adhoc);
     if (res.ok) sent += 1;
-    else console.error(`[ops-pulse:daily] digest to ${bucket.name} failed:`, res.error);
+    else console.error(`[ops-pulse:daily] digest to ${b.name} failed:`, res.error);
   }
   return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskRouted(routed), sent, escalated: 0 };
 }

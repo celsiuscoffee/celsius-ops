@@ -13,7 +13,8 @@ export type OpsSignal =
   | "STOCK_COUNT"
   | "RECEIVING"
   | "MENU_SNOOZED"
-  | "NO_CLOCK_IN";
+  | "NO_CLOCK_IN"
+  | "POS_NOT_OPEN";
 
 export type Severity = "LOW" | "MED" | "HIGH";
 

@@ -28,7 +28,7 @@ export function dailyMode(): PulseMode {
 // instant; incidents (checklist, receiving) are good candidates too. Override via
 // OPS_PULSE_REALTIME_SIGNALS (comma-separated).
 export const REALTIME_SIGNALS: Set<string> = new Set(
-  (process.env.OPS_PULSE_REALTIME_SIGNALS || "REVIEW,MENU_SNOOZED,NO_CLOCK_IN")
+  (process.env.OPS_PULSE_REALTIME_SIGNALS || "REVIEW,MENU_SNOOZED,NO_CLOCK_IN,POS_NOT_OPEN")
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),
@@ -73,6 +73,10 @@ export const THRESHOLDS = {
     // Minutes past a published shift's start_time before "no clock-in" counts.
     graceMinutes: 15,
   },
+  posOpen: {
+    // Minutes past an outlet's openTime before "POS not opened" (no till session) counts.
+    graceMinutes: 15,
+  },
   escalation: {
     // Minutes an alert may sit OPEN (unacked) before it escalates to the owner.
     slaMinutes: 90,
@@ -97,6 +101,28 @@ export const RECIPIENTS: Record<string, string[]> = {
   barista: splitNames(process.env.OPS_PULSE_BARISTA_RECIPIENTS, "Syafiq Kaberi"),
   kitchen: splitNames(process.env.OPS_PULSE_KITCHEN_RECIPIENTS, "Chef Bo"),
 };
+
+// Routine vs adhoc taxonomy. Routine = scheduled expectations checked at their
+// due time (clock-in, POS open, checklist, audits, stock, phone capture); adhoc =
+// spontaneous events that fire on occurrence (reviews, 86'd items, receiving
+// disputes). Owner: reviews are adhoc. Used to group the digest.
+export type SignalCategory = "routine" | "adhoc";
+
+export const SIGNAL_CATEGORY: Record<string, SignalCategory> = {
+  NO_CLOCK_IN: "routine",
+  POS_NOT_OPEN: "routine",
+  CHECKLIST: "routine",
+  AUDIT: "routine", // outlet audits + staff skill training
+  STOCK_COUNT: "routine",
+  PHONE_CAPTURE: "routine",
+  REVIEW: "adhoc",
+  MENU_SNOOZED: "adhoc",
+  RECEIVING: "adhoc",
+};
+
+export function categoryFor(signal: string): SignalCategory {
+  return SIGNAL_CATEGORY[signal] ?? "routine";
+}
 
 // Map an auditor roleType to its routing discipline.
 export function routeForRole(role: string): "barista" | "kitchen" | "operations" {

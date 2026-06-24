@@ -550,3 +550,48 @@ export async function detectNoClockIn(now: Date): Promise<Breach[]> {
   }
   return breaches;
 }
+
+// POS not opened: an active outlet open today whose openTime + grace has passed
+// with no pos_shifts session opened — the till isn't logged in, so it can't
+// trade. Part of "open-ready". pos_shifts.outlet_id is the loyalty outlet id.
+export async function detectPosNotOpen(now: Date): Promise<Breach[]> {
+  const { ymd, dayStart } = mytToday(now);
+  const mytNow = new Date(now.getTime() + 8 * 3_600_000);
+  const dow = mytNow.getUTCDay() === 0 ? 7 : mytNow.getUTCDay(); // 1=Mon … 7=Sun
+
+  const outlets = await prisma.outlet.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true, name: true, openTime: true, daysOpen: true, loyaltyOutletId: true },
+  });
+  const grace = THRESHOLDS.posOpen.graceMinutes;
+  const due = outlets.filter((o) => {
+    if (!o.openTime || !o.loyaltyOutletId) return false;
+    if (o.daysOpen && o.daysOpen.length > 0 && !o.daysOpen.includes(dow)) return false; // closed today
+    const open = new Date(`${ymd}T${o.openTime}:00+08:00`);
+    return now.getTime() > open.getTime() + grace * 60_000;
+  });
+  if (due.length === 0) return [];
+
+  const loyaltyIds = due.map((o) => o.loyaltyOutletId as string);
+  const opened = await prisma.$queryRaw<Array<{ outlet_id: string | null }>>`
+    SELECT DISTINCT outlet_id FROM pos_shifts
+    WHERE opened_at >= ${dayStart} AND outlet_id = ANY(${loyaltyIds})
+  `;
+  const openedSet = new Set(opened.map((r) => r.outlet_id).filter((x): x is string => !!x));
+
+  const breaches: Breach[] = [];
+  for (const o of due) {
+    if (o.loyaltyOutletId && openedSet.has(o.loyaltyOutletId)) continue;
+    breaches.push({
+      signal: "POS_NOT_OPEN",
+      outletId: o.id,
+      outletName: o.name,
+      severity: "HIGH",
+      routeKey: "operations",
+      dedupeKey: `POS_NOT_OPEN:${o.id}:${ymd}`,
+      summary: `POS not opened at ${o.name} — opens ${o.openTime}, no till session yet`,
+      detail: { openTime: o.openTime },
+    });
+  }
+  return breaches;
+}
