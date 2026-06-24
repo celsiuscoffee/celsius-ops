@@ -95,6 +95,10 @@
     {
       "path": "/api/cron/reviews-auto-reply",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/ops-pulse",
+      "schedule": "0 * * * *"
     }
   ]
 }

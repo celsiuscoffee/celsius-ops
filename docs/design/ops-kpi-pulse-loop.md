@@ -315,3 +315,20 @@ logging the breaches it *would* have paged so you read them and confirm each is 
 then do we arm escalation. Two lead-time items to kick off in parallel: **submit the five
 WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsApp numbers**
 (`User.phone`). Watch before you arm it.
+
+## Build log
+- **2026-06-24 — channel = WhatsApp 1:1 DM.** Owner chose 1:1 DMs over a group (WhatsApp
+  Groups API gated behind a verified badge + a messaging tier an internal workload won't reach;
+  group deferred behind verification). DMs work on today's standard number and keep tap-to-ack.
+- **2026-06-24 — Phase 1a (shadow) shipped.** Read-only detect-and-log, **no sends, no schema
+  change**:
+  - `apps/backoffice/src/lib/ops-pulse/` — `config` (mode + thresholds), `detectors`
+    (`detectPhoneCapture` via `pos_orders`, `detectChecklist` via Prisma `Checklist`),
+    `router` (outlet→MANAGER, owner fallback), `index` (`runOpsPulse`, masks phones, logs
+    would-be pages).
+  - `apps/backoffice/src/app/api/cron/ops-pulse/route.ts` — `checkCronAuth`-gated cron.
+  - `vercel.json` — `/api/cron/ops-pulse` **hourly** while shadowing.
+  - `OPS_PULSE_MODE` env (`off|shadow|armed`, unset ⇒ shadow). Deploying starts the shadow week.
+- **Next — Phase 1b (arm).** After a shadow week is reviewed: add the `OpsAlert` ledger
+  (+migration), the WhatsApp DM sender + approved templates, the inbound-ack hook on the
+  existing webhook, the escalation sweep, and flip the cron to a 15-min cadence.
