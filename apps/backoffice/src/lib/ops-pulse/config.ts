@@ -28,7 +28,7 @@ export function dailyMode(): PulseMode {
 // instant; incidents (checklist, receiving) are good candidates too. Override via
 // OPS_PULSE_REALTIME_SIGNALS (comma-separated).
 export const REALTIME_SIGNALS: Set<string> = new Set(
-  (process.env.OPS_PULSE_REALTIME_SIGNALS || "REVIEW,MENU_SNOOZED")
+  (process.env.OPS_PULSE_REALTIME_SIGNALS || "REVIEW,MENU_SNOOZED,NO_CLOCK_IN")
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),
@@ -68,6 +68,10 @@ export const THRESHOLDS = {
   menuSnooze: {
     // Page an outlet once its snoozed (86'd / out-of-stock) item count reaches this.
     minItems: 1,
+  },
+  attendance: {
+    // Minutes past a published shift's start_time before "no clock-in" counts.
+    graceMinutes: 15,
   },
   escalation: {
     // Minutes an alert may sit OPEN (unacked) before it escalates to the owner.

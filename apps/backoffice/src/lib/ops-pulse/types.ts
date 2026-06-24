@@ -12,7 +12,8 @@ export type OpsSignal =
   | "AUDIT"
   | "STOCK_COUNT"
   | "RECEIVING"
-  | "MENU_SNOOZED";
+  | "MENU_SNOOZED"
+  | "NO_CLOCK_IN";
 
 export type Severity = "LOW" | "MED" | "HIGH";
 

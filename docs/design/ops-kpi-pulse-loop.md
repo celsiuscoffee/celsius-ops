@@ -397,6 +397,12 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
     `ops_daily_pulse` template → the team gets a daily habit-forming digest with zero migration.
     Once that's a discipline, arm the real-time + escalation path (`OPS_PULSE_MODE=armed`,
     needs the OpsAlert migration + the breach/escalation templates).
+- **2026-06-24 — real-time tier + staff no-show.** Split signals into a fast real-time tier
+  (`OPS_PULSE_REALTIME_SIGNALS`, cron now every 5 min) vs the daily digest. Real-time defaults:
+  **REVIEW, MENU_SNOOZED, NO_CLOCK_IN**. New `detectNoClockIn` — a published `hr_schedule_shifts`
+  shift today whose `start_time` + 15-min grace passed with no `hr_attendance_logs.clock_in`;
+  routed to operations, MED, escalates. (Menu-snooze is truly live; Google reviews are bounded by
+  GBP polling — a frequent negative-review fetch is still needed for true real-time there.)
 - **Go-live checklist for the REAL-TIME path (before `OPS_PULSE_MODE=armed`).** (1) apply the `OpsAlert` migration to the
   DB; (2) get `ops_breach_digest` + `ops_escalation` templates APPROVED and set
   `OPS_PULSE_TPL_*`; (3) confirm manager + owner `User.phone`; (4) bump the cron from hourly to

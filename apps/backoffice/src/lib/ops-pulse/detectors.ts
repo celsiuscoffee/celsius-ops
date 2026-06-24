@@ -482,3 +482,71 @@ export async function detectMenuSnoozed(now: Date): Promise<Breach[]> {
   }
   return breaches;
 }
+
+// Staff no-show: a published shift today whose start_time + grace has passed with
+// no clock-in. Leaves the shift understaffed — urgent, routed to operations. The
+// roster (hr_schedule_shifts/hr_schedules) and clock-ins (hr_attendance_logs)
+// live in the same DB as Prisma, so we query them raw. One breach per staff/day.
+export async function detectNoClockIn(now: Date): Promise<Breach[]> {
+  const { ymd } = mytToday(now);
+  const dayStart = new Date(`${ymd}T00:00:00+08:00`);
+  const dayEnd = new Date(dayStart.getTime() + 86_400_000);
+
+  const shifts = await prisma.$queryRaw<
+    Array<{ user_id: string; outlet_id: string | null; start_time: string }>
+  >`
+    SELECT s.user_id, sch.outlet_id, s.start_time::text AS start_time
+    FROM hr_schedule_shifts s
+    JOIN hr_schedules sch ON sch.id = s.schedule_id
+    WHERE s.shift_date = ${ymd}::date
+      AND sch.published_at IS NOT NULL
+  `;
+  if (shifts.length === 0) return [];
+
+  const clockRows = await prisma.$queryRaw<Array<{ user_id: string }>>`
+    SELECT DISTINCT user_id FROM hr_attendance_logs
+    WHERE clock_in >= ${dayStart} AND clock_in < ${dayEnd}
+  `;
+  const clockedIn = new Set(clockRows.map((r) => r.user_id));
+
+  const grace = THRESHOLDS.attendance.graceMinutes;
+  const candidates = shifts.filter((s) => {
+    if (!s.user_id || clockedIn.has(s.user_id)) return false;
+    const start = new Date(`${ymd}T${s.start_time}+08:00`);
+    return now.getTime() > start.getTime() + grace * 60_000;
+  });
+  if (candidates.length === 0) return [];
+
+  const userIds = [...new Set(candidates.map((c) => c.user_id))];
+  const outletIds = [...new Set(candidates.map((c) => c.outlet_id).filter((x): x is string => !!x))];
+  const [users, outlets] = await Promise.all([
+    prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }),
+    outletIds.length
+      ? prisma.outlet.findMany({ where: { id: { in: outletIds } }, select: { id: true, name: true } })
+      : Promise.resolve([] as Array<{ id: string; name: string }>),
+  ]);
+  const userName = new Map<string, string>();
+  for (const u of users) userName.set(u.id, u.name);
+  const outletName = new Map<string, string>();
+  for (const o of outlets) outletName.set(o.id, o.name);
+
+  // One breach per staff per day (earliest unmatched shift wins).
+  const seen = new Set<string>();
+  const breaches: Breach[] = [];
+  for (const c of candidates) {
+    if (seen.has(c.user_id)) continue;
+    seen.add(c.user_id);
+    const oName = c.outlet_id ? outletName.get(c.outlet_id) ?? c.outlet_id : "—";
+    breaches.push({
+      signal: "NO_CLOCK_IN",
+      outletId: c.outlet_id ?? "",
+      outletName: oName,
+      severity: "MED",
+      routeKey: "operations",
+      dedupeKey: `NO_CLOCK_IN:${c.user_id}:${ymd}`,
+      summary: `${userName.get(c.user_id) ?? c.user_id} did not clock in — scheduled ${c.start_time.slice(0, 5)} at ${oName}`,
+      detail: { userId: c.user_id, scheduledStart: c.start_time, date: ymd },
+    });
+  }
+  return breaches;
+}

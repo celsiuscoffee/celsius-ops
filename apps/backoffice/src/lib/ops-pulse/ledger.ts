@@ -79,7 +79,7 @@ export async function findEscalatable(slaMinutes: number, now: Date): Promise<Es
   return prisma.opsAlert.findMany({
     where: {
       status: "OPEN",
-      signal: { in: ["CHECKLIST", "REVIEW", "RECEIVING", "AUDIT"] },
+      signal: { in: ["CHECKLIST", "REVIEW", "RECEIVING", "AUDIT", "NO_CLOCK_IN"] },
       escalatedAt: null,
       sentAt: { not: null, lt: cutoff },
     },
