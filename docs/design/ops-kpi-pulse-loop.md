@@ -198,17 +198,44 @@ So the channel split is:
 - **Alerts → WhatsApp 1:1 DM** to the accountable manager. Supported, keeps the ack buttons,
   and 1:1 is *better* for "keep her in check" anyway — a group diffuses ownership ("someone
   will get it"). Multiple recipients = **fan-out** (send the template to each DM), not a group.
-- **Team visibility / reminders → a shared group on Telegram** (`lib/telegram.ts`, already
-  wired): native group + supergroup support, inline buttons, threaded replies, no 8-cap, no
-  eligibility gate. Post the daily/weekly **scorecard** and a read-only **pulse feed** there.
+- **Team visibility / reminders → a group.** A Telegram group (`lib/telegram.ts`, already
+  wired) is the no-gate, no-cap, buttons-included option that works *today* — but the owner
+  has opted to pursue a **WhatsApp** group via verification instead (see Channel decision below).
 - Shared visibility doesn't actually *need* a group thread: the `OpsAlert` ledger + the Ops
   Pulse board + the scorecard are the shared source of truth; the group is just a convenience surface.
 - (Unofficial WhatsApp-Web automation — Baileys / whatsapp-web.js — *can* post to any group but
   **violates Meta's ToS and risks a number ban**. Not for a business-critical ops system.)
 
-The internal escalation channel today is already **Telegram** (`lib/telegram.ts`), so this
-split reuses what exists: **WhatsApp DMs** for the manager-facing accountable alerts,
-**Telegram group** for the team-facing scorecard/feed, one `OpsAlert` ledger behind both.
+### Channel decision (owner, 2026-06-24)
+Owner wants the pulse delivered **in a WhatsApp group**, will **create a new** one (clears the
+existing-group blocker), and — over a Telegram group or DM fan-out — chose to **pursue
+verification and keep it on WhatsApp.** The number is a **standard WhatsApp Business account
+(no verified badge) today**, so the Groups API is not available yet. Two honest catches:
+
+1. **The badge clears one gate, not necessarily the Groups gate.** Verification removes the
+   Official-Business-Account requirement, but the Groups API *also* reportedly needs a very
+   high messaging tier (~100k business-initiated conversations / 24h) an internal ops workload
+   will never reach — so verification may **still** not unlock groups. **Confirm Groups-API
+   availability with the BSP/Meta before banking on it.** The **8-participant cap** applies
+   regardless (ops + management must be ≤7 to fit one group).
+2. **Verification path + timeline.** Two routes:
+   - **Meta Verified (paid subscription)** — the realistic SMB route. Check **WhatsApp Business
+     app → Settings / Business Tools → Meta Verified**; if the option isn't shown it's **not
+     in your region yet** (rolled out India/Brazil/Indonesia/Colombia first — **confirm
+     Malaysia**). ~3 business days when available.
+   - **Free OBA (notability-based)** — needs press coverage / large social following; granted
+     selectively; **2–8 weeks** and uncertain for an SMB.
+
+**The build does NOT wait on verification.** The loop — `OpsAlert` ledger, detectors,
+escalation, scorecard — is **channel-agnostic**; the sender is one swappable function.
+- **Now:** build the engine, deliver via **WhatsApp 1:1 DM** to the manager (+owner). Works on
+  today's standard number, keeps tap-to-ack buttons, and is the stronger accountability surface.
+- **In parallel:** pursue Meta Verified; confirm Groups-API + tier eligibility with the BSP.
+- **When/if unlocked:** add a **group sender** (new API group, invite link, acks via text reply
+  — groups have no buttons). A one-file change, not a re-architecture.
+
+The group is a *presentation surface*; the loop is the substance. A weeks-long, uncertain
+verification shouldn't stall the ops value DMs can deliver this week.
 
 ## Premises (verify before building)
 - There is effectively **one ops manager** today; routing = `User.role=MANAGER` whose
