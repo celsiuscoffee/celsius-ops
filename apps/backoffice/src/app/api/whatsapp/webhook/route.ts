@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
 
   const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
   if (mode === "subscribe" && !!verifyToken && token === verifyToken) {
+    console.log("[whatsapp:webhook] verify OK — challenge echoed");
     // Meta expects the raw challenge string echoed back with 200.
     return new NextResponse(challenge ?? "", { status: 200 });
   }
