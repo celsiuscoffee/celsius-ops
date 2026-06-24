@@ -7,7 +7,7 @@
 //            escalates any incident sitting unacked past the SLA to the owner.
 
 import { prisma } from "@/lib/prisma";
-import { pulseMode, dailyMode, REALTIME_SIGNALS, THRESHOLDS, categoryFor } from "./config";
+import { pulseMode, dailyMode, REALTIME_SIGNALS, THRESHOLDS, categoryFor, TEAM_NOTIFY_SIGNALS } from "./config";
 import {
   detectPhoneCapture,
   detectChecklist,
@@ -21,7 +21,7 @@ import {
   detectPosNotOpen,
   detectRestockNeeded,
 } from "./detectors";
-import { resolveRecipients, resolveOwner } from "./router";
+import { resolveRecipients, resolveOwner, resolveOutletTeam } from "./router";
 import { findEscalatable, markEscalated, markSent, recordBreach } from "./ledger";
 import { sendManagerDigest, sendOwnerEscalation, sendDailyDigest } from "./sender";
 import type { Assignee, Breach, PulseRunResult, RoutedBreach } from "./types";
@@ -58,15 +58,31 @@ async function detectAll(now: Date): Promise<Breach[]> {
   return results.flat();
 }
 
-// Attach each breach's discipline recipients (resolved once per routeKey).
-async function routeAll(breaches: Breach[]): Promise<RoutedBreach[]> {
+// Attach each breach's recipients: the discipline lead(s) (cached per routeKey)
+// plus — for team-work signals like stock take — the on-shift outlet team.
+async function routeAll(breaches: Breach[], now: Date): Promise<RoutedBreach[]> {
   const recipientsByRoute = new Map<string, Assignee[]>();
+  const teamByOutlet = new Map<string, Assignee[]>();
   const routed: RoutedBreach[] = [];
   for (const b of breaches) {
     if (!recipientsByRoute.has(b.routeKey)) {
       recipientsByRoute.set(b.routeKey, await resolveRecipients(b.routeKey));
     }
-    routed.push({ ...b, assignees: recipientsByRoute.get(b.routeKey) ?? [] });
+    const assignees: Assignee[] = [...(recipientsByRoute.get(b.routeKey) ?? [])];
+    if (TEAM_NOTIFY_SIGNALS.has(b.signal) && b.outletId) {
+      if (!teamByOutlet.has(b.outletId)) {
+        teamByOutlet.set(b.outletId, await resolveOutletTeam(b.outletId, now));
+      }
+      const seen = new Set(assignees.map((a) => a.userId || a.phone));
+      for (const t of teamByOutlet.get(b.outletId) ?? []) {
+        const k = t.userId || t.phone;
+        if (k && !seen.has(k)) {
+          assignees.push(t);
+          seen.add(k);
+        }
+      }
+    }
+    routed.push({ ...b, assignees });
   }
   return routed;
 }
@@ -84,7 +100,7 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
   // Real-time tier only — the fast pulse alerts on the instant signals (reviews,
   // menu-snoozed, …); everything else surfaces in the daily digest.
   const breaches = (await detectAll(now)).filter((b) => REALTIME_SIGNALS.has(b.signal));
-  const routed = await routeAll(breaches);
+  const routed = await routeAll(breaches, now);
 
   // ── SHADOW: log what we *would* page; never message anyone, never persist. ──
   if (mode === "shadow") {
@@ -183,7 +199,7 @@ export async function runDailyPulse(now = new Date()): Promise<PulseRunResult> {
   }
 
   const breaches = await detectAll(now);
-  const routed = await routeAll(breaches);
+  const routed = await routeAll(breaches, now);
 
   // Group ALL current items by recipient, split routine vs adhoc.
   const byUser = new Map<string, { phone: string | null; name: string; routine: string[]; adhoc: string[] }>();

@@ -125,6 +125,21 @@ export function categoryFor(signal: string): SignalCategory {
   return SIGNAL_CATEGORY[signal] ?? "routine";
 }
 
+// Restock-needed is held OFF until stock counts are reliable — par-level alerts
+// are noise while StockBalance is stale (78% of items read below reorder today,
+// because counts aren't being done). Fix stock counts first (the nudge to
+// Ariff/Adam), then flip OPS_PULSE_RESTOCK_ENABLED=true.
+export const RESTOCK_ENABLED = (process.env.OPS_PULSE_RESTOCK_ENABLED || "false").toLowerCase() === "true";
+
+// Signals that ALSO nudge the on-shift outlet team (not just the discipline
+// lead), because the team does the work — e.g. stock take. Comma-separated.
+export const TEAM_NOTIFY_SIGNALS: Set<string> = new Set(
+  (process.env.OPS_PULSE_TEAM_NOTIFY_SIGNALS || "STOCK_COUNT")
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean),
+);
+
 // Map an auditor roleType to its routing discipline.
 export function routeForRole(role: string): "barista" | "kitchen" | "operations" {
   if (role === "barista_head") return "barista";

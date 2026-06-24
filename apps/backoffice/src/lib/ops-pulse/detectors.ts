@@ -10,7 +10,7 @@
 import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
-import { AUDIT, THRESHOLDS, routeForRole } from "./config";
+import { AUDIT, THRESHOLDS, routeForRole, RESTOCK_ENABLED } from "./config";
 import type { Breach } from "./types";
 
 // Today's MYT (UTC+8) calendar date + the UTC instant of its 00:00. pos_orders
@@ -375,14 +375,21 @@ export async function detectStockCount(now: Date): Promise<Breach[]> {
   const cadenceDays = THRESHOLDS.stockCount.cadenceDays;
   const cutoff = new Date(now.getTime() - cadenceDays * 86_400_000);
 
-  const [outlets, recent] = await Promise.all([
+  const [outlets, recent, lastCounts] = await Promise.all([
     prisma.outlet.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
     prisma.stockCount.findMany({
       where: { status: { in: ["SUBMITTED", "REVIEWED"] }, countDate: { gte: cutoff } },
       select: { outletId: true },
     }),
+    prisma.stockCount.groupBy({
+      by: ["outletId"],
+      where: { status: { in: ["SUBMITTED", "REVIEWED"] } },
+      _max: { countDate: true },
+    }),
   ]);
   const counted = new Set(recent.map((r) => r.outletId));
+  const lastByOutlet = new Map<string, Date | null>();
+  for (const r of lastCounts) lastByOutlet.set(r.outletId, r._max.countDate ?? null);
 
   const { ymd } = mytToday(now);
   const bucket = Math.floor(
@@ -392,15 +399,18 @@ export async function detectStockCount(now: Date): Promise<Breach[]> {
   const breaches: Breach[] = [];
   for (const o of outlets) {
     if (counted.has(o.id)) continue;
+    const last = lastByOutlet.get(o.id) ?? null;
+    const daysSince = last ? Math.floor((now.getTime() - new Date(last).getTime()) / 86_400_000) : null;
+    const when = daysSince === null ? "no count on record" : `${daysSince}d ago`;
     breaches.push({
       signal: "STOCK_COUNT",
       outletId: o.id,
       outletName: o.name,
-      severity: "LOW",
+      severity: "MED",
       routeKey: "operations",
       dedupeKey: `STOCK_COUNT:${o.id}:${bucket}`,
-      summary: `No stock count submitted at ${o.name} in ${cadenceDays}d`,
-      detail: { cadenceDays },
+      summary: `Stock take overdue at ${o.name} — last count ${when}. Please do a stock take today.`,
+      detail: { cadenceDays, daysSince, lastCount: last ? new Date(last).toISOString().slice(0, 10) : null },
     });
   }
   return breaches;
@@ -600,6 +610,8 @@ export async function detectPosNotOpen(now: Date): Promise<Breach[]> {
 // reorder point (ParLevel), per active outlet. A routine procurement list — one
 // breach per outlet (count + a sample of items), never a ping per item.
 export async function detectRestockNeeded(now: Date): Promise<Breach[]> {
+  // Held off until stock counts are reliable (StockBalance is stale today).
+  if (!RESTOCK_ENABLED) return [];
   const { ymd } = mytToday(now);
 
   const pars = await prisma.parLevel.findMany({

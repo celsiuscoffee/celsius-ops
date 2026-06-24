@@ -66,3 +66,26 @@ export async function resolveOwner(): Promise<Assignee | null> {
   if (!owner) return null;
   return { userId: owner.id, name: owner.name, phone: owner.phone, role: owner.role, fallback: false };
 }
+
+// The on-shift OUTLET TEAM today — staff on a published shift at this outlet, for
+// work the team itself does (e.g. stock take). Resolved to active users with a
+// phone. Empty when no roster is published for the outlet today.
+export async function resolveOutletTeam(outletId: string, now: Date): Promise<Assignee[]> {
+  if (!outletId) return [];
+  const ymd = new Date(now.getTime() + 8 * 3_600_000).toISOString().slice(0, 10);
+  const rows = await prisma.$queryRaw<Array<{ user_id: string | null }>>`
+    SELECT DISTINCT s.user_id
+    FROM hr_schedule_shifts s
+    JOIN hr_schedules sch ON sch.id = s.schedule_id
+    WHERE sch.outlet_id = ${outletId}
+      AND sch.published_at IS NOT NULL
+      AND s.shift_date = ${ymd}::date
+  `;
+  const ids = rows.map((r) => r.user_id).filter((x): x is string => !!x);
+  if (ids.length === 0) return [];
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids }, status: "ACTIVE", phone: { not: null } },
+    select: { id: true, name: true, phone: true, role: true },
+  });
+  return users.map((u) => ({ userId: u.id, name: u.name, phone: u.phone, role: u.role, fallback: false }));
+}
