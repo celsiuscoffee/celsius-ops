@@ -104,6 +104,7 @@ model Outlet {
   internalFeedbacks InternalFeedback[]
   reviewReplyDrafts ReviewReplyDraft[]
   geoGridScans      GeoGridScan[]
+  geoGridKeywords   GeoGridKeyword[]
   auditReports      AuditReport[]
   recurringExpenses RecurringExpense[]
   bankStatementLines BankStatementLine[]
@@ -1399,10 +1400,28 @@ model GeoGridScan {
   foundPoints  Int      @default(0)
   totalPoints  Int      @default(0)
   greenRadiusM Float? // farthest point (m) still ranking ≤3
+  competitors  Json     @default("[]") // [{name, top3Points, avgRank}] who out-ranks us
   createdAt    DateTime @default(now())
   createdBy    String?
 
   @@index([outletId, keyword, createdAt])
+}
+
+// Tracked keyword set per outlet for the automated geogrid loop. Auto-selected
+// monthly from the GBP Performance API (terms customers actually search).
+model GeoGridKeyword {
+  id          String   @id @default(uuid())
+  outletId    String
+  outlet      Outlet   @relation(fields: [outletId], references: [id])
+  keyword     String
+  source      String   @default("auto") // auto | manual
+  impressions Int? // monthly impressions (importance)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([outletId, keyword])
+  @@index([outletId, active])
 }
 
 // ─── ADS MODULE ─────────────────────────────────────────────
