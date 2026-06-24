@@ -201,11 +201,10 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
         <img
           src={menu.imageUrl}
           alt={`${menu.name} — plating reference`}
-          className="h-36 w-full bg-[#F5F1EA] object-cover"
-          style={{ transform: `scale(${(menu.imageZoom ?? 100) / 100})`, transformOrigin: "center" }}
+          className="h-44 w-full bg-[#F5F1EA] object-contain"
         />
       ) : (
-        <div className="flex h-36 w-full flex-col items-center justify-center gap-1 bg-[#F5F1EA] text-[#160800]/25">
+        <div className="flex h-44 w-full flex-col items-center justify-center gap-1 bg-[#F5F1EA] text-[#160800]/25">
           <Coffee className="h-7 w-7" />
           <span className="text-[10px] font-medium uppercase tracking-wide print:hidden">No reference photo</span>
         </div>
