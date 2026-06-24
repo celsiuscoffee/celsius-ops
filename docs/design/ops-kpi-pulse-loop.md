@@ -348,6 +348,15 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
   OUTLET *or* STAFF report of the role. LOW severity, deduped per outlet/role/window, **never
   escalated** (lagging, not a now-fix-it incident). A role only fires if it has an active
   `AuditTemplate`. (`AUDIT.cadenceDays` / `OPS_PULSE_AUDIT_ROLES` to tune.)
+- **2026-06-24 — audit split: outlet coverage vs. staff training.** Owner clarified the two
+  audit types behave differently:
+  - **Outlet audits = 1×/week per outlet** → `detectOutletAudit` (OUTLET templates: Barista
+    Station Audit, Kitchen Quality Audit), weekly coverage.
+  - **Skill audits = # staff trained** → `detectSkillTraining` (STAFF templates: Barista
+    Skills, Kitchen Crew Skills). Cross-DB join: HR position (`hr_employee_profiles` —
+    Barista×29, Kitchen Crew×10) → staff→outlet (`User`) → completed skill `AuditReport`s.
+    Reports **trained/eligible per outlet** (currently **0/39 trained**). LOW severity, never
+    escalated — a coaching/scorecard number, not an incident.
 - **Go-live checklist (before flipping to armed).** (1) apply the `OpsAlert` migration to the
   DB; (2) get `ops_breach_digest` + `ops_escalation` templates APPROVED and set
   `OPS_PULSE_TPL_*`; (3) confirm manager + owner `User.phone`; (4) bump the cron from hourly to

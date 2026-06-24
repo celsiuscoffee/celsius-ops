@@ -8,6 +8,7 @@
 //     dueAt + grace window, at an active outlet.
 
 import { prisma } from "@/lib/prisma";
+import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { AUDIT, THRESHOLDS } from "./config";
 import type { Breach } from "./types";
 
@@ -198,20 +199,20 @@ export async function detectReviews(now: Date): Promise<Breach[]> {
   return breaches;
 }
 
-// Audit/training coverage gap: a tracked auditor role (e.g. barista_head,
-// food_director) with no COMPLETED report at an active outlet inside the cadence
-// window. Low-frequency by nature, so this is a LOW-severity reminder, deduped
-// to once per outlet/role/cadence-window — never escalated (it's lagging, not a
-// now-fix-it incident). A role is only checked if it has an active
-// AuditTemplate, so configuring a not-yet-created role is a harmless no-op.
-export async function detectAudit(now: Date): Promise<Breach[]> {
+// OUTLET-audit coverage gap: a tracked role's OUTLET audit (e.g. Barista Station
+// Audit, Kitchen Quality Audit) with no COMPLETED report at an active outlet
+// inside the cadence window (weekly). LOW severity, deduped per
+// outlet/role/window, never escalated (lagging, not a now-fix-it incident). A
+// role is only checked if it has an active OUTLET template. Per-staff SKILL
+// audits are handled separately by detectSkillTraining.
+export async function detectOutletAudit(now: Date): Promise<Breach[]> {
   if (AUDIT.roles.length === 0) return [];
   const cutoff = new Date(now.getTime() - AUDIT.cadenceDays * 86_400_000);
 
   const [outlets, templates] = await Promise.all([
     prisma.outlet.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
     prisma.auditTemplate.findMany({
-      where: { isActive: true, roleType: { in: AUDIT.roles } },
+      where: { isActive: true, auditTarget: "OUTLET", roleType: { in: AUDIT.roles } },
       select: { id: true, roleType: true },
     }),
   ]);
@@ -254,6 +255,97 @@ export async function detectAudit(now: Date): Promise<Breach[]> {
         dedupeKey: `AUDIT:${role}:${o.id}:${bucket}`,
         summary: `No ${role} audit at ${o.name} in ${AUDIT.cadenceDays}d`,
         detail: { role, cadenceDays: AUDIT.cadenceDays },
+      });
+    }
+  }
+  return breaches;
+}
+
+// SKILL-audit (training) coverage: for each STAFF skill template, how many
+// eligible staff (by HR position) at an outlet have a COMPLETED skill audit
+// vs. how many should. The number trained is the metric. Cross-DB: positions
+// live in hr_employee_profiles (HR Supabase), staff→outlet + reports in Prisma.
+// "Trained" is cumulative (any completed skill audit), re-nudged once per cadence
+// window. LOW severity, never escalated — a scorecard/coaching number.
+export async function detectSkillTraining(now: Date): Promise<Breach[]> {
+  if (AUDIT.roles.length === 0) return [];
+
+  const templates = await prisma.auditTemplate.findMany({
+    where: { isActive: true, auditTarget: "STAFF", roleType: { in: AUDIT.roles } },
+    select: { id: true, name: true, roleType: true, jobRoleFilter: true },
+  });
+  if (templates.length === 0) return [];
+
+  // Fetch the eligible roster once: HR profiles whose position matches any tracked
+  // template's jobRoleFilter.
+  const positions = [...new Set(templates.flatMap((t) => t.jobRoleFilter))].filter(Boolean);
+  if (positions.length === 0) return [];
+  const { data: profiles, error } = await hrSupabaseAdmin
+    .from("hr_employee_profiles")
+    .select("user_id, position")
+    .in("position", positions);
+  if (error) throw new Error(`hr_employee_profiles: ${error.message}`);
+
+  const idsByPosition = new Map<string, Set<string>>();
+  for (const p of (profiles ?? []) as Array<{ user_id: string | null; position: string | null }>) {
+    if (!p.user_id || !p.position) continue;
+    const set = idsByPosition.get(p.position) ?? new Set<string>();
+    set.add(p.user_id);
+    idsByPosition.set(p.position, set);
+  }
+
+  const { ymd } = mytToday(now);
+  const bucket = Math.floor(
+    new Date(`${ymd}T00:00:00+08:00`).getTime() / (AUDIT.cadenceDays * 86_400_000),
+  );
+
+  const breaches: Breach[] = [];
+  for (const t of templates) {
+    const eligibleIds = new Set<string>();
+    for (const pos of t.jobRoleFilter) for (const id of idsByPosition.get(pos) ?? []) eligibleIds.add(id);
+    if (eligibleIds.size === 0) continue;
+    const eligibleList = [...eligibleIds];
+
+    const [staff, trainedRows] = await Promise.all([
+      prisma.user.findMany({
+        where: { id: { in: eligibleList }, status: "ACTIVE" },
+        select: { id: true, outletId: true, outlet: { select: { name: true, status: true } } },
+      }),
+      prisma.auditReport.findMany({
+        where: { templateId: t.id, status: "COMPLETED", auditeeId: { in: eligibleList } },
+        select: { auditeeId: true },
+      }),
+    ]);
+    const trained = new Set(trainedRows.map((r) => r.auditeeId).filter((x): x is string => !!x));
+
+    // Tally eligible vs trained per active outlet (staff need an outlet to route).
+    const byOutlet = new Map<string, { name: string; eligible: number; trained: number }>();
+    for (const s of staff) {
+      if (!s.outletId || s.outlet?.status !== "ACTIVE") continue;
+      const agg = byOutlet.get(s.outletId) ?? { name: s.outlet?.name ?? s.outletId, eligible: 0, trained: 0 };
+      agg.eligible += 1;
+      if (trained.has(s.id)) agg.trained += 1;
+      byOutlet.set(s.outletId, agg);
+    }
+
+    for (const [outletId, agg] of byOutlet) {
+      const untrained = agg.eligible - agg.trained;
+      if (untrained <= 0) continue;
+      breaches.push({
+        signal: "AUDIT",
+        outletId,
+        outletName: agg.name,
+        severity: "LOW",
+        dedupeKey: `SKILL:${t.roleType}:${outletId}:${bucket}`,
+        summary: `${t.name}: ${agg.trained}/${agg.eligible} staff trained — ${agg.name} (${untrained} to go)`,
+        detail: {
+          kind: "skill_training",
+          template: t.name,
+          role: t.roleType,
+          eligible: agg.eligible,
+          trained: agg.trained,
+          untrained,
+        },
       });
     }
   }
