@@ -5,7 +5,7 @@ import { formatRM } from "@celsius/shared";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import { Coffee, Search, Loader2, Printer, ArrowLeft, X, Flame, Snowflake } from "lucide-react";
+import { Coffee, Search, Loader2, Printer, ArrowLeft, X, Flame, Snowflake, Utensils, Pencil, Check } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 /**
@@ -55,6 +55,9 @@ type MenuItem = {
   ingredientCount: number;
   packagingCount: number;
   ingredients: Ingredient[];
+  imageUrl: string | null; // reference photo from the customer catalogue (by name)
+  imageZoom: number; // catalogue display zoom (%) so the ref matches the menu
+  platingNote: string | null; // plating / presentation expectation
 };
 
 // ── Build order ───────────────────────────────────────────────────────────
@@ -157,7 +160,7 @@ function BuildColumn({
   );
 }
 
-function RecipeCard({ menu, showCosts }: { menu: MenuItem; showCosts: boolean }) {
+function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: boolean; onSaved?: () => void }) {
   const ingredients = menu.ingredients.filter((i) => i.kind === "ingredient");
   const packaging = menu.ingredients.filter((i) => i.kind === "packaging");
   const hasTempSplit = ingredients.some((i) => i.modifier != null);
@@ -167,8 +170,47 @@ function RecipeCard({ menu, showCosts }: { menu: MenuItem; showCosts: boolean })
   const pkgRows = buildPackaging(packaging);
   const empty = ingredients.length === 0 && packaging.length === 0;
 
+  // Plating note — inline editable, persisted to Menu.platingNote.
+  const [note, setNote] = useState(menu.platingNote ?? "");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const trimmedNote = note.trim();
+  const saveNote = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/inventory/menus/${menu.id}/plating`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platingNote: note }),
+      });
+      if (res.ok) {
+        setEditing(false);
+        onSaved?.();
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="recipe-card flex break-inside-avoid flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      {/* Reference photo (plating expectation) — pulled from the customer
+          catalogue by name; graceful placeholder when there's no match. */}
+      {menu.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={menu.imageUrl}
+          alt={`${menu.name} — plating reference`}
+          className="h-36 w-full bg-[#F5F1EA] object-cover"
+          style={{ transform: `scale(${(menu.imageZoom ?? 100) / 100})`, transformOrigin: "center" }}
+        />
+      ) : (
+        <div className="flex h-36 w-full flex-col items-center justify-center gap-1 bg-[#F5F1EA] text-[#160800]/25">
+          <Coffee className="h-7 w-7" />
+          <span className="text-[10px] font-medium uppercase tracking-wide print:hidden">No reference photo</span>
+        </div>
+      )}
+
       {/* Header band — espresso fill, cream text */}
       <div className="rc-head flex items-start justify-between gap-3 bg-[#160800] px-4 py-3 text-[#F5F1EA]">
         <div className="min-w-0">
@@ -226,6 +268,45 @@ function RecipeCard({ menu, showCosts }: { menu: MenuItem; showCosts: boolean })
         </div>
       )}
 
+      {/* Plating expectation — editable; only prints when a note is set. */}
+      <div className={`border-t border-gray-100 px-4 py-2 text-[11px] ${trimmedNote && !editing ? "" : "print:hidden"}`}>
+        <div className="mb-0.5 flex items-center justify-between">
+          <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+            <Utensils className="h-3 w-3" /> Plating
+          </p>
+          {!editing && trimmedNote && (
+            <button onClick={() => setEditing(true)} title="Edit plating note" className="text-gray-400 hover:text-terracotta print:hidden">
+              <Pencil className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+        {editing ? (
+          <div className="print:hidden">
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={3}
+              placeholder="How it should look / be served — e.g. foam art, dust cocoa, wooden board + napkin"
+              className="w-full resize-y rounded border border-gray-200 p-2 text-[11px] text-gray-700 focus:border-terracotta focus:outline-none"
+            />
+            <div className="mt-1 flex items-center justify-end gap-1">
+              <button onClick={() => { setNote(menu.platingNote ?? ""); setEditing(false); }} disabled={saving} className="rounded px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-100">
+                Cancel
+              </button>
+              <button onClick={saveNote} disabled={saving} className="flex items-center gap-1 rounded bg-green-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-green-700">
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
+              </button>
+            </div>
+          </div>
+        ) : trimmedNote ? (
+          <p className="whitespace-pre-line text-gray-700">{trimmedNote}</p>
+        ) : (
+          <button onClick={() => setEditing(true)} className="text-gray-400 hover:text-terracotta print:hidden">
+            + Add plating note
+          </button>
+        )}
+      </div>
+
       {/* Cost summary (off by default — toggle on for costing) */}
       {showCosts && (menu.ingredientCost > 0 || menu.cogs > 0) && (
         <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-2 text-[11px]">
@@ -256,7 +337,7 @@ function RecipeCard({ menu, showCosts }: { menu: MenuItem; showCosts: boolean })
 }
 
 export default function RecipeCardsPage() {
-  const { data: menus = [], isLoading: loading } = useFetch<MenuItem[]>("/api/inventory/menus");
+  const { data: menus = [], isLoading: loading, mutate: reload } = useFetch<MenuItem[]>("/api/inventory/menus");
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string[]>([]);
   const [onlyWithRecipe, setOnlyWithRecipe] = useState(true);
@@ -312,7 +393,7 @@ export default function RecipeCardsPage() {
           <h2 className="text-xl font-semibold text-gray-900">Recipe Cards</h2>
         </div>
         <p className="mt-0.5 text-sm text-gray-500">
-          Barista build cards from the Bill of Materials — Hot &amp; Iced builds side by side. {filtered.length} of {menus.length} shown.
+          Barista build cards from the Bill of Materials — reference photo, Hot &amp; Iced builds, and plating notes. {filtered.length} of {menus.length} shown.
         </p>
 
         <div className="mt-4 flex flex-col gap-3">
@@ -373,7 +454,7 @@ export default function RecipeCardsPage() {
       ) : (
         <div className="rc-grid mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 print:mt-0">
           {filtered.map((menu) => (
-            <RecipeCard key={menu.id} menu={menu} showCosts={showCosts} />
+            <RecipeCard key={menu.id} menu={menu} showCosts={showCosts} onSaved={reload} />
           ))}
         </div>
       )}

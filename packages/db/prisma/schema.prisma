@@ -829,6 +829,9 @@ model Menu {
   category     String?
   sellingPrice Decimal?
   storehubId   String   @unique
+  // Plating / presentation note shown on the Recipe Card — the "this is how it
+  // should look / be served" expectation for baristas. Free text, nullable.
+  platingNote  String?
   isActive     Boolean  @default(true)
   lastSyncedAt DateTime @default(now())
   createdAt    DateTime @default(now())
