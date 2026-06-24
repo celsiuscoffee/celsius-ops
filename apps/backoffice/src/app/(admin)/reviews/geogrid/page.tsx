@@ -39,6 +39,40 @@ function km(m: number | null): string {
   return (m / 1000).toFixed(2) + " km";
 }
 
+function distM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// The KPI: #1 within 1km, Top-2 within 5km, Top-3 within 10km.
+const KPIS = [
+  { label: "#1 within 1 km", ringKm: 1, target: 1 },
+  { label: "Top 2 within 5 km", ringKm: 5, target: 2 },
+  { label: "Top 3 within 10 km", ringKm: 10, target: 3 },
+];
+
+// % of scanned points within `ringKm` that hit the target rank. Only measurable
+// if the scan actually reaches that ring.
+function evalKpi(
+  scan: Scan,
+  ringKm: number,
+  target: number,
+): { measurable: boolean; pct: number; n: number } {
+  const ranked = scan.points.filter((p) => p.rank != null) as (GridPoint & { rank: number })[];
+  const dists = ranked.map((p) => ({ p, d: distM(scan.centerLat, scan.centerLng, p.lat, p.lng) }));
+  const maxDist = dists.length ? Math.max(...dists.map((x) => x.d)) : 0;
+  const covered = maxDist >= ringKm * 1000 * 0.85;
+  const inRing = dists.filter((x) => x.d <= ringKm * 1000);
+  if (!covered || inRing.length === 0) return { measurable: false, pct: 0, n: 0 };
+  const met = inRing.filter((x) => x.p.rank <= target).length;
+  return { measurable: true, pct: Math.round((met / inRing.length) * 100), n: inRing.length };
+}
+
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-xl border border-border bg-white p-4">
@@ -173,8 +207,43 @@ export default function GeogridPage() {
 
       {active ? (
         <>
+          {/* KPI vs target — #1@1km · Top-2@5km · Top-3@10km */}
+          <div className="mt-6 rounded-xl border border-border bg-white p-4">
+            <div className="mb-3 text-sm font-medium text-foreground">KPI vs target</div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {KPIS.map((k) => {
+                const r = evalKpi(active, k.ringKm, k.target);
+                const tone = !r.measurable
+                  ? { ring: "border-border", txt: "text-muted-foreground", dot: "bg-neutral-300" }
+                  : r.pct >= 90
+                    ? { ring: "border-emerald-200 bg-emerald-50", txt: "text-emerald-700", dot: "bg-emerald-500" }
+                    : r.pct >= 50
+                      ? { ring: "border-amber-200 bg-amber-50", txt: "text-amber-700", dot: "bg-amber-500" }
+                      : { ring: "border-red-200 bg-red-50", txt: "text-red-700", dot: "bg-red-500" };
+                return (
+                  <div key={k.label} className={`rounded-lg border p-3 ${tone.ring}`}>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`h-2 w-2 rounded-full ${tone.dot}`} />
+                      <span className="text-xs font-medium text-foreground">{k.label}</span>
+                    </div>
+                    {r.measurable ? (
+                      <p className={`mt-1 text-xl font-bold ${tone.txt}`}>
+                        {r.pct}% <span className="text-[11px] font-normal text-muted-foreground">of {r.n} pts hit it</span>
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted-foreground">needs a ≥{k.ringKm} km scan</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              % of scanned points within each ring hitting the target rank. Run a ~10 km scan to grade all three at once.
+            </p>
+          </div>
+
           {/* Metrics — the two goals */}
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Avg rank" value={active.avgRank != null ? active.avgRank.toFixed(1) : "–"} sub="lower is better" />
             <Stat label="% in top 3" value={`${Math.round(active.pctTop3 ?? 0)}%`} sub="more green = better" />
             <Stat label="Green radius" value={km(active.greenRadiusM)} sub="rank ≤3 reach (goal #2)" />
