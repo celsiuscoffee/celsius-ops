@@ -182,12 +182,33 @@ open the 24h window so the rest of the exchange is free-form.
 - A backoffice **"Ops Pulse"** tab (reuse the `loyalty/loops` + Reviews-Ops dashboard pattern):
   live board, history, per-manager trend, SLA breaches.
 
-### Channel note (Telegram vs WhatsApp)
-The internal escalation channel today is **Telegram**, which has native inline buttons +
-callback queries (`lib/telegram.ts`) — richer for ops control and zero template approval.
-WhatsApp is where the managers actually live and what the owner asked for. Recommend:
-**WhatsApp for the manager-facing pulse** (meet them where they are), keep **Telegram for the
-owner-facing escalation + approve flows** (richer, instant). One ledger, two senders.
+### Channels — DM for accountability, group for visibility (and why the group goes on Telegram)
+**Can WhatsApp send to a group?** Technically yes — Meta shipped a **Groups API** for the
+Cloud API (2026) — but it is **not viable for this use case**, for four reasons:
+- **Eligibility gate.** Group messaging reportedly requires an **Official Business Account**
+  (green tick) **and a very high messaging tier (~100k business-initiated conversations / 24h).**
+  An internal ops-alert workload will never reach that — so we likely can't turn it on at all.
+- **Can't use your existing group.** The API can only message groups it **created
+  programmatically**; an ops team's manually-made WhatsApp group can't be retrofitted.
+- **Opt-in + 8-person cap.** Members join via invite link (no force-add), max **8 incl. admin**.
+- **No buttons in groups.** Group messages are text/media/template only — which **kills the
+  tap-to-ack quick-reply** the accountability loop depends on.
+
+So the channel split is:
+- **Alerts → WhatsApp 1:1 DM** to the accountable manager. Supported, keeps the ack buttons,
+  and 1:1 is *better* for "keep her in check" anyway — a group diffuses ownership ("someone
+  will get it"). Multiple recipients = **fan-out** (send the template to each DM), not a group.
+- **Team visibility / reminders → a shared group on Telegram** (`lib/telegram.ts`, already
+  wired): native group + supergroup support, inline buttons, threaded replies, no 8-cap, no
+  eligibility gate. Post the daily/weekly **scorecard** and a read-only **pulse feed** there.
+- Shared visibility doesn't actually *need* a group thread: the `OpsAlert` ledger + the Ops
+  Pulse board + the scorecard are the shared source of truth; the group is just a convenience surface.
+- (Unofficial WhatsApp-Web automation — Baileys / whatsapp-web.js — *can* post to any group but
+  **violates Meta's ToS and risks a number ban**. Not for a business-critical ops system.)
+
+The internal escalation channel today is already **Telegram** (`lib/telegram.ts`), so this
+split reuses what exists: **WhatsApp DMs** for the manager-facing accountable alerts,
+**Telegram group** for the team-facing scorecard/feed, one `OpsAlert` ledger behind both.
 
 ## Premises (verify before building)
 - There is effectively **one ops manager** today; routing = `User.role=MANAGER` whose
