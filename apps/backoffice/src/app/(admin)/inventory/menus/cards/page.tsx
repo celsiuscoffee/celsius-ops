@@ -160,6 +160,18 @@ function BuildColumn({
   );
 }
 
+// Catalogue photos are Cloudinary-hosted. Ask Cloudinary for a consistent 4:3
+// crop (c_fill) at a sensible width with auto quality/format, so every card's
+// hero photo fills edge-to-edge — no letterboxing, no zoom over-crop, uniform
+// across the grid. Non-Cloudinary URLs pass through unchanged.
+function fitPhoto(url: string): string {
+  const marker = "/image/upload/";
+  const at = url.indexOf(marker);
+  if (at === -1) return url;
+  const tx = "c_fill,ar_4:3,w_640,q_auto,f_auto";
+  return `${url.slice(0, at + marker.length)}${tx}/${url.slice(at + marker.length)}`;
+}
+
 function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: boolean; onSaved?: () => void }) {
   const ingredients = menu.ingredients.filter((i) => i.kind === "ingredient");
   const packaging = menu.ingredients.filter((i) => i.kind === "packaging");
@@ -199,12 +211,12 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
       {menu.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={menu.imageUrl}
+          src={fitPhoto(menu.imageUrl)}
           alt={`${menu.name} — plating reference`}
-          className="h-44 w-full bg-[#F5F1EA] object-contain"
+          className="aspect-[4/3] w-full bg-[#F5F1EA] object-cover"
         />
       ) : (
-        <div className="flex h-44 w-full flex-col items-center justify-center gap-1 bg-[#F5F1EA] text-[#160800]/25">
+        <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 bg-[#F5F1EA] text-[#160800]/25">
           <Coffee className="h-7 w-7" />
           <span className="text-[10px] font-medium uppercase tracking-wide print:hidden">No reference photo</span>
         </div>
