@@ -103,6 +103,7 @@ model Outlet {
   reviewSettings    ReviewSettings?
   internalFeedbacks InternalFeedback[]
   reviewReplyDrafts ReviewReplyDraft[]
+  geoGridScans      GeoGridScan[]
   auditReports      AuditReport[]
   recurringExpenses RecurringExpense[]
   bankStatementLines BankStatementLine[]
@@ -1377,6 +1378,31 @@ model ReviewReplyDraft {
 
   @@index([status])
   @@index([outletId])
+}
+
+// Local-rank geogrid scoreboard for the GBP ranking loop. One row per scan
+// (an N×N grid of simulated searches around an outlet for a keyword).
+model GeoGridScan {
+  id           String   @id @default(uuid())
+  outletId     String
+  outlet       Outlet   @relation(fields: [outletId], references: [id])
+  keyword      String
+  gridSize     Int // N for an N×N grid
+  rangeMiles   Float // spacing between points, miles
+  centerLat    Float
+  centerLng    Float
+  placeId      String? // target business Places id
+  status       String   @default("complete") // complete | partial | failed
+  points       Json // [{row,col,lat,lng,rank}] rank null = unranked
+  avgRank      Float? // mean rank over ranked points
+  pctTop3      Float? // % of points ranking 1-3
+  foundPoints  Int      @default(0)
+  totalPoints  Int      @default(0)
+  greenRadiusM Float? // farthest point (m) still ranking ≤3
+  createdAt    DateTime @default(now())
+  createdBy    String?
+
+  @@index([outletId, keyword, createdAt])
 }
 
 // ─── ADS MODULE ─────────────────────────────────────────────
