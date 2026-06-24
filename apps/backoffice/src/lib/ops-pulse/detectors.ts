@@ -118,3 +118,82 @@ export async function detectChecklist(now: Date): Promise<Breach[]> {
   }
   return breaches;
 }
+
+// Trim a free-text review to a one-line preview for the digest.
+function clip(s: string | null | undefined, n = 60): string {
+  const t = (s ?? "").replace(/\s+/g, " ").trim();
+  return t.length <= n ? t : `${t.slice(0, n - 1)}…`;
+}
+
+// Bad reviews still needing attention. Two sources, both reused from the live
+// reviews module rather than re-detected:
+//   • InternalFeedback — QR-gate feedback (already 1–3★); page the ≤2★ that are
+//     still "open".
+//   • ReviewReplyDraft — negative (1–3★) Google reviews still "pending" a reply.
+// Bounded to the recency window so arming doesn't burst on historical backlog;
+// the ledger then dedupes each review to a single page.
+export async function detectReviews(now: Date): Promise<Breach[]> {
+  const { internalMaxRating, googleMaxRating, recencyHours } = THRESHOLDS.review;
+  const since = new Date(now.getTime() - recencyHours * 3_600_000);
+  const breaches: Breach[] = [];
+
+  const feedback = await prisma.internalFeedback.findMany({
+    where: {
+      status: "open",
+      rating: { lte: internalMaxRating },
+      createdAt: { gte: since },
+    },
+    select: {
+      id: true,
+      outletId: true,
+      rating: true,
+      feedback: true,
+      outlet: { select: { name: true, status: true } },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 100,
+  });
+  for (const f of feedback) {
+    if (f.outlet.status !== "ACTIVE") continue;
+    breaches.push({
+      signal: "REVIEW",
+      outletId: f.outletId,
+      outletName: f.outlet.name,
+      severity: f.rating <= 1 ? "HIGH" : "MED",
+      dedupeKey: `REVIEW:IF:${f.id}`,
+      summary: `${f.rating}★ feedback — ${f.outlet.name}: "${clip(f.feedback)}"`,
+      detail: { source: "internal_feedback", feedbackId: f.id, rating: f.rating },
+    });
+  }
+
+  const drafts = await prisma.reviewReplyDraft.findMany({
+    where: {
+      status: "pending",
+      rating: { lte: googleMaxRating },
+      createdAt: { gte: since },
+    },
+    select: {
+      id: true,
+      outletId: true,
+      rating: true,
+      comment: true,
+      outlet: { select: { name: true, status: true } },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 100,
+  });
+  for (const d of drafts) {
+    if (d.outlet.status !== "ACTIVE") continue;
+    breaches.push({
+      signal: "REVIEW",
+      outletId: d.outletId,
+      outletName: d.outlet.name,
+      severity: d.rating <= 1 ? "HIGH" : "MED",
+      dedupeKey: `REVIEW:GBP:${d.id}`,
+      summary: `${d.rating}★ Google review awaiting reply — ${d.outlet.name}: "${clip(d.comment)}"`,
+      detail: { source: "google_review", draftId: d.id, rating: d.rating },
+    });
+  }
+
+  return breaches;
+}

@@ -1379,6 +1379,37 @@ model ReviewReplyDraft {
   @@index([outletId])
 }
 
+// ─── OPS KPI PULSE ──────────────────────────────────────────
+// Alert ledger for the internal ops pulse (docs/design/ops-kpi-pulse-loop.md).
+// One row per (signal, outlet, period) breach — the spine that dedupes alerts,
+// tracks the ack/escalation lifecycle, and feeds the manager scorecard.
+// Written only in armed mode; shadow mode logs without persisting. Plain scalar
+// FKs (no Prisma relations) — append-only log, no cascade needs. Table created
+// by manual SQL migration; never `prisma db push`.
+model OpsAlert {
+  id                String    @id @default(uuid())
+  signal            String // PHONE_CAPTURE | CHECKLIST | REVIEW
+  outletId          String
+  severity          String // LOW | MED | HIGH
+  dedupeKey         String    @unique
+  summary           String
+  detail            Json
+  status            String    @default("OPEN") // OPEN | ACKED | ESCALATED | RESOLVED | EXPIRED
+  assigneeUserId    String?
+  channel           String?
+  providerMessageId String?
+  sentAt            DateTime?
+  ackedAt           DateTime?
+  escalatedAt       DateTime?
+  resolvedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([status])
+  @@index([assigneeUserId, status])
+  @@index([outletId])
+}
+
 // ─── ADS MODULE ─────────────────────────────────────────────
 // Google Ads performance + invoice tracking.
 // MCC: 415-243-7144, child account: 890-356-3535.

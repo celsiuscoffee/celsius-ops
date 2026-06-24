@@ -1,14 +1,17 @@
-// Ops KPI Pulse runner. Orchestrates detect → route → (shadow) log.
+// Ops KPI Pulse runner. Orchestrates detect → route → (shadow) log / (armed)
+// persist + page + escalate. See docs/design/ops-kpi-pulse-loop.md.
 //
-// Phase 1 is SHADOW-ONLY: it never messages anyone and never writes the ledger.
-// It logs each breach it *would* page so the owner can read a week of output and
-// confirm every breach is real before we arm escalation (Phase 1b). See
-// docs/design/ops-kpi-pulse-loop.md → "The Assignment".
+//   shadow — logs each breach it *would* page; no writes, no sends.
+//   armed  — records each breach in the OpsAlert ledger (deduped), DMs the
+//            accountable manager one digest of their NEW items, then escalates
+//            any incident sitting unacked past the SLA to the owner.
 
-import { pulseMode } from "./config";
-import { detectPhoneCapture, detectChecklist } from "./detectors";
-import { resolveAssignee } from "./router";
-import type { Breach, PulseRunResult, RoutedBreach } from "./types";
+import { pulseMode, THRESHOLDS } from "./config";
+import { detectPhoneCapture, detectChecklist, detectReviews } from "./detectors";
+import { resolveAssignee, resolveOwner } from "./router";
+import { findEscalatable, markEscalated, markSent, recordBreach } from "./ledger";
+import { sendManagerDigest, sendOwnerEscalation } from "./sender";
+import type { Assignee, Breach, PulseRunResult, RoutedBreach } from "./types";
 
 // Last-4 only — shadow output goes to plaintext logs / cron responses, so never
 // emit a full number there.
@@ -18,56 +21,110 @@ function maskPhone(p: string | null): string | null {
   return d.length <= 4 ? "****" : `••••${d.slice(-4)}`;
 }
 
+function detectorFailed(name: string) {
+  return (err: unknown) => {
+    console.error(`[ops-pulse] ${name} detector failed:`, err);
+    return [] as Breach[];
+  };
+}
+
 export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
   const mode = pulseMode();
   if (mode === "off") {
-    return { mode, ranAt: now.toISOString(), breachCount: 0, routed: [], sent: 0 };
+    return { mode, ranAt: now.toISOString(), breachCount: 0, routed: [], sent: 0, escalated: 0 };
   }
 
-  // Detectors are isolated: one failing must not sink the whole run.
-  const [phone, checklist] = await Promise.all([
-    detectPhoneCapture(now).catch((err) => {
-      console.error("[ops-pulse] phone-capture detector failed:", err);
-      return [] as Breach[];
-    }),
-    detectChecklist(now).catch((err) => {
-      console.error("[ops-pulse] checklist detector failed:", err);
-      return [] as Breach[];
-    }),
+  // Detectors are isolated: one failing must not sink the run.
+  const [phone, checklist, reviews] = await Promise.all([
+    detectPhoneCapture(now).catch(detectorFailed("phone-capture")),
+    detectChecklist(now).catch(detectorFailed("checklist")),
+    detectReviews(now).catch(detectorFailed("reviews")),
   ]);
-  const breaches: Breach[] = [...phone, ...checklist];
+  const breaches: Breach[] = [...phone, ...checklist, ...reviews];
 
   // Resolve the accountable assignee once per outlet.
-  const assigneeByOutlet = new Map<string, Awaited<ReturnType<typeof resolveAssignee>>>();
+  const assigneeByOutlet = new Map<string, Assignee | null>();
   const routed: RoutedBreach[] = [];
   for (const b of breaches) {
     if (!assigneeByOutlet.has(b.outletId)) {
       assigneeByOutlet.set(b.outletId, await resolveAssignee(b.outletId));
     }
-    const a = assigneeByOutlet.get(b.outletId) ?? null;
-    routed.push({ ...b, assignee: a ? { ...a, phone: maskPhone(a.phone) } : null });
+    routed.push({ ...b, assignee: assigneeByOutlet.get(b.outletId) ?? null });
   }
 
-  // Sending is Phase 1b. If someone flips OPS_PULSE_MODE=armed before then,
-  // be loud and stay safe — degrade to shadow rather than silently do nothing.
-  if (mode === "armed") {
-    console.warn("[ops-pulse] mode=armed but the sender/ledger are not wired yet — running as shadow (no sends).");
+  const maskedRouted = (): RoutedBreach[] =>
+    routed.map((r) => ({ ...r, assignee: r.assignee ? { ...r.assignee, phone: maskPhone(r.assignee.phone) } : null }));
+
+  // ── SHADOW: log what we *would* page; never message anyone, never persist. ──
+  if (mode === "shadow") {
+    for (const r of routed) {
+      console.log(
+        "[ops-pulse:shadow]",
+        JSON.stringify({
+          signal: r.signal,
+          severity: r.severity,
+          outlet: r.outletName,
+          wouldNotify: r.assignee
+            ? { name: r.assignee.name, phone: maskPhone(r.assignee.phone), fallbackToOwner: r.assignee.fallback }
+            : null,
+          summary: r.summary,
+        }),
+      );
+    }
+    return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskedRouted(), sent: 0, escalated: 0 };
   }
 
+  // ── ARMED: persist + page new alerts + escalate stale ones. ──
+  // Record every breach (dedupe in the ledger); bucket the NEW ones per assignee.
+  const newByUser = new Map<string, { phone: string | null; name: string; lines: string[]; alertIds: string[] }>();
   for (const r of routed) {
-    console.log(
-      "[ops-pulse:shadow]",
-      JSON.stringify({
-        signal: r.signal,
-        severity: r.severity,
-        outlet: r.outletName,
-        wouldNotify: r.assignee
-          ? { name: r.assignee.name, phone: r.assignee.phone, fallbackToOwner: r.assignee.fallback }
-          : null,
-        summary: r.summary,
-      }),
-    );
+    const { alert, isNew } = await recordBreach(r, r.assignee);
+    if (!isNew) continue;
+    const key = r.assignee?.userId ?? "__unrouted__";
+    const bucket = newByUser.get(key) ?? {
+      phone: r.assignee?.phone ?? null,
+      name: r.assignee?.name ?? "unrouted",
+      lines: [],
+      alertIds: [],
+    };
+    bucket.lines.push(r.summary);
+    bucket.alertIds.push(alert.id);
+    newByUser.set(key, bucket);
   }
 
-  return { mode: "shadow", ranAt: now.toISOString(), breachCount: breaches.length, routed, sent: 0 };
+  let sent = 0;
+  for (const [key, bucket] of newByUser) {
+    if (!bucket.phone) {
+      console.warn(`[ops-pulse] ${bucket.alertIds.length} new alert(s) for ${key} but no phone on file — not sent`);
+      continue;
+    }
+    const res = await sendManagerDigest(bucket.phone, bucket.lines);
+    // Mark sent even on failure so the escalation timer starts; a failed send is
+    // surfaced via the log and the alert simply stays OPEN to escalate.
+    for (const id of bucket.alertIds) await markSent(id, res.ok ? res.messageId ?? null : null);
+    if (res.ok) sent += 1;
+    else console.error(`[ops-pulse] manager digest to ${bucket.name} failed:`, res.error);
+  }
+
+  // Escalation sweep — incidents unacked past SLA go to the owner, batched.
+  let escalated = 0;
+  const due = await findEscalatable(THRESHOLDS.escalation.slaMinutes, now);
+  if (due.length > 0) {
+    const owner = await resolveOwner();
+    if (owner?.phone) {
+      const res = await sendOwnerEscalation(owner.phone, due.map((a) => a.summary));
+      if (res.ok) {
+        for (const a of due) {
+          await markEscalated(a.id);
+          escalated += 1;
+        }
+      } else {
+        console.error("[ops-pulse] owner escalation failed:", res.error);
+      }
+    } else {
+      console.warn(`[ops-pulse] ${due.length} alert(s) due for escalation but no owner phone on file`);
+    }
+  }
+
+  return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskedRouted(), sent, escalated };
 }

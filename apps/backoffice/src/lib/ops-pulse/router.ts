@@ -21,13 +21,17 @@ export async function resolveAssignee(outletId: string): Promise<Assignee | null
   if (manager) {
     return { userId: manager.id, name: manager.name, phone: manager.phone, role: manager.role, fallback: false };
   }
+  // No outlet-matched manager → fall back to the owner (also the escalation target).
+  const owner = await resolveOwner();
+  return owner ? { ...owner, fallback: true } : null;
+}
 
+// The owner — escalation target and last-resort assignee.
+export async function resolveOwner(): Promise<Assignee | null> {
   const owner = await prisma.user.findFirst({
     where: { role: "OWNER", status: "ACTIVE" },
     select: { id: true, name: true, phone: true, role: true },
   });
-  if (owner) {
-    return { userId: owner.id, name: owner.name, phone: owner.phone, role: owner.role, fallback: true };
-  }
-  return null;
+  if (!owner) return null;
+  return { userId: owner.id, name: owner.name, phone: owner.phone, role: owner.role, fallback: false };
 }

@@ -5,9 +5,11 @@
 // accountable manager and (once armed) sends a 1:1 WhatsApp DM. In shadow mode
 // nothing is sent — we only log what we *would* page, to validate the detectors.
 
-export type OpsSignal = "PHONE_CAPTURE" | "CHECKLIST";
+export type OpsSignal = "PHONE_CAPTURE" | "CHECKLIST" | "REVIEW";
 
 export type Severity = "LOW" | "MED" | "HIGH";
+
+export type OpsAlertStatus = "OPEN" | "ACKED" | "ESCALATED" | "RESOLVED" | "EXPIRED";
 
 export interface Breach {
   signal: OpsSignal;
@@ -38,5 +40,6 @@ export interface PulseRunResult {
   ranAt: string;
   breachCount: number;
   routed: RoutedBreach[];
-  sent: number; // always 0 until the armed sender lands (Phase 1b)
+  sent: number; // manager digests sent this run (0 in shadow)
+  escalated: number; // alerts escalated to the owner this run (0 in shadow)
 }

@@ -329,6 +329,17 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
   - `apps/backoffice/src/app/api/cron/ops-pulse/route.ts` — `checkCronAuth`-gated cron.
   - `vercel.json` — `/api/cron/ops-pulse` **hourly** while shadowing.
   - `OPS_PULSE_MODE` env (`off|shadow|armed`, unset ⇒ shadow). Deploying starts the shadow week.
-- **Next — Phase 1b (arm).** After a shadow week is reviewed: add the `OpsAlert` ledger
-  (+migration), the WhatsApp DM sender + approved templates, the inbound-ack hook on the
-  existing webhook, the escalation sweep, and flip the cron to a 15-min cadence.
+- **2026-06-24 — Phase 1b (armed path) wired.** Owner confirmed 60% phone floor, 90-min
+  escalation, and **+reviews**. Built (dormant until `OPS_PULSE_MODE=armed`):
+  - `OpsAlert` model (`schema.prisma`) + SQL migration
+    (`packages/db/prisma/migrations/20260624_ops_alert/`).
+  - `detectReviews` — internal QR feedback ≤2★ (open) + negative Google review drafts ≤3★
+    (pending), bounded to a 72h recency window.
+  - `ledger` (dedupe + OPEN→ESCALATED→RESOLVED lifecycle; phone-capture excluded from
+    escalation), `sender` (template-or-text WhatsApp digest), `inbound` (reply "DONE" →
+    resolve), runner armed branch (persist → page new per-manager digest → escalate past SLA),
+    ack hooked into `api/whatsapp/webhook`.
+- **Go-live checklist (before flipping to armed).** (1) apply the `OpsAlert` migration to the
+  DB; (2) get `ops_breach_digest` + `ops_escalation` templates APPROVED and set
+  `OPS_PULSE_TPL_*`; (3) confirm manager + owner `User.phone`; (4) bump the cron from hourly to
+  15-min in `vercel.json`; (5) set `OPS_PULSE_MODE=armed`. Until then it stays in shadow.
