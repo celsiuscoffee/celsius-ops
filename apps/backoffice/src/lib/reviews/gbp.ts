@@ -244,3 +244,28 @@ export async function replyToReview(
     throw new Error(`GBP reply error ${res.status}: ${body}`);
   }
 }
+
+const GBP_INFO_BASE = "https://mybusinessbusinessinformation.googleapis.com/v1";
+
+// Resolve an outlet's precise centre (lat/lng) + Google Places id, so a geogrid
+// scan can place its grid and find the business in each point's results.
+export async function getLocationGeo(
+  locationName: string,
+): Promise<{ lat: number; lng: number; placeId: string | null; title: string | null }> {
+  const token = await getAccessToken();
+  const res = await fetch(
+    `${GBP_INFO_BASE}/${locationName}?readMask=latlng,metadata,title`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GBP location info error ${res.status}: ${body}`);
+  }
+  const data = await res.json();
+  return {
+    lat: data.latlng?.latitude,
+    lng: data.latlng?.longitude,
+    placeId: data.metadata?.placeId ?? null,
+    title: data.title ?? null,
+  };
+}

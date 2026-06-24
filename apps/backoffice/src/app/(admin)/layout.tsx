@@ -38,6 +38,7 @@ import {
   TicketPercent,
   Megaphone,
   MessageSquare,
+  MapPinned,
   Sparkles,
   Building2,
   UserCog,
@@ -330,6 +331,7 @@ const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "All Reviews", href: "/reviews", icon: <Star className={ICON_SIZE} />, moduleKey: "reviews:list" },
           { label: "Feedback Management", href: "/reviews/feedback", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "reviews:list" },
+          { label: "Local Rank", href: "/reviews/geogrid", icon: <MapPinned className={ICON_SIZE} />, moduleKey: "reviews:list" },
         ],
       },
       {
