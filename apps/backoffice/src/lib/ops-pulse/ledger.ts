@@ -66,22 +66,24 @@ export interface EscalatableAlert {
   outletId: string;
   summary: string;
   severity: string;
+  assigneeUserId: string | null;
 }
 
-// OPEN, actionable-incident alerts sent but unacked past the SLA. Only now-fix-it
-// incidents escalate (CHECKLIST, REVIEW, RECEIVING). Excluded on purpose:
-// PHONE_CAPTURE / STOCK_COUNT / MENU_SNOOZED (rates/coaching that self-clear) and
-// AUDIT (lagging) — escalating those on a 90-min timer would cry wolf.
+// OPEN alerts sent but unacked past the SLA. Escalate the accountability signals
+// the owner wants enforced: CHECKLIST, REVIEW, RECEIVING (incidents) PLUS AUDIT —
+// outlet audits AND staff skill training — because the owner wants proof the work
+// is actually being done. PHONE_CAPTURE / STOCK_COUNT / MENU_SNOOZED stay
+// non-escalating (fluctuating rates that self-clear).
 export async function findEscalatable(slaMinutes: number, now: Date): Promise<EscalatableAlert[]> {
   const cutoff = new Date(now.getTime() - slaMinutes * 60_000);
   return prisma.opsAlert.findMany({
     where: {
       status: "OPEN",
-      signal: { in: ["CHECKLIST", "REVIEW", "RECEIVING"] },
+      signal: { in: ["CHECKLIST", "REVIEW", "RECEIVING", "AUDIT"] },
       escalatedAt: null,
       sentAt: { not: null, lt: cutoff },
     },
-    select: { id: true, outletId: true, summary: true, severity: true },
+    select: { id: true, outletId: true, summary: true, severity: true, assigneeUserId: true },
     orderBy: { sentAt: "asc" },
     take: 100,
   });

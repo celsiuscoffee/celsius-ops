@@ -380,6 +380,13 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
   "Chef Bo", the account name). Audits/training ARE happening (Barista Station 30, Barista Skills
   14, Kitchen+Food audits 24, Kitchen Crew Skills 6) — the earlier "0 everywhere" was the stale
   project. ⚠️ Apply the `OpsAlert` migration to the **loyalty project**, not celsius-inventory.
+- **2026-06-24 — audit + skill now escalate; skill = 1/week/staff.** Owner wants proof the work
+  is done, so `AUDIT` (outlet audits + staff skill training) joins CHECKLIST/REVIEW/RECEIVING in
+  the escalation set — unacked past SLA → owner, **tagged with the responsible lead's name** so
+  the owner sees *who* isn't getting it done. Weekly dedupe means each overdue audit escalates at
+  most once per week. Skill coverage is now window-based (audited within 7d, not ever) — skill =
+  1/week/staff; outlet audit = 1/week (unchanged). PHONE_CAPTURE / STOCK_COUNT / MENU_SNOOZED
+  stay non-escalating.
 - **Go-live checklist (before flipping to armed).** (1) apply the `OpsAlert` migration to the
   DB; (2) get `ops_breach_digest` + `ops_escalation` templates APPROVED and set
   `OPS_PULSE_TPL_*`; (3) confirm manager + owner `User.phone`; (4) bump the cron from hourly to

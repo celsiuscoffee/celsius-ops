@@ -6,6 +6,7 @@
 //            recipient of its discipline one digest of their NEW items, then
 //            escalates any incident sitting unacked past the SLA to the owner.
 
+import { prisma } from "@/lib/prisma";
 import { pulseMode, THRESHOLDS } from "./config";
 import {
   detectPhoneCapture,
@@ -119,13 +120,24 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
   // send success — a failed send is logged and the alert stays OPEN to escalate.
   for (const id of newAlertIds) await markSent(id, null);
 
-  // Escalation sweep — incidents unacked past SLA go to the owner, batched.
+  // Escalation sweep — unacked incidents + audits/skill past SLA go to the owner,
+  // tagged with the responsible lead so the owner sees WHO isn't getting it done.
   let escalated = 0;
   const due = await findEscalatable(THRESHOLDS.escalation.slaMinutes, now);
   if (due.length > 0) {
     const owner = await resolveOwner();
     if (owner?.phone) {
-      const res = await sendOwnerEscalation(owner.phone, due.map((a) => a.summary));
+      const leadIds = [...new Set(due.map((a) => a.assigneeUserId).filter((x): x is string => !!x))];
+      const leadName = new Map<string, string>();
+      if (leadIds.length > 0) {
+        const leads = await prisma.user.findMany({ where: { id: { in: leadIds } }, select: { id: true, name: true } });
+        for (const l of leads) leadName.set(l.id, l.name);
+      }
+      const lines = due.map((a) => {
+        const n = a.assigneeUserId ? leadName.get(a.assigneeUserId) : undefined;
+        return n ? `${a.summary} — lead: ${n}` : a.summary;
+      });
+      const res = await sendOwnerEscalation(owner.phone, lines);
       if (res.ok) {
         for (const a of due) {
           await markEscalated(a.id);
