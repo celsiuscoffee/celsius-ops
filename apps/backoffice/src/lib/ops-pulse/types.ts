@@ -14,7 +14,8 @@ export type OpsSignal =
   | "RECEIVING"
   | "MENU_SNOOZED"
   | "NO_CLOCK_IN"
-  | "POS_NOT_OPEN";
+  | "POS_NOT_OPEN"
+  | "RESTOCK_NEEDED";
 
 export type Severity = "LOW" | "MED" | "HIGH";
 

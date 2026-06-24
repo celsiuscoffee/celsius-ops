@@ -114,6 +114,7 @@ export const SIGNAL_CATEGORY: Record<string, SignalCategory> = {
   CHECKLIST: "routine",
   AUDIT: "routine", // outlet audits + staff skill training
   STOCK_COUNT: "routine",
+  RESTOCK_NEEDED: "routine",
   PHONE_CAPTURE: "routine",
   REVIEW: "adhoc",
   MENU_SNOOZED: "adhoc",

@@ -595,3 +595,55 @@ export async function detectPosNotOpen(now: Date): Promise<Breach[]> {
   }
   return breaches;
 }
+
+// Restock needed: products whose on-hand (summed StockBalance) is at/below their
+// reorder point (ParLevel), per active outlet. A routine procurement list — one
+// breach per outlet (count + a sample of items), never a ping per item.
+export async function detectRestockNeeded(now: Date): Promise<Breach[]> {
+  const { ymd } = mytToday(now);
+
+  const pars = await prisma.parLevel.findMany({
+    select: {
+      outletId: true,
+      productId: true,
+      reorderPoint: true,
+      outlet: { select: { name: true, status: true } },
+      product: { select: { name: true } },
+    },
+  });
+  if (pars.length === 0) return [];
+
+  const balances = await prisma.stockBalance.groupBy({
+    by: ["outletId", "productId"],
+    _sum: { quantity: true },
+  });
+  const onHand = new Map<string, number>();
+  for (const b of balances) onHand.set(`${b.outletId}::${b.productId}`, Number(b._sum.quantity ?? 0));
+
+  const byOutlet = new Map<string, { name: string; count: number; items: string[] }>();
+  for (const par of pars) {
+    if (par.outlet.status !== "ACTIVE") continue;
+    const have = onHand.get(`${par.outletId}::${par.productId}`) ?? 0;
+    if (have > Number(par.reorderPoint)) continue;
+    const agg = byOutlet.get(par.outletId) ?? { name: par.outlet.name, count: 0, items: [] as string[] };
+    agg.count += 1;
+    if (agg.items.length < 5) agg.items.push(par.product.name);
+    byOutlet.set(par.outletId, agg);
+  }
+
+  const breaches: Breach[] = [];
+  for (const [outletId, agg] of byOutlet) {
+    const more = agg.count > agg.items.length ? ` +${agg.count - agg.items.length} more` : "";
+    breaches.push({
+      signal: "RESTOCK_NEEDED",
+      outletId,
+      outletName: agg.name,
+      severity: "MED",
+      routeKey: "operations",
+      dedupeKey: `RESTOCK_NEEDED:${outletId}:${ymd}`,
+      summary: `${agg.count} item${agg.count === 1 ? "" : "s"} below reorder at ${agg.name} — restock: ${agg.items.join(", ")}${more}`,
+      detail: { count: agg.count, items: agg.items },
+    });
+  }
+  return breaches;
+}

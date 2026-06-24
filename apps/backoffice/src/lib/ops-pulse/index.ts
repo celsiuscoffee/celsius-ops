@@ -19,6 +19,7 @@ import {
   detectMenuSnoozed,
   detectNoClockIn,
   detectPosNotOpen,
+  detectRestockNeeded,
 } from "./detectors";
 import { resolveRecipients, resolveOwner } from "./router";
 import { findEscalatable, markEscalated, markSent, recordBreach } from "./ledger";
@@ -52,6 +53,7 @@ async function detectAll(now: Date): Promise<Breach[]> {
     detectMenuSnoozed(now).catch(detectorFailed("menu-snoozed")),
     detectNoClockIn(now).catch(detectorFailed("no-clock-in")),
     detectPosNotOpen(now).catch(detectorFailed("pos-not-open")),
+    detectRestockNeeded(now).catch(detectorFailed("restock-needed")),
   ]);
   return results.flat();
 }
