@@ -105,6 +105,7 @@ model Outlet {
   reviewReplyDrafts ReviewReplyDraft[]
   geoGridScans      GeoGridScan[]
   geoGridKeywords   GeoGridKeyword[]
+  reviewDailySnapshots ReviewDailySnapshot[]
   auditReports      AuditReport[]
   recurringExpenses RecurringExpense[]
   bankStatementLines BankStatementLine[]
@@ -1405,6 +1406,30 @@ model GeoGridScan {
   createdBy    String?
 
   @@index([outletId, keyword, createdAt])
+}
+
+// Daily snapshot of our review prominence vs the top nearby competitor.
+// The "daily rank lever": reviews acquired per day vs the rate needed to
+// out-review the leader. Populated by /api/cron/reviews-daily-snapshot.
+model ReviewDailySnapshot {
+  id                String   @id @default(uuid())
+  outletId          String
+  outlet            Outlet   @relation(fields: [outletId], references: [id])
+  snapshotDate      DateTime @db.Date
+  reviewCount       Int // our total Google review count
+  averageRating     Float?
+  recentFetched     Int      @default(0) // # recent reviews fetched (response-rate denominator)
+  recentResponded   Int      @default(0) // of those, # we have replied to
+  reviews7d         Int      @default(0) // reviews created in the last 7 days
+  reviews30d        Int      @default(0) // reviews created in the last 30 days
+  competitorName    String? // top nearby cafe by review count (not us)
+  competitorPlaceId String?
+  competitorReviews Int?
+  competitorRating  Float?
+  createdAt         DateTime @default(now())
+
+  @@unique([outletId, snapshotDate])
+  @@index([outletId, snapshotDate])
 }
 
 // Tracked keyword set per outlet for the automated geogrid loop. Auto-selected
