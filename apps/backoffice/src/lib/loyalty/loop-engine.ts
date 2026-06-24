@@ -300,6 +300,32 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+// ── DETERMINISTIC HOLDOUT ────────────────────────────────────────────────────
+// The holdout is the only honest attribution we have, so a member must be a
+// STABLE control for a loop — never treated in one round and held out in another.
+// A per-round random split breaks that: run the same loop over the same pool a
+// few times and the "control" fills up with members already SMSed in a prior
+// round, so the holdout converts at the treated rate and lift reads false (this
+// is exactly what poisoned winback's early read — 61% of its holdout had been
+// treated elsewhere). Fix: holdout membership is a deterministic function of
+// (loopKey, memberId), so a member always lands on the SAME side for a loop.
+//
+// djb2 over `${loopKey}:${memberId}` → a stable bucket in [0,100). A member is
+// held out iff bucket < holdoutPct. The mapping is monotonic in holdoutPct
+// (holdout at pct P ⊆ holdout at any pct ≥ P), so the control stays pure as long
+// as a loop uses a CONSISTENT holdoutPct across its rounds — which every loop
+// here does. Vary the pct per round and a sliver of members near the boundary
+// can flip; keep it fixed per loop.
+export function holdoutBucket(loopKey: string, memberId: string): number {
+  let h = 5381;
+  const s = `${loopKey}:${memberId}`;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h % 100; // 0..99, stable per (loop, member)
+}
+export function isHoldoutMember(loopKey: string, memberId: string, holdoutPct: number): boolean {
+  return holdoutPct > 0 && holdoutBucket(loopKey, memberId) < holdoutPct;
+}
+
 // sourceType tags the voucher's origin on issued_rewards. Most loops use
 // "campaign" (the generic win-back/round-gap bucket), but lifecycle loops pass
 // their own (e.g. Birthday → "birthday") so the native wallet shows the right
@@ -399,10 +425,12 @@ export async function prepareRound(loopKey: LoopKey, opts: {
   const roundNo = (last?.round_no ?? 0) + 1;
   const roundId = rid("lr");
 
-  // split: holdout first, then round-robin across arms
-  const holdoutN = Math.round((segment.length * holdoutPct) / 100);
-  const holdout = segment.slice(0, holdoutN);
-  const treatment = segment.slice(holdoutN);
+  // split: DETERMINISTIC holdout keyed on (loop, member) — never a per-round
+  // random slice — so a member is always control or always treated for this loop
+  // and the holdout can't fill up with already-SMSed members across rounds. The
+  // realized holdout count tracks holdoutPct on average (stable bucket < pct).
+  const holdout = segment.filter((m) => isHoldoutMember(loopKey, m.member_id, holdoutPct));
+  const treatment = segment.filter((m) => !isHoldoutMember(loopKey, m.member_id, holdoutPct));
 
   const segmentLabel = `${seg.label} (${segment.length} reachable, ${holdoutPct}% holdout)${capped ? ` · budget-capped from ${rawReach}` : ""}`;
 
