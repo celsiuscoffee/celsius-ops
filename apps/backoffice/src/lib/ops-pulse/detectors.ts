@@ -8,7 +8,7 @@
 //     dueAt + grace window, at an active outlet.
 
 import { prisma } from "@/lib/prisma";
-import { THRESHOLDS } from "./config";
+import { AUDIT, THRESHOLDS } from "./config";
 import type { Breach } from "./types";
 
 // Today's MYT (UTC+8) calendar date + the UTC instant of its 00:00. pos_orders
@@ -195,5 +195,67 @@ export async function detectReviews(now: Date): Promise<Breach[]> {
     });
   }
 
+  return breaches;
+}
+
+// Audit/training coverage gap: a tracked auditor role (e.g. barista_head,
+// food_director) with no COMPLETED report at an active outlet inside the cadence
+// window. Low-frequency by nature, so this is a LOW-severity reminder, deduped
+// to once per outlet/role/cadence-window — never escalated (it's lagging, not a
+// now-fix-it incident). A role is only checked if it has an active
+// AuditTemplate, so configuring a not-yet-created role is a harmless no-op.
+export async function detectAudit(now: Date): Promise<Breach[]> {
+  if (AUDIT.roles.length === 0) return [];
+  const cutoff = new Date(now.getTime() - AUDIT.cadenceDays * 86_400_000);
+
+  const [outlets, templates] = await Promise.all([
+    prisma.outlet.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
+    prisma.auditTemplate.findMany({
+      where: { isActive: true, roleType: { in: AUDIT.roles } },
+      select: { id: true, roleType: true },
+    }),
+  ]);
+  if (outlets.length === 0 || templates.length === 0) return [];
+
+  const roleByTemplate = new Map<string, string>();
+  for (const t of templates) roleByTemplate.set(t.id, t.roleType);
+  // Only roles that actually have an active template can be "overdue".
+  const activeRoles = [...new Set(templates.map((t) => t.roleType))];
+
+  const recent = await prisma.auditReport.findMany({
+    where: {
+      status: "COMPLETED",
+      templateId: { in: templates.map((t) => t.id) },
+      date: { gte: cutoff },
+    },
+    select: { outletId: true, templateId: true },
+  });
+  const covered = new Set<string>(); // `${outletId}::${roleType}`
+  for (const r of recent) {
+    const role = roleByTemplate.get(r.templateId);
+    if (role) covered.add(`${r.outletId}::${role}`);
+  }
+
+  // Re-alert once per cadence window: a stable bucket index over MYT days.
+  const { ymd } = mytToday(now);
+  const bucket = Math.floor(
+    new Date(`${ymd}T00:00:00+08:00`).getTime() / (AUDIT.cadenceDays * 86_400_000),
+  );
+
+  const breaches: Breach[] = [];
+  for (const o of outlets) {
+    for (const role of activeRoles) {
+      if (covered.has(`${o.id}::${role}`)) continue;
+      breaches.push({
+        signal: "AUDIT",
+        outletId: o.id,
+        outletName: o.name,
+        severity: "LOW",
+        dedupeKey: `AUDIT:${role}:${o.id}:${bucket}`,
+        summary: `No ${role} audit at ${o.name} in ${AUDIT.cadenceDays}d`,
+        detail: { role, cadenceDays: AUDIT.cadenceDays },
+      });
+    }
+  }
   return breaches;
 }

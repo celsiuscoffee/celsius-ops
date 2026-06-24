@@ -43,6 +43,23 @@ export const THRESHOLDS = {
   },
 } as const;
 
+// Audit / training coverage. The schema has NO audit cadence, so we define one:
+// each tracked auditor role should have a COMPLETED report at each active outlet
+// within `cadenceDays`. A role only pulses if it has an active AuditTemplate, so
+// configuring a role that doesn't exist yet is a harmless no-op. Severity is LOW
+// (a reminder/scorecard line — never escalated). Kept separate from THRESHOLDS
+// so `roles` stays a mutable string[] for Prisma `in:` filters.
+export const AUDIT = {
+  // 30 = monthly. Owner-set frequency (7 weekly, 90 quarterly).
+  cadenceDays: 30,
+  // AuditTemplate.roleType values to watch. Confirmed in data: "barista_head".
+  // Override with OPS_PULSE_AUDIT_ROLES (comma-separated, e.g. "barista_head,food_director").
+  roles: (process.env.OPS_PULSE_AUDIT_ROLES || "barista_head")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+};
+
 // Approved WhatsApp template names for proactive (out-of-24h-window) sends.
 // Until a template is APPROVED in WhatsApp Manager and set here, the sender
 // falls back to free-form text — which Meta only delivers inside the recipient's

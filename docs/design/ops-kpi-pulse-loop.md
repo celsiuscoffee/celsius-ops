@@ -339,6 +339,14 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
     escalation), `sender` (template-or-text WhatsApp digest), `inbound` (reply "DONE" →
     resolve), runner armed branch (persist → page new per-manager digest → escalate past SLA),
     ack hooked into `api/whatsapp/webhook`.
+- **2026-06-24 — audit signal added (food director / barista lead).** `detectAudit` flags a
+  tracked auditor `roleType` with no `COMPLETED` `AuditReport` at an active outlet inside a
+  cadence window. No audit cadence exists in the schema, so it's defined in config
+  (`AUDIT.cadenceDays`, default 30 = monthly) over a configurable role list
+  (`OPS_PULSE_AUDIT_ROLES`, default `barista_head`). LOW severity, deduped per
+  outlet/role/window, **never escalated** (lagging, not a now-fix-it incident). A role only
+  fires if it has an active `AuditTemplate`. ⚠️ Owner to confirm the **cadence** and the exact
+  **food-director roleType** string (only `barista_head` is visible in the data today).
 - **Go-live checklist (before flipping to armed).** (1) apply the `OpsAlert` migration to the
   DB; (2) get `ops_breach_digest` + `ops_escalation` templates APPROVED and set
   `OPS_PULSE_TPL_*`; (3) confirm manager + owner `User.phone`; (4) bump the cron from hourly to

@@ -5,7 +5,7 @@
 // accountable manager and (once armed) sends a 1:1 WhatsApp DM. In shadow mode
 // nothing is sent — we only log what we *would* page, to validate the detectors.
 
-export type OpsSignal = "PHONE_CAPTURE" | "CHECKLIST" | "REVIEW";
+export type OpsSignal = "PHONE_CAPTURE" | "CHECKLIST" | "REVIEW" | "AUDIT";
 
 export type Severity = "LOW" | "MED" | "HIGH";
 

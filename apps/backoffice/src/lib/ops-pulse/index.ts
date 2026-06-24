@@ -7,7 +7,7 @@
 //            any incident sitting unacked past the SLA to the owner.
 
 import { pulseMode, THRESHOLDS } from "./config";
-import { detectPhoneCapture, detectChecklist, detectReviews } from "./detectors";
+import { detectPhoneCapture, detectChecklist, detectReviews, detectAudit } from "./detectors";
 import { resolveAssignee, resolveOwner } from "./router";
 import { findEscalatable, markEscalated, markSent, recordBreach } from "./ledger";
 import { sendManagerDigest, sendOwnerEscalation } from "./sender";
@@ -35,12 +35,13 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
   }
 
   // Detectors are isolated: one failing must not sink the run.
-  const [phone, checklist, reviews] = await Promise.all([
+  const [phone, checklist, reviews, audit] = await Promise.all([
     detectPhoneCapture(now).catch(detectorFailed("phone-capture")),
     detectChecklist(now).catch(detectorFailed("checklist")),
     detectReviews(now).catch(detectorFailed("reviews")),
+    detectAudit(now).catch(detectorFailed("audit")),
   ]);
-  const breaches: Breach[] = [...phone, ...checklist, ...reviews];
+  const breaches: Breach[] = [...phone, ...checklist, ...reviews, ...audit];
 
   // Resolve the accountable assignee once per outlet.
   const assigneeByOutlet = new Map<string, Assignee | null>();
