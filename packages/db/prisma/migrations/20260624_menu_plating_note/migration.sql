@@ -2,6 +2,10 @@
 -- expectation" shown on the barista build card). Additive, nullable — every
 -- existing Menu row is unchanged.
 --
--- Applied to production (celsius-inventory) via Supabase MCP apply_migration.
--- Manual SQL only — never `prisma db push`. See docs/database-migrations.md.
+-- Applied to the PRODUCTION inventory DB: the loyalty Supabase project
+-- (kqdcdhpnyuwrxqhbuyfl) — that is where Prisma's DATABASE_URL points for the
+-- Menu / inventory tables. NOTE: the similarly-named "celsius-inventory" project
+-- (akkwdrllvcpnkzgmclkk) is a stale copy and is NOT what production uses; do not
+-- target it. Applied via Supabase MCP apply_migration. Manual SQL only — never
+-- `prisma db push`. See docs/database-migrations.md.
 ALTER TABLE "Menu" ADD COLUMN IF NOT EXISTS "platingNote" TEXT;
