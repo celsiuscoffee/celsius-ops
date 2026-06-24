@@ -32,3 +32,10 @@ ALTER TABLE "GeoRankSnapshot"
   ADD CONSTRAINT "GeoRankSnapshot_outletId_fkey"
   FOREIGN KEY ("outletId") REFERENCES "Outlet"("id")
   ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Lock to the backoffice. The app reads/writes via the direct Prisma
+-- connection (service role), which bypasses RLS, so enabling RLS with NO
+-- policy simply keeps the anon/authenticated keys out — this table is never
+-- touched by a Supabase client. Avoids the "RLS disabled" exposure default.
+ALTER TABLE "GeoRankSnapshot" ENABLE ROW LEVEL SECURITY;
+
