@@ -2,26 +2,29 @@
 
 import { formatRM } from "@celsius/shared";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Coffee, Search, Loader2, Printer, ArrowLeft, X } from "lucide-react";
+import { Coffee, Search, Loader2, Printer, ArrowLeft, X, Flame, Snowflake } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 /**
- * Recipe Cards — a print-friendly view of every menu item's Bill of Materials.
+ * Recipe Cards — barista build cards for every menu item's Bill of Materials.
  *
- * Same data as the Menu & BOM table (/api/inventory/menus), reshaped into one
- * card per item so it reads like a barista's recipe card: ingredients + qty
- * (with Hot/Iced split where the recipe differs), packaging, and an optional
- * cost summary. "Print" → the browser's Save-as-PDF gives a tidy 2-up sheet to
- * post in the bar. Costs can be hidden for a clean prep card.
+ * Modelled on the coffee-chain "build card" template (Starbucks beverage
+ * routine cards et al.): the recipe reads as a numbered build, and where it
+ * differs by temperature the Hot and Iced builds sit side by side — driven by
+ * the BOM's per-line Hot/Iced modifier. Packaging is pulled out to a "Serve in"
+ * line. Costs are off by default (a clean prep card) and toggle on for costing.
+ *
+ * Same data as the Menu & BOM table (/api/inventory/menus) so builds + COGS
+ * never drift. There is no size dimension in the catalogue (each drink is one
+ * SKU), so the card deliberately does NOT fake Short/Tall/Grande columns.
  */
 
 type ServiceMode = "ALL" | "DINE_IN" | "TAKEAWAY";
 const SERVICE_MODE_LABEL: Record<ServiceMode, string> = {
-  ALL: "Both",
+  ALL: "Dine-in & takeaway",
   DINE_IN: "Dine-in",
   TAKEAWAY: "Takeaway",
 };
@@ -54,145 +57,176 @@ type MenuItem = {
   ingredients: Ingredient[];
 };
 
-// Collapse the flat BOM line list into display rows: one row per
-// (source, product, channel), with Hot/Iced quantities stacked so a recipe that
-// differs by temperature stays on a single readable line. Ingredients sort
-// before packaging — mirrors the Menu & BOM read-only view.
-type CardRow = {
-  product: string;
-  sku: string;
-  uom: string;
-  kind: "ingredient" | "packaging";
-  serviceMode: ServiceMode;
-  source: "bom" | "rule";
-  parts: { modifier: string | null; qty: number }[];
-};
+// ── Build order ───────────────────────────────────────────────────────────
+// A barista builds a drink in a rough order: pull the base (espresso/tea), add
+// powders/sauces, then flavouring syrups, then milk/water, ice, and finally
+// toppings. We infer that order from the ingredient name so the card reads like
+// a build sequence rather than an arbitrary list. Unknowns sit in the middle.
+const BUILD_ORDER: { test: RegExp; rank: number }[] = [
+  { test: /espresso|coffee|bean|ristretto|\bshot|brew/i, rank: 0 },
+  { test: /matcha|\btea\b|chai/i, rank: 1 },
+  { test: /choc|mocha|powder|sauce|puree|jam/i, rank: 2 },
+  { test: /syrup|monin|vanilla|caramel|hazelnut|berr|lychee|flavou?r/i, rank: 3 },
+  { test: /milk|dairy|cream|foam|water|soda|tonic/i, rank: 4 },
+  { test: /\bice\b/i, rank: 6 },
+  { test: /top|drizzle|sprinkle|cinnamon|whip|garnish|dust|salt/i, rank: 7 },
+];
+const buildRank = (name: string) => BUILD_ORDER.find((b) => b.test.test(name))?.rank ?? 5;
 
-const modOrder = (m?: string | null) => (m === "Iced" ? 0 : m === "Hot" ? 1 : 2);
+type Step = { name: string; qty: number; uom: string; rank: number };
 
-function buildRows(ingredients: Ingredient[]): CardRow[] {
-  const groups = new Map<string, Ingredient[]>();
+// Resolve the build steps for one temperature. temp === null builds the single
+// (non-split) recipe. For a temperature, a line tagged with that temperature
+// wins; otherwise the "both" (null modifier) line applies; if neither, the
+// ingredient simply isn't part of that build.
+function buildSteps(ingredients: Ingredient[], temp: "Hot" | "Iced" | null): Step[] {
+  const byProduct = new Map<string, Ingredient[]>();
   for (const ing of ingredients) {
-    const k = `${ing.source ?? "bom"}|${ing.productId}|${ing.serviceMode}`;
-    const arr = groups.get(k);
+    const arr = byProduct.get(ing.productId);
     if (arr) arr.push(ing);
-    else groups.set(k, [ing]);
+    else byProduct.set(ing.productId, [ing]);
   }
-  const rows: CardRow[] = [...groups.values()].map((lines) => {
+  const steps: Step[] = [];
+  for (const lines of byProduct.values()) {
+    const both = lines.find((l) => !l.modifier);
+    const qty =
+      temp === null ? both?.qty : (lines.find((l) => l.modifier === temp)?.qty ?? both?.qty);
+    if (qty == null) continue;
     const f = lines[0];
-    const parts = [...lines]
-      .sort((a, b) => modOrder(a.modifier) - modOrder(b.modifier))
-      .map((l) => ({ modifier: l.modifier ?? null, qty: l.qty }));
-    return {
-      product: f.product,
-      sku: f.sku,
-      uom: f.uom,
-      kind: f.kind,
-      serviceMode: f.serviceMode,
-      source: f.source ?? "bom",
-      parts,
-    };
-  });
-  return rows.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "ingredient" ? -1 : 1));
+    steps.push({ name: f.product, qty, uom: f.uom, rank: buildRank(f.product) });
+  }
+  return steps.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 }
 
-// One BOM line on a card: name on the left, quantity (Hot/Iced stacked) on the
-// right. Packaging shows its channel; rule-applied packaging is tagged.
-function LineRow({ row, showChannel }: { row: CardRow; showChannel: boolean }) {
-  const split = row.parts.some((p) => p.modifier);
+// Packaging collapses to one "serve in" line per (product, channel).
+type PkgRow = { name: string; serviceMode: ServiceMode };
+function buildPackaging(packaging: Ingredient[]): PkgRow[] {
+  const seen = new Map<string, PkgRow>();
+  for (const p of packaging) {
+    const k = `${p.productId}|${p.serviceMode}`;
+    if (!seen.has(k)) seen.set(k, { name: p.product, serviceMode: p.serviceMode });
+  }
+  return [...seen.values()];
+}
+
+// One numbered build step: sequence chip · ingredient · measure.
+function StepRow({ n, step }: { n: number; step: Step }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 py-1">
-      <div className="min-w-0 flex items-center gap-1.5">
-        <span className="truncate text-gray-800">{row.product}</span>
-        {row.source === "rule" && (
-          <Badge variant="outline" className="border-gray-200 bg-gray-50 text-[9px] text-gray-500">
-            via rule
-          </Badge>
-        )}
-      </div>
-      <div className="shrink-0 text-right">
-        {split ? (
-          <div className="flex flex-col items-end gap-0.5">
-            {row.parts.map((p, i) => (
-              <span key={i} className="whitespace-nowrap tabular-nums">
-                {p.modifier && (
-                  <span className={`mr-1 text-[10px] font-semibold ${p.modifier === "Iced" ? "text-sky-600" : "text-orange-600"}`}>
-                    {p.modifier}
-                  </span>
-                )}
-                <span className="font-medium text-gray-900">{p.qty}</span>
-                <span className="ml-0.5 text-gray-400">{row.uom}</span>
-              </span>
-            ))}
-          </div>
-        ) : (
-          <span className="whitespace-nowrap tabular-nums">
-            <span className="font-medium text-gray-900">{row.parts[0]?.qty ?? 0}</span>
-            <span className="ml-0.5 text-gray-400">{row.uom}</span>
-          </span>
-        )}
-        {showChannel && row.kind === "packaging" && row.serviceMode !== "ALL" && (
-          <span className="ml-1 text-[10px] text-gray-400">({SERVICE_MODE_LABEL[row.serviceMode]})</span>
-        )}
-      </div>
+    <li className="flex items-baseline gap-2 py-[3px]">
+      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#160800]/5 text-[9px] font-bold text-[#160800]/60">
+        {n}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-gray-800">{step.name}</span>
+      <span className="shrink-0 whitespace-nowrap tabular-nums font-semibold text-gray-900">
+        {step.qty}
+        <span className="ml-0.5 text-[10px] font-normal text-gray-400">{step.uom}</span>
+      </span>
+    </li>
+  );
+}
+
+function BuildColumn({
+  title,
+  icon,
+  accent,
+  steps,
+}: {
+  title?: string;
+  icon?: ReactNode;
+  accent?: string;
+  steps: Step[];
+}) {
+  return (
+    <div className="min-w-0">
+      {title && (
+        <p className={`mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${accent ?? "text-gray-400"}`}>
+          {icon}
+          {title}
+        </p>
+      )}
+      {steps.length === 0 ? (
+        <p className="py-1 text-[11px] text-gray-400">No items</p>
+      ) : (
+        <ol className="divide-y divide-gray-100">
+          {steps.map((s, i) => (
+            <StepRow key={i} n={i + 1} step={s} />
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
 
 function RecipeCard({ menu, showCosts }: { menu: MenuItem; showCosts: boolean }) {
-  const rows = buildRows(menu.ingredients);
-  const ingredientRows = rows.filter((r) => r.kind === "ingredient");
-  const packagingRows = rows.filter((r) => r.kind === "packaging");
+  const ingredients = menu.ingredients.filter((i) => i.kind === "ingredient");
+  const packaging = menu.ingredients.filter((i) => i.kind === "packaging");
+  const hasTempSplit = ingredients.some((i) => i.modifier != null);
+  const hotSteps = hasTempSplit ? buildSteps(ingredients, "Hot") : [];
+  const icedSteps = hasTempSplit ? buildSteps(ingredients, "Iced") : [];
+  const singleSteps = hasTempSplit ? [] : buildSteps(ingredients, null);
+  const pkgRows = buildPackaging(packaging);
+  const empty = ingredients.length === 0 && packaging.length === 0;
 
   return (
-    <div className="recipe-card flex flex-col break-inside-avoid overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+    <div className="recipe-card flex break-inside-avoid flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
       {/* Header band — espresso fill, cream text */}
-      <div className="rc-head bg-[#160800] px-4 py-3 text-[#F5F1EA]">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#D2965C]">
-              {menu.category || "Uncategorised"}
-            </p>
-            <h3 className="mt-0.5 truncate text-base font-bold leading-tight">{menu.name}</h3>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="text-[10px] uppercase tracking-wide text-[#F5F1EA]/60">Sells at</p>
-            <p className="text-sm font-bold">RM {menu.sellingPrice.toFixed(2)}</p>
-          </div>
+      <div className="rc-head flex items-start justify-between gap-3 bg-[#160800] px-4 py-3 text-[#F5F1EA]">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#D2965C]">
+            {menu.category || "Uncategorised"}
+          </p>
+          <h3 className="mt-0.5 truncate text-base font-bold leading-tight">{menu.name}</h3>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-[9px] uppercase tracking-wide text-[#F5F1EA]/55">Sells at</p>
+          <p className="text-sm font-bold">RM {menu.sellingPrice.toFixed(2)}</p>
         </div>
       </div>
 
-      {/* Body — ingredients then packaging */}
+      {/* Build */}
       <div className="flex-1 px-4 py-3 text-xs">
-        {ingredientRows.length === 0 && packagingRows.length === 0 ? (
+        {empty ? (
           <p className="py-3 text-center text-gray-400">No recipe yet</p>
+        ) : hasTempSplit ? (
+          <div className="grid grid-cols-2 gap-x-4 divide-x divide-gray-100">
+            <BuildColumn
+              title="Hot build"
+              accent="text-orange-600"
+              icon={<Flame className="h-3 w-3" />}
+              steps={hotSteps}
+            />
+            <div className="pl-4">
+              <BuildColumn
+                title="Iced build"
+                accent="text-sky-600"
+                icon={<Snowflake className="h-3 w-3" />}
+                steps={icedSteps}
+              />
+            </div>
+          </div>
         ) : (
-          <>
-            {ingredientRows.length > 0 && (
-              <>
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Ingredients</p>
-                <div className="divide-y divide-gray-100">
-                  {ingredientRows.map((r, i) => (
-                    <LineRow key={i} row={r} showChannel={false} />
-                  ))}
-                </div>
-              </>
-            )}
-            {packagingRows.length > 0 && (
-              <>
-                <p className="mb-1 mt-3 text-[10px] font-semibold uppercase tracking-wide text-amber-600">Packaging</p>
-                <div className="divide-y divide-gray-100">
-                  {packagingRows.map((r, i) => (
-                    <LineRow key={i} row={r} showChannel />
-                  ))}
-                </div>
-              </>
-            )}
-          </>
+          <BuildColumn title="Build" steps={singleSteps} />
         )}
       </div>
 
-      {/* Cost summary footer */}
+      {/* Serve in (packaging) */}
+      {pkgRows.length > 0 && (
+        <div className="border-t border-gray-100 px-4 py-2 text-[11px]">
+          <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600">Serve in</p>
+          <ul className="space-y-0.5">
+            {pkgRows.map((p, i) => (
+              <li key={i} className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-gray-700">{p.name}</span>
+                {p.serviceMode !== "ALL" && (
+                  <span className="shrink-0 text-[10px] text-gray-400">{SERVICE_MODE_LABEL[p.serviceMode]}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Cost summary (off by default — toggle on for costing) */}
       {showCosts && (menu.ingredientCost > 0 || menu.cogs > 0) && (
         <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-2 text-[11px]">
           <div className="flex items-center justify-between">
@@ -201,9 +235,7 @@ function RecipeCard({ menu, showCosts }: { menu: MenuItem; showCosts: boolean })
           </div>
           {menu.cogs > 0 && (
             <div className="mt-0.5 flex items-center justify-between">
-              <span className="text-gray-500">
-                All-in COGS{menu.packagingCount > 0 ? " (incl. packaging)" : ""}
-              </span>
+              <span className="text-gray-500">All-in COGS{menu.packagingCount > 0 ? " (incl. packaging)" : ""}</span>
               <span className="tabular-nums">
                 <span className="font-semibold text-gray-900">{formatRM(menu.cogs)}</span>
                 {menu.cogsPercent > 0 && (
@@ -215,7 +247,7 @@ function RecipeCard({ menu, showCosts }: { menu: MenuItem; showCosts: boolean })
             </div>
           )}
           {menu.hasIcedHotSplit && (
-            <p className="mt-0.5 text-[9px] text-gray-400">Worst case across Hot/Iced × dine-in/takeaway — see Menu &amp; BOM for the full breakdown.</p>
+            <p className="mt-0.5 text-[9px] text-gray-400">Worst case across Hot/Iced × dine-in/takeaway — full breakdown on Menu &amp; BOM.</p>
           )}
         </div>
       )}
@@ -228,7 +260,7 @@ export default function RecipeCardsPage() {
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string[]>([]);
   const [onlyWithRecipe, setOnlyWithRecipe] = useState(true);
-  // Barista-prep card by default: quantities + Hot/Iced + packaging, no costs.
+  // Barista-prep card by default: build steps + Hot/Iced + packaging, no costs.
   // Toggle on for a costing view (ingredient cost + all-in COGS%).
   const [showCosts, setShowCosts] = useState(false);
 
@@ -280,7 +312,7 @@ export default function RecipeCardsPage() {
           <h2 className="text-xl font-semibold text-gray-900">Recipe Cards</h2>
         </div>
         <p className="mt-0.5 text-sm text-gray-500">
-          Printable Bill of Materials — one card per menu item. {filtered.length} of {menus.length} shown.
+          Barista build cards from the Bill of Materials — Hot &amp; Iced builds side by side. {filtered.length} of {menus.length} shown.
         </p>
 
         <div className="mt-4 flex flex-col gap-3">
