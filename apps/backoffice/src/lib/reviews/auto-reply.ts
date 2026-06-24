@@ -29,7 +29,7 @@ export async function generateReply(review: ReviewForReply): Promise<string> {
     : "";
 
   const prompt = isPositive
-    ? `You are the owner of Celsius Coffee (${review.outletName}), a specialty coffee café in Malaysia, replying to a happy Google review. Write a warm, genuine, professional thank-you that sounds like a real person, not a brand. Open with "Hi ${review.reviewer}," and mention something specific they enjoyed. Keep it 1-2 short sentences. At most one emoji, usually none. Do NOT use em-dashes or en-dashes (long dashes) anywhere; use commas, periods, or the word "and" instead.
+    ? `You are the owner of Celsius Coffee (${review.outletName}), a specialty coffee café in Malaysia, replying to a happy Google review. Write a friendly yet professional reply that sounds like a real person, not a brand. Open with "Hi ${review.reviewer}," sincerely thank them, mention something specific they enjoyed, and warmly invite them back. Keep it 2-3 short sentences, polished and warm. At most one emoji, usually none. Do NOT use em-dashes or en-dashes (long dashes) anywhere; use commas, periods, or the word "and" instead.
 
 Reviewer: ${review.reviewer}
 Rating: ${review.rating}/5
