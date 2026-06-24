@@ -29,9 +29,13 @@ export type SalesDashboard = {
     newCustomers: number; newCustomersDelta: number | null;
     newAppCustomers: number; newAppDelta: number | null;
     appOrders: number; appOrdersDelta: number | null;
+    appOrdersNative: number; appOrdersWeb: number;
     appSharePct: number; appShareDeltaPts: number;
     capturedOrders: number; collectionRatePct: number; collectionDeltaPts: number;
+    collectionRatePos: number; collectionRateNative: number; collectionRateWeb: number;
+    capturedPos: number; capturedNative: number; capturedWeb: number;
     pairAdds: number; pairAddsDelta: number | null;
+    pairInstore: number; pairNative: number; pairWeb: number;
   };
   warnings?: string[];
 };

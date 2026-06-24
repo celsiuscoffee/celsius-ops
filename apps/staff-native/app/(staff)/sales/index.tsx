@@ -227,26 +227,46 @@ export default function SalesScreen() {
                 <Tile icon={UserPlus} color="#34d399" v={numF(g.newCustomers)} k="New customers" delta={g.newCustomersDelta} />
                 <Tile icon={Smartphone} color="#8FB3F0" v={numF(g.newAppCustomers)} k="New app customers" delta={g.newAppDelta} />
               </View>
-              <View className="mt-3.5 flex-row items-center justify-between border-t border-[#F5F3F00f] pt-3.5">
-                <View>
-                  <Text className="font-body-semi text-xs text-[#F5F3F08a]">Orders via app</Text>
-                  <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.appOrders)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {g.appSharePct}% of all</Text></Text>
+              <View className="mt-3.5 border-t border-[#F5F3F00f] pt-3.5">
+                <View className="flex-row items-center justify-between">
+                  <View>
+                    <Text className="font-body-semi text-xs text-[#F5F3F08a]">Orders via app</Text>
+                    <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.appOrders)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {g.appSharePct}% of all</Text></Text>
+                  </View>
+                  <Text className={`font-body-bold text-[13px] ${deltaUp(g.appOrdersDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.appOrdersDelta)}</Text>
                 </View>
-                <Text className={`font-body-bold text-[13px] ${deltaUp(g.appOrdersDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.appOrdersDelta)}</Text>
+                <View className="mt-2.5 flex-row gap-2">
+                  <ChannelChip label="Native" v={g.appOrdersNative} />
+                  <ChannelChip label="Web" v={g.appOrdersWeb} />
+                </View>
               </View>
-              <View className="mt-3.5 flex-row items-center justify-between border-t border-[#F5F3F00f] pt-3.5">
-                <View>
-                  <Text className="font-body-semi text-xs text-[#F5F3F08a]">Collection rate</Text>
-                  <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{g.collectionRatePct}%<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {numF(g.capturedOrders)} with phone</Text></Text>
+              <View className="mt-3.5 border-t border-[#F5F3F00f] pt-3.5">
+                <View className="flex-row items-center justify-between">
+                  <View>
+                    <Text className="font-body-semi text-xs text-[#F5F3F08a]">Collection rate</Text>
+                    <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{g.collectionRatePct}%<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {numF(g.capturedOrders)} with phone</Text></Text>
+                  </View>
+                  <Text className={`font-body-bold text-[13px] ${g.collectionDeltaPts >= 0 ? "text-[#34d399]" : "text-[#f87171]"}`}>{g.collectionDeltaPts >= 0 ? "+" : ""}{g.collectionDeltaPts}%</Text>
                 </View>
-                <Text className={`font-body-bold text-[13px] ${g.collectionDeltaPts >= 0 ? "text-[#34d399]" : "text-[#f87171]"}`}>{g.collectionDeltaPts >= 0 ? "+" : ""}{g.collectionDeltaPts}%</Text>
+                <View className="mt-2.5 flex-row gap-2">
+                  <ChannelChip label="In-store" v={g.collectionRatePos} suffix="%" sub={`${numF(g.capturedPos)} w/ phone`} />
+                  <ChannelChip label="Native" v={g.collectionRateNative} suffix="%" sub={`${numF(g.capturedNative)} w/ phone`} />
+                  <ChannelChip label="Web" v={g.collectionRateWeb} suffix="%" sub={`${numF(g.capturedWeb)} w/ phone`} />
+                </View>
               </View>
-              <View className="mt-3.5 flex-row items-center justify-between border-t border-[#F5F3F00f] pt-3.5">
-                <View>
-                  <Text className="font-body-semi text-xs text-[#F5F3F08a]">Pair adds</Text>
-                  <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.pairAdds)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · upsell added to cart</Text></Text>
+              <View className="mt-3.5 border-t border-[#F5F3F00f] pt-3.5">
+                <View className="flex-row items-center justify-between">
+                  <View>
+                    <Text className="font-body-semi text-xs text-[#F5F3F08a]">Pair adds</Text>
+                    <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.pairAdds)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · upsell added to cart</Text></Text>
+                  </View>
+                  <Text className={`font-body-bold text-[13px] ${deltaUp(g.pairAddsDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.pairAddsDelta)}</Text>
                 </View>
-                <Text className={`font-body-bold text-[13px] ${deltaUp(g.pairAddsDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.pairAddsDelta)}</Text>
+                <View className="mt-2.5 flex-row gap-2">
+                  <ChannelChip label="In-store" v={g.pairInstore} />
+                  <ChannelChip label="Native" v={g.pairNative} />
+                  <ChannelChip label="Web" v={g.pairWeb} />
+                </View>
               </View>
             </View>
 
@@ -318,6 +338,15 @@ function Tile({ icon: Icon, color, v, k, delta }: { icon: any; color: string; v:
       <Text className="font-display text-2xl text-[#F5F3F0]">{v}</Text>
       <Text className="mt-1 font-body text-[13px] text-[#F5F3F08a]">{k}</Text>
       <Text className={`mt-1.5 font-body-bold text-[13px] ${deltaUp(delta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(delta)}</Text>
+    </View>
+  );
+}
+function ChannelChip({ label, v, suffix = "", sub }: { label: string; v: number; suffix?: string; sub?: string }) {
+  return (
+    <View className="flex-1 rounded-xl border border-[#F5F3F01a] bg-[#160800] px-3 py-2">
+      <Text className="font-display text-base text-[#F5F3F0]">{numF(v)}{suffix}</Text>
+      {sub ? <Text className="font-body text-[11px] text-[#F5F3F057]">{sub}</Text> : null}
+      <Text className="mt-0.5 font-body-semi text-[11px] uppercase tracking-wide text-[#F5F3F08a]">{label}</Text>
     </View>
   );
 }
