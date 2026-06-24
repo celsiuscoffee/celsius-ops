@@ -97,9 +97,11 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
     if (!isNew) continue;
     newAlertIds.add(alert.id);
     for (const a of r.assignees) {
-      const bucket = digestByUser.get(a.userId) ?? { phone: a.phone, name: a.name, lines: [] };
+      // Phone-only recipients have no userId; key the digest by phone/name instead.
+      const key = a.userId || a.phone || a.name;
+      const bucket = digestByUser.get(key) ?? { phone: a.phone, name: a.name, lines: [] };
       bucket.lines.push(r.summary);
-      digestByUser.set(a.userId, bucket);
+      digestByUser.set(key, bucket);
     }
   }
 

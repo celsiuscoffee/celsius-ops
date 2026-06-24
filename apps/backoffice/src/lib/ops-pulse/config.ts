@@ -65,10 +65,14 @@ function splitNames(v: string | undefined, def: string): string[] {
   return (v || def).split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+// Each entry is a User name OR a raw phone number (+60…/01…) for people without
+// an app account. NOTE: "Syafiq Kaberi" and "Ibrahim Zakir" have no User record
+// yet — until they're added (or replaced here with their phone numbers) the
+// barista/kitchen routes fall back to the owner.
 export const RECIPIENTS: Record<string, string[]> = {
   operations: splitNames(process.env.OPS_PULSE_OPS_RECIPIENTS, "Ariff,Adam Kelvin"),
-  barista: splitNames(process.env.OPS_PULSE_BARISTA_RECIPIENTS, "Syafiq"),
-  kitchen: splitNames(process.env.OPS_PULSE_KITCHEN_RECIPIENTS, "Chef Bo"),
+  barista: splitNames(process.env.OPS_PULSE_BARISTA_RECIPIENTS, "Syafiq Kaberi"),
+  kitchen: splitNames(process.env.OPS_PULSE_KITCHEN_RECIPIENTS, "Ibrahim Zakir"),
 };
 
 // Map an auditor roleType to its routing discipline.

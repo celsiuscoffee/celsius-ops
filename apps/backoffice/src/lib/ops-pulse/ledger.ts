@@ -46,7 +46,8 @@ export async function recordBreach(
       summary: breach.summary,
       detail: breach.detail as Prisma.InputJsonValue,
       status: "OPEN",
-      assigneeUserId: assignee?.userId ?? null,
+      // || (not ??) so a phone-only recipient (userId "") stores null, not "".
+      assigneeUserId: assignee?.userId || null,
     },
     select: ALERT_SELECT,
   });
