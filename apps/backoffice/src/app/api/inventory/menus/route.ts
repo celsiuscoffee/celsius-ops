@@ -1,11 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { getSupabaseAdmin } from "@/lib/pickup/supabase";
+
+// Reference photos live in the customer-facing catalogue (the loyalty project's
+// `products` table), keyed by product name. Pull them so each Recipe Card can
+// show the plating reference next to its build. Best-effort: if the catalogue
+// is unreachable, cards simply render without a photo.
+type CatalogImage = { imageUrl: string; imageZoom: number };
+async function loadCatalogImages(): Promise<Map<string, CatalogImage>> {
+  const map = new Map<string, CatalogImage>();
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data } = await supabase
+      .from("products")
+      .select("name, image_url, image_zoom")
+      .eq("brand_id", "brand-celsius");
+    for (const row of (data ?? []) as { name?: string; image_url?: string; image_zoom?: number }[]) {
+      const key = (row.name ?? "").trim().toLowerCase();
+      const url = (row.image_url ?? "").trim();
+      if (!key || !url || map.has(key)) continue;
+      map.set(key, { imageUrl: url, imageZoom: Number(row.image_zoom) || 100 });
+    }
+  } catch {
+    // Photos are optional enrichment — never fail the menus payload over them.
+  }
+  return map;
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
-  const [menus, supplierProducts, packagingRules] = await Promise.all([
+  const [menus, supplierProducts, packagingRules, catalogImages] = await Promise.all([
     prisma.menu.findMany({
       include: {
         ingredients: {
@@ -32,6 +58,7 @@ export async function GET(request: NextRequest) {
         product: { select: { name: true, sku: true, baseUom: true } },
       },
     }),
+    loadCatalogImages(),
   ]);
 
   // Build cost-per-base-unit map (cheapest non-zero supplier price / conversion factor)
@@ -173,11 +200,15 @@ export async function GET(request: NextRequest) {
     const allIn = [matrix.hot.dineIn, matrix.hot.takeaway, matrix.iced.dineIn, matrix.iced.takeaway];
     const worst = allIn.reduce((a, b) => (b.cogs > a.cogs ? b : a));
 
+    const photo = catalogImages.get(m.name.trim().toLowerCase());
     return {
       id: m.id,
       name: m.name,
       category: m.category ?? "",
       sellingPrice,
+      imageUrl: photo?.imageUrl ?? null,
+      imageZoom: photo?.imageZoom ?? 100,
+      platingNote: m.platingNote ?? null,
       ingredientCost: round2(ingredientTotal),
       matrix,
       hasIcedHotSplit,
