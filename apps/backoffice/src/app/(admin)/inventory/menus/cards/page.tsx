@@ -228,7 +228,9 @@ export default function RecipeCardsPage() {
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string[]>([]);
   const [onlyWithRecipe, setOnlyWithRecipe] = useState(true);
-  const [showCosts, setShowCosts] = useState(true);
+  // Barista-prep card by default: quantities + Hot/Iced + packaging, no costs.
+  // Toggle on for a costing view (ingredient cost + all-in COGS%).
+  const [showCosts, setShowCosts] = useState(false);
 
   const categories = [...new Set(menus.map((m) => m.category).filter(Boolean))].sort();
   const toggleCat = (c: string) =>
