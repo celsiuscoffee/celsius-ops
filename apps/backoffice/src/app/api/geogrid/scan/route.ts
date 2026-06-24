@@ -50,24 +50,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "outletId and keyword required" }, { status: 400 });
   }
 
-  const settings = await prisma.reviewSettings.findUnique({ where: { outletId } });
-  if (!settings?.gbpLocationName) {
+  const outlet = await prisma.outlet.findUnique({
+    where: { id: outletId },
+    include: { reviewSettings: true },
+  });
+  if (!outlet?.reviewSettings?.gbpLocationName) {
     return NextResponse.json({ error: "Outlet has no GBP location connected" }, { status: 400 });
   }
 
-  // Resolve centre + target Places id from the GBP location.
-  let geo;
+  // Resolve centre + target Places id from the GBP location. GBP doesn't always
+  // expose latlng, so fall back to the outlet's own stored coordinates, and to
+  // the outlet name for matching when there's no Place id.
+  let geo: { lat: number | null; lng: number | null; placeId: string | null; title: string | null } = {
+    lat: null, lng: null, placeId: null, title: null,
+  };
   try {
-    geo = await getLocationGeo(settings.gbpLocationName);
+    geo = await getLocationGeo(outlet.reviewSettings.gbpLocationName);
   } catch (err) {
-    console.error("[geogrid] location geo failed:", err);
-    return NextResponse.json({ error: "Could not resolve outlet location from Google" }, { status: 502 });
-  }
-  if (geo.lat == null || geo.lng == null) {
-    return NextResponse.json({ error: "Outlet has no lat/lng on its Google profile" }, { status: 400 });
+    console.error("[geogrid] GBP location info failed, falling back to outlet coords:", err);
   }
 
-  const points = buildGrid(geo.lat, geo.lng, gridSize, rangeMiles);
+  const centerLat = geo.lat ?? (outlet.lat != null ? Number(outlet.lat) : null);
+  const centerLng = geo.lng ?? (outlet.lng != null ? Number(outlet.lng) : null);
+  if (centerLat == null || centerLng == null) {
+    return NextResponse.json(
+      { error: "No coordinates for this outlet (set its lat/lng, or fix its Google profile)" },
+      { status: 400 },
+    );
+  }
+  const targetTitle = geo.title ?? outlet.name;
+
+  const points = buildGrid(centerLat, centerLng, gridSize, rangeMiles);
   const radiusM = Math.min(Math.max(rangeMiles * METERS_PER_MILE, 500), 5000);
 
   const { points: scanned, failures } = await scanGrid(
@@ -76,9 +89,9 @@ export async function POST(request: NextRequest) {
     points,
     radiusM,
     geo.placeId,
-    geo.title,
+    targetTitle,
   );
-  const metrics = computeMetrics(scanned, geo.lat, geo.lng);
+  const metrics = computeMetrics(scanned, centerLat, centerLng);
 
   const scan = await prisma.geoGridScan.create({
     data: {
@@ -86,8 +99,8 @@ export async function POST(request: NextRequest) {
       keyword,
       gridSize,
       rangeMiles,
-      centerLat: geo.lat,
-      centerLng: geo.lng,
+      centerLat,
+      centerLng,
       placeId: geo.placeId,
       status: failures === 0 ? "complete" : failures < points.length ? "partial" : "failed",
       points: scanned,
