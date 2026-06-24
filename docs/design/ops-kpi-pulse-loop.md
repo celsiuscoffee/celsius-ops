@@ -357,6 +357,19 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
     Barista×29, Kitchen Crew×10) → staff→outlet (`User`) → completed skill `AuditReport`s.
     Reports **trained/eligible per outlet** (currently **0/39 trained**). LOW severity, never
     escalated — a coaching/scorecard number, not an incident.
+- **2026-06-24 — routing redesigned to discipline-based + procurement signals.** Owner set
+  recipients by *type*, not outlet→manager:
+  - **operations** (phone, checklist, reviews, procurement) → **Ariff + Adam Kelvin** (resolved,
+    have phones).
+  - **barista** (barista_head audit + skill) → **Syafiq**; **kitchen** (chef_head) → **Chef Bo**.
+    ⚠️ Neither resolves to an active `User` (the Barista-Lead HR profile points to a missing
+    user; the Kitchen Leads are Haziq/Shairuleen/Ameir, no "Bo"). Routes are config-driven
+    (`OPS_PULSE_*_RECIPIENTS`, matched on `User.name`); **unresolved names fall back to the
+    owner** until confirmed. Detectors stamp `routeKey`; the router resolves names → recipients
+    (first = primary, owns ack/escalation; rest co-receive the digest).
+  - **Procurement signals added** → operations: `detectStockCount` (no SUBMITTED/REVIEWED count
+    in 7d, LOW), `detectReceivings` (DISPUTED=MED/PARTIAL=LOW in 7d, **escalates**),
+    `detectMenuSnoozed` (86'd item count via `outlet_product_availability`, MED).
 - **Go-live checklist (before flipping to armed).** (1) apply the `OpsAlert` migration to the
   DB; (2) get `ops_breach_digest` + `ops_escalation` templates APPROVED and set
   `OPS_PULSE_TPL_*`; (3) confirm manager + owner `User.phone`; (4) bump the cron from hourly to

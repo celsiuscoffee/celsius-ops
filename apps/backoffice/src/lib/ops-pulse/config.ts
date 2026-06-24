@@ -37,11 +37,46 @@ export const THRESHOLDS = {
     // Only page reviews newer than this, so first-arm doesn't burst on old backlog.
     recencyHours: 72,
   },
+  stockCount: {
+    // No SUBMITTED/REVIEWED stock count for an active outlet within this many
+    // days → overdue (procurement).
+    cadenceDays: 7,
+  },
+  receiving: {
+    // Receivings with a discrepancy (DISPUTED/PARTIAL) in this window get paged.
+    recencyDays: 7,
+  },
+  menuSnooze: {
+    // Page an outlet once its snoozed (86'd / out-of-stock) item count reaches this.
+    minItems: 1,
+  },
   escalation: {
     // Minutes an alert may sit OPEN (unacked) before it escalates to the owner.
     slaMinutes: 90,
   },
 } as const;
+
+// ── Routing ──────────────────────────────────────────────────
+// Discipline (routeKey) → recipient names, matched case-insensitively against
+// User.name. Multiple recipients allowed; the FIRST is primary (owns the
+// ledger row's ack/escalation), the rest are co-recipients who also get the
+// digest. Unresolved names fall back to the owner (logged). Override via env.
+function splitNames(v: string | undefined, def: string): string[] {
+  return (v || def).split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+export const RECIPIENTS: Record<string, string[]> = {
+  operations: splitNames(process.env.OPS_PULSE_OPS_RECIPIENTS, "Ariff,Adam Kelvin"),
+  barista: splitNames(process.env.OPS_PULSE_BARISTA_RECIPIENTS, "Syafiq"),
+  kitchen: splitNames(process.env.OPS_PULSE_KITCHEN_RECIPIENTS, "Chef Bo"),
+};
+
+// Map an auditor roleType to its routing discipline.
+export function routeForRole(role: string): "barista" | "kitchen" | "operations" {
+  if (role === "barista_head") return "barista";
+  if (role === "chef_head") return "kitchen";
+  return "operations";
+}
 
 // Audit / training coverage. The schema has NO audit cadence, so we define one:
 // each tracked auditor role should have a COMPLETED report at each active outlet

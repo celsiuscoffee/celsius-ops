@@ -2,9 +2,9 @@
 // persist + page + escalate. See docs/design/ops-kpi-pulse-loop.md.
 //
 //   shadow — logs each breach it *would* page; no writes, no sends.
-//   armed  — records each breach in the OpsAlert ledger (deduped), DMs the
-//            accountable manager one digest of their NEW items, then escalates
-//            any incident sitting unacked past the SLA to the owner.
+//   armed  — records each breach in the OpsAlert ledger (deduped), DMs every
+//            recipient of its discipline one digest of their NEW items, then
+//            escalates any incident sitting unacked past the SLA to the owner.
 
 import { pulseMode, THRESHOLDS } from "./config";
 import {
@@ -13,14 +13,16 @@ import {
   detectReviews,
   detectOutletAudit,
   detectSkillTraining,
+  detectStockCount,
+  detectReceivings,
+  detectMenuSnoozed,
 } from "./detectors";
-import { resolveAssignee, resolveOwner } from "./router";
+import { resolveRecipients, resolveOwner } from "./router";
 import { findEscalatable, markEscalated, markSent, recordBreach } from "./ledger";
 import { sendManagerDigest, sendOwnerEscalation } from "./sender";
 import type { Assignee, Breach, PulseRunResult, RoutedBreach } from "./types";
 
-// Last-4 only — shadow output goes to plaintext logs / cron responses, so never
-// emit a full number there.
+// Last-4 only — shadow output goes to plaintext logs / cron responses.
 function maskPhone(p: string | null): string | null {
   if (!p) return null;
   const d = p.replace(/[^0-9]/g, "");
@@ -41,27 +43,30 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
   }
 
   // Detectors are isolated: one failing must not sink the run.
-  const [phone, checklist, reviews, outletAudit, skill] = await Promise.all([
+  const results = await Promise.all([
     detectPhoneCapture(now).catch(detectorFailed("phone-capture")),
     detectChecklist(now).catch(detectorFailed("checklist")),
     detectReviews(now).catch(detectorFailed("reviews")),
     detectOutletAudit(now).catch(detectorFailed("outlet-audit")),
     detectSkillTraining(now).catch(detectorFailed("skill-training")),
+    detectStockCount(now).catch(detectorFailed("stock-count")),
+    detectReceivings(now).catch(detectorFailed("receivings")),
+    detectMenuSnoozed(now).catch(detectorFailed("menu-snoozed")),
   ]);
-  const breaches: Breach[] = [...phone, ...checklist, ...reviews, ...outletAudit, ...skill];
+  const breaches: Breach[] = results.flat();
 
-  // Resolve the accountable assignee once per outlet.
-  const assigneeByOutlet = new Map<string, Assignee | null>();
+  // Resolve recipients once per discipline (routeKey).
+  const recipientsByRoute = new Map<string, Assignee[]>();
   const routed: RoutedBreach[] = [];
   for (const b of breaches) {
-    if (!assigneeByOutlet.has(b.outletId)) {
-      assigneeByOutlet.set(b.outletId, await resolveAssignee(b.outletId));
+    if (!recipientsByRoute.has(b.routeKey)) {
+      recipientsByRoute.set(b.routeKey, await resolveRecipients(b.routeKey));
     }
-    routed.push({ ...b, assignee: assigneeByOutlet.get(b.outletId) ?? null });
+    routed.push({ ...b, assignees: recipientsByRoute.get(b.routeKey) ?? [] });
   }
 
   const maskedRouted = (): RoutedBreach[] =>
-    routed.map((r) => ({ ...r, assignee: r.assignee ? { ...r.assignee, phone: maskPhone(r.assignee.phone) } : null }));
+    routed.map((r) => ({ ...r, assignees: r.assignees.map((a) => ({ ...a, phone: maskPhone(a.phone) })) }));
 
   // ── SHADOW: log what we *would* page; never message anyone, never persist. ──
   if (mode === "shadow") {
@@ -71,10 +76,9 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
         JSON.stringify({
           signal: r.signal,
           severity: r.severity,
+          route: r.routeKey,
           outlet: r.outletName,
-          wouldNotify: r.assignee
-            ? { name: r.assignee.name, phone: maskPhone(r.assignee.phone), fallbackToOwner: r.assignee.fallback }
-            : null,
+          wouldNotify: r.assignees.map((a) => ({ name: a.name, phone: maskPhone(a.phone), fallbackToOwner: a.fallback })),
           summary: r.summary,
         }),
       );
@@ -83,36 +87,35 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
   }
 
   // ── ARMED: persist + page new alerts + escalate stale ones. ──
-  // Record every breach (dedupe in the ledger); bucket the NEW ones per assignee.
-  const newByUser = new Map<string, { phone: string | null; name: string; lines: string[]; alertIds: string[] }>();
+  // Record every breach (dedupe in the ledger); primary = first recipient owns
+  // the row's ack/escalation. Bucket each NEW breach into every recipient's digest.
+  const newAlertIds = new Set<string>();
+  const digestByUser = new Map<string, { phone: string | null; name: string; lines: string[] }>();
   for (const r of routed) {
-    const { alert, isNew } = await recordBreach(r, r.assignee);
+    const primary = r.assignees[0] ?? null;
+    const { alert, isNew } = await recordBreach(r, primary);
     if (!isNew) continue;
-    const key = r.assignee?.userId ?? "__unrouted__";
-    const bucket = newByUser.get(key) ?? {
-      phone: r.assignee?.phone ?? null,
-      name: r.assignee?.name ?? "unrouted",
-      lines: [],
-      alertIds: [],
-    };
-    bucket.lines.push(r.summary);
-    bucket.alertIds.push(alert.id);
-    newByUser.set(key, bucket);
+    newAlertIds.add(alert.id);
+    for (const a of r.assignees) {
+      const bucket = digestByUser.get(a.userId) ?? { phone: a.phone, name: a.name, lines: [] };
+      bucket.lines.push(r.summary);
+      digestByUser.set(a.userId, bucket);
+    }
   }
 
   let sent = 0;
-  for (const [key, bucket] of newByUser) {
+  for (const [userId, bucket] of digestByUser) {
     if (!bucket.phone) {
-      console.warn(`[ops-pulse] ${bucket.alertIds.length} new alert(s) for ${key} but no phone on file — not sent`);
+      console.warn(`[ops-pulse] new alert(s) for ${bucket.name} (${userId}) but no phone on file — not sent`);
       continue;
     }
     const res = await sendManagerDigest(bucket.phone, bucket.lines);
-    // Mark sent even on failure so the escalation timer starts; a failed send is
-    // surfaced via the log and the alert simply stays OPEN to escalate.
-    for (const id of bucket.alertIds) await markSent(id, res.ok ? res.messageId ?? null : null);
     if (res.ok) sent += 1;
-    else console.error(`[ops-pulse] manager digest to ${bucket.name} failed:`, res.error);
+    else console.error(`[ops-pulse] digest to ${bucket.name} failed:`, res.error);
   }
+  // Start the escalation timer on every new alert regardless of per-recipient
+  // send success — a failed send is logged and the alert stays OPEN to escalate.
+  for (const id of newAlertIds) await markSent(id, null);
 
   // Escalation sweep — incidents unacked past SLA go to the owner, batched.
   let escalated = 0;

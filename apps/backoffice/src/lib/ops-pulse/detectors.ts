@@ -9,7 +9,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
-import { AUDIT, THRESHOLDS } from "./config";
+import { getSupabaseAdmin } from "@/lib/pickup/supabase";
+import { AUDIT, THRESHOLDS, routeForRole } from "./config";
 import type { Breach } from "./types";
 
 // Today's MYT (UTC+8) calendar date + the UTC instant of its 00:00. pos_orders
@@ -64,6 +65,7 @@ export async function detectPhoneCapture(now: Date): Promise<Breach[]> {
       outletId: outlet.id,
       outletName: outlet.name,
       severity: "MED",
+      routeKey: "operations",
       dedupeKey: `PHONE_CAPTURE:${outlet.id}:${ymd}`,
       summary: `Phone capture ${pct}% today (${r.with_phone}/${r.total} sales) — below ${floorPct}% floor`,
       detail: { pct, withPhone: r.with_phone, total: r.total, floorPct, date: ymd },
@@ -106,6 +108,7 @@ export async function detectChecklist(now: Date): Promise<Breach[]> {
       outletName: c.outlet.name,
       // An unopened opening checklist (prep/food-safety) is the high-stakes case.
       severity: c.shift === "OPENING" ? "HIGH" : "MED",
+      routeKey: "operations",
       dedupeKey: `CHECKLIST:${c.id}`, // each instance is unique
       summary: `${c.sop.title} (${c.shift.toLowerCase()}) overdue ${overdueMinutes}m — ${c.outlet.name}`,
       detail: {
@@ -161,6 +164,7 @@ export async function detectReviews(now: Date): Promise<Breach[]> {
       outletId: f.outletId,
       outletName: f.outlet.name,
       severity: f.rating <= 1 ? "HIGH" : "MED",
+      routeKey: "operations",
       dedupeKey: `REVIEW:IF:${f.id}`,
       summary: `${f.rating}★ feedback — ${f.outlet.name}: "${clip(f.feedback)}"`,
       detail: { source: "internal_feedback", feedbackId: f.id, rating: f.rating },
@@ -190,6 +194,7 @@ export async function detectReviews(now: Date): Promise<Breach[]> {
       outletId: d.outletId,
       outletName: d.outlet.name,
       severity: d.rating <= 1 ? "HIGH" : "MED",
+      routeKey: "operations",
       dedupeKey: `REVIEW:GBP:${d.id}`,
       summary: `${d.rating}★ Google review awaiting reply — ${d.outlet.name}: "${clip(d.comment)}"`,
       detail: { source: "google_review", draftId: d.id, rating: d.rating },
@@ -252,6 +257,7 @@ export async function detectOutletAudit(now: Date): Promise<Breach[]> {
         outletId: o.id,
         outletName: o.name,
         severity: "LOW",
+        routeKey: routeForRole(role),
         dedupeKey: `AUDIT:${role}:${o.id}:${bucket}`,
         summary: `No ${role} audit at ${o.name} in ${AUDIT.cadenceDays}d`,
         detail: { role, cadenceDays: AUDIT.cadenceDays },
@@ -336,6 +342,7 @@ export async function detectSkillTraining(now: Date): Promise<Breach[]> {
         outletId,
         outletName: agg.name,
         severity: "LOW",
+        routeKey: routeForRole(t.roleType),
         dedupeKey: `SKILL:${t.roleType}:${outletId}:${bucket}`,
         summary: `${t.name}: ${agg.trained}/${agg.eligible} staff trained — ${agg.name} (${untrained} to go)`,
         detail: {
@@ -348,6 +355,122 @@ export async function detectSkillTraining(now: Date): Promise<Breach[]> {
         },
       });
     }
+  }
+  return breaches;
+}
+
+// ── Procurement signals (route to operations) ────────────────
+
+// Stock count overdue: an active outlet with no SUBMITTED/REVIEWED StockCount
+// inside the cadence window. LOW severity, deduped per outlet/window.
+export async function detectStockCount(now: Date): Promise<Breach[]> {
+  const cadenceDays = THRESHOLDS.stockCount.cadenceDays;
+  const cutoff = new Date(now.getTime() - cadenceDays * 86_400_000);
+
+  const [outlets, recent] = await Promise.all([
+    prisma.outlet.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
+    prisma.stockCount.findMany({
+      where: { status: { in: ["SUBMITTED", "REVIEWED"] }, countDate: { gte: cutoff } },
+      select: { outletId: true },
+    }),
+  ]);
+  const counted = new Set(recent.map((r) => r.outletId));
+
+  const { ymd } = mytToday(now);
+  const bucket = Math.floor(
+    new Date(`${ymd}T00:00:00+08:00`).getTime() / (cadenceDays * 86_400_000),
+  );
+
+  const breaches: Breach[] = [];
+  for (const o of outlets) {
+    if (counted.has(o.id)) continue;
+    breaches.push({
+      signal: "STOCK_COUNT",
+      outletId: o.id,
+      outletName: o.name,
+      severity: "LOW",
+      routeKey: "operations",
+      dedupeKey: `STOCK_COUNT:${o.id}:${bucket}`,
+      summary: `No stock count submitted at ${o.name} in ${cadenceDays}d`,
+      detail: { cadenceDays },
+    });
+  }
+  return breaches;
+}
+
+// Receiving discrepancy: a DISPUTED/PARTIAL goods receipt in the recency window.
+// DISPUTED = MED (active dispute), PARTIAL = LOW. Deduped per receiving.
+export async function detectReceivings(now: Date): Promise<Breach[]> {
+  const cutoff = new Date(now.getTime() - THRESHOLDS.receiving.recencyDays * 86_400_000);
+
+  const rows = await prisma.receiving.findMany({
+    where: { status: { in: ["DISPUTED", "PARTIAL"] }, receivedAt: { gte: cutoff } },
+    select: {
+      id: true,
+      status: true,
+      outletId: true,
+      outlet: { select: { name: true, status: true } },
+    },
+    orderBy: { receivedAt: "desc" },
+    take: 100,
+  });
+
+  const breaches: Breach[] = [];
+  for (const r of rows) {
+    if (r.outlet.status !== "ACTIVE") continue;
+    breaches.push({
+      signal: "RECEIVING",
+      outletId: r.outletId,
+      outletName: r.outlet.name,
+      severity: r.status === "DISPUTED" ? "MED" : "LOW",
+      routeKey: "operations",
+      dedupeKey: `RECEIVING:${r.id}`,
+      summary: `${r.status.toLowerCase()} goods receipt — ${r.outlet.name}`,
+      detail: { receivingId: r.id, status: r.status },
+    });
+  }
+  return breaches;
+}
+
+// Menu snoozed: items 86'd / out-of-stock at an outlet (outlet_product_availability
+// in the loyalty DB; outlet_id is the pickupStoreId slug). A restock/procurement
+// signal. Deduped per outlet/day (the count fluctuates).
+export async function detectMenuSnoozed(now: Date): Promise<Breach[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("outlet_product_availability")
+    .select("outlet_id")
+    .eq("is_available", false);
+  if (error) throw new Error(`outlet_product_availability: ${error.message}`);
+
+  const countBySlug = new Map<string, number>();
+  for (const row of (data ?? []) as Array<{ outlet_id: string | null }>) {
+    if (!row.outlet_id) continue;
+    countBySlug.set(row.outlet_id, (countBySlug.get(row.outlet_id) ?? 0) + 1);
+  }
+  if (countBySlug.size === 0) return [];
+
+  const outlets = await prisma.outlet.findMany({
+    where: { status: "ACTIVE", pickupStoreId: { in: [...countBySlug.keys()] } },
+    select: { id: true, name: true, pickupStoreId: true },
+  });
+
+  const { ymd } = mytToday(now);
+  const minItems = THRESHOLDS.menuSnooze.minItems;
+  const breaches: Breach[] = [];
+  for (const o of outlets) {
+    const n = o.pickupStoreId ? countBySlug.get(o.pickupStoreId) ?? 0 : 0;
+    if (n < minItems) continue;
+    breaches.push({
+      signal: "MENU_SNOOZED",
+      outletId: o.id,
+      outletName: o.name,
+      severity: "MED",
+      routeKey: "operations",
+      dedupeKey: `MENU_SNOOZED:${o.id}:${ymd}`,
+      summary: `${n} menu item${n === 1 ? "" : "s"} snoozed (86'd) at ${o.name}`,
+      detail: { snoozed: n },
+    });
   }
   return breaches;
 }

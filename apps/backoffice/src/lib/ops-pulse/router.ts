@@ -1,32 +1,45 @@
-// Routes a breach to the accountable human. The design holds the *manager*
-// in check, so we page the MANAGER who owns the outlet, with the OWNER as the
-// escalation fallback when no outlet-matched manager exists.
-//
-// NOTE: the schema has no outlet→manager mapping (no Outlet.managerId / region
-// hierarchy), so we match on User.outletId / outletIds. With a single ops
-// manager today this is exact; add a mapping before a second manager joins.
+// Routes a breach to the accountable people by DISCIPLINE (routeKey), not by
+// outlet→manager. Operations/procurement → ops leads; barista/kitchen → the
+// discipline lead. Recipient names come from config (RECIPIENTS) and resolve to
+// active users; unresolved names fall back to the owner so nothing is dropped.
 
 import { prisma } from "@/lib/prisma";
-import type { Assignee } from "./types";
+import { RECIPIENTS } from "./config";
+import type { Assignee, RouteKey } from "./types";
 
-export async function resolveAssignee(outletId: string): Promise<Assignee | null> {
-  const manager = await prisma.user.findFirst({
-    where: {
-      role: "MANAGER",
-      status: "ACTIVE",
-      OR: [{ outletId }, { outletIds: { has: outletId } }],
-    },
+// Resolve a discipline's configured recipient names to active users. First
+// configured name = primary (owns the ledger row's ack/escalation); the rest are
+// co-recipients. Unmatched names are logged and skipped; if none resolve, falls
+// back to the owner.
+export async function resolveRecipients(routeKey: RouteKey): Promise<Assignee[]> {
+  const names = RECIPIENTS[routeKey] ?? [];
+  if (names.length === 0) return ownerFallback(routeKey);
+
+  const users = await prisma.user.findMany({
+    where: { status: "ACTIVE" },
     select: { id: true, name: true, phone: true, role: true },
   });
-  if (manager) {
-    return { userId: manager.id, name: manager.name, phone: manager.phone, role: manager.role, fallback: false };
+  const byName = new Map<string, (typeof users)[number]>();
+  for (const u of users) byName.set(u.name.trim().toLowerCase(), u);
+
+  const matched: Assignee[] = [];
+  for (const n of names) {
+    const u = byName.get(n.trim().toLowerCase());
+    if (u) matched.push({ userId: u.id, name: u.name, phone: u.phone, role: u.role, fallback: false });
+    else console.warn(`[ops-pulse] route "${routeKey}" recipient "${n}" not found among active users — skipped`);
   }
-  // No outlet-matched manager → fall back to the owner (also the escalation target).
-  const owner = await resolveOwner();
-  return owner ? { ...owner, fallback: true } : null;
+  if (matched.length === 0) return ownerFallback(routeKey);
+  return matched;
 }
 
-// The owner — escalation target and last-resort assignee.
+async function ownerFallback(routeKey: string): Promise<Assignee[]> {
+  const owner = await resolveOwner();
+  if (!owner) return [];
+  console.warn(`[ops-pulse] route "${routeKey}" had no resolvable recipients — falling back to owner`);
+  return [{ ...owner, fallback: true }];
+}
+
+// The owner — escalation target and last-resort recipient.
 export async function resolveOwner(): Promise<Assignee | null> {
   const owner = await prisma.user.findFirst({
     where: { role: "OWNER", status: "ACTIVE" },
