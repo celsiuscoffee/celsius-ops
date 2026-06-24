@@ -20,7 +20,7 @@ CREATE TABLE "OpsAlert" (
     "escalatedAt" TIMESTAMP(3),
     "resolvedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "OpsAlert_pkey" PRIMARY KEY ("id")
 );
 
