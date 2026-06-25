@@ -17,6 +17,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp";
+import { recordInboundMessage } from "@/lib/whatsapp-store";
 
 // GET — webhook verification handshake.
 export async function GET(request: NextRequest) {
@@ -63,14 +64,26 @@ export async function POST(request: NextRequest) {
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const value = change.value ?? {};
+      const businessNumber = value.metadata?.display_phone_number ?? "";
       for (const msg of value.messages ?? []) {
-        const text = msg.text?.body ?? `<${msg.type}>`;
+        const body = msg.text?.body ?? msg.image?.caption ?? msg.document?.caption ?? null;
         console.log(
-          `[whatsapp:webhook] inbound from=${msg.from} type=${msg.type} text=${JSON.stringify(text)}`,
+          `[whatsapp:webhook] inbound from=${msg.from} type=${msg.type} text=${JSON.stringify(body ?? `<${msg.type}>`)}`,
         );
-        // TODO: route inbound messages — open/append a customer-service thread,
-        // fire an auto-reply via sendWhatsAppText, or notify staff. The 24-hour
-        // free-form reply window opens the moment this message arrives.
+        // Persist for the supplier-chat monitor/inbox (Option 1). Best-effort —
+        // recordInboundMessage never throws, so it never blocks the 200 to Meta.
+        // supplierId is matched by phone inside. Media URL resolution is a follow-up.
+        await recordInboundMessage({
+          waMessageId: msg.id,
+          fromNumber: msg.from,
+          toNumber: businessNumber,
+          type: msg.type,
+          body,
+          timestamp: msg.timestamp ? new Date(Number(msg.timestamp) * 1000) : undefined,
+          raw: msg,
+        });
+        // TODO (next increment): mirror to the Telegram monitor group + route
+        // inbound — auto-reply / AI-propose PO edit.
       }
       for (const status of value.statuses ?? []) {
         console.log(
@@ -100,6 +113,8 @@ interface WhatsAppWebhookPayload {
           timestamp?: string;
           type: string;
           text?: { body?: string };
+          image?: { id?: string; caption?: string; mime_type?: string };
+          document?: { id?: string; caption?: string; filename?: string; mime_type?: string };
         }>;
         statuses?: Array<{
           id: string;
