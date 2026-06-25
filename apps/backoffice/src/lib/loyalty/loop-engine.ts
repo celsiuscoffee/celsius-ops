@@ -17,7 +17,7 @@ import { pushTokensByMember, sendPushToTokens } from "@/lib/loyalty/push";
 
 const BRAND = "brand-celsius";
 const SMS_COST_RM = 0.1; // SMS Niaga ~RM0.10/SMS
-const GP = 0.72; // gross-profit rate for incremental-margin read
+const GP = 0.65; // gross-profit rate for incremental-margin read (owner-ratified 2026-06-25; see docs/design/sms-loop-metrics.md)
 
 export type ArmDef = {
   key: string; // e.g. 'free_tea'

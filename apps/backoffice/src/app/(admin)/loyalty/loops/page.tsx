@@ -10,8 +10,12 @@
 //             → review → /send → wait window → /measure → per-arm results
 //             → leaderboard updates → next proposal sharpens.
 //
-// Agreed economics: start RM200/round SMS then scale; scale an arm only at
-// >=3pp order-rate lift over the holdout; margins read at 72% GP.
+// Ratified metrics (2026-06-25, docs/design/sms-loop-metrics.md): redemption is
+// the PRIMARY TARGET the loop optimises; the holdout is the honesty check (is
+// that redemption incremental, not subsidy). Scale an arm only at >=5pp order-
+// rate lift over the holdout AND positive incremental margin; margins read at
+// 65% GP. Naive gross "return" (revenue/SMS, no holdout) is shown but flagged
+// unverified — never the headline.
 // ============================================================================
 
 import { useState, useEffect, useCallback } from "react";
@@ -24,9 +28,9 @@ import { cn } from "@/lib/utils";
 
 // ---- agreed knobs -----------------------------------------------------------
 const DEFAULT_BUDGET_RM = 200; // round-1 default; raise to scale
-const SUCCESS_BAR_PP = 3;
+const SUCCESS_BAR_PP = 5; // ratified scale bar: >=5pp lift vs holdout (AND positive incr. margin)
 const SMS_COST_RM = 0.1;
-const GP = 0.72;
+const GP = 0.65; // ratified blended gross margin
 
 // ---- types ------------------------------------------------------------------
 type ArmStat = {
@@ -474,13 +478,13 @@ function EvaluationPanel({ data, days, onDays, loops }: { data: Evaluation; days
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">All campaigns</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <Kpi label="Redeemed (target)" value={lv.redeemed.toLocaleString()} sub={`${lv.redeemed_rate}% of sent`} highlight />
           <Kpi label="SMS sent" value={lv.sent.toLocaleString()} sub={`${rm(lv.sms_cost_rm)} spent`} />
-          <Kpi label="Redeemed" value={lv.redeemed.toLocaleString()} sub={`${lv.redeemed_rate}%`} />
           <Kpi label="Orders" value={lv.orders.toLocaleString()} sub="so far" />
           <Kpi label="RM Orders" value={rm(lv.revenue_rm)} sub="gross · in window" />
-          <Kpi label="Return" value={totalReturn} sub="RM per RM1 SMS" highlight />
+          <Kpi label="Gross return" value={totalReturn} sub="unverified · no holdout" />
         </div>
-        <p className="mt-2 text-[11px] text-gray-400">Orders, RM &amp; return are <strong>gross attributed so far</strong>. True ROI vs the holdout shows per campaign once each window closes.</p>
+        <p className="mt-2 text-[11px] text-gray-400"><strong>Redemption is the target</strong> — the cleanest proof an SMS drove an action. Orders, RM &amp; gross return are <strong>gross attributed so far</strong> (no holdout) — the trustworthy, holdout-verified ROI + lift shows per campaign once each window closes.</p>
       </div>
 
       {/* One board per campaign */}
@@ -520,11 +524,11 @@ function CampaignBoard({ meta, live, meas }: {
       ) : (
         <>
           <div className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2">
+            <MiniStat label="Redeemed" value={`${live!.redeemed} (${live!.redeemed_rate}%)`} highlight />
             <MiniStat label="Sent" value={sent.toLocaleString()} />
-            <MiniStat label="Redeemed" value={`${live!.redeemed} (${live!.redeemed_rate}%)`} />
             <MiniStat label="Orders" value={live!.orders.toLocaleString()} />
             <MiniStat label="RM Orders" value={rm(live!.revenue_rm)} />
-            <MiniStat label="Return" value={ret} />
+            <MiniStat label="Gross return" value={ret} />
             <MiniStat label="Spent" value={rm(live!.sms_cost_rm)} />
           </div>
           {hasResults ? (
@@ -538,11 +542,11 @@ function CampaignBoard({ meta, live, meas }: {
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
+function MiniStat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-gray-400">{label}</p>
-      <p className="text-sm font-semibold tabular-nums text-gray-900">{value}</p>
+      <p className={cn("text-[11px] uppercase tracking-wide", highlight ? "text-[#A2492C]" : "text-gray-400")}>{label}</p>
+      <p className={cn("text-sm font-semibold tabular-nums", highlight ? "text-[#A2492C]" : "text-gray-900")}>{value}</p>
     </div>
   );
 }
@@ -955,8 +959,15 @@ function Results({ round }: { round: Round }) {
     const incrMargin = (s.revenue_per_recipient_rm - baseRevPerRecip) * s.n * GP;
     const smsSpend = s.n * SMS_COST_RM;
     const roi = smsSpend > 0 ? incrMargin / smsSpend : 0;
-    const meetsBar = s.lift_pp >= SUCCESS_BAR_PP;
-    return { ...s, incrMargin, smsSpend, roi, meetsBar };
+    // L6 redemption incrementality = incremental orders ÷ redemptions. ≈1 clean,
+    // <1 subsidy (paying people who'd have come anyway), >1 halo (SMS drives
+    // visits beyond the reward). See docs/design/sms-loop-metrics.md §1B.
+    const incrOrders = (s.lift_pp / 100) * s.n;
+    const redemptions = (s.redemption_rate / 100) * s.n;
+    const redeemInc = redemptions > 0 ? incrOrders / redemptions : null;
+    // Ratified scale gate: >=5pp lift AND positive incremental margin.
+    const meetsBar = s.lift_pp >= SUCCESS_BAR_PP && incrMargin > 0;
+    return { ...s, incrMargin, smsSpend, roi, redeemInc, meetsBar };
   });
   const winners = treatment.filter((t) => t.meetsBar).sort((a, b) => b.incrMargin - a.incrMargin);
   const winnerArm = winners[0]?.arm ?? null;
@@ -972,9 +983,10 @@ function Results({ round }: { round: Round }) {
             <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
               <th className="py-2 pr-3">Arm</th>
               <th className="py-2 pr-3 text-right">Sent</th>
+              <th className="py-2 pr-3 text-right">Redeemed</th>
               <th className="py-2 pr-3 text-right">Order rate</th>
               <th className="py-2 pr-3 text-right">Lift vs holdout</th>
-              <th className="py-2 pr-3 text-right">Redeemed</th>
+              <th className="py-2 pr-3 text-right" title="Incremental orders ÷ redemptions. ≈1 clean · <1 subsidy · >1 halo">Incr/redeem</th>
               <th className="py-2 pr-3 text-right">Incr. margin</th>
               <th className="py-2 pr-3 text-right">ROI</th>
             </tr>
@@ -989,11 +1001,14 @@ function Results({ round }: { round: Round }) {
                   </span>
                 </td>
                 <td className="py-2 pr-3 text-right tabular-nums">{t.n.toLocaleString()}</td>
+                <td className="py-2 pr-3 text-right font-medium tabular-nums text-[#A2492C]">{t.redemption_rate}%</td>
                 <td className="py-2 pr-3 text-right tabular-nums">{t.conversion_rate}%</td>
                 <td className={cn("py-2 pr-3 text-right font-medium tabular-nums", t.lift_pp >= SUCCESS_BAR_PP ? "text-green-700" : t.lift_pp > 0 ? "text-gray-700" : "text-red-600")}>
                   {t.lift_pp > 0 ? "+" : ""}{t.lift_pp}pp {t.meetsBar && "✓"}
                 </td>
-                <td className="py-2 pr-3 text-right tabular-nums">{t.redemption_rate}%</td>
+                <td className={cn("py-2 pr-3 text-right tabular-nums", t.redeemInc == null ? "text-gray-400" : t.redeemInc < 0.7 ? "text-red-600" : "text-gray-700")} title={t.redeemInc == null ? "no redemptions yet" : t.redeemInc < 0.7 ? "subsidy: most redeemers would've come anyway" : t.redeemInc > 1.3 ? "halo: SMS drives visits beyond the reward" : "clean: reward is the mechanism"}>
+                  {t.redeemInc == null ? "—" : `${t.redeemInc.toFixed(1)}×`}
+                </td>
                 <td className="py-2 pr-3 text-right tabular-nums">{rm(t.incrMargin)}</td>
                 <td className="py-2 pr-3 text-right tabular-nums">{t.roi > 0 ? `${t.roi.toFixed(1)}×` : "—"}</td>
               </tr>
@@ -1002,10 +1017,10 @@ function Results({ round }: { round: Round }) {
         </table>
       </div>
       <p className="mt-2 text-xs text-gray-400">
-        Incremental margin = (arm revenue/recipient − holdout revenue/recipient) × recipients × {Math.round(GP * 100)}% GP. ROI = incremental margin ÷ SMS spend.
+        <strong>Redeemed</strong> is the target; <strong>Lift vs holdout</strong> + <strong>Incr/redeem</strong> are the honesty check that those redemptions are real new business, not subsidy. Incremental margin = (arm revenue/recipient − holdout revenue/recipient) × recipients × {Math.round(GP * 100)}% GP. ROI = incremental margin ÷ SMS spend. Scale gate: ≥{SUCCESS_BAR_PP}pp lift AND positive incremental margin.
         {winnerArm
           ? ` Round winner: ${labelFor(winnerArm)}. It feeds the leaderboard — if it leads with enough evidence it becomes the champion next round.`
-          : ` No arm cleared the ≥${SUCCESS_BAR_PP}pp bar this round — the optimizer keeps exploring.`}
+          : ` No arm cleared the bar this round (≥${SUCCESS_BAR_PP}pp lift + positive margin) — the optimizer keeps exploring.`}
       </p>
     </div>
   );
