@@ -5,22 +5,22 @@ _Builds on [`sms-loop-engineering.md`](./sms-loop-engineering.md) and [`personal
 
 ## 0. The one rule everything hangs on
 
-**No number counts unless it is measured against the holdout.** Naive before/after is banned (it's how the old StoreHub tool got a fake 41–62× ROI). Every lag metric is `treatment − holdout`. If a round shipped without a logged holdout (`loop_assignments.arm = 'holdout'`), it produced **zero** trustworthy numbers, regardless of how good the raw conversion looked.
+**The target is redemption of the SMS-tagged reward** — that's the KPI the loop is optimized to grow, because a redemption is the cleanest proof an SMS drove a real action we own. **The holdout stays, but as the honesty check, not the target:** it tells us how many of those redemptions are genuinely *incremental* (new business) vs. people who'd have come anyway. So we set goals against redemption and use the holdout to keep that number honest — never the naive before/after that gave StoreHub its fake 41–62× ROI.
 
-North Star (unchanged): **incremental orders per member per period, vs holdout.** SMS optimizes visit **frequency**, not basket — AOV stays at the POS.
+North Star: **redemptions per round, grown over time, with the holdout confirming they're incremental.** SMS optimizes visit **frequency**, not basket — AOV stays at the POS.
 
 ---
 
 ## 1. LAG GOAL — "return spending / redeem" (the outcome)
 
-Lag = the result. You can't move it directly; it's what the lead activity produces. Measured per round at `measured_at`, written to `loop_rounds.stats`.
+Lag = the result. You can't move it directly; it's what the lead activity produces. Measured per round at `measured_at`, written to `loop_rounds.stats`. **L2 (redemption) is the target; everything else is the honesty/margin layer around it.**
 
 | # | Metric | Formula (real fields) | Hard rule / bar |
 |---|--------|----------------------|-----------------|
-| L1 | **Incremental Conversion Rate (ICR)** — *the primary lag metric* | `conv_rate(treatment) − conv_rate(holdout)`, where `conv_rate = count(converted=true) / count(arm)` within `attribution_window_days` | **≥ 3pp = iterate. ≥ 5pp = scale. < 0 or n.s. = kill.** This is the go/no-go number. |
-| L2 | **Reward Redemption Rate** — cleanest causal signal | `count(reward_redeemed=true) / count(treated)` per arm | Track always; redemption = they claimed *this* round's reward, so attribution is unambiguous. No fixed bar (read alongside ICR); the redeemed-vs-incremental gap is formalised as L6 in §1B. |
-| L3 | **Incremental Margin per Recipient (IMPR)** — *the ranking metric* | `(incr_orders × margin_per_order − reward_COGS_redeemed − sms_cost) / count(treated)` per arm | **MUST be > 0 to scale. Arms are ranked by IMPR, not by ICR** — so a high-conversion money-losing freebie never wins. |
-| L4 | **True ROI (holdout-based)** | `incremental_margin / (sms_cost + reward_COGS)` per round | Reported for the owner's "a number I trust." Replaces the banned naive ROI. Scale bar: **> 1.0** (margin exceeds spend), comfortably **≥ 2×** to prioritise budget. |
+| L2 | **Reward Redemption Rate — PRIMARY TARGET** | `count(reward_redeemed=true) / count(sent)` per round (and per arm) | **This is the KPI the loop optimizes — maximize redemptions per round.** Set a per-round target and beat it; calibrate from round 1 (StoreHub Win Back reactivated ~14%, 248/1,748, as a reference). A redemption = they claimed *this* round's reward, so the SMS provably drove it. |
+| L1 | **Incremental Conversion Rate (ICR) — honesty check** | `conv_rate(treatment) − conv_rate(holdout)`, where `conv_rate = count(converted=true) / count(arm)` within `attribution_window_days` | Not the target — the guard that keeps it honest. **≥ 3pp = redemptions are real incremental lift. < 0 / n.s. = redeemers would've come anyway (subsidy); fix offer or segment.** |
+| L3 | **Incremental Margin per Recipient (IMPR) — margin guard / ranking** | `(incr_orders × margin_per_order − reward_COGS_redeemed − sms_cost) / count(treated)` per arm | **MUST be > 0 to scale.** Arms are ranked by IMPR so a high-redemption money-losing freebie never wins. |
+| L4 | **True ROI (holdout-based)** | `incremental_margin / (sms_cost + reward_COGS)` per round | The owner's "a number I trust." Scale bar: **> 1.0**, comfortably **≥ 2×** to prioritise budget. |
 | L5 | **Program repeat-rate trend** | brand repeat rate over time (repeat members / total) — baseline **20.1%** (1,110 / 5,523) | The slow-moving scoreboard the whole loop exists to move. Directional, quarterly. |
 
 **SMS cost** = recipients × RM0.10 (SMS Niaga). **margin_per_order** = **65% of order value** (owner-ratified 2026-06-25, blended gross margin net of COGS). Revisit if COGS/pricing shift materially.
@@ -156,7 +156,7 @@ These aren't who/what/when — they're the safety rails that stop the loop from 
 
 ## 4. The scoreboard (what to actually watch)
 
-- **Per round (operational):** ICR (L1), IMPR per arm (L3), redemption per arm (L2), redemption incrementality (L6), opt-out %, deliverability, decision.
+- **Per round (operational):** redemptions / redemption rate (L2 — the target) first, then the honesty layer: ICR (L1), redemption incrementality (L6), IMPR per arm (L3), opt-out %, deliverability, decision.
 - **Per loop (champion-challenger):** which arm is champion, IMPR trend, pool coverage.
 - **Program (strategic, quarterly):** repeat-rate trend (L5), true ROI (L4), total incremental orders & margin.
 
