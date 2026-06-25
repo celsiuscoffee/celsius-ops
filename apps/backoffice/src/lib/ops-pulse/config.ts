@@ -17,10 +17,16 @@ export function pulseMode(): PulseMode {
 
 // Controls the DAILY pulse — a once-a-day digest per recipient, the habit-builder
 // shipped first. Independent of OPS_PULSE_MODE so the daily digest can go live
-// while the real-time path stays in shadow. off | shadow | armed; unset ⇒ shadow.
+// while the real-time path stays in shadow. off | shadow | armed.
+//
+// GO-LIVE 2026-06-25 (owner authorized): defaults to "armed" so the daily digest
+// sends in production without further config. Safe to arm first because — unlike
+// the real-time tier — it has NO ledger: it re-evaluates the full current state
+// each day, so a missed/failed send is simply retried tomorrow (nothing is
+// "burned"). Override anytime: OPS_PULSE_DAILY_MODE=shadow (log-only) or off.
 export function dailyMode(): PulseMode {
-  const m = (process.env.OPS_PULSE_DAILY_MODE || "shadow").trim().toLowerCase();
-  return m === "off" || m === "armed" ? m : "shadow";
+  const m = (process.env.OPS_PULSE_DAILY_MODE || "armed").trim().toLowerCase();
+  return m === "off" || m === "shadow" ? m : "armed";
 }
 
 // Signals that fire on the FAST real-time pulse (every ~5 min). Everything else
