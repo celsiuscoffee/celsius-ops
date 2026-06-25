@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sendDailyDigest, sendManagerDigest } from "@/lib/ops-pulse/sender";
+import { sendDailyDigest, sendManagerDigest, sendAuditDigest } from "@/lib/ops-pulse/sender";
 
 export const dynamic = "force-dynamic";
 
@@ -45,31 +45,37 @@ export async function POST(req: NextRequest) {
     target = toMsisdn(me.phone);
   }
 
-  // Two messages, mirroring the live design:
-  //  1) a real-time alert — adhoc signals (reviews, 86'd items, receiving) are
-  //     trigger-based and fire the moment they happen, in the manager-digest format.
-  //  2) the daily digest — ROUTINE discipline only (the once-a-day snapshot).
+  // Three messages, mirroring the live design:
+  //  1) real-time alert — adhoc signals (reviews, 86'd items, receiving) fire the
+  //     moment they happen, in the manager-digest format.
+  //  2) audit digest — its own template for the discipline leads (Syafiq/Chef Bo).
+  //  3) daily digest — ROUTINE ops discipline only (the once-a-day snapshot).
   const realtime = ["New 2-star review — “Long wait, latte was cold” · Bangsar"];
+  const audit = ["Kitchen Quality Audit overdue at Bangsar (8 days)"];
   const routine = [
     "TEST PULSE — sample data, not real alerts",
     "Stock count overdue (2 days) · Bangsar",
-    "Weekly barista audit due · Bangsar",
     "Opening checklist incomplete · Bangsar",
   ];
 
   const alertRes = await sendManagerDigest(target, realtime);
+  const auditRes = await sendAuditDigest(target, audit);
   const dailyRes = await sendDailyDigest(target, routine, []);
 
-  if (!alertRes.ok || !dailyRes.ok) {
+  if (!alertRes.ok || !auditRes.ok || !dailyRes.ok) {
     return NextResponse.json(
       {
         ok: false,
-        error: alertRes.error || dailyRes.error || "send_failed",
+        error: alertRes.error || auditRes.error || dailyRes.error || "send_failed",
         message:
           "Send failed — most likely outside the recipient's 24h WhatsApp window and no approved pulse template is configured yet. They need to message the business number first, then try again.",
       },
       { status: 502 },
     );
   }
-  return NextResponse.json({ ok: true, to: target, sent: { realtimeAlert: alertRes.ok, dailyDigest: dailyRes.ok } });
+  return NextResponse.json({
+    ok: true,
+    to: target,
+    sent: { realtimeAlert: alertRes.ok, auditDigest: auditRes.ok, dailyDigest: dailyRes.ok },
+  });
 }

@@ -130,3 +130,21 @@ export function sendDailyDigest(phone: string, routine: string[], adhoc: string[
   if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
   return sendProactive(phone, TEMPLATES.dailyDigest, composeDailyDigest(routine, adhoc), dailyDigestVar(routine, adhoc));
 }
+
+// Audit digest — its own message/template for the discipline leads (barista =
+// Syafiq, kitchen = Chef Bo). A weekly coaching cadence, kept separate from the
+// ops daily digest so it reads as "your audits", not buried in ops routine.
+export function composeAuditDigest(lines: string[]): string {
+  const n = lines.length;
+  const header = `Audit — ${n} due`;
+  return [header, "", lines.map((l) => `• ${l}`).join("\n\n"), "", "Run it and log the report. Reply DONE when done."].join("\n");
+}
+
+export function auditDigestVar(lines: string[]): string {
+  return `${lines.length} audit${lines.length === 1 ? "" : "s"} due · ${summarize(lines)}`;
+}
+
+export function sendAuditDigest(phone: string, lines: string[]): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
+  return sendProactive(phone, TEMPLATES.audit, composeAuditDigest(lines), auditDigestVar(lines));
+}
