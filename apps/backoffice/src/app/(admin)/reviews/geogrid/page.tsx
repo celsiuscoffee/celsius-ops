@@ -2,10 +2,22 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Loader2, MapPin, Play, ArrowLeft, TrendingUp } from "lucide-react";
+import { Loader2, MapPin, Play, ArrowLeft, TrendingUp, ChevronDown, Sparkles } from "lucide-react";
 
 type PointResult = { name: string; placeId: string; isUs: boolean };
 type GridPoint = { row: number; col: number; lat: number; lng: number; rank: number | null; results?: PointResult[] };
+type PlaceProfile = {
+  name: string;
+  rating: number | null;
+  reviews: number | null;
+  hasWebsite: boolean;
+  hasPhone: boolean;
+  hasHours: boolean;
+  photos: number;
+  hasDescription: boolean;
+};
+type Suggestion = { tag: string; priority: "high" | "med" | "low"; text: string };
+type Compare = { us: PlaceProfile | null; them: PlaceProfile; suggestions: Suggestion[] };
 type Scan = {
   id: string;
   keyword: string;
@@ -114,6 +126,103 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
       <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
       {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
     </div>
+  );
+}
+
+const PRIORITY_DOT: Record<string, string> = { high: "bg-red-500", med: "bg-amber-500", low: "bg-emerald-500" };
+
+// A ranked business in the per-point list, with an on-demand "how to beat them"
+// drawer that diffs their Google profile against ours into concrete actions.
+function CompetitorRow({ rank, r, ourPlaceId }: { rank: number; r: PointResult; ourPlaceId: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<Compare | null>(null);
+  const [err, setErr] = useState("");
+
+  const canCompare = !r.isUs && !!r.placeId;
+
+  const toggle = async () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (data || !canCompare) return;
+    setLoading(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/geogrid/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ competitorPlaceId: r.placeId, ourPlaceId }),
+      });
+      const d = await res.json();
+      if (res.ok) setData(d);
+      else setErr(d.error || "Lookup failed");
+    } catch {
+      setErr("Network error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <li className="rounded-lg">
+      <div
+        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${r.isUs ? "bg-brand-dark/10 font-semibold text-foreground" : "text-muted-foreground"}`}
+      >
+        <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-bold text-foreground ring-1 ring-border">
+          {rank}
+        </span>
+        <span className="truncate">{r.name || "Unknown"}</span>
+        {r.isUs ? (
+          <span className="ml-auto rounded bg-brand-dark px-1.5 py-0.5 text-[10px] font-medium text-white">You</span>
+        ) : canCompare ? (
+          <button
+            onClick={toggle}
+            className="ml-auto flex items-center gap-1 whitespace-nowrap rounded-md border border-border bg-white px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-muted/50"
+          >
+            <Sparkles className="h-3 w-3" /> How to beat them
+            <ChevronDown className={`h-3 w-3 transition ${open ? "rotate-180" : ""}`} />
+          </button>
+        ) : null}
+      </div>
+
+      {open && canCompare && (
+        <div className="ml-7 mr-2 mb-1.5 mt-1 rounded-lg border border-border bg-white p-3">
+          {loading ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Comparing profiles…
+            </p>
+          ) : err ? (
+            <p className="text-xs text-red-600">{err}</p>
+          ) : data ? (
+            <>
+              <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                <span>
+                  <span className="font-medium text-foreground">Them:</span> {data.them.reviews ?? "–"} reviews
+                  {data.them.rating != null ? ` · ${data.them.rating.toFixed(1)}★` : ""}
+                </span>
+                <span>
+                  <span className="font-medium text-foreground">You:</span>{" "}
+                  {data.us ? `${data.us.reviews ?? "–"} reviews${data.us.rating != null ? ` · ${data.us.rating.toFixed(1)}★` : ""}` : "profile not linked"}
+                </span>
+              </div>
+              <ul className="space-y-1.5">
+                {data.suggestions.map((s, i) => (
+                  <li key={i} className="flex gap-2 text-xs text-foreground">
+                    <span className={`mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full ${PRIORITY_DOT[s.priority] ?? "bg-neutral-400"}`} />
+                    <span>
+                      <span className="font-medium">{s.tag}:</span> {s.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -420,18 +529,9 @@ export default function GeogridPage() {
                   }
                   if (rows && rows.length > 0) {
                     return (
-                      <ol className="space-y-1">
+                      <ol className="space-y-0.5">
                         {rows.map((r, i) => (
-                          <li
-                            key={r.placeId || `${r.name}-${i}`}
-                            className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${r.isUs ? "bg-brand-dark/10 font-semibold text-foreground" : "text-muted-foreground"}`}
-                          >
-                            <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-bold text-foreground ring-1 ring-border">
-                              {i + 1}
-                            </span>
-                            <span className="truncate">{r.name || "Unknown"}</span>
-                            {r.isUs && <span className="ml-auto rounded bg-brand-dark px-1.5 py-0.5 text-[10px] font-medium text-white">You</span>}
-                          </li>
+                          <CompetitorRow key={r.placeId || `${r.name}-${i}`} rank={i + 1} r={r} ourPlaceId={active.placeId ?? null} />
                         ))}
                       </ol>
                     );
