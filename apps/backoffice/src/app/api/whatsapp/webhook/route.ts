@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp";
 import { recordInboundMessage } from "@/lib/whatsapp-store";
 import { handleInboundAck } from "@/lib/ops-pulse/inbound";
+import { handleSupplierMessage } from "@/lib/inventory/agents/supplier-chat-agent";
 
 // GET — webhook verification handshake.
 export async function GET(request: NextRequest) {
@@ -94,7 +95,21 @@ export async function POST(request: NextRequest) {
         } catch (err) {
           console.error("[ops-pulse] inbound ack failed:", err);
         }
-        // TODO (next): Telegram monitor mirror + route non-ack inbound (AI-propose PO edit).
+        // 3) Supplier-chat AI agent (full-auto, flag-gated + allow-listed). Reads
+        // the message in PO context, auto-replies in the supplier's language, and
+        // edits the PO for clear low-risk cases; substitutions / cancellations /
+        // low-confidence escalate to a human. It's internally guarded and never
+        // throws, so we AWAIT it (serverless can freeze after the response, so a
+        // fire-and-forget promise might not run) — it still returns fast for
+        // non-suppliers and when the flag is off. TODO: Telegram monitor mirror.
+        if (msg.type === "text" && body) {
+          await handleSupplierMessage({
+            fromNumber: msg.from,
+            toNumber: businessNumber,
+            text: body,
+            waMessageId: msg.id,
+          });
+        }
       }
       for (const status of value.statuses ?? []) {
         console.log(

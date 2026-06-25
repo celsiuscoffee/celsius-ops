@@ -94,3 +94,11 @@ helps; matching/short/partial/double detection is still manual.
 - **Bake/make-to-order** (Cake Discovery, JS Breadserie, Jiju's, Blancoz, Xora cups): "OOS" =
   lead-time wait; vendor-push prompts common.
 - **External-channel** (Dankoff email, HNJ app, BBM portal): mirror/track only.
+
+## Agent v1 — what got baked into the prompt (2026-06-26)
+`apps/backoffice/src/lib/inventory/agents/supplier-chat-agent.ts` turns these learnings into behaviour. A cached `PLAYBOOK` system block carries the Malay/Manglish glossary (takde/kosong/otw/cuti/ctn…), the Celsius voice (warm, terse, "bos", 🙏), and the auto-vs-escalate matrix:
+
+- **Auto (full-auto, no human):** unambiguous OOS → `remove_item`; clear smaller qty → `reduce_qty`; plain delivery/ETA, order confirmation, greeting, closure notice → short conversational reply, no PO change.
+- **Always escalate** (holding reply, PO untouched, human decides): ANY substitution offer ("same quality" is the trap — cream 35.7 vs 35.1); price increase / quote commitment; MOQ top-up; payment / PoP / payment-gating / reconciliation (agent can't read invoice/PoP images); complaints / damaged / wrong goods; e-invoice / PO-number / TIN / credit terms; ambiguous qty or unit → clarify.
+
+Rollout is gated: `PROCUREMENT_AGENT_ENABLED` (off by default) + `PROCUREMENT_AGENT_ALLOWLIST` (last-8 phone digits; scope the first live run to the Test supplier). Shipped in PR #526. Substitution auto-accept and the reconciliation ledger remain the open high-ROI follow-ups.

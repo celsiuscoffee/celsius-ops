@@ -75,6 +75,10 @@ export interface OutboundRecord {
   mediaUrl?: string | null;
   supplierId?: string | null;
   status?: string | null;
+  // Free-form audit payload stored on the row. The supplier-chat agent stamps
+  // its decision + the inbound waMessageId it answers ({ agent, inReplyTo, … })
+  // here, so the inbox can show "AI replied" and redeliveries are de-duped.
+  raw?: unknown;
 }
 
 export async function recordOutboundMessage(rec: OutboundRecord): Promise<void> {
@@ -90,6 +94,7 @@ export async function recordOutboundMessage(rec: OutboundRecord): Promise<void> 
         body: rec.body ?? null,
         mediaUrl: rec.mediaUrl ?? null,
         status: rec.status ?? "sent",
+        raw: (rec.raw ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
   } catch (e) {
