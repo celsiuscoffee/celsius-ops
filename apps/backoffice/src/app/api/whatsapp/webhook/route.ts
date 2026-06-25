@@ -102,12 +102,14 @@ export async function POST(request: NextRequest) {
         // throws, so we AWAIT it (serverless can freeze after the response, so a
         // fire-and-forget promise might not run) — it still returns fast for
         // non-suppliers and when the flag is off. TODO: Telegram monitor mirror.
-        if (msg.type === "text" && body) {
+        if (msg.type === "text" || msg.type === "document" || msg.type === "image") {
           await handleSupplierMessage({
             fromNumber: msg.from,
             toNumber: businessNumber,
-            text: body,
+            text: body ?? "",
             waMessageId: msg.id,
+            type: msg.type,
+            mediaId: msg.document?.id ?? msg.image?.id ?? null,
           });
         }
       }

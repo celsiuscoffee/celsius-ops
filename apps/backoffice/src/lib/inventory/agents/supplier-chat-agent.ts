@@ -3,27 +3,26 @@
  *
  * On an inbound WhatsApp message from a matched supplier that has an open PO,
  * this reads the message in context (recent thread + the PO's line items),
- * works out what the supplier means (out of stock, reduce qty, price change,
- * delivery update, …) and:
- *   - auto-replies to the supplier in THEIR language (Malay / English / mix), and
- *   - for clear, low-risk cases, edits the open PO itself (remove / reduce a line).
+ * works out what the supplier means and acts:
+ *   - auto-replies to the supplier in THEIR language (Malay / English / mix),
+ *   - edits the open PO for clear OOS / quantity cases (remove / reduce a line),
+ *   - updates the PO delivery date when the supplier states when they'll deliver,
+ *   - captures an invoice/SOA the supplier sends as a DRAFT invoice on the PO
+ *     (amount left provisional for a human to verify — it can't read the PDF).
  *
  * Guardrails are enforced in CODE, not left to the model:
  *   - Off unless PROCUREMENT_AGENT_ENABLED=true.
- *   - Only acts for suppliers on PROCUREMENT_AGENT_ALLOWLIST (comma-separated,
- *     matched on the last 8 phone digits) when that var is set — so the first
- *     live run is scoped to the Test supplier, not all suppliers. Unset = all.
- *   - substitutions, full cancellations, and ANY low-confidence call ESCALATE:
- *     we send a safe holding reply and leave the PO untouched for a human.
- *   - every decision is stamped onto the outbound message's `raw` for audit, and
+ *   - Only acts for suppliers on PROCUREMENT_AGENT_ALLOWLIST (last-8 phone digits)
+ *     when set — so the first live run is scoped to the Test supplier.
+ *   - substitutions, full cancellations, payment/PoP/reconciliation, complaints,
+ *     and ANY low-confidence call ESCALATE: a safe holding reply, no PO change.
+ *   - every decision is stamped on the outbound message's `raw` for audit, and
  *     used to de-dupe Meta webhook redeliveries.
  *
- * Sends use sendWhatsAppText, which uses the app's own permanent token server
- * side — no token is needed from a caller. Never throws (callers can await it
- * without risking the webhook's 200).
+ * Sends use sendWhatsAppText (the app's own permanent token, server-side). Never
+ * throws — callers can await it without risking the webhook's 200.
  *
- * Model: claude-sonnet-4-6 — this edits real POs and writes to real suppliers,
- * so it gets a reasoning-grade model rather than Haiku.
+ * Model: claude-sonnet-4-6 — it edits real POs and writes to real suppliers.
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { OrderStatus } from "@celsius/db";
@@ -33,7 +32,7 @@ import { recordOutboundMessage } from "@/lib/whatsapp-store";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export const SUPPLIER_AGENT_VERSION = "supplier-chat-agent-v1";
+export const SUPPLIER_AGENT_VERSION = "supplier-chat-agent-v2";
 
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
 
@@ -59,6 +58,8 @@ type AgentDecision = {
     new_quantity: number | null;
     note: string | null;
   };
+  delivery_date: string | null; // YYYY-MM-DD when the supplier states a future delivery day
+  capture_invoice: boolean; // true when this message is the supplier sending their invoice/SOA
   reply_text: string;
   confidence: number;
   requires_human: boolean;
@@ -70,6 +71,8 @@ export interface SupplierMessageEvent {
   toNumber: string; // our business number
   text: string;
   waMessageId?: string;
+  type?: string; // WhatsApp message type: text | document | image | …
+  mediaId?: string | null; // media id for document/image (the invoice PDF, etc.)
 }
 
 const HOLDING_REPLY = {
@@ -95,17 +98,27 @@ function allowed(supplierPhone: string | null | undefined): boolean {
     .includes(tail);
 }
 
+const isValidIsoDate = (d: string | null): d is string =>
+  !!d && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d));
+
+/** Today's date in Malaysia (UTC+8), YYYY-MM-DD — so the model can resolve "esok"/"Rabu". */
+function todayMyt(): string {
+  return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 /**
- * Entry point. Safe to `await` from the webhook — it never throws and no-ops
- * fast for non-suppliers / disabled flag.
+ * Entry point. Safe to `await` from the webhook — never throws, no-ops fast for
+ * non-suppliers / disabled flag.
  */
 export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<void> {
   try {
     if (!flagEnabled() || !process.env.ANTHROPIC_API_KEY) return;
 
+    const hasDoc = evt.type === "document" || evt.type === "image";
     const fromDigits = digits(evt.fromNumber);
     const tail = fromDigits.slice(-8);
-    if (tail.length < 8 || !evt.text.trim()) return;
+    if (tail.length < 8) return;
+    if (!evt.text.trim() && !hasDoc) return; // nothing to act on
 
     // Match the supplier by last-8 digits (same rule as whatsapp-store).
     const suppliers = await prisma.supplier.findMany({
@@ -127,7 +140,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       if (already) return;
     }
 
-    // Most recent open PO for this supplier + its line items.
+    // Most recent open PO for this supplier + its line items + invoice presence.
     const order = await prisma.order.findFirst({
       where: {
         supplierId: supplier.id,
@@ -139,6 +152,8 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         id: true,
         orderNumber: true,
         status: true,
+        outletId: true,
+        totalAmount: true,
         items: {
           select: {
             id: true,
@@ -147,9 +162,10 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
             product: { select: { name: true, baseUom: true } },
           },
         },
+        invoices: { select: { id: true }, take: 1 },
       },
     });
-    if (!order || order.items.length === 0) return; // nothing actionable
+    if (!order) return; // no open PO — nothing to act on
 
     // Recent thread for context (chronological, last 8).
     const history = await prisma.whatsAppMessage.findMany({
@@ -160,7 +176,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     });
     history.reverse();
 
-    const decision = await classify(evt.text, supplier, order, history);
+    const decision = await classify(evt.text, supplier, order, history, todayMyt(), hasDoc);
     if (!decision) return;
 
     // ── Guardrails (code, not model): auto-act vs escalate ──
@@ -171,15 +187,30 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     const lang: "ms" | "en" = decision.language === "ms" ? "ms" : "en";
     let replyText = decision.reply_text?.trim();
     let appliedAction: PoActionType = "none";
+    let deliveryUpdated: string | null = null;
+    let invoiceCaptured = false;
 
     if (escalate) {
       // Never confirm an action we're not taking — send a safe holding line.
       replyText = HOLDING_REPLY[lang];
-    } else if (
-      decision.po_action.type === "remove_item" ||
-      decision.po_action.type === "reduce_qty"
-    ) {
-      appliedAction = await applyPoAction(order.id, decision.po_action);
+    } else {
+      if (
+        decision.po_action.type === "remove_item" ||
+        decision.po_action.type === "reduce_qty"
+      ) {
+        appliedAction = await applyPoAction(order.id, decision.po_action);
+      }
+      if (isValidIsoDate(decision.delivery_date)) {
+        await applyDeliveryDate(order.id, decision.delivery_date);
+        deliveryUpdated = decision.delivery_date;
+      }
+      if (decision.capture_invoice && order.invoices.length === 0) {
+        invoiceCaptured = await captureInvoice(
+          { id: order.id, orderNumber: order.orderNumber, outletId: order.outletId, totalAmount: order.totalAmount },
+          supplier.id,
+          evt.mediaId ?? null,
+        );
+      }
     }
     if (!replyText) replyText = HOLDING_REPLY[lang];
 
@@ -200,6 +231,8 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         intent: decision.intent,
         confidence: decision.confidence,
         appliedAction,
+        deliveryUpdated,
+        invoiceCaptured,
         escalated: escalate,
         escalationReason: escalate ? (decision.escalation_reason ?? "guardrail") : null,
         poNumber: order.orderNumber,
@@ -208,7 +241,8 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
 
     console.log(
       `[supplier-agent] supplier=${supplier.name} po=${order.orderNumber} intent=${decision.intent} ` +
-        `conf=${decision.confidence.toFixed(2)} action=${appliedAction} escalate=${escalate} sent=${sent.ok}`,
+        `conf=${decision.confidence.toFixed(2)} action=${appliedAction} delivery=${deliveryUpdated ?? "-"} ` +
+        `invoice=${invoiceCaptured} escalate=${escalate} sent=${sent.ok}`,
     );
   } catch (err) {
     // Never let the agent break the webhook's 200.
@@ -250,6 +284,47 @@ async function applyPoAction(
   return action.type;
 }
 
+/** Update the PO's delivery date (informational — safe to auto-apply). */
+async function applyDeliveryDate(orderId: string, isoDate: string): Promise<void> {
+  await prisma.order.update({ where: { id: orderId }, data: { deliveryDate: new Date(isoDate) } });
+}
+
+/**
+ * Capture a supplier-sent invoice as a DRAFT invoice on the PO. The amount is
+ * provisional (the PO total) — the agent can't read the PDF, so a human verifies
+ * it in the Invoices screen. Safe to auto: a DRAFT never triggers payment.
+ */
+async function captureInvoice(
+  order: { id: string; orderNumber: string; outletId: string; totalAmount: unknown },
+  supplierId: string,
+  mediaId: string | null,
+): Promise<boolean> {
+  try {
+    await prisma.invoice.create({
+      data: {
+        invoiceNumber: `AI-${order.orderNumber}`,
+        orderId: order.id,
+        outletId: order.outletId,
+        supplierId,
+        amount: order.totalAmount as never, // Decimal passthrough
+        status: "DRAFT",
+        paymentType: "SUPPLIER",
+        notes:
+          "Captured from WhatsApp by the supplier-chat agent — amount is provisional (PO total); " +
+          `verify against the document before paying.${mediaId ? ` [wa-media:${mediaId}]` : ""}`,
+      },
+    });
+    return true;
+  } catch (e) {
+    // Unique invoiceNumber collision (already captured) or any write error.
+    console.warn(
+      "[supplier-agent] invoice capture skipped:",
+      e instanceof Error ? e.message : e,
+    );
+    return false;
+  }
+}
+
 type SupplierCtx = { name: string; paymentTerms: string | null };
 type OrderCtx = {
   orderNumber: string;
@@ -268,43 +343,46 @@ const AGENT_ROLE = `You are the procurement assistant for Celsius Coffee, a Mala
 
 // Static voice + glossary + decision policy, distilled from 17 real Celsius
 // supplier chat logs (docs/design/procurement-chat-learnings.md). Marked for
-// prompt caching — identical on every call, so we pay input tokens once per
-// 5-min window. The hard escalation rules below are the real lesson from those
-// chats: suppliers casually offer "same quality" subs that are not recipe-safe.
+// prompt caching — identical on every call. The hard escalation rules are the
+// real lesson: suppliers casually offer "same quality" subs that aren't recipe-safe.
 const PLAYBOOK = `# Voice (match it)
 Warm, brief, never pushy. Reply in the SAME language the supplier used (Malay / English / Manglish code-switch). Address them "bos"/"boss" or by name; greet "Hi"/"Salam". Light emoji only (🙏 👌). Keep confirmations short: "noted bos", "ok", "baik, thank you".
 
 # Supplier phrasing you must understand (Malay / Manglish)
-- Out of stock: takde, xde, x ada, dah habis, dah abis, kosong, "no stock", OOS, "dry stock" (their own supplier is out).
+- Out of stock: takde, xde, x ada, dah habis, dah abis, kosong, "no stock", OOS, "dry stock".
 - Short quantity: "ada sikit je", "boleh bagi X je", "tinggal X".
 - Delivery/ETA: "boleh hantar bila", "bila sampai", harini=today, esok=tomorrow, otw, "dah hantar/sampai". Days: Isnin Mon, Selasa Tue, Rabu Wed, Khamis Thu, Jumaat Fri, Sabtu Sat.
 - Price: berapa, "1 ctn ada brp", "RM9 per pc". Invoice: "keluarkan invois", SOA (statement of account), "resend invoice".
 - Payment: "attached PoP", "dah initiate", "clear payment first" (pay before they release), "received with thanks".
-- MOQ: "below MOQ", "add something more", "trip min RMxxx". Closure: cuti, tutup, "off day", Raya/CNY/PH last-order/resume notices.
+- MOQ: "below MOQ", "add something more", "trip min RMxxx". Closure: cuti, tutup, "off day", Raya/CNY/PH notices.
 - Units: ctn carton, pkt packet, pcs, btl bottle, kg, kotak box, tin. boleh=ok/can, faham=understood.
 
-# You may act AUTONOMOUSLY only here (set po_action + a confirming reply):
+# You may act AUTONOMOUSLY (set the field + a confirming reply):
 - remove_item — only when it is unambiguous WHICH line is out of stock.
 - reduce_qty — only when they state a smaller available quantity for a specific line.
-If they say something is out/short but NOT which item → ask which, po_action none. Never guess.
+- delivery_date — when they state WHEN they'll deliver ("hantar Rabu", "esok", a date). Resolve it to an absolute YYYY-MM-DD relative to today. "dah hantar"/"otw"/"sampai" (already sent / on the way) is NOT a future date → delivery_date null.
+- capture_invoice — when this message is them SENDING their invoice/SOA (especially a document on a PO with no invoice yet). We save it as a DRAFT for a human to verify the amount, so just acknowledge ("terima invois, thank you") — do NOT discuss or confirm the amount.
+If they say something is out/short but NOT which item → ask which, change nothing. Never guess.
 
-# You MUST escalate (requires_human=true, po_action none, send a short honest holding reply — never confirm the action):
-- ANY substitution offer, even "same quality / identical" — Celsius recipes are fat-%/grade/brand-sensitive (e.g. cream 35.7% vs 35.1%, matcha grade, syrup line). Relay it; never accept it.
-- price increases or committing to a quote; MOQ top-up decisions (buying filler is a judgement call).
-- payment, proof-of-payment, payment-gating, and ANY reconciliation query (you cannot see invoice / PoP contents).
+# You MUST escalate (requires_human=true, change nothing, send a short honest holding reply — never confirm the action):
+- ANY substitution offer, even "same quality / identical" — Celsius recipes are fat-%/grade/brand-sensitive (e.g. cream 35.7% vs 35.1%). Relay it; never accept it.
+- price increase / committing to a quote; MOQ top-up decisions.
+- payment, proof-of-payment, payment-gating, and reconciliation queries ("is this PoP for inv -0142 or -0143?").
 - complaints / damaged / wrong goods; e-invoice / PO-number / TIN / compliance; credit-term questions.
 - ambiguous quantity or unit ("2.5kg only", "1 ctn ada brp") → ask to clarify, do not assume.
 
-# Handle conversationally, NO PO change, requires_human=false:
-order confirmations, delivery / ETA, invoice / SOA receipt, closure / holiday notices, greetings, lead-time notes — acknowledge politely or ask a brief clarifying question.
+# Handle conversationally, change nothing, requires_human=false:
+order confirmations, greetings, closure / holiday notices, lead-time notes — acknowledge politely or ask a brief clarifying question.
 
-Be conservative: confidence >0.7 ONLY when both the item AND the action are unambiguous.`;
+Be conservative: confidence >0.7 ONLY when the intended action is unambiguous.`;
 
 async function classify(
   text: string,
   supplier: SupplierCtx,
   order: OrderCtx,
   history: Array<{ direction: string; body: string | null }>,
+  today: string,
+  hasDoc: boolean,
 ): Promise<AgentDecision | null> {
   const items = order.items
     .map(
@@ -317,30 +395,35 @@ async function classify(
       .filter((m) => m.body)
       .map((m) => `${m.direction === "inbound" ? "Supplier" : "Us"}: ${m.body}`)
       .join("\n") || "(no earlier messages)";
+  const newMsg = text.trim() || (hasDoc ? "[sent a document, no caption]" : "");
 
-  const prompt = `# Open PO ${order.orderNumber} (status ${order.status}) — ${supplier.name}, terms ${supplier.paymentTerms ?? "—"}
+  const prompt = `Today is ${today} (Asia/Kuala_Lumpur). A document was attached: ${hasDoc ? "YES — most likely their invoice/PoP/photo" : "no"}.
+
+# Open PO ${order.orderNumber} (status ${order.status}) — ${supplier.name}, terms ${supplier.paymentTerms ?? "—"}
 ${items}
 
 # Recent conversation
 ${thread}
 
 # New message from the supplier
-"${text}"
+"${newMsg}"
 
 # Judgement examples (follow this behaviour)
 - "caramel syrup takde" AND Caramel is a line item → remove_item that line; reply e.g. "Noted bos 🙏 kita remove caramel dulu, proceed yang lain ya".
-- "ada barang yang takde" (does NOT say which) → po_action none; ask "Hi bos, boleh confirm item mana yang takde? 🙏".
+- "ada barang yang takde" (does NOT say which) → change nothing; ask "Hi bos, boleh confirm item mana yang takde? 🙏".
 - "boleh bagi 3 ctn je" for a line of 5 → reduce_qty new_quantity 3; confirm briefly.
-- "Matcha Morihan OOS, boleh replace Yamama, same quality" → substitution → requires_human true, po_action none, brief holding reply only (do NOT accept the swap).
-- "dah hantar ya, otw" → delivery_eta; reply "noted, thank you bos 🙏"; no PO change.
-- "below MOQ RM300, can add something?" → moq_topup → requires_human true, po_action none, holding reply.
-- "attached invoice" / "this PoP for inv -0142 or -0143?" → invoice_or_soa / reconciliation_query → requires_human true; you can't read the document.
+- "hantar Rabu ya" → delivery_date = the next Wednesday's date; reply "noted bos, Rabu ya 🙏".
+- a document on a PO with no invoice / "ni invois" → capture_invoice true, intent invoice_or_soa; reply "Noted bos, terima invois 🙏 thank you" (don't mention the amount).
+- "Matcha Morihan OOS, boleh replace Yamama, same quality" → requires_human true, change nothing, brief holding reply (do NOT accept the swap).
+- "below MOQ RM300, can add something?" → requires_human true, change nothing, holding reply.
 
 # Output — JSON only:
 {
   "intent": "out_of_stock|reduce_qty|substitution_offer|price_quote_or_increase|delivery_eta|order_confirmation|invoice_or_soa|payment_gating_or_chase|moq_topup|closure_or_holiday|new_product_offer|reconciliation_query|complaint_or_quality|lead_time_advisory|compliance_or_einvoice|staff_handover|greeting|other|unclear",
   "language": "ms|en|mixed",
   "po_action": {"type":"none|remove_item|reduce_qty|substitute_item|cancel_order","po_item_id":null,"new_quantity":null,"note":null},
+  "delivery_date": null,
+  "capture_invoice": false,
   "reply_text": "…",
   "confidence": 0.0,
   "requires_human": false,
@@ -382,6 +465,8 @@ ${thread}
         new_quantity: typeof pa.new_quantity === "number" ? pa.new_quantity : null,
         note: typeof pa.note === "string" ? pa.note : null,
       },
+      delivery_date: typeof p.delivery_date === "string" ? p.delivery_date : null,
+      capture_invoice: Boolean(p.capture_invoice),
       reply_text: String(p.reply_text ?? ""),
       confidence: Math.max(0, Math.min(1, Number(p.confidence) || 0)),
       requires_human: Boolean(p.requires_human),
