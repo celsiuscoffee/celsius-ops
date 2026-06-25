@@ -52,6 +52,11 @@ export const THRESHOLDS = {
   checklist: {
     // Minutes past dueAt before a still-incomplete checklist counts as a breach.
     graceMinutes: 30,
+    // Ceiling on how stale a miss can be and still page. Past this the checklist
+    // is backlog, not today's miss — suppress it so arming doesn't burst on
+    // historical/orphaned rows (mirrors review.recencyHours / receiving.recencyDays).
+    // 48h still catches yesterday's late closing at the 9am daily digest.
+    staleAfterHours: 48,
   },
   review: {
     // QR feedback is already 1–3★ (4–5★ redirect to Google), so page only the
