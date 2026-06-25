@@ -1416,6 +1416,29 @@ model OpsAlert {
   @@index([outletId])
 }
 
+// Ad-hoc reminders authored in the Ops Workspace. Distinct from OpsAlert
+// (system-detected breaches) and HR memos: a manager jots a follow-up for
+// themselves or assigns a to-do to a staff member, with a due time and a
+// done/snooze lifecycle. Human-authored, not detector-driven.
+model OpsReminder {
+  id              String    @id @default(uuid())
+  title           String
+  notes           String?
+  createdByUserId String
+  assigneeUserId  String? // null = personal to the creator
+  dueAt           DateTime?
+  status          String    @default("OPEN") // OPEN | DONE | SNOOZED | CANCELLED
+  snoozedUntil    DateTime?
+  doneAt          DateTime?
+  doneByUserId    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status, dueAt])
+  @@index([assigneeUserId, status])
+  @@index([createdByUserId, status])
+}
+
 // Local-rank geogrid scoreboard for the GBP ranking loop. One row per scan
 // (an N×N grid of simulated searches around an outlet for a keyword).
 model GeoGridScan {
