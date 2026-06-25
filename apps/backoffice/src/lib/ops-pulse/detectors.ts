@@ -10,7 +10,7 @@
 import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
-import { AUDIT, THRESHOLDS, routeForRole, RESTOCK_ENABLED } from "./config";
+import { AUDIT, THRESHOLDS, routeForRole, RESTOCK_ENABLED, NOCLOCKIN_ENABLED } from "./config";
 import type { Breach } from "./types";
 
 // Today's MYT (UTC+8) calendar date + the UTC instant of its 00:00. pos_orders
@@ -519,6 +519,8 @@ export async function detectMenuSnoozed(now: Date): Promise<Breach[]> {
 // roster (hr_schedule_shifts/hr_schedules) and clock-ins (hr_attendance_logs)
 // live in the same DB as Prisma, so we query them raw. One breach per staff/day.
 export async function detectNoClockIn(now: Date): Promise<Breach[]> {
+  // Gated off until clock-in adoption is real — see NOCLOCKIN_ENABLED.
+  if (!NOCLOCKIN_ENABLED) return [];
   const { ymd } = mytToday(now);
   const dayStart = new Date(`${ymd}T00:00:00+08:00`);
   const dayEnd = new Date(dayStart.getTime() + 86_400_000);

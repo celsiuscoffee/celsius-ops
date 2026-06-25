@@ -142,6 +142,13 @@ export function categoryFor(signal: string): SignalCategory {
 // Ariff/Adam), then flip OPS_PULSE_RESTOCK_ENABLED=true.
 export const RESTOCK_ENABLED = (process.env.OPS_PULSE_RESTOCK_ENABLED || "false").toLowerCase() === "true";
 
+// No-clock-in alerts are held OFF until clock-in adoption is real. Today only
+// ~4 of ~22 scheduled staff clock in (28 logs/7d), so flagging the rest is
+// mostly an adoption gap, not no-shows — it would bury the digest in ~15-20
+// false misses a day. Flip OPS_PULSE_NOCLOCKIN_ENABLED=true once clock-in is
+// actually being used, the same gating used for restock alerts above.
+export const NOCLOCKIN_ENABLED = (process.env.OPS_PULSE_NOCLOCKIN_ENABLED || "false").toLowerCase() === "true";
+
 // Signals that ALSO nudge the on-shift outlet team (not just the discipline
 // lead), because the team does the work — e.g. stock take. Comma-separated.
 export const TEAM_NOTIFY_SIGNALS: Set<string> = new Set(
