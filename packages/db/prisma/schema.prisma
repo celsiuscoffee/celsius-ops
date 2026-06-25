@@ -1997,3 +1997,27 @@ enum RecurringCadence {
   QUARTERLY
   YEARLY
 }
+
+/// All WhatsApp Cloud API messages — inbound (webhook) + outbound (our sends).
+/// Powers the supplier-chat monitor/inbox and AI learning. supplierId is a SOFT
+/// link matched by phone (no FK — supplier numbers aren't guaranteed clean/unique).
+model WhatsAppMessage {
+  id          String   @id @default(uuid())
+  waMessageId String?  @unique          // WhatsApp wamid (idempotency)
+  direction   String                    // "inbound" | "outbound"
+  fromNumber  String                    // E.164 digits
+  toNumber    String                    // E.164 digits
+  supplierId  String?                   // soft link to Supplier.id (matched by phone)
+  type        String   @default("text") // text | image | document | template | ...
+  body        String?                   // text body / caption
+  mediaUrl    String?                   // resolved media URL, if any
+  status      String?                   // outbound delivery status (sent/delivered/read/failed)
+  raw         Json?                     // full payload, for audit + AI
+  timestamp   DateTime @default(now())  // message time (Meta's, or send time)
+  createdAt   DateTime @default(now())
+
+  @@index([fromNumber])
+  @@index([toNumber])
+  @@index([supplierId])
+  @@index([timestamp])
+}
