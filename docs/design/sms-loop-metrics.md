@@ -18,12 +18,66 @@ Lag = the result. You can't move it directly; it's what the lead activity produc
 | # | Metric | Formula (real fields) | Hard rule / bar |
 |---|--------|----------------------|-----------------|
 | L1 | **Incremental Conversion Rate (ICR)** — *the primary lag metric* | `conv_rate(treatment) − conv_rate(holdout)`, where `conv_rate = count(converted=true) / count(arm)` within `attribution_window_days` | **≥ 3pp = iterate. ≥ 5pp = scale. < 0 or n.s. = kill.** This is the go/no-go number. |
-| L2 | **Reward Redemption Rate** — cleanest causal signal | `count(reward_redeemed=true) / count(treated)` per arm | Track always; redemption = they claimed *this* round's reward, so attribution is unambiguous. No fixed bar (read alongside ICR) but a redeemed-but-no-incremental-order gap flags a leaky offer. |
+| L2 | **Reward Redemption Rate** — cleanest causal signal | `count(reward_redeemed=true) / count(treated)` per arm | Track always; redemption = they claimed *this* round's reward, so attribution is unambiguous. No fixed bar (read alongside ICR); the redeemed-vs-incremental gap is formalised as L6 in §1B. |
 | L3 | **Incremental Margin per Recipient (IMPR)** — *the ranking metric* | `(incr_orders × margin_per_order − reward_COGS_redeemed − sms_cost) / count(treated)` per arm | **MUST be > 0 to scale. Arms are ranked by IMPR, not by ICR** — so a high-conversion money-losing freebie never wins. |
 | L4 | **True ROI (holdout-based)** | `incremental_margin / (sms_cost + reward_COGS)` per round | Reported for the owner's "a number I trust." Replaces the banned naive ROI. Scale bar: **> 1.0** (margin exceeds spend), comfortably **≥ 2×** to prioritise budget. |
 | L5 | **Program repeat-rate trend** | brand repeat rate over time (repeat members / total) — baseline **20.1%** (1,110 / 5,523) | The slow-moving scoreboard the whole loop exists to move. Directional, quarterly. |
 
 **SMS cost** = recipients × RM0.10 (SMS Niaga). **margin_per_order** = owner-supplied gross margin %; until supplied, use a conservative placeholder and flag it.
+
+### Definitions (read — these are NOT raw treatment numbers)
+
+The benefit side of every lag metric is **net of the holdout**. "Orders" never means treatment orders alone — it means treatment orders *minus* what the holdout did anyway:
+
+```
+conv_rate(arm)     = count(converted=true in window) / count(arm)         # per arm
+incremental_orders = (conv_rate(treatment) − conv_rate(holdout)) × N_treated
+incremental_margin = incremental_orders × margin_per_order
+```
+
+The holdout is a **random** slice of the *same* segment that gets **no SMS and no reward**. Its order rate is, by construction, the "they'd have come without the trigger" rate — so subtracting it is exactly how we throw away orders the SMS didn't cause. A treatment member who would have ordered anyway is cancelled out by an equivalent holdout member; only the *difference* is credited to the SMS. If a round has no holdout, `incremental_orders` is undefined — you're back to naive attribution (see §0).
+
+Cost, by contrast, is **actual**: SMS is charged on everyone sent; reward COGS is charged on every redemption (`reward_redeemed=true`), incremental or not.
+
+---
+
+## 1B. Reconciling redemption vs holdout (which "real" number to trust)
+
+Two honest-looking signals, measuring different things — this section says how they fit together so we never double-count or fool ourselves.
+
+- **Redemption** = per-person proof. Claiming *this* round's reward means the SMS provably reached and motivated that individual. No holdout needed to attribute one redemption.
+- **Holdout incremental orders** = population-level causal truth (`treatment − holdout`), but never knowable per person.
+
+A redemption is one of two things the holdout can tell apart in aggregate but a redemption count alone cannot:
+1. **Incremental redeemer** — wouldn't have come without the SMS. A real win.
+2. **Subsidised redeemer** — was coming anyway and took a free reward en route. You paid COGS for an order you'd have had for free — a margin leak, *not* effectiveness.
+
+And redemption misses a third group entirely: **halo orders** — SMS reminded them, they came and ordered, but never used the reward (forgot it, missed min-spend, bought something else). Real incremental business, zero redemption.
+
+**So redemption is NOT the ROI numerator.** Setting `ROI = redemptions × margin / cost` counts the subsidised redeemers as wins — that is the StoreHub over-attribution bug wearing a redemption costume. The honest split (already how L3/L4 are written):
+
+- **Benefit → from the holdout** (`incremental_orders`): subsidy contributes nothing, halo is correctly counted.
+- **Cost → from redemptions** (`reward_COGS × redeemed`): you really did pay COGS on every claim.
+
+### The reconciliation as a watched metric
+
+| L6 | **Redemption incrementality** | `incremental_orders / redemptions` per arm |
+|---|---|---|
+
+| Value | Meaning | Action |
+|---|---|---|
+| ≈ 1.0 | reward is the mechanism; clean, tight attribution | trust redemption as a fast proxy |
+| ≪ 1.0 (e.g. 0.4) | **subsidy leak** — most redeemers would've come anyway | offer too generous / wrong segment; tighten or cut |
+| > 1.0 | **halo** — SMS drives visits beyond the reward | reward almost incidental; try a cheaper / no offer |
+
+### Which number to lean on depends on the segment's baseline
+
+This is the practical rule:
+
+- **Win-back / lapsed (low holdout order rate):** the holdout barely orders, so nearly every redemption *is* incremental → redemption ≈ incremental. Redemption is a fine, fast proxy; you can read results before the noisier holdout math settles.
+- **Active / round-gap / frequency (high holdout order rate):** the holdout orders a lot anyway, so redemptions massively overstate effect (lots of group 2). Redemption-only ROI here is the StoreHub trap — you **must** use the holdout.
+
+Rule of thumb: **redemption tells you the loop *works*; the holdout tells you it *paid*. The higher the segment's natural visit rate, the more you lean on the holdout.**
 
 ---
 
@@ -102,7 +156,7 @@ These aren't who/what/when — they're the safety rails that stop the loop from 
 
 ## 4. The scoreboard (what to actually watch)
 
-- **Per round (operational):** ICR (L1), IMPR per arm (L3), redemption per arm (L2), opt-out %, deliverability, decision.
+- **Per round (operational):** ICR (L1), IMPR per arm (L3), redemption per arm (L2), redemption incrementality (L6), opt-out %, deliverability, decision.
 - **Per loop (champion-challenger):** which arm is champion, IMPR trend, pool coverage.
 - **Program (strategic, quarterly):** repeat-rate trend (L5), true ROI (L4), total incremental orders & margin.
 
