@@ -67,6 +67,10 @@ function clock(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
+function initials(name: string): string {
+  return name.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?";
+}
+
 export default function SupplierChatsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "attention">("all");
@@ -74,9 +78,13 @@ export default function SupplierChatsPage() {
   const { data: threadsData, isLoading } = useFetch<{ threads: Thread[]; needsAttention: number }>(
     "/api/inventory/supplier-chats",
   );
-  const { data: detail } = useFetch<Detail>(
+  const { data: detail, mutate: mutateDetail } = useFetch<Detail>(
     selected ? `/api/inventory/supplier-chats/${selected}` : null,
   );
+
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const threads = threadsData?.threads ?? [];
   const shown = filter === "attention" ? threads.filter((t) => t.needsAttention) : threads;
@@ -85,24 +93,53 @@ export default function SupplierChatsPage() {
     if (!selected && threads.length) setSelected(threads[0].key);
   }, [threads, selected]);
 
+  useEffect(() => {
+    setDraft("");
+    setSendError(null);
+  }, [selected]);
+
+  async function send() {
+    if (!selected || !draft.trim() || sending) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      const res = await fetch(`/api/inventory/supplier-chats/${selected}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: draft.trim() }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSendError(json.error ?? "Send failed");
+        return;
+      }
+      setDraft("");
+      mutateDetail();
+    } catch {
+      setSendError("Network error");
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
-    <div className="flex h-[calc(100vh-120px)] min-h-[560px] overflow-hidden rounded-lg border border-gray-800 bg-gray-950 text-gray-100">
+    <div className="flex h-[calc(100vh-120px)] min-h-[560px] overflow-hidden rounded-lg border border-border bg-background text-foreground">
       {/* ── Thread list ─────────────────────────────── */}
-      <div className="flex w-64 shrink-0 flex-col border-r border-gray-800">
-        <div className="border-b border-gray-800 p-3">
+      <div className="flex w-64 shrink-0 flex-col border-r border-border">
+        <div className="border-b border-border p-3">
           <div className="flex items-center gap-2 text-sm font-medium">
             <MessageCircle size={16} /> Supplier chats
           </div>
           <div className="mt-2 flex gap-1">
             <button
               onClick={() => setFilter("all")}
-              className={`rounded-full px-2.5 py-0.5 text-xs ${filter === "all" ? "bg-gray-700 text-white" : "text-gray-400 hover:bg-gray-800"}`}
+              className={`rounded-full px-2.5 py-0.5 text-xs ${filter === "all" ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted"}`}
             >
               All
             </button>
             <button
               onClick={() => setFilter("attention")}
-              className={`rounded-full px-2.5 py-0.5 text-xs ${filter === "attention" ? "bg-red-900/60 text-red-200" : "text-gray-400 hover:bg-gray-800"}`}
+              className={`rounded-full px-2.5 py-0.5 text-xs ${filter === "attention" ? "bg-destructive/10 text-destructive" : "text-muted-foreground hover:bg-muted"}`}
             >
               Needs attention {threadsData?.needsAttention ?? 0}
             </button>
@@ -110,12 +147,12 @@ export default function SupplierChatsPage() {
         </div>
         <div className="flex-1 overflow-y-auto">
           {isLoading && (
-            <div className="flex items-center justify-center p-6 text-gray-500">
+            <div className="flex items-center justify-center p-6 text-muted-foreground">
               <Loader2 size={18} className="animate-spin" />
             </div>
           )}
           {!isLoading && shown.length === 0 && (
-            <p className="p-4 text-xs text-gray-500">
+            <p className="p-4 text-xs text-muted-foreground">
               No supplier messages yet. They appear here once the WhatsApp number is live and receiving.
             </p>
           )}
@@ -123,18 +160,18 @@ export default function SupplierChatsPage() {
             <button
               key={t.key}
               onClick={() => setSelected(t.key)}
-              className={`flex w-full gap-2.5 border-b border-gray-800/70 p-2.5 text-left ${selected === t.key ? "bg-gray-800" : "hover:bg-gray-900"}`}
+              className={`flex w-full gap-2.5 border-b border-border p-2.5 text-left ${selected === t.key ? "bg-muted" : "hover:bg-muted/50"}`}
             >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-700 text-[11px] font-medium">
-                {t.name.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?"}
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-medium text-primary">
+                {initials(t.name)}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex justify-between">
                   <span className="truncate text-[13px] font-medium">{t.name}</span>
-                  <span className="shrink-0 pl-1 text-[11px] text-gray-500">{rel(t.lastAt)}</span>
+                  <span className="shrink-0 pl-1 text-[11px] text-muted-foreground">{rel(t.lastAt)}</span>
                 </div>
-                <div className="flex items-center gap-1 text-[11px] text-gray-400">
-                  {t.needsAttention && <AlertCircle size={11} className="shrink-0 text-red-400" />}
+                <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  {t.needsAttention && <AlertCircle size={11} className="shrink-0 text-destructive" />}
                   <span className="truncate">{t.preview}</span>
                 </div>
               </div>
@@ -144,57 +181,80 @@ export default function SupplierChatsPage() {
       </div>
 
       {/* ── Conversation ────────────────────────────── */}
-      <div className="flex min-w-0 flex-1 flex-col border-r border-gray-800">
+      <div className="flex min-w-0 flex-1 flex-col border-r border-border">
         {!detail ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-gray-500">
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
             Select a chat
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between border-b border-gray-800 px-4 py-2.5">
+            <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
               <div>
                 <div className="text-sm font-medium">{detail.supplier?.name ?? `+${detail.key}`}</div>
-                <div className="text-xs text-gray-500">+{detail.key}</div>
+                <div className="text-xs text-muted-foreground">+{detail.key}</div>
               </div>
-              <span className="rounded-full bg-emerald-900/50 px-2 py-0.5 text-[11px] text-emerald-300">
+              <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] text-green-600 dark:text-green-400">
                 WhatsApp
               </span>
             </div>
             <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
               {detail.messages.length === 0 && (
-                <p className="m-auto text-xs text-gray-500">No messages in this thread yet.</p>
+                <p className="m-auto text-xs text-muted-foreground">No messages in this thread yet.</p>
               )}
               {detail.messages.map((m) => (
                 <div
                   key={m.id}
                   className={`max-w-[80%] rounded-lg px-3 py-2 text-[13px] leading-snug ${
                     m.direction === "outbound"
-                      ? "self-end bg-emerald-900/40 text-emerald-50"
-                      : "self-start bg-gray-800 text-gray-100"
+                      ? "self-end bg-primary text-primary-foreground"
+                      : "self-start bg-muted text-foreground"
                   }`}
                 >
-                  {m.body ?? <span className="inline-flex items-center gap-1 text-gray-300"><FileText size={13} /> {m.type}</span>}
-                  <div className="mt-1 text-[10px] text-gray-500">{clock(m.timestamp)}</div>
+                  {m.body ?? (
+                    <span className="inline-flex items-center gap-1">
+                      <FileText size={13} /> {m.type}
+                    </span>
+                  )}
+                  <div
+                    className={`mt-1 text-[10px] ${m.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                  >
+                    {clock(m.timestamp)}
+                  </div>
                 </div>
               ))}
             </div>
-            <div className="border-t border-gray-800 px-4 py-2.5">
+            <div className="border-t border-border px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <input
-                  disabled
-                  placeholder={detail.windowOpen ? "Type a reply…" : "Window closed — use a template"}
-                  className="h-9 flex-1 rounded-md border border-gray-700 bg-gray-900 px-3 text-[13px] text-gray-300 placeholder:text-gray-600"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") send();
+                  }}
+                  disabled={!detail.windowOpen || sending}
+                  placeholder={
+                    detail.windowOpen ? "Type a reply…" : "Window closed — free text not allowed (template only)"
+                  }
+                  className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground disabled:opacity-50"
                 />
-                <button disabled className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-700 text-gray-500">
-                  <Send size={15} />
+                <button
+                  onClick={send}
+                  disabled={!detail.windowOpen || sending || !draft.trim()}
+                  aria-label="Send"
+                  className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-foreground hover:bg-muted disabled:opacity-40"
+                >
+                  {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
                 </button>
               </div>
               <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
-                <Clock size={12} className={detail.windowOpen ? "text-emerald-400" : "text-amber-400"} />
-                <span className="text-gray-500">
+                <Clock
+                  size={12}
+                  className={detail.windowOpen ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}
+                />
+                <span className="text-muted-foreground">
                   {detail.windowOpen ? "24h window open — free reply" : "24h window closed — template only"}
                 </span>
-                <span className="ml-auto text-gray-600">Reply/send: coming in #9</span>
+                {sendError && <span className="ml-auto text-destructive">{sendError}</span>}
               </div>
             </div>
           </>
@@ -205,56 +265,56 @@ export default function SupplierChatsPage() {
       <div className="w-60 shrink-0 overflow-y-auto p-3">
         {!detail ? null : (
           <>
-            <div className="flex flex-col items-center gap-1.5 border-b border-gray-800 pb-3 text-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-700 text-sm font-medium">
-                {(detail.supplier?.name ?? detail.key).replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase()}
+            <div className="flex flex-col items-center gap-1.5 border-b border-border pb-3 text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
+                {initials(detail.supplier?.name ?? detail.key)}
               </div>
               <div className="text-[13px] font-medium">{detail.supplier?.name ?? `+${detail.key}`}</div>
-              <div className="flex items-center gap-1 text-[11px] text-gray-500">
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                 <Phone size={11} /> +{detail.key}
               </div>
             </div>
 
             {detail.supplierId ? (
               <>
-                <div className="flex flex-col gap-1.5 border-b border-gray-800 py-3">
-                  <div className="rounded-md bg-gray-900 px-2.5 py-1.5">
-                    <div className="text-[11px] text-gray-500">Open POs</div>
+                <div className="flex flex-col gap-1.5 border-b border-border py-3">
+                  <div className="rounded-md bg-muted px-2.5 py-1.5">
+                    <div className="text-[11px] text-muted-foreground">Open POs</div>
                     <div className="text-[15px] font-medium">{detail.context.openPOs}</div>
                   </div>
-                  <div className="rounded-md bg-gray-900 px-2.5 py-1.5">
-                    <div className="text-[11px] text-gray-500">Unpaid</div>
+                  <div className="rounded-md bg-muted px-2.5 py-1.5">
+                    <div className="text-[11px] text-muted-foreground">Unpaid</div>
                     <div className="text-[15px] font-medium">{formatRM(detail.context.unpaidTotal)}</div>
                   </div>
                   {detail.context.overdueTotal > 0 && (
-                    <div className="rounded-md bg-red-950/60 px-2.5 py-1.5">
-                      <div className="text-[11px] text-red-300">Overdue</div>
-                      <div className="text-[15px] font-medium text-red-300">
+                    <div className="rounded-md bg-destructive/10 px-2.5 py-1.5">
+                      <div className="text-[11px] text-destructive">Overdue</div>
+                      <div className="text-[15px] font-medium text-destructive">
                         {formatRM(detail.context.overdueTotal)}
                       </div>
                     </div>
                   )}
                 </div>
-                <div className="flex flex-col gap-1 border-b border-gray-800 py-3 text-[12px]">
+                <div className="flex flex-col gap-1 border-b border-border py-3 text-[12px]">
                   <Row label="Delivery" value={detail.supplier?.deliveryDays?.join(", ") || "—"} />
                   <Row label="Lead time" value={`${detail.supplier?.leadTimeDays ?? 0}d`} />
                   <Row label="Terms" value={detail.supplier?.paymentTerms || "—"} />
                 </div>
                 <div className="pt-3">
-                  <div className="mb-1.5 text-[11px] text-gray-500">Open purchase orders</div>
+                  <div className="mb-1.5 text-[11px] text-muted-foreground">Open purchase orders</div>
                   {detail.context.recentPOs.length === 0 && (
-                    <p className="text-[11px] text-gray-600">None open.</p>
+                    <p className="text-[11px] text-muted-foreground">None open.</p>
                   )}
                   {detail.context.recentPOs.map((po) => (
                     <div key={po.orderNumber} className="flex justify-between py-0.5 text-[11px]">
                       <span>{po.orderNumber}</span>
-                      <span className="text-gray-500">{po.status.replace(/_/g, " ").toLowerCase()}</span>
+                      <span className="text-muted-foreground">{po.status.replace(/_/g, " ").toLowerCase()}</span>
                     </div>
                   ))}
                 </div>
               </>
             ) : (
-              <p className="py-4 text-[11px] text-gray-500">
+              <p className="py-4 text-[11px] text-muted-foreground">
                 Not linked to a supplier yet — no procurement context. Match this number on the supplier record to see open POs and balances.
               </p>
             )}
@@ -268,7 +328,7 @@ export default function SupplierChatsPage() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">
-      <span className="text-gray-500">{label}</span>
+      <span className="text-muted-foreground">{label}</span>
       <span className="text-right">{value}</span>
     </div>
   );
