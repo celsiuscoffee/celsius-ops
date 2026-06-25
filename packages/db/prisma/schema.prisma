@@ -1416,6 +1416,34 @@ model OpsAlert {
   @@index([outletId])
 }
 
+// Persisted WhatsApp messages — the Ops chat inbox (/ops/chat-inbox). Every
+// inbound staff reply (webhook) and every outbound ops-pulse digest / ad-hoc
+// reply (sender) lands here so the owner can monitor the two-way thread; before
+// this they were only console-logged and discarded. Append-only; scalar FKs (no
+// Prisma relations), created by manual SQL migration — never `prisma db push`.
+// Threading keys on staffPhone (the staff side, canonicalised to "60"+last9) so
+// the same person is one thread regardless of phone format or message direction.
+model WaMessage {
+  id           String   @id @default(uuid())
+  direction    String // IN | OUT
+  waMessageId  String?  @unique // Meta wamid.* — dedupe inbound, match status receipts
+  staffPhone   String // canonical staff-side phone — the thread key
+  userId       String? // resolved staff User.id (best-effort, matched by phone)
+  fromPhone    String
+  toPhone      String
+  body         String
+  type         String   @default("text") // text | template | image | …
+  templateName String? // OUT: the approved template used, when sent as a template
+  status       String? // received (IN) | sent | delivered | read | failed (OUT)
+  error        String? // provider error message when a send failed
+  opsAlertId   String? // best-effort link to the OpsAlert that triggered an OUT digest
+  sentAt       DateTime @default(now()) // event time (Meta ts for IN, send time for OUT)
+  createdAt    DateTime @default(now())
+
+  @@index([staffPhone, sentAt])
+  @@index([userId])
+}
+
 // Local-rank geogrid scoreboard for the GBP ranking loop. One row per scan
 // (an N×N grid of simulated searches around an outlet for a keyword).
 model GeoGridScan {

@@ -13,6 +13,7 @@ import {
   type WhatsAppSendResult,
 } from "@/lib/whatsapp";
 import { TEMPLATES } from "./config";
+import { recordOutbound } from "@/lib/wa-messages";
 
 const NOT_CONFIGURED: WhatsAppSendResult = {
   ok: false,
@@ -49,12 +50,27 @@ async function sendProactive(
   templateName: string,
   body: string,
 ): Promise<WhatsAppSendResult> {
-  if (templateName) {
-    return sendWhatsAppTemplate(to, templateName, TEMPLATES.languageCode, [
-      { type: "body", parameters: [{ type: "text", text: body }] },
-    ]);
+  const result = templateName
+    ? await sendWhatsAppTemplate(to, templateName, TEMPLATES.languageCode, [
+        { type: "body", parameters: [{ type: "text", text: body }] },
+      ])
+    : await sendWhatsAppText(to, body);
+  // Persist the outbound digest (success OR failure) so it shows in the Ops
+  // chat inbox — failures are useful signal there too. Best-effort; the send
+  // result is what the caller acts on, never the recording.
+  try {
+    await recordOutbound({
+      to,
+      body,
+      templateName: templateName || undefined,
+      ok: result.ok,
+      waMessageId: result.messageId,
+      error: result.error,
+    });
+  } catch (err) {
+    console.error("[ops-pulse] persist outbound failed:", err);
   }
-  return sendWhatsAppText(to, body);
+  return result;
 }
 
 export function sendManagerDigest(phone: string, lines: string[]): Promise<WhatsAppSendResult> {

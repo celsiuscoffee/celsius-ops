@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp";
 import { handleInboundAck } from "@/lib/ops-pulse/inbound";
+import { recordInbound, updateOutboundStatus } from "@/lib/wa-messages";
 
 // GET — webhook verification handshake.
 export async function GET(request: NextRequest) {
@@ -69,6 +70,19 @@ export async function POST(request: NextRequest) {
         console.log(
           `[whatsapp:webhook] inbound from=${msg.from} type=${msg.type} text=${JSON.stringify(text)}`,
         );
+        // Persist EVERY inbound message (not just acks) so the Ops chat inbox
+        // shows the full thread. Best-effort — never block the webhook 200.
+        try {
+          await recordInbound({
+            from: msg.from,
+            waMessageId: msg.id,
+            type: msg.type,
+            body: text,
+            at: msg.timestamp ? new Date(Number(msg.timestamp) * 1000) : undefined,
+          });
+        } catch (err) {
+          console.error("[whatsapp:webhook] persist inbound failed:", err);
+        }
         // Ops pulse ack: a manager/owner replying "DONE" (etc.) resolves their
         // open OpsAlerts. No-op when the sender isn't staff or it's not an ack.
         // Never let this break the webhook — Meta must still get a fast 200.
@@ -87,6 +101,13 @@ export async function POST(request: NextRequest) {
         console.log(
           `[whatsapp:webhook] status id=${status.id} status=${status.status} recipient=${status.recipient_id ?? "?"}`,
         );
+        // Advance the matching outbound row's delivery status (sent → delivered
+        // → read, or failed) for the inbox. Best-effort.
+        try {
+          await updateOutboundStatus(status.id, status.status);
+        } catch (err) {
+          console.error("[whatsapp:webhook] persist status failed:", err);
+        }
       }
     }
   }
