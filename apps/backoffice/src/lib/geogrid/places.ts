@@ -153,55 +153,62 @@ export type Suggestion = { tag: string; priority: "high" | "med" | "low"; text: 
 
 /** Concrete actions to close the gap on `them`, given our profile (or null). */
 export function buildSuggestions(us: PlaceProfile | null, them: PlaceProfile): Suggestion[] {
+  // Every tip is a concrete action with a number and a timeframe, aimed at the
+  // prominence signals that move local rank, so you can actually out-rank them.
   const out: Suggestion[] = [];
+  const PACE = 5; // realistic reviews/week from asking every happy customer
   const reviewsUs = us?.reviews ?? 0;
   const reviewsThem = them.reviews ?? 0;
+
+  // Reviews — overtake their review count (the strongest rank lever).
   if (reviewsThem > reviewsUs) {
-    const gap = reviewsThem - reviewsUs;
+    const target = reviewsThem - reviewsUs + 1; // pass them, not just match
+    const weeks = Math.ceil(target / PACE);
     out.push({
       tag: "Reviews",
-      priority: gap > 50 ? "high" : "med",
-      text: us
-        ? `They have ${reviewsThem} reviews vs your ${reviewsUs} — close the ${gap}-review gap. Review count + velocity is the strongest prominence lever: ask every happy customer and reply to each one.`
-        : `They have ${reviewsThem} reviews. Review count + velocity is the strongest prominence lever — ask every happy customer and reply to each.`,
+      priority: target > 50 ? "high" : "med",
+      text: `Get +${target} reviews to pass their ${reviewsThem}. At ${PACE}/week (ask every customer + QR on receipts) → ~${weeks} week${weeks > 1 ? "s" : ""}.`,
     });
   }
-  if (them.rating != null && (us?.rating == null || them.rating > us.rating + 0.1)) {
-    out.push({
-      tag: "Rating",
-      priority: "med",
-      text:
-        us?.rating != null
-          ? `Their rating is ${them.rating.toFixed(1)}★ vs your ${us.rating.toFixed(1)}★ — lift service quality and recover unhappy customers before they leave 1-stars.`
-          : `Their rating is ${them.rating.toFixed(1)}★ — protect yours by recovering unhappy customers fast.`,
-    });
+
+  // Rating — 5★ reviews needed to lift your average past theirs.
+  if (them.rating != null && them.rating < 5 && us?.rating != null && us.rating + 0.05 < them.rating) {
+    const need = Math.ceil((reviewsUs * (them.rating - us.rating)) / (5 - them.rating));
+    if (need > 0) {
+      const weeks = Math.ceil(need / PACE);
+      out.push({
+        tag: "Rating",
+        priority: "med",
+        text: `Lift your ${us.rating.toFixed(1)}★ past their ${them.rating.toFixed(1)}★: ~${need} new 5★ reviews. At ${PACE}/week → ~${weeks} week${weeks > 1 ? "s" : ""}; recover unhappy customers before they post.`,
+      });
+    }
   }
+
+  // Profile completeness — one-time fixes, each time-boxed.
   if (them.hasHours && us && !us.hasHours) {
-    out.push({ tag: "Hours", priority: "high", text: "Add your opening hours — they have them set, and a profile without hours gets down-ranked and loses walk-ins." });
+    out.push({ tag: "Hours", priority: "high", text: "Add opening hours — 5-min fix today. Missing hours get down-ranked." });
   }
   if (them.hasWebsite && us && !us.hasWebsite) {
-    out.push({ tag: "Website", priority: "med", text: "Add your website / menu link — they link one and you don't." });
+    out.push({ tag: "Website", priority: "med", text: "Add your website / menu link — 2-min fix today." });
   }
   if (them.hasPhone && us && !us.hasPhone) {
-    out.push({ tag: "Phone", priority: "low", text: "Add a phone number to your profile — they have one, you don't." });
+    out.push({ tag: "Phone", priority: "low", text: "Add a phone number — 1-min fix today." });
   }
-  if (them.photos > (us?.photos ?? 0)) {
-    out.push({
-      tag: "Photos",
-      priority: "low",
-      text: `They showcase more photos${us ? ` (${them.photos}+ vs your ${us.photos})` : ""} — add fresh storefront, interior and product photos; profiles with more photos get more clicks.`,
-    });
+  if (us && them.photos > us.photos) {
+    const add = Math.max(them.photos - us.photos, 5);
+    out.push({ tag: "Photos", priority: "low", text: `Add ${add} photos (storefront, interior, drinks) — ~15 min today, then 2/week to stay fresh.` });
   }
   if (them.hasDescription && us && !us.hasDescription) {
-    out.push({ tag: "Description", priority: "low", text: "Add a business description that includes your key search terms — they have one." });
+    out.push({ tag: "Description", priority: "low", text: "Add a description with your key search terms — 10-min fix today." });
   }
+
   if (out.length === 0) {
     out.push({
       tag: us ? "Even" : "Note",
       priority: "low",
       text: us
-        ? "Your profile matches theirs on the basics. The remaining edge is proximity + steady review velocity — keep reviews flowing and post weekly Google updates."
-        : "Couldn't load your profile to compare. Focus on review count, rating and a complete profile (hours, website, photos).",
+        ? `Profile matches theirs — win on velocity: ${PACE} reviews/week + 1 Google post/week keeps you climbing.`
+        : `Link your profile to compare. Meanwhile: ${PACE} reviews/week and add hours, website + 5 photos today.`,
     });
   }
   return out;
