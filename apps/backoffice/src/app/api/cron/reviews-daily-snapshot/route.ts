@@ -3,7 +3,7 @@ import { checkCronAuth } from "@celsius/shared";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews } from "@/lib/reviews/gbp";
-import { fetchTopCompetitor } from "@/lib/reviews/competitors";
+import { fetchCompetitorByName, fetchNextAheadCompetitor } from "@/lib/reviews/competitors";
 import { buildScoreboard } from "@/lib/reviews/scoreboard";
 import { sendMessage } from "@/lib/telegram";
 
@@ -48,9 +48,22 @@ export async function GET(req: NextRequest) {
       const reviews7d = data.reviews.filter((r) => new Date(r.createdAt).getTime() >= now - 7 * DAY).length;
       const reviews30d = data.reviews.filter((r) => new Date(r.createdAt).getTime() >= now - 30 * DAY).length;
 
+      // Chase target: the geogrid's actual rank-rival (whoever out-ranks us in
+      // the local pack), falling back to the nearest cafe just ahead of us in
+      // review count. Avoids pointing at giant unrelated venues.
       let comp = null;
       if (apiKey && outlet.lat != null && outlet.lng != null) {
-        comp = await fetchTopCompetitor(apiKey, Number(outlet.lat), Number(outlet.lng), s.gbpPlaceId ?? null);
+        const lat = Number(outlet.lat);
+        const lng = Number(outlet.lng);
+        const scan = await prisma.geoGridScan.findFirst({
+          where: { outletId: outlet.id },
+          orderBy: { createdAt: "desc" },
+          select: { competitors: true },
+        });
+        const rivals = (scan?.competitors as { name?: string }[] | null) ?? [];
+        const rivalName = rivals.find((r) => r.name && !/celsius/i.test(r.name))?.name;
+        if (rivalName) comp = await fetchCompetitorByName(apiKey, rivalName, lat, lng);
+        if (!comp) comp = await fetchNextAheadCompetitor(apiKey, lat, lng, data.totalReviewCount, s.gbpPlaceId ?? null);
       }
 
       const payload = {
