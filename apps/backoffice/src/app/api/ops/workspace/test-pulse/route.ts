@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sendDailyDigest } from "@/lib/ops-pulse/sender";
+import { sendDailyDigest, sendManagerDigest } from "@/lib/ops-pulse/sender";
 
 export const dynamic = "force-dynamic";
 
@@ -45,33 +45,31 @@ export async function POST(req: NextRequest) {
     target = toMsisdn(me.phone);
   }
 
-  // Representative sample spanning the real detector categories: routine
-  // (recurring discipline) vs adhoc (event-driven). Mirrors a live daily digest
-  // so format + delivery are validated end to end.
+  // Two messages, mirroring the live design:
+  //  1) a real-time alert — adhoc signals (reviews, 86'd items, receiving) are
+  //     trigger-based and fire the moment they happen, in the manager-digest format.
+  //  2) the daily digest — ROUTINE discipline only (the once-a-day snapshot).
+  const realtime = ["New 2-star review — “Long wait, latte was cold” · Bangsar"];
   const routine = [
     "TEST PULSE — sample data, not real alerts",
     "Stock count overdue (2 days) · Bangsar",
     "Weekly barista audit due · Bangsar",
     "Opening checklist incomplete · Bangsar",
   ];
-  const adhoc = [
-    "New 2-star review — “Long wait, latte was cold” · Bangsar",
-    "Menu item snoozed 3h — Iced Latte · Bangsar",
-    "Receiving short 2 units — PO #1042",
-  ];
 
-  const result = await sendDailyDigest(target, routine, adhoc);
+  const alertRes = await sendManagerDigest(target, realtime);
+  const dailyRes = await sendDailyDigest(target, routine, []);
 
-  if (!result.ok) {
+  if (!alertRes.ok || !dailyRes.ok) {
     return NextResponse.json(
       {
         ok: false,
-        error: result.error || "send_failed",
+        error: alertRes.error || dailyRes.error || "send_failed",
         message:
           "Send failed — most likely outside the recipient's 24h WhatsApp window and no approved pulse template is configured yet. They need to message the business number first, then try again.",
       },
       { status: 502 },
     );
   }
-  return NextResponse.json({ ok: true, messageId: result.messageId, to: target });
+  return NextResponse.json({ ok: true, to: target, sent: { realtimeAlert: alertRes.ok, dailyDigest: dailyRes.ok } });
 }
