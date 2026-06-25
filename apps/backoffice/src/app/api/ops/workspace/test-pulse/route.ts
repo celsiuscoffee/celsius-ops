@@ -49,13 +49,13 @@ export async function POST(req: NextRequest) {
   // (recurring discipline) vs adhoc (event-driven). Mirrors a live daily digest
   // so format + delivery are validated end to end.
   const routine = [
-    "🧪 TEST PULSE — sample data, not real alerts",
+    "TEST PULSE — sample data, not real alerts",
     "Stock count overdue (2 days) · Bangsar",
     "Weekly barista audit due · Bangsar",
     "Opening checklist incomplete · Bangsar",
   ];
   const adhoc = [
-    "⭐ New 2★ review — “Long wait, latte was cold” · Bangsar",
+    "New 2-star review — “Long wait, latte was cold” · Bangsar",
     "Menu item snoozed 3h — Iced Latte · Bangsar",
     "Receiving short 2 units — PO #1042",
   ];

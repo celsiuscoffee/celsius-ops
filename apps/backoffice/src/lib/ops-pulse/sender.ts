@@ -26,16 +26,18 @@ const NOT_CONFIGURED: WhatsAppSendResult = {
   error: "WhatsApp not configured",
 };
 
+// Free-form digests render with NO emojis and a blank line between each point
+// (one item per "paragraph") for readability on the recipient's phone.
 export function composeManagerDigest(lines: string[]): string {
   const n = lines.length;
-  const header = `🔴 Ops Pulse — ${n} item${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} you`;
-  return [header, ...lines.map((l) => `• ${l}`), "", "Reply DONE when handled."].join("\n");
+  const header = `Ops Pulse — ${n} item${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} you`;
+  return [header, "", lines.map((l) => `• ${l}`).join("\n\n"), "", "Reply DONE when handled."].join("\n");
 }
 
 export function composeEscalation(lines: string[]): string {
   const n = lines.length;
-  const header = `⚠️ Ops escalation — ${n} item${n === 1 ? "" : "s"} unacked past SLA`;
-  return [header, ...lines.map((l) => `• ${l}`)].join("\n");
+  const header = `Ops escalation — ${n} item${n === 1 ? "" : "s"} unacked past SLA`;
+  return [header, "", lines.map((l) => `• ${l}`).join("\n\n")].join("\n");
 }
 
 // The daily roundup — a once-a-day snapshot of everything outstanding in the
@@ -43,9 +45,9 @@ export function composeEscalation(lines: string[]): string {
 // discipline.
 export function composeDailyDigest(routine: string[], adhoc: string[]): string {
   const total = routine.length + adhoc.length;
-  const parts = [`☀️ Daily Ops Pulse — ${total} open item${total === 1 ? "" : "s"}`];
-  if (routine.length) parts.push("", "🔁 Routine", ...routine.map((l) => `• ${l}`));
-  if (adhoc.length) parts.push("", "⚡ Adhoc", ...adhoc.map((l) => `• ${l}`));
+  const parts = [`Daily Ops Pulse — ${total} open item${total === 1 ? "" : "s"}`];
+  if (routine.length) parts.push("", "Routine", "", routine.map((l) => `• ${l}`).join("\n\n"));
+  if (adhoc.length) parts.push("", "Adhoc", "", adhoc.map((l) => `• ${l}`).join("\n\n"));
   parts.push("", "Clear them today. Reply DONE as you go.");
   return parts.join("\n");
 }
