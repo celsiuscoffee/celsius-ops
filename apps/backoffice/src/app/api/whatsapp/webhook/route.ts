@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp";
 import { recordInboundMessage } from "@/lib/whatsapp-store";
+import { handleInboundAck } from "@/lib/ops-pulse/inbound";
 
 // GET — webhook verification handshake.
 export async function GET(request: NextRequest) {
@@ -70,9 +71,9 @@ export async function POST(request: NextRequest) {
         console.log(
           `[whatsapp:webhook] inbound from=${msg.from} type=${msg.type} text=${JSON.stringify(body ?? `<${msg.type}>`)}`,
         );
-        // Persist for the supplier-chat monitor/inbox (Option 1). Best-effort —
+        // 1) Persist for the supplier-chat monitor/inbox (Option 1). Best-effort —
         // recordInboundMessage never throws, so it never blocks the 200 to Meta.
-        // supplierId is matched by phone inside. Media URL resolution is a follow-up.
+        // supplierId is matched by phone inside; media URL resolution is a follow-up.
         await recordInboundMessage({
           waMessageId: msg.id,
           fromNumber: msg.from,
@@ -82,8 +83,18 @@ export async function POST(request: NextRequest) {
           timestamp: msg.timestamp ? new Date(Number(msg.timestamp) * 1000) : undefined,
           raw: msg,
         });
-        // TODO (next increment): mirror to the Telegram monitor group + route
-        // inbound — auto-reply / AI-propose PO edit.
+        // 2) Ops pulse ack: a manager/owner replying "DONE" (etc.) resolves their
+        // open OpsAlerts. No-op when the sender isn't staff or it's not an ack.
+        // Never let this break the webhook — Meta must still get a fast 200.
+        try {
+          const ack = await handleInboundAck(msg.from, msg.text?.body ?? "");
+          if (ack && ack.resolved > 0) {
+            console.log(`[ops-pulse] ack from=${msg.from} resolved=${ack.resolved} alert(s)`);
+          }
+        } catch (err) {
+          console.error("[ops-pulse] inbound ack failed:", err);
+        }
+        // TODO (next): Telegram monitor mirror + route non-ack inbound (AI-propose PO edit).
       }
       for (const status of value.statuses ?? []) {
         console.log(

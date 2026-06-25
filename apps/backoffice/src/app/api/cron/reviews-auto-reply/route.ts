@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
+import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews, replyToReview } from "@/lib/reviews/gbp";
 import { generateReply, POSITIVE_THRESHOLD } from "@/lib/reviews/auto-reply";
@@ -16,7 +17,12 @@ export const maxDuration = 300;
 //
 // Idempotent: reviews that already carry a reply (from a prior run or a
 // manual reply) are skipped, so re-running never double-posts.
-const MAX_REPLIES_PER_RUN = 50; // safety cap across all outlets per run
+//
+// Per-outlet budget so a high-volume outlet (e.g. Putrajaya) can't consume the
+// whole run and starve the others — that left Shah Alam/Tamarind/Nilai at ~0%
+// response rate under the old single global cap.
+const MAX_PER_OUTLET = 25; // fair share per outlet per run
+const MAX_TOTAL = 120; // global safety ceiling across all outlets per run
 
 type OutletResult = {
   outletId: string;
@@ -28,9 +34,11 @@ type OutletResult = {
 };
 
 export async function GET(req: NextRequest) {
+  // Cron secret OR an authenticated admin (so it can be triggered manually).
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) {
-    return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
+    const user = await getUserFromHeaders(req.headers);
+    if (!user) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
   }
 
   const outlets = await prisma.outlet.findMany({
@@ -47,7 +55,7 @@ export async function GET(req: NextRequest) {
   let totalFailed = 0;
 
   for (const outlet of connected) {
-    if (totalPosted >= MAX_REPLIES_PER_RUN) break;
+    if (totalPosted >= MAX_TOTAL) break;
     const settings = outlet.reviewSettings!;
 
     try {
@@ -67,7 +75,7 @@ export async function GET(req: NextRequest) {
       let failed = 0;
 
       for (const review of candidates) {
-        if (totalPosted + posted >= MAX_REPLIES_PER_RUN) break;
+        if (posted >= MAX_PER_OUTLET || totalPosted + posted >= MAX_TOTAL) break;
         try {
           const reply = await generateReply({
             rating: review.rating,
@@ -123,7 +131,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ran_at: new Date().toISOString(),
     outlets_connected: connected.length,
-    max_per_run: MAX_REPLIES_PER_RUN,
+    max_per_outlet: MAX_PER_OUTLET,
     total_posted: totalPosted,
     total_failed: totalFailed,
     results,
