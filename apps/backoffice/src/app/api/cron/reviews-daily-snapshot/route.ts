@@ -3,7 +3,7 @@ import { checkCronAuth } from "@celsius/shared";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews } from "@/lib/reviews/gbp";
-import { fetchCompetitorByName, fetchNextAheadCompetitor } from "@/lib/reviews/competitors";
+import { fetchNextAheadCompetitor } from "@/lib/reviews/competitors";
 import { buildScoreboard } from "@/lib/reviews/scoreboard";
 import { sendMessage } from "@/lib/telegram";
 
@@ -48,22 +48,20 @@ export async function GET(req: NextRequest) {
       const reviews7d = data.reviews.filter((r) => new Date(r.createdAt).getTime() >= now - 7 * DAY).length;
       const reviews30d = data.reviews.filter((r) => new Date(r.createdAt).getTime() >= now - 30 * DAY).length;
 
-      // Chase target: the geogrid's actual rank-rival (whoever out-ranks us in
-      // the local pack), falling back to the nearest cafe just ahead of us in
-      // review count. Avoids pointing at giant unrelated venues.
+      // Chase target: the nearest cafe just ahead of us in review count, the
+      // next realistic overtake for the review lever. (Who out-RANKS us, which
+      // is often a proximity story not a reviews story, lives on the geogrid
+      // page; using it here produced junk targets like a 48-review shop or a
+      // cafe in the wrong city.)
       let comp = null;
       if (apiKey && outlet.lat != null && outlet.lng != null) {
-        const lat = Number(outlet.lat);
-        const lng = Number(outlet.lng);
-        const scan = await prisma.geoGridScan.findFirst({
-          where: { outletId: outlet.id },
-          orderBy: { createdAt: "desc" },
-          select: { competitors: true },
-        });
-        const rivals = (scan?.competitors as { name?: string }[] | null) ?? [];
-        const rivalName = rivals.find((r) => r.name && !/celsius/i.test(r.name))?.name;
-        if (rivalName) comp = await fetchCompetitorByName(apiKey, rivalName, lat, lng);
-        if (!comp) comp = await fetchNextAheadCompetitor(apiKey, lat, lng, data.totalReviewCount, s.gbpPlaceId ?? null);
+        comp = await fetchNextAheadCompetitor(
+          apiKey,
+          Number(outlet.lat),
+          Number(outlet.lng),
+          data.totalReviewCount,
+          s.gbpPlaceId ?? null,
+        );
       }
 
       const payload = {
