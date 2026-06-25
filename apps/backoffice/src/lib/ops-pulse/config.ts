@@ -19,14 +19,15 @@ export function pulseMode(): PulseMode {
 // shipped first. Independent of OPS_PULSE_MODE so the daily digest can go live
 // while the real-time path stays in shadow. off | shadow | armed.
 //
-// GO-LIVE 2026-06-25 (owner authorized): defaults to "armed" so the daily digest
-// sends in production without further config. Safe to arm first because — unlike
-// the real-time tier — it has NO ledger: it re-evaluates the full current state
-// each day, so a missed/failed send is simply retried tomorrow (nothing is
-// "burned"). Override anytime: OPS_PULSE_DAILY_MODE=shadow (log-only) or off.
+// Defaults to "shadow" (log-only): deploying is always safe and never sends a
+// WhatsApp on its own. Going live is a deliberate, reviewed step — confirm the
+// [ops-pulse:daily:shadow] per-recipient output looks sane AND an approved
+// OPS_PULSE_TPL_DAILY template is set, THEN flip OPS_PULSE_DAILY_MODE=armed.
+// (Arming is safe to do anytime: the daily has no ledger, so it just re-evaluates
+// the full current state each day — a missed/failed send is retried tomorrow.)
 export function dailyMode(): PulseMode {
-  const m = (process.env.OPS_PULSE_DAILY_MODE || "armed").trim().toLowerCase();
-  return m === "off" || m === "shadow" ? m : "armed";
+  const m = (process.env.OPS_PULSE_DAILY_MODE || "shadow").trim().toLowerCase();
+  return m === "off" || m === "armed" ? m : "shadow";
 }
 
 // Signals that fire on the FAST real-time pulse (every ~5 min). Everything else
