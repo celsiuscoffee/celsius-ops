@@ -25,6 +25,12 @@ CREATE TABLE IF NOT EXISTS "WhatsAppMessage" (
   "createdAt"   timestamptz NOT NULL DEFAULT now()
 );
 
+-- Holds supplier phone numbers + chat content. Enable RLS so the anon /
+-- authenticated Supabase roles can't read it. The app reaches this table only
+-- via Prisma (privileged connection, bypasses RLS), so no policies are needed —
+-- same posture as the other Prisma-owned tables.
+ALTER TABLE "WhatsAppMessage" ENABLE ROW LEVEL SECURITY;
+
 CREATE INDEX IF NOT EXISTS "WhatsAppMessage_fromNumber_idx" ON "WhatsAppMessage" ("fromNumber");
 CREATE INDEX IF NOT EXISTS "WhatsAppMessage_toNumber_idx"   ON "WhatsAppMessage" ("toNumber");
 CREATE INDEX IF NOT EXISTS "WhatsAppMessage_supplierId_idx" ON "WhatsAppMessage" ("supplierId");
