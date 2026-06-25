@@ -19,14 +19,15 @@ export function pulseMode(): PulseMode {
 // shipped first. Independent of OPS_PULSE_MODE so the daily digest can go live
 // while the real-time path stays in shadow. off | shadow | armed.
 //
-// GO-LIVE 2026-06-25 (owner authorized): defaults to "armed" so the daily digest
-// sends in production without further config. Safe to arm first because — unlike
-// the real-time tier — it has NO ledger: it re-evaluates the full current state
-// each day, so a missed/failed send is simply retried tomorrow (nothing is
-// "burned"). Override anytime: OPS_PULSE_DAILY_MODE=shadow (log-only) or off.
+// Defaults to "shadow" (log-only): deploying is always safe and never sends a
+// WhatsApp on its own. Going live is a deliberate, reviewed step — confirm the
+// [ops-pulse:daily:shadow] per-recipient output looks sane AND an approved
+// OPS_PULSE_TPL_DAILY template is set, THEN flip OPS_PULSE_DAILY_MODE=armed.
+// (Arming is safe to do anytime: the daily has no ledger, so it just re-evaluates
+// the full current state each day — a missed/failed send is retried tomorrow.)
 export function dailyMode(): PulseMode {
-  const m = (process.env.OPS_PULSE_DAILY_MODE || "armed").trim().toLowerCase();
-  return m === "off" || m === "shadow" ? m : "armed";
+  const m = (process.env.OPS_PULSE_DAILY_MODE || "shadow").trim().toLowerCase();
+  return m === "off" || m === "armed" ? m : "shadow";
 }
 
 // Signals that fire on the FAST real-time pulse (every ~5 min). Everything else
@@ -52,6 +53,11 @@ export const THRESHOLDS = {
   checklist: {
     // Minutes past dueAt before a still-incomplete checklist counts as a breach.
     graceMinutes: 30,
+    // Ceiling on how stale a miss can be and still page. Past this the checklist
+    // is backlog, not today's miss — suppress it so arming doesn't burst on
+    // historical/orphaned rows (mirrors review.recencyHours / receiving.recencyDays).
+    // 48h still catches yesterday's late closing at the 9am daily digest.
+    staleAfterHours: 48,
   },
   review: {
     // QR feedback is already 1–3★ (4–5★ redirect to Google), so page only the
@@ -136,6 +142,13 @@ export function categoryFor(signal: string): SignalCategory {
 // because counts aren't being done). Fix stock counts first (the nudge to
 // Ariff/Adam), then flip OPS_PULSE_RESTOCK_ENABLED=true.
 export const RESTOCK_ENABLED = (process.env.OPS_PULSE_RESTOCK_ENABLED || "false").toLowerCase() === "true";
+
+// No-clock-in alerts are held OFF until clock-in adoption is real. Today only
+// ~4 of ~22 scheduled staff clock in (28 logs/7d), so flagging the rest is
+// mostly an adoption gap, not no-shows — it would bury the digest in ~15-20
+// false misses a day. Flip OPS_PULSE_NOCLOCKIN_ENABLED=true once clock-in is
+// actually being used, the same gating used for restock alerts above.
+export const NOCLOCKIN_ENABLED = (process.env.OPS_PULSE_NOCLOCKIN_ENABLED || "false").toLowerCase() === "true";
 
 // Signals that ALSO nudge the on-shift outlet team (not just the discipline
 // lead), because the team does the work — e.g. stock take. Comma-separated.

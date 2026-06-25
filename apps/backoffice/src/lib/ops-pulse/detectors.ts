@@ -10,7 +10,7 @@
 import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
-import { AUDIT, THRESHOLDS, routeForRole, RESTOCK_ENABLED } from "./config";
+import { AUDIT, THRESHOLDS, routeForRole, RESTOCK_ENABLED, NOCLOCKIN_ENABLED } from "./config";
 import type { Breach } from "./types";
 
 // Today's MYT (UTC+8) calendar date + the UTC instant of its 00:00. pos_orders
@@ -78,12 +78,18 @@ export async function detectPhoneCapture(now: Date): Promise<Breach[]> {
 // graceMinutes past due, at an active outlet. (Shift-only checklists with no
 // dueAt aren't paged here — that needs shift-end resolution; a Phase 2 refinement.)
 export async function detectChecklist(now: Date): Promise<Breach[]> {
-  const cutoff = new Date(now.getTime() - THRESHOLDS.checklist.graceMinutes * 60_000);
+  const { graceMinutes, staleAfterHours } = THRESHOLDS.checklist;
+  // A miss only pages while it's fresh: at least graceMinutes past due, but no
+  // older than staleAfterHours. Older rows are backlog/orphans (e.g. abandoned
+  // checklists), not today's miss — bounding here keeps arming from bursting on
+  // historical data, the same way reviews/receiving are recency-bounded.
+  const overdueCutoff = new Date(now.getTime() - graceMinutes * 60_000);
+  const staleCutoff = new Date(now.getTime() - staleAfterHours * 3_600_000);
 
   const overdue = await prisma.checklist.findMany({
     where: {
       status: { in: ["PENDING", "IN_PROGRESS"] },
-      dueAt: { not: null, lt: cutoff },
+      dueAt: { lt: overdueCutoff, gte: staleCutoff },
     },
     select: {
       id: true,
@@ -94,7 +100,7 @@ export async function detectChecklist(now: Date): Promise<Breach[]> {
       sop: { select: { title: true } },
     },
     orderBy: { dueAt: "asc" },
-    take: 200, // safety cap; a backlog this deep is itself the alert
+    take: 200, // safety cap; a recent backlog this deep is itself the alert
   });
 
   const breaches: Breach[] = [];
@@ -513,6 +519,8 @@ export async function detectMenuSnoozed(now: Date): Promise<Breach[]> {
 // roster (hr_schedule_shifts/hr_schedules) and clock-ins (hr_attendance_logs)
 // live in the same DB as Prisma, so we query them raw. One breach per staff/day.
 export async function detectNoClockIn(now: Date): Promise<Breach[]> {
+  // Gated off until clock-in adoption is real — see NOCLOCKIN_ENABLED.
+  if (!NOCLOCKIN_ENABLED) return [];
   const { ymd } = mytToday(now);
   const dayStart = new Date(`${ymd}T00:00:00+08:00`);
   const dayEnd = new Date(dayStart.getTime() + 86_400_000);
