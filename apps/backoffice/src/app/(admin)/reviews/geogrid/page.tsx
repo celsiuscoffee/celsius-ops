@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Loader2, MapPin, Play, ArrowLeft, TrendingUp, ChevronDown, Sparkles } from "lucide-react";
+import { Loader2, MapPin, Play, ArrowLeft, TrendingUp, ChevronDown, Sparkles, Store } from "lucide-react";
 
 type PointResult = { name: string; placeId: string; isUs: boolean };
 type GridPoint = { row: number; col: number; lat: number; lng: number; rank: number | null; results?: PointResult[] };
@@ -690,22 +690,23 @@ export default function GeogridPage() {
               {grid.flat().map((p) => {
                 const c = rankColor(p.rank);
                 const isSelected = selectedPoint?.row === p.row && selectedPoint?.col === p.col;
+                const isCenter = p.row === (active.gridSize - 1) / 2 && p.col === (active.gridSize - 1) / 2;
                 return (
                   <button
                     key={`${p.row}-${p.col}`}
                     type="button"
                     onClick={() => selectPoint(p)}
-                    className={`flex aspect-square cursor-pointer items-center justify-center rounded-full text-xs font-bold transition hover:opacity-90 ${isSelected ? "ring-2 ring-brand-dark ring-offset-2" : ""}`}
+                    className={`flex aspect-square cursor-pointer items-center justify-center rounded-full text-xs font-bold transition hover:opacity-90 ${isCenter ? "ring-2 ring-brand-dark ring-offset-1" : isSelected ? "ring-2 ring-brand-dark ring-offset-2" : ""}`}
                     style={{ backgroundColor: c.bg, color: c.fg }}
-                    title={`rank ${p.rank ?? ">20"} — click for competitors here`}
+                    title={isCenter ? `Your store — you rank ${p.rank ?? ">20"} here` : `rank ${p.rank ?? ">20"} — click for competitors here`}
                   >
-                    {c.label}
+                    {isCenter ? <Store className="h-4 w-4" aria-label="Your store" /> : c.label}
                   </button>
                 );
               })}
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Center = your storefront. Rank approximated from the Places API (proxy for the Maps local pack) — use it for trend, not exact position. Click any point to see who ranks there.
+              The store icon marks your storefront (grid center). Rank approximated from the Places API (proxy for the Maps local pack) — use it for trend, not exact position. Click any point to see who ranks there.
             </p>
 
             {/* Per-point detail — who ranks at the clicked grid cell */}
