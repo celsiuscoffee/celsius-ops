@@ -74,6 +74,38 @@ function evalKpi(
   return { measurable: true, pct: Math.round((met / inRing.length) * 100), n: inRing.length };
 }
 
+// Who out-ranks us in the OUTER ring of the scan (the far points where proximity
+// favours rivals). "Far" = points at ≥50% of the scanned reach, so it adapts to
+// any scan size. A rival "beats us" at a point when it ranks above our position
+// there (or we're absent). Returns the worst offenders + the km threshold used.
+function outerRingRivals(
+  scan: Scan,
+): { thresholdKm: number; farPoints: number; rivals: { name: string; beats: number; bestRank: number }[] } {
+  const withData = scan.points.filter((p) => p.results && p.results.length);
+  const dists = withData.map((p) => distM(scan.centerLat, scan.centerLng, p.lat, p.lng));
+  const maxDist = dists.length ? Math.max(...dists) : 0;
+  const threshold = maxDist * 0.5;
+  const tally = new Map<string, { name: string; beats: number; bestRank: number }>();
+  let farPoints = 0;
+  withData.forEach((p, i) => {
+    if (dists[i] < threshold) return;
+    farPoints++;
+    (p.results ?? []).forEach((r, idx) => {
+      const theirRank = idx + 1;
+      if (r.isUs || !r.name) return;
+      const beatsUs = p.rank == null || theirRank < p.rank;
+      if (!beatsUs) return;
+      const key = r.placeId || r.name.toLowerCase();
+      const t = tally.get(key) ?? { name: r.name, beats: 0, bestRank: theirRank };
+      t.beats++;
+      t.bestRank = Math.min(t.bestRank, theirRank);
+      tally.set(key, t);
+    });
+  });
+  const rivals = [...tally.values()].sort((a, b) => b.beats - a.beats || a.bestRank - b.bestRank).slice(0, 5);
+  return { thresholdKm: threshold / 1000, farPoints, rivals };
+}
+
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-xl border border-border bg-white p-4">
@@ -324,6 +356,35 @@ export default function GeogridPage() {
               </div>
             )}
           </div>
+
+          {/* Outer-ring callout — who beats us at distance, where proximity favours rivals */}
+          {(() => {
+            const ring = outerRingRivals(active);
+            if (ring.farPoints === 0 || ring.rivals.length === 0) return null;
+            return (
+              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="text-sm font-medium text-amber-900">
+                  Who out-ranks you at distance (≥{ring.thresholdKm.toFixed(1)} km)
+                </div>
+                <p className="mt-0.5 text-[11px] text-amber-800">
+                  Across the {ring.farPoints} outer-ring point{ring.farPoints === 1 ? "" : "s"}, these rivals rank above you most often. Out here Google leans on proximity — you climb past them with prominence (more reviews, faster).
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {ring.rivals.map((r, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm text-amber-900">
+                      <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-bold text-amber-900 ring-1 ring-amber-200">
+                        {i + 1}
+                      </span>
+                      <span className="truncate">{r.name}</span>
+                      <span className="ml-auto whitespace-nowrap text-xs text-amber-800">
+                        beats you at {r.beats} pt{r.beats === 1 ? "" : "s"} · best #{r.bestRank}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
 
           {/* Competitors — who out-ranks us, for reference */}
           {active.competitors && active.competitors.length > 0 && (
