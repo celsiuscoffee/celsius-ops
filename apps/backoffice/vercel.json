@@ -97,6 +97,10 @@
       "schedule": "0 4 * * *"
     },
     {
+      "path": "/api/cron/reviews-weekly-post",
+      "schedule": "0 2 * * 1"
+    },
+    {
       "path": "/api/cron/ops-pulse",
       "schedule": "*/5 * * * *"
     },

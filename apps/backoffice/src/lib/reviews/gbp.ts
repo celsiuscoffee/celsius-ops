@@ -270,6 +270,60 @@ export async function getLocationGeo(
   };
 }
 
+export type LocationProfile = {
+  websiteUri: string | null;
+  description: string | null;
+  hasHours: boolean;
+};
+
+// Read the profile-completeness fields (website, description, whether hours are set).
+export async function getLocationProfile(locationName: string): Promise<LocationProfile> {
+  const token = await getAccessToken();
+  const res = await fetch(`${GBP_INFO_BASE}/${locationName}?readMask=websiteUri,profile,regularHours`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GBP profile read error ${res.status}: ${body}`);
+  }
+  const d = await res.json();
+  return {
+    websiteUri: d.websiteUri ?? null,
+    description: d.profile?.description ?? null,
+    hasHours: Array.isArray(d.regularHours?.periods) && d.regularHours.periods.length > 0,
+  };
+}
+
+// Patch a location's website and/or description. updateMask lists only the
+// fields we're changing, so we never clobber anything the owner already set.
+export async function updateLocationProfile(
+  locationName: string,
+  fields: { websiteUri?: string; description?: string },
+): Promise<void> {
+  const token = await getAccessToken();
+  const mask: string[] = [];
+  const body: Record<string, unknown> = {};
+  if (typeof fields.websiteUri === "string") {
+    mask.push("websiteUri");
+    body.websiteUri = fields.websiteUri;
+  }
+  if (typeof fields.description === "string") {
+    mask.push("profile.description");
+    body.profile = { description: fields.description };
+  }
+  if (!mask.length) return;
+
+  const res = await fetch(`${GBP_INFO_BASE}/${locationName}?updateMask=${mask.join(",")}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`GBP profile update error ${res.status}: ${text}`);
+  }
+}
+
 const GBP_PERF_BASE = "https://businessprofileperformance.googleapis.com/v1";
 
 // The actual search terms customers used to find this location, with monthly

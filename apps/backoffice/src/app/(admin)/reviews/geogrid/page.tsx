@@ -436,6 +436,151 @@ function BeatTargetRow({ rank, target, scan }: { rank: number; target: BeatTarge
     </li>
   );
 }
+
+type LocProfile = { websiteUri: string | null; description: string | null; hasHours: boolean };
+
+// One-click profile completeness: reads the live Google profile, and lets you
+// fill the missing website/description (with a drafted starter) and push it
+// straight to Google. Hours are too structured to safely auto-set, so we link out.
+function ProfileCompleteness({ outletId, outletName }: { outletId: string; outletName: string }) {
+  const [profile, setProfile] = useState<LocProfile | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const [website, setWebsite] = useState("");
+  const [desc, setDesc] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    if (!outletId) return;
+    setProfile(null);
+    setHidden(false);
+    setMsg("");
+    setErr("");
+    setLoading(true);
+    fetch(`/api/reviews/profile?outletId=${outletId}`)
+      .then((r) => r.json())
+      .then((d: { profile?: LocProfile; error?: string }) => {
+        if (d.profile) {
+          setProfile(d.profile);
+          setWebsite(d.profile.websiteUri ?? "");
+          setDesc(
+            d.profile.description ??
+              `Celsius Coffee ${outletName} is a specialty coffee café serving espresso-based drinks, brunch and a cozy spot to work or catch up. Come say hi.`,
+          );
+        } else {
+          setHidden(true); // not connected / no creds — stay quiet
+        }
+      })
+      .catch(() => setHidden(true))
+      .finally(() => setLoading(false));
+  }, [outletId, outletName]);
+
+  if (hidden) return null;
+  if (loading) {
+    return (
+      <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-white p-4 text-xs text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking your Google profile…
+      </div>
+    );
+  }
+  if (!profile) return null;
+
+  const missing: string[] = [];
+  if (!profile.websiteUri) missing.push("website");
+  if (!profile.description) missing.push("description");
+  if (!profile.hasHours) missing.push("hours");
+  if (missing.length === 0) {
+    return (
+      <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        Google profile complete — website, description and hours are all set. ✓
+      </div>
+    );
+  }
+
+  const save = async () => {
+    setSaving(true);
+    setMsg("");
+    setErr("");
+    const fields: { outletId: string; websiteUri?: string; description?: string } = { outletId };
+    if (!profile.websiteUri && website.trim()) fields.websiteUri = website.trim();
+    if (!profile.description && desc.trim()) fields.description = desc.trim();
+    try {
+      const res = await fetch("/api/reviews/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      });
+      const d = await res.json();
+      if (res.ok && d.profile) {
+        setProfile(d.profile);
+        setMsg("Pushed to Google ✓");
+      } else {
+        setErr(d.error || "Update failed");
+      }
+    } catch {
+      setErr("Network error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+      <div className="text-sm font-medium text-amber-900">Complete your Google profile ({missing.join(", ")})</div>
+      <p className="mt-0.5 text-[11px] text-amber-800">A complete profile ranks better. Fill what’s missing and push it straight to Google.</p>
+
+      <div className="mt-3 space-y-3">
+        {!profile.websiteUri && (
+          <div>
+            <label className="block text-[11px] font-medium text-amber-900">Website / menu link</label>
+            <input
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              placeholder="https://…"
+              className="mt-1 w-full max-w-md rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm outline-none"
+            />
+          </div>
+        )}
+        {!profile.description && (
+          <div>
+            <label className="block text-[11px] font-medium text-amber-900">Business description (drafted — edit before pushing)</label>
+            <textarea
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              rows={3}
+              className="mt-1 w-full max-w-md rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm outline-none"
+            />
+          </div>
+        )}
+        {!profile.hasHours && (
+          <p className="text-[11px] text-amber-800">
+            Hours aren’t set. They’re too structured to auto-fill safely —{" "}
+            <a href="https://business.google.com/" target="_blank" rel="noreferrer" className="underline">
+              set them in Google Business Profile
+            </a>
+            .
+          </p>
+        )}
+      </div>
+
+      {(!profile.websiteUri || !profile.description) && (
+        <button
+          onClick={save}
+          disabled={saving}
+          className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700/90 disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {saving ? "Pushing…" : "Push to Google"}
+        </button>
+      )}
+      {msg && <p className="mt-2 text-xs text-emerald-700">{msg}</p>}
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </div>
+  );
+}
+
 export default function GeogridPage() {
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [outletId, setOutletId] = useState("");
@@ -635,6 +780,9 @@ export default function GeogridPage() {
         </div>
       )}
 
+      {/* Auto-fix: complete the Google profile (one of the rank levers) */}
+      {outletId && <ProfileCompleteness outletId={outletId} outletName={outlets.find((o) => o.id === outletId)?.name ?? ""} />}
+
       {active ? (
         <>
           {/* KPI vs target — #1@1km · Top-2@5km · Top-3@10km */}
@@ -679,6 +827,62 @@ export default function GeogridPage() {
             <Stat label="Green radius" value={km(active.greenRadiusM)} sub="rank ≤3 reach (goal #2)" />
             <Stat label="Coverage" value={`${active.foundPoints}/${active.totalPoints}`} sub="points ranking ≤20" />
           </div>
+
+          {/* Progress since last scan — is the auto-loop moving the goals? */}
+          {(() => {
+            const prev = scans
+              .filter((s) => s.keyword === active.keyword && s.id !== active.id && new Date(s.createdAt) < new Date(active.createdAt))
+              .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))[0];
+            if (!prev) return null;
+            const rows: { label: string; from: string; to: string; good: boolean | null }[] = [
+              {
+                label: "Avg rank",
+                from: prev.avgRank != null ? prev.avgRank.toFixed(1) : "–",
+                to: active.avgRank != null ? active.avgRank.toFixed(1) : "–",
+                good: prev.avgRank != null && active.avgRank != null ? active.avgRank < prev.avgRank : null,
+              },
+              {
+                label: "% in top 3",
+                from: `${Math.round(prev.pctTop3 ?? 0)}%`,
+                to: `${Math.round(active.pctTop3 ?? 0)}%`,
+                good: (active.pctTop3 ?? 0) > (prev.pctTop3 ?? 0) ? true : (active.pctTop3 ?? 0) < (prev.pctTop3 ?? 0) ? false : null,
+              },
+              {
+                label: "Green radius",
+                from: km(prev.greenRadiusM),
+                to: km(active.greenRadiusM),
+                good: (active.greenRadiusM ?? 0) > (prev.greenRadiusM ?? 0) ? true : (active.greenRadiusM ?? 0) < (prev.greenRadiusM ?? 0) ? false : null,
+              },
+            ];
+            const moved = rows.some((r) => r.good !== null && r.from !== r.to);
+            return (
+              <div className="mt-4 rounded-xl border border-border bg-white p-4">
+                <div className="text-sm font-medium text-foreground">
+                  Progress since last scan{" "}
+                  <span className="text-xs font-normal text-muted-foreground">({new Date(prev.createdAt).toLocaleDateString()})</span>
+                </div>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {rows.map((r) => (
+                    <div key={r.label} className="rounded-lg border border-border px-3 py-2 text-sm">
+                      <div className="text-[11px] text-muted-foreground">{r.label}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">{r.from}</span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className={`font-semibold ${r.good === true ? "text-emerald-600" : r.good === false ? "text-red-600" : "text-foreground"}`}>
+                          {r.to}
+                        </span>
+                        {r.good === true && <span className="text-emerald-600">↑</span>}
+                        {r.good === false && <span className="text-red-600">↓</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  {moved ? "The loop is moving the goals — keep the actions running." : "Flat since last scan — work the top target in “Who to beat first”."}
+                </p>
+              </div>
+            );
+          })()}
 
           {/* The grid */}
           <div className="mt-5 rounded-xl border border-border bg-white p-4">
