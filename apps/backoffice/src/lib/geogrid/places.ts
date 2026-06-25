@@ -101,6 +101,112 @@ export async function rankAtPoint(
   return { rank: idx >= 0 ? idx + 1 : null, results };
 }
 
+// ── Profile comparison ───────────────────────────────────────────────────────
+// To advise how to out-rank a specific rival, we pull the prominence signals
+// Google's local ranking leans on (reviews, rating, profile completeness) for
+// both businesses and diff them into concrete to-dos.
+
+export type PlaceProfile = {
+  placeId: string;
+  name: string;
+  rating: number | null;
+  reviews: number | null;
+  hasWebsite: boolean;
+  hasPhone: boolean;
+  hasHours: boolean;
+  photos: number;
+  hasDescription: boolean;
+  primaryType: string | null;
+  businessStatus: string | null;
+};
+
+/** Place Details (New) for one place — the fields that feed prominence. */
+export async function placeDetails(apiKey: string, placeId: string): Promise<PlaceProfile> {
+  const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
+    headers: {
+      "X-Goog-Api-Key": apiKey,
+      "X-Goog-FieldMask":
+        "id,displayName,rating,userRatingCount,websiteUri,nationalPhoneNumber,regularOpeningHours,photos,editorialSummary,primaryTypeDisplayName,businessStatus",
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Places details error ${res.status}: ${body.slice(0, 200)}`);
+  }
+  const p = await res.json();
+  return {
+    placeId: p.id ?? placeId,
+    name: p.displayName?.text ?? "",
+    rating: typeof p.rating === "number" ? p.rating : null,
+    reviews: typeof p.userRatingCount === "number" ? p.userRatingCount : null,
+    hasWebsite: !!p.websiteUri,
+    hasPhone: !!p.nationalPhoneNumber,
+    hasHours: !!p.regularOpeningHours,
+    photos: Array.isArray(p.photos) ? p.photos.length : 0,
+    hasDescription: !!p.editorialSummary?.text,
+    primaryType: p.primaryTypeDisplayName?.text ?? null,
+    businessStatus: p.businessStatus ?? null,
+  };
+}
+
+export type Suggestion = { tag: string; priority: "high" | "med" | "low"; text: string };
+
+/** Concrete actions to close the gap on `them`, given our profile (or null). */
+export function buildSuggestions(us: PlaceProfile | null, them: PlaceProfile): Suggestion[] {
+  const out: Suggestion[] = [];
+  const reviewsUs = us?.reviews ?? 0;
+  const reviewsThem = them.reviews ?? 0;
+  if (reviewsThem > reviewsUs) {
+    const gap = reviewsThem - reviewsUs;
+    out.push({
+      tag: "Reviews",
+      priority: gap > 50 ? "high" : "med",
+      text: us
+        ? `They have ${reviewsThem} reviews vs your ${reviewsUs} — close the ${gap}-review gap. Review count + velocity is the strongest prominence lever: ask every happy customer and reply to each one.`
+        : `They have ${reviewsThem} reviews. Review count + velocity is the strongest prominence lever — ask every happy customer and reply to each.`,
+    });
+  }
+  if (them.rating != null && (us?.rating == null || them.rating > us.rating + 0.1)) {
+    out.push({
+      tag: "Rating",
+      priority: "med",
+      text:
+        us?.rating != null
+          ? `Their rating is ${them.rating.toFixed(1)}★ vs your ${us.rating.toFixed(1)}★ — lift service quality and recover unhappy customers before they leave 1-stars.`
+          : `Their rating is ${them.rating.toFixed(1)}★ — protect yours by recovering unhappy customers fast.`,
+    });
+  }
+  if (them.hasHours && us && !us.hasHours) {
+    out.push({ tag: "Hours", priority: "high", text: "Add your opening hours — they have them set, and a profile without hours gets down-ranked and loses walk-ins." });
+  }
+  if (them.hasWebsite && us && !us.hasWebsite) {
+    out.push({ tag: "Website", priority: "med", text: "Add your website / menu link — they link one and you don't." });
+  }
+  if (them.hasPhone && us && !us.hasPhone) {
+    out.push({ tag: "Phone", priority: "low", text: "Add a phone number to your profile — they have one, you don't." });
+  }
+  if (them.photos > (us?.photos ?? 0)) {
+    out.push({
+      tag: "Photos",
+      priority: "low",
+      text: `They showcase more photos${us ? ` (${them.photos}+ vs your ${us.photos})` : ""} — add fresh storefront, interior and product photos; profiles with more photos get more clicks.`,
+    });
+  }
+  if (them.hasDescription && us && !us.hasDescription) {
+    out.push({ tag: "Description", priority: "low", text: "Add a business description that includes your key search terms — they have one." });
+  }
+  if (out.length === 0) {
+    out.push({
+      tag: us ? "Even" : "Note",
+      priority: "low",
+      text: us
+        ? "Your profile matches theirs on the basics. The remaining edge is proximity + steady review velocity — keep reviews flowing and post weekly Google updates."
+        : "Couldn't load your profile to compare. Focus on review count, rating and a complete profile (hours, website, photos).",
+    });
+  }
+  return out;
+}
+
 export function computeMetrics(points: GridPoint[], centerLat: number, centerLng: number) {
   const ranked = points.filter((p) => p.rank != null) as (GridPoint & { rank: number })[];
   const top3 = ranked.filter((p) => p.rank <= 3);

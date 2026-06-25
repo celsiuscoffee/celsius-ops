@@ -2,10 +2,22 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Loader2, MapPin, Play, ArrowLeft, TrendingUp } from "lucide-react";
+import { Loader2, MapPin, Play, ArrowLeft, TrendingUp, ChevronDown, Sparkles } from "lucide-react";
 
 type PointResult = { name: string; placeId: string; isUs: boolean };
 type GridPoint = { row: number; col: number; lat: number; lng: number; rank: number | null; results?: PointResult[] };
+type PlaceProfile = {
+  name: string;
+  rating: number | null;
+  reviews: number | null;
+  hasWebsite: boolean;
+  hasPhone: boolean;
+  hasHours: boolean;
+  photos: number;
+  hasDescription: boolean;
+};
+type Suggestion = { tag: string; priority: "high" | "med" | "low"; text: string };
+type Compare = { us: PlaceProfile | null; them: PlaceProfile; suggestions: Suggestion[] };
 type Scan = {
   id: string;
   keyword: string;
@@ -13,6 +25,7 @@ type Scan = {
   rangeMiles: number;
   centerLat: number;
   centerLng: number;
+  placeId?: string | null;
   status: string;
   points: GridPoint[];
   avgRank: number | null;
@@ -116,6 +129,103 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
+const PRIORITY_DOT: Record<string, string> = { high: "bg-red-500", med: "bg-amber-500", low: "bg-emerald-500" };
+
+// A ranked business in the per-point list, with an on-demand "how to beat them"
+// drawer that diffs their Google profile against ours into concrete actions.
+function CompetitorRow({ rank, r, ourPlaceId }: { rank: number; r: PointResult; ourPlaceId: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<Compare | null>(null);
+  const [err, setErr] = useState("");
+
+  const canCompare = !r.isUs && !!r.placeId;
+
+  const toggle = async () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (data || !canCompare) return;
+    setLoading(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/geogrid/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ competitorPlaceId: r.placeId, ourPlaceId }),
+      });
+      const d = await res.json();
+      if (res.ok) setData(d);
+      else setErr(d.error || "Lookup failed");
+    } catch {
+      setErr("Network error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <li className="rounded-lg">
+      <div
+        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${r.isUs ? "bg-brand-dark/10 font-semibold text-foreground" : "text-muted-foreground"}`}
+      >
+        <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-bold text-foreground ring-1 ring-border">
+          {rank}
+        </span>
+        <span className="truncate">{r.name || "Unknown"}</span>
+        {r.isUs ? (
+          <span className="ml-auto rounded bg-brand-dark px-1.5 py-0.5 text-[10px] font-medium text-white">You</span>
+        ) : canCompare ? (
+          <button
+            onClick={toggle}
+            className="ml-auto flex items-center gap-1 whitespace-nowrap rounded-md border border-border bg-white px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-muted/50"
+          >
+            <Sparkles className="h-3 w-3" /> How to beat them
+            <ChevronDown className={`h-3 w-3 transition ${open ? "rotate-180" : ""}`} />
+          </button>
+        ) : null}
+      </div>
+
+      {open && canCompare && (
+        <div className="ml-7 mr-2 mb-1.5 mt-1 rounded-lg border border-border bg-white p-3">
+          {loading ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Comparing profiles…
+            </p>
+          ) : err ? (
+            <p className="text-xs text-red-600">{err}</p>
+          ) : data ? (
+            <>
+              <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                <span>
+                  <span className="font-medium text-foreground">Them:</span> {data.them.reviews ?? "–"} reviews
+                  {data.them.rating != null ? ` · ${data.them.rating.toFixed(1)}★` : ""}
+                </span>
+                <span>
+                  <span className="font-medium text-foreground">You:</span>{" "}
+                  {data.us ? `${data.us.reviews ?? "–"} reviews${data.us.rating != null ? ` · ${data.us.rating.toFixed(1)}★` : ""}` : "profile not linked"}
+                </span>
+              </div>
+              <ul className="space-y-1.5">
+                {data.suggestions.map((s, i) => (
+                  <li key={i} className="flex gap-2 text-xs text-foreground">
+                    <span className={`mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full ${PRIORITY_DOT[s.priority] ?? "bg-neutral-400"}`} />
+                    <span>
+                      <span className="font-medium">{s.tag}:</span> {s.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </div>
+      )}
+    </li>
+  );
+}
+
 export default function GeogridPage() {
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [outletId, setOutletId] = useState("");
@@ -123,11 +233,19 @@ export default function GeogridPage() {
   const [gridSize, setGridSize] = useState(9);
   const [radiusKm, setRadiusKm] = useState(2);
   const [scans, setScans] = useState<Scan[]>([]);
+  const [filterKeyword, setFilterKeyword] = useState(""); // "" = all keywords
   const [active, setActive] = useState<Scan | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<GridPoint | null>(null);
+  const [liveResults, setLiveResults] = useState<Record<string, PointResult[]>>({});
+  const [pointLoading, setPointLoading] = useState(false);
+  const [pointError, setPointError] = useState("");
   const [running, setRunning] = useState(false);
   const [keyConfigured, setKeyConfigured] = useState(true);
   const [error, setError] = useState("");
+
+  // Scans for the chosen keyword (or all), and the distinct keywords for the filter.
+  const keywordOptions = [...new Set(scans.map((s) => s.keyword))];
+  const visibleScans = filterKeyword ? scans.filter((s) => s.keyword === filterKeyword) : scans;
 
   useEffect(() => {
     fetch("/api/settings/outlets")
@@ -156,7 +274,51 @@ export default function GeogridPage() {
   // Clear the per-point detail whenever the displayed scan changes.
   useEffect(() => {
     setSelectedPoint(null);
+    setLiveResults({});
+    setPointError("");
   }, [active?.id]);
+
+  // When the keyword filter changes, jump to the newest scan that matches it.
+  useEffect(() => {
+    const list = filterKeyword ? scans.filter((s) => s.keyword === filterKeyword) : scans;
+    setActive(list[0] ?? null);
+  }, [filterKeyword, scans]);
+
+  // Click a grid point → show who ranks there. Newer scans have the list stored;
+  // for older scans (and unranked points) we look it up live from the Places API.
+  const selectPoint = async (p: GridPoint) => {
+    if (!active) return;
+    if (selectedPoint?.row === p.row && selectedPoint?.col === p.col) {
+      setSelectedPoint(null);
+      return;
+    }
+    setSelectedPoint(p);
+    setPointError("");
+    const key = `${p.row}-${p.col}`;
+    if ((p.results && p.results.length) || liveResults[key]) return; // already have it
+    setPointLoading(true);
+    try {
+      const res = await fetch("/api/geogrid/point", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outletId,
+          keyword: active.keyword,
+          lat: p.lat,
+          lng: p.lng,
+          rangeMiles: active.rangeMiles,
+          placeId: active.placeId ?? null,
+        }),
+      });
+      const d = await res.json();
+      if (res.ok) setLiveResults((prev) => ({ ...prev, [key]: d.results ?? [] }));
+      else setPointError(d.error || "Lookup failed");
+    } catch {
+      setPointError("Network error");
+    } finally {
+      setPointLoading(false);
+    }
+  };
 
   const run = async () => {
     setError("");
@@ -244,6 +406,25 @@ export default function GeogridPage() {
       </div>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
+      {/* Keyword filter — narrow the grid + trend to one tracked keyword */}
+      {keywordOptions.length > 1 && (
+        <div className="mt-4 flex items-center gap-2">
+          <label className="text-xs font-medium text-muted-foreground">Show keyword</label>
+          <select
+            value={filterKeyword}
+            onChange={(e) => setFilterKeyword(e.target.value)}
+            className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm"
+          >
+            <option value="">All keywords ({scans.length})</option>
+            {keywordOptions.map((k) => (
+              <option key={k} value={k}>
+                {k} ({scans.filter((s) => s.keyword === k).length})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {active ? (
         <>
           {/* KPI vs target — #1@1km · Top-2@5km · Top-3@10km */}
@@ -298,17 +479,15 @@ export default function GeogridPage() {
             <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${active.gridSize}, minmax(0, 1fr))`, maxWidth: 520 }}>
               {grid.flat().map((p) => {
                 const c = rankColor(p.rank);
-                const hasDetail = !!(p.results && p.results.length);
                 const isSelected = selectedPoint?.row === p.row && selectedPoint?.col === p.col;
                 return (
                   <button
                     key={`${p.row}-${p.col}`}
                     type="button"
-                    onClick={() => setSelectedPoint(isSelected ? null : p)}
-                    disabled={!hasDetail}
-                    className={`flex aspect-square items-center justify-center rounded-full text-xs font-bold transition ${hasDetail ? "cursor-pointer hover:opacity-90" : "cursor-default"} ${isSelected ? "ring-2 ring-brand-dark ring-offset-2" : ""}`}
+                    onClick={() => selectPoint(p)}
+                    className={`flex aspect-square cursor-pointer items-center justify-center rounded-full text-xs font-bold transition hover:opacity-90 ${isSelected ? "ring-2 ring-brand-dark ring-offset-2" : ""}`}
                     style={{ backgroundColor: c.bg, color: c.fg }}
-                    title={hasDetail ? `rank ${p.rank ?? ">20"} — click for competitors here` : `rank ${p.rank ?? ">20"}`}
+                    title={`rank ${p.rank ?? ">20"} — click for competitors here`}
                   >
                     {c.label}
                   </button>
@@ -316,8 +495,7 @@ export default function GeogridPage() {
               })}
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Center = your storefront. Rank approximated from the Places API (proxy for the Maps local pack) — use it for trend, not exact position.
-              {grid.flat().some((p) => p.results?.length) && " Click any point to see who ranks there."}
+              Center = your storefront. Rank approximated from the Places API (proxy for the Maps local pack) — use it for trend, not exact position. Click any point to see who ranks there.
             </p>
 
             {/* Per-point detail — who ranks at the clicked grid cell */}
@@ -335,24 +513,31 @@ export default function GeogridPage() {
                     Close
                   </button>
                 </div>
-                {selectedPoint.results && selectedPoint.results.length > 0 ? (
-                  <ol className="space-y-1">
-                    {selectedPoint.results.map((r, i) => (
-                      <li
-                        key={r.placeId || `${r.name}-${i}`}
-                        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${r.isUs ? "bg-brand-dark/10 font-semibold text-foreground" : "text-muted-foreground"}`}
-                      >
-                        <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-bold text-foreground ring-1 ring-border">
-                          {i + 1}
-                        </span>
-                        <span className="truncate">{r.name || "Unknown"}</span>
-                        {r.isUs && <span className="ml-auto rounded bg-brand-dark px-1.5 py-0.5 text-[10px] font-medium text-white">You</span>}
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No competitor list recorded for this point. Re-run the scan to capture it.</p>
-                )}
+                {(() => {
+                  const stored = selectedPoint.results;
+                  const live = liveResults[`${selectedPoint.row}-${selectedPoint.col}`];
+                  const rows = stored && stored.length ? stored : live;
+                  if (pointLoading && !rows) {
+                    return (
+                      <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Looking up who ranks here…
+                      </p>
+                    );
+                  }
+                  if (pointError) {
+                    return <p className="text-xs text-red-600">{pointError}</p>;
+                  }
+                  if (rows && rows.length > 0) {
+                    return (
+                      <ol className="space-y-0.5">
+                        {rows.map((r, i) => (
+                          <CompetitorRow key={r.placeId || `${r.name}-${i}`} rank={i + 1} r={r} ourPlaceId={active.placeId ?? null} />
+                        ))}
+                      </ol>
+                    );
+                  }
+                  return <p className="text-xs text-muted-foreground">No businesses ranked here for this keyword.</p>;
+                })()}
               </div>
             )}
           </div>
@@ -413,10 +598,10 @@ export default function GeogridPage() {
           )}
 
           {/* History / trend — the loop */}
-          {scans.length > 1 && (
+          {visibleScans.length > 1 && (
             <div className="mt-5 rounded-xl border border-border bg-white p-4">
               <div className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
-                <TrendingUp className="h-4 w-4" /> Trend (are the two goals moving?)
+                <TrendingUp className="h-4 w-4" /> Trend{filterKeyword ? ` · "${filterKeyword}"` : ""} (are the two goals moving?)
               </div>
               <table className="w-full text-sm">
                 <thead>
@@ -425,7 +610,7 @@ export default function GeogridPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {scans.map((s) => (
+                  {visibleScans.map((s) => (
                     <tr key={s.id} className={`border-t border-border ${active.id === s.id ? "bg-muted/40" : ""}`}>
                       <td className="py-1.5">
                         <button onClick={() => setActive(s)} className="text-foreground hover:underline">{new Date(s.createdAt).toLocaleDateString()}</button>
