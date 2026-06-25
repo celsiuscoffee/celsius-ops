@@ -118,6 +118,7 @@ export type PlaceProfile = {
   hasDescription: boolean;
   primaryType: string | null;
   businessStatus: string | null;
+  location: { lat: number; lng: number } | null;
 };
 
 /** Place Details (New) for one place — the fields that feed prominence. */
@@ -126,7 +127,7 @@ export async function placeDetails(apiKey: string, placeId: string): Promise<Pla
     headers: {
       "X-Goog-Api-Key": apiKey,
       "X-Goog-FieldMask":
-        "id,displayName,rating,userRatingCount,websiteUri,nationalPhoneNumber,regularOpeningHours,photos,editorialSummary,primaryTypeDisplayName,businessStatus",
+        "id,displayName,rating,userRatingCount,websiteUri,nationalPhoneNumber,regularOpeningHours,photos,editorialSummary,primaryTypeDisplayName,businessStatus,location",
     },
   });
   if (!res.ok) {
@@ -146,6 +147,10 @@ export async function placeDetails(apiKey: string, placeId: string): Promise<Pla
     hasDescription: !!p.editorialSummary?.text,
     primaryType: p.primaryTypeDisplayName?.text ?? null,
     businessStatus: p.businessStatus ?? null,
+    location:
+      typeof p.location?.latitude === "number" && typeof p.location?.longitude === "number"
+        ? { lat: p.location.latitude, lng: p.location.longitude }
+        : null,
   };
 }
 

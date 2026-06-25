@@ -15,6 +15,7 @@ type PlaceProfile = {
   hasHours: boolean;
   photos: number;
   hasDescription: boolean;
+  location: { lat: number; lng: number } | null;
 };
 type Suggestion = { tag: string; priority: "high" | "med" | "low"; text: string; levers: string[] };
 type Compare = { us: PlaceProfile | null; them: PlaceProfile; suggestions: Suggestion[] };
@@ -131,9 +132,60 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 
 const PRIORITY_DOT: Record<string, string> = { high: "bg-red-500", med: "bg-amber-500", low: "bg-emerald-500" };
 
+type Band = "Already ahead" | "High" | "Moderate" | "Low";
+const BAND_STYLE: Record<Band, string> = {
+  "Already ahead": "border-emerald-200 bg-emerald-50 text-emerald-700",
+  High: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  Moderate: "border-amber-200 bg-amber-50 text-amber-700",
+  Low: "border-red-200 bg-red-50 text-red-700",
+};
+
+// Honest, directional read on whether doing the actions out-ranks this rival at
+// this point. Prominence (reviews/rating) is assumed closed by the actions, so
+// the swing factor is proximity: who is physically closer to the search point.
+function winLikelihood(opts: {
+  ourRank: number | null;
+  theirRank: number;
+  distUs: number;
+  distThem: number | null;
+}): { band: Band; reason: string } {
+  const { ourRank, theirRank, distUs, distThem } = opts;
+  if (ourRank != null && ourRank < theirRank) {
+    return { band: "Already ahead", reason: "You already out-rank them here — hold it with steady reviews." };
+  }
+  if (distThem == null) {
+    return { band: "Moderate", reason: "Closing the review/rating gap usually decides it; their exact location wasn’t available to weigh proximity here." };
+  }
+  if (distUs <= distThem) {
+    return { band: "High", reason: "You’re closer to this spot, so matching their prominence should put you ahead." };
+  }
+  if (distUs <= distThem * 1.4) {
+    return { band: "Moderate", reason: "They’re a bit closer to this spot — prominence is the swing factor, so closing the review gap can flip it." };
+  }
+  return { band: "Low", reason: "They’re much closer to this spot — proximity caps you here; reviews alone rarely flip a point this deep in their backyard." };
+}
+
 // A ranked business in the per-point list, with an on-demand "how to beat them"
 // drawer that diffs their Google profile against ours into concrete actions.
-function CompetitorRow({ rank, r, ourPlaceId }: { rank: number; r: PointResult; ourPlaceId: string | null }) {
+function CompetitorRow({
+  rank,
+  r,
+  ourPlaceId,
+  ourRank,
+  pLat,
+  pLng,
+  centerLat,
+  centerLng,
+}: {
+  rank: number;
+  r: PointResult;
+  ourPlaceId: string | null;
+  ourRank: number | null;
+  pLat: number;
+  pLng: number;
+  centerLat: number;
+  centerLng: number;
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<Compare | null>(null);
@@ -198,6 +250,19 @@ function CompetitorRow({ rank, r, ourPlaceId }: { rank: number; r: PointResult; 
             <p className="text-xs text-red-600">{err}</p>
           ) : data ? (
             <>
+              {(() => {
+                const distUs = distM(centerLat, centerLng, pLat, pLng);
+                const distThem = data.them.location ? distM(data.them.location.lat, data.them.location.lng, pLat, pLng) : null;
+                const wl = winLikelihood({ ourRank, theirRank: rank, distUs, distThem });
+                return (
+                  <div className={`mb-2 rounded-lg border px-2.5 py-1.5 ${BAND_STYLE[wl.band]}`}>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide">
+                      Win likelihood if you do all this: {wl.band}
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-snug">{wl.reason}</p>
+                  </div>
+                );
+              })()}
               <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
                 <span>
                   <span className="font-medium text-foreground">Them:</span> {data.them.reviews ?? "–"} reviews
@@ -541,7 +606,17 @@ export default function GeogridPage() {
                     return (
                       <ol className="space-y-0.5">
                         {rows.map((r, i) => (
-                          <CompetitorRow key={r.placeId || `${r.name}-${i}`} rank={i + 1} r={r} ourPlaceId={active.placeId ?? null} />
+                          <CompetitorRow
+                            key={r.placeId || `${r.name}-${i}`}
+                            rank={i + 1}
+                            r={r}
+                            ourPlaceId={active.placeId ?? null}
+                            ourRank={selectedPoint.rank}
+                            pLat={selectedPoint.lat}
+                            pLng={selectedPoint.lng}
+                            centerLat={active.centerLat}
+                            centerLng={active.centerLng}
+                          />
                         ))}
                       </ol>
                     );
