@@ -439,144 +439,43 @@ function BeatTargetRow({ rank, target, scan }: { rank: number; target: BeatTarge
 
 type LocProfile = { websiteUri: string | null; description: string | null; hasHours: boolean };
 
-// One-click profile completeness: reads the live Google profile, and lets you
-// fill the missing website/description (with a drafted starter) and push it
-// straight to Google. Hours are too structured to safely auto-set, so we link out.
-function ProfileCompleteness({ outletId, outletName }: { outletId: string; outletName: string }) {
+// Passive profile status — no inputs, nothing to action. The description is set
+// automatically by the reviews-profile-autofill cron; website and hours are the
+// only fields the loop can't fill (we can't know them), shown muted, not as a CTA.
+function ProfileStatus({ outletId }: { outletId: string }) {
   const [profile, setProfile] = useState<LocProfile | null>(null);
-  const [loading, setLoading] = useState(false);
   const [hidden, setHidden] = useState(false);
-  const [website, setWebsite] = useState("");
-  const [desc, setDesc] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [err, setErr] = useState("");
 
   useEffect(() => {
     if (!outletId) return;
     setProfile(null);
     setHidden(false);
-    setMsg("");
-    setErr("");
-    setLoading(true);
     fetch(`/api/reviews/profile?outletId=${outletId}`)
       .then((r) => r.json())
-      .then((d: { profile?: LocProfile; error?: string }) => {
-        if (d.profile) {
-          setProfile(d.profile);
-          setWebsite(d.profile.websiteUri ?? "");
-          setDesc(
-            d.profile.description ??
-              `Celsius Coffee ${outletName} is a specialty coffee café serving espresso-based drinks, brunch and a cozy spot to work or catch up. Come say hi.`,
-          );
-        } else {
-          setHidden(true); // not connected / no creds — stay quiet
-        }
-      })
-      .catch(() => setHidden(true))
-      .finally(() => setLoading(false));
-  }, [outletId, outletName]);
+      .then((d: { profile?: LocProfile }) => (d.profile ? setProfile(d.profile) : setHidden(true)))
+      .catch(() => setHidden(true));
+  }, [outletId]);
 
-  if (hidden) return null;
-  if (loading) {
-    return (
-      <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-white p-4 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking your Google profile…
-      </div>
-    );
-  }
-  if (!profile) return null;
+  if (hidden || !profile) return null;
 
-  const missing: string[] = [];
-  if (!profile.websiteUri) missing.push("website");
-  if (!profile.description) missing.push("description");
-  if (!profile.hasHours) missing.push("hours");
-  if (missing.length === 0) {
-    return (
-      <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-        Google profile complete — website, description and hours are all set. ✓
-      </div>
-    );
-  }
-
-  const save = async () => {
-    setSaving(true);
-    setMsg("");
-    setErr("");
-    const fields: { outletId: string; websiteUri?: string; description?: string } = { outletId };
-    if (!profile.websiteUri && website.trim()) fields.websiteUri = website.trim();
-    if (!profile.description && desc.trim()) fields.description = desc.trim();
-    try {
-      const res = await fetch("/api/reviews/profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fields),
-      });
-      const d = await res.json();
-      if (res.ok && d.profile) {
-        setProfile(d.profile);
-        setMsg("Pushed to Google ✓");
-      } else {
-        setErr(d.error || "Update failed");
-      }
-    } catch {
-      setErr("Network error");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const rows = [
+    { ok: !!profile.description, label: "Description", note: profile.description ? "set" : "drafts + posts automatically on the weekly run" },
+    { ok: !!profile.websiteUri, label: "Website", note: profile.websiteUri ? "set" : "optional — set once in Google Business Profile" },
+    { ok: profile.hasHours, label: "Hours", note: profile.hasHours ? "set" : "optional — set once in Google Business Profile" },
+  ];
 
   return (
-    <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
-      <div className="text-sm font-medium text-amber-900">Complete your Google profile ({missing.join(", ")})</div>
-      <p className="mt-0.5 text-[11px] text-amber-800">A complete profile ranks better. Fill what’s missing and push it straight to Google.</p>
-
-      <div className="mt-3 space-y-3">
-        {!profile.websiteUri && (
-          <div>
-            <label className="block text-[11px] font-medium text-amber-900">Website / menu link</label>
-            <input
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              placeholder="https://…"
-              className="mt-1 w-full max-w-md rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm outline-none"
-            />
+    <div className="mt-5 rounded-xl border border-border bg-white p-4">
+      <div className="text-sm font-medium text-foreground">Google profile · auto-managed</div>
+      <div className="mt-2 space-y-1">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-center gap-2 text-xs">
+            <span className={r.ok ? "text-emerald-600" : "text-muted-foreground/50"}>{r.ok ? "✓" : "○"}</span>
+            <span className={r.ok ? "text-foreground" : "text-muted-foreground"}>{r.label}</span>
+            <span className="text-[11px] text-muted-foreground">{r.note}</span>
           </div>
-        )}
-        {!profile.description && (
-          <div>
-            <label className="block text-[11px] font-medium text-amber-900">Business description (drafted — edit before pushing)</label>
-            <textarea
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              rows={3}
-              className="mt-1 w-full max-w-md rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm outline-none"
-            />
-          </div>
-        )}
-        {!profile.hasHours && (
-          <p className="text-[11px] text-amber-800">
-            Hours aren’t set. They’re too structured to auto-fill safely —{" "}
-            <a href="https://business.google.com/" target="_blank" rel="noreferrer" className="underline">
-              set them in Google Business Profile
-            </a>
-            .
-          </p>
-        )}
+        ))}
       </div>
-
-      {(!profile.websiteUri || !profile.description) && (
-        <button
-          onClick={save}
-          disabled={saving}
-          className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700/90 disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {saving ? "Pushing…" : "Push to Google"}
-        </button>
-      )}
-      {msg && <p className="mt-2 text-xs text-emerald-700">{msg}</p>}
-      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
     </div>
   );
 }
@@ -780,8 +679,8 @@ export default function GeogridPage() {
         </div>
       )}
 
-      {/* Auto-fix: complete the Google profile (one of the rank levers) */}
-      {outletId && <ProfileCompleteness outletId={outletId} outletName={outlets.find((o) => o.id === outletId)?.name ?? ""} />}
+      {/* Profile completeness — auto-managed by the loop, status only */}
+      {outletId && <ProfileStatus outletId={outletId} />}
 
       {active ? (
         <>
