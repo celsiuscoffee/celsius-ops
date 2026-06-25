@@ -13,7 +13,7 @@ import {
   type WhatsAppSendResult,
 } from "@/lib/whatsapp";
 import { TEMPLATES } from "./config";
-import { recordOutbound } from "@/lib/wa-messages";
+import { recordOutboundMessage } from "@/lib/whatsapp-store";
 
 const NOT_CONFIGURED: WhatsAppSendResult = {
   ok: false,
@@ -55,21 +55,17 @@ async function sendProactive(
         { type: "body", parameters: [{ type: "text", text: body }] },
       ])
     : await sendWhatsAppText(to, body);
-  // Persist the outbound digest (success OR failure) so it shows in the Ops
-  // chat inbox — failures are useful signal there too. Best-effort; the send
-  // result is what the caller acts on, never the recording.
-  try {
-    await recordOutbound({
-      to,
-      body,
-      templateName: templateName || undefined,
-      ok: result.ok,
-      waMessageId: result.messageId,
-      error: result.error,
-    });
-  } catch (err) {
-    console.error("[ops-pulse] persist outbound failed:", err);
-  }
+  // Persist the outbound digest (success OR failure) into the shared WhatsApp
+  // store so it shows in the Ops chat inbox. recordOutboundMessage swallows its
+  // own errors — the send result is what the caller acts on, never the record.
+  await recordOutboundMessage({
+    waMessageId: result.messageId,
+    fromNumber: process.env.WHATSAPP_DISPLAY_NUMBER || "",
+    toNumber: to,
+    type: templateName ? "template" : "text",
+    body,
+    status: result.ok ? "sent" : "failed",
+  });
   return result;
 }
 

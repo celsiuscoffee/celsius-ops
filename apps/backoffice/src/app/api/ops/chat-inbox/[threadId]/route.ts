@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
-import { getThread, isWindowOpen, recordOutbound } from "@/lib/wa-messages";
+import { getThread, isWindowOpen } from "@/lib/wa-messages";
+import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { isWhatsAppConfigured, sendWhatsAppText } from "@/lib/whatsapp";
 
 const ALLOWED = ["OWNER", "ADMIN", "MANAGER"];
@@ -63,17 +64,14 @@ export async function POST(
   }
 
   const result = await sendWhatsAppText(phone, body.text);
-  try {
-    await recordOutbound({
-      to: phone,
-      body: body.text,
-      ok: result.ok,
-      waMessageId: result.messageId,
-      error: result.error,
-    });
-  } catch (err) {
-    console.error("[chat-inbox] persist reply failed:", err);
-  }
+  await recordOutboundMessage({
+    waMessageId: result.messageId,
+    fromNumber: process.env.WHATSAPP_DISPLAY_NUMBER || "",
+    toNumber: phone,
+    type: "text",
+    body: body.text,
+    status: result.ok ? "sent" : "failed",
+  });
 
   if (!result.ok) {
     return NextResponse.json({ error: "send_failed", message: result.error || "Send failed" }, { status: 502 });

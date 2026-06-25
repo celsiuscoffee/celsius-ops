@@ -3,6 +3,7 @@ import type { Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { detectPaymentFlags, mergeFlags } from "@/lib/inventory/flag-detector";
+import { sendProofOfPayment } from "@/lib/inventory/procurement-whatsapp";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const caller = await getUserFromHeaders(req.headers);
@@ -189,6 +190,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           where: { id },
           data: { flags: merged as unknown as Prisma.InputJsonValue },
         });
+      }
+    }
+
+    // Auto-send Proof of Payment to the supplier once the invoice is fully
+    // PAID (gated by PROCUREMENT_WHATSAPP_ENABLED; idempotent via popSentAt).
+    // Best-effort — a WhatsApp failure must never fail the payment write.
+    if (invoice.status === "PAID" && !invoice.popSentAt) {
+      try {
+        const pop = await sendProofOfPayment(id);
+        if (pop.sent) {
+          console.log(`[invoices/[id]] POP auto-sent invoice=${id} msg=${pop.messageId}`);
+        } else if (pop.reason && pop.reason !== "disabled") {
+          console.log(`[invoices/[id]] POP not sent invoice=${id} reason=${pop.reason}`);
+        }
+      } catch (e) {
+        console.warn(`[invoices/[id]] POP auto-send error invoice=${id}:`, e instanceof Error ? e.message : e);
       }
     }
 
