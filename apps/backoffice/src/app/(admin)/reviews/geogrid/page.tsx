@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Loader2, MapPin, Play, ArrowLeft, TrendingUp } from "lucide-react";
 
-type GridPoint = { row: number; col: number; lat: number; lng: number; rank: number | null };
+type PointResult = { name: string; placeId: string; isUs: boolean };
+type GridPoint = { row: number; col: number; lat: number; lng: number; rank: number | null; results?: PointResult[] };
 type Scan = {
   id: string;
   keyword: string;
@@ -91,6 +92,7 @@ export default function GeogridPage() {
   const [radiusKm, setRadiusKm] = useState(2);
   const [scans, setScans] = useState<Scan[]>([]);
   const [active, setActive] = useState<Scan | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<GridPoint | null>(null);
   const [running, setRunning] = useState(false);
   const [keyConfigured, setKeyConfigured] = useState(true);
   const [error, setError] = useState("");
@@ -118,6 +120,11 @@ export default function GeogridPage() {
   useEffect(() => {
     loadHistory(outletId);
   }, [outletId, loadHistory]);
+
+  // Clear the per-point detail whenever the displayed scan changes.
+  useEffect(() => {
+    setSelectedPoint(null);
+  }, [active?.id]);
 
   const run = async () => {
     setError("");
@@ -259,16 +266,63 @@ export default function GeogridPage() {
             <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${active.gridSize}, minmax(0, 1fr))`, maxWidth: 520 }}>
               {grid.flat().map((p) => {
                 const c = rankColor(p.rank);
+                const hasDetail = !!(p.results && p.results.length);
+                const isSelected = selectedPoint?.row === p.row && selectedPoint?.col === p.col;
                 return (
-                  <div key={`${p.row}-${p.col}`} className="flex aspect-square items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: c.bg, color: c.fg }} title={`rank ${p.rank ?? ">20"}`}>
+                  <button
+                    key={`${p.row}-${p.col}`}
+                    type="button"
+                    onClick={() => setSelectedPoint(isSelected ? null : p)}
+                    disabled={!hasDetail}
+                    className={`flex aspect-square items-center justify-center rounded-full text-xs font-bold transition ${hasDetail ? "cursor-pointer hover:opacity-90" : "cursor-default"} ${isSelected ? "ring-2 ring-brand-dark ring-offset-2" : ""}`}
+                    style={{ backgroundColor: c.bg, color: c.fg }}
+                    title={hasDetail ? `rank ${p.rank ?? ">20"} — click for competitors here` : `rank ${p.rank ?? ">20"}`}
+                  >
                     {c.label}
-                  </div>
+                  </button>
                 );
               })}
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
               Center = your storefront. Rank approximated from the Places API (proxy for the Maps local pack) — use it for trend, not exact position.
+              {grid.flat().some((p) => p.results?.length) && " Click any point to see who ranks there."}
             </p>
+
+            {/* Per-point detail — who ranks at the clicked grid cell */}
+            {selectedPoint && (
+              <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-sm font-medium text-foreground">
+                    Ranking at this point
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      ~{(distM(active.centerLat, active.centerLng, selectedPoint.lat, selectedPoint.lng) / 1000).toFixed(2)} km from storefront
+                      {selectedPoint.rank != null ? ` · you rank #${selectedPoint.rank}` : " · you’re not in the top 20"}
+                    </span>
+                  </div>
+                  <button onClick={() => setSelectedPoint(null)} className="text-xs text-muted-foreground hover:text-foreground">
+                    Close
+                  </button>
+                </div>
+                {selectedPoint.results && selectedPoint.results.length > 0 ? (
+                  <ol className="space-y-1">
+                    {selectedPoint.results.map((r, i) => (
+                      <li
+                        key={r.placeId || `${r.name}-${i}`}
+                        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${r.isUs ? "bg-brand-dark/10 font-semibold text-foreground" : "text-muted-foreground"}`}
+                      >
+                        <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-bold text-foreground ring-1 ring-border">
+                          {i + 1}
+                        </span>
+                        <span className="truncate">{r.name || "Unknown"}</span>
+                        {r.isUs && <span className="ml-auto rounded bg-brand-dark px-1.5 py-0.5 text-[10px] font-medium text-white">You</span>}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No competitor list recorded for this point. Re-run the scan to capture it.</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Competitors — who out-ranks us, for reference */}
