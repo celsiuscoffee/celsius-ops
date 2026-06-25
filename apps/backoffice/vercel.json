@@ -115,6 +115,10 @@
     {
       "path": "/api/cron/reviews-daily-snapshot",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/request-invoices",
+      "schedule": "0 */4 * * *"
     }
   ]
 }
