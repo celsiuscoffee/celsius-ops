@@ -62,6 +62,7 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
     { label: "Audit", key: "audit" },
     { label: "SOPs", key: "sops" },
     { label: "Categories", key: "categories" },
+    { label: "Chat Inbox", key: "chat-inbox" },
   ],
   hr: [
     { label: "Dashboard", key: "dashboard" },
@@ -235,6 +236,7 @@ export const NAV_TABS: GrantTab[] = [
           m("ops", "audit", "Audits"),
           m("ops", "sops", "SOPs & Templates"),
           m("ops", "categories", "Categories"),
+          m("ops", "chat-inbox", "Chat Inbox"),
         ],
       },
     ],

@@ -13,6 +13,7 @@ import {
   type WhatsAppSendResult,
 } from "@/lib/whatsapp";
 import { TEMPLATES } from "./config";
+import { recordOutboundMessage } from "@/lib/whatsapp-store";
 
 const NOT_CONFIGURED: WhatsAppSendResult = {
   ok: false,
@@ -49,12 +50,23 @@ async function sendProactive(
   templateName: string,
   body: string,
 ): Promise<WhatsAppSendResult> {
-  if (templateName) {
-    return sendWhatsAppTemplate(to, templateName, TEMPLATES.languageCode, [
-      { type: "body", parameters: [{ type: "text", text: body }] },
-    ]);
-  }
-  return sendWhatsAppText(to, body);
+  const result = templateName
+    ? await sendWhatsAppTemplate(to, templateName, TEMPLATES.languageCode, [
+        { type: "body", parameters: [{ type: "text", text: body }] },
+      ])
+    : await sendWhatsAppText(to, body);
+  // Persist the outbound digest (success OR failure) into the shared WhatsApp
+  // store so it shows in the Ops chat inbox. recordOutboundMessage swallows its
+  // own errors — the send result is what the caller acts on, never the record.
+  await recordOutboundMessage({
+    waMessageId: result.messageId,
+    fromNumber: process.env.WHATSAPP_DISPLAY_NUMBER || "",
+    toNumber: to,
+    type: templateName ? "template" : "text",
+    body,
+    status: result.ok ? "sent" : "failed",
+  });
+  return result;
 }
 
 export function sendManagerDigest(phone: string, lines: string[]): Promise<WhatsAppSendResult> {

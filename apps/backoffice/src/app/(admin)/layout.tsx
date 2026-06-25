@@ -383,6 +383,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Audits", href: "/ops/audit", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "ops:audit" },
       { label: "SOPs & Templates", href: "/ops/sops", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "ops:sops" },
       { label: "Categories", href: "/ops/categories", icon: <Tags className={ICON_SIZE} />, moduleKey: "ops:categories" },
+      { label: "Chat Inbox", href: "/ops/chat-inbox", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "ops:chat-inbox" },
     ],
   },
   {
