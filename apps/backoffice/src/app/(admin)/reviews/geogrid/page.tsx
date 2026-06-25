@@ -15,8 +15,9 @@ type PlaceProfile = {
   hasHours: boolean;
   photos: number;
   hasDescription: boolean;
+  location: { lat: number; lng: number } | null;
 };
-type Suggestion = { tag: string; priority: "high" | "med" | "low"; text: string };
+type Suggestion = { tag: string; priority: "high" | "med" | "low"; text: string; levers: string[] };
 type Compare = { us: PlaceProfile | null; them: PlaceProfile; suggestions: Suggestion[] };
 type Scan = {
   id: string;
@@ -131,9 +132,86 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 
 const PRIORITY_DOT: Record<string, string> = { high: "bg-red-500", med: "bg-amber-500", low: "bg-emerald-500" };
 
+type Band = "Already ahead" | "High" | "Moderate" | "Low";
+const BAND_STYLE: Record<Band, string> = {
+  "Already ahead": "border-emerald-200 bg-emerald-50 text-emerald-700",
+  High: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  Moderate: "border-amber-200 bg-amber-50 text-amber-700",
+  Low: "border-red-200 bg-red-50 text-red-700",
+};
+
+// Honest, directional read on whether doing the actions out-ranks this rival at
+// this point. Prominence (reviews/rating) is assumed closed by the actions, so
+// the swing factor is proximity: who is physically closer to the search point.
+function winLikelihood(opts: {
+  ourRank: number | null;
+  theirRank: number;
+  distUs: number;
+  distThem: number | null;
+}): { band: Band; reason: string } {
+  const { ourRank, theirRank, distUs, distThem } = opts;
+  if (ourRank != null && ourRank < theirRank) {
+    return { band: "Already ahead", reason: "You already out-rank them here — hold it with steady reviews." };
+  }
+  if (distThem == null) {
+    return { band: "Moderate", reason: "Closing the review/rating gap usually decides it; their exact location wasn’t available to weigh proximity here." };
+  }
+  if (distUs <= distThem) {
+    return { band: "High", reason: "You’re closer to this spot, so matching their prominence should put you ahead." };
+  }
+  if (distUs <= distThem * 1.4) {
+    return { band: "Moderate", reason: "They’re a bit closer to this spot — prominence is the swing factor, so closing the review gap can flip it." };
+  }
+  return { band: "Low", reason: "They’re much closer to this spot — proximity caps you here; reviews alone rarely flip a point this deep in their backyard." };
+}
+
+// Shared renderer for the prioritised actions + their how-to levers.
+function SuggestionList({ suggestions }: { suggestions: Suggestion[] }) {
+  return (
+    <ul className="space-y-1.5">
+      {suggestions.map((s, i) => (
+        <li key={i} className="flex gap-2 text-xs text-foreground">
+          <span className={`mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full ${PRIORITY_DOT[s.priority] ?? "bg-neutral-400"}`} />
+          <span>
+            <span className="font-medium">{s.tag}:</span> {s.text}
+            {s.levers && s.levers.length > 0 && (
+              <ul className="mt-1 space-y-0.5 border-l-2 border-border pl-2.5 text-[11px] text-muted-foreground">
+                {s.levers.map((l, j) => (
+                  <li key={j} className="flex gap-1.5">
+                    <span className="select-none">→</span>
+                    <span>{l}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 // A ranked business in the per-point list, with an on-demand "how to beat them"
 // drawer that diffs their Google profile against ours into concrete actions.
-function CompetitorRow({ rank, r, ourPlaceId }: { rank: number; r: PointResult; ourPlaceId: string | null }) {
+function CompetitorRow({
+  rank,
+  r,
+  ourPlaceId,
+  ourRank,
+  pLat,
+  pLng,
+  centerLat,
+  centerLng,
+}: {
+  rank: number;
+  r: PointResult;
+  ourPlaceId: string | null;
+  ourRank: number | null;
+  pLat: number;
+  pLng: number;
+  centerLat: number;
+  centerLng: number;
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<Compare | null>(null);
@@ -198,6 +276,19 @@ function CompetitorRow({ rank, r, ourPlaceId }: { rank: number; r: PointResult; 
             <p className="text-xs text-red-600">{err}</p>
           ) : data ? (
             <>
+              {(() => {
+                const distUs = distM(centerLat, centerLng, pLat, pLng);
+                const distThem = data.them.location ? distM(data.them.location.lat, data.them.location.lng, pLat, pLng) : null;
+                const wl = winLikelihood({ ourRank, theirRank: rank, distUs, distThem });
+                return (
+                  <div className={`mb-2 rounded-lg border px-2.5 py-1.5 ${BAND_STYLE[wl.band]}`}>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide">
+                      Win likelihood if you do all this: {wl.band}
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-snug">{wl.reason}</p>
+                  </div>
+                );
+              })()}
               <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
                 <span>
                   <span className="font-medium text-foreground">Them:</span> {data.them.reviews ?? "–"} reviews
@@ -208,16 +299,7 @@ function CompetitorRow({ rank, r, ourPlaceId }: { rank: number; r: PointResult; 
                   {data.us ? `${data.us.reviews ?? "–"} reviews${data.us.rating != null ? ` · ${data.us.rating.toFixed(1)}★` : ""}` : "profile not linked"}
                 </span>
               </div>
-              <ul className="space-y-1.5">
-                {data.suggestions.map((s, i) => (
-                  <li key={i} className="flex gap-2 text-xs text-foreground">
-                    <span className={`mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full ${PRIORITY_DOT[s.priority] ?? "bg-neutral-400"}`} />
-                    <span>
-                      <span className="font-medium">{s.tag}:</span> {s.text}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <SuggestionList suggestions={data.suggestions} />
             </>
           ) : null}
         </div>
@@ -226,6 +308,134 @@ function CompetitorRow({ rank, r, ourPlaceId }: { rank: number; r: PointResult; 
   );
 }
 
+type BeatTarget = { name: string; placeId: string; beats: number; points: number; typicalRank: number };
+
+// Rank the rivals you actually need to beat: aggregate the stored per-point
+// results into "how many grid points does each out-rank us at", worst first.
+function beatTargets(scan: Scan): BeatTarget[] {
+  const tally = new Map<string, { name: string; placeId: string; beats: number; points: number; rankSum: number }>();
+  for (const p of scan.points) {
+    if (!p.results || !p.results.length) continue;
+    p.results.forEach((r, idx) => {
+      if (r.isUs || !r.name) return;
+      const theirRank = idx + 1;
+      const beatsUs = p.rank == null || theirRank < p.rank;
+      const key = r.placeId || r.name.toLowerCase();
+      const t = tally.get(key) ?? { name: r.name, placeId: r.placeId, beats: 0, points: 0, rankSum: 0 };
+      t.points++;
+      t.rankSum += theirRank;
+      if (beatsUs) t.beats++;
+      tally.set(key, t);
+    });
+  }
+  return [...tally.values()]
+    .filter((t) => t.beats > 0)
+    .map((t) => ({ name: t.name, placeId: t.placeId, beats: t.beats, points: t.points, typicalRank: Math.round(t.rankSum / t.points) }))
+    .sort((a, b) => b.beats - a.beats || a.typicalRank - b.typicalRank)
+    .slice(0, 6);
+}
+
+// Grid-wide proximity read: what share of the grid you sit closer to than them.
+function aggregateWinBand(scan: Scan, theirLoc: { lat: number; lng: number } | null): { band: Band; reason: string } {
+  if (!theirLoc) {
+    return { band: "Moderate", reason: "Close the review/rating gap — their location wasn’t available to weigh proximity across the grid." };
+  }
+  let closer = 0;
+  for (const p of scan.points) {
+    const dUs = distM(scan.centerLat, scan.centerLng, p.lat, p.lng);
+    const dThem = distM(theirLoc.lat, theirLoc.lng, p.lat, p.lng);
+    if (dUs <= dThem) closer++;
+  }
+  const pct = Math.round((closer / scan.points.length) * 100);
+  if (pct >= 55) return { band: "High", reason: `You’re closer than them across ~${pct}% of the grid — match their prominence and you take most of it.` };
+  if (pct >= 30) return { band: "Moderate", reason: `You’re closer across ~${pct}% of the grid — prominence decides the contested middle, so closing the review gap swings it.` };
+  return { band: "Low", reason: `You’re closer at only ~${pct}% of the grid — they own the proximity; expect to win near your store, not their turf.` };
+}
+
+// A target in the "who to beat first" list: impact summary + on-demand actions.
+function BeatTargetRow({ rank, target, scan }: { rank: number; target: BeatTarget; scan: Scan }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<Compare | null>(null);
+  const [err, setErr] = useState("");
+
+  const toggle = async () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (data || !target.placeId) return;
+    setLoading(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/geogrid/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ competitorPlaceId: target.placeId, ourPlaceId: scan.placeId ?? null }),
+      });
+      const d = await res.json();
+      if (res.ok) setData(d);
+      else setErr(d.error || "Lookup failed");
+    } catch {
+      setErr("Network error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <li className="rounded-lg border border-border">
+      <button onClick={toggle} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/40">
+        <span className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700">{rank}</span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium text-foreground">{target.name}</span>
+          <span className="text-[11px] text-muted-foreground">
+            Out-ranks you at {target.beats}/{target.points} points · typically #{target.typicalRank}
+          </span>
+        </span>
+        <span className="ml-auto flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-foreground">
+          <Sparkles className="h-3 w-3" /> How to beat them
+          <ChevronDown className={`h-3 w-3 transition ${open ? "rotate-180" : ""}`} />
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-border p-3">
+          {loading ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Comparing profiles…
+            </p>
+          ) : err ? (
+            <p className="text-xs text-red-600">{err}</p>
+          ) : data ? (
+            (() => {
+              const wl = aggregateWinBand(scan, data.them.location);
+              return (
+                <>
+                  <div className={`mb-2 rounded-lg border px-2.5 py-1.5 ${BAND_STYLE[wl.band]}`}>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide">Win likelihood if you do all this: {wl.band}</div>
+                    <p className="mt-0.5 text-[11px] leading-snug">{wl.reason}</p>
+                  </div>
+                  <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                    <span>
+                      <span className="font-medium text-foreground">Them:</span> {data.them.reviews ?? "–"} reviews
+                      {data.them.rating != null ? ` · ${data.them.rating.toFixed(1)}★` : ""}
+                    </span>
+                    <span>
+                      <span className="font-medium text-foreground">You:</span>{" "}
+                      {data.us ? `${data.us.reviews ?? "–"} reviews${data.us.rating != null ? ` · ${data.us.rating.toFixed(1)}★` : ""}` : "profile not linked"}
+                    </span>
+                  </div>
+                  <SuggestionList suggestions={data.suggestions} />
+                </>
+              );
+            })()
+          ) : null}
+        </div>
+      )}
+    </li>
+  );
+}
 export default function GeogridPage() {
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [outletId, setOutletId] = useState("");
@@ -531,7 +741,17 @@ export default function GeogridPage() {
                     return (
                       <ol className="space-y-0.5">
                         {rows.map((r, i) => (
-                          <CompetitorRow key={r.placeId || `${r.name}-${i}`} rank={i + 1} r={r} ourPlaceId={active.placeId ?? null} />
+                          <CompetitorRow
+                            key={r.placeId || `${r.name}-${i}`}
+                            rank={i + 1}
+                            r={r}
+                            ourPlaceId={active.placeId ?? null}
+                            ourRank={selectedPoint.rank}
+                            pLat={selectedPoint.lat}
+                            pLng={selectedPoint.lng}
+                            centerLat={active.centerLat}
+                            centerLng={active.centerLng}
+                          />
                         ))}
                       </ol>
                     );
@@ -567,6 +787,25 @@ export default function GeogridPage() {
                     </li>
                   ))}
                 </ul>
+              </div>
+            );
+          })()}
+
+          {/* Who to beat first — ranked hit-list with actions per target */}
+          {(() => {
+            const targets = beatTargets(active);
+            if (!targets.length) return null;
+            return (
+              <div className="mt-5 rounded-xl border border-border bg-white p-4">
+                <div className="text-sm font-medium text-foreground">Who to beat first</div>
+                <p className="mb-3 mt-0.5 text-[11px] text-muted-foreground">
+                  Ranked by how much of your grid each rival out-ranks you across. Beat the top ones to reclaim the most map — expand for the actions.
+                </p>
+                <ol className="space-y-2">
+                  {targets.map((t, i) => (
+                    <BeatTargetRow key={t.placeId || t.name} rank={i + 1} target={t} scan={active} />
+                  ))}
+                </ol>
               </div>
             );
           })()}
