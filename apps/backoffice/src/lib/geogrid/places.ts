@@ -13,7 +13,19 @@
 
 const MILES_PER_DEG_LAT = 69.0;
 
-export type GridPoint = { row: number; col: number; lat: number; lng: number; rank: number | null };
+export type PointResult = { name: string; placeId: string; isUs: boolean };
+
+// `results` = the ranked businesses returned at this point (index 0 = local #1),
+// kept so the UI can show "who out-ranks us here" per grid cell. Optional for
+// back-compat with scans recorded before per-point results were stored.
+export type GridPoint = {
+  row: number;
+  col: number;
+  lat: number;
+  lng: number;
+  rank: number | null;
+  results?: PointResult[];
+};
 
 /** N×N points centred on (lat,lng), spaced `rangeMiles` apart. Row 0 = north. */
 export function buildGrid(centerLat: number, centerLng: number, gridSize: number, rangeMiles: number): GridPoint[] {
@@ -45,7 +57,6 @@ export function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: n
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-export type PointResult = { name: string; placeId: string; isUs: boolean };
 export type Competitor = { name: string; top3Points: number; avgRank: number };
 
 /** Our rank + the ranked businesses (for the competitor reference) at one point. */
@@ -124,6 +135,7 @@ export async function scanGrid(
         try {
           const { rank, results } = await rankAtPoint(apiKey, keyword, p.lat, p.lng, radiusM, targetPlaceId, targetTitle);
           p.rank = rank;
+          p.results = results;
           results.forEach((r, i2) => {
             if (r.isUs || !r.name) return;
             const key = r.placeId || r.name.toLowerCase();

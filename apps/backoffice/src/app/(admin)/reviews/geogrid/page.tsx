@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Loader2, MapPin, Play, ArrowLeft, TrendingUp } from "lucide-react";
 
-type GridPoint = { row: number; col: number; lat: number; lng: number; rank: number | null };
+type PointResult = { name: string; placeId: string; isUs: boolean };
+type GridPoint = { row: number; col: number; lat: number; lng: number; rank: number | null; results?: PointResult[] };
 type Scan = {
   id: string;
   keyword: string;
@@ -73,6 +74,38 @@ function evalKpi(
   return { measurable: true, pct: Math.round((met / inRing.length) * 100), n: inRing.length };
 }
 
+// Who out-ranks us in the OUTER ring of the scan (the far points where proximity
+// favours rivals). "Far" = points at ≥50% of the scanned reach, so it adapts to
+// any scan size. A rival "beats us" at a point when it ranks above our position
+// there (or we're absent). Returns the worst offenders + the km threshold used.
+function outerRingRivals(
+  scan: Scan,
+): { thresholdKm: number; farPoints: number; rivals: { name: string; beats: number; bestRank: number }[] } {
+  const withData = scan.points.filter((p) => p.results && p.results.length);
+  const dists = withData.map((p) => distM(scan.centerLat, scan.centerLng, p.lat, p.lng));
+  const maxDist = dists.length ? Math.max(...dists) : 0;
+  const threshold = maxDist * 0.5;
+  const tally = new Map<string, { name: string; beats: number; bestRank: number }>();
+  let farPoints = 0;
+  withData.forEach((p, i) => {
+    if (dists[i] < threshold) return;
+    farPoints++;
+    (p.results ?? []).forEach((r, idx) => {
+      const theirRank = idx + 1;
+      if (r.isUs || !r.name) return;
+      const beatsUs = p.rank == null || theirRank < p.rank;
+      if (!beatsUs) return;
+      const key = r.placeId || r.name.toLowerCase();
+      const t = tally.get(key) ?? { name: r.name, beats: 0, bestRank: theirRank };
+      t.beats++;
+      t.bestRank = Math.min(t.bestRank, theirRank);
+      tally.set(key, t);
+    });
+  });
+  const rivals = [...tally.values()].sort((a, b) => b.beats - a.beats || a.bestRank - b.bestRank).slice(0, 5);
+  return { thresholdKm: threshold / 1000, farPoints, rivals };
+}
+
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-xl border border-border bg-white p-4">
@@ -91,6 +124,7 @@ export default function GeogridPage() {
   const [radiusKm, setRadiusKm] = useState(2);
   const [scans, setScans] = useState<Scan[]>([]);
   const [active, setActive] = useState<Scan | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<GridPoint | null>(null);
   const [running, setRunning] = useState(false);
   const [keyConfigured, setKeyConfigured] = useState(true);
   const [error, setError] = useState("");
@@ -118,6 +152,11 @@ export default function GeogridPage() {
   useEffect(() => {
     loadHistory(outletId);
   }, [outletId, loadHistory]);
+
+  // Clear the per-point detail whenever the displayed scan changes.
+  useEffect(() => {
+    setSelectedPoint(null);
+  }, [active?.id]);
 
   const run = async () => {
     setError("");
@@ -259,17 +298,93 @@ export default function GeogridPage() {
             <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${active.gridSize}, minmax(0, 1fr))`, maxWidth: 520 }}>
               {grid.flat().map((p) => {
                 const c = rankColor(p.rank);
+                const hasDetail = !!(p.results && p.results.length);
+                const isSelected = selectedPoint?.row === p.row && selectedPoint?.col === p.col;
                 return (
-                  <div key={`${p.row}-${p.col}`} className="flex aspect-square items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: c.bg, color: c.fg }} title={`rank ${p.rank ?? ">20"}`}>
+                  <button
+                    key={`${p.row}-${p.col}`}
+                    type="button"
+                    onClick={() => setSelectedPoint(isSelected ? null : p)}
+                    disabled={!hasDetail}
+                    className={`flex aspect-square items-center justify-center rounded-full text-xs font-bold transition ${hasDetail ? "cursor-pointer hover:opacity-90" : "cursor-default"} ${isSelected ? "ring-2 ring-brand-dark ring-offset-2" : ""}`}
+                    style={{ backgroundColor: c.bg, color: c.fg }}
+                    title={hasDetail ? `rank ${p.rank ?? ">20"} — click for competitors here` : `rank ${p.rank ?? ">20"}`}
+                  >
                     {c.label}
-                  </div>
+                  </button>
                 );
               })}
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
               Center = your storefront. Rank approximated from the Places API (proxy for the Maps local pack) — use it for trend, not exact position.
+              {grid.flat().some((p) => p.results?.length) && " Click any point to see who ranks there."}
             </p>
+
+            {/* Per-point detail — who ranks at the clicked grid cell */}
+            {selectedPoint && (
+              <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-sm font-medium text-foreground">
+                    Ranking at this point
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      ~{(distM(active.centerLat, active.centerLng, selectedPoint.lat, selectedPoint.lng) / 1000).toFixed(2)} km from storefront
+                      {selectedPoint.rank != null ? ` · you rank #${selectedPoint.rank}` : " · you’re not in the top 20"}
+                    </span>
+                  </div>
+                  <button onClick={() => setSelectedPoint(null)} className="text-xs text-muted-foreground hover:text-foreground">
+                    Close
+                  </button>
+                </div>
+                {selectedPoint.results && selectedPoint.results.length > 0 ? (
+                  <ol className="space-y-1">
+                    {selectedPoint.results.map((r, i) => (
+                      <li
+                        key={r.placeId || `${r.name}-${i}`}
+                        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${r.isUs ? "bg-brand-dark/10 font-semibold text-foreground" : "text-muted-foreground"}`}
+                      >
+                        <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-bold text-foreground ring-1 ring-border">
+                          {i + 1}
+                        </span>
+                        <span className="truncate">{r.name || "Unknown"}</span>
+                        {r.isUs && <span className="ml-auto rounded bg-brand-dark px-1.5 py-0.5 text-[10px] font-medium text-white">You</span>}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No competitor list recorded for this point. Re-run the scan to capture it.</p>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* Outer-ring callout — who beats us at distance, where proximity favours rivals */}
+          {(() => {
+            const ring = outerRingRivals(active);
+            if (ring.farPoints === 0 || ring.rivals.length === 0) return null;
+            return (
+              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="text-sm font-medium text-amber-900">
+                  Who out-ranks you at distance (≥{ring.thresholdKm.toFixed(1)} km)
+                </div>
+                <p className="mt-0.5 text-[11px] text-amber-800">
+                  Across the {ring.farPoints} outer-ring point{ring.farPoints === 1 ? "" : "s"}, these rivals rank above you most often. Out here Google leans on proximity — you climb past them with prominence (more reviews, faster).
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {ring.rivals.map((r, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm text-amber-900">
+                      <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-bold text-amber-900 ring-1 ring-amber-200">
+                        {i + 1}
+                      </span>
+                      <span className="truncate">{r.name}</span>
+                      <span className="ml-auto whitespace-nowrap text-xs text-amber-800">
+                        beats you at {r.beats} pt{r.beats === 1 ? "" : "s"} · best #{r.bestRank}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
 
           {/* Competitors — who out-ranks us, for reference */}
           {active.competitors && active.competitors.length > 0 && (
