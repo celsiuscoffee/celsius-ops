@@ -97,6 +97,14 @@
       "schedule": "0 4 * * *"
     },
     {
+      "path": "/api/cron/ops-pulse",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/ops-pulse-daily",
+      "schedule": "0 1 * * *"
+    },
+    {
       "path": "/api/cron/geogrid-keywords",
       "schedule": "0 6 1 * *"
     },
