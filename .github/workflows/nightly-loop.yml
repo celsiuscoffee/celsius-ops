@@ -1,0 +1,111 @@
+# Nightly maintenance loop — the "night shift" (Module 6 of the Loop
+# Engineering masterclass). Design & operations: ops/nightly-loop/README.md.
+#
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │  THIS WORKFLOW IS DEPLOYED *DISABLED ON PURPOSE*.                         │
+# │  It runs ONLY on manual dispatch, and even then defaults to --dry-run.    │
+# │  The daily `schedule:` trigger is commented out. Do NOT uncomment it      │
+# │  until you have:                                                          │
+# │    1. run `/nightly-loop --dry-run` locally and read the findings,        │
+# │    2. run a few findings through maker/checker by hand and trusted them,  │
+# │    3. measured the checker's false-pass rate (rubric.md),                 │
+# │    4. added the ANTHROPIC_API_KEY secret to the repo.                     │
+# │  Depth before autonomy — always.                                          │
+# └─────────────────────────────────────────────────────────────────────────┘
+
+name: nightly-loop
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run (triage only, no PRs) or live (maker/checker + gated PRs)"
+        type: choice
+        default: dry-run
+        options: [dry-run, live]
+        required: true
+      max_findings:
+        description: "Max findings to attempt this run"
+        type: string
+        default: "3"
+        required: false
+  # --- AUTONOMY: enable last, deliberately. Leave commented until trusted. ---
+  # schedule:
+  #   - cron: "0 22 * * *"   # 06:00 Asia/Kuala_Lumpur (UTC+8) daily
+
+# One loop run at a time. A second run must wait, never race the first over
+# STATE.md (the loop's memory).
+concurrency:
+  group: nightly-loop
+  cancel-in-progress: false
+
+permissions:
+  contents: write          # create loop/<id> branches
+  pull-requests: write      # open PRs (never merge)
+  issues: read              # triage reads open issues
+  actions: read             # triage reads recent CI runs
+
+jobs:
+  loop:
+    # Belt-and-braces: even on manual dispatch this won't run unattended
+    # unless the secret exists. Forks and the schedule (when added) can't
+    # accidentally trip it without the key.
+    if: ${{ github.repository == 'celsiuscoffee/celsius-ops' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30      # cost/time ceiling — a loop is a production system
+    env:
+      LOOP_MODE: ${{ github.event.inputs.mode || 'dry-run' }}
+      LOOP_MAX: ${{ github.event.inputs.max_findings || '3' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # triage reads recent commit history
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Guard — require API key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY secret is not set. The nightly loop is"
+            echo "::error::deliberately inert until you add it. See ops/nightly-loop/README.md."
+            exit 1
+          fi
+          echo "Mode: $LOOP_MODE · max findings: $LOOP_MAX"
+
+      # The loop driver. Invokes the /nightly-loop orchestrator headlessly via
+      # the official Claude Code action; the orchestrator (and its skill +
+      # sub-agents) live in .claude/ and are version-controlled with the repo.
+      - name: Run nightly-loop
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # In dry-run we force triage-only; in live we cap findings.
+          prompt: >-
+            Run /nightly-loop
+            ${{ env.LOOP_MODE == 'dry-run' && '--dry-run' || format('--max {0}', env.LOOP_MAX) }}.
+            Follow ops/nightly-loop/README.md and the /goal gate exactly. Open
+            PRs but never merge them. Stop and punt to the triage inbox on any
+            ambiguity, broken test environment, or risky domain.
+
+      # The loop's memory is committed so the next run resumes from it.
+      # (In dry-run this is just the refreshed findings list.)
+      - name: Persist loop memory
+        if: always()
+        run: |
+          if ! git diff --quiet -- ops/nightly-loop/STATE.md ops/nightly-loop/triage-inbox.md; then
+            git config user.name  "nightly-loop[bot]"
+            git config user.email "nightly-loop@users.noreply.github.com"
+            git add ops/nightly-loop/STATE.md ops/nightly-loop/triage-inbox.md
+            git commit -m "chore(nightly-loop): update STATE.md memory [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "No memory changes to persist."
+          fi
