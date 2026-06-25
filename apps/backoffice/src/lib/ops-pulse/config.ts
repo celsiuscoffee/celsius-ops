@@ -151,9 +151,12 @@ export const RESTOCK_ENABLED = (process.env.OPS_PULSE_RESTOCK_ENABLED || "false"
 export const NOCLOCKIN_ENABLED = (process.env.OPS_PULSE_NOCLOCKIN_ENABLED || "false").toLowerCase() === "true";
 
 // Signals that ALSO nudge the on-shift outlet team (not just the discipline
-// lead), because the team does the work — e.g. stock take. Comma-separated.
+// lead), because the team is accountable for what happened on their shift —
+// stock take (they do the work) and bad reviews (they served it). REVIEW is
+// real-time, so the on-shift team at fire-time is the staff who worked it.
+// Comma-separated; override via OPS_PULSE_TEAM_NOTIFY_SIGNALS.
 export const TEAM_NOTIFY_SIGNALS: Set<string> = new Set(
-  (process.env.OPS_PULSE_TEAM_NOTIFY_SIGNALS || "STOCK_COUNT")
+  (process.env.OPS_PULSE_TEAM_NOTIFY_SIGNALS || "STOCK_COUNT,REVIEW")
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),
@@ -195,5 +198,7 @@ export const TEMPLATES = {
   managerDigest: process.env.OPS_PULSE_TPL_DIGEST || "",
   ownerEscalation: process.env.OPS_PULSE_TPL_ESCALATION || "",
   dailyDigest: process.env.OPS_PULSE_TPL_DAILY || "",
+  // Audit goes to the discipline leads (barista/kitchen) on its own template.
+  audit: process.env.OPS_PULSE_TPL_AUDIT || "",
   languageCode: process.env.OPS_PULSE_TPL_LANG || "en",
 } as const;

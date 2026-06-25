@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Loader2, ShieldAlert, Check, Eye, RefreshCw, Send } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
@@ -42,12 +43,17 @@ export default function PulsePanel({ onChange }: { onChange: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testTo, setTestTo] = useState("");
 
   const sendTest = async () => {
     setTesting(true);
     setTestMsg(null);
     try {
-      const res = await fetch("/api/ops/workspace/test-pulse", { method: "POST" });
+      const res = await fetch("/api/ops/workspace/test-pulse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: testTo.trim() || undefined }),
+      });
       const j = await res.json().catch(() => ({}));
       setTestMsg(
         res.ok
@@ -81,13 +87,19 @@ export default function PulsePanel({ onChange }: { onChange: () => void }) {
       <div className="mb-3 flex items-center gap-2">
         <ShieldAlert className="h-4 w-4 text-terracotta" />
         <span className="text-sm font-medium">Open pulse alerts</span>
+        <Input
+          value={testTo}
+          onChange={(e) => setTestTo(e.target.value)}
+          placeholder="Send to (blank = me)"
+          className="ml-auto h-7 w-44 text-xs"
+        />
         <Button
           size="sm"
           variant="outline"
           onClick={sendTest}
           disabled={testing}
-          className="ml-auto h-7 gap-1 px-2 text-xs"
-          title="Send a sample pulse digest to your own WhatsApp"
+          className="h-7 gap-1 px-2 text-xs"
+          title="Send a sample pulse digest — blank = you, or enter a number (owner/admin)"
         >
           {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
           Send test pulse

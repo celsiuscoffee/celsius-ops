@@ -23,7 +23,7 @@ import {
 } from "./detectors";
 import { resolveRecipients, resolveOwner, resolveOutletTeam } from "./router";
 import { findEscalatable, markEscalated, markSent, recordBreach } from "./ledger";
-import { sendManagerDigest, sendOwnerEscalation, sendDailyDigest } from "./sender";
+import { sendManagerDigest, sendOwnerEscalation, sendDailyDigest, sendAuditDigest } from "./sender";
 import type { Assignee, Breach, PulseRunResult, RoutedBreach } from "./types";
 
 // Last-4 only — shadow output goes to plaintext logs / cron responses.
@@ -198,17 +198,22 @@ export async function runDailyPulse(now = new Date()): Promise<PulseRunResult> {
     return { mode, ranAt: now.toISOString(), breachCount: 0, routed: [], sent: 0, escalated: 0 };
   }
 
-  const breaches = await detectAll(now);
+  // Daily carries ROUTINE items only — the scheduled-discipline snapshot. Adhoc
+  // event signals (reviews, 86'd items, receiving disputes) are trigger-based:
+  // they fire on the real-time pulse the moment they happen, so re-listing them
+  // a day later would just double-page. Excluded here by category.
+  const breaches = (await detectAll(now)).filter((b) => categoryFor(b.signal) === "routine");
   const routed = await routeAll(breaches, now);
 
-  // Group ALL current items by recipient, split routine vs adhoc.
-  const byUser = new Map<string, { phone: string | null; name: string; routine: string[]; adhoc: string[] }>();
+  // Group routine items by recipient, splitting AUDIT (its own template for the
+  // discipline leads — Syafiq/barista, Chef Bo/kitchen) from the ops routine digest.
+  const byUser = new Map<string, { phone: string | null; name: string; routine: string[]; audit: string[] }>();
   for (const r of routed) {
-    const cat = categoryFor(r.signal);
+    const isAudit = r.signal === "AUDIT";
     for (const a of r.assignees) {
       const key = a.userId || a.phone || a.name;
-      const bucket = byUser.get(key) ?? { phone: a.phone, name: a.name, routine: [], adhoc: [] };
-      (cat === "adhoc" ? bucket.adhoc : bucket.routine).push(r.summary);
+      const bucket = byUser.get(key) ?? { phone: a.phone, name: a.name, routine: [], audit: [] };
+      (isAudit ? bucket.audit : bucket.routine).push(r.summary);
       byUser.set(key, bucket);
     }
   }
@@ -217,22 +222,29 @@ export async function runDailyPulse(now = new Date()): Promise<PulseRunResult> {
     for (const [, b] of byUser) {
       console.log(
         "[ops-pulse:daily:shadow]",
-        JSON.stringify({ to: b.name, phone: maskPhone(b.phone), routine: b.routine, adhoc: b.adhoc }),
+        JSON.stringify({ to: b.name, phone: maskPhone(b.phone), routine: b.routine, audit: b.audit }),
       );
     }
     return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskRouted(routed), sent: 0, escalated: 0 };
   }
 
-  // ARMED: one daily digest per recipient who has items.
+  // ARMED: per recipient — the ops routine digest and/or their audit digest.
   let sent = 0;
   for (const [key, b] of byUser) {
     if (!b.phone) {
       console.warn(`[ops-pulse:daily] items for ${b.name} (${key}) but no phone on file — not sent`);
       continue;
     }
-    const res = await sendDailyDigest(b.phone, b.routine, b.adhoc);
-    if (res.ok) sent += 1;
-    else console.error(`[ops-pulse:daily] digest to ${b.name} failed:`, res.error);
+    if (b.routine.length) {
+      const res = await sendDailyDigest(b.phone, b.routine, []);
+      if (res.ok) sent += 1;
+      else console.error(`[ops-pulse:daily] digest to ${b.name} failed:`, res.error);
+    }
+    if (b.audit.length) {
+      const res = await sendAuditDigest(b.phone, b.audit);
+      if (res.ok) sent += 1;
+      else console.error(`[ops-pulse:daily] audit to ${b.name} failed:`, res.error);
+    }
   }
   return { mode, ranAt: now.toISOString(), breachCount: breaches.length, routed: maskRouted(routed), sent, escalated: 0 };
 }
