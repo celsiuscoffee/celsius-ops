@@ -74,9 +74,13 @@ export default function SupplierChatsPage() {
   const { data: threadsData, isLoading } = useFetch<{ threads: Thread[]; needsAttention: number }>(
     "/api/inventory/supplier-chats",
   );
-  const { data: detail } = useFetch<Detail>(
+  const { data: detail, mutate: mutateDetail } = useFetch<Detail>(
     selected ? `/api/inventory/supplier-chats/${selected}` : null,
   );
+
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const threads = threadsData?.threads ?? [];
   const shown = filter === "attention" ? threads.filter((t) => t.needsAttention) : threads;
@@ -84,6 +88,35 @@ export default function SupplierChatsPage() {
   useEffect(() => {
     if (!selected && threads.length) setSelected(threads[0].key);
   }, [threads, selected]);
+
+  useEffect(() => {
+    setDraft("");
+    setSendError(null);
+  }, [selected]);
+
+  async function send() {
+    if (!selected || !draft.trim() || sending) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      const res = await fetch(`/api/inventory/supplier-chats/${selected}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: draft.trim() }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSendError(json.error ?? "Send failed");
+        return;
+      }
+      setDraft("");
+      mutateDetail();
+    } catch {
+      setSendError("Network error");
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <div className="flex h-[calc(100vh-120px)] min-h-[560px] overflow-hidden rounded-lg border border-gray-800 bg-gray-950 text-gray-100">
@@ -181,12 +214,24 @@ export default function SupplierChatsPage() {
             <div className="border-t border-gray-800 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <input
-                  disabled
-                  placeholder={detail.windowOpen ? "Type a reply…" : "Window closed — use a template"}
-                  className="h-9 flex-1 rounded-md border border-gray-700 bg-gray-900 px-3 text-[13px] text-gray-300 placeholder:text-gray-600"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") send();
+                  }}
+                  disabled={!detail.windowOpen || sending}
+                  placeholder={
+                    detail.windowOpen ? "Type a reply…" : "Window closed — free text not allowed (template only)"
+                  }
+                  className="h-9 flex-1 rounded-md border border-gray-700 bg-gray-900 px-3 text-[13px] text-gray-100 placeholder:text-gray-600 disabled:opacity-50"
                 />
-                <button disabled className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-700 text-gray-500">
-                  <Send size={15} />
+                <button
+                  onClick={send}
+                  disabled={!detail.windowOpen || sending || !draft.trim()}
+                  aria-label="Send"
+                  className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-700 text-gray-200 hover:bg-gray-800 disabled:opacity-40"
+                >
+                  {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
                 </button>
               </div>
               <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
@@ -194,7 +239,7 @@ export default function SupplierChatsPage() {
                 <span className="text-gray-500">
                   {detail.windowOpen ? "24h window open — free reply" : "24h window closed — template only"}
                 </span>
-                <span className="ml-auto text-gray-600">Reply/send: coming in #9</span>
+                {sendError && <span className="ml-auto text-red-400">{sendError}</span>}
               </div>
             </div>
           </>
