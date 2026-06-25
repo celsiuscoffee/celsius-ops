@@ -16,7 +16,7 @@ type PlaceProfile = {
   photos: number;
   hasDescription: boolean;
 };
-type Suggestion = { tag: string; priority: "high" | "med" | "low"; text: string };
+type Suggestion = { tag: string; priority: "high" | "med" | "low"; text: string; levers: string[] };
 type Compare = { us: PlaceProfile | null; them: PlaceProfile; suggestions: Suggestion[] };
 type Scan = {
   id: string;
@@ -214,6 +214,16 @@ function CompetitorRow({ rank, r, ourPlaceId }: { rank: number; r: PointResult; 
                     <span className={`mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full ${PRIORITY_DOT[s.priority] ?? "bg-neutral-400"}`} />
                     <span>
                       <span className="font-medium">{s.tag}:</span> {s.text}
+                      {s.levers && s.levers.length > 0 && (
+                        <ul className="mt-1 space-y-0.5 border-l-2 border-border pl-2.5 text-[11px] text-muted-foreground">
+                          {s.levers.map((l, j) => (
+                            <li key={j} className="flex gap-1.5">
+                              <span className="select-none">→</span>
+                              <span>{l}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </span>
                   </li>
                 ))}

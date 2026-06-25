@@ -149,7 +149,7 @@ export async function placeDetails(apiKey: string, placeId: string): Promise<Pla
   };
 }
 
-export type Suggestion = { tag: string; priority: "high" | "med" | "low"; text: string };
+export type Suggestion = { tag: string; priority: "high" | "med" | "low"; text: string; levers: string[] };
 
 /** Concrete actions to close the gap on `them`, given our profile (or null). */
 export function buildSuggestions(us: PlaceProfile | null, them: PlaceProfile): Suggestion[] {
@@ -167,7 +167,13 @@ export function buildSuggestions(us: PlaceProfile | null, them: PlaceProfile): S
     out.push({
       tag: "Reviews",
       priority: target > 50 ? "high" : "med",
-      text: `Get +${target} reviews to pass their ${reviewsThem}. At ${PACE}/week (ask every customer + QR on receipts) → ~${weeks} week${weeks > 1 ? "s" : ""}.`,
+      text: `Get +${target} reviews to pass their ${reviewsThem}. At ${PACE}/week → ~${weeks} week${weeks > 1 ? "s" : ""}.`,
+      levers: [
+        "Staff asks for a review the moment a customer compliments the coffee — hand them a QR card.",
+        "Print a Google review QR on receipts and table tents.",
+        "Text/WhatsApp a one-tap review link to loyalty members after purchase.",
+        "Reply to every existing review — active profiles rank better.",
+      ],
     });
   }
 
@@ -179,27 +185,60 @@ export function buildSuggestions(us: PlaceProfile | null, them: PlaceProfile): S
       out.push({
         tag: "Rating",
         priority: "med",
-        text: `Lift your ${us.rating.toFixed(1)}★ past their ${them.rating.toFixed(1)}★: ~${need} new 5★ reviews. At ${PACE}/week → ~${weeks} week${weeks > 1 ? "s" : ""}; recover unhappy customers before they post.`,
+        text: `Lift your ${us.rating.toFixed(1)}★ past their ${them.rating.toFixed(1)}★: ~${need} new 5★ reviews. At ${PACE}/week → ~${weeks} week${weeks > 1 ? "s" : ""}.`,
+        levers: [
+          "Train staff to fix complaints on the spot, before the customer leaves.",
+          "Catch unhappy customers privately (receipt feedback link) and resolve before they post.",
+          "Only prompt for reviews after a clear win — fresh bake, fast service, a regular.",
+        ],
       });
     }
   }
 
   // Profile completeness — one-time fixes, each time-boxed.
   if (them.hasHours && us && !us.hasHours) {
-    out.push({ tag: "Hours", priority: "high", text: "Add opening hours — 5-min fix today. Missing hours get down-ranked." });
+    out.push({
+      tag: "Hours",
+      priority: "high",
+      text: "Add opening hours — 5-min fix today. Missing hours get down-ranked.",
+      levers: ["Google Business Profile → Edit profile → Hours → set regular + holiday hours."],
+    });
   }
   if (them.hasWebsite && us && !us.hasWebsite) {
-    out.push({ tag: "Website", priority: "med", text: "Add your website / menu link — 2-min fix today." });
+    out.push({
+      tag: "Website",
+      priority: "med",
+      text: "Add your website / menu link — 2-min fix today.",
+      levers: ["Edit profile → Contact → Website: link your site or online-order/menu page."],
+    });
   }
   if (them.hasPhone && us && !us.hasPhone) {
-    out.push({ tag: "Phone", priority: "low", text: "Add a phone number — 1-min fix today." });
+    out.push({
+      tag: "Phone",
+      priority: "low",
+      text: "Add a phone number — 1-min fix today.",
+      levers: ["Edit profile → Contact → Phone: add your primary number."],
+    });
   }
   if (us && them.photos > us.photos) {
     const add = Math.max(them.photos - us.photos, 5);
-    out.push({ tag: "Photos", priority: "low", text: `Add ${add} photos (storefront, interior, drinks) — ~15 min today, then 2/week to stay fresh.` });
+    out.push({
+      tag: "Photos",
+      priority: "low",
+      text: `Add ${add} photos — ~15 min today, then 2/week to stay fresh.`,
+      levers: [
+        "Maps app → your business → Add photos: storefront, interior, menu board, 3-5 hero drinks.",
+        "Set a weekly reminder to post 2 fresh photos.",
+      ],
+    });
   }
   if (them.hasDescription && us && !us.hasDescription) {
-    out.push({ tag: "Description", priority: "low", text: "Add a description with your key search terms — 10-min fix today." });
+    out.push({
+      tag: "Description",
+      priority: "low",
+      text: "Add a description with your key search terms — 10-min fix today.",
+      levers: ["Edit profile → Description: include 'specialty coffee', your area and signature items."],
+    });
   }
 
   if (out.length === 0) {
@@ -207,8 +246,11 @@ export function buildSuggestions(us: PlaceProfile | null, them: PlaceProfile): S
       tag: us ? "Even" : "Note",
       priority: "low",
       text: us
-        ? `Profile matches theirs — win on velocity: ${PACE} reviews/week + 1 Google post/week keeps you climbing.`
-        : `Link your profile to compare. Meanwhile: ${PACE} reviews/week and add hours, website + 5 photos today.`,
+        ? `Profile matches theirs — win on velocity to climb past them.`
+        : `Link your profile to compare. Meanwhile, work the basics.`,
+      levers: us
+        ? [`Keep ${PACE} reviews/week flowing.`, "Post 1 Google update/week (offer, new drink, event)."]
+        : [`Aim for ${PACE} reviews/week.`, "Add hours, website and 5 photos today."],
     });
   }
   return out;
