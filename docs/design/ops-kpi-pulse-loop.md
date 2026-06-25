@@ -425,3 +425,13 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
   DB; (2) get `ops_breach_digest` + `ops_escalation` templates APPROVED and set
   `OPS_PULSE_TPL_*`; (3) confirm manager + owner `User.phone`; (4) bump the cron from hourly to
   15-min in `vercel.json`; (5) set `OPS_PULSE_MODE=armed`. Until then it stays in shadow.
+- **2026-06-25 — DAILY pulse GONE LIVE.** Owner authorized firing it. Flipped `dailyMode()` default
+  `shadow → armed` (the go-live commit; `OPS_PULSE_DAILY_MODE` still overrides). Armed the daily
+  tier first because it has no ledger — it re-sends the full current state each day, so a failed
+  send just retries tomorrow (nothing burned). **Real-time tier deliberately held in shadow**
+  (`pulseMode()` default unchanged): armed real-time `markSent`s each breach once, so arming it
+  before WhatsApp delivery is proven would silently consume the first real breaches. Delivery is
+  still gated on WhatsApp's rule — the daily digest sends free-form (no `OPS_PULSE_TPL_DAILY` set),
+  which Meta only delivers inside each recipient's open 24h window, so the leads must message the
+  bot once (or the templates must be approved) for it to actually land. Flip real-time to armed
+  once a window/template is confirmed.
