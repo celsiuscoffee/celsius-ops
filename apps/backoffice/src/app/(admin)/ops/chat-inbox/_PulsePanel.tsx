@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ShieldAlert, Check, Eye, RefreshCw } from "lucide-react";
+import { Loader2, ShieldAlert, Check, Eye, RefreshCw, Send } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 type Alert = {
@@ -40,6 +40,26 @@ export default function PulsePanel({ onChange }: { onChange: () => void }) {
   const { data, isLoading, mutate } = useFetch<{ alerts: Alert[] }>("/api/ops/workspace/pulse");
   const alerts = data?.alerts ?? [];
   const [busy, setBusy] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const sendTest = async () => {
+    setTesting(true);
+    setTestMsg(null);
+    try {
+      const res = await fetch("/api/ops/workspace/test-pulse", { method: "POST" });
+      const j = await res.json().catch(() => ({}));
+      setTestMsg(
+        res.ok
+          ? { ok: true, text: `Test pulse sent to ${j.to ?? "your number"} — check WhatsApp.` }
+          : { ok: false, text: j.message || j.error || "Failed to send test pulse." },
+      );
+    } catch {
+      setTestMsg({ ok: false, text: "Network error sending test pulse." });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const act = async (id: string, action: "resolve" | "ack") => {
     setBusy(id);
@@ -61,10 +81,31 @@ export default function PulsePanel({ onChange }: { onChange: () => void }) {
       <div className="mb-3 flex items-center gap-2">
         <ShieldAlert className="h-4 w-4 text-terracotta" />
         <span className="text-sm font-medium">Open pulse alerts</span>
-        <button onClick={() => mutate()} className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={sendTest}
+          disabled={testing}
+          className="ml-auto h-7 gap-1 px-2 text-xs"
+          title="Send a sample pulse digest to your own WhatsApp"
+        >
+          {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+          Send test pulse
+        </Button>
+        <button onClick={() => mutate()} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </button>
       </div>
+      {testMsg && (
+        <div
+          className={
+            "mb-3 rounded-md px-3 py-2 text-xs " +
+            (testMsg.ok ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-800")
+          }
+        >
+          {testMsg.text}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="p-6 text-center text-muted-foreground">
