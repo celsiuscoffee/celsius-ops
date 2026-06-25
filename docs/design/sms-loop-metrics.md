@@ -23,7 +23,7 @@ Lag = the result. You can't move it directly; it's what the lead activity produc
 | L4 | **True ROI (holdout-based)** | `incremental_margin / (sms_cost + reward_COGS)` per round | Reported for the owner's "a number I trust." Replaces the banned naive ROI. Scale bar: **> 1.0** (margin exceeds spend), comfortably **≥ 2×** to prioritise budget. |
 | L5 | **Program repeat-rate trend** | brand repeat rate over time (repeat members / total) — baseline **20.1%** (1,110 / 5,523) | The slow-moving scoreboard the whole loop exists to move. Directional, quarterly. |
 
-**SMS cost** = recipients × RM0.10 (SMS Niaga). **margin_per_order** = owner-supplied gross margin %; until supplied, use a conservative placeholder and flag it.
+**SMS cost** = recipients × RM0.10 (SMS Niaga). **margin_per_order** = **65% of order value** (owner-ratified 2026-06-25, blended gross margin net of COGS). Revisit if COGS/pricing shift materially.
 
 ### Definitions (read — these are NOT raw treatment numbers)
 
@@ -164,11 +164,14 @@ Lead metrics (§2) are the ones reviewed **weekly** — they predict the lag. If
 
 ---
 
-## 5. Open decisions (owner)
+## 5. Ratified decisions (owner, 2026-06-25)
 
-Carried from the engineering doc, now framed as metric thresholds to ratify:
-1. **Scale bar** — confirm ICR **≥ 5pp** and IMPR **> 0** as the scale gate (proposed).
-2. **Attribution window** — **7d or 14d**? Lock one.
-3. **Holdout %** — **20%** default OK, or 10% to send more treatment?
-4. **margin_per_order** — supply the real gross-margin number so L3/L4/offer ceiling stop using a placeholder.
-5. **Opt-out kill threshold** — ratify **2%**.
+| # | Decision | Value |
+|---|----------|-------|
+| 1 | **Scale bar** | **ICR ≥ 5pp AND IMPR > 0** — both must hold to scale a round. |
+| 2 | **Attribution window** | **7 days** (`attribution_window_days = 7`). Held constant across rounds. |
+| 3 | **Holdout %** | **20%** (`holdout_pct = 20`). |
+| 4 | **margin_per_order** | **65% of order value** (blended gross margin). Feeds L3 / L4 / L6 / offer cost ceiling. |
+| 5 | **Opt-out kill threshold** | **2%** — opt-out rate above 2% among treated pauses the loop. |
+
+Revisit any of these if COGS/pricing shift or once enough rounds have run to retune the bars empirically.
