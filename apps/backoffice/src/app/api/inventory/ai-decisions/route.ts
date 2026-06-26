@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { validateSupplierOrder, type OrderWarning } from "@/lib/inventory/order-validation";
+import { validateSupplierOrder, boundedReorderQty, type OrderWarning } from "@/lib/inventory/order-validation";
 
 // ─── GET /api/inventory/ai-decisions ────────────────────────────────────
 // Returns executable decisions: draft POs to create, transfers to make,
@@ -223,6 +223,8 @@ export async function GET(request: NextRequest) {
       productPackageId: string | null;
       packageName: string | null;
       daysUntilStockout: number;
+      capNote: string | null; // why orderQty was capped (overstock / shelf-life), if any
+      alternatives: { supplierName: string; price: number; moq: number }[]; // next-cheapest sources
     };
 
     // ── Pre-compute surplus stock at each outlet per product ──
@@ -342,12 +344,41 @@ export async function GET(request: NextRequest) {
         const supplier = cheapestSupplier[product.id];
         if (!supplier) continue; // no supplier = can't order
 
-        // Calculate order quantity: only remaining deficit after transfers, in package units
-        const packageQty = Math.ceil(baseUnitsNeeded / supplier.conversionFactor);
-        // Respect MOQ
-        const orderQty = Math.max(packageQty, supplier.moq);
+        // Order quantity: enough to reach par (after transfers), floored by MOQ,
+        // but capped so we don't overstock past maxLevel or order more than can be
+        // used before it spoils (perishables). MOQ stays a hard floor.
+        const maxLevel = par.maxLevel != null ? Number(par.maxLevel) : null;
+        const headroomBase = maxLevel != null ? Math.max(0, maxLevel - currentQty - onOrderQty) : null;
+        const shelfLifeDays = product.shelfLifeDays != null ? Number(product.shelfLifeDays) : null;
+        const shelfUsableBase = shelfLifeDays && shelfLifeDays > 0 && avgDaily > 0 ? shelfLifeDays * avgDaily : null;
+        const bounded = boundedReorderQty({
+          neededBase: baseUnitsNeeded,
+          conversionFactor: supplier.conversionFactor,
+          moq: supplier.moq,
+          headroomBase,
+          shelfUsableBase,
+        });
+        const orderQty = bounded.orderQty;
         const totalPrice = orderQty * supplier.price;
         const daysLeft = avgDaily > 0 ? Math.round(currentQty / avgDaily) : 0;
+
+        let capNote: string | null = null;
+        if (bounded.moqForced) {
+          capNote = bounded.cap === "shelf_life"
+            ? "MOQ exceeds shelf-life usage — spoilage risk"
+            : "MOQ pushes above max level — overstock";
+        } else if (bounded.cap === "shelf_life") {
+          capNote = "Capped to shelf-life usage";
+        } else if (bounded.cap === "max_level") {
+          capNote = "Capped at max level";
+        }
+
+        // Alternative suppliers (next-cheapest) so an OOS/unavailable line can be
+        // re-sourced without leaving the need unfilled.
+        const alternatives = (supplierOptionsMap[product.id] ?? [])
+          .filter((o) => o.supplierId !== supplier.supplierId)
+          .slice(0, 3)
+          .map((o) => ({ supplierName: o.supplierName, price: o.price, moq: o.moq }));
 
         const conv = supplier.conversionFactor;
         const item: ReorderItem = {
@@ -367,6 +398,8 @@ export async function GET(request: NextRequest) {
           productPackageId: supplier.productPackageId,
           packageName: supplier.packageName,
           daysUntilStockout: daysLeft,
+          capNote,
+          alternatives,
         };
 
         if (!reorderGroups[outlet.id]) reorderGroups[outlet.id] = {};

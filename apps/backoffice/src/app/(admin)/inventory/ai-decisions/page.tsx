@@ -17,6 +17,8 @@ type ReorderItem = {
   orderQty: number;
   unitPrice: number;
   priceChangePercent?: number | null;
+  capNote?: string | null;
+  alternatives?: { supplierName: string; price: number; moq: number }[];
   totalPrice: number;
   productPackageId: string | null;
   packageName: string | null;
@@ -360,6 +362,14 @@ export default function AIDecisionsPage() {
                             <td className="py-1.5 px-3 text-zinc-300">
                               {item.productName}
                               {item.packageName && <span className="text-zinc-500 ml-1">({item.packageName})</span>}
+                              {item.capNote && (
+                                <div className="text-[10px] text-amber-400/90">⚠ {item.capNote}</div>
+                              )}
+                              {item.alternatives && item.alternatives.length > 0 && (
+                                <div className="text-[10px] text-zinc-500">
+                                  alt: {item.alternatives.map((a) => `${a.supplierName} RM${a.price.toFixed(2)}`).join(" · ")}
+                                </div>
+                              )}
                             </td>
                             <td className={`py-1.5 px-3 text-right font-medium ${item.currentQty <= 0 ? "text-red-400" : item.currentQty <= item.reorderPoint ? "text-orange-400" : "text-zinc-300"}`}>
                               {item.currentQty}

@@ -13,6 +13,62 @@
 // cron, PO draft API, supplier-chat agent context). Dates are compared in UTC —
 // callers pass a UTC-midnight Date representing the intended local (MYT) day.
 
+// ─── Reorder quantity bounding ──────────────────────────────
+// The reorder engine orders "enough to reach par", floored by the per-line MOQ.
+// But MOQ + pack-size rounding can overshoot two real ceilings:
+//   - maxLevel: ordering above it overstocks (cash tied up, storage).
+//   - shelf life: ordering more than can be used before expiry → spoilage.
+// boundedReorderQty caps the order at the tighter of those, but never below MOQ
+// (a hard supplier floor) — when MOQ forces an overshoot it reports why so the
+// buyer sees it. Pure + unit-tested.
+
+export type ReorderCap = "max_level" | "shelf_life" | null;
+
+export type ReorderQty = {
+  orderQty: number; // package units to order
+  cap: ReorderCap; // which ceiling bound the qty (null = pure need/MOQ)
+  moqForced: boolean; // true when MOQ pushed the qty above a ceiling
+};
+
+export function boundedReorderQty(input: {
+  neededBase: number; // base units short of par (after transfers + on-order)
+  conversionFactor: number; // base units per package unit
+  moq: number; // per-line package MOQ (hard floor)
+  /** maxLevel − currentBase − onOrderBase: base units we can add before exceeding max. null = no max. */
+  headroomBase?: number | null;
+  /** shelfLifeDays × avgDailyUsage: base units usable before spoilage. null = non-perishable. */
+  shelfUsableBase?: number | null;
+}): ReorderQty {
+  const conv = input.conversionFactor > 0 ? input.conversionFactor : 1;
+  const moq = Math.max(0, Math.floor(input.moq) || 0);
+
+  const needPkg = Math.max(0, Math.ceil(input.neededBase / conv));
+  let orderQty = Math.max(needPkg, moq);
+
+  // Ceilings in package units (floor — never round a cap up past itself).
+  const maxPkg = input.headroomBase != null ? Math.max(0, Math.floor(input.headroomBase / conv)) : Infinity;
+  const shelfPkg =
+    input.shelfUsableBase != null && input.shelfUsableBase > 0
+      ? Math.max(0, Math.floor(input.shelfUsableBase / conv))
+      : Infinity;
+
+  const cap = Math.min(maxPkg, shelfPkg);
+  let which: ReorderCap = null;
+  let moqForced = false;
+
+  if (orderQty > cap) {
+    which = maxPkg <= shelfPkg ? "max_level" : "shelf_life";
+    if (cap >= moq) {
+      orderQty = cap; // cap is the binding ceiling, still ≥ MOQ
+    } else {
+      orderQty = moq; // MOQ is a hard floor — overshoot the ceiling, flag it
+      moqForced = true;
+    }
+  }
+
+  return { orderQty: Math.max(orderQty, moq > 0 ? moq : 1), cap: which, moqForced };
+}
+
 export type OrderWarningCode = "BELOW_MOQ" | "DELIVERY_DAY";
 
 export type OrderWarning = {
