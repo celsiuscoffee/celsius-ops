@@ -46,8 +46,15 @@ These are larger than a safe in-PR fix; flagging for prioritisation.
    never called by any sales/POS flow, and `MenuIngredient` (BOM) is manual-only with
    no import. This is why COGS and the new variance report are empty until recipes +
    sales exist, and why par-level reorder can't be trusted (the docs' load-bearing
-   "stock accurate enough to auto-order" premise). Fix = a consumption engine
-   (sales × recipe → decrement) + a recipe import. Largest item; underpins the loop.
+   "stock accurate enough to auto-order" premise).
+   _Started (SHADOW): `lib/inventory/consumption.ts` + `/api/cron/consumption-post`
+   (daily) turn each outlet's menu sales into theoretical ingredient depletion
+   (sales × recipe BOM) and report it. Shadow by default — writes nothing.
+   `CONSUMPTION_ENGINE_ENABLED=true` (+ a system OWNER user) enables idempotent live
+   posting of negative StockAdjustments, but MUST stay off until stock units are
+   normalised to base UOM (#1) — otherwise the base-unit decrement misaligns with the
+   package-keyed StockBalance rows. Still open: a recipe (`MenuIngredient`) import, and
+   the unit normalisation that unblocks going live._
 
 4. **Lower-priority QA items:** orphaned `OrderStatus.CONFIRMED`; no PO status-transition
    allowlist; deposit rounding via `Number()` coercion; `Order.deliveryDate` optional
