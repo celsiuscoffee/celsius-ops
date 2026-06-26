@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { formatRM } from "@celsius/shared";
 import {
@@ -84,12 +84,24 @@ export default function SupplierChatsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "attention">("all");
 
+  // Poll so inbound supplier messages + the agent's auto-replies appear without
+  // a manual refresh. The open thread polls faster than the list.
   const { data: threadsData, isLoading } = useFetch<{ threads: Thread[]; needsAttention: number }>(
     "/api/inventory/supplier-chats",
+    { refreshInterval: 10000, revalidateOnFocus: true },
   );
   const { data: detail, mutate: mutateDetail } = useFetch<Detail>(
     selected ? `/api/inventory/supplier-chats/${selected}` : null,
+    { refreshInterval: 6000, revalidateOnFocus: true },
   );
+
+  // Auto-scroll to the newest message when the thread or its message count
+  // changes (so polled-in messages land in view, not below the fold).
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const msgCount = detail?.messages.length ?? 0;
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: "end" });
+  }, [selected, msgCount]);
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -231,6 +243,7 @@ export default function SupplierChatsPage() {
                   </div>
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
             <div className="border-t border-border px-4 py-2.5">
               <div className="flex items-center gap-2">
