@@ -194,11 +194,15 @@ export const AUDIT = {
 // falls back to free-form text — which Meta only delivers inside the recipient's
 // open 24h window (fine for testing, NOT for production paging). Set these
 // before flipping OPS_PULSE_MODE=armed.
+// Template names default to the standard ops_pulse_* set (created in WhatsApp
+// Manager / via the templates create endpoint). Sending tries the template first
+// and FALLS BACK to free-form when it isn't APPROVED yet (see sendProactive), so
+// wiring the names here is safe even before approval — no env var needed once the
+// templates go live. Override only to point at differently-named templates.
 export const TEMPLATES = {
-  managerDigest: process.env.OPS_PULSE_TPL_DIGEST || "",
-  ownerEscalation: process.env.OPS_PULSE_TPL_ESCALATION || "",
-  dailyDigest: process.env.OPS_PULSE_TPL_DAILY || "",
-  // Audit goes to the discipline leads (barista/kitchen) on its own template.
-  audit: process.env.OPS_PULSE_TPL_AUDIT || "",
+  managerDigest: process.env.OPS_PULSE_TPL_DIGEST || "ops_pulse_digest",
+  ownerEscalation: process.env.OPS_PULSE_TPL_ESCALATION || "ops_pulse_escalation",
+  dailyDigest: process.env.OPS_PULSE_TPL_DAILY || "ops_pulse_daily",
+  audit: process.env.OPS_PULSE_TPL_AUDIT || "ops_pulse_audit",
   languageCode: process.env.OPS_PULSE_TPL_LANG || "en",
 } as const;
