@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const outletWhere = outletId ? { id: outletId, status: "ACTIVE" as const } : { status: "ACTIVE" as const };
 
     // ─── Parallel data fetches ──────────────────────────────────────
-    const [outlets, stockBalances, parLevels, supplierProducts, products, productPackages, existingDraftOrders, wastage30] = await Promise.all([
+    const [outlets, stockBalances, parLevels, supplierProducts, products, productPackages, existingDraftOrders, openPurchaseOrders, wastage30] = await Promise.all([
       prisma.outlet.findMany({
         where: outletWhere,
         select: { id: true, name: true, code: true },
@@ -66,13 +66,29 @@ export async function GET(request: NextRequest) {
         select: { id: true, productId: true, packageName: true, packageLabel: true, conversionFactor: true, isDefault: true },
         orderBy: { isDefault: "desc" }, // default packages first
       }),
-      // Existing DRAFT orders to avoid duplicates
+      // Existing DRAFT orders to avoid duplicate drafts
       prisma.order.findMany({
         where: { status: "DRAFT", orderType: "PURCHASE_ORDER" },
         select: {
           outletId: true,
           supplierId: true,
           items: { select: { productId: true } },
+        },
+      }),
+      // Open POs already placed but not yet received — this is incoming stock.
+      // Netting it off the reorder decision is what stops us re-ordering goods
+      // that are already on the way (the #1 overpurchase cause). PARTIALLY_RECEIVED
+      // is excluded on purpose: the receivings reconcile overwrites OrderItem.quantity
+      // with the received total, so its lines no longer represent what's still owed.
+      prisma.order.findMany({
+        where: {
+          orderType: "PURCHASE_ORDER",
+          status: { in: ["APPROVED", "SENT", "CONFIRMED", "AWAITING_DELIVERY"] },
+          ...(outletId ? { outletId } : {}),
+        },
+        select: {
+          outletId: true,
+          items: { select: { productId: true, productPackageId: true, quantity: true } },
         },
       }),
       // Wastage last 30 days
@@ -111,6 +127,20 @@ export async function GET(request: NextRequest) {
     for (const draftOrder of existingDraftOrders) {
       for (const item of draftOrder.items) {
         draftProductSet.add(`${item.productId}_${draftOrder.outletId}`);
+      }
+    }
+
+    // Incoming (on-order) quantity per product+outlet, converted to BASE units so
+    // it nets directly against the base-unit par level / current stock below.
+    // OrderItem.quantity is in package units; ×conversionFactor → base.
+    const pkgConvById = new Map(productPackages.map((p) => [p.id, Number(p.conversionFactor)]));
+    const onOrderMap = new Map<string, number>(); // key: productId_outletId → base units inbound
+    for (const po of openPurchaseOrders) {
+      for (const item of po.items) {
+        const conv = item.productPackageId ? pkgConvById.get(item.productPackageId) ?? 1 : 1;
+        const base = Number(item.quantity) * (conv > 0 ? conv : 1);
+        const key = `${item.productId}_${po.outletId}`;
+        onOrderMap.set(key, (onOrderMap.get(key) ?? 0) + base);
       }
     }
 
@@ -165,6 +195,7 @@ export async function GET(request: NextRequest) {
       sku: string;
       baseUom: string;
       currentQty: number;
+      onOrderQty: number; // package units already inbound from open POs
       parLevel: number;
       reorderPoint: number;
       avgDailyUsage: number;
@@ -208,18 +239,22 @@ export async function GET(request: NextRequest) {
         if (!par) continue; // no par level = skip
 
         const currentQty = stockMap.get(key) ?? 0;
+        const onOrderQty = onOrderMap.get(key) ?? 0; // base units already inbound
         const reorderPoint = Number(par.reorderPoint);
         const parLevel = Number(par.parLevel);
         const avgDaily = Number(par.avgDailyUsage);
 
-        // Only reorder if at or below reorder point
-        if (currentQty > reorderPoint) continue;
+        // Only reorder if stock-on-hand PLUS what's already on the way is at or
+        // below the reorder point. Counting inbound stock stops us re-ordering
+        // goods that are already coming.
+        if (currentQty + onOrderQty > reorderPoint) continue;
 
         // Skip if already in a DRAFT order
         if (draftProductSet.has(key)) continue;
 
         // ── Check if other outlets have surplus we can transfer ──
-        let baseUnitsNeeded = Math.max(parLevel - currentQty, 0);
+        // Need = par minus what we have minus what's inbound.
+        let baseUnitsNeeded = Math.max(parLevel - currentQty - onOrderQty, 0);
         if (baseUnitsNeeded <= 0) continue;
 
         // Look for surplus at other outlets (stock above par level)
@@ -303,6 +338,7 @@ export async function GET(request: NextRequest) {
           sku: product.sku || "",
           baseUom: product.baseUom,
           currentQty: conv > 1 ? Math.round((currentQty / conv) * 100) / 100 : currentQty,
+          onOrderQty: conv > 1 ? Math.round((onOrderQty / conv) * 100) / 100 : onOrderQty,
           parLevel: conv > 1 ? Math.round((parLevel / conv) * 100) / 100 : parLevel,
           reorderPoint: conv > 1 ? Math.round((reorderPoint / conv) * 100) / 100 : reorderPoint,
           avgDailyUsage: Math.round(avgDaily * 100) / 100,

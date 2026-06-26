@@ -10,6 +10,7 @@ type ReorderItem = {
   sku: string;
   baseUom: string;
   currentQty: number;
+  onOrderQty?: number;
   parLevel: number;
   reorderPoint: number;
   avgDailyUsage: number;
@@ -344,6 +345,7 @@ export default function AIDecisionsPage() {
                         <tr className="text-zinc-500 bg-zinc-950/50">
                           <th className="text-left py-1.5 px-3 font-medium">Product</th>
                           <th className="text-right py-1.5 px-3 font-medium">Stock</th>
+                          <th className="text-right py-1.5 px-3 font-medium">On Order</th>
                           <th className="text-right py-1.5 px-3 font-medium">Par</th>
                           <th className="text-right py-1.5 px-3 font-medium">Days Left</th>
                           <th className="text-right py-1.5 px-3 font-medium">Order Qty</th>
@@ -360,6 +362,9 @@ export default function AIDecisionsPage() {
                             </td>
                             <td className={`py-1.5 px-3 text-right font-medium ${item.currentQty <= 0 ? "text-red-400" : item.currentQty <= item.reorderPoint ? "text-orange-400" : "text-zinc-300"}`}>
                               {item.currentQty}
+                            </td>
+                            <td className="py-1.5 px-3 text-right text-zinc-400">
+                              {item.onOrderQty && item.onOrderQty > 0 ? <span className="text-sky-400">+{item.onOrderQty}</span> : <span className="text-zinc-600">—</span>}
                             </td>
                             <td className="py-1.5 px-3 text-right text-zinc-400">{item.parLevel}</td>
                             <td className={`py-1.5 px-3 text-right ${item.daysUntilStockout <= 1 ? "text-red-400 font-medium" : item.daysUntilStockout <= 3 ? "text-orange-400" : "text-zinc-400"}`}>
