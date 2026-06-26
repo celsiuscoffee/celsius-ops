@@ -238,6 +238,7 @@ export default function ReceivePage() {
 
   const submitReceiving = async () => {
     if (!selectedPO || !user) return;
+    if (invoicePhotos.length === 0) return;
     setSubmitting(true);
 
     const payload = {
@@ -607,7 +608,7 @@ export default function ReceivePage() {
             {/* Invoice photo capture */}
             <div>
               <h3 className="mb-1.5 text-sm font-medium text-gray-900">
-                Invoice Photo
+                Invoice Photo <span className="text-terracotta">*</span>
               </h3>
               <div className="flex flex-wrap gap-2">
                 {invoicePhotos.map((photo, i) => (
@@ -656,9 +657,17 @@ export default function ReceivePage() {
                   </span>
                 </div>
               )}
+              {allReceived && invoicePhotos.length === 0 && (
+                <div className="mb-2 flex items-center gap-2 rounded-lg bg-terracotta/5 px-3 py-2 text-xs text-terracotta-dark">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>Add an invoice photo to confirm receiving.</span>
+                </div>
+              )}
               <Button
                 className="w-full bg-terracotta hover:bg-terracotta-dark"
-                disabled={!allReceived || submitting}
+                disabled={
+                  !allReceived || invoicePhotos.length === 0 || submitting
+                }
                 onClick={submitReceiving}
               >
                 {submitting ? (
