@@ -89,6 +89,9 @@ export async function GET(req: NextRequest) {
   const overdue = new Set(overdueRows.map((o) => o.supplierId));
 
   const out = [...threads.values()]
+    // Registered suppliers only — hide threads from numbers not matched to a
+    // Supplier record (random/unknown senders don't belong in the supplier inbox).
+    .filter((t) => !!t.supplierId)
     .map((t) => {
       const s = t.supplierId ? sup.get(t.supplierId) : undefined;
       const needsAttention =
