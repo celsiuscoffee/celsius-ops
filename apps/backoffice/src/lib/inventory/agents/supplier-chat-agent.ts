@@ -89,19 +89,9 @@ function flagEnabled(): boolean {
   return process.env.PROCUREMENT_AGENT_ENABLED === "true";
 }
 
-// Allow-list of supplier numbers (last-8 digits) the agent may act on. Unset or
-// empty => all suppliers. Set to the Test number for the first live run.
-function allowed(supplierPhone: string | null | undefined): boolean {
-  const raw = process.env.PROCUREMENT_AGENT_ALLOWLIST?.trim();
-  if (!raw) return true;
-  const tail = digits(supplierPhone).slice(-8);
-  if (!tail) return false;
-  return raw
-    .split(",")
-    .map((s) => digits(s).slice(-8))
-    .filter(Boolean)
-    .includes(tail);
-}
+// Which suppliers the agent may act on is now a per-supplier dial (Supplier.automationMode):
+// OFF = hands-off, ASSIST = draft + human-approve, AUTO = act + send. This replaces the
+// old global PROCUREMENT_AGENT_ALLOWLIST; PROCUREMENT_AGENT_ENABLED stays the master switch.
 
 const isValidIsoDate = (d: string | null): d is string =>
   !!d && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d));
@@ -128,13 +118,15 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     // Match the supplier by last-8 digits (same rule as whatsapp-store).
     const suppliers = await prisma.supplier.findMany({
       where: { phone: { not: null }, status: "ACTIVE" },
-      select: { id: true, name: true, phone: true, paymentTerms: true, depositPercent: true },
+      select: { id: true, name: true, phone: true, paymentTerms: true, depositPercent: true, automationMode: true },
     });
     const supplier = suppliers.find((s) => {
       const sd = digits(s.phone);
       return sd === fromDigits || (sd.length >= 8 && sd.slice(-8) === tail);
     });
-    if (!supplier || !allowed(supplier.phone)) return; // unknown / not allow-listed → leave to humans
+    // Per-supplier dial: OFF → hands-off (leave to humans). ASSIST/AUTO continue;
+    // ASSIST forces escalate below (draft + human-approve, never auto-act).
+    if (!supplier || supplier.automationMode === "OFF") return;
 
     // Redelivery dedupe: if we've already auto-answered this exact inbound, stop.
     if (evt.waMessageId) {
@@ -186,9 +178,12 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     if (!decision) return;
 
     // ── Guardrails (code, not model): auto-act vs escalate ──
+    // ASSIST suppliers always escalate → the agent drafts a holding reply + a proposal
+    // for a human to approve, and never auto-edits the PO. AUTO suppliers auto-act below.
     const risky =
       decision.po_action.type === "substitute_item" || decision.po_action.type === "cancel_order";
-    const escalate = decision.requires_human || risky || decision.confidence < 0.7;
+    const escalate =
+      decision.requires_human || risky || decision.confidence < 0.7 || supplier.automationMode === "ASSIST";
 
     const lang: "ms" | "en" = decision.language === "ms" ? "ms" : "en";
     let replyText = decision.reply_text?.trim();
