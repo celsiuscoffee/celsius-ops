@@ -86,12 +86,27 @@ helps; matching/short/partial/double detection is still manual.
 - **P1 — Auto-send the order block on approval** (already generated) via the API, with MOQ +
   outlet + delivery-day/cut-off validation baked in (kills the "add more / which outlet /
   too late for today's lorry" loops).
+  _Shipped (validation): `lib/inventory/order-validation.ts` (validateSupplierOrder +
+  parseMoqRm + nextDeliveryDate, unit-tested) wired into ai-decisions — each drafted PO is
+  checked against the supplier's trip MOQ (ringgit) with the exact top-up shortfall, shown as
+  a warning on the PO card. Delivery-day check is built and fires once a date is set on the PO.
+  Open: per-outlet legal billing entity._
 - **P1 — Inbox/message-store (Option 1, in progress).** Capture all chats (done: Increment 1)
   → AI-parse inbound (Malay + media aware) → classify OOS / substitute / price-change /
   invoice / payment → propose action to a human.
+  _Shipped (propose-to-human): when the agent escalates it now stamps a STRUCTURED PROPOSAL
+  (intent + the declined PO edit + payment model) on the outbound message; the Supplier Chats
+  inbox surfaces it as an "Agent suggests — your call" card. The agent never applies it._
 - **P2 — OOS handling:** AI-propose / human-approve PO edit; recipe-critical always human.
+  _Shipped (proposal capture): substitution offers are escalated WITH the structured swap
+  detail (which line, the offered note) so the human sees a concrete proposal. WhatsApp-button
+  one-tap approval remains the external-gated follow-up (needs a Meta-approved template)._
 - **P2 — Per-payment-model + per-supplier rules:** prepay vs credit-SOA vs deposit; delivery
   calendar; legal billing entity per outlet.
+  _Shipped: `lib/inventory/payment-model.ts` (unit-tested) classifies prepay / deposit+balance
+  / credit-SOA / standard from depositPercent + terms. The agent treats prepay/deposit payment
+  messages as delivery-critical; the inbox shows the model (⚡ when POP-gated). Delivery
+  calendar lives in order-validation. Open: per-outlet legal billing entity._
 
 ## Reusable supplier archetypes (for the model)
 - **Single-SKU prepay** (RICH's foam, BeansCo choc powder, Farm Fresh milk, BBM lamb,

@@ -31,6 +31,7 @@ import { sendWhatsAppText, fetchWhatsAppMedia } from "@/lib/whatsapp";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { parseSupplierDoc } from "@/lib/finance/parsers/supplier-doc";
 import { detectCreationFlags } from "@/lib/inventory/flag-detector";
+import { paymentModel, type PaymentModelInfo } from "@/lib/inventory/payment-model";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -125,7 +126,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     // Match the supplier by last-8 digits (same rule as whatsapp-store).
     const suppliers = await prisma.supplier.findMany({
       where: { phone: { not: null }, status: "ACTIVE" },
-      select: { id: true, name: true, phone: true, paymentTerms: true },
+      select: { id: true, name: true, phone: true, paymentTerms: true, depositPercent: true },
     });
     const supplier = suppliers.find((s) => {
       const sd = digits(s.phone);
@@ -178,7 +179,8 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     });
     history.reverse();
 
-    const decision = await classify(evt.text, supplier, order, history, todayMyt(), hasDoc);
+    const pm = paymentModel(supplier);
+    const decision = await classify(evt.text, supplier, order, history, todayMyt(), hasDoc, pm);
     if (!decision) return;
 
     // ── Guardrails (code, not model): auto-act vs escalate ──
@@ -216,6 +218,33 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     }
     if (!replyText) replyText = HOLDING_REPLY[lang];
 
+    // When we escalate, capture a STRUCTURED PROPOSAL of the action we declined
+    // to auto-apply (e.g. the substitution swap, the qty change) so the inbox can
+    // show the human a concrete "AI suggests …" they can accept or reject —
+    // rather than just "needs attention". Read-only: the agent never applies it.
+    const proposedItem =
+      decision.po_action.po_item_id
+        ? order.items.find((i) => i.id === decision.po_action.po_item_id)
+        : undefined;
+    const proposal = escalate
+      ? {
+          intent: decision.intent,
+          escalationReason: decision.escalation_reason ?? "guardrail",
+          paymentModel: pm.model,
+          popDeliveryCritical: pm.popDeliveryCritical,
+          poAction:
+            decision.po_action.type !== "none"
+              ? {
+                  type: decision.po_action.type,
+                  poItemId: decision.po_action.po_item_id,
+                  itemName: proposedItem?.product.name ?? null,
+                  newQuantity: decision.po_action.new_quantity,
+                  note: decision.po_action.note,
+                }
+              : null,
+        }
+      : null;
+
     // Auto-reply (24h window is open — the supplier just messaged us).
     const sent = await sendWhatsAppText(supplier.phone ?? fromDigits, replyText);
 
@@ -238,6 +267,8 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         escalated: escalate,
         escalationReason: escalate ? (decision.escalation_reason ?? "guardrail") : null,
         poNumber: order.orderNumber,
+        paymentModel: pm.model,
+        proposal,
       },
     });
 
@@ -461,6 +492,7 @@ async function classify(
   history: Array<{ direction: string; body: string | null }>,
   today: string,
   hasDoc: boolean,
+  pm: PaymentModelInfo,
 ): Promise<AgentDecision | null> {
   const items = order.items
     .map(
@@ -478,6 +510,7 @@ async function classify(
   const prompt = `Today is ${today} (Asia/Kuala_Lumpur). A document was attached: ${hasDoc ? "YES — most likely their invoice/PoP/photo" : "no"}.
 
 # Open PO ${order.orderNumber} (status ${order.status}) — ${supplier.name}, terms ${supplier.paymentTerms ?? "—"}
+# Payment model: ${pm.label}${pm.popDeliveryCritical ? " — PREPAY/DEPOSIT: payment clears BEFORE goods are released, so any payment/PoP message here is delivery-critical; escalate promptly with an honest holding reply." : ""}
 ${items}
 
 # Recent conversation
