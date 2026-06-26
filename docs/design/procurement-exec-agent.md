@@ -11,6 +11,11 @@ reconciliation, consumption, and finance as **tools**. We build the brain *aroun
 those tools instead of rewriting the mouth (this also stops the two procurement
 sessions colliding on one file).
 
+> **Supplier intelligence:** how each supplier actually behaves (reply speed,
+> reliability, delivery/SOA/invoice/troubleshoot patterns) — mined from 17 historical
+> chats — is documented in [`procurement-supplier-chat-intelligence.md`](./procurement-supplier-chat-intelligence.md)
+> and seeded into `supplier-behavior.ts`.
+
 ## Standing goal
 For every **outlet × item**: enough on-hand + on-order to cover lead-time demand,
 and no more than the cap (max level in **units AND ringgit value**), at the lowest
