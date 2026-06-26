@@ -194,7 +194,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     let appliedAction: PoActionType = "none";
     let deliveryUpdated: string | null = null;
     let invoiceCaptured = false;
-    let reSource: { supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean } | null = null;
+    let reSource: { orderId: string; supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean } | null = null;
 
     if (escalate) {
       // Never confirm an action we're not taking — send a safe holding line.
@@ -253,6 +253,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
           escalationReason: decision.escalation_reason ?? "guardrail",
           paymentModel: pm.model,
           popDeliveryCritical: pm.popDeliveryCritical,
+          orderId: order.id,
           poAction:
             decision.po_action.type !== "none"
               ? {

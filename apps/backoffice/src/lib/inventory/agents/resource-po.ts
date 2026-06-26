@@ -11,6 +11,7 @@ import { boundedReorderQty } from "@/lib/inventory/order-validation";
 // Idempotent: won't duplicate a pending re-source for the same product+supplier.
 
 export type ReSourceResult = {
+  orderId: string; // the draft PO's id (for deep-linking from the chat)
   supplierName: string;
   orderNumber: string;
   qty: number; // alternative-supplier package units
@@ -79,10 +80,10 @@ export async function createReSourcePO(opts: {
       notes: { startsWith: RESOURCE_NOTE_PREFIX },
       items: { some: { productId: opts.productId } },
     },
-    select: { orderNumber: true },
+    select: { id: true, orderNumber: true },
   });
   if (existing) {
-    return { supplierName: best.a.supplier.name, orderNumber: existing.orderNumber, qty: orderQty, unit, existing: true };
+    return { orderId: existing.id, supplierName: best.a.supplier.name, orderNumber: existing.orderNumber, qty: orderQty, unit, existing: true };
   }
 
   try {
@@ -111,9 +112,9 @@ export async function createReSourcePO(opts: {
           ],
         },
       },
-      select: { orderNumber: true },
+      select: { id: true, orderNumber: true },
     });
-    return { supplierName: best.a.supplier.name, orderNumber: order.orderNumber, qty: orderQty, unit, existing: false };
+    return { orderId: order.id, supplierName: best.a.supplier.name, orderNumber: order.orderNumber, qty: orderQty, unit, existing: false };
   } catch (e) {
     console.warn("[resource-po] create failed:", e instanceof Error ? e.message : e);
     return null;

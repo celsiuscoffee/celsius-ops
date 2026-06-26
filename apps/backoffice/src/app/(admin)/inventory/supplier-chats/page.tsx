@@ -11,6 +11,8 @@ import {
   Send,
   Loader2,
   Phone,
+  Check,
+  ExternalLink,
 } from "lucide-react";
 
 type Thread = {
@@ -55,14 +57,16 @@ type Detail = {
   windowOpen: boolean;
   messages: Msg[];
   agentProposal?: {
+    messageId: string;
+    orderId: string | null;
     intent: string;
     escalationReason: string;
     paymentModel?: string;
     popDeliveryCritical?: boolean;
-    poAction: { type: string; itemName: string | null; newQuantity: number | null; note: string | null } | null;
+    poAction: { type: string; poItemId: string | null; itemName: string | null; newQuantity: number | null; note: string | null } | null;
     at: string;
   } | null;
-  agentReSource?: { supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean } | null;
+  agentReSource?: { orderId: string | null; supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean } | null;
 };
 
 function rel(iso: string): string {
@@ -107,6 +111,8 @@ export default function SupplierChatsPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   const threads = threadsData?.threads ?? [];
   const shown = filter === "attention" ? threads.filter((t) => t.needsAttention) : threads;
@@ -118,6 +124,7 @@ export default function SupplierChatsPage() {
   useEffect(() => {
     setDraft("");
     setSendError(null);
+    setApplyError(null);
   }, [selected]);
 
   async function send() {
@@ -141,6 +148,37 @@ export default function SupplierChatsPage() {
       setSendError("Network error");
     } finally {
       setSending(false);
+    }
+  }
+
+  // Apply the agent's held proposal to the PO (remove_item / reduce_qty only).
+  async function applyProposal() {
+    const p = detail?.agentProposal;
+    if (!selected || applying || !p?.poAction?.poItemId || !p.orderId) return;
+    setApplying(true);
+    setApplyError(null);
+    try {
+      const res = await fetch(`/api/inventory/supplier-chats/${selected}/apply-proposal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageId: p.messageId,
+          orderId: p.orderId,
+          poItemId: p.poAction.poItemId,
+          action: p.poAction.type,
+          newQuantity: p.poAction.newQuantity,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setApplyError(json.error ?? "Apply failed");
+        return;
+      }
+      mutateDetail();
+    } catch {
+      setApplyError("Network error");
+    } finally {
+      setApplying(false);
     }
   }
 
@@ -340,6 +378,38 @@ export default function SupplierChatsPage() {
                       <div className="mt-1 text-[10.5px] text-muted-foreground">
                         Held for review: {detail.agentProposal.escalationReason}. The agent did not change the PO.
                       </div>
+                      {(() => {
+                        const pa = detail.agentProposal.poAction;
+                        const canApply =
+                          !!pa?.poItemId &&
+                          !!detail.agentProposal.orderId &&
+                          (pa.type === "remove_item" || pa.type === "reduce_qty");
+                        return (
+                          <div className="mt-2 flex items-center gap-2">
+                            {canApply && (
+                              <button
+                                onClick={applyProposal}
+                                disabled={applying}
+                                className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                              >
+                                {applying ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                                {pa?.type === "remove_item" ? "Apply: remove line" : "Apply: reduce qty"}
+                              </button>
+                            )}
+                            {detail.agentProposal.orderId && (
+                              <a
+                                href={`/inventory/orders/${detail.agentProposal.orderId}`}
+                                className="inline-flex items-center gap-1 rounded border border-amber-300 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                              >
+                                Open PO <ExternalLink size={11} />
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })()}
+                      {applyError && (
+                        <div className="mt-1 text-[10.5px] text-destructive">{applyError}</div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -356,6 +426,16 @@ export default function SupplierChatsPage() {
                       <div className="mt-0.5 text-[10.5px] text-muted-foreground">
                         {detail.agentReSource.existing ? "Already pending — review & send." : "Review & send in Purchase Orders. Not visible to this supplier."}
                       </div>
+                      {detail.agentReSource.orderId && (
+                        <div className="mt-2">
+                          <a
+                            href={`/inventory/orders/${detail.agentReSource.orderId}`}
+                            className="inline-flex items-center gap-1 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-sky-700"
+                          >
+                            Open draft PO <ExternalLink size={11} />
+                          </a>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
