@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useFetch } from "@/lib/use-fetch";
 import { formatRM } from "@celsius/shared";
 import {
@@ -86,7 +87,10 @@ function initials(name: string): string {
 }
 
 export default function SupplierChatsPage() {
-  const [selected, setSelected] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  // Deep-link support: /inventory/supplier-chats?key=<number> opens that thread
+  // (e.g. from Agent QA). Lazy init so it wins over the auto-select-first effect.
+  const [selected, setSelected] = useState<string | null>(() => searchParams.get("key"));
   const [filter, setFilter] = useState<"all" | "attention">("all");
 
   // Poll so inbound supplier messages + the agent's auto-replies appear without

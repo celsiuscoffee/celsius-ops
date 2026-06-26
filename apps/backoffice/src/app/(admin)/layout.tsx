@@ -223,6 +223,7 @@ const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Purchase Orders", href: "/inventory/orders", icon: <FileText className={ICON_SIZE} />, moduleKey: "inventory:orders" },
           { label: "Supplier Chats", href: "/inventory/supplier-chats", icon: <MessageCircle className={ICON_SIZE} />, moduleKey: "inventory:orders" },
+          { label: "Agent QA", href: "/inventory/agent-qa", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "inventory:orders" },
           { label: "Transfers", href: "/inventory/transfers", icon: <ArrowLeftRight className={ICON_SIZE} />, moduleKey: "inventory:transfers" },
           { label: "Receivings", href: "/inventory/receivings", icon: <Receipt className={ICON_SIZE} />, moduleKey: "inventory:receivings" },
           { label: "Invoices", href: "/inventory/invoices", icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "inventory:invoices" },

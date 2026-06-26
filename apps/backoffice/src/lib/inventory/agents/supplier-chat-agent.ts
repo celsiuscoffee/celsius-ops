@@ -267,6 +267,44 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         }
       : null;
 
+    // Snapshot exactly what the agent saw + did, so the independent verifier
+    // agent can re-judge this decision later (Agent QA) without reconstructing
+    // mutable PO state. Compact by design.
+    const verifierInput = {
+      supplierName: supplier.name,
+      paymentModel: pm.label,
+      orderNumber: order.orderNumber,
+      orderStatus: order.status,
+      items: order.items.map((it) => ({
+        name: it.product.name,
+        qty: Number(it.quantity),
+        unit: it.product.baseUom,
+        unitPrice: Number(it.unitPrice),
+      })),
+      thread: history
+        .filter((m) => m.body)
+        .map((m) => ({ who: m.direction === "inbound" ? "Supplier" : "Us", text: m.body as string })),
+      inboundText: evt.text.trim() || (hasDoc ? "[document, no caption]" : ""),
+      hadDoc: hasDoc,
+      today: todayMyt(),
+    };
+    const verifierDecision = {
+      intent: decision.intent,
+      language: decision.language,
+      actionType: decision.po_action.type,
+      actionItemName:
+        order.items.find((i) => i.id === decision.po_action.po_item_id)?.product.name ?? null,
+      newQuantity: decision.po_action.new_quantity,
+      deliveryDate: deliveryUpdated,
+      captureInvoice: invoiceCaptured,
+      replyText,
+      confidence: decision.confidence,
+      escalated: escalate,
+      escalationReason: escalate ? (decision.escalation_reason ?? "guardrail") : null,
+      appliedAction,
+      reSourced: !!reSource,
+    };
+
     // Auto-reply (24h window is open — the supplier just messaged us).
     const sent = await sendWhatsAppText(supplier.phone ?? fromDigits, replyText);
 
@@ -292,6 +330,8 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         paymentModel: pm.model,
         proposal,
         reSource,
+        verifierInput,
+        verifierDecision,
       },
     });
 
