@@ -123,6 +123,10 @@
     {
       "path": "/api/cron/consumption-post",
       "schedule": "25 19 * * *"
+    },
+    {
+      "path": "/api/cron/request-receivings",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

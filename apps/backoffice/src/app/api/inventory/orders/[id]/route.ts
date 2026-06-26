@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { computeDepositAmount } from "@/lib/inventory/deposit";
+import { sendPurchaseOrder } from "@/lib/inventory/procurement-po-send";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -156,6 +157,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         invoices: true,
       },
     });
+
+    // Auto-send the order block to the supplier on the SENT / AWAITING_DELIVERY
+    // transition (gated + allow-listed + de-duped per PO). Awaited so it runs to
+    // completion before the response; it's internally guarded and never throws.
+    if (status === "SENT" || status === "AWAITING_DELIVERY") {
+      await sendPurchaseOrder(order);
+    }
 
     // Cascade cancel: when a PO is cancelled, drop any GRNI placeholder
     // invoices auto-attached to it. Without this, the placeholder lingers
