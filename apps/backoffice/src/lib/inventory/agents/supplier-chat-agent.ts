@@ -33,6 +33,7 @@ import { parseSupplierDoc } from "@/lib/finance/parsers/supplier-doc";
 import { detectCreationFlags } from "@/lib/inventory/flag-detector";
 import { paymentModel, type PaymentModelInfo } from "@/lib/inventory/payment-model";
 import { createReSourcePO } from "@/lib/inventory/agents/resource-po";
+import { verifierEnabled, verifyMessage } from "@/lib/inventory/agents/verifier-run";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -267,10 +268,48 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         }
       : null;
 
+    // Snapshot exactly what the agent saw + did, so the independent verifier
+    // agent can re-judge this decision later (Agent QA) without reconstructing
+    // mutable PO state. Compact by design.
+    const verifierInput = {
+      supplierName: supplier.name,
+      paymentModel: pm.label,
+      orderNumber: order.orderNumber,
+      orderStatus: order.status,
+      items: order.items.map((it) => ({
+        name: it.product.name,
+        qty: Number(it.quantity),
+        unit: it.product.baseUom,
+        unitPrice: Number(it.unitPrice),
+      })),
+      thread: history
+        .filter((m) => m.body)
+        .map((m) => ({ who: m.direction === "inbound" ? "Supplier" : "Us", text: m.body as string })),
+      inboundText: evt.text.trim() || (hasDoc ? "[document, no caption]" : ""),
+      hadDoc: hasDoc,
+      today: todayMyt(),
+    };
+    const verifierDecision = {
+      intent: decision.intent,
+      language: decision.language,
+      actionType: decision.po_action.type,
+      actionItemName:
+        order.items.find((i) => i.id === decision.po_action.po_item_id)?.product.name ?? null,
+      newQuantity: decision.po_action.new_quantity,
+      deliveryDate: deliveryUpdated,
+      captureInvoice: invoiceCaptured,
+      replyText,
+      confidence: decision.confidence,
+      escalated: escalate,
+      escalationReason: escalate ? (decision.escalation_reason ?? "guardrail") : null,
+      appliedAction,
+      reSourced: !!reSource,
+    };
+
     // Auto-reply (24h window is open — the supplier just messaged us).
     const sent = await sendWhatsAppText(supplier.phone ?? fromDigits, replyText);
 
-    await recordOutboundMessage({
+    const recordedId = await recordOutboundMessage({
       waMessageId: sent.messageId,
       fromNumber: digits(evt.toNumber),
       toNumber: fromDigits,
@@ -292,8 +331,29 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         paymentModel: pm.model,
         proposal,
         reSource,
+        verifierInput,
+        verifierDecision,
       },
     });
+
+    // Close the loop: the independent verifier checks EVERY decision the moment
+    // it's made (the reply is already sent, so this never delays the supplier).
+    // It only stamps a verdict — a "fail" surfaces the thread as needs-attention
+    // in the inbox (see supplier-chats list), pulling a human in exactly when the
+    // check catches something. Best-effort, gated, never throws.
+    if (recordedId && verifierEnabled()) {
+      try {
+        const verdict = await verifyMessage(recordedId);
+        if (verdict) {
+          console.log(
+            `[supplier-agent] verifier po=${order.orderNumber} rating=${verdict.rating} ` +
+              `conf=${verdict.confidence.toFixed(2)}${verdict.issues.length ? ` issues=${verdict.issues.length}` : ""}`,
+          );
+        }
+      } catch (e) {
+        console.warn("[supplier-agent] auto-verify failed:", e instanceof Error ? e.message : e);
+      }
+    }
 
     console.log(
       `[supplier-agent] supplier=${supplier.name} po=${order.orderNumber} intent=${decision.intent} ` +
