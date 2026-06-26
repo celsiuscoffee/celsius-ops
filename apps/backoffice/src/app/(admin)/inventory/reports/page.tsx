@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { DollarSign, Package, ShoppingCart, Trash2, Truck, ArrowRight } from "lucide-react";
+import { DollarSign, Package, ShoppingCart, Trash2, Truck, Scale, ArrowRight } from "lucide-react";
 
 const REPORTS = [
   { name: "Stock Valuation", description: "System qty vs last count with RM values — expected vs real inventory", icon: Package, color: "bg-blue-50 text-blue-600", href: "/inventory/reports/stock-valuation" },
+  { name: "Usage Variance", description: "Actual usage (stock movements) vs expected (recipe BOM × sales) — over-portioning, theft, spoilage", icon: Scale, color: "bg-amber-50 text-amber-600", href: "/inventory/reports/ingredient-variance" },
   { name: "COGS Report", description: "Actual vs expected ingredient usage and cost variance per outlet per period", icon: DollarSign, color: "bg-red-50 text-red-600", href: "/inventory/reports/cogs" },
   { name: "Purchase Summary", description: "Total spending by supplier, product, and period with trend comparison", icon: ShoppingCart, color: "bg-green-50 text-green-600", href: "/inventory/reports/purchase-summary" },
   { name: "Wastage Report", description: "Cost of waste by reason (expired, spillage, breakage), outlet, and period", icon: Trash2, color: "bg-terracotta/10 text-terracotta", href: "/inventory/reports/wastage" },
