@@ -24,7 +24,14 @@ import { activeFlags, flagLabel, type InvoiceFlag } from "@/lib/inventory/flag-d
 const OPEN_STATUSES = ["PENDING", "INITIATED", "PARTIALLY_PAID", "DEPOSIT_PAID", "OVERDUE"] as const;
 const TOLERANCE = 0.01;
 
-type ExceptionKind = "FLAGGED" | "SHORT_PAID" | "CARRY_FORWARD" | "UNVERIFIED" | "OVERDUE";
+type ExceptionKind = "FLAGGED" | "SHORT_PAID" | "CARRY_FORWARD" | "UNVERIFIED" | "OVERDUE" | "BILLED_OVER_PO";
+
+// A supplier invoice legitimately adds SST + delivery/handling on top of the
+// PO's goods total, but an UNEXPECTED extra is the "missing delivery charge"
+// reconciliation pain: we pay the goods, the supplier chases the delivery fee.
+// Surface it only when the gap is material so SST-sized rounding isn't noise.
+const BILLED_OVER_PO_MIN_RM = 10;
+const BILLED_OVER_PO_MIN_PCT = 0.05;
 
 type Exception = {
   invoiceId: string;
@@ -82,7 +89,7 @@ export async function GET(req: NextRequest) {
       flags: true,
       supplierId: true,
       supplier: { select: { id: true, name: true, paymentTerms: true } },
-      order: { select: { orderNumber: true } },
+      order: { select: { orderNumber: true, totalAmount: true } },
     },
     orderBy: { issueDate: "asc" },
   });
@@ -169,6 +176,17 @@ export async function GET(req: NextRequest) {
       kinds.push("OVERDUE");
       reasons.push(`Overdue ${inv.dueDate ? daysBetween(inv.dueDate, now) : 0}d — RM ${balance.toFixed(2)} owed`);
     }
+    // Billed materially over the PO goods total — the supplier likely added a
+    // delivery/handling charge (or a price change) the order didn't account
+    // for. Only surface on real, verified invoices (not provisional drafts).
+    const poTotal = inv.order?.totalAmount != null ? Number(inv.order.totalAmount) : 0;
+    if (!isDraft && poTotal > 0) {
+      const over = Math.round((amount - poTotal) * 100) / 100;
+      if (over >= BILLED_OVER_PO_MIN_RM && over >= poTotal * BILLED_OVER_PO_MIN_PCT) {
+        kinds.push("BILLED_OVER_PO");
+        reasons.push(`Billed RM ${over.toFixed(2)} over PO total (RM ${poTotal.toFixed(2)}) — verify delivery/handling/SST and that payment covers it`);
+      }
+    }
 
     if (kinds.length > 0) {
       row.exceptions.push({
@@ -196,7 +214,7 @@ export async function GET(req: NextRequest) {
   // Sort exceptions within each supplier: flagged money-matching issues first
   // (highest risk), then by age. Sort suppliers by exception count then
   // outstanding so the rows that need a human bubble up.
-  const kindRank: Record<ExceptionKind, number> = { FLAGGED: 0, SHORT_PAID: 1, OVERDUE: 2, CARRY_FORWARD: 3, UNVERIFIED: 4 };
+  const kindRank: Record<ExceptionKind, number> = { FLAGGED: 0, BILLED_OVER_PO: 1, SHORT_PAID: 2, OVERDUE: 3, CARRY_FORWARD: 4, UNVERIFIED: 5 };
   const suppliers = [...bySupplier.values()]
     .map((s) => {
       s.outstanding = Math.round(s.outstanding * 100) / 100;

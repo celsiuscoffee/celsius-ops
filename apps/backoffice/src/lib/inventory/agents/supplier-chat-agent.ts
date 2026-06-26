@@ -25,10 +25,12 @@
  * Model: claude-sonnet-4-6 — it edits real POs and writes to real suppliers.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import type { OrderStatus } from "@celsius/db";
+import type { OrderStatus, Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppText } from "@/lib/whatsapp";
+import { sendWhatsAppText, fetchWhatsAppMedia } from "@/lib/whatsapp";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
+import { parseSupplierDoc } from "@/lib/finance/parsers/supplier-doc";
+import { detectCreationFlags } from "@/lib/inventory/flag-detector";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -289,31 +291,107 @@ async function applyDeliveryDate(orderId: string, isoDate: string): Promise<void
   await prisma.order.update({ where: { id: orderId }, data: { deliveryDate: new Date(isoDate) } });
 }
 
+// WhatsApp inbound mime → the subset parseSupplierDoc (Claude vision) accepts.
+function visionMime(
+  mime: string | undefined,
+): "application/pdf" | "image/jpeg" | "image/png" | "image/webp" | null {
+  const m = (mime ?? "").toLowerCase();
+  if (m === "application/pdf") return "application/pdf";
+  if (m === "image/jpeg" || m === "image/jpg") return "image/jpeg";
+  if (m === "image/png") return "image/png";
+  if (m === "image/webp") return "image/webp";
+  return null;
+}
+
 /**
- * Capture a supplier-sent invoice as a DRAFT invoice on the PO. The amount is
- * provisional (the PO total) — the agent can't read the PDF, so a human verifies
- * it in the Invoices screen. Safe to auto: a DRAFT never triggers payment.
+ * Capture a supplier-sent invoice as a DRAFT invoice on the PO.
+ *
+ * The agent now READS the document: it downloads the media and runs the shared
+ * supplier-doc vision parser to extract the real billed total, the supplier's
+ * own invoice number, and the bill/due dates. Those land as AI-prefilled fields
+ * (aiPrefilledAt set) so the Invoices screen surfaces a "verify before paying"
+ * banner — a human still confirms the amount. Creation flags run so a duplicate
+ * PO / billed-over-PO mismatch is caught immediately. If the media can't be
+ * fetched or parsed (or the total is unreadable), we fall back to the old
+ * provisional capture (amount = PO total). Always DRAFT → never triggers payment.
  */
 async function captureInvoice(
   order: { id: string; orderNumber: string; outletId: string; totalAmount: unknown },
   supplierId: string,
   mediaId: string | null,
 ): Promise<boolean> {
+  // ── Try to read the document for a real amount/number/date ──
+  let extractedTotal: number | null = null;
+  let extractedNumber: string | null = null;
+  let billDate: Date | null = null;
+  let dueDate: Date | null = null;
+  const prefilled: string[] = [];
+  if (mediaId) {
+    try {
+      const media = await fetchWhatsAppMedia(mediaId);
+      const mime = visionMime(media?.mimeType);
+      if (media && mime) {
+        const parsed = await parseSupplierDoc({ fileBytes: media.bytes, mimeType: mime });
+        if (parsed.total != null && parsed.total > 0) {
+          extractedTotal = Math.round(parsed.total * 100) / 100;
+          prefilled.push("amount");
+        }
+        if (parsed.billNumber) {
+          extractedNumber = parsed.billNumber.slice(0, 64);
+          prefilled.push("invoiceNumber");
+        }
+        if (parsed.billDate && /^\d{4}-\d{2}-\d{2}$/.test(parsed.billDate)) {
+          billDate = new Date(parsed.billDate);
+          prefilled.push("issueDate");
+        }
+        if (parsed.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(parsed.dueDate)) {
+          dueDate = new Date(parsed.dueDate);
+          prefilled.push("dueDate");
+        }
+      }
+    } catch (e) {
+      console.warn("[supplier-agent] doc extract failed:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  const amount = extractedTotal ?? (Number(order.totalAmount) || 0);
+  const invoiceNumber = extractedNumber || `AI-${order.orderNumber}`;
+  const provisional = extractedTotal == null;
+
   try {
-    await prisma.invoice.create({
+    const flags = await detectCreationFlags({
+      orderId: order.id,
+      supplierId,
+      amount,
+      issueDate: billDate,
+    });
+    const created = await prisma.invoice.create({
       data: {
-        invoiceNumber: `AI-${order.orderNumber}`,
+        invoiceNumber,
         orderId: order.id,
         outletId: order.outletId,
         supplierId,
-        amount: order.totalAmount as never, // Decimal passthrough
+        amount: amount as never, // Decimal passthrough
         status: "DRAFT",
         paymentType: "SUPPLIER",
-        notes:
-          "Captured from WhatsApp by the supplier-chat agent — amount is provisional (PO total); " +
-          `verify against the document before paying.${mediaId ? ` [wa-media:${mediaId}]` : ""}`,
+        ...(billDate ? { issueDate: billDate } : {}),
+        ...(dueDate ? { dueDate } : {}),
+        ...(prefilled.length > 0
+          ? { aiPrefilledAt: new Date(), aiPrefilledFields: JSON.stringify(prefilled) }
+          : {}),
+        ...(flags.length > 0 ? { flags: flags as unknown as Prisma.InputJsonValue } : {}),
+        notes: provisional
+          ? "Captured from WhatsApp by the supplier-chat agent — document unreadable, amount is provisional (PO total); " +
+            `verify against the document before paying.${mediaId ? ` [wa-media:${mediaId}]` : ""}`
+          : "Captured + read from WhatsApp by the supplier-chat agent — amount/number extracted from the document; " +
+            `verify before paying.${mediaId ? ` [wa-media:${mediaId}]` : ""}`,
       },
+      select: { id: true },
     });
+    console.log(
+      `[supplier-agent] invoice captured id=${created.id} no=${invoiceNumber} ` +
+        `amount=${amount} extracted=${!provisional} prefilled=${prefilled.join("|") || "-"} flags=${flags.length}`,
+    );
     return true;
   } catch (e) {
     // Unique invoiceNumber collision (already captured) or any write error.

@@ -17,7 +17,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-type ExceptionKind = "FLAGGED" | "SHORT_PAID" | "CARRY_FORWARD" | "UNVERIFIED" | "OVERDUE";
+type ExceptionKind = "FLAGGED" | "SHORT_PAID" | "CARRY_FORWARD" | "UNVERIFIED" | "OVERDUE" | "BILLED_OVER_PO";
 
 type Exception = {
   invoiceId: string;
@@ -61,6 +61,7 @@ const KIND_META: Record<ExceptionKind, { label: string; cls: string }> = {
   FLAGGED: { label: "Mismatch", cls: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" },
   SHORT_PAID: { label: "Short-paid", cls: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" },
   OVERDUE: { label: "Overdue", cls: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
+  BILLED_OVER_PO: { label: "Over PO", cls: "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300" },
   CARRY_FORWARD: { label: "Balance due", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
   UNVERIFIED: { label: "Verify", cls: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300" },
 };
