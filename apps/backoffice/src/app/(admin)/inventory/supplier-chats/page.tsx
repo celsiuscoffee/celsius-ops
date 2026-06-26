@@ -187,9 +187,9 @@ export default function SupplierChatsPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-120px)] min-h-[560px] overflow-hidden rounded-lg border border-border bg-background text-foreground">
+    <div className="flex h-[calc(100vh-64px)] min-h-[560px] gap-3 p-3 text-foreground">
       {/* ── Thread list ─────────────────────────────── */}
-      <div className="flex w-64 shrink-0 flex-col border-r border-border">
+      <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm">
         <div className="border-b border-border p-3">
           <div className="flex items-center gap-2 text-sm font-medium">
             <MessageCircle size={16} /> Supplier chats
@@ -245,7 +245,7 @@ export default function SupplierChatsPage() {
       </div>
 
       {/* ── Conversation ────────────────────────────── */}
-      <div className="flex min-w-0 flex-1 flex-col border-r border-border">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm">
         {!detail ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
             Select a chat
@@ -327,7 +327,7 @@ export default function SupplierChatsPage() {
       </div>
 
       {/* ── Supplier context ────────────────────────── */}
-      <div className="w-60 shrink-0 overflow-y-auto p-3">
+      <div className="flex w-64 shrink-0 flex-col overflow-y-auto rounded-xl border border-border bg-background p-3 shadow-sm">
         {!detail ? null : (
           <>
             <div className="flex flex-col items-center gap-1.5 border-b border-border pb-3 text-center">
