@@ -567,12 +567,33 @@ export async function sendRound(roundId: string) {
     .map((r) => r.member_id).filter((x): x is string => !!x);
   const tokensByMember = await pushTokensByMember(treatmentMemberIds);
 
+  // GLOBAL frequency cap across ALL loops: skip any member who already hit the
+  // weekly cap (any loop) so winback + round-gap + reward-expiring etc. can't
+  // stack into spam in one week. Per-loop cooldowns don't see each other; this
+  // does. Tunable: app_settings.marketing_weekly_cap (default 2 per 7 days).
+  const cappedPhones = new Set<string>();
+  {
+    let cap = 2;
+    try {
+      const { data: s } = await supabaseAdmin.from("app_settings").select("value").eq("key", "marketing_weekly_cap").maybeSingle();
+      const n = parseInt(String(s?.value ?? "").replace(/[^0-9]/g, ""), 10);
+      if (Number.isFinite(n) && n > 0) cap = n;
+    } catch { /* default 2 */ }
+    const { data: cp } = await supabaseAdmin.rpc("loyalty_capped_phones", { p_cap: cap, p_days: 7 });
+    for (const r of (cp ?? []) as Array<{ phone: string }>) if (r.phone) cappedPhones.add(r.phone.trim());
+  }
+
   let sentPush = 0;
   let sentSms = 0;
   let failed = 0;
+  let capped = 0;
   let firstError: string | undefined;
   for (const r of (rows ?? []) as Array<{ id: string; phone: string; arm: string; sms_status: string | null; member_id: string | null; issued_reward_id: string | null }>) {
     if (r.sms_status === "sent") continue; // idempotent (covers push + SMS)
+    if (cappedPhones.has(r.phone)) { // global weekly cap hit on another loop
+      await supabaseAdmin.from("loop_assignments").update({ sms_status: "capped", sms_message_id: "weekly_cap" }).eq("id", r.id);
+      capped++; continue;
+    }
     let message = armMsg[r.arm] ?? "";
     if (!message) { failed++; continue; }
     if (needsName) {
@@ -615,7 +636,7 @@ export async function sendRound(roundId: string) {
     .update({ status: "sent", sent_at: sentAt.toISOString(), send_window: round.send_window ?? deriveWindow(sentAt) })
     .eq("id", roundId);
 
-  return { round_id: roundId, sent: sentPush + sentSms, sent_push: sentPush, sent_sms: sentSms, failed, error: firstError };
+  return { round_id: roundId, sent: sentPush + sentSms, sent_push: sentPush, sent_sms: sentSms, capped, failed, error: firstError };
 }
 
 // ── MEASURE ───────────────────────────────────────────────────────────────────
