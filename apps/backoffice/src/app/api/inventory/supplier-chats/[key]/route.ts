@@ -104,12 +104,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
   // That's the "AI proposes / human approves" handoff — the human sees the
   // concrete suggested PO edit and acts on it (the agent never applies it).
   let agentProposal: {
+    messageId: string;
+    orderId: string | null;
     intent: string;
     escalationReason: string;
     paymentModel?: string;
     popDeliveryCritical?: boolean;
     poAction: {
       type: string;
+      poItemId: string | null;
       itemName: string | null;
       newQuantity: number | null;
       note: string | null;
@@ -119,13 +122,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
   const lastOutbound = await prisma.whatsAppMessage.findFirst({
     where: { ...counter, direction: "outbound" },
     orderBy: { timestamp: "desc" },
-    select: { raw: true, timestamp: true },
+    select: { id: true, raw: true, timestamp: true },
   });
   const raw = (lastOutbound?.raw ?? null) as Record<string, unknown> | null;
-  if (raw && raw.escalated === true && raw.proposal && typeof raw.proposal === "object") {
+  // raw.proposalResolved is stamped when a human applies the proposal — once
+  // resolved, stop surfacing the banner even though it's still the last message.
+  if (raw && raw.escalated === true && raw.proposalResolved !== true && raw.proposal && typeof raw.proposal === "object") {
     const p = raw.proposal as Record<string, unknown>;
     const pa = (p.poAction ?? null) as Record<string, unknown> | null;
     agentProposal = {
+      messageId: lastOutbound!.id,
+      orderId: typeof p.orderId === "string" ? p.orderId : null,
       intent: String(p.intent ?? "unclear"),
       escalationReason: String(p.escalationReason ?? "guardrail"),
       paymentModel: typeof p.paymentModel === "string" ? p.paymentModel : undefined,
@@ -133,6 +140,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
       poAction: pa
         ? {
             type: String(pa.type ?? ""),
+            poItemId: typeof pa.poItemId === "string" ? pa.poItemId : null,
             itemName: typeof pa.itemName === "string" ? pa.itemName : null,
             newQuantity: typeof pa.newQuantity === "number" ? pa.newQuantity : null,
             note: typeof pa.note === "string" ? pa.note : null,
@@ -142,5 +150,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     };
   }
 
-  return NextResponse.json({ key, supplierId, supplier, context, windowOpen, messages, agentProposal });
+  // A DRAFT re-source PO the agent opened to an alternative supplier after this
+  // supplier said an item was OOS (internal — never mentioned to the supplier).
+  let agentReSource: { orderId: string | null; supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean } | null = null;
+  if (raw && raw.reSource && typeof raw.reSource === "object") {
+    const r = raw.reSource as Record<string, unknown>;
+    agentReSource = {
+      orderId: typeof r.orderId === "string" ? r.orderId : null,
+      supplierName: String(r.supplierName ?? ""),
+      orderNumber: String(r.orderNumber ?? ""),
+      qty: typeof r.qty === "number" ? r.qty : 0,
+      unit: typeof r.unit === "string" ? r.unit : "",
+      existing: r.existing === true,
+    };
+  }
+
+  return NextResponse.json({ key, supplierId, supplier, context, windowOpen, messages, agentProposal, agentReSource });
 }

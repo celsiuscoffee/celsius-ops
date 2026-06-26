@@ -32,6 +32,7 @@ import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { parseSupplierDoc } from "@/lib/finance/parsers/supplier-doc";
 import { detectCreationFlags } from "@/lib/inventory/flag-detector";
 import { paymentModel, type PaymentModelInfo } from "@/lib/inventory/payment-model";
+import { createReSourcePO } from "@/lib/inventory/agents/resource-po";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -193,6 +194,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     let appliedAction: PoActionType = "none";
     let deliveryUpdated: string | null = null;
     let invoiceCaptured = false;
+    let reSource: { orderId: string; supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean } | null = null;
 
     if (escalate) {
       // Never confirm an action we're not taking — send a safe holding line.
@@ -202,7 +204,26 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         decision.po_action.type === "remove_item" ||
         decision.po_action.type === "reduce_qty"
       ) {
-        appliedAction = await applyPoAction(order.id, decision.po_action);
+        const actionResult = await applyPoAction(order.id, decision.po_action);
+        appliedAction = actionResult.type;
+
+        // OOS removal → open a DRAFT re-source PO to the next-cheapest supplier
+        // so the need isn't dropped. Internal only — we never tell THIS supplier
+        // we're sourcing elsewhere; the supplier reply is unchanged.
+        if (actionResult.type === "remove_item" && actionResult.removed) {
+          const systemUser = await prisma.user.findFirst({ where: { role: "OWNER" }, select: { id: true } });
+          if (systemUser) {
+            reSource = await createReSourcePO({
+              productId: actionResult.removed.productId,
+              productName: actionResult.removed.productName,
+              baseQtyNeeded: actionResult.removed.baseQty,
+              fromSupplierId: supplier.id,
+              fromSupplierName: supplier.name,
+              outletId: order.outletId,
+              systemUserId: systemUser.id,
+            });
+          }
+        }
       }
       if (isValidIsoDate(decision.delivery_date)) {
         await applyDeliveryDate(order.id, decision.delivery_date);
@@ -232,6 +253,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
           escalationReason: decision.escalation_reason ?? "guardrail",
           paymentModel: pm.model,
           popDeliveryCritical: pm.popDeliveryCritical,
+          orderId: order.id,
           poAction:
             decision.po_action.type !== "none"
               ? {
@@ -269,13 +291,15 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         poNumber: order.orderNumber,
         paymentModel: pm.model,
         proposal,
+        reSource,
       },
     });
 
     console.log(
       `[supplier-agent] supplier=${supplier.name} po=${order.orderNumber} intent=${decision.intent} ` +
         `conf=${decision.confidence.toFixed(2)} action=${appliedAction} delivery=${deliveryUpdated ?? "-"} ` +
-        `invoice=${invoiceCaptured} escalate=${escalate} sent=${sent.ok}`,
+        `invoice=${invoiceCaptured} escalate=${escalate} sent=${sent.ok}` +
+        (reSource ? ` reSource=${reSource.orderNumber}->${reSource.supplierName}(${reSource.qty}${reSource.existing ? ",existing" : ""})` : ""),
     );
   } catch (err) {
     // Never let the agent break the webhook's 200.
@@ -283,19 +307,39 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
   }
 }
 
-/** Apply a vetted, low-risk edit to the PO and recompute its total. */
+type RemovedLine = { productId: string; productName: string; baseQty: number };
+
+/**
+ * Apply a vetted, low-risk edit to the PO and recompute its total. For an OOS
+ * removal it also returns the removed line (base units) so the caller can
+ * re-source it from another supplier.
+ */
 async function applyPoAction(
   orderId: string,
   action: AgentDecision["po_action"],
-): Promise<PoActionType> {
-  if (!action.po_item_id) return "none";
+): Promise<{ type: PoActionType; removed?: RemovedLine }> {
+  if (!action.po_item_id) return { type: "none" };
   const item = await prisma.orderItem.findFirst({
     where: { id: action.po_item_id, orderId }, // ensure the line belongs to THIS order
-    select: { id: true, unitPrice: true },
+    select: {
+      id: true,
+      unitPrice: true,
+      quantity: true,
+      productId: true,
+      product: { select: { name: true } },
+      productPackage: { select: { conversionFactor: true } },
+    },
   });
-  if (!item) return "none";
+  if (!item) return { type: "none" };
 
+  let removed: RemovedLine | undefined;
   if (action.type === "remove_item") {
+    const conv = item.productPackage ? Number(item.productPackage.conversionFactor) : 1;
+    removed = {
+      productId: item.productId,
+      productName: item.product?.name ?? "item",
+      baseQty: Number(item.quantity) * (conv > 0 ? conv : 1),
+    };
     await prisma.orderItem.delete({ where: { id: item.id } });
   } else if (action.type === "reduce_qty" && action.new_quantity && action.new_quantity > 0) {
     const q = action.new_quantity;
@@ -304,7 +348,7 @@ async function applyPoAction(
       data: { quantity: q, totalPrice: Number(item.unitPrice) * q },
     });
   } else {
-    return "none";
+    return { type: "none" };
   }
 
   // Recompute the order total from the remaining lines.
@@ -314,7 +358,7 @@ async function applyPoAction(
   });
   const total = remaining.reduce((s, i) => s + Number(i.totalPrice), 0);
   await prisma.order.update({ where: { id: orderId }, data: { totalAmount: total } });
-  return action.type;
+  return { type: action.type, removed };
 }
 
 /** Update the PO's delivery date (informational — safe to auto-apply). */
