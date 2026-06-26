@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useFetch } from "@/lib/use-fetch";
 import { formatRM } from "@celsius/shared";
@@ -14,18 +14,27 @@ import {
   Phone,
   Check,
   ExternalLink,
+  Search,
+  Plus,
+  X,
 } from "lucide-react";
 
+type AutomationMode = "OFF" | "ASSIST" | "AUTO";
 type Thread = {
   key: string;
   supplierId: string | null;
   name: string;
   phone: string;
   preview: string;
-  lastAt: string;
+  lastAt: string | null;
   count: number;
   needsAttention: boolean;
+  registered: boolean;
+  automationMode: AutomationMode | null;
+  hasMessages: boolean;
 };
+type Counts = { all: number; suppliers: number; needsAttention: number; other: number; auto: number; assist: number; off: number };
+type PoProduct = { supplierProductId: string; productId: string; name: string; packageLabel: string; productPackageId: string | null; price: number; moq: number };
 
 type Msg = {
   id: string;
@@ -91,11 +100,12 @@ export default function SupplierChatsPage() {
   // Deep-link support: /inventory/supplier-chats?key=<number> opens that thread
   // (e.g. from Agent QA). Lazy init so it wins over the auto-select-first effect.
   const [selected, setSelected] = useState<string | null>(() => searchParams.get("key"));
-  const [filter, setFilter] = useState<"all" | "attention">("all");
+  const [filter, setFilter] = useState<"all" | "attention" | "auto" | "assist" | "off" | "other">("all");
+  const [query, setQuery] = useState("");
 
   // Poll so inbound supplier messages + the agent's auto-replies appear without
   // a manual refresh. The open thread polls faster than the list.
-  const { data: threadsData, isLoading } = useFetch<{ threads: Thread[]; needsAttention: number }>(
+  const { data: threadsData, isLoading } = useFetch<{ threads: Thread[]; counts: Counts; needsAttention: number }>(
     "/api/inventory/supplier-chats",
     { refreshInterval: 10000, revalidateOnFocus: true },
   );
@@ -118,8 +128,96 @@ export default function SupplierChatsPage() {
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
 
+  // ── New PO panel ──────────────────────────────────────────────
+  const [poOpen, setPoOpen] = useState(false);
+  const [outlets, setOutlets] = useState<{ id: string; name: string }[]>([]);
+  const [poOutlet, setPoOutlet] = useState("");
+  const [poProducts, setPoProducts] = useState<PoProduct[]>([]);
+  const [poQty, setPoQty] = useState<Record<string, number>>({});
+  const [poBusy, setPoBusy] = useState(false);
+  const [poError, setPoError] = useState<string | null>(null);
+
+  async function openPO() {
+    if (!detail?.supplierId) return;
+    setPoOpen(true);
+    setPoError(null);
+    setPoQty({});
+    try {
+      const [oRaw, pRaw] = await Promise.all([
+        fetch("/api/settings/outlets?status=ACTIVE").then((r) => r.json()),
+        fetch(`/api/inventory/suppliers/${detail.supplierId}/products`).then((r) => r.json()),
+      ]);
+      const oList: { id: string; name: string }[] = Array.isArray(oRaw) ? oRaw : (oRaw.outlets ?? []);
+      setOutlets(oList.map((o) => ({ id: o.id, name: o.name })));
+      setPoOutlet((prev) => prev || oList[0]?.id || "");
+      setPoProducts(Array.isArray(pRaw) ? pRaw : []);
+    } catch {
+      setPoError("Couldn't load outlets / products.");
+    }
+  }
+
+  async function createPO(send: boolean) {
+    if (!detail?.supplierId || !poOutlet) {
+      setPoError("Pick an outlet first.");
+      return;
+    }
+    const items = poProducts
+      .filter((p) => (poQty[p.productId] ?? 0) > 0)
+      .map((p) => ({ productId: p.productId, productPackageId: p.productPackageId, quantity: poQty[p.productId], unitPrice: p.price }));
+    if (items.length === 0) {
+      setPoError("Set a quantity on at least one item.");
+      return;
+    }
+    setPoBusy(true);
+    setPoError(null);
+    try {
+      const cRes = await fetch("/api/inventory/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outletId: poOutlet, supplierId: detail.supplierId, items, clientRequestId: crypto.randomUUID() }),
+      });
+      if (!cRes.ok) throw new Error((await cRes.json().catch(() => ({}))).error || "Create failed");
+      const order = await cRes.json();
+      if (send && order.id) {
+        const sRes = await fetch(`/api/inventory/orders/${order.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "SENT" }),
+        });
+        if (!sRes.ok) throw new Error((await sRes.json().catch(() => ({}))).error || "Created, but send failed");
+      }
+      setPoOpen(false);
+      mutateDetail();
+    } catch (e) {
+      setPoError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setPoBusy(false);
+    }
+  }
+  const poTotal = poProducts.reduce((s, p) => s + (poQty[p.productId] ?? 0) * p.price, 0);
+
   const threads = threadsData?.threads ?? [];
-  const shown = filter === "attention" ? threads.filter((t) => t.needsAttention) : threads;
+  const counts = threadsData?.counts;
+  const q = query.trim().toLowerCase();
+  const shown = threads.filter((t) => {
+    if (q && !(t.name.toLowerCase().includes(q) || t.phone.includes(q) || t.preview.toLowerCase().includes(q))) {
+      return false;
+    }
+    switch (filter) {
+      case "attention":
+        return t.needsAttention;
+      case "auto":
+        return t.automationMode === "AUTO";
+      case "assist":
+        return t.automationMode === "ASSIST";
+      case "off":
+        return t.registered && t.automationMode === "OFF";
+      case "other":
+        return !t.registered;
+      default:
+        return t.registered; // "all" = every supplier (non-suppliers live under "Other")
+    }
+  });
 
   useEffect(() => {
     if (!selected && threads.length) setSelected(threads[0].key);
@@ -192,21 +290,28 @@ export default function SupplierChatsPage() {
       <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm">
         <div className="border-b border-border p-3">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <MessageCircle size={16} /> Supplier chats
+            <MessageCircle size={16} /> Suppliers
           </div>
-          <div className="mt-2 flex gap-1">
-            <button
-              onClick={() => setFilter("all")}
-              className={`rounded-full px-2.5 py-0.5 text-xs ${filter === "all" ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted"}`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setFilter("attention")}
-              className={`rounded-full px-2.5 py-0.5 text-xs ${filter === "attention" ? "bg-destructive/10 text-destructive" : "text-muted-foreground hover:bg-muted"}`}
-            >
-              Needs attention {threadsData?.needsAttention ?? 0}
-            </button>
+          <div className="relative mt-2">
+            <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name or number…"
+              className="h-8 w-full rounded-md border border-border bg-background pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            <Chip on={filter === "all"} onClick={() => setFilter("all")}>All {counts?.suppliers ?? 0}</Chip>
+            <Chip on={filter === "attention"} tone="danger" onClick={() => setFilter("attention")}>
+              Attention {counts?.needsAttention ?? 0}
+            </Chip>
+            <Chip on={filter === "auto"} tone="auto" onClick={() => setFilter("auto")}>Auto {counts?.auto ?? 0}</Chip>
+            <Chip on={filter === "assist"} tone="assist" onClick={() => setFilter("assist")}>Assist {counts?.assist ?? 0}</Chip>
+            <Chip on={filter === "off"} onClick={() => setFilter("off")}>Off {counts?.off ?? 0}</Chip>
+            {(counts?.other ?? 0) > 0 && (
+              <Chip on={filter === "other"} onClick={() => setFilter("other")}>Other {counts?.other ?? 0}</Chip>
+            )}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -216,9 +321,7 @@ export default function SupplierChatsPage() {
             </div>
           )}
           {!isLoading && shown.length === 0 && (
-            <p className="p-4 text-xs text-muted-foreground">
-              No supplier messages yet. They appear here once the WhatsApp number is live and receiving.
-            </p>
+            <p className="p-4 text-xs text-muted-foreground">No suppliers match this filter.</p>
           )}
           {shown.map((t) => (
             <button
@@ -230,13 +333,16 @@ export default function SupplierChatsPage() {
                 {initials(t.name)}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex justify-between">
-                  <span className="truncate text-[13px] font-medium">{t.name}</span>
-                  <span className="shrink-0 pl-1 text-[11px] text-muted-foreground">{rel(t.lastAt)}</span>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium">
+                    {t.registered && t.automationMode && <ModeDot mode={t.automationMode} />}
+                    <span className="truncate">{t.name}</span>
+                  </span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">{t.lastAt ? rel(t.lastAt) : ""}</span>
                 </div>
                 <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                   {t.needsAttention && <AlertCircle size={11} className="shrink-0 text-destructive" />}
-                  <span className="truncate">{t.preview}</span>
+                  <span className="truncate">{t.hasMessages ? t.preview : "No messages yet"}</span>
                 </div>
               </div>
             </button>
@@ -257,9 +363,19 @@ export default function SupplierChatsPage() {
                 <div className="text-sm font-medium">{detail.supplier?.name ?? `+${detail.key}`}</div>
                 <div className="text-xs text-muted-foreground">+{detail.key}</div>
               </div>
-              <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] text-green-600 dark:text-green-400">
-                WhatsApp
-              </span>
+              <div className="flex items-center gap-2">
+                {detail.supplierId && (
+                  <button
+                    onClick={openPO}
+                    className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted"
+                  >
+                    <Plus size={12} /> New PO
+                  </button>
+                )}
+                <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] text-green-600 dark:text-green-400">
+                  WhatsApp
+                </span>
+              </div>
             </div>
             <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
               {detail.messages.length === 0 && (
@@ -478,6 +594,90 @@ export default function SupplierChatsPage() {
           </>
         )}
       </div>
+
+      {poOpen && detail && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !poBusy && setPoOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden rounded-xl border border-border bg-background shadow-lg"
+          >
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="text-sm font-medium">New PO — {detail.supplier?.name ?? `+${detail.key}`}</div>
+              <button onClick={() => !poBusy && setPoOpen(false)} aria-label="Close" className="text-muted-foreground hover:text-foreground">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+              <span className="text-xs text-muted-foreground">Outlet</span>
+              <select
+                value={poOutlet}
+                onChange={(e) => setPoOutlet(e.target.value)}
+                className="h-8 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+              >
+                {outlets.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-1">
+              {poProducts.length === 0 ? (
+                <p className="py-6 text-center text-xs text-muted-foreground">
+                  No price-list products for this supplier yet. Add them on the supplier record first.
+                </p>
+              ) : (
+                poProducts.map((p) => (
+                  <div key={p.productId} className="flex items-center gap-2 border-b border-border py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px]">{p.name}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {formatRM(p.price)} / {p.packageLabel}
+                        {p.moq ? ` · MOQ ${p.moq}` : ""}
+                      </div>
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      value={poQty[p.productId] ?? ""}
+                      onChange={(e) =>
+                        setPoQty((q) => ({ ...q, [p.productId]: Math.max(0, Number(e.target.value) || 0) }))
+                      }
+                      placeholder="0"
+                      className="h-8 w-16 rounded-md border border-border bg-background px-2 text-right text-[13px] text-foreground"
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="border-t border-border px-4 py-3">
+              {poError && <div className="mb-2 text-[11px] text-destructive">{poError}</div>}
+              <div className="mb-2 flex justify-between text-[13px]">
+                <span className="text-muted-foreground">Total</span>
+                <span className="font-medium">{formatRM(poTotal)}</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => createPO(false)}
+                  disabled={poBusy}
+                  className="flex-1 rounded-md border border-border px-3 py-2 text-[13px] font-medium hover:bg-muted disabled:opacity-50"
+                >
+                  Create draft
+                </button>
+                <button
+                  onClick={() => createPO(true)}
+                  disabled={poBusy || !detail.windowOpen}
+                  title={detail.windowOpen ? "" : "24h window closed — create a draft, then send via template"}
+                  className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-3 py-2 text-[13px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {poBusy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Create &amp; send
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -489,4 +689,38 @@ function Row({ label, value }: { label: string; value: string }) {
       <span className="text-right">{value}</span>
     </div>
   );
+}
+
+function Chip({
+  on,
+  tone,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  tone?: "danger" | "auto" | "assist";
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const active =
+    tone === "danger"
+      ? "bg-destructive/10 text-destructive"
+      : tone === "auto"
+        ? "bg-green-500/15 text-green-700 dark:text-green-400"
+        : tone === "assist"
+          ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+          : "bg-muted text-foreground";
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-full px-2.5 py-0.5 text-[11px] ${on ? active : "text-muted-foreground hover:bg-muted"}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ModeDot({ mode }: { mode: AutomationMode }) {
+  const c = mode === "AUTO" ? "bg-green-500" : mode === "ASSIST" ? "bg-amber-500" : "bg-muted-foreground/40";
+  return <span title={`Automation: ${mode}`} className={`inline-block h-2 w-2 shrink-0 rounded-full ${c}`} />;
 }

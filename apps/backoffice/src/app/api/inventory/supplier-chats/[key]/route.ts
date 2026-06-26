@@ -30,13 +30,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     },
   });
 
-  const supplierId =
+  let supplierId =
     (
       await prisma.whatsAppMessage.findFirst({
         where: { ...counter, supplierId: { not: null } },
         select: { supplierId: true },
       })
     )?.supplierId ?? null;
+
+  // No message carried a supplierId (e.g. a supplier with no chat yet, opened from
+  // the list) — resolve by phone (last-8 digits) so context + "New PO" still work.
+  if (!supplierId) {
+    const tail = key.replace(/[^0-9]/g, "").slice(-8);
+    if (tail.length >= 8) {
+      const actives = await prisma.supplier.findMany({
+        where: { status: "ACTIVE", phone: { not: null } },
+        select: { id: true, phone: true },
+      });
+      supplierId = actives.find((s) => (s.phone ?? "").replace(/[^0-9]/g, "").slice(-8) === tail)?.id ?? null;
+    }
+  }
 
   let supplier:
     | null

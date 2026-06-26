@@ -4,6 +4,39 @@ import { requireAuth } from "@/lib/auth";
 import { recordPriceChange } from "@/lib/inventory/price-history";
 
 /**
+ * GET /api/inventory/suppliers/[id]/products
+ * The supplier's active price-list products — for building a PO from the workspace.
+ */
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
+  const { id: supplierId } = await params;
+  const rows = await prisma.supplierProduct.findMany({
+    where: { supplierId, isActive: true, price: { gt: 0 }, product: { isActive: true } },
+    select: {
+      id: true,
+      price: true,
+      moq: true,
+      productPackageId: true,
+      product: { select: { id: true, name: true } },
+      productPackage: { select: { packageLabel: true } },
+    },
+    orderBy: { product: { name: "asc" } },
+  });
+  return NextResponse.json(
+    rows.map((r) => ({
+      supplierProductId: r.id,
+      productId: r.product.id,
+      name: r.product.name,
+      packageLabel: r.productPackage?.packageLabel ?? "unit",
+      productPackageId: r.productPackageId,
+      price: Number(r.price),
+      moq: Number(r.moq) || 0,
+    })),
+  );
+}
+
+/**
  * POST /api/suppliers/[id]/products
  * Add a product to a supplier's price list.
  * Body: { productId, productPackageId?, price }
