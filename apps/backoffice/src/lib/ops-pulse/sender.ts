@@ -93,27 +93,41 @@ async function sendProactive(
   freeForm: string,
   templateVar: string,
 ): Promise<WhatsAppSendResult> {
-  const usingTemplate = !!templateName;
   const param = sanitizeParam(templateVar);
-  const result = usingTemplate
-    ? await sendWhatsAppTemplate(to, templateName, TEMPLATES.languageCode, [
-        { type: "body", parameters: [{ type: "text", text: param }] },
-      ])
-    : await sendWhatsAppText(to, freeForm);
-  // Persist the outbound digest (success OR failure) into the shared WhatsApp
-  // store so it shows in the Ops chat inbox. We store what was actually sent —
-  // the {{1}} summary for a template, the full text for free-form.
-  // recordOutboundMessage swallows its own errors — the send result is what the
-  // caller acts on, never the record.
+
+  // Prefer the approved template — it delivers outside the recipient's 24h window.
+  if (templateName) {
+    const tpl = await sendWhatsAppTemplate(to, templateName, TEMPLATES.languageCode, [
+      { type: "body", parameters: [{ type: "text", text: param }] },
+    ]);
+    if (tpl.ok) {
+      await recordOutboundMessage({
+        waMessageId: tpl.messageId,
+        fromNumber: process.env.WHATSAPP_DISPLAY_NUMBER || "",
+        toNumber: to,
+        type: "template",
+        body: param,
+        status: "sent",
+      });
+      return tpl;
+    }
+    // Template path failed — most commonly the template isn't APPROVED yet. Fall
+    // back to free-form (delivered inside an open 24h window). Logged so a
+    // genuinely broken template never hides silently behind the fallback.
+    console.warn(`[ops-pulse] template "${templateName}" failed (${tpl.error}); falling back to free-form`);
+  }
+
+  // Free-form path (no template configured, or template send failed).
+  const ff = await sendWhatsAppText(to, freeForm);
   await recordOutboundMessage({
-    waMessageId: result.messageId,
+    waMessageId: ff.messageId,
     fromNumber: process.env.WHATSAPP_DISPLAY_NUMBER || "",
     toNumber: to,
-    type: usingTemplate ? "template" : "text",
-    body: usingTemplate ? param : freeForm,
-    status: result.ok ? "sent" : "failed",
+    type: "text",
+    body: freeForm,
+    status: ff.ok ? "sent" : "failed",
   });
-  return result;
+  return ff;
 }
 
 export function sendManagerDigest(phone: string, lines: string[]): Promise<WhatsAppSendResult> {
