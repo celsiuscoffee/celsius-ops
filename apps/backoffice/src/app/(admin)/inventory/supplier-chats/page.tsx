@@ -25,6 +25,7 @@ type Thread = {
   lastAt: string;
   count: number;
   needsAttention: boolean;
+  registered: boolean;
 };
 
 type Msg = {
@@ -91,11 +92,11 @@ export default function SupplierChatsPage() {
   // Deep-link support: /inventory/supplier-chats?key=<number> opens that thread
   // (e.g. from Agent QA). Lazy init so it wins over the auto-select-first effect.
   const [selected, setSelected] = useState<string | null>(() => searchParams.get("key"));
-  const [filter, setFilter] = useState<"all" | "attention">("all");
+  const [filter, setFilter] = useState<"all" | "attention" | "non">("all");
 
   // Poll so inbound supplier messages + the agent's auto-replies appear without
   // a manual refresh. The open thread polls faster than the list.
-  const { data: threadsData, isLoading } = useFetch<{ threads: Thread[]; needsAttention: number }>(
+  const { data: threadsData, isLoading } = useFetch<{ threads: Thread[]; needsAttention: number; nonSuppliers: number }>(
     "/api/inventory/supplier-chats",
     { refreshInterval: 10000, revalidateOnFocus: true },
   );
@@ -119,7 +120,12 @@ export default function SupplierChatsPage() {
   const [applyError, setApplyError] = useState<string | null>(null);
 
   const threads = threadsData?.threads ?? [];
-  const shown = filter === "attention" ? threads.filter((t) => t.needsAttention) : threads;
+  const shown =
+    filter === "non"
+      ? threads.filter((t) => !t.registered)
+      : filter === "attention"
+        ? threads.filter((t) => t.registered && t.needsAttention)
+        : threads.filter((t) => t.registered); // "all" = registered suppliers only
 
   useEffect(() => {
     if (!selected && threads.length) setSelected(threads[0].key);
@@ -206,6 +212,12 @@ export default function SupplierChatsPage() {
               className={`rounded-full px-2.5 py-0.5 text-xs ${filter === "attention" ? "bg-destructive/10 text-destructive" : "text-muted-foreground hover:bg-muted"}`}
             >
               Needs attention {threadsData?.needsAttention ?? 0}
+            </button>
+            <button
+              onClick={() => setFilter("non")}
+              className={`rounded-full px-2.5 py-0.5 text-xs ${filter === "non" ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted"}`}
+            >
+              Non-suppliers {threadsData?.nonSuppliers ?? 0}
             </button>
           </div>
         </div>
