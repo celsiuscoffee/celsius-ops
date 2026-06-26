@@ -1,5 +1,33 @@
 import { describe, it, expect } from "vitest";
-import { parseMoqRm, nextDeliveryDate, validateSupplierOrder } from "./order-validation";
+import { parseMoqRm, nextDeliveryDate, validateSupplierOrder, boundedReorderQty } from "./order-validation";
+
+describe("boundedReorderQty", () => {
+  it("orders to need, floored by MOQ, rounded to pack size", () => {
+    expect(boundedReorderQty({ neededBase: 50, conversionFactor: 1, moq: 1 })).toMatchObject({ orderQty: 50, cap: null, moqForced: false });
+    expect(boundedReorderQty({ neededBase: 2, conversionFactor: 1, moq: 10 }).orderQty).toBe(10); // MOQ floor
+    expect(boundedReorderQty({ neededBase: 45, conversionFactor: 10, moq: 1 }).orderQty).toBe(5); // ceil(45/10)
+  });
+
+  it("caps at maxLevel headroom (overstock guard)", () => {
+    const r = boundedReorderQty({ neededBase: 80, conversionFactor: 1, moq: 1, headroomBase: 50 });
+    expect(r).toMatchObject({ orderQty: 50, cap: "max_level", moqForced: false });
+  });
+
+  it("caps at shelf-life usable qty (spoilage guard)", () => {
+    const r = boundedReorderQty({ neededBase: 100, conversionFactor: 1, moq: 1, shelfUsableBase: 30 });
+    expect(r).toMatchObject({ orderQty: 30, cap: "shelf_life" });
+  });
+
+  it("takes the tighter of the two ceilings", () => {
+    const r = boundedReorderQty({ neededBase: 100, conversionFactor: 1, moq: 1, headroomBase: 40, shelfUsableBase: 25 });
+    expect(r).toMatchObject({ orderQty: 25, cap: "shelf_life" });
+  });
+
+  it("never goes below MOQ — flags moqForced when MOQ overshoots a ceiling", () => {
+    const r = boundedReorderQty({ neededBase: 5, conversionFactor: 1, moq: 20, headroomBase: 10 });
+    expect(r).toMatchObject({ orderQty: 20, cap: "max_level", moqForced: true });
+  });
+});
 
 // A UTC-midnight Date for a given YYYY-MM-DD (what callers pass as "today"/planned).
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
