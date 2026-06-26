@@ -30,6 +30,7 @@ import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { createReorderDraftPO } from "@/lib/inventory/exec/proactive-order";
 import { behaviorTag } from "@/lib/inventory/exec/supplier-behavior";
 import { runMessageIntel, type IntelSummary } from "@/lib/inventory/exec/message-intel";
+import { runIntentResponder, type ResponderSummary } from "@/lib/inventory/exec/intent-responder";
 
 export const EXEC_VERSION = "procurement-exec-v2";
 
@@ -70,6 +71,9 @@ export interface ExecRunSummary {
   priceIncreases: number;
   openIssues: number;
   vendorPushPrompts: number;
+  soaHandoffs: number;
+  vendorPushDrafts: number;
+  promiseChases: number;
   briefSent: boolean;
   skipped?: string;
 }
@@ -101,6 +105,9 @@ export async function runProcurementExec(): Promise<ExecRunSummary> {
     priceIncreases: 0,
     openIssues: 0,
     vendorPushPrompts: 0,
+    soaHandoffs: 0,
+    vendorPushDrafts: 0,
+    promiseChases: 0,
     briefSent: false,
   };
   if (!enabled()) return { ...zero, skipped: "disabled" };
@@ -109,8 +116,9 @@ export async function runProcurementExec(): Promise<ExecRunSummary> {
   const agingBefore = new Date(now.getTime() - DAY);
 
   // Read inbound supplier messages FIRST — applied ETAs update deliveryDate before
-  // the overdue-GRN query below reads it.
+  // the overdue-GRN query below reads it — then act on the non-PO intents.
   const intel = await runMessageIntel();
+  const responder = await runIntentResponder();
 
   const [unsent, overdue, supply, finance] = await Promise.all([
     prisma.order.findMany({
@@ -181,6 +189,9 @@ export async function runProcurementExec(): Promise<ExecRunSummary> {
     priceIncreases: intel.priceIncrease,
     openIssues: intel.issues,
     vendorPushPrompts: intel.vendorPush,
+    soaHandoffs: responder.soaHandoffs,
+    vendorPushDrafts: responder.vendorPushDrafts,
+    promiseChases: responder.promiseChases,
     briefSent: false,
   };
 
@@ -194,11 +205,13 @@ export async function runProcurementExec(): Promise<ExecRunSummary> {
     intel.soa ||
     intel.priceIncrease ||
     intel.issues ||
-    intel.vendorPush;
+    intel.vendorPush ||
+    responder.actions.length ||
+    responder.promiseChases;
   if (!hasAnything) return summary;
 
   const dest = digits(process.env.PROCUREMENT_EXEC_NOTIFY_TO);
-  const brief = buildBrief(supply.oosRisk, supply.overstock, finance, unsent, overdue, proactive, intel);
+  const brief = buildBrief(supply.oosRisk, supply.overstock, finance, unsent, overdue, proactive, intel, responder);
   if (dest.length < 8) {
     console.log(`[procurement-exec] no PROCUREMENT_EXEC_NOTIFY_TO — brief not sent\n${brief}`);
     return summary;
@@ -369,6 +382,7 @@ function buildBrief(
   overdue: Array<{ orderNumber: string; deliveryDate: Date | null; supplier: { name: string } | null; outlet: { name: string } | null }>,
   proactive: string[],
   intel: IntelSummary,
+  responder: ResponderSummary,
 ): string {
   const L: string[] = ["🧮 *Procurement status*"];
   if (oos.length) {
@@ -412,6 +426,12 @@ function buildBrief(
   if (intel.vendorPush) finz.push(`🛒 ${intel.vendorPush} "order this week?" prompt${intel.vendorPush > 1 ? "s" : ""}`);
   if (finz.length) {
     L.push(`\n📨 From supplier chats: ${finz.join(" · ")}`);
+  }
+  if (responder.actions.length || responder.promiseChases) {
+    L.push(`\n🤖 Exec handled:`);
+    for (const a of responder.actions.slice(0, 5)) L.push(`• ${a}`);
+    if (responder.actions.length > 5) L.push(`• …+${responder.actions.length - 5} more`);
+    if (responder.promiseChases) L.push(`• chased ${responder.promiseChases} missed-ETA PO${responder.promiseChases > 1 ? "s" : ""}`);
   }
   return L.join("\n");
 }

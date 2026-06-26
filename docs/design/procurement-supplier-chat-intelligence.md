@@ -123,9 +123,14 @@ leave these unanswered (a missed prompt = a missed restock window).
 | Doc timing → invoice chase | ◑ baseline captured; chaser uses windows | `invoice-requester.ts` |
 | Delivery-date parsing → PO ETA | ✅ classify + parse; applies to PO behind `PROCUREMENT_EXEC_APPLY_ETA` | `message-intel.ts` |
 | SOA / price / issue / vendor-push detection | ✅ classified + surfaced in the daily brief | `message-intel.ts` |
-| SOA reconciliation (match vs paid invoices) | ☐ planned | (exec — finance) |
-| Invoice revise / CN actions, vendor-push reply | ☐ agent intent handlers | (agent — mouth) |
+| SOA → reconcile vs unpaid invoices → finance handoff | ✅ `intent-responder.ts` | exec |
+| Vendor-push → draft the week's order; missed-ETA → chase | ✅ `intent-responder.ts` (send behind `PROCUREMENT_EXEC_AUTO_REPLY`) | exec |
+| Invoice revise / CN actions | ◑ flagged for review; auto-action pending | (agent — mouth) |
 | Voice-note (.opus) transcription | ☐ needs audio-model integration | (new) |
+
+> **Why decoupled works here:** the chat agent bails when there's no open PO
+> (`agent.ts: if (!order) return`), so SOA / vendor-push / price messages never get a
+> reply from it. The responder owns exactly those — no double-reply, no shared file.
 
 ✅ done · ◑ partial / self-improving · ☐ planned
 
