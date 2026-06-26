@@ -10,11 +10,13 @@ type ReorderItem = {
   sku: string;
   baseUom: string;
   currentQty: number;
+  onOrderQty?: number;
   parLevel: number;
   reorderPoint: number;
   avgDailyUsage: number;
   orderQty: number;
   unitPrice: number;
+  priceChangePercent?: number | null;
   totalPrice: number;
   productPackageId: string | null;
   packageName: string | null;
@@ -32,6 +34,7 @@ type PORecommendation = {
   items: ReorderItem[];
   totalAmount: number;
   urgency: "critical" | "low" | "restock";
+  warnings?: { code: string; severity: "warn" | "info"; message: string }[];
 };
 
 type TransferRecommendation = {
@@ -324,6 +327,18 @@ export default function AIDecisionsPage() {
                     </div>
                   </div>
 
+                  {/* Order-level warnings (below trip MOQ, off-calendar delivery) */}
+                  {po.warnings && po.warnings.length > 0 && (
+                    <div className="border-t border-amber-500/20 bg-amber-500/5 px-3 py-2 space-y-1">
+                      {po.warnings.map((w, i) => (
+                        <div key={i} className="flex items-start gap-1.5 text-[11px] text-amber-300/90">
+                          <span aria-hidden>⚠</span>
+                          <span>{w.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Items table */}
                   <div className="border-t border-zinc-800 overflow-x-auto">
                     <table className="w-full text-xs min-w-[720px]">
@@ -331,6 +346,7 @@ export default function AIDecisionsPage() {
                         <tr className="text-zinc-500 bg-zinc-950/50">
                           <th className="text-left py-1.5 px-3 font-medium">Product</th>
                           <th className="text-right py-1.5 px-3 font-medium">Stock</th>
+                          <th className="text-right py-1.5 px-3 font-medium">On Order</th>
                           <th className="text-right py-1.5 px-3 font-medium">Par</th>
                           <th className="text-right py-1.5 px-3 font-medium">Days Left</th>
                           <th className="text-right py-1.5 px-3 font-medium">Order Qty</th>
@@ -348,12 +364,22 @@ export default function AIDecisionsPage() {
                             <td className={`py-1.5 px-3 text-right font-medium ${item.currentQty <= 0 ? "text-red-400" : item.currentQty <= item.reorderPoint ? "text-orange-400" : "text-zinc-300"}`}>
                               {item.currentQty}
                             </td>
+                            <td className="py-1.5 px-3 text-right text-zinc-400">
+                              {item.onOrderQty && item.onOrderQty > 0 ? <span className="text-sky-400">+{item.onOrderQty}</span> : <span className="text-zinc-600">—</span>}
+                            </td>
                             <td className="py-1.5 px-3 text-right text-zinc-400">{item.parLevel}</td>
                             <td className={`py-1.5 px-3 text-right ${item.daysUntilStockout <= 1 ? "text-red-400 font-medium" : item.daysUntilStockout <= 3 ? "text-orange-400" : "text-zinc-400"}`}>
                               {item.daysUntilStockout}d
                             </td>
                             <td className="py-1.5 px-3 text-right text-white font-medium">{item.orderQty}</td>
-                            <td className="py-1.5 px-3 text-right text-zinc-400">RM {item.unitPrice.toFixed(2)}</td>
+                            <td className="py-1.5 px-3 text-right text-zinc-400">
+                              RM {item.unitPrice.toFixed(2)}
+                              {typeof item.priceChangePercent === "number" && Math.abs(item.priceChangePercent) >= 1 && (
+                                <span className={`ml-1 text-[10px] ${item.priceChangePercent > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                                  {item.priceChangePercent > 0 ? "↑" : "↓"}{Math.abs(item.priceChangePercent)}%
+                                </span>
+                              )}
+                            </td>
                             <td className="py-1.5 px-3 text-right text-zinc-300">RM {item.totalPrice.toFixed(2)}</td>
                           </tr>
                         ))}

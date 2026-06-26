@@ -44,6 +44,7 @@ type Detail = {
     deliveryDays: string[];
     paymentTerms: string | null;
     leadTimeDays: number;
+    paymentModel?: { model: string; label: string; note: string; popDeliveryCritical: boolean };
   };
   context: {
     openPOs: number;
@@ -53,6 +54,14 @@ type Detail = {
   };
   windowOpen: boolean;
   messages: Msg[];
+  agentProposal?: {
+    intent: string;
+    escalationReason: string;
+    paymentModel?: string;
+    popDeliveryCritical?: boolean;
+    poAction: { type: string; itemName: string | null; newQuantity: number | null; note: string | null } | null;
+    at: string;
+  } | null;
 };
 
 function rel(iso: string): string {
@@ -295,10 +304,44 @@ export default function SupplierChatsPage() {
                     </div>
                   )}
                 </div>
+                {detail.agentProposal && (
+                  <div className="border-b border-border py-3">
+                    <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950/40">
+                      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                        <AlertCircle size={12} /> Agent suggests — your call
+                      </div>
+                      <div className="text-[12px] text-foreground">
+                        {detail.agentProposal.poAction
+                          ? <>
+                              {detail.agentProposal.poAction.type === "substitute_item" && "Substitution offered"}
+                              {detail.agentProposal.poAction.type === "cancel_order" && "Cancel requested"}
+                              {detail.agentProposal.poAction.type === "remove_item" && "Remove line"}
+                              {detail.agentProposal.poAction.type === "reduce_qty" && "Reduce qty"}
+                              {detail.agentProposal.poAction.itemName && <> · <span className="font-medium">{detail.agentProposal.poAction.itemName}</span></>}
+                              {detail.agentProposal.poAction.newQuantity != null && <> → {detail.agentProposal.poAction.newQuantity}</>}
+                              {detail.agentProposal.poAction.note && <div className="mt-0.5 text-[11px] text-muted-foreground">“{detail.agentProposal.poAction.note}”</div>}
+                            </>
+                          : <span className="capitalize">{detail.agentProposal.intent.replace(/_/g, " ")}</span>}
+                      </div>
+                      <div className="mt-1 text-[10.5px] text-muted-foreground">
+                        Held for review: {detail.agentProposal.escalationReason}. The agent did not change the PO.
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="flex flex-col gap-1 border-b border-border py-3 text-[12px]">
                   <Row label="Delivery" value={detail.supplier?.deliveryDays?.join(", ") || "—"} />
                   <Row label="Lead time" value={`${detail.supplier?.leadTimeDays ?? 0}d`} />
                   <Row label="Terms" value={detail.supplier?.paymentTerms || "—"} />
+                  {detail.supplier?.paymentModel && (
+                    <Row
+                      label="Payment"
+                      value={
+                        detail.supplier.paymentModel.label +
+                        (detail.supplier.paymentModel.popDeliveryCritical ? " ⚡" : "")
+                      }
+                    />
+                  )}
                 </div>
                 <div className="pt-3">
                   <div className="mb-1.5 text-[11px] text-muted-foreground">Open purchase orders</div>

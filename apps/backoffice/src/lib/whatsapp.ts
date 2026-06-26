@@ -52,6 +52,41 @@ export interface WhatsAppSendResult {
   error?: string;
 }
 
+export interface WhatsAppMedia {
+  bytes: Buffer;
+  mimeType: string;
+}
+
+/**
+ * Download an inbound media object (invoice PDF, PoP image, …) by its media id.
+ * Two-step per the Cloud API: GET /{media-id} returns a short-lived URL, which
+ * must then be fetched with the same bearer token. Returns null on any failure
+ * so callers can degrade gracefully (the agent falls back to a provisional
+ * capture rather than throwing inside the webhook).
+ */
+export async function fetchWhatsAppMedia(mediaId: string): Promise<WhatsAppMedia | null> {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  if (!token || !mediaId) return null;
+  try {
+    const metaRes = await fetch(`${GRAPH_BASE}/${mediaId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!metaRes.ok) return null;
+    const meta = (await metaRes.json().catch(() => ({}))) as { url?: string; mime_type?: string };
+    if (!meta.url) return null;
+    // The media URL itself also requires the bearer token.
+    const binRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!binRes.ok) return null;
+    const arrayBuf = await binRes.arrayBuffer();
+    return {
+      bytes: Buffer.from(arrayBuf),
+      mimeType: meta.mime_type?.split(";")[0]?.trim() || "application/octet-stream",
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function postMessage(body: Record<string, unknown>): Promise<WhatsAppSendResult> {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const token = process.env.WHATSAPP_ACCESS_TOKEN;

@@ -111,17 +111,26 @@ export async function detectPaymentFlags(input: {
     }
   }
 
-  if (input.popInvoiceReference) {
-    // Supplier invoices often store with a "#" prefix (e.g. "#1-14306") while
-    // Maybank recipient references drop it ("1-14306"). Use contains to catch
-    // those variants without normalizing both sides.
-    const refMatch = await prisma.invoice.findFirst({
+    // Normalised reference: strip non-alphanumerics so "#1-14306" (supplier
+    // invoice) and "1-14306" (Maybank recipient ref) compare equal. Skip very
+    // short refs — a bare "30" would substring-match "INV-300" and fire a
+    // false double-payment flag (the bug this guard fixes).
+  const refNorm = (input.popInvoiceReference ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (refNorm.length >= 4) {
+    // contains() narrows candidates in SQL; the normalised token comparison
+    // below is the real match so embedded-substring false positives are dropped.
+    const candidates = await prisma.invoice.findMany({
       where: {
-        invoiceNumber: { contains: input.popInvoiceReference, mode: "insensitive" },
+        invoiceNumber: { contains: input.popInvoiceReference!, mode: "insensitive" },
         status: "PAID",
         NOT: { id: input.invoiceId },
       },
       select: { id: true, invoiceNumber: true, paymentRef: true, paidAt: true },
+    });
+    const refMatch = candidates.find((c) => {
+      const inv = c.invoiceNumber.replace(/[^a-z0-9]/gi, "").toLowerCase();
+      // Equal, or one is a prefix-stripped form of the other (e.g. "#" dropped).
+      return inv === refNorm || inv.endsWith(refNorm) || refNorm.endsWith(inv);
     });
     if (refMatch) {
       flags.push({

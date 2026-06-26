@@ -25,10 +25,13 @@
  * Model: claude-sonnet-4-6 — it edits real POs and writes to real suppliers.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import type { OrderStatus } from "@celsius/db";
+import type { OrderStatus, Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppText } from "@/lib/whatsapp";
+import { sendWhatsAppText, fetchWhatsAppMedia } from "@/lib/whatsapp";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
+import { parseSupplierDoc } from "@/lib/finance/parsers/supplier-doc";
+import { detectCreationFlags } from "@/lib/inventory/flag-detector";
+import { paymentModel, type PaymentModelInfo } from "@/lib/inventory/payment-model";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -123,7 +126,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     // Match the supplier by last-8 digits (same rule as whatsapp-store).
     const suppliers = await prisma.supplier.findMany({
       where: { phone: { not: null }, status: "ACTIVE" },
-      select: { id: true, name: true, phone: true, paymentTerms: true },
+      select: { id: true, name: true, phone: true, paymentTerms: true, depositPercent: true },
     });
     const supplier = suppliers.find((s) => {
       const sd = digits(s.phone);
@@ -176,7 +179,8 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     });
     history.reverse();
 
-    const decision = await classify(evt.text, supplier, order, history, todayMyt(), hasDoc);
+    const pm = paymentModel(supplier);
+    const decision = await classify(evt.text, supplier, order, history, todayMyt(), hasDoc, pm);
     if (!decision) return;
 
     // ── Guardrails (code, not model): auto-act vs escalate ──
@@ -214,6 +218,33 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     }
     if (!replyText) replyText = HOLDING_REPLY[lang];
 
+    // When we escalate, capture a STRUCTURED PROPOSAL of the action we declined
+    // to auto-apply (e.g. the substitution swap, the qty change) so the inbox can
+    // show the human a concrete "AI suggests …" they can accept or reject —
+    // rather than just "needs attention". Read-only: the agent never applies it.
+    const proposedItem =
+      decision.po_action.po_item_id
+        ? order.items.find((i) => i.id === decision.po_action.po_item_id)
+        : undefined;
+    const proposal = escalate
+      ? {
+          intent: decision.intent,
+          escalationReason: decision.escalation_reason ?? "guardrail",
+          paymentModel: pm.model,
+          popDeliveryCritical: pm.popDeliveryCritical,
+          poAction:
+            decision.po_action.type !== "none"
+              ? {
+                  type: decision.po_action.type,
+                  poItemId: decision.po_action.po_item_id,
+                  itemName: proposedItem?.product.name ?? null,
+                  newQuantity: decision.po_action.new_quantity,
+                  note: decision.po_action.note,
+                }
+              : null,
+        }
+      : null;
+
     // Auto-reply (24h window is open — the supplier just messaged us).
     const sent = await sendWhatsAppText(supplier.phone ?? fromDigits, replyText);
 
@@ -236,6 +267,8 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         escalated: escalate,
         escalationReason: escalate ? (decision.escalation_reason ?? "guardrail") : null,
         poNumber: order.orderNumber,
+        paymentModel: pm.model,
+        proposal,
       },
     });
 
@@ -289,31 +322,107 @@ async function applyDeliveryDate(orderId: string, isoDate: string): Promise<void
   await prisma.order.update({ where: { id: orderId }, data: { deliveryDate: new Date(isoDate) } });
 }
 
+// WhatsApp inbound mime → the subset parseSupplierDoc (Claude vision) accepts.
+function visionMime(
+  mime: string | undefined,
+): "application/pdf" | "image/jpeg" | "image/png" | "image/webp" | null {
+  const m = (mime ?? "").toLowerCase();
+  if (m === "application/pdf") return "application/pdf";
+  if (m === "image/jpeg" || m === "image/jpg") return "image/jpeg";
+  if (m === "image/png") return "image/png";
+  if (m === "image/webp") return "image/webp";
+  return null;
+}
+
 /**
- * Capture a supplier-sent invoice as a DRAFT invoice on the PO. The amount is
- * provisional (the PO total) — the agent can't read the PDF, so a human verifies
- * it in the Invoices screen. Safe to auto: a DRAFT never triggers payment.
+ * Capture a supplier-sent invoice as a DRAFT invoice on the PO.
+ *
+ * The agent now READS the document: it downloads the media and runs the shared
+ * supplier-doc vision parser to extract the real billed total, the supplier's
+ * own invoice number, and the bill/due dates. Those land as AI-prefilled fields
+ * (aiPrefilledAt set) so the Invoices screen surfaces a "verify before paying"
+ * banner — a human still confirms the amount. Creation flags run so a duplicate
+ * PO / billed-over-PO mismatch is caught immediately. If the media can't be
+ * fetched or parsed (or the total is unreadable), we fall back to the old
+ * provisional capture (amount = PO total). Always DRAFT → never triggers payment.
  */
 async function captureInvoice(
   order: { id: string; orderNumber: string; outletId: string; totalAmount: unknown },
   supplierId: string,
   mediaId: string | null,
 ): Promise<boolean> {
+  // ── Try to read the document for a real amount/number/date ──
+  let extractedTotal: number | null = null;
+  let extractedNumber: string | null = null;
+  let billDate: Date | null = null;
+  let dueDate: Date | null = null;
+  const prefilled: string[] = [];
+  if (mediaId) {
+    try {
+      const media = await fetchWhatsAppMedia(mediaId);
+      const mime = visionMime(media?.mimeType);
+      if (media && mime) {
+        const parsed = await parseSupplierDoc({ fileBytes: media.bytes, mimeType: mime });
+        if (parsed.total != null && parsed.total > 0) {
+          extractedTotal = Math.round(parsed.total * 100) / 100;
+          prefilled.push("amount");
+        }
+        if (parsed.billNumber) {
+          extractedNumber = parsed.billNumber.slice(0, 64);
+          prefilled.push("invoiceNumber");
+        }
+        if (parsed.billDate && /^\d{4}-\d{2}-\d{2}$/.test(parsed.billDate)) {
+          billDate = new Date(parsed.billDate);
+          prefilled.push("issueDate");
+        }
+        if (parsed.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(parsed.dueDate)) {
+          dueDate = new Date(parsed.dueDate);
+          prefilled.push("dueDate");
+        }
+      }
+    } catch (e) {
+      console.warn("[supplier-agent] doc extract failed:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  const amount = extractedTotal ?? (Number(order.totalAmount) || 0);
+  const invoiceNumber = extractedNumber || `AI-${order.orderNumber}`;
+  const provisional = extractedTotal == null;
+
   try {
-    await prisma.invoice.create({
+    const flags = await detectCreationFlags({
+      orderId: order.id,
+      supplierId,
+      amount,
+      issueDate: billDate,
+    });
+    const created = await prisma.invoice.create({
       data: {
-        invoiceNumber: `AI-${order.orderNumber}`,
+        invoiceNumber,
         orderId: order.id,
         outletId: order.outletId,
         supplierId,
-        amount: order.totalAmount as never, // Decimal passthrough
+        amount: amount as never, // Decimal passthrough
         status: "DRAFT",
         paymentType: "SUPPLIER",
-        notes:
-          "Captured from WhatsApp by the supplier-chat agent — amount is provisional (PO total); " +
-          `verify against the document before paying.${mediaId ? ` [wa-media:${mediaId}]` : ""}`,
+        ...(billDate ? { issueDate: billDate } : {}),
+        ...(dueDate ? { dueDate } : {}),
+        ...(prefilled.length > 0
+          ? { aiPrefilledAt: new Date(), aiPrefilledFields: JSON.stringify(prefilled) }
+          : {}),
+        ...(flags.length > 0 ? { flags: flags as unknown as Prisma.InputJsonValue } : {}),
+        notes: provisional
+          ? "Captured from WhatsApp by the supplier-chat agent — document unreadable, amount is provisional (PO total); " +
+            `verify against the document before paying.${mediaId ? ` [wa-media:${mediaId}]` : ""}`
+          : "Captured + read from WhatsApp by the supplier-chat agent — amount/number extracted from the document; " +
+            `verify before paying.${mediaId ? ` [wa-media:${mediaId}]` : ""}`,
       },
+      select: { id: true },
     });
+    console.log(
+      `[supplier-agent] invoice captured id=${created.id} no=${invoiceNumber} ` +
+        `amount=${amount} extracted=${!provisional} prefilled=${prefilled.join("|") || "-"} flags=${flags.length}`,
+    );
     return true;
   } catch (e) {
     // Unique invoiceNumber collision (already captured) or any write error.
@@ -383,6 +492,7 @@ async function classify(
   history: Array<{ direction: string; body: string | null }>,
   today: string,
   hasDoc: boolean,
+  pm: PaymentModelInfo,
 ): Promise<AgentDecision | null> {
   const items = order.items
     .map(
@@ -400,6 +510,7 @@ async function classify(
   const prompt = `Today is ${today} (Asia/Kuala_Lumpur). A document was attached: ${hasDoc ? "YES — most likely their invoice/PoP/photo" : "no"}.
 
 # Open PO ${order.orderNumber} (status ${order.status}) — ${supplier.name}, terms ${supplier.paymentTerms ?? "—"}
+# Payment model: ${pm.label}${pm.popDeliveryCritical ? " — PREPAY/DEPOSIT: payment clears BEFORE goods are released, so any payment/PoP message here is delivery-critical; escalate promptly with an honest holding reply." : ""}
 ${items}
 
 # Recent conversation

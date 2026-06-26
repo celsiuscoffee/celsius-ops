@@ -76,15 +76,37 @@ helps; matching/short/partial/double detection is still manual.
   template. Reconcile with `staff-native/lib/ops/invoices.ts`.
 - **P0 — Reconciliation ledger.** Match PoP ↔ invoice; flag short/partial/double/missing-charge;
   surface "which invoice unmatched." This is the real prize. Invoice model has the fields.
+  _Shipped (v1): `/inventory/reconciliation` + `GET /api/inventory/invoices/reconciliation` —
+  per-supplier statement of account (outstanding + aging) with a reconciliation-EXCEPTIONS list:
+  the existing per-invoice money flags (duplicate/double-pay/wrong-account/tolerance) grouped by
+  supplier, plus short-paid residuals, partial/deposit carry-forward, and AI-captured drafts to
+  verify. Overpayment surfaces via flags (amountPaid is clamped to amount on payment), so the
+  ledger aggregates flag-detector output rather than recomputing it. Open: automated PoP-amount ↔
+  invoice matching from inbound payment images, and missing-delivery-charge detection._
 - **P1 — Auto-send the order block on approval** (already generated) via the API, with MOQ +
   outlet + delivery-day/cut-off validation baked in (kills the "add more / which outlet /
   too late for today's lorry" loops).
+  _Shipped (validation): `lib/inventory/order-validation.ts` (validateSupplierOrder +
+  parseMoqRm + nextDeliveryDate, unit-tested) wired into ai-decisions — each drafted PO is
+  checked against the supplier's trip MOQ (ringgit) with the exact top-up shortfall, shown as
+  a warning on the PO card. Delivery-day check is built and fires once a date is set on the PO.
+  Open: per-outlet legal billing entity._
 - **P1 — Inbox/message-store (Option 1, in progress).** Capture all chats (done: Increment 1)
   → AI-parse inbound (Malay + media aware) → classify OOS / substitute / price-change /
   invoice / payment → propose action to a human.
+  _Shipped (propose-to-human): when the agent escalates it now stamps a STRUCTURED PROPOSAL
+  (intent + the declined PO edit + payment model) on the outbound message; the Supplier Chats
+  inbox surfaces it as an "Agent suggests — your call" card. The agent never applies it._
 - **P2 — OOS handling:** AI-propose / human-approve PO edit; recipe-critical always human.
+  _Shipped (proposal capture): substitution offers are escalated WITH the structured swap
+  detail (which line, the offered note) so the human sees a concrete proposal. WhatsApp-button
+  one-tap approval remains the external-gated follow-up (needs a Meta-approved template)._
 - **P2 — Per-payment-model + per-supplier rules:** prepay vs credit-SOA vs deposit; delivery
   calendar; legal billing entity per outlet.
+  _Shipped: `lib/inventory/payment-model.ts` (unit-tested) classifies prepay / deposit+balance
+  / credit-SOA / standard from depositPercent + terms. The agent treats prepay/deposit payment
+  messages as delivery-critical; the inbox shows the model (⚡ when POP-gated). Delivery
+  calendar lives in order-validation. Open: per-outlet legal billing entity._
 
 ## Reusable supplier archetypes (for the model)
 - **Single-SKU prepay** (RICH's foam, BeansCo choc powder, Farm Fresh milk, BBM lamb,

@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
+import { recordPriceChange } from "@/lib/inventory/price-history";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const caller = await getUserFromHeaders(req.headers);
@@ -168,6 +169,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             where: { supplierId, productId: id, productPackageId: packageId },
           });
           if (existingLink) {
+            await recordPriceChange({
+              supplierId,
+              productId: id,
+              productPackageId: packageId,
+              oldPrice: Number(existingLink.price),
+              newPrice: Number(entry.price),
+            });
             await prisma.supplierProduct.update({
               where: { id: existingLink.id },
               data: { price: entry.price },
