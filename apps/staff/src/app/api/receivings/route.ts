@@ -86,6 +86,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cannot record receiving for another outlet" }, { status: 403 });
   }
 
+  // PO ordered quantities by product+package, used to backfill orderedQty.
+  const orderedQtyMap = new Map<string, number>();
+  const resolveOrderedQty = (i: { productId: string; productPackageId?: string; orderedQty?: number }): number | null => {
+    if (i.orderedQty !== undefined && i.orderedQty !== null) return i.orderedQty;
+    if (!orderId) return null;
+    return orderedQtyMap.get(`${i.productId}::${i.productPackageId ?? ""}`) ?? null;
+  };
+
   let receivingStatus = status || "COMPLETE";
   if (orderId) {
     // Receivable from SENT onwards — procurement must have transmitted the PO
@@ -105,10 +113,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
 
-    const hasShort = items.some(
-      (i: { orderedQty?: number; receivedQty: number }) =>
-        i.orderedQty !== undefined && i.receivedQty < i.orderedQty,
-    );
+    // Auto-derive orderedQty from the PO server-side (the client may omit it),
+    // so short-delivery tracking survives even though the PO reconcile below
+    // overwrites OrderItem.quantity with the received total.
+    const poItems = await prisma.orderItem.findMany({
+      where: { orderId },
+      select: { productId: true, productPackageId: true, quantity: true },
+    });
+    for (const oi of poItems) {
+      orderedQtyMap.set(`${oi.productId}::${oi.productPackageId ?? ""}`, Number(oi.quantity));
+    }
+
+    const hasShort = items.some((i: { productId: string; productPackageId?: string; orderedQty?: number; receivedQty: number }) => {
+      const ordered = resolveOrderedQty(i);
+      return ordered !== null && i.receivedQty < ordered;
+    });
     if (hasShort) receivingStatus = "PARTIAL";
   }
 
@@ -125,7 +144,7 @@ export async function POST(req: NextRequest) {
         create: items.map((i: { productId: string; productPackageId?: string; orderedQty?: number; receivedQty: number; expiryDate?: string; discrepancyReason?: string }) => ({
           productId: i.productId,
           productPackageId: i.productPackageId || null,
-          orderedQty: i.orderedQty ?? null,
+          orderedQty: resolveOrderedQty(i),
           receivedQty: i.receivedQty,
           expiryDate: i.expiryDate ? new Date(i.expiryDate) : null,
           discrepancyReason: i.discrepancyReason || null,

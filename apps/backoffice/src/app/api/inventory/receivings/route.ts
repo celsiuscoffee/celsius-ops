@@ -115,12 +115,32 @@ export async function POST(req: NextRequest) {
 
   const isTransfer = !!transferId;
 
+  // Auto-derive orderedQty from the PO server-side so short-delivery tracking
+  // doesn't depend on the client sending it. This is the ONLY surviving record
+  // of what was ordered, because the PO-line reconcile below overwrites
+  // OrderItem.quantity with the received total. Keyed by product+package.
+  const orderedQtyMap = new Map<string, number>();
+  if (orderId) {
+    const poItems = await prisma.orderItem.findMany({
+      where: { orderId },
+      select: { productId: true, productPackageId: true, quantity: true },
+    });
+    for (const oi of poItems) {
+      orderedQtyMap.set(`${oi.productId}::${oi.productPackageId ?? ""}`, Number(oi.quantity));
+    }
+  }
+  const resolveOrderedQty = (i: { productId: string; productPackageId?: string; orderedQty?: number }): number | null => {
+    if (i.orderedQty !== undefined && i.orderedQty !== null) return i.orderedQty;
+    if (!orderId) return null;
+    return orderedQtyMap.get(`${i.productId}::${i.productPackageId ?? ""}`) ?? null;
+  };
+
   let receivingStatus = status || "COMPLETE";
   if (orderId) {
-    const hasShort = items.some(
-      (i: { orderedQty?: number; receivedQty: number }) =>
-        i.orderedQty !== undefined && i.receivedQty < i.orderedQty,
-    );
+    const hasShort = items.some((i: { productId: string; productPackageId?: string; orderedQty?: number; receivedQty: number }) => {
+      const ordered = resolveOrderedQty(i);
+      return ordered !== null && i.receivedQty < ordered;
+    });
     if (hasShort) receivingStatus = "PARTIAL";
   }
 
@@ -138,7 +158,7 @@ export async function POST(req: NextRequest) {
         create: items.map((i: { productId: string; productPackageId?: string; orderedQty?: number; receivedQty: number; expiryDate?: string; discrepancyReason?: string }) => ({
           productId: i.productId,
           productPackageId: i.productPackageId || null,
-          orderedQty: i.orderedQty ?? null,
+          orderedQty: resolveOrderedQty(i),
           receivedQty: i.receivedQty,
           expiryDate: i.expiryDate ? new Date(i.expiryDate) : null,
           discrepancyReason: i.discrepancyReason || null,

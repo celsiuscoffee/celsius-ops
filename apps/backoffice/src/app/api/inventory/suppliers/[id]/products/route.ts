@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { recordPriceChange } from "@/lib/inventory/price-history";
 
 /**
  * POST /api/suppliers/[id]/products
@@ -29,6 +30,16 @@ export async function POST(
       productPackageId: productPackageId || null,
     },
   });
+
+  if (existing) {
+    await recordPriceChange({
+      supplierId,
+      productId,
+      productPackageId: productPackageId || null,
+      oldPrice: Number(existing.price),
+      newPrice: Number(price),
+    });
+  }
 
   const sp = existing
     ? await prisma.supplierProduct.update({
