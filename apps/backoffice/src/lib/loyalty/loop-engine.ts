@@ -1075,9 +1075,20 @@ async function recentlyTargetedPhones(loopKey: LoopKey, cooldownDays: number): P
     .from("loop_rounds").select("id").eq("loop_key", loopKey).gte("prepared_at", since);
   const roundIds = ((rounds ?? []) as Array<{ id: string }>).map((r) => r.id);
   if (roundIds.length === 0) return [];
-  const { data: rows } = await supabaseAdmin
-    .from("loop_assignments").select("phone").in("round_id", roundIds);
-  return Array.from(new Set(((rows ?? []) as Array<{ phone: string }>).map((r) => r.phone)));
+  // PAGINATE: Supabase caps a select at 1000 rows. A loop with daily rounds
+  // accumulates thousands of assignments in the cooldown window, so an unpaged
+  // query truncates the suppress list → already-messaged members slip through and
+  // get re-spammed. Page through all of them (ordered by id for stable ranges).
+  const phones = new Set<string>();
+  for (let from = 0; ; from += 1000) {
+    const { data: rows } = await supabaseAdmin
+      .from("loop_assignments").select("phone").in("round_id", roundIds)
+      .order("id", { ascending: true }).range(from, from + 999);
+    const batch = (rows ?? []) as Array<{ phone: string }>;
+    for (const r of batch) if (r.phone) phones.add(r.phone.trim());
+    if (batch.length < 1000) break;
+  }
+  return Array.from(phones);
 }
 
 // Has this loop already produced a round today (MYT)? Keeps the cadence at one
