@@ -180,7 +180,9 @@ export async function GET(req: NextRequest) {
     // delivery/handling charge (or a price change) the order didn't account
     // for. Only surface on real, verified invoices (not provisional drafts).
     const poTotal = inv.order?.totalAmount != null ? Number(inv.order.totalAmount) : 0;
-    if (!isDraft && poTotal > 0) {
+    // amount > 0 guards against credit notes / zero invoices producing a
+    // spurious "billed over PO" reading.
+    if (!isDraft && poTotal > 0 && amount > 0) {
       const over = Math.round((amount - poTotal) * 100) / 100;
       if (over >= BILLED_OVER_PO_MIN_RM && over >= poTotal * BILLED_OVER_PO_MIN_PCT) {
         kinds.push("BILLED_OVER_PO");

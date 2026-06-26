@@ -24,7 +24,7 @@ export type PaymentModelInfo = {
 };
 
 const PREPAY_RX =
-  /\b(pre-?pay|prepaid|pay\s*(?:first|before|upfront|in\s*advance)|clear\s*payment\s*first|before\s*delivery|cash\s*before|advance\s*payment|c\.?o\.?d\.?|cash\s*on\s*delivery)\b/i;
+  /\b(pre-?pay|prepaid|upfront|pay\s*(?:first|before|upfront|in\s*advance)|clear\s*payment\s*first|before\s*delivery|cash\s*before|advance\s*payment|c\.?o\.?d\.?|cash\s*on\s*delivery)\b/i;
 const CREDIT_RX =
   /\b(net\s*\d+|\d+\s*[- ]?days?|credit|monthly|month\s*end|soa|statement\s*of\s*account|invoice\s*\d+\s*days?)\b/i;
 

@@ -74,6 +74,30 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       data.aiPrefilledFields = null;
     }
 
+    // Amount edited on an already-PAID invoice (e.g. the supplier's real total
+    // came in higher than what we settled) without an explicit status or
+    // payment in this request → the invoice is no longer fully paid. Flip it
+    // back to PARTIALLY_PAID so the stranded balance is visible, instead of
+    // leaving it PAID with money still owed. Scoped to PAID only — deposit
+    // flows manage their own balance leg.
+    if (
+      amount !== undefined &&
+      status === undefined &&
+      !(typeof paymentAmountInput === "number" && paymentAmountInput > 0)
+    ) {
+      const current = await prisma.invoice.findUnique({
+        where: { id },
+        select: { status: true, amountPaid: true },
+      });
+      if (current?.status === "PAID") {
+        const paid = Number(current.amountPaid ?? 0);
+        if (Number(amount) - paid > 0.01) {
+          data.status = paid > 0 ? "PARTIALLY_PAID" : "PENDING";
+          data.paidAt = null;
+        }
+      }
+    }
+
     // Deposit overrides — caller can set/clear deposit on this invoice.
     // We always recompute depositAmount when percent or amount changes so
     // they can never drift apart silently.

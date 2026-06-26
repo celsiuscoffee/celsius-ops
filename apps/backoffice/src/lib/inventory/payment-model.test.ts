@@ -15,7 +15,7 @@ describe("paymentModel", () => {
   });
 
   it("detects prepay terms as delivery-critical", () => {
-    for (const t of ["Prepay before delivery", "clear payment first", "Cash before delivery", "COD", "pay in advance"]) {
+    for (const t of ["Prepay before delivery", "clear payment first", "Cash before delivery", "COD", "pay in advance", "100% upfront", "upfront"]) {
       const m = paymentModel({ paymentTerms: t });
       expect(m.model, t).toBe("prepay");
       expect(m.popDeliveryCritical, t).toBe(true);
