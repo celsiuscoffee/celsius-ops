@@ -29,6 +29,7 @@ import { sendWhatsAppText } from "@/lib/whatsapp";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { createReorderDraftPO } from "@/lib/inventory/exec/proactive-order";
 import { behaviorTag } from "@/lib/inventory/exec/supplier-behavior";
+import { runMessageIntel, type IntelSummary } from "@/lib/inventory/exec/message-intel";
 
 export const EXEC_VERSION = "procurement-exec-v2";
 
@@ -64,6 +65,11 @@ export interface ExecRunSummary {
   unsentReSource: number;
   overdueGrn: number;
   proactiveOrders: number;
+  etaUpdates: number;
+  soaToReconcile: number;
+  priceIncreases: number;
+  openIssues: number;
+  vendorPushPrompts: number;
   briefSent: boolean;
   skipped?: string;
 }
@@ -90,12 +96,21 @@ export async function runProcurementExec(): Promise<ExecRunSummary> {
     unsentReSource: 0,
     overdueGrn: 0,
     proactiveOrders: 0,
+    etaUpdates: 0,
+    soaToReconcile: 0,
+    priceIncreases: 0,
+    openIssues: 0,
+    vendorPushPrompts: 0,
     briefSent: false,
   };
   if (!enabled()) return { ...zero, skipped: "disabled" };
 
   const now = new Date();
   const agingBefore = new Date(now.getTime() - DAY);
+
+  // Read inbound supplier messages FIRST — applied ETAs update deliveryDate before
+  // the overdue-GRN query below reads it.
+  const intel = await runMessageIntel();
 
   const [unsent, overdue, supply, finance] = await Promise.all([
     prisma.order.findMany({
@@ -161,15 +176,29 @@ export async function runProcurementExec(): Promise<ExecRunSummary> {
     unsentReSource: unsent.length,
     overdueGrn: overdue.length,
     proactiveOrders: proactive.length,
+    etaUpdates: intel.etaUpdates.length,
+    soaToReconcile: intel.soa,
+    priceIncreases: intel.priceIncrease,
+    openIssues: intel.issues,
+    vendorPushPrompts: intel.vendorPush,
     briefSent: false,
   };
 
   const hasAnything =
-    supply.oosRisk.length || supply.overstock.length || finance.length || unsent.length || overdue.length;
+    supply.oosRisk.length ||
+    supply.overstock.length ||
+    finance.length ||
+    unsent.length ||
+    overdue.length ||
+    intel.etaUpdates.length ||
+    intel.soa ||
+    intel.priceIncrease ||
+    intel.issues ||
+    intel.vendorPush;
   if (!hasAnything) return summary;
 
   const dest = digits(process.env.PROCUREMENT_EXEC_NOTIFY_TO);
-  const brief = buildBrief(supply.oosRisk, supply.overstock, finance, unsent, overdue, proactive);
+  const brief = buildBrief(supply.oosRisk, supply.overstock, finance, unsent, overdue, proactive, intel);
   if (dest.length < 8) {
     console.log(`[procurement-exec] no PROCUREMENT_EXEC_NOTIFY_TO — brief not sent\n${brief}`);
     return summary;
@@ -215,6 +244,11 @@ export async function runProcurementExec(): Promise<ExecRunSummary> {
       unsentReSource: unsent.length,
       overdueGrn: overdue.length,
       proactiveOrders: proactive.length,
+      etaUpdates: intel.etaUpdates.length,
+      soaToReconcile: intel.soa,
+      priceIncreases: intel.priceIncrease,
+      openIssues: intel.issues,
+      vendorPushPrompts: intel.vendorPush,
       ok: res.ok,
       error: res.error ?? null,
     },
@@ -334,6 +368,7 @@ function buildBrief(
   unsent: Array<{ orderNumber: string; supplier: { name: string } | null; outlet: { name: string } | null }>,
   overdue: Array<{ orderNumber: string; deliveryDate: Date | null; supplier: { name: string } | null; outlet: { name: string } | null }>,
   proactive: string[],
+  intel: IntelSummary,
 ): string {
   const L: string[] = ["🧮 *Procurement status*"];
   if (oos.length) {
@@ -364,6 +399,19 @@ function buildBrief(
       L.push(`• ${o.orderNumber} — ${o.supplier?.name ?? "?"}${behaviorTag(o.supplier?.name ?? "")}, due ${d}`);
     }
     if (overdue.length > 3) L.push(`• …+${overdue.length - 3} more`);
+  }
+  if (intel.etaUpdates.length) {
+    L.push(`\n🚚 ${intel.etaUpdates.length} delivery ETA${intel.etaUpdates.length > 1 ? "s" : ""} from suppliers:`);
+    for (const e of intel.etaUpdates.slice(0, 4)) L.push(`• ${e}`);
+    if (intel.etaUpdates.length > 4) L.push(`• …+${intel.etaUpdates.length - 4} more`);
+  }
+  const finz: string[] = [];
+  if (intel.soa) finz.push(`🧾 ${intel.soa} SOA to reconcile`);
+  if (intel.priceIncrease) finz.push(`💲 ${intel.priceIncrease} price-increase notice${intel.priceIncrease > 1 ? "s" : ""}`);
+  if (intel.issues) finz.push(`🛠 ${intel.issues} issue${intel.issues > 1 ? "s" : ""} (defect/short/wrong)`);
+  if (intel.vendorPush) finz.push(`🛒 ${intel.vendorPush} "order this week?" prompt${intel.vendorPush > 1 ? "s" : ""}`);
+  if (finz.length) {
+    L.push(`\n📨 From supplier chats: ${finz.join(" · ")}`);
   }
   return L.join("\n");
 }

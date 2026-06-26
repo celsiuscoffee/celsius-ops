@@ -121,10 +121,10 @@ leave these unanswered (a missed prompt = a missed restock window).
 | Reliability (OOS) → flag/de-risk | ✅ `behaviorTag()` in the daily brief | `exec-controller.ts` |
 | Lead time → ETA / overdue | ◑ live from `sentAt → receiving` (fills in) | `supplier-behavior.ts` |
 | Doc timing → invoice chase | ◑ baseline captured; chaser uses windows | `invoice-requester.ts` |
-| Delivery-date parsing | ☐ agent intent → gap `promisedBackDate` | (agent — mouth) |
-| SOA-aware finance handoff | ☐ Inc 4+ | (exec — finance) |
-| Invoice revise / CN flows | ☐ agent intent handlers | (agent — mouth) |
-| Vendor-push reorder reply | ☐ agent intent handler | (agent — mouth) |
+| Delivery-date parsing → PO ETA | ✅ classify + parse; applies to PO behind `PROCUREMENT_EXEC_APPLY_ETA` | `message-intel.ts` |
+| SOA / price / issue / vendor-push detection | ✅ classified + surfaced in the daily brief | `message-intel.ts` |
+| SOA reconciliation (match vs paid invoices) | ☐ planned | (exec — finance) |
+| Invoice revise / CN actions, vendor-push reply | ☐ agent intent handlers | (agent — mouth) |
 | Voice-note (.opus) transcription | ☐ needs audio-model integration | (new) |
 
 ✅ done · ◑ partial / self-improving · ☐ planned
