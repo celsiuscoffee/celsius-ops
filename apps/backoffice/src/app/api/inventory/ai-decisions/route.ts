@@ -25,7 +25,10 @@ export async function GET(request: NextRequest) {
     const outletWhere = outletId ? { id: outletId, status: "ACTIVE" as const } : { status: "ACTIVE" as const };
 
     // ─── Parallel data fetches ──────────────────────────────────────
-    const [outlets, stockBalances, parLevels, supplierProducts, products, productPackages, existingDraftOrders, openPurchaseOrders, wastage30] = await Promise.all([
+    const d90 = new Date(mytNow);
+    d90.setDate(d90.getDate() - 90);
+
+    const [outlets, stockBalances, parLevels, supplierProducts, products, productPackages, existingDraftOrders, openPurchaseOrders, recentPriceChanges, wastage30] = await Promise.all([
       prisma.outlet.findMany({
         where: outletWhere,
         select: { id: true, name: true, code: true },
@@ -91,6 +94,13 @@ export async function GET(request: NextRequest) {
           items: { select: { productId: true, productPackageId: true, quantity: true } },
         },
       }),
+      // Recent supplier price changes (90d) so the decision can flag a line whose
+      // price just moved — newest first, we keep the latest per supplier+product.
+      prisma.priceHistory.findMany({
+        where: { changedAt: { gte: d90 } },
+        orderBy: { changedAt: "desc" },
+        select: { supplierId: true, productId: true, changePercent: true, changedAt: true },
+      }),
       // Wastage last 30 days
       prisma.stockAdjustment.findMany({
         where: {
@@ -133,6 +143,13 @@ export async function GET(request: NextRequest) {
     // Incoming (on-order) quantity per product+outlet, converted to BASE units so
     // it nets directly against the base-unit par level / current stock below.
     // OrderItem.quantity is in package units; ×conversionFactor → base.
+    // Latest price change per supplier+product (newest first, so first wins).
+    const priceChangeMap = new Map<string, number>();
+    for (const pc of recentPriceChanges) {
+      const key = `${pc.supplierId}_${pc.productId}`;
+      if (!priceChangeMap.has(key)) priceChangeMap.set(key, Number(pc.changePercent));
+    }
+
     const pkgConvById = new Map(productPackages.map((p) => [p.id, Number(p.conversionFactor)]));
     const onOrderMap = new Map<string, number>(); // key: productId_outletId → base units inbound
     for (const po of openPurchaseOrders) {
@@ -201,6 +218,7 @@ export async function GET(request: NextRequest) {
       avgDailyUsage: number;
       orderQty: number; // in package units
       unitPrice: number; // per package
+      priceChangePercent: number | null; // latest 90d change from this supplier, if any
       totalPrice: number;
       productPackageId: string | null;
       packageName: string | null;
@@ -344,6 +362,7 @@ export async function GET(request: NextRequest) {
           avgDailyUsage: Math.round(avgDaily * 100) / 100,
           orderQty,
           unitPrice: supplier.price,
+          priceChangePercent: priceChangeMap.get(`${supplier.supplierId}_${product.id}`) ?? null,
           totalPrice: Math.round(totalPrice * 100) / 100,
           productPackageId: supplier.productPackageId,
           packageName: supplier.packageName,

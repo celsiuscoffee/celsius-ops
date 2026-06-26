@@ -16,6 +16,7 @@ type ReorderItem = {
   avgDailyUsage: number;
   orderQty: number;
   unitPrice: number;
+  priceChangePercent?: number | null;
   totalPrice: number;
   productPackageId: string | null;
   packageName: string | null;
@@ -371,7 +372,14 @@ export default function AIDecisionsPage() {
                               {item.daysUntilStockout}d
                             </td>
                             <td className="py-1.5 px-3 text-right text-white font-medium">{item.orderQty}</td>
-                            <td className="py-1.5 px-3 text-right text-zinc-400">RM {item.unitPrice.toFixed(2)}</td>
+                            <td className="py-1.5 px-3 text-right text-zinc-400">
+                              RM {item.unitPrice.toFixed(2)}
+                              {typeof item.priceChangePercent === "number" && Math.abs(item.priceChangePercent) >= 1 && (
+                                <span className={`ml-1 text-[10px] ${item.priceChangePercent > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                                  {item.priceChangePercent > 0 ? "↑" : "↓"}{Math.abs(item.priceChangePercent)}%
+                                </span>
+                              )}
+                            </td>
                             <td className="py-1.5 px-3 text-right text-zinc-300">RM {item.totalPrice.toFixed(2)}</td>
                           </tr>
                         ))}
