@@ -120,21 +120,41 @@ independent LLM** whose only job is to grade the first one.
 6. **Language mismatch** — replied in the wrong language.
 7. **Confidence calibration** — high confidence on a genuinely ambiguous case.
 
+### When it runs — automatic, closing the loop
+To replace the human reviewer (not just assist one), the verifier runs
+**automatically on every decision**, inline in `handleSupplierMessage`, the
+moment the agent acts. The supplier reply is already sent by then, so the check
+never delays the conversation. This is the loop-closing step: the *check itself*
+is automated, so no human has to remember to run it.
+
+- **Auto-escalation on fail.** A `fail` verdict surfaces the thread as
+  **needs-attention** in the Supplier Chats inbox (the inbox treats "the newest
+  message is an auto-decision the verifier failed" as a flag). So a human is
+  pulled in *exactly* when the independent check catches something — and only
+  then. `pass`/`concern` stay silent in the QA log.
+- The Agent QA dashboard's **"Run checks"** remains for back-filling decisions
+  made while the verifier was off, or re-sweeping history.
+
 ### Safety (same rules as the loop)
-- **Shadow-mode**, gated by `PROCUREMENT_VERIFIER_ENABLED`. Off → no calls.
+- **Shadow-mode**, gated by `PROCUREMENT_VERIFIER_ENABLED`. Off → no calls, no
+  auto-run.
 - **Flags only.** The verifier never edits a PO, never messages a supplier,
-  never changes the agent's decision. It writes a verdict to `raw.verifier` and
-  surfaces it on the Agent QA dashboard for a human.
+  never changes the agent's decision. It writes a verdict to `raw.verifier`,
+  raises needs-attention on a fail, and surfaces everything on Agent QA. (It does
+  NOT auto-undo an action — reverting is a separate, riskier capability we'd add
+  deliberately, not silently.)
 - **Idempotent.** A decision already carrying `raw.verifier` is skipped; re-runs
   are safe.
+- **Best-effort + isolated.** The auto-verify call is wrapped so a verifier
+  error never affects the agent's reply or the webhook's 200.
 - **Pure core + DB shell.** `verifier.ts` (prompt build + verdict parse) imports
   zero prisma and is unit-tested; `verifier-run.ts` does the DB + LLM I/O.
 
 ### Where the human sees it
 **Agent QA** (`/inventory/agent-qa`) — a dashboard of recent agent decisions
 with verifier verdicts: fail/concern surfaced at the top, pass-rate and
-auto-act-rate cards, each row deep-linking into the supplier chat. "Run checks"
-verifies the most recent unverified decisions on demand.
+auto-act-rate cards, each row deep-linking into the supplier chat. Failed
+decisions also light up the Supplier Chats inbox's needs-attention filter.
 
 ### Why a separate agent (not just stricter guardrails)
 Guardrails are pre-action and rule-based; they can't catch a *correct-looking

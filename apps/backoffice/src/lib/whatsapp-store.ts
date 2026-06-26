@@ -81,9 +81,9 @@ export interface OutboundRecord {
   raw?: unknown;
 }
 
-export async function recordOutboundMessage(rec: OutboundRecord): Promise<void> {
+export async function recordOutboundMessage(rec: OutboundRecord): Promise<string | null> {
   try {
-    await prisma.whatsAppMessage.create({
+    const created = await prisma.whatsAppMessage.create({
       data: {
         waMessageId: rec.waMessageId ?? null,
         direction: "outbound",
@@ -96,8 +96,11 @@ export async function recordOutboundMessage(rec: OutboundRecord): Promise<void> 
         status: rec.status ?? "sent",
         raw: (rec.raw ?? undefined) as Prisma.InputJsonValue | undefined,
       },
+      select: { id: true },
     });
+    return created.id;
   } catch (e) {
     console.warn(`[whatsapp:store] outbound persist skipped: ${e instanceof Error ? e.message : e}`);
+    return null;
   }
 }

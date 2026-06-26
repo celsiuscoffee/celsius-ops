@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
       body: true,
       type: true,
       timestamp: true,
+      raw: true,
     },
   });
 
@@ -37,6 +38,7 @@ export async function GET(req: NextRequest) {
     lastAt: Date;
     count: number;
     lastInbound: string | null;
+    verifierFailed: boolean; // the newest message is an auto-decision the verifier failed
   };
   const threads = new Map<string, T>();
   for (const m of rows) {
@@ -44,6 +46,11 @@ export async function GET(req: NextRequest) {
     if (!counter) continue;
     let t = threads.get(counter);
     if (!t) {
+      // rows are newest-first, so the first message we see for a thread is its
+      // latest. If that latest message is an agent decision the verifier rated
+      // "fail" and nothing newer has happened, the thread needs a human.
+      const raw = (m.raw ?? null) as Record<string, unknown> | null;
+      const v = raw?.verifier as { rating?: string } | undefined;
       t = {
         key: counter,
         supplierId: m.supplierId,
@@ -51,6 +58,7 @@ export async function GET(req: NextRequest) {
         lastAt: m.timestamp,
         count: 0,
         lastInbound: null,
+        verifierFailed: m.direction === "outbound" && !!raw?.agent && v?.rating === "fail",
       };
       threads.set(counter, t);
     }
@@ -84,6 +92,7 @@ export async function GET(req: NextRequest) {
     .map((t) => {
       const s = t.supplierId ? sup.get(t.supplierId) : undefined;
       const needsAttention =
+        t.verifierFailed ||
         (!!t.lastInbound && ATTENTION_RX.test(t.lastInbound)) ||
         (!!t.supplierId && overdue.has(t.supplierId));
       return {
