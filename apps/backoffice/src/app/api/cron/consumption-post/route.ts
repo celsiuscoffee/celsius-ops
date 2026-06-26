@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { postOutletConsumption, mytDayWindow, type ConsumptionResult } from "@/lib/inventory/consumption";
+import { mytDayWindow, type ConsumptionResult } from "@/lib/inventory/consumption";
+import { postOutletConsumption } from "@/lib/inventory/consumption-post";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
