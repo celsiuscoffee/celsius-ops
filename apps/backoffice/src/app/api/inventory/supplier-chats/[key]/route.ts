@@ -142,5 +142,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     };
   }
 
-  return NextResponse.json({ key, supplierId, supplier, context, windowOpen, messages, agentProposal });
+  // A DRAFT re-source PO the agent opened to an alternative supplier after this
+  // supplier said an item was OOS (internal — never mentioned to the supplier).
+  let agentReSource: { supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean } | null = null;
+  if (raw && raw.reSource && typeof raw.reSource === "object") {
+    const r = raw.reSource as Record<string, unknown>;
+    agentReSource = {
+      supplierName: String(r.supplierName ?? ""),
+      orderNumber: String(r.orderNumber ?? ""),
+      qty: typeof r.qty === "number" ? r.qty : 0,
+      unit: typeof r.unit === "string" ? r.unit : "",
+      existing: r.existing === true,
+    };
+  }
+
+  return NextResponse.json({ key, supplierId, supplier, context, windowOpen, messages, agentProposal, agentReSource });
 }

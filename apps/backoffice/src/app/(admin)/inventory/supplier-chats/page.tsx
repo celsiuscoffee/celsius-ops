@@ -62,6 +62,7 @@ type Detail = {
     poAction: { type: string; itemName: string | null; newQuantity: number | null; note: string | null } | null;
     at: string;
   } | null;
+  agentReSource?: { supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean } | null;
 };
 
 function rel(iso: string): string {
@@ -338,6 +339,22 @@ export default function SupplierChatsPage() {
                       </div>
                       <div className="mt-1 text-[10.5px] text-muted-foreground">
                         Held for review: {detail.agentProposal.escalationReason}. The agent did not change the PO.
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {detail.agentReSource && (
+                  <div className="border-b border-border py-3">
+                    <div className="rounded-md border border-sky-300 bg-sky-50 p-2.5 dark:border-sky-800 dark:bg-sky-950/40">
+                      <div className="mb-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300">
+                        Re-sourced (OOS)
+                      </div>
+                      <div className="text-[12px] text-foreground">
+                        Draft PO <span className="font-medium">{detail.agentReSource.orderNumber}</span> to{" "}
+                        <span className="font-medium">{detail.agentReSource.supplierName}</span> · {detail.agentReSource.qty} {detail.agentReSource.unit}
+                      </div>
+                      <div className="mt-0.5 text-[10.5px] text-muted-foreground">
+                        {detail.agentReSource.existing ? "Already pending — review & send." : "Review & send in Purchase Orders. Not visible to this supplier."}
                       </div>
                     </div>
                   </div>
