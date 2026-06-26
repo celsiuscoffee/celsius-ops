@@ -127,6 +127,10 @@
     {
       "path": "/api/cron/request-receivings",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/procurement-exec",
+      "schedule": "0 1 * * *"
     }
   ]
 }
