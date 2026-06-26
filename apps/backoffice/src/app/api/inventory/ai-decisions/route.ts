@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { validateSupplierOrder, type OrderWarning } from "@/lib/inventory/order-validation";
 
 // ─── GET /api/inventory/ai-decisions ────────────────────────────────────
 // Returns executable decisions: draft POs to create, transfers to make,
@@ -332,6 +333,9 @@ export async function GET(request: NextRequest) {
       items: ReorderItem[];
       totalAmount: number;
       urgency: "critical" | "low" | "restock";
+      // Order-level (per-trip) checks: below trip MOQ, off-calendar delivery.
+      // Surfaced so the buyer can top up to MOQ before the supplier asks.
+      warnings: OrderWarning[];
     };
 
     const poRecommendations: PORecommendation[] = [];
@@ -357,6 +361,30 @@ export async function GET(request: NextRequest) {
           items,
           totalAmount: Math.round(total * 100) / 100,
           urgency: hasCritical ? "critical" : hasLow ? "low" : "restock",
+          warnings: [],
+        });
+      }
+    }
+
+    // ── Attach trip-MOQ warnings ──
+    // The per-line MOQ is already enforced in the order quantities above; this
+    // checks the whole PO against the supplier's per-trip ringgit minimum so the
+    // buyer can top up before the supplier sends an "add more" message. (No
+    // planned delivery date on a draft, so the delivery-day check stays dormant
+    // until a date is set on the PO.)
+    if (poRecommendations.length > 0) {
+      const supplierIds = [...new Set(poRecommendations.map((p) => p.supplierId))];
+      const supplierMeta = await prisma.supplier.findMany({
+        where: { id: { in: supplierIds } },
+        select: { id: true, moq: true, deliveryDays: true },
+      });
+      const metaById = new Map(supplierMeta.map((s) => [s.id, s]));
+      for (const po of poRecommendations) {
+        const meta = metaById.get(po.supplierId);
+        po.warnings = validateSupplierOrder({
+          orderTotal: po.totalAmount,
+          moq: meta?.moq ?? null,
+          deliveryDays: meta?.deliveryDays ?? [],
         });
       }
     }

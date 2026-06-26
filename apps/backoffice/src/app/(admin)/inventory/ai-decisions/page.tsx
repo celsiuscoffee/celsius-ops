@@ -32,6 +32,7 @@ type PORecommendation = {
   items: ReorderItem[];
   totalAmount: number;
   urgency: "critical" | "low" | "restock";
+  warnings?: { code: string; severity: "warn" | "info"; message: string }[];
 };
 
 type TransferRecommendation = {
@@ -323,6 +324,18 @@ export default function AIDecisionsPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* Order-level warnings (below trip MOQ, off-calendar delivery) */}
+                  {po.warnings && po.warnings.length > 0 && (
+                    <div className="border-t border-amber-500/20 bg-amber-500/5 px-3 py-2 space-y-1">
+                      {po.warnings.map((w, i) => (
+                        <div key={i} className="flex items-start gap-1.5 text-[11px] text-amber-300/90">
+                          <span aria-hidden>⚠</span>
+                          <span>{w.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Items table */}
                   <div className="border-t border-zinc-800 overflow-x-auto">
