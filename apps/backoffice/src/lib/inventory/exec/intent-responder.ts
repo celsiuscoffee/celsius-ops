@@ -12,10 +12,11 @@
  *  - delivery promise missed → a promised date passed with no GRN → chase for an ETA.
  *  - price-increase / invoice-revise → flag for review (surfaced in the brief).
  *
- * Supplier-facing sends are OFF unless PROCUREMENT_EXEC_AUTO_REPLY=true (else the draft
- * is surfaced in the brief for the inbox). The internal finance handoff sends whenever
- * PROCUREMENT_FINANCE_NOTIFY_TO is set + in-window. Gated by PROCUREMENT_AGENT_ENABLED;
- * de-duped via raw markers; never throws. See procurement-supplier-chat-intelligence.md.
+ * Supplier-facing sends go out only for AUTO suppliers (the per-supplier dial,
+ * Supplier.automationMode); ASSIST/OFF → the draft is surfaced in the brief for the
+ * inbox. The internal finance handoff sends whenever PROCUREMENT_FINANCE_NOTIFY_TO is
+ * set + in-window. Gated by PROCUREMENT_AGENT_ENABLED; de-duped via raw markers; never
+ * throws. See procurement-supplier-chat-intelligence.md.
  */
 import type { OrderStatus, Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
@@ -50,7 +51,8 @@ const EMPTY: ResponderSummary = { soaHandoffs: 0, vendorPushDrafts: 0, promiseCh
 
 export async function runIntentResponder(): Promise<ResponderSummary> {
   if (process.env.PROCUREMENT_AGENT_ENABLED !== "true") return { ...EMPTY, skipped: "disabled" };
-  const autoReply = process.env.PROCUREMENT_EXEC_AUTO_REPLY === "true";
+  // Supplier-facing replies send only for AUTO suppliers (the per-supplier dial);
+  // ASSIST/OFF → drafted/surfaced. The internal finance handoff is unaffected.
   const financeDest = digits(process.env.PROCUREMENT_FINANCE_NOTIFY_TO);
   const today = todayMyt();
   const out: ResponderSummary = { ...EMPTY, actions: [] };
@@ -81,7 +83,7 @@ export async function runIntentResponder(): Promise<ResponderSummary> {
   }
 
   for (const job of jobs) {
-    const supplier = await prisma.supplier.findUnique({ where: { id: job.supplierId }, select: { name: true, phone: true } });
+    const supplier = await prisma.supplier.findUnique({ where: { id: job.supplierId }, select: { name: true, phone: true, automationMode: true } });
     if (!supplier) continue;
     const name = supplier.name;
     try {
@@ -95,7 +97,7 @@ export async function runIntentResponder(): Promise<ResponderSummary> {
         const draft = await draftWeeklyOrder(job.supplierId, name);
         if (draft) {
           out.vendorPushDrafts++;
-          const sent = autoReply && (await maybeSendToSupplier(job.phone, draft));
+          const sent = supplier.automationMode === "AUTO" && (await maybeSendToSupplier(job.phone, draft));
           out.actions.push(`🛒 ${name} asked for an order — ${sent ? "replied" : "draft ready"}: ${draft.slice(0, 60)}…`);
         }
       } else if (job.category === "price" || job.category === "invchange") {
@@ -108,8 +110,8 @@ export async function runIntentResponder(): Promise<ResponderSummary> {
     await markResponded(job.messageId);
   }
 
-  // Delivery promise missed → chase for a fresh ETA.
-  out.promiseChases = await chaseMissedPromises(autoReply);
+  // Delivery promise missed → chase for a fresh ETA (AUTO suppliers only).
+  out.promiseChases = await chaseMissedPromises();
 
   console.log(
     `[intent-responder] soa=${out.soaHandoffs} vendorPush=${out.vendorPushDrafts} chases=${out.promiseChases} flagged=${out.flagged}`,
@@ -229,7 +231,7 @@ async function maybeSendToSupplier(phone: string, text: string): Promise<boolean
 }
 
 /** POs whose promised delivery date has passed with no GRN → chase for a fresh ETA. */
-async function chaseMissedPromises(autoReply: boolean): Promise<number> {
+async function chaseMissedPromises(): Promise<number> {
   const now = new Date();
   const overdue = await prisma.order.findMany({
     where: {
@@ -239,7 +241,7 @@ async function chaseMissedPromises(autoReply: boolean): Promise<number> {
       receivings: { none: {} },
     },
     take: 30,
-    select: { id: true, orderNumber: true, deliveryDate: true, supplier: { select: { name: true, phone: true } } },
+    select: { id: true, orderNumber: true, deliveryDate: true, supplier: { select: { name: true, phone: true, automationMode: true } } },
   });
   let chased = 0;
   for (const o of overdue) {
@@ -251,7 +253,7 @@ async function chaseMissedPromises(autoReply: boolean): Promise<number> {
     if (dupe) continue;
     const dest = digits(o.supplier.phone);
     const text = `Hi ${o.supplier.name}, following up on ${o.orderNumber} — expected ${o.deliveryDate ? new Date(o.deliveryDate).toISOString().slice(0, 10) : "earlier"} but not received yet. New ETA? 🙏`;
-    if (autoReply && dest.length >= 8 && (await windowOpen(dest))) {
+    if (o.supplier.automationMode === "AUTO" && dest.length >= 8 && (await windowOpen(dest))) {
       const res = await sendWhatsAppText(dest, text);
       await recordOutboundMessage({
         waMessageId: res.messageId,

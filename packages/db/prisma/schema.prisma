@@ -309,6 +309,9 @@ model Supplier {
   phone        String?
   email        String?
   status       SupplierStatus @default(ACTIVE)
+  // Per-supplier procurement automation dial (the hybrid model). OFF = manual only;
+  // ASSIST = agent/exec draft + a human approves; AUTO = agent/exec act + send.
+  automationMode AutomationMode @default(OFF)
   tags         String[]       @default([])
   leadTimeDays Int            @default(1)
   deliveryDays String[]       @default([])  // e.g. ["Monday","Wednesday","Friday"]
@@ -334,6 +337,12 @@ model Supplier {
 enum SupplierStatus {
   ACTIVE
   INACTIVE
+}
+
+enum AutomationMode {
+  OFF
+  ASSIST
+  AUTO
 }
 
 // ─── SUPPLIER PRODUCTS (Price List) ─────────────────────────

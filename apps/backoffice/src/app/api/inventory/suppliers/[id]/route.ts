@@ -14,7 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       name, phone, email, location, leadTimeDays, status, tags, moq,
       paymentTerms, deliveryDays, notes,
       bankName, bankAccountNumber, bankAccountName,
-      depositPercent, depositTermsDays,
+      depositPercent, depositTermsDays, automationMode,
     } = body;
     const data: Record<string, unknown> = {};
     if (name !== undefined) data.name = name;
@@ -37,6 +37,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     if (depositTermsDays !== undefined) {
       data.depositTermsDays = depositTermsDays === "" || depositTermsDays === null ? null : parseInt(depositTermsDays, 10);
+    }
+    // Per-supplier procurement automation dial (the hybrid model).
+    if (automationMode !== undefined && ["OFF", "ASSIST", "AUTO"].includes(automationMode)) {
+      data.automationMode = automationMode;
     }
 
     const supplier = await prisma.supplier.update({
