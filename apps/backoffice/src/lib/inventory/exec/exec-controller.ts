@@ -20,13 +20,15 @@
  * doesn't collide with the chat-agent rewrites. Gated by PROCUREMENT_AGENT_ENABLED;
  * de-duped (one brief/day via raw.execBriefDate); never throws. Proactive ordering is
  * DRAFT-only, capped, idempotent, and OFF unless PROCUREMENT_EXEC_AUTO_ORDER=true.
- * Remaining (Inc 5): supplier-reliability memory, voice notes, the scorecard.
+ * Supplier reliability + reply speed (Inc 5) annotate the brief via behaviorTag()
+ * (supplier-behavior.ts). Remaining: voice-note (.opus) transcription, scorecard UI.
  */
 import type { OrderStatus } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppText } from "@/lib/whatsapp";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { createReorderDraftPO } from "@/lib/inventory/exec/proactive-order";
+import { behaviorTag } from "@/lib/inventory/exec/supplier-behavior";
 
 export const EXEC_VERSION = "procurement-exec-v2";
 
@@ -347,19 +349,19 @@ function buildBrief(
   }
   if (finance.length) {
     L.push(`\n💸 ${finance.length} supplier${finance.length > 1 ? "s" : ""} with overdue invoices (finance to settle):`);
-    for (const f of finance.slice(0, 3)) L.push(`• ${f.supplierName} — RM${f.outstanding} (${f.count} inv)`);
+    for (const f of finance.slice(0, 3)) L.push(`• ${f.supplierName}${behaviorTag(f.supplierName)} — RM${f.outstanding} (${f.count} inv)`);
     if (finance.length > 3) L.push(`• …+${finance.length - 3} more`);
   }
   if (unsent.length) {
     L.push(`\n⚠️ ${unsent.length} re-source order${unsent.length > 1 ? "s" : ""} still unsent:`);
-    for (const o of unsent.slice(0, 3)) L.push(`• ${o.orderNumber} → ${o.supplier?.name ?? "?"} (${o.outlet?.name ?? "?"})`);
+    for (const o of unsent.slice(0, 3)) L.push(`• ${o.orderNumber} → ${o.supplier?.name ?? "?"}${behaviorTag(o.supplier?.name ?? "")} (${o.outlet?.name ?? "?"})`);
     if (unsent.length > 3) L.push(`• …+${unsent.length - 3} more`);
   }
   if (overdue.length) {
     L.push(`\n📦 ${overdue.length} PO${overdue.length > 1 ? "s" : ""} overdue for receiving:`);
     for (const o of overdue.slice(0, 3)) {
       const d = o.deliveryDate ? new Date(o.deliveryDate).toISOString().slice(0, 10) : "?";
-      L.push(`• ${o.orderNumber} — ${o.supplier?.name ?? "?"}, due ${d}`);
+      L.push(`• ${o.orderNumber} — ${o.supplier?.name ?? "?"}${behaviorTag(o.supplier?.name ?? "")}, due ${d}`);
     }
     if (overdue.length > 3) L.push(`• …+${overdue.length - 3} more`);
   }
