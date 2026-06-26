@@ -89,9 +89,6 @@ export async function GET(req: NextRequest) {
   const overdue = new Set(overdueRows.map((o) => o.supplierId));
 
   const out = [...threads.values()]
-    // Registered suppliers only — hide threads from numbers not matched to a
-    // Supplier record (random/unknown senders don't belong in the supplier inbox).
-    .filter((t) => !!t.supplierId)
     .map((t) => {
       const s = t.supplierId ? sup.get(t.supplierId) : undefined;
       const needsAttention =
@@ -101,6 +98,7 @@ export async function GET(req: NextRequest) {
       return {
         key: t.key,
         supplierId: t.supplierId,
+        registered: !!t.supplierId, // matched to a Supplier record (vs unknown sender)
         name: s?.name ?? `+${t.key}`,
         phone: s?.phone ?? t.key,
         preview: t.preview.slice(0, 60),
@@ -111,5 +109,9 @@ export async function GET(req: NextRequest) {
     })
     .sort((a, b) => +new Date(b.lastAt) - +new Date(a.lastAt));
 
-  return NextResponse.json({ threads: out, needsAttention: out.filter((t) => t.needsAttention).length });
+  return NextResponse.json({
+    threads: out,
+    needsAttention: out.filter((t) => t.needsAttention && t.registered).length,
+    nonSuppliers: out.filter((t) => !t.registered).length,
+  });
 }
