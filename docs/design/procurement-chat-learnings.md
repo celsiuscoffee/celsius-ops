@@ -76,6 +76,13 @@ helps; matching/short/partial/double detection is still manual.
   template. Reconcile with `staff-native/lib/ops/invoices.ts`.
 - **P0 — Reconciliation ledger.** Match PoP ↔ invoice; flag short/partial/double/missing-charge;
   surface "which invoice unmatched." This is the real prize. Invoice model has the fields.
+  _Shipped (v1): `/inventory/reconciliation` + `GET /api/inventory/invoices/reconciliation` —
+  per-supplier statement of account (outstanding + aging) with a reconciliation-EXCEPTIONS list:
+  the existing per-invoice money flags (duplicate/double-pay/wrong-account/tolerance) grouped by
+  supplier, plus short-paid residuals, partial/deposit carry-forward, and AI-captured drafts to
+  verify. Overpayment surfaces via flags (amountPaid is clamped to amount on payment), so the
+  ledger aggregates flag-detector output rather than recomputing it. Open: automated PoP-amount ↔
+  invoice matching from inbound payment images, and missing-delivery-charge detection._
 - **P1 — Auto-send the order block on approval** (already generated) via the API, with MOQ +
   outlet + delivery-day/cut-off validation baked in (kills the "add more / which outlet /
   too late for today's lorry" loops).
