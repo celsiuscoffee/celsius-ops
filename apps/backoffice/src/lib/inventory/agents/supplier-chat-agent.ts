@@ -355,8 +355,10 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       reSourced: !!reSource,
     };
 
-    // Auto-reply (24h window is open — the supplier just messaged us).
-    const sent = await sendWhatsAppText(supplier.phone ?? fromDigits, replyText);
+    // Auto-reply (24h window is open — the supplier just messaged us). Quote THIS
+    // inbound message so the supplier sees exactly which message we're answering —
+    // avoids "which item / which order?" confusion on a busy thread.
+    const sent = await sendWhatsAppText(supplier.phone ?? fromDigits, replyText, evt.waMessageId);
 
     const recordedId = await recordOutboundMessage({
       waMessageId: sent.messageId,
