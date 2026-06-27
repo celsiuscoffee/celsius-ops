@@ -217,7 +217,7 @@ export default function OrdersPage() {
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Purchase Orders</h2>
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">PO Lists</h2>
           <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
             {summary.total} {summary.total === 1 ? 'order' : 'orders'} &middot; {summary.active} active
           </p>
