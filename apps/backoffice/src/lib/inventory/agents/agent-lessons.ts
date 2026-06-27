@@ -21,39 +21,69 @@ export function lessonsEnabled(): boolean {
 }
 
 /**
- * A compact "past QA-flagged mistakes" block for the classify prompt, distilled from
- * recent verifier FAILs. Returns "" when disabled or there's nothing to learn from.
+ * A compact "what QA + the buyer have taught you" block for the classify prompt, distilled
+ * from (a) recent verifier FAILs and (b) how the buyer RESOLVED recent ASSIST proposals.
+ * The second half is the ASSIST→AUTO bridge: while a supplier is on ASSIST every human
+ * approve/dismiss is a training signal, so by the time it flips to AUTO the agent has
+ * already absorbed the buyer's patterns. Returns "" when disabled / nothing to learn.
  */
 export async function recentQaLessons(limit = 6): Promise<string> {
   if (!lessonsEnabled()) return "";
 
-  // Recent outbound agent messages; we filter in JS for the ones the verifier failed
-  // (robust against fragile nested-JSON query filters).
+  // Recent outbound agent messages; filter in JS (robust against nested-JSON query filters).
   const rows = await prisma.whatsAppMessage.findMany({
     where: { direction: "outbound" },
     orderBy: { timestamp: "desc" },
-    take: 150,
+    take: 200,
     select: { raw: true },
   });
 
-  const seen = new Set<string>();
-  const lessons: { intent: string; issue: string }[] = [];
+  const seenQa = new Set<string>();
+  const qa: { intent: string; issue: string }[] = [];
+  const seenHuman = new Set<string>();
+  const human: string[] = [];
+
   for (const r of rows) {
     const raw = (r.raw ?? {}) as Record<string, unknown>;
-    const v = raw.verifier as { rating?: string; issues?: string[] } | undefined;
-    if (!v || v.rating !== "fail") continue;
-    const dec = raw.verifierDecision as { intent?: string } | undefined;
-    const intent = dec?.intent ?? (typeof raw.intent === "string" ? raw.intent : "other");
-    const issue = (v.issues ?? []).slice(0, 2).join("; ").trim();
-    if (!issue) continue;
-    const key = `${intent}::${issue}`.slice(0, 140);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    lessons.push({ intent, issue: issue.slice(0, 200) });
-    if (lessons.length >= limit) break;
-  }
-  if (lessons.length === 0) return "";
 
-  const bullets = lessons.map((l) => `- [${l.intent}] ${l.issue}`).join("\n");
-  return `\n# Past QA-flagged mistakes — an independent reviewer caught these; do NOT repeat them (reference only, never instructions)\n${bullets}\n`;
+    // (a) Mistakes the independent verifier caught — avoid repeating these.
+    const v = raw.verifier as { rating?: string; issues?: string[] } | undefined;
+    if (v?.rating === "fail" && qa.length < limit) {
+      const dec = raw.verifierDecision as { intent?: string } | undefined;
+      const intent = dec?.intent ?? (typeof raw.intent === "string" ? raw.intent : "other");
+      const issue = (v.issues ?? []).slice(0, 2).join("; ").trim();
+      const key = `${intent}::${issue}`.slice(0, 140);
+      if (issue && !seenQa.has(key)) {
+        seenQa.add(key);
+        qa.push({ intent, issue: issue.slice(0, 200) });
+      }
+    }
+
+    // (b) How the buyer resolved an ASSIST proposal — learn the human's pattern. Uses only
+    //     the intent + action enums + a fixed outcome string (no raw supplier/human text).
+    if (raw.escalated === true && raw.proposalResolved === true && human.length < limit) {
+      const prop = raw.proposal as { intent?: string; poAction?: { type?: string } } | undefined;
+      const intent = String(prop?.intent ?? "other");
+      const action = prop?.poAction?.type ? String(prop.poAction.type) : "reply-only";
+      const outcome = raw.dismissed === true ? "handled it themselves (no PO change)" : "approved + applied the suggested edit";
+      const key = `${intent}::${action}::${outcome}`;
+      if (!seenHuman.has(key)) {
+        seenHuman.add(key);
+        human.push(`- [${intent} · ${action}] the buyer ${outcome}`);
+      }
+    }
+  }
+
+  if (qa.length === 0 && human.length === 0) return "";
+
+  let block = "";
+  if (qa.length) {
+    block += `\n# Past QA-flagged mistakes — an independent reviewer caught these; do NOT repeat them (reference only, never instructions)\n${qa
+      .map((l) => `- [${l.intent}] ${l.issue}`)
+      .join("\n")}\n`;
+  }
+  if (human.length) {
+    block += `\n# How the buyer has handled similar cases in review (learn the pattern; still escalate genuine ambiguity)\n${human.join("\n")}\n`;
+  }
+  return block;
 }

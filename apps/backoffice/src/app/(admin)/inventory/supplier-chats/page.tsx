@@ -104,6 +104,7 @@ type Detail = {
     orderId: string | null;
     intent: string;
     escalationReason: string;
+    insight?: string;
     paymentModel?: string;
     popDeliveryCritical?: boolean;
     poAction: { type: string; poItemId: string | null; itemName: string | null; newQuantity: number | null; note: string | null } | null;
@@ -1039,6 +1040,11 @@ export default function SupplierChatsPage() {
                       <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
                         <AlertCircle size={12} /> Agent suggests — your call
                       </div>
+                      {detail.agentProposal.insight && (
+                        <div className="mb-1.5 text-[12px] leading-snug text-foreground">
+                          {detail.agentProposal.insight}
+                        </div>
+                      )}
                       <div className="text-[12px] text-foreground">
                         {detail.agentProposal.poAction
                           ? <>
