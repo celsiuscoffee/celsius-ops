@@ -37,7 +37,7 @@ import { verifierEnabled, verifyMessage } from "@/lib/inventory/agents/verifier-
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export const SUPPLIER_AGENT_VERSION = "supplier-chat-agent-v2";
+export const SUPPLIER_AGENT_VERSION = "supplier-chat-agent-v3";
 
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
 
@@ -54,15 +54,21 @@ const OPEN_ORDER_STATUSES: OrderStatus[] = [
 
 type PoActionType = "none" | "remove_item" | "reduce_qty" | "substitute_item" | "cancel_order";
 
+type PoAction = {
+  type: PoActionType;
+  po_item_id: string | null;
+  new_quantity: number | null;
+  note: string | null;
+};
+
 type AgentDecision = {
   intent: string;
   language: "ms" | "en" | "mixed";
-  po_action: {
-    type: PoActionType;
-    po_item_id: string | null;
-    new_quantity: number | null;
-    note: string | null;
-  };
+  // One entry per line the supplier flags — so a single "Earl Grey 5, Peppermint 3,
+  // Orange habis" message resolves all three at once (the multi-item fix).
+  po_actions: PoAction[];
+  // Primary action = po_actions[0] (or none). Kept for the verifier / inbox proposal.
+  po_action: PoAction;
   delivery_date: string | null; // YYYY-MM-DD when the supplier states a future delivery day
   capture_invoice: boolean; // true when this message is the supplier sending their invoice/SOA
   reply_text: string;
@@ -70,6 +76,8 @@ type AgentDecision = {
   requires_human: boolean;
   escalation_reason: string | null;
 };
+
+const NO_ACTION: PoAction = { type: "none", po_item_id: null, new_quantity: null, note: null };
 
 export interface SupplierMessageEvent {
   fromNumber: string; // supplier's number (digits or +form)
@@ -178,49 +186,54 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     if (!decision) return;
 
     // ── Guardrails (code, not model): auto-act vs escalate ──
-    // ASSIST suppliers always escalate → the agent drafts a holding reply + a proposal
-    // for a human to approve, and never auto-edits the PO. AUTO suppliers auto-act below.
-    const risky =
-      decision.po_action.type === "substitute_item" || decision.po_action.type === "cancel_order";
-    const escalate =
-      decision.requires_human || risky || decision.confidence < 0.7 || supplier.automationMode === "ASSIST";
+    // Accountable by default: act on clear shortfalls (reduce/remove every flagged line
+    // + re-source each OOS) instead of deferring. Escalate ONLY when the model flags
+    // genuine ambiguity (requires_human), a risky swap/cancel, or the supplier is on
+    // ASSIST. No confidence-threshold gate — that was escalating clean multi-item
+    // shortfalls; the independent verifier backstops every auto-act instead.
+    const actions = decision.po_actions.filter((a) => a.type !== "none");
+    const hasRisky = actions.some((a) => a.type === "substitute_item" || a.type === "cancel_order");
+    const escalate = decision.requires_human || hasRisky || supplier.automationMode === "ASSIST";
 
     const lang: "ms" | "en" = decision.language === "ms" ? "ms" : "en";
     let replyText = decision.reply_text?.trim();
     let appliedAction: PoActionType = "none";
+    const appliedActions: PoActionType[] = [];
     let deliveryUpdated: string | null = null;
     let invoiceCaptured = false;
-    let reSource: { orderId: string; supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean } | null = null;
+    type ReSource = { orderId: string; supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean };
+    let reSource: ReSource | null = null;
+    const reSources: ReSource[] = [];
 
     if (escalate) {
       // Never confirm an action we're not taking — send a safe holding line.
       replyText = HOLDING_REPLY[lang];
     } else {
-      if (
-        decision.po_action.type === "remove_item" ||
-        decision.po_action.type === "reduce_qty"
-      ) {
-        const actionResult = await applyPoAction(order.id, decision.po_action);
-        appliedAction = actionResult.type;
-
-        // OOS removal → open a DRAFT re-source PO to the next-cheapest supplier
-        // so the need isn't dropped. Internal only — we never tell THIS supplier
-        // we're sourcing elsewhere; the supplier reply is unchanged.
-        if (actionResult.type === "remove_item" && actionResult.removed) {
-          const systemUser = await prisma.user.findFirst({ where: { role: "OWNER" }, select: { id: true } });
-          if (systemUser) {
-            reSource = await createReSourcePO({
-              productId: actionResult.removed.productId,
-              productName: actionResult.removed.productName,
-              baseQtyNeeded: actionResult.removed.baseQty,
-              fromSupplierId: supplier.id,
-              fromSupplierName: supplier.name,
-              outletId: order.outletId,
-              systemUserId: systemUser.id,
-            });
-          }
+      // Fetch the system user once if any line is being removed (for the re-source PO).
+      const systemUser = actions.some((a) => a.type === "remove_item")
+        ? await prisma.user.findFirst({ where: { role: "OWNER" }, select: { id: true } })
+        : null;
+      for (const a of actions) {
+        if (a.type !== "remove_item" && a.type !== "reduce_qty") continue;
+        const actionResult = await applyPoAction(order.id, a);
+        if (actionResult.type !== "none") appliedActions.push(actionResult.type);
+        // OOS removal → open a DRAFT re-source PO to the next-cheapest supplier so the
+        // need isn't dropped. Internal only — never surfaced to THIS supplier.
+        if (actionResult.type === "remove_item" && actionResult.removed && systemUser) {
+          const rs = await createReSourcePO({
+            productId: actionResult.removed.productId,
+            productName: actionResult.removed.productName,
+            baseQtyNeeded: actionResult.removed.baseQty,
+            fromSupplierId: supplier.id,
+            fromSupplierName: supplier.name,
+            outletId: order.outletId,
+            systemUserId: systemUser.id,
+          });
+          if (rs) reSources.push(rs);
         }
       }
+      appliedAction = appliedActions[0] ?? "none";
+      reSource = reSources[0] ?? null;
       if (isValidIsoDate(decision.delivery_date)) {
         await applyDeliveryDate(order.id, decision.delivery_date);
         deliveryUpdated = decision.delivery_date;
@@ -318,6 +331,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         intent: decision.intent,
         confidence: decision.confidence,
         appliedAction,
+        appliedActions,
         deliveryUpdated,
         invoiceCaptured,
         escalated: escalate,
@@ -326,6 +340,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         paymentModel: pm.model,
         proposal,
         reSource,
+        reSources,
         verifierInput,
         verifierDecision,
       },
@@ -619,19 +634,24 @@ ${thread}
 "${newMsg}"
 
 # Judgement examples (follow this behaviour)
-- "caramel syrup takde" AND Caramel is a line item → remove_item that line; reply e.g. "Noted bos 🙏 kita remove caramel dulu, proceed yang lain ya".
-- "ada barang yang takde" (does NOT say which) → change nothing; ask "Hi bos, boleh confirm item mana yang takde? 🙏".
-- "boleh bagi 3 ctn je" for a line of 5 → reduce_qty new_quantity 3; confirm briefly.
-- "hantar Rabu ya" → delivery_date = the next Wednesday's date; reply "noted bos, Rabu ya 🙏".
-- a document on a PO with no invoice / "ni invois" → capture_invoice true, intent invoice_or_soa; reply "Noted bos, terima invois 🙏 thank you" (don't mention the amount).
-- "Matcha Morihan OOS, boleh replace Yamama, same quality" → requires_human true, change nothing, brief holding reply (do NOT accept the swap).
-- "below MOQ RM300, can add something?" → requires_human true, change nothing, holding reply.
+- "caramel syrup takde" AND Caramel is a line item → po_actions: [remove_item that line]; reply "Noted bos 🙏 caramel kita remove dulu, proceed yang lain — bila ada balik ya?".
+- MULTIPLE lines in one message — "Earl Grey ada 5 je, Peppermint 3, Orange habis" with lines for all three → po_actions: [reduce_qty Earl Grey new_quantity 5, reduce_qty Peppermint new_quantity 3, remove_item Orange]. Resolve ALL of them, one entry per line; do NOT set requires_human just because there are several. Reply confirms each + asks the ETA: "Noted bos 🙏 Earl Grey 5, Peppermint 3, Orange kita remove dulu — bila orange ada balik ya?".
+- "ada barang yang takde" (does NOT say which) → po_actions: []; ask "Hi bos, boleh confirm item mana yang takde? 🙏".
+- "boleh bagi 3 ctn je" for a line of 5 → po_actions: [reduce_qty new_quantity 3]; confirm briefly.
+- "hantar Rabu ya" → delivery_date = the next Wednesday's date; po_actions: []; reply "noted bos, Rabu ya 🙏".
+- a document on a PO with no invoice / "ni invois" → capture_invoice true, intent invoice_or_soa, po_actions: []; reply "Noted bos, terima invois 🙏 thank you" (don't mention the amount).
+- "Matcha Morihan OOS, boleh replace Yamama, same quality" → requires_human true, po_actions: [], brief holding reply (do NOT accept the swap).
+- "below MOQ RM300, can add something?" → requires_human true, po_actions: [], holding reply.
+
+# Rules
+- po_actions = ONE entry per line the supplier flags (reduce_qty / remove_item). Empty [] if nothing changes. Several clear shortfalls is normal — resolve them, don't escalate.
+- Whenever you apply a shortfall change, reply_text MUST confirm each adjusted line briefly AND ask when any removed/OOS item comes back. Never a vague "let me check with the team".
 
 # Output — JSON only:
 {
   "intent": "out_of_stock|reduce_qty|substitution_offer|price_quote_or_increase|delivery_eta|order_confirmation|invoice_or_soa|payment_gating_or_chase|moq_topup|closure_or_holiday|new_product_offer|reconciliation_query|complaint_or_quality|lead_time_advisory|compliance_or_einvoice|staff_handover|greeting|other|unclear",
   "language": "ms|en|mixed",
-  "po_action": {"type":"none|remove_item|reduce_qty|substitute_item|cancel_order","po_item_id":null,"new_quantity":null,"note":null},
+  "po_actions": [{"type":"none|remove_item|reduce_qty|substitute_item|cancel_order","po_item_id":null,"new_quantity":null,"note":null}],
   "delivery_date": null,
   "capture_invoice": false,
   "reply_text": "…",
@@ -660,21 +680,26 @@ ${thread}
 
   try {
     const p = JSON.parse(m[0]) as Record<string, unknown>;
-    const pa = (p.po_action ?? {}) as Record<string, unknown>;
-    const type = String(pa.type ?? "none") as PoActionType;
+    const VALID: PoActionType[] = ["none", "remove_item", "reduce_qty", "substitute_item", "cancel_order"];
+    const normAction = (raw: unknown): PoAction => {
+      const a = (raw ?? {}) as Record<string, unknown>;
+      const type = String(a.type ?? "none") as PoActionType;
+      return {
+        type: VALID.includes(type) ? type : "none",
+        po_item_id: typeof a.po_item_id === "string" ? a.po_item_id : null,
+        new_quantity: typeof a.new_quantity === "number" ? a.new_quantity : null,
+        note: typeof a.note === "string" ? a.note : null,
+      };
+    };
+    // Prefer the new array; fall back to a single po_action if the model returns the
+    // old shape. Drop "none" entries so po_actions holds only real line changes.
+    const rawList = Array.isArray(p.po_actions) ? p.po_actions : p.po_action != null ? [p.po_action] : [];
+    const po_actions = rawList.map(normAction).filter((a) => a.type !== "none");
     return {
       intent: String(p.intent ?? "unclear"),
       language: p.language === "ms" || p.language === "mixed" ? (p.language as "ms" | "mixed") : "en",
-      po_action: {
-        type: (
-          ["none", "remove_item", "reduce_qty", "substitute_item", "cancel_order"] as PoActionType[]
-        ).includes(type)
-          ? type
-          : "none",
-        po_item_id: typeof pa.po_item_id === "string" ? pa.po_item_id : null,
-        new_quantity: typeof pa.new_quantity === "number" ? pa.new_quantity : null,
-        note: typeof pa.note === "string" ? pa.note : null,
-      },
+      po_actions,
+      po_action: po_actions[0] ?? NO_ACTION,
       delivery_date: typeof p.delivery_date === "string" ? p.delivery_date : null,
       capture_invoice: Boolean(p.capture_invoice),
       reply_text: String(p.reply_text ?? ""),
