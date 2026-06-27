@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { sendWhatsAppText } from "@/lib/whatsapp";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
+import { tryApplyHumanApproval } from "@/lib/inventory/agents/human-approval";
 
 // Human-takeover send (#9). Staff reply to a supplier from the inbox. Free-text
 // is only allowed inside the 24h customer-service window (supplier messaged us in
@@ -57,5 +58,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ key
     status: "sent",
   });
 
-  return NextResponse.json({ ok: true, messageId: result.messageId });
+  // If this reply is an affirmative ("boleh") and the agent has a held proposal on the
+  // thread, apply it now — so approving in chat actually moves the PO (closes the loop).
+  const approval = await tryApplyHumanApproval(key, text, caller.id);
+
+  return NextResponse.json({ ok: true, messageId: result.messageId, approval });
 }
