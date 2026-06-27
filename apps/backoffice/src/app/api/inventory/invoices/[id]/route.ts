@@ -35,6 +35,32 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // below. Independent of (and pairs with) the existing status-based flow.
     const paymentAmountInput: number | null | undefined = body.paymentAmount;
 
+    // ── Payment guards (money-safety) ──────────────────────────────────────
+    // The PATCH route is the real boundary — the UI only hides buttons, so a direct
+    // call / stale client / double-submit could otherwise pay the wrong thing. Two rules:
+    //   1. Never re-stamp an already-PAID invoice (double-pay / paidAt reset).
+    //   2. Never record a payment on a DRAFT or unconfirmed AI-captured invoice — those
+    //      carry a PROVISIONAL amount (the PO total), not the supplier's real bill, so they
+    //      must be verified (confirm prefill or edit the amount) before any payment lands.
+    const PAYMENT_STATUSES = ["INITIATED", "PARTIALLY_PAID", "DEPOSIT_PAID", "PAID"];
+    if (typeof status === "string" && PAYMENT_STATUSES.includes(status)) {
+      const current = await prisma.invoice.findUnique({
+        where: { id },
+        select: { status: true, aiPrefilledAt: true },
+      });
+      if (!current) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+      if (current.status === "PAID") {
+        return NextResponse.json({ error: "Invoice is already paid." }, { status: 409 });
+      }
+      const verifyingNow = body.confirmAiPrefill === true || body.amount !== undefined;
+      if ((current.status === "DRAFT" || current.aiPrefilledAt != null) && !verifyingNow) {
+        return NextResponse.json(
+          { error: "Verify the captured invoice amount before recording a payment." },
+          { status: 409 },
+        );
+      }
+    }
+
     const data: Record<string, unknown> = {};
     if (status !== undefined) data.status = status;
     if (invoiceNumber !== undefined) data.invoiceNumber = invoiceNumber;
