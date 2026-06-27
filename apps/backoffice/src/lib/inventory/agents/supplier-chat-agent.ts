@@ -239,7 +239,16 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     // shortfalls; the independent verifier backstops every auto-act instead.
     const actions = decision.po_actions.filter((a) => a.type !== "none");
     const hasRisky = actions.some((a) => a.type === "substitute_item" || a.type === "cancel_order");
-    let escalate = decision.requires_human || hasRisky || supplier.automationMode === "ASSIST";
+    // A "reduce" that doesn't actually LOWER the line (new_qty missing/<=0/>= current) is a
+    // model misread — e.g. "ada 50 je" on a line of 5, or echoing a price as a qty. Auto-
+    // applying it would silently RAISE committed spend and confirm a cut that didn't happen.
+    // Force escalation so it holds with a neutral reply + a human-reviewed proposal instead.
+    const badReduce = actions.some((a) => {
+      if (a.type !== "reduce_qty") return false;
+      const line = order.items.find((i) => i.id === a.po_item_id);
+      return !a.new_quantity || a.new_quantity <= 0 || (!!line && a.new_quantity >= Number(line.quantity));
+    });
+    let escalate = decision.requires_human || hasRisky || badReduce || supplier.automationMode === "ASSIST";
     let qaBlocked = false;
     let gateVerdict: Awaited<ReturnType<typeof judgePlanned>> = null;
 
@@ -520,7 +529,14 @@ async function applyPoAction(
       baseQty: Number(item.quantity) * (conv > 0 ? conv : 1),
     };
     await prisma.orderItem.delete({ where: { id: item.id } });
-  } else if (action.type === "reduce_qty" && action.new_quantity && action.new_quantity > 0) {
+  } else if (
+    action.type === "reduce_qty" &&
+    action.new_quantity &&
+    action.new_quantity > 0 &&
+    // Defense-in-depth: a reduce must lower the line (the guardrail already escalates a bad
+    // reduce, but never let this path raise the order if reached another way).
+    action.new_quantity < Number(item.quantity)
+  ) {
     const q = action.new_quantity;
     await prisma.orderItem.update({
       where: { id: item.id },
