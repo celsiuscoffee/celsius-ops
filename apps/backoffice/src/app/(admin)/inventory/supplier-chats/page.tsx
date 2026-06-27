@@ -36,6 +36,15 @@ type Thread = {
 };
 type Counts = { all: number; suppliers: number; needsAttention: number; other: number; auto: number; assist: number; off: number };
 type PoProduct = { supplierProductId: string; productId: string; name: string; packageLabel: string; productPackageId: string | null; price: number; moq: number };
+type PoView = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  totalAmount: number | string;
+  deliveryDate: string | null;
+  outlet?: { name: string } | null;
+  items: { id: string; quantity: number | string; unitPrice: number | string; product?: { name: string } | null }[];
+};
 
 type Msg = {
   id: string;
@@ -64,7 +73,7 @@ type Detail = {
     openPOs: number;
     unpaidTotal: number;
     overdueTotal: number;
-    recentPOs: { orderNumber: string; status: string }[];
+    recentPOs: { id: string; orderNumber: string; status: string }[];
   };
   windowOpen: boolean;
   humanHandling: boolean;
@@ -215,6 +224,51 @@ export default function SupplierChatsPage() {
       }
     } finally {
       setModeBusy(false);
+    }
+  }
+
+  // ── PO management panel ───────────────────────────────────────
+  const [poViewId, setPoViewId] = useState<string | null>(null);
+  const [poView, setPoView] = useState<PoView | null>(null);
+  const [poViewBusy, setPoViewBusy] = useState(false);
+  const [poViewError, setPoViewError] = useState<string | null>(null);
+  const [poDate, setPoDate] = useState("");
+
+  async function fetchPo(id: string): Promise<PoView | null> {
+    const r = await fetch(`/api/inventory/orders/${id}`);
+    return r.ok ? r.json() : null;
+  }
+  async function openPoView(id: string) {
+    setPoViewId(id);
+    setPoView(null);
+    setPoViewError(null);
+    const po = await fetchPo(id);
+    if (po) {
+      setPoView(po);
+      setPoDate(po.deliveryDate ? String(po.deliveryDate).slice(0, 10) : "");
+    } else setPoViewError("Couldn't load this PO.");
+  }
+  async function poPatch(body: Record<string, unknown>) {
+    if (!poViewId) return;
+    setPoViewBusy(true);
+    setPoViewError(null);
+    try {
+      const r = await fetch(`/api/inventory/orders/${poViewId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Action failed");
+      const po = await fetchPo(poViewId);
+      if (po) {
+        setPoView(po);
+        setPoDate(po.deliveryDate ? String(po.deliveryDate).slice(0, 10) : "");
+      }
+      mutateDetail();
+    } catch (e) {
+      setPoViewError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setPoViewBusy(false);
     }
   }
 
@@ -638,10 +692,14 @@ export default function SupplierChatsPage() {
                     <p className="text-[11px] text-muted-foreground">None open.</p>
                   )}
                   {detail.context.recentPOs.map((po) => (
-                    <div key={po.orderNumber} className="flex justify-between py-0.5 text-[11px]">
-                      <span>{po.orderNumber}</span>
+                    <button
+                      key={po.id}
+                      onClick={() => openPoView(po.id)}
+                      className="flex w-full items-center justify-between rounded px-1 py-1 text-left text-[11px] hover:bg-muted"
+                    >
+                      <span className="font-medium text-primary">{po.orderNumber}</span>
                       <span className="text-muted-foreground">{po.status.replace(/_/g, " ").toLowerCase()}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </>
@@ -734,6 +792,133 @@ export default function SupplierChatsPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {poViewId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => {
+            if (!poViewBusy) {
+              setPoViewId(null);
+              setPoView(null);
+            }
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden rounded-xl border border-border bg-background shadow-lg"
+          >
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">{poView?.orderNumber ?? "Loading…"}</span>
+                {poView && (
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                    {poView.status.replace(/_/g, " ").toLowerCase()}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setPoViewId(null);
+                  setPoView(null);
+                }}
+                aria-label="Close"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {!poView ? (
+              <div className="flex items-center justify-center p-8">
+                {poViewError ? (
+                  <span className="text-xs text-destructive">{poViewError}</span>
+                ) : (
+                  <Loader2 size={18} className="animate-spin text-muted-foreground" />
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 overflow-y-auto px-4 py-2">
+                  {poView.outlet?.name && <div className="mb-1 text-[11px] text-muted-foreground">{poView.outlet.name}</div>}
+                  {poView.items.map((it) => (
+                    <div key={it.id} className="flex items-center justify-between border-b border-border py-1.5 text-[13px]">
+                      <span className="truncate">{it.product?.name ?? "item"}</span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {Number(it.quantity)} × {formatRM(Number(it.unitPrice))}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="mt-2 flex justify-between text-[13px]">
+                    <span className="text-muted-foreground">Total</span>
+                    <span className="font-medium">{formatRM(Number(poView.totalAmount))}</span>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">Delivery</span>
+                    <input
+                      type="date"
+                      value={poDate}
+                      onChange={(e) => setPoDate(e.target.value)}
+                      className="h-8 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+                    />
+                    <button
+                      onClick={() => poPatch({ deliveryDate: poDate || null })}
+                      disabled={poViewBusy || poDate === (poView.deliveryDate ? String(poView.deliveryDate).slice(0, 10) : "")}
+                      className="rounded-md border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-40"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+                <div className="border-t border-border px-4 py-3">
+                  {poViewError && <div className="mb-2 text-[11px] text-destructive">{poViewError}</div>}
+                  <div className="flex flex-wrap gap-2">
+                    {(poView.status === "DRAFT" || poView.status === "PENDING_APPROVAL") && (
+                      <button
+                        onClick={() => poPatch({ status: "APPROVED" })}
+                        disabled={poViewBusy}
+                        className="flex-1 rounded-md bg-primary px-3 py-2 text-[13px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        Approve
+                      </button>
+                    )}
+                    {poView.status === "APPROVED" && (
+                      <button
+                        onClick={() => poPatch({ status: "SENT" })}
+                        disabled={poViewBusy}
+                        className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-3 py-2 text-[13px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        {poViewBusy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Send to supplier
+                      </button>
+                    )}
+                    {["SENT", "CONFIRMED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(poView.status) && (
+                      <a
+                        href="/inventory/receivings"
+                        className="flex-1 rounded-md border border-border px-3 py-2 text-center text-[13px] font-medium hover:bg-muted"
+                      >
+                        Record delivery
+                      </a>
+                    )}
+                    {poView.status !== "COMPLETED" && poView.status !== "CANCELLED" && (
+                      <button
+                        onClick={() => poPatch({ status: "CANCELLED" })}
+                        disabled={poViewBusy}
+                        className="rounded-md border border-destructive/40 px-3 py-2 text-[13px] font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <a
+                      href={`/inventory/orders/${poView.id}`}
+                      className="rounded-md border border-border px-3 py-2 text-[13px] font-medium hover:bg-muted"
+                    >
+                      Open full
+                    </a>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

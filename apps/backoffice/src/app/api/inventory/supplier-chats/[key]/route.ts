@@ -67,7 +67,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     openPOs: 0,
     unpaidTotal: 0,
     overdueTotal: 0,
-    recentPOs: [] as { orderNumber: string; status: string }[],
+    recentPOs: [] as { id: string; orderNumber: string; status: string }[],
   };
 
   if (supplierId) {
@@ -83,7 +83,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
         where: openFilter,
         orderBy: { createdAt: "desc" },
         take: 5,
-        select: { orderNumber: true, status: true },
+        select: { id: true, orderNumber: true, status: true },
       }),
       prisma.invoice.aggregate({
         where: { supplierId, status: { not: "PAID" } },
@@ -103,7 +103,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
       openPOs,
       unpaidTotal: bal(unpaid),
       overdueTotal: bal(overdue),
-      recentPOs: recentPOs.map((o) => ({ orderNumber: o.orderNumber, status: o.status })),
+      recentPOs: recentPOs.map((o) => ({ id: o.id, orderNumber: o.orderNumber, status: o.status })),
     };
   }
 
