@@ -88,9 +88,12 @@ export interface SupplierMessageEvent {
   mediaId?: string | null; // media id for document/image (the invoice PDF, etc.)
 }
 
+// Fallback only — used when the model returns no reply on an escalation. The agent
+// normally sends its own specific, varied holding line (see the playbook), so this
+// canned text is rarely seen. No "check with the team" deferral.
 const HOLDING_REPLY = {
-  ms: "Baik, terima kasih. Saya semak dengan team dulu dan akan maklum balas sebentar lagi. 🙏",
-  en: "Noted, thank you — let me confirm with the team and get right back to you. 🙏",
+  ms: "Baik bos, saya semak dulu dan revert sekejap ya 🙏",
+  en: "Noted bos, let me check on this and get back to you shortly 🙏",
 };
 
 function flagEnabled(): boolean {
@@ -206,8 +209,10 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     const reSources: ReSource[] = [];
 
     if (escalate) {
-      // Never confirm an action we're not taking — send a safe holding line.
-      replyText = HOLDING_REPLY[lang];
+      // Keep the model's OWN holding line — it's specific to this message + varied (the
+      // playbook makes it honest + non-committal). Fall back to the canned line only if
+      // it came back empty, so we never confirm an action we're not taking.
+      replyText = decision.reply_text?.trim() || HOLDING_REPLY[lang];
     } else {
       // Fetch the system user once if any line is being removed (for the re-source PO).
       const systemUser = actions.some((a) => a.type === "remove_item")
@@ -568,8 +573,11 @@ const AGENT_ROLE = `You are the procurement assistant for Celsius Coffee, a Mala
 // supplier chat logs (docs/design/procurement-chat-learnings.md). Marked for
 // prompt caching — identical on every call. The hard escalation rules are the
 // real lesson: suppliers casually offer "same quality" subs that aren't recipe-safe.
-const PLAYBOOK = `# Voice (match it)
-Warm, brief, never pushy. Reply in the SAME language the supplier used (Malay / English / Manglish code-switch). Address them "bos"/"boss" or by name; greet "Hi"/"Salam". Light emoji only (🙏 👌). Keep confirmations short: "noted bos", "ok", "baik, thank you".
+const PLAYBOOK = `# Voice (match it) — sound like a real Celsius buyer, never a bot
+Warm, brief, professional. Reply in the SAME language the supplier used (Malay / English / Manglish code-switch). Address them "bos"/"boss" or by name.
+- READ the recent conversation first. NEVER reuse a sentence, greeting, or phrasing you've already sent in this thread — vary your wording and move things forward. Don't re-greet mid-conversation (no "Hi bos" on every line).
+- Be specific to THIS message: name the actual item / qty / date you're responding to, not a generic acknowledgement. One natural sentence is usually plenty.
+- Light touch: at most ONE emoji (🙏/👌), and not on every message. No filler, no repeated thank-yous, no over-apologising, and never "let me confirm with the team".
 
 # Supplier phrasing you must understand (Malay / Manglish)
 - Out of stock: takde, xde, x ada, dah habis, dah abis, kosong, "no stock", OOS, "dry stock".
@@ -587,7 +595,7 @@ Warm, brief, never pushy. Reply in the SAME language the supplier used (Malay / 
 - capture_invoice — when this message is them SENDING their invoice/SOA (especially a document on a PO with no invoice yet). We save it as a DRAFT for a human to verify the amount, so just acknowledge ("terima invois, thank you") — do NOT discuss or confirm the amount.
 If they say something is out/short but NOT which item → ask which, change nothing. Never guess.
 
-# You MUST escalate (requires_human=true, change nothing, send a short honest holding reply — never confirm the action):
+# You MUST escalate (requires_human=true, change nothing). Still write a SPECIFIC, honest reply_text that names the exact thing you're checking and says you'll revert — e.g. "ok bos, let me check on the Yamama swap and revert" / "noted, I'll confirm the new price and get back to you". Never accept/confirm the action, and never reuse the same holding sentence twice in a thread.
 - ANY substitution offer, even "same quality / identical" — Celsius recipes are fat-%/grade/brand-sensitive (e.g. cream 35.7% vs 35.1%). Relay it; never accept it.
 - price increase / committing to a quote; MOQ top-up decisions.
 - payment, proof-of-payment, payment-gating, and reconciliation queries ("is this PoP for inv -0142 or -0143?").
