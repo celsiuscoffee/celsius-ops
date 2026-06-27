@@ -437,15 +437,13 @@ export default function SupplierChatsPage() {
   );
   const needGroups: NeedGroup[] | null = needData?.groups ?? null;
   const needSupplierIds = new Set((needGroups ?? []).map((g) => g.supplierId));
-  // Land on "Need ordering" by default (what to order today). Once the reorder data
-  // loads, if nothing is below reorder point, fall back to All so we never sit on an
-  // empty view. One-shot — never overrides a manual filter pick afterwards.
-  const didDefaultFilter = useRef(false);
+  // Land on "Need ordering" by default (what to order today), and STAY there while there's
+  // something to order. Once the list drains (you created the last draft) — or there was
+  // nothing on load — fall back to All, so we never sit on the now-hidden "need" chip with
+  // an empty list. Only ever falls back; never yanks you onto "need".
   useEffect(() => {
-    if (didDefaultFilter.current || !needData) return;
-    didDefaultFilter.current = true;
-    if (needSupplierIds.size === 0) setFilter("all");
-  }, [needData, needSupplierIds.size]);
+    if (needData && filter === "need" && needSupplierIds.size === 0) setFilter("all");
+  }, [needData, needSupplierIds.size, filter]);
 
   async function createDraftFromGroup(g: NeedGroup) {
     const key = `${g.supplierId}_${g.outletId}`;
@@ -731,7 +729,9 @@ export default function SupplierChatsPage() {
                   } max-w-[80%]`}
                 >
                   <div
-                    className={`min-w-0 rounded-lg px-3 py-2 text-[13px] leading-snug ${
+                    onDoubleClick={() => setReplyingTo(m)}
+                    title="Double-click to reply"
+                    className={`min-w-0 cursor-default select-none rounded-lg px-3 py-2 text-[13px] leading-snug ${
                       m.direction === "outbound"
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-foreground"
@@ -878,7 +878,11 @@ export default function SupplierChatsPage() {
                   <div className="py-1">
                     {poProducts.length === 0 ? (
                       <p className="py-6 text-center text-[11px] text-muted-foreground">
-                        No price-list products for this supplier yet. Add them on the supplier record first.
+                        No price-list products for this supplier yet.{" "}
+                        <a href="/inventory/suppliers" className="font-medium text-primary hover:underline">
+                          Add them on the supplier record
+                        </a>{" "}
+                        first.
                       </p>
                     ) : (
                       poProducts.map((p) => (
