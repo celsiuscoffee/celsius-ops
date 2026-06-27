@@ -511,6 +511,12 @@ export default function SupplierChatsPage() {
     setSendError(null);
     setApplyError(null);
     setReplyingTo(null);
+    // Close the New PO composer on thread switch — its products/qty/outlet belong to the
+    // supplier it was opened for; leaving it open showed the previous supplier's items.
+    setPoOpen(false);
+    setPoProducts([]);
+    setPoQty({});
+    setPoError(null);
   }, [selected]);
 
   async function send() {
