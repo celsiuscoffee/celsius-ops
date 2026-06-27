@@ -778,7 +778,7 @@ export default function SupplierChatsPage() {
       </div>
 
       {/* ── Supplier context ────────────────────────── */}
-      <div className="flex w-80 shrink-0 flex-col overflow-y-auto rounded-xl border border-border bg-background p-3 shadow-sm">
+      <div className="flex w-96 shrink-0 flex-col overflow-y-auto rounded-xl border border-border bg-background p-3 shadow-sm">
         {!detail ? null : (
           <>
             <div className="flex flex-col items-center gap-1.5 border-b border-border pb-3 text-center">
@@ -792,7 +792,90 @@ export default function SupplierChatsPage() {
             </div>
 
             {detail.supplierId ? (
+              poOpen ? (
+                <div>
+                  <div className="flex items-center justify-between border-b border-border pb-2 pt-1">
+                    <span className="text-[12px] font-medium">New PO</span>
+                    <button onClick={() => !poBusy && setPoOpen(false)} aria-label="Close" className="text-muted-foreground hover:text-foreground">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 border-b border-border py-2">
+                    <span className="text-[11px] text-muted-foreground">Outlet</span>
+                    <select
+                      value={poOutlet}
+                      onChange={(e) => setPoOutlet(e.target.value)}
+                      className="h-7 flex-1 rounded-md border border-border bg-background px-1.5 text-[11px] text-foreground"
+                    >
+                      {outlets.map((o) => (
+                        <option key={o.id} value={o.id}>{o.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="py-1">
+                    {poProducts.length === 0 ? (
+                      <p className="py-6 text-center text-[11px] text-muted-foreground">
+                        No price-list products for this supplier yet. Add them on the supplier record first.
+                      </p>
+                    ) : (
+                      poProducts.map((p) => (
+                        <div key={p.productId} className="flex items-center gap-2 border-b border-border py-1.5">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[12px]">{p.name}</div>
+                            <div className="text-[10.5px] text-muted-foreground">
+                              {formatRM(p.price)} / {p.packageLabel}
+                              {p.moq ? ` · MOQ ${p.moq}` : ""}
+                            </div>
+                          </div>
+                          <input
+                            type="number"
+                            min={0}
+                            value={poQty[p.productId] ?? ""}
+                            onChange={(e) =>
+                              setPoQty((q) => ({ ...q, [p.productId]: Math.max(0, Number(e.target.value) || 0) }))
+                            }
+                            placeholder="0"
+                            className="h-7 w-14 rounded-md border border-border bg-background px-1.5 text-right text-[12px] text-foreground"
+                          />
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="sticky bottom-0 -mx-3 border-t border-border bg-background px-3 pb-1 pt-2">
+                    {poError && <div className="mb-1.5 text-[10.5px] text-destructive">{poError}</div>}
+                    <div className="mb-1.5 flex justify-between text-[12px]">
+                      <span className="text-muted-foreground">Total</span>
+                      <span className="font-medium">{formatRM(poTotal)}</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => createPO(false)}
+                        disabled={poBusy}
+                        className="flex-1 rounded-md border border-border px-2 py-1.5 text-[12px] font-medium hover:bg-muted disabled:opacity-50"
+                      >
+                        Create draft
+                      </button>
+                      <button
+                        onClick={() => createPO(true)}
+                        disabled={poBusy || !detail.windowOpen}
+                        title={detail.windowOpen ? "" : "24h window closed — create a draft, then send via template"}
+                        className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1.5 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        {poBusy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Create &amp; send
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
               <>
+                <div className="border-b border-border py-3">
+                  <button
+                    onClick={openPO}
+                    className="flex w-full items-center justify-center gap-1 rounded-md bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    <Plus size={13} /> New PO
+                  </button>
+                </div>
                 <div className="border-b border-border py-3">
                   <div className="mb-1.5 text-[11px] text-muted-foreground">Automation</div>
                   <div className="flex rounded-md border border-border p-0.5">
@@ -997,6 +1080,7 @@ export default function SupplierChatsPage() {
                   ))}
                 </div>
               </>
+              )
             ) : (
               <p className="py-4 text-[11px] text-muted-foreground">
                 Not linked to a supplier yet — no procurement context. Match this number on the supplier record to see open POs and balances.
@@ -1005,90 +1089,6 @@ export default function SupplierChatsPage() {
           </>
         )}
       </div>
-
-      {poOpen && detail && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => !poBusy && setPoOpen(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden rounded-xl border border-border bg-background shadow-lg"
-          >
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <div className="text-sm font-medium">New PO — {detail.supplier?.name ?? `+${detail.key}`}</div>
-              <button onClick={() => !poBusy && setPoOpen(false)} aria-label="Close" className="text-muted-foreground hover:text-foreground">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-              <span className="text-xs text-muted-foreground">Outlet</span>
-              <select
-                value={poOutlet}
-                onChange={(e) => setPoOutlet(e.target.value)}
-                className="h-8 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground"
-              >
-                {outlets.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 py-1">
-              {poProducts.length === 0 ? (
-                <p className="py-6 text-center text-xs text-muted-foreground">
-                  No price-list products for this supplier yet. Add them on the supplier record first.
-                </p>
-              ) : (
-                poProducts.map((p) => (
-                  <div key={p.productId} className="flex items-center gap-2 border-b border-border py-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px]">{p.name}</div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {formatRM(p.price)} / {p.packageLabel}
-                        {p.moq ? ` · MOQ ${p.moq}` : ""}
-                      </div>
-                    </div>
-                    <input
-                      type="number"
-                      min={0}
-                      value={poQty[p.productId] ?? ""}
-                      onChange={(e) =>
-                        setPoQty((q) => ({ ...q, [p.productId]: Math.max(0, Number(e.target.value) || 0) }))
-                      }
-                      placeholder="0"
-                      className="h-8 w-16 rounded-md border border-border bg-background px-2 text-right text-[13px] text-foreground"
-                    />
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="border-t border-border px-4 py-3">
-              {poError && <div className="mb-2 text-[11px] text-destructive">{poError}</div>}
-              <div className="mb-2 flex justify-between text-[13px]">
-                <span className="text-muted-foreground">Total</span>
-                <span className="font-medium">{formatRM(poTotal)}</span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => createPO(false)}
-                  disabled={poBusy}
-                  className="flex-1 rounded-md border border-border px-3 py-2 text-[13px] font-medium hover:bg-muted disabled:opacity-50"
-                >
-                  Create draft
-                </button>
-                <button
-                  onClick={() => createPO(true)}
-                  disabled={poBusy || !detail.windowOpen}
-                  title={detail.windowOpen ? "" : "24h window closed — create a draft, then send via template"}
-                  className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-3 py-2 text-[13px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {poBusy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Create &amp; send
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {poViewId && (
         <div
