@@ -36,6 +36,7 @@ import { paymentModel, type PaymentModelInfo } from "@/lib/inventory/payment-mod
 import { createReSourcePO } from "@/lib/inventory/agents/resource-po";
 import { verifierEnabled, verifierGateEnabled, verifyMessage, judgePlanned } from "@/lib/inventory/agents/verifier-run";
 import { VERIFIER_VERSION } from "@/lib/inventory/agents/verifier";
+import { recentQaLessons } from "@/lib/inventory/agents/agent-lessons";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -224,7 +225,10 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     history.reverse();
 
     const pm = paymentModel(supplier);
-    const decision = await classify(evt.text, supplier, order, history, todayMyt(), hasDoc, pm);
+    // Correction memory: recent QA-flagged mistakes, fed back so the agent stops repeating
+    // them (no-op string when disabled). Closes the QA loop with the pre-send gate.
+    const lessons = await recentQaLessons();
+    const decision = await classify(evt.text, supplier, order, history, todayMyt(), hasDoc, pm, lessons);
     if (!decision) return;
 
     // ── Guardrails (code, not model): auto-act vs escalate ──
@@ -723,6 +727,7 @@ async function classify(
   today: string,
   hasDoc: boolean,
   pm: PaymentModelInfo,
+  lessons = "",
 ): Promise<AgentDecision | null> {
   const items = order.items
     .map(
@@ -758,7 +763,7 @@ ${thread}
 - a document on a PO with no invoice / "ni invois" → capture_invoice true, intent invoice_or_soa, po_actions: []; reply "Ok noted, terima invois. Thank you 🙏" (don't mention the amount).
 - "Matcha Morihan OOS, boleh replace Yamama, same quality" → requires_human true, po_actions: [], brief holding reply (do NOT accept the swap).
 - "below MOQ RM300, can add something?" → requires_human true, po_actions: [], holding reply.
-
+${lessons}
 # Rules
 - po_actions = ONE entry per line the supplier flags (reduce_qty / remove_item). Empty [] if nothing changes. Several clear shortfalls is normal — resolve them, don't escalate.
 - Whenever you apply a shortfall change, reply_text MUST confirm each adjusted line briefly AND ask when any removed/OOS item comes back. Never a vague "let me check with the team".
