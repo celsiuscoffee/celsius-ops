@@ -572,6 +572,33 @@ export default function SupplierChatsPage() {
     }
   }
 
+  // Clear the "Agent suggests" banner once you've handled it your own way (paid the
+  // invoice, replied yourself, no PO change) — the resolution for escalations that have
+  // no auto-appliable PO action, so the banner isn't a dead-end redirect.
+  async function dismissProposal() {
+    const p = detail?.agentProposal;
+    if (!selected || applying || !p?.messageId) return;
+    setApplying(true);
+    setApplyError(null);
+    try {
+      const res = await fetch(`/api/inventory/supplier-chats/${selected}/apply-proposal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: p.messageId, action: "dismiss" }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setApplyError(json.error ?? "Failed");
+        return;
+      }
+      mutateDetail();
+    } catch {
+      setApplyError("Network error");
+    } finally {
+      setApplying(false);
+    }
+  }
+
   return (
     <div className="flex h-[calc(100vh-64px)] min-h-[560px] gap-3 p-3 text-foreground">
       {/* ── Thread list ─────────────────────────────── */}
@@ -1044,6 +1071,14 @@ export default function SupplierChatsPage() {
                                 Open PO <ExternalLink size={11} />
                               </a>
                             )}
+                            <button
+                              onClick={dismissProposal}
+                              disabled={applying}
+                              title="Clear this suggestion once you've handled it"
+                              className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                            >
+                              <Check size={11} /> Mark handled
+                            </button>
                           </div>
                         );
                       })()}
