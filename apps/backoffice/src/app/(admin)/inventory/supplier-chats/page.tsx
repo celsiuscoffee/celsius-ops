@@ -710,7 +710,7 @@ export default function SupplierChatsPage() {
                     onClick={() => setReplyingTo(m)}
                     aria-label="Reply"
                     title="Reply"
-                    className="shrink-0 rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                    className="shrink-0 rounded-full p-1 text-muted-foreground opacity-50 transition-opacity hover:bg-muted hover:text-foreground hover:opacity-100"
                   >
                     <Reply size={13} />
                   </button>
@@ -778,7 +778,7 @@ export default function SupplierChatsPage() {
       </div>
 
       {/* ── Supplier context ────────────────────────── */}
-      <div className="flex w-64 shrink-0 flex-col overflow-y-auto rounded-xl border border-border bg-background p-3 shadow-sm">
+      <div className="flex w-80 shrink-0 flex-col overflow-y-auto rounded-xl border border-border bg-background p-3 shadow-sm">
         {!detail ? null : (
           <>
             <div className="flex flex-col items-center gap-1.5 border-b border-border pb-3 text-center">
