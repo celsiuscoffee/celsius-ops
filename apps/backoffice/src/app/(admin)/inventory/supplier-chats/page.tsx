@@ -127,7 +127,7 @@ export default function SupplierChatsPage() {
   // Deep-link support: /inventory/supplier-chats?key=<number> opens that thread
   // (e.g. from Agent QA). Lazy init so it wins over the auto-select-first effect.
   const [selected, setSelected] = useState<string | null>(() => searchParams.get("key"));
-  const [filter, setFilter] = useState<"all" | "attention" | "auto" | "assist" | "off" | "other" | "need">("all");
+  const [filter, setFilter] = useState<"all" | "attention" | "auto" | "assist" | "off" | "other" | "need">("need");
   const [query, setQuery] = useState("");
 
   // Poll so inbound supplier messages + the agent's auto-replies appear without
@@ -421,6 +421,15 @@ export default function SupplierChatsPage() {
   );
   const needGroups: NeedGroup[] | null = needData?.groups ?? null;
   const needSupplierIds = new Set((needGroups ?? []).map((g) => g.supplierId));
+  // Land on "Need ordering" by default (what to order today). Once the reorder data
+  // loads, if nothing is below reorder point, fall back to All so we never sit on an
+  // empty view. One-shot — never overrides a manual filter pick afterwards.
+  const didDefaultFilter = useRef(false);
+  useEffect(() => {
+    if (didDefaultFilter.current || !needData) return;
+    didDefaultFilter.current = true;
+    if (needSupplierIds.size === 0) setFilter("all");
+  }, [needData, needSupplierIds.size]);
 
   async function createDraftFromGroup(g: NeedGroup) {
     const key = `${g.supplierId}_${g.outletId}`;
