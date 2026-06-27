@@ -34,7 +34,8 @@ import { parseSupplierDoc } from "@/lib/finance/parsers/supplier-doc";
 import { detectCreationFlags } from "@/lib/inventory/flag-detector";
 import { paymentModel, type PaymentModelInfo } from "@/lib/inventory/payment-model";
 import { createReSourcePO } from "@/lib/inventory/agents/resource-po";
-import { verifierEnabled, verifyMessage } from "@/lib/inventory/agents/verifier-run";
+import { verifierEnabled, verifierGateEnabled, verifyMessage, judgePlanned } from "@/lib/inventory/agents/verifier-run";
+import { VERIFIER_VERSION } from "@/lib/inventory/agents/verifier";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -234,7 +235,9 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     // shortfalls; the independent verifier backstops every auto-act instead.
     const actions = decision.po_actions.filter((a) => a.type !== "none");
     const hasRisky = actions.some((a) => a.type === "substitute_item" || a.type === "cancel_order");
-    const escalate = decision.requires_human || hasRisky || supplier.automationMode === "ASSIST";
+    let escalate = decision.requires_human || hasRisky || supplier.automationMode === "ASSIST";
+    let qaBlocked = false;
+    let gateVerdict: Awaited<ReturnType<typeof judgePlanned>> = null;
 
     const lang: "ms" | "en" = decision.language === "ms" ? "ms" : "en";
     let replyText = decision.reply_text?.trim();
@@ -258,6 +261,66 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       );
     }
 
+    // Snapshot exactly what the agent saw — used by the pre-send gate now, and recorded
+    // for the post-hoc verifier below. Built from pre-apply PO state (the original lines).
+    const verifierInput = {
+      supplierName: supplier.name,
+      paymentModel: pm.label,
+      orderNumber: order.orderNumber,
+      orderStatus: order.status,
+      items: order.items.map((it) => ({
+        name: it.product.name,
+        qty: Number(it.quantity),
+        unit: it.product.baseUom,
+        unitPrice: Number(it.unitPrice),
+      })),
+      thread: history
+        .filter((m) => m.body)
+        .map((m) => ({
+          who: (m.direction === "inbound" ? "Supplier" : "Us") as "Supplier" | "Us",
+          text: m.body as string,
+        })),
+      inboundText: evt.text.trim() || (hasDoc ? "[document, no caption]" : ""),
+      hadDoc: hasDoc,
+      today: todayMyt(),
+    };
+
+    // ── Pre-send QA gate ──────────────────────────────────────────
+    // Before an AUTO supplier's clean decision actually changes the PO or sends a
+    // confirmation, have the independent verifier judge the PLANNED action. A "fail" means
+    // don't ship it — flip to escalate (hold + human) instead. This is what turns QA from
+    // a post-hoc flag into a real guardrail. Gated (PROCUREMENT_VERIFIER_GATE) + fail-open:
+    // a judge error returns null → proceed ungated rather than block the supplier on a hiccup.
+    if (!escalate && verifierGateEnabled()) {
+      gateVerdict = await judgePlanned(verifierInput, {
+        intent: decision.intent,
+        language: decision.language,
+        actionType: decision.po_action.type,
+        actionItemName:
+          order.items.find((i) => i.id === decision.po_action.po_item_id)?.product.name ?? null,
+        newQuantity: decision.po_action.new_quantity,
+        deliveryDate: isValidIsoDate(decision.delivery_date) ? decision.delivery_date : null,
+        captureInvoice: invoiceCaptured,
+        replyText: decision.reply_text?.trim() || "",
+        confidence: decision.confidence,
+        escalated: false,
+        escalationReason: null,
+        appliedAction: actions[0]?.type ?? "none",
+        reSourced: actions.some((a) => a.type === "remove_item"),
+      });
+      if (gateVerdict?.rating === "fail") {
+        escalate = true;
+        qaBlocked = true;
+        console.log(
+          `[supplier-agent] QA gate BLOCKED auto-act po=${order.orderNumber} — ${gateVerdict.issues?.[0] ?? "fail"}`,
+        );
+      }
+    }
+
+    // The escalation reason shown to the human (and recorded) — name QA explicitly when
+    // the gate is what held it, so the inbox reads "qa_gate_blocked" not just "guardrail".
+    const escReason = qaBlocked ? "qa_gate_blocked" : decision.escalation_reason ?? "guardrail";
+
     if (escalate) {
       // Keep the model's OWN holding line — it's specific to this message + varied (the
       // playbook makes it honest + non-committal). Fall back to the canned line only if
@@ -266,6 +329,9 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       // ...except payment/finance: force a short "waiting on finance" line so the agent
       // doesn't free-write a prepay explainer (reads stiff + risks over-promising).
       if (decision.intent === "payment_gating_or_chase") replyText = FINANCE_HOLDING_REPLY[lang];
+      // QA gate blocked the planned action — the model's line was written assuming we'd
+      // apply it (often a confirmation), so it must NOT go out. Use a neutral holding line.
+      if (qaBlocked) replyText = HOLDING_REPLY[lang];
     } else {
       // Fetch the system user once if any line is being removed (for the re-source PO).
       const systemUser = actions.some((a) => a.type === "remove_item")
@@ -310,7 +376,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     const proposal = escalate
       ? {
           intent: decision.intent,
-          escalationReason: decision.escalation_reason ?? "guardrail",
+          escalationReason: escReason,
           paymentModel: pm.model,
           popDeliveryCritical: pm.popDeliveryCritical,
           orderId: order.id,
@@ -327,27 +393,8 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         }
       : null;
 
-    // Snapshot exactly what the agent saw + did, so the independent verifier
-    // agent can re-judge this decision later (Agent QA) without reconstructing
-    // mutable PO state. Compact by design.
-    const verifierInput = {
-      supplierName: supplier.name,
-      paymentModel: pm.label,
-      orderNumber: order.orderNumber,
-      orderStatus: order.status,
-      items: order.items.map((it) => ({
-        name: it.product.name,
-        qty: Number(it.quantity),
-        unit: it.product.baseUom,
-        unitPrice: Number(it.unitPrice),
-      })),
-      thread: history
-        .filter((m) => m.body)
-        .map((m) => ({ who: m.direction === "inbound" ? "Supplier" : "Us", text: m.body as string })),
-      inboundText: evt.text.trim() || (hasDoc ? "[document, no caption]" : ""),
-      hadDoc: hasDoc,
-      today: todayMyt(),
-    };
+    // What the agent actually DID, paired with verifierInput (built earlier) as the
+    // post-hoc verifier / Agent QA snapshot.
     const verifierDecision = {
       intent: decision.intent,
       language: decision.language,
@@ -360,7 +407,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       replyText,
       confidence: decision.confidence,
       escalated: escalate,
-      escalationReason: escalate ? (decision.escalation_reason ?? "guardrail") : null,
+      escalationReason: escalate ? escReason : null,
       appliedAction,
       reSourced: !!reSource,
     };
@@ -386,7 +433,8 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         deliveryUpdated,
         invoiceCaptured,
         escalated: escalate,
-        escalationReason: escalate ? (decision.escalation_reason ?? "guardrail") : null,
+        escalationReason: escalate ? escReason : null,
+        qaBlocked,
         poNumber: order.orderNumber,
         paymentModel: pm.model,
         proposal,
@@ -394,6 +442,11 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         reSources,
         verifierInput,
         verifierDecision,
+        // The pre-send gate already judged this exact decision — stamp its verdict so the
+        // Agent QA view shows it and the post-hoc verifier skips a redundant call.
+        ...(gateVerdict
+          ? { verifier: { ...gateVerdict, version: VERIFIER_VERSION, at: new Date().toISOString() } }
+          : {}),
       },
     });
 
@@ -401,8 +454,9 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     // it's made (the reply is already sent, so this never delays the supplier).
     // It only stamps a verdict — a "fail" surfaces the thread as needs-attention
     // in the inbox (see supplier-chats list), pulling a human in exactly when the
-    // check catches something. Best-effort, gated, never throws.
-    if (recordedId && verifierEnabled()) {
+    // check catches something. Best-effort, gated, never throws. Skipped when the
+    // pre-send gate already judged this decision (its verdict is stamped above).
+    if (recordedId && verifierEnabled() && !gateVerdict) {
       try {
         const verdict = await verifyMessage(recordedId);
         if (verdict) {
