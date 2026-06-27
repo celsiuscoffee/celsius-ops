@@ -1210,12 +1210,6 @@ export default function SupplierChatsPage() {
                     >
                       {editLoading ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />} Edit
                     </button>
-                    <a
-                      href={`/inventory/orders/${poView.id}`}
-                      className="rounded-md border border-border px-3 py-2 text-[13px] font-medium hover:bg-muted"
-                    >
-                      Open full
-                    </a>
                   </div>
                 </div>
               </>
