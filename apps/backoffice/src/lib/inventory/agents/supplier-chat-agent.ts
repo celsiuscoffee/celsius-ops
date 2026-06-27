@@ -28,6 +28,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { OrderStatus, Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppText, fetchWhatsAppMedia } from "@/lib/whatsapp";
+import { storeWhatsAppMedia } from "@/lib/whatsapp-media";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { parseSupplierDoc } from "@/lib/finance/parsers/supplier-doc";
 import { detectCreationFlags } from "@/lib/inventory/flag-detector";
@@ -543,6 +544,11 @@ async function captureInvoice(
   const invoiceNumber = extractedNumber || `AI-${order.orderNumber}`;
   const provisional = extractedTotal == null;
 
+  // Persist the supplier-sent document to storage so the captured invoice keeps
+  // the photo (the inbox webhook already stored it under the same deterministic
+  // path — this upsert is idempotent). Best-effort: never throws, returns null.
+  const photoUrl = await storeWhatsAppMedia(mediaId);
+
   try {
     const flags = await detectCreationFlags({
       orderId: order.id,
@@ -559,6 +565,7 @@ async function captureInvoice(
         amount: amount as never, // Decimal passthrough
         status: "DRAFT",
         paymentType: "SUPPLIER",
+        photos: photoUrl ? [photoUrl] : [],
         ...(billDate ? { issueDate: billDate } : {}),
         ...(dueDate ? { dueDate } : {}),
         ...(prefilled.length > 0

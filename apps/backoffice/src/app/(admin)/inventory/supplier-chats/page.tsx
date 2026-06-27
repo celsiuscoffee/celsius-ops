@@ -21,6 +21,7 @@ import {
   X,
   Hand,
   ShoppingCart,
+  Reply,
 } from "lucide-react";
 
 type AutomationMode = "OFF" | "ASSIST" | "AUTO";
@@ -53,6 +54,7 @@ type NeedGroup = { supplierId: string; supplierName: string; outletId: string; o
 
 type Msg = {
   id: string;
+  waMessageId: string | null;
   direction: "inbound" | "outbound";
   type: string;
   body: string | null;
@@ -112,6 +114,14 @@ function initials(name: string): string {
   return name.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?";
 }
 
+// Short one-line preview of a message for the "Replying to" bar.
+function msgPreview(m: Msg): string {
+  if (m.body && m.body.trim()) return m.body.trim().slice(0, 80);
+  if (m.type === "image") return "📷 Photo";
+  if (m.type === "document") return "📄 Document";
+  return m.type;
+}
+
 export default function SupplierChatsPage() {
   const searchParams = useSearchParams();
   // Deep-link support: /inventory/supplier-chats?key=<number> opens that thread
@@ -142,6 +152,8 @@ export default function SupplierChatsPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  // Quoted reply: the message the composer is replying to (clears on send/cancel).
+  const [replyingTo, setReplyingTo] = useState<Msg | null>(null);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
 
@@ -473,17 +485,21 @@ export default function SupplierChatsPage() {
     setDraft("");
     setSendError(null);
     setApplyError(null);
+    setReplyingTo(null);
   }, [selected]);
 
   async function send() {
     if (!selected || !draft.trim() || sending) return;
     setSending(true);
     setSendError(null);
+    // Prefer the Meta message id (so WhatsApp threads the quote); fall back to
+    // our DB row id, which the send route resolves to the Meta id server-side.
+    const replyTo = replyingTo ? replyingTo.waMessageId ?? replyingTo.id : undefined;
     try {
       const res = await fetch(`/api/inventory/supplier-chats/${selected}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: draft.trim() }),
+        body: JSON.stringify({ text: draft.trim(), ...(replyTo ? { replyTo } : {}) }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -491,6 +507,7 @@ export default function SupplierChatsPage() {
         return;
       }
       setDraft("");
+      setReplyingTo(null);
       mutateDetail();
     } catch {
       setSendError("Network error");
@@ -646,22 +663,57 @@ export default function SupplierChatsPage() {
               {detail.messages.map((m) => (
                 <div
                   key={m.id}
-                  className={`max-w-[80%] rounded-lg px-3 py-2 text-[13px] leading-snug ${
-                    m.direction === "outbound"
-                      ? "self-end bg-primary text-primary-foreground"
-                      : "self-start bg-muted text-foreground"
-                  }`}
+                  className={`group flex items-center gap-1.5 ${
+                    m.direction === "outbound" ? "flex-row-reverse self-end" : "self-start"
+                  } max-w-[80%]`}
                 >
-                  {m.body ?? (
-                    <span className="inline-flex items-center gap-1">
-                      <FileText size={13} /> {m.type}
-                    </span>
-                  )}
                   <div
-                    className={`mt-1 text-[10px] ${m.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                    className={`min-w-0 rounded-lg px-3 py-2 text-[13px] leading-snug ${
+                      m.direction === "outbound"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-foreground"
+                    }`}
                   >
-                    {clock(m.timestamp)}
+                    {m.type === "image" && m.mediaUrl ? (
+                      <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer" className="block">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={m.mediaUrl}
+                          alt={m.body ?? "Photo"}
+                          className="max-h-[180px] max-w-full rounded-md object-cover"
+                        />
+                        {m.body && <div className="mt-1">{m.body}</div>}
+                      </a>
+                    ) : m.type === "document" && m.mediaUrl ? (
+                      <a
+                        href={m.mediaUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
+                      >
+                        <FileText size={13} /> {m.body || "Document"}
+                      </a>
+                    ) : (
+                      m.body ?? (
+                        <span className="inline-flex items-center gap-1">
+                          <FileText size={13} /> {m.type}
+                        </span>
+                      )
+                    )}
+                    <div
+                      className={`mt-1 text-[10px] ${m.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                    >
+                      {clock(m.timestamp)}
+                    </div>
                   </div>
+                  <button
+                    onClick={() => setReplyingTo(m)}
+                    aria-label="Reply"
+                    title="Reply"
+                    className="shrink-0 rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                  >
+                    <Reply size={13} />
+                  </button>
                 </div>
               ))}
               <div ref={messagesEndRef} />
@@ -671,6 +723,21 @@ export default function SupplierChatsPage() {
                 <div className="mb-2 flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-400">
                   <Hand size={13} className="shrink-0" />
                   You&apos;re handling this chat — AI paused here. It resumes once you go quiet.
+                </div>
+              )}
+              {replyingTo && (
+                <div className="mb-2 flex items-center gap-2 rounded-md border-l-2 border-primary bg-muted px-2.5 py-1.5 text-[11px]">
+                  <Reply size={12} className="shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                    Replying to: {msgPreview(replyingTo)}
+                  </span>
+                  <button
+                    onClick={() => setReplyingTo(null)}
+                    aria-label="Cancel reply"
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                  >
+                    <X size={13} />
+                  </button>
                 </div>
               )}
               <div className="flex items-center gap-2">
