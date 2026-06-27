@@ -60,6 +60,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
         deliveryDays: string[];
         paymentTerms: string | null;
         leadTimeDays: number;
+        automationMode: "OFF" | "ASSIST" | "AUTO";
         paymentModel?: { model: string; label: string; note: string; popDeliveryCritical: boolean };
       } = null;
   let context = {
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     const [s, openPOs, recentPOs, unpaid, overdue] = await Promise.all([
       prisma.supplier.findUnique({
         where: { id: supplierId },
-        select: { id: true, name: true, phone: true, deliveryDays: true, paymentTerms: true, leadTimeDays: true, depositPercent: true },
+        select: { id: true, name: true, phone: true, deliveryDays: true, paymentTerms: true, leadTimeDays: true, depositPercent: true, automationMode: true },
       }),
       prisma.order.count({ where: openFilter }),
       prisma.order.findMany({
