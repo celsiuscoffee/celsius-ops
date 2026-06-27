@@ -96,6 +96,13 @@ const HOLDING_REPLY = {
   ms: "Ok noted, saya semak dulu dan revert sekejap.",
   en: "Ok noted, let me check on this and revert shortly.",
 };
+// Payment / finance is never the agent's call — the supplier just needs a short, honest
+// "hang on" rather than the agent explaining prepay/deposit mechanics. Used for the
+// payment_gating_or_chase intent so the held reply stays casual + non-committal.
+const FINANCE_HOLDING_REPLY = {
+  ms: "Kejap ya, saya tengah tunggu respon dari team finance.",
+  en: "Hang on ya, I'm waiting on a reply from our finance team.",
+};
 
 function flagEnabled(): boolean {
   return process.env.PROCUREMENT_AGENT_ENABLED === "true";
@@ -256,6 +263,9 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       // playbook makes it honest + non-committal). Fall back to the canned line only if
       // it came back empty, so we never confirm an action we're not taking.
       replyText = decision.reply_text?.trim() || HOLDING_REPLY[lang];
+      // ...except payment/finance: force a short "waiting on finance" line so the agent
+      // doesn't free-write a prepay explainer (reads stiff + risks over-promising).
+      if (decision.intent === "payment_gating_or_chase") replyText = FINANCE_HOLDING_REPLY[lang];
     } else {
       // Fetch the system user once if any line is being removed (for the re-source PO).
       const systemUser = actions.some((a) => a.type === "remove_item")

@@ -28,14 +28,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ key
     newQuantity?: number;
   };
 
-  if (!messageId || !orderId || !poItemId) {
-    return NextResponse.json({ error: "messageId, orderId and poItemId are required" }, { status: 400 });
-  }
-  if (action !== "remove_item" && action !== "reduce_qty") {
-    return NextResponse.json(
-      { error: "Only remove_item and reduce_qty can be applied from chat. Open the PO for other changes." },
-      { status: 400 },
-    );
+  if (!messageId) {
+    return NextResponse.json({ error: "messageId is required" }, { status: 400 });
   }
 
   // The message must be this thread's escalation, not yet resolved — prevents
@@ -47,7 +41,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ key
   if (!message) return NextResponse.json({ error: "Proposal message not found" }, { status: 404 });
   const raw = (message.raw ?? {}) as Record<string, unknown>;
   if (raw.proposalResolved === true) {
-    return NextResponse.json({ error: "This proposal was already applied." }, { status: 409 });
+    return NextResponse.json({ error: "This proposal was already resolved." }, { status: 409 });
+  }
+
+  // Dismiss = the human handled it out-of-band (paid the invoice, replied themselves, no
+  // PO change needed). Just clear the banner. This is the resolution for escalations with
+  // no auto-appliable PO action — payment chase, SOA query, complaint, lead-time, etc.
+  if (action === "dismiss") {
+    await prisma.whatsAppMessage.update({
+      where: { id: message.id },
+      data: { raw: { ...raw, proposalResolved: true, dismissed: true, resolvedById: caller.id, resolvedAt: new Date().toISOString() } },
+    });
+    return NextResponse.json({ ok: true, dismissed: true });
+  }
+
+  // Apply path: needs the order + line, and only the two low-risk edits.
+  if (!orderId || !poItemId) {
+    return NextResponse.json({ error: "orderId and poItemId are required to apply" }, { status: 400 });
+  }
+  if (action !== "remove_item" && action !== "reduce_qty") {
+    return NextResponse.json(
+      { error: "Only remove_item and reduce_qty can be applied from chat. Open the PO for other changes." },
+      { status: 400 },
+    );
   }
 
   // The line must belong to THIS order, and the order must be open.
