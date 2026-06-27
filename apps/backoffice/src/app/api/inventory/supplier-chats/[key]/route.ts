@@ -139,6 +139,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     select: { id: true, raw: true, timestamp: true },
   });
   const raw = (lastOutbound?.raw ?? null) as Record<string, unknown> | null;
+  // Human takeover: if the last outbound was typed by a human (no system marker) and is
+  // recent, the agent is standing down — you're handling this thread.
+  const HUMAN_TAKEOVER_MS = (Number(process.env.PROCUREMENT_HUMAN_TAKEOVER_HOURS) || 6) * 60 * 60 * 1000;
+  const lastOutByHuman =
+    !raw ||
+    (!raw.agent && !raw.invoiceRequestFor && !raw.receivingChaseFor && !raw.poSentFor && !raw.execBriefDate && !raw.soaHandoffFor && !raw.promiseChaseFor);
+  const humanHandling =
+    !!lastOutbound && lastOutByHuman && Date.now() - +new Date(lastOutbound.timestamp) < HUMAN_TAKEOVER_MS;
   // raw.proposalResolved is stamped when a human applies the proposal — once
   // resolved, stop surfacing the banner even though it's still the last message.
   if (raw && raw.escalated === true && raw.proposalResolved !== true && raw.proposal && typeof raw.proposal === "object") {
@@ -179,5 +187,5 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     };
   }
 
-  return NextResponse.json({ key, supplierId, supplier, context, windowOpen, messages, agentProposal, agentReSource });
+  return NextResponse.json({ key, supplierId, supplier, context, windowOpen, humanHandling, messages, agentProposal, agentReSource });
 }

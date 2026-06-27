@@ -17,6 +17,7 @@ import {
   Search,
   Plus,
   X,
+  Hand,
 } from "lucide-react";
 
 type AutomationMode = "OFF" | "ASSIST" | "AUTO";
@@ -66,6 +67,7 @@ type Detail = {
     recentPOs: { orderNumber: string; status: string }[];
   };
   windowOpen: boolean;
+  humanHandling: boolean;
   messages: Msg[];
   agentProposal?: {
     messageId: string;
@@ -425,6 +427,12 @@ export default function SupplierChatsPage() {
               <div ref={messagesEndRef} />
             </div>
             <div className="border-t border-border px-4 py-2.5">
+              {detail.humanHandling && (
+                <div className="mb-2 flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+                  <Hand size={13} className="shrink-0" />
+                  You&apos;re handling this chat — AI paused here. It resumes once you go quiet.
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <input
                   value={draft}

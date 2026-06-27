@@ -112,6 +112,18 @@ function todayMyt(): string {
   return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+// Human takeover: once a human replies from the inbox, the agent stands down on that
+// thread for this long so it doesn't talk over them. Auto-resumes after.
+const HUMAN_TAKEOVER_MS = (Number(process.env.PROCUREMENT_HUMAN_TAKEOVER_HOURS) || 6) * 60 * 60 * 1000;
+// A human-typed reply (inbox composer) carries no system marker; agent + cron senders
+// all stamp one — so "no known marker" ⇒ a human sent it.
+function isHumanOutbound(raw: Record<string, unknown> | null | undefined): boolean {
+  const r = raw ?? {};
+  return (
+    !r.agent && !r.invoiceRequestFor && !r.receivingChaseFor && !r.poSentFor && !r.execBriefDate && !r.soaHandoffFor && !r.promiseChaseFor
+  );
+}
+
 /**
  * Entry point. Safe to `await` from the webhook — never throws, no-ops fast for
  * non-suppliers / disabled flag.
@@ -146,6 +158,24 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         select: { id: true },
       });
       if (already) return;
+    }
+
+    // Human takeover: if the last thing WE sent this supplier was typed by a human
+    // (inbox composer) within the takeover window, stand down — they're handling this
+    // thread. Stops the agent talking over a human who's stepped in. Auto-resumes once
+    // the human goes quiet past the window (or set the supplier to OFF to pause for good).
+    const lastOut = await prisma.whatsAppMessage.findFirst({
+      where: { toNumber: fromDigits, direction: "outbound" },
+      orderBy: { timestamp: "desc" },
+      select: { raw: true, timestamp: true },
+    });
+    if (
+      lastOut &&
+      isHumanOutbound(lastOut.raw as Record<string, unknown> | null) &&
+      Date.now() - +new Date(lastOut.timestamp) < HUMAN_TAKEOVER_MS
+    ) {
+      console.log(`[supplier-agent] standing down — human is handling ${supplier.name}`);
+      return;
     }
 
     // Most recent open PO for this supplier + its line items + invoice presence.
