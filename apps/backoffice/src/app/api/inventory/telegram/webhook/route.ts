@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { createShortLink } from "@/lib/shortlink";
 import { detectPaymentFlags, appendInvoiceFlags } from "@/lib/inventory/flag-detector";
 import { computeDepositAmount } from "@/lib/inventory/deposit";
+import { sendProofOfPayment } from "@/lib/inventory/procurement-whatsapp";
 import {
   sendMessage,
   sendPhoto,
@@ -932,6 +933,24 @@ async function resolvePop(
     `✅ <b>${payType} matched</b>\n\nInvoice: ${invoice.invoiceNumber}${poRef}${outletRef}\n${payeeLabel}\n${isDepositMatch ? `Deposit` : `Amount`}: RM ${amount.toFixed(2)}${isDepositMatch ? ` / RM ${fullAmt.toFixed(2)} total` : ""}${balanceLine}\nRef: ${pop.referenceNumber ?? "–"}\n\nMarked as <b>${statusLabel}</b>.\n📎 Uploaded to PO + Invoice${receiptLink}`,
     msgId,
   );
+
+  // Send the supplier their Proof of Payment on WhatsApp — this was missing, so paying via
+  // Telegram marked the invoice paid but never told the supplier. Full payments only (a
+  // deposit POP is a different message, handled on the Invoices tab). sendProofOfPayment is
+  // gated (PROCUREMENT_WHATSAPP_ENABLED) + idempotent (popSentAt) + never throws; report
+  // the outcome back so the team knows whether the supplier actually received it.
+  if (!isDepositMatch && invoice.supplier) {
+    try {
+      const popSend = await sendProofOfPayment(invoice.id);
+      if (popSend.sent) {
+        await sendMessage(chatId, `📤 POP sent to ${invoice.supplier?.name ?? "supplier"} on WhatsApp.`, msgId);
+      } else if (popSend.reason && popSend.reason !== "already-sent") {
+        await sendMessage(chatId, `⚠️ Supplier POP not sent (${popSend.reason}). Send it from the Invoices tab.`, msgId);
+      }
+    } catch (e) {
+      console.error("[telegram] supplier POP send failed:", e);
+    }
+  }
 
   // Forward POP: supplier → their Telegram group; staff claim → owner chat
   // (staff don't have a Telegram group linked).
