@@ -223,7 +223,8 @@ const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Purchase Orders", href: "/inventory/supplier-chats", icon: <MessageCircle className={ICON_SIZE} />, moduleKey: "inventory:orders" },
           { label: "PO Lists", href: "/inventory/orders", icon: <FileText className={ICON_SIZE} />, moduleKey: "inventory:orders" },
-          { label: "Agent QA", href: "/inventory/agent-qa", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "inventory:orders" },
+          // Agent QA runs in the background (the verifier grades every decision regardless);
+          // the viewer page stays at /inventory/agent-qa but is off the nav by choice.
           { label: "Transfers", href: "/inventory/transfers", icon: <ArrowLeftRight className={ICON_SIZE} />, moduleKey: "inventory:transfers" },
           { label: "Receivings", href: "/inventory/receivings", icon: <Receipt className={ICON_SIZE} />, moduleKey: "inventory:receivings" },
           { label: "Invoices", href: "/inventory/invoices", icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "inventory:invoices" },
