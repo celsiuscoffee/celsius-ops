@@ -117,7 +117,7 @@ export default function SupplierChatsPage() {
   // Deep-link support: /inventory/supplier-chats?key=<number> opens that thread
   // (e.g. from Agent QA). Lazy init so it wins over the auto-select-first effect.
   const [selected, setSelected] = useState<string | null>(() => searchParams.get("key"));
-  const [filter, setFilter] = useState<"all" | "attention" | "auto" | "assist" | "off" | "other">("all");
+  const [filter, setFilter] = useState<"all" | "attention" | "auto" | "assist" | "off" | "other" | "need">("all");
   const [query, setQuery] = useState("");
 
   // Poll so inbound supplier messages + the agent's auto-replies appear without
@@ -400,21 +400,19 @@ export default function SupplierChatsPage() {
 
   // ── Need ordering (suggested draft POs) ───────────────────────
   const [needOrderOpen, setNeedOrderOpen] = useState(false);
-  const [needGroups, setNeedGroups] = useState<NeedGroup[] | null>(null);
   const [needCreated, setNeedCreated] = useState<Set<string>>(new Set());
   const [needCreatingKey, setNeedCreatingKey] = useState<string | null>(null);
+  // Loaded on mount so the "Need ordering" filter chip + the per-supplier rail card
+  // both have the data (the modal reads it too).
+  const { data: needData, mutate: mutateNeed } = useFetch<{ groups: NeedGroup[] }>(
+    "/api/inventory/reorder-suggestions",
+    { revalidateOnFocus: true },
+  );
+  const needGroups: NeedGroup[] | null = needData?.groups ?? null;
+  const needSupplierIds = new Set((needGroups ?? []).map((g) => g.supplierId));
 
-  async function openNeedOrder() {
+  function openNeedOrder() {
     setNeedOrderOpen(true);
-    setNeedGroups(null);
-    setNeedCreated(new Set());
-    try {
-      const r = await fetch("/api/inventory/reorder-suggestions");
-      const data = r.ok ? await r.json() : { groups: [] };
-      setNeedGroups(data.groups ?? []);
-    } catch {
-      setNeedGroups([]);
-    }
   }
   async function createDraftFromGroup(g: NeedGroup) {
     const key = `${g.supplierId}_${g.outletId}`;
@@ -435,6 +433,7 @@ export default function SupplierChatsPage() {
         setNeedCreated((prev) => new Set(prev).add(key));
         mutateDetail();
         mutateThreads();
+        mutateNeed();
       }
     } finally {
       setNeedCreatingKey(null);
@@ -459,6 +458,8 @@ export default function SupplierChatsPage() {
         return t.registered && t.automationMode === "OFF";
       case "other":
         return !t.registered;
+      case "need":
+        return !!t.supplierId && needSupplierIds.has(t.supplierId);
       default:
         return t.registered; // "all" = every supplier (non-suppliers live under "Other")
     }
@@ -562,6 +563,14 @@ export default function SupplierChatsPage() {
             <Chip on={filter === "auto"} tone="auto" onClick={() => setFilter("auto")}>Auto {counts?.auto ?? 0}</Chip>
             <Chip on={filter === "assist"} tone="assist" onClick={() => setFilter("assist")}>Assist {counts?.assist ?? 0}</Chip>
             <Chip on={filter === "off"} onClick={() => setFilter("off")}>Off {counts?.off ?? 0}</Chip>
+            {needSupplierIds.size > 0 && (
+              <button
+                onClick={() => setFilter("need")}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] ${filter === "need" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" : "text-muted-foreground hover:bg-muted"}`}
+              >
+                <ShoppingCart size={11} /> Need ordering {needSupplierIds.size}
+              </button>
+            )}
             {(counts?.other ?? 0) > 0 && (
               <Chip on={filter === "other"} onClick={() => setFilter("other")}>Other {counts?.other ?? 0}</Chip>
             )}
@@ -766,6 +775,47 @@ export default function SupplierChatsPage() {
                     </div>
                   )}
                 </div>
+                {(() => {
+                  const myNeed = (needGroups ?? []).filter((g) => g.supplierId === detail.supplierId);
+                  if (myNeed.length === 0) return null;
+                  return (
+                    <div className="border-b border-border py-3">
+                      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                        <ShoppingCart size={12} /> Need ordering
+                      </div>
+                      {myNeed.map((g) => {
+                        const key = `${g.supplierId}_${g.outletId}`;
+                        const done = needCreated.has(key);
+                        return (
+                          <div key={key} className="mb-2 rounded-md border border-amber-200 bg-amber-50/50 p-2 dark:border-amber-900 dark:bg-amber-950/30">
+                            <div className="mb-1 flex items-center justify-between gap-2">
+                              <span className="truncate text-[10.5px] text-muted-foreground">
+                                {g.outletName} · {g.itemCount} item{g.itemCount > 1 ? "s" : ""} · {formatRM(g.total)}
+                              </span>
+                              {done ? (
+                                <span className="shrink-0 text-[10px] font-medium text-green-600 dark:text-green-400">✓ draft</span>
+                              ) : (
+                                <button
+                                  onClick={() => createDraftFromGroup(g)}
+                                  disabled={needCreatingKey === key}
+                                  className="shrink-0 rounded bg-amber-600 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                                >
+                                  {needCreatingKey === key ? "…" : "Create draft"}
+                                </button>
+                              )}
+                            </div>
+                            {g.items.map((it) => (
+                              <div key={it.productId} className="flex items-center justify-between gap-2 text-[10.5px]">
+                                <span className="truncate">{it.name}</span>
+                                <span className="shrink-0 text-muted-foreground">order {it.qty} {it.packageLabel}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
                 {detail.agentProposal && (
                   <div className="border-b border-border py-3">
                     <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950/40">
