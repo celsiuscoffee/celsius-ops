@@ -265,10 +265,12 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     // Capture a supplier-sent invoice as a DRAFT (amount left for a human to verify) —
     // REGARDLESS of escalate/mode. Invoice messages routinely trip requires_human, so
     // when this sat inside the non-escalate branch it was silently skipped while the
-    // agent still replied "saved". Safe: only creates a draft on a PO with no invoice yet.
-    if (decision.capture_invoice && order.invoices.length === 0) {
+    // agent still replied "saved". captureInvoice now matches the invoice to the RIGHT PO
+    // (by billed total, not just the most-recent open one) and dedups per-PO itself, so the
+    // most-recent-PO `invoices.length` guard is gone — pass the most-recent as the fallback.
+    if (decision.capture_invoice) {
       invoiceCaptured = await captureInvoice(
-        { id: order.id, orderNumber: order.orderNumber, outletId: order.outletId, totalAmount: order.totalAmount },
+        { id: order.id, orderNumber: order.orderNumber, outletId: order.outletId, totalAmount: order.totalAmount, status: order.status },
         supplier.id,
         evt.mediaId ?? null,
       );
@@ -586,7 +588,7 @@ function visionMime(
  * provisional capture (amount = PO total). Always DRAFT → never triggers payment.
  */
 async function captureInvoice(
-  order: { id: string; orderNumber: string; outletId: string; totalAmount: unknown },
+  order: { id: string; orderNumber: string; outletId: string; totalAmount: unknown; status: OrderStatus | null },
   supplierId: string,
   mediaId: string | null,
 ): Promise<boolean> {
@@ -624,8 +626,32 @@ async function captureInvoice(
     }
   }
 
-  const amount = extractedTotal ?? (Number(order.totalAmount) || 0);
-  const invoiceNumber = extractedNumber || `AI-${order.orderNumber}`;
+  // ── Pick the RIGHT PO for this invoice ──────────────────────────────────
+  // The supplier bills per PO, so match the invoice's billed TOTAL to the open PO with
+  // that total, instead of always the most-recent open PO (which mis-filed invoices onto
+  // the newest order). Fall back to the passed `order` when nothing matches / is unreadable.
+  let target: { id: string; orderNumber: string; outletId: string; totalAmount: unknown; status: OrderStatus | null } = order;
+  if (extractedTotal != null) {
+    const openPos = await prisma.order.findMany({
+      where: { supplierId, orderType: "PURCHASE_ORDER", status: { in: OPEN_ORDER_STATUSES } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, orderNumber: true, outletId: true, totalAmount: true, status: true },
+    });
+    const match = openPos.find(
+      (p) => Math.abs(Number(p.totalAmount) - extractedTotal!) <= Math.max(1, Number(p.totalAmount) * 0.02),
+    );
+    if (match) target = match;
+  }
+
+  // Dedup: one captured invoice per PO. Skips a burst of images for the same bill / a
+  // re-send (the unique invoiceNumber backstops the truly-simultaneous race).
+  if ((await prisma.invoice.count({ where: { orderId: target.id } })) > 0) {
+    console.log(`[supplier-agent] invoice capture skipped — ${target.orderNumber} already has an invoice`);
+    return false;
+  }
+
+  const amount = extractedTotal ?? (Number(target.totalAmount) || 0);
+  const invoiceNumber = extractedNumber || `AI-${target.orderNumber}`;
   const provisional = extractedTotal == null;
 
   // Persist the supplier-sent document to storage so the captured invoice keeps
@@ -635,7 +661,7 @@ async function captureInvoice(
 
   try {
     const flags = await detectCreationFlags({
-      orderId: order.id,
+      orderId: target.id,
       supplierId,
       amount,
       issueDate: billDate,
@@ -643,8 +669,8 @@ async function captureInvoice(
     const created = await prisma.invoice.create({
       data: {
         invoiceNumber,
-        orderId: order.id,
-        outletId: order.outletId,
+        orderId: target.id,
+        outletId: target.outletId,
         supplierId,
         amount: amount as never, // Decimal passthrough
         status: "DRAFT",
@@ -664,8 +690,16 @@ async function captureInvoice(
       },
       select: { id: true },
     });
+    // Receiving an invoice means the supplier confirmed + is fulfilling → move the PO to
+    // Awaiting Delivery, matching the manual "Upload Invoice & Send" flow. Only from a
+    // sent/approved state; best-effort (the status nudge never fails the capture itself).
+    if (target.status && (["APPROVED", "SENT", "CONFIRMED"] as OrderStatus[]).includes(target.status)) {
+      await prisma.order
+        .update({ where: { id: target.id }, data: { status: "AWAITING_DELIVERY" } })
+        .catch((e) => console.warn("[supplier-agent] PO→AWAITING_DELIVERY failed:", e instanceof Error ? e.message : e));
+    }
     console.log(
-      `[supplier-agent] invoice captured id=${created.id} no=${invoiceNumber} ` +
+      `[supplier-agent] invoice captured id=${created.id} no=${invoiceNumber} po=${target.orderNumber} ` +
         `amount=${amount} extracted=${!provisional} prefilled=${prefilled.join("|") || "-"} flags=${flags.length}`,
     );
     return true;
