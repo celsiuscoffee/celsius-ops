@@ -271,6 +271,7 @@ export default function InvoicesPage() {
   });
   const [editPhotos, setEditPhotos] = useState<string[]>([]);
   const [editSaving, setEditSaving] = useState(false);
+  const [editDeleting, setEditDeleting] = useState(false);
   const [editUploading, setEditUploading] = useState(false);
 
   // Attach Invoice dialog (GRNI placeholder → real supplier invoice)
@@ -658,6 +659,25 @@ export default function InvoicesPage() {
       loadInvoices(undefined, { revalidate: true });
     } finally {
       setEditSaving(false);
+    }
+  };
+
+  // Hard-delete a DRAFT/PENDING invoice (the API rejects anything further along —
+  // initiated/paid stay put). Used to clear junk placeholders / mis-captured drafts.
+  const deleteInvoice = async () => {
+    if (!editingInvoice) return;
+    if (!confirm(`Delete invoice ${editingInvoice.invoiceNumber}? This can't be undone.`)) return;
+    setEditDeleting(true);
+    try {
+      const res = await fetch(`/api/inventory/invoices/${editingInvoice.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        alert((await res.json().catch(() => ({}))).error || "Delete failed");
+        return;
+      }
+      setEditingInvoice(null);
+      loadInvoices(undefined, { revalidate: true });
+    } finally {
+      setEditDeleting(false);
     }
   };
 
@@ -1877,6 +1897,16 @@ export default function InvoicesPage() {
             </div>
 
             <div className="mt-4 flex gap-2">
+              {["DRAFT", "PENDING"].includes(editingInvoice.status) && (
+                <button
+                  onClick={deleteInvoice}
+                  disabled={editDeleting || editSaving}
+                  title="Delete this draft/pending invoice"
+                  className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {editDeleting ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Delete"}
+                </button>
+              )}
               <button onClick={() => setEditingInvoice(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
               <button
                 onClick={saveEdit}
