@@ -34,11 +34,25 @@ type Thread = {
   lastAt: string | null;
   count: number;
   needsAttention: boolean;
+  awaitingReply: boolean;
+  toPay: boolean;
+  awaitingDelivery: boolean;
   registered: boolean;
   automationMode: AutomationMode | null;
   hasMessages: boolean;
 };
-type Counts = { all: number; suppliers: number; needsAttention: number; other: number; auto: number; assist: number; off: number };
+type Counts = {
+  all: number;
+  suppliers: number;
+  needsAttention: number;
+  needsReply: number;
+  toPay: number;
+  awaitingDelivery: number;
+  other: number;
+  auto: number;
+  assist: number;
+  off: number;
+};
 type PoProduct = { supplierProductId: string; productId: string; name: string; packageLabel: string; productPackageId: string | null; price: number; moq: number };
 type PoView = {
   id: string;
@@ -127,7 +141,9 @@ export default function SupplierChatsPage() {
   // Deep-link support: /inventory/supplier-chats?key=<number> opens that thread
   // (e.g. from Agent QA). Lazy init so it wins over the auto-select-first effect.
   const [selected, setSelected] = useState<string | null>(() => searchParams.get("key"));
-  const [filter, setFilter] = useState<"all" | "attention" | "auto" | "assist" | "off" | "other" | "need">("need");
+  const [filter, setFilter] = useState<
+    "all" | "reply" | "topay" | "awaiting" | "auto" | "assist" | "off" | "other" | "need"
+  >("need");
   const [query, setQuery] = useState("");
 
   // Poll so inbound supplier messages + the agent's auto-replies appear without
@@ -465,8 +481,12 @@ export default function SupplierChatsPage() {
       return false;
     }
     switch (filter) {
-      case "attention":
-        return t.needsAttention;
+      case "reply":
+        return t.awaitingReply;
+      case "topay":
+        return t.toPay;
+      case "awaiting":
+        return t.awaitingDelivery;
       case "auto":
         return t.automationMode === "AUTO";
       case "assist":
@@ -571,8 +591,11 @@ export default function SupplierChatsPage() {
               className="h-8 w-full rounded-md border border-border bg-background pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground"
             />
           </div>
-          <div className="mt-2 flex flex-wrap gap-1">
-            {needSupplierIds.size > 0 && (
+          {/* Action tabs in workflow order (order → reply → pay → receive). Each shows
+              only when it has items (or is the active filter). Automation config lives in
+              the Mode dropdown so it doesn't clutter the daily view. */}
+          <div className="mt-2 flex flex-wrap items-center gap-1">
+            {(needSupplierIds.size > 0 || filter === "need") && (
               <button
                 onClick={() => setFilter("need")}
                 className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${filter === "need" ? "bg-amber-500/20 text-amber-800 dark:text-amber-300" : "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-400"}`}
@@ -580,16 +603,32 @@ export default function SupplierChatsPage() {
                 <ShoppingCart size={11} /> Need ordering {needSupplierIds.size}
               </button>
             )}
-            <Chip on={filter === "all"} onClick={() => setFilter("all")}>All {counts?.suppliers ?? 0}</Chip>
-            <Chip on={filter === "attention"} tone="danger" onClick={() => setFilter("attention")}>
-              Attention {counts?.needsAttention ?? 0}
-            </Chip>
-            <Chip on={filter === "auto"} tone="auto" onClick={() => setFilter("auto")}>Auto {counts?.auto ?? 0}</Chip>
-            <Chip on={filter === "assist"} tone="assist" onClick={() => setFilter("assist")}>Assist {counts?.assist ?? 0}</Chip>
-            <Chip on={filter === "off"} onClick={() => setFilter("off")}>Off {counts?.off ?? 0}</Chip>
-            {(counts?.other ?? 0) > 0 && (
-              <Chip on={filter === "other"} onClick={() => setFilter("other")}>Other {counts?.other ?? 0}</Chip>
+            {(filter === "reply" || (counts?.needsReply ?? 0) > 0) && (
+              <Chip on={filter === "reply"} tone="danger" onClick={() => setFilter("reply")}>
+                Needs reply {counts?.needsReply ?? 0}
+              </Chip>
             )}
+            {(filter === "topay" || (counts?.toPay ?? 0) > 0) && (
+              <Chip on={filter === "topay"} onClick={() => setFilter("topay")}>To pay {counts?.toPay ?? 0}</Chip>
+            )}
+            {(filter === "awaiting" || (counts?.awaitingDelivery ?? 0) > 0) && (
+              <Chip on={filter === "awaiting"} onClick={() => setFilter("awaiting")}>
+                Awaiting delivery {counts?.awaitingDelivery ?? 0}
+              </Chip>
+            )}
+            <Chip on={filter === "all"} onClick={() => setFilter("all")}>All {counts?.suppliers ?? 0}</Chip>
+            <select
+              value={(["auto", "assist", "off", "other"] as string[]).includes(filter) ? filter : ""}
+              onChange={(e) => e.target.value && setFilter(e.target.value as "auto" | "assist" | "off" | "other")}
+              title="Filter by automation mode"
+              className={`rounded-full border px-2 py-[3px] text-[11px] ${(["auto", "assist", "off", "other"] as string[]).includes(filter) ? "border-primary/40 bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground"}`}
+            >
+              <option value="">Mode</option>
+              <option value="auto">Auto {counts?.auto ?? 0}</option>
+              <option value="assist">Assist {counts?.assist ?? 0}</option>
+              <option value="off">Off {counts?.off ?? 0}</option>
+              {(counts?.other ?? 0) > 0 && <option value="other">Other {counts?.other ?? 0}</option>}
+            </select>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
