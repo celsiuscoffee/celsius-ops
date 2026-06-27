@@ -666,7 +666,15 @@ export default function InvoicesPage() {
   // initiated/paid stay put). Used to clear junk placeholders / mis-captured drafts.
   const deleteInvoice = async () => {
     if (!editingInvoice) return;
-    if (!confirm(`Delete invoice ${editingInvoice.invoiceNumber}? This can't be undone.`)) return;
+    if (
+      !(await confirm({
+        title: `Delete invoice ${editingInvoice.invoiceNumber}?`,
+        description: "This can't be undone.",
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
+    )
+      return;
     setEditDeleting(true);
     try {
       const res = await fetch(`/api/inventory/invoices/${editingInvoice.id}`, { method: "DELETE" });
