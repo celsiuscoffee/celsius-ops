@@ -18,6 +18,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ key
   const body = await req.json().catch(() => ({}));
   const text = typeof body.text === "string" ? body.text.trim() : "";
   if (!text) return NextResponse.json({ error: "Message is empty" }, { status: 400 });
+  // Optional quoted-reply: the Meta message id of the inbound message being
+  // replied to. The UI passes the WhatsApp `waMessageId` directly; if a caller
+  // only has our DB row id, resolve it to the Meta id server-side.
+  const replyToRaw = typeof body.replyTo === "string" ? body.replyTo.trim() : "";
+  let replyTo = "";
+  if (replyToRaw) {
+    if (replyToRaw.startsWith("wamid.")) {
+      replyTo = replyToRaw;
+    } else {
+      const ref = await prisma.whatsAppMessage.findUnique({
+        where: { id: replyToRaw },
+        select: { waMessageId: true },
+      });
+      replyTo = ref?.waMessageId ?? "";
+    }
+  }
 
   // 24h window: did this counterparty message us within the last 24h?
   const lastInbound = await prisma.whatsAppMessage.findFirst({
@@ -34,7 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ key
     );
   }
 
-  const result = await sendWhatsAppText(key, text);
+  const result = await sendWhatsAppText(key, text, replyTo || undefined);
   if (!result.ok) {
     return NextResponse.json({ error: result.error ?? "Send failed" }, { status: 502 });
   }

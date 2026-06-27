@@ -17,6 +17,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp";
+import { storeWhatsAppMedia } from "@/lib/whatsapp-media";
 import { recordInboundMessage } from "@/lib/whatsapp-store";
 import { handleInboundAck } from "@/lib/ops-pulse/inbound";
 import { handleSupplierMessage } from "@/lib/inventory/agents/supplier-chat-agent";
@@ -72,15 +73,25 @@ export async function POST(request: NextRequest) {
         console.log(
           `[whatsapp:webhook] inbound from=${msg.from} type=${msg.type} text=${JSON.stringify(body ?? `<${msg.type}>`)}`,
         );
+        // For image/document messages, fetch the media bytes once and persist them
+        // to Supabase Storage so the inbox can open the attachment (the Cloud API
+        // media id alone is useless — the download URL is short-lived + token-gated).
+        // storeWhatsAppMedia never throws and returns null on any failure, so this
+        // can't block the 200 to Meta.
+        const mediaUrl =
+          msg.type === "image" || msg.type === "document"
+            ? await storeWhatsAppMedia(msg.image?.id ?? msg.document?.id ?? null)
+            : null;
         // 1) Persist for the supplier-chat monitor/inbox (Option 1). Best-effort —
         // recordInboundMessage never throws, so it never blocks the 200 to Meta.
-        // supplierId is matched by phone inside; media URL resolution is a follow-up.
+        // supplierId is matched by phone inside.
         await recordInboundMessage({
           waMessageId: msg.id,
           fromNumber: msg.from,
           toNumber: businessNumber,
           type: msg.type,
           body,
+          mediaUrl,
           timestamp: msg.timestamp ? new Date(Number(msg.timestamp) * 1000) : undefined,
           raw: msg,
         });

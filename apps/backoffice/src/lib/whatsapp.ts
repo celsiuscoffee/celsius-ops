@@ -117,12 +117,20 @@ async function postMessage(body: Record<string, unknown>): Promise<WhatsAppSendR
  * service window (the recipient messaged us within the last 24h). For
  * business-initiated messages outside that window, use sendWhatsAppTemplate.
  * `to` may be passed in any human format ("+60 12-345 6789") — it's normalised.
+ *
+ * Pass `replyToWaId` (the Meta message id of an inbound message) to send this as
+ * a quoted reply — WhatsApp threads it under that message in the supplier's app.
  */
-export function sendWhatsAppText(to: string, body: string): Promise<WhatsAppSendResult> {
+export function sendWhatsAppText(
+  to: string,
+  body: string,
+  replyToWaId?: string,
+): Promise<WhatsAppSendResult> {
   return postMessage({
     recipient_type: "individual",
     to: normalizeMsisdn(to),
     type: "text",
+    ...(replyToWaId ? { context: { message_id: replyToWaId } } : {}),
     text: { preview_url: false, body },
   });
 }

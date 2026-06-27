@@ -21,6 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     take: 500,
     select: {
       id: true,
+      waMessageId: true,
       direction: true,
       type: true,
       body: true,
