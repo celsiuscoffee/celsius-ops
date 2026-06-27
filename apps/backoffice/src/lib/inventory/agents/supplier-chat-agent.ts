@@ -78,6 +78,9 @@ type AgentDecision = {
   confidence: number;
   requires_human: boolean;
   escalation_reason: string | null;
+  // 1-sentence INTERNAL note for the human reviewer (ASSIST mode) — what the supplier
+  // wants, what the agent suggests, any risk to double-check. Never sent to the supplier.
+  insight: string;
 };
 
 const NO_ACTION: PoAction = { type: "none", po_item_id: null, new_quantity: null, note: null };
@@ -392,6 +395,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       ? {
           intent: decision.intent,
           escalationReason: escReason,
+          insight: decision.insight?.trim() || "",
           paymentModel: pm.model,
           popDeliveryCritical: pm.popDeliveryCritical,
           orderId: order.id,
@@ -828,7 +832,8 @@ ${lessons}
   "reply_text": "…",
   "confidence": 0.0,
   "requires_human": false,
-  "escalation_reason": null
+  "escalation_reason": null,
+  "insight": "1-sentence INTERNAL note for the human reviewer — what the supplier wants, what you suggest, and any risk to double-check (recipe %, price, payment/PoP). Plain + specific. NOT sent to the supplier."
 }`;
 
   const response = await anthropic.messages.create({
@@ -877,6 +882,7 @@ ${lessons}
       confidence: Math.max(0, Math.min(1, Number(p.confidence) || 0)),
       requires_human: Boolean(p.requires_human),
       escalation_reason: typeof p.escalation_reason === "string" ? p.escalation_reason : null,
+      insight: typeof p.insight === "string" ? p.insight : "",
     };
   } catch {
     return null;

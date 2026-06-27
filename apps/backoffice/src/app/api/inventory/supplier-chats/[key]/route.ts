@@ -123,6 +123,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     orderId: string | null;
     intent: string;
     escalationReason: string;
+    insight?: string;
     paymentModel?: string;
     popDeliveryCritical?: boolean;
     poAction: {
@@ -158,6 +159,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
       orderId: typeof p.orderId === "string" ? p.orderId : null,
       intent: String(p.intent ?? "unclear"),
       escalationReason: String(p.escalationReason ?? "guardrail"),
+      insight: typeof p.insight === "string" && p.insight.trim() ? p.insight.trim() : undefined,
       paymentModel: typeof p.paymentModel === "string" ? p.paymentModel : undefined,
       popDeliveryCritical: typeof p.popDeliveryCritical === "boolean" ? p.popDeliveryCritical : undefined,
       poAction: pa
