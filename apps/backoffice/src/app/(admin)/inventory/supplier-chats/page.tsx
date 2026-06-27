@@ -56,6 +56,7 @@ type Detail = {
     deliveryDays: string[];
     paymentTerms: string | null;
     leadTimeDays: number;
+    automationMode: AutomationMode;
     paymentModel?: { model: string; label: string; note: string; popDeliveryCritical: boolean };
   };
   context: {
@@ -105,7 +106,7 @@ export default function SupplierChatsPage() {
 
   // Poll so inbound supplier messages + the agent's auto-replies appear without
   // a manual refresh. The open thread polls faster than the list.
-  const { data: threadsData, isLoading } = useFetch<{ threads: Thread[]; counts: Counts; needsAttention: number }>(
+  const { data: threadsData, isLoading, mutate: mutateThreads } = useFetch<{ threads: Thread[]; counts: Counts; needsAttention: number }>(
     "/api/inventory/supplier-chats",
     { refreshInterval: 10000, revalidateOnFocus: true },
   );
@@ -195,6 +196,25 @@ export default function SupplierChatsPage() {
     }
   }
   const poTotal = poProducts.reduce((s, p) => s + (poQty[p.productId] ?? 0) * p.price, 0);
+
+  const [modeBusy, setModeBusy] = useState(false);
+  async function setMode(mode: AutomationMode) {
+    if (!detail?.supplierId || detail.supplier?.automationMode === mode) return;
+    setModeBusy(true);
+    try {
+      const res = await fetch(`/api/inventory/suppliers/${detail.supplierId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ automationMode: mode }),
+      });
+      if (res.ok) {
+        mutateDetail();
+        mutateThreads();
+      }
+    } finally {
+      setModeBusy(false);
+    }
+  }
 
   const threads = threadsData?.threads ?? [];
   const counts = threadsData?.counts;
@@ -458,6 +478,37 @@ export default function SupplierChatsPage() {
 
             {detail.supplierId ? (
               <>
+                <div className="border-b border-border py-3">
+                  <div className="mb-1.5 text-[11px] text-muted-foreground">Automation</div>
+                  <div className="flex rounded-md border border-border p-0.5">
+                    {(["OFF", "ASSIST", "AUTO"] as AutomationMode[]).map((m) => {
+                      const on = detail.supplier?.automationMode === m;
+                      const tone =
+                        m === "AUTO"
+                          ? "bg-green-500/15 text-green-700 dark:text-green-400"
+                          : m === "ASSIST"
+                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                            : "bg-muted text-foreground";
+                      return (
+                        <button
+                          key={m}
+                          onClick={() => setMode(m)}
+                          disabled={modeBusy}
+                          className={`flex-1 rounded px-1.5 py-1 text-[11px] font-medium capitalize disabled:opacity-50 ${on ? tone : "text-muted-foreground hover:bg-muted/60"}`}
+                        >
+                          {m.toLowerCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-1 text-[10.5px] text-muted-foreground">
+                    {detail.supplier?.automationMode === "AUTO"
+                      ? "Agent acts + sends automatically."
+                      : detail.supplier?.automationMode === "ASSIST"
+                        ? "Agent drafts — you approve before it sends."
+                        : "Manual — agent won't act on this supplier."}
+                  </div>
+                </div>
                 <div className="flex flex-col gap-1.5 border-b border-border py-3">
                   <div className="rounded-md bg-muted px-2.5 py-1.5">
                     <div className="text-[11px] text-muted-foreground">Open POs</div>
