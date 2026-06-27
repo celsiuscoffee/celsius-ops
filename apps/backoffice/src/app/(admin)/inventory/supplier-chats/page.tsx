@@ -18,6 +18,7 @@ import {
   Plus,
   X,
   Hand,
+  ShoppingCart,
 } from "lucide-react";
 
 type AutomationMode = "OFF" | "ASSIST" | "AUTO";
@@ -45,6 +46,8 @@ type PoView = {
   outlet?: { name: string } | null;
   items: { id: string; quantity: number | string; unitPrice: number | string; product?: { name: string } | null }[];
 };
+type NeedItem = { productId: string; productPackageId: string | null; name: string; qty: number; unitPrice: number; packageLabel: string; onHand: number; reorderPoint: number };
+type NeedGroup = { supplierId: string; supplierName: string; outletId: string; outletName: string; items: NeedItem[]; total: number; itemCount: number };
 
 type Msg = {
   id: string;
@@ -272,6 +275,49 @@ export default function SupplierChatsPage() {
     }
   }
 
+  // ── Need ordering (suggested draft POs) ───────────────────────
+  const [needOrderOpen, setNeedOrderOpen] = useState(false);
+  const [needGroups, setNeedGroups] = useState<NeedGroup[] | null>(null);
+  const [needCreated, setNeedCreated] = useState<Set<string>>(new Set());
+  const [needCreatingKey, setNeedCreatingKey] = useState<string | null>(null);
+
+  async function openNeedOrder() {
+    setNeedOrderOpen(true);
+    setNeedGroups(null);
+    setNeedCreated(new Set());
+    try {
+      const r = await fetch("/api/inventory/reorder-suggestions");
+      const data = r.ok ? await r.json() : { groups: [] };
+      setNeedGroups(data.groups ?? []);
+    } catch {
+      setNeedGroups([]);
+    }
+  }
+  async function createDraftFromGroup(g: NeedGroup) {
+    const key = `${g.supplierId}_${g.outletId}`;
+    setNeedCreatingKey(key);
+    try {
+      const r = await fetch("/api/inventory/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outletId: g.outletId,
+          supplierId: g.supplierId,
+          notes: "Suggested reorder (below par)",
+          items: g.items.map((i) => ({ productId: i.productId, productPackageId: i.productPackageId, quantity: i.qty, unitPrice: i.unitPrice })),
+          clientRequestId: crypto.randomUUID(),
+        }),
+      });
+      if (r.ok) {
+        setNeedCreated((prev) => new Set(prev).add(key));
+        mutateDetail();
+        mutateThreads();
+      }
+    } finally {
+      setNeedCreatingKey(null);
+    }
+  }
+
   const threads = threadsData?.threads ?? [];
   const counts = threadsData?.counts;
   const q = query.trim().toLowerCase();
@@ -365,8 +411,16 @@ export default function SupplierChatsPage() {
       {/* ── Thread list ─────────────────────────────── */}
       <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm">
         <div className="border-b border-border p-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <MessageCircle size={16} /> Suppliers
+          <div className="flex items-center justify-between gap-2 text-sm font-medium">
+            <span className="flex items-center gap-2">
+              <MessageCircle size={16} /> Suppliers
+            </span>
+            <button
+              onClick={openNeedOrder}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+            >
+              <ShoppingCart size={12} /> Need ordering
+            </button>
           </div>
           <div className="relative mt-2">
             <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -919,6 +973,78 @@ export default function SupplierChatsPage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {needOrderOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setNeedOrderOpen(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-background shadow-lg"
+          >
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <ShoppingCart size={15} /> Need ordering
+              </div>
+              <button onClick={() => setNeedOrderOpen(false)} aria-label="Close" className="text-muted-foreground hover:text-foreground">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+              {!needGroups ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 size={18} className="animate-spin text-muted-foreground" />
+                </div>
+              ) : needGroups.length === 0 ? (
+                <p className="p-6 text-center text-xs text-muted-foreground">Nothing below reorder point right now.</p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {needGroups.map((g) => {
+                    const key = `${g.supplierId}_${g.outletId}`;
+                    const done = needCreated.has(key);
+                    return (
+                      <div key={key} className="rounded-lg border border-border p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-[13px] font-medium">{g.supplierName}</div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {g.outletName} · {g.itemCount} item{g.itemCount > 1 ? "s" : ""} · {formatRM(g.total)}
+                            </div>
+                          </div>
+                          {done ? (
+                            <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-400">
+                              <Check size={13} /> Draft created
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => createDraftFromGroup(g)}
+                              disabled={needCreatingKey === key}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                            >
+                              {needCreatingKey === key ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Create draft PO
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          {g.items.map((it) => (
+                            <div key={it.productId} className="flex items-center justify-between gap-2 text-[11px]">
+                              <span className="truncate">{it.name}</span>
+                              <span className="shrink-0 text-muted-foreground">
+                                {Math.round(it.onHand)} on hand ≤ {Math.round(it.reorderPoint)} → order {it.qty} {it.packageLabel}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="border-t border-border px-4 py-2.5 text-[11px] text-muted-foreground">
+              Below-par items with no open PO, grouped to the cheapest supplier. Create a draft, then review + send it from the PO list.
+            </div>
           </div>
         </div>
       )}
