@@ -2,34 +2,48 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 
-// Threads for the Supplier Chats inbox: folds WhatsAppMessage rows into one
-// thread per counterparty (the supplier's number) with a preview + a
-// "needs attention" flag (OOS/substitution language, or an overdue invoice).
+// Threads for the Supplier Chats workspace. Folds WhatsAppMessage rows into one
+// thread per counterparty, then MERGES in every active supplier — so suppliers with
+// no chat yet still appear (you can start one / raise a PO). A non-supplier number
+// that has messaged us shows as registered:false (filterable as "Other").
 
-// Inbound lines likely needing a human — EN + Malay. Tune as real data lands.
 const ATTENTION_RX =
   /out of stock|no stock|\boos\b|unavailable|sold out|tak ?ada|x ?ada|takde|habis|cancel|delay|short/i;
+
+const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
+const last8 = (s: string | null | undefined) => digits(s).slice(-8);
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // v1: pull recent messages and fold into threads in JS (store is new + low
-  // volume). Switch to a SQL window query if it grows large.
-  const rows = await prisma.whatsAppMessage.findMany({
-    orderBy: { timestamp: "desc" },
-    take: 1000,
-    select: {
-      direction: true,
-      fromNumber: true,
-      toNumber: true,
-      supplierId: true,
-      body: true,
-      type: true,
-      timestamp: true,
-      raw: true,
-    },
-  });
+  const [rows, suppliers] = await Promise.all([
+    prisma.whatsAppMessage.findMany({
+      orderBy: { timestamp: "desc" },
+      take: 1000,
+      select: {
+        direction: true,
+        fromNumber: true,
+        toNumber: true,
+        supplierId: true,
+        body: true,
+        type: true,
+        timestamp: true,
+        raw: true,
+      },
+    }),
+    prisma.supplier.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true, name: true, phone: true, automationMode: true },
+    }),
+  ]);
+
+  const byId = new Map(suppliers.map((s) => [s.id, s]));
+  const byPhone = new Map<string, (typeof suppliers)[number]>();
+  for (const s of suppliers) {
+    const k = last8(s.phone);
+    if (k.length >= 8) byPhone.set(k, s);
+  }
 
   type T = {
     key: string;
@@ -38,7 +52,7 @@ export async function GET(req: NextRequest) {
     lastAt: Date;
     count: number;
     lastInbound: string | null;
-    verifierFailed: boolean; // the newest message is an auto-decision the verifier failed
+    verifierFailed: boolean;
   };
   const threads = new Map<string, T>();
   for (const m of rows) {
@@ -46,9 +60,6 @@ export async function GET(req: NextRequest) {
     if (!counter) continue;
     let t = threads.get(counter);
     if (!t) {
-      // rows are newest-first, so the first message we see for a thread is its
-      // latest. If that latest message is an agent decision the verifier rated
-      // "fail" and nothing newer has happened, the thread needs a human.
       const raw = (m.raw ?? null) as Record<string, unknown> | null;
       const v = raw?.verifier as { rating?: string } | undefined;
       t = {
@@ -67,46 +78,96 @@ export async function GET(req: NextRequest) {
     if (m.direction === "inbound" && t.lastInbound === null) t.lastInbound = m.body ?? `[${m.type}]`;
   }
 
-  const supplierIds = [
-    ...new Set([...threads.values()].map((t) => t.supplierId).filter((x): x is string => !!x)),
-  ];
-  const [suppliers, overdueRows] = await Promise.all([
-    supplierIds.length
-      ? prisma.supplier.findMany({
-          where: { id: { in: supplierIds } },
-          select: { id: true, name: true, phone: true },
-        })
-      : Promise.resolve([]),
-    supplierIds.length
-      ? prisma.invoice.findMany({
-          where: { supplierId: { in: supplierIds }, status: { not: "PAID" }, dueDate: { lt: new Date() } },
-          select: { supplierId: true },
-          distinct: ["supplierId"],
-        })
-      : Promise.resolve([]),
-  ]);
-  const sup = new Map(suppliers.map((s) => [s.id, s]));
+  // Resolve each thread to a supplier (by soft-matched id, else by phone), and note
+  // which suppliers already have a thread so we can append the ones that don't.
+  const supplierWithThread = new Set<string>();
+  for (const t of threads.values()) {
+    const s = (t.supplierId && byId.get(t.supplierId)) || byPhone.get(last8(t.key)) || null;
+    if (s) {
+      t.supplierId = s.id;
+      supplierWithThread.add(s.id);
+    }
+  }
+
+  const matchedIds = [...supplierWithThread];
+  const overdueRows = matchedIds.length
+    ? await prisma.invoice.findMany({
+        where: { supplierId: { in: matchedIds }, status: { not: "PAID" }, dueDate: { lt: new Date() } },
+        select: { supplierId: true },
+        distinct: ["supplierId"],
+      })
+    : [];
   const overdue = new Set(overdueRows.map((o) => o.supplierId));
 
-  const out = [...threads.values()]
-    .map((t) => {
-      const s = t.supplierId ? sup.get(t.supplierId) : undefined;
-      const needsAttention =
-        t.verifierFailed ||
-        (!!t.lastInbound && ATTENTION_RX.test(t.lastInbound)) ||
-        (!!t.supplierId && overdue.has(t.supplierId));
-      return {
-        key: t.key,
-        supplierId: t.supplierId,
-        name: s?.name ?? `+${t.key}`,
-        phone: s?.phone ?? t.key,
-        preview: t.preview.slice(0, 60),
-        lastAt: t.lastAt,
-        count: t.count,
-        needsAttention,
-      };
-    })
-    .sort((a, b) => +new Date(b.lastAt) - +new Date(a.lastAt));
+  type Out = {
+    key: string;
+    supplierId: string | null;
+    name: string;
+    phone: string;
+    preview: string;
+    lastAt: Date | null;
+    count: number;
+    needsAttention: boolean;
+    registered: boolean;
+    automationMode: "OFF" | "ASSIST" | "AUTO" | null;
+    hasMessages: boolean;
+  };
 
-  return NextResponse.json({ threads: out, needsAttention: out.filter((t) => t.needsAttention).length });
+  const out: Out[] = [];
+  for (const t of threads.values()) {
+    const s = t.supplierId ? byId.get(t.supplierId) : undefined;
+    const needsAttention =
+      t.verifierFailed ||
+      (!!t.lastInbound && ATTENTION_RX.test(t.lastInbound)) ||
+      (!!t.supplierId && overdue.has(t.supplierId));
+    out.push({
+      key: t.key,
+      supplierId: t.supplierId,
+      name: s?.name ?? `+${t.key}`,
+      phone: s?.phone ?? t.key,
+      preview: t.preview.slice(0, 60),
+      lastAt: t.lastAt,
+      count: t.count,
+      needsAttention,
+      registered: !!s,
+      automationMode: s?.automationMode ?? null,
+      hasMessages: true,
+    });
+  }
+  // Append every supplier that has no thread yet.
+  for (const s of suppliers) {
+    if (supplierWithThread.has(s.id)) continue;
+    out.push({
+      key: digits(s.phone) || s.id,
+      supplierId: s.id,
+      name: s.name,
+      phone: s.phone ?? "",
+      preview: "",
+      lastAt: null,
+      count: 0,
+      needsAttention: overdue.has(s.id),
+      registered: true,
+      automationMode: s.automationMode,
+      hasMessages: false,
+    });
+  }
+
+  out.sort((a, b) => {
+    if (a.hasMessages !== b.hasMessages) return a.hasMessages ? -1 : 1; // chats first
+    if (a.hasMessages) return +new Date(b.lastAt!) - +new Date(a.lastAt!);
+    return a.name.localeCompare(b.name); // then suppliers without chats, A→Z
+  });
+
+  const reg = out.filter((t) => t.registered);
+  const counts = {
+    all: out.length,
+    suppliers: reg.length,
+    needsAttention: out.filter((t) => t.needsAttention).length,
+    other: out.length - reg.length,
+    auto: reg.filter((t) => t.automationMode === "AUTO").length,
+    assist: reg.filter((t) => t.automationMode === "ASSIST").length,
+    off: reg.filter((t) => t.automationMode === "OFF").length,
+  };
+
+  return NextResponse.json({ threads: out, counts, needsAttention: counts.needsAttention });
 }
