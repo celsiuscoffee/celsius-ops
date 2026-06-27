@@ -238,6 +238,18 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     let reSource: ReSource | null = null;
     const reSources: ReSource[] = [];
 
+    // Capture a supplier-sent invoice as a DRAFT (amount left for a human to verify) —
+    // REGARDLESS of escalate/mode. Invoice messages routinely trip requires_human, so
+    // when this sat inside the non-escalate branch it was silently skipped while the
+    // agent still replied "saved". Safe: only creates a draft on a PO with no invoice yet.
+    if (decision.capture_invoice && order.invoices.length === 0) {
+      invoiceCaptured = await captureInvoice(
+        { id: order.id, orderNumber: order.orderNumber, outletId: order.outletId, totalAmount: order.totalAmount },
+        supplier.id,
+        evt.mediaId ?? null,
+      );
+    }
+
     if (escalate) {
       // Keep the model's OWN holding line — it's specific to this message + varied (the
       // playbook makes it honest + non-committal). Fall back to the canned line only if
@@ -272,13 +284,6 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       if (isValidIsoDate(decision.delivery_date)) {
         await applyDeliveryDate(order.id, decision.delivery_date);
         deliveryUpdated = decision.delivery_date;
-      }
-      if (decision.capture_invoice && order.invoices.length === 0) {
-        invoiceCaptured = await captureInvoice(
-          { id: order.id, orderNumber: order.orderNumber, outletId: order.outletId, totalAmount: order.totalAmount },
-          supplier.id,
-          evt.mediaId ?? null,
-        );
       }
     }
     if (!replyText) replyText = HOLDING_REPLY[lang];
