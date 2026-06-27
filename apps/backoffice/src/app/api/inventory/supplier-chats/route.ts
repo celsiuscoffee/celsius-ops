@@ -1,6 +1,10 @@
 import { NextResponse, NextRequest } from "next/server";
+import type { OrderStatus } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
+
+// A PO that's out the door and we're still expecting goods against.
+const DELIVERY_STATUSES: OrderStatus[] = ["SENT", "CONFIRMED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
 
 // Threads for the Supplier Chats workspace. Folds WhatsAppMessage rows into one
 // thread per counterparty, then MERGES in every active supplier — so suppliers with
@@ -52,6 +56,7 @@ export async function GET(req: NextRequest) {
     lastAt: Date;
     count: number;
     lastInbound: string | null;
+    lastDirection: string;
     verifierFailed: boolean;
   };
   const threads = new Map<string, T>();
@@ -69,6 +74,8 @@ export async function GET(req: NextRequest) {
         lastAt: m.timestamp,
         count: 0,
         lastInbound: null,
+        // rows are desc, so the first one we see for a thread is the most recent.
+        lastDirection: m.direction,
         verifierFailed: m.direction === "outbound" && !!raw?.agent && v?.rating === "fail",
       };
       threads.set(counter, t);
@@ -99,6 +106,25 @@ export async function GET(req: NextRequest) {
     : [];
   const overdue = new Set(overdueRows.map((o) => o.supplierId));
 
+  // Workflow-stage signals across ALL active suppliers (cheap distinct lookups):
+  // who has an unpaid invoice (To pay) and who has a PO out awaiting goods (Awaiting
+  // delivery). Used to drive the action-oriented filter tabs.
+  const allSupplierIds = suppliers.map((s) => s.id);
+  const [unpaidRows, deliveryRows] = await Promise.all([
+    prisma.invoice.findMany({
+      where: { supplierId: { in: allSupplierIds }, status: { not: "PAID" } },
+      select: { supplierId: true },
+      distinct: ["supplierId"],
+    }),
+    prisma.order.findMany({
+      where: { supplierId: { in: allSupplierIds }, status: { in: DELIVERY_STATUSES } },
+      select: { supplierId: true },
+      distinct: ["supplierId"],
+    }),
+  ]);
+  const unpaidSet = new Set(unpaidRows.map((o) => o.supplierId).filter((x): x is string => !!x));
+  const deliverySet = new Set(deliveryRows.map((o) => o.supplierId).filter((x): x is string => !!x));
+
   type Out = {
     key: string;
     supplierId: string | null;
@@ -108,6 +134,9 @@ export async function GET(req: NextRequest) {
     lastAt: Date | null;
     count: number;
     needsAttention: boolean;
+    awaitingReply: boolean;
+    toPay: boolean;
+    awaitingDelivery: boolean;
     registered: boolean;
     automationMode: "OFF" | "ASSIST" | "AUTO" | null;
     hasMessages: boolean;
@@ -129,6 +158,9 @@ export async function GET(req: NextRequest) {
       lastAt: t.lastAt,
       count: t.count,
       needsAttention,
+      awaitingReply: t.lastDirection === "inbound",
+      toPay: !!t.supplierId && unpaidSet.has(t.supplierId),
+      awaitingDelivery: !!t.supplierId && deliverySet.has(t.supplierId),
       registered: !!s,
       automationMode: s?.automationMode ?? null,
       hasMessages: true,
@@ -146,6 +178,9 @@ export async function GET(req: NextRequest) {
       lastAt: null,
       count: 0,
       needsAttention: overdue.has(s.id),
+      awaitingReply: false,
+      toPay: unpaidSet.has(s.id),
+      awaitingDelivery: deliverySet.has(s.id),
       registered: true,
       automationMode: s.automationMode,
       hasMessages: false,
@@ -163,6 +198,9 @@ export async function GET(req: NextRequest) {
     all: out.length,
     suppliers: reg.length,
     needsAttention: out.filter((t) => t.needsAttention).length,
+    needsReply: out.filter((t) => t.awaitingReply).length,
+    toPay: out.filter((t) => t.toPay).length,
+    awaitingDelivery: out.filter((t) => t.awaitingDelivery).length,
     other: out.length - reg.length,
     auto: reg.filter((t) => t.automationMode === "AUTO").length,
     assist: reg.filter((t) => t.automationMode === "ASSIST").length,
