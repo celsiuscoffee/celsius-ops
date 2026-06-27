@@ -13,6 +13,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         outlet: true,
         supplier: true,
         items: { include: { product: true, productPackage: true } },
+        invoices: { orderBy: { createdAt: "desc" } },
       },
     });
     if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });

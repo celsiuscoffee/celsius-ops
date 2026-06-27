@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useFetch } from "@/lib/use-fetch";
 import { formatRM } from "@celsius/shared";
+import { EditOrderModal, type Order as EditOrder } from "@/components/inventory/EditOrderModal";
 import {
   MessageCircle,
   AlertCircle,
@@ -16,6 +17,7 @@ import {
   ExternalLink,
   Search,
   Plus,
+  Pencil,
   X,
   Hand,
   ShoppingCart,
@@ -272,6 +274,127 @@ export default function SupplierChatsPage() {
       setPoViewError(e instanceof Error ? e.message : "Failed");
     } finally {
       setPoViewBusy(false);
+    }
+  }
+
+  // ── Full PO edit (shared EditOrderModal) ──────────────────────
+  // The simple PO panel above only adjusts delivery date + status. The
+  // "Edit" button opens the same rich modal the Purchase Orders page uses
+  // (invoice upload + AI extract, deposit, editable line items). The GET
+  // /api/inventory/orders/[id] response is a raw Prisma row, so we adapt
+  // it into the modal's Order shape. It doesn't include invoices, so
+  // `invoice` is null here — the modal creates one on save as needed.
+  const [editOrder, setEditOrder] = useState<EditOrder | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+
+  type RawOrder = {
+    id: string;
+    orderNumber: string;
+    status: string;
+    totalAmount: number | string;
+    deliveryCharge?: number | string | null;
+    notes?: string | null;
+    photos?: string[] | null;
+    deliveryDate?: string | null;
+    sentAt?: string | null;
+    approvedAt?: string | null;
+    createdAt?: string | null;
+    outlet?: { name?: string | null; code?: string | null } | null;
+    supplier?: { id?: string | null; name?: string | null; phone?: string | null; depositPercent?: number | null; depositTermsDays?: number | null } | null;
+    items?: {
+      id: string;
+      quantity: number | string;
+      unitPrice: number | string;
+      totalPrice: number | string;
+      notes?: string | null;
+      product?: { name?: string | null; sku?: string | null; baseUom?: string | null } | null;
+      productPackage?: { packageLabel?: string | null; packageName?: string | null } | null;
+    }[] | null;
+    invoices?: {
+      id: string;
+      invoiceNumber: string;
+      amount: number | string;
+      status: string;
+      issueDate?: string | null;
+      dueDate?: string | null;
+      photos?: string[] | null;
+      depositPercent?: number | null;
+      depositTermsDays?: number | null;
+      depositAmount?: number | string | null;
+      depositPaidAt?: string | null;
+      deliveryDate?: string | null;
+    }[] | null;
+  };
+
+  function adaptOrder(o: RawOrder): EditOrder {
+    return {
+      id: o.id,
+      orderNumber: o.orderNumber,
+      outlet: o.outlet?.name ?? "",
+      outletCode: o.outlet?.code ?? "",
+      supplierId: o.supplier?.id ?? "",
+      supplier: o.supplier?.name ?? "Unknown",
+      supplierPhone: o.supplier?.phone ?? "",
+      status: o.status,
+      totalAmount: Number(o.totalAmount),
+      notes: o.notes ?? null,
+      photos: o.photos ?? [],
+      deliveryDate: o.deliveryDate ? String(o.deliveryDate).slice(0, 10) : null,
+      deliveryCharge: Number(o.deliveryCharge ?? 0),
+      createdBy: "",
+      approvedBy: null,
+      approvedAt: o.approvedAt ? String(o.approvedAt) : null,
+      sentAt: o.sentAt ? String(o.sentAt) : null,
+      createdAt: o.createdAt ? String(o.createdAt) : "",
+      items: (o.items ?? []).map((i) => ({
+        id: i.id,
+        product: i.product?.name ?? "item",
+        sku: i.product?.sku ?? "",
+        uom: i.productPackage?.packageLabel ?? i.product?.baseUom ?? "",
+        package: i.productPackage?.packageLabel ?? i.productPackage?.packageName ?? "",
+        quantity: Number(i.quantity),
+        unitPrice: Number(i.unitPrice),
+        totalPrice: Number(i.totalPrice),
+        notes: i.notes ?? null,
+      })),
+      receivingCount: 0,
+      invoice:
+        o.invoices && o.invoices[0]
+          ? {
+              id: o.invoices[0].id,
+              invoiceNumber: o.invoices[0].invoiceNumber,
+              amount: Number(o.invoices[0].amount),
+              status: o.invoices[0].status,
+              issueDate: o.invoices[0].issueDate ? String(o.invoices[0].issueDate).slice(0, 10) : "",
+              dueDate: o.invoices[0].dueDate ? String(o.invoices[0].dueDate).slice(0, 10) : null,
+              photoCount: o.invoices[0].photos?.length ?? 0,
+              photos: o.invoices[0].photos ?? [],
+              depositPercent: o.invoices[0].depositPercent ?? null,
+              depositTermsDays: o.invoices[0].depositTermsDays ?? null,
+              depositAmount: o.invoices[0].depositAmount != null ? Number(o.invoices[0].depositAmount) : null,
+              depositPaidAt: o.invoices[0].depositPaidAt ? String(o.invoices[0].depositPaidAt) : null,
+              deliveryDate: o.invoices[0].deliveryDate ? String(o.invoices[0].deliveryDate).slice(0, 10) : null,
+            }
+          : null,
+      supplierDepositPercent: o.supplier?.depositPercent ?? null,
+      supplierDepositTermsDays: o.supplier?.depositTermsDays ?? null,
+    };
+  }
+
+  async function openEditOrder(id: string) {
+    setEditLoading(true);
+    try {
+      const r = await fetch(`/api/inventory/orders/${id}`);
+      if (!r.ok) {
+        setPoViewError("Couldn't load this PO for editing.");
+        return;
+      }
+      const raw = (await r.json()) as RawOrder;
+      setEditOrder(adaptOrder(raw));
+    } catch {
+      setPoViewError("Couldn't load this PO for editing.");
+    } finally {
+      setEditLoading(false);
     }
   }
 
@@ -963,6 +1086,13 @@ export default function SupplierChatsPage() {
                         Cancel
                       </button>
                     )}
+                    <button
+                      onClick={() => openEditOrder(poView.id)}
+                      disabled={editLoading}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-2 text-[13px] font-medium hover:bg-muted disabled:opacity-50"
+                    >
+                      {editLoading ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />} Edit
+                    </button>
                     <a
                       href={`/inventory/orders/${poView.id}`}
                       className="rounded-md border border-border px-3 py-2 text-[13px] font-medium hover:bg-muted"
@@ -1048,6 +1178,13 @@ export default function SupplierChatsPage() {
           </div>
         </div>
       )}
+
+      {/* Full PO edit — shared modal (same one the Purchase Orders page uses) */}
+      <EditOrderModal
+        order={editOrder}
+        onClose={() => setEditOrder(null)}
+        onSaved={() => { mutateDetail(); mutateThreads(); if (poViewId) void openPoView(poViewId); }}
+      />
     </div>
   );
 }
