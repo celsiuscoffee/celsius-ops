@@ -28,6 +28,32 @@ export function verifierEnabled(): boolean {
   return process.env.PROCUREMENT_VERIFIER_ENABLED === "true" && !!process.env.ANTHROPIC_API_KEY;
 }
 
+// Pre-send gate: when on, the agent judges a PLANNED auto-act before applying/sending and
+// escalates instead of shipping a "fail". Separate flag so the gate can be rolled out
+// independently of shadow-mode grading. Requires the verifier itself to be enabled.
+export function verifierGateEnabled(): boolean {
+  return process.env.PROCUREMENT_VERIFIER_GATE === "true" && verifierEnabled();
+}
+
+/**
+ * Judge an in-flight decision BEFORE it's applied/sent (the pre-send gate), as opposed to
+ * verifyMessage which grades an already-recorded message post-hoc. The caller uses the
+ * verdict to hold + escalate on a fail. Best-effort: a judge error returns null (caller
+ * proceeds as if ungated — fail-open, never blocks the supplier on an infra hiccup).
+ */
+export async function judgePlanned(
+  input: VerifierInput,
+  decision: VerifierDecision,
+): Promise<VerifierVerdict | null> {
+  if (!verifierEnabled()) return null;
+  try {
+    return await judge(input, decision);
+  } catch (e) {
+    console.warn("[verifier] pre-send judge failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
 async function judge(input: VerifierInput, decision: VerifierDecision): Promise<VerifierVerdict | null> {
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
