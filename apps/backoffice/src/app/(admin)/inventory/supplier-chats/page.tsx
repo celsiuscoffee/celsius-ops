@@ -21,6 +21,8 @@ import {
   Hand,
   ShoppingCart,
   Reply,
+  Pin,
+  MoreHorizontal,
 } from "lucide-react";
 
 type AutomationMode = "OFF" | "ASSIST" | "AUTO";
@@ -136,6 +138,71 @@ export default function SupplierChatsPage() {
     "all" | "reply" | "topay" | "awaiting" | "auto" | "assist" | "off" | "other" | "need"
   >("need");
   const [query, setQuery] = useState("");
+
+  // ── List organization (pins + custom segments) ────────────────
+  // Client-only, persisted per-browser in localStorage. No backend/schema.
+  type Segment = { id: string; name: string; keys: string[] };
+  const [pinnedKeys, setPinnedKeys] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      return new Set(JSON.parse(localStorage.getItem("sc-pinned-keys") || "[]") as string[]);
+    } catch {
+      return new Set();
+    }
+  });
+  const [segments, setSegments] = useState<Segment[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = JSON.parse(localStorage.getItem("sc-segments") || "[]");
+      return Array.isArray(raw) ? (raw as Segment[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  // Which custom segment is active (overrides the built-in `filter` while set).
+  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+  // Per-row "…" menu: the open row's key, or null.
+  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem("sc-pinned-keys", JSON.stringify([...pinnedKeys]));
+  }, [pinnedKeys]);
+  useEffect(() => {
+    localStorage.setItem("sc-segments", JSON.stringify(segments));
+  }, [segments]);
+
+  function togglePin(key: string) {
+    setPinnedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+  // Toggle a thread key in/out of a segment (immutable update).
+  function toggleSegmentMember(segmentId: string, key: string) {
+    setSegments((prev) =>
+      prev.map((s) =>
+        s.id === segmentId
+          ? { ...s, keys: s.keys.includes(key) ? s.keys.filter((k) => k !== key) : [...s.keys, key] }
+          : s,
+      ),
+    );
+  }
+  // Create a new segment from a prompt; optionally seed it with one thread key.
+  function createSegment(seedKey?: string): string | null {
+    const name = window.prompt("Segment name")?.trim();
+    if (!name) return null;
+    const id = crypto.randomUUID();
+    setSegments((prev) => [...prev, { id, name, keys: seedKey ? [seedKey] : [] }]);
+    return id;
+  }
+  function deleteSegment(segmentId: string) {
+    const seg = segments.find((s) => s.id === segmentId);
+    if (!window.confirm(`Delete segment "${seg?.name ?? ""}"?`)) return;
+    setSegments((prev) => prev.filter((s) => s.id !== segmentId));
+    setActiveSegmentId((cur) => (cur === segmentId ? null : cur));
+  }
 
   // Poll so inbound supplier messages + the agent's auto-replies appear without
   // a manual refresh. The open thread polls faster than the list.
@@ -422,9 +489,14 @@ export default function SupplierChatsPage() {
   const threads = threadsData?.threads ?? [];
   const counts = threadsData?.counts;
   const q = query.trim().toLowerCase();
-  const shown = threads.filter((t) => {
+  // When a custom segment is active it overrides the built-in `filter` (search still applies).
+  const activeSegment = activeSegmentId ? segments.find((s) => s.id === activeSegmentId) ?? null : null;
+  const filtered = threads.filter((t) => {
     if (q && !(t.name.toLowerCase().includes(q) || t.phone.includes(q) || t.preview.toLowerCase().includes(q))) {
       return false;
+    }
+    if (activeSegment) {
+      return activeSegment.keys.includes(t.key);
     }
     switch (filter) {
       case "reply":
@@ -446,6 +518,13 @@ export default function SupplierChatsPage() {
       default:
         return t.registered; // "all" = every supplier (non-suppliers live under "Other")
     }
+  });
+  // Pinned threads float to the top. Stable sort preserves the existing relative
+  // order within the pinned and unpinned groups.
+  const shown = [...filtered].sort((a, b) => {
+    const ap = pinnedKeys.has(a.key) ? 0 : 1;
+    const bp = pinnedKeys.has(b.key) ? 0 : 1;
+    return ap - bp;
   });
 
   useEffect(() => {
@@ -576,31 +655,31 @@ export default function SupplierChatsPage() {
           <div className="mt-2 flex flex-wrap items-center gap-1">
             {(needSupplierIds.size > 0 || filter === "need") && (
               <button
-                onClick={() => setFilter("need")}
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${filter === "need" ? "bg-amber-500/20 text-amber-800 dark:text-amber-300" : "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-400"}`}
+                onClick={() => { setActiveSegmentId(null); setFilter("need"); }}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${!activeSegment && filter === "need" ? "bg-amber-500/20 text-amber-800 dark:text-amber-300" : "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-400"}`}
               >
                 <ShoppingCart size={11} /> Need ordering {needSupplierIds.size}
               </button>
             )}
             {(filter === "reply" || (counts?.needsReply ?? 0) > 0) && (
-              <Chip on={filter === "reply"} tone="danger" onClick={() => setFilter("reply")}>
+              <Chip on={!activeSegment && filter === "reply"} tone="danger" onClick={() => { setActiveSegmentId(null); setFilter("reply"); }}>
                 Needs reply {counts?.needsReply ?? 0}
               </Chip>
             )}
             {(filter === "topay" || (counts?.toPay ?? 0) > 0) && (
-              <Chip on={filter === "topay"} onClick={() => setFilter("topay")}>To pay {counts?.toPay ?? 0}</Chip>
+              <Chip on={!activeSegment && filter === "topay"} onClick={() => { setActiveSegmentId(null); setFilter("topay"); }}>To pay {counts?.toPay ?? 0}</Chip>
             )}
             {(filter === "awaiting" || (counts?.awaitingDelivery ?? 0) > 0) && (
-              <Chip on={filter === "awaiting"} onClick={() => setFilter("awaiting")}>
+              <Chip on={!activeSegment && filter === "awaiting"} onClick={() => { setActiveSegmentId(null); setFilter("awaiting"); }}>
                 Awaiting delivery {counts?.awaitingDelivery ?? 0}
               </Chip>
             )}
-            <Chip on={filter === "all"} onClick={() => setFilter("all")}>All {counts?.suppliers ?? 0}</Chip>
+            <Chip on={!activeSegment && filter === "all"} onClick={() => { setActiveSegmentId(null); setFilter("all"); }}>All {counts?.suppliers ?? 0}</Chip>
             <select
-              value={(["auto", "assist", "off", "other"] as string[]).includes(filter) ? filter : ""}
-              onChange={(e) => e.target.value && setFilter(e.target.value as "auto" | "assist" | "off" | "other")}
+              value={!activeSegment && (["auto", "assist", "off", "other"] as string[]).includes(filter) ? filter : ""}
+              onChange={(e) => { if (e.target.value) { setActiveSegmentId(null); setFilter(e.target.value as "auto" | "assist" | "off" | "other"); } }}
               title="Filter by automation mode"
-              className={`rounded-full border px-2 py-[3px] text-[11px] ${(["auto", "assist", "off", "other"] as string[]).includes(filter) ? "border-primary/40 bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground"}`}
+              className={`rounded-full border px-2 py-[3px] text-[11px] ${!activeSegment && (["auto", "assist", "off", "other"] as string[]).includes(filter) ? "border-primary/40 bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground"}`}
             >
               <option value="">Mode</option>
               <option value="auto">Auto {counts?.auto ?? 0}</option>
@@ -608,6 +687,37 @@ export default function SupplierChatsPage() {
               <option value="off">Off {counts?.off ?? 0}</option>
               {(counts?.other ?? 0) > 0 && <option value="other">Other {counts?.other ?? 0}</option>}
             </select>
+            {/* ── Custom segments ── render after the built-in chips, same wrap row. */}
+            {segments.map((seg) => {
+              const on = activeSegmentId === seg.id;
+              return (
+                <span
+                  key={seg.id}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] ${on ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                >
+                  <button onClick={() => setActiveSegmentId(seg.id)} className="inline-flex items-center gap-1">
+                    {seg.name} {seg.keys.length}
+                  </button>
+                  {on && (
+                    <button
+                      onClick={() => deleteSegment(seg.id)}
+                      aria-label="Delete segment"
+                      title="Delete segment"
+                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                    >
+                      <X size={11} />
+                    </button>
+                  )}
+                </span>
+              );
+            })}
+            <button
+              onClick={() => { const id = createSegment(); if (id) setActiveSegmentId(id); }}
+              title="New segment"
+              className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+            >
+              <Plus size={11} /> Segment
+            </button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -619,11 +729,16 @@ export default function SupplierChatsPage() {
           {!isLoading && shown.length === 0 && (
             <p className="p-4 text-xs text-muted-foreground">No suppliers match this filter.</p>
           )}
-          {shown.map((t) => (
-            <button
+          {shown.map((t) => {
+            const isPinned = pinnedKeys.has(t.key);
+            return (
+            <div
               key={t.key}
+              role="button"
+              tabIndex={0}
               onClick={() => setSelected(t.key)}
-              className={`flex w-full gap-2.5 border-b border-border p-2.5 text-left ${selected === t.key ? "bg-muted" : "hover:bg-muted/50"}`}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(t.key); } }}
+              className={`group relative flex w-full cursor-pointer gap-2.5 border-b border-border p-2.5 text-left ${selected === t.key ? "bg-muted" : "hover:bg-muted/50"}`}
             >
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-medium text-primary">
                 {initials(t.name)}
@@ -631,18 +746,76 @@ export default function SupplierChatsPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
                   <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium">
+                    {isPinned && <Pin size={11} className="shrink-0 fill-primary text-primary" />}
                     {t.registered && t.automationMode && <ModeDot mode={t.automationMode} />}
                     <span className="truncate">{t.name}</span>
                   </span>
-                  <span className="shrink-0 text-[11px] text-muted-foreground">{t.lastAt ? rel(t.lastAt) : ""}</span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <span className="text-[11px] text-muted-foreground group-hover:hidden">{t.lastAt ? rel(t.lastAt) : ""}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setOpenMenuKey((k) => (k === t.key ? null : t.key)); }}
+                      aria-label="Organize chat"
+                      title="Pin / add to segment"
+                      className="hidden rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground group-hover:inline-flex"
+                    >
+                      <MoreHorizontal size={14} />
+                    </button>
+                  </span>
                 </div>
                 <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                   {t.needsAttention && <AlertCircle size={11} className="shrink-0 text-destructive" />}
                   <span className="truncate">{t.hasMessages ? t.preview : "No messages yet"}</span>
                 </div>
               </div>
-            </button>
-          ))}
+              {openMenuKey === t.key && (
+                <>
+                  {/* Backdrop dismiss */}
+                  <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setOpenMenuKey(null); }} />
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute right-2 top-9 z-20 w-52 rounded-md border border-border bg-popover p-1 text-[12px] text-popover-foreground shadow-lg"
+                  >
+                    <button
+                      onClick={() => { togglePin(t.key); setOpenMenuKey(null); }}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
+                    >
+                      <Pin size={12} className={isPinned ? "fill-primary text-primary" : ""} />
+                      {isPinned ? "Unpin" : "Pin to top"}
+                    </button>
+                    <div className="my-1 border-t border-border" />
+                    <div className="px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Add to segment
+                    </div>
+                    {segments.length === 0 && (
+                      <div className="px-2 py-1 text-[11px] text-muted-foreground">No segments yet.</div>
+                    )}
+                    {segments.map((seg) => {
+                      const member = seg.keys.includes(t.key);
+                      return (
+                        <button
+                          key={seg.id}
+                          onClick={() => toggleSegmentMember(seg.id, t.key)}
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
+                        >
+                          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border border-border">
+                            {member && <Check size={11} className="text-primary" />}
+                          </span>
+                          <span className="truncate">{seg.name}</span>
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => { createSegment(t.key); setOpenMenuKey(null); }}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-muted-foreground hover:bg-muted"
+                    >
+                      <Plus size={12} /> New segment…
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            );
+          })}
         </div>
       </div>
 
