@@ -58,6 +58,7 @@ export async function GET(req: NextRequest) {
     lastInbound: string | null;
     lastDirection: string;
     verifierFailed: boolean;
+    sendFailed: boolean;
   };
   const threads = new Map<string, T>();
   for (const m of rows) {
@@ -77,6 +78,7 @@ export async function GET(req: NextRequest) {
         // rows are desc, so the first one we see for a thread is the most recent.
         lastDirection: m.direction,
         verifierFailed: m.direction === "outbound" && !!raw?.agent && v?.rating === "fail",
+        sendFailed: m.direction === "outbound" && raw?.sendFailed === true,
       };
       threads.set(counter, t);
     }
@@ -147,6 +149,7 @@ export async function GET(req: NextRequest) {
     const s = t.supplierId ? byId.get(t.supplierId) : undefined;
     const needsAttention =
       t.verifierFailed ||
+      t.sendFailed ||
       (!!t.lastInbound && ATTENTION_RX.test(t.lastInbound)) ||
       (!!t.supplierId && overdue.has(t.supplierId));
     out.push({

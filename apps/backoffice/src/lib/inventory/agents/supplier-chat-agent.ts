@@ -445,6 +445,10 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       raw: {
         agent: SUPPLIER_AGENT_VERSION,
         inReplyTo: evt.waMessageId ?? null,
+        // The send failed — the supplier never got our reply. If a PO edit was applied, the
+        // PO is now changed but unconfirmed; the dedup correctly won't retry, so flag the
+        // thread for a human to resend (surfaced as needs-attention in the inbox list).
+        sendFailed: !sent.ok,
         intent: decision.intent,
         confidence: decision.confidence,
         appliedAction,
