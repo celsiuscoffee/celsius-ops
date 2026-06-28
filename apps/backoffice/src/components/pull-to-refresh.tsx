@@ -7,11 +7,15 @@ interface PullToRefreshProps {
   onRefresh: () => Promise<void>;
   children: React.ReactNode;
   className?: string;
+  // When true the pull gesture is inert (no listeners attached) — e.g. on full-screen,
+  // internally-scrolled pages like the Purchase Orders workspace, where an accidental pull
+  // reloading the page makes it hard to navigate.
+  disabled?: boolean;
 }
 
 const THRESHOLD = 80;
 
-export function PullToRefresh({ onRefresh, children, className }: PullToRefreshProps) {
+export function PullToRefresh({ onRefresh, children, className, disabled = false }: PullToRefreshProps) {
   const [pulling, setPulling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
@@ -45,7 +49,7 @@ export function PullToRefresh({ onRefresh, children, className }: PullToRefreshP
 
   useEffect(() => {
     const el = containerRef.current;
-    if (!el) return;
+    if (!el || disabled) return;
     el.addEventListener("touchstart", handleTouchStart, { passive: true });
     el.addEventListener("touchmove", handleTouchMove, { passive: true });
     el.addEventListener("touchend", handleTouchEnd);
@@ -54,7 +58,7 @@ export function PullToRefresh({ onRefresh, children, className }: PullToRefreshP
       el.removeEventListener("touchmove", handleTouchMove);
       el.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd, disabled]);
 
   const progress = Math.min(pullDistance / THRESHOLD, 1);
 
