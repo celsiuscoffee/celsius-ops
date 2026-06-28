@@ -90,20 +90,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // HARD GATE: Reject clock-in if outside geofence or no GPS (clock-out still allowed)
+  // SOFT CONTROL (company policy: warn + allow + audit, NOT a hard block — a
+  // barista must never be locked out of starting their shift). Out-of-zone /
+  // no-GPS clock-ins are ALLOWED but tagged via clock_in_method + a warning, so
+  // attendance review can flag them. Hard-blocking here is also what kept clock-in
+  // adoption near zero — the point now is to GET the clock-in, then review it.
+  let geofenceWarning: string | null = null;
+  let clockInMethod = "app";
   if (action === "clock_in" && zone) {
     if (latitude == null || longitude == null) {
-      return NextResponse.json({
-        error: "GPS location required to clock in",
-        withinGeofence: false,
-      }, { status: 400 });
-    }
-    if (!withinGeofence) {
-      return NextResponse.json({
-        error: `You must be at ${zoneName} to clock in. You're ${distanceMeters}m away (zone: ${zoneRadius}m).`,
-        withinGeofence: false,
-        distanceMeters,
-      }, { status: 403 });
+      clockInMethod = "app_nogps";
+      geofenceWarning = "Clocked in without GPS — flagged for review.";
+    } else if (!withinGeofence) {
+      clockInMethod = "app_offsite";
+      geofenceWarning = `Clocked in ${distanceMeters}m from ${zoneName} (zone ${zoneRadius}m) — flagged for review.`;
     }
   }
 
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
         clock_in: new Date().toISOString(),
         clock_in_lat: latitude ?? null,
         clock_in_lng: longitude ?? null,
-        clock_in_method: "app",
+        clock_in_method: clockInMethod,
         clock_in_photo_url: photoUrl,
         ai_status: "pending",
       })
@@ -175,6 +175,7 @@ export async function POST(req: NextRequest) {
       success: true,
       log: data,
       withinGeofence,
+      warning: geofenceWarning,
     });
   }
 

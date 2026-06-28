@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
-import { listReminders, createReminder } from "@/lib/ops-reminders";
+import { listReminders, createReminder, notifyReminderAssignee } from "@/lib/ops-reminders";
 
 export const dynamic = "force-dynamic";
 
@@ -96,5 +96,14 @@ export async function POST(req: NextRequest) {
     assigneeUserId: body.assigneeUserId ?? null,
     createdByUserId: session.id,
   });
-  return NextResponse.json({ ok: true, id: r.id });
+
+  // Ping the assignee on WhatsApp now (on-assign beat). Best-effort + never
+  // self-pings the creator; the due-nudge cron handles the later "it's due now"
+  // beat. notify is the result so the UI can hint "sent" / "no phone on file".
+  const notify = await notifyReminderAssignee(r.id, { creatorId: session.id }).catch((e) => {
+    console.error("[ops-reminders] on-assign notify failed:", e);
+    return { sent: false as const, reason: "send_failed" as const };
+  });
+
+  return NextResponse.json({ ok: true, id: r.id, notify });
 }

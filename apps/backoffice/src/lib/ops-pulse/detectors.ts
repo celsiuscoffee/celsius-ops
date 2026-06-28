@@ -519,8 +519,18 @@ export async function detectMenuSnoozed(now: Date): Promise<Breach[]> {
 // roster (hr_schedule_shifts/hr_schedules) and clock-ins (hr_attendance_logs)
 // live in the same DB as Prisma, so we query them raw. One breach per staff/day.
 export async function detectNoClockIn(now: Date): Promise<Breach[]> {
-  // Gated off until clock-in adoption is real — see NOCLOCKIN_ENABLED.
+  // Gated off for the PULSE digest until adoption is real (NOCLOCKIN_ENABLED) —
+  // it would bury the digest in false misses. The ops-nudges module calls
+  // findNoClockInBreaches directly (ungated): nudging the no-show + manager is
+  // exactly what BUILDS adoption, so it shouldn't wait on adoption.
   if (!NOCLOCKIN_ENABLED) return [];
+  return findNoClockInBreaches(now);
+}
+
+// Ungated core: every staff with a published shift today whose start + grace has
+// passed and no clock-in. Each breach carries detail.userId (the no-show) so a
+// caller can DM the person, not just the discipline lead.
+export async function findNoClockInBreaches(now: Date): Promise<Breach[]> {
   const { ymd } = mytToday(now);
   const dayStart = new Date(`${ymd}T00:00:00+08:00`);
   const dayEnd = new Date(dayStart.getTime() + 86_400_000);
@@ -547,6 +557,9 @@ export async function detectNoClockIn(now: Date): Promise<Breach[]> {
   const grace = THRESHOLDS.attendance.graceMinutes;
   const candidates = shifts.filter((s) => {
     if (!s.user_id || clockedIn.has(s.user_id)) return false;
+    // Skip 00:00 starts — a midnight start_time is a roster placeholder (untimed
+    // shift), not a real shift. Nudging "clock in for your 00:00 shift" is noise.
+    if (s.start_time.startsWith("00:00")) return false;
     const start = new Date(`${ymd}T${s.start_time}+08:00`);
     return now.getTime() > start.getTime() + grace * 60_000;
   });

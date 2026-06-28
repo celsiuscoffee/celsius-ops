@@ -204,5 +204,13 @@ export const TEMPLATES = {
   ownerEscalation: process.env.OPS_PULSE_TPL_ESCALATION || "ops_pulse_escalation",
   dailyDigest: process.env.OPS_PULSE_TPL_DAILY || "ops_pulse_daily",
   audit: process.env.OPS_PULSE_TPL_AUDIT || "ops_pulse_audit",
+  // Manager-authored reminder pinged to the assignee (on assign + when due).
+  reminder: process.env.OPS_PULSE_TPL_REMINDER || "ops_reminder",
+  // Ad-hoc directive/announcement fanned out to staff from the workspace.
+  instruction: process.env.OPS_PULSE_TPL_INSTRUCTION || "ops_instruction",
+  // Weekly performance scoreboard (cashier DM / leader digest).
+  scoreboard: process.env.OPS_PULSE_TPL_SCOREBOARD || "ops_scoreboard",
+  // Real-time staff nudge (clock-in / stock count).
+  nudge: process.env.OPS_PULSE_TPL_NUDGE || "ops_nudge",
   languageCode: process.env.OPS_PULSE_TPL_LANG || "en",
 } as const;

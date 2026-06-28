@@ -1431,12 +1431,60 @@ model OpsReminder {
   snoozedUntil    DateTime?
   doneAt          DateTime?
   doneByUserId    String?
+  // Last time the assignee was pinged on WhatsApp about this reminder (on
+  // assign, then re-nudged when it falls due). Null = never notified. Drives
+  // the due-nudge cron's de-dupe so we don't re-ping every run.
+  lastNotifiedAt  DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([status, dueAt])
   @@index([assigneeUserId, status])
   @@index([createdByUserId, status])
+}
+
+// A directive/announcement the owner or a manager sends to staff over WhatsApp
+// from the Ops Workspace — distinct from OpsReminder (a single-owner to-do) and
+// OpsAlert (detector-driven). One instruction fans out to many recipients
+// (individuals, an outlet's on-shift team, a discipline, or all managers), each
+// tracked for delivery + acknowledgement so the workspace shows who has / hasn't
+// acted. Acks arrive as a "DONE"/"OK" WhatsApp reply (see lib/ops-instructions).
+model OpsInstruction {
+  id              String                    @id @default(uuid())
+  title           String
+  body            String
+  severity        String                    @default("normal") // normal | important | urgent
+  createdByUserId String
+  // Snapshot of the chosen audience for display ({ type, label, ... }). The
+  // resolved people live in OpsInstructionRecipient.
+  audience        Json
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  recipients      OpsInstructionRecipient[]
+
+  @@index([createdAt])
+  @@index([createdByUserId, createdAt])
+}
+
+// One row per (instruction, person). Carries the per-recipient WhatsApp delivery
+// state and the acknowledgement timestamp. userId is null for phone-only
+// recipients (e.g. a discipline lead configured as a raw number).
+model OpsInstructionRecipient {
+  id                String         @id @default(uuid())
+  instructionId     String
+  instruction       OpsInstruction @relation(fields: [instructionId], references: [id], onDelete: Cascade)
+  userId            String? // null = phone-only recipient (no app account)
+  name              String
+  phone             String? // E.164 digits, used to match inbound acks
+  deliveryStatus    String         @default("pending") // pending | sent | failed | skipped
+  error             String?
+  providerMessageId String?
+  sentAt            DateTime?
+  ackedAt           DateTime?
+  createdAt         DateTime       @default(now())
+
+  @@index([instructionId])
+  @@index([userId, ackedAt])
 }
 
 // Local-rank geogrid scoreboard for the GBP ranking loop. One row per scan

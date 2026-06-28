@@ -69,7 +69,7 @@ const PERIOD_LABELS: Record<PeriodType, string> = {
 };
 
 // Resolve a period to MYT (UTC+8) day boundaries + matching ISO timestamps.
-function resolvePeriod(period: PeriodType, fromParam?: string, toParam?: string) {
+export function resolvePeriod(period: PeriodType, fromParam?: string, toParam?: string) {
   const now = new Date();
   const mytNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
   const todayMYT = mytNow.toISOString().split("T")[0];
@@ -138,7 +138,15 @@ export async function GET(request: NextRequest) {
     searchParams.get("from") || undefined,
     searchParams.get("to") || undefined,
   );
+  return NextResponse.json(await computeScorecard(p));
+}
 
+export type ScorecardPeriod = ReturnType<typeof resolvePeriod>;
+
+// Per-outlet KPI computation, extracted from GET so the WhatsApp scoreboard loop
+// (lib/ops-scoreboard) shares the EXACT same numbers as the dashboard. Returns the
+// plain payload object; the route wraps it in NextResponse.
+export async function computeScorecard(p: ScorecardPeriod) {
   const supabase = getSupabaseAdmin();
 
   // ── Outlets: the join hub (active storefronts only) ─────────
@@ -233,7 +241,9 @@ export async function GET(request: NextRequest) {
     await Promise.all([ordersQ, pairQ, servingPosQ, servingPickupQ, checklistsP, adjustmentsP, supplierPricesP]);
 
   if (ordersRes.error) {
-    return NextResponse.json({ error: ordersRes.error.message }, { status: 500 });
+    // Throw (not return) so computeScorecard's type stays the payload object, not
+    // a NextResponse union — the GET wrapper / cron surfaces it as a 500.
+    throw new Error(`scorecard pos_orders query failed: ${ordersRes.error.message}`);
   }
   const orders = ordersRes.data ?? [];
   const pairRows = pairRes.data ?? [];
@@ -463,7 +473,7 @@ export async function GET(request: NextRequest) {
     return nums.length ? Math.round(nums.reduce((s, v) => s + v, 0) / nums.length) : null;
   };
 
-  return NextResponse.json({
+  return {
     period: { from: p.fromDate, to: p.toDate, type: p.type, label: p.label },
     generatedAt: new Date().toISOString(),
     targets: KPI_TARGETS,
@@ -481,5 +491,5 @@ export async function GET(request: NextRequest) {
       },
     },
     outlets: rows,
-  });
+  };
 }

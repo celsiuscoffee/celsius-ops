@@ -34,6 +34,28 @@ const TEMPLATE_DEFS = [
     body: "Audit\n\n{{1}}\n\nRun it and log the report. Reply DONE when done.",
     sample: "1 audit due · Kitchen Quality Audit overdue at Bangsar (8 days)",
   },
+  {
+    name: "ops_reminder",
+    body: "Reminder\n\n{{1}}\n\nReply DONE when it's handled.",
+    sample: "Chase Samudra invoice #1042 (due today 3:00 PM)",
+  },
+  {
+    name: "ops_instruction",
+    body: "Instruction\n\n{{1}}\n\nReply OK to confirm you've got it.",
+    sample: "Switch to the new opening checklist from tomorrow — Ammar",
+  },
+  {
+    name: "ops_scoreboard",
+    body: "Your scoreboard\n\n{{1}}\n\nFull board in BackOffice. Let's move the number this week.",
+    sample: "capture 18% (tgt 70%) · upsell 6% (tgt 10%) · crew 18% · top Badri 47%",
+  },
+  {
+    name: "ops_nudge",
+    // Fixed framing + {{1}} (Meta rejects a body that is only a variable). The
+    // variable carries the specific ask (clock-in / stock / manager digest).
+    body: "Hi, a quick update from Celsius ops:\n\n{{1}}",
+    sample: "Clock in for your 8:00am shift at Putrajaya — you haven't yet.",
+  },
 ] as const;
 
 // GET — list the WABA's WhatsApp message templates with their approval status,

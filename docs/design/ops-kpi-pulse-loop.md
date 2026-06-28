@@ -435,3 +435,30 @@ WhatsApp templates for approval**, and **confirm the manager's + owner's WhatsAp
   which Meta only delivers inside each recipient's open 24h window, so the leads must message the
   bot once (or the templates must be approved) for it to actually land. Flip real-time to armed
   once a window/template is confirmed.
+- **2026-06-27 — Workspace: reminders + instructions now SEND over WhatsApp.** The
+  Ops Workspace (`/ops/chat-inbox`) previously only *received* (inbox) and showed pulse/reminder
+  state; reminders were silent internal to-dos. Closed the gap so all three outbound types the
+  owner wanted go over WhatsApp:
+  - **Reminders → WhatsApp.** Assigning an `OpsReminder` to staff now pings them on assign
+    (free-form/template via the shared `sendProactive`), and a new hourly cron
+    `/api/cron/ops-reminders` (`runReminderDueNudges`) re-pings the assignee when it falls due
+    (de-duped on the new `OpsReminder.lastNotifiedAt` vs `dueAt`). A strong-completion reply
+    ("done"/"siap"/"selesai") marks their assigned reminders DONE (`handleReminderAck`).
+  - **Instructions (NEW).** Ad-hoc directives fanned out to a chosen audience and tracked
+    per-recipient. New models `OpsInstruction` + `OpsInstructionRecipient` (migration
+    `20260627_ops_instructions`, applied to the live project `kqdcdhpnyuwrxqhbuyfl`). Audience
+    (owner choice: "people + groups") = explicit staff / an outlet's on-shift team (reuses
+    `resolveOutletTeam`) / a discipline lead (reuses `resolveRecipients`) / all managers. Each
+    recipient row carries delivery state + `ackedAt`; a soft reply ("ok"/"noted"/"done") acks all
+    their pending rows (`handleInstructionAck`). `lib/ops-instructions.ts` +
+    `/api/ops/workspace/instructions[/[id]]` (create/list, detail/nudge/manual-ack) + a new
+    **Instructions** tab (`_InstructionsPanel.tsx`) with composer, per-instruction ack progress
+    (`acked/total`), and a "Nudge pending" button.
+  - **Unified inbound.** The WhatsApp webhook now runs all three ack handlers (alert / reminder /
+    instruction) per inbound message, best-effort. One staff "DONE" clears their batch across all
+    three (the documented batch-ack model; per-item acks await template quick-reply buttons).
+  - **Templates.** Added `ops_reminder` + `ops_instruction` to the `?action=create` set and to
+    `TEMPLATES`; both fall back to free-form (in-window) until APPROVED — same posture as the
+    pulse templates. No new env required.
+  - Typecheck clean; migration is additive + idempotent (`IF NOT EXISTS`). Delivery still bound
+    by WhatsApp's 24h rule until `ops_reminder` / `ops_instruction` are approved.
