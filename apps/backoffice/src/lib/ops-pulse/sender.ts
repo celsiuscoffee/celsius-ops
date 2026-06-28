@@ -53,36 +53,48 @@ export function composeDailyDigest(routine: string[], adhoc: string[]): string {
 }
 
 // ─── Template variable ({{1}}) builders ──────────────────────────────────
-// A single-line, newline-free summary: "<count> <noun> · item · item · …".
-// Items are joined with " · " and the whole thing is capped so the rendered
-// template body stays well under WhatsApp's 1024-char limit; overflow is elided
-// with a pointer to BackOffice (where the full list lives).
-function summarize(items: string[], max = 600): string {
+// The list for the template's {{1}} placeholder, rendered as a real MULTI-LINE
+// bulleted list (one item per line) for readability. sendProactive sends this
+// first and auto-retries a flat one-liner if WhatsApp rejects the newlines for
+// this account. Capped so the rendered body stays under WhatsApp's 1024-char
+// limit; overflow is elided with a pointer to BackOffice.
+function paramList(items: string[], max = 600): string {
   if (items.length === 0) return "";
-  const joined = items.join(" · ");
-  if (joined.length <= max) return joined;
-  return joined.slice(0, max - 1).replace(/\s+\S*$/, "") + " … (more in BackOffice)";
+  const bulleted = items.map((i) => `• ${i}`).join("\n");
+  if (bulleted.length <= max) return bulleted;
+  return bulleted.slice(0, max - 1).replace(/\s+\S*$/, "") + "\n• (more in BackOffice)";
 }
 
 export function managerDigestVar(lines: string[]): string {
-  return `${lines.length} need you · ${summarize(lines)}`;
+  return `${lines.length} need you:\n${paramList(lines)}`;
 }
 
 export function escalationVar(lines: string[]): string {
-  return `${lines.length} unacked past SLA · ${summarize(lines)}`;
+  return `${lines.length} unacked past SLA:\n${paramList(lines)}`;
 }
 
 export function dailyDigestVar(routine: string[], adhoc: string[]): string {
   const total = routine.length + adhoc.length;
-  const items = summarize([...routine, ...adhoc]);
-  return items ? `${total} open today · ${items}` : `${total} open today`;
+  const items = paramList([...routine, ...adhoc]);
+  return items ? `${total} open today:\n${items}` : `${total} open today`;
 }
 
-// WhatsApp template parameters can't contain newlines, tabs, or >4 consecutive
-// spaces. Collapse any whitespace run to a single space — defensive so a stray
-// newline can never bounce a send, even though the *Var builders are flat.
+// Flat (single-line) sanitizer — collapses ALL whitespace incl newlines to one
+// space. Used as the retry fallback if a multi-line param is rejected.
 function sanitizeParam(s: string): string {
   return s.replace(/\s+/g, " ").trim();
+}
+
+// Readable sanitizer — KEEPS single newlines so the {{1}} list renders one item
+// per line, but strips tabs, collapses space runs, and removes blank lines to
+// stay within WhatsApp's "no tabs / no >4 consecutive spaces" parameter rule.
+function sanitizeParamReadable(s: string): string {
+  return s
+    .replace(/\t/g, " ")
+    .replace(/[ ]{2,}/g, " ")
+    .replace(/[ ]+\n/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
 }
 
 // `freeForm` is the full multi-line text (in-window fallback); `templateVar` is
@@ -95,13 +107,22 @@ export async function sendProactive(
   freeForm: string,
   templateVar: string,
 ): Promise<WhatsAppSendResult> {
-  const param = sanitizeParam(templateVar);
-
   // Prefer the approved template — it delivers outside the recipient's 24h window.
   if (templateName) {
-    const tpl = await sendWhatsAppTemplate(to, templateName, TEMPLATES.languageCode, [
-      { type: "body", parameters: [{ type: "text", text: param }] },
-    ]);
+    const send = (text: string) =>
+      sendWhatsAppTemplate(to, templateName, TEMPLATES.languageCode, [
+        { type: "body", parameters: [{ type: "text", text }] },
+      ]);
+    // Send the readable multi-line param first; if this account rejects newlines
+    // in a template parameter, retry once flattened so delivery never depends on
+    // the formatting.
+    let param = sanitizeParamReadable(templateVar);
+    let tpl = await send(param);
+    if (!tpl.ok && param.includes("\n")) {
+      console.warn(`[ops-pulse] template "${templateName}" rejected multi-line param (${tpl.error}); retrying flat`);
+      param = sanitizeParam(templateVar);
+      tpl = await send(param);
+    }
     if (tpl.ok) {
       await recordOutboundMessage({
         waMessageId: tpl.messageId,
@@ -159,7 +180,7 @@ export function composeAuditDigest(lines: string[]): string {
 }
 
 export function auditDigestVar(lines: string[]): string {
-  return `${lines.length} audit${lines.length === 1 ? "" : "s"} due · ${summarize(lines)}`;
+  return `${lines.length} audit${lines.length === 1 ? "" : "s"} due:\n${paramList(lines)}`;
 }
 
 export function sendAuditDigest(phone: string, lines: string[]): Promise<WhatsAppSendResult> {
@@ -281,8 +302,7 @@ export function composeReviewNudge(outletName: string, lines: string[]): string 
 
 export function sendReviewNudge(phone: string, outletName: string, lines: string[]): Promise<WhatsAppSendResult> {
   if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
-  const flat = sanitizeParam(`Guest feedback at ${outletName}: ${lines.join("; ")}`);
-  const v = flat.length <= 700 ? flat : flat.slice(0, 699).replace(/\s+\S*$/, "") + " …";
+  const v = `Guest feedback at ${outletName}:\n${paramList(lines)}`;
   return sendProactive(phone, TEMPLATES.nudge, composeReviewNudge(outletName, lines), v);
 }
 
@@ -300,8 +320,7 @@ export function composeOpsDigest(headline: string, lines: string[]): string {
 
 export function sendOpsDigest(phone: string, headline: string, lines: string[]): Promise<WhatsAppSendResult> {
   if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
-  const flat = sanitizeParam(`${headline}: ${lines.join("; ")}`);
-  const v = flat.length <= 700 ? flat : flat.slice(0, 699).replace(/\s+\S*$/, "") + " …";
+  const v = `${headline}\n${paramList(lines)}`;
   return sendProactive(phone, TEMPLATES.nudge, composeOpsDigest(headline, lines), v);
 }
 
@@ -320,7 +339,6 @@ export function composeAuditNudge(name: string, lines: string[]): string {
 
 export function sendAuditNudge(phone: string, name: string, lines: string[]): Promise<WhatsAppSendResult> {
   if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
-  const flat = sanitizeParam(`${lines.length} audit${lines.length === 1 ? "" : "s"} due: ${lines.join("; ")}`);
-  const v = flat.length <= 700 ? flat : flat.slice(0, 699).replace(/\s+\S*$/, "") + " …";
+  const v = `${lines.length} audit${lines.length === 1 ? "" : "s"} due:\n${paramList(lines)}`;
   return sendProactive(phone, TEMPLATES.audit, composeAuditNudge(name, lines), v);
 }
