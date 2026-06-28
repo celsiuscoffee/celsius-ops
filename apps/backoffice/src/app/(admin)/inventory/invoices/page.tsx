@@ -148,6 +148,24 @@ export default function InvoicesPage() {
   const [cardFilter, setCardFilter] = useState<"all" | "pending" | "overdue" | "initiated" | "paid" | "due_today" | "payable" | "pending_invoice" | null>(null);
   const [batchInitiating, setBatchInitiating] = useState(false);
 
+  // Deep-link from the Purchase Orders workspace: ?supplier=<id>&cardFilter=payable&search=<inv>
+  // pre-applies the supplier + unpaid filters, so the rail's Unpaid card / invoice rows land on
+  // exactly this supplier's unpaid invoices. window.location (not useSearchParams) avoids the
+  // Suspense-boundary requirement on this route.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sup = params.get("supplier");
+    const card = params.get("cardFilter");
+    const q = params.get("search");
+    if (sup) setSupplierFilter([sup]);
+    if (q) {
+      setSearch(q);
+      setDebouncedSearch(q);
+    }
+    const validCards = ["all", "pending", "overdue", "initiated", "paid", "due_today", "payable", "pending_invoice"];
+    if (card && validCards.includes(card)) setCardFilter(card as typeof cardFilter);
+  }, []); // once on mount
+
   // Payment dialog
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [payingTargetStatus, setPayingTargetStatus] = useState<string>("");
