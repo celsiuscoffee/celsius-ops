@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@celsius/ui";
@@ -25,6 +25,7 @@ import {
   X,
   Sparkles,
   Truck,
+  Send,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -178,6 +179,35 @@ export function EditOrderModal({
   const [detectedSupplier, setDetectedSupplier] = useState<string | null>(null);
   const [aiUnmatched, setAiUnmatched] = useState<string[]>([]);
   const [aiDeliveryCharge, setAiDeliveryCharge] = useState<number | null>(null);
+  // Status-action row (Approve / Send / Cancel) — ports the lightweight PO
+  // panel actions into this modal so a PO can be progressed without leaving
+  // the edit view. Independent of the Save/Upload flow above.
+  const [statusBusy, setStatusBusy] = useState(false);
+
+  // Transition the order's status, then refresh + close. Surfaces the API
+  // error inline (toast) and keeps the modal open on failure.
+  const patchStatus = async (status: string) => {
+    if (!order) return;
+    setStatusBusy(true);
+    try {
+      const res = await fetch(`/api/inventory/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        toast.error(json?.error || `Status update failed (${res.status})`);
+        return;
+      }
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Status update failed");
+    } finally {
+      setStatusBusy(false);
+    }
+  };
 
   // Initialize the internal state from `order` (port of openEditDialog).
   // Keyed on order?.id so re-opening with a different order re-inits.
@@ -918,6 +948,53 @@ export function EditOrderModal({
             {/* old invoice section removed - now at top */}
           </div>
         </div>
+        )}
+
+        {/* Status actions — progress the PO (approve / send / receive / cancel)
+            without leaving the edit modal. Ported from the supplier-chats
+            poView panel. */}
+        {order && (order.status !== "COMPLETED" && order.status !== "CANCELLED") && (
+          <div className="flex flex-wrap gap-2 border-t pt-3">
+            {(order.status === "DRAFT" || order.status === "PENDING_APPROVAL") && (
+              <Button
+                onClick={() => patchStatus("APPROVED")}
+                disabled={statusBusy || editSaving || uploading}
+                className="bg-primary hover:bg-primary/90"
+              >
+                {statusBusy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
+                Approve
+              </Button>
+            )}
+            {order.status === "APPROVED" && (
+              <Button
+                onClick={() => patchStatus("SENT")}
+                disabled={statusBusy || editSaving || uploading}
+                className="bg-primary hover:bg-primary/90"
+              >
+                {statusBusy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+                Send to supplier
+              </Button>
+            )}
+            {["SENT", "CONFIRMED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(order.status) && (
+              <a href="/inventory/receivings" className={buttonVariants({ variant: "outline" })}>
+                <Truck className="mr-1.5 h-4 w-4" />
+                Record delivery
+              </a>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (window.confirm(`Cancel order ${order.orderNumber}? This can't be undone.`)) {
+                  void patchStatus("CANCELLED");
+                }
+              }}
+              disabled={statusBusy || editSaving || uploading}
+              className="border-destructive/40 text-destructive hover:bg-destructive/10"
+            >
+              {statusBusy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Cancel order
+            </Button>
+          </div>
         )}
 
         <DialogFooter className="flex gap-2">
