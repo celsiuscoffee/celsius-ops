@@ -3,7 +3,35 @@
  * Extracted from dashboard/route.ts for reuse in compare/route.ts.
  */
 
-import type { StoreHubTransaction } from "@/lib/storehub";
+// Shape of a StoreHub transaction as stored in the `storehub_sales.raw` archive.
+// StoreHub itself is retired (the live API client was removed); this type lives
+// here now because the archive read paths still classify historical rows.
+export interface StoreHubTransactionItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  total: number;
+  productId?: string;
+}
+
+export interface StoreHubTransaction {
+  refId: string;
+  total: number;
+  subTotal: number;
+  items: StoreHubTransactionItem[];
+  channel?: string;
+  remarks?: string;
+  tags?: string[];
+  transactionType?: string;
+  orderType?: string;
+  isCancelled?: boolean;
+  status?: string | null;
+  transactionTime?: string;
+  createdAt?: string;
+  completedAt?: string;
+  [key: string]: unknown; // capture any extra fields
+}
 
 // ─── Time Rounds (MYT = UTC+8) ──────────────────────────────────────────
 

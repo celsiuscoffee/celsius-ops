@@ -1,7 +1,6 @@
 // Daily cron — runs at 4 AM MYT to ingest yesterday's EOD across all outlets
-// and post AR journals via the AR agent. Each outlet is routed by ingestEodForDate
-// to the POS that owned it that day: POS-native on/after its cutover, StoreHub
-// before (historical). Once every outlet has cut over this is fully native.
+// and post AR journals via the AR agent. Every outlet is on POS-native, so
+// ingestEodForDate sources every outlet from native data (StoreHub is retired).
 //
 // Idempotent: re-running for a date that's already been posted skips the
 // outlet (shared outlet+date guard in the ingestors).
