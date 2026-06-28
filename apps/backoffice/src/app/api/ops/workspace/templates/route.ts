@@ -51,9 +51,10 @@ const TEMPLATE_DEFS = [
   },
   {
     name: "ops_nudge",
-    // Fixed framing + {{1}} (Meta rejects a body that is only a variable). The
-    // variable carries the specific ask (clock-in / stock / manager digest).
-    body: "Hi, a quick update from Celsius ops:\n\n{{1}}",
+    // Fixed text BEFORE and AFTER {{1}} — Meta rejects a body that is only a
+    // variable AND one with the variable at the start or end. The variable
+    // carries the specific ask (clock-in / stock / manager digest).
+    body: "Hi, a quick update from Celsius ops:\n\n{{1}}\n\nReply DONE once it's sorted.",
     sample: "Clock in for your 8:00am shift at Putrajaya — you haven't yet.",
   },
 ] as const;
