@@ -10,7 +10,7 @@
 import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
-import { AUDIT, THRESHOLDS, routeForRole, RESTOCK_ENABLED, NOCLOCKIN_ENABLED } from "./config";
+import { AUDIT, THRESHOLDS, routeForRole, auditRoleLabel, RESTOCK_ENABLED, NOCLOCKIN_ENABLED } from "./config";
 import type { Breach } from "./types";
 
 // Today's MYT (UTC+8) calendar date + the UTC instant of its 00:00. pos_orders
@@ -265,7 +265,7 @@ export async function detectOutletAudit(now: Date): Promise<Breach[]> {
         severity: "LOW",
         routeKey: routeForRole(role),
         dedupeKey: `AUDIT:${role}:${o.id}:${bucket}`,
-        summary: `No ${role} audit at ${o.name} in ${AUDIT.cadenceDays}d`,
+        summary: `${auditRoleLabel(role)} audit overdue at ${o.name} — none in ${AUDIT.cadenceDays}d`,
         detail: { role, cadenceDays: AUDIT.cadenceDays },
       });
     }

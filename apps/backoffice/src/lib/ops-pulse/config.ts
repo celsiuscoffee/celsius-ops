@@ -169,6 +169,14 @@ export function routeForRole(role: string): "barista" | "kitchen" | "operations"
   return "operations";
 }
 
+// Human label for an auditor roleType — for staff-facing copy (never leak the
+// internal "barista_head"/"chef_head" enum into a WhatsApp message).
+export function auditRoleLabel(role: string): string {
+  if (role === "barista_head") return "Barista station";
+  if (role === "chef_head") return "Kitchen";
+  return role;
+}
+
 // Audit / training coverage. The schema has NO audit cadence, so we define one:
 // each tracked auditor role should have a COMPLETED report at each active outlet
 // within `cadenceDays`. A role only pulses if it has an active AuditTemplate, so

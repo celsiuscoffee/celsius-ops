@@ -1,0 +1,29 @@
+import { NextRequest, NextResponse } from "next/server";
+import { checkCronAuth } from "@celsius/shared";
+import { runAuditNudges } from "@/lib/ops-nudges";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+/**
+ * GET /api/cron/ops-nudge-audit — weekly audit nudge to the discipline leads.
+ *
+ * Outlet audits + staff skill training overdue this week, routed by discipline:
+ * barista -> Syafiq, kitchen -> Chef Bo. Each lead gets one DM of their due
+ * audits. Weekly (Mon); the ledger dedupes per 7-day cadence bucket.
+ * OPS_NUDGES_MODE (off|shadow|armed, default shadow).
+ * Design: docs/design/ops-performance-loop.md.
+ */
+export async function GET(req: NextRequest) {
+  const cronAuth = checkCronAuth(req.headers);
+  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
+  try {
+    const result = await runAuditNudges();
+    console.log(`[cron/ops-nudge-audit] mode=${result.mode} items=${result.items} leads=${result.staffSent}`);
+    return NextResponse.json({ ok: true, ...result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "ops-nudge-audit failed";
+    console.error("[cron/ops-nudge-audit]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}

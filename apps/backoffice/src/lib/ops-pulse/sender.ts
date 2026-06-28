@@ -282,3 +282,23 @@ export function sendOpsDigest(phone: string, headline: string, lines: string[]):
   const v = flat.length <= 700 ? flat : flat.slice(0, 699).replace(/\s+\S*$/, "") + " …";
   return sendProactive(phone, TEMPLATES.nudge, composeOpsDigest(headline, lines), v);
 }
+
+// Audit nudge — DM'd to the discipline lead (barista -> Syafiq, kitchen -> Chef Bo)
+// with the outlet audits + skill training they owe this week. Rides ops_pulse_audit.
+export function composeAuditNudge(name: string, lines: string[]): string {
+  const first = name.split(" ")[0];
+  return [
+    `Hi ${first}, audits due this week:`,
+    "",
+    lines.map((l) => `- ${l}`).join("\n"),
+    "",
+    "Please run them and log each report in the app. Reply DONE as you go.",
+  ].join("\n");
+}
+
+export function sendAuditNudge(phone: string, name: string, lines: string[]): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
+  const flat = sanitizeParam(`${lines.length} audit${lines.length === 1 ? "" : "s"} due: ${lines.join("; ")}`);
+  const v = flat.length <= 700 ? flat : flat.slice(0, 699).replace(/\s+\S*$/, "") + " …";
+  return sendProactive(phone, TEMPLATES.audit, composeAuditNudge(name, lines), v);
+}

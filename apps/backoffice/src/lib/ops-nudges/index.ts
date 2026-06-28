@@ -15,11 +15,11 @@
 // WhatsApp's 24h rule until ops_nudge is approved.
 
 import { prisma } from "@/lib/prisma";
-import { findNoClockInBreaches } from "@/lib/ops-pulse/detectors";
+import { findNoClockInBreaches, detectOutletAudit, detectSkillTraining } from "@/lib/ops-pulse/detectors";
 import { recordBreach } from "@/lib/ops-pulse/ledger";
 import { resolveRecipients, resolveOutletTeam } from "@/lib/ops-pulse/router";
-import { sendClockInNudge, sendStockCountNudge, sendOpsDigest } from "@/lib/ops-pulse/sender";
-import type { Assignee, Breach } from "@/lib/ops-pulse/types";
+import { sendClockInNudge, sendStockCountNudge, sendOpsDigest, sendAuditNudge } from "@/lib/ops-pulse/sender";
+import type { Assignee, Breach, RouteKey } from "@/lib/ops-pulse/types";
 
 export type NudgesMode = "off" | "shadow" | "armed";
 export function nudgesMode(): NudgesMode {
@@ -189,4 +189,54 @@ export async function runStockCountNudges(now = new Date()): Promise<NudgeRunRes
   const headline = `${managerLines.length} outlet${managerLines.length === 1 ? "" : "s"} need a stock count today`;
   const managerSent = await sendManagerDigestToOps(headline, managerLines, mode);
   return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
+}
+
+// ── 3. Audits due → discipline lead (barista -> Syafiq, kitchen -> Chef Bo) ──
+// Outlet audits + staff skill training overdue this week, routed by discipline.
+// staffSent = lead DMs sent. Weekly cadence (detector dedupeKey is per 7-day
+// bucket, so even a daily cron nudges each item at most once per week).
+export async function runAuditNudges(now = new Date()): Promise<NudgeRunResult> {
+  const mode = nudgesMode();
+  const ranAt = now.toISOString();
+  if (mode === "off") return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  const breaches = [...(await detectOutletAudit(now)), ...(await detectSkillTraining(now))];
+  if (breaches.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  // Group by discipline (routeKey) → that lead's set of audits.
+  const byRoute: Record<string, Breach[]> = {};
+  for (const b of breaches) (byRoute[b.routeKey] ??= []).push(b);
+
+  let staffSent = 0;
+  let items = 0;
+  for (const routeKey of Object.keys(byRoute)) {
+    const recips = await resolveRecipients(routeKey as RouteKey); // Syafiq / Chef Bo
+
+    if (mode === "shadow") {
+      const lines = byRoute[routeKey].map((b) => b.summary);
+      console.log("[ops-nudge:audit:shadow]", JSON.stringify({ discipline: routeKey, to: recips.map((r) => r.name), lines }));
+      items += lines.length;
+      continue;
+    }
+
+    // armed — dedupe per audit (weekly), then DM the lead the new ones.
+    const newLines: string[] = [];
+    for (const b of byRoute[routeKey]) {
+      const { isNew } = await recordBreach(b, recips[0] ?? null);
+      if (isNew) newLines.push(b.summary);
+    }
+    if (newLines.length === 0) continue;
+    items += newLines.length;
+    for (const r of recips) {
+      if (!r.phone) {
+        console.warn(`[ops-nudge:audit] no phone for ${r.name} (${routeKey}) — not nudged`);
+        continue;
+      }
+      const res = await sendAuditNudge(r.phone, r.name, newLines);
+      if (res.ok) staffSent += 1;
+      else console.error(`[ops-nudge:audit] lead nudge to ${r.name} failed:`, res.error);
+    }
+  }
+
+  return { mode, ranAt, items, staffSent, managerSent: 0 };
 }
