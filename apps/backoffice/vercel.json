@@ -114,7 +114,7 @@
     },
     {
       "path": "/api/cron/ops-nudge-clockin",
-      "schedule": "30 0 * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/ops-nudge-stockcount",
