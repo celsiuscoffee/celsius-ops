@@ -56,8 +56,8 @@ export const THRESHOLDS = {
     // Ceiling on how stale a miss can be and still page. Past this the checklist
     // is backlog, not today's miss — suppress it so arming doesn't burst on
     // historical/orphaned rows (mirrors review.recencyHours / receiving.recencyDays).
-    // 48h still catches yesterday's late closing at the 9am daily digest.
-    staleAfterHours: 48,
+    // 24h keeps it to today's miss only — don't carry yesterday's into today (owner).
+    staleAfterHours: 24,
   },
   review: {
     // QR feedback is already 1–3★ (4–5★ redirect to Google), so page only the
@@ -86,8 +86,9 @@ export const THRESHOLDS = {
     graceMinutes: 15,
   },
   posOpen: {
-    // Minutes past an outlet's openTime before "POS not opened" (no till session) counts.
-    graceMinutes: 15,
+    // Minutes past an outlet's openTime before "POS not opened" counts. 0 = the
+    // moment past open time — exactly on the open time, no grace (owner).
+    graceMinutes: 0,
   },
   escalation: {
     // Minutes an alert may sit OPEN (unacked) before it escalates to the owner.
@@ -152,11 +153,12 @@ export const NOCLOCKIN_ENABLED = (process.env.OPS_PULSE_NOCLOCKIN_ENABLED || "fa
 
 // Signals that ALSO nudge the on-shift outlet team (not just the discipline
 // lead), because the team is accountable for what happened on their shift —
-// stock take (they do the work) and bad reviews (they served it). REVIEW is
-// real-time, so the on-shift team at fire-time is the staff who worked it.
-// Comma-separated; override via OPS_PULSE_TEAM_NOTIFY_SIGNALS.
+// stock take (they do the work), bad reviews (they served it), phone capture
+// (they ask for the number) and checklists (they complete them). The on-shift
+// roster includes that shift's lead. Comma-separated; override via
+// OPS_PULSE_TEAM_NOTIFY_SIGNALS.
 export const TEAM_NOTIFY_SIGNALS: Set<string> = new Set(
-  (process.env.OPS_PULSE_TEAM_NOTIFY_SIGNALS || "STOCK_COUNT,REVIEW")
+  (process.env.OPS_PULSE_TEAM_NOTIFY_SIGNALS || "STOCK_COUNT,REVIEW,PHONE_CAPTURE,CHECKLIST")
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),
