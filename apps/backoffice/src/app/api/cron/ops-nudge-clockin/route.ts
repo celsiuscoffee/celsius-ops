@@ -10,9 +10,10 @@ export const maxDuration = 60;
  *
  * For each staff with a published shift today whose start + grace has passed and
  * no clock-in: DMs the staff member ("please clock in") and adds them to a digest
- * for the manager (ops leads). Runs every ~30 min; the OpsAlert ledger dedupes so
- * each no-show is nudged at most once per day. OPS_NUDGES_MODE (off|shadow|armed),
- * default shadow. Design: docs/design/ops-performance-loop.md.
+ * for the manager (ops leads). Runs ONCE daily (~8:30am MYT) — catches the main
+ * morning shift while it's still actionable, and keeps cost low (one run, not 48).
+ * The ledger still dedupes per (staff, day). OPS_NUDGES_MODE (off|shadow|armed),
+ * default armed. Design: docs/design/ops-performance-loop.md.
  */
 export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);

@@ -273,7 +273,8 @@ that complements the passive weekly scoreboard.
   manager. `OPS_NUDGES_MODE` (off|shadow|armed, default shadow).
   - **Clock-in:** `findNoClockInBreaches` (refactored ungated out of `detectNoClockIn`, so the nudge
     fires without flipping the pulse's NOCLOCKIN gate) → DM the no-show + digest to ops leads.
-    Cron `/api/cron/ops-nudge-clockin` every 30 min (ledger dedupes to once/day).
+    Cron `/api/cron/ops-nudge-clockin` once daily (~8:30am MYT — catches the main
+    morning shift, low cost; ledger still dedupes per staff/day).
   - **Stock:** outlets with no SUBMITTED/REVIEWED count in 3 days → DM the on-shift team
     (`resolveOutletTeam`) + digest to ops leads. Cron `/api/cron/ops-nudge-stockcount` daily.
   - "Manager" = ops leads (Ariff/Adam) until an outlet→manager map exists. Templates: `ops_nudge`.
