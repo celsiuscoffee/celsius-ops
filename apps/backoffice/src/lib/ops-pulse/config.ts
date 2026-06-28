@@ -169,6 +169,14 @@ export function routeForRole(role: string): "barista" | "kitchen" | "operations"
   return "operations";
 }
 
+// Human label for an auditor roleType — for staff-facing copy (never leak the
+// internal "barista_head"/"chef_head" enum into a WhatsApp message).
+export function auditRoleLabel(role: string): string {
+  if (role === "barista_head") return "Barista station";
+  if (role === "chef_head") return "Kitchen";
+  return role;
+}
+
 // Audit / training coverage. The schema has NO audit cadence, so we define one:
 // each tracked auditor role should have a COMPLETED report at each active outlet
 // within `cadenceDays`. A role only pulses if it has an active AuditTemplate, so
@@ -204,5 +212,13 @@ export const TEMPLATES = {
   ownerEscalation: process.env.OPS_PULSE_TPL_ESCALATION || "ops_pulse_escalation",
   dailyDigest: process.env.OPS_PULSE_TPL_DAILY || "ops_pulse_daily",
   audit: process.env.OPS_PULSE_TPL_AUDIT || "ops_pulse_audit",
+  // Manager-authored reminder pinged to the assignee (on assign + when due).
+  reminder: process.env.OPS_PULSE_TPL_REMINDER || "ops_reminder",
+  // Ad-hoc directive/announcement fanned out to staff from the workspace.
+  instruction: process.env.OPS_PULSE_TPL_INSTRUCTION || "ops_instruction",
+  // Weekly performance scoreboard (cashier DM / leader digest).
+  scoreboard: process.env.OPS_PULSE_TPL_SCOREBOARD || "ops_scoreboard",
+  // Real-time staff nudge (clock-in / stock count).
+  nudge: process.env.OPS_PULSE_TPL_NUDGE || "ops_nudge",
   languageCode: process.env.OPS_PULSE_TPL_LANG || "en",
 } as const;

@@ -15,13 +15,21 @@ function digits(s: string): string {
 
 // Inbound senders are international digits (e.g. 60123456789); stored phones may
 // be +60…/01…. Compare the last 9 digits, which uniquely identify a MY mobile.
-function samePhone(a: string, b: string): boolean {
+// Exported so the reminder + instruction ack handlers match the same way.
+export function samePhone(a: string, b: string): boolean {
   const x = digits(a);
   const y = digits(b);
   if (x.length < 8 || y.length < 8) return false;
   const n = Math.min(9, x.length, y.length);
   return x.slice(-n) === y.slice(-n);
 }
+
+// Strong completion words — "I finished it". Closes reminders/tasks. Excludes a
+// bare "ok"/"okay" (too easily a throwaway reply to risk auto-completing a task).
+export const ACK_STRONG = /\b(done|resolved|settled|fixed|cleared?|handled|completed?|siap|selesai)\b/i;
+// Soft acknowledgement — "got it". Enough to ACK an instruction (low stakes), so
+// it also accepts ok/okay/noted/received/baik on top of the strong words.
+export const ACK_SOFT = /\b(done|ok|okay|noted|received|roger|acknowledged?|got\s*it|resolved|settled|fixed|cleared?|handled|completed?|siap|selesai|baik|faham)\b/i;
 
 // Returns the number of alerts resolved, or null when the message wasn't an ack
 // from a known manager/owner. Never throws — caller logs.

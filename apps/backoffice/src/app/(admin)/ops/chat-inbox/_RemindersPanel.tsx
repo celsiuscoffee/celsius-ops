@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, BellRing, Check, Clock, Plus, X, FileText } from "lucide-react";
+import { Loader2, BellRing, Check, Clock, Plus, X, FileText, Send } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 type Reminder = {
@@ -18,6 +18,7 @@ type Reminder = {
   status: string;
   snoozedUntil: string | null;
   overdue: boolean;
+  notified: boolean;
 };
 type Assignee = { id: string; name: string; role: string };
 type Memo = { id: string; title: string; body: string; severity: string; issuedAt: string; recipients: string[] };
@@ -185,6 +186,11 @@ export default function RemindersPanel({ onChange }: { onChange: () => void }) {
                             </Badge>
                           )}
                           {r.assigneeName && <span>→ {r.assigneeName}</span>}
+                          {r.assigneeName && r.notified && (
+                            <span className="flex items-center gap-0.5 text-green-700" title="Pinged on WhatsApp">
+                              <Send className="h-3 w-3" /> WhatsApp&apos;d
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">

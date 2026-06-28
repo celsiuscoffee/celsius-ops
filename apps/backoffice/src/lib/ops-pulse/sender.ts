@@ -87,7 +87,9 @@ function sanitizeParam(s: string): string {
 
 // `freeForm` is the full multi-line text (in-window fallback); `templateVar` is
 // the newline-free {{1}} content used when an approved template is configured.
-async function sendProactive(
+// Exported so the workspace's reminder + instruction senders reuse the exact
+// same template-or-free-form delivery + message-store recording.
+export async function sendProactive(
   to: string,
   templateName: string,
   freeForm: string,
@@ -108,6 +110,7 @@ async function sendProactive(
         type: "template",
         body: param,
         status: "sent",
+        raw: { kind: templateName }, // durable classification for the ops message monitor
       });
       return tpl;
     }
@@ -126,6 +129,7 @@ async function sendProactive(
     type: "text",
     body: freeForm,
     status: ff.ok ? "sent" : "failed",
+    raw: { kind: templateName }, // durable classification for the ops message monitor
   });
   return ff;
 }
@@ -161,4 +165,142 @@ export function auditDigestVar(lines: string[]): string {
 export function sendAuditDigest(phone: string, lines: string[]): Promise<WhatsAppSendResult> {
   if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
   return sendProactive(phone, TEMPLATES.audit, composeAuditDigest(lines), auditDigestVar(lines));
+}
+
+// ─── Reminder nudge ──────────────────────────────────────────────────────
+// A single manager-authored to-do pinged to its assignee — on assign, then again
+// when it falls due. `when` is a human due phrase ("due today 3pm" / "overdue")
+// or empty. Reply DONE closes it (lib/ops-reminders handleReminderAck).
+export function composeReminder(title: string, notes: string | null, when: string): string {
+  const parts = ["Reminder", "", title];
+  if (notes) parts.push("", notes);
+  if (when) parts.push("", when);
+  parts.push("", "Reply DONE when it's handled.");
+  return parts.join("\n");
+}
+
+export function reminderVar(title: string, when: string): string {
+  return when ? `${title} (${when})` : title;
+}
+
+export function sendReminder(
+  phone: string,
+  title: string,
+  notes: string | null,
+  when: string,
+): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
+  return sendProactive(phone, TEMPLATES.reminder, composeReminder(title, notes, when), reminderVar(title, when));
+}
+
+// ─── Instruction ─────────────────────────────────────────────────────────
+// An ad-hoc directive/announcement fanned out to staff. `fromName` is who sent
+// it (accountability — a directive has an author). Reply DONE/OK acknowledges.
+export function composeInstruction(title: string, body: string, fromName: string): string {
+  const parts = ["Instruction", "", title];
+  if (body && body.trim() !== title.trim()) parts.push("", body);
+  if (fromName) parts.push("", `— ${fromName}`);
+  parts.push("", "Reply OK to confirm you've got it.");
+  return parts.join("\n");
+}
+
+export function instructionVar(title: string, body: string): string {
+  const flat = sanitizeParam(body && body !== title ? `${title} — ${body}` : title);
+  return flat.length <= 700 ? flat : flat.slice(0, 699).replace(/\s+\S*$/, "") + " …";
+}
+
+export function sendInstruction(
+  phone: string,
+  title: string,
+  body: string,
+  fromName: string,
+): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
+  return sendProactive(phone, TEMPLATES.instruction, composeInstruction(title, body, fromName), instructionVar(title, body));
+}
+
+// ─── Performance scoreboard ────────────────────────────────────────────────
+// The full board is rendered upstream (lib/ops-scoreboard/render); this just
+// delivers it: free-form multi-line in-window, single-line {{1}} otherwise.
+export function sendScoreboard(phone: string, text: string, templateVar: string): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
+  return sendProactive(phone, TEMPLATES.scoreboard, text, templateVar);
+}
+
+// ─── Real-time staff nudges (clock-in / stock count) ───────────────────────
+// Gentle, first-person reminders DM'd to the staff member (the manager copy goes
+// out as a normal manager digest). Both ride the generic ops_nudge template.
+export function composeClockInNudge(name: string, outletName: string, startTime: string): string {
+  const first = name.split(" ")[0];
+  return [
+    `Hi ${first}, you're on shift at ${outletName} (${startTime}) but haven't clocked in yet.`,
+    "",
+    "Please clock in now in the staff app. Takes 5 seconds.",
+  ].join("\n");
+}
+
+export function sendClockInNudge(
+  phone: string,
+  name: string,
+  outletName: string,
+  startTime: string,
+): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
+  const text = composeClockInNudge(name, outletName, startTime);
+  const v = `Clock in for your ${startTime} shift at ${outletName} — you haven't yet.`;
+  return sendProactive(phone, TEMPLATES.nudge, text, v);
+}
+
+export function composeStockCountNudge(outletName: string, when: string): string {
+  return [
+    `Stock count due at ${outletName} — last count ${when}.`,
+    "",
+    "Please do the stock take and submit it in the app today.",
+  ].join("\n");
+}
+
+export function sendStockCountNudge(phone: string, outletName: string, when: string): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
+  const text = composeStockCountNudge(outletName, when);
+  const v = `Stock count due at ${outletName} (last ${when}) — please count + submit today.`;
+  return sendProactive(phone, TEMPLATES.nudge, text, v);
+}
+
+// Manager-facing ops digest — professional but casual, no emoji. `headline` sets
+// the ask ("8 staff haven't clocked in yet"); `lines` are the specifics.
+export function composeOpsDigest(headline: string, lines: string[]): string {
+  return [
+    headline,
+    "",
+    lines.map((l) => `- ${l}`).join("\n"),
+    "",
+    "Could you follow up with the team? Reply DONE once it's sorted. Thanks.",
+  ].join("\n");
+}
+
+export function sendOpsDigest(phone: string, headline: string, lines: string[]): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
+  const flat = sanitizeParam(`${headline}: ${lines.join("; ")}`);
+  const v = flat.length <= 700 ? flat : flat.slice(0, 699).replace(/\s+\S*$/, "") + " …";
+  return sendProactive(phone, TEMPLATES.nudge, composeOpsDigest(headline, lines), v);
+}
+
+// Audit nudge — DM'd to the discipline lead (barista -> Syafiq, kitchen -> Chef Bo)
+// with the outlet audits + skill training they owe this week. Rides ops_pulse_audit.
+export function composeAuditNudge(name: string, lines: string[]): string {
+  const first = name.split(" ")[0];
+  return [
+    `Hi ${first}, audits due this week:`,
+    "",
+    lines.map((l) => `- ${l}`).join("\n"),
+    "",
+    "Please run them and log each report in the app. Reply DONE as you go.",
+  ].join("\n");
+}
+
+export function sendAuditNudge(phone: string, name: string, lines: string[]): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
+  const flat = sanitizeParam(`${lines.length} audit${lines.length === 1 ? "" : "s"} due: ${lines.join("; ")}`);
+  const v = flat.length <= 700 ? flat : flat.slice(0, 699).replace(/\s+\S*$/, "") + " …";
+  return sendProactive(phone, TEMPLATES.audit, composeAuditNudge(name, lines), v);
 }

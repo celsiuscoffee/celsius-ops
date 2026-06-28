@@ -20,6 +20,8 @@ import { verifyWhatsAppSignature } from "@/lib/whatsapp";
 import { storeWhatsAppMedia } from "@/lib/whatsapp-media";
 import { recordInboundMessage } from "@/lib/whatsapp-store";
 import { handleInboundAck } from "@/lib/ops-pulse/inbound";
+import { handleReminderAck } from "@/lib/ops-reminders";
+import { handleInstructionAck } from "@/lib/ops-instructions";
 import { handleSupplierMessage } from "@/lib/inventory/agents/supplier-chat-agent";
 
 // GET — webhook verification handshake.
@@ -95,16 +97,35 @@ export async function POST(request: NextRequest) {
           timestamp: msg.timestamp ? new Date(Number(msg.timestamp) * 1000) : undefined,
           raw: msg,
         });
-        // 2) Ops pulse ack: a manager/owner replying "DONE" (etc.) resolves their
-        // open OpsAlerts. No-op when the sender isn't staff or it's not an ack.
-        // Never let this break the webhook — Meta must still get a fast 200.
+        // 2) Ops workspace acks: a staff member replying "DONE"/"OK" (etc.)
+        // closes the loop on what was pushed to them — open OpsAlerts (leads),
+        // assigned reminders, and pending instruction acks. Each is independent
+        // and best-effort; one staff reply can clear all three batches (the
+        // digest-batch model). Never let this break the webhook — Meta needs a
+        // fast 200.
         try {
-          const ack = await handleInboundAck(msg.from, msg.text?.body ?? "");
-          if (ack && ack.resolved > 0) {
-            console.log(`[ops-pulse] ack from=${msg.from} resolved=${ack.resolved} alert(s)`);
+          const reply = msg.text?.body ?? "";
+          const [alertAck, reminderAck, instructionAck] = await Promise.all([
+            handleInboundAck(msg.from, reply).catch((e) => {
+              console.error("[ops-pulse] alert ack failed:", e);
+              return null;
+            }),
+            handleReminderAck(msg.from, reply).catch((e) => {
+              console.error("[ops-reminders] ack failed:", e);
+              return null;
+            }),
+            handleInstructionAck(msg.from, reply).catch((e) => {
+              console.error("[ops-instructions] ack failed:", e);
+              return null;
+            }),
+          ]);
+          if (alertAck?.resolved || reminderAck?.completed || instructionAck?.acked) {
+            console.log(
+              `[ops-workspace] ack from=${msg.from} alerts=${alertAck?.resolved ?? 0} reminders=${reminderAck?.completed ?? 0} instructions=${instructionAck?.acked ?? 0}`,
+            );
           }
         } catch (err) {
-          console.error("[ops-pulse] inbound ack failed:", err);
+          console.error("[ops-workspace] inbound ack failed:", err);
         }
         // 3) Supplier-chat AI agent (full-auto, flag-gated + allow-listed). Reads
         // the message in PO context, auto-replies in the supplier's language, and

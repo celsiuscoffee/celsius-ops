@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { listThreads } from "@/lib/wa-messages";
 import { countOpenAlerts } from "@/lib/ops-pulse/workspace";
 import { countOpenReminders } from "@/lib/ops-reminders";
+import { countPendingInstructions } from "@/lib/ops-instructions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,15 +18,17 @@ export async function GET() {
 
   const scope = { userId: session.id, role: session.role };
   const now = new Date();
-  const [threads, pulseOpen, remindersOpen] = await Promise.all([
+  const [threads, pulseOpen, remindersOpen, instructionsPending] = await Promise.all([
     listThreads(now),
     countOpenAlerts(scope),
     countOpenReminders(scope),
+    countPendingInstructions(scope),
   ]);
 
   return NextResponse.json({
     inbox: { threads: threads.length, awaitingReply: threads.filter((t) => t.awaitingReply).length },
     pulse: { open: pulseOpen },
     reminders: { open: remindersOpen },
+    instructions: { pending: instructionsPending },
   });
 }

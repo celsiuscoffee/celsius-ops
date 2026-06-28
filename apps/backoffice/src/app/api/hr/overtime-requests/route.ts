@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
+import { applyApprovedOt, reverseApprovedOt } from "@/lib/hr/ot-payroll-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -224,7 +225,35 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ request: data });
+
+  // Close the loop to PAY: push the decision onto an attendance log payroll reads
+  // (approve/partial → land hours; reject/cancel → retract any we synced). Best-
+  // effort — a sync failure must not fail the approval, but we surface it so the
+  // UI can warn that payroll didn't pick it up. See lib/hr/ot-payroll-sync.
+  let payrollSynced: boolean | null = null;
+  try {
+    const r = data as {
+      id: string;
+      user_id: string;
+      outlet_id?: string | null;
+      date: string;
+      ot_type?: string | null;
+      hours_approved?: number | null;
+      attendance_log_id?: string | null;
+    };
+    if (status === "approved" || status === "partial") {
+      await applyApprovedOt(r);
+      payrollSynced = true;
+    } else if (status === "rejected" || status === "cancelled") {
+      await reverseApprovedOt(r);
+      payrollSynced = true;
+    }
+  } catch (e) {
+    console.error("[ot-payroll-sync] failed for request", id, e);
+    payrollSynced = false;
+  }
+
+  return NextResponse.json({ request: data, payrollSynced });
 }
 
 async function getHoursRequested(id: string) {
