@@ -193,10 +193,12 @@ export async function runStockCountNudges(now = new Date()): Promise<NudgeRunRes
   return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }
 
-// ── 3. Audits due → discipline lead (barista -> Syafiq, kitchen -> Chef Bo) ──
-// Outlet audits + staff skill training overdue this week, routed by discipline.
-// staffSent = lead DMs sent. Weekly cadence (detector dedupeKey is per 7-day
-// bucket, so even a daily cron nudges each item at most once per week).
+// ── 3. Audit progress → discipline lead (barista -> Syafiq, kitchen -> Chef Bo) ──
+// DAILY progress snapshot (owner 2026-06-28): each day the lead gets their CURRENT
+// outstanding outlet audits + skill-training gaps, routed by discipline. No ledger
+// dedupe — it re-sends each daily run, so as they complete audits the list shrinks
+// and the skill counts climb (the message updates their progress). The daily cron
+// cadence is the once-per-day guard. staffSent = lead DMs sent.
 export async function runAuditNudges(now = new Date()): Promise<NudgeRunResult> {
   const mode = nudgesMode();
   const ranAt = now.toISOString();
@@ -221,20 +223,17 @@ export async function runAuditNudges(now = new Date()): Promise<NudgeRunResult> 
       continue;
     }
 
-    // armed — dedupe per audit (weekly), then DM the lead the new ones.
-    const newLines: string[] = [];
-    for (const b of byRoute[routeKey]) {
-      const { isNew } = await recordBreach(b, recips[0] ?? null);
-      if (isNew) newLines.push(b.summary);
-    }
-    if (newLines.length === 0) continue;
-    items += newLines.length;
+    // armed — daily progress snapshot: send the lead their CURRENT outstanding
+    // audits every run (no dedupe; the daily cron is the cadence). The list
+    // shrinks + skill counts climb as they complete, so it reads as progress.
+    const lines = byRoute[routeKey].map((b) => b.summary);
+    items += lines.length;
     for (const r of recips) {
       if (!r.phone) {
         console.warn(`[ops-nudge:audit] no phone for ${r.name} (${routeKey}) — not nudged`);
         continue;
       }
-      const res = await sendAuditNudge(r.phone, r.name, newLines);
+      const res = await sendAuditNudge(r.phone, r.name, lines);
       if (res.ok) staffSent += 1;
       else console.error(`[ops-nudge:audit] lead nudge to ${r.name} failed:`, res.error);
     }
