@@ -69,12 +69,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     unpaidTotal: 0,
     overdueTotal: 0,
     recentPOs: [] as { id: string; orderNumber: string; status: string }[],
+    unpaidInvoices: [] as {
+      id: string;
+      invoiceNumber: string;
+      balance: number;
+      status: string;
+      dueDate: string | null;
+      overdue: boolean;
+    }[],
   };
 
   if (supplierId) {
     const closedStatuses: OrderStatus[] = ["COMPLETED", "CANCELLED"];
     const openFilter = { supplierId, status: { notIn: closedStatuses } };
-    const [s, openPOs, recentPOs, unpaid, overdue] = await Promise.all([
+    const [s, openPOs, recentPOs, unpaid, overdue, unpaidList] = await Promise.all([
       prisma.supplier.findUnique({
         where: { id: supplierId },
         select: { id: true, name: true, phone: true, deliveryDays: true, paymentTerms: true, leadTimeDays: true, depositPercent: true, automationMode: true },
@@ -94,17 +102,32 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
         where: { supplierId, status: { not: "PAID" }, dueDate: { lt: new Date() } },
         _sum: { amount: true, amountPaid: true },
       }),
+      prisma.invoice.findMany({
+        where: { supplierId, status: { not: "PAID" } },
+        orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+        take: 12,
+        select: { id: true, invoiceNumber: true, amount: true, amountPaid: true, status: true, dueDate: true },
+      }),
     ]);
     supplier = s
       ? { ...s, paymentModel: paymentModel({ paymentTerms: s.paymentTerms, depositPercent: s.depositPercent }) }
       : null;
     const bal = (a: { _sum: { amount: unknown; amountPaid: unknown } }) =>
       Math.max(0, Number(a._sum.amount ?? 0) - Number(a._sum.amountPaid ?? 0));
+    const nowMs = Date.now();
     context = {
       openPOs,
       unpaidTotal: bal(unpaid),
       overdueTotal: bal(overdue),
       recentPOs: recentPOs.map((o) => ({ id: o.id, orderNumber: o.orderNumber, status: o.status })),
+      unpaidInvoices: unpaidList.map((i) => ({
+        id: i.id,
+        invoiceNumber: i.invoiceNumber,
+        balance: Math.max(0, Number(i.amount) - Number(i.amountPaid ?? 0)),
+        status: i.status,
+        dueDate: i.dueDate ? i.dueDate.toISOString().slice(0, 10) : null,
+        overdue: !!i.dueDate && i.dueDate.getTime() < nowMs,
+      })),
     };
   }
 

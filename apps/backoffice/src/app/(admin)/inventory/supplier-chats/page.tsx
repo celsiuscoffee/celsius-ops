@@ -89,6 +89,7 @@ type Detail = {
     unpaidTotal: number;
     overdueTotal: number;
     recentPOs: { id: string; orderNumber: string; status: string }[];
+    unpaidInvoices: { id: string; invoiceNumber: string; balance: number; status: string; dueDate: string | null; overdue: boolean }[];
   };
   windowOpen: boolean;
   humanHandling: boolean;
@@ -1225,10 +1226,16 @@ export default function SupplierChatsPage() {
                     <div className="text-[11px] text-muted-foreground">Open POs</div>
                     <div className="text-[15px] font-medium">{detail.context.openPOs}</div>
                   </div>
-                  <div className="rounded-md bg-muted px-2.5 py-1.5">
-                    <div className="text-[11px] text-muted-foreground">Unpaid</div>
+                  <a
+                    href={`/inventory/invoices?supplier=${detail.supplierId ?? ""}&cardFilter=payable`}
+                    className="block rounded-md bg-muted px-2.5 py-1.5 transition hover:bg-muted/70"
+                  >
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Unpaid</span>
+                      <ExternalLink size={11} className="opacity-50" />
+                    </div>
                     <div className="text-[15px] font-medium">{formatRM(detail.context.unpaidTotal)}</div>
-                  </div>
+                  </a>
                   {detail.context.overdueTotal > 0 && (
                     <div className="rounded-md bg-destructive/10 px-2.5 py-1.5">
                       <div className="text-[11px] text-destructive">Overdue</div>
@@ -1238,6 +1245,26 @@ export default function SupplierChatsPage() {
                     </div>
                   )}
                 </div>
+                {detail.context.unpaidInvoices.length > 0 && (
+                  <div className="border-b border-border py-3">
+                    <div className="mb-1.5 text-[11px] text-muted-foreground">Unpaid invoices</div>
+                    {detail.context.unpaidInvoices.map((inv) => (
+                      <a
+                        key={inv.id}
+                        href={`/inventory/invoices?supplier=${detail.supplierId ?? ""}&cardFilter=payable&search=${encodeURIComponent(inv.invoiceNumber)}`}
+                        className="flex items-center justify-between gap-2 rounded px-1 py-1 text-[11px] hover:bg-muted"
+                      >
+                        <span className="truncate font-medium text-primary">{inv.invoiceNumber}</span>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          {inv.overdue && (
+                            <span className="rounded bg-destructive/10 px-1 text-[9.5px] font-medium text-destructive">overdue</span>
+                          )}
+                          <span className="text-muted-foreground">{formatRM(inv.balance)}</span>
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                )}
                 {(() => {
                   const myNeed = (needGroups ?? []).filter((g) => g.supplierId === detail.supplierId);
                   if (myNeed.length === 0) return null;
