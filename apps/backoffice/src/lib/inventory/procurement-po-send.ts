@@ -43,7 +43,11 @@ export interface PoForSend {
   deliveryDate: Date | null;
   outlet: { name: string; address: string | null };
   supplier: { id: string; name: string; phone: string | null } | null;
-  items: Array<{ quantity: unknown; product: { name: string; baseUom: string } | null }>;
+  items: Array<{
+    quantity: unknown;
+    product: { name: string; baseUom: string } | null;
+    productPackage: { packageLabel: string } | null;
+  }>;
 }
 
 export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
@@ -84,7 +88,9 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
         .map((it) => ({
           name: it.product!.name,
           quantity: Number(it.quantity),
-          uom: it.product!.baseUom,
+          // The supplier orders in PACKAGE units (cartons/boxes), so label the line with the
+          // package, not the base unit — "3 Box (10× 10pcs Loaf)", not "3 loaf".
+          uom: it.productPackage?.packageLabel ?? it.product!.baseUom,
         })),
       deliveryDate: order.deliveryDate
         ? new Date(order.deliveryDate).toISOString().slice(0, 10)
