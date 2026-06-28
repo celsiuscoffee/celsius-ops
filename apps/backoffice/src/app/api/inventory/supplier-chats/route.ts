@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [rows, suppliers] = await Promise.all([
+  const [rows, suppliers, staff] = await Promise.all([
     prisma.whatsAppMessage.findMany({
       orderBy: { timestamp: "desc" },
       take: 1000,
@@ -40,6 +40,9 @@ export async function GET(req: NextRequest) {
       where: { status: "ACTIVE" },
       select: { id: true, name: true, phone: true, automationMode: true },
     }),
+    // Staff phones — used to drop internal Ops Pulse / clock-in threads from the supplier
+    // inbox (a number that's a staff member but no supplier isn't a supplier conversation).
+    prisma.user.findMany({ where: { phone: { not: null } }, select: { phone: true } }),
   ]);
 
   const byId = new Map(suppliers.map((s) => [s.id, s]));
@@ -47,6 +50,11 @@ export async function GET(req: NextRequest) {
   for (const s of suppliers) {
     const k = last8(s.phone);
     if (k.length >= 8) byPhone.set(k, s);
+  }
+  const staffPhones = new Set<string>();
+  for (const u of staff) {
+    const k = last8(u.phone);
+    if (k.length >= 8) staffPhones.add(k);
   }
 
   type T = {
@@ -147,6 +155,10 @@ export async function GET(req: NextRequest) {
   const out: Out[] = [];
   for (const t of threads.values()) {
     const s = t.supplierId ? byId.get(t.supplierId) : undefined;
+    // Skip internal staff / ops threads (e.g. Ops Pulse clock-in "done" replies): a number
+    // that matches a staff member but no supplier isn't a supplier conversation. Keeps them
+    // out of the list, the counts, and "Needs reply".
+    if (!s && staffPhones.has(last8(t.key))) continue;
     const needsAttention =
       t.verifierFailed ||
       t.sendFailed ||
