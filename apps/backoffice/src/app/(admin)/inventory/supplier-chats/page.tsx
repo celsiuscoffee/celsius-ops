@@ -23,6 +23,8 @@ import {
   Reply,
   Pin,
   MoreHorizontal,
+  ChevronLeft,
+  Info,
 } from "lucide-react";
 
 type AutomationMode = "OFF" | "ASSIST" | "AUTO";
@@ -138,6 +140,8 @@ export default function SupplierChatsPage() {
     "all" | "reply" | "topay" | "awaiting" | "auto" | "assist" | "off" | "other" | "need"
   >("need");
   const [query, setQuery] = useState("");
+  // Mobile-only: the supplier-context rail renders as a full-screen overlay below `lg`.
+  const [mobileRailOpen, setMobileRailOpen] = useState(false);
 
   // ── List organization (pins + custom segments) ────────────────
   // Client-only, persisted per-browser in localStorage. No backend/schema.
@@ -536,6 +540,8 @@ export default function SupplierChatsPage() {
     setSendError(null);
     setApplyError(null);
     setReplyingTo(null);
+    // Mobile: collapse the rail overlay when switching threads.
+    setMobileRailOpen(false);
     // Close the New PO composer on thread switch — its products/qty/outlet belong to the
     // supplier it was opened for; leaving it open showed the previous supplier's items.
     setPoOpen(false);
@@ -633,7 +639,7 @@ export default function SupplierChatsPage() {
   return (
     <div className="flex h-[calc(100vh-64px)] min-h-[560px] gap-3 p-3 text-foreground">
       {/* ── Thread list ─────────────────────────────── */}
-      <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+      <div className={`${selected ? "hidden lg:flex" : "flex"} w-full lg:w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm`}>
         <div className="border-b border-border p-3">
           <div className="flex items-center justify-between gap-2 text-sm font-medium">
             <span className="flex items-center gap-2">
@@ -820,7 +826,7 @@ export default function SupplierChatsPage() {
       </div>
 
       {/* ── Conversation ────────────────────────────── */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+      <div className={`${selected ? "flex" : "hidden lg:flex"} w-full min-w-0 lg:flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm`}>
         {!detail ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
             Select a chat
@@ -828,14 +834,32 @@ export default function SupplierChatsPage() {
         ) : (
           <>
             <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-              <div>
-                <div className="text-sm font-medium">{detail.supplier?.name ?? `+${detail.key}`}</div>
-                <div className="text-xs text-muted-foreground">+{detail.key}</div>
+              <div className="flex min-w-0 items-center gap-2">
+                <button
+                  onClick={() => setSelected(null)}
+                  aria-label="Back to list"
+                  title="Back"
+                  className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{detail.supplier?.name ?? `+${detail.key}`}</div>
+                  <div className="text-xs text-muted-foreground">+{detail.key}</div>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] text-green-600 dark:text-green-400">
                   WhatsApp
                 </span>
+                <button
+                  onClick={() => setMobileRailOpen(true)}
+                  aria-label="Supplier details"
+                  title="Supplier details"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+                >
+                  <Info size={16} />
+                </button>
               </div>
             </div>
             <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
@@ -1035,7 +1059,20 @@ export default function SupplierChatsPage() {
       </div>
 
       {/* ── Supplier context ────────────────────────── */}
-      <div className="flex w-96 shrink-0 flex-col overflow-y-auto rounded-xl border border-border bg-background p-3 shadow-sm">
+      <div
+        className={`${mobileRailOpen ? "flex" : "hidden"} fixed inset-0 z-40 flex-col overflow-y-auto bg-background p-3 lg:static lg:z-auto lg:inset-auto lg:flex lg:w-96 lg:shrink-0 lg:overflow-y-auto lg:rounded-xl lg:border lg:border-border lg:bg-background lg:p-3 lg:shadow-sm`}
+      >
+        {/* Mobile-only close row for the overlay. */}
+        <div className="mb-2 flex justify-end lg:hidden">
+          <button
+            onClick={() => setMobileRailOpen(false)}
+            aria-label="Close details"
+            title="Close"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X size={18} />
+          </button>
+        </div>
         {!detail ? null : (
           <>
             <div className="flex flex-col items-center gap-1.5 border-b border-border pb-3 text-center">
