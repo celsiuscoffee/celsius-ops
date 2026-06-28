@@ -20,9 +20,10 @@ import { sendScoreboard } from "@/lib/ops-pulse/sender";
 
 export type ScoreboardMode = "off" | "shadow" | "armed";
 
+// Default ARMED (owner go-live 2026-06-28). Pause via OPS_SCOREBOARD_MODE=off|shadow.
 export function scoreboardMode(): ScoreboardMode {
-  const m = (process.env.OPS_SCOREBOARD_MODE || "shadow").trim().toLowerCase();
-  return m === "off" || m === "armed" ? m : "shadow";
+  const m = (process.env.OPS_SCOREBOARD_MODE || "armed").trim().toLowerCase();
+  return m === "off" || m === "shadow" ? m : "armed";
 }
 
 function mask(phone: string | null): string | null {

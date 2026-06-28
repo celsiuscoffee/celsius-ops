@@ -202,7 +202,15 @@ export async function runDailyPulse(now = new Date()): Promise<PulseRunResult> {
   // event signals (reviews, 86'd items, receiving disputes) are trigger-based:
   // they fire on the real-time pulse the moment they happen, so re-listing them
   // a day later would just double-page. Excluded here by category.
-  const breaches = (await detectAll(now)).filter((b) => categoryFor(b.signal) === "routine");
+  //
+  // Clock-in, stock count, and audit are now owned by the dedicated ops-nudges
+  // loops (which DM staff + the lead). Excluded here so the daily digest doesn't
+  // double-ping the leads. The daily pulse keeps its unique routine signals
+  // (checklist, POS-open, phone capture, restock).
+  const NUDGE_OWNED = new Set(["NO_CLOCK_IN", "STOCK_COUNT", "AUDIT"]);
+  const breaches = (await detectAll(now)).filter(
+    (b) => categoryFor(b.signal) === "routine" && !NUDGE_OWNED.has(b.signal),
+  );
   const routed = await routeAll(breaches, now);
 
   // Group routine items by recipient, splitting AUDIT (its own template for the
