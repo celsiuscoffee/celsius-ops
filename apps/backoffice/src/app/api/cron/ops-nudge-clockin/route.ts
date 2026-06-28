@@ -8,13 +8,14 @@ export const maxDuration = 60;
 /**
  * GET /api/cron/ops-nudge-clockin — no-clock-in nudge.
  *
- * For each staff with a published shift today whose start + grace has passed and
- * no clock-in: DMs the staff member ("please clock in") and adds them to a digest
- * for the manager (ops leads). Runs every 15 min so each shift trips at its OWN
- * start time (morning, midday, afternoon, evening), not just the morning. Cost is
- * unchanged: the ledger dedupes per (staff, day), so each no-show is DM'd once no
- * matter how often the cron runs — frequency only sets how promptly lateness is
- * caught. OPS_NUDGES_MODE (off|shadow|armed), default armed.
+ * For each staff with a published shift today whose start + 15-min grace has
+ * passed and no clock-in: DMs the staff member ("please clock in") and adds them
+ * to a digest for the manager (ops leads). Trigger is per-shift: each shift trips
+ * at its OWN rostered start + grace (morning, midday, afternoon, evening). Runs
+ * every 5 min so the nudge lands right at the 15-min grace mark, not up to a poll
+ * later. Cost is unchanged: the ledger dedupes per (staff, day), so each no-show
+ * is DM'd once no matter how often the cron runs. OPS_NUDGES_MODE
+ * (off|shadow|armed), default armed.
  * Design: docs/design/ops-performance-loop.md.
  */
 export async function GET(req: NextRequest) {
