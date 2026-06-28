@@ -241,6 +241,13 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     // ASSIST. No confidence-threshold gate — that was escalating clean multi-item
     // shortfalls; the independent verifier backstops every auto-act instead.
     const actions = decision.po_actions.filter((a) => a.type !== "none");
+    // Every planned line, name-resolved, for the verifier — so the pre-send gate + post-hoc
+    // check judge ALL lines of a multi-item message, not just the primary one.
+    const verifierActions = actions.map((a) => ({
+      type: a.type,
+      itemName: order.items.find((i) => i.id === a.po_item_id)?.product.name ?? null,
+      newQuantity: a.new_quantity,
+    }));
     const hasRisky = actions.some((a) => a.type === "substitute_item" || a.type === "cancel_order");
     // A "reduce" that doesn't actually LOWER the line (new_qty missing/<=0/>= current) is a
     // model misread — e.g. "ada 50 je" on a line of 5, or echoing a price as a qty. Auto-
@@ -317,6 +324,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         actionItemName:
           order.items.find((i) => i.id === decision.po_action.po_item_id)?.product.name ?? null,
         newQuantity: decision.po_action.new_quantity,
+        actions: verifierActions,
         deliveryDate: isValidIsoDate(decision.delivery_date) ? decision.delivery_date : null,
         captureInvoice: invoiceCaptured,
         replyText: decision.reply_text?.trim() || "",
@@ -421,6 +429,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       actionItemName:
         order.items.find((i) => i.id === decision.po_action.po_item_id)?.product.name ?? null,
       newQuantity: decision.po_action.new_quantity,
+      actions: verifierActions,
       deliveryDate: deliveryUpdated,
       captureInvoice: invoiceCaptured,
       replyText,
