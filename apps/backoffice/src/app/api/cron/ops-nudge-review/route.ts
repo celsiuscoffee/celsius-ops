@@ -13,7 +13,9 @@ export const maxDuration = 60;
  * path the reviews board uses — so negatives no longer wait for a human to open
  * the board), then DMs the outlet's on-shift team for service recovery + a digest
  * to the managers (ops leads). Covers internal QR <=2* + Google <=3* (last 72h).
- * Hourly; the ledger dedupes per review so each is nudged once.
+ * Runs every 5 min (near-realtime — a bad review reaches the team within minutes);
+ * the ledger dedupes per review so each is nudged once. For TRUE instant delivery,
+ * GBP Pub/Sub notifications would push new reviews to a webhook (needs GCP setup).
  * OPS_NUDGES_MODE (off|shadow|armed, default armed).
  * Design: docs/design/ops-performance-loop.md.
  */

@@ -284,7 +284,9 @@ that complements the passive weekly scoreboard.
     previously negatives only entered the DB when a human opened the reviews board, so nothing
     was ever sent), then nudges: new negatives (internal QR ≤2★, Google ≤3★, last 72h via
     `detectReviews`) → DM the outlet's on-shift team for recovery + a managers digest.
-    Ledger-deduped per review (once ever). Cron `/api/cron/ops-nudge-review` hourly.
+    Ledger-deduped per review (once ever). Cron `/api/cron/ops-nudge-review` **every 5 min**
+    (near-realtime; bounded by GBP API quota). True instant would need GBP Pub/Sub notifications
+    (GCP topic/subscription → webhook) — offered, not yet set up.
   - "Manager" = ops leads (Ariff/Adam) until an outlet→manager map exists. Templates: `ops_nudge`.
 - **Shadow run on live data (proof):** clock-in 8 real no-shows after fix (Badri, Ameir Haziq,
   Tengku Syahirah, Atthirah…), each DM'd + an 8-line digest to Ariff/Adam; stock 4 outlets
