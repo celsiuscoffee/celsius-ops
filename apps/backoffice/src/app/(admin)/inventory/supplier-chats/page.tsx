@@ -1235,10 +1235,16 @@ export default function SupplierChatsPage() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5 border-b border-border py-3">
-                  <div className="rounded-md bg-muted px-2.5 py-1.5">
-                    <div className="text-[11px] text-muted-foreground">Open POs</div>
+                  <a
+                    href={`/inventory/orders?search=${encodeURIComponent(detail.supplier?.name ?? "")}`}
+                    className="block rounded-md bg-muted px-2.5 py-1.5 transition hover:bg-muted/70"
+                  >
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Open POs</span>
+                      <ExternalLink size={11} className="opacity-50" />
+                    </div>
                     <div className="text-[15px] font-medium">{detail.context.openPOs}</div>
-                  </div>
+                  </a>
                   <a
                     href={`/inventory/invoices?supplier=${detail.supplierId ?? ""}&cardFilter=payable`}
                     className="block rounded-md bg-muted px-2.5 py-1.5 transition hover:bg-muted/70"
@@ -1250,12 +1256,18 @@ export default function SupplierChatsPage() {
                     <div className="text-[15px] font-medium">{formatRM(detail.context.unpaidTotal)}</div>
                   </a>
                   {detail.context.overdueTotal > 0 && (
-                    <div className="rounded-md bg-destructive/10 px-2.5 py-1.5">
-                      <div className="text-[11px] text-destructive">Overdue</div>
+                    <a
+                      href={`/inventory/invoices?supplier=${detail.supplierId ?? ""}&cardFilter=overdue`}
+                      className="block rounded-md bg-destructive/10 px-2.5 py-1.5 transition hover:bg-destructive/15"
+                    >
+                      <div className="flex items-center justify-between text-[11px] text-destructive">
+                        <span>Overdue</span>
+                        <ExternalLink size={11} className="opacity-60" />
+                      </div>
                       <div className="text-[15px] font-medium text-destructive">
                         {formatRM(detail.context.overdueTotal)}
                       </div>
-                    </div>
+                    </a>
                   )}
                 </div>
                 {detail.context.unpaidInvoices.length > 0 && (

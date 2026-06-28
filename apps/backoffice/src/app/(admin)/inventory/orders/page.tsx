@@ -123,6 +123,15 @@ export default function OrdersPage() {
     const t = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(t);
   }, [search]);
+  // Deep-link from the Purchase Orders workspace: ?search=<supplier> pre-fills the search so the
+  // rail's "Open POs" card lands on this supplier's POs. window.location avoids a Suspense boundary.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("search");
+    if (q) {
+      setSearch(q);
+      setDebouncedSearch(q);
+    }
+  }, []);
   // Created-date range filter — mirrors the invoices page pattern.
   const [showFilters, setShowFilters] = useState(false);
   const [createdFrom, setCreatedFrom] = useState("");
