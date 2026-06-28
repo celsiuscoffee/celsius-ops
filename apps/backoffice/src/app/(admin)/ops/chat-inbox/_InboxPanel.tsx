@@ -13,6 +13,8 @@ type Thread = {
   userId: string | null;
   name: string | null;
   role: string | null;
+  outletId: string | null;
+  outletName: string | null;
   lastBody: string;
   lastDirection: "IN" | "OUT";
   lastAt: string;
@@ -47,6 +49,7 @@ type ThreadDetail = {
   userId: string | null;
   name: string | null;
   role: string | null;
+  outletName: string | null;
   windowOpen: boolean;
   openAlerts: OpenAlert[];
   messages: Message[];
@@ -67,6 +70,18 @@ function fmtPhone(p: string): string {
 export default function InboxPanel() {
   const { data, isLoading, mutate: mutateList } = useFetch<{ threads: Thread[] }>("/api/ops/chat-inbox");
   const threads = data?.threads ?? [];
+
+  const [outletFilter, setOutletFilter] = useState<string>("all");
+  // Distinct outlets present in the threads, for the filter dropdown.
+  const outletOptions = Array.from(
+    new Map(threads.filter((t) => t.outletId).map((t) => [t.outletId as string, t.outletName || (t.outletId as string)])).entries(),
+  ).sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+  const visibleThreads =
+    outletFilter === "all"
+      ? threads
+      : outletFilter === "none"
+        ? threads.filter((t) => !t.outletId)
+        : threads.filter((t) => t.outletId === outletFilter);
 
   const [selected, setSelected] = useState<string | null>(null);
   const { data: detail, isLoading: detailLoading, mutate: mutateThread } = useFetch<ThreadDetail>(
@@ -119,14 +134,28 @@ export default function InboxPanel() {
 
   return (
     <div>
-      <div className="mb-2 flex items-center">
+      <div className="mb-2 flex items-center gap-2">
         <span className="text-xs text-muted-foreground">WhatsApp — ops-pulse digests &amp; staff replies</span>
+        <select
+          value={outletFilter}
+          onChange={(e) => setOutletFilter(e.target.value)}
+          className="ml-auto h-7 rounded-md border bg-background px-2 text-xs text-foreground"
+          title="Filter by outlet"
+        >
+          <option value="all">All outlets</option>
+          {outletOptions.map(([id, name]) => (
+            <option key={id} value={id}>
+              {name}
+            </option>
+          ))}
+          <option value="none">No outlet</option>
+        </select>
         <button
           onClick={() => {
             mutateList();
             if (selected) mutateThread();
           }}
-          className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </button>
@@ -139,14 +168,15 @@ export default function InboxPanel() {
             <div className="p-6 text-center text-muted-foreground">
               <Loader2 className="mx-auto h-5 w-5 animate-spin" />
             </div>
-          ) : threads.length === 0 ? (
+          ) : visibleThreads.length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">
-              No conversations yet. Messages appear here as staff reply to ops-pulse digests, or
-              message the WhatsApp number.
+              {outletFilter === "all"
+                ? "No conversations yet. Messages appear here as staff reply to ops-pulse digests, or message the WhatsApp number."
+                : "No conversations for this outlet."}
             </div>
           ) : (
             <ul className="divide-y">
-              {threads.map((t) => {
+              {visibleThreads.map((t) => {
                 const active = t.staffPhone === selected;
                 return (
                   <li key={t.staffPhone}>
@@ -165,6 +195,9 @@ export default function InboxPanel() {
                           <Badge variant="secondary" className="text-[10px]">
                             {t.role}
                           </Badge>
+                        )}
+                        {t.outletName && (
+                          <span className="truncate text-[10px] text-muted-foreground">· {t.outletName}</span>
                         )}
                         <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
                           {fmtTime(t.lastAt)}
@@ -222,6 +255,7 @@ export default function InboxPanel() {
                   <div className="text-[11px] text-muted-foreground">
                     {fmtPhone(detail.staffPhone)}
                     {detail.role ? ` · ${detail.role}` : ""}
+                    {detail.outletName ? ` · ${detail.outletName}` : ""}
                   </div>
                 </div>
                 {detail.openAlerts.length > 0 && (
