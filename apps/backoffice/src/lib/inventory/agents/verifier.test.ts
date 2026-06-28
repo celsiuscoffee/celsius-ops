@@ -46,7 +46,7 @@ describe("buildVerifierPrompt", () => {
     expect(p).toContain("CC-KL-0001");
     expect(p).toContain("Caramel Syrup");
     expect(p).toContain("caramel syrup takde bos");
-    expect(p).toContain("PO action: remove_item");
+    expect(p).toContain("PO action(s): remove_item");
     expect(p).toContain("re-sourced to alt supplier (DRAFT): true");
     expect(p).toContain("2026-06-26");
   });
