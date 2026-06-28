@@ -29,8 +29,20 @@ export function nudgesMode(): NudgesMode {
   return m === "off" || m === "shadow" ? m : "armed";
 }
 
-// Owner choice 2026-06-28: nudge if no stock count in the last 3 days.
-const STOCK_STALE_DAYS = Number(process.env.OPS_NUDGE_STOCK_DAYS || 3);
+// Stock counts follow the owner-set schedule (Settings → Stock Count): regular
+// counts on chosen weekdays + a full count on chosen month-end dates. Stored in
+// appConfig. Default mirrors the settings default (Sun/Tue/Thu + 28-31).
+const STOCK_SCHEDULE_KEY = "stock_count_schedule";
+const DEFAULT_STOCK_SCHEDULE = { weeklyDays: [0, 2, 4], endOfMonthDays: [28, 29, 30, 31] };
+
+async function getStockSchedule(): Promise<{ weeklyDays: number[]; endOfMonthDays: number[] }> {
+  const c = await prisma.appConfig.findUnique({ where: { key: STOCK_SCHEDULE_KEY } });
+  const v = (c?.value ?? null) as { weeklyDays?: number[]; endOfMonthDays?: number[] } | null;
+  return {
+    weeklyDays: v?.weeklyDays ?? DEFAULT_STOCK_SCHEDULE.weeklyDays,
+    endOfMonthDays: v?.endOfMonthDays ?? DEFAULT_STOCK_SCHEDULE.endOfMonthDays,
+  };
+}
 
 function mytYmd(now: Date): string {
   return new Date(now.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
@@ -115,42 +127,45 @@ export async function runClockInNudges(now = new Date()): Promise<NudgeRunResult
   return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }
 
-// ── 2. No stock count ───────────────────────────────────────────────────────
-export async function findStaleStockBreaches(now: Date, days: number): Promise<Breach[]> {
+// ── 2. Stock count — schedule-driven ────────────────────────────────────────
+// Follows the owner's Stock Count schedule (Settings → Stock Count): fires ONLY
+// on a configured count day — a chosen weekday (regular count) or a month-end
+// date (full count) — for outlets that haven't logged a SUBMITTED/REVIEWED count
+// THAT day. Returns [] on non-count days, so it never nudges off-schedule.
+export async function findScheduledStockBreaches(now: Date): Promise<Breach[]> {
+  const sched = await getStockSchedule();
+  const myt = new Date(now.getTime() + 8 * 3600_000);
+  const weekday = myt.getUTCDay(); // 0=Sun … 6=Sat (myt instant read as UTC)
+  const dom = myt.getUTCDate();
+  const isWeekly = sched.weeklyDays.includes(weekday);
+  const isMonthEnd = sched.endOfMonthDays.includes(dom);
+  if (!isWeekly && !isMonthEnd) return []; // not a scheduled count day → nothing due
+  const full = isMonthEnd; // month-end date = full count
+
   const ymd = mytYmd(now);
-  const cutoff = new Date(now.getTime() - days * 86_400_000);
-  const [outlets, recent, lastCounts] = await Promise.all([
+  const dayStart = new Date(`${ymd}T00:00:00+08:00`);
+  const [outlets, todayCounts] = await Promise.all([
     prisma.outlet.findMany({ where: { status: "ACTIVE", type: "OUTLET" }, select: { id: true, name: true } }),
     prisma.stockCount.findMany({
-      where: { status: { in: ["SUBMITTED", "REVIEWED"] }, countDate: { gte: cutoff } },
+      where: { status: { in: ["SUBMITTED", "REVIEWED"] }, countDate: { gte: dayStart } },
       select: { outletId: true },
     }),
-    prisma.stockCount.groupBy({
-      by: ["outletId"],
-      where: { status: { in: ["SUBMITTED", "REVIEWED"] } },
-      _max: { countDate: true },
-    }),
   ]);
-  const counted = new Set(recent.map((r) => r.outletId));
-  const lastBy = new Map(lastCounts.map((r) => [r.outletId, r._max.countDate ?? null]));
+  const countedToday = new Set(todayCounts.map((r) => r.outletId));
+  const label = full ? "Full stock count" : "Stock count";
 
   const breaches: Breach[] = [];
   for (const o of outlets) {
-    if (counted.has(o.id)) continue;
-    const last = lastBy.get(o.id) ?? null;
-    const daysSince = last ? Math.floor((now.getTime() - new Date(last).getTime()) / 86_400_000) : null;
-    const when = daysSince === null ? "no count on record" : `${daysSince}d ago`;
+    if (countedToday.has(o.id)) continue;
     breaches.push({
       signal: "STOCK_COUNT",
       outletId: o.id,
       outletName: o.name,
       severity: "MED",
       routeKey: "operations",
-      // Daily dedupe key (own namespace so it can't collide with the pulse's
-      // 7-day STOCK_COUNT bucket) → at most one nudge per outlet per day.
-      dedupeKey: `STOCK_NUDGE:${o.id}:${ymd}`,
-      summary: `Stock count overdue at ${o.name} — last ${when}. Please count + submit today.`,
-      detail: { daysSince, when, lastCount: last ? new Date(last).toISOString().slice(0, 10) : null },
+      dedupeKey: `STOCK_NUDGE:${o.id}:${ymd}`, // one nudge per outlet per day
+      summary: `${label} due today at ${o.name} — not logged yet.`,
+      detail: { full, when: "today" },
     });
   }
   return breaches;
@@ -161,17 +176,17 @@ export async function runStockCountNudges(now = new Date()): Promise<NudgeRunRes
   const ranAt = now.toISOString();
   if (mode === "off") return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
 
-  const breaches = await findStaleStockBreaches(now, STOCK_STALE_DAYS);
+  const breaches = await findScheduledStockBreaches(now);
   if (breaches.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
 
   const managerLines: string[] = [];
   let staffSent = 0;
   for (const b of breaches) {
     const team = await resolveOutletTeam(b.outletId, now); // on-shift staff w/ phone
-    const when = String((b.detail as { when?: string }).when ?? "");
+    const full = Boolean((b.detail as { full?: boolean }).full);
 
     if (mode === "shadow") {
-      console.log("[ops-nudge:stock:shadow]", JSON.stringify({ outlet: b.outletName, team: team.map((t) => t.name), when }));
+      console.log("[ops-nudge:stock:shadow]", JSON.stringify({ outlet: b.outletName, team: team.map((t) => t.name), full }));
       managerLines.push(b.summary);
       continue;
     }
@@ -180,7 +195,7 @@ export async function runStockCountNudges(now = new Date()): Promise<NudgeRunRes
     if (!isNew) continue;
     for (const t of team) {
       if (!t.phone) continue;
-      const r = await sendStockCountNudge(t.phone, b.outletName, when);
+      const r = await sendStockCountNudge(t.phone, b.outletName, full);
       if (r.ok) staffSent += 1;
       else console.error(`[ops-nudge:stock] staff nudge to ${t.name} failed:`, r.error);
     }

@@ -251,19 +251,20 @@ export function sendClockInNudge(
   return sendProactive(phone, TEMPLATES.nudge, text, v);
 }
 
-export function composeStockCountNudge(outletName: string, when: string): string {
+export function composeStockCountNudge(outletName: string, full: boolean): string {
+  const label = full ? "Full stock count" : "Stock count";
   return [
-    `Stock count due at ${outletName} — last count ${when}.`,
+    `${label} due today at ${outletName}.`,
     "",
-    "Please do the stock take and submit it in the app today.",
+    `Please do the ${full ? "full count" : "count"} and submit it in the app before end of day.`,
   ].join("\n");
 }
 
-export function sendStockCountNudge(phone: string, outletName: string, when: string): Promise<WhatsAppSendResult> {
+export function sendStockCountNudge(phone: string, outletName: string, full: boolean): Promise<WhatsAppSendResult> {
   if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
-  const text = composeStockCountNudge(outletName, when);
-  const v = `Stock count due at ${outletName} (last ${when}) — please count + submit today.`;
-  return sendProactive(phone, TEMPLATES.nudge, text, v);
+  const label = full ? "Full stock count" : "Stock count";
+  const v = `${label} due today at ${outletName} — please count + submit before end of day.`;
+  return sendProactive(phone, TEMPLATES.nudge, composeStockCountNudge(outletName, full), v);
 }
 
 // Manager-facing ops digest — professional but casual, no emoji. `headline` sets

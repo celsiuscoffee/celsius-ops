@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { findNoClockInBreaches } from "@/lib/ops-pulse/detectors";
-import { findStaleStockBreaches } from "@/lib/ops-nudges";
+import { findScheduledStockBreaches } from "@/lib/ops-nudges";
 import { sendProactive } from "@/lib/ops-pulse/sender";
 import { TEMPLATES } from "@/lib/ops-pulse/config";
 
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   const dateLabel = now.toLocaleDateString("en-MY", { timeZone: "Asia/Kuala_Lumpur", weekday: "short", day: "2-digit", month: "short" });
 
   // Real live data — same detectors the crons use.
-  const [clk, stock] = await Promise.all([findNoClockInBreaches(now), findStaleStockBreaches(now, 3)]);
+  const [clk, stock] = await Promise.all([findNoClockInBreaches(now), findScheduledStockBreaches(now)]);
 
   const ids = [...new Set(clk.map((b) => String(b.detail.userId ?? "")).filter(Boolean))];
   const users = ids.length
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     const who = nameById.get(String(b.detail.userId ?? "")) ?? "Staff";
     return `${who} — ${b.outletName}, ${fmtTime(String(b.detail.scheduledStart ?? ""))}`;
   });
-  const stockLines = stock.map((b) => `${b.outletName} — ${String((b.detail as { when?: string }).when ?? "overdue")}`);
+  const stockLines = stock.map((b) => `${b.outletName} — ${(b.detail as { full?: boolean }).full ? "full count due" : "count due"}`);
 
   // Compose: professional but casual, no emoji.
   const parts = [`Morning ${greetName}. Quick ops check for ${dateLabel}:`];
