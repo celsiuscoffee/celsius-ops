@@ -31,18 +31,19 @@ function staffSide(m: { direction: string; fromNumber: string; toNumber: string 
   return m.direction === "inbound" ? m.fromNumber : m.toNumber;
 }
 
-type StaffUser = { id: string; name: string; role: string };
+type StaffUser = { id: string; name: string; role: string; outletId: string | null };
 
 // Staff are a small set; load those with a phone and key them by canonical phone
 // so we can tell which threads belong to staff (vs suppliers / unknown numbers).
+// Prefer fullName so the inbox shows the real name, not a short handle.
 async function loadStaffByCanonical(): Promise<Map<string, StaffUser>> {
   const users = await prisma.user.findMany({
     where: { phone: { not: null } },
-    select: { id: true, name: true, role: true, phone: true },
+    select: { id: true, name: true, fullName: true, role: true, phone: true, outletId: true },
   });
   const map = new Map<string, StaffUser>();
   for (const u of users) {
-    if (u.phone) map.set(canonicalPhone(u.phone), { id: u.id, name: u.name, role: u.role });
+    if (u.phone) map.set(canonicalPhone(u.phone), { id: u.id, name: u.fullName || u.name, role: u.role, outletId: u.outletId });
   }
   return map;
 }
@@ -52,6 +53,8 @@ export interface ThreadSummary {
   userId: string | null;
   name: string | null;
   role: string | null;
+  outletId: string | null;
+  outletName: string | null;
   lastBody: string;
   lastDirection: string; // IN | OUT
   lastAt: string;
@@ -105,12 +108,17 @@ export async function listThreads(now: Date): Promise<ThreadSummary[]> {
   if (accs.length === 0) return [];
 
   const userIds = accs.map((a) => staffByCanon.get(a.staffPhone)!.id);
-  const alertRows = await prisma.opsAlert.groupBy({
-    by: ["assigneeUserId"],
-    where: { assigneeUserId: { in: userIds }, status: { in: ["OPEN", "ESCALATED"] } },
-    _count: { _all: true },
-  });
+  const outletIds = [...new Set(accs.map((a) => staffByCanon.get(a.staffPhone)!.outletId).filter(Boolean) as string[])];
+  const [alertRows, outlets] = await Promise.all([
+    prisma.opsAlert.groupBy({
+      by: ["assigneeUserId"],
+      where: { assigneeUserId: { in: userIds }, status: { in: ["OPEN", "ESCALATED"] } },
+      _count: { _all: true },
+    }),
+    outletIds.length ? prisma.outlet.findMany({ where: { id: { in: outletIds } }, select: { id: true, name: true } }) : Promise.resolve([] as { id: string; name: string }[]),
+  ]);
   const alertMap = new Map(alertRows.map((r) => [r.assigneeUserId, r._count._all]));
+  const outletNameById = new Map(outlets.map((o) => [o.id, o.name]));
 
   const threads = accs.map((a) => {
     const u = staffByCanon.get(a.staffPhone)!;
@@ -120,6 +128,8 @@ export async function listThreads(now: Date): Promise<ThreadSummary[]> {
       userId: u.id,
       name: u.name,
       role: u.role,
+      outletId: u.outletId,
+      outletName: u.outletId ? outletNameById.get(u.outletId) ?? null : null,
       lastBody: a.lastBody,
       lastDirection: a.lastDirection === "inbound" ? "IN" : "OUT",
       lastAt: a.lastAt.toISOString(),
@@ -138,6 +148,7 @@ export interface ThreadDetail {
   userId: string | null;
   name: string | null;
   role: string | null;
+  outletName: string | null;
   windowOpen: boolean;
   openAlerts: { id: string; signal: string; severity: string; summary: string; status: string; sentAt: string | null }[];
   messages: {
@@ -176,10 +187,14 @@ export async function getThread(staffPhoneRaw: string, now: Date): Promise<Threa
   const mine = rows.filter((m) => canonicalPhone(staffSide(m)) === canon);
   if (mine.length === 0) return null;
 
-  const user = await prisma.user.findFirst({
-    where: { phone: { endsWith: tail } },
-    select: { id: true, name: true, role: true },
-  });
+  // Match staff by CANONICAL phone, not raw endsWith — stored phones may be
+  // formatted ("011-28429710"), so a digits-only endsWith on the raw string
+  // misses them (the bug that showed the bare number instead of the name).
+  const staff = await loadStaffByCanonical();
+  const user = staff.get(canon) ?? null;
+  const outlet = user?.outletId
+    ? await prisma.outlet.findUnique({ where: { id: user.outletId }, select: { name: true } })
+    : null;
 
   const lastInbound = [...mine].reverse().find((m) => m.direction === "inbound");
   const windowOpen = !!lastInbound && now.getTime() - lastInbound.timestamp.getTime() < WINDOW_MS;
@@ -198,6 +213,7 @@ export async function getThread(staffPhoneRaw: string, now: Date): Promise<Threa
     userId: user?.id ?? null,
     name: user?.name ?? null,
     role: user?.role ?? null,
+    outletName: outlet?.name ?? null,
     windowOpen,
     openAlerts: alerts.map((a) => ({
       id: a.id,

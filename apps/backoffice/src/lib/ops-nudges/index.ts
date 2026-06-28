@@ -15,10 +15,10 @@
 // WhatsApp's 24h rule until ops_nudge is approved.
 
 import { prisma } from "@/lib/prisma";
-import { findNoClockInBreaches, detectOutletAudit, detectSkillTraining } from "@/lib/ops-pulse/detectors";
+import { findNoClockInBreaches, detectOutletAudit, detectSkillTraining, detectReviews } from "@/lib/ops-pulse/detectors";
 import { recordBreach } from "@/lib/ops-pulse/ledger";
 import { resolveRecipients, resolveOutletTeam } from "@/lib/ops-pulse/router";
-import { sendClockInNudge, sendStockCountNudge, sendOpsDigest, sendAuditNudge } from "@/lib/ops-pulse/sender";
+import { sendClockInNudge, sendStockCountNudge, sendOpsDigest, sendAuditNudge, sendReviewNudge } from "@/lib/ops-pulse/sender";
 import type { Assignee, Breach, RouteKey } from "@/lib/ops-pulse/types";
 
 export type NudgesMode = "off" | "shadow" | "armed";
@@ -29,8 +29,20 @@ export function nudgesMode(): NudgesMode {
   return m === "off" || m === "shadow" ? m : "armed";
 }
 
-// Owner choice 2026-06-28: nudge if no stock count in the last 3 days.
-const STOCK_STALE_DAYS = Number(process.env.OPS_NUDGE_STOCK_DAYS || 3);
+// Stock counts follow the owner-set schedule (Settings → Stock Count): regular
+// counts on chosen weekdays + a full count on chosen month-end dates. Stored in
+// appConfig. Default mirrors the settings default (Sun/Tue/Thu + 28-31).
+const STOCK_SCHEDULE_KEY = "stock_count_schedule";
+const DEFAULT_STOCK_SCHEDULE = { weeklyDays: [0, 2, 4], endOfMonthDays: [28, 29, 30, 31] };
+
+async function getStockSchedule(): Promise<{ weeklyDays: number[]; endOfMonthDays: number[] }> {
+  const c = await prisma.appConfig.findUnique({ where: { key: STOCK_SCHEDULE_KEY } });
+  const v = (c?.value ?? null) as { weeklyDays?: number[]; endOfMonthDays?: number[] } | null;
+  return {
+    weeklyDays: v?.weeklyDays ?? DEFAULT_STOCK_SCHEDULE.weeklyDays,
+    endOfMonthDays: v?.endOfMonthDays ?? DEFAULT_STOCK_SCHEDULE.endOfMonthDays,
+  };
+}
 
 function mytYmd(now: Date): string {
   return new Date(now.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
@@ -115,42 +127,45 @@ export async function runClockInNudges(now = new Date()): Promise<NudgeRunResult
   return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }
 
-// ── 2. No stock count ───────────────────────────────────────────────────────
-export async function findStaleStockBreaches(now: Date, days: number): Promise<Breach[]> {
+// ── 2. Stock count — schedule-driven ────────────────────────────────────────
+// Follows the owner's Stock Count schedule (Settings → Stock Count): fires ONLY
+// on a configured count day — a chosen weekday (regular count) or a month-end
+// date (full count) — for outlets that haven't logged a SUBMITTED/REVIEWED count
+// THAT day. Returns [] on non-count days, so it never nudges off-schedule.
+export async function findScheduledStockBreaches(now: Date): Promise<Breach[]> {
+  const sched = await getStockSchedule();
+  const myt = new Date(now.getTime() + 8 * 3600_000);
+  const weekday = myt.getUTCDay(); // 0=Sun … 6=Sat (myt instant read as UTC)
+  const dom = myt.getUTCDate();
+  const isWeekly = sched.weeklyDays.includes(weekday);
+  const isMonthEnd = sched.endOfMonthDays.includes(dom);
+  if (!isWeekly && !isMonthEnd) return []; // not a scheduled count day → nothing due
+  const full = isMonthEnd; // month-end date = full count
+
   const ymd = mytYmd(now);
-  const cutoff = new Date(now.getTime() - days * 86_400_000);
-  const [outlets, recent, lastCounts] = await Promise.all([
+  const dayStart = new Date(`${ymd}T00:00:00+08:00`);
+  const [outlets, todayCounts] = await Promise.all([
     prisma.outlet.findMany({ where: { status: "ACTIVE", type: "OUTLET" }, select: { id: true, name: true } }),
     prisma.stockCount.findMany({
-      where: { status: { in: ["SUBMITTED", "REVIEWED"] }, countDate: { gte: cutoff } },
+      where: { status: { in: ["SUBMITTED", "REVIEWED"] }, countDate: { gte: dayStart } },
       select: { outletId: true },
     }),
-    prisma.stockCount.groupBy({
-      by: ["outletId"],
-      where: { status: { in: ["SUBMITTED", "REVIEWED"] } },
-      _max: { countDate: true },
-    }),
   ]);
-  const counted = new Set(recent.map((r) => r.outletId));
-  const lastBy = new Map(lastCounts.map((r) => [r.outletId, r._max.countDate ?? null]));
+  const countedToday = new Set(todayCounts.map((r) => r.outletId));
+  const label = full ? "Full stock count" : "Stock count";
 
   const breaches: Breach[] = [];
   for (const o of outlets) {
-    if (counted.has(o.id)) continue;
-    const last = lastBy.get(o.id) ?? null;
-    const daysSince = last ? Math.floor((now.getTime() - new Date(last).getTime()) / 86_400_000) : null;
-    const when = daysSince === null ? "no count on record" : `${daysSince}d ago`;
+    if (countedToday.has(o.id)) continue;
     breaches.push({
       signal: "STOCK_COUNT",
       outletId: o.id,
       outletName: o.name,
       severity: "MED",
       routeKey: "operations",
-      // Daily dedupe key (own namespace so it can't collide with the pulse's
-      // 7-day STOCK_COUNT bucket) → at most one nudge per outlet per day.
-      dedupeKey: `STOCK_NUDGE:${o.id}:${ymd}`,
-      summary: `Stock count overdue at ${o.name} — last ${when}. Please count + submit today.`,
-      detail: { daysSince, when, lastCount: last ? new Date(last).toISOString().slice(0, 10) : null },
+      dedupeKey: `STOCK_NUDGE:${o.id}:${ymd}`, // one nudge per outlet per day
+      summary: `${label} due today at ${o.name} — not logged yet.`,
+      detail: { full, when: "today" },
     });
   }
   return breaches;
@@ -161,17 +176,17 @@ export async function runStockCountNudges(now = new Date()): Promise<NudgeRunRes
   const ranAt = now.toISOString();
   if (mode === "off") return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
 
-  const breaches = await findStaleStockBreaches(now, STOCK_STALE_DAYS);
+  const breaches = await findScheduledStockBreaches(now);
   if (breaches.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
 
   const managerLines: string[] = [];
   let staffSent = 0;
   for (const b of breaches) {
     const team = await resolveOutletTeam(b.outletId, now); // on-shift staff w/ phone
-    const when = String((b.detail as { when?: string }).when ?? "");
+    const full = Boolean((b.detail as { full?: boolean }).full);
 
     if (mode === "shadow") {
-      console.log("[ops-nudge:stock:shadow]", JSON.stringify({ outlet: b.outletName, team: team.map((t) => t.name), when }));
+      console.log("[ops-nudge:stock:shadow]", JSON.stringify({ outlet: b.outletName, team: team.map((t) => t.name), full }));
       managerLines.push(b.summary);
       continue;
     }
@@ -180,7 +195,7 @@ export async function runStockCountNudges(now = new Date()): Promise<NudgeRunRes
     if (!isNew) continue;
     for (const t of team) {
       if (!t.phone) continue;
-      const r = await sendStockCountNudge(t.phone, b.outletName, when);
+      const r = await sendStockCountNudge(t.phone, b.outletName, full);
       if (r.ok) staffSent += 1;
       else console.error(`[ops-nudge:stock] staff nudge to ${t.name} failed:`, r.error);
     }
@@ -193,10 +208,12 @@ export async function runStockCountNudges(now = new Date()): Promise<NudgeRunRes
   return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }
 
-// ── 3. Audits due → discipline lead (barista -> Syafiq, kitchen -> Chef Bo) ──
-// Outlet audits + staff skill training overdue this week, routed by discipline.
-// staffSent = lead DMs sent. Weekly cadence (detector dedupeKey is per 7-day
-// bucket, so even a daily cron nudges each item at most once per week).
+// ── 3. Audit progress → discipline lead (barista -> Syafiq, kitchen -> Chef Bo) ──
+// DAILY progress snapshot (owner 2026-06-28): each day the lead gets their CURRENT
+// outstanding outlet audits + skill-training gaps, routed by discipline. No ledger
+// dedupe — it re-sends each daily run, so as they complete audits the list shrinks
+// and the skill counts climb (the message updates their progress). The daily cron
+// cadence is the once-per-day guard. staffSent = lead DMs sent.
 export async function runAuditNudges(now = new Date()): Promise<NudgeRunResult> {
   const mode = nudgesMode();
   const ranAt = now.toISOString();
@@ -221,24 +238,75 @@ export async function runAuditNudges(now = new Date()): Promise<NudgeRunResult> 
       continue;
     }
 
-    // armed — dedupe per audit (weekly), then DM the lead the new ones.
-    const newLines: string[] = [];
-    for (const b of byRoute[routeKey]) {
-      const { isNew } = await recordBreach(b, recips[0] ?? null);
-      if (isNew) newLines.push(b.summary);
-    }
-    if (newLines.length === 0) continue;
-    items += newLines.length;
+    // armed — daily progress snapshot: send the lead their CURRENT outstanding
+    // audits every run (no dedupe; the daily cron is the cadence). The list
+    // shrinks + skill counts climb as they complete, so it reads as progress.
+    const lines = byRoute[routeKey].map((b) => b.summary);
+    items += lines.length;
     for (const r of recips) {
       if (!r.phone) {
         console.warn(`[ops-nudge:audit] no phone for ${r.name} (${routeKey}) — not nudged`);
         continue;
       }
-      const res = await sendAuditNudge(r.phone, r.name, newLines);
+      const res = await sendAuditNudge(r.phone, r.name, lines);
       if (res.ok) staffSent += 1;
       else console.error(`[ops-nudge:audit] lead nudge to ${r.name} failed:`, res.error);
     }
   }
 
   return { mode, ranAt, items, staffSent, managerSent: 0 };
+}
+
+// ── 4. Bad reviews → on-shift team + managers ────────────────────────────────
+// New negative reviews (internal QR <=2*, Google <=3*) DM'd to the outlet's
+// on-shift team for service recovery + a digest to the managers (ops leads).
+// Ledger-deduped per review (each review nudged once, ever). Real-time-ish — the
+// cron runs hourly. Reuses detectReviews.
+export async function runReviewNudges(now = new Date()): Promise<NudgeRunResult> {
+  const mode = nudgesMode();
+  const ranAt = now.toISOString();
+  if (mode === "off") return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  const breaches = await detectReviews(now);
+  if (breaches.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  // Group by outlet so each outlet's team gets one message listing its reviews.
+  const byOutlet: Record<string, Breach[]> = {};
+  for (const b of breaches) (byOutlet[b.outletId] ??= []).push(b);
+
+  const managerLines: string[] = [];
+  let staffSent = 0;
+  for (const outletId of Object.keys(byOutlet)) {
+    const outletName = byOutlet[outletId][0].outletName;
+
+    // Dedupe per review (armed); shadow shows all.
+    let fresh = byOutlet[outletId];
+    if (mode === "armed") {
+      fresh = [];
+      for (const b of byOutlet[outletId]) {
+        const { isNew } = await recordBreach(b, null);
+        if (isNew) fresh.push(b);
+      }
+    }
+    if (fresh.length === 0) continue;
+    const lines = fresh.map((b) => b.summary);
+    managerLines.push(...lines);
+
+    const team = await resolveOutletTeam(outletId, now); // who's on shift now
+    if (mode === "shadow") {
+      console.log("[ops-nudge:review:shadow]", JSON.stringify({ outlet: outletName, team: team.map((t) => t.name), lines }));
+      continue;
+    }
+    for (const t of team) {
+      if (!t.phone) continue;
+      const r = await sendReviewNudge(t.phone, outletName, lines);
+      if (r.ok) staffSent += 1;
+      else console.error(`[ops-nudge:review] staff nudge to ${t.name} failed:`, r.error);
+    }
+    if (team.length === 0) console.warn(`[ops-nudge:review] no on-shift team for ${outletName} — only managers notified`);
+  }
+
+  const headline = `${managerLines.length} new guest review${managerLines.length === 1 ? "" : "s"} need a response`;
+  const managerSent = await sendManagerDigestToOps(headline, managerLines, mode);
+  return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }
