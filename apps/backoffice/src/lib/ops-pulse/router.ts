@@ -90,10 +90,11 @@ export async function resolveOutletTeam(outletId: string, now: Date): Promise<As
   return users.map((u) => ({ userId: u.id, name: u.name, phone: u.phone, role: u.role, fallback: false }));
 }
 
-// The OUTLET's SUPERVISORS — active staff whose HR position is "Supervisor" at
-// this outlet, with a phone. Used for work the shift supervisor owns (e.g. stock
-// counts) so the message goes to the supervisor, not the whole floor team. Empty
-// when the outlet has no supervisor assigned (the manager digest is the backstop).
+// The OUTLET's SUPERVISORS / LEADS — active staff whose HR position is
+// "Supervisor" or any "…Lead" (Shift Lead, Barista Lead, Kitchen Lead) at this
+// outlet, with a phone. Used for work the shift lead owns (e.g. stock counts) so
+// the message goes to the leads, not the whole floor team. Empty when the outlet
+// has no supervisor/lead assigned (the manager digest is the backstop).
 export async function resolveOutletSupervisors(outletId: string): Promise<Assignee[]> {
   if (!outletId) return [];
   const users = await prisma.$queryRaw<Array<{ id: string; name: string; phone: string | null; role: string }>>`
@@ -103,7 +104,7 @@ export async function resolveOutletSupervisors(outletId: string): Promise<Assign
     WHERE u."outletId" = ${outletId}
       AND u.status = 'ACTIVE'
       AND u.phone IS NOT NULL
-      AND p.position = 'Supervisor'
+      AND (p.position = 'Supervisor' OR p.position ILIKE '%lead%')
   `;
   return users.map((u) => ({ userId: u.id, name: u.name, phone: u.phone, role: u.role, fallback: false }));
 }
