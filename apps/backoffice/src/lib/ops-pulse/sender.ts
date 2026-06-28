@@ -290,11 +290,11 @@ export function sendOpsDigest(phone: string, headline: string, lines: string[]):
 export function composeAuditNudge(name: string, lines: string[]): string {
   const first = name.split(" ")[0];
   return [
-    `Hi ${first}, audits due this week:`,
+    `Hi ${first}, audit progress this week — ${lines.length} still to do:`,
     "",
     lines.map((l) => `- ${l}`).join("\n"),
     "",
-    "Please run them and log each report in the app. Reply DONE as you go.",
+    "Knock these off and log each report in the app. I'll check in daily.",
   ].join("\n");
 }
 

@@ -9,9 +9,9 @@ export const maxDuration = 60;
  * GET /api/cron/ops-nudge-audit — weekly audit nudge to the discipline leads.
  *
  * Outlet audits + staff skill training overdue this week, routed by discipline:
- * barista -> Syafiq, kitchen -> Chef Bo. Each lead gets one DM of their due
- * audits. Weekly (Mon); the ledger dedupes per 7-day cadence bucket.
- * OPS_NUDGES_MODE (off|shadow|armed, default shadow).
+ * barista -> Syafiq, kitchen -> Chef Bo. DAILY progress snapshot — each day the
+ * lead gets their CURRENT outstanding audits, so the list shrinks + skill counts
+ * climb as they work through them. OPS_NUDGES_MODE (off|shadow|armed, default armed).
  * Design: docs/design/ops-performance-loop.md.
  */
 export async function GET(req: NextRequest) {
