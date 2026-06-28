@@ -531,9 +531,9 @@ export default function SupplierChatsPage() {
     return ap - bp;
   });
 
-  useEffect(() => {
-    if (!selected && threads.length) setSelected(threads[0].key);
-  }, [threads, selected]);
+  // Default landing = the Need-ordering list ("what to order today"), NOT an auto-opened
+  // thread. Only a ?key= deep-link selects a thread on load; otherwise the conversation pane
+  // stays on "Select a chat" until you pick one.
 
   useEffect(() => {
     setDraft("");
