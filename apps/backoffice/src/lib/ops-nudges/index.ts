@@ -15,10 +15,10 @@
 // WhatsApp's 24h rule until ops_nudge is approved.
 
 import { prisma } from "@/lib/prisma";
-import { findNoClockInBreaches, detectOutletAudit, detectSkillTraining } from "@/lib/ops-pulse/detectors";
+import { findNoClockInBreaches, detectOutletAudit, detectSkillTraining, detectReviews } from "@/lib/ops-pulse/detectors";
 import { recordBreach } from "@/lib/ops-pulse/ledger";
 import { resolveRecipients, resolveOutletTeam } from "@/lib/ops-pulse/router";
-import { sendClockInNudge, sendStockCountNudge, sendOpsDigest, sendAuditNudge } from "@/lib/ops-pulse/sender";
+import { sendClockInNudge, sendStockCountNudge, sendOpsDigest, sendAuditNudge, sendReviewNudge } from "@/lib/ops-pulse/sender";
 import type { Assignee, Breach, RouteKey } from "@/lib/ops-pulse/types";
 
 export type NudgesMode = "off" | "shadow" | "armed";
@@ -255,4 +255,58 @@ export async function runAuditNudges(now = new Date()): Promise<NudgeRunResult> 
   }
 
   return { mode, ranAt, items, staffSent, managerSent: 0 };
+}
+
+// ── 4. Bad reviews → on-shift team + managers ────────────────────────────────
+// New negative reviews (internal QR <=2*, Google <=3*) DM'd to the outlet's
+// on-shift team for service recovery + a digest to the managers (ops leads).
+// Ledger-deduped per review (each review nudged once, ever). Real-time-ish — the
+// cron runs hourly. Reuses detectReviews.
+export async function runReviewNudges(now = new Date()): Promise<NudgeRunResult> {
+  const mode = nudgesMode();
+  const ranAt = now.toISOString();
+  if (mode === "off") return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  const breaches = await detectReviews(now);
+  if (breaches.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  // Group by outlet so each outlet's team gets one message listing its reviews.
+  const byOutlet: Record<string, Breach[]> = {};
+  for (const b of breaches) (byOutlet[b.outletId] ??= []).push(b);
+
+  const managerLines: string[] = [];
+  let staffSent = 0;
+  for (const outletId of Object.keys(byOutlet)) {
+    const outletName = byOutlet[outletId][0].outletName;
+
+    // Dedupe per review (armed); shadow shows all.
+    let fresh = byOutlet[outletId];
+    if (mode === "armed") {
+      fresh = [];
+      for (const b of byOutlet[outletId]) {
+        const { isNew } = await recordBreach(b, null);
+        if (isNew) fresh.push(b);
+      }
+    }
+    if (fresh.length === 0) continue;
+    const lines = fresh.map((b) => b.summary);
+    managerLines.push(...lines);
+
+    const team = await resolveOutletTeam(outletId, now); // who's on shift now
+    if (mode === "shadow") {
+      console.log("[ops-nudge:review:shadow]", JSON.stringify({ outlet: outletName, team: team.map((t) => t.name), lines }));
+      continue;
+    }
+    for (const t of team) {
+      if (!t.phone) continue;
+      const r = await sendReviewNudge(t.phone, outletName, lines);
+      if (r.ok) staffSent += 1;
+      else console.error(`[ops-nudge:review] staff nudge to ${t.name} failed:`, r.error);
+    }
+    if (team.length === 0) console.warn(`[ops-nudge:review] no on-shift team for ${outletName} — only managers notified`);
+  }
+
+  const headline = `${managerLines.length} new guest review${managerLines.length === 1 ? "" : "s"} need a response`;
+  const managerSent = await sendManagerDigestToOps(headline, managerLines, mode);
+  return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }

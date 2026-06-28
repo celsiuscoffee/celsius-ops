@@ -267,6 +267,25 @@ export function sendStockCountNudge(phone: string, outletName: string, full: boo
   return sendProactive(phone, TEMPLATES.nudge, composeStockCountNudge(outletName, full), v);
 }
 
+// Bad-review nudge to the on-shift team — awareness + service recovery, framed
+// constructively (not blame). `lines` are the new review summaries for the outlet.
+export function composeReviewNudge(outletName: string, lines: string[]): string {
+  return [
+    `Heads up — guest feedback just came in at ${outletName}:`,
+    "",
+    lines.map((l) => `- ${l}`).join("\n"),
+    "",
+    "Let's make the next visit right, and flag to your manager to recover this guest. Reply DONE once handled.",
+  ].join("\n");
+}
+
+export function sendReviewNudge(phone: string, outletName: string, lines: string[]): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) return Promise.resolve(NOT_CONFIGURED);
+  const flat = sanitizeParam(`Guest feedback at ${outletName}: ${lines.join("; ")}`);
+  const v = flat.length <= 700 ? flat : flat.slice(0, 699).replace(/\s+\S*$/, "") + " …";
+  return sendProactive(phone, TEMPLATES.nudge, composeReviewNudge(outletName, lines), v);
+}
+
 // Manager-facing ops digest — professional but casual, no emoji. `headline` sets
 // the ask ("8 staff haven't clocked in yet"); `lines` are the specifics.
 export function composeOpsDigest(headline: string, lines: string[]): string {
