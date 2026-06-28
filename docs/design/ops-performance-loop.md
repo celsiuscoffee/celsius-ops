@@ -275,8 +275,10 @@ that complements the passive weekly scoreboard.
     fires without flipping the pulse's NOCLOCKIN gate) → DM the no-show + digest to ops leads.
     Cron `/api/cron/ops-nudge-clockin` once daily (~8:30am MYT — catches the main
     morning shift, low cost; ledger still dedupes per staff/day).
-  - **Stock:** outlets with no SUBMITTED/REVIEWED count in 3 days → DM the on-shift team
-    (`resolveOutletTeam`) + digest to ops leads. Cron `/api/cron/ops-nudge-stockcount` daily.
+  - **Stock:** follows the owner's Stock Count schedule (`appConfig.stock_count_schedule`:
+    weekly count days + month-end full-count dates, Settings → Stock Count). On a scheduled
+    day, DM the on-shift team (`resolveOutletTeam`) + digest to ops leads for outlets that
+    haven't logged a count that day; silent off-schedule. Cron daily (schedule gates sending).
   - "Manager" = ops leads (Ariff/Adam) until an outlet→manager map exists. Templates: `ops_nudge`.
 - **Shadow run on live data (proof):** clock-in 8 real no-shows after fix (Badri, Ameir Haziq,
   Tengku Syahirah, Atthirah…), each DM'd + an 8-line digest to Ariff/Adam; stock 4 outlets
