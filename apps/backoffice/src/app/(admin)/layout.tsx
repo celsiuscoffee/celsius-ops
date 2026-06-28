@@ -1081,6 +1081,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <PullToRefresh
           onRefresh={async () => { window.location.reload(); }}
           className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible print:h-auto"
+          disabled={pathname?.startsWith("/inventory/supplier-chats") ?? false}
         >
           {children}
         </PullToRefresh>

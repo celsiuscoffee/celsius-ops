@@ -189,21 +189,6 @@ export default function SupplierChatsPage() {
     localStorage.setItem("sc-segments", JSON.stringify(segments));
   }, [segments]);
 
-  // Mobile: suppress the browser's native pull-to-refresh while this full-screen workspace is
-  // open — an overscroll at the top of the list/chat was reloading the page mid-navigation.
-  // Scoped to this page (restored on unmount) so the rest of the app keeps pull-to-refresh.
-  useEffect(() => {
-    const html = document.documentElement;
-    const prevHtml = html.style.overscrollBehaviorY;
-    const prevBody = document.body.style.overscrollBehaviorY;
-    html.style.overscrollBehaviorY = "none";
-    document.body.style.overscrollBehaviorY = "none";
-    return () => {
-      html.style.overscrollBehaviorY = prevHtml;
-      document.body.style.overscrollBehaviorY = prevBody;
-    };
-  }, []);
-
   function togglePin(key: string) {
     setPinnedKeys((prev) => {
       const next = new Set(prev);
