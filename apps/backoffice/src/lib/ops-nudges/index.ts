@@ -17,7 +17,7 @@
 import { prisma } from "@/lib/prisma";
 import { findNoClockInBreaches, detectOutletAudit, detectSkillTraining, detectReviews } from "@/lib/ops-pulse/detectors";
 import { recordBreach } from "@/lib/ops-pulse/ledger";
-import { resolveRecipients, resolveOutletTeam } from "@/lib/ops-pulse/router";
+import { resolveRecipients, resolveOutletTeam, resolveOutletSupervisors } from "@/lib/ops-pulse/router";
 import { sendClockInNudge, sendStockCountNudge, sendOpsDigest, sendAuditNudge, sendReviewNudge } from "@/lib/ops-pulse/sender";
 import type { Assignee, Breach, RouteKey } from "@/lib/ops-pulse/types";
 
@@ -179,27 +179,29 @@ export async function runStockCountNudges(now = new Date()): Promise<NudgeRunRes
   const breaches = await findScheduledStockBreaches(now);
   if (breaches.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
 
+  // Owner 2026-06-28: stock count goes to SUPERVISORS + managers, not the whole
+  // floor team. Per outlet → that outlet's supervisor(s); managers get the digest.
   const managerLines: string[] = [];
-  let staffSent = 0;
+  let staffSent = 0; // supervisor DMs (kept under the existing result field)
   for (const b of breaches) {
-    const team = await resolveOutletTeam(b.outletId, now); // on-shift staff w/ phone
+    const supervisors = await resolveOutletSupervisors(b.outletId); // outlet's supervisor(s), not the floor team
     const full = Boolean((b.detail as { full?: boolean }).full);
 
     if (mode === "shadow") {
-      console.log("[ops-nudge:stock:shadow]", JSON.stringify({ outlet: b.outletName, team: team.map((t) => t.name), full }));
+      console.log("[ops-nudge:stock:shadow]", JSON.stringify({ outlet: b.outletName, supervisors: supervisors.map((t) => t.name), full }));
       managerLines.push(b.summary);
       continue;
     }
 
-    const { isNew } = await recordBreach(b, team[0] ?? null);
+    const { isNew } = await recordBreach(b, supervisors[0] ?? null);
     if (!isNew) continue;
-    for (const t of team) {
+    for (const t of supervisors) {
       if (!t.phone) continue;
       const r = await sendStockCountNudge(t.phone, b.outletName, full);
       if (r.ok) staffSent += 1;
-      else console.error(`[ops-nudge:stock] staff nudge to ${t.name} failed:`, r.error);
+      else console.error(`[ops-nudge:stock] supervisor nudge to ${t.name} failed:`, r.error);
     }
-    if (team.length === 0) console.warn(`[ops-nudge:stock] no on-shift team for ${b.outletName} — only manager notified`);
+    if (supervisors.length === 0) console.warn(`[ops-nudge:stock] no supervisor for ${b.outletName} — only managers notified`);
     managerLines.push(b.summary);
   }
 

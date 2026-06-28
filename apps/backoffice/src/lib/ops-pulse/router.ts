@@ -89,3 +89,21 @@ export async function resolveOutletTeam(outletId: string, now: Date): Promise<As
   });
   return users.map((u) => ({ userId: u.id, name: u.name, phone: u.phone, role: u.role, fallback: false }));
 }
+
+// The OUTLET's SUPERVISORS — active staff whose HR position is "Supervisor" at
+// this outlet, with a phone. Used for work the shift supervisor owns (e.g. stock
+// counts) so the message goes to the supervisor, not the whole floor team. Empty
+// when the outlet has no supervisor assigned (the manager digest is the backstop).
+export async function resolveOutletSupervisors(outletId: string): Promise<Assignee[]> {
+  if (!outletId) return [];
+  const users = await prisma.$queryRaw<Array<{ id: string; name: string; phone: string | null; role: string }>>`
+    SELECT u.id, u.name, u.phone, u.role
+    FROM "User" u
+    JOIN hr_employee_profiles p ON p.user_id = u.id
+    WHERE u."outletId" = ${outletId}
+      AND u.status = 'ACTIVE'
+      AND u.phone IS NOT NULL
+      AND p.position = 'Supervisor'
+  `;
+  return users.map((u) => ({ userId: u.id, name: u.name, phone: u.phone, role: u.role, fallback: false }));
+}
