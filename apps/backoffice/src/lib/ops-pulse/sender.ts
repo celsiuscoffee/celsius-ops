@@ -110,6 +110,7 @@ export async function sendProactive(
         type: "template",
         body: param,
         status: "sent",
+        raw: { kind: templateName }, // durable classification for the ops message monitor
       });
       return tpl;
     }
@@ -128,6 +129,7 @@ export async function sendProactive(
     type: "text",
     body: freeForm,
     status: ff.ok ? "sent" : "failed",
+    raw: { kind: templateName }, // durable classification for the ops message monitor
   });
   return ff;
 }

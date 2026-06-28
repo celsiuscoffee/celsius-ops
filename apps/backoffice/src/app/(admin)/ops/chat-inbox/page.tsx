@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { MessageSquare, ShieldAlert, BellRing, Megaphone, LayoutGrid } from "lucide-react";
+import { MessageSquare, ShieldAlert, BellRing, Megaphone, Activity, LayoutGrid } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
 import InboxPanel from "./_InboxPanel";
 import PulsePanel from "./_PulsePanel";
 import RemindersPanel from "./_RemindersPanel";
 import InstructionsPanel from "./_InstructionsPanel";
+import MessagesPanel from "./_MessagesPanel";
 
 type Summary = {
   inbox: { threads: number; awaitingReply: number };
@@ -16,7 +17,7 @@ type Summary = {
   instructions: { pending: number };
 };
 
-type Segment = "inbox" | "pulse" | "reminders" | "instructions";
+type Segment = "inbox" | "pulse" | "reminders" | "instructions" | "monitor";
 
 export default function OpsWorkspacePage() {
   const [seg, setSeg] = useState<Segment>("inbox");
@@ -28,6 +29,7 @@ export default function OpsWorkspacePage() {
     { key: "pulse", label: "Pulse", Icon: ShieldAlert, count: summary?.pulse.open ?? 0 },
     { key: "reminders", label: "Reminders", Icon: BellRing, count: summary?.reminders.open ?? 0 },
     { key: "instructions", label: "Instructions", Icon: Megaphone, count: summary?.instructions.pending ?? 0 },
+    { key: "monitor", label: "Monitor", Icon: Activity, count: 0 },
   ];
 
   return (
@@ -36,7 +38,7 @@ export default function OpsWorkspacePage() {
         <LayoutGrid className="h-5 w-5 text-terracotta" />
         <h1 className="text-lg font-semibold">Ops Workspace</h1>
         <span className="hidden text-xs text-muted-foreground sm:inline">
-          Chats, pulse alerts, reminders &amp; instructions — one place to act
+          Chats, pulse, reminders, instructions &amp; a live monitor of every message
         </span>
       </div>
 
@@ -69,6 +71,7 @@ export default function OpsWorkspacePage() {
       {seg === "pulse" && <PulsePanel onChange={mutate} />}
       {seg === "reminders" && <RemindersPanel onChange={mutate} />}
       {seg === "instructions" && <InstructionsPanel onChange={mutate} />}
+      {seg === "monitor" && <MessagesPanel />}
     </div>
   );
 }
