@@ -43,6 +43,9 @@ export type VerifierDecision = {
   actionType: string; // none | remove_item | reduce_qty | substitute_item | cancel_order
   actionItemName: string | null;
   newQuantity: number | null;
+  // ALL planned line actions for a multi-item message. When present + >1 the verifier MUST
+  // check EVERY line, not just the primary actionType. Optional (older snapshots lack it).
+  actions?: Array<{ type: string; itemName: string | null; newQuantity: number | null }>;
   deliveryDate: string | null;
   captureInvoice: boolean;
   replyText: string;
@@ -95,6 +98,19 @@ export function buildVerifierPrompt(input: VerifierInput, decision: VerifierDeci
     input.thread.filter((m) => m.text).map((m) => `${m.who}: ${m.text}`).join("\n") ||
     "(no earlier messages)";
 
+  // Render EVERY planned line action (multi-item), not just the primary one, so the judge
+  // can catch a bad line 2..N (lines apply non-atomically; any bad line fails the message).
+  const acts = decision.actions && decision.actions.length > 0 ? decision.actions : null;
+  const actionDesc = acts
+    ? (acts.length > 1 ? `MULTI (${acts.length} lines — check EVERY one): ` : "") +
+      acts
+        .map(
+          (a) =>
+            `${a.type}${a.itemName ? ` (${a.itemName})` : ""}${a.newQuantity != null ? ` → qty ${a.newQuantity}` : ""}`,
+        )
+        .join("; ")
+    : `${decision.actionType}${decision.actionItemName ? ` (line: ${decision.actionItemName})` : ""}${decision.newQuantity != null ? ` → qty ${decision.newQuantity}` : ""}`;
+
   return `Today is ${input.today} (Asia/Kuala_Lumpur). A document was attached to the new message: ${input.hadDoc ? "YES" : "no"}.
 
 # Open PO ${input.orderNumber} (status ${input.orderStatus}) — ${input.supplierName}, payment model ${input.paymentModel}
@@ -109,7 +125,7 @@ ${thread}
 # What the agent decided
 - intent: ${decision.intent}
 - language: ${decision.language}
-- PO action: ${decision.actionType}${decision.actionItemName ? ` (line: ${decision.actionItemName})` : ""}${decision.newQuantity != null ? ` → qty ${decision.newQuantity}` : ""}
+- PO action(s): ${actionDesc}
 - applied to PO: ${decision.appliedAction}
 - delivery_date set: ${decision.deliveryDate ?? "none"}
 - capture_invoice: ${decision.captureInvoice}
