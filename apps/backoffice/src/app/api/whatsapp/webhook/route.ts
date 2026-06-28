@@ -86,8 +86,9 @@ export async function POST(request: NextRequest) {
             : null;
         // 1) Persist for the supplier-chat monitor/inbox (Option 1). Best-effort —
         // recordInboundMessage never throws, so it never blocks the 200 to Meta.
-        // supplierId is matched by phone inside.
-        await recordInboundMessage({
+        // supplierId is matched by phone inside. Returns false on a Meta re-delivery
+        // (duplicate wamid) — atomic via the @unique — so we run the agent exactly once.
+        const isNewInbound = await recordInboundMessage({
           waMessageId: msg.id,
           fromNumber: msg.from,
           toNumber: businessNumber,
@@ -134,7 +135,10 @@ export async function POST(request: NextRequest) {
         // throws, so we AWAIT it (serverless can freeze after the response, so a
         // fire-and-forget promise might not run) — it still returns fast for
         // non-suppliers and when the flag is off. TODO: Telegram monitor mirror.
-        if (msg.type === "text" || msg.type === "document" || msg.type === "image") {
+        // Skip on a re-delivery (isNewInbound === false): otherwise two concurrent Meta
+        // re-deliveries could both pass the agent's own check and double-apply a PO edit +
+        // double-reply. The @unique wamid makes the first inbound store the atomic claim.
+        if (isNewInbound && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
           await handleSupplierMessage({
             fromNumber: msg.from,
             toNumber: businessNumber,

@@ -43,7 +43,11 @@ export interface InboundRecord {
   raw?: unknown;
 }
 
-export async function recordInboundMessage(rec: InboundRecord): Promise<void> {
+// Returns true if the inbound was NEWLY stored, false if it was a duplicate (same wamid,
+// a Meta re-delivery). Because waMessageId is @unique, the create is an ATOMIC claim — two
+// concurrent re-deliveries can't both return true — so the webhook can run the agent exactly
+// once per inbound off this flag (prevents the double-act race).
+export async function recordInboundMessage(rec: InboundRecord): Promise<boolean> {
   try {
     const supplierId = await matchSupplierIdByPhone(rec.fromNumber);
     await prisma.whatsAppMessage.create({
@@ -60,9 +64,13 @@ export async function recordInboundMessage(rec: InboundRecord): Promise<void> {
         raw: (rec.raw ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
+    return true; // newly stored
   } catch (e) {
-    // Duplicate wamid (re-delivery) or any write error — never throw.
-    console.warn(`[whatsapp:store] inbound persist skipped: ${e instanceof Error ? e.message : e}`);
+    // P2002 = duplicate wamid (re-delivery) → not new. Any OTHER write error → fail-open
+    // (treat as new so a transient DB error doesn't silently drop the message). Never throws.
+    const dup = (e as { code?: string }).code === "P2002";
+    if (!dup) console.warn(`[whatsapp:store] inbound persist skipped: ${e instanceof Error ? e.message : e}`);
+    return !dup;
   }
 }
 
