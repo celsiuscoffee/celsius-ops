@@ -3,7 +3,8 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Loader2, AlertTriangle, Banknote, Settings, ArrowRight, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
+import { Loader2, AlertTriangle, Banknote, ArrowRight, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
+import DailyBalancePanel from "./DailyBalancePanel";
 
 type Outlet = { id: string; name: string; code: string };
 
@@ -39,6 +40,15 @@ type MonthlyHistory = {
 
 type ProjectedMin = { closing: number; weekStart: string; weekEnd: string };
 
+type DailyBalance = {
+  asOf: string | null;
+  accounts: string[];
+  consolidated: { date: string; balance: number }[];
+  perAccount: { account: string; points: { date: string; balance: number }[] }[];
+  projected: { date: string; balance: number }[];
+  minPoint: { date: string; balance: number } | null;
+};
+
 type OperatingCashFlow = {
   month: string;
   sales: { card: number; qr: number; storehub: number; grab: number; foodpanda: number; gastrohub: number; meetings: number; total: number };
@@ -64,6 +74,7 @@ type CashflowResult = {
   operatingCashFlow: OperatingCashFlow[];
   cashGeneration: CashGeneration;
   projectedMin: ProjectedMin | null;
+  dailyBalance: DailyBalance | null;
   buckets: CashflowBucket[];
   warnings: string[];
 };
@@ -75,6 +86,10 @@ function fmtMYR(n: number): string {
 }
 function fmtMYR2(n: number): string {
   return new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", maximumFractionDigits: 2 }).format(n);
+}
+function fmtDay(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00+08:00");
+  return `${d.getDate()} ${d.toLocaleString("en-MY", { month: "short" })}`;
 }
 function shortRange(start: string, end: string): string {
   const s = new Date(start);
@@ -188,9 +203,6 @@ export default function CashflowPage() {
           <Link href="/finance/bank-statements" className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
             <Banknote className="h-3.5 w-3.5" /> Bank Statements
           </Link>
-          <Link href="/finance/recurring-expenses" className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
-            <Settings className="h-3.5 w-3.5" /> Recurring
-          </Link>
         </div>
       </div>
 
@@ -198,6 +210,14 @@ export default function CashflowPage() {
         <div className="mt-6 flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
       ) : (
         <>
+          {/* Daily bank balance — the hero. Account-level cash position over
+              time, with period-overlay comparison and forward projection. */}
+          {data.dailyBalance && (
+            <div className="mt-4">
+              <DailyBalancePanel db={data.dailyBalance} />
+            </div>
+          )}
+
           {/* Headline — Cash Generation. The primary KPI. */}
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
             <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">

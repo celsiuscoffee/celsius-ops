@@ -119,6 +119,22 @@ export type CashflowResult = {
   // for "should I be worried?" decisions. Inspired by QuickBooks'
   // Cash Flow Projector minimum-balance highlighting.
   projectedMin: { closing: number; weekStart: string; weekEnd: string } | null;
+  // Daily reconstructed bank balance — the "actual" running cash position,
+  // walked day-by-day from each account's prior closing balance + its
+  // transaction lines. Consolidated = sum across accounts on days where
+  // every account has a reconstructed balance (so we never undercount).
+  // `projected` continues past today using the weekly forward buckets,
+  // linearly interpolated to a daily cadence so it overlays the actuals
+  // on a single date axis. Bank balance is an account-level concept and
+  // is NOT outlet-filterable, so this block ignores the outlet filter.
+  dailyBalance: {
+    asOf: string | null;            // last actual day with consolidated data
+    accounts: string[];             // account labels present in the series
+    consolidated: { date: string; balance: number }[];
+    perAccount: { account: string; points: { date: string; balance: number }[] }[];
+    projected: { date: string; balance: number }[];
+    minPoint: { date: string; balance: number } | null;  // lowest actual consolidated balance
+  } | null;
   buckets: CashflowBucket[];
   warnings: string[];
 };
@@ -741,12 +757,13 @@ export async function computeCashflow(opts: {
   // transfers between Celsius entities — without that, a transfer to
   // an internal account we don't track shows as "cash burned" when
   // it isn't.
-  const [monthlyHistory, operatingCashFlow, minByMonth] = await Promise.all([
+  const [monthlyHistory, operatingCashFlow, dailyBalances] = await Promise.all([
     loadMonthlyHistory(),
     loadOperatingCashFlow(),
-    loadMinBalancePerMonth(),
+    buildDailyBalances(12),
   ]);
   // Merge min balance into monthlyHistory rows
+  const minByMonth = minBalancePerMonth(dailyBalances.dailyConsolidated);
   for (const row of monthlyHistory) {
     const m = minByMonth.get(row.month);
     if (m) {
@@ -754,6 +771,10 @@ export async function computeCashflow(opts: {
       row.minBalanceDate = m.date;
     }
   }
+  // Daily balance chart series — actuals + forward projection overlay.
+  // Account-level, so it ignores the outlet filter by design.
+  const dailyBalance = buildDailyBalanceSeries(dailyBalances);
+  dailyBalance.projected = buildProjectedDaily(ymd(today), opening.amount, buckets);
   const cashGeneration = summariseCashGeneration(monthlyHistory, opening.amount);
   // Projected min balance — lowest closing across the projection horizon
   const projectedMin = buckets.length === 0 ? null : buckets.reduce<{ closing: number; weekStart: string; weekEnd: string } | null>(
@@ -791,6 +812,7 @@ export async function computeCashflow(opts: {
     operatingCashFlow,
     cashGeneration,
     projectedMin,
+    dailyBalance,
     buckets,
     warnings,
   };
@@ -888,18 +910,25 @@ async function loadMonthlyHistory(): Promise<CashflowResult["monthlyHistory"]> {
     });
 }
 
-// Reconstruct daily consolidated balance (sum across accounts) and
-// return min per month. Uses prior month's closingBalance as the
-// starting balance and walks forward day-by-day applying lines and
-// carrying balance when there's no activity. Skips months where any
-// account has no prior closing (we can't anchor the reconstruction).
+type DailyBalances = {
+  // account → (YYYY-MM-DD → end-of-day balance)
+  dailyByAccount: Map<string, Map<string, number>>;
+  // YYYY-MM-DD → consolidated balance (only days where ALL accounts report)
+  dailyConsolidated: Map<string, number>;
+  accounts: string[];
+};
+
+// Reconstruct daily balance per account (and the consolidated sum). Uses
+// each account's prior-month closingBalance as the anchor and walks
+// forward day-by-day applying lines, carrying the balance over days with
+// no activity. Skips a month for an account when it has no prior closing
+// (we can't anchor the reconstruction).
 //
-// QuickBooks-style: their Cash Flow Projector highlights minimum
-// projected balance — same idea here for the past, so finance can
-// see "we got down to RM 20,676 on Feb 11" not just "Feb net was X".
-async function loadMinBalancePerMonth(): Promise<Map<string, { min: number; date: string }>> {
+// Shared by loadMinBalancePerMonth (past minimum) and the daily-balance
+// chart series — computed once per request and threaded into both.
+async function buildDailyBalances(monthsBack = 12): Promise<DailyBalances> {
   const since = new Date();
-  since.setMonth(since.getMonth() - 12);
+  since.setMonth(since.getMonth() - monthsBack);
 
   const statements = await prisma.bankStatement.findMany({
     where: { periodStart: { gte: since } },
@@ -995,7 +1024,12 @@ async function loadMinBalancePerMonth(): Promise<Map<string, { min: number; date
     if (allHave) dailyConsolidated.set(day, sum);
   }
 
-  // Min per month
+  return { dailyByAccount, dailyConsolidated, accounts };
+}
+
+// Lowest consolidated balance hit within each month — QuickBooks-style,
+// so finance sees "we got down to RM 20,676 on Feb 11" not just the net.
+function minBalancePerMonth(dailyConsolidated: Map<string, number>): Map<string, { min: number; date: string }> {
   const minByMonth = new Map<string, { min: number; date: string }>();
   for (const [day, bal] of dailyConsolidated.entries()) {
     const month = day.slice(0, 7);
@@ -1003,6 +1037,66 @@ async function loadMinBalancePerMonth(): Promise<Map<string, { min: number; date
     if (!cur || bal < cur.min) minByMonth.set(month, { min: round2(bal), date: day });
   }
   return minByMonth;
+}
+
+// Shape the reconstructed balances into the chart series: sorted daily
+// consolidated line, per-account lines, and the all-time minimum point.
+// `__default__` (statements with no accountName) is relabelled for display.
+function buildDailyBalanceSeries(db: DailyBalances): NonNullable<CashflowResult["dailyBalance"]> {
+  const label = (a: string) => (a === "__default__" ? "Unlabelled" : a);
+  const sortByDate = (a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date);
+
+  const consolidated = Array.from(db.dailyConsolidated.entries())
+    .map(([date, balance]) => ({ date, balance: round2(balance) }))
+    .sort(sortByDate);
+
+  const perAccount = db.accounts.map((account) => ({
+    account: label(account),
+    points: Array.from((db.dailyByAccount.get(account) ?? new Map<string, number>()).entries())
+      .map(([date, balance]) => ({ date, balance: round2(balance) }))
+      .sort(sortByDate),
+  }));
+
+  const minPoint = consolidated.reduce<{ date: string; balance: number } | null>(
+    (acc, p) => (acc == null || p.balance < acc.balance ? p : acc),
+    null,
+  );
+
+  return {
+    asOf: consolidated.length ? consolidated[consolidated.length - 1].date : null,
+    accounts: db.accounts.map(label),
+    consolidated,
+    perAccount,
+    projected: [],   // filled by computeCashflow from the forward buckets
+    minPoint,
+  };
+}
+
+// Linearly interpolate the weekly forward buckets into a daily projected
+// balance line, anchored at today's opening balance so it overlays the
+// reconstructed actuals continuously on a single date axis.
+function buildProjectedDaily(
+  asOf: string,
+  openingAmount: number,
+  buckets: CashflowBucket[],
+): { date: string; balance: number }[] {
+  const anchors = [
+    { date: asOf, balance: openingAmount },
+    ...buckets.map((b) => ({ date: b.weekEnd, balance: b.closing })),
+  ];
+  const out: { date: string; balance: number }[] = [];
+  for (let i = 0; i < anchors.length - 1; i++) {
+    const a = anchors[i];
+    const b = anchors[i + 1];
+    const span = Math.max(1, Math.round((Date.parse(b.date) - Date.parse(a.date)) / DAY_MS));
+    for (let d = 0; d < span; d++) {
+      const t = new Date(Date.parse(a.date) + d * DAY_MS);
+      out.push({ date: ymd(t), balance: round2(a.balance + ((b.balance - a.balance) * d) / span) });
+    }
+  }
+  const last = anchors[anchors.length - 1];
+  out.push({ date: last.date, balance: round2(last.balance) });
+  return out;
 }
 
 // Operating Cash Flow per month — sourced from classified bank lines.
