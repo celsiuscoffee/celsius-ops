@@ -441,7 +441,9 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     };
 
     // Auto-reply (24h window is open — the supplier just messaged us).
-    const sent = await sendWhatsAppText(supplier.phone ?? fromDigits, replyText);
+    // Quote the inbound message so the supplier sees which message we're answering (lost in
+    // a merge after #561; restored). evt.waMessageId is the supplier's Meta wamid.
+    const sent = await sendWhatsAppText(supplier.phone ?? fromDigits, replyText, evt.waMessageId);
 
     const recordedId = await recordOutboundMessage({
       waMessageId: sent.messageId,
