@@ -22,9 +22,11 @@ import { sendClockInNudge, sendStockCountNudge, sendOpsDigest, sendAuditNudge } 
 import type { Assignee, Breach, RouteKey } from "@/lib/ops-pulse/types";
 
 export type NudgesMode = "off" | "shadow" | "armed";
+// Default ARMED (owner go-live 2026-06-28, "full auto"). Kill switch / staging
+// via OPS_NUDGES_MODE=off|shadow in Vercel — no code change needed to pause.
 export function nudgesMode(): NudgesMode {
-  const m = (process.env.OPS_NUDGES_MODE || "shadow").trim().toLowerCase();
-  return m === "off" || m === "armed" ? m : "shadow";
+  const m = (process.env.OPS_NUDGES_MODE || "armed").trim().toLowerCase();
+  return m === "off" || m === "shadow" ? m : "armed";
 }
 
 // Owner choice 2026-06-28: nudge if no stock count in the last 3 days.
