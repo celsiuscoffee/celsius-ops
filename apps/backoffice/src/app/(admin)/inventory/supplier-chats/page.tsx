@@ -780,6 +780,78 @@ export default function SupplierChatsPage() {
                   </button>
                 </div>
               ))}
+              {/* Agent's ASSIST suggestion — inline at the bottom of the thread, in the
+                  conversation flow, instead of off in the side panel. */}
+              {detail.agentProposal && (
+                <div className="pt-1">
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40">
+                    <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                      <AlertCircle size={12} /> Agent suggests — your call
+                    </div>
+                    {detail.agentProposal.insight && (
+                      <div className="mb-1.5 text-[12px] leading-snug text-foreground">
+                        {detail.agentProposal.insight}
+                      </div>
+                    )}
+                    <div className="text-[12px] text-foreground">
+                      {detail.agentProposal.poAction ? (
+                        <>
+                          {detail.agentProposal.poAction.type === "substitute_item" && "Substitution offered"}
+                          {detail.agentProposal.poAction.type === "cancel_order" && "Cancel requested"}
+                          {detail.agentProposal.poAction.type === "remove_item" && "Remove line"}
+                          {detail.agentProposal.poAction.type === "reduce_qty" && "Reduce qty"}
+                          {detail.agentProposal.poAction.itemName && <> · <span className="font-medium">{detail.agentProposal.poAction.itemName}</span></>}
+                          {detail.agentProposal.poAction.newQuantity != null && <> → {detail.agentProposal.poAction.newQuantity}</>}
+                          {detail.agentProposal.poAction.note && <div className="mt-0.5 text-[11px] text-muted-foreground">“{detail.agentProposal.poAction.note}”</div>}
+                        </>
+                      ) : (
+                        <span className="capitalize">{detail.agentProposal.intent.replace(/_/g, " ")}</span>
+                      )}
+                    </div>
+                    <div className="mt-1 text-[10.5px] text-muted-foreground">
+                      Held for review: {detail.agentProposal.escalationReason}. The agent did not change the PO.
+                    </div>
+                    {(() => {
+                      const pa = detail.agentProposal.poAction;
+                      const canApply =
+                        !!pa?.poItemId &&
+                        !!detail.agentProposal.orderId &&
+                        (pa.type === "remove_item" || pa.type === "reduce_qty");
+                      return (
+                        <div className="mt-2 flex items-center gap-2">
+                          {canApply && (
+                            <button
+                              onClick={applyProposal}
+                              disabled={applying}
+                              className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                            >
+                              {applying ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                              {pa?.type === "remove_item" ? "Apply: remove line" : "Apply: reduce qty"}
+                            </button>
+                          )}
+                          {detail.agentProposal.orderId && (
+                            <a
+                              href={`/inventory/orders/${detail.agentProposal.orderId}`}
+                              className="inline-flex items-center gap-1 rounded border border-amber-300 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                            >
+                              Open PO <ExternalLink size={11} />
+                            </a>
+                          )}
+                          <button
+                            onClick={dismissProposal}
+                            disabled={applying}
+                            title="Clear this suggestion once you've handled it"
+                            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                          >
+                            <Check size={11} /> Mark handled
+                          </button>
+                        </div>
+                      );
+                    })()}
+                    {applyError && <div className="mt-1 text-[10.5px] text-destructive">{applyError}</div>}
+                  </div>
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
             <div className="border-t border-border px-4 py-2.5">
@@ -1034,76 +1106,6 @@ export default function SupplierChatsPage() {
                     </div>
                   );
                 })()}
-                {detail.agentProposal && (
-                  <div className="border-b border-border py-3">
-                    <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950/40">
-                      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-                        <AlertCircle size={12} /> Agent suggests — your call
-                      </div>
-                      {detail.agentProposal.insight && (
-                        <div className="mb-1.5 text-[12px] leading-snug text-foreground">
-                          {detail.agentProposal.insight}
-                        </div>
-                      )}
-                      <div className="text-[12px] text-foreground">
-                        {detail.agentProposal.poAction
-                          ? <>
-                              {detail.agentProposal.poAction.type === "substitute_item" && "Substitution offered"}
-                              {detail.agentProposal.poAction.type === "cancel_order" && "Cancel requested"}
-                              {detail.agentProposal.poAction.type === "remove_item" && "Remove line"}
-                              {detail.agentProposal.poAction.type === "reduce_qty" && "Reduce qty"}
-                              {detail.agentProposal.poAction.itemName && <> · <span className="font-medium">{detail.agentProposal.poAction.itemName}</span></>}
-                              {detail.agentProposal.poAction.newQuantity != null && <> → {detail.agentProposal.poAction.newQuantity}</>}
-                              {detail.agentProposal.poAction.note && <div className="mt-0.5 text-[11px] text-muted-foreground">“{detail.agentProposal.poAction.note}”</div>}
-                            </>
-                          : <span className="capitalize">{detail.agentProposal.intent.replace(/_/g, " ")}</span>}
-                      </div>
-                      <div className="mt-1 text-[10.5px] text-muted-foreground">
-                        Held for review: {detail.agentProposal.escalationReason}. The agent did not change the PO.
-                      </div>
-                      {(() => {
-                        const pa = detail.agentProposal.poAction;
-                        const canApply =
-                          !!pa?.poItemId &&
-                          !!detail.agentProposal.orderId &&
-                          (pa.type === "remove_item" || pa.type === "reduce_qty");
-                        return (
-                          <div className="mt-2 flex items-center gap-2">
-                            {canApply && (
-                              <button
-                                onClick={applyProposal}
-                                disabled={applying}
-                                className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-50"
-                              >
-                                {applying ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                                {pa?.type === "remove_item" ? "Apply: remove line" : "Apply: reduce qty"}
-                              </button>
-                            )}
-                            {detail.agentProposal.orderId && (
-                              <a
-                                href={`/inventory/orders/${detail.agentProposal.orderId}`}
-                                className="inline-flex items-center gap-1 rounded border border-amber-300 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/40"
-                              >
-                                Open PO <ExternalLink size={11} />
-                              </a>
-                            )}
-                            <button
-                              onClick={dismissProposal}
-                              disabled={applying}
-                              title="Clear this suggestion once you've handled it"
-                              className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
-                            >
-                              <Check size={11} /> Mark handled
-                            </button>
-                          </div>
-                        );
-                      })()}
-                      {applyError && (
-                        <div className="mt-1 text-[10.5px] text-destructive">{applyError}</div>
-                      )}
-                    </div>
-                  </div>
-                )}
                 {detail.agentReSource && (
                   <div className="border-b border-border py-3">
                     <div className="rounded-md border border-sky-300 bg-sky-50 p-2.5 dark:border-sky-800 dark:bg-sky-950/40">
