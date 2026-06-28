@@ -125,6 +125,10 @@
       "schedule": "0 1 * * *"
     },
     {
+      "path": "/api/cron/ops-nudge-review",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/cron/geogrid-keywords",
       "schedule": "0 6 1 * *"
     },
