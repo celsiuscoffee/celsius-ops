@@ -279,10 +279,12 @@ that complements the passive weekly scoreboard.
     weekly count days + month-end full-count dates, Settings → Stock Count). On a scheduled
     day, DM the on-shift team (`resolveOutletTeam`) + digest to ops leads for outlets that
     haven't logged a count that day; silent off-schedule. Cron daily (schedule gates sending).
-  - **Reviews (2026-06-28):** new negative reviews (internal QR ≤2★, Google ≤3★, last 72h, reuses
-    `detectReviews`) → DM the outlet's on-shift team for service recovery + a managers digest.
-    Ledger-deduped per review (once ever). Cron `/api/cron/ops-nudge-review` hourly. This fills the
-    gap where reviews only lived in the shadow real-time pulse, so nobody was being told.
+  - **Reviews (2026-06-28):** the cron first INGESTS new negative Google reviews into
+    `ReviewReplyDraft` (`lib/reviews/sync-negatives`, extracted from the board's sync=1 path —
+    previously negatives only entered the DB when a human opened the reviews board, so nothing
+    was ever sent), then nudges: new negatives (internal QR ≤2★, Google ≤3★, last 72h via
+    `detectReviews`) → DM the outlet's on-shift team for recovery + a managers digest.
+    Ledger-deduped per review (once ever). Cron `/api/cron/ops-nudge-review` hourly.
   - "Manager" = ops leads (Ariff/Adam) until an outlet→manager map exists. Templates: `ops_nudge`.
 - **Shadow run on live data (proof):** clock-in 8 real no-shows after fix (Badri, Ameir Haziq,
   Tengku Syahirah, Atthirah…), each DM'd + an 8-line digest to Ariff/Adam; stock 4 outlets
