@@ -8,6 +8,7 @@ import { createShortLink } from "@/lib/shortlink";
 import { detectPaymentFlags, appendInvoiceFlags } from "@/lib/inventory/flag-detector";
 import { computeDepositAmount } from "@/lib/inventory/deposit";
 import { sendProofOfPayment } from "@/lib/inventory/procurement-whatsapp";
+import { rescueNoMatch, judgeDuplicate } from "@/lib/inventory/agents/pop-verifier-run";
 import {
   sendMessage,
   sendPhoto,
@@ -713,9 +714,33 @@ async function resolvePop(
   chatId: number, msgId: number, photoUrl: string, pop: PopData, amount: number,
   candidates: Awaited<ReturnType<typeof prisma.invoice.findMany>>,
 ) {
+  // Snapshot the POP fields the AI POP-match verifier needs (same shape for both dead-ends).
+  const popForVerify = {
+    amount,
+    referenceNumber: pop.referenceNumber,
+    recipientName: pop.recipientName,
+    recipientAccount: pop.recipientAccount,
+    recipientBank: pop.recipientBank,
+    invoiceReference: pop.invoiceReference,
+    date: pop.date,
+  };
+
   if (candidates.length === 0) {
-    await sendMessage(chatId, `💳 POP received — RM ${amount.toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\nRecipient: ${pop.recipientName ?? "–"}\nAccount: ${pop.recipientAccount ?? "–"}\n\n❌ No matching unpaid invoice found.`, msgId);
-    return;
+    // Dead-end #1 — the deterministic matcher found nothing. Before giving up (which leaves
+    // a real payment unpaid → double-pay risk), let the AI verifier scan open invoices.
+    const rescue = await rescueNoMatch(popForVerify, amount);
+    if (rescue.action === "notify") {
+      await sendMessage(chatId, rescue.message, msgId);
+      return;
+    }
+    if (rescue.action === "pay") {
+      // Verifier rescued a real payment the matcher missed (armed + confident + corroborated)
+      // — pay it through the normal single-candidate path below.
+      candidates = [rescue.invoice];
+    } else {
+      await sendMessage(chatId, `💳 POP received — RM ${amount.toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\nRecipient: ${pop.recipientName ?? "–"}\nAccount: ${pop.recipientAccount ?? "–"}\n\n❌ No matching unpaid invoice found.`, msgId);
+      return;
+    }
   }
 
   if (candidates.length > 1) {
@@ -803,15 +828,43 @@ async function resolvePop(
         status: { in: ["PAID", "DEPOSIT_PAID"] },
         NOT: { id: invoice.id },
       },
-      select: { invoiceNumber: true, paidAt: true },
+      select: { invoiceNumber: true, paidAt: true, amount: true, paymentRef: true },
     });
     if (existingRef) {
-      await sendMessage(
-        chatId,
-        `⛔ <b>Duplicate POP blocked</b>\nRef <code>${pop.referenceNumber}</code> is already attached to <b>${existingRef.invoiceNumber}</b>${existingRef.paidAt ? ` (paid ${existingRef.paidAt.toISOString().slice(0, 10)})` : ""}.\n\nSame bank ref can't be on two invoices. Verify before retrying.`,
-        msgId,
-      );
-      return;
+      // Deterministic stop-bleed: a repeated bank reference only signals a genuine re-send when
+      // the AMOUNT also matches. A DIFFERENT amount means a distinct payment that merely reuses a
+      // ref (e.g. a shared corporate account) — the old code hard-blocked these, leaving a real
+      // payment unpaid → double-pay. We now proceed to pay (the normal flag-detector still records
+      // the reused ref as DUPLICATE_PAYMENT_REF for review). Only the same-amount case is ambiguous.
+      const sameAmount = Math.abs(Number(existingRef.amount) - amount) <= 0.5;
+      if (sameAmount) {
+        // Same ref + same amount could be a real re-send OR a coincidental shared ref. The AI
+        // verifier decides: "pay" (proceed), "notify" (proposed to a human), or "none" (block).
+        const dup = await judgeDuplicate({
+          pop: popForVerify,
+          popAmount: amount,
+          invoice,
+          existingPaid: {
+            invoiceNumber: existingRef.invoiceNumber,
+            amount: Number(existingRef.amount),
+            paidAt: existingRef.paidAt ? existingRef.paidAt.toISOString().slice(0, 10) : null,
+            paymentRef: existingRef.paymentRef ?? pop.referenceNumber,
+          },
+        });
+        if (dup.action === "notify") {
+          await sendMessage(chatId, dup.message, msgId);
+          return;
+        }
+        if (dup.action === "none") {
+          await sendMessage(
+            chatId,
+            `⛔ <b>Duplicate POP blocked</b>\nRef <code>${pop.referenceNumber}</code> is already attached to <b>${existingRef.invoiceNumber}</b>${existingRef.paidAt ? ` (paid ${existingRef.paidAt.toISOString().slice(0, 10)})` : ""}.\n\nSame bank ref + same amount — likely the same payment re-sent. Verify before retrying.`,
+            msgId,
+          );
+          return;
+        }
+        // dup.action === "pay" → verifier judged a distinct payment; fall through to pay.
+      }
     }
   }
 

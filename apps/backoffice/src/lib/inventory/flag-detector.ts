@@ -9,7 +9,10 @@ export type InvoiceFlagCode =
   | "DUPLICATE_PAYMENT_REF"
   | "REF_MATCHES_PAID_INVOICE"
   | "AMOUNT_TOLERANCE_MATCH"
-  | "BANK_MISMATCH";
+  | "BANK_MISMATCH"
+  // The POP-match verifier (AI) thinks this unpaid invoice was actually paid by a POP the
+  // deterministic matcher dropped — surfaced for finance to confirm. meta holds the verdict.
+  | "POP_VERIFIER";
 
 export type InvoiceFlag = {
   code: InvoiceFlagCode;
@@ -27,6 +30,7 @@ const FLAG_LABEL: Record<InvoiceFlagCode, string> = {
   REF_MATCHES_PAID_INVOICE: "Reference points to a paid invoice",
   AMOUNT_TOLERANCE_MATCH: "Amount matched within tolerance only",
   BANK_MISMATCH: "POP bank differs from supplier bank",
+  POP_VERIFIER: "AI: a payment may have been missed — verify",
 };
 
 export function flagLabel(code: InvoiceFlagCode) {
