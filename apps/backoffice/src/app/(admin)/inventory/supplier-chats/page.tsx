@@ -147,32 +147,45 @@ export default function SupplierChatsPage() {
   // ── List organization (pins + custom segments) ────────────────
   // Client-only, persisted per-browser in localStorage. No backend/schema.
   type Segment = { id: string; name: string; keys: string[] };
-  const [pinnedKeys, setPinnedKeys] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      return new Set(JSON.parse(localStorage.getItem("sc-pinned-keys") || "[]") as string[]);
-    } catch {
-      return new Set();
-    }
-  });
-  const [segments, setSegments] = useState<Segment[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = JSON.parse(localStorage.getItem("sc-segments") || "[]");
-      return Array.isArray(raw) ? (raw as Segment[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Start EMPTY on both server + client (no hydration mismatch); the persisted values load from
+  // localStorage just after mount (below). This is the fix for pins/segments vanishing on
+  // refresh: reading localStorage in the initializer mismatched the empty SSR render, and the
+  // persist effect then overwrote storage with that empty state before the real values loaded.
+  const [pinnedKeys, setPinnedKeys] = useState<Set<string>>(new Set());
+  const [segments, setSegments] = useState<Segment[]>([]);
   // Which custom segment is active (overrides the built-in `filter` while set).
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
   // Per-row "…" menu: the open row's key, or null.
   const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
 
+  // Load persisted pins + segments once, after mount (client-only).
   useEffect(() => {
+    try {
+      const p = JSON.parse(localStorage.getItem("sc-pinned-keys") || "[]");
+      if (Array.isArray(p)) setPinnedKeys(new Set(p as string[]));
+    } catch {}
+    try {
+      const s = JSON.parse(localStorage.getItem("sc-segments") || "[]");
+      if (Array.isArray(s)) setSegments(s as Segment[]);
+    } catch {}
+  }, []);
+
+  // Persist on change — but SKIP the initial mount render, else we'd overwrite storage with the
+  // empty initial state before the load effect above runs (the bug that wiped pins on refresh).
+  const pinnedReady = useRef(false);
+  useEffect(() => {
+    if (!pinnedReady.current) {
+      pinnedReady.current = true;
+      return;
+    }
     localStorage.setItem("sc-pinned-keys", JSON.stringify([...pinnedKeys]));
   }, [pinnedKeys]);
+  const segmentsReady = useRef(false);
   useEffect(() => {
+    if (!segmentsReady.current) {
+      segmentsReady.current = true;
+      return;
+    }
     localStorage.setItem("sc-segments", JSON.stringify(segments));
   }, [segments]);
 
