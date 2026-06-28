@@ -49,7 +49,7 @@ export interface PoForSend {
   orderNumber: string;
   deliveryDate: Date | null;
   outlet: { name: string; address: string | null };
-  supplier: { id: string; name: string; phone: string | null } | null;
+  supplier: { id: string; name: string; phone: string | null; automationMode?: string | null } | null;
   items: Array<{
     quantity: unknown;
     product: { name: string; baseUom: string } | null;
@@ -62,6 +62,13 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
     if (!enabled()) return;
     const supplier = order.supplier;
     if (!supplier?.phone || !allowed(supplier.phone)) return;
+    // OFF = the manual lane: these suppliers are ordered from by hand on the Smart Order
+    // page (incl. WhatsApp GROUPS via the wa.me picker, which the Cloud API can't reach).
+    // Don't also fire a Cloud-API send for them, or they'd get a duplicate 1:1 message.
+    if (supplier.automationMode === "OFF") {
+      console.log(`[po-send] po=${order.orderNumber} skipped — supplier is OFF (manual / group send)`);
+      return;
+    }
     const dest = digits(supplier.phone);
 
     // Dedupe: already sent this PO once?
