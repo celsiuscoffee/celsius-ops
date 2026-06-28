@@ -72,9 +72,14 @@ export async function GET(req: NextRequest) {
   for (const m of rows) {
     const counter = m.direction === "inbound" ? m.fromNumber : m.toNumber;
     if (!counter) continue;
+    const raw = (m.raw ?? null) as Record<string, unknown> | null;
+    // Internal Ops Pulse nudges (clock-in digests etc.) are stamped raw.kind="ops_nudge".
+    // They go to STAFF, never suppliers — skip them so they can't surface as a supplier chat
+    // even when a junk supplier phone (e.g. "+") causes a mis-match. The staff-User filter
+    // below only catches numbers that DON'T match a supplier; this catches the mis-tagged ones.
+    if (raw?.kind === "ops_nudge") continue;
     let t = threads.get(counter);
     if (!t) {
-      const raw = (m.raw ?? null) as Record<string, unknown> | null;
       const v = raw?.verifier as { rating?: string } | undefined;
       t = {
         key: counter,
