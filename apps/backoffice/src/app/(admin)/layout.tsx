@@ -415,7 +415,6 @@ const NAV_SECTIONS: NavSection[] = [
         label: "People",
         items: [
           { label: "Employees", href: "/hr/employees", icon: <UserCog className={ICON_SIZE} />, moduleKey: "hr:employees" },
-          { label: "Certifications", href: "/hr/certifications", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "hr:employees" },
           { label: "Memos", href: "/hr/memos", icon: <FileText className={ICON_SIZE} />, moduleKey: "hr:memos" },
         ],
       },

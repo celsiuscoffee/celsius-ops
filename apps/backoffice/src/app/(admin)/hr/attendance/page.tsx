@@ -2,7 +2,7 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, MapPinOff, Clock, Timer, Loader2, ImageOff } from "lucide-react";
+import { AlertTriangle, CheckCircle2, MapPinOff, Clock, Timer, Loader2, ImageOff, CalendarDays, UserX, CalendarOff, HelpCircle } from "lucide-react";
 import { usePrompt } from "@celsius/ui";
 import { HrPageHeader } from "@/components/hr/page-header";
 import type { AttendanceLog } from "@/lib/hr/types";
@@ -21,9 +21,66 @@ const FLAG_LABELS: Record<string, { label: string; icon: typeof AlertTriangle; c
   no_gps_data: { label: "No GPS", icon: MapPinOff, color: "text-gray-600 bg-gray-50" },
 };
 
+type RosterStatus = "present" | "late" | "absent" | "on_leave" | "unscheduled";
+
+type RosterRow = {
+  user_id: string;
+  user_name: string | null;
+  user_nickname: string | null;
+  status: RosterStatus;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  role_type: string | null;
+  clock_in: string | null;
+  clock_out: string | null;
+  total_hours: number | null;
+  leave_type: string | null;
+  log_id: string | null;
+  no_clock_out: boolean;
+};
+
+type RosterResponse = {
+  date: string;
+  outlet_id: string | null;
+  outlets: { id: string; name: string }[];
+  rows: RosterRow[];
+  summary?: {
+    scheduled: number;
+    present: number;
+    late: number;
+    absent: number;
+    on_leave: number;
+    unscheduled: number;
+    has_schedule: boolean;
+  };
+};
+
+const ROSTER_STATUS: Record<RosterStatus, { label: string; icon: typeof AlertTriangle; color: string }> = {
+  present: { label: "Present", icon: CheckCircle2, color: "text-green-700 bg-green-50" },
+  late: { label: "Late", icon: Clock, color: "text-amber-700 bg-amber-50" },
+  absent: { label: "Absent", icon: UserX, color: "text-red-700 bg-red-50" },
+  on_leave: { label: "On leave", icon: CalendarOff, color: "text-blue-700 bg-blue-50" },
+  unscheduled: { label: "Unscheduled", icon: HelpCircle, color: "text-gray-700 bg-gray-100" },
+};
+
+const fmtTime = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" }) : null;
+
+// Today in Malaysia time as YYYY-MM-DD (en-CA gives ISO date format).
+const todayMY = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
+
 export default function AttendanceReviewPage() {
-  const [filter, setFilter] = useState<"flagged" | "all">("flagged");
-  const { data, mutate } = useFetch<{ logs: EnrichedLog[]; count: number }>(`/api/hr/attendance?status=${filter}`);
+  const [filter, setFilter] = useState<"flagged" | "all" | "schedule">("flagged");
+  const [rosterDate, setRosterDate] = useState(todayMY);
+  const [rosterOutlet, setRosterOutlet] = useState("");
+  const { data, mutate } = useFetch<{ logs: EnrichedLog[]; count: number }>(
+    filter === "schedule" ? null : `/api/hr/attendance?status=${filter}`,
+  );
+  const { data: roster } = useFetch<RosterResponse>(
+    filter === "schedule"
+      ? `/api/hr/attendance/roster?date=${rosterDate}${rosterOutlet ? `&outlet_id=${rosterOutlet}` : ""}`
+      : null,
+  );
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const { prompt, PromptDialog } = usePrompt();
@@ -61,9 +118,11 @@ export default function AttendanceReviewPage() {
       <HrPageHeader
         title="Attendance Review"
         description={
-          filter === "flagged"
-            ? `${logs.length} flagged item${logs.length !== 1 ? "s" : ""} need review`
-            : `${logs.length} attendance log${logs.length !== 1 ? "s" : ""}`
+          filter === "schedule"
+            ? "Scheduled staff vs actual clock-ins for the day"
+            : filter === "flagged"
+              ? `${logs.length} flagged item${logs.length !== 1 ? "s" : ""} need review`
+              : `${logs.length} attendance log${logs.length !== 1 ? "s" : ""}`
         }
         action={
           <div className="flex gap-1 rounded-lg border bg-card p-1 text-sm">
@@ -79,11 +138,25 @@ export default function AttendanceReviewPage() {
             >
               All
             </button>
+            <button
+              onClick={() => setFilter("schedule")}
+              className={`rounded-md px-3 py-1.5 font-medium ${filter === "schedule" ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
+            >
+              By Schedule
+            </button>
           </div>
         }
       />
 
-      {logs.length === 0 ? (
+      {filter === "schedule" ? (
+        <ScheduleRoster
+          roster={roster}
+          date={rosterDate}
+          onDateChange={setRosterDate}
+          outletId={rosterOutlet}
+          onOutletChange={setRosterOutlet}
+        />
+      ) : logs.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border bg-card py-16 text-center">
           <CheckCircle2 className="mb-3 h-12 w-12 text-green-500" />
           <p className="text-lg font-semibold">All clear</p>
@@ -179,6 +252,138 @@ export default function AttendanceReviewPage() {
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={previewUrl} alt="Clock-in preview" className="max-h-full max-w-full rounded-lg" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScheduleRoster({
+  roster,
+  date,
+  onDateChange,
+  outletId,
+  onOutletChange,
+}: {
+  roster: RosterResponse | undefined;
+  date: string;
+  onDateChange: (d: string) => void;
+  outletId: string;
+  onOutletChange: (id: string) => void;
+}) {
+  const outlets = roster?.outlets || [];
+  const rows = roster?.rows || [];
+  const summary = roster?.summary;
+  // The API resolves the active outlet when none is requested; reflect that
+  // back into the picker so it shows the outlet actually being displayed.
+  const activeOutlet = outletId || roster?.outlet_id || "";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => onDateChange(e.target.value)}
+            className="rounded-lg border bg-card px-3 py-1.5 text-sm"
+          />
+        </div>
+        <select
+          value={activeOutlet}
+          onChange={(e) => onOutletChange(e.target.value)}
+          className="rounded-lg border bg-card px-3 py-1.5 text-sm"
+        >
+          {outlets.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+        </select>
+        {summary && (
+          <div className="ml-auto flex flex-wrap items-center gap-2 text-xs">
+            {summary.absent > 0 && (
+              <span className="rounded-full bg-red-50 px-2 py-1 font-medium text-red-700">
+                {summary.absent} absent
+              </span>
+            )}
+            {summary.late > 0 && (
+              <span className="rounded-full bg-amber-50 px-2 py-1 font-medium text-amber-700">
+                {summary.late} late
+              </span>
+            )}
+            <span className="rounded-full bg-green-50 px-2 py-1 font-medium text-green-700">
+              {summary.present} present
+            </span>
+            <span className="text-muted-foreground">of {summary.scheduled} scheduled</span>
+          </div>
+        )}
+      </div>
+
+      {summary && !summary.has_schedule ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border bg-card py-16 text-center">
+          <CalendarOff className="mb-3 h-12 w-12 text-muted-foreground" />
+          <p className="text-lg font-semibold">No published schedule</p>
+          <p className="text-sm text-muted-foreground">
+            No shifts are scheduled for this outlet on this date.
+          </p>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border bg-card py-16 text-center">
+          <CheckCircle2 className="mb-3 h-12 w-12 text-green-500" />
+          <p className="text-lg font-semibold">Nothing to show</p>
+          <p className="text-sm text-muted-foreground">No scheduled shifts or clock-ins for this day.</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border bg-card">
+          <table className="w-full text-sm">
+            <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2 font-medium">Employee</th>
+                <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium">Scheduled</th>
+                <th className="px-4 py-2 font-medium">Actual</th>
+                <th className="px-4 py-2 font-medium">Hours</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const info = ROSTER_STATUS[r.status];
+                const Icon = info.icon;
+                return (
+                  <tr key={`${r.user_id}-${r.log_id ?? "noshow"}`} className="border-b last:border-0">
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{r.user_name || r.user_id.slice(0, 8) + "..."}</p>
+                      {r.role_type && <p className="text-xs text-muted-foreground">{r.role_type}</p>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium ${info.color}`}>
+                        <Icon className="h-3 w-3" />
+                        {r.status === "on_leave" && r.leave_type ? r.leave_type : info.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {r.scheduled_start ? `${r.scheduled_start} – ${r.scheduled_end ?? ""}` : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {r.clock_in ? (
+                        <>
+                          {fmtTime(r.clock_in)}
+                          {r.clock_out ? ` – ${fmtTime(r.clock_out)}` : r.no_clock_out ? " – (no clock-out)" : ""}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {r.total_hours != null ? `${r.total_hours}h` : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
