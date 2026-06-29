@@ -314,17 +314,40 @@ export async function runReviewNudges(now = new Date()): Promise<NudgeRunResult>
   return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }
 
-// ── 5. Checklist not done → DM the INDIVIDUAL owner (role + clock-in resolved) ──
-// Owner = the clocked-in person rostered to the matching role (OPENING→"opening",
-// CLOSING→"closing") at the outlet today; an explicit Checklist.assignedToId wins if
-// that person clocked in. No one in that role on shift → the shift lead; no lead →
-// a managers digest. ROSTER IS THE PLAN, CLOCK-IN IS THE TRUTH — never nudge an
-// absent person about a task they weren't there for (the no-show is its own signal).
-// Same-day + recently overdue only (grace–3h) so the owner is still on shift and can
-// actually do it. Deduped per checklist (ledger) → one nudge per checklist instance.
-// Design: docs/design/checklist-individual-accountability.md.
-const CHECKLIST_LEAD_ROLES = new Set(["supervisor", "manager", "barista lead", "kitchen lead"]);
+// ── 5. Checklist not done → DM the INDIVIDUAL owner (STATION + fair balance) ──
+// FAIR model (owner choice 2026-06-29): each checklist goes to the person whose
+// STATION owns it — station from the person's JOB POSITION (hr_employee_profiles),
+// PRESENCE from the roster + clock-in (the roster is mostly Opening/Closing
+// segments, so position is the station source). Station-specific SOPs → the present
+// person in that station; shared cleaning → the LIGHTEST-loaded present person
+// (balance); whole-outlet (opening/closing) → the on-shift lead. An explicit
+// assignedToId wins if present. No present staff at all → managers digest. Fairness
+// = own-your-station + the roster rotating who works + balancing the shared load +
+// per-person load visible. ROSTER=plan, CLOCK-IN=truth (never blame an absent
+// person). The resolved owner is PERSISTED to assignedToId so the app shows it and
+// completion attributes. Same-day, recently overdue (grace–3h); deduped per
+// checklist. Design: docs/design/checklist-individual-accountability.md.
 const CHECKLIST_OWNER_WINDOW_MS = 3 * 3_600_000;
+// SOP title (lowercased) → station group. Unmapped → "cleaning" (shared/balanced).
+const SOP_STATION: Record<string, "barista" | "kitchen" | "lead" | "cleaning"> = {
+  "coffee calibration": "barista",
+  "fridge & storage": "kitchen",
+  "first food out": "kitchen",
+  "grease trap cleaning": "kitchen",
+  "ice machine cleaning": "kitchen",
+  "pest control check": "kitchen",
+  "opening checklist": "lead",
+  closing: "lead",
+  "door & window cleaning": "cleaning",
+  "toilet cleaning": "cleaning",
+};
+// Job positions (hr_employee_profiles.position, lowercased) that staff each station.
+const STATION_POSITIONS: Record<string, string[]> = {
+  barista: ["barista", "barista lead"],
+  kitchen: ["kitchen crew", "kitchen lead"],
+  lead: ["supervisor", "manager", "shift lead", "barista lead", "kitchen lead"],
+};
+const LEAD_POSITIONS = STATION_POSITIONS.lead;
 
 export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResult> {
   const mode = nudgesMode();
@@ -353,43 +376,77 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   const active = overdue.filter((c) => c.outletId && c.outlet?.status === "ACTIVE");
   if (active.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
 
-  // Today's published roster (role per person) + today's clock-ins, batched once
-  // (all active outlets; each checklist is matched to its outlet in JS below).
+  // Today's published roster (with each person's JOB POSITION = their station) +
+  // today's clock-ins, batched once. The roster gives PRESENCE; the profile gives
+  // the station. De-duped to one row per present user.
   const roster = await prisma.$queryRaw<
-    Array<{ outlet_id: string; role_type: string; user_id: string; name: string; phone: string | null }>
+    Array<{ outlet_id: string; position: string; user_id: string; name: string; phone: string | null }>
   >`
-    SELECT sch.outlet_id, lower(s.role_type) AS role_type, u.id AS user_id, u.name, u.phone
+    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, u.id AS user_id, u.name, u.phone
     FROM hr_schedule_shifts s
     JOIN hr_schedules sch ON sch.id = s.schedule_id
     JOIN "User" u ON u.id = s.user_id
+    LEFT JOIN hr_employee_profiles p ON p.user_id = u.id
     WHERE s.shift_date = ${ymd}::date AND sch.published_at IS NOT NULL AND u.status = 'ACTIVE'
   `;
   const clockRows = await prisma.$queryRaw<Array<{ user_id: string }>>`
     SELECT DISTINCT user_id FROM hr_attendance_logs WHERE clock_in >= ${dayStart} AND clock_in < ${dayEnd}
   `;
   const clockedIn = new Set(clockRows.map((r) => r.user_id));
-  const present = roster.filter((r) => r.phone && clockedIn.has(r.user_id));
+  type Present = { outlet_id: string; position: string; user_id: string; name: string; phone: string };
+  const present = [
+    ...new Map(
+      roster.filter((r): r is Present => !!r.phone && clockedIn.has(r.user_id)).map((r) => [r.user_id, r]),
+    ).values(),
+  ];
+  const presentByOutlet = new Map<string, Present[]>();
+  for (const p of present) (presentByOutlet.get(p.outlet_id) ?? presentByOutlet.set(p.outlet_id, []).get(p.outlet_id)!).push(p);
+
+  // Balance: seed each present person's load from the checklists already assigned to
+  // them today, so we even out the day's total — not just this run's items.
+  const loadRows = await prisma.$queryRaw<Array<{ uid: string; n: bigint }>>`
+    SELECT "assignedToId" AS uid, count(*) AS n FROM "Checklist"
+    WHERE "date" >= ${dayStart} AND "date" < ${dayEnd} AND "assignedToId" IS NOT NULL GROUP BY 1
+  `;
+  const load = new Map<string, number>(loadRows.map((r) => [r.uid, Number(r.n)]));
+  const lightest = (pool: Present[]): Present | null => {
+    let best: Present | null = null;
+    for (const p of pool) if (!best || (load.get(p.user_id) ?? 0) < (load.get(best.user_id) ?? 0)) best = p;
+    return best;
+  };
 
   type Item = { id: string; label: string; outletId: string; outletName: string };
   const byOwner = new Map<string, { name: string; phone: string; items: Item[] }>();
   const unowned = new Map<string, { name: string; items: Item[] }>();
 
   for (const c of active) {
-    const role = c.shift === "OPENING" ? "opening" : c.shift === "CLOSING" ? "closing" : null;
+    const station = SOP_STATION[(c.sop?.title ?? "").toLowerCase()] ?? "cleaning";
     const item: Item = {
       id: c.id,
       label: `${c.sop?.title ?? "Checklist"} (${String(c.shift).toLowerCase()})`,
       outletId: c.outletId,
       outletName: c.outlet!.name,
     };
-    // Explicit assignment wins if that person is present; else the present person
-    // rostered to the matching role.
-    let owner = present.find((r) => r.outlet_id === c.outletId && r.user_id === c.assignedToId) ?? null;
-    if (!owner && role) owner = present.find((r) => r.outlet_id === c.outletId && r.role_type === role) ?? null;
+    const here = presentByOutlet.get(c.outletId) ?? [];
+    // 1. explicit assignment wins if that person is present.
+    let owner = here.find((p) => p.user_id === c.assignedToId) ?? null;
+    if (!owner) {
+      // 2. station pool by job position (cleaning = anyone present), then balance.
+      let pool = station === "cleaning" ? here : here.filter((p) => STATION_POSITIONS[station].includes(p.position));
+      if (pool.length === 0 && station !== "lead") pool = here.filter((p) => LEAD_POSITIONS.includes(p.position)); // no station person → lead
+      if (pool.length === 0) pool = here; // last resort: anyone present
+      owner = lightest(pool);
+    }
     if (owner?.phone) {
+      load.set(owner.user_id, (load.get(owner.user_id) ?? 0) + 1); // keep balancing within this run
       const o = byOwner.get(owner.user_id) ?? { name: owner.name, phone: owner.phone, items: [] };
       o.items.push(item);
       byOwner.set(owner.user_id, o);
+      // Persist the fair assignment (armed) so the app shows the owner + completion
+      // attributes to them — assignment, not just a reminder.
+      if (mode === "armed" && c.assignedToId !== owner.user_id) {
+        await prisma.checklist.update({ where: { id: c.id }, data: { assignedToId: owner.user_id } }).catch(() => {});
+      }
     } else {
       const u = unowned.get(c.outletId) ?? { name: c.outlet!.name, items: [] };
       u.items.push(item);
@@ -434,8 +491,9 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
     if (r.ok) staffSent += 1;
   }
 
-  // No present owner for the role → the shift lead; no lead → managers digest.
-  for (const [outletId, u] of unowned) {
+  // Unowned = NO ONE present at the outlet (the lead is already in the pool
+  // fallback above, so a present lead would have become the owner). → managers.
+  for (const [, u] of unowned) {
     const fresh: Item[] = [];
     for (const it of u.items) {
       const { isNew } = await recordBreach(mkBreach(it), null);
@@ -443,18 +501,10 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
     }
     if (fresh.length === 0) continue;
     items += fresh.length;
-    const lead = present.find((r) => r.outlet_id === outletId && CHECKLIST_LEAD_ROLES.has(r.role_type));
     if (mode === "shadow") {
-      console.log("[ops-nudge:checklist:shadow:unowned]", JSON.stringify({ outlet: u.name, lead: lead?.name ?? null, items: fresh.map((f) => f.label) }));
-      managerLines.push(...fresh.map((f) => `${u.name}: ${f.label}`));
-      continue;
+      console.log("[ops-nudge:checklist:shadow:unowned]", JSON.stringify({ outlet: u.name, items: fresh.map((f) => f.label) }));
     }
-    if (lead?.phone) {
-      const r = await sendOpsDigest(lead.phone, `No one on shift is assigned to these overdue checklists at ${u.name}:`, fresh.map((f) => f.label));
-      if (r.ok) staffSent += 1;
-    } else {
-      managerLines.push(...fresh.map((f) => `${u.name}: ${f.label} (no one on shift to own it)`));
-    }
+    managerLines.push(...fresh.map((f) => `${u.name}: ${f.label} (no one on shift to own it)`));
   }
 
   const headline = `${managerLines.length} overdue checklist${managerLines.length === 1 ? "" : "s"} with no owner on shift`;
