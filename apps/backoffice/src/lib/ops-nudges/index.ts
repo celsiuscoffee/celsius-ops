@@ -350,6 +350,21 @@ const STATION_POSITIONS: Record<string, string[]> = {
   lead: ["supervisor", "manager", "shift lead", "barista lead", "kitchen lead"],
 };
 const LEAD_POSITIONS = STATION_POSITIONS.lead;
+// "HH:MM[:SS]" → minutes since midnight (null if unparseable).
+const toMin = (t: string | null): number | null => {
+  if (!t) return null;
+  const [h, m] = t.split(":").map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+};
+// Is a shift on at `slotMin`? Used to scope SHARED checklists to the crew actually
+// on that shift (a morning person who clocked in and left ≠ accountable for the
+// 18:00 grease trap). Unknown window → don't exclude.
+const shiftCovers = (startTime: string | null, endTime: string | null, slotMin: number): boolean => {
+  const s = toMin(startTime);
+  const e = toMin(endTime);
+  if (s === null || e === null) return true;
+  return e >= s ? slotMin >= s && slotMin <= e : slotMin >= s || slotMin <= e; // overnight shift
+};
 
 export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResult> {
   const mode = nudgesMode();
@@ -368,6 +383,7 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
       id: true,
       outletId: true,
       shift: true,
+      timeSlot: true,
       assignedToId: true,
       outlet: { select: { name: true, status: true } },
       sop: { select: { title: true } },
@@ -382,9 +398,10 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   // today's clock-ins, batched once. The roster gives PRESENCE; the profile gives
   // the station. De-duped to one row per present user.
   const roster = await prisma.$queryRaw<
-    Array<{ outlet_id: string; position: string; user_id: string; name: string; phone: string | null }>
+    Array<{ outlet_id: string; position: string; user_id: string; name: string; phone: string | null; start_time: string | null; end_time: string | null }>
   >`
-    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, u.id AS user_id, u.name, u.phone
+    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, u.id AS user_id, u.name, u.phone,
+           s.start_time::text AS start_time, s.end_time::text AS end_time
     FROM hr_schedule_shifts s
     JOIN hr_schedules sch ON sch.id = s.schedule_id
     JOIN "User" u ON u.id = s.user_id
@@ -395,7 +412,7 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
     SELECT DISTINCT user_id FROM hr_attendance_logs WHERE clock_in >= ${dayStart} AND clock_in < ${dayEnd}
   `;
   const clockedIn = new Set(clockRows.map((r) => r.user_id));
-  type Present = { outlet_id: string; position: string; user_id: string; name: string; phone: string };
+  type Present = { outlet_id: string; position: string; user_id: string; name: string; phone: string; start_time: string | null; end_time: string | null };
   const present = [
     ...new Map(
       roster.filter((r): r is Present => !!r.phone && clockedIn.has(r.user_id)).map((r) => [r.user_id, r]),
@@ -431,15 +448,18 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
     };
     const here = presentByOutlet.get(c.outletId) ?? [];
 
-    // Shared (opening/closing): collective work — EVERY present person on shift is
-    // accountable, no single owner, no persist (each is deduped independently).
+    // Shared (opening/closing/grease trap): collective work — accountable = every
+    // person whose SHIFT is on at the task's slot time (not someone who clocked in
+    // and already left). No single owner, no persist; deduped per person.
     if (station === "shared") {
-      for (const p of here) {
+      const slotMin = toMin(c.timeSlot);
+      const crew = slotMin === null ? here : here.filter((p) => shiftCovers(p.start_time, p.end_time, slotMin));
+      for (const p of crew) {
         const o = byOwner.get(p.user_id) ?? { name: p.name, phone: p.phone, items: [] };
         o.items.push(item);
         byOwner.set(p.user_id, o);
       }
-      if (here.length === 0) {
+      if (crew.length === 0) {
         const u = unowned.get(c.outletId) ?? { name: c.outlet!.name, items: [] };
         u.items.push(item);
         unowned.set(c.outletId, u);
