@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
+import { nextOrderNumber } from "@/lib/inventory/order-number";
 
 // ─── POST /api/inventory/ai-decisions/execute ───────────────────────────
 // Executes AI decisions: creates real draft POs or transfers in the DB.
@@ -24,8 +25,7 @@ export async function POST(req: NextRequest) {
       };
 
       const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId }, select: { code: true } });
-      const count = await prisma.order.count({ where: { outletId } });
-      const orderNumber = `CC-${outlet.code}-${String(count + 1).padStart(4, "0")}`;
+      const orderNumber = await nextOrderNumber(outlet.code);
 
       const totalAmount = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
 
@@ -68,8 +68,7 @@ export async function POST(req: NextRequest) {
       const created = [];
       for (const po of purchaseOrders) {
         const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: po.outletId }, select: { code: true } });
-        const count = await prisma.order.count({ where: { outletId: po.outletId } });
-        const orderNumber = `CC-${outlet.code}-${String(count + 1).padStart(4, "0")}`;
+        const orderNumber = await nextOrderNumber(outlet.code);
         const totalAmount = po.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
 
         const order = await prisma.order.create({
