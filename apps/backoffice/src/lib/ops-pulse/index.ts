@@ -203,11 +203,11 @@ export async function runDailyPulse(now = new Date()): Promise<PulseRunResult> {
   // they fire on the real-time pulse the moment they happen, so re-listing them
   // a day later would just double-page. Excluded here by category.
   //
-  // Clock-in, stock count, and audit are now owned by the dedicated ops-nudges
-  // loops (which DM staff + the lead). Excluded here so the daily digest doesn't
-  // double-ping the leads. The daily pulse keeps its unique routine signals
-  // (checklist, POS-open, phone capture, restock).
-  const NUDGE_OWNED = new Set(["NO_CLOCK_IN", "STOCK_COUNT", "AUDIT"]);
+  // Clock-in, stock count, audit, and checklist are now owned by the dedicated
+  // ops-nudges loops (which DM the individual owner / on-shift team + the lead).
+  // Excluded here so the daily digest doesn't double-ping. The daily pulse keeps
+  // its unique routine signals (POS-open, phone capture, restock).
+  const NUDGE_OWNED = new Set(["NO_CLOCK_IN", "STOCK_COUNT", "AUDIT", "CHECKLIST"]);
   const breaches = (await detectAll(now)).filter(
     (b) => categoryFor(b.signal) === "routine" && !NUDGE_OWNED.has(b.signal),
   );
