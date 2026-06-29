@@ -133,6 +133,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/ops-nudge-checklist",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/geogrid-keywords",
       "schedule": "0 6 1 * *"
     },

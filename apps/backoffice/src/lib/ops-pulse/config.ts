@@ -154,11 +154,11 @@ export const NOCLOCKIN_ENABLED = (process.env.OPS_PULSE_NOCLOCKIN_ENABLED || "fa
 // Signals that ALSO nudge the on-shift outlet team (not just the discipline
 // lead), because the team is accountable for what happened on their shift —
 // stock take (they do the work), bad reviews (they served it), phone capture
-// (they ask for the number) and checklists (they complete them). The on-shift
-// roster includes that shift's lead. Comma-separated; override via
-// OPS_PULSE_TEAM_NOTIFY_SIGNALS.
+// (they ask for the number). The on-shift roster includes that shift's lead.
+// (Checklist is no longer here — it's a dedicated INDIVIDUAL-owner nudge now.)
+// Comma-separated; override via OPS_PULSE_TEAM_NOTIFY_SIGNALS.
 export const TEAM_NOTIFY_SIGNALS: Set<string> = new Set(
-  (process.env.OPS_PULSE_TEAM_NOTIFY_SIGNALS || "STOCK_COUNT,REVIEW,PHONE_CAPTURE,CHECKLIST")
+  (process.env.OPS_PULSE_TEAM_NOTIFY_SIGNALS || "STOCK_COUNT,REVIEW,PHONE_CAPTURE")
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),

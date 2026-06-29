@@ -20,6 +20,7 @@ import { recordBreach } from "@/lib/ops-pulse/ledger";
 import { resolveRecipients, resolveOutletTeam, resolveOutletSupervisors } from "@/lib/ops-pulse/router";
 import { sendClockInNudge, sendStockCountNudge, sendOpsDigest, sendAuditNudge, sendReviewNudge } from "@/lib/ops-pulse/sender";
 import type { Assignee, Breach, RouteKey } from "@/lib/ops-pulse/types";
+import { THRESHOLDS } from "@/lib/ops-pulse/config";
 
 export type NudgesMode = "off" | "shadow" | "armed";
 // Default ARMED (owner go-live 2026-06-28, "full auto"). Kill switch / staging
@@ -311,4 +312,152 @@ export async function runReviewNudges(now = new Date()): Promise<NudgeRunResult>
   const headline = `${managerLines.length} new guest review${managerLines.length === 1 ? "" : "s"} need a response`;
   const managerSent = await sendManagerDigestToOps(headline, managerLines, mode);
   return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
+}
+
+// ── 5. Checklist not done → DM the INDIVIDUAL owner (role + clock-in resolved) ──
+// Owner = the clocked-in person rostered to the matching role (OPENING→"opening",
+// CLOSING→"closing") at the outlet today; an explicit Checklist.assignedToId wins if
+// that person clocked in. No one in that role on shift → the shift lead; no lead →
+// a managers digest. ROSTER IS THE PLAN, CLOCK-IN IS THE TRUTH — never nudge an
+// absent person about a task they weren't there for (the no-show is its own signal).
+// Same-day + recently overdue only (grace–3h) so the owner is still on shift and can
+// actually do it. Deduped per checklist (ledger) → one nudge per checklist instance.
+// Design: docs/design/checklist-individual-accountability.md.
+const CHECKLIST_LEAD_ROLES = new Set(["supervisor", "manager", "barista lead", "kitchen lead"]);
+const CHECKLIST_OWNER_WINDOW_MS = 3 * 3_600_000;
+
+export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResult> {
+  const mode = nudgesMode();
+  const ranAt = now.toISOString();
+  if (mode === "off") return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  const ymd = new Date(now.getTime() + 8 * 3_600_000).toISOString().slice(0, 10);
+  const dayStart = new Date(`${ymd}T00:00:00+08:00`);
+  const dayEnd = new Date(dayStart.getTime() + 86_400_000);
+  const overdueCutoff = new Date(now.getTime() - THRESHOLDS.checklist.graceMinutes * 60_000);
+  const windowStart = new Date(Math.max(dayStart.getTime(), now.getTime() - CHECKLIST_OWNER_WINDOW_MS));
+
+  const overdue = await prisma.checklist.findMany({
+    where: { status: { in: ["PENDING", "IN_PROGRESS"] }, dueAt: { gte: windowStart, lt: overdueCutoff } },
+    select: {
+      id: true,
+      outletId: true,
+      shift: true,
+      assignedToId: true,
+      outlet: { select: { name: true, status: true } },
+      sop: { select: { title: true } },
+    },
+    orderBy: { dueAt: "asc" },
+    take: 200,
+  });
+  const active = overdue.filter((c) => c.outletId && c.outlet?.status === "ACTIVE");
+  if (active.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  // Today's published roster (role per person) + today's clock-ins, batched once
+  // (all active outlets; each checklist is matched to its outlet in JS below).
+  const roster = await prisma.$queryRaw<
+    Array<{ outlet_id: string; role_type: string; user_id: string; name: string; phone: string | null }>
+  >`
+    SELECT sch.outlet_id, lower(s.role_type) AS role_type, u.id AS user_id, u.name, u.phone
+    FROM hr_schedule_shifts s
+    JOIN hr_schedules sch ON sch.id = s.schedule_id
+    JOIN "User" u ON u.id = s.user_id
+    WHERE s.shift_date = ${ymd}::date AND sch.published_at IS NOT NULL AND u.status = 'ACTIVE'
+  `;
+  const clockRows = await prisma.$queryRaw<Array<{ user_id: string }>>`
+    SELECT DISTINCT user_id FROM hr_attendance_logs WHERE clock_in >= ${dayStart} AND clock_in < ${dayEnd}
+  `;
+  const clockedIn = new Set(clockRows.map((r) => r.user_id));
+  const present = roster.filter((r) => r.phone && clockedIn.has(r.user_id));
+
+  type Item = { id: string; label: string; outletId: string; outletName: string };
+  const byOwner = new Map<string, { name: string; phone: string; items: Item[] }>();
+  const unowned = new Map<string, { name: string; items: Item[] }>();
+
+  for (const c of active) {
+    const role = c.shift === "OPENING" ? "opening" : c.shift === "CLOSING" ? "closing" : null;
+    const item: Item = {
+      id: c.id,
+      label: `${c.sop?.title ?? "Checklist"} (${String(c.shift).toLowerCase()})`,
+      outletId: c.outletId,
+      outletName: c.outlet!.name,
+    };
+    // Explicit assignment wins if that person is present; else the present person
+    // rostered to the matching role.
+    let owner = present.find((r) => r.outlet_id === c.outletId && r.user_id === c.assignedToId) ?? null;
+    if (!owner && role) owner = present.find((r) => r.outlet_id === c.outletId && r.role_type === role) ?? null;
+    if (owner?.phone) {
+      const o = byOwner.get(owner.user_id) ?? { name: owner.name, phone: owner.phone, items: [] };
+      o.items.push(item);
+      byOwner.set(owner.user_id, o);
+    } else {
+      const u = unowned.get(c.outletId) ?? { name: c.outlet!.name, items: [] };
+      u.items.push(item);
+      unowned.set(c.outletId, u);
+    }
+  }
+
+  const mkBreach = (it: Item): Breach => ({
+    signal: "CHECKLIST",
+    outletId: it.outletId,
+    outletName: it.outletName,
+    severity: "MED",
+    routeKey: "operations",
+    dedupeKey: `CHECKLIST_NUDGE:${it.id}`,
+    summary: `${it.label} overdue — ${it.outletName}`,
+    detail: { checklistId: it.id },
+  });
+
+  let staffSent = 0;
+  let items = 0;
+  const managerLines: string[] = [];
+
+  // Owners get DM'd their own overdue items (deduped per checklist).
+  for (const [userId, o] of byOwner) {
+    const fresh: Item[] = [];
+    for (const it of o.items) {
+      const { isNew } = await recordBreach(mkBreach(it), { userId, name: o.name, phone: o.phone, role: "staff", fallback: false });
+      if (isNew) fresh.push(it);
+    }
+    if (fresh.length === 0) continue;
+    items += fresh.length;
+    if (mode === "shadow") {
+      console.log("[ops-nudge:checklist:shadow]", JSON.stringify({ to: o.name, items: fresh.map((f) => f.label) }));
+      continue;
+    }
+    const first = o.name.split(" ")[0];
+    const r = await sendOpsDigest(
+      o.phone,
+      `Hi ${first}, your checklist${fresh.length === 1 ? "" : "s"} ${fresh.length === 1 ? "is" : "are"} overdue, please complete:`,
+      fresh.map((f) => f.label),
+    );
+    if (r.ok) staffSent += 1;
+  }
+
+  // No present owner for the role → the shift lead; no lead → managers digest.
+  for (const [outletId, u] of unowned) {
+    const fresh: Item[] = [];
+    for (const it of u.items) {
+      const { isNew } = await recordBreach(mkBreach(it), null);
+      if (isNew) fresh.push(it);
+    }
+    if (fresh.length === 0) continue;
+    items += fresh.length;
+    const lead = present.find((r) => r.outlet_id === outletId && CHECKLIST_LEAD_ROLES.has(r.role_type));
+    if (mode === "shadow") {
+      console.log("[ops-nudge:checklist:shadow:unowned]", JSON.stringify({ outlet: u.name, lead: lead?.name ?? null, items: fresh.map((f) => f.label) }));
+      managerLines.push(...fresh.map((f) => `${u.name}: ${f.label}`));
+      continue;
+    }
+    if (lead?.phone) {
+      const r = await sendOpsDigest(lead.phone, `No one on shift is assigned to these overdue checklists at ${u.name}:`, fresh.map((f) => f.label));
+      if (r.ok) staffSent += 1;
+    } else {
+      managerLines.push(...fresh.map((f) => `${u.name}: ${f.label} (no one on shift to own it)`));
+    }
+  }
+
+  const headline = `${managerLines.length} overdue checklist${managerLines.length === 1 ? "" : "s"} with no owner on shift`;
+  const managerSent = await sendManagerDigestToOps(headline, managerLines, mode);
+  return { mode, ranAt, items, staffSent, managerSent };
 }
