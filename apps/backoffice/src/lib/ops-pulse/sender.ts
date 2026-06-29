@@ -136,8 +136,8 @@ export async function sendProactive(
   return ff;
 }
 
-// Number of item-lines in the ops_list template ({{2}}..{{6}}).
-const LIST_SLOTS = 5;
+// Number of item-lines in the ops_list template ({{2}}..{{5}}).
+const LIST_SLOTS = 4;
 // Non-breaking space pads unused slots (WhatsApp rejects empty params) and renders
 // as a near-blank line; sanitizeParam is not applied to it so it survives.
 const LIST_PAD = "\u00A0";

@@ -58,19 +58,20 @@ const TEMPLATE_DEFS = [
     sample: "Clock in for your 8:00am shift at Putrajaya — you haven't yet.",
   },
   {
-    // Multi-line LIST: a headline ({{1}}) + up to five item lines ({{2}}..{{6}}),
+    // Multi-line LIST: a headline ({{1}}) + up to four item lines ({{2}}..{{5}}),
     // each on its OWN line — the only way to get real line breaks (a single param
-    // can't contain newlines). Fixed text wraps the variables (Meta rejects a body
-    // that starts/ends with one); unused item lines are padded blank at send time.
+    // can't contain newlines). Generous fixed text wraps the variables: Meta
+    // rejects a body that starts/ends with a variable AND one with "too many
+    // variables for its length", so the wrapper keeps the text:variable ratio high.
+    // Unused item lines are padded blank at send time.
     name: "ops_list",
-    body: "Celsius ops update:\n\n{{1}}\n\n{{2}}\n{{3}}\n{{4}}\n{{5}}\n{{6}}\n\nReply DONE once it's sorted.",
+    body: "Celsius ops update. Here are the things that need your attention, please take a look:\n\n{{1}}\n\n{{2}}\n{{3}}\n{{4}}\n{{5}}\n\nSort these out and reply DONE once they're handled. The full list is always in BackOffice.",
     sample: [
       "8 audits due this week",
       "Barista station audit overdue at Tamarind",
       "Barista station audit overdue at Shah Alam",
       "Barista station audit overdue at Nilai",
-      "Barista station audit overdue at Putrajaya",
-      "...and 4 more in BackOffice",
+      "...and 5 more in BackOffice",
     ],
   },
 ] as const;
