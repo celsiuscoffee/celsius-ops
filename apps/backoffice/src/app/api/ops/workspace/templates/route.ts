@@ -57,6 +57,22 @@ const TEMPLATE_DEFS = [
     body: "Hi, a quick update from Celsius ops:\n\n{{1}}\n\nReply DONE once it's sorted.",
     sample: "Clock in for your 8:00am shift at Putrajaya — you haven't yet.",
   },
+  {
+    // Multi-line LIST: a headline ({{1}}) + up to five item lines ({{2}}..{{6}}),
+    // each on its OWN line — the only way to get real line breaks (a single param
+    // can't contain newlines). Fixed text wraps the variables (Meta rejects a body
+    // that starts/ends with one); unused item lines are padded blank at send time.
+    name: "ops_list",
+    body: "Celsius ops update:\n\n{{1}}\n\n{{2}}\n{{3}}\n{{4}}\n{{5}}\n{{6}}\n\nReply DONE once it's sorted.",
+    sample: [
+      "8 audits due this week",
+      "Barista station audit overdue at Tamarind",
+      "Barista station audit overdue at Shah Alam",
+      "Barista station audit overdue at Nilai",
+      "Barista station audit overdue at Putrajaya",
+      "...and 4 more in BackOffice",
+    ],
+  },
 ] as const;
 
 // GET — list the WABA's WhatsApp message templates with their approval status,
@@ -90,7 +106,15 @@ export async function GET(req: NextRequest) {
             name: t.name,
             language: "en",
             category: "UTILITY",
-            components: [{ type: "BODY", text: t.body, example: { body_text: [[t.sample]] } }],
+            components: [
+              {
+                type: "BODY",
+                text: t.body,
+                // body_text is [ [one example per {{n}} variable] ]. Multi-param
+                // templates (ops_list) carry an array sample; single-param a string.
+                example: { body_text: [Array.isArray(t.sample) ? [...t.sample] : [t.sample]] },
+              },
+            ],
           }),
         });
         const json = (await res.json().catch(() => ({}))) as {
