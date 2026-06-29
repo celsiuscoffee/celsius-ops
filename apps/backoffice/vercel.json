@@ -62,7 +62,7 @@
     },
     {
       "path": "/api/cron/bukku-feed-sync",
-      "schedule": "30 19 * * *"
+      "schedule": "0 */6 * * *"
     },
     {
       "path": "/api/cron/music-alerts",
