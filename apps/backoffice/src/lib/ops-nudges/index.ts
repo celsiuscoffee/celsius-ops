@@ -335,7 +335,7 @@ const SOP_STATION: Record<string, "barista" | "kitchen" | "lead" | "cleaning" | 
   "coffee calibration": "barista",
   "fridge & storage": "kitchen",
   "first food out": "kitchen",
-  "grease trap cleaning": "kitchen",
+  "grease trap cleaning": "shared",
   "ice machine cleaning": "kitchen",
   "pest control check": "kitchen",
   "opening checklist": "shared",
