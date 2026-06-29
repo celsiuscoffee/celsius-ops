@@ -328,16 +328,18 @@ export async function runReviewNudges(now = new Date()): Promise<NudgeRunResult>
 // completion attributes. Same-day, recently overdue (grace–3h); deduped per
 // checklist. Design: docs/design/checklist-individual-accountability.md.
 const CHECKLIST_OWNER_WINDOW_MS = 3 * 3_600_000;
-// SOP title (lowercased) → station group. Unmapped → "cleaning" (shared/balanced).
-const SOP_STATION: Record<string, "barista" | "kitchen" | "lead" | "cleaning"> = {
+// SOP title (lowercased) → station group. "shared" = whole-outlet collective work
+// (opening/closing) → EVERY present person on shift is accountable, not one owner.
+// "cleaning" = shared but balanced onto the one lightest person. Unmapped → cleaning.
+const SOP_STATION: Record<string, "barista" | "kitchen" | "lead" | "cleaning" | "shared"> = {
   "coffee calibration": "barista",
   "fridge & storage": "kitchen",
   "first food out": "kitchen",
   "grease trap cleaning": "kitchen",
   "ice machine cleaning": "kitchen",
   "pest control check": "kitchen",
-  "opening checklist": "lead",
-  closing: "lead",
+  "opening checklist": "shared",
+  closing: "shared",
   "door & window cleaning": "cleaning",
   "toilet cleaning": "cleaning",
 };
@@ -428,6 +430,23 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
       outletName: c.outlet!.name,
     };
     const here = presentByOutlet.get(c.outletId) ?? [];
+
+    // Shared (opening/closing): collective work — EVERY present person on shift is
+    // accountable, no single owner, no persist (each is deduped independently).
+    if (station === "shared") {
+      for (const p of here) {
+        const o = byOwner.get(p.user_id) ?? { name: p.name, phone: p.phone, items: [] };
+        o.items.push(item);
+        byOwner.set(p.user_id, o);
+      }
+      if (here.length === 0) {
+        const u = unowned.get(c.outletId) ?? { name: c.outlet!.name, items: [] };
+        u.items.push(item);
+        unowned.set(c.outletId, u);
+      }
+      continue;
+    }
+
     // 1. explicit assignment wins if that person is present.
     let owner = here.find((p) => p.user_id === c.assignedToId) ?? null;
     if (!owner) {
@@ -454,13 +473,15 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
     }
   }
 
-  const mkBreach = (it: Item): Breach => ({
+  // dedupeKey includes WHO, so a shared (opening/closing) checklist nudges each
+  // present person once (and an individual one nudges its single owner once).
+  const mkBreach = (it: Item, who: string): Breach => ({
     signal: "CHECKLIST",
     outletId: it.outletId,
     outletName: it.outletName,
     severity: "MED",
     routeKey: "operations",
-    dedupeKey: `CHECKLIST_NUDGE:${it.id}`,
+    dedupeKey: `CHECKLIST_NUDGE:${it.id}:${who}`,
     summary: `${it.label} overdue — ${it.outletName}`,
     detail: { checklistId: it.id },
   });
@@ -473,7 +494,7 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   for (const [userId, o] of byOwner) {
     const fresh: Item[] = [];
     for (const it of o.items) {
-      const { isNew } = await recordBreach(mkBreach(it), { userId, name: o.name, phone: o.phone, role: "staff", fallback: false });
+      const { isNew } = await recordBreach(mkBreach(it, userId), { userId, name: o.name, phone: o.phone, role: "staff", fallback: false });
       if (isNew) fresh.push(it);
     }
     if (fresh.length === 0) continue;
@@ -496,7 +517,7 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   for (const [, u] of unowned) {
     const fresh: Item[] = [];
     for (const it of u.items) {
-      const { isNew } = await recordBreach(mkBreach(it), null);
+      const { isNew } = await recordBreach(mkBreach(it, "mgr"), null);
       if (isNew) fresh.push(it);
     }
     if (fresh.length === 0) continue;
