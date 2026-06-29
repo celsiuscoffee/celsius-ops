@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { boundedReorderQty } from "@/lib/inventory/order-validation";
+import { nextOrderNumber } from "@/lib/inventory/order-number";
 
 // When the supplier-chat agent removes a line because the supplier is out of
 // stock, the need would otherwise vanish (stockout risk). createReSourcePO opens
@@ -88,8 +89,7 @@ export async function createReSourcePO(opts: {
 
   try {
     const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: opts.outletId }, select: { code: true } });
-    const count = await prisma.order.count({ where: { outletId: opts.outletId } });
-    const orderNumber = `CC-${outlet.code}-${String(count + 1).padStart(4, "0")}`;
+    const orderNumber = await nextOrderNumber(outlet.code);
     const order = await prisma.order.create({
       data: {
         orderNumber,

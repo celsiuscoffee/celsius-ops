@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
+import { nextOrderNumberBase } from "@/lib/inventory/order-number";
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -224,17 +225,14 @@ export async function POST(req: NextRequest) {
       0,
     );
 
-    // Retry loop to handle orderNumber collisions
+    // Highest existing NUMERIC suffix for this outlet's prefix (a string MAX / COUNT are unsafe —
+    // see nextOrderNumberBase). Computed once; the retry loop below bumps by `attempt` on collision.
+    const { prefix, lastNum } = await nextOrderNumberBase(outlet.code);
+
+    // Retry loop to handle orderNumber collisions (concurrent same-outlet creates).
     let order;
     for (let attempt = 0; attempt < 5; attempt++) {
-      const maxResult = await prisma.order.aggregate({
-        where: { orderNumber: { startsWith: `CC-${outlet.code}-` } },
-        _max: { orderNumber: true },
-      });
-      const lastNum = maxResult._max.orderNumber
-        ? parseInt(maxResult._max.orderNumber.split("-").pop() || "0")
-        : 0;
-      const orderNumber = `CC-${outlet.code}-${String(lastNum + 1 + attempt).padStart(4, "0")}`;
+      const orderNumber = `${prefix}${String(lastNum + 1 + attempt).padStart(4, "0")}`;
 
       try {
         order = await prisma.order.create({
