@@ -45,9 +45,13 @@ const TEMPLATE_DEFS = [
     sample: "Switch to the new opening checklist from tomorrow — Ammar",
   },
   {
-    name: "ops_scoreboard",
-    body: "Your scoreboard\n\n{{1}}\n\nFull board in BackOffice. Let's move the number this week.",
-    sample: "capture 18% (tgt 70%) · upsell 6% (tgt 10%) · crew 18% · top Badri 47%",
+    // Renamed from ops_scoreboard, which Meta classified MARKETING because of the
+    // motivational copy ("Let's move the number this week"). This is a dry,
+    // data-only status report so Meta classifies it UTILITY (~5x cheaper). No
+    // call-to-action, no urgency, no cheerleading — just the numbers.
+    name: "ops_scorecard",
+    body: "Weekly performance summary.\n\n{{1}}\n\nThe full breakdown is in BackOffice.",
+    sample: "Phone number collection 42% (target 70%), upsell 6% (target 10%), crew average 31%, top Nuralia 47%",
   },
   {
     name: "ops_nudge",
