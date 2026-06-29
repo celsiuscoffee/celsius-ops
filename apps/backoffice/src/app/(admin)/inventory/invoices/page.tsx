@@ -1,6 +1,7 @@
 "use client";
 
 import { formatRM } from "@celsius/shared";
+import { mytTodayStr } from "@/lib/inventory/myt-today";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -335,7 +336,7 @@ export default function InvoicesPage() {
   const dueTodayCount = data?.dueTodayCount ?? 0;
   const dueTodayAmount = data?.dueTodayAmount ?? 0;
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = mytTodayStr();
 
   // Bank filter is still applied client-side (it's a free-text contains check
   // on supplier/claimant bank names — not worth a server roundtrip). cardFilter
@@ -735,7 +736,7 @@ export default function InvoicesPage() {
     setAttachRecon(null);
     setShowVariances(false);
     setAttachVarianceReason("");
-    const today = new Date().toISOString().split("T")[0];
+    const today = mytTodayStr();
     const termDays = parsePaymentTermDays(inv.supplierPaymentTerms);
     setAttachForm({
       invoiceNumber: "",
@@ -904,7 +905,7 @@ export default function InvoicesPage() {
     if (!rejectingInvoice) return;
     setRejectSaving(true);
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = mytTodayStr();
       const oldRef = rejectingInvoice.paymentRef ?? "n/a";
       const stamp = `[Rejected ${today} — was ref: ${oldRef}]${rejectReason.trim() ? ": " + rejectReason.trim() : ""}`;
       const newNotes = rejectingInvoice.notes ? `${rejectingInvoice.notes}\n\n${stamp}` : stamp;
