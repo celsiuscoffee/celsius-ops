@@ -1144,7 +1144,7 @@ export default function PayAndClaimPage() {
         <DialogContent className="!max-w-6xl max-h-[95vh] overflow-hidden p-0">
           <div className="flex h-[90vh] flex-col lg:h-[85vh] lg:flex-row">
             {/* Left: Photo viewer (40% desktop, top 40vh on mobile) */}
-            <div className="h-[22vh] w-full bg-gray-900 flex flex-col lg:h-auto lg:w-[40%]">
+            <div className="h-[22vh] w-full bg-gray-900 flex flex-col lg:h-full lg:w-[40%]">
               <div className="p-4 border-b border-gray-700">
                 <p className="text-xs text-gray-400 font-medium">Receipt / Invoice</p>
                 {reviewPhotos.length > 0 && (
@@ -1153,7 +1153,7 @@ export default function PayAndClaimPage() {
                   </p>
                 )}
               </div>
-              <div className="flex-1 flex items-center justify-center relative p-4">
+              <div className="flex-1 min-h-0 flex items-center justify-center relative p-4">
                 {reviewPhotos.length === 0 ? (
                   <div className="text-center text-gray-500">
                     <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-30" />
@@ -1469,7 +1469,7 @@ export default function PayAndClaimPage() {
         <DialogContent className="!max-w-6xl max-h-[95vh] overflow-hidden p-0">
           <div className="flex h-[90vh] flex-col lg:h-[85vh] lg:flex-row">
             {/* Left: Photo upload & viewer (40% desktop, top 40vh mobile) */}
-            <div className="h-[22vh] w-full bg-gray-900 flex flex-col lg:h-auto lg:w-[40%]"
+            <div className="h-[22vh] w-full bg-gray-900 flex flex-col lg:h-full lg:w-[40%]"
               onDragOver={(e) => { e.preventDefault(); setQuDragging(true); }}
               onDragEnter={(e) => { e.preventDefault(); setQuDragging(true); }}
               onDragLeave={(e) => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget as Node)) setQuDragging(false); }}
@@ -1481,7 +1481,7 @@ export default function PayAndClaimPage() {
                   <p className="text-[10px] text-gray-500 mt-0.5">{quPhotoIdx + 1} of {quPhotos.length}</p>
                 )}
               </div>
-              <div className="flex-1 flex items-center justify-center relative p-4">
+              <div className="flex-1 min-h-0 flex items-center justify-center relative p-4">
                 {quPhotos.length === 0 ? (
                   <label className={`flex flex-col items-center justify-center cursor-pointer text-center rounded-lg border-2 border-dashed p-8 w-full h-full transition-colors ${quDragging ? "border-[#C2714F] bg-orange-900/20" : "border-gray-600"}`}>
                     {quUploading ? (
