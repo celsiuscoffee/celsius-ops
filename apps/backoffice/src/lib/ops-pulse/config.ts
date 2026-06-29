@@ -222,5 +222,8 @@ export const TEMPLATES = {
   scoreboard: process.env.OPS_PULSE_TPL_SCOREBOARD || "ops_scoreboard",
   // Real-time staff nudge (clock-in / stock count).
   nudge: process.env.OPS_PULSE_TPL_NUDGE || "ops_nudge",
+  // Multi-line list: headline + one item per line (audit / review / digests).
+  // Empty string disables it (sendList falls back to the flat template).
+  list: process.env.OPS_PULSE_TPL_LIST ?? "ops_list",
   languageCode: process.env.OPS_PULSE_TPL_LANG || "en",
 } as const;
