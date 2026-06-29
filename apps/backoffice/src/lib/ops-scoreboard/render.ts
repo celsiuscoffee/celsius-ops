@@ -29,21 +29,24 @@ export function renderCashierBoard(
 ): { text: string; var: string } {
   const capOk = c.captureRate !== null && c.captureRate >= targets.collectionRate;
   const upOk = c.upsellRate !== null && c.upsellRate >= targets.upsellRate;
-  const lines = [
-    `Your scoreboard — ${c.name}`,
-    "",
-    `Phone capture: ${pct(c.captureRate)} (target ${targets.collectionRate}%) ${capOk ? "✓" : "✗"}`,
+  // Metric lines, shared by the free-form body and the template {{1}} (the sender
+  // renders {{1}} multi-line now). Plain wording: "phone number collection" not
+  // "capture", full word "target", no abbreviations.
+  const metrics = [
+    `Phone number collection: ${pct(c.captureRate)} (target ${targets.collectionRate}%) ${capOk ? "✓" : "✗"}`,
     `Upsell: ${pct(c.upsellRate)} (target ${targets.upsellRate}%) ${upOk ? "✓" : "✗"}`,
-    "",
   ];
   const ctx: string[] = [];
-  if (crewCaptureRate !== null) ctx.push(`Crew avg ${crewCaptureRate}%`);
+  if (crewCaptureRate !== null) ctx.push(`Crew average ${crewCaptureRate}%`);
   if (best && best.employeeId !== c.employeeId && best.captureRate !== null)
-    ctx.push(`top: ${best.name.split(" ")[0]} ${best.captureRate}%`);
-  if (ctx.length) lines.push(ctx.join(" · "));
-  lines.push('Ask every customer "nombor untuk points?" — small ask, big number.');
-  const v = `capture ${pct(c.captureRate)} (tgt ${targets.collectionRate}%) · upsell ${pct(c.upsellRate)} (tgt ${targets.upsellRate}%)${crewCaptureRate !== null ? ` · crew ${crewCaptureRate}%` : ""}${best && best.captureRate !== null ? ` · top ${best.name.split(" ")[0]} ${best.captureRate}%` : ""}`;
-  return { text: lines.join("\n"), var: v };
+    ctx.push(`top this week ${best.name.split(" ")[0]} ${best.captureRate}%`);
+
+  const body = [...metrics];
+  if (ctx.length) body.push(`${ctx.join(", ")}.`);
+  body.push('Ask every customer "nombor untuk points?" before they pay.');
+
+  const text = [`Your scoreboard, ${c.name.split(" ")[0]}`, "", ...body].join("\n");
+  return { text, var: body.join("\n") };
 }
 
 // ── Manager board (per outlet) ───────────────────────────────────────────
@@ -54,34 +57,34 @@ export function renderManagerBoard(
 ): { text: string; var: string } {
   const k = o.kpis;
   const rows: Array<[string, string]> = [
-    ["Capture", `${pct(k.collection.value)} (tgt ${k.collection.target}%) ${tick(k.collection.status)}`],
-    ["Serving", `${k.serving.value === null ? "n/a" : `${k.serving.value}m`} (tgt ${k.serving.target}m) ${tick(k.serving.status)}`],
-    ["Checklist", `${pct(k.ops.value)} (tgt ${k.ops.target}%) ${tick(k.ops.status)}`],
-    ["Wastage", `${k.wastage.value === null ? "n/a" : `${k.wastage.value}%`} (tgt ${k.wastage.target}%) ${tick(k.wastage.status)}`],
-    ["Upsell", `${pct(k.upsell.value)} (tgt ${k.upsell.target}%) ${tick(k.upsell.status)}`],
+    ["Phone collection", `${pct(k.collection.value)} (target ${k.collection.target}%) ${tick(k.collection.status)}`],
+    ["Serving", `${k.serving.value === null ? "n/a" : `${k.serving.value}m`} (target ${k.serving.target}m) ${tick(k.serving.status)}`],
+    ["Checklist", `${pct(k.ops.value)} (target ${k.ops.target}%) ${tick(k.ops.status)}`],
+    ["Wastage", `${k.wastage.value === null ? "n/a" : `${k.wastage.value}%`} (target ${k.wastage.target}%) ${tick(k.wastage.status)}`],
+    ["Upsell", `${pct(k.upsell.value)} (target ${k.upsell.target}%) ${tick(k.upsell.status)}`],
   ];
   // Dark-signal adoption metrics — owned numbers, not per-incident pings.
   if (health) {
     const ciStatus = health.clockInPct === null ? "·" : health.clockInPct >= CLOCKIN_TARGET_PCT ? "✓" : "✗";
-    rows.push(["Clock-in", `${health.clockInPct === null ? "n/a" : `${health.clockInPct}%`} (tgt ${CLOCKIN_TARGET_PCT}%) ${ciStatus}`]);
+    rows.push(["Clock-in", `${health.clockInPct === null ? "n/a" : `${health.clockInPct}%`} (target ${CLOCKIN_TARGET_PCT}%) ${ciStatus}`]);
     const scStatus = health.daysSinceCount === null ? "✗" : health.daysSinceCount <= STOCK_MAX_DAYS ? "✓" : "✗";
     const scVal = health.daysSinceCount === null ? "never" : `${health.daysSinceCount}d ago`;
-    rows.push(["Stock count", `${scVal} (tgt ≤${STOCK_MAX_DAYS}d) ${scStatus}`]);
+    rows.push(["Stock count", `${scVal} (target ≤${STOCK_MAX_DAYS}d) ${scStatus}`]);
   }
   const lines = [
-    `Outlet scoreboard — ${o.name} (this week)`,
+    `Outlet scoreboard: ${o.name} (this week)`,
     "",
     ...rows.map(([label, val]) => `${label}: ${val}`),
     "",
     `Score: ${o.met}/${o.measurable} KPIs hit.`,
   ];
   if (worstCashier && worstCashier.captureRate !== null) {
-    lines.push(`Coach this week: ${worstCashier.name} at ${worstCashier.captureRate}% capture.`);
+    lines.push(`Coach this week: ${worstCashier.name} at ${worstCashier.captureRate}% phone collection.`);
   }
   const healthVar = health
     ? ` · clock-in ${health.clockInPct === null ? "n/a" : `${health.clockInPct}%`} · stock ${health.daysSinceCount === null ? "never" : `${health.daysSinceCount}d`}`
     : "";
-  const v = `${o.name}: ${o.met}/${o.measurable} hit · capture ${pct(k.collection.value)} · serving ${k.serving.value === null ? "n/a" : `${k.serving.value}m`} · checklist ${pct(k.ops.value)} · wastage ${k.wastage.value === null ? "n/a" : `${k.wastage.value}%`} · upsell ${pct(k.upsell.value)}${healthVar}`;
+  const v = `${o.name}: ${o.met}/${o.measurable} hit · phone collection ${pct(k.collection.value)} · serving ${k.serving.value === null ? "n/a" : `${k.serving.value}m`} · checklist ${pct(k.ops.value)} · wastage ${k.wastage.value === null ? "n/a" : `${k.wastage.value}%`} · upsell ${pct(k.upsell.value)}${healthVar}`;
   return { text: lines.join("\n"), var: v };
 }
 
@@ -89,13 +92,13 @@ export function renderManagerBoard(
 export function renderOwnerLeague(sc: Scorecard): { text: string; var: string } {
   const ranked = sc.outlets.filter((o) => o.measurable > 0);
   const lines = [
-    `Outlet league — ${sc.period.label}`,
+    `Outlet league: ${sc.period.label}`,
     "",
-    ...ranked.map((o, i) => `${i + 1}. ${o.name} — ${o.score}% (${o.met}/${o.measurable})`),
+    ...ranked.map((o, i) => `${i + 1}. ${o.name}: ${o.score}% (${o.met}/${o.measurable})`),
     "",
-    `Avg capture ${pct(sc.summary.avg.collection)} (tgt ${sc.targets.collectionRate}%). ${sc.summary.hittingAll}/${sc.summary.measuredOutlets} outlets hitting every KPI.`,
+    `Avg phone collection ${pct(sc.summary.avg.collection)} (target ${sc.targets.collectionRate}%). ${sc.summary.hittingAll}/${sc.summary.measuredOutlets} outlets hitting every KPI.`,
   ];
-  const v = `${ranked.map((o) => `${o.name} ${o.score}%`).join(" · ")} · avg capture ${pct(sc.summary.avg.collection)}`;
+  const v = `${ranked.map((o) => `${o.name} ${o.score}%`).join(" · ")} · avg phone collection ${pct(sc.summary.avg.collection)}`;
   return { text: lines.join("\n"), var: v };
 }
 
