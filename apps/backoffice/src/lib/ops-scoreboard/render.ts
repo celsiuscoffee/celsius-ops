@@ -41,12 +41,13 @@ export function renderCashierBoard(
   if (best && best.employeeId !== c.employeeId && best.captureRate !== null)
     ctx.push(`top this week ${best.name.split(" ")[0]} ${best.captureRate}%`);
 
-  const body = [...metrics];
-  if (ctx.length) body.push(`${ctx.join(", ")}.`);
-  body.push('Ask every customer "nombor untuk points?" before they pay.');
-
-  const text = [`Your scoreboard, ${c.name.split(" ")[0]}`, "", ...body].join("\n");
-  return { text, var: body.join("\n") };
+  const data = [...metrics];
+  if (ctx.length) data.push(`${ctx.join(", ")}.`);
+  // The template {{1}} carries DRY DATA only (no coaching CTA) so ops_scorecard
+  // stays UTILITY-classified. The coaching line lives in the in-window text only.
+  const coaching = 'Ask every customer "nombor untuk points?" before they pay.';
+  const text = [`Your scoreboard, ${c.name.split(" ")[0]}`, "", ...data, "", coaching].join("\n");
+  return { text, var: data.join("\n") };
 }
 
 // ── Manager board (per outlet) ───────────────────────────────────────────

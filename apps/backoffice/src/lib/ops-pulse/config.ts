@@ -219,7 +219,9 @@ export const TEMPLATES = {
   // Ad-hoc directive/announcement fanned out to staff from the workspace.
   instruction: process.env.OPS_PULSE_TPL_INSTRUCTION || "ops_instruction",
   // Weekly performance scoreboard (cashier DM / leader digest).
-  scoreboard: process.env.OPS_PULSE_TPL_SCOREBOARD || "ops_scoreboard",
+  // ops_scorecard (not ops_scoreboard): the old one was classified MARKETING by
+  // Meta; the new dry, data-only template is UTILITY (~5x cheaper).
+  scoreboard: process.env.OPS_PULSE_TPL_SCOREBOARD || "ops_scorecard",
   // Real-time staff nudge (clock-in / stock count).
   nudge: process.env.OPS_PULSE_TPL_NUDGE || "ops_nudge",
   // Multi-line list: headline + one item per line (audit / review / digests).
