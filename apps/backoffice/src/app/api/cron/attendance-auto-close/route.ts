@@ -69,18 +69,29 @@ export async function GET(req: NextRequest) {
 
     // Get last ping (any kind) and last in-zone ping
     const [lastPingResp, lastInZoneResp] = await Promise.all([
-      hrSupabaseAdmin.from("hr_attendance_pings").select("created_at").eq("attendance_log_id", log.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      hrSupabaseAdmin.from("hr_attendance_pings").select("created_at, in_zone").eq("attendance_log_id", log.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       hrSupabaseAdmin.from("hr_attendance_pings").select("created_at").eq("attendance_log_id", log.id).eq("in_zone", true).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
 
     const lastPingAt = lastPingResp.data?.created_at ? new Date(lastPingResp.data.created_at) : null;
     const lastInZoneAt = lastInZoneResp.data?.created_at ? new Date(lastInZoneResp.data.created_at) : null;
+    // Is the MOST RECENT ping an out-of-zone ping? This is the only reliable
+    // evidence that the staffer has actually left the outlet.
+    const latestPingOutOfZone = lastPingResp.data?.in_zone === false;
 
     let closeAt: Date | null = null;
     let reason: string | null = null;
 
-    // Rule A: Last in-zone ping was long ago (has pings but stopped being in-zone)
-    if (lastInZoneAt && lastPingAt) {
+    // Rule A: Staffer has actually left the zone and not returned within grace.
+    //
+    // We require the LATEST ping to be out-of-zone — not merely "the last
+    // in-zone ping is stale". The app pings only on geofence boundary
+    // crossings (enter/exit) plus once at clock-in, never continuously, so a
+    // staffer working *inside* the zone all shift produces no new pings. The
+    // old "in-zone ping is older than grace" test misread that silence as an
+    // exit and auto-clocked-out people who never left (truncating the shift to
+    // ~0h mid-shift). Absence of pings ≠ left the outlet.
+    if (lastInZoneAt && lastPingAt && latestPingOutOfZone) {
       const inZoneAgoMin = (now.getTime() - lastInZoneAt.getTime()) / 60000;
       if (inZoneAgoMin > graceMin) {
         closeAt = lastInZoneAt;
