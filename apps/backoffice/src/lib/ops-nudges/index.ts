@@ -314,23 +314,24 @@ export async function runReviewNudges(now = new Date()): Promise<NudgeRunResult>
   return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }
 
-// ── 5. Checklist not done → DM the INDIVIDUAL owner (STATION + fair balance) ──
-// FAIR model (owner choice 2026-06-29): each checklist goes to the person whose
-// STATION owns it — station from the person's JOB POSITION (hr_employee_profiles),
-// PRESENCE from the roster + clock-in (the roster is mostly Opening/Closing
-// segments, so position is the station source). Station-specific SOPs → the present
-// person in that station; shared cleaning → the LIGHTEST-loaded present person
-// (balance); whole-outlet (opening/closing) → the on-shift lead. An explicit
-// assignedToId wins if present. No present staff at all → managers digest. Fairness
-// = own-your-station + the roster rotating who works + balancing the shared load +
-// per-person load visible. ROSTER=plan, CLOCK-IN=truth (never blame an absent
-// person). The resolved owner is PERSISTED to assignedToId so the app shows it and
-// completion attributes. Same-day, recently overdue (grace–3h); deduped per
-// checklist. Design: docs/design/checklist-individual-accountability.md.
+// ── 5. Checklist not done → DM the fairly-assigned owner (STATION + balance) ──
+// FAIR model (owner choice 2026-06-29): EVERY checklist gets exactly ONE fair owner.
+// Eligibility = people whose SHIFT covers the task's slot (roster start/end + clock-
+// in — not someone who clocked in and left). Station-specific SOPs → the eligible
+// person in that station (station from JOB POSITION, hr_employee_profiles, since the
+// roster is mostly Opening/Closing segments); "shared" (opening/closing/grease trap)
+// & "cleaning" → ANY eligible crew member, picked LIGHTEST-loaded so the collective
+// work rotates fairly across the crew over time. An explicit assignedToId wins if on
+// shift. No eligible staff → managers digest. Fairness = own-your-station + balanced
+// shared load + the roster rotating who works. ROSTER=plan, CLOCK-IN=truth (never
+// blame an absent person). Owner PERSISTED to assignedToId so the app shows it +
+// completion attributes. Same-day, recently overdue (grace–3h); deduped per (checklist,
+// person). Design: docs/design/checklist-individual-accountability.md.
 const CHECKLIST_OWNER_WINDOW_MS = 3 * 3_600_000;
 // SOP title (lowercased) → station group. "shared" = whole-outlet collective work
-// (opening/closing) → EVERY present person on shift is accountable, not one owner.
-// "cleaning" = shared but balanced onto the one lightest person. Unmapped → cleaning.
+// (opening/closing/grease trap) → fairly assigned to ONE on-shift crew member,
+// rotated by load balance. "cleaning" = balanced across whoever's on shift. Unmapped
+// → cleaning.
 const SOP_STATION: Record<string, "barista" | "kitchen" | "lead" | "cleaning" | "shared"> = {
   "coffee calibration": "barista",
   "fridge & storage": "kitchen",
@@ -447,33 +448,24 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
       outletName: c.outlet!.name,
     };
     const here = presentByOutlet.get(c.outletId) ?? [];
+    // Eligible = people whose SHIFT covers the task's slot (not someone who clocked
+    // in and left). Unknown slot → everyone present at the outlet.
+    const slotMin = toMin(c.timeSlot);
+    const crew = slotMin === null ? here : here.filter((p) => shiftCovers(p.start_time, p.end_time, slotMin));
 
-    // Shared (opening/closing/grease trap): collective work — accountable = every
-    // person whose SHIFT is on at the task's slot time (not someone who clocked in
-    // and already left). No single owner, no persist; deduped per person.
-    if (station === "shared") {
-      const slotMin = toMin(c.timeSlot);
-      const crew = slotMin === null ? here : here.filter((p) => shiftCovers(p.start_time, p.end_time, slotMin));
-      for (const p of crew) {
-        const o = byOwner.get(p.user_id) ?? { name: p.name, phone: p.phone, items: [] };
-        o.items.push(item);
-        byOwner.set(p.user_id, o);
-      }
-      if (crew.length === 0) {
-        const u = unowned.get(c.outletId) ?? { name: c.outlet!.name, items: [] };
-        u.items.push(item);
-        unowned.set(c.outletId, u);
-      }
-      continue;
-    }
-
-    // 1. explicit assignment wins if that person is present.
-    let owner = here.find((p) => p.user_id === c.assignedToId) ?? null;
+    // 1. explicit assignment wins if that person is on shift.
+    let owner = crew.find((p) => p.user_id === c.assignedToId) ?? null;
     if (!owner) {
-      // 2. station pool by job position (cleaning = anyone present), then balance.
-      let pool = station === "cleaning" ? here : here.filter((p) => STATION_POSITIONS[station].includes(p.position));
-      if (pool.length === 0 && station !== "lead") pool = here.filter((p) => LEAD_POSITIONS.includes(p.position)); // no station person → lead
-      if (pool.length === 0) pool = here; // last resort: anyone present
+      // 2. EVERY task gets ONE fair owner. Station-specific → that station's job
+      //    position; "shared" (opening/closing/grease) & "cleaning" → the whole
+      //    on-shift crew. Either way the LIGHTEST-loaded is picked, so the shared
+      //    work rotates fairly across the crew over time (= the fair/shared part).
+      let pool =
+        station === "barista" || station === "kitchen" || station === "lead"
+          ? crew.filter((p) => STATION_POSITIONS[station].includes(p.position))
+          : crew;
+      if (pool.length === 0 && station !== "lead") pool = crew.filter((p) => LEAD_POSITIONS.includes(p.position)); // no station person → lead
+      if (pool.length === 0) pool = crew; // last resort: anyone on shift
       owner = lightest(pool);
     }
     if (owner?.phone) {
