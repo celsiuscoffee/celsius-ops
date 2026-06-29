@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { activeFlags, flagLabel, type InvoiceFlag } from "@/lib/inventory/flag-detector";
+import { mytTodayRange } from "@/lib/inventory/myt-today";
 
 // GET /api/inventory/invoices/reconciliation
 //
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayStart = mytTodayRange().start; // MYT calendar midnight (see lib/inventory/myt-today)
 
   // Optional supplier filter — same repeated-param shape as the invoices list.
   const supplierIds = req.nextUrl.searchParams.getAll("supplier").filter(Boolean);

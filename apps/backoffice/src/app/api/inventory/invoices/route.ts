@@ -3,6 +3,7 @@ import type { Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { detectCreationFlags } from "@/lib/inventory/flag-detector";
+import { mytTodayRange } from "@/lib/inventory/myt-today";
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -20,9 +21,10 @@ export async function GET(req: NextRequest) {
   // over `tab` when they conflict — the user explicitly clicked a card.
   const cardFilter = req.nextUrl.searchParams.get("cardFilter") || "";
 
-  const _now = new Date();
-  const _todayStart = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate());
-  const _todayEnd = new Date(_todayStart.getTime() + 86400000);
+  // "Today" is the MALAYSIA calendar day (UTC+8), not the server's UTC day — otherwise invoices
+  // due today drop out of the Due Today card every Malaysia morning (00:00–08:00 MYT, when UTC is
+  // still yesterday). See lib/inventory/myt-today.
+  const { start: _todayStart, end: _todayEnd } = mytTodayRange();
 
   // "Overdue" semantically = anything unpaid past its due date. The OVERDUE
   // status auto-rollover only flips PENDING → OVERDUE (line below); INITIATED

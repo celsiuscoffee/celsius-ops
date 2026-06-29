@@ -3,6 +3,7 @@ import type { Prisma } from "@celsius/db";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
+import { mytTodayRange } from "@/lib/inventory/myt-today";
 
 export const runtime = "nodejs"; // xlsx needs Node
 
@@ -33,8 +34,8 @@ export async function GET(req: NextRequest) {
   const UNPAID_STATUSES = ["DRAFT", "INITIATED", "PENDING", "PARTIALLY_PAID", "DEPOSIT_PAID", "OVERDUE"];
 
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart.getTime() + 86400000);
+  // MYT calendar day (see lib/inventory/myt-today) — keep Due Today / overdue consistent with the API.
+  const { start: todayStart, end: todayEnd } = mytTodayRange();
 
   // Mirror the list route: overdue = unpaid past due, including the two-leg
   // states (DEPOSIT_PAID / PARTIALLY_PAID) whose balance is past due. Status
