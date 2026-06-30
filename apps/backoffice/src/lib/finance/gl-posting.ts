@@ -21,14 +21,16 @@
 import { prisma } from "@/lib/prisma";
 import { postJournal } from "./ledger";
 import type { JournalLineInput } from "./types";
-import { BANK_CASH, companyFromAccountName, contraFor, round2, SKIP_CATS } from "./gl-posting-map";
+import { BANK_CASH, companyFromAccountName, resolveContra, round2, SKIP_CATS } from "./gl-posting-map";
 
-export { CONTRA_ACCOUNT, companyFromAccountName, contraFor } from "./gl-posting-map";
+export { CONTRA_ACCOUNT, companyFromAccountName, contraFor, resolveContra } from "./gl-posting-map";
 
 type Group = {
   company: string;
   outletId: string | null;
-  category: string;
+  contra: string;        // resolved contra account (control/inter-co/expense/…)
+  suspense: boolean;
+  category: string;      // representative category, for labelling
   date: string;          // YYYY-MM-DD
   direction: "CR" | "DR";
   amount: number;
@@ -63,14 +65,16 @@ export async function postBankLinesToGl(
       ...(opts.sinceDays ? { txnDate: { gte: new Date(Date.now() - opts.sinceDays * 86_400_000) } } : {}),
     },
     select: {
-      id: true, txnDate: true, amount: true, direction: true, category: true, outletId: true,
+      id: true, txnDate: true, amount: true, direction: true, category: true, description: true, outletId: true,
       statement: { select: { accountName: true } },
     },
     orderBy: { txnDate: "asc" },
     take: opts.limit,
   });
 
-  // Aggregate into one journal per (company, outlet, category, day, direction).
+  // Resolve the contra account per line (so statutory splits by type and inter-co
+  // routes by counterparty), then aggregate into one journal per
+  // (company, outlet, CONTRA account, day, direction).
   const groups = new Map<string, Group>();
   let skippedLines = 0;
   for (const l of lines) {
@@ -79,10 +83,11 @@ export async function postBankLinesToGl(
     const company = companyFromAccountName(l.statement.accountName);
     const date = l.txnDate.toISOString().slice(0, 10);
     const direction = l.direction as "CR" | "DR";
-    const key = [company, l.outletId ?? "", category, date, direction].join("|");
+    const { code: contra, suspense } = resolveContra(category, l.description ?? "");
+    const key = [company, l.outletId ?? "", contra, date, direction].join("|");
     const g = groups.get(key);
     if (g) { g.amount = round2(g.amount + Number(l.amount)); g.lineIds.push(l.id); }
-    else groups.set(key, { company, outletId: l.outletId, category, date, direction, amount: round2(Number(l.amount)), lineIds: [l.id] });
+    else groups.set(key, { company, outletId: l.outletId, contra, suspense, category, date, direction, amount: round2(Number(l.amount)), lineIds: [l.id] });
   }
 
   const byCat = new Map<string, { account: string; direction: string; journals: number; lines: number; amount: number; suspense: boolean }>();
@@ -91,26 +96,26 @@ export async function postBankLinesToGl(
 
   for (const g of groups.values()) {
     if (g.amount <= 0) continue;
-    const { code: contra, suspense } = contraFor(g.category);
+    const contra = g.contra;
     // CR = money in → Dr Bank, Cr contra. DR = money out → Dr contra, Cr Bank.
     const journalLines: JournalLineInput[] = g.direction === "CR"
       ? [{ accountCode: BANK_CASH, debit: g.amount, outletId: g.outletId }, { accountCode: contra, credit: g.amount, outletId: g.outletId }]
       : [{ accountCode: contra, debit: g.amount, outletId: g.outletId }, { accountCode: BANK_CASH, credit: g.amount, outletId: g.outletId }];
 
-    const ck = `${g.category}|${g.direction}`;
-    const agg = byCat.get(ck) ?? { account: contra, direction: g.direction, journals: 0, lines: 0, amount: 0, suspense };
+    const ck = `${g.category}|${contra}|${g.direction}`;
+    const agg = byCat.get(ck) ?? { account: contra, direction: g.direction, journals: 0, lines: 0, amount: 0, suspense: g.suspense };
     agg.journals++; agg.lines += g.lineIds.length; agg.amount = round2(agg.amount + g.amount);
     byCat.set(ck, agg);
 
     journals++;
     postedLines += g.lineIds.length;
-    if (suspense) suspenseLines += g.lineIds.length;
+    if (g.suspense) suspenseLines += g.lineIds.length;
     totalDebit = round2(totalDebit + g.amount);
     totalCredit = round2(totalCredit + g.amount);
 
     if (!commit) continue;
     try {
-      const desc = `Bank ${g.direction === "CR" ? "receipts" : "payments"} — ${g.category} ${g.date} (${g.lineIds.length} line${g.lineIds.length > 1 ? "s" : ""})`;
+      const desc = `Bank ${g.direction === "CR" ? "receipts" : "payments"} — ${g.category}→${contra} ${g.date} (${g.lineIds.length} line${g.lineIds.length > 1 ? "s" : ""})`;
       const res = await postJournal({
         companyId: g.company,
         txnDate: g.date,
