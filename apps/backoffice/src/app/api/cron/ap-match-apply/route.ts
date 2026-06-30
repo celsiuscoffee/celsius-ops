@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { applyApMatches } from "@/lib/finance/ap-match";
 import { applyVerifiedReview } from "@/lib/finance/agents/ap-verifier";
+import { createWagePaymentSlips } from "@/lib/finance/payment-slips";
 import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
@@ -21,11 +22,15 @@ export async function GET(req: NextRequest) {
     // 2) review tier — LLM verifier judges the gray zone; confident confirms
     //    auto-clear, rejects drop, only true uncertainties stay for a human.
     const review = await applyVerifiedReview({ commit: true, sinceDays: 120 });
+    // 3) wages have no invoice — document them with auto payment slips so they
+    //    leave the unmatched pile with a supporting doc instead of a match.
+    const slips = await createWagePaymentSlips({ commit: true });
     return NextResponse.json({
       autoApplied: auto.applied,
       reviewConfirmedApplied: review.confirmedApplied,
       reviewRejected: review.rejected,
       reviewUncertain: review.uncertain,
+      paymentSlipsCreated: slips.created,
     });
   } catch (err) {
     console.error("[cron/ap-match-apply]", err);
