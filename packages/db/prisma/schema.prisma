@@ -103,6 +103,7 @@ model Outlet {
   reviewSettings    ReviewSettings?
   internalFeedbacks InternalFeedback[]
   reviewReplyDrafts ReviewReplyDraft[]
+  reviewImprovementFlags ReviewImprovementFlag[]
   geoGridScans      GeoGridScan[]
   geoGridKeywords   GeoGridKeyword[]
   reviewDailySnapshots ReviewDailySnapshot[]
@@ -1391,6 +1392,31 @@ model ReviewReplyDraft {
   updatedAt    DateTime  @updatedAt
 
   @@index([status])
+  @@index([outletId])
+}
+
+// Happy-but-fixable signal. A 4-5★ Google review is auto-replied (no draft), so
+// any improvement buried in the praise ("great coffee, but the wifi kept
+// dropping") would otherwise be lost. At reply time the auto-reply cron asks the
+// model whether the comment carries an actionable point; if so it lands here and
+// the ops review-nudge surfaces it on WhatsApp. One row per GBP review
+// (reviewId unique) so re-runs never re-flag. Status drives a future BackOffice
+// "what happy guests want improved" list. Table created by manual SQL migration;
+// never `prisma db push`.
+model ReviewImprovementFlag {
+  id           String   @id @default(uuid())
+  reviewId     String   @unique // GBP review id (idempotency anchor)
+  outletId     String
+  outlet       Outlet   @relation(fields: [outletId], references: [id])
+  reviewerName String?
+  rating       Int // 4 or 5
+  comment      String? // the full review text
+  point        String // the extracted improvement (short, e.g. "wifi kept dropping")
+  // open(needs attention) | ack(seen) | dismissed(not actionable after all)
+  status       String   @default("open")
+  createdAt    DateTime @default(now())
+
+  @@index([status, createdAt])
   @@index([outletId])
 }
 

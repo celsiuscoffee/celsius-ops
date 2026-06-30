@@ -67,3 +67,59 @@ Reply:`;
   const text = response.content[0];
   return text.type === "text" ? text.text.trim() : "";
 }
+
+export type ImprovementVerdict = {
+  actionable: boolean;
+  // Short, concrete improvement phrase when actionable (e.g. "wifi kept
+  // dropping", "slow service at peak"); empty when not.
+  point: string;
+};
+
+/**
+ * Read a HAPPY (4-5★) review and decide whether — under the praise — it carries
+ * a concrete, fixable operational point worth flagging to the team. Pure praise
+ * ("best coffee in town!"), vague vibes, or off-topic comments are NOT
+ * actionable. Cheap, fast model; returns strict JSON we parse defensively.
+ */
+export async function extractImprovement(review: {
+  rating: number;
+  comment: string;
+  outletName: string;
+}): Promise<ImprovementVerdict> {
+  const comment = review.comment.trim();
+  if (!comment) return { actionable: false, point: "" };
+
+  const prompt = `A customer left a ${review.rating}/5 review for Celsius Coffee (${review.outletName}), a café in Malaysia. The review is POSITIVE overall, but happy customers sometimes still mention something that could be better ("great coffee, but the wifi kept dropping", "sedap tapi lambat sikit"). The comment may be in English or Malay.
+
+Decide if there is a SPECIFIC, ACTIONABLE thing the café could fix or improve — something concrete the team can act on (speed, cleanliness, wifi, seating, temperature, portion, noise, parking, a specific staff interaction, a menu gap, etc.).
+
+NOT actionable: pure praise, generic vibes, compliments, "nothing", or anything the café can't act on (e.g. "wish it were closer to my house").
+
+Reply with ONLY a JSON object, no other text:
+{"actionable": true/false, "point": "<short concrete phrase, max 8 words; empty string if not actionable>"}
+
+Do not use em-dashes or en-dashes in the point; use commas or "and".
+
+Review: ${comment}
+
+JSON:`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 120,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.content[0];
+  const raw = text.type === "text" ? text.text.trim() : "";
+  try {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) return { actionable: false, point: "" };
+    const parsed = JSON.parse(match[0]) as { actionable?: unknown; point?: unknown };
+    const point = typeof parsed.point === "string" ? parsed.point.trim() : "";
+    const actionable = parsed.actionable === true && point.length > 0;
+    return { actionable, point: actionable ? point : "" };
+  } catch {
+    return { actionable: false, point: "" };
+  }
+}
