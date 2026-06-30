@@ -299,6 +299,7 @@ export async function buildSourcedPnl(input: {
         direction: "DR",
         txnDate: { gte: dStart(start), lte: dEnd(end) },
         statement: { accountName: { contains: suffix } },
+        apInvoiceId: null, // AP-matched lines settle a procurement invoice (COGS) — not opex
       },
       _sum: { amount: true },
     });
