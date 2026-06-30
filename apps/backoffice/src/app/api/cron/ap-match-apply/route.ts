@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { applyApMatches } from "@/lib/finance/ap-match";
 import { applyVerifiedReview } from "@/lib/finance/agents/ap-verifier";
 import { createWagePaymentSlips } from "@/lib/finance/payment-slips";
+import { importApSheet } from "@/lib/finance/ap-sheet-import";
 import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,12 @@ export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
   try {
+    // 0) import the AP register sheet → procurement invoices, so the unmatched
+    //    outflows have something to match. Best-effort: a sheet/network hiccup
+    //    must not block the rest of the loop.
+    let invoicesImported = 0;
+    try { invoicesImported = (await importApSheet({ commit: true })).created; }
+    catch (e) { console.error("[cron/ap-match-apply] sheet import skipped:", e); }
     // 1) rules tier — amount-exact + name-confirmed → auto-clear.
     const auto = await applyApMatches({ commit: true, sinceDays: 120 });
     // 2) review tier — LLM verifier judges the gray zone; confident confirms
@@ -26,6 +33,7 @@ export async function GET(req: NextRequest) {
     //    leave the unmatched pile with a supporting doc instead of a match.
     const slips = await createWagePaymentSlips({ commit: true });
     return NextResponse.json({
+      invoicesImported,
       autoApplied: auto.applied,
       reviewConfirmedApplied: review.confirmedApplied,
       reviewRejected: review.rejected,
