@@ -368,6 +368,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Home", href: "/finance", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "finance:home" },
       { label: "Ledger", href: "/finance/transactions", icon: <FileText className={ICON_SIZE} />, moduleKey: "finance:transactions" },
       { label: "Reports", href: "/finance/reports", icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "finance:reports" },
+      { label: "Reconciliation", href: "/finance/recon", icon: <Scale className={ICON_SIZE} />, moduleKey: "finance:reports" },
       { label: "Compliance", href: "/finance/compliance", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "finance:compliance" },
       // Legacy (pre-agentic) views — kept until the new module reaches parity.
       { label: "Cashflow", href: "/finance/cashflow", icon: <LineChart className={ICON_SIZE} />, moduleKey: "finance:cashflow" },
