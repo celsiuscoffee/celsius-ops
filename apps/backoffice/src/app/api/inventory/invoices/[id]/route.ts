@@ -221,10 +221,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
-    const invoice = await prisma.invoice.update({
-      where: { id },
-      data,
-    });
+    // Make the full-PAID transition ATOMIC. The early guard above is a read-then-write
+    // (TOCTOU): two concurrent mark-paid requests (double-click / stale client / a second
+    // tab, or a paymentAmount that completes the invoice with no status param) could both
+    // pass it and both write PAID — resetting paidAt and firing the POP auto-send twice.
+    // Gate the write on the row still NOT being PAID so exactly one wins; the loser gets the
+    // same 409. Non-payment edits keep the plain update. (Mirrors the Telegram path's guard.)
+    let invoice: Awaited<ReturnType<typeof prisma.invoice.update>>;
+    if (data.status === "PAID") {
+      const res = await prisma.invoice.updateMany({
+        where: { id, status: { not: "PAID" } },
+        data,
+      });
+      if (res.count === 0) {
+        return NextResponse.json({ error: "Invoice is already paid." }, { status: 409 });
+      }
+      invoice = await prisma.invoice.findUniqueOrThrow({ where: { id } });
+    } else {
+      invoice = await prisma.invoice.update({ where: { id }, data });
+    }
 
     // When transitioning to PAID/DEPOSIT_PAID, run the flag detector against
     // the freshly-attached payment data so the UI can surface any duplicates.
