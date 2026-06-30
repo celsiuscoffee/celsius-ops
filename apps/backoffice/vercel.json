@@ -65,6 +65,10 @@
       "schedule": "0 */6 * * *"
     },
     {
+      "path": "/api/cron/ap-match-apply",
+      "schedule": "0 21 * * *"
+    },
+    {
       "path": "/api/cron/music-alerts",
       "schedule": "*/5 * * * *"
     },

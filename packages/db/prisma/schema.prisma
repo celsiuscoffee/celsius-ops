@@ -1948,8 +1948,11 @@ model BankStatementLine {
   outletId        String?
   outlet          Outlet?  @relation(fields: [outletId], references: [id])
   isInterCo       Boolean  @default(false)
-  classifiedBy    String?  // 'rule' | 'manual'
+  classifiedBy    String?  // 'rule' | 'manual' | 'ap-match'
   ruleName        String?  // which regex rule fired
+  // AP auto-match: the procurement invoice this outflow settled.
+  apInvoiceId     String?
+  apMatchedAt     DateTime?
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

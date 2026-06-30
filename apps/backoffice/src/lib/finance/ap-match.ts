@@ -87,7 +87,7 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
   // rent, etc. are pulse categories) — but to be safe we consider all DR and let
   // the score gate it.
   const lines = await prisma.bankStatementLine.findMany({
-    where: { direction: "DR", isInterCo: false, txnDate: { gte: since } },
+    where: { direction: "DR", isInterCo: false, txnDate: { gte: since }, apInvoiceId: null },
     select: { id: true, description: true, amount: true, txnDate: true, category: true },
   });
 
@@ -168,4 +168,57 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
     .sort((a, b) => b.amount - a.amount);
 
   return { auto, review, unmatchedInvoices, unmatchedOutflows, doublePayments };
+}
+
+// ── VERIFIER + APPLY ────────────────────────────────────────────────────────
+// The verifier is the loop's independent second pair of eyes: it re-checks
+// each AUTO proposal against hard rules before any write is allowed. Only
+// matches that pass BOTH the matcher's score AND the verifier auto-apply; the
+// rest fall to the human review queue. This is what lets the loop clear
+// invoices with no bookkeeper.
+export function verifyMatch(m: ApMatch): { ok: boolean; reason?: string } {
+  if (m.tier !== "auto") return { ok: false, reason: "not auto-tier" };
+  if (!m.reasons.includes("amount exact")) return { ok: false, reason: "amount not exact" };
+  if (!m.reasons.includes("payee name in description")) return { ok: false, reason: "payee not confirmed in bank line" };
+  if (m.alreadyPaid) return { ok: false, reason: "invoice already settled — possible double-pay" };
+  return { ok: true };
+}
+
+export type ApplyResult = {
+  committed: boolean;
+  applied: number;
+  skipped: { payee: string; amount: number; reason: string }[];
+};
+
+// Apply verified AUTO matches: link the bank line to its invoice, mark the
+// invoice PAID, and tag classifiedBy='ap-match'. The linked line then drops
+// out of P&L opex (it settles a liability, not a new expense). Idempotent and
+// transactional. Dry-run (commit=false) reports what WOULD apply.
+export async function applyApMatches(opts: { commit?: boolean; sinceDays?: number } = {}): Promise<ApplyResult> {
+  const commit = opts.commit ?? false;
+  const { auto } = await proposeApMatches({ sinceDays: opts.sinceDays });
+  const skipped: ApplyResult["skipped"] = [];
+  let applied = 0;
+  for (const m of auto) {
+    const v = verifyMatch(m);
+    if (!v.ok) { skipped.push({ payee: m.payee, amount: m.amount, reason: v.reason! }); continue; }
+    if (commit) {
+      await prisma.$transaction(async (tx) => {
+        const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true } });
+        if (line?.apInvoiceId) return; // already matched — idempotent
+        const inv = await tx.invoice.findUnique({ where: { id: m.invoiceId }, select: { status: true, amount: true } });
+        if (!inv || inv.status === "PAID") return;
+        await tx.bankStatementLine.update({
+          where: { id: m.bankLineId },
+          data: { apInvoiceId: m.invoiceId, apMatchedAt: new Date(), classifiedBy: "ap-match" },
+        });
+        await tx.invoice.update({
+          where: { id: m.invoiceId },
+          data: { amountPaid: inv.amount, status: "PAID", paidAt: new Date(m.bankDate + "T00:00:00Z"), paidVia: "bank-ap-match" },
+        });
+      });
+    }
+    applied++;
+  }
+  return { committed: commit, applied, skipped };
 }
