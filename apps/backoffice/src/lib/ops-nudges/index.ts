@@ -15,7 +15,7 @@
 // WhatsApp's 24h rule until ops_nudge is approved.
 
 import { prisma } from "@/lib/prisma";
-import { findNoClockInBreaches, detectOutletAudit, detectSkillTraining, detectReviews } from "@/lib/ops-pulse/detectors";
+import { findNoClockInBreaches, detectOutletAudit, detectSkillTraining, detectReviews, detectPosNotOpen, detectMenuSnoozed } from "@/lib/ops-pulse/detectors";
 import { recordBreach } from "@/lib/ops-pulse/ledger";
 import { resolveRecipients, resolveOutletTeam, resolveOutletSupervisors } from "@/lib/ops-pulse/router";
 import { sendClockInNudge, sendStockCountNudge, sendOpsDigest, sendAuditNudge, sendReviewNudge } from "@/lib/ops-pulse/sender";
@@ -545,4 +545,73 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   const headline = `${managerLines.length} overdue checklist${managerLines.length === 1 ? "" : "s"} with no owner on shift`;
   const managerSent = await sendManagerDigestToOps(headline, managerLines, mode);
   return { mode, ranAt, items, staffSent, managerSent };
+}
+
+// ── 6. Store status: POS-not-open + menu 86'd → on-shift team + managers ──────
+// The two ops-pulse signals that have no dedicated owner and so went dark while
+// the legacy pulse sat in shadow:
+//   • POS_NOT_OPEN — an active outlet past its open time with no till session
+//     (HIGH: the outlet isn't trading — straight lost revenue).
+//   • MENU_SNOOZED — items 86'd off the menu (MED: lost attach + a stale menu).
+// We bring them live HERE, on the proven dedicated-nudge tier, rather than arming
+// the whole pulse — that would race the specialized clock-in/checklist routing
+// through the shared ledger. Reuses the same detectors (still shadow in the pulse)
+// + the ledger for dedupe (each is keyed per outlet/day, so at most one a day) +
+// the WhatsApp sender. Cron: every 15 min (catches a late open soon after open
+// time). OPS_NUDGES_MODE (off | shadow | armed).
+export async function runStoreStatusNudges(now = new Date()): Promise<NudgeRunResult> {
+  const mode = nudgesMode();
+  const ranAt = now.toISOString();
+  if (mode === "off") return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  const [posNot, menu] = await Promise.all([
+    detectPosNotOpen(now).catch((e) => {
+      console.error("[ops-nudge:store] pos-not-open detector failed:", e);
+      return [] as Breach[];
+    }),
+    detectMenuSnoozed(now).catch((e) => {
+      console.error("[ops-nudge:store] menu-snoozed detector failed:", e);
+      return [] as Breach[];
+    }),
+  ]);
+  const breaches = [...posNot, ...menu];
+  if (breaches.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  // Dedupe per breach (armed) so the 15-min cron nudges each once a day. Group the
+  // fresh ones by outlet for the on-shift team, and collect all for the manager digest.
+  const byOutlet = new Map<string, { name: string; lines: string[] }>();
+  const managerLines: string[] = [];
+  for (const b of breaches) {
+    if (mode === "armed") {
+      const { isNew } = await recordBreach(b, null);
+      if (!isNew) continue;
+    }
+    managerLines.push(b.summary);
+    const g = byOutlet.get(b.outletId) ?? { name: b.outletName, lines: [] };
+    g.lines.push(b.summary);
+    byOutlet.set(b.outletId, g);
+  }
+  if (managerLines.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  // The on-shift team gets their own outlet's lines (they can open the till / fix
+  // the 86). If nobody's clocked in (common when the till isn't open), the team is
+  // empty and the managers still get it.
+  let staffSent = 0;
+  for (const [outletId, g] of byOutlet) {
+    if (mode === "shadow") {
+      console.log("[ops-nudge:store:shadow]", JSON.stringify({ outlet: g.name, lines: g.lines }));
+      continue;
+    }
+    const team = await resolveOutletTeam(outletId, now);
+    for (const t of team) {
+      if (!t.phone) continue;
+      const r = await sendOpsDigest(t.phone, `Store status — ${g.name}`, g.lines);
+      if (r.ok) staffSent += 1;
+      else console.error(`[ops-nudge:store] team nudge to ${t.name} failed:`, r.error);
+    }
+  }
+
+  const headline = `${managerLines.length} store status alert${managerLines.length === 1 ? "" : "s"} need attention`;
+  const managerSent = await sendManagerDigestToOps(headline, managerLines, mode);
+  return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }

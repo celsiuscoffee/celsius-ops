@@ -145,6 +145,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/ops-nudge-store",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/geogrid-keywords",
       "schedule": "0 6 1 * *"
     },
