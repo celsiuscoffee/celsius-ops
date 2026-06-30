@@ -35,10 +35,16 @@ const BANK_ACCOUNT_SUFFIX: Record<string, string> = {
 const BANK_COGS = new Set(["RAW_MATERIALS", "DELIVERY", "INTERCO_RAW_MATERIAL"]); // COGS comes from procurement
 const BANK_DIGITAL_ADS = new Set(["DIGITAL_ADS"]);                                // = ads module (dedup)
 const BANK_MARKETING = new Set(["MARKETPLACE_FEE", "KOL", "OTHER_MARKETING"]);     // non-digital marketing
-const BANK_NONOPEX = new Set([                                                    // internal / financing / capex — not operating
+const BANK_NONOPEX = new Set([                                                    // internal / financing / capex / distributions — not operating
   "CAPITAL", "LOAN", "MANAGEMENT_FEE", "INTERCO_PEOPLE", "INTERCO_INVESTMENTS",
   "INTERCO_EXPENSES", "INVESTMENTS", "EQUIPMENTS", "ADTD", "TRANSFER_NOT_SUCCESSFUL",
+  "DIVIDEND", "DIRECTORS_ALLOWANCE",  // shareholder/owner distributions, not P&L opex
 ]);
+// Catch-all + unclassified bank outflows. Surfaced as a flagged "needs review"
+// line rather than buried in opex, because it double-counts COGS (unnamed
+// supplier payments already in procurement) + internal transfers until the AP
+// auto-match re-tags them. Visible so it can't silently inflate the P&L.
+const BANK_REVIEW = new Set(["OTHER_OUTFLOW"]);
 
 // GrabFood revenue is booked GROSS in income, but Grab deducts a commission
 // (marketplace fee) at source before paying out — so it never appears in the
@@ -297,10 +303,11 @@ export async function buildSourcedPnl(input: {
       const amt = round2(Number(g._sum?.amount ?? 0));
       if (!amt) continue;
       if (cat && (BANK_COGS.has(cat) || BANK_NONOPEX.has(cat) || BANK_DIGITAL_ADS.has(cat))) continue;
+      const isReview = !cat || BANK_REVIEW.has(cat);
       const isMkt = !!cat && BANK_MARKETING.has(cat);
       expenseLines.push({
         code: `BANK:${cat ?? "NULL"}`,
-        name: (isMkt ? "Marketing — " : "") + humanCat(cat),
+        name: isReview ? "Unclassified — pending AP match (review)" : (isMkt ? "Marketing — " : "") + humanCat(cat),
         amount: amt,
         parentCode: null,
       });
