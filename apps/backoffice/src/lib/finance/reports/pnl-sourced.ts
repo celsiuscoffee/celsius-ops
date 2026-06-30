@@ -132,15 +132,21 @@ export async function buildSourcedPnl(input: {
   companyId: string;
   start: string;
   end: string;
+  outletId?: string; // when set, scope to one outlet — revenue + COGS + the
+                     // outlet-TAGGED bank costs only. Shared/HQ opex (paid from
+                     // the entity account, untagged) can't be split per outlet,
+                     // so a per-outlet view is a contribution margin, not net.
 }): Promise<PnlReport> {
-  const { companyId, start, end } = input;
+  const { companyId, start, end, outletId } = input;
   const client = getFinanceClient();
   const defaultCompany = await getDefaultCompanyId();
 
-  // Company's outlets (UUIDs) — drive both revenue and COGS.
+  // Company's outlets (UUIDs) — drive both revenue and COGS. Narrow to one when
+  // an outlet filter is set (and it belongs to the company).
   const { data: oc } = await client
     .from("fin_outlet_companies").select("outlet_id").eq("company_id", companyId);
-  const outletIds = (oc ?? []).map((r) => r.outlet_id as string);
+  const companyOutletIds = (oc ?? []).map((r) => r.outlet_id as string);
+  const outletIds = outletId && companyOutletIds.includes(outletId) ? [outletId] : companyOutletIds;
 
   // ─── INCOME: actual GROSS sales, cutover-aware (StoreHub history + POS-native
   // + pickup) — the SAME source the sales dashboard uses. Replaces the
@@ -300,6 +306,7 @@ export async function buildSourcedPnl(input: {
         txnDate: { gte: dStart(start), lte: dEnd(end) },
         statement: { accountName: { contains: suffix } },
         apInvoiceId: null, // AP-matched lines settle a procurement invoice (COGS) — not opex
+        ...(outletId ? { outletId } : {}), // per-outlet: only outlet-tagged costs
       },
       _sum: { amount: true },
     });

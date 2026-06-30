@@ -18,11 +18,12 @@ export async function GET(req: NextRequest) {
   const start = url.searchParams.get("start");
   const end = url.searchParams.get("end");
   const companyId = url.searchParams.get("companyId") ?? (await getActiveCompanyId());
+  const outletId = url.searchParams.get("outletId") ?? undefined;
   if (!start || !end || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
     return NextResponse.json({ error: "start, end (YYYY-MM-DD) required" }, { status: 400 });
   }
   try {
-    const report = await buildSourcedPnl({ companyId, start, end });
+    const report = await buildSourcedPnl({ companyId, start, end, outletId });
     return NextResponse.json({ report });
   } catch (err) {
     return NextResponse.json(

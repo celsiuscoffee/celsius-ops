@@ -101,7 +101,9 @@ function SectionHeader({ label }: { label: string }) {
 function PnlTab() {
   const [start, setStart] = useState(thisMonthStart());
   const [end, setEnd] = useState(todayMyt());
-  const qs = useMemo(() => `start=${start}&end=${end}`, [start, end]);
+  const [outletId, setOutletId] = useState("");
+  const { data: outlets } = useFetch<{ id: string; name: string }[]>("/api/settings/outlets");
+  const qs = useMemo(() => `start=${start}&end=${end}${outletId ? `&outletId=${outletId}` : ""}`, [start, end, outletId]);
   const { data, error, isLoading, mutate } = useFetch<{ report: PnlReport }>(
     `/api/finance/reports/pnl?${qs}`
   );
@@ -123,10 +125,24 @@ function PnlTab() {
           onChange={(e) => setEnd(e.target.value)}
           className="h-8 rounded-md border bg-background px-2 text-sm"
         />
+        <select
+          value={outletId}
+          onChange={(e) => setOutletId(e.target.value)}
+          className="h-8 rounded-md border bg-background px-2 text-sm"
+          title="Per-outlet scopes revenue + COGS + outlet-tagged costs (contribution margin; shared opex stays company-level)"
+        >
+          <option value="">All outlets (company)</option>
+          {(outlets ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
         <Button onClick={() => mutate()} variant="outline" size="sm">
           Refresh
         </Button>
       </div>
+      {outletId && (
+        <p className="text-[11px] text-amber-600">
+          Per-outlet view: revenue + COGS + outlet-tagged costs only (contribution margin). Shared/HQ opex is paid from the entity account and can&apos;t be split per outlet.
+        </p>
+      )}
 
       {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
       {error && (
