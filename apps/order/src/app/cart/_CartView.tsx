@@ -455,7 +455,7 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
 
       {/* Basket-targeted upsell — "goes well with your order" (drinks → a bite,
           personalized by member). Reactive to the cart contents. */}
-      <CartUpsell productIds={items.map((i) => i.productId)} loyaltyId={loyaltyId} />
+      <CartUpsell productIds={items.map((i) => i.productId)} loyaltyId={loyaltyId} outletId={outletId} />
 
       {reward ? (
         <div
