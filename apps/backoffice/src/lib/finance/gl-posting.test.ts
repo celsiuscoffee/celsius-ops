@@ -1,5 +1,32 @@
 import { describe, it, expect } from "vitest";
-import { contraFor, companyFromAccountName, CONTRA_ACCOUNT } from "./gl-posting-map";
+import { contraFor, companyFromAccountName, CONTRA_ACCOUNT, resolveContra } from "./gl-posting-map";
+
+describe("resolveContra — Bukku-accurate control / inter-co routing", () => {
+  it("routes full-time salary to the Salary Control liability (cleared by payroll accrual)", () => {
+    expect(resolveContra("EMPLOYEE_SALARY", "SALARY DEC 2025").code).toBe("3008");
+  });
+  it("keeps part-timer wages as a direct expense (matches Bukku)", () => {
+    expect(resolveContra("PARTIMER", "PT Week 51/25").code).toBe("6500-03");
+  });
+  it("splits statutory by type into the right control account", () => {
+    expect(resolveContra("STATUTORY_PAYMENT", "KWSP/EPF DEC").code).toBe("3004");
+    expect(resolveContra("STATUTORY_PAYMENT", "PERKESO SOCSO").code).toBe("3005");
+    expect(resolveContra("STATUTORY_PAYMENT", "EIS SIP").code).toBe("3006");
+    expect(resolveContra("STATUTORY_PAYMENT", "LHDN PCB MTD").code).toBe("3007");
+    expect(resolveContra("STATUTORY_PAYMENT", "statutory misc").code).toBe("3008");
+  });
+  it("routes inter-company to the right Due to/from account by counterparty", () => {
+    expect(resolveContra("INTERCO_PEOPLE", "TRANSFER TO A/C CELSIUS COFFEE TAMARIND").code).toBe("3600-00");
+    expect(resolveContra("INTERCO_EXPENSES", "TRANSFER FR A/C CONEZION").code).toBe("3600-01");
+    expect(resolveContra("INTERCO_RAW_MATERIAL", "to celsius coffee sdn bhd").code).toBe("3600-02");
+    expect(resolveContra("INTERCO_INVESTMENTS", "unknown counterparty").code).toBe("3600");
+  });
+  it("falls through to the static map for everything else", () => {
+    expect(resolveContra("RAW_MATERIALS", "").code).toBe("6000-01");
+    expect(resolveContra("DIRECTORS_ALLOWANCE", "").code).toBe("3400");
+    expect(resolveContra("OTHER_OUTFLOW", "").suspense).toBe(true);
+  });
+});
 
 describe("companyFromAccountName", () => {
   it("routes each bank account to its legal entity", () => {

@@ -33,9 +33,10 @@ export const CONTRA_ACCOUNT: Record<string, string> = {
   SOFTWARE: "6508",
   MAINTENANCE: "6506",
   STAFF_CLAIM: "6507",     // reimbursed outlet buys
-  EMPLOYEE_SALARY: "6500-02",
-  PARTIMER: "6500-03",
-  STATUTORY_PAYMENT: "6501",
+  PARTIMER: "6500-03",     // part-timer wages → expense (Bukku books these direct)
+  // EMPLOYEE_SALARY + STATUTORY_PAYMENT are NOT here — they route through
+  // CONTROL accounts (3008/3004-3007) in resolveContra(), the way Bukku books
+  // them: the bank payment clears a liability the payroll run accrued.
   TAX: "6900",
   COMPLIANCE: "6510",
   LICENSING_FEE: "6510-02",
@@ -71,6 +72,40 @@ export function companyFromAccountName(accountName: string | null | undefined): 
 export function contraFor(category: string): { code: string; suspense: boolean } {
   if (CONTRA_ACCOUNT[category]) return { code: CONTRA_ACCOUNT[category], suspense: false };
   return { code: SUSPENSE, suspense: true };
+}
+
+const INTERCO_CATS = new Set([
+  "INTERCO_PEOPLE", "INTERCO_RAW_MATERIAL", "INTERCO_INVESTMENTS", "INTERCO_EXPENSES",
+]);
+
+// Which related-company "Due to/from" account an inter-co line belongs to, read
+// from the counterparty named in the bank narrative.
+function intercoAccount(descUpper: string): string {
+  if (/TAMARIND|TAMAR/.test(descUpper)) return "3600-00";
+  if (/CONEZION|\bCONE\b/.test(descUpper)) return "3600-01";
+  if (/CELSIUS\s*COFFEE\s*SDN|\bCCSB\b/.test(descUpper)) return "3600-02";
+  return "3600"; // generic inter-company current account
+}
+
+// Resolve the contra account for a bank line — the accurate version that mirrors
+// how Bukku books things, using the description where the category alone is too
+// coarse:
+//   • EMPLOYEE_SALARY  → 3008 Salary Control          (cleared by payroll accrual)
+//   • STATUTORY_PAYMENT→ 3004/3005/3006/3007 by type  (EPF/SOCSO/EIS/PCB control)
+//   • INTERCO_*        → 3600-xx Due to/from <entity>  (not suspense)
+//   • everything else  → the static CONTRA_ACCOUNT map
+export function resolveContra(category: string, description: string): { code: string; suspense: boolean } {
+  const d = (description || "").toUpperCase();
+  if (category === "EMPLOYEE_SALARY") return { code: "3008", suspense: false };
+  if (category === "STATUTORY_PAYMENT") {
+    if (/\bEPF\b|KWSP/.test(d)) return { code: "3004", suspense: false };
+    if (/SOCSO|PERKESO/.test(d)) return { code: "3005", suspense: false };
+    if (/\bEIS\b|\bSIP\b/.test(d)) return { code: "3006", suspense: false };
+    if (/\bPCB\b|\bMTD\b|LHDN|HASIL|INLAND\s*REVENUE/.test(d)) return { code: "3007", suspense: false };
+    return { code: "3008", suspense: false }; // unspecified statutory → salary control
+  }
+  if (INTERCO_CATS.has(category)) return { code: intercoAccount(d), suspense: false };
+  return contraFor(category);
 }
 
 export function round2(n: number): number {
