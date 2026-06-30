@@ -22,7 +22,7 @@ import { prisma } from "@/lib/prisma";
 export type MatchTier = "auto" | "review";
 export type ApMatch = {
   invoiceId: string;
-  invoiceNo: string | null;
+  invoiceNumber: string | null;
   payee: string;
   amount: number;
   issueDate: string;
@@ -39,7 +39,7 @@ export type ApMatch = {
 export type ApMatchResult = {
   auto: ApMatch[];
   review: ApMatch[];
-  unmatchedInvoices: { invoiceId: string; invoiceNo: string | null; payee: string; amount: number; issueDate: string }[];
+  unmatchedInvoices: { invoiceId: string; invoiceNumber: string | null; payee: string; amount: number; issueDate: string }[];
   unmatchedOutflows: { bankLineId: string; desc: string; date: string; amount: number; category: string | null }[];
   doublePayments: ApMatch[];
 };
@@ -140,7 +140,7 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
 
       if (!best || score > best.score) {
         best = {
-          invoiceId: inv.id, invoiceNo: inv.invoiceNumber, payee, amount: amt, issueDate: ymd(issue),
+          invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, payee, amount: amt, issueDate: ymd(issue),
           outletId: inv.outletId, bankLineId: l.id, bankDesc: (l.description ?? "").replace(/\s+/g, " ").slice(0, 60),
           bankDate: ymd(l.txnDate), bankCategory: l.category as string | null,
           score: round2(score), tier: "review", reasons, alreadyPaid,
@@ -156,7 +156,7 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
       if (best.alreadyPaid) doublePayments.push(best);
       else (best.tier === "auto" ? auto : review).push(best);
     } else {
-      unmatchedInvoices.push({ invoiceId: inv.id, invoiceNo: inv.invoiceNumber, payee, amount: amt, issueDate: ymd(issue) });
+      unmatchedInvoices.push({ invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, payee, amount: amt, issueDate: ymd(issue) });
     }
   }
 
@@ -194,6 +194,26 @@ export type ApplyResult = {
 // invoice PAID, and tag classifiedBy='ap-match'. The linked line then drops
 // out of P&L opex (it settles a liability, not a new expense). Idempotent and
 // transactional. Dry-run (commit=false) reports what WOULD apply.
+// The single write: link the bank line to its invoice + mark the invoice paid.
+// Idempotent + transactional. Shared by the rules-tier auto-apply and the
+// LLM-verified review-tier apply.
+export async function writeApMatch(m: ApMatch): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true } });
+    if (line?.apInvoiceId) return; // already matched — idempotent
+    const inv = await tx.invoice.findUnique({ where: { id: m.invoiceId }, select: { status: true, amount: true } });
+    if (!inv || inv.status === "PAID") return;
+    await tx.bankStatementLine.update({
+      where: { id: m.bankLineId },
+      data: { apInvoiceId: m.invoiceId, apMatchedAt: new Date(), classifiedBy: "ap-match" },
+    });
+    await tx.invoice.update({
+      where: { id: m.invoiceId },
+      data: { amountPaid: inv.amount, status: "PAID", paidAt: new Date(m.bankDate + "T00:00:00Z"), paidVia: "bank-ap-match" },
+    });
+  });
+}
+
 export async function applyApMatches(opts: { commit?: boolean; sinceDays?: number } = {}): Promise<ApplyResult> {
   const commit = opts.commit ?? false;
   const { auto } = await proposeApMatches({ sinceDays: opts.sinceDays });
@@ -202,22 +222,7 @@ export async function applyApMatches(opts: { commit?: boolean; sinceDays?: numbe
   for (const m of auto) {
     const v = verifyMatch(m);
     if (!v.ok) { skipped.push({ payee: m.payee, amount: m.amount, reason: v.reason! }); continue; }
-    if (commit) {
-      await prisma.$transaction(async (tx) => {
-        const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true } });
-        if (line?.apInvoiceId) return; // already matched — idempotent
-        const inv = await tx.invoice.findUnique({ where: { id: m.invoiceId }, select: { status: true, amount: true } });
-        if (!inv || inv.status === "PAID") return;
-        await tx.bankStatementLine.update({
-          where: { id: m.bankLineId },
-          data: { apInvoiceId: m.invoiceId, apMatchedAt: new Date(), classifiedBy: "ap-match" },
-        });
-        await tx.invoice.update({
-          where: { id: m.invoiceId },
-          data: { amountPaid: inv.amount, status: "PAID", paidAt: new Date(m.bankDate + "T00:00:00Z"), paidVia: "bank-ap-match" },
-        });
-      });
-    }
+    if (commit) await writeApMatch(m);
     applied++;
   }
   return { committed: commit, applied, skipped };

@@ -6,17 +6,27 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { applyApMatches } from "@/lib/finance/ap-match";
+import { applyVerifiedReview } from "@/lib/finance/agents/ap-verifier";
 import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 180;
 
 export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
   try {
-    const result = await applyApMatches({ commit: true, sinceDays: 120 });
-    return NextResponse.json({ applied: result.applied, skipped: result.skipped.length });
+    // 1) rules tier — amount-exact + name-confirmed → auto-clear.
+    const auto = await applyApMatches({ commit: true, sinceDays: 120 });
+    // 2) review tier — LLM verifier judges the gray zone; confident confirms
+    //    auto-clear, rejects drop, only true uncertainties stay for a human.
+    const review = await applyVerifiedReview({ commit: true, sinceDays: 120 });
+    return NextResponse.json({
+      autoApplied: auto.applied,
+      reviewConfirmedApplied: review.confirmedApplied,
+      reviewRejected: review.rejected,
+      reviewUncertain: review.uncertain,
+    });
   } catch (err) {
     console.error("[cron/ap-match-apply]", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "apply failed" }, { status: 500 });
