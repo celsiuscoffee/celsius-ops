@@ -1,11 +1,15 @@
-// AP register import — turns the owner's "payment request" Google Sheet into
-// procurement Invoice rows so the unmatched bank outflows have something to
-// match against. The sheet is the source of truth for what each outflow was
-// (vendor, invoice no, amount, outlet); the bank feed only has the payment. Once
-// imported, the existing AP-match (ap-match.ts) links invoice ↔ bank line.
+// AP register import — ONE-OFF MIGRATION. This Google Sheet was the previous
+// payment-request system, before the procurement module existed. It is NOT a
+// live source (procurement is) — run this once to backfill the historical
+// invoices so the pre-procurement bank outflows have something to match against.
+// Do not wire it into a recurring cron.
+//
+// Each row says what an outflow was (vendor, invoice no, amount, outlet); the
+// bank feed only has the payment. We create procurement Invoice rows; the
+// existing AP-match (ap-match.ts) then links invoice ↔ bank line.
 //
 // The sheet is link-shareable, so we fetch its CSV export directly (no auth).
-// Idempotent: an invoice number already in the DB is skipped, so re-running only
+// Idempotent: an invoice number already in the DB is skipped, so a re-run only
 // fills gaps. Imported invoices are one-off-vendor (vendorName, no Supplier
 // record) with status PENDING — the matcher then settles + marks them paid.
 
