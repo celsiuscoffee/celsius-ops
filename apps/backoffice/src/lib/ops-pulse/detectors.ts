@@ -207,6 +207,36 @@ export async function detectReviews(now: Date): Promise<Breach[]> {
     });
   }
 
+  // Happy-but-fixable (4-5★): the review was auto-replied, but the auto-reply
+  // cron caught a concrete improvement in the praise. Surface it so a good
+  // review's fixable point isn't lost. LOW severity (informational, not an
+  // incident); copy stays positive so the team reads it as a tip, not a blame.
+  const flags = await prisma.reviewImprovementFlag.findMany({
+    where: { status: "open", createdAt: { gte: since } },
+    select: {
+      id: true,
+      outletId: true,
+      rating: true,
+      point: true,
+      outlet: { select: { name: true, status: true } },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 100,
+  });
+  for (const fl of flags) {
+    if (fl.outlet.status !== "ACTIVE") continue;
+    breaches.push({
+      signal: "REVIEW",
+      outletId: fl.outletId,
+      outletName: fl.outlet.name,
+      severity: "LOW",
+      routeKey: "operations",
+      dedupeKey: `REVIEW:IMP:${fl.id}`,
+      summary: `${fl.rating}★ happy guest with a fixable note at ${fl.outlet.name}: ${clip(fl.point, 160)}`,
+      detail: { source: "positive_improvement", flagId: fl.id, rating: fl.rating },
+    });
+  }
+
   return breaches;
 }
 

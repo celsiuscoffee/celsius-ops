@@ -309,7 +309,9 @@ export async function runReviewNudges(now = new Date()): Promise<NudgeRunResult>
     if (team.length === 0) console.warn(`[ops-nudge:review] no on-shift team for ${outletName} — only managers notified`);
   }
 
-  const headline = `${managerLines.length} new guest review${managerLines.length === 1 ? "" : "s"} need a response`;
+  // "need attention" not "need a response": the list mixes reviews awaiting a
+  // reply with happy-but-fixable notes (already auto-replied) that just want action.
+  const headline = `${managerLines.length} guest review${managerLines.length === 1 ? "" : "s"} need attention`;
   const managerSent = await sendManagerDigestToOps(headline, managerLines, mode);
   return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }

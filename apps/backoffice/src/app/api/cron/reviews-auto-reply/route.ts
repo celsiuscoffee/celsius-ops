@@ -3,10 +3,16 @@ import { checkCronAuth } from "@celsius/shared";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews, replyToReview } from "@/lib/reviews/gbp";
-import { generateReply, POSITIVE_THRESHOLD } from "@/lib/reviews/auto-reply";
+import { generateReply, extractImprovement, POSITIVE_THRESHOLD } from "@/lib/reviews/auto-reply";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+// While we reply to each happy (4-5★) review, also catch any fixable point
+// buried in the praise and flag it for the ops review-nudge (WhatsApp). Default
+// on; set REVIEWS_IMPROVEMENT_FLAGS_ENABLED=false to pause without a deploy.
+const IMPROVEMENT_FLAGS_ENABLED =
+  (process.env.REVIEWS_IMPROVEMENT_FLAGS_ENABLED || "true").toLowerCase() !== "false";
 
 // Scheduled auto-reply for POSITIVE (4-5★) Google reviews only.
 //
@@ -30,6 +36,7 @@ type OutletResult = {
   candidates: number;
   posted: number;
   failed: number;
+  flagged: number; // happy reviews with a fixable point, surfaced to ops
   error?: string;
 };
 
@@ -53,6 +60,7 @@ export async function GET(req: NextRequest) {
   const results: OutletResult[] = [];
   let totalPosted = 0;
   let totalFailed = 0;
+  let totalFlagged = 0;
 
   for (const outlet of connected) {
     if (totalPosted >= MAX_TOTAL) break;
@@ -73,6 +81,7 @@ export async function GET(req: NextRequest) {
 
       let posted = 0;
       let failed = 0;
+      let flagged = 0;
 
       for (const review of candidates) {
         if (posted >= MAX_PER_OUTLET || totalPosted + posted >= MAX_TOTAL) break;
@@ -94,6 +103,39 @@ export async function GET(req: NextRequest) {
             reply,
           );
           posted++;
+
+          // Happy-but-fixable: read the praise for a concrete point and flag it
+          // for the ops review-nudge. Isolated — a classifier slip never fails
+          // the reply we just posted. Skip comment-less ratings (nothing to read).
+          if (IMPROVEMENT_FLAGS_ENABLED && review.comment?.trim()) {
+            try {
+              const verdict = await extractImprovement({
+                rating: review.rating,
+                comment: review.comment,
+                outletName: outlet.name,
+              });
+              if (verdict.actionable) {
+                await prisma.reviewImprovementFlag.upsert({
+                  where: { reviewId: review.id },
+                  create: {
+                    reviewId: review.id,
+                    outletId: outlet.id,
+                    reviewerName: review.reviewer.name,
+                    rating: review.rating,
+                    comment: review.comment,
+                    point: verdict.point,
+                  },
+                  update: { point: verdict.point },
+                });
+                flagged++;
+              }
+            } catch (cErr) {
+              console.error(
+                `[reviews-auto-reply] improvement-flag failed for review ${review.id} (${outlet.name}):`,
+                cErr,
+              );
+            }
+          }
         } catch (err) {
           console.error(
             `[reviews-auto-reply] failed for review ${review.id} (${outlet.name}):`,
@@ -105,12 +147,14 @@ export async function GET(req: NextRequest) {
 
       totalPosted += posted;
       totalFailed += failed;
+      totalFlagged += flagged;
       results.push({
         outletId: outlet.id,
         outletName: outlet.name,
         candidates: candidates.length,
         posted,
         failed,
+        flagged,
       });
     } catch (err) {
       console.error(
@@ -123,6 +167,7 @@ export async function GET(req: NextRequest) {
         candidates: 0,
         posted: 0,
         failed: 0,
+        flagged: 0,
         error: "fetch_failed",
       });
     }
@@ -134,6 +179,7 @@ export async function GET(req: NextRequest) {
     max_per_outlet: MAX_PER_OUTLET,
     total_posted: totalPosted,
     total_failed: totalFailed,
+    total_flagged: totalFlagged,
     results,
   });
 }
