@@ -365,17 +365,15 @@ const NAV_SECTIONS: NavSection[] = [
       // moduleKey starts with "finance:" — canAccess hard-restricts these to
       // OWNER/ADMIN regardless of moduleAccess, so the section won't render
       // in the rail for managers/staff.
-      { label: "Home", href: "/finance", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "finance:home" },
       { label: "Ledger", href: "/finance/transactions", icon: <FileText className={ICON_SIZE} />, moduleKey: "finance:transactions" },
       { label: "Reports", href: "/finance/reports", icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "finance:reports" },
       { label: "Reconciliation", href: "/finance/recon", icon: <Scale className={ICON_SIZE} />, moduleKey: "finance:reports" },
-      { label: "Compliance", href: "/finance/compliance", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "finance:compliance" },
       // Legacy (pre-agentic) views — kept until the new module reaches parity.
       { label: "Cashflow", href: "/finance/cashflow", icon: <LineChart className={ICON_SIZE} />, moduleKey: "finance:cashflow" },
       { label: "Cash Tracking", href: "/finance/cash-tracking", icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
-      { label: "Bank Statements", href: "/finance/bank-statements", icon: <Banknote className={ICON_SIZE} />, moduleKey: "finance:bank-statements" },
-      { label: "Payouts", href: "/finance/payouts", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "finance:payouts" },
-      { label: "Recurring Expenses", href: "/finance/recurring-expenses", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "finance:recurring-expenses" },
+      // Hidden from the rail (Home/Compliance/Bank Statements/Payouts/Recurring
+      // Expenses) — pages still exist, just dropped from nav per owner. Re-add a
+      // line here to restore any of them.
     ],
   },
   {
