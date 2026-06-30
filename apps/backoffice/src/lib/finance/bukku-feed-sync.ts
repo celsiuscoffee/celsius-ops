@@ -11,6 +11,7 @@
 // Self-healing — a missed day is caught on the next run.
 
 import { prisma } from "@/lib/prisma";
+import { classifyBankLine } from "./bank-line-classifier";
 import {
   listBankFeeds,
   fetchRawFeedLines,
@@ -123,6 +124,19 @@ async function syncAccount(
   });
 
   if (commit) {
+    // Outlet hints come from the line description (CONEZION / TAMARIND / etc.).
+    const outlets = await prisma.outlet.findMany({ select: { id: true, code: true } });
+    const codeToId = new Map(outlets.map((o) => [o.code, o.id]));
+    const classify = (l: BukkuBankLineDraft) => {
+      const cls = classifyBankLine({ description: l.description, reference: l.reference, amount: l.amount, direction: l.direction, accountKey: accountName });
+      return {
+        category: cls.category,
+        outletId: cls.outletCode ? codeToId.get(cls.outletCode) ?? null : null,
+        // Transfers are inter-co by construction; otherwise trust the rule.
+        isInterCo: l.isInterCo || cls.isInterCo,
+        ruleName: cls.ruleName,
+      };
+    };
     await prisma.$transaction(async (tx) => {
       await tx.bankStatement.deleteMany({ where: { accountName, notes: FEED_NOTE } });
       for (let i = 0; i < plans.length; i++) {
@@ -137,11 +151,15 @@ async function syncAccount(
             closingBalance: s.closing, totalInflows: s.cr, totalOutflows: s.dr,
             uploadedById: adminId, notes: FEED_NOTE,
             lines: {
-              create: s.lines.map((l) => ({
-                txnDate: new Date(l.txnDate + "T00:00:00Z"), description: l.description,
-                reference: l.reference, amount: l.amount, direction: l.direction,
-                isInterCo: l.isInterCo, classifiedBy: FEED_NOTE,
-              })),
+              create: s.lines.map((l) => {
+                const c = classify(l);
+                return {
+                  txnDate: new Date(l.txnDate + "T00:00:00Z"), description: l.description,
+                  reference: l.reference, amount: l.amount, direction: l.direction,
+                  category: c.category, outletId: c.outletId, isInterCo: c.isInterCo,
+                  classifiedBy: "rule", ruleName: c.ruleName,
+                };
+              }),
             },
           },
         });

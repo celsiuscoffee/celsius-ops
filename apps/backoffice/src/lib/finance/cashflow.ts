@@ -91,7 +91,7 @@ export type CashflowResult = {
   // generate cash this month?"
   operatingCashFlow: Array<{
     month: string;
-    sales: { card: number; qr: number; storehub: number; grab: number; foodpanda: number; gastrohub: number; meetings: number; total: number };
+    sales: { card: number; qr: number; storehub: number; grab: number; foodpanda: number; gastrohub: number; meetings: number; revenueMonster: number; total: number };
     costs: {
       payroll: number;        // EMPLOYEE_SALARY + PARTIMER + STATUTORY + STAFF_CLAIM + PETTY_CASH (excl directors)
       cogs: number;           // RAW_MATERIALS + DELIVERY
@@ -297,8 +297,19 @@ async function projectMarketing(start: Date, end: Date): Promise<{ date: Date; a
 // Sales channels — DOW-shaped projection (revenue varies by day-of-week)
 const SALES_INFLOW_CATEGORIES = [
   "CARD", "QR", "STOREHUB", "GRAB", "GRAB_PUTRAJAYA",
-  "FOODPANDA", "MEETINGS_EVENTS", "GASTROHUB",
+  "FOODPANDA", "MEETINGS_EVENTS", "GASTROHUB", "REVENUE_MONSTER",
 ] as const;
+
+// Non-operating DR — financing / distributions / capex. These are lumpy and
+// discretionary (dividends, director draws, loan repayments, equipment,
+// renovations, inter-co investing), NOT a steady operating cost, so they are
+// EXCLUDED from the daily "other outflow" burn smear. Smearing them was what
+// dragged the forward projection far too negative. Still visible in actuals;
+// just not extrapolated as a recurring weekly burn.
+const NON_OPERATING_DR = new Set<string>([
+  "DIVIDEND", "DIRECTORS_ALLOWANCE", "CAPITAL", "LOAN",
+  "EQUIPMENTS", "INVESTMENTS", "INTERCO_INVESTMENTS", "INTERCO_EXPENSES",
+]);
 
 // COGS — separate column for raw materials + delivery. Daily rate
 // smearing is the right model: suppliers paid throughout the week.
@@ -393,7 +404,12 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
         // on their actual due dates. Including them here would
         // double-count.
       }
-      else otherOutSum += amt;  // directors, partimer, marketing, capex, catch-alls
+      else if (NON_OPERATING_DR.has(cat)) {
+        // Skip — financing / distributions / capex are lumpy and
+        // discretionary, not a recurring operating burn. Smearing them
+        // as a daily rate dragged the projection far too negative.
+      }
+      else otherOutSum += amt;  // partimer, marketing, petty cash, catch-alls
     }
   }
 
@@ -1124,7 +1140,7 @@ async function loadOperatingCashFlow(): Promise<CashflowResult["operatingCashFlo
   function emptyRow(month: string): Row {
     return {
       month,
-      sales: { card: 0, qr: 0, storehub: 0, grab: 0, foodpanda: 0, gastrohub: 0, meetings: 0, total: 0 },
+      sales: { card: 0, qr: 0, storehub: 0, grab: 0, foodpanda: 0, gastrohub: 0, meetings: 0, revenueMonster: 0, total: 0 },
       costs: { payroll: 0, cogs: 0, rent: 0, utilities: 0, marketing: 0, software: 0, taxCompliance: 0, maintenance: 0, total: 0 },
       operatingNet: 0,
     };
@@ -1148,6 +1164,7 @@ async function loadOperatingCashFlow(): Promise<CashflowResult["operatingCashFlo
         case "FOODPANDA":      row.sales.foodpanda+= amt; break;
         case "GASTROHUB":      row.sales.gastrohub+= amt; break;
         case "MEETINGS_EVENTS":row.sales.meetings += amt; break;
+        case "REVENUE_MONSTER":row.sales.revenueMonster += amt; break;
         // Other CR categories (LOAN, CAPITAL, OTHER_INFLOW, refunds)
         // are NOT operating — excluded.
       }
@@ -1189,7 +1206,7 @@ async function loadOperatingCashFlow(): Promise<CashflowResult["operatingCashFlo
   return Array.from(byMonth.values())
     .sort((a, b) => a.month.localeCompare(b.month))
     .map((r) => {
-      const salesTotal = r.sales.card + r.sales.qr + r.sales.storehub + r.sales.grab + r.sales.foodpanda + r.sales.gastrohub + r.sales.meetings;
+      const salesTotal = r.sales.card + r.sales.qr + r.sales.storehub + r.sales.grab + r.sales.foodpanda + r.sales.gastrohub + r.sales.meetings + r.sales.revenueMonster;
       const costsTotal = r.costs.payroll + r.costs.cogs + r.costs.rent + r.costs.utilities + r.costs.marketing + r.costs.software + r.costs.taxCompliance + r.costs.maintenance;
       r.sales.total = round2(salesTotal);
       r.costs.total = round2(costsTotal);
@@ -1200,6 +1217,7 @@ async function loadOperatingCashFlow(): Promise<CashflowResult["operatingCashFlo
       r.sales.foodpanda = round2(r.sales.foodpanda);
       r.sales.gastrohub = round2(r.sales.gastrohub);
       r.sales.meetings = round2(r.sales.meetings);
+      r.sales.revenueMonster = round2(r.sales.revenueMonster);
       r.costs.payroll = round2(r.costs.payroll);
       r.costs.cogs = round2(r.costs.cogs);
       r.costs.rent = round2(r.costs.rent);
