@@ -88,12 +88,18 @@ export interface EscalatableAlert {
 // NO_CLOCK_IN, POS_NOT_OPEN. MENU_SNOOZED is real-time but self-clears, so it's
 // excluded. AUDIT/skill escalation is pending the routine-ledger path (they're
 // daily, not real-time, so they aren't persisted here yet).
+//
+// Exception: LOW-severity REVIEW alerts are the happy-but-fixable notes from
+// positive reviews (negatives are always MED/HIGH). They're improvement TIPS,
+// not incidents — nobody acks a tip, so without this they'd all bubble to the
+// owner after the SLA. Keep them with the team/managers; never escalate.
 export async function findEscalatable(slaMinutes: number, now: Date): Promise<EscalatableAlert[]> {
   const cutoff = new Date(now.getTime() - slaMinutes * 60_000);
   return prisma.opsAlert.findMany({
     where: {
       status: "OPEN",
       signal: { in: ["CHECKLIST", "REVIEW", "RECEIVING", "NO_CLOCK_IN", "POS_NOT_OPEN"] },
+      NOT: { signal: "REVIEW", severity: "LOW" }, // positive-review improvement tips don't escalate
       escalatedAt: null,
       sentAt: { not: null, lt: cutoff },
     },
