@@ -22,7 +22,7 @@ export type ApVerdict = {
   reason: string;
 };
 
-const SYSTEM = `You verify whether a bank payment settles a specific supplier invoice for a coffee chain. Be strict: a matching amount alone is NOT enough — Malaysian bank lines for salaries, part-timer wages ("PT Week"), rent, owner transfers, and unrelated vendors frequently collide on amount. Confirm ONLY if the bank line's payee/reference clearly corresponds to the invoice's supplier. Reject if the bank line is plainly a different kind of payment (payroll, rent, transfer, a different company). Use "uncertain" when you genuinely cannot tell. Output ONLY JSON: {"verdict":"confirm|reject|uncertain","confidence":0.0,"reason":"one short line"}.`;
+const SYSTEM = `You verify whether a bank payment settles a specific vendor invoice for a coffee chain. The invoice may be for raw materials, packaging, services, MARKETING (e.g. PXL Marketing, agencies, KOLs), rent, or equipment — all are valid vendor invoices. Be strict: a matching amount alone is NOT enough — Malaysian bank lines for salaries, part-timer wages ("PT Week"), statutory payments (EPF/SOCSO), owner draws, and unrelated companies frequently collide on amount. Confirm ONLY if the bank line's payee/reference clearly corresponds to the invoice's vendor (e.g. invoice "PXL Marketing" matches bank "PXL MARKETING SDN"). Reject if the bank line is plainly a different kind of payment (payroll/PT-week, statutory, an internal transfer, or a different company). Use "uncertain" when you genuinely cannot tell. Output ONLY JSON: {"verdict":"confirm|reject|uncertain","confidence":0.0,"reason":"one short line"}.`;
 
 function buildPrompt(m: ApMatch): string {
   return `# Invoice
