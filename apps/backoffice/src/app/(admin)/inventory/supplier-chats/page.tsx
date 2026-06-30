@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, Fragment, type ReactNode } from "react";
+import { ChatDateDivider } from "@/components/chat-date-divider";
+import { mytDayKey, chatDayLabel } from "@/lib/chat-day";
 import { useSearchParams } from "next/navigation";
 import { useFetch } from "@/lib/use-fetch";
 import { formatRM } from "@celsius/shared";
@@ -915,9 +917,13 @@ export default function SupplierChatsPage() {
               {detail.messages.length === 0 && (
                 <p className="m-auto text-xs text-muted-foreground">No messages in this thread yet.</p>
               )}
-              {detail.messages.map((m) => (
+              {detail.messages.map((m, i) => {
+                const showDivider =
+                  i === 0 || mytDayKey(detail.messages[i - 1].timestamp) !== mytDayKey(m.timestamp);
+                return (
+                <Fragment key={m.id}>
+                {showDivider && <ChatDateDivider label={chatDayLabel(m.timestamp)} />}
                 <div
-                  key={m.id}
                   className={`group flex items-center gap-1.5 ${
                     m.direction === "outbound" ? "flex-row-reverse self-end" : "self-start"
                   } max-w-[80%]`}
@@ -972,7 +978,9 @@ export default function SupplierChatsPage() {
                     <Reply size={13} />
                   </button>
                 </div>
-              ))}
+                </Fragment>
+                );
+              })}
               {/* Agent's ASSIST suggestion — inline at the bottom of the thread, in the
                   conversation flow, instead of off in the side panel. */}
               {detail.agentProposal && (

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { ChatDateDivider } from "@/components/chat-date-divider";
+import { mytDayKey, chatDayLabel } from "@/lib/chat-day";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Loader2, Activity, ArrowUpRight, ArrowDownLeft, RefreshCw, AlertTriangle } from "lucide-react";
@@ -134,10 +136,17 @@ export default function MessagesPanel() {
           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No messages match these filters.</div>
         ) : (
           <ul className="space-y-1.5">
-            {messages.map((m) => {
+            {messages.map((m, i) => {
               const failed = m.status === "failed";
+              const showDivider = i === 0 || mytDayKey(messages[i - 1].at) !== mytDayKey(m.at);
               return (
-                <li key={m.id} className={"rounded-lg border p-2.5 " + (failed ? "border-red-200 bg-red-50/40" : "bg-card")}>
+                <Fragment key={m.id}>
+                {showDivider && (
+                  <li>
+                    <ChatDateDivider label={chatDayLabel(m.at)} />
+                  </li>
+                )}
+                <li className={"rounded-lg border p-2.5 " + (failed ? "border-red-200 bg-red-50/40" : "bg-card")}>
                   <div className="flex items-center gap-1.5">
                     {m.direction === "out" ? (
                       <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -153,6 +162,7 @@ export default function MessagesPanel() {
                   </div>
                   <div className="mt-1 whitespace-pre-wrap break-words pl-5 text-xs text-muted-foreground line-clamp-4">{m.body || `<${m.type}>`}</div>
                 </li>
+                </Fragment>
               );
             })}
           </ul>
