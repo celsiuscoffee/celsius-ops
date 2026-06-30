@@ -20,6 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { getDefaultCompanyId } from "../companies";
 import type { PnlReport, PnlLine } from "./pnl";
+import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -136,46 +137,52 @@ export async function buildSourcedPnl(input: {
   const client = getFinanceClient();
   const defaultCompany = await getDefaultCompanyId();
 
-  // ─── INCOME: net sales from the AR EOD feed (incl. drafts) ───────────────
-  const { data: incomeAccts } = await client
-    .from("fin_accounts").select("code, name").eq("type", "income");
-  const incomeName = new Map((incomeAccts ?? []).map((a) => [a.code as string, a.name as string]));
-
-  const { data: txns } = await client
-    .from("fin_transactions")
-    .select("id")
-    .eq("company_id", companyId)
-    .in("status", ["draft", "posted"])
-    .gte("txn_date", start)
-    .lte("txn_date", end);
-  const txnIds = (txns ?? []).map((t) => t.id as string);
-
-  const incomeByCode = new Map<string, number>();
-  let totalIncome = 0;
-  for (let i = 0; i < txnIds.length; i += 200) {
-    const chunk = txnIds.slice(i, i + 200);
-    const { data: lines } = await client
-      .from("fin_journal_lines")
-      .select("account_code, debit, credit")
-      .in("transaction_id", chunk);
-    for (const l of lines ?? []) {
-      const code = l.account_code as string;
-      if (!incomeName.has(code)) continue;
-      const v = Number(l.credit) - Number(l.debit); // income is credit-normal
-      incomeByCode.set(code, (incomeByCode.get(code) ?? 0) + v);
-      totalIncome += v;
-    }
-  }
-  const incomeLines: PnlLine[] = [...incomeByCode.entries()]
-    .filter(([, amt]) => round2(amt) !== 0)
-    .map(([code, amt]) => ({ code, name: incomeName.get(code) ?? code, amount: round2(amt), parentCode: null }))
-    .sort((a, b) => a.code.localeCompare(b.code));
-  totalIncome = round2(totalIncome);
-
-  // ─── COGS: supplier invoices (procurement) ───────────────────────────────
+  // Company's outlets (UUIDs) — drive both revenue and COGS.
   const { data: oc } = await client
     .from("fin_outlet_companies").select("outlet_id").eq("company_id", companyId);
   const outletIds = (oc ?? []).map((r) => r.outlet_id as string);
+
+  // ─── INCOME: actual GROSS sales, cutover-aware (StoreHub history + POS-native
+  // + pickup) — the SAME source the sales dashboard uses. Replaces the
+  // under-posting AR-EOD ledger (which read ~RM250k vs ~RM345k actual). SST is
+  // 0 so gross ≈ net. Split by channel: in-store / online / Grab / FoodPanda.
+  const outletRows = outletIds.length
+    ? await prisma.outlet.findMany({
+        where: { id: { in: outletIds } },
+        select: { id: true, loyaltyOutletId: true, pickupStoreId: true, posNativeCutoverAt: true },
+      })
+    : [];
+  const rev = { instore: 0, online: 0, grab: 0, foodpanda: 0 };
+  let saleCount = 0;
+  const perOutlet = await Promise.all(
+    outletRows.map((o) =>
+      getUnifiedSalesForOutlet(
+        { outletId: o.id, storehubStoreId: null, loyaltyOutletId: o.loyaltyOutletId, pickupStoreId: o.pickupStoreId, cutoverAt: o.posNativeCutoverAt },
+        dStart(start),
+        dEnd(end),
+      ),
+    ),
+  );
+  for (const sales of perOutlet) {
+    for (const s of sales) {
+      saleCount++;
+      const lbl = (s.channelLabel ?? "").toLowerCase();
+      if (/grab/.test(lbl)) rev.grab += s.total;
+      else if (/panda/.test(lbl)) rev.foodpanda += s.total;
+      else if (s.isDeliveryQR || s.channel === "delivery") rev.online += s.total;
+      else rev.instore += s.total;
+    }
+  }
+  const grabGrossRevenue = round2(rev.grab); // gross Grab, for the commission line
+  const incomeLines: PnlLine[] = [
+    { code: "REV-INSTORE", name: "Sales — In-store (dine-in + takeaway)", amount: round2(rev.instore), parentCode: null },
+    { code: "REV-ONLINE", name: "Sales — Online (pickup + table-QR)", amount: round2(rev.online), parentCode: null },
+    { code: "REV-GRAB", name: "Sales — GrabFood (gross)", amount: round2(rev.grab), parentCode: null },
+    { code: "REV-PANDA", name: "Sales — FoodPanda", amount: round2(rev.foodpanda), parentCode: null },
+  ].filter((l) => l.amount !== 0);
+  const totalIncome = round2(rev.instore + rev.online + rev.grab + rev.foodpanda);
+
+  // ─── COGS: Opening inventory + Purchases − Closing inventory ──────────────
   const invDate = { gte: dStart(start), lte: dEnd(end) };
   const invAgg = await prisma.invoice.aggregate({
     _sum: { amount: true },
@@ -272,11 +279,8 @@ export async function buildSourcedPnl(input: {
   // GrabFood commission (marketplace fee) — estimated on the gross Grab
   // revenue booked above, since Grab nets it out before payout (never in the
   // bank feed). Find the Grab income code(s) and apply the rate.
-  const grabGross = [...incomeByCode.entries()]
-    .filter(([code]) => /grab/i.test(incomeName.get(code) ?? code))
-    .reduce((s, [, v]) => s + v, 0);
-  if (grabGross > 0) {
-    const grabComm = round2(grabGross * GRAB_COMMISSION_RATE);
+  if (grabGrossRevenue > 0) {
+    const grabComm = round2(grabGrossRevenue * GRAB_COMMISSION_RATE);
     expenseLines.push({
       code: "MKT-GRAB-COMM",
       name: `Marketplace fee — GrabFood commission (est. ${Math.round(GRAB_COMMISSION_RATE * 100)}%)`,
@@ -329,6 +333,6 @@ export async function buildSourcedPnl(input: {
     grossProfit,
     expenses: { type: "expense", total: totalExpenses, lines: expenseLines },
     netIncome,
-    txnCount: txnIds.length,
+    txnCount: saleCount,
   };
 }
