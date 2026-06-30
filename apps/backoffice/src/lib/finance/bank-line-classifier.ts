@@ -141,7 +141,10 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "purpose_stat_pay",         match: /\b(STAT\s*PAY|STATUTORY)\b/i,           direction: "DR", category: "STATUTORY_PAYMENT" as CashCategory },
   { name: "purpose_inventory",        match: /\bINVENTORY\b/i,                        direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "purpose_digital_ads",      match: /\bDIGITAL\s*ADS?\b/i,                   direction: "DR", category: "DIGITAL_ADS" as CashCategory },
-  { name: "purpose_marketing_generic",match: /\bMARKETING\b/i,                        direction: "DR", category: "OTHER_MARKETING" as CashCategory },
+  // NOTE: deliberately NO generic /\bMARKETING\b/ rule. Vendors named "PXL
+  // Marketing", "BEST Marketing & Distribution", "Shriyo Marketing" are goods
+  // SUPPLIERS, not ad spend; a name-sweep mis-booked them as marketing. Real
+  // marketing = Google Ads (ads module) + SMS Niaga only (rules below).
   { name: "purpose_rent",             match: /\bRENT(AL)?\b/i,                        direction: "DR", category: "RENT" as CashCategory },
   { name: "purpose_utility",          match: /\bUTILIT(Y|IES)\b/i,                    direction: "DR", category: "UTILITIES" as CashCategory },
   { name: "purpose_software",         match: /\bSOFTWARE|\bSAAS\b|\bSUBSCRIPTION\b/i, direction: "DR", category: "SOFTWARE" as CashCategory },
@@ -186,10 +189,12 @@ const OUTFLOW_RULES: Rule[] = [
   // Bank fees
   { name: "bank_fee",       match: /\b(SERVICE\s*FEE|HANDLING\s*FEE|BANK\s*CHARGE|MAINTENANCE\s*FEE|GIRO\s*FEE)\b/i, direction: "DR", category: "BANK_FEE" as CashCategory },
 
-  // Marketing — Digital Ads, KOL, content
+  // Marketing — for now ONLY Google Ads + SMS Niaga (per owner). Google Ads is
+  // also pulled from the ads module, so DIGITAL_ADS is DEDUPED out of the bank
+  // P&L; SMS Niaga is real bank-only spend → OTHER_MARKETING (counted, kept).
   { name: "marketing_digital_ads_meta",  match: /\b(META PLATFORMS|FACEBOOK|INSTAGRAM)\b/i, direction: "DR", category: "DIGITAL_ADS" as CashCategory },
-  { name: "marketing_digital_ads_google",match: /\bGOOGLE\s*ADS\b/i,         direction: "DR", category: "DIGITAL_ADS" as CashCategory },
-  { name: "marketing_pxl",               match: /\bPXL\s*MARKETING\b/i,       direction: "DR", category: "DIGITAL_ADS" as CashCategory },
+  { name: "marketing_digital_ads_google",match: /\bGOOGLE\s*ADS\b/i,            direction: "DR", category: "DIGITAL_ADS" as CashCategory },
+  { name: "marketing_sms_niaga",         match: /\bSMS\s*NIAGA\b|\bSMSNIAGA\b/i, direction: "DR", category: "OTHER_MARKETING" as CashCategory },
 
   // Marketplace fees — GrabFood / FP commissions
   { name: "marketplace_grab_fee",        match: /\bGRABFOOD\s*COMMISSION\b/i, direction: "DR", category: "MARKETPLACE_FEE" as CashCategory },
