@@ -55,6 +55,52 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ key
     return NextResponse.json({ ok: true, dismissed: true });
   }
 
+  // Apply a supplier-sent invoice REVISION the agent proposed (amount and/or number).
+  // SAFE by construction: the values come from the agent-stamped proposal on THIS message
+  // (never the request body), and a PAID / part-paid invoice is refused outright — money has
+  // moved, so a human edits it manually. Only amount + invoiceNumber change; status/payment never.
+  if (action === "apply_invoice_revision") {
+    const proposal = (raw.proposal ?? {}) as Record<string, unknown>;
+    const invoiceAction = (proposal.invoiceAction ?? null) as
+      | { invoiceId?: string; invoiceNumber?: string; toAmount?: number | null; toNumber?: string | null }
+      | null;
+    if (!invoiceAction?.invoiceId) {
+      return NextResponse.json({ error: "No invoice revision on this proposal." }, { status: 400 });
+    }
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceAction.invoiceId },
+      select: { id: true, invoiceNumber: true, amount: true, status: true, amountPaid: true },
+    });
+    if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    if (invoice.status === "PAID" || Number(invoice.amountPaid ?? 0) > 0) {
+      return NextResponse.json(
+        { error: `Invoice ${invoice.invoiceNumber} is already paid/part-paid — edit it manually.` },
+        { status: 400 },
+      );
+    }
+    const data: { amount?: number; invoiceNumber?: string } = {};
+    if (typeof invoiceAction.toAmount === "number" && invoiceAction.toAmount > 0) data.amount = invoiceAction.toAmount;
+    if (typeof invoiceAction.toNumber === "string" && invoiceAction.toNumber.trim()) {
+      data.invoiceNumber = invoiceAction.toNumber.trim().slice(0, 64);
+    }
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: "Nothing to apply (no new amount or number)." }, { status: 400 });
+    }
+    try {
+      await prisma.invoice.update({ where: { id: invoice.id }, data });
+    } catch (e) {
+      // e.g. a unique invoiceNumber collision — surface it rather than 500.
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Update failed" }, { status: 400 });
+    }
+    await prisma.whatsAppMessage.update({
+      where: { id: message.id },
+      data: {
+        raw: { ...raw, proposalResolved: true, invoiceRevisionApplied: true, resolvedById: caller.id, resolvedAt: new Date().toISOString() },
+      },
+    });
+    return NextResponse.json({ ok: true, action, invoiceId: invoice.id, applied: data });
+  }
+
   // Apply path: needs the order + line, and only the two low-risk edits.
   if (!orderId || !poItemId) {
     return NextResponse.json({ error: "orderId and poItemId are required to apply" }, { status: 400 });

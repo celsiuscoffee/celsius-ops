@@ -103,6 +103,15 @@ type Detail = {
     paymentModel?: string;
     popDeliveryCritical?: boolean;
     poAction: { type: string; poItemId: string | null; itemName: string | null; newQuantity: number | null; note: string | null } | null;
+    invoiceAction: {
+      invoiceId: string;
+      invoiceNumber: string;
+      orderNumber: string;
+      fromAmount: number;
+      toAmount: number | null;
+      fromNumber: string;
+      toNumber: string | null;
+    } | null;
     at: string;
   } | null;
   agentReSource?: { orderId: string | null; supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean } | null;
@@ -623,6 +632,32 @@ export default function SupplierChatsPage() {
     }
   }
 
+  // Approve the agent's proposed invoice REVISION — the server applies the stamped amount/number
+  // change to the invoice (and refuses if it's already paid). ASSIST does the work; you only decide.
+  async function applyInvoiceRevision() {
+    const p = detail?.agentProposal;
+    if (!selected || applying || !p?.invoiceAction?.invoiceId) return;
+    setApplying(true);
+    setApplyError(null);
+    try {
+      const res = await fetch(`/api/inventory/supplier-chats/${selected}/apply-proposal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: p.messageId, action: "apply_invoice_revision" }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setApplyError(json.error ?? "Apply failed");
+        return;
+      }
+      mutateDetail();
+    } catch {
+      setApplyError("Network error");
+    } finally {
+      setApplying(false);
+    }
+  }
+
   // Clear the "Agent suggests" banner once you've handled it your own way (paid the
   // invoice, replied yourself, no PO change) — the resolution for escalations that have
   // no auto-appliable PO action, so the banner isn't a dead-end redirect.
@@ -952,7 +987,27 @@ export default function SupplierChatsPage() {
                       </div>
                     )}
                     <div className="text-[12px] text-foreground">
-                      {detail.agentProposal.poAction ? (
+                      {detail.agentProposal.invoiceAction ? (
+                        <>
+                          <span className="font-medium">Revised invoice</span>
+                          {detail.agentProposal.invoiceAction.orderNumber && <> · {detail.agentProposal.invoiceAction.orderNumber}</>}
+                          <div className="mt-0.5">
+                            {detail.agentProposal.invoiceAction.toAmount != null && (
+                              <>
+                                Amount RM{detail.agentProposal.invoiceAction.fromAmount.toFixed(2)} →{" "}
+                                <span className="font-semibold">RM{detail.agentProposal.invoiceAction.toAmount.toFixed(2)}</span>
+                              </>
+                            )}
+                            {detail.agentProposal.invoiceAction.toNumber && (
+                              <>
+                                {detail.agentProposal.invoiceAction.toAmount != null && " · "}
+                                No. {detail.agentProposal.invoiceAction.fromNumber} →{" "}
+                                <span className="font-semibold">{detail.agentProposal.invoiceAction.toNumber}</span>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      ) : detail.agentProposal.poAction ? (
                         <>
                           {detail.agentProposal.poAction.type === "substitute_item" && "Substitution offered"}
                           {detail.agentProposal.poAction.type === "cancel_order" && "Cancel requested"}
@@ -967,16 +1022,30 @@ export default function SupplierChatsPage() {
                       )}
                     </div>
                     <div className="mt-1 text-[10.5px] text-muted-foreground">
-                      Held for review: {detail.agentProposal.escalationReason}. The agent did not change the PO.
+                      Held for review: {detail.agentProposal.escalationReason}.{" "}
+                      {detail.agentProposal.invoiceAction
+                        ? "The agent did not change the invoice — approve to apply."
+                        : "The agent did not change the PO."}
                     </div>
                     {(() => {
                       const pa = detail.agentProposal.poAction;
+                      const ia = detail.agentProposal.invoiceAction;
                       const canApply =
                         !!pa?.poItemId &&
                         !!detail.agentProposal.orderId &&
                         (pa.type === "remove_item" || pa.type === "reduce_qty");
                       return (
                         <div className="mt-2 flex items-center gap-2">
+                          {ia && (
+                            <button
+                              onClick={applyInvoiceRevision}
+                              disabled={applying}
+                              className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                            >
+                              {applying ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                              Approve: update invoice
+                            </button>
+                          )}
                           {canApply && (
                             <button
                               onClick={applyProposal}
