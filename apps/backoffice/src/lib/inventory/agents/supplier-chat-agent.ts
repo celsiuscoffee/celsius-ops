@@ -691,12 +691,15 @@ async function captureInvoice(
       orderBy: { createdAt: "desc" },
       select: { id: true, orderNumber: true, outletId: true, totalAmount: true, status: true },
     });
-    const match = openPos.find(
+    const matches = openPos.filter(
       (p) => Math.abs(Number(p.totalAmount) - extractedTotal!) <= Math.max(1, Number(p.totalAmount) * 0.02),
     );
-    if (match) {
-      target = match;
-      targetConfident = true;
+    if (matches.length >= 1) {
+      target = matches[0]; // most-recent within tolerance — unchanged filing behaviour
+      // Only TRUST the match (enough to drive a revision proposal against this PO) when it is
+      // UNIQUE. Two open POs near the same total is ambiguous — file against the newest but
+      // don't let an ambiguous match propose editing that PO's invoice.
+      targetConfident = matches.length === 1;
     }
   }
 
@@ -707,16 +710,28 @@ async function captureInvoice(
   const amtChanged = (oldAmount: number) =>
     extractedTotal != null && Math.abs(oldAmount - extractedTotal) > Math.max(1, oldAmount * 0.02);
 
-  // (1) Strong signal: this supplier already has an invoice with this exact number, but the
-  //     amount changed → a corrected bill. High precision, independent of PO matching.
+  // A prior invoice is only REVISABLE if no money has moved against it (never propose touching a
+  // PAID / part-paid / deposit-paid bill — money's gone; the apply route hard-refuses these too,
+  // so detection must agree or the human gets a dead-end banner) AND it's RECENT — an old invoice
+  // that shares a REUSED number (suppliers reset invoice sequences monthly/per book) is a
+  // DIFFERENT bill, not a revision, so we must not propose rewriting it.
+  const REVISABLE_LOOKBACK_MS = 45 * 24 * 60 * 60 * 1000;
+  const isRevisable = (inv: { status: string; amountPaid: unknown; createdAt: Date }): boolean =>
+    Number(inv.amountPaid ?? 0) === 0 &&
+    inv.status !== "PAID" && inv.status !== "PARTIALLY_PAID" && inv.status !== "DEPOSIT_PAID" &&
+    Date.now() - +new Date(inv.createdAt) <= REVISABLE_LOOKBACK_MS;
+
+  // (1) Strong signal: this supplier has a RECENT, fully-unpaid invoice with this exact number,
+  //     but the amount changed → a corrected bill. (Recency + unpaid guard against a reused
+  //     invoice number sitting on an unrelated older bill.)
   const priorSameNo = extractedNumber
     ? await prisma.invoice.findFirst({
         where: { supplierId, invoiceNumber: extractedNumber },
         orderBy: { createdAt: "desc" },
-        select: { id: true, invoiceNumber: true, amount: true, status: true, order: { select: { orderNumber: true } } },
+        select: { id: true, invoiceNumber: true, amount: true, status: true, amountPaid: true, createdAt: true, order: { select: { orderNumber: true } } },
       })
     : null;
-  if (priorSameNo && priorSameNo.status !== "PAID" && amtChanged(Number(priorSameNo.amount))) {
+  if (priorSameNo && isRevisable(priorSameNo) && amtChanged(Number(priorSameNo.amount))) {
     console.log(
       `[supplier-agent] invoice REVISION (amount) ${priorSameNo.invoiceNumber}: ${Number(priorSameNo.amount)} → ${extractedTotal}`,
     );
@@ -738,13 +753,13 @@ async function captureInvoice(
   const priorOnPo = await prisma.invoice.findFirst({
     where: { orderId: target.id },
     orderBy: { createdAt: "desc" },
-    select: { id: true, invoiceNumber: true, amount: true, status: true },
+    select: { id: true, invoiceNumber: true, amount: true, status: true, amountPaid: true, createdAt: true },
   });
   if (priorOnPo) {
-    // (2) Re-issued invoice number on the SAME billed-total-matched PO (and it's not the same
-    //     number we already matched in (1)) → a replacement invoice: propose the number/amount update.
+    // (2) Re-issued invoice number on the SAME, UNIQUELY-matched PO (and not the same number we
+    //     already matched in (1)) → a replacement invoice: propose the number/amount update.
     const numberChanged = !!extractedNumber && extractedNumber !== priorOnPo.invoiceNumber;
-    if (targetConfident && priorOnPo.status !== "PAID" && numberChanged && !priorSameNo) {
+    if (targetConfident && isRevisable(priorOnPo) && numberChanged && !priorSameNo) {
       console.log(
         `[supplier-agent] invoice REVISION (number) po=${target.orderNumber} ${priorOnPo.invoiceNumber} → ${extractedNumber}`,
       );
