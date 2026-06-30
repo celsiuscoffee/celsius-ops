@@ -18,6 +18,18 @@
 //   tiers: AUTO ≥ 0.85 (needs amount-exact AND name) · REVIEW ≥ 0.55 · else none
 
 import { prisma } from "@/lib/prisma";
+import type { CashCategory } from "@celsius/db";
+
+// Categories that can never be the settlement of a SUPPLIER invoice — wages
+// (PT Week / part-timers), full-time salary, statutory (EPF/SOCSO/tax), director
+// draws, financing, bank fees, petty-cash float. These collided on amount with
+// real invoices and produced false matches; they're documented by a payment
+// slip (payment-slips.ts) instead of an AP match. Inter-co is already excluded.
+const NON_SUPPLIER_CATEGORIES: CashCategory[] = [
+  "PARTIMER", "EMPLOYEE_SALARY", "STATUTORY_PAYMENT", "TAX",
+  "DIRECTORS_ALLOWANCE", "ADTD", "LOAN", "CAPITAL", "DIVIDEND",
+  "BANK_FEE", "PETTY_CASH",
+];
 
 export type MatchTier = "auto" | "review";
 export type ApMatch = {
@@ -82,12 +94,17 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
     },
   });
 
-  // Candidate bank outflows: DR, not inter-co, in the window. We only care about
-  // lines that aren't already a confidently-typed non-supplier expense (payroll,
-  // rent, etc. are pulse categories) — but to be safe we consider all DR and let
-  // the score gate it.
+  // Candidate bank outflows: DR, not inter-co, in the window, and NOT a category
+  // that can never have a supplier invoice — wages ("PT Week"), statutory, tax,
+  // director draws, financing, bank fees. Those collide on amount with real
+  // invoices and were the main source of false matches; they're documented by a
+  // payment slip instead (see payment-slips.ts), not an AP match. Null/unknown
+  // categories stay in the pool — those are exactly the OTHER_OUTFLOW pile to match.
   const lines = await prisma.bankStatementLine.findMany({
-    where: { direction: "DR", isInterCo: false, txnDate: { gte: since }, apInvoiceId: null },
+    where: {
+      direction: "DR", isInterCo: false, txnDate: { gte: since }, apInvoiceId: null,
+      OR: [{ category: null }, { category: { notIn: NON_SUPPLIER_CATEGORIES } }],
+    },
     select: { id: true, description: true, amount: true, txnDate: true, category: true },
   });
 
