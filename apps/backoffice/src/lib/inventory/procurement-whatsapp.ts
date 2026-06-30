@@ -11,6 +11,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppTemplate, isWhatsAppConfigured } from "@/lib/whatsapp";
+import { recordOutboundMessage } from "@/lib/whatsapp-store";
 
 const POP_TEMPLATE = "proof_of_payment";
 
@@ -43,7 +44,7 @@ export async function sendProofOfPayment(invoiceId: string): Promise<Procurement
       paidVia: true,
       popSentAt: true,
       photos: true,
-      supplier: { select: { name: true, phone: true } },
+      supplier: { select: { id: true, name: true, phone: true } },
     },
   });
   if (!invoice) return { sent: false, reason: "invoice-not-found" };
@@ -81,6 +82,33 @@ export async function sendProofOfPayment(invoiceId: string): Promise<Procurement
       ],
     },
   ]);
+
+  // Record the send in the supplier thread so the POP shows in the chat (like the PO send), and so
+  // its waMessageId can later carry the delivery status. Best-effort — never blocks the send/result.
+  const supplierId = invoice.supplier?.id ?? null;
+  try {
+    const lastMsg = supplierId
+      ? await prisma.whatsAppMessage.findFirst({
+          where: { supplierId },
+          orderBy: { timestamp: "desc" },
+          select: { direction: true, fromNumber: true, toNumber: true },
+        })
+      : null;
+    const ourNumber = lastMsg ? (lastMsg.direction === "inbound" ? lastMsg.toNumber : lastMsg.fromNumber) : "";
+    await recordOutboundMessage({
+      waMessageId: result.messageId,
+      fromNumber: ourNumber,
+      toNumber: phone,
+      type: "document",
+      body: `🧾 Proof of payment sent — ${invoice.invoiceNumber}, ${amount} (ref ${ref})`,
+      mediaUrl: popUrl,
+      supplierId,
+      status: result.ok ? "sent" : "failed",
+      raw: { kind: "pop_send", invoiceId, ok: result.ok, sendFailed: !result.ok, error: result.error ?? null },
+    });
+  } catch (e) {
+    console.warn(`[procurement:pop] record-message failed invoice=${invoiceId}: ${e instanceof Error ? e.message : e}`);
+  }
 
   if (!result.ok) {
     console.warn(`[procurement:pop] send failed invoice=${invoiceId} err=${result.error}`);
