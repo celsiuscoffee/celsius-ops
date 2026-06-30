@@ -40,6 +40,16 @@ const BANK_NONOPEX = new Set([                                                  
   "INTERCO_EXPENSES", "INVESTMENTS", "EQUIPMENTS", "ADTD", "TRANSFER_NOT_SUCCESSFUL",
 ]);
 
+// GrabFood revenue is booked GROSS in income, but Grab deducts a commission
+// (marketplace fee) at source before paying out — so it never appears in the
+// bank feed and must be recognised as a cost here, else Grab margin is wildly
+// overstated. This is an ESTIMATE at a flat rate; the exact per-order
+// commission lives in the GrabFood Partner settlement report (TODO: source it
+// from the API and replace this estimate). Commission is the selling company's
+// cost, so it attributes to whichever company booked the Grab revenue —
+// independent of which bank account the net payout lands in.
+const GRAB_COMMISSION_RATE = 0.30;
+
 function humanCat(c: string | null): string {
   if (!c) return "Unclassified";
   return c.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
@@ -165,6 +175,23 @@ export async function buildSourcedPnl(input: {
         totalExpenses += grabAds;
       }
     }
+  }
+
+  // GrabFood commission (marketplace fee) — estimated on the gross Grab
+  // revenue booked above, since Grab nets it out before payout (never in the
+  // bank feed). Find the Grab income code(s) and apply the rate.
+  const grabGross = [...incomeByCode.entries()]
+    .filter(([code]) => /grab/i.test(incomeName.get(code) ?? code))
+    .reduce((s, [, v]) => s + v, 0);
+  if (grabGross > 0) {
+    const grabComm = round2(grabGross * GRAB_COMMISSION_RATE);
+    expenseLines.push({
+      code: "MKT-GRAB-COMM",
+      name: `Marketplace fee — GrabFood commission (est. ${Math.round(GRAB_COMMISSION_RATE * 100)}%)`,
+      amount: grabComm,
+      parentCode: null,
+    });
+    totalExpenses += grabComm;
   }
 
   // Bank-classified outflows for this company's account.
