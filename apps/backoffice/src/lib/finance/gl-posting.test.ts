@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { contraFor, companyFromAccountName, CONTRA_ACCOUNT } from "./gl-posting";
+import { contraFor, companyFromAccountName, CONTRA_ACCOUNT } from "./gl-posting-map";
 
 describe("companyFromAccountName", () => {
   it("routes each bank account to its legal entity", () => {
