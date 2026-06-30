@@ -53,13 +53,13 @@ export default function ReconPage() {
         <div className="mt-6 flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
       ) : (
         <>
-          {/* Summary tiles */}
+          {/* Summary tiles — each jumps to its detail section */}
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
-            <Tile icon={<CheckCircle2 className="h-4 w-4 text-green-600" />} label="Auto-matched" value={data.summary.auto} tone="green" />
-            <Tile icon={<HelpCircle className="h-4 w-4 text-amber-600" />} label="Needs review" value={data.summary.review} tone="amber" />
-            <Tile icon={<Copy className="h-4 w-4 text-red-600" />} label="Double payments" value={data.summary.doublePayments} tone={data.summary.doublePayments ? "red" : "gray"} />
-            <Tile icon={<ArrowDownCircle className="h-4 w-4 text-gray-500" />} label="Unmatched out" value={data.summary.unmatchedOutflows} sub={fmtRM0(data.summary.unmatchedOutflowValue)} tone="gray" />
-            <Tile icon={<AlertTriangle className="h-4 w-4 text-gray-500" />} label="Open invoices, no payment" value={data.summary.unmatchedInvoices} tone="gray" />
+            <Tile icon={<CheckCircle2 className="h-4 w-4 text-green-600" />} label="Auto-matched" value={data.summary.auto} tone="green" targetId="recon-auto" />
+            <Tile icon={<HelpCircle className="h-4 w-4 text-amber-600" />} label="Needs review" value={data.summary.review} tone="amber" targetId="recon-review" />
+            <Tile icon={<Copy className="h-4 w-4 text-red-600" />} label="Double payments" value={data.summary.doublePayments} tone={data.summary.doublePayments ? "red" : "gray"} targetId="recon-double" />
+            <Tile icon={<ArrowDownCircle className="h-4 w-4 text-gray-500" />} label="Unmatched out" value={data.summary.unmatchedOutflows} sub={fmtRM0(data.summary.unmatchedOutflowValue)} tone="gray" targetId="recon-unmatched-out" />
+            <Tile icon={<AlertTriangle className="h-4 w-4 text-gray-500" />} label="Open invoices, no payment" value={data.summary.unmatchedInvoices} tone="gray" targetId="recon-open-invoices" />
           </div>
 
           {/* CASH-IN: sales rung up vs settlements received */}
@@ -93,20 +93,20 @@ export default function ReconPage() {
           </Section>
 
           {data.doublePayments.length > 0 && (
-            <Section title="⚠ Possible double payments" desc="Invoice already settled but another bank payment matches it.">
+            <Section id="recon-double" title="⚠ Possible double payments" desc="Invoice already settled but another bank payment matches it.">
               <MatchTable rows={data.doublePayments} />
             </Section>
           )}
 
-          <Section title="Auto-matched (high confidence)" desc="Amount-exact + payee name + date. The loop clears these and re-tags the bank line to COGS.">
+          <Section id="recon-auto" title="Auto-matched (high confidence)" desc="Amount-exact + payee name + date. The loop clears these and re-tags the bank line to COGS.">
             <MatchTable rows={data.auto} />
           </Section>
 
-          <Section title="Needs review" desc="Likely matches that aren't certain enough to auto-clear — confirm or reject.">
+          <Section id="recon-review" title="Needs review" desc="Likely matches that aren't certain enough to auto-clear — confirm or reject.">
             <MatchTable rows={data.review} showReasons />
           </Section>
 
-          <Section title="Unmatched outflows — unreconciled cash-out" desc="Bank payments with no matching invoice yet. The pile to drive to zero.">
+          <Section id="recon-unmatched-out" title="Unmatched outflows — unreconciled cash-out" desc="Bank payments with no matching invoice yet. The pile to drive to zero.">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-sm">
                 <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
@@ -127,26 +127,64 @@ export default function ReconPage() {
               {data.unmatchedOutflows.length > 100 && <p className="px-3 py-2 text-[11px] text-gray-400">Showing top 100 of {data.unmatchedOutflows.length} by amount.</p>}
             </div>
           </Section>
+
+          <Section id="recon-open-invoices" title="Open invoices — no payment found" desc="Procurement invoices with no matching bank payment yet. Either unpaid, or paid via an outflow we haven't matched.">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-sm">
+                <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+                  <th className="px-3 py-2 font-medium">Payee</th><th className="px-3 py-2 font-medium">Invoice</th>
+                  <th className="px-3 py-2 font-medium">Issued</th><th className="px-3 py-2 text-right font-medium">Amount</th>
+                </tr></thead>
+                <tbody className="divide-y">
+                  {data.unmatchedInvoices.length === 0 ? (
+                    <tr><td colSpan={4} className="px-4 py-4 text-xs text-gray-400">Nothing here.</td></tr>
+                  ) : data.unmatchedInvoices.slice(0, 100).map((inv) => (
+                    <tr key={inv.invoiceId} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-xs text-gray-700">{inv.payee}</td>
+                      <td className="px-3 py-2 text-[11px] text-gray-400">{inv.invoiceNumber ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{inv.issueDate}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{fmtRM(inv.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {data.unmatchedInvoices.length > 100 && <p className="px-3 py-2 text-[11px] text-gray-400">Showing top 100 of {data.unmatchedInvoices.length}.</p>}
+            </div>
+          </Section>
         </>
       )}
     </div>
   );
 }
 
-function Tile({ icon, label, value, sub, tone }: { icon: React.ReactNode; label: string; value: number; sub?: string; tone: "green" | "amber" | "red" | "gray" }) {
+function scrollToSection(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  // brief highlight so it's obvious which section the tile jumped to
+  el.classList.add("ring-2", "ring-terracotta");
+  window.setTimeout(() => el.classList.remove("ring-2", "ring-terracotta"), 1400);
+}
+
+function Tile({ icon, label, value, sub, tone, targetId }: { icon: React.ReactNode; label: string; value: number; sub?: string; tone: "green" | "amber" | "red" | "gray"; targetId?: string }) {
   const ring = tone === "green" ? "border-green-200" : tone === "amber" ? "border-amber-200" : tone === "red" ? "border-red-200" : "border-gray-200";
   return (
-    <div className={`rounded-lg border ${ring} bg-white px-3 py-2.5`}>
+    <button
+      type="button"
+      onClick={() => targetId && scrollToSection(targetId)}
+      disabled={!targetId}
+      className={`rounded-lg border ${ring} bg-white px-3 py-2.5 text-left transition-shadow ${targetId ? "cursor-pointer hover:shadow-md hover:border-terracotta/40 focus:outline-none focus:ring-2 focus:ring-terracotta/40" : ""}`}
+    >
       <div className="flex items-center gap-1.5 text-xs text-gray-500">{icon}{label}</div>
       <p className="mt-0.5 text-lg font-bold text-gray-900">{value}</p>
       {sub && <p className="text-[10px] text-gray-400">{sub}</p>}
-    </div>
+    </button>
   );
 }
 
-function Section({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
+function Section({ id, title, desc, children }: { id?: string; title: string; desc: string; children: React.ReactNode }) {
   return (
-    <div className="mt-4 rounded-xl border border-gray-200 bg-white">
+    <div id={id} className="mt-4 scroll-mt-4 rounded-xl border border-gray-200 bg-white transition-all">
       <div className="border-b border-gray-100 px-4 py-2.5">
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</p>
         <p className="mt-0.5 text-[11px] text-gray-400">{desc}</p>
