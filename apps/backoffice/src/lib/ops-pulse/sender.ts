@@ -150,11 +150,10 @@ function clipLine(s: string, max = 150): string {
 }
 
 // Multi-line list nudge via the dedicated ops_list template: a headline + up to
-// LIST_SLOTS bulleted item lines, each on its OWN line (real line breaks, which a
-// single {{1}} param can't do — WhatsApp strips newlines from a parameter).
-// Overflow folds into the last line; short lists pad blank. Falls back to the flat
-// one-line `flatTemplate` if ops_list isn't approved yet or the send fails, so
-// delivery never breaks (and there is no regression before the template is live).
+// LIST_SLOTS bulleted item lines, each on its OWN line. Lists EVERYTHING by
+// PAGINATING — more than LIST_SLOTS items → multiple messages ("(1/2)", "(2/2)") —
+// rather than "…N more in BackOffice" (staff don't open it). Falls back to the flat
+// one-line `flatTemplate` (which also lists every item) if ops_list isn't usable.
 export async function sendList(
   to: string,
   headline: string,
@@ -165,34 +164,49 @@ export async function sendList(
   const clean = items.map((i) => clipLine(i)).filter(Boolean);
   const head = clipLine(headline) || "Update from Celsius ops";
 
-  if (TEMPLATES.list) {
-    const lines: string[] = [];
-    if (clean.length <= LIST_SLOTS) {
-      lines.push(...clean);
-    } else {
-      lines.push(...clean.slice(0, LIST_SLOTS - 1));
-      lines.push(`...and ${clean.length - (LIST_SLOTS - 1)} more in BackOffice`);
+  if (TEMPLATES.list && clean.length > 0) {
+    // Paginate into pages of LIST_SLOTS so the FULL list goes out (no truncation).
+    const MAX_PAGES = 6; // safety backstop (24 items); real lists are far smaller
+    const pages: string[][] = [];
+    for (let i = 0; i < clean.length && pages.length < MAX_PAGES; i += LIST_SLOTS) {
+      pages.push(clean.slice(i, i + LIST_SLOTS));
     }
-    while (lines.length < LIST_SLOTS) lines.push(LIST_PAD);
+    // Only if a pathological list overflows the backstop: note the remainder (no
+    // "BackOffice"). Not hit by audit/clock-in/review/stock in practice.
+    if (clean.length > MAX_PAGES * LIST_SLOTS) {
+      pages[MAX_PAGES - 1][LIST_SLOTS - 1] = `...and ${clean.length - (MAX_PAGES * LIST_SLOTS - 1)} more`;
+    }
 
-    const params = [head, ...lines];
-    const tpl = await sendWhatsAppTemplate(to, TEMPLATES.list, TEMPLATES.languageCode, [
-      { type: "body", parameters: params.map((text) => ({ type: "text", text })) },
-    ]);
-    if (tpl.ok) {
-      await recordOutboundMessage({
-        waMessageId: tpl.messageId,
-        fromNumber: process.env.WHATSAPP_DISPLAY_NUMBER || "",
-        toNumber: to,
-        type: "template",
-        // Store the readable multi-line form (drop the blank pads) for the monitor.
-        body: [head, "", ...lines.filter((l) => l !== LIST_PAD).map((l) => `• ${l}`)].join("\n"),
-        status: "sent",
-        raw: { kind: TEMPLATES.list },
-      });
-      return tpl;
+    let last: WhatsAppSendResult | null = null;
+    for (let pi = 0; pi < pages.length; pi++) {
+      const lines = [...pages[pi]];
+      while (lines.length < LIST_SLOTS) lines.push(LIST_PAD);
+      const h = pages.length > 1 ? `${head} (${pi + 1}/${pages.length})` : head;
+      const tpl = await sendWhatsAppTemplate(to, TEMPLATES.list, TEMPLATES.languageCode, [
+        { type: "body", parameters: [h, ...lines].map((text) => ({ type: "text", text })) },
+      ]);
+      if (tpl.ok) {
+        await recordOutboundMessage({
+          waMessageId: tpl.messageId,
+          fromNumber: process.env.WHATSAPP_DISPLAY_NUMBER || "",
+          toNumber: to,
+          type: "template",
+          body: [h, "", ...lines.filter((l) => l !== LIST_PAD).map((l) => `• ${l}`)].join("\n"),
+          status: "sent",
+          raw: { kind: TEMPLATES.list },
+        });
+        last = tpl;
+      } else if (pi === 0) {
+        // First page failed → template unusable; fall through to flat (lists all).
+        console.warn(`[ops-pulse] ops_list send failed (${tpl.error}); falling back to flat ${flatTemplate}`);
+        last = null;
+        break;
+      } else {
+        console.error(`[ops-pulse] ops_list page ${pi + 1}/${pages.length} failed (${tpl.error})`);
+        last = tpl;
+      }
     }
-    console.warn(`[ops-pulse] ops_list send failed (${tpl.error}); falling back to flat ${flatTemplate}`);
+    if (last) return last;
   }
 
   // Fallback: the flat one-line template (no regression until ops_list is live).
