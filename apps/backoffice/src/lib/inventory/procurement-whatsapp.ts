@@ -52,10 +52,14 @@ export async function sendProofOfPayment(invoiceId: string): Promise<Procurement
   const phone = invoice.supplier?.phone?.trim();
   if (!phone) return { sent: false, reason: "no-supplier-phone" };
 
-  // DIRECT public URL of the receipt (the last POP photo) — WhatsApp fetches
-  // this for the document header, so it must be the real file URL, never the
-  // popShortLink redirect (the media fetcher won't follow it).
-  const popUrl = invoice.photos?.[invoice.photos.length - 1];
+  // DIRECT public URL of the real payment RECEIPT — WhatsApp fetches it for the document
+  // header, so it must be the real file URL (never the popShortLink redirect, which the
+  // media fetcher won't follow). Only ever send a document stored under the `/pop/` path
+  // (file-naming.popStoragePath); an invoice image or any other attachment must NEVER go
+  // out as "proof of payment". If the invoice was marked paid with no receipt on file,
+  // there's nothing legitimate to send — skip WITHOUT stamping popSentAt, so the real
+  // receipt can still go out once it's uploaded.
+  const popUrl = (invoice.photos ?? []).filter((p) => p.includes("/pop/")).pop();
   if (!popUrl) return { sent: false, reason: "no-pop-document" };
 
   const amount = `RM ${Number(invoice.amount).toFixed(2)}`;
