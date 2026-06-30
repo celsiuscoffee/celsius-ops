@@ -214,12 +214,26 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "salary_explicit",match: /\bSALARY\b/i,                  direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
   { name: "salary_scc",     match: /\bSCC[_ ]\d+\/\d+\b/i,         direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
 
-  // Directors Allowance — RM 40,000 to Ammar Bin Shahrin (per Apr 2026 pattern)
-  { name: "directors_ammar",match: /\bAMMAR\s*BIN\s*SHAHRIN\b/i,  direction: "DR", category: "DIRECTORS_ALLOWANCE" as CashCategory },
+  // Director account — ONLY a genuine drawing / amount-due-to-director is a
+  // distribution (excluded from P&L). Do NOT blanket-match the name: most
+  // "Ammar Bin Shahrin" transfers are REIMBURSEMENTS for company costs he
+  // fronted (equipment, supplies, supplier invoices, software, ads) and must
+  // NOT be booked as a director allowance. Those fall through to the vendor /
+  // purpose rules (Google Ads already handled by marketing_ads_claim; vendor
+  // rules below) or to OTHER_OUTFLOW (review + AP-match).
+  { name: "director_due",   match: /\bADTD\b|\bDUE\s*(2|TO)?\s*DIRECTO|\bDIRECTOR'?S?\s*(ALLOWANCE|DRAWINGS?)|\bDRAWINGS?\b/i, direction: "DR", category: "DIRECTORS_ALLOWANCE" as CashCategory },
 
   // Raw Materials — known F&B suppliers (extend as new vendors onboard)
   { name: "raw_aryzta",      match: /\bARYZTA\b/i,                 direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "raw_erul",        match: /\bERUL\s*FOOD\b/i,            direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_sri_ternak",  match: /\bSRI\s*TERNAK\b/i,           direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+
+  // Fixtures / equipment / smallware vendors often fronted by the director
+  { name: "equip_ikea",      match: /\bIKEA\b/i,                   direction: "DR", category: "EQUIPMENTS" as CashCategory },
+  { name: "equip_mrdiy",     match: /\bMR\s*DIY\b|\bMRDIY\b/i,     direction: "DR", category: "EQUIPMENTS" as CashCategory },
+  { name: "equip_cookerland",match: /\bCOOKERLAND\b/i,             direction: "DR", category: "EQUIPMENTS" as CashCategory },
+  { name: "equip_decasa",    match: /\bDECASA\b/i,                 direction: "DR", category: "EQUIPMENTS" as CashCategory },
+  { name: "software_gsuite", match: /\bG\s*SUITE\b|\bGSUITE\b|\bGOOGLE\s*WORKSPACE\b/i, direction: "DR", category: "SOFTWARE" as CashCategory },
   { name: "raw_tmm",         match: /\bTMM\s*RESOURCES\b/i,        direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "raw_nyc",         match: /\bNYC\s*TREATS\b/i,           direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "raw_global_coffee",match: /\bGLOBAL\s*COFFEE\b/i,       direction: "DR", category: "RAW_MATERIALS" as CashCategory },
