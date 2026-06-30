@@ -22,6 +22,7 @@ import { recordInboundMessage } from "@/lib/whatsapp-store";
 import { handleInboundAck } from "@/lib/ops-pulse/inbound";
 import { handleReminderAck } from "@/lib/ops-reminders";
 import { handleInstructionAck } from "@/lib/ops-instructions";
+import { handleOutletDeliveryReply } from "@/lib/inventory/exec/outlet-delivery-check";
 import { handleSupplierMessage } from "@/lib/inventory/agents/supplier-chat-agent";
 
 // GET — webhook verification handshake.
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
         // fast 200.
         try {
           const reply = msg.text?.body ?? "";
-          const [alertAck, reminderAck, instructionAck] = await Promise.all([
+          const [alertAck, reminderAck, instructionAck, outletReply] = await Promise.all([
             handleInboundAck(msg.from, reply).catch((e) => {
               console.error("[ops-pulse] alert ack failed:", e);
               return null;
@@ -119,10 +120,16 @@ export async function POST(request: NextRequest) {
               console.error("[ops-instructions] ack failed:", e);
               return null;
             }),
+            // An outlet staff member answering "did this delivery arrive?" — gates the
+            // supplier chase (procurement). Best-effort; never blocks the 200 to Meta.
+            handleOutletDeliveryReply(msg.from, reply).catch((e) => {
+              console.error("[outlet-confirm] reply failed:", e);
+              return null;
+            }),
           ]);
-          if (alertAck?.resolved || reminderAck?.completed || instructionAck?.acked) {
+          if (alertAck?.resolved || reminderAck?.completed || instructionAck?.acked || outletReply) {
             console.log(
-              `[ops-workspace] ack from=${msg.from} alerts=${alertAck?.resolved ?? 0} reminders=${reminderAck?.completed ?? 0} instructions=${instructionAck?.acked ?? 0}`,
+              `[ops-workspace] ack from=${msg.from} alerts=${alertAck?.resolved ?? 0} reminders=${reminderAck?.completed ?? 0} instructions=${instructionAck?.acked ?? 0}${outletReply ? ` outletDelivery=${outletReply.result}` : ""}`,
             );
           }
         } catch (err) {
