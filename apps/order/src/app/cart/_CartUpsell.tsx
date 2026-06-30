@@ -12,8 +12,12 @@ type Pair = { id: string; name: string; basePrice: number; image: string | null;
  * (drinks cart → a bite, etc.) via /api/suggest-pairs, personalized by member.
  * Cards link to the product page (one tap to add, same flow as the best-seller
  * rail). Renders nothing until it has a suggestion, so it never adds noise.
+ *
+ * outletId (the store slug) is forwarded so the shared engine can drop items
+ * that are 86'd / snoozed at this outlet — otherwise a snoozed item, hidden
+ * from the menu, would still surface here and let the customer order it.
  */
-export function CartUpsell({ productIds, loyaltyId }: { productIds: string[]; loyaltyId: string | null }) {
+export function CartUpsell({ productIds, loyaltyId, outletId }: { productIds: string[]; loyaltyId: string | null; outletId: string | null }) {
   const [pairs, setPairs] = useState<Pair[]>([]);
   const key = productIds.slice().sort().join(",");
 
@@ -23,14 +27,15 @@ export function CartUpsell({ productIds, loyaltyId }: { productIds: string[]; lo
     fetch("/api/suggest-pairs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cart_product_ids: productIds, member: loyaltyId }),
+      body: JSON.stringify({ cart_product_ids: productIds, member: loyaltyId, outlet_id: outletId }),
     })
       .then((r) => r.json())
       .then((j) => { if (!cancelled) setPairs(Array.isArray(j?.pairs) ? j.pairs : []); })
       .catch(() => { if (!cancelled) setPairs([]); });
     return () => { cancelled = true; };
-    // Re-fetch when the cart contents change (key) or the member resolves.
-  }, [key, loyaltyId]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Re-fetch when the cart contents change (key), the member resolves, or the
+    // selected outlet changes (different outlet = different 86 list).
+  }, [key, loyaltyId, outletId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (pairs.length === 0) return null;
 
