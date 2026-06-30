@@ -544,8 +544,113 @@ function AuditorPack() {
 
 // ─── Page shell ─────────────────────────────────────────────────
 
+// ─── Trial Balance tab ──────────────────────────────────────────
+type TbRow = { code: string; name: string; type: string; debit: number; credit: number };
+type Tb = { asOf: string; rows: TbRow[]; totalDebit: number; totalCredit: number; balanced: boolean };
+
+function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
+  const [asOf, setAsOf] = useState(todayMyt());
+  const { data, isLoading } = useFetch<{ report: Tb }>(`/api/finance/reports/trial-balance?asOf=${asOf}`);
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs text-muted-foreground">As of
+          <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
+        </label>
+        {data?.report && (
+          <span className={`ml-auto rounded px-2 py-1 text-xs font-medium ${data.report.balanced ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-red-500/10 text-red-600"}`}>
+            {data.report.balanced ? "Balanced" : "Out of balance"}
+          </span>
+        )}
+      </div>
+      {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+              <th className="px-3 py-2 font-medium">Code</th><th className="px-3 py-2 font-medium">Account</th>
+              <th className="px-3 py-2 text-right font-medium">Debit</th><th className="px-3 py-2 text-right font-medium">Credit</th>
+            </tr></thead>
+            <tbody className="divide-y">
+              {data.report.rows.map((r) => (
+                <tr key={r.code} className="cursor-pointer hover:bg-muted/40" onClick={() => onDrill(r.code)} title="Open in General Ledger">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground tabular-nums">{r.code}</td>
+                  <td className="px-3 py-1.5">{r.name}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{r.debit ? RM(r.debit) : ""}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{r.credit ? RM(r.credit) : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot><tr className="border-t-2 font-semibold">
+              <td className="px-3 py-2" colSpan={2}>Total</td>
+              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.totalDebit)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.totalCredit)}</td>
+            </tr></tfoot>
+          </table>
+        </div>
+      )}
+      <p className="text-[11px] text-muted-foreground">Click any account to open its General Ledger. Fills in as the bank→GL bridge posts.</p>
+    </div>
+  );
+}
+
+// ─── General Ledger tab ─────────────────────────────────────────
+type GlEntry = { date: string; txnType: string; description: string; debit: number; credit: number; balance: number };
+type Gl = { accountCode: string; accountName: string; start: string; end: string; opening: number; entries: GlEntry[]; closing: number; totalDebit: number; totalCredit: number };
+
+function GlTab({ account, setAccount }: { account: string; setAccount: (c: string) => void }) {
+  const [start, setStart] = useState(thisMonthStart());
+  const [end, setEnd] = useState(todayMyt());
+  const { data, isLoading } = useFetch<{ report: Gl }>(`/api/finance/reports/general-ledger?account=${encodeURIComponent(account)}&start=${start}&end=${end}`);
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs text-muted-foreground">Account
+          <input value={account} onChange={(e) => setAccount(e.target.value.trim())} placeholder="e.g. 6000-01" className="ml-2 w-28 rounded border px-2 py-1 text-sm tabular-nums" />
+        </label>
+        <label className="text-xs text-muted-foreground">From
+          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
+        </label>
+        <label className="text-xs text-muted-foreground">To
+          <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
+        </label>
+      </div>
+      {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
+        <div className="overflow-x-auto rounded-lg border">
+          <div className="border-b bg-muted/40 px-3 py-2 text-sm font-medium">{data.report.accountCode} · {data.report.accountName}</div>
+          <table className="w-full min-w-[640px] text-sm">
+            <thead><tr className="border-b text-left text-muted-foreground">
+              <th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Description</th>
+              <th className="px-3 py-2 text-right font-medium">Debit</th><th className="px-3 py-2 text-right font-medium">Credit</th><th className="px-3 py-2 text-right font-medium">Balance</th>
+            </tr></thead>
+            <tbody className="divide-y">
+              <tr className="bg-muted/20 text-muted-foreground"><td className="px-3 py-1.5" colSpan={4}>Opening balance</td><td className="px-3 py-1.5 text-right tabular-nums">{RM(data.report.opening)}</td></tr>
+              {data.report.entries.map((e, i) => (
+                <tr key={i} className="hover:bg-muted/40">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground tabular-nums">{e.date}</td>
+                  <td className="px-3 py-1.5 text-xs">{e.description}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{e.debit ? RM(e.debit) : ""}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{e.credit ? RM(e.credit) : ""}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{RM(e.balance)}</td>
+                </tr>
+              ))}
+              {data.report.entries.length === 0 && <tr><td colSpan={5} className="px-3 py-4 text-center text-xs text-muted-foreground">No movements in this period.</td></tr>}
+            </tbody>
+            <tfoot><tr className="border-t-2 font-semibold">
+              <td className="px-3 py-2" colSpan={2}>Period total / closing</td>
+              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.totalDebit)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.totalCredit)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.closing)}</td>
+            </tr></tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FinanceReportsPage() {
-  const [tab, setTab] = useState<"pnl" | "bs" | "cf" | "audit">("pnl");
+  const [tab, setTab] = useState<"pnl" | "bs" | "cf" | "tb" | "gl" | "audit">("pnl");
+  const [glAccount, setGlAccount] = useState("1000-01"); // shared so TB rows can drill into GL
 
   return (
     <div className="space-y-4 p-3 sm:p-6">
@@ -562,6 +667,8 @@ export default function FinanceReportsPage() {
             { id: "pnl", label: "Profit & Loss" },
             { id: "bs", label: "Balance Sheet" },
             { id: "cf", label: "Cash Flow" },
+            { id: "tb", label: "Trial Balance" },
+            { id: "gl", label: "General Ledger" },
             { id: "audit", label: "Auditor pack" },
           ].map((t) => (
             <button
@@ -589,6 +696,8 @@ export default function FinanceReportsPage() {
       {tab === "pnl" && <PnlTab />}
       {tab === "bs" && <BsTab />}
       {tab === "cf" && <CfTab />}
+      {tab === "tb" && <TbTab onDrill={(code) => { setGlAccount(code); setTab("gl"); }} />}
+      {tab === "gl" && <GlTab account={glAccount} setAccount={setGlAccount} />}
       {tab === "audit" && <AuditorPack />}
     </div>
   );
