@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole, AuthError } from "@/lib/auth";
 import { proposeApMatches } from "@/lib/finance/ap-match";
+import { cashInRecon } from "@/lib/finance/sales-recon";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -16,7 +17,10 @@ export async function GET(req: NextRequest) {
   }
   const sinceDays = Number(req.nextUrl.searchParams.get("sinceDays") ?? 90);
   try {
-    const result = await proposeApMatches({ sinceDays: Number.isFinite(sinceDays) ? sinceDays : 90 });
+    const [result, cashIn] = await Promise.all([
+      proposeApMatches({ sinceDays: Number.isFinite(sinceDays) ? sinceDays : 90 }),
+      cashInRecon({ sinceDays: Number.isFinite(sinceDays) ? sinceDays : 90 }),
+    ]);
     const summary = {
       auto: result.auto.length,
       review: result.review.length,
@@ -25,7 +29,7 @@ export async function GET(req: NextRequest) {
       unmatchedOutflows: result.unmatchedOutflows.length,
       unmatchedOutflowValue: Math.round(result.unmatchedOutflows.reduce((s, o) => s + o.amount, 0)),
     };
-    return NextResponse.json({ summary, ...result });
+    return NextResponse.json({ summary, ...result, cashIn });
   } catch (err) {
     console.error("[finance/ap-match]", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "AP match failed" }, { status: 500 });

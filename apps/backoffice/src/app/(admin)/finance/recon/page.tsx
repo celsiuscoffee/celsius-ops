@@ -9,11 +9,18 @@ type ApMatch = {
   bankLineId: string; bankDesc: string; bankDate: string; bankCategory: string | null;
   score: number; tier: "auto" | "review"; reasons: string[]; alreadyPaid: boolean;
 };
+type CashIn = {
+  from: string; to: string; salesGross: number; settlementsTotal: number; gap: number; gapPct: number | null;
+  settlementsByChannel: { channel: string; amount: number; n: number }[];
+  salesByChannel: { channel: string; amount: number }[];
+  grab: { gross: number; settled: number; deductionPct: number | null };
+};
 type ReconData = {
   summary: { auto: number; review: number; doublePayments: number; unmatchedInvoices: number; unmatchedOutflows: number; unmatchedOutflowValue: number };
   auto: ApMatch[]; review: ApMatch[]; doublePayments: ApMatch[];
   unmatchedInvoices: { invoiceId: string; invoiceNumber: string | null; payee: string; amount: number; issueDate: string }[];
   unmatchedOutflows: { bankLineId: string; desc: string; date: string; amount: number; category: string | null }[];
+  cashIn: CashIn;
 };
 
 const fmtRM = (n: number) => `RM ${n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -54,6 +61,36 @@ export default function ReconPage() {
             <Tile icon={<ArrowDownCircle className="h-4 w-4 text-gray-500" />} label="Unmatched out" value={data.summary.unmatchedOutflows} sub={fmtRM0(data.summary.unmatchedOutflowValue)} tone="gray" />
             <Tile icon={<AlertTriangle className="h-4 w-4 text-gray-500" />} label="Open invoices, no payment" value={data.summary.unmatchedInvoices} tone="gray" />
           </div>
+
+          {/* CASH-IN: sales rung up vs settlements received */}
+          <Section title={`Cash-in — sales vs settlements (${data.cashIn.from} → ${data.cashIn.to})`} desc="What the POS rang up vs what landed in the bank. The gap is fees + platform commission + cash-not-banked + settlement timing.">
+            <div className="grid grid-cols-3 gap-3 px-4 py-3">
+              <div><p className="text-[11px] text-gray-500">Sales rung up</p><p className="font-mono text-sm font-semibold text-gray-900">{fmtRM(data.cashIn.salesGross)}</p></div>
+              <div><p className="text-[11px] text-gray-500">Settled to bank</p><p className="font-mono text-sm font-semibold text-gray-900">{fmtRM(data.cashIn.settlementsTotal)}</p></div>
+              <div><p className="text-[11px] text-gray-500">Gap</p><p className={`font-mono text-sm font-semibold ${Math.abs(data.cashIn.gapPct ?? 0) > 12 ? "text-red-600" : "text-amber-600"}`}>{fmtRM(data.cashIn.gap)}{data.cashIn.gapPct != null && <span className="text-[11px] font-normal text-gray-400"> ({data.cashIn.gapPct}%)</span>}</p></div>
+            </div>
+            <div className="overflow-x-auto border-t border-gray-100">
+              <table className="w-full min-w-[480px] text-sm">
+                <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+                  <th className="px-3 py-2 font-medium">Channel</th><th className="px-3 py-2 text-right font-medium">Settled</th><th className="px-3 py-2 text-right font-medium">Txns</th>
+                </tr></thead>
+                <tbody className="divide-y">
+                  {data.cashIn.settlementsByChannel.map((c) => (
+                    <tr key={c.channel} className="hover:bg-gray-50">
+                      <td className="px-3 py-1.5 text-xs text-gray-700">{c.channel}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-xs text-green-700">+{fmtRM(c.amount)}</td>
+                      <td className="px-3 py-1.5 text-right text-[11px] text-gray-400">{c.n}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {data.cashIn.grab.deductionPct != null && (
+              <p className={`border-t border-gray-100 px-4 py-2 text-[11px] ${data.cashIn.grab.deductionPct > 45 ? "text-red-600" : "text-gray-500"}`}>
+                Grab: gross {fmtRM(data.cashIn.grab.gross)} vs settled {fmtRM(data.cashIn.grab.settled)} → <strong>{data.cashIn.grab.deductionPct}% deducted</strong> at source (commission + promos + timing){data.cashIn.grab.deductionPct > 45 ? " — high, review" : ""}.
+              </p>
+            )}
+          </Section>
 
           {data.doublePayments.length > 0 && (
             <Section title="⚠ Possible double payments" desc="Invoice already settled but another bank payment matches it.">
