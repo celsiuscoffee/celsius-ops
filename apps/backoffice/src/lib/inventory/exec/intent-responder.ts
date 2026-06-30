@@ -22,6 +22,7 @@ import type { OrderStatus, Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppText } from "@/lib/whatsapp";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
+import { outletConfirmEnabled, readOutletDeliveryState, askOutletIfArrived } from "./outlet-delivery-check";
 
 const DAY = 24 * 60 * 60 * 1000;
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
@@ -241,7 +242,7 @@ async function chaseMissedPromises(): Promise<number> {
       receivings: { none: {} },
     },
     take: 30,
-    select: { id: true, orderNumber: true, deliveryDate: true, supplier: { select: { name: true, phone: true, automationMode: true } } },
+    select: { id: true, orderNumber: true, deliveryDate: true, outletId: true, supplier: { select: { name: true, phone: true, automationMode: true } } },
   });
   let chased = 0;
   for (const o of overdue) {
@@ -254,6 +255,26 @@ async function chaseMissedPromises(): Promise<number> {
     const dest = digits(o.supplier.phone);
     const text = `Hi ${o.supplier.name}, following up on ${o.orderNumber} — expected ${o.deliveryDate ? new Date(o.deliveryDate).toISOString().slice(0, 10) : "earlier"} but not received yet. New ETA? 🙏`;
     if (o.supplier.automationMode === "AUTO" && dest.length >= 8 && (await windowOpen(dest))) {
+      // Confirm with the on-shift OUTLET team BEFORE chasing the supplier — a missing GRN is
+      // as often an un-recorded receiving as a real non-delivery (don't chase the supplier for
+      // an ops gap). Gated for safe rollout; off → chases directly as before.
+      if (outletConfirmEnabled() && o.outletId) {
+        const state = await readOutletDeliveryState(o.id);
+        // arrived → never chase (outlet confirmed it came); pending → still waiting (within grace).
+        if (state === "arrived" || state === "pending") continue;
+        if (state === "unasked") {
+          const ask = await askOutletIfArrived({
+            id: o.id,
+            orderNumber: o.orderNumber,
+            outletId: o.outletId,
+            supplierName: o.supplier.name,
+            deliveryDate: o.deliveryDate,
+          });
+          if (ask === "asked") continue; // wait for the outlet's reply (or grace) before chasing
+          // no on-shift team / couldn't deliver → fall through and chase now, don't block.
+        }
+        // "not_arrived" (outlet confirmed it didn't come) | "stale" (no reply past grace) → chase.
+      }
       const res = await sendWhatsAppText(dest, text);
       await recordOutboundMessage({
         waMessageId: res.messageId,
