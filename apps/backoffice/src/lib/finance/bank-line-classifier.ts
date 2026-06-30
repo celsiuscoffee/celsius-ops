@@ -138,6 +138,14 @@ const OUTFLOW_RULES: Rule[] = [
   // CELSIUS COFFEE SDN.* <purpose>" pattern. The leading entity name
   // is just routing; the meaningful info is in the suffix. Match the
   // actual purpose so these end up in real categories.
+  //
+  // Google Ads is fronted personally by the director (Ammar) and reimbursed as
+  // an "Ads claim"/"Google Ads" transfer. The ACTUAL spend is already booked
+  // from the ads module (ads_metric_daily), so these reimbursements must land
+  // in DIGITAL_ADS = deduped out of bank opex (else double-count). This MUST
+  // come before purpose_staff_claim (/CLAIM/), software_saas (/GOOGLE/) and
+  // directors_ammar (/AMMAR BIN SHAHRIN/), which would otherwise grab them.
+  { name: "marketing_ads_claim",      match: /\bGOOGLE\s*ADS\b|\bADS?\s*CLAIMS?\b|\bCLAIMS?\s*ADS?\b/i, direction: "DR", category: "DIGITAL_ADS" as CashCategory },
   { name: "purpose_stat_pay",         match: /\b(STAT\s*PAY|STATUTORY)\b/i,           direction: "DR", category: "STATUTORY_PAYMENT" as CashCategory },
   { name: "purpose_inventory",        match: /\bINVENTORY\b/i,                        direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "purpose_digital_ads",      match: /\bDIGITAL\s*ADS?\b/i,                   direction: "DR", category: "DIGITAL_ADS" as CashCategory },
