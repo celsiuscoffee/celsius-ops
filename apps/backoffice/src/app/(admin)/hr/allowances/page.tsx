@@ -7,31 +7,42 @@ import { Wallet, Loader2, TrendingUp, AlertTriangle, Trophy } from "lucide-react
 import { HrPageHeader } from "@/components/hr/page-header";
 import { AllowanceTabs } from "@/components/hr/allowance-tabs";
 
+type Lever = {
+  key: string;
+  label: string;
+  applicable: boolean;
+  score: number;
+  tier: "under" | "ok" | "perform";
+  slice: number;
+  earned: number;
+  detail: string;
+};
+
 type StaffSummary = {
   userId: string;
   name: string;
   fullName: string | null;
   outletName: string | null;
-  attendanceEarned: number;
-  attendanceBase: number;
+  eligible: boolean;
+  levers: Lever[];
   performanceEarned: number;
-  performanceBase: number;
-  performanceScore: number;
+  attendanceDeducted: number;
+  reviewPenaltyTotal: number;
   totalEarned: number;
   totalMax: number;
   lateCount: number;
   absentCount: number;
 };
 
-type Rules = {
-  attendance_allowance_amount: number;
-  performance_allowance_amount: number;
-  performance_allowance_mode: string;
-};
-
+type Rules = { pool: number; leverChecklist: number; leverPhone: number; leverServing: number; leverAudit: number };
 type Outlet = { id: string; name: string };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const TIER_STYLE: Record<string, string> = {
+  perform: "bg-green-100 text-green-700",
+  ok: "bg-amber-100 text-amber-700",
+  under: "bg-red-100 text-red-700",
+};
 
 export default function AllowancesPage() {
   const now = new Date();
@@ -50,22 +61,15 @@ export default function AllowancesPage() {
 
   const totalPayout = staff.reduce((s, p) => s + p.totalEarned, 0);
   const maxPayout = staff.reduce((s, p) => s + p.totalMax, 0);
-  const fullEarners = staff.filter(p => p.totalEarned === p.totalMax).length;
-  const atRisk = staff.filter(p => p.absentCount > 0 || p.lateCount > 2).length;
-
-  const barColor = (earned: number, base: number) => {
-    const pct = base > 0 ? earned / base : 0;
-    if (pct >= 0.9) return "bg-green-500";
-    if (pct >= 0.6) return "bg-amber-500";
-    return "bg-red-500";
-  };
+  const fullEarners = staff.filter((p) => p.totalMax > 0 && p.totalEarned === p.totalMax).length;
+  const atRisk = staff.filter((p) => p.absentCount > 0 || p.lateCount > 2).length;
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <HrPageHeader
         title="Allowances"
         icon={<Wallet className="h-6 w-6 text-terracotta" />}
-        description="Live attendance & performance allowances this month. Paid with the next salary cycle."
+        description="Live performance allowance this month. Paid with the next salary cycle."
       />
       <AllowanceTabs />
 
@@ -77,7 +81,7 @@ export default function AllowancesPage() {
             {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded border bg-background px-3 py-1.5 text-sm">
-            {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </label>
         <label className="flex items-center gap-2 text-sm">
@@ -89,7 +93,7 @@ export default function AllowancesPage() {
         </label>
         {rules && (
           <span className="ml-auto text-xs text-muted-foreground">
-            RM {rules.attendance_allowance_amount} attendance + RM {rules.performance_allowance_amount} performance ({rules.performance_allowance_mode})
+            RM {rules.pool} pool · checklist {rules.leverChecklist} / phone {rules.leverPhone} / serving {rules.leverServing} / audit {rules.leverAudit}
             <Link href="/hr/settings/working-time" className="ml-2 text-terracotta hover:underline">Configure →</Link>
           </span>
         )}
@@ -130,46 +134,44 @@ export default function AllowancesPage() {
             <thead className="bg-gray-50">
               <tr className="text-xs text-gray-500">
                 <th className="px-3 py-2 text-left">Staff</th>
-                <th className="px-3 py-2 text-left">Attendance</th>
-                <th className="px-3 py-2 text-left">Performance</th>
+                <th className="px-3 py-2 text-left">Earn levers (score → RM)</th>
+                <th className="px-3 py-2 text-center">Deductions</th>
                 <th className="px-3 py-2 text-right">Total earned</th>
-                <th className="px-3 py-2 text-center">Lates</th>
-                <th className="px-3 py-2 text-center">Absences</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {staff.map((p) => (
                 <tr key={p.userId} className="border-t hover:bg-gray-50/40">
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2.5 align-top">
                     <div className="font-medium">{p.name}</div>
                     <div className="text-xs text-gray-500">{p.outletName || "—"}</div>
                   </td>
                   <td className="px-3 py-2.5">
-                    <div className="mb-0.5 flex items-center gap-2">
-                      <span className="text-xs font-mono">RM {p.attendanceEarned}</span>
-                      <span className="text-xs text-gray-400">/ {p.attendanceBase}</span>
-                    </div>
-                    <div className="h-1.5 w-32 overflow-hidden rounded-full bg-gray-100">
-                      <div className={"h-full " + barColor(p.attendanceEarned, p.attendanceBase)} style={{ width: `${(p.attendanceEarned / p.attendanceBase) * 100}%` }} />
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="mb-0.5 flex items-center gap-2">
-                      <span className="text-xs font-mono">RM {p.performanceEarned}</span>
-                      <span className="text-xs text-gray-400">/ {p.performanceBase}</span>
-                      <span className="text-xs text-gray-500">· {p.performanceScore}</span>
-                    </div>
-                    <div className="h-1.5 w-32 overflow-hidden rounded-full bg-gray-100">
-                      <div className={"h-full " + barColor(p.performanceEarned, p.performanceBase)} style={{ width: `${(p.performanceEarned / p.performanceBase) * 100}%` }} />
+                    <div className="flex flex-wrap gap-1.5">
+                      {p.levers.filter((l) => l.applicable).map((l) => (
+                        <span key={l.key} title={l.detail} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${TIER_STYLE[l.tier]}`}>
+                          {l.label.replace(" completion", "").replace(" time", "")} · {l.detail} → RM{l.earned}
+                        </span>
+                      ))}
+                      {p.levers.filter((l) => !l.applicable).map((l) => (
+                        <span key={l.key} title={l.detail} className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-400">
+                          {l.label.replace(" completion", "").replace(" time", "")}: n/a
+                        </span>
+                      ))}
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-right font-bold text-terracotta">RM {p.totalEarned}</td>
-                  <td className="px-3 py-2.5 text-center">
-                    <span className={p.lateCount > 2 ? "text-red-700" : p.lateCount > 0 ? "text-amber-700" : "text-gray-400"}>{p.lateCount || "—"}</span>
+                  <td className="px-3 py-2.5 text-center text-xs">
+                    {p.attendanceDeducted > 0 || p.reviewPenaltyTotal > 0 ? (
+                      <span className="text-red-700">
+                        −RM{(p.attendanceDeducted + p.reviewPenaltyTotal).toFixed(0)}
+                        <span className="ml-1 text-gray-400">({p.lateCount}L/{p.absentCount}A{p.reviewPenaltyTotal > 0 ? `/${(p.reviewPenaltyTotal / 10)}R` : ""})</span>
+                      </span>
+                    ) : <span className="text-gray-400">—</span>}
                   </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <span className={p.absentCount > 0 ? "text-red-700 font-semibold" : "text-gray-400"}>{p.absentCount || "—"}</span>
+                  <td className="px-3 py-2.5 text-right">
+                    <span className="font-bold text-terracotta">RM {p.totalEarned}</span>
+                    <span className="text-xs text-gray-400"> / {p.totalMax}</span>
                   </td>
                   <td className="px-3 py-2.5">
                     <Link href={`/hr/employees/${p.userId}`} className="text-xs text-terracotta hover:underline">View</Link>
@@ -177,7 +179,7 @@ export default function AllowancesPage() {
                 </tr>
               ))}
               {staff.length === 0 && !isLoading && (
-                <tr><td colSpan={7} className="px-3 py-10 text-center text-sm text-muted-foreground">No staff for this period</td></tr>
+                <tr><td colSpan={5} className="px-3 py-10 text-center text-sm text-muted-foreground">No staff for this period</td></tr>
               )}
             </tbody>
           </table>

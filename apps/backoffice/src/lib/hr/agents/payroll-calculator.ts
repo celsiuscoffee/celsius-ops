@@ -353,10 +353,14 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       month,
       allowanceRules,
     );
-    const attendanceAllowance = Math.round(allowanceBreakdown.attendance.earned * 100) / 100;
-    const performanceAllowance = Math.round(allowanceBreakdown.performance.earned * 100) / 100;
+    // v2 single performance pool: the paid allowance is the levers' earned
+    // amount already NET of attendance (late/absent) + negative-review
+    // deductions, floored at 0 (breakdown.totalEarned). It's variable incentive
+    // pay → added to gross + PCB but excluded from the EPF/SOCSO/EIS basis.
+    const perfAllowance = Math.round(allowanceBreakdown.totalEarned * 100) / 100;
+    const attendanceDeducted = Math.round(allowanceBreakdown.attendance.total * 100) / 100;
     const reviewPenalty = Math.round(allowanceBreakdown.reviewPenalty.total * 100) / 100;
-    const totalAllowances = Math.round((attendanceAllowance + performanceAllowance) * 100) / 100;
+    const totalAllowances = perfAllowance;
 
     // Recurring per-employee items active this cycle. Apply BEFORE statutory
     // so EPF-contributing additions feed into the basis, and deduct_from_gross
@@ -414,7 +418,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     // fixed (capped); performance allowance is VARIABLE incentive pay and
     // therefore excluded from the statutory basis. PCB still uses full gross
     // annualized.
-    const statutoryBasis = Math.max(0, basePay - unpaidDeduction + attendanceAllowance + recurringStatBasis - recurringPreTaxDeduct);
+    const statutoryBasis = Math.max(0, basePay - unpaidDeduction + recurringStatBasis - recurringPreTaxDeduct);
     const ytd = ytdByUser.get(profile.user_id) || { gross: 0, pcb: 0 };
     const employeeReliefs = reliefsByUser.get(profile.user_id);
     const stat = await calcAllStatutory({
@@ -441,11 +445,13 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     const pcb = stat.pcb;
     const zakat = stat.zakat;
 
-    // Review penalty is post-tax: subtract from net.
-    // Recurring deduct_after_net items also subtract post-tax (e.g. CP38 tax orders).
+    // NOTE: the negative-review penalty is already netted INTO perfAllowance
+    // (gross is lower by that amount), so it is NOT subtracted again here —
+    // doing so would double-count it. Recurring deduct_after_net items still
+    // subtract post-tax (e.g. CP38 tax orders).
     const recurringPostTaxTotal = recurringPostTax.reduce((s, d) => s + d.amount, 0);
-    const totalDeduct = Math.round((epfRates.employee + socsoRates.employee + eisRates.employee + pcb + zakat + reviewPenalty + recurringPostTaxTotal + recurringPreTaxDeduct) * 100) / 100;
-    const netPay = Math.round((gross - epfRates.employee - socsoRates.employee - eisRates.employee - pcb - zakat - reviewPenalty - recurringPostTaxTotal) * 100) / 100;
+    const totalDeduct = Math.round((epfRates.employee + socsoRates.employee + eisRates.employee + pcb + zakat + recurringPostTaxTotal + recurringPreTaxDeduct) * 100) / 100;
+    const netPay = Math.round((gross - epfRates.employee - socsoRates.employee - eisRates.employee - pcb - zakat - recurringPostTaxTotal) * 100) / 100;
     const employerCost = Math.round((epfRates.employer + socsoRates.employer + eisRates.employer + stat.hrdf.employer) * 100) / 100;
 
     totalGross += gross;
@@ -453,21 +459,20 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     totalNet += netPay;
     totalEmployerCost += employerCost;
 
-    // Structured allowance breakdown for payslip transparency
+    // Structured allowance breakdown for payslip transparency. Single
+    // performance pool: show the lever earnings + the deductions that netted
+    // against it (attendance + negative reviews).
     const allowancesDetail: Record<string, unknown> = {};
-    if (attendanceAllowance > 0) {
-      allowancesDetail.attendance = {
-        amount: attendanceAllowance,
-        base: allowanceBreakdown.attendance.base,
-        penalties: allowanceBreakdown.attendance.penalties,
-      };
-    }
-    if (performanceAllowance > 0) {
+    if (allowanceBreakdown.eligible) {
       allowancesDetail.performance = {
-        amount: performanceAllowance,
-        base: allowanceBreakdown.performance.base,
-        score: allowanceBreakdown.performance.score,
-        breakdown: allowanceBreakdown.performance.breakdown,
+        amount: perfAllowance,
+        pool: allowanceBreakdown.pool,
+        gross_earned: allowanceBreakdown.performanceEarned,
+        levers: allowanceBreakdown.levers,
+        attendance_deductions: allowanceBreakdown.attendance.deductions,
+        attendance_deducted: attendanceDeducted,
+        review_entries: allowanceBreakdown.reviewPenalty.entries,
+        review_deducted: reviewPenalty,
       };
     }
     // Recurring additions / pre-tax deductions show up in allowancesDetail with
@@ -480,12 +485,8 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     const otherDeductions: Record<string, unknown> = {};
     if (unpaidDeduction > 0) otherDeductions.unpaid_leave = unpaidDeduction;
     if (zakat > 0) otherDeductions.zakat = zakat;
-    if (reviewPenalty > 0) {
-      otherDeductions.review_penalty = {
-        amount: reviewPenalty,
-        entries: allowanceBreakdown.reviewPenalty.entries,
-      };
-    }
+    // Review penalty is netted into the performance allowance (above), not a
+    // separate post-tax deduction line — see allowancesDetail.performance.
     // Post-tax recurring deductions (e.g. CP38, salary advance recovery)
     for (const d of recurringPostTax) {
       otherDeductions[d.code] = { amount: d.amount, label: d.label, note: d.note };
@@ -522,9 +523,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         employment_type: profile.employment_type,
         unpaid_days: unpaidDays,
         attendance_records: userAttendance.length,
-        allowance_attendance_earned: attendanceAllowance,
-        allowance_performance_earned: performanceAllowance,
-        allowance_performance_eligible: allowanceBreakdown.performance.eligible,
+        allowance_earned: perfAllowance,
+        allowance_gross_earned: allowanceBreakdown.performanceEarned,
+        allowance_attendance_deducted: attendanceDeducted,
+        allowance_eligible: allowanceBreakdown.eligible,
         review_penalty: reviewPenalty,
         // Final-payroll marker: staff resigned this cycle. HR should add
         // leave encashment + notice-pay manually via an ad-hoc adjustment
