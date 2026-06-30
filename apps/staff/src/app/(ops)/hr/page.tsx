@@ -14,14 +14,27 @@ type HRStatus = {
   outletId: string | null;
 };
 
+type AllowanceLever = {
+  key: string;
+  label: string;
+  applicable: boolean;
+  score: number;
+  tier: "under" | "ok" | "perform";
+  slice: number;
+  earned: number;
+  detail: string;
+};
 type AllowanceBreakdown = {
-  isFullTime: boolean;
+  eligible: boolean;
   period: { year: number; month: number; daysElapsed: number; daysRemaining: number };
-  attendance: { base: number; earned: number; tip: string; metrics: { lateCount: number; absentCount: number } };
-  performance: { base: number; earned: number; score: number; mode: string; eligible: boolean; breakdown: { checklists: number; reviews: number; audit: number }; tip: string };
+  pool: number;
+  levers: AllowanceLever[];
+  performanceEarned: number;
+  attendance: { deductions: { kind: string; label: string; amount: number; date?: string }[]; lateCount: number; absentCount: number; total: number };
   reviewPenalty: { total: number; entries: { id: string; reviewDate: string; rating: number; amount: number }[] };
   totalEarned: number;
   totalMax: number;
+  tip: string;
 };
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -190,69 +203,62 @@ export default function HRHomePage() {
             </div>
           </div>
 
-          {/* Attendance bar */}
-          <div className="mb-3 rounded-xl bg-white/70 p-3">
-            <div className="mb-1 flex items-center justify-between text-sm">
+          {!allowance.eligible ? (
+            <div className="rounded-xl bg-white/70 p-3 text-sm text-gray-500">
               <div className="flex items-center gap-1.5">
-                <Clock className="h-4 w-4 text-blue-600" />
-                <span className="font-medium">Attendance</span>
+                <Sparkles className="h-4 w-4" />
+                <span>{allowance.tip || "Performance allowance is for full-time staff only."}</span>
               </div>
-              <span className="font-semibold">RM {allowance.attendance.earned} / RM {allowance.attendance.base}</span>
-            </div>
-            <div className="mb-1.5 h-2 overflow-hidden rounded-full bg-gray-200">
-              <div
-                className="h-full rounded-full bg-blue-500 transition-all"
-                style={{ width: `${(allowance.attendance.earned / allowance.attendance.base) * 100}%` }}
-              />
-            </div>
-            <p className="text-xs text-gray-600">{allowance.attendance.tip}</p>
-          </div>
-
-          {/* Performance bar — FT only */}
-          {allowance.performance.eligible ? (
-            <div className="mb-3 rounded-xl bg-white/70 p-3">
-              <div className="mb-1 flex items-center justify-between text-sm">
-                <div className="flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4 text-amber-600" />
-                  <span className="font-medium">Performance</span>
-                  <span className="text-xs text-gray-400">· score {allowance.performance.score}/100</span>
-                </div>
-                <span className="font-semibold">RM {allowance.performance.earned} / RM {allowance.performance.base}</span>
-              </div>
-              <div className="mb-1.5 h-2 overflow-hidden rounded-full bg-gray-200">
-                <div
-                  className="h-full rounded-full bg-amber-500 transition-all"
-                  style={{ width: allowance.performance.base > 0 ? `${(allowance.performance.earned / allowance.performance.base) * 100}%` : "0%" }}
-                />
-              </div>
-              <div className="mb-1 flex items-center gap-3 text-[11px] text-gray-500">
-                <span>Checklists {allowance.performance.breakdown.checklists}</span>
-                <span>Reviews {allowance.performance.breakdown.reviews}</span>
-                <span>Audit {allowance.performance.breakdown.audit}</span>
-              </div>
-              <p className="text-xs text-gray-600">{allowance.performance.tip}</p>
             </div>
           ) : (
-            <div className="mb-3 rounded-xl bg-white/70 p-3">
-              <div className="flex items-center gap-1.5 text-sm text-gray-500">
-                <Sparkles className="h-4 w-4" />
-                <span>Performance allowance — full-time staff only</span>
+            <>
+              {/* Earn levers — each scored on its own KPI */}
+              <div className="mb-3 space-y-2">
+                {allowance.levers.filter((l) => l.applicable).map((l) => {
+                  const barColor = l.tier === "perform" ? "bg-green-500" : l.tier === "ok" ? "bg-amber-500" : "bg-red-500";
+                  const pct = l.slice > 0 ? Math.round((l.earned / l.slice) * 100) : 0;
+                  return (
+                    <div key={l.key} className="rounded-xl bg-white/70 p-3">
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span className="font-medium">{l.label}</span>
+                        <span className="font-semibold">RM {l.earned} / {l.slice}</span>
+                      </div>
+                      <div className="mb-1.5 h-2 overflow-hidden rounded-full bg-gray-200">
+                        <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <p className="text-[11px] text-gray-600">{l.detail}</p>
+                    </div>
+                  );
+                })}
+                {allowance.levers.some((l) => !l.applicable) && (
+                  <p className="px-1 text-[11px] text-gray-400">
+                    Not counted for you: {allowance.levers.filter((l) => !l.applicable).map((l) => l.label).join(", ")} (shared across your other areas).
+                  </p>
+                )}
               </div>
-            </div>
-          )}
 
-          {/* Review penalty line */}
-          {allowance.reviewPenalty.total > 0 && (
-            <div className="rounded-xl bg-red-50 p-3">
-              <div className="mb-1 flex items-center justify-between text-sm">
-                <div className="flex items-center gap-1.5">
-                  <AlertTriangle className="h-4 w-4 text-red-600" />
-                  <span className="font-medium text-red-700">Review penalty</span>
+              {/* Deductions */}
+              {(allowance.attendance.total > 0 || allowance.reviewPenalty.total > 0) && (
+                <div className="rounded-xl bg-red-50 p-3">
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-1.5">
+                      <AlertTriangle className="h-4 w-4 text-red-600" />
+                      <span className="font-medium text-red-700">Deductions</span>
+                    </div>
+                    <span className="font-semibold text-red-700">−RM {allowance.attendance.total + allowance.reviewPenalty.total}</span>
+                  </div>
+                  <p className="text-xs text-red-600">
+                    {[
+                      allowance.attendance.lateCount > 0 ? `${allowance.attendance.lateCount} late` : null,
+                      allowance.attendance.absentCount > 0 ? `${allowance.attendance.absentCount} absence` : null,
+                      allowance.reviewPenalty.total > 0 ? `${allowance.reviewPenalty.entries.length} review penalty` : null,
+                    ].filter(Boolean).join(", ")} this month.
+                  </p>
                 </div>
-                <span className="font-semibold text-red-700">−RM {allowance.reviewPenalty.total}</span>
-              </div>
-              <p className="text-xs text-red-600">{allowance.reviewPenalty.entries.length} bad review{allowance.reviewPenalty.entries.length !== 1 ? "s" : ""} attributed this month.</p>
-            </div>
+              )}
+
+              <p className="mt-2 px-1 text-xs text-gray-600">{allowance.tip}</p>
+            </>
           )}
         </div>
       )}
