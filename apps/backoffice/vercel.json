@@ -69,6 +69,10 @@
       "schedule": "0 21 * * *"
     },
     {
+      "path": "/api/cron/gl-post",
+      "schedule": "0 */3 * * *"
+    },
+    {
       "path": "/api/cron/music-alerts",
       "schedule": "*/5 * * * *"
     },

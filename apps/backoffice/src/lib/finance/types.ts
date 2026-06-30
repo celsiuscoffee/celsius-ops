@@ -20,6 +20,7 @@ export type AgentName =
   | "matcher"
   | "ap"
   | "ar"
+  | "bank"
   | "close"
   | "compliance"
   | "anomaly"

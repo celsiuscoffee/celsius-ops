@@ -1953,6 +1953,11 @@ model BankStatementLine {
   // AP auto-match: the procurement invoice this outflow settled.
   apInvoiceId     String?
   apMatchedAt     DateTime?
+  // GL posting bridge: the fin_transactions journal this line was posted into
+  // (lines sharing a company/outlet/category/day roll into one journal). Set =
+  // posted; null = not yet in the ledger. Idempotency key for the poster.
+  glTransactionId String?
+  glPostedAt      DateTime?
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -1960,6 +1965,7 @@ model BankStatementLine {
   @@index([statementId])
   @@index([txnDate])
   @@index([category, outletId])
+  @@index([glTransactionId])
 }
 
 enum BankLineDirection {
