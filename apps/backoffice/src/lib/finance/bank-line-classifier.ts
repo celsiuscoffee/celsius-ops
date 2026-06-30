@@ -98,6 +98,11 @@ const INFLOW_RULES: Rule[] = [
   // StoreHub — Interbank GIRO from STOREHUB SDN BHD
   { name: "storehub", match: /\bSTOREHUB\b/i, direction: "CR", category: "STOREHUB" as CashCategory },
 
+  // Revenue Monster — online (pickup + table-QR) settlement. Description is
+  // "<DDMMYY> SETTLEMENT REVENUE MONSTER SDN*RMSB SETTLEMENT" where DDMMYY is
+  // the sales date being settled (the bank txnDate is the later clearing date).
+  { name: "revenue_monster", match: /\bREVENUE\s*MONSTER\b|\bRMSB\s*SETTLEMENT\b/i, direction: "CR", category: "REVENUE_MONSTER" as CashCategory },
+
   // Grab — GPAY NETWORK / GRAB
   { name: "grab", match: /\b(GPAY NETWORK|GRAB(?!FOOD))\b/i, direction: "CR", category: "GRAB" as CashCategory },
 
@@ -145,7 +150,7 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "purpose_kol",              match: /\bKOL\b|\bINFLUENCER\b/i,               direction: "DR", category: "KOL" as CashCategory },
   { name: "purpose_renovation",       match: /\bRENOVATION\b|\bRENOVATE\b/i,          direction: "DR", category: "INVESTMENTS" as CashCategory },
   { name: "purpose_legal",            match: /\bLEGAL\s*FEE|\bASHRAF\s*&\s*PARTNERS|\bLAWYER\b/i, direction: "DR", category: "COMPLIANCE" as CashCategory },
-  { name: "purpose_dividend",         match: /\bDIVIDEND\b/i,                         direction: "DR", category: "OTHER_OUTFLOW" as CashCategory },
+  { name: "purpose_dividend",         match: /\bDIVIDEND\b|\bDIVIDE\b/i,              direction: "DR", category: "DIVIDEND" as CashCategory },
   { name: "purpose_cfs_contract",     match: /\bCFS\s*CONTRACT\b|\bCFS\s*FEE\b/i,     direction: "DR", category: "CFS_FEE" as CashCategory },
 
   // Statutory — EPF / SOCSO / EIS / KWSP / PERKESO / LHDN tax
@@ -172,7 +177,7 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "software_pos",   match: /\b(STOREHUB|XERO|BUKKU|QUICKBOOKS|HUBSPOT)\b/i, direction: "DR", category: "SOFTWARE" as CashCategory },
 
   // Loan repayments
-  { name: "loan_payment",   match: /\b(LOAN\s*PAYMENT|FINANCING|HIRE\s*PURCHASE)\b/i, direction: "DR", category: "LOAN" as CashCategory },
+  { name: "loan_payment",   match: /\b(LOAN\s*(PAYMENT|PAYBACK|REPAY(MENT)?|SETTLEMENT)|FINANCING|HIRE\s*PURCHASE)\b/i, direction: "DR", category: "LOAN" as CashCategory },
 
   // Bank fees
   { name: "bank_fee",       match: /\b(SERVICE\s*FEE|HANDLING\s*FEE|BANK\s*CHARGE|MAINTENANCE\s*FEE|GIRO\s*FEE)\b/i, direction: "DR", category: "BANK_FEE" as CashCategory },
