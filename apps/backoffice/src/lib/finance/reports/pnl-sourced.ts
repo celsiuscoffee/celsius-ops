@@ -56,6 +56,70 @@ function humanCat(c: string | null): string {
 }
 const dStart = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const dEnd = (s: string) => new Date(`${s}T23:59:59.999Z`);
+const ymd = (d: Date) => d.toISOString().slice(0, 10);
+
+// Cheapest active supplier cost per BASE unit, per stock product — the same
+// basis the BOM/menu costing uses. Values physical stock counts for the COGS
+// formula (Opening + Purchases − Closing).
+async function costPerBaseUnit(): Promise<Map<string, number>> {
+  const sps = await prisma.supplierProduct.findMany({
+    where: { isActive: true, price: { gt: 0 } },
+    select: { productId: true, price: true, productPackage: { select: { conversionFactor: true } }, supplier: { select: { supplierCode: true } } },
+  });
+  const m = new Map<string, number>();
+  for (const sp of sps) {
+    if (sp.supplier?.supplierCode === "ADHOC") continue;
+    const conv = Number(sp.productPackage?.conversionFactor ?? 0);
+    if (conv <= 0) continue;
+    const c = Number(sp.price) / conv;
+    const ex = m.get(sp.productId);
+    if (ex == null || c < ex) m.set(sp.productId, c);
+  }
+  return m;
+}
+
+// Value inventory at a period boundary from the nearest finalized
+// (REVIEWED/SUBMITTED) stock count per outlet within 25 days. Returns null
+// (→ caller falls back to the purchases proxy) when no usable count exists, or
+// when a full count values implausibly low (a broken/mis-unit count) — so we
+// never print a wrong COGS. coverage exposes how complete the count was.
+async function valueInventoryAt(
+  outletIds: string[],
+  boundary: Date,
+  cost: Map<string, number>,
+): Promise<{ value: number; dates: string[]; coverage: string } | null> {
+  if (!outletIds.length) return null;
+  const since = new Date(boundary.getTime() - 25 * 86400_000);
+  const counts = await prisma.stockCount.findMany({
+    where: { outletId: { in: outletIds }, status: { in: ["REVIEWED", "SUBMITTED"] }, countDate: { gte: since, lte: boundary } },
+    orderBy: { countDate: "desc" },
+    select: { outletId: true, countDate: true, items: { select: { productId: true, countedQty: true } } },
+  });
+  // Per outlet, take the latest count that is a real FULL inventory: ≥100
+  // counted items and a plausible value (skip partials like a 65-item count
+  // and broken/mis-unit counts worth a few ringgit). Keep looking back through
+  // the window if the newest count is partial.
+  const MIN_ITEMS = 100;
+  const used = new Map<string, { date: Date; value: number; items: number; costed: number }>();
+  for (const c of counts) {
+    if (used.has(c.outletId)) continue;
+    let v = 0, n = 0, costed = 0;
+    for (const it of c.items) {
+      if (it.countedQty == null) continue;
+      n++;
+      const u = cost.get(it.productId);
+      if (u != null) { costed++; v += Number(it.countedQty) * u; }
+    }
+    if (n < MIN_ITEMS || v < 2000) continue; // partial or broken — skip
+    used.set(c.outletId, { date: c.countDate, value: v, items: n, costed });
+  }
+  if (used.size === 0) return null;
+
+  let value = 0, tot = 0, costed = 0;
+  const dates: string[] = [];
+  for (const u of used.values()) { value += u.value; tot += u.items; costed += u.costed; dates.push(ymd(u.date)); }
+  return { value: round2(value), dates: [...new Set(dates)].sort(), coverage: `${costed}/${tot} items` };
+}
 
 export async function buildSourcedPnl(input: {
   companyId: string;
@@ -111,10 +175,32 @@ export async function buildSourcedPnl(input: {
     _sum: { amount: true },
     where: { issueDate: invDate, outletId: { in: outletIds.length ? outletIds : ["__none__"] } },
   });
-  const cogsTotal = round2(Number(invAgg._sum?.amount ?? 0));
-  const cogsLines: PnlLine[] = cogsTotal
-    ? [{ code: "PROC", name: "Supplier purchases (procurement)", amount: cogsTotal, parentCode: null }]
-    : [];
+  const purchases = round2(Number(invAgg._sum?.amount ?? 0));
+
+  // True COGS = Opening inventory + Purchases − Closing inventory, valuing the
+  // bounding stock counts at supplier cost. Falls back to purchases-only when
+  // either boundary lacks a usable count (so it's never a wrong number — just
+  // a flagged proxy).
+  const costMap = await costPerBaseUnit();
+  const [opening, closing] = await Promise.all([
+    valueInventoryAt(outletIds, dStart(start), costMap),
+    valueInventoryAt(outletIds, dEnd(end), costMap),
+  ]);
+  let cogsTotal: number;
+  let cogsLines: PnlLine[];
+  if (opening && closing) {
+    cogsTotal = round2(opening.value + purchases - closing.value);
+    cogsLines = [
+      { code: "INV-OPEN", name: `Opening inventory (count ${opening.dates.join(", ")} · ${opening.coverage})`, amount: opening.value, parentCode: null },
+      { code: "PROC", name: "Add: Purchases (procurement)", amount: purchases, parentCode: null },
+      { code: "INV-CLOSE", name: `Less: Closing inventory (count ${closing.dates.join(", ")} · ${closing.coverage})`, amount: -closing.value, parentCode: null },
+    ];
+  } else {
+    cogsTotal = purchases;
+    cogsLines = purchases
+      ? [{ code: "PROC", name: "Purchases (procurement) — no usable stock count, COGS = purchases", amount: purchases, parentCode: null }]
+      : [];
+  }
 
   // ─── EXPENSES: marketing (ads + bank) + other opex (bank) ────────────────
   const expenseLines: PnlLine[] = [];
