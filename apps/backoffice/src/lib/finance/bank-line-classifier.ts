@@ -41,10 +41,14 @@ export type ClassifyResult = {
 //
 // Outlet codes returned here match the Outlet.code values used elsewhere.
 function inferOutlet(desc: string): string | null {
+  // Channel-specific outlets (both in Celsius Coffee SB / acct 4384):
+  // GastroHub settles for Nilai; Kiddytopia is the IOI Mall events venue.
+  if (/\bGYRO\s*GASTRO\b/i.test(desc)) return "CF Nilai";
+  if (/\bKIDDYTOPIA\b/i.test(desc)) return "CF IOI Mall";
   if (/\bTAMARIND\b/i.test(desc) || /\bCELSIUSCOFFEE\s*T\b/i.test(desc)) return "CC003";
   if (/\bCONEZION\b/i.test(desc) || /\bCELSIUSCOFFEE\s*C\b/i.test(desc)) return "CC001";
-  if (/\bCELSIUSCOFFEE\s*SA\b/i.test(desc)) return null;       // Shah Alam — outlet code unknown to me
-  if (/\bCELSIUSCOFFEE\s*N\b/i.test(desc)) return null;        // Nilai — same
+  if (/\bCELSIUSCOFFEE\s*SA\b/i.test(desc)) return "CC002";    // Shah Alam
+  if (/\bCELSIUSCOFFEE\s*N\b/i.test(desc)) return "CF Nilai";  // Nilai
   if (/\bCELSIUSCOFFEE\s*P\b/i.test(desc)) return "CC001";     // Putrajaya = Conezion in current data
   return null;
 }
