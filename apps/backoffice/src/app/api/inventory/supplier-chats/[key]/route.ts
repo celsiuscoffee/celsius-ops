@@ -156,6 +156,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
       newQuantity: number | null;
       note: string | null;
     } | null;
+    // A supplier-sent revised invoice: the concrete amount/number change to approve.
+    invoiceAction: {
+      invoiceId: string;
+      invoiceNumber: string;
+      orderNumber: string;
+      fromAmount: number;
+      toAmount: number | null;
+      fromNumber: string;
+      toNumber: string | null;
+    } | null;
     at: string;
   } | null = null;
   const lastOutbound = await prisma.whatsAppMessage.findFirst({
@@ -177,6 +187,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
   if (raw && raw.escalated === true && raw.proposalResolved !== true && raw.proposal && typeof raw.proposal === "object") {
     const p = raw.proposal as Record<string, unknown>;
     const pa = (p.poAction ?? null) as Record<string, unknown> | null;
+    const ia = (p.invoiceAction ?? null) as Record<string, unknown> | null;
     agentProposal = {
       messageId: lastOutbound!.id,
       orderId: typeof p.orderId === "string" ? p.orderId : null,
@@ -194,6 +205,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
             note: typeof pa.note === "string" ? pa.note : null,
           }
         : null,
+      invoiceAction:
+        ia && typeof ia.invoiceId === "string"
+          ? {
+              invoiceId: ia.invoiceId,
+              invoiceNumber: String(ia.invoiceNumber ?? ""),
+              orderNumber: String(ia.orderNumber ?? ""),
+              fromAmount: typeof ia.fromAmount === "number" ? ia.fromAmount : 0,
+              toAmount: typeof ia.toAmount === "number" ? ia.toAmount : null,
+              fromNumber: String(ia.fromNumber ?? ""),
+              toNumber: typeof ia.toNumber === "string" ? ia.toNumber : null,
+            }
+          : null,
       at: lastOutbound!.timestamp.toISOString(),
     };
   }

@@ -268,6 +268,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     const appliedActions: PoActionType[] = [];
     let deliveryUpdated: string | null = null;
     let invoiceCaptured = false;
+    let invoiceRevision: InvoiceRevision | null = null;
     type ReSource = { orderId: string; supplierName: string; orderNumber: string; qty: number; unit: string; existing: boolean };
     let reSource: ReSource | null = null;
     const reSources: ReSource[] = [];
@@ -279,11 +280,16 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     // (by billed total, not just the most-recent open one) and dedups per-PO itself, so the
     // most-recent-PO `invoices.length` guard is gone — pass the most-recent as the fallback.
     if (decision.capture_invoice) {
-      invoiceCaptured = await captureInvoice(
+      const cap = await captureInvoice(
         { id: order.id, orderNumber: order.orderNumber, outletId: order.outletId, totalAmount: order.totalAmount, status: order.status },
         supplier.id,
         evt.mediaId ?? null,
       );
+      invoiceCaptured = cap.captured;
+      invoiceRevision = cap.revision;
+      // A revised invoice is never auto-applied — force a human gate (ASSIST already escalates;
+      // this also holds AUTO suppliers) so it surfaces as an Approve/Reject proposal.
+      if (invoiceRevision) escalate = true;
     }
 
     // Snapshot exactly what the agent saw — used by the pre-send gate now, and recorded
@@ -417,6 +423,20 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
                   note: decision.po_action.note,
                 }
               : null,
+          // A supplier-sent REVISED invoice → the concrete update for a human to approve
+          // (apply-proposal patches the invoice; never touches a PAID one). ASSIST does the work,
+          // staff only decides. See assist-mode-principle.
+          invoiceAction: invoiceRevision
+            ? {
+                invoiceId: invoiceRevision.invoiceId,
+                invoiceNumber: invoiceRevision.invoiceNumber,
+                orderNumber: invoiceRevision.orderNumber,
+                fromAmount: invoiceRevision.fromAmount,
+                toAmount: invoiceRevision.toAmount,
+                fromNumber: invoiceRevision.fromNumber,
+                toNumber: invoiceRevision.toNumber,
+              }
+            : null,
         }
       : null;
 
@@ -606,11 +626,25 @@ function visionMime(
  * fetched or parsed (or the total is unreadable), we fall back to the old
  * provisional capture (amount = PO total). Always DRAFT → never triggers payment.
  */
+// A supplier-sent REVISED invoice on a bill we already have on file — surfaced as an ASSIST
+// proposal ("update X → Y", a human approves), never auto-applied and never touching a PAID
+// invoice. null toAmount/toNumber = that field is unchanged (or unreadable).
+type InvoiceRevision = {
+  invoiceId: string;
+  invoiceNumber: string;
+  orderNumber: string;
+  fromAmount: number;
+  toAmount: number | null;
+  fromNumber: string;
+  toNumber: string | null;
+};
+type CaptureResult = { captured: boolean; revision: InvoiceRevision | null };
+
 async function captureInvoice(
   order: { id: string; orderNumber: string; outletId: string; totalAmount: unknown; status: OrderStatus | null },
   supplierId: string,
   mediaId: string | null,
-): Promise<boolean> {
+): Promise<CaptureResult> {
   // ── Try to read the document for a real amount/number/date ──
   let extractedTotal: number | null = null;
   let extractedNumber: string | null = null;
@@ -650,6 +684,7 @@ async function captureInvoice(
   // that total, instead of always the most-recent open PO (which mis-filed invoices onto
   // the newest order). Fall back to the passed `order` when nothing matches / is unreadable.
   let target: { id: string; orderNumber: string; outletId: string; totalAmount: unknown; status: OrderStatus | null } = order;
+  let targetConfident = false; // target came from a real billed-total match (not the fallback)
   if (extractedTotal != null) {
     const openPos = await prisma.order.findMany({
       where: { supplierId, orderType: "PURCHASE_ORDER", status: { in: OPEN_ORDER_STATUSES } },
@@ -659,14 +694,75 @@ async function captureInvoice(
     const match = openPos.find(
       (p) => Math.abs(Number(p.totalAmount) - extractedTotal!) <= Math.max(1, Number(p.totalAmount) * 0.02),
     );
-    if (match) target = match;
+    if (match) {
+      target = match;
+      targetConfident = true;
+    }
   }
 
-  // Dedup: one captured invoice per PO. Skips a burst of images for the same bill / a
-  // re-send (the unique invoiceNumber backstops the truly-simultaneous race).
-  if ((await prisma.invoice.count({ where: { orderId: target.id } })) > 0) {
+  // Already on file? A re-send of the same bill → skip silently (the original dedup). But a
+  // REVISED bill — the same invoice number with a corrected amount, or a re-issued number on the
+  // same confidently-matched PO — is surfaced as an ASSIST proposal for a human to approve the
+  // update, never silently dropped and never auto-edited. We NEVER propose touching a PAID invoice.
+  const amtChanged = (oldAmount: number) =>
+    extractedTotal != null && Math.abs(oldAmount - extractedTotal) > Math.max(1, oldAmount * 0.02);
+
+  // (1) Strong signal: this supplier already has an invoice with this exact number, but the
+  //     amount changed → a corrected bill. High precision, independent of PO matching.
+  const priorSameNo = extractedNumber
+    ? await prisma.invoice.findFirst({
+        where: { supplierId, invoiceNumber: extractedNumber },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, invoiceNumber: true, amount: true, status: true, order: { select: { orderNumber: true } } },
+      })
+    : null;
+  if (priorSameNo && priorSameNo.status !== "PAID" && amtChanged(Number(priorSameNo.amount))) {
+    console.log(
+      `[supplier-agent] invoice REVISION (amount) ${priorSameNo.invoiceNumber}: ${Number(priorSameNo.amount)} → ${extractedTotal}`,
+    );
+    return {
+      captured: false,
+      revision: {
+        invoiceId: priorSameNo.id,
+        invoiceNumber: priorSameNo.invoiceNumber,
+        orderNumber: priorSameNo.order?.orderNumber ?? target.orderNumber,
+        fromAmount: Number(priorSameNo.amount),
+        toAmount: extractedTotal,
+        fromNumber: priorSameNo.invoiceNumber,
+        toNumber: null,
+      },
+    };
+  }
+
+  // Dedup anchor: the invoice already filed against this PO.
+  const priorOnPo = await prisma.invoice.findFirst({
+    where: { orderId: target.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, invoiceNumber: true, amount: true, status: true },
+  });
+  if (priorOnPo) {
+    // (2) Re-issued invoice number on the SAME billed-total-matched PO (and it's not the same
+    //     number we already matched in (1)) → a replacement invoice: propose the number/amount update.
+    const numberChanged = !!extractedNumber && extractedNumber !== priorOnPo.invoiceNumber;
+    if (targetConfident && priorOnPo.status !== "PAID" && numberChanged && !priorSameNo) {
+      console.log(
+        `[supplier-agent] invoice REVISION (number) po=${target.orderNumber} ${priorOnPo.invoiceNumber} → ${extractedNumber}`,
+      );
+      return {
+        captured: false,
+        revision: {
+          invoiceId: priorOnPo.id,
+          invoiceNumber: priorOnPo.invoiceNumber,
+          orderNumber: target.orderNumber,
+          fromAmount: Number(priorOnPo.amount),
+          toAmount: amtChanged(Number(priorOnPo.amount)) ? extractedTotal : null,
+          fromNumber: priorOnPo.invoiceNumber,
+          toNumber: extractedNumber,
+        },
+      };
+    }
     console.log(`[supplier-agent] invoice capture skipped — ${target.orderNumber} already has an invoice`);
-    return false;
+    return { captured: false, revision: null };
   }
 
   const amount = extractedTotal ?? (Number(target.totalAmount) || 0);
@@ -721,14 +817,14 @@ async function captureInvoice(
       `[supplier-agent] invoice captured id=${created.id} no=${invoiceNumber} po=${target.orderNumber} ` +
         `amount=${amount} extracted=${!provisional} prefilled=${prefilled.join("|") || "-"} flags=${flags.length}`,
     );
-    return true;
+    return { captured: true, revision: null };
   } catch (e) {
     // Unique invoiceNumber collision (already captured) or any write error.
     console.warn(
       "[supplier-agent] invoice capture skipped:",
       e instanceof Error ? e.message : e,
     );
-    return false;
+    return { captured: false, revision: null };
   }
 }
 
