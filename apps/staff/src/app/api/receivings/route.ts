@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import { baseQtyByProduct } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { adjustStockBalance } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
@@ -88,6 +89,9 @@ export async function POST(req: NextRequest) {
 
   // PO ordered quantities by product+package, used to backfill orderedQty.
   const orderedQtyMap = new Map<string, number>();
+  // PO package per product — receivings are counted in the PO's package unit,
+  // so we use this to convert receivedQty to base UOM before touching stock.
+  const poPkgMap = new Map<string, string | null>();
   const resolveOrderedQty = (i: { productId: string; productPackageId?: string; orderedQty?: number }): number | null => {
     if (i.orderedQty !== undefined && i.orderedQty !== null) return i.orderedQty;
     if (!orderId) return null;
@@ -122,6 +126,7 @@ export async function POST(req: NextRequest) {
     });
     for (const oi of poItems) {
       orderedQtyMap.set(`${oi.productId}::${oi.productPackageId ?? ""}`, Number(oi.quantity));
+      if (!poPkgMap.has(oi.productId)) poPkgMap.set(oi.productId, oi.productPackageId ?? null);
     }
 
     const hasShort = items.some((i: { productId: string; productPackageId?: string; orderedQty?: number; receivedQty: number }) => {
@@ -153,10 +158,38 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Update stock balances (parallel)
+  // Update stock balances. Goods are received in the PO's package unit
+  // ("12 bottles"), but StockBalance is tracked in base UOM, so multiply each
+  // line by its package conversionFactor before incrementing the canonical
+  // per-product row (productPackageId = null) — same rule as stock counts.
+  const recvPkgIds = [
+    ...new Set(
+      (items as Array<{ productId: string; productPackageId?: string }>)
+        .map((i) => i.productPackageId ?? poPkgMap.get(i.productId) ?? null)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+  const cfMap = new Map<string, number>();
+  if (recvPkgIds.length > 0) {
+    const pkgs = await prisma.productPackage.findMany({
+      where: { id: { in: recvPkgIds } },
+      select: { id: true, conversionFactor: true },
+    });
+    for (const p of pkgs) cfMap.set(p.id, Number(p.conversionFactor));
+  }
+  const baseTotals = baseQtyByProduct(
+    (items as Array<{ productId: string; productPackageId?: string; receivedQty: number }>).map((i) => {
+      const pkgId = i.productPackageId ?? poPkgMap.get(i.productId) ?? null;
+      return {
+        productId: i.productId,
+        countedQty: i.receivedQty,
+        conversionFactor: pkgId ? cfMap.get(pkgId) ?? 1 : 1,
+      };
+    }),
+  );
   await Promise.all(
-    items.map((item: { productId: string; receivedQty: number }) =>
-      adjustStockBalance(outletId, item.productId, item.receivedQty),
+    [...baseTotals].map(([productId, baseQty]) =>
+      adjustStockBalance(outletId, productId, baseQty, null),
     ),
   );
 
