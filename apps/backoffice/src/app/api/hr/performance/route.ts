@@ -4,6 +4,7 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews } from "@/lib/reviews/gbp";
 import { resolveVisibleUserIds, getAccessibleOutletIds } from "@/lib/hr/scope";
+import { computeLateMinutes } from "@/lib/hr/hours";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
   // vs scheduled_start below).
   const { data: attendance } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("user_id, outlet_id, clock_in, clock_out, scheduled_start, regular_hours, overtime_hours, ai_flags, final_status, excused")
+    .select("user_id, outlet_id, clock_in, clock_out, scheduled_start, scheduled_date, regular_hours, overtime_hours, ai_flags, final_status, excused")
     .gte("clock_in", monthStartIso)
     .lte("clock_in", monthEndIso);
 
@@ -252,23 +253,14 @@ export async function GET(req: NextRequest) {
     });
   });
 
-  // Attendance aggregates — compute lateness inline from clock_in vs
-  // scheduled_start (the scheduled_start column holds HH:MM:SS for the
-  // expected start time of that shift; clock_in is a full UTC timestamp).
-  const computeLateMin = (clockInIso: string, schedStart: string | null): number => {
-    if (!schedStart) return 0;
-    const d = new Date(clockInIso);
-    // Convert to MYT to compare against scheduled_start (stored in MYT)
-    const myt = new Date(d.getTime() + 8 * 3600 * 1000);
-    const h = myt.getUTCHours(), m = myt.getUTCMinutes();
-    const [sh, sm] = schedStart.split(":").map(Number);
-    const delta = (h * 60 + m) - (sh * 60 + (sm || 0));
-    return delta > 0 ? delta : 0;
-  };
-  (attendance || []).forEach((a: { user_id: string; clock_in: string; scheduled_start: string | null; regular_hours: number | null; overtime_hours: number | null; final_status: string | null }) => {
+  // Attendance aggregates — lateness via the shared cross-midnight-safe helper.
+  // The previous inline version compared only the MYT wall-clock of clock_in
+  // against scheduled_start with NO date component, so a shift rostered 23:00
+  // and clocked in 00:10 next day read as "on time" (or wildly wrong).
+  (attendance || []).forEach((a: { user_id: string; clock_in: string; scheduled_start: string | null; scheduled_date: string | null; regular_hours: number | null; overtime_hours: number | null; final_status: string | null }) => {
     const p = perfMap.get(a.user_id);
     if (!p) return;
-    const lateMin = computeLateMin(a.clock_in, a.scheduled_start);
+    const lateMin = Math.max(0, computeLateMinutes(a.clock_in, a.scheduled_start, a.scheduled_date));
     p.clockIns += 1;
     if (lateMin > 0) p.lateCount += 1;
     p.totalLateMinutes += lateMin;
