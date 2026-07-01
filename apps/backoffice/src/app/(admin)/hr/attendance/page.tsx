@@ -2,7 +2,7 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, MapPinOff, Clock, Timer, Loader2, ImageOff } from "lucide-react";
+import { AlertTriangle, CheckCircle2, MapPinOff, Clock, Timer, Loader2, ImageOff, PencilLine } from "lucide-react";
 import { usePrompt } from "@celsius/ui";
 import { HrPageHeader } from "@/components/hr/page-header";
 import type { AttendanceLog } from "@/lib/hr/types";
@@ -26,7 +26,46 @@ export default function AttendanceReviewPage() {
   const { data, mutate } = useFetch<{ logs: EnrichedLog[]; count: number }>(`/api/hr/attendance?status=${filter}`);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // "Fix times" inline editor: which log is being edited + its MYT-input values.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCI, setEditCI] = useState("");
+  const [editCO, setEditCO] = useState("");
   const { prompt, PromptDialog } = usePrompt();
+
+  // datetime-local <-> UTC ISO, treating the input as Malaysia wall time (UTC+8).
+  const toMytInput = (iso: string | null): string =>
+    !iso ? "" : new Date(new Date(iso).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 16);
+  const fromMytInput = (v: string): string | null => {
+    if (!v) return null;
+    const ms = Date.parse(`${v}:00+08:00`);
+    return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+  };
+
+  const openEditor = (log: EnrichedLog) => {
+    setEditingId(log.id);
+    setEditCI(toMytInput(log.clock_in));
+    setEditCO(toMytInput(log.clock_out));
+  };
+
+  const handleSetTimes = async (id: string) => {
+    const clockInIso = fromMytInput(editCI);
+    const clockOutIso = fromMytInput(editCO);
+    if (!clockOutIso) return; // a clock-out time is required
+    setReviewingId(id);
+    try {
+      const res = await fetch("/api/hr/attendance", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "set_times", clockIn: clockInIso, clockOut: clockOutIso }),
+      });
+      if (res.ok) {
+        setEditingId(null);
+        mutate();
+      }
+    } finally {
+      setReviewingId(null);
+    }
+  };
 
   const handleReview = async (id: string, action: "acknowledge" | "excuse" | "reject", excuseReason?: string) => {
     setReviewingId(id);
@@ -166,7 +205,61 @@ export default function AttendanceReviewPage() {
                 >
                   Reject
                 </button>
+                <button
+                  onClick={() => (editingId === log.id ? setEditingId(null) : openEditor(log))}
+                  disabled={reviewingId === log.id}
+                  title={log.clock_out ? "Correct the clock in / out times" : "Manually clock this staffer out"}
+                  className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-muted disabled:opacity-50"
+                >
+                  <PencilLine className="h-3 w-3" />
+                  {log.clock_out ? "Fix times" : "Clock out"}
+                </button>
               </div>
+
+              {/* Fix-times editor: manual clock-out for an open log, or a time
+                  correction. Hours recompute server-side via the shared engine. */}
+              {editingId === log.id && (
+                <div className="mt-3 space-y-2 rounded-lg border bg-muted/40 p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <label className="flex-1 text-xs font-medium text-muted-foreground">
+                      Clock in (MYT)
+                      <input
+                        type="datetime-local"
+                        value={editCI}
+                        onChange={(e) => setEditCI(e.target.value)}
+                        className="mt-1 w-full rounded-md border bg-card px-2 py-1 text-sm text-foreground"
+                      />
+                    </label>
+                    <label className="flex-1 text-xs font-medium text-muted-foreground">
+                      Clock out (MYT)
+                      <input
+                        type="datetime-local"
+                        value={editCO}
+                        onChange={(e) => setEditCO(e.target.value)}
+                        className="mt-1 w-full rounded-md border bg-card px-2 py-1 text-sm text-foreground"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleSetTimes(log.id)}
+                      disabled={reviewingId === log.id || !editCO}
+                      className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                    >
+                      {reviewingId === log.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                      Save times
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      disabled={reviewingId === log.id}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-muted disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <span className="text-[11px] text-muted-foreground">Hours recompute automatically. Times are Malaysia time.</span>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

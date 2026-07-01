@@ -4,6 +4,7 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds } from "@/lib/hr/scope";
 import { signAttendancePhotos } from "@/lib/hr/photos";
+import { deriveHours, mytDateString, mytDayOfWeek } from "@/lib/hr/hours";
 
 export const dynamic = "force-dynamic";
 
@@ -116,12 +117,14 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { id, action, adjustedHours, notes, excuseReason } = body as {
+  const { id, action, adjustedHours, notes, excuseReason, clockIn, clockOut } = body as {
     id: string;
-    action: "acknowledge" | "excuse" | "approve" | "reject" | "adjust";
+    action: "acknowledge" | "excuse" | "approve" | "reject" | "adjust" | "set_times";
     adjustedHours?: number;
     notes?: string;
     excuseReason?: string;
+    clockIn?: string; // ISO — new clock-in (set_times)
+    clockOut?: string; // ISO — new clock-out / manual clock-out (set_times)
   };
 
   if (!id) {
@@ -132,7 +135,7 @@ export async function PATCH(req: NextRequest) {
   // 'adjust' can preserve the original overtime_type (PH/rest-day/weekday).
   const { data: existingLog } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("outlet_id, overtime_type")
+    .select("user_id, outlet_id, clock_in, clock_out, overtime_type")
     .eq("id", id)
     .maybeSingle();
   if (!existingLog) {
@@ -146,6 +149,68 @@ export async function PATCH(req: NextRequest) {
         { status: 403 },
       );
     }
+  }
+
+  // set_times: the manager fixes the real clock-in/out (or manually clocks out a
+  // stranded staffer). Hours recompute via the SAME deriveHours engine as a normal
+  // clock-out, so a corrected log pays identically. The corrected clock-in flows
+  // into the allowance lateness naturally (not force-excused).
+  if (action === "set_times") {
+    const newClockInIso = clockIn || existingLog.clock_in;
+    const newClockOutIso = clockOut || existingLog.clock_out;
+    if (!newClockOutIso) {
+      return NextResponse.json({ error: "A clock-out time is required" }, { status: 400 });
+    }
+    const ci = new Date(newClockInIso);
+    const co = new Date(newClockOutIso);
+    if (isNaN(ci.getTime()) || isNaN(co.getTime())) {
+      return NextResponse.json({ error: "Invalid clock-in/out time" }, { status: 400 });
+    }
+    if (co.getTime() < ci.getTime()) {
+      return NextResponse.json({ error: "Clock-out must be after clock-in" }, { status: 400 });
+    }
+    if (co.getTime() - ci.getTime() > 24 * 3600 * 1000) {
+      return NextResponse.json({ error: "Shift can't exceed 24 hours — check the times" }, { status: 400 });
+    }
+    const { data: prof } = await hrSupabaseAdmin
+      .from("hr_employee_profiles")
+      .select("employment_type, rest_day")
+      .eq("user_id", existingLog.user_id)
+      .maybeSingle();
+    const employmentType = prof?.employment_type || "full_time";
+    const restDay = prof?.rest_day == null ? 0 : Number(prof.rest_day);
+    const mytDate = mytDateString(ci);
+    const { data: ph } = await hrSupabaseAdmin
+      .from("hr_public_holidays").select("date").eq("date", mytDate).maybeSingle();
+    const derived = deriveHours({
+      clockIn: ci,
+      clockOut: co,
+      employmentType,
+      isPublicHoliday: !!ph,
+      isRestDay: mytDayOfWeek(ci) === restDay,
+    });
+    const wasOpen = !existingLog.clock_out;
+    const { data: updated, error: setErr } = await hrSupabaseAdmin
+      .from("hr_attendance_logs")
+      .update({
+        clock_in: ci.toISOString(),
+        clock_out: co.toISOString(),
+        clock_out_method: "manual",
+        total_hours: derived.totalHours,
+        regular_hours: derived.regularHours,
+        overtime_hours: derived.overtimeHours,
+        overtime_type: derived.overtimeType,
+        final_status: "adjusted",
+        ai_status: "reviewed",
+        reviewed_by: session.id,
+        reviewed_at: new Date().toISOString(),
+        review_notes: notes || (wasOpen ? "Manager manual clock-out" : "Manager corrected clock in/out times"),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+    if (setErr) return NextResponse.json({ error: setErr.message }, { status: 500 });
+    return NextResponse.json({ log: updated });
   }
 
   const updateData: Record<string, unknown> = {
