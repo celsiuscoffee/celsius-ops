@@ -9,7 +9,7 @@ export default function AttendanceScreen() {
     queryKey: ["hr-attendance", 30],
     queryFn: () => fetchAttendance(30),
   });
-  const items = data?.attendance ?? [];
+  const items = data?.logs ?? [];
   const stats = data?.stats;
 
   return (

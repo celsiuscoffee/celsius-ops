@@ -41,6 +41,20 @@ async function backgroundPing(
   lat?: number,
   lng?: number,
 ) {
+  // Prefer the DEVICE's actual position over whatever coords the caller passed.
+  // Geofence events hand us the region (outlet) center, so pinging with those
+  // always reads in_zone and the server never sees a real out-of-zone ping —
+  // defeating geofence-exit detection. Fall back to the passed coords only if a
+  // fresh fix isn't available.
+  try {
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+    lat = loc.coords.latitude;
+    lng = loc.coords.longitude;
+  } catch {
+    // keep the passed-in coords as a last resort
+  }
   if (lat == null || lng == null) return;
   const token = await getToken();
   if (!token) return;

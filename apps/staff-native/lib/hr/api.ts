@@ -82,7 +82,9 @@ export type AttendanceItem = {
 };
 
 export type AttendanceResponse = {
-  attendance: AttendanceItem[];
+  // The API returns `logs` (matches the web staff app). This was previously
+  // typed/read as `attendance`, so the native list was always empty.
+  logs: AttendanceItem[];
   stats?: {
     totalHours: number;
     totalOT: number;

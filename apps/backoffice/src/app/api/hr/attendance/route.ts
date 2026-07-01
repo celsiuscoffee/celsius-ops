@@ -232,6 +232,12 @@ export async function PATCH(req: NextRequest) {
   } else if (action === "reject") {
     updateData.final_status = "rejected";
   } else if (action === "adjust" && adjustedHours != null) {
+    // Bound the manager-entered value — it flows straight into payroll
+    // (total/regular/OT). Without this a typo or malicious value (negative,
+    // 9999) inflates OT pay or writes nonsense hours. (set_times already caps.)
+    if (!Number.isFinite(adjustedHours) || adjustedHours < 0 || adjustedHours > 24) {
+      return NextResponse.json({ error: "adjustedHours must be between 0 and 24" }, { status: 400 });
+    }
     // Preserve the original overtime classification so a manager-adjusted
     // rest-day / public-holiday shift doesn't silently become a weekday 1.5x
     // line in payroll. OT hours always floor to whole numbers per policy.
