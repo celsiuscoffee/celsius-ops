@@ -7,25 +7,25 @@ import { deriveHours, mytDateString, mytDayOfWeek, mytInstant } from "@/lib/hr/h
 export const dynamic = "force-dynamic";
 
 // Runs every 15 min via Vercel Cron.
-// Auto-closes attendance logs that match any of:
-//   A) Most recent ping is OUT-of-zone + last in-zone ping > geofence_exit_grace_minutes ago
-//   B) No ping at all + open past an ABANDONED threshold (staff never came back)
-//   C) Scheduled shift end + auto_close_after_scheduled_end_hours passed
-//   D) Outlet closed + auto_close_at_outlet_close_minutes passed
 //
-// Clock-out time is set to:
-//   - For (A) → last in-zone ping, but floored at the rostered scheduled end
-//     (the PWA can't background-ping, so the last in-zone ping often lands
-//     seconds after clock-in and would truncate a full shift to ~0h)
-//   - For (B), (C), (D) → scheduled end or now (whichever earlier)
+// GEOFENCE IS NOT USED TO AUTO-CLOSE. The PWA has no background geofence and
+// native geofence is unreliable, and closing on geofence is exactly what
+// truncated real shifts to ~0h before. Clock-OUT is the source of truth; when
+// it's missing we fall back to the roster, never to location pings.
 //
-// The close writes the SAME regular/OT hour split a normal clock-out would (via
-// the shared deriveHours engine) — otherwise payroll reads regular_hours = 0 for
-// every auto-closed log and shorts the shift. ai_flags always gets
-// "auto_closed_<reason>" for the audit trail. The two PING-BASED reasons
-// (A geofence_exit, B no_pings_stale) are unreliable on the PWA, so they
-// AUTO-RESOLVE (approved + excused, penalty waived) rather than flooding the
-// manager review queue. The deterministic reasons (C, D) still surface as flagged.
+// Auto-closes an OPEN log when:
+//   1) forgot_clockout — it's past 1am (the shift is definitely over) → close at
+//      the staffer's ROSTERED shift end (scheduled_end; a 10pm shift closes at
+//      10pm, an 11:30 closer at 11:30). Falls back to outlet close, then the 1am
+//      cutoff, only when there's no roster.
+//   2) no_pings_stale — a genuinely abandoned session with no roster and open
+//      longer than a full shift (backstop).
+//
+// PAY: a missed tap-out is NOT proven overtime, so an auto-close pays regular
+// hours up to the shift end with OT = 0 (OT is only ever paid via an approved
+// overtime request). Every auto-close AUTO-RESOLVES (approved + excused) — a
+// forgotten tap-out isn't a staff violation, so it must not flood the review
+// queue. Day-type (PH/rest-day) classification is preserved for the regular pay.
 export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
@@ -39,10 +39,7 @@ export async function GET(req: NextRequest) {
     .limit(1)
     .maybeSingle();
 
-  const graceMin = Number(settings?.geofence_exit_grace_minutes ?? 30);
   const staleMin = Number(settings?.auto_close_stale_pings_minutes ?? 90);
-  const pastEndHours = Number(settings?.auto_close_after_scheduled_end_hours ?? 2);
-  const outletCloseBuffer = Number(settings?.auto_close_at_outlet_close_minutes ?? 30);
   // Rule B is a BACKSTOP for an abandoned session, not a mid-shift closer. Never
   // fire before a plausible max shift (16h) even if pings are stale — a barista
   // who clocked in and backgrounded the PWA is still working.
@@ -99,71 +96,50 @@ export async function GET(req: NextRequest) {
     // the roster date). Used by Rule C and the ping-rule anti-truncation floor.
     const schedEndInstant = mytInstant(log.scheduled_date ?? mytDateString(log.clock_in), log.scheduled_end);
 
-    // Get last ping (any kind) and last in-zone ping
-    const [lastPingResp, lastInZoneResp] = await Promise.all([
-      hrSupabaseAdmin.from("hr_attendance_pings").select("created_at, in_zone").eq("attendance_log_id", log.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-      hrSupabaseAdmin.from("hr_attendance_pings").select("created_at").eq("attendance_log_id", log.id).eq("in_zone", true).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    ]);
-
-    const lastPingAt = lastPingResp.data?.created_at ? new Date(lastPingResp.data.created_at) : null;
-    const lastInZoneAt = lastInZoneResp.data?.created_at ? new Date(lastInZoneResp.data.created_at) : null;
-    // Is the MOST RECENT ping an out-of-zone ping? This is the only reliable
-    // evidence that the staffer has actually left the outlet.
-    const latestPingOutOfZone = lastPingResp.data?.in_zone === false;
+    // Last ping — used ONLY to detect a never-pinged (abandoned) session for the
+    // backstop below. Geofence pings never drive a close (see header).
+    const { data: lastPing } = await hrSupabaseAdmin
+      .from("hr_attendance_pings")
+      .select("created_at")
+      .eq("attendance_log_id", log.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const lastPingAt = lastPing?.created_at ? new Date(lastPing.created_at) : null;
 
     let closeAt: Date | null = null;
     let reason: string | null = null;
 
-    // Rule A: Staffer has actually left the zone and not returned within grace.
-    //
-    // We require the LATEST ping to be out-of-zone — not merely "the last
-    // in-zone ping is stale". The app pings only on geofence boundary crossings
-    // (enter/exit) plus once at clock-in, never continuously, so a staffer
-    // working *inside* the zone all shift produces no new pings. The old
-    // "in-zone ping older than grace" test misread that silence as an exit and
-    // auto-clocked-out people who never left (truncating the shift to ~0h,
-    // because scheduled_end — the only floor — is usually null). Absence of
-    // pings ≠ left the outlet.
-    if (lastInZoneAt && lastPingAt && latestPingOutOfZone) {
-      const inZoneAgoMin = (now.getTime() - lastInZoneAt.getTime()) / 60000;
-      if (inZoneAgoMin > graceMin) {
-        closeAt = lastInZoneAt;
-        reason = "geofence_exit";
-      }
-    }
-
-    // Rule C: Past scheduled end + pastEndHours (deterministic, roster-driven).
-    if (!reason && schedEndInstant) {
-      const hoursPastEnd = (now.getTime() - schedEndInstant.getTime()) / 3600000;
-      if (hoursPastEnd > pastEndHours) {
-        closeAt = schedEndInstant;
-        reason = "past_scheduled_end";
-      }
-    }
-
-    // Rule D: Outlet closed + buffer. Build the close instant in MYT (closeTime is
-    // a local "HH:MM" — setHours on a UTC server would treat 22:00 as 22:00 UTC =
-    // 06:00 MYT next day and close ~8h late at the wrong time).
-    if (!reason) {
-      const outlet = outletMap.get(log.outlet_id);
-      if (outlet?.closeTime) {
-        let outletClose = mytInstant(mytDateString(clockIn), outlet.closeTime);
-        // After-midnight / late shift: if close is before clock-in, it's the next MYT day.
-        if (outletClose && outletClose < clockIn) {
-          const nextDay = mytDateString(new Date(clockIn.getTime() + 24 * 3600 * 1000));
-          outletClose = mytInstant(nextDay, outlet.closeTime);
-        }
-        if (outletClose) {
-          const minsPastClose = (now.getTime() - outletClose.getTime()) / 60000;
-          if (minsPastClose > outletCloseBuffer) {
-            closeAt = outletClose;
-            reason = "outlet_closed";
+    // (1) forgot_clockout — once it's past 1am the shift is definitely over, so a
+    // still-open log is a missed tap-out. Close at the ROSTERED shift end.
+    {
+      const shiftDate = log.scheduled_date ?? mytDateString(clockIn);
+      // 1am on the morning AFTER the shift date (noon+24h dodges any edge).
+      const shiftNoon = mytInstant(shiftDate, "12:00");
+      const oneAmCutoff = shiftNoon
+        ? mytInstant(mytDateString(new Date(shiftNoon.getTime() + 24 * 3600 * 1000)), "01:00")
+        : null;
+      if (oneAmCutoff && now >= oneAmCutoff) {
+        // Prefer the rostered end; fall back to outlet close, then the cutoff,
+        // only when there's no roster to read.
+        let end = schedEndInstant;
+        if (!end) {
+          const outlet = outletMap.get(log.outlet_id);
+          if (outlet?.closeTime) {
+            let oc = mytInstant(mytDateString(clockIn), outlet.closeTime);
+            if (oc && oc < clockIn) {
+              oc = mytInstant(mytDateString(new Date(clockIn.getTime() + 24 * 3600 * 1000)), outlet.closeTime);
+            }
+            end = oc;
           }
         }
+        closeAt = end ?? oneAmCutoff;
+        reason = "forgot_clockout";
       }
     }
 
-    // Rule B: No pings at all + open past the ABANDONED threshold (backstop only).
+    // (2) no_pings_stale — genuinely abandoned: never pinged AND open longer than
+    // a full shift, with no roster to have caught it at (1). Backstop only.
     if (!reason && !lastPingAt && clockInAgeMin > abandonedMin) {
       closeAt = now;
       reason = "no_pings_stale";
@@ -171,21 +147,12 @@ export async function GET(req: NextRequest) {
 
     if (!closeAt || !reason) continue;
 
-    // Ping-based rules misfire on the PWA (can't background-ping): the last
-    // in-zone ping can land seconds after clock-in, truncating a real shift to
-    // ~0h. For these, prefer the rostered scheduled end so hours aren't
-    // under-counted (and payroll isn't shorted).
-    const isPingRule = reason === "geofence_exit" || reason === "no_pings_stale";
-    if (isPingRule && schedEndInstant && schedEndInstant > closeAt && schedEndInstant <= now) {
-      closeAt = schedEndInstant;
-    }
-
     // Don't close in the future or before clock_in
     if (closeAt > now) closeAt = now;
     if (closeAt < clockIn) closeAt = clockIn;
 
-    // Pay-hours split — identical to a normal clock-out (F1). Day type keyed on
-    // the MYT calendar day so a pre-08:00 opening shift gets the right multiplier.
+    // Pay-hours split — same shared engine as a normal clock-out, so the day-type
+    // (PH / rest-day) multiplier on regular hours is preserved.
     const employmentType = employmentByUser.get(log.user_id) || "full_time";
     const restDay = restDayByUser.get(log.user_id) ?? 0;
     const derived = deriveHours({
@@ -198,27 +165,26 @@ export async function GET(req: NextRequest) {
 
     flags.push(`auto_closed_${reason}`, ...derived.dayTypeFlags);
 
-    // A system auto-close is not a staff violation. Ping-based closes are
-    // false positives on the PWA → auto-resolve (penalty waived) and keep the
-    // audit flag for the "All" tab, instead of flooding the review queue.
-    // Deterministic closes (past scheduled end / outlet closed) still flag.
+    // NO OT on an auto-close: a missed tap-out isn't proven overtime (OT is only
+    // paid via an approved overtime request). Keep regular hours (deriveHours
+    // already floors them at the daily threshold) and the day-type classification,
+    // but zero the OT hours. Every auto-close AUTO-RESOLVES (approved + excused)
+    // so a forgotten tap-out never lands in the manager review queue.
     const update: Record<string, unknown> = {
       clock_out: closeAt.toISOString(),
       clock_out_method: "system",
       total_hours: derived.totalHours,
       regular_hours: derived.regularHours,
-      overtime_hours: derived.overtimeHours,
+      overtime_hours: 0,
       overtime_type: derived.overtimeType,
       ai_flags: flags,
-      ai_status: isPingRule ? "approved" : "flagged",
-      final_status: isPingRule ? "approved" : null,
+      ai_status: "approved",
+      final_status: "approved",
+      excused: true,
+      excused_reason: "Auto-closed — no clock-out (paid to rostered shift end, no OT)",
+      reviewed_at: now.toISOString(),
+      review_notes: `System auto-close (${reason}); paid to shift end, OT excluded`,
     };
-    if (isPingRule) {
-      update.excused = true;
-      update.excused_reason = "Auto-resolved — app ping limitation";
-      update.reviewed_at = now.toISOString();
-      update.review_notes = "System auto-close (PWA ping limitation); penalty waived";
-    }
 
     // Guard against a live clock-out landing in the same instant: only close if
     // still open, so the cron never overwrites a real clock-out (wrong method/hours).
@@ -239,6 +205,6 @@ export async function GET(req: NextRequest) {
     processed: activeLogs.length,
     closed,
     actions,
-    thresholds: { graceMin, staleMin, pastEndHours, outletCloseBuffer, abandonedMin },
+    thresholds: { staleMin, abandonedMin },
   });
 }
