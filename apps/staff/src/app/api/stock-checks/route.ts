@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { isCleanCount } from "@celsius/db";
+import { isCleanCount, baseQtyByProduct } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { setStockBalance } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
@@ -105,23 +105,42 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Update stock balances from counted quantities. Monthly counts can have
-  // 200+ items — firing them all in parallel exhausts the Supavisor pool
-  // and the Vercel function times out before responding (the StockCount
-  // insert above still succeeds, so the user sees "submit doesn't work"
-  // and keeps tapping, producing duplicate StockCount rows). Chunked to
-  // bound concurrency.
-  const itemsToUpdate = items.filter(
-    (item: { countedQty?: number | null }) =>
-      item.countedQty !== null && item.countedQty !== undefined,
-  ) as Array<{ productId: string; countedQty: number; productPackageId?: string | null }>;
+  // Update stock balances from counted quantities. Counts happen in package
+  // units ("22 packets") but StockBalance is tracked in the product's base UOM,
+  // so multiply each line by its package conversionFactor before storing and
+  // write to the canonical per-product row (productPackageId = null) that
+  // receiving and wastage use. Reads conversionFactor off the created items,
+  // which include productPackage.
+  const baseTotals = baseQtyByProduct(
+    stockCount.items
+      .filter((i) => i.countedQty != null)
+      .map((i) => ({
+        productId: i.productId,
+        countedQty: i.countedQty,
+        conversionFactor: i.productPackage?.conversionFactor ?? 1,
+      })),
+  );
+  const productIds = [...baseTotals.keys()];
 
+  // Zero any leftover per-package balance rows for these products so the
+  // inventory reader (which sums across package rows) doesn't double-count
+  // them against the fresh base total.
+  if (productIds.length > 0) {
+    await prisma.stockBalance.updateMany({
+      where: { outletId, productId: { in: productIds }, productPackageId: { not: null } },
+      data: { quantity: 0, lastUpdated: now },
+    });
+  }
+
+  // Monthly counts can have 200+ items — firing them all in parallel exhausts
+  // the Supavisor pool and the Vercel function times out before responding.
+  // Chunked to bound concurrency.
   const CHUNK_SIZE = 20;
-  for (let i = 0; i < itemsToUpdate.length; i += CHUNK_SIZE) {
-    const chunk = itemsToUpdate.slice(i, i + CHUNK_SIZE);
+  for (let i = 0; i < productIds.length; i += CHUNK_SIZE) {
+    const chunk = productIds.slice(i, i + CHUNK_SIZE);
     await Promise.all(
-      chunk.map((item) =>
-        setStockBalance(outletId, item.productId, item.countedQty, item.productPackageId ?? null),
+      chunk.map((productId) =>
+        setStockBalance(outletId, productId, baseTotals.get(productId)!, null),
       ),
     );
   }

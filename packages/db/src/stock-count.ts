@@ -44,3 +44,40 @@ export function countDiscrepancies(items: VarianceItem[]): number {
 export function isCleanCount(items: VarianceItem[]): boolean {
   return countDiscrepancies(items) === 0;
 }
+
+export interface CountedLine {
+  productId: string;
+  /** Quantity as physically counted — in the *package's* units, not base UOM. */
+  countedQty: QtyLike;
+  /**
+   * The counted package's conversion factor (base-UOM units per package). A
+   * missing/invalid/≤0 factor is treated as 1 (item counted directly in its
+   * base UOM, or an un-packaged item).
+   */
+  conversionFactor?: QtyLike;
+}
+
+/**
+ * Convert counted lines into base-UOM totals per product.
+ *
+ * Staff count in whatever package they physically handle ("22 packets"), but
+ * StockBalance is tracked in the product's base UOM (see the wastage/inventory
+ * routes: "Stock is tracked in product baseUom"). Each line must therefore be
+ * multiplied by its package conversionFactor before it lands in a balance —
+ * skipping this stored 22 base units for "22 packets" instead of 22 × pack size.
+ *
+ * Lines with a null countedQty are ignored (not yet counted). Multiple lines
+ * for the same product — e.g. the same item counted in two packages — are
+ * summed, so the result is the product's full on-hand in base UOM.
+ */
+export function baseQtyByProduct(lines: CountedLine[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const line of lines) {
+    const counted = toNum(line.countedQty);
+    if (counted === null) continue;
+    const cf = toNum(line.conversionFactor);
+    const factor = cf === null || cf <= 0 ? 1 : cf;
+    totals.set(line.productId, (totals.get(line.productId) ?? 0) + counted * factor);
+  }
+  return totals;
+}
