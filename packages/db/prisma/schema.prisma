@@ -600,6 +600,33 @@ model HrClaimBatch {
   @@index([status, createdAt(sort: Desc)])
 }
 
+/// An uploaded Proof of Payment (POP) the Telegram matcher could NOT auto-link to a single
+/// invoice (ambiguous → multiple candidates). Persisted so BackOffice can surface a "possible
+/// POP match" on each candidate invoice and let a human confirm it. Closed (RESOLVED) when a
+/// candidate is paid via the Telegram picker OR the BackOffice confirm.
+model PendingPop {
+  id                  String    @id @default(uuid())
+  token               String?   // matches the Telegram picker's pop/meta token, to close the exact record
+  amount              Decimal
+  referenceNumber     String?
+  payeeName           String?
+  bankName            String?
+  invoiceReference    String?
+  date                DateTime?
+  photoUrl            String?
+  candidateInvoiceIds String[]  @default([])
+  status              String    @default("OPEN") // OPEN | RESOLVED | DISMISSED
+  source              String?   @default("telegram")
+  resolvedInvoiceId   String?
+  resolvedById        String?
+  resolvedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @default(now()) @updatedAt
+
+  @@index([status])
+  @@index([token])
+}
+
 enum InvoiceStatus {
   DRAFT
   INITIATED
