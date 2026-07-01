@@ -3,7 +3,7 @@
 // Reports — three live financial statements (P&L, Balance Sheet, Cash Flow)
 // + auditor pack export. Date pickers, drill down by clicking any P&L line.
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import {
   Button,
@@ -697,8 +697,85 @@ function ApTab() {
   );
 }
 
+// ─── Reconciliation tab ─────────────────────────────────────────
+type ReconChannel = {
+  code: string; label: string; note: string;
+  salesRecognised: number; settledToBank: number; unreconciled: number; pct: number | null;
+  months: { month: string; sales: number; settled: number; net: number }[];
+};
+type Recon = { start: string; end: string; channels: ReconChannel[]; totals: { salesRecognised: number; settledToBank: number; unreconciled: number } };
+
+function ReconTab() {
+  // Default to the matched period: sales archive + bank feed both exist from
+  // 2026-01, so the channels net to true fees/timing (before that the bank feed
+  // has settlements with no sales side, which reads as a false imbalance).
+  const [start, setStart] = useState("2026-01-01");
+  const [end, setEnd] = useState(todayMyt());
+  const [open, setOpen] = useState<string | null>(null);
+  const { data, isLoading } = useFetch<{ report: Recon }>(`/api/finance/reports/reconciliation?start=${start}&end=${end}`);
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs text-muted-foreground">From
+          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
+        </label>
+        <label className="text-xs text-muted-foreground">To
+          <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
+        </label>
+      </div>
+      {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+              <th className="px-3 py-2 font-medium">Channel</th>
+              <th className="px-3 py-2 text-right font-medium">Sales recognised</th>
+              <th className="px-3 py-2 text-right font-medium">Settled to bank</th>
+              <th className="px-3 py-2 text-right font-medium">Unreconciled</th>
+              <th className="px-3 py-2 text-right font-medium">%</th>
+            </tr></thead>
+            <tbody className="divide-y">
+              {data.report.channels.map((c) => (
+                <Fragment key={c.code}>
+                  <tr className="cursor-pointer hover:bg-muted/40" onClick={() => setOpen(open === c.code ? null : c.code)} title="Show monthly breakdown">
+                    <td className="px-3 py-1.5">
+                      <span className="font-medium">{c.label}</span>
+                      <span className="ml-2 text-xs text-muted-foreground tabular-nums">{c.code}</span>
+                      <div className="text-[11px] text-muted-foreground">{c.note}</div>
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{RM(c.salesRecognised)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{RM(c.settledToBank)}</td>
+                    <td className={`px-3 py-1.5 text-right tabular-nums ${c.unreconciled < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(c.unreconciled)}</td>
+                    <td className="px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{c.pct === null ? "" : `${c.pct}%`}</td>
+                  </tr>
+                  {open === c.code && c.months.map((m) => (
+                    <tr key={`${c.code}-${m.month}`} className="bg-muted/20 text-xs">
+                      <td className="px-3 py-1 pl-8 text-muted-foreground tabular-nums">{m.month}</td>
+                      <td className="px-3 py-1 text-right tabular-nums">{RM(m.sales)}</td>
+                      <td className="px-3 py-1 text-right tabular-nums">{RM(m.settled)}</td>
+                      <td className={`px-3 py-1 text-right tabular-nums ${m.net < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(m.net)}</td>
+                      <td className="px-3 py-1" />
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+            </tbody>
+            <tfoot><tr className="border-t-2 font-semibold">
+              <td className="px-3 py-2">Total</td>
+              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.totals.salesRecognised)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.totals.settledToBank)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.totals.unreconciled)}</td>
+              <td className="px-3 py-2" />
+            </tr></tfoot>
+          </table>
+        </div>
+      )}
+      <p className="text-[11px] text-muted-foreground">Each sales channel is a debtor account: sales debit it, the bank settlement credits it. The unreconciled net is the expected economics (card timing, Grab commission, cash-not-banked), not an error. Click a channel for the monthly breakdown. Defaults to 2026-01 onward, where both the sales archive and the bank feed exist.</p>
+    </div>
+  );
+}
+
 export default function FinanceReportsPage() {
-  const [tab, setTab] = useState<"pnl" | "bs" | "cf" | "tb" | "gl" | "ap" | "audit">("pnl");
+  const [tab, setTab] = useState<"pnl" | "bs" | "cf" | "tb" | "gl" | "ap" | "recon" | "audit">("pnl");
   const [glAccount, setGlAccount] = useState("1000-01"); // shared so TB rows can drill into GL
 
   return (
@@ -719,6 +796,7 @@ export default function FinanceReportsPage() {
             { id: "tb", label: "Trial Balance" },
             { id: "gl", label: "General Ledger" },
             { id: "ap", label: "Aged Payables" },
+            { id: "recon", label: "Reconciliation" },
             { id: "audit", label: "Auditor pack" },
           ].map((t) => (
             <button
@@ -749,6 +827,7 @@ export default function FinanceReportsPage() {
       {tab === "tb" && <TbTab onDrill={(code) => { setGlAccount(code); setTab("gl"); }} />}
       {tab === "gl" && <GlTab account={glAccount} setAccount={setGlAccount} />}
       {tab === "ap" && <ApTab />}
+      {tab === "recon" && <ReconTab />}
       {tab === "audit" && <AuditorPack />}
     </div>
   );
