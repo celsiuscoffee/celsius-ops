@@ -48,9 +48,24 @@ export async function GET(req: NextRequest) {
     const menuIngredients = await prisma.menuIngredient.findMany({
       include: {
         menu: { select: { id: true, name: true, category: true } },
-        product: { select: { id: true, name: true, baseUom: true, itemType: true } },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            baseUom: true,
+            itemType: true,
+            group: { select: { name: true } },
+          },
+        },
       },
     });
+
+    // A BOM line is "packaging" if the product is tagged itemType=PACKAGING OR
+    // sits in a packaging item-group. In practice nothing is tagged
+    // itemType=PACKAGING yet (cups/lids/bags are classified by group), so the
+    // itemType-only check folded all packaging cost into ingredient cost.
+    const isPackaging = (p: { itemType: string; group: { name: string } | null }) =>
+      p.itemType === "PACKAGING" || /packag/i.test(p.group?.name ?? "");
 
     // 3. Fetch cheapest active SupplierProduct price per product (with package conversion)
     // Exclude ADHOC supplier and zero-price entries to get real costs
@@ -93,7 +108,7 @@ export async function GET(req: NextRequest) {
       existing.push({
         productId: mi.productId,
         quantityUsed: Number(mi.quantityUsed),
-        isPackaging: mi.product.itemType === "PACKAGING",
+        isPackaging: isPackaging(mi.product),
         serviceMode: mi.serviceMode,
       });
       recipeMap.set(mi.menuId, existing);
