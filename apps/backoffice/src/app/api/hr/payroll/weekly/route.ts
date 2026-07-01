@@ -184,9 +184,10 @@ export async function PATCH(req: NextRequest) {
     : Number(existing.computation_details?.hourly_rate || 0);
   const newOtHours = ot_hours !== undefined ? Number(ot_hours) : Number(existing.total_ot_hours || 0);
 
-  // Recompute gross from hours × rate (+ OT @ 1.5x). Keep it simple for PT.
+  // Flat hourly for part-timers: every hour (including any manually-added "OT"
+  // hours) pays the same rate — no OT premium. Gross = (hours + ot) × rate.
   const regPay = newHours * newRate;
-  const otPay = newOtHours * newRate * 1.5;
+  const otPay = newOtHours * newRate;
   const newGross = Math.round((regPay + otPay) * 100) / 100;
 
   const compDetails = {

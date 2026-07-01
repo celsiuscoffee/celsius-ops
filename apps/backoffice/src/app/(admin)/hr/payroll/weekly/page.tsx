@@ -167,8 +167,8 @@ export default function WeeklyPayrollPage() {
         <h1 className="text-2xl font-bold">Weekly Payroll (Part-Timers)</h1>
       </div>
       <p className="text-sm text-muted-foreground">
-        Part-time payroll runs Mon–Sun, paid the following week. Gross = scheduled hours
-        (from the published roster) × hourly rate. OT is added by managers as ad-hoc adjustments.
+        Part-time payroll runs Mon–Sun, paid the following week. Gross = clocked hours
+        (from the staff app clock-in/out, break excluded) × hourly rate. Flat rate, no OT premium.
       </p>
 
       {/* Compute Controls */}
@@ -398,7 +398,8 @@ type WeeklyPreflightIssue = { code: string; severity: "block" | "warn"; message:
 type WeeklyPreflightRow = {
   user_id: string;
   name: string;
-  scheduled_shifts: number;
+  logged_shifts: number;
+  logged_hours: number;
   skipped: boolean;
   skip_reason: string | null;
   issues: WeeklyPreflightIssue[];
@@ -407,14 +408,13 @@ type WeeklyPreflightRow = {
 type WeeklyPreflightSummary = {
   total_part_timers: number;
   payable: number;
-  not_scheduled: number;
+  no_clockins: number;
   blocked: number;
   warning: number;
   skipped: number;
   final_payroll: number;
-  published_schedules: number;
-  published_shifts: number;
-  draft_schedules: number;
+  total_logged_shifts: number;
+  total_logged_hours: number;
 };
 
 function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
@@ -427,25 +427,25 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
     return (
       <div className="mt-4 rounded-md border bg-gray-50 p-3 text-xs text-gray-500">
         <Loader2 className="mr-2 inline h-3 w-3 animate-spin" />
-        Checking roster + readiness…
+        Checking clock-ins + readiness…
       </div>
     );
   }
 
   const { summary, rows } = data;
   const issuesOnly = rows.filter((r) => r.status === "blocked" || r.status === "warning");
-  const noRoster = summary.published_schedules === 0;
+  const noClockData = summary.total_logged_shifts === 0;
 
   return (
     <div className="mt-4 rounded-md border bg-gray-50 p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="font-semibold uppercase tracking-wide text-gray-500">Pre-run check</span>
-        <Pill color="blue" label={`${summary.published_shifts} scheduled shifts`} />
+        <Pill color="blue" label={`${summary.total_logged_shifts} clocked shifts · ${summary.total_logged_hours}h`} />
         <Pill color="emerald" label={`${summary.payable} payable`} />
         {summary.warning > 0 && <Pill color="amber" label={`${summary.warning} warning`} />}
         {summary.blocked > 0 && <Pill color="red" label={`${summary.blocked} blocked`} />}
-        {summary.not_scheduled > 0 && (
-          <Pill color="gray" label={`${summary.not_scheduled} not scheduled`} />
+        {summary.no_clockins > 0 && (
+          <Pill color="gray" label={`${summary.no_clockins} no clock-ins`} />
         )}
         {summary.final_payroll > 0 && (
           <Pill color="amber" label={`${summary.final_payroll} final payroll`} />
@@ -453,20 +453,18 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
         {summary.skipped > 0 && <Pill color="gray" label={`${summary.skipped} prior-cycle resigners`} />}
       </div>
 
-      {noRoster ? (
+      {noClockData ? (
         <p className="mt-1 text-xs font-medium text-red-700">
-          ⚠ No published schedule covers this week. Publish the roster
-          {summary.draft_schedules > 0 ? " (you have draft schedules — publish them)" : ""}
-          {" "}before computing payroll.
+          ⚠ No part-timer has clocked in this week yet. Compute will produce zero rows.
         </p>
       ) : summary.payable === 0 ? (
         <p className="mt-1 text-xs text-amber-700">
-          Roster is published but no part-timer is scheduled. Compute will produce zero rows.
+          Part-timers clocked in, but none are payable (check hourly rates). Compute will produce zero rows.
         </p>
       ) : issuesOnly.length === 0 ? (
         <p className="mt-1 text-xs text-emerald-700">
           ✓ {summary.payable} part-timer{summary.payable === 1 ? "" : "s"} ready
-          ({summary.published_shifts} shift{summary.published_shifts === 1 ? "" : "s"}).
+          ({summary.total_logged_shifts} shift{summary.total_logged_shifts === 1 ? "" : "s"}, {summary.total_logged_hours}h).
         </p>
       ) : (
         <>
@@ -493,7 +491,7 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
                     <Link href={`/hr/employees/${r.user_id}`} className="font-medium text-blue-600 hover:underline">
                       {r.name}
                     </Link>
-                    <span className="text-gray-400">· {r.scheduled_shifts} shift{r.scheduled_shifts === 1 ? "" : "s"}</span>
+                    <span className="text-gray-400">· {r.logged_shifts} shift{r.logged_shifts === 1 ? "" : "s"} · {r.logged_hours}h</span>
                   </div>
                   <ul className="ml-4 mt-1 list-disc space-y-0.5 text-[10px] text-gray-600">
                     {r.issues.map((i) => (
