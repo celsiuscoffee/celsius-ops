@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { isCleanCount } from "@celsius/db";
+import { isCleanCount, baseQtyByProduct } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { setStockBalance } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           productPackageId: true,
           expectedQty: true,
           countedQty: true,
+          productPackage: { select: { conversionFactor: true } },
         },
       },
     },
@@ -88,19 +89,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Already finalized by someone else" }, { status: 409 });
   }
 
+  // Convert each counted line from package units to the product's base UOM
+  // (StockBalance is tracked in base UOM everywhere else — receiving, wastage,
+  // inventory, par levels). Counting "22 packets" must land as 22 × pack size,
+  // not a raw 22. Lines for the same product are summed into one base total.
+  const baseTotals = baseQtyByProduct(
+    count.items
+      .filter((i) => i.countedQty != null)
+      .map((i) => ({
+        productId: i.productId,
+        countedQty: i.countedQty,
+        conversionFactor: i.productPackage?.conversionFactor ?? 1,
+      })),
+  );
+  const productIds = [...baseTotals.keys()];
+
+  // A physical count is authoritative for total on-hand, so it writes to the
+  // canonical per-product row (productPackageId = null) that receiving and
+  // wastage also use. Zero out any leftover per-package balance rows for these
+  // products first, otherwise the inventory reader — which sums across all
+  // package rows — would double-count them against the fresh base total.
+  if (productIds.length > 0) {
+    await prisma.stockBalance.updateMany({
+      where: { outletId: count.outletId, productId: { in: productIds }, productPackageId: { not: null } },
+      data: { quantity: 0, lastUpdated: now },
+    });
+  }
+
   // Run stock balance updates — chunked at 20 to bound concurrency.
-  const itemsToUpdate = count.items.filter((i) => i.countedQty != null);
   const CHUNK = 20;
-  for (let i = 0; i < itemsToUpdate.length; i += CHUNK) {
-    const chunk = itemsToUpdate.slice(i, i + CHUNK);
+  for (let i = 0; i < productIds.length; i += CHUNK) {
+    const chunk = productIds.slice(i, i + CHUNK);
     await Promise.all(
-      chunk.map((it) =>
-        setStockBalance(
-          count.outletId,
-          it.productId,
-          Number(it.countedQty),
-          it.productPackageId ?? null,
-        ),
+      chunk.map((productId) =>
+        setStockBalance(count.outletId, productId, baseTotals.get(productId)!, null),
       ),
     );
   }
