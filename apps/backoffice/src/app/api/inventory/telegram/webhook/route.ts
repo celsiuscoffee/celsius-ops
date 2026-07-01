@@ -744,22 +744,38 @@ async function resolvePop(
   }
 
   if (candidates.length > 1) {
-    // Finance pays identical-amount staff claims individually (e.g. Ariff has
-    // two RM 10 claims at MT2, receives two separate RM 10 transfers). When
-    // all candidates are the same claimant's STAFF_CLAIM at the same outlet,
-    // consume the oldest one instead of asking to disambiguate — next POP
-    // picks up the next one.
+    // Finance pays identical-amount staff claims individually (e.g. Ariff has several RM 35
+    // claims, each reimbursed by its own RM 35 transfer). For a STAFF reimbursement the payee is
+    // the PERSON, not the outlet — a RM 35 transfer to Ariff settles one of his RM 35 claims no
+    // matter which outlet the purchase was at. So consume the OLDEST claim whose amount EXACTLY
+    // equals the POP when every such exact-amount candidate is the same claimant's STAFF_CLAIM:
+    //   - exact-amount only, so a RM 35.00 POP can never grab a RM 35.20 claim;
+    //   - single claimant, so it never settles the wrong person.
+    // Next POP picks up the next one. Falls back to the same-outlet rule, then to ask-to-pick.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const allStaffClaim = candidates.every((c: any) => c.paymentType === "STAFF_CLAIM");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const claimantIds = new Set(candidates.map((c: any) => c.order?.claimedBy?.id));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const outletIds = new Set(candidates.map((c: any) => c.outletId));
-    if (allStaffClaim && claimantIds.size === 1 && !claimantIds.has(undefined) && outletIds.size === 1) {
-      candidates = [...candidates].sort(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
-        (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      ).slice(0, 1);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+    const exact = candidates.filter((c: any) => Math.abs(Number(c.amount) - amount) < 0.005);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+    const exactClaimantIds = new Set(exact.map((c: any) => c.order?.claimedBy?.id));
+    const exactAllStaffOneClaimant =
+      exact.length >= 1 &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      exact.every((c: any) => c.paymentType === "STAFF_CLAIM") &&
+      exactClaimantIds.size === 1 && !exactClaimantIds.has(undefined);
+    const byOldest =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    if (exactAllStaffOneClaimant) {
+      // Same claimant, exact amount, ANY outlet → consume the oldest exact-amount claim.
+      candidates = [...exact].sort(byOldest).slice(0, 1);
+    } else if (allStaffClaim && claimantIds.size === 1 && !claimantIds.has(undefined) && outletIds.size === 1) {
+      // Same claimant + same outlet (any amount within tolerance) → consume the oldest.
+      candidates = [...candidates].sort(byOldest).slice(0, 1);
     } else {
       // Cap at 8 buttons (Telegram's practical limit per message is generous
       // but huge keyboards are unreadable on mobile).
