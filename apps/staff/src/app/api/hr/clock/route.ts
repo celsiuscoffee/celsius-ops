@@ -6,7 +6,7 @@ import { getUser } from "@/lib/auth";
 // before RLS even runs.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { haversineDistance, GEOFENCE_RADIUS_METERS } from "@/lib/hr/constants";
-import { mytDateString, mytInstant } from "@/lib/hr/hours";
+import { deriveHours, mytDateString, mytDayOfWeek, mytInstant } from "@/lib/hr/hours";
 import type { AttendanceLog, GeofenceZone } from "@/lib/hr/types";
 
 export const dynamic = "force-dynamic";
@@ -317,7 +317,25 @@ export async function POST(req: NextRequest) {
 
     const clockOut = new Date();
     const clockIn = new Date(activeLog.clock_in);
-    const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+
+    // Pay-hours split via the shared engine — the SAME one the auto-close cron
+    // and AI processor use. Previously a normal clock-out wrote total_hours
+    // ONLY, leaving regular_hours/overtime_hours NULL; payroll sums
+    // regular_hours, so every app clock-out paid 0 hours. Derive them here so a
+    // clean clock-out pays immediately.
+    const [profileResp, holidayResp] = await Promise.all([
+      supabase.from("hr_employee_profiles").select("employment_type, rest_day").eq("user_id", session.id).maybeSingle(),
+      supabase.from("hr_public_holidays").select("date").eq("date", mytDateString(clockIn)).maybeSingle(),
+    ]);
+    const restDay = profileResp.data?.rest_day == null ? 0 : Number(profileResp.data.rest_day);
+    const derived = deriveHours({
+      clockIn,
+      clockOut,
+      employmentType: profileResp.data?.employment_type || "full_time",
+      isPublicHoliday: !!holidayResp.data,
+      isRestDay: mytDayOfWeek(clockIn) === restDay,
+    });
+    const totalHours = derived.totalHours;
 
     const photoUrl = photo ? await uploadPhoto(photo, "out") : null;
 
@@ -329,7 +347,10 @@ export async function POST(req: NextRequest) {
         clock_out_lng: longitude ?? null,
         clock_out_method: "app",
         clock_out_photo_url: photoUrl,
-        total_hours: Math.round(totalHours * 100) / 100,
+        total_hours: totalHours,
+        regular_hours: derived.regularHours,
+        overtime_hours: derived.overtimeHours,
+        overtime_type: derived.overtimeType,
       })
       .eq("id", activeLog.id)
       .select()

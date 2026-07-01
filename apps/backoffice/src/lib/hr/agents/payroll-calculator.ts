@@ -123,7 +123,12 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     .select("*")
     .gte("clock_in", startDate)
     .lt("clock_in", endDate)
-    .neq("final_status", "rejected");
+    // NULL-safe "not rejected": PostgREST `.neq` compiles to `final_status <>
+    // 'rejected'`, which is FALSE for NULL rows and silently drops them — but
+    // the AI-auto-approved happy path is exactly `final_status = NULL` (see the
+    // paying-out rules above). Dropping those means unpaid shifts. Keep NULL +
+    // any non-rejected value; exclude only explicit rejections.
+    .or("final_status.is.null,final_status.neq.rejected");
 
   // Group attendance by user
   const attendanceByUser = new Map<string, typeof attendance>();
