@@ -38,6 +38,10 @@ export async function GET(req: NextRequest) {
 
   const graceMin = Number(settings?.geofence_exit_grace_minutes ?? 30);
   const staleMin = Number(settings?.auto_close_stale_pings_minutes ?? 90);
+  // Ping-absence is NOT evidence a PWA staffer left (see Rule A). So "no pings"
+  // must never close an in-progress shift after just staleMin — it only acts as
+  // a last-resort backstop for a session left open longer than any real shift.
+  const abandonedMin = Math.max(16 * 60, staleMin);
   const pastEndHours = Number(settings?.auto_close_after_scheduled_end_hours ?? 2);
   const outletCloseBuffer = Number(settings?.auto_close_at_outlet_close_minutes ?? 30);
 
@@ -99,12 +103,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Rule B: No pings at all + stale
-    if (!reason && !lastPingAt && clockInAgeMin > staleMin) {
-      closeAt = log.scheduled_end ? new Date(log.scheduled_end) : now;
-      if (closeAt > now) closeAt = now;
-      reason = "no_pings_stale";
-    }
+    // (Rule B — the ping-absence close — moved BELOW C/D as an abandoned-session
+    // backstop, so it can never clock out a working staffer mid-shift.)
 
     // Rule C: Past scheduled end + pastEndHours
     if (!reason && log.scheduled_end) {
@@ -131,6 +131,16 @@ export async function GET(req: NextRequest) {
           reason = "outlet_closed";
         }
       }
+    }
+
+    // Rule B (backstop): a genuinely ABANDONED session. There's no roster to
+    // close it (Rule C) and no outlet close time (Rule D), and it's been open
+    // far longer than any real shift. Only then do we fall back to closing on
+    // ping-absence — never mid-shift. Requires no scheduled_end so it can't
+    // pre-empt Rule C, and a full-day age so a working staffer is never cut.
+    if (!reason && !log.scheduled_end && clockInAgeMin > abandonedMin) {
+      closeAt = now;
+      reason = "no_pings_stale";
     }
 
     if (!closeAt || !reason) continue;
