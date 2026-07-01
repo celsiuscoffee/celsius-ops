@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+// Service-role: the route authenticates via getSession and filters every query
+// by session.id, so it doesn't rely on RLS. Using the anon client would break
+// once RLS is enabled on hr_attendance_logs (migration 064) — no anon policy.
+import { supabaseAdmin as supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 

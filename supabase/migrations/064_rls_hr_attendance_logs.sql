@@ -1,0 +1,16 @@
+-- Enable RLS on hr_attendance_logs (parent of hr_attendance_pings, which was
+-- already RLS-enabled in 20260502_rls_sensitive_tables). The parent holds the
+-- more sensitive data — GPS coords, selfie photo paths, PII-correlated
+-- timestamps — yet had RLS OFF, so the anon key could read the whole table.
+--
+-- Deny-all by default: no policy is added, so anon/authenticated get nothing.
+-- Every server route reads/writes this table through the SERVICE-ROLE client
+-- (supabaseAdmin), which bypasses RLS, and authenticates + scopes each query in
+-- app code. The two staff routes that previously used the anon client
+-- (hr/attendance, hr/my-reviews) were switched to service-role in the same
+-- change.
+--
+-- DEPLOY ORDER: apply this AFTER the code switching those two routes to
+-- service-role is live in production — otherwise their anon SELECTs return
+-- nothing (no policy) and the attendance history / my-reviews screens go blank.
+ALTER TABLE hr_attendance_logs ENABLE ROW LEVEL SECURITY;
