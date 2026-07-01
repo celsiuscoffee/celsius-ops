@@ -5,6 +5,7 @@ import {
   LATE_THRESHOLD_MINUTES,
   AUTO_CLOCKOUT_AFTER_HOURS,
 } from "../constants";
+import { deriveHours, mytDateString, mytDayOfWeek, computeLateMinutes } from "../hours";
 import type { AttendanceLog, GeofenceZone, EmployeeProfile } from "../types";
 
 type ProcessResult = {
@@ -12,14 +13,6 @@ type ProcessResult = {
   autoApproved: number;
   flagged: number;
   errors: string[];
-};
-
-// OT thresholds per employment type
-const OT_THRESHOLD_HOURS: Record<string, number> = {
-  full_time: 7.5,  // 45h/week ÷ 6 days = 7.5h/day (break excluded)
-  contract: 7.5,
-  part_time: 5,    // 5.5h shift - 30min break = 5h working
-  intern: 6,       // 6.5h shift - 30min break = 6h working
 };
 
 /**
@@ -74,8 +67,9 @@ export async function processAttendance(): Promise<ProcessResult> {
     restDayByUser.set(p.user_id, p.rest_day == null ? 0 : Number(p.rest_day));
   });
 
-  // 4. Get public holidays for the date range of pending logs
-  const logDates = [...new Set((pendingLogs as AttendanceLog[]).map((l) => l.clock_in.slice(0, 10)))];
+  // 4. Get public holidays for the date range of pending logs (MYT calendar day —
+  // a pre-08:00-MYT clock-in is the previous day in UTC, so slice() would miss it).
+  const logDates = [...new Set((pendingLogs as AttendanceLog[]).map((l) => mytDateString(l.clock_in)))];
   const { data: holidays } = await hrSupabaseAdmin
     .from("hr_public_holidays")
     .select("date")
@@ -89,7 +83,6 @@ export async function processAttendance(): Promise<ProcessResult> {
   for (const log of pendingLogs as AttendanceLog[]) {
     const flags: string[] = [];
     const employmentType = profileMap.get(log.user_id) || "full_time";
-    const otThreshold = OT_THRESHOLD_HOURS[employmentType] || 8;
 
     // --- Geofence Check ---
     const zone = zonesByOutlet.get(log.outlet_id);
@@ -106,12 +99,10 @@ export async function processAttendance(): Promise<ProcessResult> {
     }
 
     // --- Late Arrival ---
+    // Date-aware, cross-midnight safe: builds the scheduled instant from the
+    // roster's OWN date (scheduled_date), not the clock-in's UTC day.
     if (log.scheduled_start) {
-      const scheduled = parseTimeToMinutes(log.scheduled_start);
-      const clockInDate = new Date(log.clock_in);
-      const clockInMinutes = clockInDate.getUTCHours() * 60 + clockInDate.getUTCMinutes() + 8 * 60;
-      const normalizedClockIn = clockInMinutes % (24 * 60);
-      const lateMinutes = normalizedClockIn - scheduled;
+      const lateMinutes = computeLateMinutes(log.clock_in, log.scheduled_start, log.scheduled_date ?? mytDateString(log.clock_in));
       if (lateMinutes > LATE_THRESHOLD_MINUTES) {
         flags.push("late_arrival");
       }
@@ -127,71 +118,37 @@ export async function processAttendance(): Promise<ProcessResult> {
       }
     }
 
-    // --- Compute Hours ---
+    // --- Compute Hours (shared engine — the auto-close cron uses the same split) ---
     let totalHours = log.total_hours ? Number(log.total_hours) : 0;
     let regularHours = 0;
     let overtimeHours = 0;
     let overtimeType: string | null = null;
 
     if (log.clock_out) {
-      const clockIn = new Date(log.clock_in);
-      const clockOut = new Date(log.clock_out);
-      totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
-      totalHours = Math.round(totalHours * 100) / 100;
-
-      // Break deduction: break is NOT working time
-      // Full-time/contract: 1h break if shift > 5h
-      // Part-time/intern: 30min break if shift > 4h
-      let breakHours = 0;
-      if (employmentType === "part_time" || employmentType === "intern") {
-        breakHours = totalHours > 4 ? 0.5 : 0;
-      } else {
-        breakHours = totalHours > 5 ? 1 : 0;
-      }
-      const workedHours = totalHours - breakHours;
-
-      // Determine day type for OT rate
-      const clockDate = log.clock_in.slice(0, 10);
+      // Day type keyed on the MYT calendar day (not the UTC slice) so a pre-08:00
+      // opening shift gets the right rest-day / public-holiday OT multiplier.
+      const clockDate = mytDateString(log.clock_in);
       const isPH = publicHolidaySet.has(clockDate);
-      const dayOfWeek = new Date(clockDate).getDay(); // 0=Sun
-      // Per-employee rest day (NULL → Sunday default).
-      const restDay = restDayByUser.get(log.user_id) ?? 0;
-      const isRestDay = dayOfWeek === restDay;
+      const restDay = restDayByUser.get(log.user_id) ?? 0; // NULL → Sunday default
+      const isRestDay = mytDayOfWeek(log.clock_in) === restDay;
 
-      if (isPH) {
-        // Public holiday: all hours at 2x, OT at 3x
-        if (workedHours > otThreshold) {
-          regularHours = otThreshold;
-          overtimeHours = Math.floor(workedHours - otThreshold); // OT always floored to whole hours
-          overtimeType = "ot_3x"; // PH overtime = 3x
-        } else {
-          regularHours = Math.round(workedHours * 100) / 100;
-          overtimeType = "ph_2x"; // PH normal = 2x rate
-        }
-        flags.push("public_holiday");
-      } else if (isRestDay) {
-        // Rest day: normal hours at 1x, OT at 2x
-        if (workedHours > otThreshold) {
-          regularHours = otThreshold;
-          overtimeHours = Math.floor(workedHours - otThreshold); // OT always floored to whole hours
-          overtimeType = "ot_2x"; // rest day OT = 2x
-        } else {
-          regularHours = Math.round(workedHours * 100) / 100;
-          overtimeType = "rest_day_1x";
-        }
-        flags.push("rest_day_work");
-      } else if (workedHours > otThreshold) {
-        // Normal weekday OT
-        regularHours = otThreshold;
-        overtimeHours = Math.floor(workedHours - otThreshold); // OT always floored to whole hours
-        overtimeType = "ot_1_5x"; // weekday OT = 1.5x
-        flags.push("overtime_detected");
-      } else {
-        regularHours = Math.round(workedHours * 100) / 100;
-      }
+      const derived = deriveHours({
+        clockIn: new Date(log.clock_in),
+        clockOut: new Date(log.clock_out),
+        employmentType,
+        isPublicHoliday: isPH,
+        isRestDay,
+      });
+      totalHours = derived.totalHours;
+      regularHours = derived.regularHours;
+      overtimeHours = derived.overtimeHours;
+      overtimeType = derived.overtimeType;
+      flags.push(...derived.dayTypeFlags);
     } else if (flags.includes("no_clock_out")) {
-      totalHours = AUTO_CLOCKOUT_AFTER_HOURS;
-      regularHours = otThreshold;
+      // Still open past the auto-clockout window: flag for a manager but DON'T
+      // fabricate payable hours (the old code wrote a flat 12h). The auto-close
+      // cron is the single authority for closing stale logs and writing real hours.
+      regularHours = 0;
     }
 
     // --- Decision ---
@@ -222,9 +179,4 @@ export async function processAttendance(): Promise<ProcessResult> {
   }
 
   return result;
-}
-
-function parseTimeToMinutes(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
 }
