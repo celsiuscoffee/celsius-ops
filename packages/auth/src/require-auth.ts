@@ -9,17 +9,21 @@ import type { SessionUser, UserRole } from "./types";
 import { AuthError } from "./types";
 
 /**
- * Read user from middleware-injected headers (proxy pattern).
+ * SECURITY (was an authentication bypass): this previously returned a fully
+ * authenticated session straight from UNVERIFIED `x-user-*` request headers
+ * (the "trusted proxy" pattern). But no app in this monorepo injects those
+ * headers, and nothing strips them on the way in — so the only way they were
+ * ever populated was an attacker forging them. Sending `x-user-id: <victim>`
+ * impersonated any user on every route that resolved auth via `getUser`
+ * (staff clock-in/out, attendance, ping, …).
+ *
+ * It is intentionally inert now — auth must come from a verified JWT (bearer or
+ * cookie). Kept as an exported no-op so existing imports keep compiling; if a
+ * genuine trusted-proxy deployment is ever added, reintroduce header trust ONLY
+ * behind a shared secret the proxy signs and the edge strips inbound.
  */
-export function getUserFromHeaders(headers: Headers): SessionUser | null {
-  const id = headers.get("x-user-id");
-  if (!id) return null;
-  return {
-    id,
-    name: headers.get("x-user-name") || "",
-    role: (headers.get("x-user-role") || "STAFF") as UserRole,
-    outletId: headers.get("x-user-outlet") || headers.get("x-user-branch") || null,
-  };
+export function getUserFromHeaders(_headers: Headers): SessionUser | null {
+  return null;
 }
 
 /**
@@ -45,12 +49,12 @@ export async function getUserFromBearer(headers: Headers): Promise<SessionUser |
 }
 
 /**
- * Get the authenticated user from headers (proxy), bearer token (native),
- * or cookie (web). Proxy headers win, then bearer, then cookie.
+ * Get the authenticated user from a verified JWT — bearer token (native app)
+ * or cookie (web). Unverified `x-user-*` headers are NOT trusted (see
+ * getUserFromHeaders): they were an impersonation vector and no proxy sets them.
  */
 export async function getUser(headers: Headers): Promise<SessionUser | null> {
   return (
-    getUserFromHeaders(headers) ||
     (await getUserFromBearer(headers)) ||
     getUserFromCookie(headers)
   );
