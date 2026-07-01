@@ -20,6 +20,8 @@
 //     • Negative reviews = manager-approved hr_review_penalty rows (RM10 each)
 import { supabaseAdmin } from "../supabase";
 import { prisma } from "../prisma";
+import { computeLateMinutes, mytDateString } from "./hours";
+import { getMYTToday } from "./constants";
 
 // Phone capture is a FRONT-OF-HOUSE lever (kitchen does no phone collection).
 const FOH_POSITIONS = ["Barista", "Barista Lead", "Supervisor", "Shift Lead", "Manager", "Cashier"];
@@ -121,7 +123,7 @@ const LEVER_LABEL: Record<AllowanceLeverKey, string> = {
 };
 
 type RawLever = { tier: AllowanceTier; applicable: boolean; detail: string; score: number };
-type AttendanceLog = { clock_in: string; clock_out: string | null; scheduled_start: string | null; outlet_id: string | null; excused: boolean | null };
+type AttendanceLog = { clock_in: string; clock_out: string | null; scheduled_start: string | null; scheduled_date: string | null; outlet_id: string | null; excused: boolean | null };
 
 export async function computeAllowances(
   userId: string,
@@ -131,16 +133,18 @@ export async function computeAllowances(
 ): Promise<AllowanceBreakdown> {
   const r: AllowanceRules = { ...(rules ?? (await loadAllowanceRules())) };
 
-  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
-  const monthEndDate = new Date(year, month, 0);
-  const monthEnd = monthEndDate.toISOString().slice(0, 10);
-  const monthStartIso = `${monthStart}T00:00:00Z`;
-  const monthEndIso = `${monthEnd}T23:59:59Z`;
-  const today = new Date();
-  const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
-  const endForElapsed = isCurrentMonth ? today : monthEndDate;
-  const daysElapsed = Math.min(endForElapsed.getDate(), monthEndDate.getDate());
-  const daysRemaining = Math.max(0, monthEndDate.getDate() - daysElapsed);
+  const mm = String(month).padStart(2, "0");
+  const monthStart = `${year}-${mm}-01`;
+  const lastDayNum = new Date(Date.UTC(year, month, 0)).getUTCDate(); // days in this month (TZ-independent)
+  const monthEnd = `${year}-${mm}-${String(lastDayNum).padStart(2, "0")}`;
+  // MYT month window (not UTC) so a shift clocked just after midnight near a month
+  // edge is attributed to the right month, and days-elapsed reflects the MYT day.
+  const monthStartIso = `${monthStart}T00:00:00+08:00`;
+  const monthEndIso = `${monthEnd}T23:59:59+08:00`;
+  const todayMyt = getMYTToday();
+  const isCurrentMonth = todayMyt.slice(0, 7) === `${year}-${mm}`;
+  const daysElapsed = isCurrentMonth ? Math.min(Number(todayMyt.slice(8, 10)), lastDayNum) : lastDayNum;
+  const daysRemaining = Math.max(0, lastDayNum - daysElapsed);
 
   const { data: profile } = await supabaseAdmin
     .from("hr_employee_profiles")
@@ -155,7 +159,7 @@ export async function computeAllowances(
 
   const { data: logsRaw } = await supabaseAdmin
     .from("hr_attendance_logs")
-    .select("clock_in, clock_out, scheduled_start, outlet_id, excused")
+    .select("clock_in, clock_out, scheduled_start, scheduled_date, outlet_id, excused")
     .eq("user_id", userId)
     .gte("clock_in", monthStartIso)
     .lte("clock_in", monthEndIso);
@@ -229,21 +233,14 @@ export async function computeAllowances(
     for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) leaveDays.add(d.toISOString().slice(0, 10));
   });
 
-  const toMytDate = (iso: string | null | undefined): string =>
-    !iso ? "" : new Date(new Date(iso).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
-  const computeLateMin = (clockInIso: string, schedStart: string | null): number => {
-    if (!schedStart) return 0;
-    const myt = new Date(new Date(clockInIso).getTime() + 8 * 3600 * 1000);
-    const [sh, sm] = schedStart.split(":").map(Number);
-    return Math.max(0, (myt.getUTCHours() * 60 + myt.getUTCMinutes()) - (sh * 60 + (sm || 0)));
-  };
-
   const deductions: AllowanceDeduction[] = [];
   let lateCount = 0, absentCount = 0;
   for (const log of logs) {
     if (log.excused) continue;
-    const date = toMytDate(log.clock_in);
-    const lateMin = computeLateMin(log.clock_in, log.scheduled_start);
+    const date = mytDateString(log.clock_in);
+    // Lateness against the ROSTER instant (scheduled_date + scheduled_start),
+    // cross-midnight safe. No schedule stamped → 0 (no penalty), the safe default.
+    const lateMin = computeLateMinutes(log.clock_in, log.scheduled_start, log.scheduled_date ?? date);
     if (lateMin > r.latenessAbsentMinutes) {
       deductions.push({ kind: "absent", label: `Very late (${Math.round(lateMin)}m) — counted as absent`, amount: r.absentPenalty, date });
       absentCount++;
@@ -252,10 +249,9 @@ export async function computeAllowances(
       lateCount++;
     }
   }
-  const loggedDates = new Set(logs.map((l) => toMytDate(l.clock_in)));
-  const todayIso = today.toISOString().slice(0, 10);
+  const loggedDates = new Set(logs.map((l) => mytDateString(l.clock_in)));
   for (const sh of (scheduled || [])) {
-    if (sh.shift_date >= todayIso || loggedDates.has(sh.shift_date) || leaveDays.has(sh.shift_date)) continue;
+    if (sh.shift_date >= todayMyt || loggedDates.has(sh.shift_date) || leaveDays.has(sh.shift_date)) continue;
     deductions.push({ kind: "absent", label: "No-show (scheduled, didn't clock in)", amount: r.absentPenalty, date: sh.shift_date });
     absentCount++;
   }

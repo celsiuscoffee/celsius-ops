@@ -48,10 +48,11 @@ export type AttendanceLog = {
   clock_in_lng: number | null;
   clock_out_lat: number | null;
   clock_out_lng: number | null;
-  clock_in_method: "app" | "manual" | "pos";
-  clock_out_method: "app" | "manual" | "pos" | null;
+  clock_in_method: "app" | "manual" | "pos" | "app_nogps" | "app_offsite" | "system";
+  clock_out_method: "app" | "manual" | "pos" | "system" | null;
   scheduled_start: string | null;
   scheduled_end: string | null;
+  scheduled_date: string | null;
   ai_status: "pending" | "approved" | "flagged" | "reviewed";
   ai_flags: string[];
   ai_processed_at: string | null;

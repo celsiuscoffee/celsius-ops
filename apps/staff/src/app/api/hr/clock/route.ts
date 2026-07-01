@@ -6,6 +6,7 @@ import { getUser } from "@/lib/auth";
 // before RLS even runs.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { haversineDistance, GEOFENCE_RADIUS_METERS } from "@/lib/hr/constants";
+import { mytDateString, mytInstant } from "@/lib/hr/hours";
 import type { AttendanceLog, GeofenceZone } from "@/lib/hr/types";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,31 @@ async function pickOutletByLocation(candidateIds: string[], lat: number | undefi
   if (!best) return { outletId: fb, zone: null, distanceMeters: null, withinGeofence: false };
   const radius = best.z.radius_meters || GEOFENCE_RADIUS_METERS;
   return { outletId: best.z.outlet_id, zone: best.z, distanceMeters: best.dist, withinGeofence: best.dist <= radius };
+}
+
+// At clock-in, stamp the rostered shift (scheduled_start / _end / _date) onto the
+// log so lateness and the shift-end auto-close have a roster reference. Matches
+// the same hr_schedule_shifts rows the no-show / allowance logic reads. Picks the
+// shift whose start is closest to the clock-in, and checks today AND yesterday
+// (MYT) so a just-past-midnight clock-in still matches its previous-evening shift.
+async function findRosterShift(userId: string, clockIn: Date): Promise<{ scheduled_start: string; scheduled_end: string | null; scheduled_date: string } | null> {
+  const todayMyt = mytDateString(clockIn);
+  const prevMyt = mytDateString(new Date(clockIn.getTime() - 24 * 3600 * 1000));
+  const { data } = await supabase
+    .from("hr_schedule_shifts")
+    .select("shift_date, start_time, end_time")
+    .eq("user_id", userId)
+    .in("shift_date", [prevMyt, todayMyt]);
+  const shifts = (data ?? []) as { shift_date: string; start_time: string; end_time: string | null }[];
+  let best: { shift: (typeof shifts)[number]; diff: number } | null = null;
+  for (const s of shifts) {
+    const startInstant = mytInstant(s.shift_date, s.start_time);
+    if (!startInstant) continue;
+    const diff = Math.abs(clockIn.getTime() - startInstant.getTime());
+    if (!best || diff < best.diff) best = { shift: s, diff };
+  }
+  if (!best) return null;
+  return { scheduled_start: best.shift.start_time, scheduled_end: best.shift.end_time, scheduled_date: best.shift.shift_date };
 }
 
 // GET: current clock-in status for the logged-in user
@@ -192,17 +218,23 @@ export async function POST(req: NextRequest) {
     }
 
     const photoUrl = photo ? await uploadPhoto(photo, "in") : null;
+    const clockInAt = new Date();
+    const roster = await findRosterShift(session.id, clockInAt);
 
     const { data, error } = await supabase
       .from("hr_attendance_logs")
       .insert({
         user_id: session.id,
         outlet_id: outletId,
-        clock_in: new Date().toISOString(),
+        clock_in: clockInAt.toISOString(),
         clock_in_lat: latitude ?? null,
         clock_in_lng: longitude ?? null,
         clock_in_method: clockInMethod,
         clock_in_photo_url: photoUrl,
+        // Roster stamp → lateness + shift-end auto-close reference (null when no shift rostered).
+        scheduled_start: roster?.scheduled_start ?? null,
+        scheduled_end: roster?.scheduled_end ?? null,
+        scheduled_date: roster?.scheduled_date ?? null,
         ai_status: "pending",
       })
       .select()
