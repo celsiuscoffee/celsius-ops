@@ -3,7 +3,7 @@
 // Reports — three live financial statements (P&L, Balance Sheet, Cash Flow)
 // + auditor pack export. Date pickers, drill down by clicking any P&L line.
 
-import { useState, useMemo, Fragment } from "react";
+import { useState, useMemo, Fragment, createContext, useContext, useEffect } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import {
   Button,
@@ -26,6 +26,108 @@ function thisMonthStart(): string {
 
 function todayMyt(): string {
   return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+// ─── Shared report controls (date range + outlet filter) ────────
+// One control bar for the whole Reports page, persisted to localStorage: pick a
+// preset once (or a custom range) and every statement tab uses it — the way Xero
+// / QuickBooks put a single date filter above all reports instead of one per tab.
+
+type Preset = "this_month" | "last_month" | "this_quarter" | "last_quarter" | "ytd" | "last_12m" | "custom";
+const PRESETS: { id: Preset; label: string }[] = [
+  { id: "this_month", label: "This month" },
+  { id: "last_month", label: "Last month" },
+  { id: "this_quarter", label: "This quarter" },
+  { id: "last_quarter", label: "Last quarter" },
+  { id: "ytd", label: "Year to date" },
+  { id: "last_12m", label: "Last 12 months" },
+  { id: "custom", label: "Custom range" },
+];
+
+function rangeForPreset(preset: Preset, customStart: string, customEnd: string): { start: string; end: string } {
+  const now = new Date(Date.now() + 8 * 60 * 60 * 1000); // MYT
+  const y = now.getUTCFullYear(), m = now.getUTCMonth();
+  const first = (yy: number, mm: number) => new Date(Date.UTC(yy, mm, 1)).toISOString().slice(0, 10);
+  const last = (yy: number, mm: number) => new Date(Date.UTC(yy, mm + 1, 0)).toISOString().slice(0, 10);
+  const today = now.toISOString().slice(0, 10);
+  switch (preset) {
+    case "last_month": { const yy = m === 0 ? y - 1 : y, mm = m === 0 ? 11 : m - 1; return { start: first(yy, mm), end: last(yy, mm) }; }
+    case "this_quarter": { const qm = Math.floor(m / 3) * 3; return { start: first(y, qm), end: today }; }
+    case "last_quarter": { let qm = Math.floor(m / 3) * 3 - 3, yy = y; if (qm < 0) { qm += 12; yy -= 1; } return { start: first(yy, qm), end: last(yy, qm + 2) }; }
+    case "ytd": return { start: first(y, 0), end: today };
+    case "last_12m": return { start: first(y, m - 11), end: today };
+    case "custom": return { start: customStart, end: customEnd };
+    default: return { start: first(y, m), end: today };
+  }
+}
+
+type Controls = { start: string; end: string; outletId: string };
+const ControlsCtx = createContext<Controls>({ start: "", end: "", outletId: "" });
+const useControls = () => useContext(ControlsCtx);
+
+const CONTROLS_KEY = "finance:reports:controls";
+
+function useReportControlsState() {
+  const [preset, setPreset] = useState<Preset>("this_month");
+  const [customStart, setCustomStart] = useState(thisMonthStart());
+  const [customEnd, setCustomEnd] = useState(todayMyt());
+  const [outletId, setOutletId] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+
+  // Remember the last-used range + filter across reloads.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CONTROLS_KEY);
+      if (raw) {
+        const s = JSON.parse(raw) as Partial<{ preset: Preset; customStart: string; customEnd: string; outletId: string }>;
+        if (s.preset) setPreset(s.preset);
+        if (s.customStart) setCustomStart(s.customStart);
+        if (s.customEnd) setCustomEnd(s.customEnd);
+        if (s.outletId) setOutletId(s.outletId);
+      }
+    } catch { /* ignore */ }
+    setHydrated(true);
+  }, []);
+  useEffect(() => {
+    if (!hydrated) return;
+    try { localStorage.setItem(CONTROLS_KEY, JSON.stringify({ preset, customStart, customEnd, outletId })); } catch { /* ignore */ }
+  }, [hydrated, preset, customStart, customEnd, outletId]);
+
+  const { start, end } = rangeForPreset(preset, customStart, customEnd);
+  return { preset, setPreset, customStart, setCustomStart, customEnd, setCustomEnd, outletId, setOutletId, start, end };
+}
+
+function ReportControlsBar({ c }: { c: ReturnType<typeof useReportControlsState> }) {
+  const { data: outlets } = useFetch<{ id: string; name: string }[]>("/api/settings/outlets");
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2">
+      <select
+        value={c.preset}
+        onChange={(e) => c.setPreset(e.target.value as Preset)}
+        className="h-8 rounded-md border bg-background px-2 text-sm font-medium"
+        title="Report period"
+      >
+        {PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+      </select>
+      {c.preset === "custom" && (
+        <div className="flex items-center gap-1.5">
+          <input type="date" value={c.customStart} max={c.customEnd} onChange={(e) => c.setCustomStart(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-sm" />
+          <span className="text-xs text-muted-foreground">to</span>
+          <input type="date" value={c.customEnd} min={c.customStart} onChange={(e) => c.setCustomEnd(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-sm" />
+        </div>
+      )}
+      <span className="text-[11px] text-muted-foreground tabular-nums">{c.start} → {c.end}</span>
+      <select
+        value={c.outletId}
+        onChange={(e) => c.setOutletId(e.target.value)}
+        className="ml-auto h-8 rounded-md border bg-background px-2 text-sm"
+        title="Filter by outlet"
+      >
+        <option value="">All outlets</option>
+        {(outlets ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+      </select>
+    </div>
+  );
 }
 
 // ─── P&L tab ────────────────────────────────────────────────────
@@ -99,45 +201,15 @@ function SectionHeader({ label }: { label: string }) {
 }
 
 function PnlTab() {
-  const [start, setStart] = useState(thisMonthStart());
-  const [end, setEnd] = useState(todayMyt());
-  const [outletId, setOutletId] = useState("");
-  const { data: outlets } = useFetch<{ id: string; name: string }[]>("/api/settings/outlets");
+  const { start, end, outletId } = useControls();
   const qs = useMemo(() => `start=${start}&end=${end}${outletId ? `&outletId=${outletId}` : ""}`, [start, end, outletId]);
-  const { data, error, isLoading, mutate } = useFetch<{ report: PnlReport }>(
+  const { data, error, isLoading } = useFetch<{ report: PnlReport }>(
     `/api/finance/reports/pnl?${qs}`
   );
   const [drillCode, setDrillCode] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="date"
-          value={start}
-          onChange={(e) => setStart(e.target.value)}
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-        />
-        <span className="text-xs text-muted-foreground">to</span>
-        <input
-          type="date"
-          value={end}
-          onChange={(e) => setEnd(e.target.value)}
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-        />
-        <select
-          value={outletId}
-          onChange={(e) => setOutletId(e.target.value)}
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-          title="Per-outlet scopes revenue + COGS + outlet-tagged costs (contribution margin; shared opex stays company-level)"
-        >
-          <option value="">All outlets (company)</option>
-          {(outlets ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
-        <Button onClick={() => mutate()} variant="outline" size="sm">
-          Refresh
-        </Button>
-      </div>
       {outletId && (
         <p className="text-[11px] text-amber-600">
           Per-outlet view: revenue + COGS + outlet-tagged costs only (contribution margin). Shared/HQ opex is paid from the entity account and can&apos;t be split per outlet.
@@ -251,7 +323,7 @@ type BsReport = {
   imbalance: number;
 };
 
-function BsSectionTable({ title, total, lines }: { title: string; total: number; lines: BsLine[] }) {
+function BsSectionTable({ title, total, lines, onDrill }: { title: string; total: number; lines: BsLine[]; onDrill: (code: string) => void }) {
   return (
     <div className="overflow-hidden rounded-md border bg-card">
       <header className="border-b bg-muted/30 px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">
@@ -261,7 +333,7 @@ function BsSectionTable({ title, total, lines }: { title: string; total: number;
         <table className="w-full text-sm">
           <tbody>
             {lines.map((l) => (
-              <tr key={l.code} className="border-t">
+              <tr key={l.code} className="cursor-pointer border-t hover:bg-muted/30" onClick={() => onDrill(l.code)} title="Show journal lines">
                 <td
                   className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground"
                   style={{ paddingLeft: l.parentCode ? 32 : 12 }}
@@ -288,25 +360,15 @@ function BsSectionTable({ title, total, lines }: { title: string; total: number;
 }
 
 function BsTab() {
-  const [asOf, setAsOf] = useState(todayMyt());
-  const { data, isLoading, error, mutate } = useFetch<{ report: BsReport }>(
+  const { end: asOf } = useControls();
+  const { data, isLoading, error } = useFetch<{ report: BsReport }>(
     `/api/finance/reports/balance-sheet?asOf=${asOf}`
   );
+  const [drillCode, setDrillCode] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-muted-foreground">As of</span>
-        <input
-          type="date"
-          value={asOf}
-          onChange={(e) => setAsOf(e.target.value)}
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-        />
-        <Button onClick={() => mutate()} variant="outline" size="sm">
-          Refresh
-        </Button>
-      </div>
+      <p className="text-xs text-muted-foreground">Balance as of <span className="tabular-nums">{asOf}</span> (the period end). Click any line to see its journal entries.</p>
       {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
@@ -324,10 +386,10 @@ function BsTab() {
             </div>
           )}
           <div className="grid gap-3 lg:grid-cols-2">
-            <BsSectionTable title="Assets" total={data.report.assets.total} lines={data.report.assets.lines} />
+            <BsSectionTable title="Assets" total={data.report.assets.total} lines={data.report.assets.lines} onDrill={setDrillCode} />
             <div className="space-y-3">
-              <BsSectionTable title="Liabilities" total={data.report.liabilities.total} lines={data.report.liabilities.lines} />
-              <BsSectionTable title="Equity" total={data.report.equity.total} lines={data.report.equity.lines} />
+              <BsSectionTable title="Liabilities" total={data.report.liabilities.total} lines={data.report.liabilities.lines} onDrill={setDrillCode} />
+              <BsSectionTable title="Equity" total={data.report.equity.total} lines={data.report.equity.lines} onDrill={setDrillCode} />
               <div className="rounded-md border bg-muted/20 p-3 text-sm font-semibold">
                 Liabilities + Equity:{" "}
                 <span className="tabular-nums">{RM(data.report.totalLiabilitiesAndEquity)}</span>
@@ -336,6 +398,15 @@ function BsTab() {
           </div>
         </>
       )}
+
+      <Sheet open={!!drillCode} onOpenChange={(o) => !o && setDrillCode(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col gap-0 p-0">
+          <SheetHeader className="border-b px-6 py-4">
+            <SheetTitle>{drillCode} — journal lines through {asOf}</SheetTitle>
+          </SheetHeader>
+          {drillCode && <DrillDown code={drillCode} start="2020-01-01" end={asOf} />}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -402,32 +473,13 @@ function CfSectionTable({ s }: { s: CfSection }) {
 }
 
 function CfTab() {
-  const [start, setStart] = useState(thisMonthStart());
-  const [end, setEnd] = useState(todayMyt());
-  const { data, isLoading, error, mutate } = useFetch<{ report: CfReport }>(
+  const { start, end } = useControls();
+  const { data, isLoading, error } = useFetch<{ report: CfReport }>(
     `/api/finance/reports/cash-flow?start=${start}&end=${end}`
   );
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="date"
-          value={start}
-          onChange={(e) => setStart(e.target.value)}
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-        />
-        <span className="text-xs text-muted-foreground">to</span>
-        <input
-          type="date"
-          value={end}
-          onChange={(e) => setEnd(e.target.value)}
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-        />
-        <Button onClick={() => mutate()} variant="outline" size="sm">
-          Refresh
-        </Button>
-      </div>
       {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
@@ -549,14 +601,18 @@ type TbRow = { code: string; name: string; type: string; debit: number; credit: 
 type Tb = { asOf: string; rows: TbRow[]; totalDebit: number; totalCredit: number; balanced: boolean };
 
 function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
-  const [asOf, setAsOf] = useState(todayMyt());
+  const { end: asOf } = useControls();
+  const [q, setQ] = useState("");
   const { data, isLoading } = useFetch<{ report: Tb }>(`/api/finance/reports/trial-balance?asOf=${asOf}`);
+  const rows = (data?.report?.rows ?? []).filter((r) => {
+    const t = q.trim().toLowerCase();
+    return !t || r.code.toLowerCase().includes(t) || r.name.toLowerCase().includes(t);
+  });
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="text-xs text-muted-foreground">As of
-          <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
-        </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by code or account…" className="h-8 w-56 rounded-md border bg-background px-2 text-sm" />
+        <span className="text-xs text-muted-foreground">as of <span className="tabular-nums">{asOf}</span></span>
         {data?.report && (
           <span className={`ml-auto rounded px-2 py-1 text-xs font-medium ${data.report.balanced ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-red-500/10 text-red-600"}`}>
             {data.report.balanced ? "Balanced" : "Out of balance"}
@@ -571,7 +627,7 @@ function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
               <th className="px-3 py-2 text-right font-medium">Debit</th><th className="px-3 py-2 text-right font-medium">Credit</th>
             </tr></thead>
             <tbody className="divide-y">
-              {data.report.rows.map((r) => (
+              {rows.map((r) => (
                 <tr key={r.code} className="cursor-pointer hover:bg-muted/40" onClick={() => onDrill(r.code)} title="Open in General Ledger">
                   <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground tabular-nums">{r.code}</td>
                   <td className="px-3 py-1.5">{r.name}</td>
@@ -598,21 +654,15 @@ type GlEntry = { date: string; txnType: string; description: string; debit: numb
 type Gl = { accountCode: string; accountName: string; start: string; end: string; opening: number; entries: GlEntry[]; closing: number; totalDebit: number; totalCredit: number };
 
 function GlTab({ account, setAccount }: { account: string; setAccount: (c: string) => void }) {
-  const [start, setStart] = useState(thisMonthStart());
-  const [end, setEnd] = useState(todayMyt());
+  const { start, end } = useControls();
   const { data, isLoading } = useFetch<{ report: Gl }>(`/api/finance/reports/general-ledger?account=${encodeURIComponent(account)}&start=${start}&end=${end}`);
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <label className="text-xs text-muted-foreground">Account
-          <input value={account} onChange={(e) => setAccount(e.target.value.trim())} placeholder="e.g. 6000-01" className="ml-2 w-28 rounded border px-2 py-1 text-sm tabular-nums" />
+          <input value={account} onChange={(e) => setAccount(e.target.value.trim())} placeholder="e.g. 6000-01" className="ml-2 w-28 rounded-md border bg-background px-2 py-1 text-sm tabular-nums" />
         </label>
-        <label className="text-xs text-muted-foreground">From
-          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
-        </label>
-        <label className="text-xs text-muted-foreground">To
-          <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
-        </label>
+        <span className="text-xs text-muted-foreground tabular-nums">{start} → {end}</span>
       </div>
       {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
         <div className="overflow-x-auto rounded-lg border">
@@ -657,14 +707,18 @@ const AP_COLS: { key: keyof AgedPayables["totals"]; label: string }[] = [
 ];
 
 function ApTab() {
-  const [asOf, setAsOf] = useState(todayMyt());
+  const { end: asOf } = useControls();
+  const [q, setQ] = useState("");
   const { data, isLoading } = useFetch<{ report: AgedPayables }>(`/api/finance/reports/aged-payables?asOf=${asOf}`);
+  const rows = (data?.report?.rows ?? []).filter((r) => {
+    const t = q.trim().toLowerCase();
+    return !t || r.vendor.toLowerCase().includes(t);
+  });
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="text-xs text-muted-foreground">As of
-          <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
-        </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by supplier…" className="h-8 w-56 rounded-md border bg-background px-2 text-sm" />
+        <span className="text-xs text-muted-foreground">as of <span className="tabular-nums">{asOf}</span></span>
         {data?.report && <span className="ml-auto text-xs text-muted-foreground">{data.report.invoiceCount} open bills · <span className="font-medium text-foreground">{RM(data.report.grandTotal)}</span> outstanding</span>}
       </div>
       {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
@@ -676,7 +730,7 @@ function ApTab() {
               <th className="px-3 py-2 text-right font-medium">Total</th>
             </tr></thead>
             <tbody className="divide-y">
-              {data.report.rows.map((r) => (
+              {rows.map((r) => (
                 <tr key={r.vendor} className="hover:bg-muted/40">
                   <td className="px-3 py-1.5">{r.vendor} <span className="text-[10px] text-muted-foreground">({r.count})</span></td>
                   {AP_COLS.map((c) => <td key={c.key} className={`px-3 py-1.5 text-right tabular-nums ${c.key === "d90_plus" && r[c.key] ? "text-red-600" : ""}`}>{r[c.key] ? RM(r[c.key]) : ""}</td>)}
@@ -817,6 +871,10 @@ function ReconTab() {
 export default function FinanceReportsPage() {
   const [tab, setTab] = useState<"pnl" | "bs" | "cf" | "tb" | "gl" | "ap" | "recon" | "audit">("pnl");
   const [glAccount, setGlAccount] = useState("1000-01"); // shared so TB rows can drill into GL
+  const controls = useReportControlsState();
+  // Tabs driven by the shared date range + outlet filter. Recon has its own
+  // matched-period control; Auditor pack works by fiscal year.
+  const usesControls = tab !== "recon" && tab !== "audit";
 
   return (
     <div className="space-y-4 p-3 sm:p-6">
@@ -854,6 +912,8 @@ export default function FinanceReportsPage() {
         </div>
       </nav>
 
+      {usesControls && <ReportControlsBar c={controls} />}
+
       {(tab === "bs" || tab === "cf") && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs sm:text-sm text-amber-700 dark:text-amber-400">
           <span className="font-medium">Ledger-based — currently incomplete.</span>{" "}
@@ -861,14 +921,16 @@ export default function FinanceReportsPage() {
         </div>
       )}
 
-      {tab === "pnl" && <PnlTab />}
-      {tab === "bs" && <BsTab />}
-      {tab === "cf" && <CfTab />}
-      {tab === "tb" && <TbTab onDrill={(code) => { setGlAccount(code); setTab("gl"); }} />}
-      {tab === "gl" && <GlTab account={glAccount} setAccount={setGlAccount} />}
-      {tab === "ap" && <ApTab />}
-      {tab === "recon" && <ReconTab />}
-      {tab === "audit" && <AuditorPack />}
+      <ControlsCtx.Provider value={{ start: controls.start, end: controls.end, outletId: controls.outletId }}>
+        {tab === "pnl" && <PnlTab />}
+        {tab === "bs" && <BsTab />}
+        {tab === "cf" && <CfTab />}
+        {tab === "tb" && <TbTab onDrill={(code) => { setGlAccount(code); setTab("gl"); }} />}
+        {tab === "gl" && <GlTab account={glAccount} setAccount={setGlAccount} />}
+        {tab === "ap" && <ApTab />}
+        {tab === "recon" && <ReconTab />}
+        {tab === "audit" && <AuditorPack />}
+      </ControlsCtx.Provider>
     </div>
   );
 }
