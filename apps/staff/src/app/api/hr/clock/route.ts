@@ -241,6 +241,11 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) {
+      // 23505 = the one-open-log-per-user partial unique index: a concurrent
+      // clock-in (double tap / retry) beat this one. Treat as already clocked in.
+      if ((error as { code?: string }).code === "23505") {
+        return NextResponse.json({ error: "Already clocked in" }, { status: 400 });
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
