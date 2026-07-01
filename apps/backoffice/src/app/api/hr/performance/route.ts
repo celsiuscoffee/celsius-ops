@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews } from "@/lib/reviews/gbp";
-import { resolveVisibleUserIds } from "@/lib/hr/scope";
+import { resolveVisibleUserIds, getAccessibleOutletIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
   }
 
   const visibleIds = await resolveVisibleUserIds(session);
+  // null = OWNER/ADMIN (all outlets); otherwise the caller's accessible outlets.
+  const accessibleOutletIds = await getAccessibleOutletIds(session);
 
   const { searchParams } = new URL(req.url);
   const now = new Date();
@@ -29,8 +31,12 @@ export async function GET(req: NextRequest) {
   const monthStartIso = `${monthStart}T00:00:00Z`;
   const monthEndIso = `${monthEnd}T23:59:59Z`;
 
-  // MANAGER with empty subtree → return empty early.
-  if (visibleIds !== null && visibleIds.length === 0) {
+  // MANAGER with empty subtree → return empty early. Also reject an outletId the
+  // caller can't access: outletFilter feeds the audit-report and GBP-review
+  // blocks directly, so an unvalidated value leaked another outlet's audit notes
+  // and review text.
+  const outOfScopeOutlet = outletFilter != null && accessibleOutletIds !== null && !accessibleOutletIds.includes(outletFilter);
+  if ((visibleIds !== null && visibleIds.length === 0) || outOfScopeOutlet) {
     return NextResponse.json({ period: { year, month, start: monthStart, end: monthEnd }, staff: [], reviews: [], auditMentions: [] });
   }
 
