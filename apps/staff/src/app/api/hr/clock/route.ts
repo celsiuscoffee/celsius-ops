@@ -64,8 +64,11 @@ async function findRosterShift(userId: string, clockIn: Date): Promise<{ schedul
   const prevMyt = mytDateString(new Date(clockIn.getTime() - 24 * 3600 * 1000));
   const { data } = await supabase
     .from("hr_schedule_shifts")
-    .select("shift_date, start_time, end_time")
+    // Only stamp from a PUBLISHED roster (same filter the /hr/shifts route uses)
+    // so a draft shift's times don't drive lateness / auto-close.
+    .select("shift_date, start_time, end_time, hr_schedules!inner(status)")
     .eq("user_id", userId)
+    .eq("hr_schedules.status", "published")
     .in("shift_date", [prevMyt, todayMyt]);
   const shifts = (data ?? []) as { shift_date: string; start_time: string; end_time: string | null }[];
   let best: { shift: (typeof shifts)[number]; diff: number } | null = null;

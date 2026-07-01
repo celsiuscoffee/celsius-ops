@@ -194,7 +194,7 @@ export default function ClockScreen() {
         )
       : null;
   const inZone =
-    zone && distance != null ? distance <= (zone.radius_meters ?? 150) : false;
+    zone && distance != null ? distance <= (zone.radius_meters ?? 100) : false;
   const canClockIn = !clockedIn && (!zone || inZone);
 
   return (

@@ -10,7 +10,9 @@ export async function startGeofencing(zones: GeofenceZone[]) {
       identifier: `outlet:${z.name}`,
       latitude: Number(z.latitude),
       longitude: Number(z.longitude),
-      radius: z.radius_meters ?? 150,
+      // Match the server default (GEOFENCE_RADIUS_METERS = 100). A 150 fallback
+      // here disagreed with the server's in/out verdict and the clock-out gate.
+      radius: z.radius_meters ?? 100,
       notifyOnEnter: true,
       notifyOnExit: true,
     }));
