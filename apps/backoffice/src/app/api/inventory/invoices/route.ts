@@ -309,6 +309,19 @@ export async function GET(req: NextRequest) {
     pendingInvoice: { count: pendingInvoiceAgg._count._all, amount: Number(pendingInvoiceAgg._sum.amount ?? 0) },
   };
 
+  // "Possible POP match" — ambiguous POPs the Telegram matcher couldn't auto-link. Surfaced on
+  // each candidate invoice's row so a human can confirm which one it settles, right here.
+  const openPops = await prisma.pendingPop.findMany({
+    where: { status: "OPEN", candidateInvoiceIds: { hasSome: invoices.map((i) => i.id) } },
+    select: { id: true, amount: true, referenceNumber: true, payeeName: true, photoUrl: true, candidateInvoiceIds: true },
+  });
+  type PopLite = { id: string; amount: number; referenceNumber: string | null; payeeName: string | null; photoUrl: string | null };
+  const popByInvoice = new Map<string, PopLite>();
+  for (const p of openPops) {
+    const lite: PopLite = { id: p.id, amount: Number(p.amount), referenceNumber: p.referenceNumber, payeeName: p.payeeName, photoUrl: p.photoUrl };
+    for (const invId of p.candidateInvoiceIds) if (!popByInvoice.has(invId)) popByInvoice.set(invId, lite);
+  }
+
   const mapped = invoices.map((inv) => ({
     id: inv.id,
     invoiceNumber: inv.invoiceNumber,
@@ -361,6 +374,9 @@ export async function GET(req: NextRequest) {
     depositPaidAt: inv.depositPaidAt?.toISOString() ?? null,
     depositRef: inv.depositRef ?? null,
     flags: Array.isArray(inv.flags) ? inv.flags : [],
+    // An uploaded POP the matcher couldn't auto-link, for which THIS invoice is a candidate →
+    // the row shows a "possible POP" badge + a Confirm action. null when there's none.
+    possiblePop: popByInvoice.get(inv.id) ?? null,
     // True when this is a GRNI placeholder — auto-created on receiving,
     // awaiting the supplier to send the actual invoice details.
     isPendingInvoice:

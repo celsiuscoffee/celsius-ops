@@ -80,6 +80,9 @@ type Invoice = {
   aiPrefilledAt: string | null;
   aiPrefilledFields: string[];
   supplierPaymentTerms: string | null;
+  // An uploaded POP the Telegram matcher couldn't auto-link, for which THIS invoice is a
+  // candidate. Present → the row shows a "possible POP" badge + a Confirm action.
+  possiblePop: { id: string; amount: number; referenceNumber: string | null; payeeName: string | null; photoUrl: string | null } | null;
 };
 
 type InvoiceFlagCode =
@@ -174,6 +177,7 @@ export default function InvoicesPage() {
   const [paySaving, setPaySaving] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [payReceipts, setPayReceipts] = useState<string[]>([]);
+  const [confirmingPopId, setConfirmingPopId] = useState<string | null>(null);
   // Auto-submit timer fires when the AI-extracted POP amount matches the
   // deposit or balance leg within tolerance — saves the user the third click
   // (Mark → Upload → Submit becomes Mark → Upload, auto-Submit 5s later).
@@ -577,6 +581,40 @@ export default function InvoicesPage() {
       toast.error("Network error");
     } finally {
       setPaySaving(false);
+    }
+  };
+
+  // Confirm an ambiguous POP (the Telegram matcher couldn't auto-link it) against THIS invoice →
+  // marks it paid + attaches the POP + closes the pending record. The BackOffice twin of the
+  // Telegram "tap to pick"; the money-write is the shared, atomic markInvoicePaidWithPop.
+  const confirmPop = async (inv: Invoice) => {
+    const pop = inv.possiblePop;
+    if (!pop) return;
+    if (
+      !(await confirm({
+        title: `Mark ${inv.invoiceNumber} (${formatRM(inv.amount)}) paid from this POP — RM ${pop.amount.toFixed(2)}${pop.referenceNumber ? `, ref ${pop.referenceNumber}` : ""}?`,
+        confirmLabel: "Mark paid",
+      }))
+    )
+      return;
+    setConfirmingPopId(pop.id);
+    try {
+      const res = await fetch(`/api/inventory/pending-pops/${pop.id}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId: inv.id }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(`Failed: ${json.error || res.statusText}`);
+        return;
+      }
+      toast.success(json.alreadyPaid ? "Already paid — cleared the pending POP" : `${inv.invoiceNumber} marked paid`);
+      await loadInvoices(undefined, { revalidate: true });
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setConfirmingPopId(null);
     }
   };
 
@@ -1437,6 +1475,12 @@ export default function InvoicesPage() {
                         REVIEW {activeFlags(inv).length > 1 ? `×${activeFlags(inv).length}` : ""}
                       </button>
                     )}
+                    {inv.possiblePop && (
+                      <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700">
+                        <Check className="h-3 w-3" />
+                        POP RM{inv.possiblePop.amount.toFixed(2)}
+                      </span>
+                    )}
                   </div>
                   <p className="mt-0.5 truncate text-xs text-gray-600">{inv.supplier}</p>
                   <p className="truncate text-[11px] text-gray-400">
@@ -1522,6 +1566,16 @@ export default function InvoicesPage() {
                     >
                       <Check className="h-3.5 w-3.5" />
                       Confirm AI Prefill
+                    </button>
+                  )}
+                  {inv.possiblePop && (
+                    <button
+                      onClick={() => confirmPop(inv)}
+                      disabled={confirmingPopId === inv.possiblePop.id}
+                      className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {confirmingPopId === inv.possiblePop.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                      Confirm POP
                     </button>
                   )}
                   {actions.map((a) => (
@@ -1626,6 +1680,15 @@ export default function InvoicesPage() {
                         REVIEW {activeFlags(inv).length > 1 ? `×${activeFlags(inv).length}` : ""}
                       </button>
                     )}
+                    {inv.possiblePop && (
+                      <span
+                        className="ml-1.5 inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700"
+                        title={`Uploaded POP RM${inv.possiblePop.amount.toFixed(2)}${inv.possiblePop.referenceNumber ? ` · ref ${inv.possiblePop.referenceNumber}` : ""} — confirm in Actions`}
+                      >
+                        <Check className="h-3 w-3" />
+                        POP RM{inv.possiblePop.amount.toFixed(2)}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3"><code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{inv.poNumber}</code></td>
                   <td className="px-4 py-3 text-gray-600">{inv.supplier}</td>
@@ -1720,6 +1783,17 @@ export default function InvoicesPage() {
                         >
                           <Ban className="h-3 w-3" />
                           Reject
+                        </button>
+                      )}
+                      {inv.possiblePop && (
+                        <button
+                          onClick={() => confirmPop(inv)}
+                          disabled={confirmingPopId === inv.possiblePop.id}
+                          className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                          title="Confirm this POP against this invoice — mark paid + attach"
+                        >
+                          {confirmingPopId === inv.possiblePop.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                          Confirm POP
                         </button>
                       )}
                       {actions.map((a) => (

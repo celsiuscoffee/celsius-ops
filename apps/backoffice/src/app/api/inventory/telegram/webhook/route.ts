@@ -421,6 +421,7 @@ async function processCallback(cb: TelegramCallbackQuery) {
       );
     }
     await deleteFromStorage(metaPath).catch(() => {});
+    await closePendingPop(token, invoiceId);
     return;
   }
 
@@ -444,6 +445,18 @@ async function processCallback(cb: TelegramCallbackQuery) {
 
   // Clean up the meta blob so the bucket doesn't accumulate.
   await deleteFromStorage(metaPath).catch(() => {});
+  // Close the persisted PendingPop so its "possible POP" badge clears in BackOffice.
+  await closePendingPop(token, invoiceId);
+}
+
+// Resolve the persisted PendingPop for a Telegram picker token (best-effort — never throws).
+async function closePendingPop(token: string, invoiceId: string) {
+  await prisma.pendingPop
+    .updateMany({
+      where: { token, status: "OPEN" },
+      data: { status: "RESOLVED", resolvedInvoiceId: invoiceId, resolvedAt: new Date() },
+    })
+    .catch(() => {});
 }
 
 // ─── POP Matching ───────────────────────────────────────────
@@ -796,6 +809,28 @@ async function resolvePop(
         await writeJsonToStorage(metaPath, meta);
       } catch (err) {
         console.error("[telegram] Failed to stash POP meta:", err);
+      }
+      // Persist the ambiguous POP so BackOffice can surface a "possible POP match" on each
+      // candidate invoice + let a human confirm it there, not only via this Telegram picker.
+      // Best-effort — never break the Telegram reply. Closed on resolution (either path).
+      try {
+        const popDate = pop.date && !Number.isNaN(Date.parse(pop.date)) ? new Date(pop.date) : null;
+        await prisma.pendingPop.create({
+          data: {
+            token,
+            amount,
+            referenceNumber: pop.referenceNumber ?? null,
+            payeeName: pop.recipientName ?? null,
+            bankName: pop.recipientBank ?? null,
+            invoiceReference: pop.invoiceReference ?? null,
+            date: popDate,
+            photoUrl,
+            candidateInvoiceIds: offered.map((c) => c.id),
+            source: "telegram",
+          },
+        });
+      } catch (err) {
+        console.error("[telegram] Failed to persist PendingPop:", err);
       }
 
       const keyboard: InlineKeyboardMarkup = {
