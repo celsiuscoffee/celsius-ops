@@ -648,8 +648,57 @@ function GlTab({ account, setAccount }: { account: string; setAccount: (c: strin
   );
 }
 
+// ─── Aged Payables tab ──────────────────────────────────────────
+type AgedRow = { vendor: string; count: number; current: number; d1_30: number; d31_60: number; d61_90: number; d90_plus: number; total: number };
+type AgedPayables = { asOf: string; rows: AgedRow[]; totals: { current: number; d1_30: number; d31_60: number; d61_90: number; d90_plus: number }; grandTotal: number; invoiceCount: number };
+const AP_COLS: { key: keyof AgedPayables["totals"]; label: string }[] = [
+  { key: "current", label: "Current" }, { key: "d1_30", label: "1–30" }, { key: "d31_60", label: "31–60" },
+  { key: "d61_90", label: "61–90" }, { key: "d90_plus", label: "90+" },
+];
+
+function ApTab() {
+  const [asOf, setAsOf] = useState(todayMyt());
+  const { data, isLoading } = useFetch<{ report: AgedPayables }>(`/api/finance/reports/aged-payables?asOf=${asOf}`);
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs text-muted-foreground">As of
+          <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
+        </label>
+        {data?.report && <span className="ml-auto text-xs text-muted-foreground">{data.report.invoiceCount} open bills · <span className="font-medium text-foreground">{RM(data.report.grandTotal)}</span> outstanding</span>}
+      </div>
+      {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+              <th className="px-3 py-2 font-medium">Supplier</th>
+              {AP_COLS.map((c) => <th key={c.key} className="px-3 py-2 text-right font-medium">{c.label}</th>)}
+              <th className="px-3 py-2 text-right font-medium">Total</th>
+            </tr></thead>
+            <tbody className="divide-y">
+              {data.report.rows.map((r) => (
+                <tr key={r.vendor} className="hover:bg-muted/40">
+                  <td className="px-3 py-1.5">{r.vendor} <span className="text-[10px] text-muted-foreground">({r.count})</span></td>
+                  {AP_COLS.map((c) => <td key={c.key} className={`px-3 py-1.5 text-right tabular-nums ${c.key === "d90_plus" && r[c.key] ? "text-red-600" : ""}`}>{r[c.key] ? RM(r[c.key]) : ""}</td>)}
+                  <td className="px-3 py-1.5 text-right font-medium tabular-nums">{RM(r.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot><tr className="border-t-2 font-semibold">
+              <td className="px-3 py-2">Total</td>
+              {AP_COLS.map((c) => <td key={c.key} className="px-3 py-2 text-right tabular-nums">{RM(data.report.totals[c.key])}</td>)}
+              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.grandTotal)}</td>
+            </tr></tfoot>
+          </table>
+        </div>
+      )}
+      <p className="text-[11px] text-muted-foreground">Open supplier bills by how overdue they are (from due date). Aged Receivables is not shown — sales settle same-day via card/QR/grab, so there is no open receivables ledger.</p>
+    </div>
+  );
+}
+
 export default function FinanceReportsPage() {
-  const [tab, setTab] = useState<"pnl" | "bs" | "cf" | "tb" | "gl" | "audit">("pnl");
+  const [tab, setTab] = useState<"pnl" | "bs" | "cf" | "tb" | "gl" | "ap" | "audit">("pnl");
   const [glAccount, setGlAccount] = useState("1000-01"); // shared so TB rows can drill into GL
 
   return (
@@ -669,6 +718,7 @@ export default function FinanceReportsPage() {
             { id: "cf", label: "Cash Flow" },
             { id: "tb", label: "Trial Balance" },
             { id: "gl", label: "General Ledger" },
+            { id: "ap", label: "Aged Payables" },
             { id: "audit", label: "Auditor pack" },
           ].map((t) => (
             <button
@@ -698,6 +748,7 @@ export default function FinanceReportsPage() {
       {tab === "cf" && <CfTab />}
       {tab === "tb" && <TbTab onDrill={(code) => { setGlAccount(code); setTab("gl"); }} />}
       {tab === "gl" && <GlTab account={glAccount} setAccount={setGlAccount} />}
+      {tab === "ap" && <ApTab />}
       {tab === "audit" && <AuditorPack />}
     </div>
   );
