@@ -259,7 +259,7 @@ function PnlTab() {
             <SheetTitle>{drillCode} — drill down</SheetTitle>
           </SheetHeader>
           {drillCode && data && (
-            <DrillDown code={drillCode} start={data.report.start} end={data.report.end} />
+            <DrillDown code={drillCode} start={data.report.start} end={data.report.end} outletId={outletId || undefined} />
           )}
         </SheetContent>
       </Sheet>
@@ -267,14 +267,14 @@ function PnlTab() {
   );
 }
 
-function DrillDown({ code, start, end }: { code: string; start: string; end: string }) {
+function DrillDown({ code, start, end, outletId }: { code: string; start: string; end: string; outletId?: string }) {
   const { data, isLoading } = useFetch<{ lines: DrillLine[] }>(
-    `/api/finance/reports/drilldown?accountCode=${code}&start=${start}&end=${end}`
+    `/api/finance/reports/drilldown?accountCode=${encodeURIComponent(code)}&start=${start}&end=${end}${outletId ? `&outletId=${outletId}` : ""}`
   );
   if (isLoading) return <div className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>;
   if (!data) return null;
   if (data.lines.length === 0) {
-    return <div className="p-6 text-sm text-muted-foreground">No journals in this period.</div>;
+    return <div className="p-6 text-sm text-muted-foreground">No entries in this period.</div>;
   }
   return (
     <div className="overflow-y-auto p-6">
@@ -302,6 +302,17 @@ function DrillDown({ code, start, end }: { code: string; start: string; end: str
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr className="border-t-2 font-semibold">
+              <td className="px-3 py-2" colSpan={2}>Total ({data.lines.length} entries)</td>
+              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                {RM(data.lines.reduce((s, l) => s + l.debit, 0))}
+              </td>
+              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                {RM(data.lines.reduce((s, l) => s + l.credit, 0))}
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
