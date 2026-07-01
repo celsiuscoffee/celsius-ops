@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { markInvoicePaidWithPop } from "@/lib/inventory/mark-invoice-paid";
+import { deleteFromStorage } from "@/lib/inventory/pdf-splitter";
+
+// The Telegram picker's stashed metadata (its inline buttons read this). Deleting it on
+// resolution keeps the two surfaces in sync so stale "tap to pick" buttons don't linger.
+const metaPath = (token: string | null) => (token ? `pop/meta/${token}.json` : null);
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +49,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     where: { id },
     data: { status: "RESOLVED", resolvedInvoiceId: invoiceId, resolvedById: caller.id, resolvedAt: new Date() },
   });
+  const mp = metaPath(pop.token);
+  if (mp) await deleteFromStorage(mp).catch(() => {});
 
   return NextResponse.json({ ok: true, invoiceId, alreadyPaid: result.alreadyPaid });
 }
@@ -54,7 +61,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const pop = await prisma.pendingPop.findUnique({ where: { id }, select: { status: true } });
+  const pop = await prisma.pendingPop.findUnique({ where: { id }, select: { status: true, token: true } });
   if (!pop) return NextResponse.json({ error: "POP not found" }, { status: 404 });
   if (pop.status !== "OPEN") {
     return NextResponse.json({ error: `This POP was already ${pop.status.toLowerCase()}.` }, { status: 409 });
@@ -63,5 +70,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     where: { id },
     data: { status: "DISMISSED", resolvedById: caller.id, resolvedAt: new Date() },
   });
+  const mp = metaPath(pop.token);
+  if (mp) await deleteFromStorage(mp).catch(() => {});
   return NextResponse.json({ ok: true, dismissed: true });
 }
