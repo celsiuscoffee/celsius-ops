@@ -1,18 +1,17 @@
-// Unified sales source for the sales dashboard during/after the StoreHub →
-// POS-native migration. Per outlet, merges:
+// Unified sales source for the sales dashboard after the StoreHub → POS-native
+// migration. StoreHub is fully retired; its data survives only as the frozen
+// `storehub_sales` archive (read-only). Per outlet, merges:
 //   • StoreHub: the local archive (storehub_sales) for HISTORY. Pre-cutover:
 //     every row. Post-cutover: ONLY external delivery (Grab/Beep) that was still
 //     on StoreHub during the brief window before it went native — the till
 //     (OFFLINE_PAYMENTS) is on pos_orders now, so keeping it would double-count.
-//     A live "today" pull runs only while the outlet is still pre-cutover.
 //   • POS-native (pos_orders) + pickup (orders): real-time, AT/AFTER cutover.
-// Each sale is counted once. StoreHub is frozen after the final cutover (no new
-// rows) and its Grab never shares a day with native Grab, so no double-count.
+// Each sale is counted once. The archive is frozen (no new rows) and its Grab
+// never shares a day with native Grab, so no double-count.
 
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { getTransactions, type StoreHubTransaction } from "@/lib/storehub";
-import { classifyChannel, isDeliveryOrQR } from "./storehub-helpers";
+import { classifyChannel, isDeliveryOrQR, type StoreHubTransaction } from "./storehub-helpers";
 
 export type UnifiedSale = {
   ts: string; // ISO timestamp (UTC, with Z) — consumed by getMYTHour/getMYTDateStr
@@ -24,7 +23,7 @@ export type UnifiedSale = {
 
 export type OutletSource = {
   outletId: string; // Celsius Outlet.id → storehub_sales.outlet_id
-  storehubStoreId: string | null; // Outlet.storehubId → live StoreHub pull for today
+  storehubStoreId: string | null; // Outlet.storehubId → gates whether this outlet has a storehub_sales archive
   loyaltyOutletId: string | null; // → pos_orders.outlet_id (e.g. "outlet-con")
   pickupStoreId: string | null; // Outlet.pickupStoreId → orders.store_id (pickup app / QR-table)
   cutoverAt: Date | null; // Outlet.posNativeCutoverAt
@@ -154,36 +153,22 @@ export async function getUnifiedSalesForOutlet(
     for (const r of shRows) pushArchive(r);
   }
 
-  // ── StoreHub TODAY — LIVE pull so today is real-time, but ONLY while the
-  // outlet is still pre-cutover (its till is still on StoreHub). After cutover
-  // today comes from pos_orders/pickup below. Falls back to the archive if
-  // StoreHub is unreachable. ──
-  const preCutoverToday = !outlet.cutoverAt || todayStartMyt.getTime() < outlet.cutoverAt.getTime();
-  if (preCutoverToday && outlet.storehubStoreId && to.getTime() >= todayStartMyt.getTime()) {
-    try {
-      const liveTxns = await getTransactions(outlet.storehubStoreId, todayStartMyt, now);
-      for (const t of liveTxns) {
-        const ts = t.transactionTime ?? t.completedAt ?? t.createdAt;
-        if (!ts) continue;
-        pushStorehub(ts, typeof t.total === "number" ? t.total : 0, t);
-      }
-    } catch (e) {
-      console.warn(
-        `[unified-sales] live StoreHub today failed for ${outlet.outletId}; using archive:`,
-        e instanceof Error ? e.message : e,
-      );
-      const fb = await prisma.$queryRaw<Array<ArchiveRow>>`
-        SELECT transaction_time AS ts, total, channel, channel_class, is_delivery_qr,
-               CASE WHEN channel_class IS NULL THEN raw END AS raw
-        FROM storehub_sales
-        WHERE outlet_id = ${outlet.outletId}
-          AND NOT is_cancelled
-          AND transaction_time IS NOT NULL
-          AND transaction_time >= ${todayStartMyt}
-          AND transaction_time <= ${to}
-      `;
-      for (const r of fb) pushArchive(r);
-    }
+  // ── StoreHub TODAY — read today's rows from the same frozen archive. StoreHub
+  // is fully retired (no live API), so there is no real-time pull; the archive is
+  // the complete historical record and the cutover gate still drops any
+  // post-cutover till rows that would double-count pos_orders below. ──
+  if (outlet.storehubStoreId && to.getTime() >= todayStartMyt.getTime()) {
+    const todayRows = await prisma.$queryRaw<Array<ArchiveRow>>`
+      SELECT transaction_time AS ts, total, channel, channel_class, is_delivery_qr,
+             CASE WHEN channel_class IS NULL THEN raw END AS raw
+      FROM storehub_sales
+      WHERE outlet_id = ${outlet.outletId}
+        AND NOT is_cancelled
+        AND transaction_time IS NOT NULL
+        AND transaction_time >= ${todayStartMyt}
+        AND transaction_time <= ${to}
+    `;
+    for (const r of todayRows) pushArchive(r);
   }
 
   // ── POS-native — native till orders. For a transitioned StoreHub outlet keep

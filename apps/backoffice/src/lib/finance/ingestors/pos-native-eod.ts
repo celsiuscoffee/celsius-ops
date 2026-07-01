@@ -1,4 +1,5 @@
-// POS-native EOD ingestor — the StoreHub-free replacement for storehub-eod.ts.
+// POS-native EOD ingestor — the sole daily AR source now that StoreHub is
+// retired (the live StoreHub EOD ingestor was removed).
 //
 // Builds the same EodSummary the AR agent consumes, but sourced from our own
 // system instead of the StoreHub API:
@@ -14,12 +15,11 @@
 // so a day is never split across both POSs — no double-count risk.
 //
 // Idempotent: re-running the same outlet+date returns the existing AR journal
-// without re-posting (shares storehub-eod's per-day guard, keyed only on
-// outlet+date+ar_invoice, so a day can be posted by at most one source).
+// without re-posting (per-day guard keyed on outlet+date+ar_invoice, so a day
+// can be posted at most once).
 //
 // Amounts: pos_orders/orders store sen. netSales is RM, NET of SST
-// (total − sst_amount); the AR agent books SST separately. Tender → channel
-// mapping mirrors storehub-eod's classifier. Two policy calls worth a finance
+// (total − sst_amount); the AR agent books SST separately. Two policy calls worth a finance
 // review: the Celsius-app "wallet" tender is treated as cash-equivalent
 // (cashQr), since the cash was collected at top-up; partial refunds recorded on
 // a payment row (refund_amount) are not netted in v1 (full refunds are separate
@@ -31,8 +31,16 @@ import { Prisma } from "@prisma/client";
 import { getFinanceClient } from "../supabase";
 import { postDailyAr, type EodSummary, type EodChannelSplit } from "../agents/ar";
 import { resolveCompanyFromOutlet, getDefaultCompanyId } from "../companies";
-import type { IngestEodResult } from "./storehub-eod";
-import { ingestOutletEod } from "./storehub-eod";
+
+export type IngestEodResult = {
+  outletId: string;
+  outletName: string;
+  date: string;
+  transactionsFetched: number;
+  posted?: { transactionId: string; amount: number };
+  skipped?: string;
+  error?: string;
+};
 
 type ChannelKey = keyof EodChannelSplit;
 
@@ -212,9 +220,9 @@ export async function ingestOutletNativeEod(
 ): Promise<IngestEodResult> {
   const { id: outletId, name: outletName } = outlet;
 
-  // Already posted for this outlet/day? (matches storehub-eod's guard.) A
-  // REVERSED journal doesn't count — that's how the cutover backfill re-posts a
-  // day after reversing its stale StoreHub partial.
+  // Already posted for this outlet/day? A REVERSED journal doesn't count —
+  // that's how the cutover backfill re-posts a day after reversing its stale
+  // StoreHub partial.
   const client = getFinanceClient();
   const { data: existingTxn } = await client
     .from("fin_transactions")
@@ -343,14 +351,16 @@ export function isNativeOnDate(date: string, cutoverAt: Date | null): boolean {
   return date >= cutoverDateMyt;
 }
 
-// Cron entrypoint: ingest every ACTIVE outlet for `date`, routing each to the
-// POS that owned it that day — native on/after cutover, StoreHub before. Once
-// every outlet has cut over, this is fully native and StoreHub is never called.
+// Cron entrypoint: ingest every ACTIVE outlet for `date` from native sources.
+// Every outlet has cut over to POS-native, so this is fully native — StoreHub is
+// retired and is never called. Dates before an outlet's cutover have no native
+// source and are skipped (those historical days were posted from StoreHub before
+// retirement and live on as posted AR journals).
 export async function ingestEodForDate(date: string): Promise<IngestEodResult[]> {
   const outlets = await prisma.outlet.findMany({
     where: { status: "ACTIVE" },
     select: {
-      id: true, name: true, storehubId: true,
+      id: true, name: true,
       posNativeCutoverAt: true, loyaltyOutletId: true, pickupStoreId: true,
     },
   });
@@ -359,10 +369,8 @@ export async function ingestEodForDate(date: string): Promise<IngestEodResult[]>
   for (const o of outlets) {
     if (isNativeOnDate(date, o.posNativeCutoverAt)) {
       results.push(await ingestOutletNativeEod(o, date));
-    } else if (o.storehubId) {
-      results.push(await ingestOutletEod(o.id, date)); // historical / pre-cutover
     }
-    // else: outlet has neither a cutover nor StoreHub on this date → no source, skip.
+    // else: date is before this outlet's native cutover → no native source, skip.
   }
   return results;
 }
