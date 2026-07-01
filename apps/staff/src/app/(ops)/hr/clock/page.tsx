@@ -21,9 +21,13 @@ type ClockStatus = {
 };
 
 export default function ClockPage() {
-  const { data: status, mutate } = useFetch<ClockStatus>("/api/hr/clock");
-  const [loading, setLoading] = useState(false);
   const [gps, setGps] = useState<{ lat: number; lng: number } | null>(null);
+  // Pass GPS to the status call so a multi-outlet staffer sees the geofence for
+  // the outlet they're ACTUALLY at (GET picks nearest by coords), not a fallback.
+  const { data: status, mutate } = useFetch<ClockStatus>(
+    gps ? `/api/hr/clock?lat=${gps.lat}&lng=${gps.lng}` : "/api/hr/clock",
+  );
+  const [loading, setLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsLoading, setGpsLoading] = useState(true);
   const [result, setResult] = useState<{ success: boolean; message: string; withinGeofence?: boolean } | null>(null);
@@ -312,17 +316,17 @@ export default function ClockPage() {
       )}
 
       {/* Clock Button */}
-      {/* Clock-in requires being within geofence; clock-out allowed anywhere */}
+      {/* SOFT CONTROL: clock-in is NEVER hard-blocked (a barista must never be
+          locked out of starting their shift). Off-zone / no-GPS clock-ins go
+          through and the server tags them for review. Clock-out still needs GPS
+          to satisfy the same-outlet gate; if it's missing the server explains why. */}
       <button
         onClick={handleClock}
         disabled={
           loading ||
           gpsLoading ||
           !status ||
-          !!gpsError ||
-          !gps ||
-          (!cameraReady && !cameraError) ||
-          (!isClockedIn && !!status?.geofence && !withinZone)
+          (!cameraReady && !cameraError)
         }
         className={`flex h-32 w-32 flex-col items-center justify-center rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-50 ${
           isClockedIn
@@ -345,17 +349,19 @@ export default function ClockPage() {
         )}
       </button>
 
-      {/* GPS required warning */}
+      {/* GPS warning — soft for clock-in, required for clock-out (server gate) */}
       {gpsError && (
-        <p className="mt-3 text-center text-xs font-medium text-red-600">
-          Location permission is required to clock in. Please enable it in your browser settings.
+        <p className="mt-3 text-center text-xs font-medium text-amber-700">
+          {isClockedIn
+            ? "Location is needed to clock out. Enable it in your browser settings, or ask your manager to clock you out."
+            : "No location detected. You can still clock in, but it will be flagged for review."}
         </p>
       )}
 
-      {/* Outside geofence warning */}
+      {/* Outside geofence — clock-in still allowed, just flagged */}
       {!isClockedIn && !gpsLoading && !gpsError && status?.geofence && !withinZone && (
         <p className="mt-3 text-center text-xs font-medium text-amber-700">
-          You must be at {status.geofence.name} to clock in. {distanceInfo}.
+          You are {distanceInfo} from {status.geofence.name}. You can still clock in, but it will be flagged for review.
         </p>
       )}
 
