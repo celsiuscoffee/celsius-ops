@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+// Service-role: authenticated via getSession and every query is constrained to
+// the caller's own shifts / attributed reviews server-side. The anon client
+// would return nothing for hr_attendance_logs once RLS is enabled (mig 064).
+import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
