@@ -703,7 +703,11 @@ type ReconChannel = {
   salesRecognised: number; settledToBank: number; unreconciled: number; pct: number | null;
   months: { month: string; sales: number; settled: number; net: number }[];
 };
-type Recon = { start: string; end: string; channels: ReconChannel[]; totals: { salesRecognised: number; settledToBank: number; unreconciled: number } };
+type QrTender = {
+  months: { month: string; sales: number; settled: number; net: number }[];
+  salesRecognised: number; settledToBank: number; unreconciled: number; pct: number | null;
+};
+type Recon = { start: string; end: string; channels: ReconChannel[]; qrTender: QrTender; totals: { salesRecognised: number; settledToBank: number; unreconciled: number } };
 
 function ReconTab() {
   // Default to the matched period: sales archive + bank feed both exist from
@@ -770,6 +774,42 @@ function ReconTab() {
         </div>
       )}
       <p className="text-[11px] text-muted-foreground">Each sales channel is a debtor account: sales debit it, the bank settlement credits it. The unreconciled net is the expected economics (card timing, Grab commission, cash-not-banked), not an error. Click a channel for the monthly breakdown. Defaults to 2026-01 onward, where both the sales archive and the bank feed exist.</p>
+
+      {data?.report?.qrTender && (
+        <div className="mt-4 space-y-2">
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-sm font-semibold">DuitNow QR — tender reconciliation</h3>
+            <span className="text-[11px] text-muted-foreground">from tender source, exact to the cent</span>
+          </div>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[520px] text-sm">
+              <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+                <th className="px-3 py-2 font-medium">Month</th>
+                <th className="px-3 py-2 text-right font-medium">QR sales rung</th>
+                <th className="px-3 py-2 text-right font-medium">QR settled to bank</th>
+                <th className="px-3 py-2 text-right font-medium">Timing gap</th>
+              </tr></thead>
+              <tbody className="divide-y">
+                {data.report.qrTender.months.map((m) => (
+                  <tr key={m.month} className="hover:bg-muted/40">
+                    <td className="px-3 py-1.5 tabular-nums">{m.month}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{RM(m.sales)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{RM(m.settled)}</td>
+                    <td className={`px-3 py-1.5 text-right tabular-nums ${Math.abs(m.net) < 1 ? "text-green-700 dark:text-green-400" : m.net < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(m.net)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t-2 font-semibold">
+                <td className="px-3 py-2">Total</td>
+                <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.qrTender.salesRecognised)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.qrTender.settledToBank)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.qrTender.unreconciled)}</td>
+              </tr></tfoot>
+            </table>
+          </div>
+          <p className="text-[11px] text-muted-foreground">DuitNow QR settles same-day at full value (no commission), so QR sales rung should equal QR settled to the cent. Read from the tender source (StoreHub archive + POS-native QR vs the bank QR category) rather than the commingled Cash &amp; QR ledger account. Each month nets to a small settlement-timing gap; the first month also carries the prior-December QR that settled in January.</p>
+        </div>
+      )}
     </div>
   );
 }
