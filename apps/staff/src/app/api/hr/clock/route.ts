@@ -10,6 +10,49 @@ import type { AttendanceLog, GeofenceZone } from "@/lib/hr/types";
 
 export const dynamic = "force-dynamic";
 
+// Multi-outlet clock-in: a staffer assigned to several outlets (or with no fixed
+// primary, e.g. a roving manager) must clock in against the outlet they are
+// ACTUALLY at — not a fixed session.outletId. Otherwise the geofence is measured
+// against the wrong outlet (e.g. staff at Tamarind checked against Shah Alam =
+// "21 km away"), the log records the wrong outlet, and the clock-out hard gate
+// then traps them at an outlet they never visited.
+
+type Zone = { outlet_id: string; name: string | null; latitude: number | string; longitude: number | string; radius_meters: number | null };
+
+// Every outlet this user may clock into: session primary + their multi-outlet list.
+async function getCandidateOutletIds(userId: string, sessionOutletId: string | null): Promise<string[]> {
+  const ids = new Set<string>();
+  if (sessionOutletId) ids.add(sessionOutletId);
+  const { data } = await supabase.from("User").select("outletId, outletIds").eq("id", userId).maybeSingle();
+  if (data?.outletId) ids.add(data.outletId as string);
+  for (const id of ((data?.outletIds as string[] | null) ?? [])) if (id) ids.add(id);
+  return Array.from(ids);
+}
+
+type PickedOutlet = { outletId: string | null; zone: Zone | null; distanceMeters: number | null; withinGeofence: boolean };
+
+// Choose the outlet the staffer is physically at: the NEAREST candidate whose
+// geofence they're inside; if none, the nearest overall (soft-control lets them
+// clock in offsite with a warning). Falls back to the session outlet when GPS
+// is missing or candidates have no zones.
+async function pickOutletByLocation(candidateIds: string[], lat: number | undefined, lng: number | undefined, fallbackOutletId: string | null): Promise<PickedOutlet> {
+  const fb = (fallbackOutletId && candidateIds.includes(fallbackOutletId)) ? fallbackOutletId : (candidateIds[0] ?? null);
+  if (candidateIds.length === 0) return { outletId: fallbackOutletId, zone: null, distanceMeters: null, withinGeofence: false };
+  const { data } = await supabase.from("hr_geofence_zones").select("outlet_id, name, latitude, longitude, radius_meters").in("outlet_id", candidateIds).eq("is_active", true);
+  const zones = (data ?? []) as Zone[];
+  if (lat == null || lng == null || zones.length === 0) {
+    return { outletId: fb, zone: zones.find((z) => z.outlet_id === fb) ?? null, distanceMeters: null, withinGeofence: false };
+  }
+  let best: { z: Zone; dist: number } | null = null;
+  for (const z of zones) {
+    const dist = Math.round(haversineDistance(lat, lng, Number(z.latitude), Number(z.longitude)));
+    if (!best || dist < best.dist) best = { z, dist };
+  }
+  if (!best) return { outletId: fb, zone: null, distanceMeters: null, withinGeofence: false };
+  const radius = best.z.radius_meters || GEOFENCE_RADIUS_METERS;
+  return { outletId: best.z.outlet_id, zone: best.z, distanceMeters: best.dist, withinGeofence: best.dist <= radius };
+}
+
 // GET: current clock-in status for the logged-in user
 export async function GET(req: NextRequest) {
   const session = await getUser(req.headers);
@@ -25,18 +68,29 @@ export async function GET(req: NextRequest) {
     .limit(1)
     .single();
 
-  // Get geofence zones for the user's outlet
-  const outletId = session.outletId;
+  // If already clocked in, show the geofence for the outlet they clocked INTO
+  // (so clock-out is measured against the right place). Otherwise pick the
+  // nearest of their assigned outlets from the optional ?lat/&lng the app sends.
+  const sp = new URL(req.url).searchParams;
+  const lat = sp.get("lat") != null ? Number(sp.get("lat")) : undefined;
+  const lng = sp.get("lng") != null ? Number(sp.get("lng")) : undefined;
+
+  let outletId = session.outletId;
   let geofence: GeofenceZone | null = null;
-  if (outletId) {
+  if (active?.outlet_id) {
+    outletId = active.outlet_id;
     const { data } = await supabase
-      .from("hr_geofence_zones")
-      .select("*")
-      .eq("outlet_id", outletId)
-      .eq("is_active", true)
-      .limit(1)
-      .single();
+      .from("hr_geofence_zones").select("*").eq("outlet_id", active.outlet_id).eq("is_active", true).limit(1).maybeSingle();
     geofence = data;
+  } else {
+    const candidateIds = await getCandidateOutletIds(session.id, session.outletId);
+    const picked = await pickOutletByLocation(candidateIds, lat, lng, session.outletId);
+    outletId = picked.outletId;
+    if (picked.outletId) {
+      const { data } = await supabase
+        .from("hr_geofence_zones").select("*").eq("outlet_id", picked.outletId).eq("is_active", true).limit(1).maybeSingle();
+      geofence = data;
+    }
   }
 
   return NextResponse.json({
@@ -59,36 +113,23 @@ export async function POST(req: NextRequest) {
     photo?: string; // base64 data URL
   };
 
-  const outletId = session.outletId;
+  // Resolve the outlet the staffer is ACTUALLY at (nearest of their assigned
+  // outlets by GPS), not a fixed session.outletId — the multi-outlet fix.
+  const candidateIds = await getCandidateOutletIds(session.id, session.outletId);
+  if (candidateIds.length === 0) {
+    return NextResponse.json({ error: "No outlet assigned" }, { status: 400 });
+  }
+  const picked = await pickOutletByLocation(candidateIds, latitude, longitude, session.outletId);
+  const outletId = picked.outletId;
   if (!outletId) {
     return NextResponse.json({ error: "No outlet assigned" }, { status: 400 });
   }
 
-  // Check geofence
-  let withinGeofence = false;
-  let distanceMeters: number | null = null;
-  let zoneName: string | null = null;
-  let zoneRadius = GEOFENCE_RADIUS_METERS;
-
-  const { data: zone } = await supabase
-    .from("hr_geofence_zones")
-    .select("*")
-    .eq("outlet_id", outletId)
-    .eq("is_active", true)
-    .limit(1)
-    .single();
-
-  if (zone) {
-    zoneName = zone.name;
-    zoneRadius = zone.radius_meters || GEOFENCE_RADIUS_METERS;
-    if (latitude != null && longitude != null) {
-      distanceMeters = Math.round(haversineDistance(
-        latitude, longitude,
-        Number(zone.latitude), Number(zone.longitude),
-      ));
-      withinGeofence = distanceMeters <= zoneRadius;
-    }
-  }
+  const zone = picked.zone;
+  const withinGeofence = picked.withinGeofence;
+  const distanceMeters = picked.distanceMeters;
+  const zoneName = zone?.name ?? null;
+  const zoneRadius = zone?.radius_meters || GEOFENCE_RADIUS_METERS;
 
   // SOFT CONTROL (company policy: warn + allow + audit, NOT a hard block — a
   // barista must never be locked out of starting their shift). Out-of-zone /
