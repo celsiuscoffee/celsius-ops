@@ -15,8 +15,8 @@ export const CONTRA_ACCOUNT: Record<string, string> = {
   GRAB: "1005",            // Grabfood debtors
   GRAB_PUTRAJAYA: "1999",  // settles into HQ bank but debtor sits in Conezion — cross-entity, park in suspense
   FOODPANDA: "1005",       // marketplace debtor (no separate FP account yet)
+  REVENUE_MONSTER: "1000-02", // RM terminal settling pickup/table QR+e-wallet sales already accrued by EOD → clears the Cash & QR debtor (crediting income here double-counted revenue)
   // ── inflows NOT in EOD (B2B / online) → recognise income directly ──
-  REVENUE_MONSTER: "5000-01", // online pickup + table-QR sales
   MEETINGS_EVENTS: "5000-10",
   GASTROHUB: "5000-09",
   // ── cost of sales ──

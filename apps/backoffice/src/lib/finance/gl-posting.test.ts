@@ -48,7 +48,9 @@ describe("contraFor", () => {
   it("recognises income for channels not in EOD", () => {
     expect(contraFor("GASTROHUB")).toEqual({ code: "5000-09", suspense: false });
     expect(contraFor("MEETINGS_EVENTS")).toEqual({ code: "5000-10", suspense: false });
-    expect(contraFor("REVENUE_MONSTER")).toEqual({ code: "5000-01", suspense: false });
+  });
+  it("clears the Cash & QR debtor for Revenue Monster settlements (already accrued by EOD)", () => {
+    expect(contraFor("REVENUE_MONSTER")).toEqual({ code: "1000-02", suspense: false });
   });
   it("maps costs, capex and financing to real accounts", () => {
     expect(contraFor("RAW_MATERIALS").code).toBe("6000-01");
