@@ -15,6 +15,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json();
 
+  // Privilege-escalation guard: the OWNER role is OWNER-only to grant or touch.
+  // Without this an ADMIN could PATCH { role: "OWNER" } on themselves (or plant
+  // a new OWNER) and inherit the OWNER bypass everywhere, or reset an existing
+  // OWNER's PIN/password to take over the top account.
+  if (session.role !== "OWNER") {
+    if (body.role === "OWNER") {
+      return NextResponse.json({ error: "Only an OWNER can assign the OWNER role" }, { status: 403 });
+    }
+    const targetUser = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+    if (targetUser?.role === "OWNER") {
+      return NextResponse.json({ error: "Only an OWNER can modify an OWNER account" }, { status: 403 });
+    }
+  }
+
   // Lockout guard: prevent demoting / deactivating the last remaining OWNER.
   // Also prevent OWNERs from accidentally demoting themselves without a
   // second OWNER on the account.

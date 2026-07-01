@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
-import { resolveVisibleUserIds } from "@/lib/hr/scope";
+import { resolveVisibleUserIds, getAccessibleOutletIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +16,18 @@ export async function GET(req: NextRequest) {
   }
 
   const visibleIds = await resolveVisibleUserIds(session);
+  // null = OWNER/ADMIN (all outlets); otherwise the caller's accessible outlets.
+  const accessibleOutletIds = await getAccessibleOutletIds(session);
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") || "pending";
   const outletId = searchParams.get("outletId");
+
+  // A MANAGER passing an outlet they don't manage gets nothing (was: the param
+  // was honored unchecked, leaking another outlet's pending penalties).
+  if (outletId && accessibleOutletIds !== null && !accessibleOutletIds.includes(outletId)) {
+    return NextResponse.json({ items: [] });
+  }
 
   let q = hrSupabaseAdmin
     .from("hr_review_penalty")
@@ -34,11 +42,15 @@ export async function GET(req: NextRequest) {
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // MANAGER scoping: show all pending (they need to triage & attribute),
-  // and for applied/dismissed only rows where attributed_user_ids ∩ subtree is non-empty.
+  // MANAGER scoping: pending rows are limited to the manager's accessible
+  // outlets (was: EVERY pending row company-wide was returned — leaking other
+  // outlets' review_text, reviewer_name, penalty amounts, and suggested-staff
+  // PII). Applied/dismissed rows show only where attributed_user_ids ∩ subtree.
   const filteredData = visibleIds !== null
-    ? (data || []).filter((r: { status: string; attributed_user_ids: string[] | null }) => {
-        if (r.status === "pending") return true;
+    ? (data || []).filter((r: { status: string; outlet_id: string; attributed_user_ids: string[] | null }) => {
+        if (r.status === "pending") {
+          return accessibleOutletIds === null || accessibleOutletIds.includes(r.outlet_id);
+        }
         const attributed = r.attributed_user_ids || [];
         return attributed.some((u) => visibleIds.includes(u));
       })
