@@ -2,7 +2,9 @@
 // the double-entry ledger. Each channel is a debtor account: sales debit it
 // (recognised), the bank settlement credits it (received). The net is the
 // unreconciled balance, which resolves to known economics: card is settlement
-// timing, cash/QR is cash-not-banked, grab is commission (~43%) plus timing.
+// timing, grab is commission (~43%) plus timing, and the Cash & QR residual is
+// online-banking/e-wallet settlements still parked in Suspense (physical cash is
+// negligible), pending reclassification to clear the debtor.
 //
 // This is the cash-IN reconciliation (vs /finance/recon which is cash-OUT AP).
 
@@ -13,7 +15,7 @@ function round2(n: number): number { return Math.round(n * 100) / 100; }
 const CHANNELS: { code: string; label: string; note: string }[] = [
   { code: "1006", label: "Card", note: "gap is settlement timing (T+1-2)" },
   { code: "1005", label: "GrabFood", note: "gap is Grab commission (~43%) plus payout timing" },
-  { code: "1000-02", label: "Cash & QR", note: "gap is cash kept as float (not banked) plus QR timing" },
+  { code: "1000-02", label: "Cash & QR", note: "physical cash is negligible; remaining gap is online-banking/e-wallet settlements still parked in Suspense (1999), not yet reclassified to clear this debtor" },
 ];
 
 export type ReconChannel = {
