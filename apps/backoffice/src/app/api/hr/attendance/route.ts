@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds } from "@/lib/hr/scope";
+import { signAttendancePhotos } from "@/lib/hr/photos";
 
 export const dynamic = "force-dynamic";
 
@@ -86,10 +87,18 @@ export async function GET(req: NextRequest) {
   const userMap = new Map(users.map((u) => [u.id, u]));
   const outletMap = new Map(outlets.map((o) => [o.id, o.name]));
 
-  const enriched = (data || []).map((log: { user_id: string; outlet_id: string }) => {
+  // Attendance selfies live in a PRIVATE bucket — swap the stored path for a
+  // short-lived signed URL so the review UI can render them without exposure.
+  const photoMap = await signAttendancePhotos(
+    (data || []).flatMap((l: { clock_in_photo_url: string | null; clock_out_photo_url: string | null }) => [l.clock_in_photo_url, l.clock_out_photo_url]),
+  );
+
+  const enriched = (data || []).map((log: { user_id: string; outlet_id: string; clock_in_photo_url: string | null; clock_out_photo_url: string | null }) => {
     const u = userMap.get(log.user_id);
     return {
       ...log,
+      clock_in_photo_url: log.clock_in_photo_url ? (photoMap.get(log.clock_in_photo_url) ?? null) : null,
+      clock_out_photo_url: log.clock_out_photo_url ? (photoMap.get(log.clock_out_photo_url) ?? null) : null,
       user_name: u?.fullName || u?.name || null,
       user_nickname: u?.name || null,
       outlet_name: outletMap.get(log.outlet_id) || null,

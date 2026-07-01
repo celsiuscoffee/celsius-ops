@@ -1,0 +1,12 @@
+-- Make the attendance-selfie bucket PRIVATE.
+--
+-- hr-photos held clock-in/out selfies (biometric + GPS-correlated timestamps) at
+-- guessable public URLs (attendance/{user_id}/in_{ms}.jpg) — a PDPA exposure. The
+-- backoffice now mints short-lived signed URLs at read time (see lib/hr/photos.ts),
+-- and the staff clock route stores the object PATH instead of a public URL.
+--
+-- DEPLOY ORDER: apply this AFTER the signed-URL code is live. createSignedUrl works
+-- on a public bucket too, so deploying the code first (still public) then flipping
+-- private here has no broken-image window. Applying it before deploy would 404 the
+-- selfies in the currently-deployed review UI.
+UPDATE storage.buckets SET public = false WHERE id = 'hr-photos';

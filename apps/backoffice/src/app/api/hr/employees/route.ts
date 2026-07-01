@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
+import { signAttendancePhotos } from "@/lib/hr/photos";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,13 @@ export async function GET() {
     if (row.clock_in_photo_url && !firstPhotoByUser.has(row.user_id)) {
       firstPhotoByUser.set(row.user_id, row.clock_in_photo_url);
     }
+  }
+  // Private bucket → sign the stored path so the avatar renders (30-min URL).
+  const signedPhotos = await signAttendancePhotos(Array.from(firstPhotoByUser.values()));
+  for (const [uid, stored] of firstPhotoByUser) {
+    const signed = signedPhotos.get(stored);
+    if (signed) firstPhotoByUser.set(uid, signed);
+    else firstPhotoByUser.delete(uid);
   }
 
   // Onboarding progress per user: count of completed tasks vs applicable

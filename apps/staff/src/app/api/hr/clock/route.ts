@@ -193,11 +193,10 @@ export async function POST(req: NextRequest) {
         return null;
       }
 
-      const { data: urlData } = supabase.storage
-        .from("hr-photos")
-        .getPublicUrl(path);
-
-      return urlData.publicUrl;
+      // Store the object PATH — the bucket is private, so the backoffice mints a
+      // short-lived signed URL at read time. Legacy rows hold a full public URL;
+      // the signer strips either form back to the path, so both keep working.
+      return path;
     } catch {
       return null;
     }
