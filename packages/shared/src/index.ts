@@ -105,6 +105,10 @@ export type {
 // (wallet voucher OR catalog) — used by every server redemption route.
 export { resolveOrderReward } from "./loyalty/order-reward";
 export type { ResolvedOrderReward } from "./loyalty/order-reward";
+// Grant-time loop engineering — holdout/arms/attribution for rewards the app
+// hands out (mission completions etc.), sharing the SMS loop engine's tables.
+export { assignGrantArm, recordGrantIssue, pickGrantArm, MISSION_REWARD_LOOP } from "./loyalty/grant-loop";
+export type { GrantArm, GrantLoopDef, GrantAssignment } from "./loyalty/grant-loop";
 
 // Order number format: CC-{OUTLET_CODE}-{SEQUENCE}
 export function generateOrderNumber(outletCode: string, sequence: number): string {

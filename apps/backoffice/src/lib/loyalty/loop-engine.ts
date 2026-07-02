@@ -677,10 +677,15 @@ export async function measureRound(roundId: string) {
   // none. Sibling loops share the audience, so a holdout here can be TREATED by
   // another loop inside this round's window (measured at ~17% for winback) —
   // that biases the baseline up and understates lift. Exclude them from stats.
+  // GRANT rounds skip this: their 'holdout' is a control that RECEIVED the
+  // status-quo reward (not "no message"), and sibling-loop SMS lands on
+  // control and treatment symmetrically (randomised at grant time) — so
+  // excluding only contaminated controls would bias the baseline down.
+  const isGrantRound = (round.meta as { kind?: string } | null)?.kind === "grant";
   const holdoutPhones = ((rows ?? []) as Array<{ arm: string; phone: string }>)
     .filter((r) => r.arm === "holdout").map((r) => r.phone);
   const contaminated = new Set<string>();
-  if (holdoutPhones.length && round.sent_at) {
+  if (holdoutPhones.length && round.sent_at && !isGrantRound) {
     const winStart = round.sent_at as string;
     const winEnd = new Date(new Date(winStart).getTime() + windowMs).toISOString();
     for (let i = 0; i < holdoutPhones.length; i += 200) {
@@ -826,7 +831,7 @@ export const OFFER_CANDIDATES: OfferCandidate[] = [
 // ── Loop registry: each campaign objective is a loop. Same machinery
 // (holdout → optimise offers → auto-issue voucher → measure lift), different
 // audience + candidate subset. Add a loop here and it inherits the whole engine.
-export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap" | "reward_expiring" | "beans_idle";
+export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap" | "reward_expiring" | "beans_idle" | "mission_reward";
 export type LoopDef = {
   key: LoopKey;
   label: string;
@@ -849,6 +854,13 @@ export type LoopDef = {
    *  existing expiring voucher (carried on the segment row) instead. Arms are
    *  message-only; candidateKeys is empty (no offer to optimise). */
   noIssue?: boolean;
+  /** GRANT loop: assignments happen in the ORDER app at the moment a reward
+   *  is handed out (see @celsius/shared grant-loop) — nothing is sent, and
+   *  the 'holdout' arm is a CONTROL that receives the status-quo reward, not
+   *  nothing. Rounds roll: status 'open' accumulates assignments, then closes
+   *  to 'sent' (here or in the order app) and measures like any other round.
+   *  prepareRound/sendRound never run for these; the segment is a stub. */
+  grant?: boolean;
   segment: (o: SegmentOpts) => Promise<{ rows: SegmentRow[]; label: string }>;
 };
 
@@ -873,6 +885,10 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // idle Points the moment they go quiet (~5d). Mints nothing — the value
   // already exists. Push-first (free) + SMS fallback, 10% holdout measures lift.
   beans_idle: { key: "beans_idle", label: "Points sitting unused", objective: "Bring back members with idle Points", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Hi {name}! You have {beans} points at Celsius - enough for {redeem}. Redeem this week before they slip away. Show your number.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minBeans: 100, idleMinDays: 5, idleMaxDays: 9 } }, segment: beansIdleSegment },
+  // Grant loop (no SMS): which mission-completion reward best drives the next
+  // visit. Assignments are made by the order app as missions complete
+  // (@celsius/shared MISSION_REWARD_LOOP); control = the mission's own reward.
+  mission_reward: { key: "mission_reward", label: "Mission reward", objective: "Find the completion reward that best drives the next visit", defaultHoldoutPct: 50, defaultWindowDays: 14, candidateKeys: [], grant: true, messageTemplate: "", segment: async () => ({ rows: [], label: "Mission completers (grant-time)" }) },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
@@ -1233,6 +1249,21 @@ export async function runTriggeredLoops(opts?: { force?: boolean }): Promise<Arr
 // elapsed (triggered rounds have no operator to click "Measure"). Idempotent —
 // measureRound flips status to 'measured' so it's picked once.
 export async function autoMeasureDueRounds(): Promise<{ measured: number }> {
+  // Grant rounds (status 'open') accumulate assignments in the order app for
+  // meta.round_days, then close to 'sent' so the measure flow below picks
+  // them up. The order app also closes them lazily on the next grant; this is
+  // the backstop for loops whose grant traffic went quiet mid-round.
+  const { data: openRounds } = await supabaseAdmin
+    .from("loop_rounds").select("id, prepared_at, meta").eq("status", "open");
+  for (const r of (openRounds ?? []) as Array<{ id: string; prepared_at: string | null; meta: { round_days?: number } | null }>) {
+    if (!r.prepared_at) continue;
+    const days = Number(r.meta?.round_days ?? 7);
+    if (Date.now() < new Date(r.prepared_at).getTime() + days * 86400000) continue;
+    await supabaseAdmin.from("loop_rounds")
+      .update({ status: "sent", sent_at: new Date().toISOString() })
+      .eq("id", r.id).eq("status", "open");
+  }
+
   const { data: rounds } = await supabaseAdmin
     .from("loop_rounds").select("id, sent_at, attribution_window_days").eq("status", "sent");
   let measured = 0;
@@ -1428,7 +1459,9 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
     // Conservative: bills every send as SMS. Push sends are free, so this is an
     // UPPER bound on cost (→ ROI is understated, never overstated). Make it
     // channel-accurate via loop_assignments.channel once push volume is material.
-    const sms = +(a.sent * SMS_COST_RM).toFixed(2);
+    // Grant loops send nothing at all — their delivery cost is genuinely zero
+    // (the reward COGS shows up in margin, not here).
+    const sms = LOOPS[loop_key as LoopKey]?.grant ? 0 : +(a.sent * SMS_COST_RM).toFixed(2);
     return {
       loop_key, label: LOOPS[loop_key as LoopKey]?.label ?? loop_key,
       rounds: a.rounds, sent: a.sent, redemptions: a.redemptions,
@@ -1447,6 +1480,10 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
   for (const a of byLoop.values()) { tAcc.rounds += a.rounds; tAcc.sent += a.sent; tAcc.redemptions += a.redemptions; tAcc.liftW += a.liftW; tAcc.incrOrders += a.incrOrders; tAcc.incrMargin += a.incrMargin; tAcc.holdoutN += a.holdoutN; }
   const { loop_key: _k, label: _l, ...totals } = toEval("__totals__", tAcc);
   void _k; void _l;
+  // Re-derive total cost from the per-loop rows — toEval("__totals__") can't
+  // know which loops are grant (zero-cost), so it would bill their sends.
+  totals.sms_cost_rm = +per_loop.reduce((s, l) => s + l.sms_cost_rm, 0).toFixed(2);
+  totals.roi = totals.sms_cost_rm > 0 ? +(totals.incremental_margin_rm / totals.sms_cost_rm).toFixed(1) : 0;
 
   // ── LIVE activity (server-side aggregate via RPC; UNCAPPED) ──────────────────
   // Available immediately (not gated on the attribution window). The old JS path

@@ -9,6 +9,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { awardBonusBeans } from "@/lib/loyalty/points";
 import { notifyMissionCompleted, notifyReferralRewarded } from "@/lib/push/templates";
+import { assignGrantArm, recordGrantIssue, MISSION_REWARD_LOOP } from "@celsius/shared";
 
 const BRAND_ID = (process.env.LOYALTY_BRAND_ID ?? "brand-celsius").trim();
 
@@ -638,15 +639,52 @@ async function fulfilCompletedAssignment(args: {
 }): Promise<void> {
   const supabase = getSupabaseAdmin();
 
+  // Grant-loop experiment (mission_reward): does a different completion
+  // reward drive the next visit better than the mission's own? Control
+  // ('holdout' arm) keeps the mission's configured voucher(s); a treatment
+  // arm swaps in its variant. assignGrantArm fails open to control, so the
+  // member always gets a reward even if the experiment plumbing errors.
+  // Missions with no voucher configured stay out of the experiment — there's
+  // no status-quo reward to compare against, and enrolling would mint value
+  // for treatment members that control never gets.
+  const grant = args.voucherTemplateIds.length > 0
+    ? await assignGrantArm({ supabase, loop: MISSION_REWARD_LOOP, memberId: args.memberId })
+    : { arm: "holdout", overrideTemplateId: null, assignmentId: null };
+  const templateIds = grant.overrideTemplateId ? [grant.overrideTemplateId] : args.voucherTemplateIds;
+
   let issuedCount = 0;
-  for (const tplId of args.voucherTemplateIds) {
+  for (const tplId of templateIds) {
     const v = await issueVoucher({
       memberId: args.memberId,
       templateId: tplId,
       sourceType: "mission",
       sourceRefId: args.assignmentId,
     });
-    if (v) issuedCount++;
+    if (v) {
+      issuedCount++;
+      if (grant.assignmentId) await recordGrantIssue(supabase, grant.assignmentId, v.id);
+    }
+  }
+  // A treatment arm whose template failed to issue (deactivated mid-round)
+  // must not leave the member empty-handed — fall back to the mission's own,
+  // and re-file the assignment as control so the arm's stats only ever
+  // contain members who actually received the arm's reward.
+  if (issuedCount === 0 && grant.overrideTemplateId) {
+    if (grant.assignmentId) {
+      await supabase.from("loop_assignments").update({ arm: "holdout" }).eq("id", grant.assignmentId);
+    }
+    for (const tplId of args.voucherTemplateIds) {
+      const v = await issueVoucher({
+        memberId: args.memberId,
+        templateId: tplId,
+        sourceType: "mission",
+        sourceRefId: args.assignmentId,
+      });
+      if (v) {
+        issuedCount++;
+        if (grant.assignmentId) await recordGrantIssue(supabase, grant.assignmentId, v.id);
+      }
+    }
   }
 
   try {
