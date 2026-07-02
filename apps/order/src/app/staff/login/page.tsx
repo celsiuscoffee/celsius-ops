@@ -72,11 +72,11 @@ export default function StaffLoginPage() {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ storeId, pin: enteredPin }),
       });
-      const data = await res.json() as { ok?: boolean; error?: string; storeName?: string; staffName?: string | null; staffId?: string | null };
+      const data = await res.json() as { ok?: boolean; error?: string; storeName?: string; staffName?: string | null; staffId?: string | null; token?: string | null };
       if (data.ok) {
         const store = stores.find((s) => s.id === storeId) ?? { name: storeId };
         const resolvedStoreName = data.storeName ?? store.name;
-        saveSession(storeId, resolvedStoreName, data.staffName ?? null, data.staffId ?? null);
+        saveSession(storeId, resolvedStoreName, data.staffName ?? null, data.staffId ?? null, data.token ?? null);
         router.replace("/staff/availability");
       } else {
         setError(data.error ?? "Incorrect PIN");

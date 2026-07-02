@@ -2,7 +2,10 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const caller = await getUserFromHeaders(req.headers);
+  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const rules = await prisma.approvalRule.findMany({
     orderBy: { createdAt: "desc" },
   });

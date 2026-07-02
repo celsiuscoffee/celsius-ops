@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import { markOnline, markOffline } from "./connectivity";
+import { usePos } from "./store";
 
 /**
  * Thin client for the POS Next.js API (auth/pin, loyalty, order
@@ -12,12 +13,18 @@ import { markOnline, markOffline } from "./connectivity";
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "https://backoffice.celsiuscoffee.com";
 
 function headers(extra?: Record<string, string>): Record<string, string> {
+  // Replay the POS session JWT (captured at PIN login) as a Bearer. The web
+  // register authenticates via its httpOnly cookie; the native till can't read
+  // that cookie, so it carries the token in the store and sends it here. Absent
+  // before sign-in (e.g. the /api/pos/auth/pin call itself), which is fine.
+  const token = usePos.getState().staff?.token;
   return {
     "Content-Type": "application/json",
     Origin: API_BASE,
     Referer: API_BASE + "/",
     "X-App-Version": Constants.expoConfig?.version ?? "1.0.0",
     "X-App-Platform": "android-pos",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(extra ?? {}),
   };
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import webpush from "web-push";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { requireStaffSession } from "@/lib/staff-token";
 import type { OrderRow, OrderStatus } from "@/lib/supabase/types";
 import {
   notifyOrderPreparing,
@@ -96,6 +97,22 @@ export async function PATCH(
         { error: `Cannot transition from ${order.status} to ${newStatus}` },
         { status: 422 }
       );
+    }
+
+    // Authorization. ready→completed is the customer "swipe to collect", driven
+    // by the pickup-native app with no staff session, so it stays open. Every
+    // other transition — pending/paid→preparing (starts the brew), preparing→
+    // ready, the ready→preparing staff undo, and cancels to failed — is a staff
+    // action and requires a KDS/staff token. Without this guard anyone could
+    // create a pending order and PATCH it to preparing (a free, unpaid drink on
+    // the line). Enforcement is gated by STAFF_AUTH_ENFORCE (see staff-token).
+    const isCustomerCollect = order.status === "ready" && newStatus === "completed";
+    if (!isCustomerCollect) {
+      const { error: authError } = requireStaffSession(
+        request,
+        `orders/status ${order.status}->${newStatus}`,
+      );
+      if (authError) return authError;
     }
 
     // Serving-time instrumentation: stamp the kitchen-bump moments so the Area

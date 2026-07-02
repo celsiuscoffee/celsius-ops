@@ -1,7 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { requireStaffSession } from "@/lib/staff-token";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const { error: authError } = requireStaffSession(request, "staff/products");
+  if (authError) return authError;
+
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("products")

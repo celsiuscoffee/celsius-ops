@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
 
 /**
  * GET /api/products/options
  * Products with fields needed by stock check, receiving, wastage, transfer pages.
  */
 export async function GET() {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const products = await prisma.product.findMany({
     where: { isActive: true },
     select: {

@@ -5,7 +5,7 @@ import { formatRM } from "@celsius/shared";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ShoppingBag, TrendingUp, Clock, CheckCircle, XCircle } from "lucide-react";
-import { getSession } from "@/lib/staff-auth";
+import { getSession, staffAuthHeaders } from "@/lib/staff-auth";
 import { StaffNav } from "@/components/staff-nav";
 
 interface DayStats {
@@ -38,7 +38,7 @@ export default function StaffReportsPage() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    fetch(`/api/staff/orders?store=${session.storeId}&from=${today.toISOString()}`)
+    fetch(`/api/staff/orders?store=${session.storeId}&from=${today.toISOString()}`, { headers: staffAuthHeaders() })
       .then((r) => r.json())
       .then((orders: {
         status: string;

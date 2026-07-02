@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { requireStaffSession } from "@/lib/staff-token";
 
 /**
  * Staff KDS feed — returns full orders + order_items for a given store
@@ -13,6 +14,9 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
  *   GET /api/staff/orders/feed?store=X&statuses=completed&from=ISO&dir=desc
  */
 export async function GET(request: NextRequest) {
+  const { error: authError } = requireStaffSession(request, "staff/orders/feed");
+  if (authError) return authError;
+
   const sp = request.nextUrl.searchParams;
   const storeId = sp.get("store");
   if (!storeId) {
