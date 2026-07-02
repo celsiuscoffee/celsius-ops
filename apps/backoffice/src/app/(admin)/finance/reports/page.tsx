@@ -298,9 +298,18 @@ function PnlTab() {
       )}
 
       <Sheet open={!!drillCode} onOpenChange={(o) => !o && setDrillCode(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col gap-0 p-0">
-          <SheetHeader className="border-b px-6 py-4">
-            <SheetTitle>{drillCode} — drill down</SheetTitle>
+        <SheetContent side="right" className="w-full sm:max-w-3xl flex flex-col gap-0 p-0">
+          <SheetHeader className="border-b px-4 py-4 sm:px-6">
+            <SheetTitle>
+              {(drillCode && data &&
+                [...data.report.income.lines, ...data.report.cogs.lines, ...data.report.expenses.lines]
+                  .find((l) => l.code === drillCode)?.name) ?? drillCode}
+            </SheetTitle>
+            {data && (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {drillCode} · {data.report.start} → {data.report.end}
+              </p>
+            )}
           </SheetHeader>
           {drillCode && data && (
             <DrillDown code={drillCode} start={data.report.start} end={data.report.end} outletId={outletId || undefined} />
@@ -320,45 +329,73 @@ function DrillDown({ code, start, end, outletId }: { code: string; start: string
   if (data.lines.length === 0) {
     return <div className="p-6 text-sm text-muted-foreground">No entries in this period.</div>;
   }
+
+  // Source drills are one-sided (all debits or all credits) — show a single
+  // Amount column so nothing gets pushed off-screen. Debit/Credit columns only
+  // when the entries genuinely mix both sides (ledger drills).
+  const hasDebit = data.lines.some((l) => l.debit > 0);
+  const hasCredit = data.lines.some((l) => l.credit > 0);
+  const oneSided = !(hasDebit && hasCredit);
+  const amountOf = (l: DrillLine) => (l.debit > 0 ? l.debit : l.credit > 0 ? l.credit : l.amount);
+  const totalDebit = data.lines.reduce((s, l) => s + l.debit, 0);
+  const totalCredit = data.lines.reduce((s, l) => s + l.credit, 0);
+
+  // "Vendor · INV-123 · Outlet" reads as one noisy wrapping line — keep the
+  // first segment as the entry title and demote the rest to a muted meta line.
+  const splitDesc = (d: string): [string, string | null] => {
+    const parts = d.split(" · ");
+    return parts.length > 1 ? [parts[0], parts.slice(1).join(" · ")] : [d, null];
+  };
+
   return (
-    <div className="overflow-y-auto p-6">
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="whitespace-nowrap px-3 py-2">Date</th>
-              <th className="px-3 py-2">Description</th>
-              <th className="whitespace-nowrap px-3 py-2 text-right">Debit</th>
-              <th className="whitespace-nowrap px-3 py-2 text-right">Credit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.lines.map((l, i) => (
-              <tr key={`${l.transactionId}-${i}`} className="border-t align-top">
-                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{l.txnDate}</td>
-                <td className="break-words px-3 py-2">{l.description}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                  {l.debit ? RM(l.debit) : ""}
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+      <table className="w-full table-fixed text-sm">
+        <thead className="sticky top-0 bg-background text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <tr className="border-b">
+            <th className="w-20 py-2 pr-2 font-medium">Date</th>
+            <th className="py-2 pr-2 font-medium">Description</th>
+            {oneSided
+              ? <th className="w-28 py-2 text-right font-medium">Amount</th>
+              : <>
+                  <th className="w-28 py-2 text-right font-medium">Debit</th>
+                  <th className="w-28 py-2 text-right font-medium">Credit</th>
+                </>}
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {data.lines.map((l, i) => {
+            const [main, meta] = splitDesc(l.description);
+            return (
+              <tr key={`${l.transactionId}-${i}`} className="align-top">
+                <td className="whitespace-nowrap py-2 pr-2 text-xs tabular-nums text-muted-foreground">
+                  {l.txnDate.slice(5)}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                  {l.credit ? RM(l.credit) : ""}
+                <td className="break-words py-2 pr-2">
+                  {main}
+                  {meta && <div className="text-[11px] leading-snug text-muted-foreground">{meta}</div>}
                 </td>
+                {oneSided
+                  ? <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(amountOf(l))}</td>
+                  : <>
+                      <td className="whitespace-nowrap py-2 text-right tabular-nums">{l.debit ? RM(l.debit) : ""}</td>
+                      <td className="whitespace-nowrap py-2 text-right tabular-nums">{l.credit ? RM(l.credit) : ""}</td>
+                    </>}
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 font-semibold">
-              <td className="px-3 py-2" colSpan={2}>Total ({data.lines.length} entries)</td>
-              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                {RM(data.lines.reduce((s, l) => s + l.debit, 0))}
-              </td>
-              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                {RM(data.lines.reduce((s, l) => s + l.credit, 0))}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 font-semibold">
+            <td className="py-2 pr-2" colSpan={2}>Total · {data.lines.length} entries</td>
+            {oneSided
+              ? <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(totalDebit + totalCredit)}</td>
+              : <>
+                  <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(totalDebit)}</td>
+                  <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(totalCredit)}</td>
+                </>}
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }
@@ -455,9 +492,14 @@ function BsTab() {
       )}
 
       <Sheet open={!!drillCode} onOpenChange={(o) => !o && setDrillCode(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col gap-0 p-0">
-          <SheetHeader className="border-b px-6 py-4">
-            <SheetTitle>{drillCode} — journal lines through {asOf}</SheetTitle>
+        <SheetContent side="right" className="w-full sm:max-w-3xl flex flex-col gap-0 p-0">
+          <SheetHeader className="border-b px-4 py-4 sm:px-6">
+            <SheetTitle>
+              {(drillCode && data &&
+                [...data.report.assets.lines, ...data.report.liabilities.lines, ...data.report.equity.lines]
+                  .find((l) => l.code === drillCode)?.name) ?? drillCode}
+            </SheetTitle>
+            <p className="text-xs text-muted-foreground tabular-nums">{drillCode} · journal lines through {asOf}</p>
           </SheetHeader>
           {drillCode && <DrillDown code={drillCode} start="2020-01-01" end={asOf} />}
         </SheetContent>

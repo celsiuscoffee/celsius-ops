@@ -16,6 +16,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma, type CashCategory } from "@prisma/client";
 import { getFinanceClient } from "../supabase";
+import { effectiveGrabRate } from "./pnl-sourced";
 import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -235,14 +236,23 @@ export async function sourcedPnlDrillDown(args: {
   if (code === "MKT-GRAB-ADS") return drillGrabAds(companyId, start, end, outletId);
   if (code.startsWith("BANK:")) return drillBank(code.slice(5), companyId, start, end, outletId);
   if (code === "MKT-GRAB-COMM") {
-    // Estimate, not transactions: recompute the base so the drawer explains it.
-    const rev = await drillRevenue("REV-GRAB", companyId, start, end, outletId);
+    // A derived line, not transactions — the drawer explains the calculation.
+    const [rev, gr] = await Promise.all([
+      drillRevenue("REV-GRAB", companyId, start, end, outletId),
+      effectiveGrabRate(end),
+    ]);
     const gross = round2(rev.reduce((s, r) => s + r.amount, 0));
-    const est = round2(gross * 0.43);
+    const est = round2(gross * gr.rate);
+    // Grab's payout nets off commission AND marketing (promos, GrabAds); the
+    // marketing part is booked on its own P&L lines, so the commission rate
+    // excludes it — else the marketing spend would double-count.
+    const basis = gr.source === "recon"
+      ? `Effective commission ${Math.round(gr.rate * 100)}% from the payout reconciliation: over the trailing window, gross Grab sales RM${gr.windowGross.toFixed(2)} less payouts RM${gr.windowPayouts.toFixed(2)}, merchant promos RM${gr.windowPromos.toFixed(2)} and GrabAds RM${gr.windowAds.toFixed(2)} (both booked as their own marketing lines) leaves the commission portion.`
+      : `Fallback rate ${Math.round(gr.rate * 100)}% (payout window too thin to derive the effective rate).`;
     return [{
       transactionId: "grab-comm-estimate",
       txnDate: end,
-      description: `Estimated commission: 43% of RM${gross.toFixed(2)} gross GrabFood sales in this period (observed effective all-in Grab deduction). Exact per-order commission lives in the Grab settlement report.`,
+      description: `Commission on RM${gross.toFixed(2)} gross GrabFood sales this period. ${basis} Exact per-order commission lives in the Grab settlement report.`,
       amount: est,
       debit: est,
       credit: 0,
