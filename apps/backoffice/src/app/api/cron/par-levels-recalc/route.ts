@@ -29,7 +29,14 @@ export async function GET(req: NextRequest) {
       where: { loyaltyOutletId: { not: null } },
       select: { id: true, name: true },
     });
-    const results: Array<{ outlet: string; ok: boolean; productsUpdated: number; fallbackProducts: number; error?: string }> = [];
+    const results: Array<{
+      outlet: string;
+      ok: boolean;
+      productsUpdated: number;
+      fallbackProducts: number;
+      projectedParValue: number;
+      error?: string;
+    }> = [];
     for (const o of outlets) {
       const r = await recalcOutletParLevels(o.id);
       results.push({
@@ -37,13 +44,15 @@ export async function GET(req: NextRequest) {
         ok: r.ok,
         productsUpdated: r.productsUpdated,
         fallbackProducts: r.fallbackProducts,
+        projectedParValue: r.projectedParValue,
         ...(r.error ? { error: r.error } : {}),
       });
       console.log(
-        `[par-recalc] ${o.name}: ok=${r.ok} updated=${r.productsUpdated} fallback=${r.fallbackProducts}${r.error ? ` (${r.error})` : ""}`,
+        `[par-recalc] ${o.name}: ok=${r.ok} updated=${r.productsUpdated} fallback=${r.fallbackProducts} parValueRM=${r.projectedParValue}${r.error ? ` (${r.error})` : ""}`,
       );
     }
-    return NextResponse.json({ ok: true, results });
+    const totalParValue = Math.round(results.reduce((s, r) => s + r.projectedParValue, 0) * 100) / 100;
+    return NextResponse.json({ ok: true, totalParValue, results });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "par-levels-recalc failed";
     return NextResponse.json({ error: msg }, { status: 500 });
