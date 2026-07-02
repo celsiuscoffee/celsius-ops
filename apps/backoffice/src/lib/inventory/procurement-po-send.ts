@@ -18,6 +18,8 @@ import { prisma } from "@/lib/prisma";
 import { sendWhatsAppText, sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { formatWhatsAppOrder } from "@celsius/shared";
+import { generatePoPdf } from "@/lib/inventory/po-pdf";
+import { uploadToStorage } from "@/lib/inventory/pdf-splitter";
 
 export const PO_SEND_VERSION = "po-send-v1";
 
@@ -27,6 +29,12 @@ export const PO_SEND_VERSION = "po-send-v1";
 // the env var overrides for testing/renames. The template body must be:
 // {{1}} = supplier name, {{2}} = PO number.
 const PO_PROMPT_TEMPLATE = process.env.PROCUREMENT_PO_PROMPT_TEMPLATE?.trim() || "procurement_new_order";
+
+// PREFERRED cold path: send the full order as a PDF on an approved DOCUMENT template, so a cold
+// supplier gets the whole order in ONE message (no reply-prompt round-trip). Set this to the
+// approved template's name to enable; unset → the prompt flow. The template needs a DOCUMENT
+// header + a body with {{1}} = supplier name, {{2}} = PO number.
+const PO_DOC_TEMPLATE = process.env.PROCUREMENT_PO_DOC_TEMPLATE?.trim();
 
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
 
@@ -82,8 +90,13 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
     const windowOpen =
       !!lastInbound && Date.now() - +new Date(lastInbound.timestamp) < 24 * 60 * 60 * 1000;
     if (!windowOpen) {
-      // Cold: WhatsApp blocks free text. Ping with the approved prompt template (if
-      // configured) so the supplier replies and opens the window; the full PO block then
+      // Preferred cold path: send the FULL order as a PDF on an approved DOCUMENT template — the
+      // supplier gets the whole order in one message, no "reply for details" round-trip. Returns
+      // true when it handled the send (delivered OR a template failure recorded — don't also
+      // prompt); false to fall back to the prompt (PDF/upload error).
+      if (PO_DOC_TEMPLATE && (await sendPoAsDocument(order, supplier, dest))) return;
+      // Fallback cold path: WhatsApp blocks free text, so ping with the approved prompt template
+      // (if configured) so the supplier replies and opens the window; the full PO block then
       // follows in-window. Deduped via poPromptFor. No template set → skip + log as before.
       if (!PO_PROMPT_TEMPLATE) {
         console.log(`[po-send] po=${order.orderNumber} skipped — 24h window closed, no PROCUREMENT_PO_PROMPT_TEMPLATE`);
@@ -189,6 +202,73 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
     console.log(`[po-send] po=${order.orderNumber} supplier=${supplier.name} sent=${res.ok}`);
   } catch (err) {
     console.error("[po-send] error:", err instanceof Error ? err.message : err);
+  }
+}
+
+// Cold-send a PO to the supplier as a PDF attached to an approved document template — the full
+// order in ONE message, no reply-prompt. Returns true when the send was handled (delivered OR a
+// template failure recorded — caller should NOT also prompt), false to fall back to the prompt
+// (PDF generation / upload failed). Deduped via poSentFor. Records the real caption + the PDF as
+// mediaUrl so the chat shows the actual message + attachment.
+async function sendPoAsDocument(
+  order: PoForSend,
+  supplier: NonNullable<PoForSend["supplier"]>,
+  dest: string,
+): Promise<boolean> {
+  try {
+    const already = await prisma.whatsAppMessage.findFirst({
+      where: { direction: "outbound", raw: { path: ["poSentFor"], equals: order.id } },
+      select: { id: true },
+    });
+    if (already) return true; // already delivered — don't prompt
+
+    const pdf = await generatePoPdf({
+      orderNumber: order.orderNumber,
+      outletName: order.outlet.name,
+      outletAddress: order.outlet.address,
+      date: new Date().toISOString().slice(0, 10),
+      deliveryDate: order.deliveryDate ? new Date(order.deliveryDate).toISOString().slice(0, 10) : null,
+      items: order.items
+        .filter((it) => it.product)
+        .map((it) => ({
+          name: it.product!.name,
+          quantity: Number(it.quantity),
+          uom: it.productPackage?.packageLabel ?? it.product!.baseUom,
+        })),
+    });
+    const url = await uploadToStorage(pdf, `po/PO-${order.orderNumber}-${Date.now()}.pdf`, "application/pdf");
+
+    const t = await sendWhatsAppTemplate(dest, PO_DOC_TEMPLATE!, "en", [
+      {
+        type: "header",
+        parameters: [{ type: "document", document: { link: url, filename: `PO-${order.orderNumber}.pdf` } }],
+      },
+      {
+        type: "body",
+        parameters: [
+          { type: "text", text: supplier.name },
+          { type: "text", text: order.orderNumber },
+        ],
+      },
+    ]);
+
+    await recordOutboundMessage({
+      waMessageId: t.messageId,
+      fromNumber: "",
+      toNumber: dest,
+      type: "document",
+      // The real caption the supplier sees (the doc-template body) — plus the PDF as mediaUrl.
+      body: `Hi ${supplier.name}, here's purchase order ${order.orderNumber} from Celsius Coffee. The full order details are attached. Please confirm. Thank you.`,
+      mediaUrl: url,
+      supplierId: supplier.id,
+      status: t.ok ? "sent" : "failed",
+      raw: { agent: PO_SEND_VERSION, poSentFor: order.id, poNumber: order.orderNumber, via: "pdf-template", ok: t.ok, error: t.error ?? null },
+    });
+    console.log(`[po-send] po=${order.orderNumber} cold → PDF document template (${PO_DOC_TEMPLATE}) ok=${t.ok}`);
+    return true;
+  } catch (e) {
+    console.warn(`[po-send] po=${order.orderNumber} PDF send failed, falling back to prompt:`, e instanceof Error ? e.message : e);
+    return false;
   }
 }
 
