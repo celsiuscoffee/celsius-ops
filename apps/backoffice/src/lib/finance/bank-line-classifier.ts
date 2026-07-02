@@ -211,6 +211,11 @@ const OUTFLOW_RULES: Rule[] = [
 
   // Loan repayments
   { name: "loan_payment",   match: /\b(LOAN\s*(PAYMENT|PAYBACK|REPAY(MENT)?|SETTLEMENT)|FINANCING|HIRE\s*PURCHASE)\b/i, direction: "DR", category: "LOAN" as CashCategory },
+  // ESI standing-instruction auto-debits with a WME reference are the two
+  // monthly loan instalments (WME000001 RM2,233 / WME000002 RM2,182, since
+  // Jan 2025) — per owner. Match the reference, not the ESI prefix, since the
+  // description format varies ("ESI PAYMENT DEBIT …" vs the bare mandate no.).
+  { name: "loan_wme_esi",   match: /\bWME\d{4,}\b/i, direction: "DR", category: "LOAN" as CashCategory },
 
   // Bank fees
   { name: "bank_fee",       match: /\b(SERVICE\s*FEE|HANDLING\s*FEE|BANK\s*CHARGE|MAINTENANCE\s*FEE|GIRO\s*FEE)\b/i, direction: "DR", category: "BANK_FEE" as CashCategory },

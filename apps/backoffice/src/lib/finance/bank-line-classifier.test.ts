@@ -60,6 +60,12 @@ describe("bank-line-classifier", () => {
     expect(dr("CELSIUS COFFEE TAMARPILIHAN MEGAH SDN*").category).toBe("RENT");
   });
 
+  it("books WME standing-instruction debits as loan instalments (per owner)", () => {
+    expect(dr("ESI PAYMENT DEBIT CELSIUS COFFEE SDN. WME000001 000046226300").category).toBe("LOAN");
+    expect(dr("0000462263001821 CELSIUS COFFEE SDN.* WME000001").category).toBe("LOAN");
+    expect(dr("0000462263002252 CELSIUS COFFEE SDN.* WME000002").category).toBe("LOAN");
+  });
+
   it("falls back to OTHER_* for genuinely unknown lines", () => {
     expect(dr("TRANSFER FR A/C SOME UNKNOWN VENDOR XYZ").category).toBe("OTHER_OUTFLOW");
     expect(cr("MISC CREDIT NO PATTERN").category).toBe("OTHER_INFLOW");
