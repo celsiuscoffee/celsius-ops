@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { buildSourcedPnl } from "@/lib/finance/reports/pnl-sourced";
+import { buildSourcedPnl, buildConsolidatedPnl, CONSOLIDATED_COMPANY_ID } from "@/lib/finance/reports/pnl-sourced";
 import { getActiveCompanyId } from "@/lib/finance/companies";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "start, end (YYYY-MM-DD) required" }, { status: 400 });
   }
   try {
-    const report = await buildSourcedPnl({ companyId, start, end, outletId });
+    // companyId=consolidated → the GROUP statement: all companies summed with
+    // inter-company legs eliminated (outlet filter doesn't apply).
+    const report = companyId === CONSOLIDATED_COMPANY_ID
+      ? await buildConsolidatedPnl({ start, end })
+      : await buildSourcedPnl({ companyId, start, end, outletId });
     return NextResponse.json({ report });
   } catch (err) {
     return NextResponse.json(

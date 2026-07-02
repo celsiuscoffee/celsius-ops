@@ -211,8 +211,12 @@ export async function buildSourcedPnl(input: {
                      // outlet-TAGGED bank costs only. Shared/HQ opex (paid from
                      // the entity account, untagged) can't be split per outlet,
                      // so a per-outlet view is a contribution margin, not net.
+  excludeInterCo?: boolean; // consolidated mode: drop inter-company legs so
+                            // group-internal transfers (salary funding, mgmt
+                            // fees, stock transfers) eliminate instead of
+                            // stacking as expense in every entity they pass.
 }): Promise<PnlReport> {
-  const { companyId, start, end, outletId } = input;
+  const { companyId, start, end, outletId, excludeInterCo } = input;
   const client = getFinanceClient();
   const defaultCompany = await getDefaultCompanyId();
 
@@ -277,6 +281,7 @@ export async function buildSourcedPnl(input: {
         statement: { accountName: { contains: incomeSuffix } },
         category: { in: ["GASTROHUB", "MEETINGS_EVENTS"] },
         ...(outletId ? { outletId } : {}),
+        ...(excludeInterCo ? { isInterCo: false } : {}),
       },
       _sum: { amount: true },
     });
@@ -413,6 +418,7 @@ export async function buildSourcedPnl(input: {
         statement: { accountName: { contains: suffix } },
         apInvoiceId: null, // AP-matched lines settle a procurement invoice (COGS) — not opex
         ...(outletId ? { outletId } : {}), // per-outlet: only outlet-tagged costs
+        ...(excludeInterCo ? { isInterCo: false } : {}),
       },
       _sum: { amount: true },
     });
@@ -448,5 +454,55 @@ export async function buildSourcedPnl(input: {
     expenses: { type: "expense", total: totalExpenses, lines: expenseLines },
     netIncome,
     txnCount: saleCount,
+  };
+}
+
+// ─── Consolidated P&L — the GROUP statement ─────────────────────────────────
+// Per-company P&Ls distort where the group pays centrally: HQ carries all
+// Google Ads and most payroll, management fees sit as cost in one entity, and
+// inter-company transfers (salary funding, stock, fees) stack as expense in
+// every entity they pass through. Consolidation runs each company with
+// inter-company legs EXCLUDED (they eliminate on consolidation by definition)
+// and sums line-by-line — HQ-paid ads and payroll then appear exactly once,
+// as the group's cost.
+export const CONSOLIDATED_COMPANY_ID = "consolidated";
+
+export async function buildConsolidatedPnl(input: { start: string; end: string }): Promise<PnlReport> {
+  const { start, end } = input;
+  const companies = Object.keys(BANK_ACCOUNT_SUFFIX);
+  const reports = await Promise.all(
+    companies.map((companyId) => buildSourcedPnl({ companyId, start, end, excludeInterCo: true })),
+  );
+
+  const mergeLines = (sections: PnlLine[][]): PnlLine[] => {
+    const byCode = new Map<string, PnlLine>();
+    for (const lines of sections) {
+      for (const l of lines) {
+        const cur = byCode.get(l.code);
+        if (cur) cur.amount = round2(cur.amount + l.amount);
+        else byCode.set(l.code, { ...l });
+      }
+    }
+    return [...byCode.values()].sort((a, b) => b.amount - a.amount);
+  };
+
+  const income = mergeLines(reports.map((r) => r.income.lines));
+  const cogs = mergeLines(reports.map((r) => r.cogs.lines));
+  const expenses = mergeLines(reports.map((r) => r.expenses.lines));
+  const totalIncome = round2(reports.reduce((s, r) => s + r.income.total, 0));
+  const cogsTotal = round2(reports.reduce((s, r) => s + r.cogs.total, 0));
+  const totalExpenses = round2(reports.reduce((s, r) => s + r.expenses.total, 0));
+  const grossProfit = round2(totalIncome - cogsTotal);
+
+  return {
+    companyId: CONSOLIDATED_COMPANY_ID,
+    start,
+    end,
+    income: { type: "income", total: totalIncome, lines: income },
+    cogs: { type: "cogs", total: cogsTotal, lines: cogs },
+    grossProfit,
+    expenses: { type: "expense", total: totalExpenses, lines: expenses },
+    netIncome: round2(grossProfit - totalExpenses),
+    txnCount: reports.reduce((s, r) => s + r.txnCount, 0),
   };
 }

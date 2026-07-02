@@ -61,8 +61,8 @@ function rangeForPreset(preset: Preset, customStart: string, customEnd: string):
   }
 }
 
-type Controls = { start: string; end: string; outletId: string };
-const ControlsCtx = createContext<Controls>({ start: "", end: "", outletId: "" });
+type Controls = { start: string; end: string; outletId: string; consolidated: boolean };
+const ControlsCtx = createContext<Controls>({ start: "", end: "", outletId: "", consolidated: false });
 const useControls = () => useContext(ControlsCtx);
 
 const CONTROLS_KEY = "finance:reports:controls";
@@ -72,6 +72,7 @@ function useReportControlsState() {
   const [customStart, setCustomStart] = useState(thisMonthStart());
   const [customEnd, setCustomEnd] = useState(todayMyt());
   const [outletId, setOutletId] = useState("");
+  const [consolidated, setConsolidated] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   // Remember the last-used range + filter across reloads.
@@ -79,22 +80,23 @@ function useReportControlsState() {
     try {
       const raw = localStorage.getItem(CONTROLS_KEY);
       if (raw) {
-        const s = JSON.parse(raw) as Partial<{ preset: Preset; customStart: string; customEnd: string; outletId: string }>;
+        const s = JSON.parse(raw) as Partial<{ preset: Preset; customStart: string; customEnd: string; outletId: string; consolidated: boolean }>;
         if (s.preset) setPreset(s.preset);
         if (s.customStart) setCustomStart(s.customStart);
         if (s.customEnd) setCustomEnd(s.customEnd);
         if (s.outletId) setOutletId(s.outletId);
+        if (s.consolidated) setConsolidated(true);
       }
     } catch { /* ignore */ }
     setHydrated(true);
   }, []);
   useEffect(() => {
     if (!hydrated) return;
-    try { localStorage.setItem(CONTROLS_KEY, JSON.stringify({ preset, customStart, customEnd, outletId })); } catch { /* ignore */ }
-  }, [hydrated, preset, customStart, customEnd, outletId]);
+    try { localStorage.setItem(CONTROLS_KEY, JSON.stringify({ preset, customStart, customEnd, outletId, consolidated })); } catch { /* ignore */ }
+  }, [hydrated, preset, customStart, customEnd, outletId, consolidated]);
 
   const { start, end } = rangeForPreset(preset, customStart, customEnd);
-  return { preset, setPreset, customStart, setCustomStart, customEnd, setCustomEnd, outletId, setOutletId, start, end };
+  return { preset, setPreset, customStart, setCustomStart, customEnd, setCustomEnd, outletId, setOutletId, consolidated, setConsolidated, start, end };
 }
 
 type FinCompany = { id: string; name: string; outletIds: string[] };
@@ -119,8 +121,16 @@ function ReportControlsBar({ c }: { c: ReturnType<typeof useReportControlsState>
   }, [active?.id, c.outletId]);
 
   async function switchCompany(companyId: string) {
+    // "Consolidated" is a view, not a legal entity — a client-side flag the
+    // P&L understands, with no cookie switch.
+    if (companyId === "__consolidated__") {
+      c.setConsolidated(true);
+      c.setOutletId("");
+      return;
+    }
     setSwitching(true);
     try {
+      if (c.consolidated) c.setConsolidated(false);
       await fetch("/api/finance/companies/switch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -136,14 +146,15 @@ function ReportControlsBar({ c }: { c: ReturnType<typeof useReportControlsState>
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2">
       <select
-        value={co?.activeCompanyId ?? ""}
+        value={c.consolidated ? "__consolidated__" : (co?.activeCompanyId ?? "")}
         onChange={(e) => switchCompany(e.target.value)}
         disabled={!co || switching}
         className="h-8 rounded-md border bg-background px-2 text-sm font-semibold"
-        title="Active company — every report is scoped to this legal entity"
+        title="Active company — every report is scoped to this legal entity. Consolidated = all companies with inter-company legs eliminated (P&L only)."
       >
         {!co && <option value="">Company…</option>}
         {(co?.companies ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+        <option value="__consolidated__">Consolidated — all companies</option>
       </select>
       <select
         value={c.preset}
@@ -164,8 +175,9 @@ function ReportControlsBar({ c }: { c: ReturnType<typeof useReportControlsState>
       <select
         value={c.outletId}
         onChange={(e) => c.setOutletId(e.target.value)}
-        className="ml-auto h-8 rounded-md border bg-background px-2 text-sm"
-        title="Filter by outlet (outlets of the active company)"
+        disabled={c.consolidated}
+        className="ml-auto h-8 rounded-md border bg-background px-2 text-sm disabled:opacity-50"
+        title={c.consolidated ? "Consolidated view spans all outlets" : "Filter by outlet (outlets of the active company)"}
       >
         <option value="">All outlets</option>
         {companyOutlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
@@ -256,8 +268,11 @@ function SectionHeader({ label }: { label: string }) {
 }
 
 function PnlTab() {
-  const { start, end, outletId } = useControls();
-  const qs = useMemo(() => `start=${start}&end=${end}${outletId ? `&outletId=${outletId}` : ""}`, [start, end, outletId]);
+  const { start, end, outletId, consolidated } = useControls();
+  const qs = useMemo(
+    () => `start=${start}&end=${end}${consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : ""}`,
+    [start, end, outletId, consolidated],
+  );
   const { data, error, isLoading } = useFetch<{ report: PnlReport }>(
     `/api/finance/reports/pnl?${qs}`
   );
@@ -265,7 +280,12 @@ function PnlTab() {
 
   return (
     <div className="space-y-4">
-      {outletId && (
+      {consolidated && (
+        <p className="text-[11px] text-muted-foreground">
+          Consolidated group P&amp;L: all companies summed with inter-company legs eliminated — HQ-paid salary, Google Ads and management fees count once as group cost. Other tabs stay per-company; switch to a company to drill into a line.
+        </p>
+      )}
+      {!consolidated && outletId && (
         <p className="text-[11px] text-amber-600">
           Per-outlet view: revenue + COGS + outlet-tagged costs only (contribution margin). Shared/HQ opex is paid from the entity account and can&apos;t be split per outlet.
         </p>
@@ -1030,7 +1050,7 @@ export default function FinanceReportsPage() {
         </div>
       )}
 
-      <ControlsCtx.Provider value={{ start: controls.start, end: controls.end, outletId: controls.outletId }}>
+      <ControlsCtx.Provider value={{ start: controls.start, end: controls.end, outletId: controls.outletId, consolidated: controls.consolidated }}>
         {tab === "pnl" && <PnlTab />}
         {tab === "bs" && <BsTab />}
         {tab === "cf" && <CfTab />}
