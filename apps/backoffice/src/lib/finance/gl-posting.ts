@@ -24,7 +24,7 @@
 //      line is never posted again (and the feed sync now carries stamps across
 //      its rebuild).
 //   2. Journal layer — each journal's identity is DETERMINISTIC:
-//      source_doc_id = md5(company|outlet|contra|day|direction). If a journal
+//      posting_key = md5(company|outlet|contra|day|direction). If a journal
 //      for the group already exists, it is REUSED: unlinked (rebuilt) lines are
 //      re-stamped onto it, and genuinely new lines for an already-posted day
 //      fold in by updating the journal amount (additive).
@@ -40,7 +40,7 @@ import type { JournalLineInput } from "./types";
 import { BANK_CASH, companyFromAccountName, resolveContra, round2, SKIP_CATS } from "./gl-posting-map";
 
 // Deterministic journal identity for a (company, outlet, contra, day, direction)
-// aggregate. Formatted as a UUID so it fits fin_transactions.source_doc_id and
+// aggregate. Formatted as a UUID so it fits fin_transactions.posting_key and
 // matches postgres md5(text)::uuid — SQL backfills can reproduce it exactly.
 export function bankJournalKey(company: string, outletId: string | null, contra: string, date: string, direction: string): string {
   const h = createHash("md5").update(`bank-gl|${company}|${outletId ?? ""}|${contra}|${date}|${direction}`).digest("hex");
@@ -146,7 +146,7 @@ export async function postBankLinesToGl(
       const { data: existingRows, error: exErr } = await fin
         .from("fin_transactions")
         .select("id, amount")
-        .eq("source_doc_id", key)
+        .eq("posting_key", key)
         .eq("posted_by_agent", "bank")
         .eq("status", "posted")
         .limit(1);
@@ -165,7 +165,7 @@ export async function postBankLinesToGl(
           agent: "bank",
           agentVersion: "bank-gl-v1",
           confidence: 1,
-          sourceDocId: key,
+          postingKey: key,
           lines: journalLines,
         });
         txnId = res.transactionId;
