@@ -20,10 +20,11 @@ import { formatWhatsAppOrder } from "@celsius/shared";
 export const PO_SEND_VERSION = "po-send-v1";
 
 // Cold-send (no 24h window) prompt: a UTILITY template that pings the supplier to reply,
-// which opens the window so the full PO block can follow in-window (free). Set this to the
-// APPROVED template's name to enable; unset → cold sends skip (as before). The template body
-// must be: {{1}} = supplier name, {{2}} = PO number.
-const PO_PROMPT_TEMPLATE = process.env.PROCUREMENT_PO_PROMPT_TEMPLATE?.trim();
+// which opens the window so the full PO block can follow in-window (free). Defaults to the
+// procurement_new_order template shipped in TEMPLATE_DEFS (ops/workspace/templates route);
+// the env var overrides for testing/renames. The template body must be:
+// {{1}} = supplier name, {{2}} = PO number.
+const PO_PROMPT_TEMPLATE = process.env.PROCUREMENT_PO_PROMPT_TEMPLATE?.trim() || "procurement_new_order";
 
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
 
@@ -95,8 +96,17 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
         console.log(`[po-send] po=${order.orderNumber} skipped — 24h window closed, no PROCUREMENT_PO_PROMPT_TEMPLATE`);
         return;
       }
+      // Dedupe on SUCCESSFUL prompts only — a failed send (e.g. the template still
+      // pending Meta approval) must not block re-prompting forever, or the PO stays
+      // silently undelivered even after the template clears.
       const alreadyPrompted = await prisma.whatsAppMessage.findFirst({
-        where: { direction: "outbound", raw: { path: ["poPromptFor"], equals: order.id } },
+        where: {
+          direction: "outbound",
+          AND: [
+            { raw: { path: ["poPromptFor"], equals: order.id } },
+            { raw: { path: ["ok"], equals: true } },
+          ],
+        },
         select: { id: true },
       });
       if (alreadyPrompted) return;

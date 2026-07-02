@@ -136,12 +136,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
   const windowOpen =
     !!lastInbound && Date.now() - +new Date(lastInbound.timestamp) < 24 * 60 * 60 * 1000;
 
-  // Cold sends are workable when the approved new-order prompt template is
-  // configured: "Create & send" outside the window sends the template prompt,
-  // and the PO block follows automatically when the supplier's reply reopens
-  // the window (sendPendingPurchaseOrders on the webhook). Lets the UI keep
-  // the button enabled instead of dead-ending into the manual flow.
-  const canColdPrompt = !!process.env.PROCUREMENT_PO_PROMPT_TEMPLATE?.trim();
+  // Cold sends are workable via the new-order prompt template: "Create & send"
+  // outside the window sends the template prompt, and the PO block follows
+  // automatically when the supplier's reply reopens the window
+  // (sendPendingPurchaseOrders on the webhook). Defaults to the
+  // procurement_new_order template shipped in TEMPLATE_DEFS — mirrors
+  // PO_PROMPT_TEMPLATE in procurement-po-send.ts.
+  const canColdPrompt = !!(process.env.PROCUREMENT_PO_PROMPT_TEMPLATE?.trim() || "procurement_new_order");
 
   // Surface the supplier-chat agent's latest open proposal: only when the most
   // recent message WE sent was an agent escalation (a holding reply with a
