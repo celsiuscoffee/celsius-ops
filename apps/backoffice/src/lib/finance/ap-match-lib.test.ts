@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { digitRuns, invoiceRefInDesc, subsetSumIdx } from "./ap-match-lib";
+import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc } from "./ap-match-lib";
 
 describe("ap-match-lib", () => {
   it("extracts digit runs from bank descriptions", () => {
@@ -35,5 +35,20 @@ describe("ap-match-lib", () => {
   it("tolerates 1-2 sen rounding drift", () => {
     const idx = subsetSumIdx([10001, 20001], 30000);
     expect(idx).not.toBeNull();
+  });
+
+  it("bridges payee aliases: TMM = The Milk Ministry, Ad-hoc Purchase = Ariff Izham", () => {
+    // Invoice says The Milk Ministry; bank transfer says TMM (Resources)
+    const milk = aliasPhrasesFor(["The Milk Ministry", null, null]);
+    expect(aliasInDesc(milk, "celsius coffee putratmm resources *1-260601")).toBe(true);
+    // Bank says Milk Ministry; supplier record says TMM Resources
+    const tmm = aliasPhrasesFor(["TMM Resources", null, null]);
+    expect(aliasInDesc(tmm, "transfer fr a/c the milk ministry #1-14819")).toBe(true);
+    // Ad-hoc purchases are reimbursed to Ariff Izham
+    const adhoc = aliasPhrasesFor([null, "Ad-hoc Purchase", null]);
+    expect(aliasInDesc(adhoc, "transfer fr a/c ariff izham bin abd 2026/0021 celsiuscoffee")).toBe(true);
+    // No alias, no hit
+    expect(aliasPhrasesFor(["Yow Seng Sdn Bhd"])).toEqual([]);
+    expect(aliasInDesc(adhoc, "transfer fr a/c somebody else entirely")).toBe(false);
   });
 });
