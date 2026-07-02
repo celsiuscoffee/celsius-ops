@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchLoyaltySnapshot } from "@/lib/loyalty-snapshot";
+import { requirePosApiAuth } from "@/lib/pos-auth";
 
 /**
  * GET /api/loyalty/snapshot?phone=+60xxx
@@ -12,6 +13,9 @@ import { fetchLoyaltySnapshot } from "@/lib/loyalty-snapshot";
  * 404 when no member matches.
  */
 export async function GET(req: NextRequest) {
+  const { block } = await requirePosApiAuth(req, "pos/loyalty/snapshot");
+  if (block) return block;
+
   const phone = req.nextUrl.searchParams.get("phone");
   const memberId = req.nextUrl.searchParams.get("member_id");
   if (!phone && !memberId) {

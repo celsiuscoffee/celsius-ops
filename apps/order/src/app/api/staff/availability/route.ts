@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { requireStaffSession } from "@/lib/staff-token";
 
 // GET /api/staff/availability?store=shah-alam
 export async function GET(request: NextRequest) {
+  const { error: authError } = requireStaffSession(request, "staff/availability GET");
+  if (authError) return authError;
+
   const storeId = request.nextUrl.searchParams.get("store");
   if (!storeId) return NextResponse.json({ error: "Missing store" }, { status: 400 });
 
@@ -17,6 +21,9 @@ export async function GET(request: NextRequest) {
 
 // PUT /api/staff/availability  { productId, storeId, isAvailable }
 export async function PUT(request: NextRequest) {
+  const { error: authError } = requireStaffSession(request, "staff/availability PUT");
+  if (authError) return authError;
+
   const { productId, storeId, isAvailable } = await request.json() as {
     productId:   string;
     storeId:     string;

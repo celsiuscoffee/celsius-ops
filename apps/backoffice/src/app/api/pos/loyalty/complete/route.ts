@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { markVoucherUsed } from "@celsius/shared";
+import { requirePosApiAuth } from "@/lib/pos-auth";
 
 /**
  * POST /api/pos/loyalty/complete
@@ -218,6 +219,9 @@ async function spawnMysteryDrop(
 }
 
 export async function POST(req: NextRequest) {
+  const { block } = await requirePosApiAuth(req, "pos/loyalty/complete");
+  if (block) return block;
+
   try {
     const { member_id, order_id } = await req.json();
     if (!member_id || !order_id) {

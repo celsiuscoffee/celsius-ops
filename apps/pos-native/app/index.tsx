@@ -63,13 +63,15 @@ export default function Login() {
         ? { pin: override!.staffPin, outletId, overridePin: fullPin }
         : { pin: fullPin, outletId };
       try {
-        const u = await apiPost<{ id: string; name: string; role: string; shiftEnd?: string | null }>(
+        const u = await apiPost<{ id: string; name: string; role: string; shiftEnd?: string | null; token?: string }>(
           "/api/pos/auth/pin", payload,
         );
         // Rostered login → auto-logout at the scheduled shift end; otherwise null
         // (manager / override / no roster) falls back to the till's 2h TTL.
         const shiftEndsAt = u.shiftEnd ? Date.parse(u.shiftEnd) : null;
-        setStaff({ staffId: u.id, staffName: u.name, role: u.role }, shiftEndsAt);
+        // Keep the POS session JWT so apiPost/apiGet can replay it as a Bearer
+        // (the httpOnly cookie the endpoint also sets is unreachable to native).
+        setStaff({ staffId: u.id, staffName: u.name, role: u.role, token: u.token ?? null }, shiftEndsAt);
         setOverride(null);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace("/register");

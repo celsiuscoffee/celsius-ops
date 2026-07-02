@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Search, ToggleLeft, ToggleRight, RotateCcw } from "lucide-react";
-import { getSession } from "@/lib/staff-auth";
+import { getSession, staffAuthHeaders } from "@/lib/staff-auth";
 import { StaffNav } from "@/components/staff-nav";
 
 interface Product {
@@ -36,8 +36,8 @@ export default function StaffAvailabilityPage() {
   const load = useCallback(async (storeIdArg: string) => {
     setLoading(true);
     const [prodRes, ovRes] = await Promise.all([
-      fetch("/api/staff/products"),
-      fetch(`/api/staff/availability?store=${storeIdArg}`),
+      fetch("/api/staff/products", { headers: staffAuthHeaders() }),
+      fetch(`/api/staff/availability?store=${storeIdArg}`, { headers: staffAuthHeaders() }),
     ]);
     const prods = (await prodRes.json() as { id: string; name: string; category: string; price: number }[]).map((p) => ({ ...p, is_available: true }));
     const ovs   = await ovRes.json()  as { product_id: string; is_available: boolean }[];
@@ -62,7 +62,7 @@ export default function StaffAvailabilityPage() {
     try {
       await fetch("/api/staff/availability", {
         method:  "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...staffAuthHeaders() },
         body:    JSON.stringify({ productId, storeId: session.storeId, isAvailable: !current }),
       });
     } catch {
@@ -87,7 +87,7 @@ export default function StaffAvailabilityPage() {
         unavailable.map((p) =>
           fetch("/api/staff/availability", {
             method:  "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...staffAuthHeaders() },
             body:    JSON.stringify({ productId: p.id, storeId: session.storeId, isAvailable: true }),
           }),
         ),

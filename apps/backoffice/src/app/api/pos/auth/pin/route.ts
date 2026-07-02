@@ -290,6 +290,10 @@ export async function POST(req: NextRequest) {
       outletName,
       shiftEnd,    // ISO string when rostered (drives till auto-logout), else null
       overrideBy,  // manager name when login was a not-scheduled override, else null
+      // Same JWT as the httpOnly cookie below. The web register uses the cookie;
+      // the native till can't read an httpOnly cookie, so it captures this and
+      // replays it as `Authorization: Bearer <token>` on POS API calls.
+      token,
     });
 
     response.cookies.set(COOKIE_NAME, token, {

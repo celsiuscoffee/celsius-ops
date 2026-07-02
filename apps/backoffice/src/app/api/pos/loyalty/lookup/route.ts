@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requirePosApiAuth } from "@/lib/pos-auth";
 
 /**
  * GET /api/loyalty/lookup?phone=+60xxx
@@ -37,6 +38,9 @@ function phoneVariants(raw: string): string[] {
 }
 
 export async function GET(req: NextRequest) {
+  const { block } = await requirePosApiAuth(req, "pos/loyalty/lookup");
+  if (block) return block;
+
   const phone = req.nextUrl.searchParams.get("phone");
   if (!phone) {
     return NextResponse.json({ error: "phone required" }, { status: 400 });
