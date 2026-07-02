@@ -50,14 +50,60 @@ const BANK_REVIEW = new Set(["OTHER_OUTFLOW"]);
 // GrabFood revenue is booked GROSS in income, but Grab deducts a commission
 // (marketplace fee) at source before paying out — so it never appears in the
 // bank feed and must be recognised as a cost here, else Grab margin is wildly
-// overstated. This is an ESTIMATE at a flat rate; the exact per-order
-// commission lives in the GrabFood Partner settlement report (TODO: source it
-// from the API and replace this estimate). Commission is the selling company's
-// cost, so it attributes to whichever company booked the Grab revenue —
-// independent of which bank account the net payout lands in.
-// ~43% observed effective all-in deduction (commission + platform fees) from
-// reconciling gross Grab sales vs bank payouts — the old 0.30 understated it.
-const GRAB_COMMISSION_RATE = 0.43;
+// overstated. Commission is the selling company's cost, so it attributes to
+// whichever company booked the Grab revenue — independent of which bank
+// account the net payout lands in.
+//
+// The RATE is derived from the reconciliation itself: effective deduction =
+// 1 − (Grab bank payouts ÷ gross Grab sales) over a trailing window, pooled
+// across all companies to smooth weekly payout timing. Payouts land under the
+// GRAB category — plus GRAB_PUTRAJAYA, Conezion's payouts settling into the
+// HQ account. Falls back to the last observed ~43% when the window is too
+// thin to trust, and clamps to a sane band so one weird payout week can't
+// swing the P&L.
+const GRAB_RATE_FALLBACK = 0.43;
+const GRAB_RATE_WINDOW_DAYS = 120;
+const GRAB_RATE_MIN_GROSS = 20_000; // below this the window is too thin to trust
+
+export type GrabRate = { rate: number; source: "recon" | "fallback"; windowGross: number; windowPayouts: number };
+
+export async function effectiveGrabRate(end: string): Promise<GrabRate> {
+  const winEnd = dEnd(end);
+  const winStart = new Date(winEnd.getTime() - GRAB_RATE_WINDOW_DAYS * 86400_000);
+  const fallback: GrabRate = { rate: GRAB_RATE_FALLBACK, source: "fallback", windowGross: 0, windowPayouts: 0 };
+  try {
+    // Gross Grab sales in the window, pooled: StoreHub archive (pre-cutover
+    // grab channel) + POS-native grabfood orders. Totals in RM / sen.
+    const [sh, pn, pay] = await Promise.all([
+      prisma.$queryRaw<{ t: number | null }[]>(Prisma.sql`
+        SELECT COALESCE(SUM(total), 0)::float AS t FROM storehub_sales
+        WHERE is_cancelled IS NOT TRUE AND channel ~* 'grab'
+          AND transaction_time >= ${winStart} AND transaction_time <= ${winEnd}
+      `),
+      prisma.$queryRaw<{ t: number | null }[]>(Prisma.sql`
+        SELECT COALESCE(SUM(total), 0)::float / 100 AS t FROM pos_orders
+        WHERE source = 'grabfood' AND status = 'completed'
+          AND created_at >= ${winStart} AND created_at <= ${winEnd}
+      `),
+      prisma.bankStatementLine.aggregate({
+        _sum: { amount: true },
+        where: {
+          direction: "CR",
+          category: { in: ["GRAB", "GRAB_PUTRAJAYA"] },
+          txnDate: { gte: winStart, lte: winEnd },
+        },
+      }),
+    ]);
+    const gross = round2(Number(sh[0]?.t ?? 0) + Number(pn[0]?.t ?? 0));
+    const payouts = round2(Number(pay._sum?.amount ?? 0));
+    if (gross < GRAB_RATE_MIN_GROSS || payouts <= 0) return fallback;
+    const raw = 1 - payouts / gross;
+    const rate = Math.min(0.55, Math.max(0.25, round2(raw)));
+    return { rate, source: "recon", windowGross: gross, windowPayouts: payouts };
+  } catch {
+    return fallback;
+  }
+}
 
 function humanCat(c: string | null): string {
   if (!c) return "Unclassified";
@@ -313,14 +359,16 @@ export async function buildSourcedPnl(input: {
     }
   }
 
-  // GrabFood commission (marketplace fee) — estimated on the gross Grab
-  // revenue booked above, since Grab nets it out before payout (never in the
-  // bank feed). Find the Grab income code(s) and apply the rate.
+  // GrabFood commission (marketplace fee) — applied to the gross Grab revenue
+  // booked above, since Grab nets it out before payout (never in the bank
+  // feed). The rate comes from the payout reconciliation, not a hardcoded
+  // guess — see effectiveGrabRate.
   if (grabGrossRevenue > 0) {
-    const grabComm = round2(grabGrossRevenue * GRAB_COMMISSION_RATE);
+    const gr = await effectiveGrabRate(end);
+    const grabComm = round2(grabGrossRevenue * gr.rate);
     expenseLines.push({
       code: "MKT-GRAB-COMM",
-      name: `Marketplace fee — GrabFood commission (est. ${Math.round(GRAB_COMMISSION_RATE * 100)}%)`,
+      name: `Marketplace fee — GrabFood commission (${Math.round(gr.rate * 100)}% ${gr.source === "recon" ? "effective, from payout recon" : "est."})`,
       amount: grabComm,
       parentCode: null,
     });
