@@ -511,24 +511,34 @@ export async function detectMenuSnoozed(now: Date): Promise<Breach[]> {
     }
   }
 
-  const countBySlug = new Map<string, number>();
+  const itemsBySlug = new Map<string, string[]>();
   for (const row of rows) {
     if (!row.outlet_id) continue;
     if (row.product_id && disabled.has(row.product_id)) continue; // globally off-menu
-    countBySlug.set(row.outlet_id, (countBySlug.get(row.outlet_id) ?? 0) + 1);
+    (itemsBySlug.get(row.outlet_id) ?? itemsBySlug.set(row.outlet_id, []).get(row.outlet_id)!).push(row.product_id ?? "?");
   }
-  if (countBySlug.size === 0) return [];
+  if (itemsBySlug.size === 0) return [];
 
   const outlets = await prisma.outlet.findMany({
-    where: { status: "ACTIVE", pickupStoreId: { in: [...countBySlug.keys()] } },
+    where: { status: "ACTIVE", pickupStoreId: { in: [...itemsBySlug.keys()] } },
     select: { id: true, name: true, pickupStoreId: true },
   });
 
-  const { ymd } = mytToday(now);
+  // Dedupe on the SET of snoozed items, not the calendar day: an unchanged 86
+  // list alerts exactly once (a per-day key re-fired at the first cron tick after
+  // midnight — 14 messages at 00:30, 2026-07-01). Any change to the set (item
+  // added or restored) is a new key and re-alerts.
+  const sig = (ids: string[]): string => {
+    const s = [...ids].sort().join(",");
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  };
   const minItems = THRESHOLDS.menuSnooze.minItems;
   const breaches: Breach[] = [];
   for (const o of outlets) {
-    const n = o.pickupStoreId ? countBySlug.get(o.pickupStoreId) ?? 0 : 0;
+    const items = o.pickupStoreId ? itemsBySlug.get(o.pickupStoreId) ?? [] : [];
+    const n = items.length;
     if (n < minItems) continue;
     breaches.push({
       signal: "MENU_SNOOZED",
@@ -536,7 +546,7 @@ export async function detectMenuSnoozed(now: Date): Promise<Breach[]> {
       outletName: o.name,
       severity: "MED",
       routeKey: "operations",
-      dedupeKey: `MENU_SNOOZED:${o.id}:${ymd}`,
+      dedupeKey: `MENU_SNOOZED:${o.id}:${sig(items)}`,
       summary: `${n} menu item${n === 1 ? "" : "s"} snoozed (86'd) at ${o.name}`,
       detail: { snoozed: n },
     });
@@ -645,7 +655,15 @@ export async function detectPosNotOpen(now: Date): Promise<Breach[]> {
   const due = outlets.filter((o) => {
     if (!o.openTime || !o.loyaltyOutletId) return false;
     if (o.daysOpen && o.daysOpen.length > 0 && !o.daysOpen.includes(dow)) return false; // closed today
-    const open = new Date(`${ymd}T${o.openTime}:00+08:00`);
+    // openTime is a free-form string ("8:00", "08:00:00" both occur via the PATCH
+    // API) — normalize to HH:MM; an unparseable value would otherwise make an
+    // Invalid Date whose NaN comparison silently excludes the outlet forever.
+    const [hh = "", mm = ""] = o.openTime.split(":");
+    const open = new Date(`${ymd}T${hh.padStart(2, "0")}:${(mm || "00").slice(0, 2).padStart(2, "0")}:00+08:00`);
+    if (Number.isNaN(open.getTime())) {
+      console.warn(`[ops-pulse] outlet ${o.name} has unparseable openTime "${o.openTime}" — skipped from POS-open check`);
+      return false;
+    }
     return now.getTime() > open.getTime() + grace * 60_000;
   });
   if (due.length === 0) return [];

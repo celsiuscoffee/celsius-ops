@@ -504,12 +504,17 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   let items = 0;
   const managerLines: string[] = [];
 
-  // Owners get DM'd their own overdue items (deduped per checklist).
+  // Owners get DM'd their own overdue items (deduped per checklist). Shadow must
+  // never write the ledger — a shadow-recorded breach would silence the real nudge
+  // after re-arming (the row already exists, isNew=false).
   for (const [userId, o] of byOwner) {
-    const fresh: Item[] = [];
-    for (const it of o.items) {
-      const { isNew } = await recordBreach(mkBreach(it, userId), { userId, name: o.name, phone: o.phone, role: "staff", fallback: false });
-      if (isNew) fresh.push(it);
+    let fresh: Item[] = o.items;
+    if (mode === "armed") {
+      fresh = [];
+      for (const it of o.items) {
+        const { isNew } = await recordBreach(mkBreach(it, userId), { userId, name: o.name, phone: o.phone, role: "staff", fallback: false });
+        if (isNew) fresh.push(it);
+      }
     }
     if (fresh.length === 0) continue;
     items += fresh.length;
@@ -529,10 +534,13 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   // Unowned = NO ONE present at the outlet (the lead is already in the pool
   // fallback above, so a present lead would have become the owner). → managers.
   for (const [, u] of unowned) {
-    const fresh: Item[] = [];
-    for (const it of u.items) {
-      const { isNew } = await recordBreach(mkBreach(it, "mgr"), null);
-      if (isNew) fresh.push(it);
+    let fresh: Item[] = u.items;
+    if (mode === "armed") {
+      fresh = [];
+      for (const it of u.items) {
+        const { isNew } = await recordBreach(mkBreach(it, "mgr"), null);
+        if (isNew) fresh.push(it);
+      }
     }
     if (fresh.length === 0) continue;
     items += fresh.length;
@@ -556,15 +564,17 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
 // We bring them live HERE, on the proven dedicated-nudge tier, rather than arming
 // the whole pulse — that would race the specialized clock-in/checklist routing
 // through the shared ledger. Reuses the same detectors (still shadow in the pulse)
-// + the ledger for dedupe (each is keyed per outlet/day, so at most one a day) +
-// the WhatsApp sender. Cron: every 15 min (catches a late open soon after open
-// time). OPS_NUDGES_MODE (off | shadow | armed).
+// + the ledger for dedupe (POS-open per outlet/day; menu-86 per snoozed-SET, so an
+// unchanged 86 list alerts once, not nightly) + the WhatsApp sender. Cron: every
+// 15 min (catches a late open soon after open time). Menu-86 sends are gated to
+// outlet business hours — the per-day key used to roll at midnight and blast the
+// roster at 00:30 (14 msgs, 2026-07-01). OPS_NUDGES_MODE (off | shadow | armed).
 export async function runStoreStatusNudges(now = new Date()): Promise<NudgeRunResult> {
   const mode = nudgesMode();
   const ranAt = now.toISOString();
   if (mode === "off") return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
 
-  const [posNot, menu] = await Promise.all([
+  const [posNot, menuAll] = await Promise.all([
     detectPosNotOpen(now).catch((e) => {
       console.error("[ops-nudge:store] pos-not-open detector failed:", e);
       return [] as Breach[];
@@ -574,6 +584,32 @@ export async function runStoreStatusNudges(now = new Date()): Promise<NudgeRunRe
       return [] as Breach[];
     }),
   ]);
+
+  // Menu-86 is only worth a ping while the outlet is trading (someone can fix it);
+  // outside business hours, hold it — the detector re-finds it next run, and the
+  // set-keyed dedupe means it still alerts exactly once. POS-not-open needs no
+  // gate: the detector only fires after the outlet's own open time.
+  let menu = menuAll;
+  if (menuAll.length > 0) {
+    const hours = await prisma.outlet.findMany({
+      where: { id: { in: [...new Set(menuAll.map((b) => b.outletId))] } },
+      select: { id: true, openTime: true, closeTime: true },
+    });
+    const hoursById = new Map(hours.map((o) => [o.id, o]));
+    const myt = new Date(now.getTime() + 8 * 3_600_000);
+    const nowMin = myt.getUTCHours() * 60 + myt.getUTCMinutes();
+    const toMinOr = (t: string | null | undefined, fallback: number): number => {
+      const [h, m] = (t ?? "").split(":").map(Number);
+      return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : fallback;
+    };
+    menu = menuAll.filter((b) => {
+      const o = hoursById.get(b.outletId);
+      const open = toMinOr(o?.openTime, 8 * 60);
+      const close = toMinOr(o?.closeTime, 22 * 60);
+      return nowMin >= open && nowMin <= close;
+    });
+  }
+
   const breaches = [...posNot, ...menu];
   if (breaches.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
 
@@ -593,9 +629,10 @@ export async function runStoreStatusNudges(now = new Date()): Promise<NudgeRunRe
   }
   if (managerLines.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
 
-  // The on-shift team gets their own outlet's lines (they can open the till / fix
-  // the 86). If nobody's clocked in (common when the till isn't open), the team is
-  // empty and the managers still get it.
+  // The crew on shift right now gets their own outlet's lines (they can open the
+  // till / fix the 86) — resolveOutletTeam filters the roster to shifts covering
+  // this moment. No covering shift published → team is empty and the managers
+  // still get it via the digest below.
   let staffSent = 0;
   for (const [outletId, g] of byOutlet) {
     if (mode === "shadow") {
@@ -605,7 +642,7 @@ export async function runStoreStatusNudges(now = new Date()): Promise<NudgeRunRe
     const team = await resolveOutletTeam(outletId, now);
     for (const t of team) {
       if (!t.phone) continue;
-      const r = await sendOpsDigest(t.phone, `Store status — ${g.name}`, g.lines);
+      const r = await sendOpsDigest(t.phone, `Store status at ${g.name}:`, g.lines);
       if (r.ok) staffSent += 1;
       else console.error(`[ops-nudge:store] team nudge to ${t.name} failed:`, r.error);
     }

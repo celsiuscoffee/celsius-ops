@@ -67,21 +67,40 @@ export async function resolveOwner(): Promise<Assignee | null> {
   return { userId: owner.id, name: owner.name, phone: owner.phone, role: owner.role, fallback: false };
 }
 
-// The on-shift OUTLET TEAM today — staff on a published shift at this outlet, for
-// work the team itself does (e.g. stock take). Resolved to active users with a
-// phone. Empty when no roster is published for the outlet today.
+// The OUTLET TEAM on shift RIGHT NOW — staff on a published shift at this outlet
+// whose rostered window covers the current MYT time (a 15:30-23:30 closer is not
+// on the team for an 08:15 alert, and vice versa). Rostered = accountable; we
+// deliberately do NOT require a clock-in here (adoption is ~18%, requiring it
+// would empty the team). Resolved to active users with a phone. Empty when no
+// covering shift is published for the outlet right now.
 export async function resolveOutletTeam(outletId: string, now: Date): Promise<Assignee[]> {
   if (!outletId) return [];
-  const ymd = new Date(now.getTime() + 8 * 3_600_000).toISOString().slice(0, 10);
-  const rows = await prisma.$queryRaw<Array<{ user_id: string | null }>>`
-    SELECT DISTINCT s.user_id
+  const myt = new Date(now.getTime() + 8 * 3_600_000);
+  const ymd = myt.toISOString().slice(0, 10);
+  const nowMin = myt.getUTCHours() * 60 + myt.getUTCMinutes();
+  const rows = await prisma.$queryRaw<
+    Array<{ user_id: string | null; start_time: string | null; end_time: string | null }>
+  >`
+    SELECT DISTINCT s.user_id, s.start_time::text AS start_time, s.end_time::text AS end_time
     FROM hr_schedule_shifts s
     JOIN hr_schedules sch ON sch.id = s.schedule_id
     WHERE sch.outlet_id = ${outletId}
       AND sch.published_at IS NOT NULL
       AND s.shift_date = ${ymd}::date
   `;
-  const ids = rows.map((r) => r.user_id).filter((x): x is string => !!x);
+  // "HH:MM[:SS]" → minutes since midnight; unknown windows fail open (included).
+  const toMin = (t: string | null): number | null => {
+    if (!t) return null;
+    const [h, m] = t.split(":").map(Number);
+    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+  };
+  const covers = (r: { start_time: string | null; end_time: string | null }): boolean => {
+    const s = toMin(r.start_time);
+    const e = toMin(r.end_time);
+    if (s === null || e === null) return true;
+    return e >= s ? nowMin >= s && nowMin <= e : nowMin >= s || nowMin <= e; // overnight shift
+  };
+  const ids = [...new Set(rows.filter(covers).map((r) => r.user_id).filter((x): x is string => !!x))];
   if (ids.length === 0) return [];
   const users = await prisma.user.findMany({
     where: { id: { in: ids }, status: "ACTIVE", phone: { not: null } },

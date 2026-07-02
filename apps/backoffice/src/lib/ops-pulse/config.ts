@@ -41,6 +41,24 @@ export const REALTIME_SIGNALS: Set<string> = new Set(
     .filter(Boolean),
 );
 
+// Signals now owned end-to-end by the dedicated ops-nudges tier (specialized
+// per-person routing + ledger dedupe). BOTH pulse paths must exclude these:
+// the realtime pulse shares dedupeKeys with the nudges for most of them, so
+// arming it would either double-page (CHECKLIST — keys differ) or first-writer-
+// wins and randomly suppress the nudge tier's routing (REVIEW / NO_CLOCK_IN /
+// POS_NOT_OPEN / MENU_SNOOZED — keys match); the daily pulse has no ledger and
+// would simply re-list what the nudges already sent. The pulse keeps only its
+// un-owned signals (PHONE_CAPTURE, RESTOCK_NEEDED, RECEIVING).
+export const NUDGE_OWNED_SIGNALS: Set<string> = new Set([
+  "NO_CLOCK_IN",
+  "STOCK_COUNT",
+  "AUDIT",
+  "CHECKLIST",
+  "REVIEW",
+  "POS_NOT_OPEN",
+  "MENU_SNOOZED",
+]);
+
 export const THRESHOLDS = {
   phoneCapture: {
     // Breach if the day's completed-order phone-capture rate for an outlet is
