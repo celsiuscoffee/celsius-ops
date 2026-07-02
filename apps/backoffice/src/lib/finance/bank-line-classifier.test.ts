@@ -44,6 +44,12 @@ describe("bank-line-classifier", () => {
     expect(dr("TRANSFER FR A/C TUJUAN GEMILANG rent").category).toBe("RENT");
   });
 
+  it("books CARD SALES debits as bank charges (terminal MDR), credits as CARD", () => {
+    expect(dr("DR/CARD SALES M/N 2612988 D 5").category).toBe("BANK_FEE");
+    expect(dr("CR/CARD SALES M/N 2612988 DATED 010626 D").category).toBe("BANK_FEE");
+    expect(cr("DR/CARD SALES M/N 2612988 D 5").category).toBe("CARD");
+  });
+
   it("falls back to OTHER_* for genuinely unknown lines", () => {
     expect(dr("TRANSFER FR A/C SOME UNKNOWN VENDOR XYZ").category).toBe("OTHER_OUTFLOW");
     expect(cr("MISC CREDIT NO PATTERN").category).toBe("OTHER_INFLOW");
