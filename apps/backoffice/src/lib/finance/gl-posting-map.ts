@@ -19,6 +19,8 @@ export const CONTRA_ACCOUNT: Record<string, string> = {
   // ── inflows NOT in EOD (B2B / online) → recognise income directly ──
   MEETINGS_EVENTS: "5000-10",
   GASTROHUB: "5000-09",
+  REFUND: "6000-01",       // money back from a supplier — reduces COGS
+
   // ── cost of sales ──
   RAW_MATERIALS: "6000-01",
   DELIVERY: "6000-02",

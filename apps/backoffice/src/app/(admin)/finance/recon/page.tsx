@@ -46,8 +46,8 @@ const OUTFLOW_CATEGORIES = [
 ] as const;
 const INFLOW_CATEGORIES = [
   "QR", "CARD", "GRAB", "STOREHUB", "FOODPANDA", "REVENUE_MONSTER",
-  "GASTROHUB", "MEETINGS_EVENTS", "LOAN", "CAPITAL", "MANAGEMENT_FEE",
-  "EMPLOYEE_SALARY", "STATUTORY_PAYMENT",
+  "GASTROHUB", "MEETINGS_EVENTS", "REFUND", "LOAN", "CAPITAL",
+  "MANAGEMENT_FEE", "EMPLOYEE_SALARY", "STATUTORY_PAYMENT",
 ] as const;
 // Control-account routes that CONTRA_ACCOUNT doesn't carry (resolveContra does).
 const CONTROL_COA: Record<string, string> = { EMPLOYEE_SALARY: "3008", STATUTORY_PAYMENT: "3004-7" };
@@ -173,41 +173,11 @@ export default function ReconPage() {
                 {reclassNote ?? "Applies the current rules to this pile first — most known payees clear automatically."}
               </span>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-sm">
-                <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
-                  <th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Description</th>
-                  <th className="px-3 py-2 font-medium">Category</th><th className="px-3 py-2 text-right font-medium">Amount</th>
-                  <th className="px-3 py-2 font-medium">Reconcile</th>
-                </tr></thead>
-                <tbody className="divide-y">
-                  {data.unmatchedOutflows.slice(0, 100).map((o) => (
-                    <LineRow key={o.bankLineId} row={o} direction="DR" categories={OUTFLOW_CATEGORIES} accountNames={accountNames} onDone={() => mutate()} />
-                  ))}
-                </tbody>
-              </table>
-              {data.unmatchedOutflows.length > 100 && <p className="px-3 py-2 text-[11px] text-gray-400">Showing top 100 of {data.unmatchedOutflows.length} by amount.</p>}
-            </div>
+            <UnmatchedTable rows={data.unmatchedOutflows} direction="DR" categories={OUTFLOW_CATEGORIES} accountNames={accountNames} onDone={() => mutate()} />
           </Section>
 
           <Section id="recon-unmatched-in" title="Unmatched inflows — unreconciled cash-in" desc="Money that arrived with no recognised source. Pick the category it belongs to — sales settlements clear their debtor; loans/capital book to the balance sheet.">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-sm">
-                <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
-                  <th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Description</th>
-                  <th className="px-3 py-2 font-medium">Category</th><th className="px-3 py-2 text-right font-medium">Amount</th>
-                  <th className="px-3 py-2 font-medium">Reconcile</th>
-                </tr></thead>
-                <tbody className="divide-y">
-                  {data.unmatchedInflows.length === 0 ? (
-                    <tr><td colSpan={5} className="px-4 py-4 text-xs text-gray-400">Nothing here.</td></tr>
-                  ) : data.unmatchedInflows.slice(0, 100).map((o) => (
-                    <LineRow key={o.bankLineId} row={o} direction="CR" categories={INFLOW_CATEGORIES} accountNames={accountNames} onDone={() => mutate()} />
-                  ))}
-                </tbody>
-              </table>
-              {data.unmatchedInflows.length > 100 && <p className="px-3 py-2 text-[11px] text-gray-400">Showing top 100 of {data.unmatchedInflows.length} by amount.</p>}
-            </div>
+            <UnmatchedTable rows={data.unmatchedInflows} direction="CR" categories={INFLOW_CATEGORIES} accountNames={accountNames} onDone={() => mutate()} />
           </Section>
 
           <Section id="recon-open-invoices" title="Open invoices — no payment found" desc="Procurement invoices with no matching bank payment yet. Either unpaid, or paid via an outflow we haven't matched.">
@@ -239,6 +209,87 @@ export default function ReconPage() {
   );
 }
 
+// Selection-aware table for an unmatched section: header checkbox selects the
+// visible page; the bulk bar books every selected line to one category in a
+// single call (classifiedBy='user', affected GL journals re-keyed).
+function UnmatchedTable({ rows, direction, categories, accountNames, onDone }: {
+  rows: UnmatchedLine[];
+  direction: "DR" | "CR";
+  categories: readonly string[];
+  accountNames: Map<string, string>;
+  onDone: () => void;
+}) {
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const visible = rows.slice(0, 100);
+  const allSelected = visible.length > 0 && visible.every((r) => sel.has(r.bankLineId));
+
+  function toggle(id: string) {
+    setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  function toggleAll() {
+    setSel(allSelected ? new Set() : new Set(visible.map((r) => r.bankLineId)));
+  }
+  async function bulkClassify(category: string) {
+    if (!category || sel.size === 0) return;
+    setBusy(true); setNote(null);
+    try {
+      const res = await fetch("/api/finance/bank-lines/classify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankLineIds: [...sel], category }),
+      });
+      const j = await res.json();
+      if (!res.ok) setNote(j.error ?? `Failed (${res.status})`);
+      else {
+        setNote(`Booked ${j.classified} lines to ${category.toLowerCase().replace(/_/g, " ")}${j.skippedMatched ? ` (${j.skippedMatched} skipped: AP-matched)` : ""}.`);
+        setSel(new Set());
+        onDone();
+      }
+    } catch (e) { setNote(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      {sel.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-terracotta/30 bg-terracotta/5 px-4 py-2">
+          <span className="text-xs font-medium text-gray-700">{sel.size} selected</span>
+          <select
+            defaultValue=""
+            disabled={busy}
+            onChange={(e) => { bulkClassify(e.target.value); e.target.value = ""; }}
+            className="h-7 max-w-[260px] rounded border border-gray-200 bg-white px-1 text-xs text-gray-700 disabled:opacity-50"
+          >
+            <option value="" disabled>Book all selected to…</option>
+            {categories.map((c) => <option key={c} value={c}>{categoryLabel(c, accountNames)}</option>)}
+          </select>
+          <button onClick={() => setSel(new Set())} disabled={busy} className="text-[11px] text-gray-500 underline">clear</button>
+          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+        </div>
+      )}
+      {note && <p className="border-b border-gray-100 px-4 py-1.5 text-[11px] text-gray-500">{note}</p>}
+      <table className="w-full min-w-[800px] text-sm">
+        <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+          <th className="w-8 px-3 py-2"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="h-3.5 w-3.5 accent-terracotta" /></th>
+          <th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Description</th>
+          <th className="px-3 py-2 font-medium">Category</th><th className="px-3 py-2 text-right font-medium">Amount</th>
+          <th className="px-3 py-2 font-medium">Reconcile</th>
+        </tr></thead>
+        <tbody className="divide-y">
+          {visible.length === 0 ? (
+            <tr><td colSpan={6} className="px-4 py-4 text-xs text-gray-400">Nothing here.</td></tr>
+          ) : visible.map((o) => (
+            <LineRow key={o.bankLineId} row={o} direction={direction} categories={categories} accountNames={accountNames}
+              selected={sel.has(o.bankLineId)} onToggle={() => toggle(o.bankLineId)} onDone={onDone} />
+          ))}
+        </tbody>
+      </table>
+      {rows.length > 100 && <p className="px-3 py-2 text-[11px] text-gray-400">Showing top 100 of {rows.length} by amount.</p>}
+    </div>
+  );
+}
+
 type Candidate = {
   invoiceId: string; invoiceNumber: string | null; payee: string; amount: number;
   issueDate: string; status: string; linkOnly: boolean;
@@ -248,11 +299,13 @@ type Candidate = {
 // One unmatched bank line with its manual-reconcile controls: a category
 // select labeled with the COA account it books to (the GL re-keys on the next
 // loop run), and — for outflows — a Match panel listing candidate invoices.
-function LineRow({ row, direction, categories, accountNames, onDone }: {
+function LineRow({ row, direction, categories, accountNames, selected, onToggle, onDone }: {
   row: UnmatchedLine;
   direction: "DR" | "CR";
   categories: readonly string[];
   accountNames: Map<string, string>;
+  selected: boolean;
+  onToggle: () => void;
   onDone: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -302,7 +355,10 @@ function LineRow({ row, direction, categories, accountNames, onDone }: {
 
   return (
     <>
-      <tr className="hover:bg-gray-50">
+      <tr className={selected ? "bg-terracotta/5" : "hover:bg-gray-50"}>
+        <td className="px-3 py-2 align-top">
+          <input type="checkbox" checked={selected} onChange={onToggle} className="h-3.5 w-3.5 accent-terracotta" />
+        </td>
         <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap align-top">{row.date}</td>
         <td className="px-3 py-2 text-xs text-gray-700 align-top">
           {row.desc}
@@ -336,7 +392,7 @@ function LineRow({ row, direction, categories, accountNames, onDone }: {
       </tr>
       {open && (
         <tr className="bg-gray-50/60">
-          <td colSpan={5} className="px-3 py-2">
+          <td colSpan={6} className="px-3 py-2">
             {!cands ? (
               <span className="text-[11px] text-gray-400">Looking for candidate invoices…</span>
             ) : cands.length === 0 ? (
