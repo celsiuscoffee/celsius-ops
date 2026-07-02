@@ -24,6 +24,7 @@ import { handleReminderAck } from "@/lib/ops-reminders";
 import { handleInstructionAck } from "@/lib/ops-instructions";
 import { handleOutletDeliveryReply } from "@/lib/inventory/exec/outlet-delivery-check";
 import { handleSupplierMessage } from "@/lib/inventory/agents/supplier-chat-agent";
+import { sendPendingPurchaseOrders } from "@/lib/inventory/procurement-po-send";
 
 // GET — webhook verification handshake.
 export async function GET(request: NextRequest) {
@@ -154,6 +155,13 @@ export async function POST(request: NextRequest) {
             type: msg.type,
             mediaId: msg.document?.id ?? msg.image?.id ?? null,
           });
+        }
+        // 4) Queued PO delivery: this inbound just (re)opened the supplier's 24h
+        // window — deliver any PO blocks waiting behind a cold-send template
+        // prompt (raw.poPromptFor with no raw.poSentFor). Best-effort, internally
+        // deduped, never throws.
+        if (isNewInbound) {
+          await sendPendingPurchaseOrders(msg.from);
         }
       }
       for (const status of value.statuses ?? []) {

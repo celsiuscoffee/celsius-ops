@@ -94,6 +94,9 @@ type Detail = {
     unpaidInvoices: { id: string; invoiceNumber: string; balance: number; status: string; dueDate: string | null; overdue: boolean }[];
   };
   windowOpen: boolean;
+  // The approved new-order prompt template is configured, so "Create & send"
+  // works cold: prompt goes out now, PO block follows when the supplier replies.
+  canColdPrompt?: boolean;
   humanHandling: boolean;
   messages: Msg[];
   agentProposal?: {
@@ -1246,11 +1249,18 @@ export default function SupplierChatsPage() {
                       </button>
                       <button
                         onClick={() => createPO(true)}
-                        disabled={poBusy || !detail.windowOpen}
-                        title={detail.windowOpen ? "" : "24h window closed — create a draft, then send via template"}
+                        disabled={poBusy || (!detail.windowOpen && !detail.canColdPrompt)}
+                        title={
+                          detail.windowOpen
+                            ? ""
+                            : detail.canColdPrompt
+                              ? "Window closed — sends a new-order prompt now; the full PO follows automatically when they reply"
+                              : "24h window closed and no order-prompt template configured (PROCUREMENT_PO_PROMPT_TEMPLATE) — create a draft instead"
+                        }
                         className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1.5 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                       >
-                        {poBusy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Create &amp; send
+                        {poBusy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}{" "}
+                        {detail.windowOpen ? <>Create &amp; send</> : detail.canColdPrompt ? <>Create &amp; prompt</> : <>Create &amp; send</>}
                       </button>
                     </div>
                   </div>
