@@ -13,6 +13,13 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 export const PARSER_VERSION = "supplier-doc-v1";
 
 export type ParsedBill = {
+  /**
+   * What the document actually is — callers that auto-file (e.g. the WhatsApp
+   * invoice-capture fallback, which has no LLM classifier in front of it) must
+   * only file "invoice"; PoP screenshots / delivery orders / SOAs routinely
+   * arrive on the same thread and must not become DRAFT invoices.
+   */
+  docType: "invoice" | "statement" | "payment_proof" | "delivery_order" | "other";
   supplierName: string | null;
   supplierTaxId: string | null;       // SST/GST registration number if shown
   billNumber: string | null;
@@ -38,6 +45,7 @@ const PARSE_PROMPT = `Extract this supplier bill into the JSON schema below. Bil
 
 # Schema
 {
+  "doc_type": "invoice" | "statement" | "payment_proof" | "delivery_order" | "other",
   "supplier_name": string | null,
   "supplier_tax_id": string | null,
   "bill_number": string | null,
@@ -55,6 +63,7 @@ const PARSE_PROMPT = `Extract this supplier bill into the JSON schema below. Bil
 }
 
 # Rules
+- doc_type: "invoice" for a bill/tax invoice/cash bill; "statement" for a statement of account (SOA); "payment_proof" for a bank-transfer / DuitNow / payment slip or screenshot; "delivery_order" for a DO / delivery note (no prices or marked D.O.); otherwise "other".
 - bill_date / due_date: convert any format (DD/MM/YYYY, "5 May 2026", "5 Mei 2026") to YYYY-MM-DD. If only month+year, use the 1st.
 - supplier_tax_id: only if labelled "SST", "GST", "Tax No", "ROC", or similar — not a generic registration number.
 - subtotal + sst should sum to total; if they don't, leave subtotal/sst null and set total only.
@@ -131,7 +140,13 @@ export async function parseSupplierDoc(opts: {
       }))
     : [];
 
+  const DOC_TYPES = ["invoice", "statement", "payment_proof", "delivery_order", "other"] as const;
+  const docType = DOC_TYPES.includes(raw.doc_type as (typeof DOC_TYPES)[number])
+    ? (raw.doc_type as ParsedBill["docType"])
+    : "invoice"; // older prompt outputs / missing field — preserve previous behaviour
+
   return {
+    docType,
     supplierName: strOrNull(raw.supplier_name),
     supplierTaxId: strOrNull(raw.supplier_tax_id),
     billNumber: strOrNull(raw.bill_number),
@@ -167,6 +182,7 @@ function clamp01(n: number): number {
 
 function emptyParsed(warning: string): ParsedBill {
   return {
+    docType: "other",
     supplierName: null,
     supplierTaxId: null,
     billNumber: null,

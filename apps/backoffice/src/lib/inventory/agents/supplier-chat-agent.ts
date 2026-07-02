@@ -25,15 +25,13 @@
  * Model: claude-sonnet-4-6 — it edits real POs and writes to real suppliers.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import type { OrderStatus, Prisma } from "@celsius/db";
+import type { OrderStatus } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppText, fetchWhatsAppMedia } from "@/lib/whatsapp";
-import { storeWhatsAppMedia } from "@/lib/whatsapp-media";
+import { sendWhatsAppText } from "@/lib/whatsapp";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
-import { parseSupplierDoc } from "@/lib/finance/parsers/supplier-doc";
-import { detectCreationFlags } from "@/lib/inventory/flag-detector";
 import { paymentModel, type PaymentModelInfo } from "@/lib/inventory/payment-model";
 import { createReSourcePO } from "@/lib/inventory/agents/resource-po";
+import { captureInvoice, type InvoiceRevision } from "@/lib/inventory/agents/invoice-capture";
 import { verifierEnabled, verifierGateEnabled, verifyMessage, judgePlanned } from "@/lib/inventory/agents/verifier-run";
 import { VERIFIER_VERSION } from "@/lib/inventory/agents/verifier";
 import { recentQaLessons } from "@/lib/inventory/agents/agent-lessons";
@@ -141,15 +139,15 @@ function isHumanOutbound(raw: Record<string, unknown> | null | undefined): boole
  * Entry point. Safe to `await` from the webhook — never throws, no-ops fast for
  * non-suppliers / disabled flag.
  */
-export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<void> {
+export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<{ invoiceCaptured: boolean }> {
   try {
-    if (!flagEnabled() || !process.env.ANTHROPIC_API_KEY) return;
+    if (!flagEnabled() || !process.env.ANTHROPIC_API_KEY) return { invoiceCaptured: false };
 
     const hasDoc = evt.type === "document" || evt.type === "image";
     const fromDigits = digits(evt.fromNumber);
     const tail = fromDigits.slice(-8);
-    if (tail.length < 8) return;
-    if (!evt.text.trim() && !hasDoc) return; // nothing to act on
+    if (tail.length < 8) return { invoiceCaptured: false };
+    if (!evt.text.trim() && !hasDoc) return { invoiceCaptured: false }; // nothing to act on
 
     // Match the supplier by last-8 digits (same rule as whatsapp-store).
     const suppliers = await prisma.supplier.findMany({
@@ -162,7 +160,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     });
     // Per-supplier dial: OFF → hands-off (leave to humans). ASSIST/AUTO continue;
     // ASSIST forces escalate below (draft + human-approve, never auto-act).
-    if (!supplier || supplier.automationMode === "OFF") return;
+    if (!supplier || supplier.automationMode === "OFF") return { invoiceCaptured: false };
 
     // Redelivery dedupe: if we've already auto-answered this exact inbound, stop.
     if (evt.waMessageId) {
@@ -170,7 +168,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         where: { direction: "outbound", raw: { path: ["inReplyTo"], equals: evt.waMessageId } },
         select: { id: true },
       });
-      if (already) return;
+      if (already) return { invoiceCaptured: false };
     }
 
     // Human takeover: if the last thing WE sent this supplier was typed by a human
@@ -188,7 +186,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       Date.now() - +new Date(lastOut.timestamp) < HUMAN_TAKEOVER_MS
     ) {
       console.log(`[supplier-agent] standing down — human is handling ${supplier.name}`);
-      return;
+      return { invoiceCaptured: false };
     }
 
     // Most recent open PO for this supplier + its line items + invoice presence.
@@ -216,7 +214,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         invoices: { select: { id: true }, take: 1 },
       },
     });
-    if (!order) return; // no open PO — nothing to act on
+    if (!order) return { invoiceCaptured: false }; // no open PO — nothing to act on
 
     // Recent thread for context (chronological, last 8).
     const history = await prisma.whatsAppMessage.findMany({
@@ -232,7 +230,7 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
     // them (no-op string when disabled). Closes the QA loop with the pre-send gate.
     const lessons = await recentQaLessons();
     const decision = await classify(evt.text, supplier, order, history, todayMyt(), hasDoc, pm, lessons);
-    if (!decision) return;
+    if (!decision) return { invoiceCaptured: false };
 
     // ── Guardrails (code, not model): auto-act vs escalate ──
     // Accountable by default: act on clear shortfalls (reduce/remove every flagged line
@@ -530,9 +528,11 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         `invoice=${invoiceCaptured} escalate=${escalate} sent=${sent.ok}` +
         (reSource ? ` reSource=${reSource.orderNumber}->${reSource.supplierName}(${reSource.qty}${reSource.existing ? ",existing" : ""})` : ""),
     );
+    return { invoiceCaptured };
   } catch (err) {
     // Never let the agent break the webhook's 200.
     console.error("[supplier-agent] error:", err instanceof Error ? err.message : err);
+    return { invoiceCaptured: false };
   }
 }
 
@@ -602,247 +602,6 @@ async function applyPoAction(
 /** Update the PO's delivery date (informational — safe to auto-apply). */
 async function applyDeliveryDate(orderId: string, isoDate: string): Promise<void> {
   await prisma.order.update({ where: { id: orderId }, data: { deliveryDate: new Date(isoDate) } });
-}
-
-// WhatsApp inbound mime → the subset parseSupplierDoc (Claude vision) accepts.
-function visionMime(
-  mime: string | undefined,
-): "application/pdf" | "image/jpeg" | "image/png" | "image/webp" | null {
-  const m = (mime ?? "").toLowerCase();
-  if (m === "application/pdf") return "application/pdf";
-  if (m === "image/jpeg" || m === "image/jpg") return "image/jpeg";
-  if (m === "image/png") return "image/png";
-  if (m === "image/webp") return "image/webp";
-  return null;
-}
-
-/**
- * Capture a supplier-sent invoice as a DRAFT invoice on the PO.
- *
- * The agent now READS the document: it downloads the media and runs the shared
- * supplier-doc vision parser to extract the real billed total, the supplier's
- * own invoice number, and the bill/due dates. Those land as AI-prefilled fields
- * (aiPrefilledAt set) so the Invoices screen surfaces a "verify before paying"
- * banner — a human still confirms the amount. Creation flags run so a duplicate
- * PO / billed-over-PO mismatch is caught immediately. If the media can't be
- * fetched or parsed (or the total is unreadable), we fall back to the old
- * provisional capture (amount = PO total). Always DRAFT → never triggers payment.
- */
-// A supplier-sent REVISED invoice on a bill we already have on file — surfaced as an ASSIST
-// proposal ("update X → Y", a human approves), never auto-applied and never touching a PAID
-// invoice. null toAmount/toNumber = that field is unchanged (or unreadable).
-type InvoiceRevision = {
-  invoiceId: string;
-  invoiceNumber: string;
-  orderNumber: string;
-  fromAmount: number;
-  toAmount: number | null;
-  fromNumber: string;
-  toNumber: string | null;
-};
-type CaptureResult = { captured: boolean; revision: InvoiceRevision | null };
-
-async function captureInvoice(
-  order: { id: string; orderNumber: string; outletId: string; totalAmount: unknown; status: OrderStatus | null },
-  supplierId: string,
-  mediaId: string | null,
-): Promise<CaptureResult> {
-  // ── Try to read the document for a real amount/number/date ──
-  let extractedTotal: number | null = null;
-  let extractedNumber: string | null = null;
-  let billDate: Date | null = null;
-  let dueDate: Date | null = null;
-  const prefilled: string[] = [];
-  if (mediaId) {
-    try {
-      const media = await fetchWhatsAppMedia(mediaId);
-      const mime = visionMime(media?.mimeType);
-      if (media && mime) {
-        const parsed = await parseSupplierDoc({ fileBytes: media.bytes, mimeType: mime });
-        if (parsed.total != null && parsed.total > 0) {
-          extractedTotal = Math.round(parsed.total * 100) / 100;
-          prefilled.push("amount");
-        }
-        if (parsed.billNumber) {
-          extractedNumber = parsed.billNumber.slice(0, 64);
-          prefilled.push("invoiceNumber");
-        }
-        if (parsed.billDate && /^\d{4}-\d{2}-\d{2}$/.test(parsed.billDate)) {
-          billDate = new Date(parsed.billDate);
-          prefilled.push("issueDate");
-        }
-        if (parsed.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(parsed.dueDate)) {
-          dueDate = new Date(parsed.dueDate);
-          prefilled.push("dueDate");
-        }
-      }
-    } catch (e) {
-      console.warn("[supplier-agent] doc extract failed:", e instanceof Error ? e.message : e);
-    }
-  }
-
-  // ── Pick the RIGHT PO for this invoice ──────────────────────────────────
-  // The supplier bills per PO, so match the invoice's billed TOTAL to the open PO with
-  // that total, instead of always the most-recent open PO (which mis-filed invoices onto
-  // the newest order). Fall back to the passed `order` when nothing matches / is unreadable.
-  let target: { id: string; orderNumber: string; outletId: string; totalAmount: unknown; status: OrderStatus | null } = order;
-  let targetConfident = false; // target came from a real billed-total match (not the fallback)
-  if (extractedTotal != null) {
-    const openPos = await prisma.order.findMany({
-      where: { supplierId, orderType: "PURCHASE_ORDER", status: { in: OPEN_ORDER_STATUSES } },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, orderNumber: true, outletId: true, totalAmount: true, status: true },
-    });
-    const matches = openPos.filter(
-      (p) => Math.abs(Number(p.totalAmount) - extractedTotal!) <= Math.max(1, Number(p.totalAmount) * 0.02),
-    );
-    if (matches.length >= 1) {
-      target = matches[0]; // most-recent within tolerance — unchanged filing behaviour
-      // Only TRUST the match (enough to drive a revision proposal against this PO) when it is
-      // UNIQUE. Two open POs near the same total is ambiguous — file against the newest but
-      // don't let an ambiguous match propose editing that PO's invoice.
-      targetConfident = matches.length === 1;
-    }
-  }
-
-  // Already on file? A re-send of the same bill → skip silently (the original dedup). But a
-  // REVISED bill — the same invoice number with a corrected amount, or a re-issued number on the
-  // same confidently-matched PO — is surfaced as an ASSIST proposal for a human to approve the
-  // update, never silently dropped and never auto-edited. We NEVER propose touching a PAID invoice.
-  const amtChanged = (oldAmount: number) =>
-    extractedTotal != null && Math.abs(oldAmount - extractedTotal) > Math.max(1, oldAmount * 0.02);
-
-  // A prior invoice is only REVISABLE if no money has moved against it (never propose touching a
-  // PAID / part-paid / deposit-paid bill — money's gone; the apply route hard-refuses these too,
-  // so detection must agree or the human gets a dead-end banner) AND it's RECENT — an old invoice
-  // that shares a REUSED number (suppliers reset invoice sequences monthly/per book) is a
-  // DIFFERENT bill, not a revision, so we must not propose rewriting it.
-  const REVISABLE_LOOKBACK_MS = 45 * 24 * 60 * 60 * 1000;
-  const isRevisable = (inv: { status: string; amountPaid: unknown; createdAt: Date }): boolean =>
-    Number(inv.amountPaid ?? 0) === 0 &&
-    inv.status !== "PAID" && inv.status !== "PARTIALLY_PAID" && inv.status !== "DEPOSIT_PAID" &&
-    Date.now() - +new Date(inv.createdAt) <= REVISABLE_LOOKBACK_MS;
-
-  // (1) Strong signal: this supplier has a RECENT, fully-unpaid invoice with this exact number,
-  //     but the amount changed → a corrected bill. (Recency + unpaid guard against a reused
-  //     invoice number sitting on an unrelated older bill.)
-  const priorSameNo = extractedNumber
-    ? await prisma.invoice.findFirst({
-        where: { supplierId, invoiceNumber: extractedNumber },
-        orderBy: { createdAt: "desc" },
-        select: { id: true, invoiceNumber: true, amount: true, status: true, amountPaid: true, createdAt: true, order: { select: { orderNumber: true } } },
-      })
-    : null;
-  if (priorSameNo && isRevisable(priorSameNo) && amtChanged(Number(priorSameNo.amount))) {
-    console.log(
-      `[supplier-agent] invoice REVISION (amount) ${priorSameNo.invoiceNumber}: ${Number(priorSameNo.amount)} → ${extractedTotal}`,
-    );
-    return {
-      captured: false,
-      revision: {
-        invoiceId: priorSameNo.id,
-        invoiceNumber: priorSameNo.invoiceNumber,
-        orderNumber: priorSameNo.order?.orderNumber ?? target.orderNumber,
-        fromAmount: Number(priorSameNo.amount),
-        toAmount: extractedTotal,
-        fromNumber: priorSameNo.invoiceNumber,
-        toNumber: null,
-      },
-    };
-  }
-
-  // Dedup anchor: the invoice already filed against this PO.
-  const priorOnPo = await prisma.invoice.findFirst({
-    where: { orderId: target.id },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, invoiceNumber: true, amount: true, status: true, amountPaid: true, createdAt: true },
-  });
-  if (priorOnPo) {
-    // (2) Re-issued invoice number on the SAME, UNIQUELY-matched PO (and not the same number we
-    //     already matched in (1)) → a replacement invoice: propose the number/amount update.
-    const numberChanged = !!extractedNumber && extractedNumber !== priorOnPo.invoiceNumber;
-    if (targetConfident && isRevisable(priorOnPo) && numberChanged && !priorSameNo) {
-      console.log(
-        `[supplier-agent] invoice REVISION (number) po=${target.orderNumber} ${priorOnPo.invoiceNumber} → ${extractedNumber}`,
-      );
-      return {
-        captured: false,
-        revision: {
-          invoiceId: priorOnPo.id,
-          invoiceNumber: priorOnPo.invoiceNumber,
-          orderNumber: target.orderNumber,
-          fromAmount: Number(priorOnPo.amount),
-          toAmount: amtChanged(Number(priorOnPo.amount)) ? extractedTotal : null,
-          fromNumber: priorOnPo.invoiceNumber,
-          toNumber: extractedNumber,
-        },
-      };
-    }
-    console.log(`[supplier-agent] invoice capture skipped — ${target.orderNumber} already has an invoice`);
-    return { captured: false, revision: null };
-  }
-
-  const amount = extractedTotal ?? (Number(target.totalAmount) || 0);
-  const invoiceNumber = extractedNumber || `AI-${target.orderNumber}`;
-  const provisional = extractedTotal == null;
-
-  // Persist the supplier-sent document to storage so the captured invoice keeps
-  // the photo (the inbox webhook already stored it under the same deterministic
-  // path — this upsert is idempotent). Best-effort: never throws, returns null.
-  const photoUrl = await storeWhatsAppMedia(mediaId);
-
-  try {
-    const flags = await detectCreationFlags({
-      orderId: target.id,
-      supplierId,
-      amount,
-      issueDate: billDate,
-    });
-    const created = await prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        orderId: target.id,
-        outletId: target.outletId,
-        supplierId,
-        amount: amount as never, // Decimal passthrough
-        status: "DRAFT",
-        paymentType: "SUPPLIER",
-        photos: photoUrl ? [photoUrl] : [],
-        ...(billDate ? { issueDate: billDate } : {}),
-        ...(dueDate ? { dueDate } : {}),
-        ...(prefilled.length > 0
-          ? { aiPrefilledAt: new Date(), aiPrefilledFields: JSON.stringify(prefilled) }
-          : {}),
-        ...(flags.length > 0 ? { flags: flags as unknown as Prisma.InputJsonValue } : {}),
-        notes: provisional
-          ? "Captured from WhatsApp by the supplier-chat agent — document unreadable, amount is provisional (PO total); " +
-            `verify against the document before paying.${mediaId ? ` [wa-media:${mediaId}]` : ""}`
-          : "Captured + read from WhatsApp by the supplier-chat agent — amount/number extracted from the document; " +
-            `verify before paying.${mediaId ? ` [wa-media:${mediaId}]` : ""}`,
-      },
-      select: { id: true },
-    });
-    // Receiving an invoice means the supplier confirmed + is fulfilling → move the PO to
-    // Awaiting Delivery, matching the manual "Upload Invoice & Send" flow. Only from a
-    // sent/approved state; best-effort (the status nudge never fails the capture itself).
-    if (target.status && (["APPROVED", "SENT", "CONFIRMED"] as OrderStatus[]).includes(target.status)) {
-      await prisma.order
-        .update({ where: { id: target.id }, data: { status: "AWAITING_DELIVERY" } })
-        .catch((e) => console.warn("[supplier-agent] PO→AWAITING_DELIVERY failed:", e instanceof Error ? e.message : e));
-    }
-    console.log(
-      `[supplier-agent] invoice captured id=${created.id} no=${invoiceNumber} po=${target.orderNumber} ` +
-        `amount=${amount} extracted=${!provisional} prefilled=${prefilled.join("|") || "-"} flags=${flags.length}`,
-    );
-    return { captured: true, revision: null };
-  } catch (e) {
-    // Unique invoiceNumber collision (already captured) or any write error.
-    console.warn(
-      "[supplier-agent] invoice capture skipped:",
-      e instanceof Error ? e.message : e,
-    );
-    return { captured: false, revision: null };
-  }
 }
 
 type SupplierCtx = { name: string; paymentTerms: string | null };
