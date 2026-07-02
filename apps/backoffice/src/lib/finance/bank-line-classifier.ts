@@ -210,6 +210,10 @@ const OUTFLOW_RULES: Rule[] = [
 
   // Bank fees
   { name: "bank_fee",       match: /\b(SERVICE\s*FEE|HANDLING\s*FEE|BANK\s*CHARGE|MAINTENANCE\s*FEE|GIRO\s*FEE)\b/i, direction: "DR", category: "BANK_FEE" as CashCategory },
+  // "DR/CARD SALES" on the DEBIT side is the terminal MDR charge the bank
+  // nets off each card settlement (the CR twin is the settlement itself,
+  // matched by card_terminal above). Per the owner: book as a bank charge.
+  { name: "bank_fee_card_mdr", match: /\b(?:DR|CR)\/?CARD\s*SALES?\b/i, direction: "DR", category: "BANK_FEE" as CashCategory },
 
   // Marketing — for now ONLY Google Ads + SMS Niaga (per owner). Google Ads is
   // also pulled from the ads module, so DIGITAL_ADS is DEDUPED out of the bank
