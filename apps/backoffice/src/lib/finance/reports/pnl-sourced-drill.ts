@@ -188,16 +188,17 @@ async function drillGrabAds(companyId: string, start: string, end: string, outle
   }));
 }
 
-// BANK:<CAT> — the classified bank lines behind the opex line.
-async function drillBank(cat: string, companyId: string, start: string, end: string, outletId?: string | null): Promise<DrillLine[]> {
+// BANK:<CAT> — the classified bank lines behind the opex line. Also serves the
+// bank-sourced income lines (GastroHub, Meetings & Events) on the CR side.
+async function drillBank(cat: string, companyId: string, start: string, end: string, outletId?: string | null, direction: "DR" | "CR" = "DR"): Promise<DrillLine[]> {
   const suffix = BANK_ACCOUNT_SUFFIX[companyId];
   if (!suffix) return [];
   const lines = await prisma.bankStatementLine.findMany({
     where: {
-      direction: "DR",
+      direction,
       txnDate: { gte: dStart(start), lte: dEnd(end) },
       statement: { accountName: { contains: suffix } },
-      apInvoiceId: null,
+      ...(direction === "DR" ? { apInvoiceId: null } : {}),
       category: cat === "NULL" ? null : (cat as CashCategory),
       ...(outletId ? { outletId } : {}),
     },
@@ -210,8 +211,8 @@ async function drillBank(cat: string, companyId: string, start: string, end: str
     txnDate: l.txnDate.toISOString().slice(0, 10),
     description: l.description ?? "(no description)",
     amount: round2(Number(l.amount)),
-    debit: round2(Number(l.amount)),
-    credit: 0,
+    debit: direction === "DR" ? round2(Number(l.amount)) : 0,
+    credit: direction === "CR" ? round2(Number(l.amount)) : 0,
   }));
 }
 
@@ -223,6 +224,10 @@ export async function sourcedPnlDrillDown(args: {
   outletId?: string | null;
 }): Promise<DrillLine[]> {
   const { companyId, code, start, end, outletId } = args;
+  // Bank-settled income channels drill into their bank inflow lines (they have
+  // no POS orders behind them) — must route before the generic REV-* branch.
+  if (code === "REV-GASTRO") return drillBank("GASTROHUB", companyId, start, end, outletId, "CR");
+  if (code === "REV-EVENTS") return drillBank("MEETINGS_EVENTS", companyId, start, end, outletId, "CR");
   if (code.startsWith("REV-")) return drillRevenue(code, companyId, start, end, outletId);
   if (code === "PROC") return drillPurchases(companyId, start, end, outletId);
   if (code === "MKT-ADS") return drillAds(start, end);
@@ -233,11 +238,11 @@ export async function sourcedPnlDrillDown(args: {
     // Estimate, not transactions: recompute the base so the drawer explains it.
     const rev = await drillRevenue("REV-GRAB", companyId, start, end, outletId);
     const gross = round2(rev.reduce((s, r) => s + r.amount, 0));
-    const est = round2(gross * 0.30);
+    const est = round2(gross * 0.43);
     return [{
       transactionId: "grab-comm-estimate",
       txnDate: end,
-      description: `Estimated commission: 30% of RM${gross.toFixed(2)} gross GrabFood sales in this period. Exact per-order commission lives in the Grab settlement report.`,
+      description: `Estimated commission: 43% of RM${gross.toFixed(2)} gross GrabFood sales in this period (observed effective all-in Grab deduction). Exact per-order commission lives in the Grab settlement report.`,
       amount: est,
       debit: est,
       credit: 0,

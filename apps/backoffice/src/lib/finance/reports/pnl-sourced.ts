@@ -55,7 +55,9 @@ const BANK_REVIEW = new Set(["OTHER_OUTFLOW"]);
 // from the API and replace this estimate). Commission is the selling company's
 // cost, so it attributes to whichever company booked the Grab revenue —
 // independent of which bank account the net payout lands in.
-const GRAB_COMMISSION_RATE = 0.30;
+// ~43% observed effective all-in deduction (commission + platform fees) from
+// reconciling gross Grab sales vs bank payouts — the old 0.30 understated it.
+const GRAB_COMMISSION_RATE = 0.43;
 
 function humanCat(c: string | null): string {
   if (!c) return "Unclassified";
@@ -186,7 +188,36 @@ export async function buildSourcedPnl(input: {
     { code: "REV-GRAB", name: "Sales — GrabFood (gross)", amount: round2(rev.grab), parentCode: null },
     { code: "REV-PANDA", name: "Sales — FoodPanda", amount: round2(rev.foodpanda), parentCode: null },
   ].filter((l) => l.amount !== 0);
-  const totalIncome = round2(rev.instore + rev.online + rev.grab + rev.foodpanda);
+  let totalIncome = round2(rev.instore + rev.online + rev.grab + rev.foodpanda);
+
+  // Non-POS revenue the sales sources can't see: GastroHub (Nilai's cloud-kitchen
+  // channel) and Meetings/Events (IOI Mall) settle straight into the bank with no
+  // POS order behind them, so income was understated by their whole amount.
+  // Sourced from the classified bank inflows for this company's account.
+  const incomeSuffix = BANK_ACCOUNT_SUFFIX[companyId];
+  if (incomeSuffix) {
+    const bankIncome = await prisma.bankStatementLine.groupBy({
+      by: ["category"],
+      where: {
+        direction: "CR",
+        txnDate: { gte: dStart(start), lte: dEnd(end) },
+        statement: { accountName: { contains: incomeSuffix } },
+        category: { in: ["GASTROHUB", "MEETINGS_EVENTS"] },
+        ...(outletId ? { outletId } : {}),
+      },
+      _sum: { amount: true },
+    });
+    for (const g of bankIncome) {
+      const amt = round2(Number(g._sum?.amount ?? 0));
+      if (!amt) continue;
+      incomeLines.push(
+        g.category === "GASTROHUB"
+          ? { code: "REV-GASTRO", name: "Sales — GastroHub (Nilai)", amount: amt, parentCode: null }
+          : { code: "REV-EVENTS", name: "Sales — Meetings & Events", amount: amt, parentCode: null },
+      );
+      totalIncome = round2(totalIncome + amt);
+    }
+  }
 
   // ─── COGS: Opening inventory + Purchases − Closing inventory ──────────────
   const invDate = { gte: dStart(start), lte: dEnd(end) };
