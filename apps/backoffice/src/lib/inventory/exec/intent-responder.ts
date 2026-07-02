@@ -176,29 +176,52 @@ async function handleSoa(
   return { outstanding, count: lines.length, sent };
 }
 
-/** Draft the week's order for a supplier that asked — their below-reorder lines. */
+/**
+ * Draft the week's order for a supplier that asked — their below-reorder lines,
+ * in the PACKAGE units the supplier sells (never bare base-unit numbers: a
+ * shortfall of 22,000 ml must read "22 Bottle (1000ml)", not "22000"). Skips
+ * outlet lines already covered by an open PO so we don't double-order.
+ */
 async function draftWeeklyOrder(supplierId: string, name: string): Promise<string | null> {
   const sps = await prisma.supplierProduct.findMany({
     where: { supplierId, isActive: true },
-    select: { productId: true, product: { select: { name: true } } },
+    select: {
+      productId: true,
+      product: { select: { name: true, baseUom: true } },
+      productPackage: { select: { conversionFactor: true, packageLabel: true } },
+    },
   });
   if (!sps.length) return null;
   const productIds = sps.map((s) => s.productId);
-  const nameById = new Map(sps.map((s) => [s.productId, s.product?.name ?? "?"]));
+  const spById = new Map(sps.map((s) => [s.productId, s]));
 
-  const [pars, stocks] = await Promise.all([
+  const [pars, stocks, openLines] = await Promise.all([
     prisma.parLevel.findMany({ where: { productId: { in: productIds } }, select: { productId: true, outletId: true, reorderPoint: true, parLevel: true } }),
     prisma.stockBalance.findMany({ where: { productId: { in: productIds } }, select: { productId: true, outletId: true, quantity: true } }),
+    // Lines already on an open PO (any supplier) — same coverage rule as the exec's
+    // OOS check, so the draft never re-orders what's already coming.
+    prisma.orderItem.findMany({
+      where: {
+        productId: { in: productIds },
+        order: { orderType: "PURCHASE_ORDER", status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED", ...AWAITING_STATUSES, "PARTIALLY_RECEIVED"] as OrderStatus[] } },
+      },
+      select: { productId: true, order: { select: { outletId: true } } },
+    }),
   ]);
   const stockMap = new Map<string, number>();
   for (const s of stocks) {
     const k = `${s.productId}_${s.outletId}`;
     stockMap.set(k, (stockMap.get(k) ?? 0) + Number(s.quantity));
   }
-  // Aggregate the shortfall per product across outlets.
+  const covered = new Set<string>();
+  for (const l of openLines) if (l.order) covered.add(`${l.productId}_${l.order.outletId}`);
+
+  // Aggregate the shortfall per product across outlets (base units).
   const need = new Map<string, number>();
   for (const p of pars) {
-    const stock = stockMap.get(`${p.productId}_${p.outletId}`) ?? 0;
+    const k = `${p.productId}_${p.outletId}`;
+    if (covered.has(k)) continue;
+    const stock = stockMap.get(k) ?? 0;
     if (stock <= Number(p.reorderPoint)) {
       const short = Math.max(Number(p.parLevel) - stock, 0);
       if (short > 0) need.set(p.productId, (need.get(p.productId) ?? 0) + short);
@@ -210,7 +233,14 @@ async function draftWeeklyOrder(supplierId: string, name: string): Promise<strin
   const items = [...need.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
-    .map(([pid, qty]) => `• ${nameById.get(pid)} — ${Math.round(qty)}`);
+    .map(([pid, baseQty]) => {
+      const sp = spById.get(pid);
+      const convRaw = sp?.productPackage ? Number(sp.productPackage.conversionFactor) : 1;
+      const conv = convRaw > 0 ? convRaw : 1;
+      const pkgQty = Math.max(1, Math.ceil(baseQty / conv));
+      const unit = sp?.productPackage?.packageLabel ?? sp?.product?.baseUom ?? "unit";
+      return `• ${sp?.product?.name ?? "?"} — ${pkgQty} ${unit}`;
+    });
   return `Hi ${name}, yes please — boleh prepare:\n${items.join("\n")}\nThank you! 🙏`;
 }
 

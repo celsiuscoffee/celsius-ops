@@ -115,7 +115,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ key
   // The line must belong to THIS order, and the order must be open.
   const item = await prisma.orderItem.findFirst({
     where: { id: poItemId, orderId },
-    select: { id: true, unitPrice: true, order: { select: { status: true, orderNumber: true } } },
+    select: { id: true, unitPrice: true, quantity: true, order: { select: { status: true, orderNumber: true } } },
   });
   if (!item) return NextResponse.json({ error: "PO line not found on this order" }, { status: 404 });
   if (item.order.status === "COMPLETED" || item.order.status === "CANCELLED") {
@@ -125,6 +125,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ key
   if (action === "reduce_qty") {
     if (typeof newQuantity !== "number" || newQuantity <= 0) {
       return NextResponse.json({ error: "reduce_qty needs a positive newQuantity" }, { status: 400 });
+    }
+    // A reduce must LOWER the line. Escalated proposals can carry a model misread
+    // (e.g. "ada 50 je" read as qty 50 on a 5-unit line) — the agent refused to
+    // auto-apply it for exactly this reason, so the approval path must not apply
+    // it blind either. Also covers the line having been edited since the proposal.
+    if (newQuantity >= Number(item.quantity)) {
+      return NextResponse.json(
+        {
+          error: `Proposed quantity ${newQuantity} doesn't reduce the line (current ${Number(item.quantity)}) — likely a misread. Edit the PO manually if the increase is intended.`,
+        },
+        { status: 400 },
+      );
     }
     await prisma.orderItem.update({
       where: { id: item.id },

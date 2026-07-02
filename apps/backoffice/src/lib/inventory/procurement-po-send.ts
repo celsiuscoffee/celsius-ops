@@ -11,6 +11,7 @@
  * template to invite a reply (which opens the window so the PO block can follow); else the
  * cold send is skipped + logged. Never throws.
  */
+import { Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppText, sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
@@ -185,5 +186,99 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
     console.log(`[po-send] po=${order.orderNumber} supplier=${supplier.name} sent=${res.ok}`);
   } catch (err) {
     console.error("[po-send] error:", err instanceof Error ? err.message : err);
+  }
+}
+
+const PENDING_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * Deliver PO blocks that were queued behind a closed 24h window.
+ *
+ * The cold path sends a template PROMPT (raw.poPromptFor) inviting the supplier
+ * to reply; the reply opens the window — and THIS is what then sends the actual
+ * PO block. Without it the prompt was a dead end: nothing consumed the reply,
+ * so a cold "Create & send" left the PO marked SENT but never delivered.
+ *
+ * Called from the WhatsApp webhook on every new inbound (best-effort, never
+ * throws). Matches the supplier by the same last-8-digits rule as the store,
+ * finds their recent POs that got a prompt but no block, and re-runs
+ * sendPurchaseOrder — which now sees the window open, sends the block, and
+ * stamps raw.poSentFor (its own dedup, so redeliveries are safe).
+ */
+export async function sendPendingPurchaseOrders(fromNumber: string): Promise<void> {
+  try {
+    if (!enabled()) return;
+    const tail = digits(fromNumber).slice(-8);
+    if (tail.length < 8) return;
+
+    // Prisma can't filter on "last 8 digits of a free-text phone" — fetch active
+    // suppliers and match in JS (same rule as whatsapp-store).
+    const all = await prisma.supplier.findMany({
+      where: { phone: { not: null }, status: "ACTIVE" },
+      select: { id: true, name: true, phone: true },
+    });
+    const supplier = all.find((s) => {
+      const sd = digits(s.phone);
+      return sd.length >= 8 && sd.slice(-8) === tail;
+    });
+    if (!supplier) return;
+
+    // Prompted-but-undelivered POs for this supplier (recent only).
+    const since = new Date(Date.now() - PENDING_LOOKBACK_MS);
+    const [prompted, delivered] = await Promise.all([
+      prisma.whatsAppMessage.findMany({
+        where: {
+          direction: "outbound",
+          supplierId: supplier.id,
+          timestamp: { gte: since },
+          raw: { path: ["poPromptFor"], not: Prisma.DbNull },
+        },
+        select: { raw: true },
+      }),
+      prisma.whatsAppMessage.findMany({
+        where: {
+          direction: "outbound",
+          supplierId: supplier.id,
+          timestamp: { gte: since },
+          raw: { path: ["poSentFor"], not: Prisma.DbNull },
+        },
+        select: { raw: true },
+      }),
+    ]);
+    const sentIds = new Set(delivered.map((m) => String((m.raw as Record<string, unknown>)?.poSentFor ?? "")));
+    const pendingIds = [
+      ...new Set(
+        prompted
+          .map((m) => String((m.raw as Record<string, unknown>)?.poPromptFor ?? ""))
+          .filter((id) => id && !sentIds.has(id)),
+      ),
+    ];
+    if (!pendingIds.length) return;
+
+    const orders = await prisma.order.findMany({
+      where: { id: { in: pendingIds }, status: { in: ["APPROVED", "SENT", "CONFIRMED", "AWAITING_DELIVERY"] } },
+      select: {
+        id: true,
+        orderNumber: true,
+        deliveryDate: true,
+        outlet: { select: { name: true, address: true } },
+        supplier: { select: { id: true, name: true, phone: true, automationMode: true } },
+        items: {
+          select: {
+            quantity: true,
+            product: { select: { name: true, baseUom: true } },
+            productPackage: { select: { packageLabel: true } },
+          },
+        },
+      },
+    });
+    for (const order of orders) {
+      await sendPurchaseOrder(order); // window is open now; dedups via poSentFor
+    }
+    if (orders.length) {
+      console.log(`[po-send] window opened by ${supplier.name} — delivered ${orders.length} queued PO block(s)`);
+    }
+  } catch (err) {
+    console.error("[po-send] pending-send error:", err instanceof Error ? err.message : err);
   }
 }

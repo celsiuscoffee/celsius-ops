@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import { baseQtyByProduct } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { adjustStockBalance } from "@/lib/stock";
 import { getUserFromHeaders } from "@/lib/auth";
@@ -167,10 +168,35 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Update stock balances (parallel) — track per package
+  // Update stock balances. Goods are received in a package unit ("12 bottles"),
+  // but StockBalance is tracked in base UOM — multiply each line by its package
+  // conversionFactor and increment the canonical per-product row
+  // (productPackageId = null), matching stock counts and the staff app.
+  const recvPkgIds = [
+    ...new Set(
+      (items as Array<{ productPackageId?: string }>)
+        .map((i) => i.productPackageId)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+  const cfMap = new Map<string, number>();
+  if (recvPkgIds.length > 0) {
+    const pkgs = await prisma.productPackage.findMany({
+      where: { id: { in: recvPkgIds } },
+      select: { id: true, conversionFactor: true },
+    });
+    for (const p of pkgs) cfMap.set(p.id, Number(p.conversionFactor));
+  }
+  const baseTotals = baseQtyByProduct(
+    (items as Array<{ productId: string; productPackageId?: string; receivedQty: number }>).map((i) => ({
+      productId: i.productId,
+      countedQty: i.receivedQty,
+      conversionFactor: i.productPackageId ? cfMap.get(i.productPackageId) ?? 1 : 1,
+    })),
+  );
   await Promise.all(
-    items.map((item: { productId: string; productPackageId?: string; receivedQty: number }) =>
-      adjustStockBalance(outletId, item.productId, item.receivedQty, item.productPackageId),
+    [...baseTotals].map(([productId, baseQty]) =>
+      adjustStockBalance(outletId, productId, baseQty, null),
     ),
   );
 
