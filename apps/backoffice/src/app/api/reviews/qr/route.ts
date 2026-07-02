@@ -13,9 +13,11 @@ export async function GET(request: NextRequest) {
   const settings = await prisma.reviewSettings.findUnique({ where: { outletId } });
   const outlet = await prisma.outlet.findUnique({ where: { id: outletId }, select: { name: true } });
 
-  // Build the public review URL — always use the production domain
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://backoffice.celsiuscoffee.com";
-  const reviewUrl = `${baseUrl}/review/${outletId}`;
+  // Public review URL — the dedicated customer domain (middleware rewrites
+  // review.celsiuscoffee.com/<outletId> → /review/<outletId>). Old QR codes
+  // printed with backoffice.../review/<id> keep working.
+  const baseUrl = process.env.NEXT_PUBLIC_REVIEW_URL || "https://review.celsiuscoffee.com";
+  const reviewUrl = `${baseUrl}/${outletId}`;
 
   return NextResponse.json({
     url: reviewUrl,

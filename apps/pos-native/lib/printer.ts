@@ -127,6 +127,19 @@ export async function printReceipt80mm(
   await ensurePrinterReady();
   const outletInfo: OutletInfo = typeof outlet === "string" ? { name: outlet } : outlet;
 
+  // Receipt QR default: in 'review' mode (the default) with no explicit URL
+  // configured, print this outlet's QR review page — the rating gate that
+  // sends happy customers to Google and catches unhappy ones privately.
+  // Patched here so both print paths (LAN routing + built-in head) get it.
+  const qrMode = (config?.qrMode || "review").toLowerCase();
+  if (qrMode === "review" && !config?.qrUrl && outletId) {
+    config = {
+      ...(config ?? {}),
+      qrUrl: `https://review.celsiuscoffee.com/${outletId}`,
+      qrLabel: config?.qrLabel || "Scan to rate your visit",
+    };
+  }
+
   // LAN cashier printer (if configured for this outlet) takes the receipt;
   // otherwise fall through to the D3 built-in head below.
   if (outletId) {

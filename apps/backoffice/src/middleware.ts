@@ -9,11 +9,34 @@ const COOKIE_NAME = "celsius-session";
 // from a different origin.
 const ALLOWED_ORIGINS = [
   "backoffice.celsiuscoffee.com",
+  // Customer-facing QR review domain — its feedback form POSTs same-app.
+  "review.celsiuscoffee.com",
 ];
+
+// Host serving ONLY the public review page (review.celsiuscoffee.com/<outletId>).
+const REVIEW_HOST = "review.celsiuscoffee.com";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
+
+  // review.celsiuscoffee.com → the public review page, nothing else.
+  // /<outletId> rewrites to /review/<outletId>; API + static pass through so
+  // the page's own fetches work; anything else lands on the brand site.
+  const host = (request.headers.get("host") ?? "").toLowerCase();
+  if (host === REVIEW_HOST && !isApi && !pathname.startsWith("/_next") && !pathname.startsWith("/review/")) {
+    const isAsset = /\.[a-z0-9]+$/i.test(pathname) || pathname === "/sw.js" || pathname === "/manifest.json";
+    if (pathname === "/") {
+      return NextResponse.redirect("https://celsiuscoffee.com");
+    }
+    if (!isAsset) {
+      const url = request.nextUrl.clone();
+      url.pathname = `/review${pathname}`;
+      const rewritten = NextResponse.rewrite(url);
+      applySecurityHeaders(rewritten, { isApi: false });
+      return rewritten;
+    }
+  }
 
   // CSRF protection — runs FIRST so state-changing API requests are
   // checked even when we'd otherwise bypass middleware for /api/*.
