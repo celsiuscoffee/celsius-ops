@@ -25,6 +25,7 @@ import { handleInstructionAck } from "@/lib/ops-instructions";
 import { handleOutletDeliveryReply } from "@/lib/inventory/exec/outlet-delivery-check";
 import { handleSupplierMessage } from "@/lib/inventory/agents/supplier-chat-agent";
 import { sendPendingPurchaseOrders } from "@/lib/inventory/procurement-po-send";
+import { captureSupplierDocument } from "@/lib/inventory/agents/invoice-capture";
 
 // GET — webhook verification handshake.
 export async function GET(request: NextRequest) {
@@ -146,12 +147,26 @@ export async function POST(request: NextRequest) {
         // Skip on a re-delivery (isNewInbound === false): otherwise two concurrent Meta
         // re-deliveries could both pass the agent's own check and double-apply a PO edit +
         // double-reply. The @unique wamid makes the first inbound store the atomic claim.
+        let agentCapturedInvoice = false;
         if (isNewInbound && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
-          await handleSupplierMessage({
+          const agentRes = await handleSupplierMessage({
             fromNumber: msg.from,
             toNumber: businessNumber,
             text: body ?? "",
             waMessageId: msg.id,
+            type: msg.type,
+            mediaId: msg.document?.id ?? msg.image?.id ?? null,
+          });
+          agentCapturedInvoice = !!agentRes?.invoiceCaptured;
+        }
+        // 3b) Universal invoice capture: any supplier document the agent did NOT
+        // capture (OFF suppliers, no open PO, invoice arriving after the PO
+        // completed, ad-hoc bills) still gets vision-read and filed as a DRAFT
+        // invoice for human review. Internal only — never replies. Trusts the
+        // parser's docType, so PoP/DO/SOA photos are left for their own flows.
+        if (isNewInbound && (msg.type === "document" || msg.type === "image") && !agentCapturedInvoice) {
+          await captureSupplierDocument({
+            fromNumber: msg.from,
             type: msg.type,
             mediaId: msg.document?.id ?? msg.image?.id ?? null,
           });
