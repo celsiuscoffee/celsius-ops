@@ -136,7 +136,10 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
         fromNumber: ourNumber,
         toNumber: dest,
         type: "text",
-        body: `New order ${order.orderNumber} — sent a new-order prompt (cold; supplier to reply for the details).`,
+        // Record the ACTUAL message the supplier received (the procurement_new_order template
+        // body, variables filled) — not an internal status line — so the chat reads like the
+        // real conversation. The "sent" status + raw.via mark it as the cold prompt.
+        body: `Hi ${supplier.name}, we have prepared a new purchase order ${order.orderNumber} for you. Reply to this message and we will send over the full order details. Thank you.`,
         supplierId: supplier.id,
         status: t.ok ? "sent" : "failed",
         raw: {

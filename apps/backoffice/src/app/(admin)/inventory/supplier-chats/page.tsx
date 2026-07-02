@@ -985,9 +985,18 @@ export default function SupplierChatsPage() {
                       )
                     )}
                     <div
-                      className={`mt-1 text-[10px] ${m.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                      className={`mt-1 flex items-center gap-1 text-[10px] ${m.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
                     >
                       {clock(m.timestamp)}
+                      {m.direction === "outbound" && m.status === "sent" && (
+                        <span className="inline-flex items-center gap-0.5">· <Check size={10} /> Sent</span>
+                      )}
+                      {m.direction === "outbound" && m.status === "failed" && (
+                        <span>· Failed</span>
+                      )}
+                      {m.direction === "outbound" && m.status === "note" && (
+                        <span>· Internal note</span>
+                      )}
                     </div>
                   </div>
                   <button
