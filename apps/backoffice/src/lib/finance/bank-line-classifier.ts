@@ -22,6 +22,11 @@ export type ClassifyInput = {
   // Account this line came from. Used as a fallback for outlet inference
   // when the description doesn't carry an outlet prefix (e.g. EPF Payment).
   accountKey?: string;
+  // Normalized supplier names from the procurement registry (uppercased,
+  // single-spaced). When the rules miss on an outflow, a description containing
+  // one of these classifies as RAW_MATERIALS — so onboarding a supplier in
+  // procurement is enough for their payments to classify, no rule edit needed.
+  vendorHints?: string[];
 };
 
 export type ClassifyResult = {
@@ -165,8 +170,17 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "purpose_kol",              match: /\bKOL\b|\bINFLUENCER\b/i,               direction: "DR", category: "KOL" as CashCategory },
   { name: "purpose_renovation",       match: /\bRENOVATION\b|\bRENOVATE\b/i,          direction: "DR", category: "INVESTMENTS" as CashCategory },
   { name: "purpose_legal",            match: /\bLEGAL\s*FEE|\bASHRAF\s*&\s*PARTNERS|\bLAWYER\b/i, direction: "DR", category: "COMPLIANCE" as CashCategory },
-  { name: "purpose_dividend",         match: /\bDIVIDEND\b|\bDIVIDE\b/i,              direction: "DR", category: "DIVIDEND" as CashCategory },
+  // No trailing boundary: Maybank purpose suffixes run straight into references
+  // ("DIVIDENDQ1 2"), which a \b after the word would reject.
+  { name: "purpose_dividend",         match: /\bDIVIDEN/i,                            direction: "DR", category: "DIVIDEND" as CashCategory },
   { name: "purpose_cfs_contract",     match: /\bCFS\s*CONTRACT\b|\bCFS\s*FEE\b/i,     direction: "DR", category: "CFS_FEE" as CashCategory },
+  { name: "purpose_audit",            match: /\bAUDIT\s*FEE\b|\bAUDIT\b/i,            direction: "DR", category: "COMPLIANCE" as CashCategory },
+  { name: "purpose_tax_agent",        match: /\bTAXATION\b|\bTAX\s*(FORM|AGENT|FILING)/i, direction: "DR", category: "TAX" as CashCategory },
+
+  // Facility services — pest control / cleaning / small works contractors.
+  { name: "maint_rentokil",   match: /\bRENTOKIL\b/i,      direction: "DR", category: "MAINTENANCE" as CashCategory },
+  { name: "maint_cleanhero",  match: /\bCLEANHERO\b/i,     direction: "DR", category: "MAINTENANCE" as CashCategory },
+  { name: "maint_simple_axe", match: /\bSIMPLE\s*AXE\b/i,  direction: "DR", category: "MAINTENANCE" as CashCategory },
 
   // Statutory — EPF / SOCSO / EIS / KWSP / PERKESO / LHDN tax
   { name: "statutory_epf",   match: /\b(EPF|KWSP|M2UBEPF)\b/i,            direction: "DR", category: "STATUTORY_PAYMENT" as CashCategory },
@@ -258,6 +272,11 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "raw_eighty_eight",   match: /\bEIGHTY\s*EIGHT\s*FAHREN/i, direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "raw_mikofee",        match: /\bMIKOFEE\b/i,               direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "raw_unique_paper",   match: /\bUNIQUE\s*PAPER\b/i,        direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_jijus_cakes",    match: /JIJUS?\s*CAKES/i,            direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_bgs_trading",    match: /\bBGS\s*TRADING/i,           direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_milk_ministry",  match: /MILK\s*MINISTRY/i,           direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_elite_pac",      match: /ELITE\s*PAC\b/i,             direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_kl_fried",       match: /KUALA\s*LUMPUR\s*FRIED/i,    direction: "DR", category: "RAW_MATERIALS" as CashCategory },
 
   // Staff weekly payroll — "SCC Week NN" transfers to named employees.
   { name: "salary_scc_week",    match: /\bSCC\s*WE/i,                direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
@@ -297,16 +316,44 @@ export function classifyBankLine(input: ClassifyInput): ClassifyResult {
   const norm = desc.toUpperCase().replace(/\s+/g, " ").trim();
   const intercoCounterparty = INTERCO_COUNTERPARTY.test(norm);
 
+  // Maybank's beneficiary field glues a fixed-width 20-char sender name straight
+  // onto the payee — "CELSIUS COFFEE PUTRAYOW SENG SDN BHD*…" — which defeats
+  // every \b-anchored rule ("PUTRAYOW" is one word). When the description starts
+  // with the sender prefix, also match against the string with those 20 chars
+  // stripped, so the payee is rule-visible. Rule priority still wins: each rule
+  // is tried on both variants before moving to the next rule.
+  const candidates = [norm];
+  const rawUpper = desc.toUpperCase().trimStart();
+  if (/^CELSIUS\s?COFFEE/.test(rawUpper) && rawUpper.length > 20) {
+    const stripped = rawUpper.slice(20).replace(/\s+/g, " ").trim();
+    if (stripped) candidates.push(stripped);
+  }
+
   const rules = input.direction === "CR" ? INFLOW_RULES : OUTFLOW_RULES;
   for (const rule of rules) {
     if (rule.direction && rule.direction !== input.direction) continue;
-    if (rule.match.test(norm)) {
+    if (candidates.some((c) => rule.match.test(c))) {
       return {
         category: rule.category,
         outletCode: inferOutlet(desc),
         isInterCo: (rule.isInterCo ?? false) || intercoCounterparty,
         ruleName: rule.name,
       };
+    }
+  }
+
+  // Supplier registry: an outflow whose payee is a known procurement supplier
+  // is a goods purchase even when no hardcoded rule names them.
+  if (input.direction === "DR" && input.vendorHints?.length) {
+    for (const hint of input.vendorHints) {
+      if (candidates.some((c) => c.includes(hint))) {
+        return {
+          category: "RAW_MATERIALS" as CashCategory,
+          outletCode: inferOutlet(desc),
+          isInterCo: intercoCounterparty,
+          ruleName: "vendor_registry",
+        };
+      }
     }
   }
 
