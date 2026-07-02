@@ -209,9 +209,12 @@ export default function ReconPage() {
   );
 }
 
-// Selection-aware table for an unmatched section: header checkbox selects the
-// visible page; the bulk bar books every selected line to one category in a
-// single call (classifiedBy='user', affected GL journals re-keyed).
+// Selection-aware table for an unmatched section: the search box narrows the
+// list (description, date or amount), the header checkbox selects everything
+// that matches the search (not just the visible page), and the bulk bar books
+// the whole selection to one category in a single call (classifiedBy='user',
+// affected GL journals re-keyed). Search then select-all then book is the
+// fast path for repetitive lines like "Q1 2026 Divide" transfers.
 function UnmatchedTable({ rows, direction, categories, accountNames, onDone }: {
   rows: UnmatchedLine[];
   direction: "DR" | "CR";
@@ -222,36 +225,62 @@ function UnmatchedTable({ rows, direction, categories, accountNames, onDone }: {
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const visible = rows.slice(0, 100);
-  const allSelected = visible.length > 0 && visible.every((r) => sel.has(r.bankLineId));
+  const [q, setQ] = useState("");
+  const t = q.trim().toLowerCase();
+  const filtered = t
+    ? rows.filter((r) =>
+        r.desc.toLowerCase().includes(t) ||
+        r.date.includes(t) ||
+        String(Math.abs(r.amount)).includes(t.replace(/,/g, "")))
+    : rows;
+  const visible = filtered.slice(0, 100);
+  // Select-all covers every filtered match, beyond the visible page — the
+  // bulk call chunks itself to the endpoint's 200-line cap.
+  const allSelected = filtered.length > 0 && filtered.every((r) => sel.has(r.bankLineId));
 
   function toggle(id: string) {
     setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
   function toggleAll() {
-    setSel(allSelected ? new Set() : new Set(visible.map((r) => r.bankLineId)));
+    setSel(allSelected ? new Set() : new Set(filtered.map((r) => r.bankLineId)));
   }
   async function bulkClassify(category: string) {
     if (!category || sel.size === 0) return;
     setBusy(true); setNote(null);
     try {
-      const res = await fetch("/api/finance/bank-lines/classify", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankLineIds: [...sel], category }),
-      });
-      const j = await res.json();
-      if (!res.ok) setNote(j.error ?? `Failed (${res.status})`);
-      else {
-        setNote(`Booked ${j.classified} lines to ${category.toLowerCase().replace(/_/g, " ")}${j.skippedMatched ? ` (${j.skippedMatched} skipped: AP-matched)` : ""}.`);
-        setSel(new Set());
-        onDone();
+      // The endpoint takes at most 200 lines per call; chunk bigger selections.
+      const ids = [...sel];
+      let classified = 0, skipped = 0;
+      for (let i = 0; i < ids.length; i += 200) {
+        const res = await fetch("/api/finance/bank-lines/classify", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bankLineIds: ids.slice(i, i + 200), category }),
+        });
+        const j = await res.json();
+        if (!res.ok) { setNote(j.error ?? `Failed (${res.status})`); return; }
+        classified += j.classified ?? 0;
+        skipped += j.skippedMatched ?? 0;
       }
+      setNote(`Booked ${classified} lines to ${category.toLowerCase().replace(/_/g, " ")}${skipped ? ` (${skipped} skipped: AP-matched)` : ""}.`);
+      setSel(new Set());
+      onDone();
     } catch (e) { setNote(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
 
   return (
     <div className="overflow-x-auto">
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-2">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search description, date or amount…"
+          className="h-7 w-64 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700"
+        />
+        <span className="text-[11px] text-gray-400 tabular-nums">
+          {t ? `${filtered.length} of ${rows.length} lines` : `${rows.length} lines`}
+        </span>
+      </div>
       {sel.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-b border-terracotta/30 bg-terracotta/5 px-4 py-2">
           <span className="text-xs font-medium text-gray-700">{sel.size} selected</span>
@@ -278,14 +307,18 @@ function UnmatchedTable({ rows, direction, categories, accountNames, onDone }: {
         </tr></thead>
         <tbody className="divide-y">
           {visible.length === 0 ? (
-            <tr><td colSpan={6} className="px-4 py-4 text-xs text-gray-400">Nothing here.</td></tr>
+            <tr><td colSpan={6} className="px-4 py-4 text-xs text-gray-400">{t ? "No lines match the search." : "Nothing here."}</td></tr>
           ) : visible.map((o) => (
             <LineRow key={o.bankLineId} row={o} direction={direction} categories={categories} accountNames={accountNames}
               selected={sel.has(o.bankLineId)} onToggle={() => toggle(o.bankLineId)} onDone={onDone} />
           ))}
         </tbody>
       </table>
-      {rows.length > 100 && <p className="px-3 py-2 text-[11px] text-gray-400">Showing top 100 of {rows.length} by amount.</p>}
+      {filtered.length > 100 && (
+        <p className="px-3 py-2 text-[11px] text-gray-400">
+          Showing top 100 of {filtered.length} by amount. Select-all selects every match, including the ones not shown.
+        </p>
+      )}
     </div>
   );
 }
