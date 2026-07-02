@@ -952,7 +952,7 @@ export default function SupplierChatsPage() {
                   <div
                     onDoubleClick={() => setReplyingTo(m)}
                     title="Double-click to reply"
-                    className={`min-w-0 cursor-default select-none rounded-lg px-3 py-2 text-[13px] leading-snug ${
+                    className={`min-w-0 cursor-default select-none whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-[13px] leading-snug ${
                       m.direction === "outbound"
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-foreground"
