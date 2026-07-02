@@ -86,6 +86,16 @@ export async function tryApplyHumanApproval(
     let result: ApprovalResult;
 
     if (pa.type === "reduce_qty" && typeof pa.newQuantity === "number" && pa.newQuantity > 0) {
+      // A reduce must LOWER the line — same ceiling as the agent's own applyPoAction.
+      // Escalated proposals can carry a model misread (e.g. "ada 50 je" read as qty 50
+      // on a 5-unit line); a bare "ok" in chat must never apply that blind and raise
+      // committed spend. Leave the proposal unresolved so the inbox still surfaces it.
+      if (pa.newQuantity >= Number(item.quantity)) {
+        console.warn(
+          `[human-approval] refused reduce_qty ${pa.newQuantity} >= current ${Number(item.quantity)} (${item.product?.name}) — needs manual review`,
+        );
+        return null;
+      }
       await prisma.orderItem.update({
         where: { id: item.id },
         data: { quantity: pa.newQuantity, totalPrice: Number(item.unitPrice) * pa.newQuantity },
@@ -145,7 +155,12 @@ async function applySubstitution(
   const sps = item.order.supplierId
     ? await prisma.supplierProduct.findMany({
         where: { supplierId: item.order.supplierId, isActive: true, price: { gt: 0 }, product: { isActive: true } },
-        select: { price: true, productPackageId: true, product: { select: { id: true, name: true } } },
+        select: {
+          price: true,
+          productPackageId: true,
+          product: { select: { id: true, name: true } },
+          productPackage: { select: { conversionFactor: true, packageLabel: true } },
+        },
       })
     : [];
   // The replacement = a supplier product (not the OOS one) whose name appears in the offer.
@@ -155,7 +170,13 @@ async function applySubstitution(
 
   await prisma.orderItem.delete({ where: { id: item.id } });
   if (repl) {
-    const qty = Number(item.quantity);
+    // Match the GOODS quantity, not the line count: the old line's package can differ
+    // from the replacement's (5 × 1kg bags ≠ 5 × 500g packs). Convert the removed line
+    // to base units, then into the replacement's package units, rounding up so we never
+    // under-order the recipe need.
+    const replConvRaw = repl.productPackage ? Number(repl.productPackage.conversionFactor) : 1;
+    const replConv = replConvRaw > 0 ? replConvRaw : 1;
+    const qty = Math.max(1, Math.ceil(baseQty / replConv));
     await prisma.orderItem.create({
       data: {
         orderId,
@@ -166,7 +187,8 @@ async function applySubstitution(
         totalPrice: Number(repl.price) * qty,
       },
     });
-    return { applied: "substitute_item", detail: `${item.product?.name} → ${repl.product.name} (${qty})` };
+    const unit = repl.productPackage?.packageLabel ?? "unit";
+    return { applied: "substitute_item", detail: `${item.product?.name} → ${repl.product.name} (${qty} ${unit})` };
   }
   // Couldn't price the replacement on this supplier → cover the need elsewhere.
   const rs = await reSource(item.productId, item.product?.name ?? "item", baseQty, item.order, callerId);

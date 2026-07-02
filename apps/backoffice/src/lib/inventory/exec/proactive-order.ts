@@ -8,6 +8,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import { boundedReorderQty } from "@/lib/inventory/order-validation";
+import { nextOrderNumber } from "@/lib/inventory/order-number";
 
 export const PROACTIVE_NOTE_PREFIX = "Auto reorder by procurement exec";
 
@@ -70,8 +71,11 @@ export async function createReorderDraftPO(opts: {
   const unitPrice = Number(best.a.price);
   try {
     const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: opts.outletId }, select: { code: true } });
-    const count = await prisma.order.count({ where: { outletId: opts.outletId } });
-    const orderNumber = `CC-${outlet.code}-${String(count + 1).padStart(4, "0")}`;
+    // Max-suffix helper, NOT COUNT(*)+1 — a count drifts behind the real max the moment a
+    // row is deleted or another scheme numbers ahead, and then every daily exec run
+    // collides on the @unique orderNumber and silently creates nothing (the count never
+    // advances past the collision). See order-number.ts — this exact bug was live once.
+    const orderNumber = await nextOrderNumber(outlet.code);
     const order = await prisma.order.create({
       data: {
         orderNumber,

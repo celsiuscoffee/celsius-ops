@@ -587,13 +587,15 @@ async function applyPoAction(
     return { type: "none" };
   }
 
-  // Recompute the order total from the remaining lines.
-  const remaining = await prisma.orderItem.findMany({
-    where: { orderId },
-    select: { totalPrice: true },
-  });
-  const total = remaining.reduce((s, i) => s + Number(i.totalPrice), 0);
-  await prisma.order.update({ where: { id: orderId }, data: { totalAmount: total } });
+  // Recompute the order total from the remaining lines (+ keep the delivery charge —
+  // dropping it here understated totals and broke the ±2% invoice-total matching).
+  const [remaining, order] = await Promise.all([
+    prisma.orderItem.findMany({ where: { orderId }, select: { totalPrice: true } }),
+    prisma.order.findUnique({ where: { id: orderId }, select: { deliveryCharge: true } }),
+  ]);
+  const itemsTotal = remaining.reduce((s, i) => s + Number(i.totalPrice), 0);
+  const dc = order?.deliveryCharge ? Number(order.deliveryCharge) : 0;
+  await prisma.order.update({ where: { id: orderId }, data: { totalAmount: itemsTotal + dc } });
   return { type: action.type, removed };
 }
 
