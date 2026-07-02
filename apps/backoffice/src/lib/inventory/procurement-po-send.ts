@@ -63,12 +63,19 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
   try {
     if (!enabled()) return;
     const supplier = order.supplier;
-    if (!supplier?.phone || !allowed(supplier.phone)) return;
+    if (!supplier?.phone) return;
+    if (!allowed(supplier.phone)) {
+      await recordPoThreadNote(order, "not on PROCUREMENT_AGENT_ALLOWLIST — sent manually");
+      return;
+    }
     // OFF = the manual lane: these suppliers are ordered from by hand on the Smart Order
     // page (incl. WhatsApp GROUPS via the wa.me picker, which the Cloud API can't reach).
     // Don't also fire a Cloud-API send for them, or they'd get a duplicate 1:1 message.
+    // Still leave an internal note in the thread so "PO sent" is visible there —
+    // without it the chat shows nothing while the rail lists open POs.
     if (supplier.automationMode === "OFF") {
       console.log(`[po-send] po=${order.orderNumber} skipped — supplier is OFF (manual / group send)`);
+      await recordPoThreadNote(order, "supplier is on the manual lane (wa.me / group send)");
       return;
     }
     const dest = digits(supplier.phone);
@@ -196,6 +203,39 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
     console.log(`[po-send] po=${order.orderNumber} supplier=${supplier.name} sent=${res.ok}`);
   } catch (err) {
     console.error("[po-send] error:", err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * Internal thread note — records "PO sent" in the supplier's chat when the PO
+ * went out OUTSIDE the Cloud API (manual lane / wa.me / group, or allowlist
+ * skip), so the thread stays the single source of truth. Never sent to the
+ * supplier: it's a local whatsAppMessage row with status "note". Deduped per
+ * PO via raw.poThreadNote. Cloud-API sends don't need this — the real message
+ * row (raw.poSentFor) already shows in the thread.
+ */
+async function recordPoThreadNote(order: PoForSend, reason: string): Promise<void> {
+  try {
+    const supplier = order.supplier;
+    if (!supplier?.phone) return;
+    const dest = digits(supplier.phone);
+    const already = await prisma.whatsAppMessage.findFirst({
+      where: { direction: "outbound", raw: { path: ["poThreadNote"], equals: order.id } },
+      select: { id: true },
+    });
+    if (already) return;
+    await recordOutboundMessage({
+      waMessageId: undefined,
+      fromNumber: "",
+      toNumber: dest,
+      type: "text",
+      body: `📋 PO ${order.orderNumber} marked as sent — ${reason}. (Internal note, not delivered via this chat.)`,
+      supplierId: supplier.id,
+      status: "note",
+      raw: { agent: PO_SEND_VERSION, poThreadNote: order.id, poNumber: order.orderNumber, reason },
+    });
+  } catch (e) {
+    console.warn("[po-send] thread note failed:", e instanceof Error ? e.message : e);
   }
 }
 
