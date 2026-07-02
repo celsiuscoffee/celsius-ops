@@ -58,7 +58,7 @@ type Counts = {
   assist: number;
   off: number;
 };
-type PoProduct = { supplierProductId: string; productId: string; name: string; packageLabel: string; productPackageId: string | null; price: number; moq: number };
+type PoProduct = { supplierProductId: string; productId: string; name: string; packageLabel: string; productPackageId: string | null; price: number; moq: number; suggestedQty?: number };
 type NeedItem = { productId: string; productPackageId: string | null; name: string; qty: number; unitPrice: number; packageLabel: string; onHand: number; reorderPoint: number };
 type NeedGroup = { supplierId: string; supplierName: string; outletId: string; outletName: string; items: NeedItem[]; total: number; itemCount: number };
 
@@ -278,18 +278,36 @@ export default function SupplierChatsPage() {
     setPoError(null);
     setPoQty({});
     try {
-      const [oRaw, pRaw] = await Promise.all([
-        fetch("/api/settings/outlets?status=ACTIVE").then((r) => r.json()),
-        fetch(`/api/inventory/suppliers/${detail.supplierId}/products`).then((r) => r.json()),
-      ]);
+      const oRaw = await fetch("/api/settings/outlets?status=ACTIVE").then((r) => r.json());
       const oList: { id: string; name: string }[] = Array.isArray(oRaw) ? oRaw : (oRaw.outlets ?? []);
       setOutlets(oList.map((o) => ({ id: o.id, name: o.name })));
+      // Products (with per-outlet suggested quantities) load via the effect below
+      // once the outlet is known — and reload when the outlet changes.
       setPoOutlet((prev) => prev || oList[0]?.id || "");
-      setPoProducts(Array.isArray(pRaw) ? pRaw : []);
     } catch {
       setPoError("Couldn't load outlets / products.");
     }
   }
+
+  // Load the supplier's price-list products for the selected outlet. Each row
+  // carries suggestedQty (below-par shortfall through boundedReorderQty, in
+  // package units) so the composer can assist with amounts, not just items.
+  useEffect(() => {
+    if (!poOpen || !detail?.supplierId || !poOutlet) return;
+    let cancelled = false;
+    fetch(`/api/inventory/suppliers/${detail.supplierId}/products?outletId=${encodeURIComponent(poOutlet)}`)
+      .then((r) => r.json())
+      .then((pRaw) => {
+        if (!cancelled) setPoProducts(Array.isArray(pRaw) ? pRaw : []);
+      })
+      .catch(() => {
+        if (!cancelled) setPoError("Couldn't load products.");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poOpen, detail?.supplierId, poOutlet]);
 
   async function createPO(send: boolean) {
     if (!detail?.supplierId || !poOutlet) {
@@ -1210,27 +1228,61 @@ export default function SupplierChatsPage() {
                         first.
                       </p>
                     ) : (
-                      poProducts.map((p) => (
-                        <div key={p.productId} className="flex items-center gap-2 border-b border-border py-1.5">
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-[12px]">{p.name}</div>
-                            <div className="text-[10.5px] text-muted-foreground">
-                              {formatRM(p.price)} / {p.packageLabel}
-                              {p.moq ? ` · MOQ ${p.moq}` : ""}
-                            </div>
+                      <>
+                        {poProducts.some((p) => (p.suggestedQty ?? 0) > 0) && (
+                          <div className="flex items-center justify-between border-b border-border py-1.5">
+                            <span className="text-[10.5px] text-muted-foreground">
+                              {poProducts.filter((p) => (p.suggestedQty ?? 0) > 0).length} below par at this outlet
+                            </span>
+                            <button
+                              onClick={() =>
+                                setPoQty((q) => {
+                                  const next = { ...q };
+                                  for (const p of poProducts) {
+                                    if ((p.suggestedQty ?? 0) > 0 && !next[p.productId]) next[p.productId] = p.suggestedQty!;
+                                  }
+                                  return next;
+                                })
+                              }
+                              className="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10.5px] font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+                            >
+                              Fill suggested
+                            </button>
                           </div>
-                          <input
-                            type="number"
-                            min={0}
-                            value={poQty[p.productId] ?? ""}
-                            onChange={(e) =>
-                              setPoQty((q) => ({ ...q, [p.productId]: Math.max(0, Number(e.target.value) || 0) }))
-                            }
-                            placeholder="0"
-                            className="h-7 w-14 rounded-md border border-border bg-background px-1.5 text-right text-[12px] text-foreground"
-                          />
-                        </div>
-                      ))
+                        )}
+                        {poProducts.map((p) => (
+                          <div key={p.productId} className="flex items-center gap-2 border-b border-border py-1.5">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[12px]">{p.name}</div>
+                              <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+                                <span>
+                                  {formatRM(p.price)} / {p.packageLabel}
+                                  {p.moq ? ` · MOQ ${p.moq}` : ""}
+                                </span>
+                                {(p.suggestedQty ?? 0) > 0 && (
+                                  <button
+                                    onClick={() => setPoQty((q) => ({ ...q, [p.productId]: p.suggestedQty! }))}
+                                    title="Below par at this outlet — tap to use the suggested order quantity (par shortfall, capped by MOQ / max level / shelf life)"
+                                    className="shrink-0 rounded bg-amber-100 px-1.5 py-px font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-200"
+                                  >
+                                    suggest {p.suggestedQty}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <input
+                              type="number"
+                              min={0}
+                              value={poQty[p.productId] ?? ""}
+                              onChange={(e) =>
+                                setPoQty((q) => ({ ...q, [p.productId]: Math.max(0, Number(e.target.value) || 0) }))
+                              }
+                              placeholder="0"
+                              className="h-7 w-14 rounded-md border border-border bg-background px-1.5 text-right text-[12px] text-foreground"
+                            />
+                          </div>
+                        ))}
+                      </>
                     )}
                   </div>
                   <div className="sticky bottom-0 -mx-3 border-t border-border bg-background px-3 pb-1 pt-2">
