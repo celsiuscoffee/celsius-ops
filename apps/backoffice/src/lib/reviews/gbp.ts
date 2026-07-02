@@ -270,6 +270,58 @@ export async function getLocationGeo(
   };
 }
 
+// The relevance-bearing profile fields — what Google reads to decide which
+// keywords this location is a match for. Input to the keyword relevance audit.
+export type GbpLocationProfile = {
+  title: string | null;
+  primaryCategory: string | null;
+  additionalCategories: string[];
+  description: string | null;
+  services: string[]; // service/menu item display names (+ free-form descriptions)
+  websiteUri: string | null;
+  hasPhone: boolean;
+  hasHours: boolean;
+};
+
+export async function getLocationProfile(locationName: string): Promise<GbpLocationProfile> {
+  const token = await getAccessToken();
+  const readMask = "title,categories,profile,serviceItems,websiteUri,phoneNumbers,regularHours";
+  const res = await fetch(`${GBP_INFO_BASE}/${locationName}?readMask=${readMask}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GBP location profile error ${res.status}: ${body}`);
+  }
+  const data = await res.json();
+
+  // serviceItems: structured items carry only a serviceTypeId (machine id — grab
+  // its trailing words) unless a label/description was set; free-form items carry
+  // a displayName. Collect every human-readable string we can.
+  const services: string[] = [];
+  for (const s of data.serviceItems ?? []) {
+    const free = s.freeFormServiceItem?.label;
+    if (free?.displayName) services.push(free.displayName);
+    if (free?.description) services.push(free.description);
+    const structured = s.structuredServiceItem;
+    if (structured?.description) services.push(structured.description);
+    if (structured?.serviceTypeId) services.push(String(structured.serviceTypeId).replace(/^job_type_id:/, "").replace(/_/g, " "));
+  }
+
+  return {
+    title: data.title ?? null,
+    primaryCategory: data.categories?.primaryCategory?.displayName ?? null,
+    additionalCategories: (data.categories?.additionalCategories ?? [])
+      .map((c: { displayName?: string }) => c.displayName)
+      .filter(Boolean),
+    description: data.profile?.description ?? null,
+    services,
+    websiteUri: data.websiteUri ?? null,
+    hasPhone: !!(data.phoneNumbers?.primaryPhone),
+    hasHours: !!(data.regularHours?.periods?.length),
+  };
+}
+
 const GBP_PERF_BASE = "https://businessprofileperformance.googleapis.com/v1";
 
 // The actual search terms customers used to find this location, with monthly
