@@ -209,6 +209,29 @@ export function EditOrderModal({
     }
   };
 
+  // Re-fire the WhatsApp send for a SENT-but-undelivered PO. Reports what actually happened —
+  // block sent, cold prompt sent, or the template/OFF reason it didn't — so it's not a guess.
+  // Keeps the modal open so the result toast is visible.
+  const resendPo = async () => {
+    if (!order) return;
+    setStatusBusy(true);
+    try {
+      const res = await fetch(`/api/inventory/orders/${order.id}/resend-po`, { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(json?.error || `Resend failed (${res.status})`);
+        return;
+      }
+      if (json.ok) toast.success(json.message ?? "Re-sent to WhatsApp.");
+      else toast.error(json.message ?? "Resend didn't deliver — check the template.");
+      onSaved?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Resend failed");
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+
   // Initialize the internal state from `order` (port of openEditDialog).
   // Keyed on order?.id so re-opening with a different order re-inits.
   useEffect(() => {
@@ -973,6 +996,17 @@ export function EditOrderModal({
               >
                 {statusBusy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
                 Send to supplier
+              </Button>
+            )}
+            {["SENT", "CONFIRMED", "AWAITING_DELIVERY"].includes(order.status) && (
+              <Button
+                onClick={resendPo}
+                disabled={statusBusy || editSaving || uploading}
+                className="border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                title="Re-fire the WhatsApp send for this PO (use if it never reached the supplier)"
+              >
+                {statusBusy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+                Resend to WhatsApp
               </Button>
             )}
             {["SENT", "CONFIRMED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(order.status) && (
