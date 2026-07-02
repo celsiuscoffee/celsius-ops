@@ -4,6 +4,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import Link from "next/link";
 import { Receipt, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
+import { PAYROLL_UI_ENABLED } from "@/lib/hr/constants";
 
 type AllowanceItem = { amount: number; base?: number; score?: number };
 type OtherDeductions = {
@@ -15,6 +16,8 @@ type ComputationDetails = {
   source?: string;
   gross_additions?: number;
   briohr_internal_id?: string;
+  basis?: string;
+  hourly_rate?: number;
 };
 
 type Payslip = {
@@ -37,20 +40,53 @@ type Payslip = {
   net_pay: number;
   computation_details: ComputationDetails | null;
   hr_payroll_runs: {
-    period_month: number;
-    period_year: number;
+    cycle_type: string | null;
+    period_month: number | null;
+    period_year: number | null;
+    period_start: string | null;
+    period_end: string | null;
     confirmed_at: string;
   };
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// "2026-06-30" → "30 Jun 2026" (no Date parsing — avoids TZ drift on date-only strings)
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
 export default function PayslipsPage() {
-  const { data } = useFetch<{ payslips: Payslip[] }>("/api/hr/payslips");
+  // Payroll hidden pre-launch: don't fetch (SWR skips null keys) and show a notice.
+  const { data } = useFetch<{ payslips: Payslip[] }>(PAYROLL_UI_ENABLED ? "/api/hr/payslips" : null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const payslips = data?.payslips || [];
   const fmt = (n: number) => `RM ${Number(n || 0).toLocaleString("en-MY", { minimumFractionDigits: 2 })}`;
+
+  if (!PAYROLL_UI_ENABLED) {
+    return (
+      <div className="px-4 pt-6">
+        <div className="mb-6 flex items-center gap-3">
+          <Link
+            href="/hr"
+            aria-label="Back"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <h1 className="text-2xl font-bold">Payslips</h1>
+        </div>
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 py-16 text-center">
+          <Receipt className="mb-3 h-12 w-12 text-gray-300" />
+          <p className="font-semibold text-gray-500">Payslips coming soon</p>
+          <p className="text-sm text-gray-400">Your payslips will appear here once payroll goes live.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 pt-6">
@@ -74,7 +110,12 @@ export default function PayslipsPage() {
       ) : (
         <div className="space-y-3">
           {payslips.map((slip) => {
-            const period = `${MONTHS[slip.hr_payroll_runs.period_month - 1]} ${slip.hr_payroll_runs.period_year}`;
+            const run = slip.hr_payroll_runs;
+            const isWeekly = run.cycle_type === "weekly" || run.period_month == null;
+            const period = isWeekly
+              ? `Week of ${fmtDate(run.period_start)}`
+              : `${MONTHS[(run.period_month as number) - 1]} ${run.period_year}`;
+            const hourlyRate = Number(slip.computation_details?.hourly_rate || 0);
             const isOpen = expanded === slip.id;
             const totalOT =
               Number(slip.ot_1x_amount || 0) +
@@ -108,7 +149,12 @@ export default function PayslipsPage() {
                   <div className="border-t px-4 pb-4 pt-3 text-sm">
                     {/* Earnings */}
                     <p className="mb-2 font-semibold text-green-700">Earnings</p>
-                    <Row label="Basic Salary" value={fmt(slip.basic_salary)} />
+                    <Row
+                      label={isWeekly
+                        ? `Wages (${slip.total_regular_hours}h${hourlyRate > 0 ? ` × RM${hourlyRate}/h` : ""})`
+                        : "Basic Salary"}
+                      value={fmt(slip.basic_salary)}
+                    />
                     {totalOT > 0 && (
                       <>
                         {Number(slip.ot_1x_amount) > 0 && <Row label="OT 1x" value={fmt(slip.ot_1x_amount)} />}
@@ -147,7 +193,8 @@ export default function PayslipsPage() {
 
                     {/* Hours */}
                     <p className="mt-4 text-xs text-gray-400">
-                      {slip.total_regular_hours}h regular{Number(slip.total_ot_hours) > 0 ? ` + ${slip.total_ot_hours}h OT` : ""}
+                      {slip.total_regular_hours}h {isWeekly ? "clocked" : "regular"}{Number(slip.total_ot_hours) > 0 ? ` + ${slip.total_ot_hours}h OT` : ""}
+                      {isWeekly && " · from staff app clock-in/out"}
                       {isImported && " · imported from BrioHR"}
                     </p>
                   </div>
