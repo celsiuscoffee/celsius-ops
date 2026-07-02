@@ -5,10 +5,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const GRAPH = "https://graph.facebook.com/v23.0";
-// Temporary read-only access key so the setup can be verified server-side
-// without a browser session. Lists only template metadata (names/statuses) —
-// no secrets. Safe to remove once template setup is confirmed.
-const DIAG_KEY = "celsius-tpl-9Fb3xq";
 
 // The ops-pulse template set, created via ?action=create. Bodies are emoji-free
 // with a single {{1}} variable carrying the one-line "count · item · item"
@@ -83,10 +79,9 @@ const TEMPLATE_DEFS = [
 // GET — list the WABA's WhatsApp message templates with their approval status,
 // so an owner can see what's approved before wiring a template into ops-pulse.
 export async function GET(req: NextRequest) {
-  const key = req.nextUrl.searchParams.get("key");
   const session = await getSession();
   const owner = !!session && (session.role === "OWNER" || session.role === "ADMIN");
-  if (!owner && key !== DIAG_KEY) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!owner) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const waba = process.env.WHATSAPP_WABA_ID;
   const token = process.env.WHATSAPP_ACCESS_TOKEN;

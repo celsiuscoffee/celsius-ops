@@ -7,7 +7,7 @@
 //            escalates any incident sitting unacked past the SLA to the owner.
 
 import { prisma } from "@/lib/prisma";
-import { pulseMode, dailyMode, REALTIME_SIGNALS, THRESHOLDS, categoryFor, TEAM_NOTIFY_SIGNALS } from "./config";
+import { pulseMode, dailyMode, REALTIME_SIGNALS, NUDGE_OWNED_SIGNALS, THRESHOLDS, categoryFor, TEAM_NOTIFY_SIGNALS } from "./config";
 import {
   detectPhoneCapture,
   detectChecklist,
@@ -97,9 +97,12 @@ export async function runOpsPulse(now = new Date()): Promise<PulseRunResult> {
     return { mode, ranAt: now.toISOString(), breachCount: 0, routed: [], sent: 0, escalated: 0 };
   }
 
-  // Real-time tier only — the fast pulse alerts on the instant signals (reviews,
-  // menu-snoozed, …); everything else surfaces in the daily digest.
-  const breaches = (await detectAll(now)).filter((b) => REALTIME_SIGNALS.has(b.signal));
+  // Real-time tier only, minus the signals the dedicated nudges own end-to-end —
+  // arming this pulse must never race the nudge tier through the shared ledger
+  // (see NUDGE_OWNED_SIGNALS). Leaves the pulse's own signals (e.g. RECEIVING).
+  const breaches = (await detectAll(now)).filter(
+    (b) => REALTIME_SIGNALS.has(b.signal) && !NUDGE_OWNED_SIGNALS.has(b.signal),
+  );
   const routed = await routeAll(breaches, now);
 
   // ── SHADOW: log what we *would* page; never message anyone, never persist. ──
@@ -203,13 +206,13 @@ export async function runDailyPulse(now = new Date()): Promise<PulseRunResult> {
   // they fire on the real-time pulse the moment they happen, so re-listing them
   // a day later would just double-page. Excluded here by category.
   //
-  // Clock-in, stock count, audit, and checklist are now owned by the dedicated
-  // ops-nudges loops (which DM the individual owner / on-shift team + the lead).
-  // Excluded here so the daily digest doesn't double-ping. The daily pulse keeps
-  // its unique routine signals (POS-open, phone capture, restock).
-  const NUDGE_OWNED = new Set(["NO_CLOCK_IN", "STOCK_COUNT", "AUDIT", "CHECKLIST"]);
+  // Clock-in, stock count, audit, checklist, POS-open, and 86'd items are now
+  // owned by the dedicated ops-nudges loops (which DM the individual owner /
+  // on-shift team + the lead). Excluded here (shared NUDGE_OWNED_SIGNALS) so the
+  // daily digest doesn't double-ping. The daily pulse keeps its unique routine
+  // signals (phone capture, restock).
   const breaches = (await detectAll(now)).filter(
-    (b) => categoryFor(b.signal) === "routine" && !NUDGE_OWNED.has(b.signal),
+    (b) => categoryFor(b.signal) === "routine" && !NUDGE_OWNED_SIGNALS.has(b.signal),
   );
   const routed = await routeAll(breaches, now);
 

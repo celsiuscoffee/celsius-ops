@@ -106,12 +106,19 @@ export async function linkChecklistsToSchedule(scheduleId: string): Promise<Link
         orderBy: { stepNumber: "asc" },
       });
 
-      // Calculate due time
+      // Calculate due time. times[] are Malaysia wall-clock (MYT, UTC+8) — convert
+      // to UTC for storage (-480 min), matching the staff generator's calcDueAt.
+      // The old setUTCHours(h, m) stored the MYT time AS UTC, i.e. 8h late: an
+      // 18:00 task came due 02:00 MYT and nudged the wrong (empty) shift at 3am.
+      // dueMinutes falls back to 60 like the staff path, so dueMinutes=0 schedules
+      // still get a deadline instead of silently escaping the overdue detectors.
       let dueAt: Date | undefined;
-      if (sopSchedule.dueMinutes > 0 && sopSchedule.times.length > 0) {
+      if (sopSchedule.times.length > 0) {
         const [h, m] = sopSchedule.times[0].split(":").map(Number);
-        dueAt = new Date(shiftDate);
-        dueAt.setUTCHours(h, m + sopSchedule.dueMinutes, 0, 0);
+        if (Number.isFinite(h) && Number.isFinite(m)) {
+          const mytMinutes = h * 60 + m + (sopSchedule.dueMinutes || 60);
+          dueAt = new Date(shiftDate.getTime() + (mytMinutes - 480) * 60_000);
+        }
       }
 
       await prisma.checklist.create({
