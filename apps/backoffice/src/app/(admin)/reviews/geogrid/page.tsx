@@ -572,7 +572,15 @@ export default function GeogridPage() {
       <Link href="/reviews" className="mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" /> Back to Reviews
       </Link>
-      <h1 className="font-heading text-2xl font-bold text-foreground">Local Rank Geogrid</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="font-heading text-2xl font-bold text-foreground">Local Rank Geogrid</h1>
+        <Link
+          href="/reviews/geogrid/relevance"
+          className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50"
+        >
+          Keyword relevance audit →
+        </Link>
+      </div>
       <p className="text-sm text-muted-foreground">
         Where you rank for a keyword across the map. Two goals: lift the rank (more green) and widen the green radius.
       </p>
