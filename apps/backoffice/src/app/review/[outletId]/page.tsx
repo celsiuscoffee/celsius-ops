@@ -221,7 +221,7 @@ export default function PublicReviewPage({ params }: { params: Promise<{ outletI
             {step === "feedback" && (
               <div className="mt-8">
                 <h2 className="text-center text-2xl leading-tight" style={{ fontFamily: "var(--font-heading)" }}>
-                  We're sorry we missed the mark
+                  We&apos;re sorry we missed the mark
                 </h2>
                 <p className="mt-2 text-center text-sm" style={{ color: C.muted }}>
                   Tell us what happened — the team reads every message.
