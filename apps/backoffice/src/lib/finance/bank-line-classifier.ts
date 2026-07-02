@@ -103,6 +103,9 @@ const INFLOW_RULES: Rule[] = [
   { name: "in_inventory_return",   match: /\bINVENTORY\b/i,                          direction: "CR", category: "RAW_MATERIALS" as CashCategory, isInterCo: true },
   { name: "in_capital_injection",  match: /\bCAPITAL\s*(INJECTION|TRANSFER)\b/i,     direction: "CR", category: "CAPITAL" as CashCategory },
   { name: "in_chq_deposit",        match: /\bCHQ\s*DEP\b|\bCHEQUE\s*DEPOSIT\b/i,     direction: "CR", category: "OTHER_INFLOW" as CashCategory },
+  // Money back: supplier overpayment refunds, GIRO returns of our own
+  // transfers, and anything marked overpay (per owner: its own bucket).
+  { name: "in_refund",             match: /\bREFUND\b|RETURN\s*CREDIT|OVERPAY/i,        direction: "CR", category: "REFUND" as CashCategory },
 
   // StoreHub — Interbank GIRO from STOREHUB SDN BHD
   { name: "storehub", match: /\bSTOREHUB\b/i, direction: "CR", category: "STOREHUB" as CashCategory },
@@ -113,7 +116,9 @@ const INFLOW_RULES: Rule[] = [
   { name: "revenue_monster", match: /\bREVENUE\s*MONSTER\b|\bRMSB\s*SETTLEMENT\b/i, direction: "CR", category: "REVENUE_MONSTER" as CashCategory },
 
   // Grab — GPAY NETWORK / GRAB
-  { name: "grab", match: /\b(GPAY NETWORK|GRAB(?!FOOD))\b/i, direction: "CR", category: "GRAB" as CashCategory },
+  // No leading \b on GPAY: Grab's daily payouts glue the merchant id straight
+  // onto the name ("1575371GPAY NETWORK (M) SDN"), which a word boundary rejects.
+  { name: "grab", match: /GPAY\s*NETWORK|\bGRAB(?!FOOD)\b/i, direction: "CR", category: "GRAB" as CashCategory },
 
   // Foodpanda — DELIVERY HERO / FOODPANDA / DH MALAYSIA
   { name: "foodpanda", match: /\b(FOODPANDA|DELIVERY HERO|DH MALAYSIA)\b/i, direction: "CR", category: "FOODPANDA" as CashCategory },
@@ -290,6 +295,12 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "raw_milk_ministry",  match: /MILK\s*MINISTRY/i,           direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "raw_elite_pac",      match: /ELITE\s*PAC\b/i,             direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "raw_kl_fried",       match: /KUALA\s*LUMPUR\s*FRIED/i,    direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  // Ariff Izham fronts the ad-hoc purchases — his reimbursements are goods
+  // buys (per owner). Claims/salary keywords above still win when present.
+  { name: "raw_ariff_adhoc",    match: /ARIFF\s*IZHAM/i,             direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  // Marketing vendors (per owner)
+  { name: "mkt_web_impian",     match: /WEB\s*IMPIAN/i,              direction: "DR", category: "OTHER_MARKETING" as CashCategory },
+  { name: "mkt_asia_square",    match: /ASIA\s*SQUARE/i,             direction: "DR", category: "OTHER_MARKETING" as CashCategory },
 
   // Staff weekly payroll — "SCC Week NN" transfers to named employees.
   { name: "salary_scc_week",    match: /\bSCC\s*WE/i,                direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },

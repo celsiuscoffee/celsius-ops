@@ -66,6 +66,20 @@ describe("bank-line-classifier", () => {
     expect(dr("0000462263002252 CELSIUS COFFEE SDN.* WME000002").category).toBe("LOAN");
   });
 
+  it("classifies Grab daily payouts despite the glued merchant id", () => {
+    expect(cr("202501036648 1575371GPAY NETWORK (M) SDN 202501036648 1").category).toBe("GRAB");
+    expect(cr("NS0247629494 1583151GPAY NETWORK (M) SDN NS0247629494 1").category).toBe("GRAB");
+  });
+
+  it("books refunds, Ariff ad-hoc buys and marketing vendors (per owner)", () => {
+    expect(cr("REFUND OVERPAYMENT COUNTRY BREAD BAKER* Fund transfer").category).toBe("REFUND");
+    expect(cr("GIRO INWARD RETURN CREDIT M 26010961851229 IV2604-00133 04IN").category).toBe("REFUND");
+    expect(cr("TRANSFER TO A/C ELITE PAC SDN. BHD. Overpay MBB CT-").category).toBe("REFUND");
+    expect(dr("TRANSFER FR A/C ARIFF IZHAM BIN ABD 2026/0021 CelsiusCoffee").category).toBe("RAW_MATERIALS");
+    expect(dr("TRANSFER FR A/C WEB IMPIAN SDN BHD invoice 123").category).toBe("OTHER_MARKETING");
+    expect(dr("TRANSFER FR A/C ASIA SQUARE EVENTS booth").category).toBe("OTHER_MARKETING");
+  });
+
   it("falls back to OTHER_* for genuinely unknown lines", () => {
     expect(dr("TRANSFER FR A/C SOME UNKNOWN VENDOR XYZ").category).toBe("OTHER_OUTFLOW");
     expect(cr("MISC CREDIT NO PATTERN").category).toBe("OTHER_INFLOW");
@@ -103,6 +117,6 @@ describe("bank-line-classifier", () => {
     expect(hit.ruleName).toBe("vendor_registry");
     // hints never override a real rule, and never apply to inflows
     expect(classifyBankLine({ description: "TRANSFER FR A/C TUJUAN GEMILANG rent", amount: 100, direction: "DR", vendorHints: ["TUJUAN GEMILANG"] }).category).toBe("RENT");
-    expect(classifyBankLine({ description: "SOME ACME BEANS ROASTERY REFUND", amount: 100, direction: "CR", vendorHints: hints }).category).toBe("OTHER_INFLOW");
+    expect(classifyBankLine({ description: "SOME ACME BEANS ROASTERY CREDIT", amount: 100, direction: "CR", vendorHints: hints }).category).toBe("OTHER_INFLOW");
   });
 });
