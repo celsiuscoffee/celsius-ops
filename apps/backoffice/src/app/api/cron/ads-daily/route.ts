@@ -5,6 +5,7 @@ import { syncCampaigns } from "@/lib/ads/sync-campaigns";
 import { syncMetrics } from "@/lib/ads/sync-metrics";
 import { syncSearchTerms } from "@/lib/ads/sync-search-terms";
 import { runSync } from "@/lib/ads/run-sync";
+import { buildAdsOptimizerReport } from "@/lib/ads/optimizer";
 import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
@@ -70,10 +71,25 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Weekly (Monday, after the fresh sync above) shadow pass of the budget-cut
+  // optimizer — no new Vercel cron slot needed, and it deliberately mutates
+  // nothing: cutting a budget is approval-gated on /ads/optimizer. This just
+  // records the week's reclaimable total so the recommendation is auditable.
+  let optimizer: Record<string, unknown> | null = null;
+  if (new Date().getUTCDay() === 1) {
+    try {
+      const report = await buildAdsOptimizerReport(30);
+      optimizer = { mode: "shadow", summary: report.summary };
+    } catch (e) {
+      optimizer = { error: (e as Error).message };
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     date: y,
     accounts: accountsRun.error ?? accountsRun.result,
     perAccount: results,
+    optimizer,
   });
 }
