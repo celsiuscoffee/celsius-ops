@@ -21,6 +21,7 @@ export type AgentName =
   | "ap"
   | "ar"
   | "bank"
+  | "payroll"
   | "close"
   | "compliance"
   | "anomaly"

@@ -18,6 +18,7 @@ import { applyApMatches } from "@/lib/finance/ap-match";
 import { applyVerifiedReview } from "@/lib/finance/agents/ap-verifier";
 import { createWagePaymentSlips } from "@/lib/finance/payment-slips";
 import { postBankLinesToGl } from "@/lib/finance/gl-posting";
+import { accrueSalaryControls } from "@/lib/finance/salary-accrual";
 import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
@@ -51,7 +52,14 @@ export async function GET(req: NextRequest) {
   // 4. post the classified bank lines into the GL (bounded; drains over runs)
   await step("glPost", async () => {
     const r = await postBankLinesToGl({ commit: true, limit: GL_LINES_PER_RUN });
-    return { journals: r.journals, postedLines: r.postedLines, suspenseLines: r.suspenseLines, errors: r.errors.length };
+    return { journals: r.journals, reusedJournals: r.reusedJournals, gcJournals: r.gcJournals, postedLines: r.postedLines, suspenseLines: r.suspenseLines, errors: r.errors.length };
+  });
+  // 5. clear the payroll control accounts — cash-basis salary expense for what
+  //    the bank paid (self-reconciling; a no-op once real HR payroll accruals
+  //    credit the controls)
+  await step("salaryAccrual", async () => {
+    const r = await accrueSalaryControls({ commit: true });
+    return { journals: r.journals, totalAccrued: r.totalAccrued, errors: r.errors.length };
   });
 
   return NextResponse.json(out);
