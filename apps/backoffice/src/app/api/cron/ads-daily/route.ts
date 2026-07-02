@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { syncAccounts } from "@/lib/ads/sync-accounts";
 import { syncCampaigns } from "@/lib/ads/sync-campaigns";
 import { syncMetrics } from "@/lib/ads/sync-metrics";
+import { syncSearchTerms } from "@/lib/ads/sync-search-terms";
 import { runSync } from "@/lib/ads/run-sync";
 import { checkCronAuth } from "@celsius/shared";
 
@@ -35,6 +36,11 @@ export async function GET(req: NextRequest) {
   const yesterday = new Date();
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
   const y = yesterday.toISOString().slice(0, 10);
+  // Search terms re-pull a 3-day window: Ads attributes spend late, so
+  // yesterday-only would freeze each day's numbers before they settle.
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setUTCDate(threeDaysAgo.getUTCDate() - 3);
+  const t3 = threeDaysAgo.toISOString().slice(0, 10);
 
   const results: Array<Record<string, unknown>> = [];
   for (const acc of accounts) {
@@ -44,6 +50,10 @@ export async function GET(req: NextRequest) {
     });
     const met = await runSync("metrics-daily", acc.id, async () => {
       const { rows } = await syncMetrics(acc.id, acc.customerId, y, y);
+      return { rowsInserted: rows };
+    });
+    const terms = await runSync("search-terms", acc.id, async () => {
+      const { rows } = await syncSearchTerms(acc.id, acc.customerId, t3, y);
       return { rowsInserted: rows };
     });
 
@@ -56,6 +66,7 @@ export async function GET(req: NextRequest) {
       customerId: acc.customerId,
       campaigns: camp.error ?? camp.result,
       metrics: met.error ?? met.result,
+      searchTerms: terms.error ?? terms.result,
     });
   }
 

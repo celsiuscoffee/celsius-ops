@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
 
-type SyncKind = "accounts" | "campaigns" | "metrics-daily" | "metrics-backfill" | "invoices" | "keywords";
+type SyncKind = "accounts" | "campaigns" | "metrics-daily" | "metrics-backfill" | "invoices" | "keywords" | "search-terms";
 
 type SyncResult = { rowsInserted?: number; rowsUpdated?: number; metadata?: Prisma.InputJsonValue };
 
