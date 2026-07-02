@@ -58,6 +58,18 @@ const TEMPLATE_DEFS = [
     sample: "Clock in for your 8:00am shift at Putrajaya — you haven't yet.",
   },
   {
+    // Cold-send PO prompt (procurement). Sent when a PO is created outside the
+    // supplier's 24h window: invites a reply, which reopens the window so the
+    // full PO block follows automatically (sendPendingPurchaseOrders on the
+    // webhook). {{1}} = supplier name, {{2}} = PO number — must match the
+    // sendWhatsAppTemplate call in procurement-po-send.ts. Once APPROVED, set
+    // PROCUREMENT_PO_PROMPT_TEMPLATE=procurement_new_order. Dry, transactional
+    // wording so Meta classifies it UTILITY.
+    name: "procurement_new_order",
+    body: "Hi {{1}}, we have prepared a new purchase order {{2}} for you. Reply to this message and we will send over the full order details. Thank you.",
+    sample: ["Jiju Cakes To Share", "CC-CC002-0215"],
+  },
+  {
     // Multi-line LIST: a headline ({{1}}) + up to four item lines ({{2}}..{{5}}),
     // each on its OWN line — the only way to get real line breaks (a single param
     // can't contain newlines). Generous fixed text wraps the variables: Meta
