@@ -243,8 +243,11 @@ export async function sourcedPnlDrillDown(args: {
     ]);
     const gross = round2(rev.reduce((s, r) => s + r.amount, 0));
     const est = round2(gross * gr.rate);
+    // Grab's payout nets off commission AND marketing (promos, GrabAds); the
+    // marketing part is booked on its own P&L lines, so the commission rate
+    // excludes it — else the marketing spend would double-count.
     const basis = gr.source === "recon"
-      ? `Effective rate ${Math.round(gr.rate * 100)}% from the payout reconciliation: over the trailing window, Grab paid out RM${gr.windowPayouts.toFixed(2)} against RM${gr.windowGross.toFixed(2)} gross Grab sales.`
+      ? `Effective commission ${Math.round(gr.rate * 100)}% from the payout reconciliation: over the trailing window, gross Grab sales RM${gr.windowGross.toFixed(2)} less payouts RM${gr.windowPayouts.toFixed(2)}, merchant promos RM${gr.windowPromos.toFixed(2)} and GrabAds RM${gr.windowAds.toFixed(2)} (both booked as their own marketing lines) leaves the commission portion.`
       : `Fallback rate ${Math.round(gr.rate * 100)}% (payout window too thin to derive the effective rate).`;
     return [{
       transactionId: "grab-comm-estimate",
