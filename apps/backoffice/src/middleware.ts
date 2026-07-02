@@ -24,6 +24,14 @@ export async function middleware(request: NextRequest) {
   // /<outletId> rewrites to /review/<outletId>; API + static pass through so
   // the page's own fetches work; anything else lands on the brand site.
   const host = (request.headers.get("host") ?? "").toLowerCase();
+
+  // Legacy review links (old printed QRs, backoffice…/review/<id>) hop to the
+  // customer domain so every scan lands on review.celsiuscoffee.com. Scoped to
+  // the prod backoffice host so Vercel previews still serve /review directly.
+  if (host === "backoffice.celsiuscoffee.com" && pathname.startsWith("/review/")) {
+    const outletPath = pathname.slice("/review".length); // "/<outletId>"
+    return NextResponse.redirect(`https://${REVIEW_HOST}${outletPath}`, 308);
+  }
   if (host === REVIEW_HOST && !isApi && !pathname.startsWith("/_next") && !pathname.startsWith("/review/")) {
     const isAsset = /\.[a-z0-9]+$/i.test(pathname) || pathname === "/sw.js" || pathname === "/manifest.json";
     if (pathname === "/") {
@@ -102,7 +110,8 @@ export async function middleware(request: NextRequest) {
     pathname === "/sw.js" ||
     pathname === "/manifest.json" ||
     pathname.startsWith("/images/") ||
-    pathname.startsWith("/fonts/")
+    pathname.startsWith("/fonts/") ||
+    pathname.startsWith("/brand/")
   ) {
     return buildResponse(() => NextResponse.next());
   }
