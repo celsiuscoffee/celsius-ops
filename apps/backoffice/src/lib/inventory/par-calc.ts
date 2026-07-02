@@ -9,7 +9,17 @@ import { prisma } from "@/lib/prisma";
 //                   products with no BOM linkage (packaging, direct-sale items)
 //   reorderPoint  = usage × (leadTimeDays + safetyDays)        — NOT package-rounded
 //   parLevel      = usage × (leadTime + safety + coverageDays) — rounded UP to a package
-//   maxLevel      = max(parLevel × 1.5 rounded to a package, parLevel + one package)
+//   maxLevel      = max(parLevel × classMultiplier rounded to a package, parLevel + one package)
+//
+// Inventory-value cap (ABC classes): coverageDays and the max multiplier come
+// from a per-product VALUE CLASS, not one global number. Products are ranked
+// by daily ringgit usage (dailyUsage × cheapest supplier cost per base unit);
+// the top ~80% of daily spend is class A, the next ~15% class B, the tail —
+// and anything with no supplier price — class C. A-items carry short coverage
+// because that's where the capital sits and they reorder often anyway;
+// C-items carry long coverage because an extra sleeve of napkins costs
+// almost nothing and halves the ordering churn. Passing an explicit
+// coverageDays overrides the class table (same value for every class).
 //
 // Why reorderPoint is left unrounded: rounding it up to a whole bulk package
 // made reorder == par on 220/336 rows (both raws smaller than one carton), so
@@ -28,14 +38,49 @@ import { prisma } from "@/lib/prisma";
 
 export const PAR_DEFAULTS = {
   safetyDays: 1,
-  coverageDays: 3,
+  coverageDays: 3, // baseline; used only when the caller overrides class-based coverage
   leadTimeDays: 1,
   lookbackDays: 30,
-  maxLevelMultiplier: 1.5,
   // Purchase-fallback usage averages over a longer window — deliveries are
   // lumpy, so 30d would whipsaw items that arrive fortnightly.
   purchaseLookbackDays: 60,
 } as const;
+
+// ABC value classes: cut points are cumulative share of daily ringgit usage.
+// Coverage/multiplier tuned so capital concentrates where turnover is fast:
+// A holds ~2 days above the reorder trigger, C can hold up to a week.
+export type ValueClass = "A" | "B" | "C";
+export const VALUE_CLASS_PARAMS: Record<
+  ValueClass,
+  { cumulativeShare: number; coverageDays: number; maxLevelMultiplier: number }
+> = {
+  A: { cumulativeShare: 0.8, coverageDays: 2, maxLevelMultiplier: 1.25 },
+  B: { cumulativeShare: 0.95, coverageDays: 3, maxLevelMultiplier: 1.5 },
+  C: { cumulativeShare: 1, coverageDays: 5, maxLevelMultiplier: 2 },
+};
+
+// Pure ABC classifier (exported for tests). Rank by daily ringgit value and
+// walk the cumulative share, judging each item by the share BEFORE it — one
+// product carrying 85% of daily spend must still be class A, not bumped to B
+// by its own weight. Zero/unpriced value always lands in C.
+export function classifyByDailyValue(
+  items: Array<{ productId: string; dailyValue: number }>,
+): Record<string, ValueClass> {
+  const ranked = [...items].sort((a, b) => b.dailyValue - a.dailyValue);
+  const total = ranked.reduce((s, r) => s + r.dailyValue, 0);
+  const out: Record<string, ValueClass> = {};
+  let cumulative = 0;
+  for (const r of ranked) {
+    const shareBefore = total > 0 ? cumulative / total : 1;
+    cumulative += r.dailyValue;
+    out[r.productId] =
+      r.dailyValue <= 0 ? "C"
+      : shareBefore < VALUE_CLASS_PARAMS.A.cumulativeShare ? "A"
+      : shareBefore < VALUE_CLASS_PARAMS.B.cumulativeShare ? "B"
+      : "C";
+  }
+  return out;
+}
 
 export interface ParCalcOptions {
   lookbackDays?: number;
@@ -48,6 +93,9 @@ export interface ParCalcDetail {
   name: string;
   dailyUsage: number;
   usageSource: "bom" | "purchases";
+  valueClass: ValueClass;
+  unitCost: number; // RM per base unit, cheapest active supplier; 0 = unpriced
+  parValue: number; // RM tied up if stocked exactly to par
   leadTime: number;
   reorderPoint: number;
   parLevel: number;
@@ -62,22 +110,34 @@ export interface ParCalcResult {
   productsUpdated: number;
   fallbackProducts: number;
   lookbackDays: number;
-  settings: { safetyDays: number; coverageDays: number };
+  settings: { safetyDays: number; coverageDays: number | null };
+  // RM value of stocking every calculated item exactly to par — the working-
+  // capital ceiling these pars imply. Split by class so the cap is auditable.
+  projectedParValue: number;
+  valueByClass: Record<ValueClass, { products: number; parValue: number }>;
   details: ParCalcDetail[];
 }
 
 export async function recalcOutletParLevels(outletId: string, opts: ParCalcOptions = {}): Promise<ParCalcResult> {
   const lookbackDays = opts.lookbackDays ?? PAR_DEFAULTS.lookbackDays;
   const safetyDays = opts.safetyDays ?? PAR_DEFAULTS.safetyDays;
-  const coverageDays = opts.coverageDays ?? PAR_DEFAULTS.coverageDays;
+  // null ⇒ class-based coverage (the default); a number ⇒ manual override for all classes.
+  const coverageOverride = opts.coverageDays ?? null;
 
+  const emptyByClass = (): ParCalcResult["valueByClass"] => ({
+    A: { products: 0, parValue: 0 },
+    B: { products: 0, parValue: 0 },
+    C: { products: 0, parValue: 0 },
+  });
   const empty: Omit<ParCalcResult, "ok" | "error"> = {
     salesTransactions: 0,
     menuItemsWithSales: 0,
     productsUpdated: 0,
     fallbackProducts: 0,
     lookbackDays,
-    settings: { safetyDays, coverageDays },
+    settings: { safetyDays, coverageDays: coverageOverride },
+    projectedParValue: 0,
+    valueByClass: emptyByClass(),
     details: [],
   };
 
@@ -158,6 +218,17 @@ export async function recalcOutletParLevels(outletId: string, opts: ParCalcOptio
   }
   const orderable = new Set(supplierProducts.map((sp) => sp.productId));
 
+  // Cheapest cost per BASE unit across active suppliers (price is per the
+  // supplier line's package; no package row ⇒ the line is already base units).
+  const unitCostMap: Record<string, number> = {};
+  for (const sp of supplierProducts) {
+    const price = Number(sp.price);
+    const conv = sp.productPackage ? Number(sp.productPackage.conversionFactor) : 1;
+    if (!(price > 0) || !(conv > 0)) continue;
+    const perBase = price / conv;
+    if (!unitCostMap[sp.productId] || perBase < unitCostMap[sp.productId]) unitCostMap[sp.productId] = perBase;
+  }
+
   // ── Daily usage: BOM × sales ──
   const usageByProduct: Record<
     string,
@@ -194,6 +265,18 @@ export async function recalcOutletParLevels(outletId: string, opts: ParCalcOptio
     fallbackProducts++;
   }
 
+  // ── ABC classification by daily ringgit usage ──
+  // Rank by dailyUsage × unit cost, walk the cumulative share: top ~80% of
+  // daily spend → A, next ~15% → B, tail → C. Unpriced products carry zero
+  // value so they land in C — generous coverage costs nothing measurable and
+  // avoids starving items we simply haven't priced yet.
+  const classByProduct = classifyByDailyValue(
+    Object.entries(usageByProduct).map(([productId, d]) => ({
+      productId,
+      dailyValue: d.dailyUsage * (unitCostMap[productId] ?? 0),
+    })),
+  );
+
   // Package factor per product for rounding (bulk preferred).
   const packageMap: Record<string, number> = {};
   for (const pkg of productPackages) {
@@ -211,14 +294,18 @@ export async function recalcOutletParLevels(outletId: string, opts: ParCalcOptio
   };
 
   const details: ParCalcDetail[] = [];
+  const valueByClass = emptyByClass();
   const upserts = Object.entries(usageByProduct)
     .map(([productId, data]) => {
       if (data.dailyUsage <= 0) return null;
       const leadTime = leadTimeMap[productId] || PAR_DEFAULTS.leadTimeDays;
+      const valueClass = classByProduct[productId] ?? "C";
+      const classParams = VALUE_CLASS_PARAMS[valueClass];
+      const coverageDays = coverageOverride ?? classParams.coverageDays;
 
       const rawReorder = data.dailyUsage * (leadTime + safetyDays);
       const rawPar = data.dailyUsage * (leadTime + safetyDays + coverageDays);
-      const rawMax = rawPar * PAR_DEFAULTS.maxLevelMultiplier;
+      const rawMax = rawPar * classParams.maxLevelMultiplier;
 
       // Trigger stays statistical; amounts get package-rounded; the ceiling
       // always leaves room for at least one more package above par.
@@ -226,11 +313,19 @@ export async function recalcOutletParLevels(outletId: string, opts: ParCalcOptio
       const parLevel = roundToPackage(rawPar, productId);
       const maxLevel = Math.max(roundToPackage(rawMax, productId), parLevel + packageSize(productId));
 
+      const unitCost = unitCostMap[productId] ?? 0;
+      const parValue = Math.round(parLevel * unitCost * 100) / 100;
+      valueByClass[valueClass].products += 1;
+      valueByClass[valueClass].parValue = Math.round((valueByClass[valueClass].parValue + parValue) * 100) / 100;
+
       details.push({
         productId,
         name: data.name,
         dailyUsage: Math.round(data.dailyUsage * 100) / 100,
         usageSource: data.source,
+        valueClass,
+        unitCost: Math.round(unitCost * 10000) / 10000,
+        parValue,
         leadTime,
         reorderPoint,
         parLevel,
@@ -261,6 +356,9 @@ export async function recalcOutletParLevels(outletId: string, opts: ParCalcOptio
 
   await Promise.all(upserts);
 
+  const projectedParValue =
+    Math.round((valueByClass.A.parValue + valueByClass.B.parValue + valueByClass.C.parValue) * 100) / 100;
+
   return {
     ok: true,
     salesTransactions: salesCount,
@@ -268,7 +366,9 @@ export async function recalcOutletParLevels(outletId: string, opts: ParCalcOptio
     productsUpdated: upserts.length,
     fallbackProducts,
     lookbackDays,
-    settings: { safetyDays, coverageDays },
+    settings: { safetyDays, coverageDays: coverageOverride },
+    projectedParValue,
+    valueByClass,
     details: details.sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
