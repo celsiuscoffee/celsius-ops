@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
+import { CONTRA_ACCOUNT } from "@/lib/finance/gl-posting-map";
 import { Loader2, CheckCircle2, AlertTriangle, HelpCircle, Copy, ArrowDownCircle } from "lucide-react";
 
 type ApMatch = {
@@ -15,30 +16,53 @@ type CashIn = {
   salesByChannel: { channel: string; amount: number }[];
   grab: { gross: number; settled: number; deductionPct: number | null };
 };
+type UnmatchedLine = { bankLineId: string; desc: string; date: string; amount: number; category: string | null };
 type ReconData = {
-  summary: { auto: number; review: number; doublePayments: number; unmatchedInvoices: number; unmatchedOutflows: number; unmatchedOutflowValue: number };
+  summary: {
+    auto: number; review: number; doublePayments: number; unmatchedInvoices: number;
+    unmatchedOutflows: number; unmatchedOutflowValue: number;
+    unmatchedInflows: number; unmatchedInflowValue: number;
+  };
   auto: ApMatch[]; review: ApMatch[]; doublePayments: ApMatch[];
   unmatchedInvoices: { invoiceId: string; invoiceNumber: string | null; payee: string; amount: number; issueDate: string }[];
-  unmatchedOutflows: { bankLineId: string; desc: string; date: string; amount: number; category: string | null }[];
+  unmatchedOutflows: UnmatchedLine[];
+  unmatchedInflows: UnmatchedLine[];
   cashIn: CashIn;
 };
 
 const fmtRM = (n: number) => `RM ${n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtRM0 = (n: number) => `RM ${n.toLocaleString("en-MY", { maximumFractionDigits: 0 })}`;
 
-// Outflow categories a human can assign — mirrors CashCategory (validated
-// server-side against the Prisma enum).
-const MANUAL_CATEGORIES = [
+// Categories a human can assign — mirrors CashCategory (validated server-side
+// against the Prisma enum). Each books to a COA account via CONTRA_ACCOUNT
+// (statutory/salary route through control accounts in resolveContra), shown in
+// the dropdown so the pick IS a chart-of-accounts decision.
+const OUTFLOW_CATEGORIES = [
   "RAW_MATERIALS", "RENT", "UTILITIES", "MAINTENANCE", "EQUIPMENTS", "SOFTWARE",
   "STAFF_CLAIM", "PARTIMER", "EMPLOYEE_SALARY", "STATUTORY_PAYMENT", "TAX",
   "COMPLIANCE", "LICENSING_FEE", "BANK_FEE", "MARKETPLACE_FEE", "OTHER_MARKETING",
   "KOL", "DELIVERY", "PETTY_CASH", "LOAN", "DIVIDEND", "DIRECTORS_ALLOWANCE",
   "CAPITAL", "INVESTMENTS", "MANAGEMENT_FEE", "CFS_FEE",
 ] as const;
+const INFLOW_CATEGORIES = [
+  "QR", "CARD", "GRAB", "STOREHUB", "FOODPANDA", "REVENUE_MONSTER",
+  "GASTROHUB", "MEETINGS_EVENTS", "LOAN", "CAPITAL", "MANAGEMENT_FEE",
+  "EMPLOYEE_SALARY", "STATUTORY_PAYMENT",
+] as const;
+// Control-account routes that CONTRA_ACCOUNT doesn't carry (resolveContra does).
+const CONTROL_COA: Record<string, string> = { EMPLOYEE_SALARY: "3008", STATUTORY_PAYMENT: "3004-7" };
+function categoryLabel(c: string, accountNames: Map<string, string>): string {
+  const code = CONTRA_ACCOUNT[c] ?? CONTROL_COA[c];
+  const name = code ? accountNames.get(code) : undefined;
+  const human = c.toLowerCase().replace(/_/g, " ");
+  return code ? `${human} → ${code}${name ? ` ${name}` : ""}` : human;
+}
 
 export default function ReconPage() {
   const [days, setDays] = useState(90);
   const { data, isLoading, mutate } = useFetch<ReconData>(`/api/finance/ap-match?sinceDays=${days}`);
+  const { data: acctData } = useFetch<{ accounts: { code: string; name: string }[] }>("/api/finance/accounts");
+  const accountNames = new Map((acctData?.accounts ?? []).map((a) => [a.code, a.name]));
   const [reclassifying, setReclassifying] = useState(false);
   const [reclassNote, setReclassNote] = useState<string | null>(null);
 
@@ -65,7 +89,7 @@ export default function ReconPage() {
         <div>
           <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Reconciliation</h2>
           <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
-            Cash-out: bank payments matched to procurement invoices. Read-only preview — the loop auto-applies high-confidence matches; the rest is your queue.
+            Cash out AND cash in: payments matched to invoices, receipts matched to their source. The loop auto-applies high-confidence matches; the rest is your queue — every manual pick books straight to the chart of accounts.
           </p>
         </div>
         <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
@@ -83,11 +107,12 @@ export default function ReconPage() {
       ) : (
         <>
           {/* Summary tiles — each jumps to its detail section */}
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-6 gap-2 sm:gap-3">
             <Tile icon={<CheckCircle2 className="h-4 w-4 text-green-600" />} label="Auto-matched" value={data.summary.auto} tone="green" targetId="recon-auto" />
             <Tile icon={<HelpCircle className="h-4 w-4 text-amber-600" />} label="Needs review" value={data.summary.review} tone="amber" targetId="recon-review" />
             <Tile icon={<Copy className="h-4 w-4 text-red-600" />} label="Double payments" value={data.summary.doublePayments} tone={data.summary.doublePayments ? "red" : "gray"} targetId="recon-double" />
             <Tile icon={<ArrowDownCircle className="h-4 w-4 text-gray-500" />} label="Unmatched out" value={data.summary.unmatchedOutflows} sub={fmtRM0(data.summary.unmatchedOutflowValue)} tone="gray" targetId="recon-unmatched-out" />
+            <Tile icon={<ArrowDownCircle className="h-4 w-4 rotate-180 text-gray-500" />} label="Unmatched in" value={data.summary.unmatchedInflows} sub={fmtRM0(data.summary.unmatchedInflowValue)} tone="gray" targetId="recon-unmatched-in" />
             <Tile icon={<AlertTriangle className="h-4 w-4 text-gray-500" />} label="Open invoices, no payment" value={data.summary.unmatchedInvoices} tone="gray" targetId="recon-open-invoices" />
           </div>
 
@@ -157,11 +182,31 @@ export default function ReconPage() {
                 </tr></thead>
                 <tbody className="divide-y">
                   {data.unmatchedOutflows.slice(0, 100).map((o) => (
-                    <OutflowRow key={o.bankLineId} row={o} onDone={() => mutate()} />
+                    <LineRow key={o.bankLineId} row={o} direction="DR" categories={OUTFLOW_CATEGORIES} accountNames={accountNames} onDone={() => mutate()} />
                   ))}
                 </tbody>
               </table>
               {data.unmatchedOutflows.length > 100 && <p className="px-3 py-2 text-[11px] text-gray-400">Showing top 100 of {data.unmatchedOutflows.length} by amount.</p>}
+            </div>
+          </Section>
+
+          <Section id="recon-unmatched-in" title="Unmatched inflows — unreconciled cash-in" desc="Money that arrived with no recognised source. Pick the category it belongs to — sales settlements clear their debtor; loans/capital book to the balance sheet.">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+                  <th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Description</th>
+                  <th className="px-3 py-2 font-medium">Category</th><th className="px-3 py-2 text-right font-medium">Amount</th>
+                  <th className="px-3 py-2 font-medium">Reconcile</th>
+                </tr></thead>
+                <tbody className="divide-y">
+                  {data.unmatchedInflows.length === 0 ? (
+                    <tr><td colSpan={5} className="px-4 py-4 text-xs text-gray-400">Nothing here.</td></tr>
+                  ) : data.unmatchedInflows.slice(0, 100).map((o) => (
+                    <LineRow key={o.bankLineId} row={o} direction="CR" categories={INFLOW_CATEGORIES} accountNames={accountNames} onDone={() => mutate()} />
+                  ))}
+                </tbody>
+              </table>
+              {data.unmatchedInflows.length > 100 && <p className="px-3 py-2 text-[11px] text-gray-400">Showing top 100 of {data.unmatchedInflows.length} by amount.</p>}
             </div>
           </Section>
 
@@ -200,10 +245,16 @@ type Candidate = {
   amountExact: boolean; refHit: boolean; nameHit: boolean; score: number;
 };
 
-// One unmatched outflow with its manual-reconcile controls: a category select
-// (books the line to that expense; the GL re-keys on the next loop run) and a
-// Match panel listing candidate invoices to link.
-function OutflowRow({ row, onDone }: { row: { bankLineId: string; desc: string; date: string; amount: number; category: string | null }; onDone: () => void }) {
+// One unmatched bank line with its manual-reconcile controls: a category
+// select labeled with the COA account it books to (the GL re-keys on the next
+// loop run), and — for outflows — a Match panel listing candidate invoices.
+function LineRow({ row, direction, categories, accountNames, onDone }: {
+  row: UnmatchedLine;
+  direction: "DR" | "CR";
+  categories: readonly string[];
+  accountNames: Map<string, string>;
+  onDone: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -258,26 +309,28 @@ function OutflowRow({ row, onDone }: { row: { bankLineId: string; desc: string; 
           {note && <div className="mt-0.5 text-[10px] text-red-600">{note}</div>}
         </td>
         <td className="px-3 py-2 text-[11px] text-gray-400 align-top">{row.category ?? "Unclassified"}</td>
-        <td className="px-3 py-2 text-right font-mono text-xs text-red-700 align-top">−{fmtRM(row.amount)}</td>
+        <td className={`px-3 py-2 text-right font-mono text-xs align-top ${direction === "DR" ? "text-red-700" : "text-green-700"}`}>{direction === "DR" ? "−" : "+"}{fmtRM(row.amount)}</td>
         <td className="px-3 py-2 align-top">
           <div className="flex items-center gap-1.5">
             <select
               defaultValue=""
               disabled={busy}
               onChange={(e) => setCategory(e.target.value)}
-              className="h-6 max-w-[130px] rounded border border-gray-200 bg-white px-1 text-[11px] text-gray-700 disabled:opacity-50"
-              title="Book this payment to a category"
+              className="h-6 max-w-[220px] rounded border border-gray-200 bg-white px-1 text-[11px] text-gray-700 disabled:opacity-50"
+              title="Book this line to a category — the label shows the COA account it posts to"
             >
               <option value="" disabled>Set category…</option>
-              {MANUAL_CATEGORIES.map((c) => <option key={c} value={c}>{c.toLowerCase().replace(/_/g, " ")}</option>)}
+              {categories.map((c) => <option key={c} value={c}>{categoryLabel(c, accountNames)}</option>)}
             </select>
-            <button
-              onClick={openMatch}
-              disabled={busy}
-              className={`h-6 rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${open ? "border-terracotta text-terracotta" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
-            >
-              Match…
-            </button>
+            {direction === "DR" && (
+              <button
+                onClick={openMatch}
+                disabled={busy}
+                className={`h-6 rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${open ? "border-terracotta text-terracotta" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+              >
+                Match…
+              </button>
+            )}
           </div>
         </td>
       </tr>

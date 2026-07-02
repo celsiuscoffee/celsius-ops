@@ -50,6 +50,16 @@ describe("bank-line-classifier", () => {
     expect(cr("DR/CARD SALES M/N 2612988 D 5").category).toBe("CARD");
   });
 
+  it("maps utility providers + Pilihan Megah rent (per owner)", () => {
+    expect(dr("TRANSFER FR A/C TIME DOTCOM BHD monthly bill").category).toBe("UTILITIES");
+    expect(dr("PAYMENT TO TT DOTCOM SDN BHD").category).toBe("UTILITIES");
+    expect(dr("CELSIUS COFFEE PUTRATIMEDOTCOM* JUN26").category).toBe("UTILITIES");
+    expect(dr("TRANSFER FR A/C SOMEBODY water bill june").category).toBe("UTILITIES");
+    expect(dr("TRANSFER FR A/C XYZ internet subscription").category).toBe("UTILITIES");
+    expect(dr("TRANSFER FR A/C PILIHAN MEGAH SDN B rental jun").category).toBe("RENT");
+    expect(dr("CELSIUS COFFEE TAMARPILIHAN MEGAH SDN*").category).toBe("RENT");
+  });
+
   it("falls back to OTHER_* for genuinely unknown lines", () => {
     expect(dr("TRANSFER FR A/C SOME UNKNOWN VENDOR XYZ").category).toBe("OTHER_OUTFLOW");
     expect(cr("MISC CREDIT NO PATTERN").category).toBe("OTHER_INFLOW");
