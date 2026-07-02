@@ -582,6 +582,12 @@ export default function GeogridPage() {
             Progress →
           </Link>
           <Link
+            href="/reviews/geogrid/paid-organic"
+            className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50"
+          >
+            Paid × Organic →
+          </Link>
+          <Link
             href="/reviews/geogrid/relevance"
             className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50"
           >

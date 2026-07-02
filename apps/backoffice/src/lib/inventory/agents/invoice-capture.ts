@@ -254,7 +254,7 @@ export async function captureInvoice(
   // With a PO target: that PO + its outlet. Without one (ad-hoc / unmatched):
   // file PO-less — but only when the document was READABLE (a provisional
   // amount needs a PO total to borrow, and a blind RM0 draft is just noise).
-  let orderId: string | null = target?.id ?? null;
+  const orderId: string | null = target?.id ?? null;
   let outletId: string | null = target?.outletId ?? null;
   let amount: number;
   let provisional = false;

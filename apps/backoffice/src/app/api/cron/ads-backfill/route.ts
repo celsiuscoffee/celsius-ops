@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncCampaigns } from "@/lib/ads/sync-campaigns";
 import { syncMetrics } from "@/lib/ads/sync-metrics";
+import { syncSearchTerms } from "@/lib/ads/sync-search-terms";
 import { runSync } from "@/lib/ads/run-sync";
 import { checkCronAuth } from "@celsius/shared";
 
@@ -48,6 +49,10 @@ export async function GET(req: NextRequest) {
       const { rows } = await syncMetrics(acc.id, acc.customerId, from, to);
       return { rowsInserted: rows, metadata: { from, to } };
     });
+    const terms = await runSync("search-terms", acc.id, async () => {
+      const { rows } = await syncSearchTerms(acc.id, acc.customerId, from, to);
+      return { rowsInserted: rows, metadata: { from, to } };
+    });
 
     await prisma.adsAccount.update({
       where: { id: acc.id },
@@ -58,6 +63,7 @@ export async function GET(req: NextRequest) {
       customerId: acc.customerId,
       campaigns: camp.error ?? camp.result,
       metrics: met.error ?? met.result,
+      searchTerms: terms.error ?? terms.result,
     });
   }
 

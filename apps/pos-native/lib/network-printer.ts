@@ -134,6 +134,22 @@ class Esc {
   line(s = "") {
     return this.text(s).raw(0x0a);
   }
+  /** GS ( k — native QR print (model 2, size 6, EC level M). Standard on
+   *  Epson-compatible thermal heads; data is capped well under the ~7k
+   *  QR limit since we only ever print short URLs. */
+  qr(data: string) {
+    const d = data.slice(0, 256);
+    const len = d.length + 3;
+    const pL = len & 0xff;
+    const pH = (len >> 8) & 0xff;
+    this.raw(0x1d, 0x28, 0x6b, 4, 0, 0x31, 0x41, 50, 0); // model 2
+    this.raw(0x1d, 0x28, 0x6b, 3, 0, 0x31, 0x43, 6); // module size 6
+    this.raw(0x1d, 0x28, 0x6b, 3, 0, 0x31, 0x45, 49); // EC level M
+    this.raw(0x1d, 0x28, 0x6b, pL, pH, 0x31, 0x50, 48); // store data
+    for (let i = 0; i < d.length; i++) this.b.push(d.charCodeAt(i) & 0xff);
+    this.raw(0x1d, 0x28, 0x6b, 3, 0, 0x31, 0x51, 48); // print
+    return this;
+  }
   /** ESC d n — feed n lines, then partial cut. Feed 6: the cutter sits
    *  ~1.5cm above the print line, so a smaller feed slices the last line
    *  ("- END -") off. 6 clears the cutter and leaves a small tear margin. */
@@ -202,7 +218,7 @@ function buildDocketBytes(d: DocketData): number[] {
 }
 
 /** A receipt (header/body/footer text) → ESC/POS bytes for a LAN cashier printer. */
-function buildReceiptBytes(header: string, body: string, footer: string): number[] {
+function buildReceiptBytes(header: string, body: string, footer: string, qrUrl?: string, qrLabel?: string): number[] {
   const e = new Esc().init().align("center");
   const headLines = header.split("\n");
   headLines.forEach((l, i) => {
@@ -213,6 +229,13 @@ function buildReceiptBytes(header: string, body: string, footer: string): number
   for (const l of body.split("\n")) e.line(l);
   e.align("center").line("");
   for (const l of footer.split("\n")) if (l.trim()) e.line(l.trim());
+  // Receipt QR (review link / app link) — parity with the built-in Sunmi head,
+  // which prints this via LineApi printQrCode.
+  if (qrUrl) {
+    e.line("");
+    if (qrLabel) e.bold(true).line(qrLabel).bold(false);
+    e.qr(qrUrl).line("");
+  }
   e.cut();
   return e.bytes();
 }
@@ -305,7 +328,7 @@ export async function routeReceipt(
   if (!netReceipt) return false;
   const r = formatReceipt(order, outlet, config);
   try {
-    await sendToNetwork(netReceipt, buildReceiptBytes(r.header, r.body, r.footer));
+    await sendToNetwork(netReceipt, buildReceiptBytes(r.header, r.body, r.footer, r.qrUrl, r.qrLabel));
     return true;
   } catch (e) {
     console.error("[net-printer] receipt:", (e as any)?.message ?? e);

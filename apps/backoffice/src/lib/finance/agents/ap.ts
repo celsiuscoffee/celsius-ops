@@ -340,6 +340,7 @@ function round2(n: number): number {
 
 function emptyParsed(): ParsedBill {
   return {
+    docType: "other", // matches the parser's own unknown-doc fallback
     supplierName: null,
     supplierTaxId: null,
     billNumber: null,
