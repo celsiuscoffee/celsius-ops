@@ -26,9 +26,38 @@ type ReconData = {
 const fmtRM = (n: number) => `RM ${n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtRM0 = (n: number) => `RM ${n.toLocaleString("en-MY", { maximumFractionDigits: 0 })}`;
 
+// Outflow categories a human can assign — mirrors CashCategory (validated
+// server-side against the Prisma enum).
+const MANUAL_CATEGORIES = [
+  "RAW_MATERIALS", "RENT", "UTILITIES", "MAINTENANCE", "EQUIPMENTS", "SOFTWARE",
+  "STAFF_CLAIM", "PARTIMER", "EMPLOYEE_SALARY", "STATUTORY_PAYMENT", "TAX",
+  "COMPLIANCE", "LICENSING_FEE", "BANK_FEE", "MARKETPLACE_FEE", "OTHER_MARKETING",
+  "KOL", "DELIVERY", "PETTY_CASH", "LOAN", "DIVIDEND", "DIRECTORS_ALLOWANCE",
+  "CAPITAL", "INVESTMENTS", "MANAGEMENT_FEE", "CFS_FEE",
+] as const;
+
 export default function ReconPage() {
   const [days, setDays] = useState(90);
-  const { data, isLoading } = useFetch<ReconData>(`/api/finance/ap-match?sinceDays=${days}`);
+  const { data, isLoading, mutate } = useFetch<ReconData>(`/api/finance/ap-match?sinceDays=${days}`);
+  const [reclassifying, setReclassifying] = useState(false);
+  const [reclassNote, setReclassNote] = useState<string | null>(null);
+
+  async function rerunRules() {
+    setReclassifying(true);
+    setReclassNote(null);
+    try {
+      const res = await fetch("/api/finance/reclassify", { method: "POST" });
+      const j = await res.json();
+      setReclassNote(res.ok
+        ? `Re-classified ${j.changed} lines (RM ${Math.round(j.changedValue).toLocaleString("en-MY")}); ${j.unstampedJournals} journals queued for GL re-key.`
+        : `Failed: ${j.error ?? res.status}`);
+      mutate();
+    } catch (e) {
+      setReclassNote(`Failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setReclassifying(false);
+    }
+  }
 
   return (
     <div className="p-3 sm:p-6">
@@ -106,21 +135,29 @@ export default function ReconPage() {
             <MatchTable rows={data.review} showReasons />
           </Section>
 
-          <Section id="recon-unmatched-out" title="Unmatched outflows — unreconciled cash-out" desc="Bank payments with no matching invoice yet. The pile to drive to zero.">
+          <Section id="recon-unmatched-out" title="Unmatched outflows — unreconciled cash-out" desc="Bank payments with no matching invoice yet. Reconcile manually: pick a category (books it to that expense) or match it to its invoice.">
+            <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-2">
+              <button
+                onClick={rerunRules}
+                disabled={reclassifying}
+                className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {reclassifying ? "Re-running rules…" : "Re-run classifier rules"}
+              </button>
+              <span className="text-[11px] text-gray-400">
+                {reclassNote ?? "Applies the current rules to this pile first — most known payees clear automatically."}
+              </span>
+            </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full min-w-[760px] text-sm">
                 <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
                   <th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Description</th>
                   <th className="px-3 py-2 font-medium">Category</th><th className="px-3 py-2 text-right font-medium">Amount</th>
+                  <th className="px-3 py-2 font-medium">Reconcile</th>
                 </tr></thead>
                 <tbody className="divide-y">
                   {data.unmatchedOutflows.slice(0, 100).map((o) => (
-                    <tr key={o.bankLineId} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{o.date}</td>
-                      <td className="px-3 py-2 text-xs text-gray-700">{o.desc}</td>
-                      <td className="px-3 py-2 text-[11px] text-gray-400">{o.category ?? "Unclassified"}</td>
-                      <td className="px-3 py-2 text-right font-mono text-xs text-red-700">−{fmtRM(o.amount)}</td>
-                    </tr>
+                    <OutflowRow key={o.bankLineId} row={o} onDone={() => mutate()} />
                   ))}
                 </tbody>
               </table>
@@ -154,6 +191,129 @@ export default function ReconPage() {
         </>
       )}
     </div>
+  );
+}
+
+type Candidate = {
+  invoiceId: string; invoiceNumber: string | null; payee: string; amount: number;
+  issueDate: string; status: string; linkOnly: boolean;
+  amountExact: boolean; refHit: boolean; nameHit: boolean; score: number;
+};
+
+// One unmatched outflow with its manual-reconcile controls: a category select
+// (books the line to that expense; the GL re-keys on the next loop run) and a
+// Match panel listing candidate invoices to link.
+function OutflowRow({ row, onDone }: { row: { bankLineId: string; desc: string; date: string; amount: number; category: string | null }; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [cands, setCands] = useState<Candidate[] | null>(null);
+
+  async function setCategory(category: string) {
+    if (!category) return;
+    setBusy(true); setNote(null);
+    try {
+      const res = await fetch("/api/finance/bank-lines/classify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankLineId: row.bankLineId, category }),
+      });
+      const j = await res.json();
+      if (!res.ok) setNote(j.error ?? `Failed (${res.status})`);
+      else onDone();
+    } catch (e) { setNote(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function openMatch() {
+    setOpen((v) => !v);
+    if (cands || open) return;
+    try {
+      const res = await fetch(`/api/finance/bank-lines/match?bankLineId=${row.bankLineId}`);
+      const j = await res.json();
+      setCands(res.ok ? j.candidates : []);
+      if (!res.ok) setNote(j.error ?? `Failed (${res.status})`);
+    } catch (e) { setCands([]); setNote(e instanceof Error ? e.message : String(e)); }
+  }
+
+  async function applyMatch(invoiceId: string) {
+    setBusy(true); setNote(null);
+    try {
+      const res = await fetch("/api/finance/bank-lines/match", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankLineId: row.bankLineId, invoiceId }),
+      });
+      const j = await res.json();
+      if (!res.ok) setNote(j.error ?? `Failed (${res.status})`);
+      else onDone();
+    } catch (e) { setNote(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <>
+      <tr className="hover:bg-gray-50">
+        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap align-top">{row.date}</td>
+        <td className="px-3 py-2 text-xs text-gray-700 align-top">
+          {row.desc}
+          {note && <div className="mt-0.5 text-[10px] text-red-600">{note}</div>}
+        </td>
+        <td className="px-3 py-2 text-[11px] text-gray-400 align-top">{row.category ?? "Unclassified"}</td>
+        <td className="px-3 py-2 text-right font-mono text-xs text-red-700 align-top">−{fmtRM(row.amount)}</td>
+        <td className="px-3 py-2 align-top">
+          <div className="flex items-center gap-1.5">
+            <select
+              defaultValue=""
+              disabled={busy}
+              onChange={(e) => setCategory(e.target.value)}
+              className="h-6 max-w-[130px] rounded border border-gray-200 bg-white px-1 text-[11px] text-gray-700 disabled:opacity-50"
+              title="Book this payment to a category"
+            >
+              <option value="" disabled>Set category…</option>
+              {MANUAL_CATEGORIES.map((c) => <option key={c} value={c}>{c.toLowerCase().replace(/_/g, " ")}</option>)}
+            </select>
+            <button
+              onClick={openMatch}
+              disabled={busy}
+              className={`h-6 rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${open ? "border-terracotta text-terracotta" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+            >
+              Match…
+            </button>
+          </div>
+        </td>
+      </tr>
+      {open && (
+        <tr className="bg-gray-50/60">
+          <td colSpan={5} className="px-3 py-2">
+            {!cands ? (
+              <span className="text-[11px] text-gray-400">Looking for candidate invoices…</span>
+            ) : cands.length === 0 ? (
+              <span className="text-[11px] text-gray-400">No candidate invoices near this amount/date. Set a category instead.</span>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {cands.map((c) => (
+                  <div key={c.invoiceId} className="flex flex-wrap items-center gap-2 rounded border border-gray-200 bg-white px-2 py-1">
+                    <span className="text-xs text-gray-700">{c.payee}{c.invoiceNumber ? <span className="text-gray-400"> · {c.invoiceNumber}</span> : ""}</span>
+                    <span className="font-mono text-[11px] text-gray-600">{fmtRM(c.amount)}</span>
+                    <span className="text-[10px] text-gray-400">{c.issueDate}</span>
+                    {c.amountExact && <span className="rounded bg-green-50 px-1 text-[10px] text-green-700">amount exact</span>}
+                    {c.refHit && <span className="rounded bg-green-50 px-1 text-[10px] text-green-700">invoice no in line</span>}
+                    {c.nameHit && <span className="rounded bg-green-50 px-1 text-[10px] text-green-700">name hit</span>}
+                    {c.linkOnly && <span className="rounded bg-amber-50 px-1 text-[10px] text-amber-700">already paid — link only</span>}
+                    <button
+                      onClick={() => applyMatch(c.invoiceId)}
+                      disabled={busy}
+                      className="ml-auto h-6 rounded bg-terracotta px-2 text-[11px] font-medium text-white disabled:opacity-50"
+                    >
+                      Match
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
