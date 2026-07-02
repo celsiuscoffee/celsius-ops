@@ -49,4 +49,38 @@ describe("bank-line-classifier", () => {
     expect(cr("MISC CREDIT NO PATTERN").category).toBe("OTHER_INFLOW");
     expect(dr("TRANSFER FR A/C SOME UNKNOWN VENDOR XYZ").isInterCo).toBe(false);
   });
+
+  it("sees through Maybank's glued 20-char sender prefix", () => {
+    // Beneficiary field: "Celsius Coffee Putra" (exactly 20 chars) runs straight
+    // into the payee, so \b-anchored supplier rules miss without the strip pass.
+    expect(dr("CELSIUS COFFEE PUTRAYOW SENG SDN BHD*YSIV-2601").category).toBe("RAW_MATERIALS");
+    expect(dr("CELSIUS COFFEE TAMARCOLLECTIVE PROJECT *IV-1234").category).toBe("RAW_MATERIALS");
+    expect(dr("CELSIUS COFFEE PUTRATMM RESOURCES *1-260601").category).toBe("RAW_MATERIALS");
+    expect(dr("CELSIUS COFFEE PUTRAJG PACIFIC FOODS SD* ").category).toBe("RAW_MATERIALS");
+  });
+
+  it("classifies purpose suffixes that run into references", () => {
+    expect(dr("TRANSFER FR A/C ENCIK AZLAND ZULFIZ Q1 DIVIDENDQ1 2 MBB").category).toBe("DIVIDEND");
+    expect(dr("TRANSFER FR A/C AAS TAXATION SDN. B TAX FORMC").category).toBe("TAX");
+    expect(dr("CELSIUSCOFFEE SB ASSOCIATES * HALF AUDIT FEE").category).toBe("COMPLIANCE");
+    expect(dr("ELECTRONIC REMITTANCE - GIR RENTOKIL INITIAL (M").category).toBe("MAINTENANCE");
+  });
+
+  it("classifies the newly named suppliers", () => {
+    expect(dr("TRANSFER FR A/C JIJUS CAKES TO SHAR IV CELSIUS COFFEE PUTRA").category).toBe("RAW_MATERIALS");
+    expect(dr("CELSIUS COFFEE SHAH BGS TRADING SDN. BH*KIV").category).toBe("RAW_MATERIALS");
+    expect(dr("TRANSFER FR A/C THE MILK MINISTRY #1-14819").category).toBe("RAW_MATERIALS");
+    expect(dr("TRANSFER FR A/C ELITE PAC SDN BHD IV-123").category).toBe("RAW_MATERIALS");
+    expect(dr("TRANSFER FR A/C KUALA LUMPUR FRIED CELSIUS COFFEE PUTRA").category).toBe("RAW_MATERIALS");
+  });
+
+  it("classifies unknown payees via the supplier registry hints", () => {
+    const hints = ["ACME BEANS ROASTERY"];
+    const hit = classifyBankLine({ description: "CELSIUS COFFEE PUTRAACME BEANS ROASTERY*INV9", amount: 100, direction: "DR", vendorHints: hints });
+    expect(hit.category).toBe("RAW_MATERIALS");
+    expect(hit.ruleName).toBe("vendor_registry");
+    // hints never override a real rule, and never apply to inflows
+    expect(classifyBankLine({ description: "TRANSFER FR A/C TUJUAN GEMILANG rent", amount: 100, direction: "DR", vendorHints: ["TUJUAN GEMILANG"] }).category).toBe("RENT");
+    expect(classifyBankLine({ description: "SOME ACME BEANS ROASTERY REFUND", amount: 100, direction: "CR", vendorHints: hints }).category).toBe("OTHER_INFLOW");
+  });
 });

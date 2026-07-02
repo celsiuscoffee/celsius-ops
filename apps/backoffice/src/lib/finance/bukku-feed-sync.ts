@@ -51,6 +51,27 @@ function monthEnd(m: string): Date {
   return new Date(Date.UTC(y, mo, 0));
 }
 
+// Normalized procurement supplier names for the classifier's vendor-registry
+// pass: onboarding a supplier is enough for their bank payments to classify as
+// RAW_MATERIALS — no classifier rule edit needed. Names are uppercased,
+// single-spaced, stripped of "THE " and a trailing SDN BHD; short results are
+// dropped (too collision-prone against bank references).
+async function supplierVendorHints(): Promise<string[]> {
+  const suppliers = await prisma.supplier.findMany({
+    where: { supplierCode: { not: "ADHOC" } },
+    select: { name: true },
+  });
+  const hints = new Set<string>();
+  for (const s of suppliers) {
+    const n = s.name.toUpperCase().replace(/\s+/g, " ").trim()
+      .replace(/^THE /, "")
+      .replace(/\s*SDN\.?\s*BHD\.?\s*$/, "")
+      .trim();
+    if (n.length >= 6) hints.add(n);
+  }
+  return [...hints];
+}
+
 // Distinct Bukku companies (dedupe outlets that share a subdomain, e.g.
 // Shah Alam + Nilai both on CCSB).
 async function bukkuCompanies(): Promise<BukkuCreds[]> {
@@ -127,8 +148,9 @@ async function syncAccount(
     // Outlet hints come from the line description (CONEZION / TAMARIND / etc.).
     const outlets = await prisma.outlet.findMany({ select: { id: true, code: true } });
     const codeToId = new Map(outlets.map((o) => [o.code, o.id]));
+    const vendorHints = await supplierVendorHints();
     const classify = (l: BukkuBankLineDraft) => {
-      const cls = classifyBankLine({ description: l.description, reference: l.reference, amount: l.amount, direction: l.direction, accountKey: accountName });
+      const cls = classifyBankLine({ description: l.description, reference: l.reference, amount: l.amount, direction: l.direction, accountKey: accountName, vendorHints });
       return {
         category: cls.category,
         outletId: cls.outletCode ? codeToId.get(cls.outletCode) ?? null : null,
@@ -137,7 +159,31 @@ async function syncAccount(
         ruleName: cls.ruleName,
       };
     };
+    // A rebuilt line is the SAME bank transaction as the row it replaces, so
+    // downstream state must survive the wipe: GL journal links (else the poster
+    // re-posts the whole window every run = duplicate journals), AP matches,
+    // and human classifications. Feed lines re-create in a deterministic order
+    // (txnDate, bukkuId), so a per-key occurrence queue restores state even
+    // when two lines share date+amount+description.
+    const lineKey = (l: { txnDate: Date; direction: string; amount: unknown; description: string }) =>
+      `${ymd(l.txnDate)}|${l.direction}|${Number(l.amount).toFixed(2)}|${l.description}`;
     await prisma.$transaction(async (tx) => {
+      const oldLines = await tx.bankStatementLine.findMany({
+        where: { statement: { accountName, notes: FEED_NOTE } },
+        select: {
+          txnDate: true, amount: true, direction: true, description: true,
+          category: true, classifiedBy: true, ruleName: true, isInterCo: true, outletId: true,
+          glTransactionId: true, glPostedAt: true, apInvoiceId: true, apMatchedAt: true,
+        },
+        orderBy: [{ txnDate: "asc" }, { id: "asc" }],
+      });
+      const carry = new Map<string, typeof oldLines>();
+      for (const l of oldLines) {
+        const k = lineKey(l);
+        const q = carry.get(k);
+        if (q) q.push(l); else carry.set(k, [l]);
+      }
+
       await tx.bankStatement.deleteMany({ where: { accountName, notes: FEED_NOTE } });
       for (let i = 0; i < plans.length; i++) {
         const s = plans[i];
@@ -164,7 +210,38 @@ async function syncAccount(
           },
         });
       }
-    });
+
+      // Restore carried state onto the recreated lines. Batched by identical
+      // payload — most lines share a glTransactionId (one journal per day), so
+      // this is a handful of updateMany calls, not one per line.
+      if (carry.size) {
+        const fresh = await tx.bankStatementLine.findMany({
+          where: { statement: { accountName, notes: FEED_NOTE } },
+          select: { id: true, txnDate: true, amount: true, direction: true, description: true },
+          orderBy: [{ txnDate: "asc" }, { id: "asc" }],
+        });
+        type CarryData = Record<string, unknown>;
+        const batches = new Map<string, { data: CarryData; ids: string[] }>();
+        for (const nl of fresh) {
+          const old = carry.get(lineKey(nl))?.shift();
+          if (!old) continue;
+          const data: CarryData = {};
+          if (old.glTransactionId) { data.glTransactionId = old.glTransactionId; data.glPostedAt = old.glPostedAt; }
+          if (old.apInvoiceId) { data.apInvoiceId = old.apInvoiceId; data.apMatchedAt = old.apMatchedAt; }
+          if (old.classifiedBy && old.classifiedBy !== "rule") {
+            data.category = old.category; data.classifiedBy = old.classifiedBy; data.ruleName = old.ruleName;
+            data.isInterCo = old.isInterCo; data.outletId = old.outletId;
+          }
+          if (!Object.keys(data).length) continue;
+          const bk = JSON.stringify(data);
+          const b = batches.get(bk);
+          if (b) b.ids.push(nl.id); else batches.set(bk, { data, ids: [nl.id] });
+        }
+        for (const b of batches.values()) {
+          await tx.bankStatementLine.updateMany({ where: { id: { in: b.ids } }, data: b.data });
+        }
+      }
+    }, { timeout: 120_000, maxWait: 15_000 });
   }
 
   return {
