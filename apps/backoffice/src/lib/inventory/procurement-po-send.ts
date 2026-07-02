@@ -4,8 +4,10 @@
  * same message staff send by hand via wa.me today — so suppliers see the format
  * they already know.
  *
- * Gated by PROCUREMENT_AGENT_ENABLED + PROCUREMENT_AGENT_ALLOWLIST (scoped to the
- * test supplier for the first live run). De-duped per PO via the outbound row's
+ * Gated by PROCUREMENT_AGENT_ENABLED (master switch) + the per-supplier Supplier.automationMode
+ * dial: OFF = manual/group lane (skipped + noted here), ASSIST/AUTO = auto-send. (The old global
+ * PROCUREMENT_AGENT_ALLOWLIST gate was removed — it shadowed the dial, so an ASSIST supplier was
+ * still blocked; automationMode is the real control now.) De-duped per PO via the outbound row's
  * raw.poSentFor. Free text inside the 24h customer-service window; OUTSIDE it, when
  * PROCUREMENT_PO_PROMPT_TEMPLATE is set we ping the supplier with that approved UTILITY
  * template to invite a reply (which opens the window so the PO block can follow); else the
@@ -32,18 +34,6 @@ function enabled(): boolean {
   return process.env.PROCUREMENT_AGENT_ENABLED === "true";
 }
 
-function allowed(phone: string | null | undefined): boolean {
-  const raw = process.env.PROCUREMENT_AGENT_ALLOWLIST?.trim();
-  if (!raw) return true;
-  const tail = digits(phone).slice(-8);
-  if (!tail) return false;
-  return raw
-    .split(",")
-    .map((s) => digits(s).slice(-8))
-    .filter(Boolean)
-    .includes(tail);
-}
-
 // What we read off the order the PATCH route already loaded (outlet + supplier +
 // items.product included). Loose shapes so the caller can pass its richer object.
 export interface PoForSend {
@@ -64,10 +54,6 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
     if (!enabled()) return;
     const supplier = order.supplier;
     if (!supplier?.phone) return;
-    if (!allowed(supplier.phone)) {
-      await recordPoThreadNote(order, "not on PROCUREMENT_AGENT_ALLOWLIST — sent manually");
-      return;
-    }
     // OFF = the manual lane: these suppliers are ordered from by hand on the Smart Order
     // page (incl. WhatsApp GROUPS via the wa.me picker, which the Cloud API can't reach).
     // Don't also fire a Cloud-API send for them, or they'd get a duplicate 1:1 message.
