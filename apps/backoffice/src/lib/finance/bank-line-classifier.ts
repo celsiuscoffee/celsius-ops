@@ -160,6 +160,9 @@ const OUTFLOW_RULES: Rule[] = [
   // marketing = Google Ads (ads module) + SMS Niaga only (rules below).
   { name: "purpose_rent",             match: /\bRENT(AL)?\b/i,                        direction: "DR", category: "RENT" as CashCategory },
   { name: "purpose_utility",          match: /\bUTILIT(Y|IES)\b/i,                    direction: "DR", category: "UTILITIES" as CashCategory },
+  // Internet/ISP is a UTILITY (per owner) and must outrank the generic
+  // /SUBSCRIPTION/ software rule ("internet subscription").
+  { name: "util_internet",            match: /TIME\s*DOTCOM|TIMEDOTCOM|TT\s*DOTCOM|TTDOTCOM|TIME\s*FIBRE|\bINTERNET\b/i, direction: "DR", category: "UTILITIES" as CashCategory },
   { name: "purpose_software",         match: /\bSOFTWARE|\bSAAS\b|\bSUBSCRIPTION\b/i, direction: "DR", category: "SOFTWARE" as CashCategory },
   { name: "purpose_petty_cash",       match: /\bPETTY\s*CASH\b/i,                     direction: "DR", category: "PETTY_CASH" as CashCategory },
   { name: "purpose_staff_claim",      match: /\bSTAFF\s*CLAIM|\bCLAIM\b/i,             direction: "DR", category: "STAFF_CLAIM" as CashCategory },
@@ -195,10 +198,11 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "rent_properties_sdn_bhd",  match: /\bPROPERTIES\s*SDN\s*BHD\b/i, direction: "DR", category: "RENT" as CashCategory },
   { name: "rent_holdings_sdn_bhd",    match: /\bHOLDINGS\s*SDN\s*BHD\b/i,   direction: "DR", category: "RENT" as CashCategory },
   { name: "rent_hartanah",            match: /\bHARTANAH\b/i,               direction: "DR", category: "RENT" as CashCategory },
+  { name: "rent_pilihan_megah",       match: /PILIHAN\s*MEGAH/i,            direction: "DR", category: "RENT" as CashCategory },
 
-  // Utilities — TNB / AIR / IWK / TM / MAXIS / DIGI / UNIFI
+  // Utilities — TNB / AIR / IWK / TM / MAXIS / DIGI / UNIFI / TIME / TT Dotcom
   { name: "util_tnb",       match: /\bTNB\b|\bTENAGA NASIONAL\b/i, direction: "DR", category: "UTILITIES" as CashCategory },
-  { name: "util_water",     match: /\b(AIR\s+(SELANGOR|PUTRAJAYA|JOHOR|MELAKA)|INDAH WATER|IWK)\b/i, direction: "DR", category: "UTILITIES" as CashCategory },
+  { name: "util_water",     match: /\b(AIR\s+(SELANGOR|PUTRAJAYA|JOHOR|MELAKA)|INDAH WATER|IWK)\b|\bWATER\b/i, direction: "DR", category: "UTILITIES" as CashCategory },
   { name: "util_telco",     match: /\b(MAXIS|DIGI|UNIFI|TM\s|CELCOM|U MOBILE)\b/i, direction: "DR", category: "UTILITIES" as CashCategory },
 
   // Software / SaaS subscriptions
