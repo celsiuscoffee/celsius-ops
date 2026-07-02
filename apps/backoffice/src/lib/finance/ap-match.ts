@@ -47,6 +47,7 @@ export type ApMatch = {
   tier: MatchTier;
   reasons: string[];
   alreadyPaid: boolean; // invoice was already settled → potential double-payment
+  linkOnly: boolean;    // invoice PAID via another route — link the line, don't re-mark the invoice
 };
 export type ApMultiMatch = {
   bankLineId: string;
@@ -96,19 +97,35 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
   const sinceDays = opts.sinceDays ?? 120;
   const since = new Date(Date.now() - sinceDays * DAY);
 
-  // Open (not fully paid) invoices in the window.
-  const invoices = await prisma.invoice.findMany({
-    where: {
-      issueDate: { gte: since },
-      status: { not: "PAID" }, // open invoices; alreadyPaid flag still catches partial double-pays
-    },
-    select: {
-      id: true, invoiceNumber: true, amount: true, amountPaid: true, status: true,
-      issueDate: true, outletId: true,
-      vendorName: true, vendorBankAccountName: true,
-      supplier: { select: { name: true } },
-    },
-  });
+  // Invoices in the window — INCLUDING already-PAID ones that no bank line
+  // links to yet. Most invoices are marked paid through other routes (Telegram
+  // POP confirms, the historical register migration) while their bank line sat
+  // unmatched in OTHER_OUTFLOW — the P&L then counted the cost twice (once as
+  // procurement COGS, again as the unmatched outflow). Matching those is
+  // LINK-ONLY: the line gets tagged to the invoice, the invoice is untouched.
+  // PAID invoices that already HAVE a linked line are excluded — a further
+  // match against those would be a genuine double-payment, not a settlement.
+  const [invoicesRaw, linkedRows] = await Promise.all([
+    prisma.invoice.findMany({
+      where: { issueDate: { gte: since } },
+      select: {
+        id: true, invoiceNumber: true, amount: true, amountPaid: true, status: true,
+        issueDate: true, outletId: true,
+        vendorName: true, vendorBankAccountName: true,
+        supplier: { select: { name: true } },
+      },
+    }),
+    prisma.bankStatementLine.findMany({
+      where: { apInvoiceId: { not: null } },
+      select: { apInvoiceId: true },
+    }),
+  ]);
+  const linkedInvoiceIds = new Set(linkedRows.map((r) => r.apInvoiceId as string));
+  // Open invoices claim lines first; paid-but-unlinked settle for what's left.
+  const invoices = [
+    ...invoicesRaw.filter((i) => i.status !== "PAID"),
+    ...invoicesRaw.filter((i) => i.status === "PAID" && !linkedInvoiceIds.has(i.id)),
+  ];
 
   // Candidate bank outflows: DR, not inter-co, in the window, and NOT a category
   // that can never have a supplier invoice — wages ("PT Week"), statutory, tax,
@@ -143,7 +160,8 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
     const payee = inv.supplier?.name ?? inv.vendorName ?? inv.vendorBankAccountName ?? "(unknown payee)";
     const nm = [...new Set([...tokens(inv.supplier?.name), ...tokens(inv.vendorName), ...tokens(inv.vendorBankAccountName)])];
     const issue = inv.issueDate;
-    const alreadyPaid = Number(inv.amountPaid ?? 0) >= amt - 0.01;
+    const linkOnly = inv.status === "PAID"; // paid via another route, line unlinked
+    const alreadyPaid = !linkOnly && Number(inv.amountPaid ?? 0) >= amt - 0.01;
 
     // Candidate amounts: exact + ±0.5%.
     const tol = Math.max(1, Math.round(amt * 0.005 * 100));
@@ -182,7 +200,7 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
           invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, payee, amount: amt, issueDate: ymd(issue),
           outletId: inv.outletId, bankLineId: l.id, bankDesc: (l.description ?? "").replace(/\s+/g, " ").slice(0, 60),
           bankDate: ymd(l.txnDate), bankCategory: l.category as string | null,
-          score: round2(score), tier: "review", reasons, alreadyPaid,
+          score: round2(score), tier: "review", reasons, alreadyPaid, linkOnly,
         };
       }
     }
@@ -192,11 +210,14 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
       // the invoice number quoted in the transfer (score ≥ 0.85 needs one).
       const confirmed = best.reasons.includes("payee name in description") || best.reasons.includes("invoice no in description");
       best.tier = best.score >= 0.85 && best.reasons.includes("amount exact") && confirmed ? "auto" : "review";
+      if (best.linkOnly) best.reasons.push("invoice already paid via another route — link-only");
       usedBankLineIds.add(best.bankLineId);
       matchedInvoiceIds.add(inv.id);
       if (best.alreadyPaid) doublePayments.push(best);
       else (best.tier === "auto" ? auto : review).push(best);
-    } else {
+    } else if (!linkOnly) {
+      // Only OPEN invoices are worth reporting as unmatched — a paid-unlinked
+      // invoice with no line match is just history without a feed-era payment.
       unmatchedInvoices.push({ invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, payee, amount: amt, issueDate: ymd(issue) });
     }
   }
@@ -213,7 +234,9 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
     const bySupplier = new Map<string, { payee: string; toks: string[]; invs: Inv[] }>();
     for (const inv of invoices) {
       if (matchedInvoiceIds.has(inv.id)) continue;
-      if (Number(inv.amountPaid ?? 0) >= Number(inv.amount) - 0.01) continue;
+      // Paid-but-unlinked invoices stay in the bundle pool (link-only members);
+      // open invoices with a settled amountPaid are the double-pay guard.
+      if (inv.status !== "PAID" && Number(inv.amountPaid ?? 0) >= Number(inv.amount) - 0.01) continue;
       const payee = inv.supplier?.name ?? inv.vendorName ?? inv.vendorBankAccountName ?? "(unknown payee)";
       const key = payee.toLowerCase();
       const g = bySupplier.get(key) ?? { payee, toks: [...new Set([...tokens(inv.supplier?.name), ...tokens(inv.vendorName), ...tokens(inv.vendorBankAccountName)])], invs: [] };
@@ -312,7 +335,10 @@ export async function writeApMatch(m: ApMatch): Promise<void> {
     const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true, category: true } });
     if (line?.apInvoiceId) return; // already matched — idempotent
     const inv = await tx.invoice.findUnique({ where: { id: m.invoiceId }, select: { status: true, amount: true } });
-    if (!inv || inv.status === "PAID") return;
+    if (!inv) return;
+    // link-only: the invoice was paid via another route (POP / migration) —
+    // expect it PAID and leave it alone. Normal match: expect it open.
+    if (m.linkOnly ? inv.status !== "PAID" : inv.status === "PAID") return;
     await tx.bankStatementLine.update({
       where: { id: m.bankLineId },
       data: {
@@ -322,10 +348,12 @@ export async function writeApMatch(m: ApMatch): Promise<void> {
         ...(line?.category === null || line?.category === "OTHER_OUTFLOW" ? { category: "RAW_MATERIALS" as CashCategory } : {}),
       },
     });
-    await tx.invoice.update({
-      where: { id: m.invoiceId },
-      data: { amountPaid: inv.amount, status: "PAID", paidAt: new Date(m.bankDate + "T00:00:00Z"), paidVia: "bank-ap-match" },
-    });
+    if (!m.linkOnly) {
+      await tx.invoice.update({
+        where: { id: m.invoiceId },
+        data: { amountPaid: inv.amount, status: "PAID", paidAt: new Date(m.bankDate + "T00:00:00Z"), paidVia: "bank-ap-match" },
+      });
+    }
   });
 }
 
@@ -337,7 +365,7 @@ export async function writeMultiMatch(m: ApMultiMatch): Promise<void> {
     const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true, category: true } });
     if (line?.apInvoiceId) return; // already matched — idempotent
     const invs = await tx.invoice.findMany({ where: { id: { in: m.invoiceIds } }, select: { id: true, status: true, amount: true } });
-    if (invs.length !== m.invoiceIds.length || invs.some((i) => i.status === "PAID")) return;
+    if (invs.length !== m.invoiceIds.length) return;
     await tx.bankStatementLine.update({
       where: { id: m.bankLineId },
       data: {
@@ -345,7 +373,10 @@ export async function writeMultiMatch(m: ApMultiMatch): Promise<void> {
         ...(line?.category === null || line?.category === "OTHER_OUTFLOW" ? { category: "RAW_MATERIALS" as CashCategory } : {}),
       },
     });
+    // Bundle members already PAID via another route are link-only: the line
+    // now references the bundle, the invoice keeps its original payment trail.
     for (const inv of invs) {
+      if (inv.status === "PAID") continue;
       await tx.invoice.update({
         where: { id: inv.id },
         data: { amountPaid: inv.amount, status: "PAID", paidAt: new Date(m.bankDate + "T00:00:00Z"), paidVia: `bank-ap-match-multi:${m.bankLineId}` },
