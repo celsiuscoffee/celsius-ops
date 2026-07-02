@@ -97,10 +97,54 @@ function useReportControlsState() {
   return { preset, setPreset, customStart, setCustomStart, customEnd, setCustomEnd, outletId, setOutletId, start, end };
 }
 
+type FinCompany = { id: string; name: string; outletIds: string[] };
+
 function ReportControlsBar({ c }: { c: ReturnType<typeof useReportControlsState> }) {
   const { data: outlets } = useFetch<{ id: string; name: string }[]>("/api/settings/outlets");
+  const { data: co } = useFetch<{ companies: FinCompany[]; activeCompanyId: string }>("/api/finance/companies");
+  const [switching, setSwitching] = useState(false);
+
+  // Every report is scoped to the ACTIVE COMPANY (a server-side cookie) — show
+  // it and let it be switched here, and only offer that company's outlets.
+  // Without this, picking an outlet of another company silently no-ops (the
+  // API falls back to all company outlets) and the numbers mislead.
+  const active = co?.companies.find((x) => x.id === co.activeCompanyId);
+  const companyOutlets = active
+    ? (outlets ?? []).filter((o) => active.outletIds.includes(o.id))
+    : (outlets ?? []);
+
+  useEffect(() => {
+    if (active && c.outletId && !active.outletIds.includes(c.outletId)) c.setOutletId("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- clear a stale outlet filter when the company changes
+  }, [active?.id, c.outletId]);
+
+  async function switchCompany(companyId: string) {
+    setSwitching(true);
+    try {
+      await fetch("/api/finance/companies/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId }),
+      });
+      // The cookie drives every server-side report — hard reload so all tabs refetch.
+      window.location.reload();
+    } catch {
+      setSwitching(false);
+    }
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2">
+      <select
+        value={co?.activeCompanyId ?? ""}
+        onChange={(e) => switchCompany(e.target.value)}
+        disabled={!co || switching}
+        className="h-8 rounded-md border bg-background px-2 text-sm font-semibold"
+        title="Active company — every report is scoped to this legal entity"
+      >
+        {!co && <option value="">Company…</option>}
+        {(co?.companies ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+      </select>
       <select
         value={c.preset}
         onChange={(e) => c.setPreset(e.target.value as Preset)}
@@ -121,10 +165,10 @@ function ReportControlsBar({ c }: { c: ReturnType<typeof useReportControlsState>
         value={c.outletId}
         onChange={(e) => c.setOutletId(e.target.value)}
         className="ml-auto h-8 rounded-md border bg-background px-2 text-sm"
-        title="Filter by outlet"
+        title="Filter by outlet (outlets of the active company)"
       >
         <option value="">All outlets</option>
-        {(outlets ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+        {companyOutlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>
     </div>
   );
