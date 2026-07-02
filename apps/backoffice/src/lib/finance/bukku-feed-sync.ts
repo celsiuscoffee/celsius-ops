@@ -56,7 +56,7 @@ function monthEnd(m: string): Date {
 // RAW_MATERIALS — no classifier rule edit needed. Names are uppercased,
 // single-spaced, stripped of "THE " and a trailing SDN BHD; short results are
 // dropped (too collision-prone against bank references).
-async function supplierVendorHints(): Promise<string[]> {
+export async function supplierVendorHints(): Promise<string[]> {
   const suppliers = await prisma.supplier.findMany({
     where: { supplierCode: { not: "ADHOC" } },
     select: { name: true },
