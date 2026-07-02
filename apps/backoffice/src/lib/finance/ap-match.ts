@@ -90,7 +90,7 @@ function nameInDesc(nameTokens: string[], descLower: string): boolean {
   return hits >= 2 || (hits === 1 && nameTokens.some((t) => t.length >= 5 && descLower.includes(t)));
 }
 
-import { digitRuns, invoiceRefInDesc, subsetSumIdx } from "./ap-match-lib";
+import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc } from "./ap-match-lib";
 export { digitRuns, invoiceRefInDesc, subsetSumIdx } from "./ap-match-lib";
 
 export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promise<ApMatchResult> {
@@ -159,6 +159,7 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
     const amt = round2(Number(inv.amount));
     const payee = inv.supplier?.name ?? inv.vendorName ?? inv.vendorBankAccountName ?? "(unknown payee)";
     const nm = [...new Set([...tokens(inv.supplier?.name), ...tokens(inv.vendorName), ...tokens(inv.vendorBankAccountName)])];
+    const aliases = aliasPhrasesFor([inv.supplier?.name, inv.vendorName, inv.vendorBankAccountName]);
     const issue = inv.issueDate;
     const linkOnly = inv.status === "PAID"; // paid via another route, line unlinked
     const alreadyPaid = !linkOnly && Number(inv.amountPaid ?? 0) >= amt - 0.01;
@@ -184,7 +185,7 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
       let score = 0;
       if (amtDiff <= 0.01) { score += 0.55; reasons.push("amount exact"); }
       else { score += 0.35; reasons.push(`amount ~ (RM${amtDiff.toFixed(2)} off)`); }
-      const named = nameInDesc(nm, descLower);
+      const named = nameInDesc(nm, descLower) || aliasInDesc(aliases, descLower);
       if (named) { score += 0.4; reasons.push("payee name in description"); }
       // The invoice's own number quoted in the transfer is the strongest signal
       // a bank line carries — count it as identity confirmation like a name hit.
@@ -231,7 +232,7 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
   const multi: ApMultiMatch[] = [];
   {
     type Inv = (typeof invoices)[number];
-    const bySupplier = new Map<string, { payee: string; toks: string[]; invs: Inv[] }>();
+    const bySupplier = new Map<string, { payee: string; toks: string[]; aliases: string[]; invs: Inv[] }>();
     for (const inv of invoices) {
       if (matchedInvoiceIds.has(inv.id)) continue;
       // Paid-but-unlinked invoices stay in the bundle pool (link-only members);
@@ -239,7 +240,12 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
       if (inv.status !== "PAID" && Number(inv.amountPaid ?? 0) >= Number(inv.amount) - 0.01) continue;
       const payee = inv.supplier?.name ?? inv.vendorName ?? inv.vendorBankAccountName ?? "(unknown payee)";
       const key = payee.toLowerCase();
-      const g = bySupplier.get(key) ?? { payee, toks: [...new Set([...tokens(inv.supplier?.name), ...tokens(inv.vendorName), ...tokens(inv.vendorBankAccountName)])], invs: [] };
+      const g = bySupplier.get(key) ?? {
+        payee,
+        toks: [...new Set([...tokens(inv.supplier?.name), ...tokens(inv.vendorName), ...tokens(inv.vendorBankAccountName)])],
+        aliases: aliasPhrasesFor([inv.supplier?.name, inv.vendorName, inv.vendorBankAccountName]),
+        invs: [],
+      };
       g.invs.push(inv);
       bySupplier.set(key, g);
     }
@@ -254,7 +260,7 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
       for (const g of bySupplier.values()) {
         if (g.invs.length < 2) continue;
         const refHits = g.invs.filter((i) => invoiceRefInDesc(i.invoiceNumber, runs)).length;
-        const named = nameInDesc(g.toks, descLower);
+        const named = nameInDesc(g.toks, descLower) || aliasInDesc(g.aliases, descLower);
         if (!named && refHits === 0) continue;
 
         const pickIdx = subsetSumIdx(g.invs.map((i) => Math.round(Number(i.amount) * 100)), target);
