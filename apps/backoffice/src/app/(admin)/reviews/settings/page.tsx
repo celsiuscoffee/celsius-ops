@@ -12,6 +12,7 @@ import {
   Download,
 } from "lucide-react";
 import Link from "next/link";
+import QRCode from "qrcode";
 import { useFetch } from "@/lib/use-fetch";
 
 // ─── Types ─────────────────────────────────────────────────
@@ -78,6 +79,20 @@ export default function ReviewSettingsPage() {
     selectedOutletId ? `/api/reviews/qr?outletId=${selectedOutletId}` : null,
   );
 
+  // QR rendered locally (qrcode → data URL): no external image host, so the
+  // strict img-src CSP is satisfied and the code works offline. 500px scales
+  // down crisply for the 200px preview and prints cleanly.
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!qrData?.url) {
+      setQrDataUrl(null);
+      return;
+    }
+    QRCode.toDataURL(qrData.url, { width: 500, margin: 2 })
+      .then(setQrDataUrl)
+      .catch(() => setQrDataUrl(null));
+  }, [qrData?.url]);
+
   // Sync form state when settings load
   useEffect(() => {
     if (settings) {
@@ -126,11 +141,9 @@ export default function ReviewSettingsPage() {
   };
 
   const downloadQr = () => {
-    if (!qrData?.url) return;
-    // Use a QR code API to generate downloadable image
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(qrData.url)}`;
+    if (!qrDataUrl) return;
     const a = document.createElement("a");
-    a.href = qrImageUrl;
+    a.href = qrDataUrl;
     a.download = `review-qr-${selectedOutletId}.png`;
     a.click();
   };
@@ -326,13 +339,16 @@ export default function ReviewSettingsPage() {
 
                 {qrData?.url && (
                   <div className="mt-5 flex flex-col items-center">
-                    {/* QR Code image */}
+                    {/* QR Code image — locally generated data URL */}
                     <div className="rounded-xl border border-border p-4 bg-white">
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData.url)}`}
-                        alt="Review QR Code"
-                        className="h-[200px] w-[200px]"
-                      />
+                      {qrDataUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={qrDataUrl} alt="Review QR Code" className="h-[200px] w-[200px]" />
+                      ) : (
+                        <div className="flex h-[200px] w-[200px] items-center justify-center text-xs text-muted-foreground">
+                          Generating…
+                        </div>
+                      )}
                     </div>
 
                     <p className="mt-3 text-sm font-medium">{qrData.outletName}</p>
