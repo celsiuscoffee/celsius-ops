@@ -48,9 +48,22 @@ export type ApMatch = {
   reasons: string[];
   alreadyPaid: boolean; // invoice was already settled → potential double-payment
 };
+export type ApMultiMatch = {
+  bankLineId: string;
+  bankDesc: string;
+  bankDate: string;
+  amount: number;
+  payee: string;
+  invoiceIds: string[];
+  invoiceNumbers: (string | null)[];
+  refsConfirmed: number; // how many of the invoices' numbers appear in the description
+  tier: MatchTier;
+  reasons: string[];
+};
 export type ApMatchResult = {
   auto: ApMatch[];
   review: ApMatch[];
+  multi: ApMultiMatch[];
   unmatchedInvoices: { invoiceId: string; invoiceNumber: string | null; payee: string; amount: number; issueDate: string }[];
   unmatchedOutflows: { bankLineId: string; desc: string; date: string; amount: number; category: string | null }[];
   doublePayments: ApMatch[];
@@ -75,6 +88,9 @@ function nameInDesc(nameTokens: string[], descLower: string): boolean {
   // A single distinctive token (e.g. "xora", "365eat") or ≥2 tokens is a match.
   return hits >= 2 || (hits === 1 && nameTokens.some((t) => t.length >= 5 && descLower.includes(t)));
 }
+
+import { digitRuns, invoiceRefInDesc, subsetSumIdx } from "./ap-match-lib";
+export { digitRuns, invoiceRefInDesc, subsetSumIdx } from "./ap-match-lib";
 
 export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promise<ApMatchResult> {
   const sinceDays = opts.sinceDays ?? 120;
@@ -152,6 +168,12 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
       else { score += 0.35; reasons.push(`amount ~ (RM${amtDiff.toFixed(2)} off)`); }
       const named = nameInDesc(nm, descLower);
       if (named) { score += 0.4; reasons.push("payee name in description"); }
+      // The invoice's own number quoted in the transfer is the strongest signal
+      // a bank line carries — count it as identity confirmation like a name hit.
+      if (invoiceRefInDesc(inv.invoiceNumber, digitRuns(descLower))) {
+        score += named ? 0.05 : 0.4;
+        reasons.push("invoice no in description");
+      }
       if (dDays <= 14) { score += 0.1; reasons.push("paid ≤14d of issue"); }
       else if (dDays <= 45) { score += 0.05; }
 
@@ -166,14 +188,79 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
     }
 
     if (best && best.score >= 0.55) {
-      // AUTO requires amount-exact AND a name hit (score ≥ 0.85 only achievable that way).
-      best.tier = best.score >= 0.85 && best.reasons.includes("amount exact") && best.reasons.includes("payee name in description") ? "auto" : "review";
+      // AUTO requires amount-exact AND identity confirmation — payee name or
+      // the invoice number quoted in the transfer (score ≥ 0.85 needs one).
+      const confirmed = best.reasons.includes("payee name in description") || best.reasons.includes("invoice no in description");
+      best.tier = best.score >= 0.85 && best.reasons.includes("amount exact") && confirmed ? "auto" : "review";
       usedBankLineIds.add(best.bankLineId);
       matchedInvoiceIds.add(inv.id);
       if (best.alreadyPaid) doublePayments.push(best);
       else (best.tier === "auto" ? auto : review).push(best);
     } else {
       unmatchedInvoices.push({ invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, payee, amount: amt, issueDate: ymd(issue) });
+    }
+  }
+
+  // ── Multi-invoice pass ─────────────────────────────────────────────────────
+  // Suppliers are routinely paid several invoices in ONE transfer (the bank
+  // line even lists the invoice numbers: "INV 006545, 006577, 006556…"), which
+  // single-invoice amount matching can never see. For each still-unmatched
+  // outflow, try each supplier whose name or invoice refs appear in the
+  // description: find the subset of their open invoices summing to the amount.
+  const multi: ApMultiMatch[] = [];
+  {
+    type Inv = (typeof invoices)[number];
+    const bySupplier = new Map<string, { payee: string; toks: string[]; invs: Inv[] }>();
+    for (const inv of invoices) {
+      if (matchedInvoiceIds.has(inv.id)) continue;
+      if (Number(inv.amountPaid ?? 0) >= Number(inv.amount) - 0.01) continue;
+      const payee = inv.supplier?.name ?? inv.vendorName ?? inv.vendorBankAccountName ?? "(unknown payee)";
+      const key = payee.toLowerCase();
+      const g = bySupplier.get(key) ?? { payee, toks: [...new Set([...tokens(inv.supplier?.name), ...tokens(inv.vendorName), ...tokens(inv.vendorBankAccountName)])], invs: [] };
+      g.invs.push(inv);
+      bySupplier.set(key, g);
+    }
+
+    for (const l of lines) {
+      if (usedBankLineIds.has(l.id)) continue;
+      const descLower = (l.description ?? "").toLowerCase();
+      const runs = digitRuns(descLower);
+      const target = Math.round(Number(l.amount) * 100);
+
+      let found: ApMultiMatch | null = null;
+      for (const g of bySupplier.values()) {
+        if (g.invs.length < 2) continue;
+        const refHits = g.invs.filter((i) => invoiceRefInDesc(i.invoiceNumber, runs)).length;
+        const named = nameInDesc(g.toks, descLower);
+        if (!named && refHits === 0) continue;
+
+        const pickIdx = subsetSumIdx(g.invs.map((i) => Math.round(Number(i.amount) * 100)), target);
+        if (!pickIdx) continue;
+        const picked = pickIdx.map((i) => g.invs[i]);
+        const refsConfirmed = picked.filter((i) => invoiceRefInDesc(i.invoiceNumber, runs)).length;
+        // AUTO only when the transfer itself confirms the bundle: every picked
+        // invoice's number quoted, or all-but-one quoted alongside a name hit.
+        const tier: MatchTier =
+          refsConfirmed === picked.length || (named && refsConfirmed >= picked.length - 1 && refsConfirmed >= 1)
+            ? "auto" : "review";
+        const reasons = [
+          `sum of ${picked.length} invoices = amount`,
+          ...(named ? ["payee name in description"] : []),
+          ...(refsConfirmed ? [`${refsConfirmed}/${picked.length} invoice nos in description`] : []),
+        ];
+        found = {
+          bankLineId: l.id, bankDesc: (l.description ?? "").replace(/\s+/g, " ").slice(0, 60),
+          bankDate: ymd(l.txnDate), amount: round2(Number(l.amount)), payee: g.payee,
+          invoiceIds: picked.map((i) => i.id), invoiceNumbers: picked.map((i) => i.invoiceNumber),
+          refsConfirmed, tier, reasons,
+        };
+        if (tier === "auto") break; // best possible for this line
+      }
+      if (found) {
+        usedBankLineIds.add(found.bankLineId);
+        for (const id of found.invoiceIds) matchedInvoiceIds.add(id);
+        multi.push(found);
+      }
     }
   }
 
@@ -184,7 +271,11 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
     .map((l) => ({ bankLineId: l.id, desc: (l.description ?? "").replace(/\s+/g, " ").slice(0, 60), date: ymd(l.txnDate), amount: round2(Number(l.amount)), category: l.category as string | null }))
     .sort((a, b) => b.amount - a.amount);
 
-  return { auto, review, unmatchedInvoices, unmatchedOutflows, doublePayments };
+  return {
+    auto, review, multi,
+    unmatchedInvoices: unmatchedInvoices.filter((i) => !matchedInvoiceIds.has(i.invoiceId)),
+    unmatchedOutflows, doublePayments,
+  };
 }
 
 // ── VERIFIER + APPLY ────────────────────────────────────────────────────────
@@ -196,7 +287,9 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
 export function verifyMatch(m: ApMatch): { ok: boolean; reason?: string } {
   if (m.tier !== "auto") return { ok: false, reason: "not auto-tier" };
   if (!m.reasons.includes("amount exact")) return { ok: false, reason: "amount not exact" };
-  if (!m.reasons.includes("payee name in description")) return { ok: false, reason: "payee not confirmed in bank line" };
+  if (!m.reasons.includes("payee name in description") && !m.reasons.includes("invoice no in description")) {
+    return { ok: false, reason: "identity not confirmed in bank line (no payee name or invoice no)" };
+  }
   if (m.alreadyPaid) return { ok: false, reason: "invoice already settled — possible double-pay" };
   return { ok: true };
 }
@@ -216,13 +309,18 @@ export type ApplyResult = {
 // LLM-verified review-tier apply.
 export async function writeApMatch(m: ApMatch): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true } });
+    const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true, category: true } });
     if (line?.apInvoiceId) return; // already matched — idempotent
     const inv = await tx.invoice.findUnique({ where: { id: m.invoiceId }, select: { status: true, amount: true } });
     if (!inv || inv.status === "PAID") return;
     await tx.bankStatementLine.update({
       where: { id: m.bankLineId },
-      data: { apInvoiceId: m.invoiceId, apMatchedAt: new Date(), classifiedBy: "ap-match" },
+      data: {
+        apInvoiceId: m.invoiceId, apMatchedAt: new Date(), classifiedBy: "ap-match",
+        // A matched line settles a procurement invoice — pull it out of the
+        // catch-all so the GL posts it as COGS, not Suspense.
+        ...(line?.category === null || line?.category === "OTHER_OUTFLOW" ? { category: "RAW_MATERIALS" as CashCategory } : {}),
+      },
     });
     await tx.invoice.update({
       where: { id: m.invoiceId },
@@ -231,15 +329,45 @@ export async function writeApMatch(m: ApMatch): Promise<void> {
   });
 }
 
+// One transfer settling several invoices: link the line to the first invoice
+// (the FK is single) and mark every invoice in the bundle paid, stamped with
+// the bank line id so the trail survives the single-column link.
+export async function writeMultiMatch(m: ApMultiMatch): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true, category: true } });
+    if (line?.apInvoiceId) return; // already matched — idempotent
+    const invs = await tx.invoice.findMany({ where: { id: { in: m.invoiceIds } }, select: { id: true, status: true, amount: true } });
+    if (invs.length !== m.invoiceIds.length || invs.some((i) => i.status === "PAID")) return;
+    await tx.bankStatementLine.update({
+      where: { id: m.bankLineId },
+      data: {
+        apInvoiceId: m.invoiceIds[0], apMatchedAt: new Date(), classifiedBy: "ap-match",
+        ...(line?.category === null || line?.category === "OTHER_OUTFLOW" ? { category: "RAW_MATERIALS" as CashCategory } : {}),
+      },
+    });
+    for (const inv of invs) {
+      await tx.invoice.update({
+        where: { id: inv.id },
+        data: { amountPaid: inv.amount, status: "PAID", paidAt: new Date(m.bankDate + "T00:00:00Z"), paidVia: `bank-ap-match-multi:${m.bankLineId}` },
+      });
+    }
+  });
+}
+
 export async function applyApMatches(opts: { commit?: boolean; sinceDays?: number } = {}): Promise<ApplyResult> {
   const commit = opts.commit ?? false;
-  const { auto } = await proposeApMatches({ sinceDays: opts.sinceDays });
+  const { auto, multi } = await proposeApMatches({ sinceDays: opts.sinceDays });
   const skipped: ApplyResult["skipped"] = [];
   let applied = 0;
   for (const m of auto) {
     const v = verifyMatch(m);
     if (!v.ok) { skipped.push({ payee: m.payee, amount: m.amount, reason: v.reason! }); continue; }
     if (commit) await writeApMatch(m);
+    applied++;
+  }
+  for (const m of multi) {
+    if (m.tier !== "auto") { skipped.push({ payee: m.payee, amount: m.amount, reason: "multi-invoice bundle not ref-confirmed" }); continue; }
+    if (commit) await writeMultiMatch(m);
     applied++;
   }
   return { committed: commit, applied, skipped };
