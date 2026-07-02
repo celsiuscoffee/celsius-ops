@@ -14,10 +14,35 @@ import {
 } from "@celsius/ui";
 import { Loader2, Download, FileText, AlertTriangle } from "lucide-react";
 
-const RM = (n: number | null | undefined) =>
-  n === null || n === undefined
-    ? "—"
-    : new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR" }).format(n);
+// Accounting format: negatives in parentheses, the convention every
+// accounting package (Xero, QuickBooks, Bukku) uses on statements.
+const RM = (n: number | null | undefined) => {
+  if (n === null || n === undefined) return "—";
+  const f = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR" }).format(Math.abs(n));
+  return n < 0 ? `(${f})` : f;
+};
+
+function csvEscape(v: string | number): string {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
+  const blob = new Blob([rows.map((r) => r.map(csvEscape).join(",")).join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function ExportCsvButton({ onExport }: { onExport: () => void }) {
+  return (
+    <Button size="xs" variant="outline" onClick={onExport} title="Download this report as CSV">
+      <Download className="h-3.5 w-3.5" /> CSV
+    </Button>
+  );
+}
 
 function thisMonthStart(): string {
   const myt = new Date(Date.now() + 8 * 60 * 60 * 1000);
@@ -299,6 +324,23 @@ function PnlTab() {
       )}
 
       {data && (
+        <>
+        <div className="flex justify-end">
+          <ExportCsvButton onExport={() => {
+            const r = data.report;
+            const rows: Array<Array<string | number>> = [["Section", "Code", "Account", "Amount", "% of income"]];
+            const push = (section: string, lines: PnlLine[], total: number, totalLabel: string) => {
+              for (const l of lines) rows.push([section, l.code, l.name, l.amount, pctOfIncome(l.amount, r.income.total)]);
+              rows.push([section, "", totalLabel, total, pctOfIncome(total, r.income.total)]);
+            };
+            push("Income", r.income.lines, r.income.total, "Total Income");
+            push("Cost of Sales", r.cogs.lines, r.cogs.total, "Total COGS");
+            rows.push(["", "", "Gross Profit", r.grossProfit, pctOfIncome(r.grossProfit, r.income.total)]);
+            push("Expenses", r.expenses.lines, r.expenses.total, "Total Expenses");
+            rows.push(["", "", "Net Income", r.netIncome, pctOfIncome(r.netIncome, r.income.total)]);
+            downloadCsv(`pnl_${r.start}_${r.end}.csv`, rows);
+          }} />
+        </div>
         <div className="overflow-x-auto rounded-lg border bg-card">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -327,6 +369,7 @@ function PnlTab() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <Sheet open={!!drillCode} onOpenChange={(o) => !o && setDrillCode(null)}>
@@ -743,9 +786,18 @@ function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by code or account…" className="h-8 w-56 rounded-md border bg-background px-2 text-sm" />
         <span className="text-xs text-muted-foreground">as of <span className="tabular-nums">{asOf}</span></span>
         {data?.report && (
-          <span className={`ml-auto rounded px-2 py-1 text-xs font-medium ${data.report.balanced ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-red-500/10 text-red-600"}`}>
-            {data.report.balanced ? "Balanced" : "Out of balance"}
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className={`rounded px-2 py-1 text-xs font-medium ${data.report.balanced ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-red-500/10 text-red-600"}`}>
+              {data.report.balanced ? "Balanced" : "Out of balance"}
+            </span>
+            <ExportCsvButton onExport={() => {
+              const r = data.report;
+              const rows: Array<Array<string | number>> = [["Code", "Account", "Type", "Debit", "Credit"]];
+              for (const x of r.rows) rows.push([x.code, x.name, x.type, x.debit || "", x.credit || ""]);
+              rows.push(["", "Total", "", r.totalDebit, r.totalCredit]);
+              downloadCsv(`trial-balance_${r.asOf}.csv`, rows);
+            }} />
+          </div>
         )}
       </div>
       {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
@@ -782,18 +834,79 @@ function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
 type GlEntry = { date: string; txnType: string; description: string; debit: number; credit: number; balance: number };
 type Gl = { accountCode: string; accountName: string; start: string; end: string; opening: number; entries: GlEntry[]; closing: number; totalDebit: number; totalCredit: number };
 
+type CoaAccount = { code: string; name: string; type: string };
+
+// Searchable COA picker — nobody should have to know "6000-01" by heart.
+// Type a code OR a name fragment ("raw", "rental", "grab") and pick from the
+// chart of accounts, the way Xero's Account Transactions report does it.
+function AccountPicker({ value, onChange }: { value: string; onChange: (code: string) => void }) {
+  const { data } = useFetch<{ accounts: CoaAccount[] }>("/api/finance/accounts");
+  const [q, setQ] = useState<string | null>(null); // null = not editing, show the selection
+  const [open, setOpen] = useState(false);
+  const accounts = data?.accounts ?? [];
+  const current = accounts.find((a) => a.code === value);
+  const shown = q !== null ? q : current ? `${current.code} · ${current.name}` : value;
+  const t = (q ?? "").trim().toLowerCase();
+  const matches = (t
+    ? accounts.filter((a) => a.code.toLowerCase().startsWith(t) || a.name.toLowerCase().includes(t))
+    : accounts
+  ).slice(0, 14);
+  return (
+    <div className="relative">
+      <input
+        value={shown}
+        onFocus={() => { setQ(""); setOpen(true); }}
+        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onBlur={() => { setOpen(false); setQ(null); }}
+        placeholder="Search account code or name…"
+        className="h-8 w-64 sm:w-80 rounded-md border bg-background px-2 text-sm"
+      />
+      {open && matches.length > 0 && (
+        <ul className="absolute z-20 mt-1 max-h-72 w-72 sm:w-96 overflow-y-auto rounded-md border bg-card shadow-lg">
+          {matches.map((a) => (
+            <li key={a.code}>
+              <button
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); onChange(a.code); setOpen(false); setQ(null); }}
+                className={`flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-sm hover:bg-muted/50 ${a.code === value ? "bg-muted/30" : ""}`}
+              >
+                <span className="w-16 shrink-0 text-xs tabular-nums text-muted-foreground">{a.code}</span>
+                <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                <span className="shrink-0 text-[10px] uppercase text-muted-foreground">{a.type}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function GlTab({ account, setAccount }: { account: string; setAccount: (c: string) => void }) {
   const { start, end } = useControls();
-  const { data, isLoading } = useFetch<{ report: Gl }>(`/api/finance/reports/general-ledger?account=${encodeURIComponent(account)}&start=${start}&end=${end}`);
+  const { data, isLoading, error } = useFetch<{ report: Gl }>(`/api/finance/reports/general-ledger?account=${encodeURIComponent(account)}&start=${start}&end=${end}`);
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-xs text-muted-foreground">Account
-          <input value={account} onChange={(e) => setAccount(e.target.value.trim())} placeholder="e.g. 6000-01" className="ml-2 w-28 rounded-md border bg-background px-2 py-1 text-sm tabular-nums" />
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">Account
+          <AccountPicker value={account} onChange={setAccount} />
         </label>
         <span className="text-xs text-muted-foreground tabular-nums">{start} → {end}</span>
+        {data?.report && (
+          <div className="ml-auto">
+            <ExportCsvButton onExport={() => {
+              const r = data.report;
+              const rows: Array<Array<string | number>> = [["Date", "Description", "Debit", "Credit", "Balance"]];
+              rows.push(["", "Opening balance", "", "", r.opening]);
+              for (const e of r.entries) rows.push([e.date, e.description, e.debit || "", e.credit || "", e.balance]);
+              rows.push(["", "Period total / closing", r.totalDebit, r.totalCredit, r.closing]);
+              downloadCsv(`general-ledger_${r.accountCode}_${r.start}_${r.end}.csv`, rows);
+            }} />
+          </div>
+        )}
       </div>
-      {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
+      {error ? <div className="py-12 text-center text-sm text-muted-foreground">No ledger for this account. Pick another account above.</div>
+      : isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
         <div className="overflow-x-auto rounded-lg border">
           <div className="border-b bg-muted/40 px-3 py-2 text-sm font-medium">{data.report.accountCode} · {data.report.accountName}</div>
           <table className="w-full min-w-[640px] text-sm">
@@ -848,7 +961,18 @@ function ApTab() {
       <div className="flex flex-wrap items-center gap-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by supplier…" className="h-8 w-56 rounded-md border bg-background px-2 text-sm" />
         <span className="text-xs text-muted-foreground">as of <span className="tabular-nums">{asOf}</span></span>
-        {data?.report && <span className="ml-auto text-xs text-muted-foreground">{data.report.invoiceCount} open bills · <span className="font-medium text-foreground">{RM(data.report.grandTotal)}</span> outstanding</span>}
+        {data?.report && (
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{data.report.invoiceCount} open bills · <span className="font-medium text-foreground">{RM(data.report.grandTotal)}</span> outstanding</span>
+            <ExportCsvButton onExport={() => {
+              const r = data.report;
+              const rows: Array<Array<string | number>> = [["Supplier", "Bills", "Current", "1-30", "31-60", "61-90", "90+", "Total"]];
+              for (const x of r.rows) rows.push([x.vendor, x.count, x.current || "", x.d1_30 || "", x.d31_60 || "", x.d61_90 || "", x.d90_plus || "", x.total]);
+              rows.push(["Total", r.invoiceCount, r.totals.current, r.totals.d1_30, r.totals.d31_60, r.totals.d61_90, r.totals.d90_plus, r.grandTotal]);
+              downloadCsv(`aged-payables_${r.asOf}.csv`, rows);
+            }} />
+          </div>
+        )}
       </div>
       {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
         <div className="overflow-x-auto rounded-lg border">
@@ -1045,9 +1169,15 @@ export default function FinanceReportsPage() {
 
       {(tab === "bs" || tab === "cf") && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs sm:text-sm text-amber-700 dark:text-amber-400">
-          <span className="font-medium">Ledger-based — currently incomplete.</span>{" "}
-          This {tab === "bs" ? "Balance Sheet" : "Cash Flow"} is built from <em>posted</em> journals, but historical journals aren&rsquo;t fully posted yet (AR is still in draft). Treat it as indicative. For accurate figures use the <strong>P&amp;L</strong> (source-driven), the <strong>Cashflow</strong> page (bank actuals), and the <strong>Ledger</strong> (real bank lines).
+          <span className="font-medium">Ledger-based.</span>{" "}
+          Bank activity, payroll accruals and sales settlements now post to the ledger automatically. Two known gaps remain: unclassified inflows sit in <strong>Suspense (1999)</strong> until they are reconciled (clear them on the Recon page), and pre-June sales journals are partial. Cross-check cash against the <strong>Cashflow</strong> page.
         </div>
+      )}
+
+      {usesControls && controls.consolidated && tab !== "pnl" && (
+        <p className="text-[11px] text-amber-600">
+          Consolidated view applies to the P&amp;L only. This tab shows the active company.
+        </p>
       )}
 
       <ControlsCtx.Provider value={{ start: controls.start, end: controls.end, outletId: controls.outletId, consolidated: controls.consolidated }}>
