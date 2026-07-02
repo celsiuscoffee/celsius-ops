@@ -563,6 +563,12 @@ function canAccess(user: UserProfile | undefined, moduleKey?: string): boolean {
   if (moduleKey?.startsWith("finance:")) {
     return user.role === "ADMIN" || user.role === "OWNER";
   }
+  // Payroll (runs / allowances / statutory) is Owner/Admin only — managers never
+  // see it in the nav even if the moduleAccess checkbox is set (payroll routes are
+  // OWNER/ADMIN-gated too). Keeps pay off managers' screens.
+  if (moduleKey === "hr:payroll" || moduleKey === "hr:allowances") {
+    return user.role === "ADMIN" || user.role === "OWNER";
+  }
   if (user.role === "ADMIN" || user.role === "OWNER") return true;
   if (!moduleKey) return true;
   if (!user.moduleAccess) return false;

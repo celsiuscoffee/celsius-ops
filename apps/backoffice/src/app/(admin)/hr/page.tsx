@@ -121,6 +121,9 @@ type DashboardData = {
 
 export default function HRDashboardPage() {
   const { data, mutate } = useFetch<DashboardData>("/api/hr/dashboard");
+  // Payroll is Owner/Admin only — hide the Payroll card + stat from managers.
+  const { data: me } = useFetch<{ role: string }>("/api/auth/me");
+  const canSeePayroll = me?.role === "OWNER" || me?.role === "ADMIN";
   const [processing, setProcessing] = useState(false);
 
   const runProcessor = async () => {
@@ -187,7 +190,7 @@ export default function HRDashboardPage() {
 
       {/* Status Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((card) => {
+        {cards.filter((card) => canSeePayroll || card.label !== "Payroll").map((card) => {
           const Icon = card.icon;
           return (
             <Link
@@ -211,7 +214,7 @@ export default function HRDashboardPage() {
       {/* Module hub — BrioHR-style: one card per module, sub-pages as inline
           links (same groups as the sidebar + in-module tab strips). */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {MODULES.map((m) => {
+        {MODULES.filter((m) => canSeePayroll || m.label !== "Payroll").map((m) => {
           const Icon = m.icon;
           return (
             <div key={m.label} className="rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md">

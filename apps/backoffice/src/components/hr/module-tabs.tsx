@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useFetch } from "@/lib/use-fetch";
 
 // BrioHR-style in-module tab strip. The sidebar picks the module; this strip
 // switches between the module's sibling pages without going back through the
@@ -67,13 +68,19 @@ const TAB_GROUPS: { module: string; tabs: { href: string; label: string }[] }[] 
 
 export function HrModuleTabs() {
   const pathname = usePathname();
+  // Payroll is Owner/Admin only — managers never get the Payroll tab group.
+  // (Hook must run before the settings early-return below.)
+  const { data: me } = useFetch<{ role: string }>("/api/auth/me");
+  const canSeePayroll = me?.role === "OWNER" || me?.role === "ADMIN";
+
   // Settings pages keep their own SettingsNav as the primary strip — only the
   // Leave group cross-links into settings, and there the SettingsNav already
   // gives Balances/Policies/Holidays switching, so suppress ours to avoid a
   // double tab row.
   if (pathname.startsWith("/hr/settings")) return null;
 
-  const group = TAB_GROUPS.find((g) => g.tabs.some((t) => t.href === pathname));
+  const groups = canSeePayroll ? TAB_GROUPS : TAB_GROUPS.filter((g) => g.module !== "Payroll");
+  const group = groups.find((g) => g.tabs.some((t) => t.href === pathname));
   if (!group) return null;
 
   return (
