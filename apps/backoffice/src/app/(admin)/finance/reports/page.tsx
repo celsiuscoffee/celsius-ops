@@ -200,10 +200,17 @@ type DrillLine = {
   credit: number;
 };
 
+// Common-size %: every P&L line expressed against total income — the standard
+// way to read an F&B P&L (COGS ~35%, staff ~15%, net margin at a glance).
+function pctOfIncome(amount: number, totalIncome: number): string {
+  if (!totalIncome) return "";
+  return `${((amount / totalIncome) * 100).toFixed(1)}%`;
+}
+
 // Row components live at module scope (not inside PnlTab) so their
 // identity is stable across renders; ReportRow takes the drill-down
 // callback as a prop instead of closing over PnlTab state.
-function ReportRow({ line, onDrill }: { line: PnlLine; onDrill: (code: string) => void }) {
+function ReportRow({ line, totalIncome, onDrill }: { line: PnlLine; totalIncome: number; onDrill: (code: string) => void }) {
   return (
     <tr
       className="cursor-pointer border-t transition hover:bg-muted/30"
@@ -217,11 +224,12 @@ function ReportRow({ line, onDrill }: { line: PnlLine; onDrill: (code: string) =
       </td>
       <td className="px-3 py-1.5">{line.name}</td>
       <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(line.amount)}</td>
+      <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctOfIncome(line.amount, totalIncome)}</td>
     </tr>
   );
 }
 
-function TotalRow({ label, amount, bold = true }: { label: string; amount: number; bold?: boolean }) {
+function TotalRow({ label, amount, totalIncome, bold = true }: { label: string; amount: number; totalIncome: number; bold?: boolean }) {
   return (
     <tr className="border-t bg-muted/30">
       <td colSpan={2} className={`px-3 py-2 ${bold ? "font-semibold" : ""}`}>
@@ -230,6 +238,9 @@ function TotalRow({ label, amount, bold = true }: { label: string; amount: numbe
       <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${bold ? "font-semibold" : ""}`}>
         {RM(amount)}
       </td>
+      <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${bold ? "font-semibold" : ""}`}>
+        {pctOfIncome(amount, totalIncome)}
+      </td>
     </tr>
   );
 }
@@ -237,7 +248,7 @@ function TotalRow({ label, amount, bold = true }: { label: string; amount: numbe
 function SectionHeader({ label }: { label: string }) {
   return (
     <tr>
-      <td colSpan={3} className="bg-muted/50 px-3 py-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+      <td colSpan={4} className="bg-muted/50 px-3 py-1.5 text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </td>
     </tr>
@@ -275,23 +286,24 @@ function PnlTab() {
                 <th className="whitespace-nowrap px-3 py-2">Code</th>
                 <th className="px-3 py-2">Account</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right">Amount</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right" title="Share of total income">% of income</th>
               </tr>
             </thead>
             <tbody>
               <SectionHeader label="Income" />
-              {data.report.income.lines.map((l) => <ReportRow key={l.code} line={l} onDrill={setDrillCode} />)}
-              <TotalRow label="Total Income" amount={data.report.income.total} />
+              {data.report.income.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} />)}
+              <TotalRow label="Total Income" amount={data.report.income.total} totalIncome={data.report.income.total} />
 
               <SectionHeader label="Cost of Sales" />
-              {data.report.cogs.lines.map((l) => <ReportRow key={l.code} line={l} onDrill={setDrillCode} />)}
-              <TotalRow label="Total COGS" amount={data.report.cogs.total} />
-              <TotalRow label="Gross Profit" amount={data.report.grossProfit} />
+              {data.report.cogs.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} />)}
+              <TotalRow label="Total COGS" amount={data.report.cogs.total} totalIncome={data.report.income.total} />
+              <TotalRow label="Gross Profit" amount={data.report.grossProfit} totalIncome={data.report.income.total} />
 
               <SectionHeader label="Expenses" />
-              {data.report.expenses.lines.map((l) => <ReportRow key={l.code} line={l} onDrill={setDrillCode} />)}
-              <TotalRow label="Total Expenses" amount={data.report.expenses.total} />
+              {data.report.expenses.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} />)}
+              <TotalRow label="Total Expenses" amount={data.report.expenses.total} totalIncome={data.report.income.total} />
 
-              <TotalRow label="Net Income" amount={data.report.netIncome} />
+              <TotalRow label="Net Income" amount={data.report.netIncome} totalIncome={data.report.income.total} />
             </tbody>
           </table>
         </div>
