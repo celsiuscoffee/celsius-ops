@@ -60,6 +60,10 @@ export type PostJournalInput = {
   txnType: TxnType;
   outletId?: string | null;
   sourceDocId?: string | null;
+  // Deterministic identity for DERIVED journals (e.g. bank day-aggregates):
+  // md5-uuid of the aggregation key, unique-indexed so a group can never post
+  // twice. NOT source_doc_id — that is an FK to fin_documents.
+  postingKey?: string | null;
   agent: AgentName;
   agentVersion: string;
   confidence: number;     // 0-1; agents below their threshold should NOT call this — they should write fin_exceptions instead

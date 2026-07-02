@@ -62,6 +62,7 @@ export async function postJournal(input: PostJournalInput): Promise<PostJournalR
     amount: totalDebit,
     currency: "MYR",
     source_doc_id: input.sourceDocId ?? null,
+    posting_key: input.postingKey ?? null,
     txn_type: input.txnType,
     posted_by_agent: input.agent,
     agent_version: input.agentVersion,
