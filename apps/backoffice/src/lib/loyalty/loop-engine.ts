@@ -673,10 +673,35 @@ export async function measureRound(roundId: string) {
       : null;
   const mytHour = (iso: string) => new Date(new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur" })).getHours();
 
+  // HONEST CONTROL: a holdout only measures "no message" if they truly received
+  // none. Sibling loops share the audience, so a holdout here can be TREATED by
+  // another loop inside this round's window (measured at ~17% for winback) —
+  // that biases the baseline up and understates lift. Exclude them from stats.
+  const holdoutPhones = ((rows ?? []) as Array<{ arm: string; phone: string }>)
+    .filter((r) => r.arm === "holdout").map((r) => r.phone);
+  const contaminated = new Set<string>();
+  if (holdoutPhones.length && round.sent_at) {
+    const winStart = round.sent_at as string;
+    const winEnd = new Date(new Date(winStart).getTime() + windowMs).toISOString();
+    for (let i = 0; i < holdoutPhones.length; i += 200) {
+      const { data: hits } = await supabaseAdmin
+        .from("loop_assignments")
+        .select("phone, loop_rounds!inner(sent_at)")
+        .in("phone", holdoutPhones.slice(i, i + 200))
+        .eq("sms_status", "sent")
+        .neq("round_id", roundId)
+        .gte("loop_rounds.sent_at", winStart)
+        .lte("loop_rounds.sent_at", winEnd);
+      for (const h of (hits ?? []) as Array<{ phone: string }>) contaminated.add(h.phone);
+    }
+  }
+  let holdoutExcluded = 0;
+
   type Acc = { n: number; converted: number; redeemed: number; revenueRm: number };
   const byArm: Record<string, Acc> = {};
 
   for (const r of (rows ?? []) as Array<{ id: string; phone: string; arm: string; issued_reward_id: string | null; assigned_at: string }>) {
+    if (r.arm === "holdout" && contaminated.has(r.phone)) { holdoutExcluded++; continue; }
     const acc = (byArm[r.arm] ??= { n: 0, converted: 0, redeemed: 0, revenueRm: 0 });
     acc.n++;
 
@@ -728,7 +753,12 @@ export async function measureRound(roundId: string) {
     const redeemRate = a.redeemed / Math.max(1, a.n);
     const liftPp = arm === "holdout" ? 0 : +((convRate - holdoutRate) * 100).toFixed(1);
     const marginPerRecipientRm = +(a.revenueRm / Math.max(1, a.n)).toFixed(2); // gross; subtract COGS/SMS in dashboard
-    return { arm, n: a.n, conversion_rate: +(convRate * 100).toFixed(1), redemption_rate: +(redeemRate * 100).toFixed(1), lift_pp: liftPp, revenue_rm: +a.revenueRm.toFixed(2), revenue_per_recipient_rm: marginPerRecipientRm };
+    return {
+      arm, n: a.n, conversion_rate: +(convRate * 100).toFixed(1), redemption_rate: +(redeemRate * 100).toFixed(1), lift_pp: liftPp, revenue_rm: +a.revenueRm.toFixed(2), revenue_per_recipient_rm: marginPerRecipientRm,
+      // Audit trail: how many holdouts were dropped as contaminated (treated by
+      // a sibling loop inside this window). Only ever set on the holdout row.
+      ...(arm === "holdout" && holdoutExcluded > 0 ? { excluded_contaminated: holdoutExcluded } : {}),
+    };
   });
 
   await supabaseAdmin
@@ -858,7 +888,27 @@ function toArmDef(c: OfferCandidate, message: string): ArmDef {
 type StoredArm = { key: string; label: string; voucher_template_id: string; message: string };
 type StoredStat = {
   arm: string; n: number; lift_pp: number; revenue_per_recipient_rm: number;
+  conversion_rate?: number; redemption_rate?: number; revenue_rm?: number;
 };
+
+// ── POOLED HOLDOUT BASELINE ──────────────────────────────────────────────────
+// Per-round holdouts are tiny (10% of a 50-person round = ~5 people; small loops
+// get 1-3), so per-round lift_pp is statistical noise — one random holdout order
+// swings it ±30pp. The honest read pools EVERY measured round's holdout into one
+// baseline per loop, then scores each arm's pooled conversion/revenue against
+// it. (This is how the winback +3-4pp signal was validated: 110 pooled holdouts,
+// not 3.) All aggregations below use this instead of averaging stored lift_pp.
+function pooledHoldoutBaseline(statsList: Array<StoredStat[] | null | undefined>): { n: number; convRate: number; revPerRecipient: number } {
+  let n = 0, converted = 0, revenue = 0;
+  for (const stats of statsList) {
+    const h = stats?.find((s) => s.arm === "holdout");
+    if (!h || !h.n) continue;
+    n += h.n;
+    converted += h.n * (h.conversion_rate ?? 0) / 100;
+    revenue += h.revenue_rm ?? (h.revenue_per_recipient_rm ?? 0) * h.n;
+  }
+  return { n, convRate: n ? (converted / n) * 100 : 0, revPerRecipient: n ? revenue / n : 0 };
+}
 
 export type LeaderboardEntry = {
   template_id: string;
@@ -872,9 +922,10 @@ export type LeaderboardEntry = {
   cum_incr_margin_rm: number;
 };
 
-// Aggregate every MEASURED round into a per-offer leaderboard. Incremental
-// margin is measured against each round's OWN holdout, then pooled across
-// rounds (recipient-weighted) so a champion only emerges with real evidence.
+// Aggregate every MEASURED round into a per-offer leaderboard. Each offer's
+// pooled conversion/revenue is scored against the loop's POOLED holdout
+// baseline (pooledHoldoutBaseline) — never per-round holdouts, which are too
+// small to mean anything — so a champion only emerges with real evidence.
 export async function getLeaderboard(loopKey: LoopKey = "winback"): Promise<LeaderboardEntry[]> {
   const { data: rounds } = await supabaseAdmin
     .from("loop_rounds")
@@ -882,34 +933,44 @@ export async function getLeaderboard(loopKey: LoopKey = "winback"): Promise<Lead
     .eq("loop_key", loopKey)
     .eq("status", "measured");
 
-  type Agg = { label: string; key: string | null; logic: string | null; n: number; liftW: number; incrMargin: number; rounds: number };
+  // Pool the loop's holdouts into ONE baseline, then pool each offer's raw
+  // counts and score against it — never average per-round lift_pp (noise).
+  const roundList = (rounds ?? []) as Array<{ arms: StoredArm[] | null; stats: StoredStat[] | null }>;
+  const base = pooledHoldoutBaseline(roundList.map((r) => r.stats));
+
+  type Agg = { label: string; key: string | null; logic: string | null; n: number; converted: number; revenue: number; rounds: number };
   const agg = new Map<string, Agg>();
 
-  for (const r of (rounds ?? []) as Array<{ arms: StoredArm[] | null; stats: StoredStat[] | null }>) {
+  for (const r of roundList) {
     const stats = r.stats; const arms = r.arms;
     if (!stats || !arms) continue;
-    const holdout = stats.find((s) => s.arm === "holdout");
-    const baseRev = holdout?.revenue_per_recipient_rm ?? 0;
     for (const s of stats) {
       if (s.arm === "holdout") continue;
       const arm = arms.find((a) => a.key === s.arm);
       if (!arm) continue;
       const tid = arm.voucher_template_id;
       const cand = OFFER_CANDIDATES.find((c) => c.voucher_template_id === tid);
-      const incrMargin = (s.revenue_per_recipient_rm - baseRev) * s.n * GP;
-      const e = agg.get(tid) ?? { label: cand?.label ?? arm.label, key: cand?.key ?? null, logic: cand?.logic ?? null, n: 0, liftW: 0, incrMargin: 0, rounds: 0 };
-      e.n += s.n; e.liftW += s.lift_pp * s.n; e.incrMargin += incrMargin; e.rounds += 1;
+      const e = agg.get(tid) ?? { label: cand?.label ?? arm.label, key: cand?.key ?? null, logic: cand?.logic ?? null, n: 0, converted: 0, revenue: 0, rounds: 0 };
+      e.n += s.n;
+      e.converted += s.n * (s.conversion_rate ?? 0) / 100;
+      e.revenue += s.revenue_rm ?? (s.revenue_per_recipient_rm ?? 0) * s.n;
+      e.rounds += 1;
       agg.set(tid, e);
     }
   }
 
-  const out: LeaderboardEntry[] = [...agg.entries()].map(([tid, e]) => ({
-    template_id: tid, key: e.key, label: e.label, logic: e.logic, rounds: e.rounds,
-    recipients: e.n,
-    avg_lift_pp: +(e.liftW / Math.max(1, e.n)).toFixed(1),
-    incr_margin_per_recipient_rm: +(e.incrMargin / Math.max(1, e.n)).toFixed(2),
-    cum_incr_margin_rm: +e.incrMargin.toFixed(2),
-  }));
+  const out: LeaderboardEntry[] = [...agg.entries()].map(([tid, e]) => {
+    const convRate = e.n ? (e.converted / e.n) * 100 : 0;
+    const revPer = e.n ? e.revenue / e.n : 0;
+    const incrMargin = (revPer - base.revPerRecipient) * e.n * GP;
+    return {
+      template_id: tid, key: e.key, label: e.label, logic: e.logic, rounds: e.rounds,
+      recipients: e.n,
+      avg_lift_pp: +(convRate - base.convRate).toFixed(1),
+      incr_margin_per_recipient_rm: +(e.n ? incrMargin / e.n : 0).toFixed(2),
+      cum_incr_margin_rm: +incrMargin.toFixed(2),
+    };
+  });
   out.sort((a, b) => b.incr_margin_per_recipient_rm - a.incr_margin_per_recipient_rm);
   return out;
 }
@@ -1292,10 +1353,12 @@ export async function cancelRound(roundId: string): Promise<{ vouchers: number; 
 // breakdown: SMS sent/cost, redemptions, incremental orders + margin vs the
 // holdout, and ROI. Answers "is the whole programme working?" at a glance.
 // ============================================================================
-type EvalStat = { arm: string; n: number; lift_pp: number; redemption_rate: number; revenue_per_recipient_rm: number };
+type EvalStat = { arm: string; n: number; lift_pp: number; redemption_rate: number; revenue_per_recipient_rm: number; conversion_rate?: number; revenue_rm?: number };
 export type LoopEval = {
   loop_key: string; label: string; rounds: number; sent: number;
   redemptions: number; redemption_rate: number; avg_lift_pp: number;
+  /** Pooled holdout size behind avg_lift_pp — small n = low-confidence lift. */
+  holdout_n: number;
   incremental_orders: number; incremental_margin_rm: number; sms_cost_rm: number; roi: number;
 };
 // Live activity — available immediately (every sent/measured round), so the
@@ -1320,26 +1383,45 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
   }
   const { data: rounds } = await query;
 
-  type Acc = { rounds: number; sent: number; redemptions: number; liftW: number; incrOrders: number; incrMargin: number };
-  const blank = (): Acc => ({ rounds: 0, sent: 0, redemptions: 0, liftW: 0, incrOrders: 0, incrMargin: 0 });
-  const byLoop = new Map<string, Acc>();
-
+  // Group each loop's measured rounds, pool the holdouts into ONE baseline,
+  // then pool treated conversions/revenue against it (see pooledHoldoutBaseline
+  // — per-round holdouts are noise).
+  const roundsByLoop = new Map<string, Array<EvalStat[]>>();
   for (const r of (rounds ?? []) as Array<{ loop_key: string; stats: EvalStat[] | null }>) {
     if (!r.stats) continue;
-    const baseRev = r.stats.find((s) => s.arm === "holdout")?.revenue_per_recipient_rm ?? 0;
-    const acc = byLoop.get(r.loop_key) ?? blank();
-    let counted = false;
-    for (const s of r.stats) {
-      if (s.arm === "holdout") continue;
-      counted = true;
-      acc.sent += s.n;
-      acc.redemptions += Math.round(s.n * (s.redemption_rate ?? 0) / 100);
-      acc.liftW += (s.lift_pp ?? 0) * s.n;
-      acc.incrOrders += s.n * (s.lift_pp ?? 0) / 100;
-      acc.incrMargin += ((s.revenue_per_recipient_rm ?? 0) - baseRev) * s.n * GP;
+    const list = roundsByLoop.get(r.loop_key) ?? [];
+    list.push(r.stats);
+    roundsByLoop.set(r.loop_key, list);
+  }
+
+  type Acc = { rounds: number; sent: number; redemptions: number; liftW: number; incrOrders: number; incrMargin: number; holdoutN: number };
+  const blank = (): Acc => ({ rounds: 0, sent: 0, redemptions: 0, liftW: 0, incrOrders: 0, incrMargin: 0, holdoutN: 0 });
+  const byLoop = new Map<string, Acc>();
+
+  for (const [loopKey, statsList] of roundsByLoop) {
+    const base = pooledHoldoutBaseline(statsList);
+    const acc = blank();
+    acc.holdoutN = base.n;
+    let converted = 0, revenue = 0;
+    for (const stats of statsList) {
+      let counted = false;
+      for (const s of stats) {
+        if (s.arm === "holdout") continue;
+        counted = true;
+        acc.sent += s.n;
+        acc.redemptions += Math.round(s.n * (s.redemption_rate ?? 0) / 100);
+        converted += s.n * (s.conversion_rate ?? 0) / 100;
+        revenue += s.revenue_rm ?? (s.revenue_per_recipient_rm ?? 0) * s.n;
+      }
+      if (counted) acc.rounds += 1;
     }
-    if (counted) acc.rounds += 1;
-    byLoop.set(r.loop_key, acc);
+    const convRate = acc.sent ? (converted / acc.sent) * 100 : 0;
+    const revPer = acc.sent ? revenue / acc.sent : 0;
+    const liftPp = convRate - base.convRate;
+    acc.liftW = liftPp * acc.sent; // keep weighted form so totals pool correctly
+    acc.incrOrders = acc.sent * liftPp / 100;
+    acc.incrMargin = (revPer - base.revPerRecipient) * acc.sent * GP;
+    byLoop.set(loopKey, acc);
   }
 
   const toEval = (loop_key: string, a: Acc): LoopEval => {
@@ -1352,6 +1434,7 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
       rounds: a.rounds, sent: a.sent, redemptions: a.redemptions,
       redemption_rate: +(a.sent ? (a.redemptions / a.sent) * 100 : 0).toFixed(1),
       avg_lift_pp: +(a.sent ? a.liftW / a.sent : 0).toFixed(1),
+      holdout_n: a.holdoutN,
       incremental_orders: Math.round(a.incrOrders),
       incremental_margin_rm: +a.incrMargin.toFixed(2),
       sms_cost_rm: sms,
@@ -1361,7 +1444,7 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
 
   const per_loop = [...byLoop.entries()].map(([k, a]) => toEval(k, a)).sort((x, y) => y.incremental_margin_rm - x.incremental_margin_rm);
   const tAcc = blank();
-  for (const a of byLoop.values()) { tAcc.rounds += a.rounds; tAcc.sent += a.sent; tAcc.redemptions += a.redemptions; tAcc.liftW += a.liftW; tAcc.incrOrders += a.incrOrders; tAcc.incrMargin += a.incrMargin; }
+  for (const a of byLoop.values()) { tAcc.rounds += a.rounds; tAcc.sent += a.sent; tAcc.redemptions += a.redemptions; tAcc.liftW += a.liftW; tAcc.incrOrders += a.incrOrders; tAcc.incrMargin += a.incrMargin; tAcc.holdoutN += a.holdoutN; }
   const { loop_key: _k, label: _l, ...totals } = toEval("__totals__", tAcc);
   void _k; void _l;
 

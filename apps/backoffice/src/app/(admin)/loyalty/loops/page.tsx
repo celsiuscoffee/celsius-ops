@@ -62,6 +62,7 @@ type Optimizer = {
 type LoopEval = {
   loop_key: string; label: string; rounds: number; sent: number;
   redemptions: number; redemption_rate: number; avg_lift_pp: number;
+  holdout_n: number; // pooled holdout size behind the lift — small = low confidence
   incremental_orders: number; incremental_margin_rm: number; sms_cost_rm: number; roi: number;
 };
 type LiveLoop = {
@@ -522,13 +523,15 @@ function CampaignBoard({ meta, live, meas }: {
           <div className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2">
             <MiniStat label="Sent" value={sent.toLocaleString()} />
             <MiniStat label="Redeemed" value={`${live!.redeemed} (${live!.redeemed_rate}%)`} />
-            <MiniStat label="Orders" value={live!.orders.toLocaleString()} />
-            <MiniStat label="RM Orders" value={rm(live!.revenue_rm)} />
-            <MiniStat label="Return" value={ret} />
+            <MiniStat label="Orders (raw)" value={live!.orders.toLocaleString()} />
+            <MiniStat label="RM Orders (raw)" value={rm(live!.revenue_rm)} />
+            <MiniStat label="Return (gross)" value={ret} />
             <MiniStat label="Spent" value={rm(live!.sms_cost_rm)} />
           </div>
           {hasResults ? (
-            <div className="mt-3 rounded-lg bg-green-50 px-2.5 py-1.5 text-xs text-green-900"><strong>Results:</strong> ROI {meas!.roi > 0 ? `${meas!.roi}×` : "—"} · {meas!.avg_lift_pp > 0 ? "+" : ""}{meas!.avg_lift_pp}pp lift · {rm(meas!.incremental_margin_rm)} incr. margin</div>
+            // The ONLY causal number on this card — lift vs the POOLED holdout.
+            // Raw orders above include natural repeats + other marketing.
+            <div className="mt-3 rounded-lg bg-green-50 px-2.5 py-1.5 text-xs text-green-900"><strong>True ROI vs holdout:</strong> {meas!.roi > 0 ? `${meas!.roi}×` : "—"} · {meas!.avg_lift_pp > 0 ? "+" : ""}{meas!.avg_lift_pp}pp lift · {rm(meas!.incremental_margin_rm)} incr. margin{meas!.holdout_n > 0 ? ` · vs ${meas!.holdout_n} held out${meas!.holdout_n < 30 ? " (low confidence)" : ""}` : ""}</div>
           ) : measuring && next ? (
             <p className="mt-2 text-xs text-blue-700">Measuring — results vs holdout from {next}</p>
           ) : null}
