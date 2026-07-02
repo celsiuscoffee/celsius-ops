@@ -64,10 +64,11 @@ export default function PublicReviewPage({ params }: { params: Promise<{ outletI
     setRating(r);
     const threshold = settings?.ratingThreshold ?? 4;
     if (r >= threshold && settings?.googleReviewUrl) {
+      // Straight to Google — no interstitial. The "redirect" state stays
+      // visible only while the browser navigates (and carries a manual
+      // button in case navigation is slow or blocked).
       setStep("redirect");
-      setTimeout(() => {
-        window.location.href = settings.googleReviewUrl as string;
-      }, 1200);
+      window.location.href = settings.googleReviewUrl;
     } else if (r >= threshold) {
       setStep("thanks"); // no Google URL configured — thank and stop
     } else {
@@ -124,16 +125,17 @@ export default function PublicReviewPage({ params }: { params: Promise<{ outletI
       style={{ backgroundColor: C.espresso, color: C.offwhite }}
     >
       <div className="flex w-full max-w-sm flex-1 flex-col">
-        {/* Logo */}
+        {/* Logo — outlet override, else the Celsius °C mark on terracotta */}
         {settings?.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={settings.logoUrl} alt="Celsius Coffee" className="mx-auto h-16 w-16 rounded-2xl object-cover" />
         ) : (
           <div
-            className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl text-3xl"
-            style={{ backgroundColor: C.terracotta, color: C.offwhite, fontFamily: "var(--font-heading)" }}
+            className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: C.terracotta }}
           >
-            C
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/celsius-degc.png" alt="Celsius Coffee" className="h-9 w-9 object-contain" />
           </div>
         )}
 
@@ -190,29 +192,20 @@ export default function PublicReviewPage({ params }: { params: Promise<{ outletI
               </div>
             )}
 
-            {/* ── Redirecting to Google ── */}
+            {/* ── In-flight to Google (visible only while the browser navigates) ── */}
             {step === "redirect" && (
-              <div className="mt-16 text-center">
-                <div
-                  className="mx-auto flex h-16 w-16 items-center justify-center rounded-full"
-                  style={{ backgroundColor: C.terracotta }}
-                >
-                  <Check className="h-8 w-8" style={{ color: C.offwhite }} />
-                </div>
-                <h2 className="mt-6 text-2xl" style={{ fontFamily: "var(--font-heading)" }}>
-                  Thank you!
-                </h2>
-                <p className="mt-2 text-sm" style={{ color: C.muted }}>
-                  Taking you to Google to share it…
+              <div className="mt-20 text-center">
+                <Loader2 className="mx-auto h-7 w-7 animate-spin" style={{ color: C.terracotta }} />
+                <p className="mt-4 text-sm" style={{ color: C.muted }}>
+                  Opening Google reviews…
                 </p>
-                <Loader2 className="mx-auto mt-5 h-5 w-5 animate-spin" style={{ color: C.terracotta }} />
-                {/* Fallback if the auto-redirect is blocked */}
+                {/* Fallback if navigation is blocked or slow */}
                 <a
                   href={settings?.googleReviewUrl ?? "#"}
                   className="mt-8 inline-flex items-center gap-1.5 rounded-xl px-5 py-3 text-sm font-semibold"
                   style={{ backgroundColor: C.terracotta, color: C.offwhite }}
                 >
-                  Leave a Google review <ArrowUpRight className="h-4 w-4" />
+                  Continue to Google <ArrowUpRight className="h-4 w-4" />
                 </a>
               </div>
             )}
