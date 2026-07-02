@@ -4,6 +4,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import Link from "next/link";
 import { Receipt, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
+import { PAYROLL_UI_ENABLED } from "@/lib/hr/constants";
 
 type AllowanceItem = { amount: number; base?: number; score?: number };
 type OtherDeductions = {
@@ -58,11 +59,34 @@ function fmtDate(iso: string | null | undefined): string {
 }
 
 export default function PayslipsPage() {
-  const { data } = useFetch<{ payslips: Payslip[] }>("/api/hr/payslips");
+  // Payroll hidden pre-launch: don't fetch (SWR skips null keys) and show a notice.
+  const { data } = useFetch<{ payslips: Payslip[] }>(PAYROLL_UI_ENABLED ? "/api/hr/payslips" : null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const payslips = data?.payslips || [];
   const fmt = (n: number) => `RM ${Number(n || 0).toLocaleString("en-MY", { minimumFractionDigits: 2 })}`;
+
+  if (!PAYROLL_UI_ENABLED) {
+    return (
+      <div className="px-4 pt-6">
+        <div className="mb-6 flex items-center gap-3">
+          <Link
+            href="/hr"
+            aria-label="Back"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <h1 className="text-2xl font-bold">Payslips</h1>
+        </div>
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 py-16 text-center">
+          <Receipt className="mb-3 h-12 w-12 text-gray-300" />
+          <p className="font-semibold text-gray-500">Payslips coming soon</p>
+          <p className="text-sm text-gray-400">Your payslips will appear here once payroll goes live.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 pt-6">

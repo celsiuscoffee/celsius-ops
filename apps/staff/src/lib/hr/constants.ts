@@ -42,6 +42,11 @@ export const LEAVE_TYPES = {
 
 export type LeaveType = keyof typeof LEAVE_TYPES;
 
+// Feature flag: is Payroll (payslips) exposed to staff yet? OFF pre-launch — the
+// wiring stays, but the Payslips page shows a "coming soon" notice instead of
+// data. Mirror of the backoffice PAYROLL_UI_ENABLED; flip both when payroll goes live.
+export const PAYROLL_UI_ENABLED = false;
+
 // Malaysia time offset
 export const MYT_OFFSET_HOURS = 8;
 
