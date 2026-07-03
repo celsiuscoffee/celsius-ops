@@ -159,7 +159,10 @@ export function formatWhatsAppOrder(params: {
   message += `PO #: ${orderNumber}\n\n`;
 
   items.forEach((item, i) => {
-    message += `${i + 1}. ${item.name} — ${item.quantity} ${item.uom}\n`;
+    // Strip a redundant leading "1 " from the pack label and separate qty with "×" so the order
+    // quantity never runs into a unit that starts with a number (e.g. "2 1 Cake (12 slices)").
+    const unit = item.uom.replace(/^\s*1\s+/, "").trim();
+    message += `${i + 1}. ${item.name} — ${item.quantity} × ${unit}\n`;
   });
 
   if (deliveryDate) {
