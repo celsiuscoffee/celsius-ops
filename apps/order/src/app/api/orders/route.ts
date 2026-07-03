@@ -16,6 +16,7 @@ import {
   type CartLine,
 } from "@/lib/loyalty/promotions";
 import { requireCustomerSession } from "@/lib/customer-jwt";
+import { findUnavailableItems, unavailableItemsMessage } from "@/lib/menu-availability";
 import { attributeOrderToCampaign } from "@/lib/push/attribution";
 import { attributeOrderToPoster } from "@/lib/poster/attribution";
 import { getOutletSst } from "@/lib/outlet-sst";
@@ -370,6 +371,21 @@ export async function POST(request: NextRequest) {
     if (pricedErr || !pricedProducts || pricedProducts.length === 0) {
       return NextResponse.json({ error: "Failed to verify product prices" }, { status: 400 });
     }
+
+    // ── Server-side availability gate ──────────────────────────────────────
+    // Mirror of /api/checkout/initiate: reject items that are globally
+    // discontinued or 86'd at this outlet, so a sold-out item can't be ordered
+    // even if it slipped into the cart before the menu hid it.
+    {
+      const blocked = await findUnavailableItems(supabase, storeId, pricingIds);
+      if (blocked.length > 0) {
+        return NextResponse.json(
+          { error: unavailableItemsMessage(blocked), unavailableProductIds: blocked.map((b) => b.id) },
+          { status: 409 },
+        );
+      }
+    }
+
     const pricedMap = new Map(
       (pricedProducts as Array<{ id: string; price: number }>).map((p) => [p.id, p.price]),
     );
