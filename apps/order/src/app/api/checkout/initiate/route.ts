@@ -16,6 +16,7 @@ import { getOutletSst } from "@/lib/outlet-sst";
 import { fetchValidTableLabels } from "@/lib/table-layout";
 import { resolveOrderReward } from "@celsius/shared";
 import { reconcileNonStackTier } from "@/lib/loyalty/non-stack-tier";
+import { findUnavailableItems, unavailableItemsMessage } from "@/lib/menu-availability";
 
 function generateOrderNumber(): string {
   return `C-${Date.now().toString(36).slice(-4).toUpperCase()}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`;
@@ -205,6 +206,21 @@ export async function POST(request: NextRequest) {
 
     if (productsError || !dbProducts || dbProducts.length === 0) {
       return NextResponse.json({ error: "Failed to verify product prices" }, { status: 400 });
+    }
+
+    // ── Server-side availability gate ──────────────────────────────────────
+    // The menu / pairing hide 86'd items client-side, but that's advisory: an
+    // item can reach here if it was added before being 86'd, from a stale
+    // cache, or via a direct product link. Reject sold-out items server-side so
+    // the kitchen never receives an order for something the outlet can't make.
+    {
+      const blocked = await findUnavailableItems(supabase, storeId, productIds);
+      if (blocked.length > 0) {
+        return NextResponse.json(
+          { error: unavailableItemsMessage(blocked), unavailableProductIds: blocked.map((b) => b.id) },
+          { status: 409 },
+        );
+      }
     }
 
     const priceMap = new Map(dbProducts.map((p: { id: string; price: number }) => [p.id, p.price]));
