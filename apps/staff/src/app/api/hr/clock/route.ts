@@ -274,6 +274,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Not clocked in" }, { status: 400 });
     }
 
+    // Guard against an ACCIDENTAL immediate clock-out. The clock button flips
+    // straight from "Clock In" to "Clock Out" the moment you clock in, so a
+    // reflexive double-tap was closing shifts seconds later at 0h — and since
+    // the staffer then had no open log, they lost the shift entirely. Reject a
+    // clock-out in the first couple of minutes and keep them clocked in.
+    const MIN_SHIFT_MINUTES = 2;
+    const minutesClockedIn = (Date.now() - new Date(activeLog.clock_in).getTime()) / 60000;
+    if (minutesClockedIn < MIN_SHIFT_MINUTES) {
+      return NextResponse.json({
+        error: "You just clocked in — you're all set. (Tap Clock Out at the end of your shift.)",
+        justClockedIn: true,
+      }, { status: 400 });
+    }
+
     // Geofence check against the OUTLET THEY CLOCKED INTO (not their session outletId — rotating staff may differ)
     let clockOutWithinGeofence = false;
     let clockOutDistance: number | null = null;
