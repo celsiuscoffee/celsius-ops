@@ -126,7 +126,7 @@ function useReportControlsState() {
 
 type FinCompany = { id: string; name: string; outletIds: string[] };
 
-function ReportControlsBar({ c }: { c: ReturnType<typeof useReportControlsState> }) {
+function ReportControlsBar({ c, outletApplies }: { c: ReturnType<typeof useReportControlsState>; outletApplies: boolean }) {
   const { data: outlets } = useFetch<{ id: string; name: string }[]>("/api/settings/outlets");
   const { data: co } = useFetch<{ companies: FinCompany[]; activeCompanyId: string }>("/api/finance/companies");
   const [switching, setSwitching] = useState(false);
@@ -198,13 +198,17 @@ function ReportControlsBar({ c }: { c: ReturnType<typeof useReportControlsState>
       )}
       <span className="text-[11px] text-muted-foreground tabular-nums">{c.start} → {c.end}</span>
       <select
-        value={c.outletId}
+        value={outletApplies ? c.outletId : ""}
         onChange={(e) => c.setOutletId(e.target.value)}
-        disabled={c.consolidated}
+        disabled={c.consolidated || !outletApplies}
         className="ml-auto h-8 rounded-md border bg-background px-2 text-sm disabled:opacity-50"
-        title={c.consolidated ? "Consolidated view spans all outlets" : "Filter by outlet (outlets of the active company)"}
+        title={c.consolidated
+          ? "Consolidated view spans all outlets"
+          : !outletApplies
+            ? "Outlet filter applies to the P&L and Aged Payables. Ledger statements are entity-level; expenses are paid from the company account and cannot be split per outlet."
+            : "Filter by outlet (outlets of the active company)"}
       >
-        <option value="">All outlets</option>
+        <option value="">{outletApplies ? "All outlets" : "All outlets (entity-level tab)"}</option>
         {companyOutlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>
     </div>
@@ -949,9 +953,11 @@ const AP_COLS: { key: keyof AgedPayables["totals"]; label: string }[] = [
 ];
 
 function ApTab() {
-  const { end: asOf } = useControls();
+  const { end: asOf, outletId } = useControls();
   const [q, setQ] = useState("");
-  const { data, isLoading } = useFetch<{ report: AgedPayables }>(`/api/finance/reports/aged-payables?asOf=${asOf}`);
+  const { data, isLoading } = useFetch<{ report: AgedPayables }>(
+    `/api/finance/reports/aged-payables?asOf=${asOf}${outletId ? `&outletId=${outletId}` : ""}`
+  );
   const rows = (data?.report?.rows ?? []).filter((r) => {
     const t = q.trim().toLowerCase();
     return !t || r.vendor.toLowerCase().includes(t);
@@ -1165,7 +1171,7 @@ export default function FinanceReportsPage() {
         </div>
       </nav>
 
-      {usesControls && <ReportControlsBar c={controls} />}
+      {usesControls && <ReportControlsBar c={controls} outletApplies={tab === "pnl" || tab === "ap"} />}
 
       {(tab === "bs" || tab === "cf") && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs sm:text-sm text-amber-700 dark:text-amber-400">

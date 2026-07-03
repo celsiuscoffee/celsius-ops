@@ -6,6 +6,7 @@
 // customer-invoice ledger to age.
 
 import { prisma } from "@/lib/prisma";
+import { getFinanceClient } from "../supabase";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -34,10 +35,28 @@ function bucketFor(daysOverdue: number): Bucket {
   return "d90_plus";
 }
 
-export async function buildAgedPayables(input: { asOf: string }): Promise<AgedPayables> {
+export async function buildAgedPayables(input: { asOf: string; companyId: string; outletId?: string }): Promise<AgedPayables> {
   const asOfDate = new Date(`${input.asOf}T23:59:59Z`);
+
+  // Scope to the active company's outlets (every invoice carries an outletId),
+  // narrowed further when a specific outlet is picked — the report was showing
+  // all three companies' bills regardless of the switcher and ignored the
+  // outlet filter entirely.
+  const client = getFinanceClient();
+  const { data: oc } = await client
+    .from("fin_outlet_companies").select("outlet_id").eq("company_id", input.companyId);
+  const companyOutletIds = (oc ?? []).map((r) => r.outlet_id as string);
+  const outletIds = input.outletId && companyOutletIds.includes(input.outletId)
+    ? [input.outletId]
+    : companyOutletIds;
+
   const invoices = await prisma.invoice.findMany({
-    where: { status: { notIn: ["PAID", "DRAFT"] } },
+    where: {
+      status: { notIn: ["PAID", "DRAFT"] },
+      outletId: { in: outletIds },
+      // A bill issued after the report date does not exist at that date.
+      issueDate: { lte: asOfDate },
+    },
     select: {
       amount: true, amountPaid: true, dueDate: true, issueDate: true,
       vendorName: true, supplier: { select: { name: true } },

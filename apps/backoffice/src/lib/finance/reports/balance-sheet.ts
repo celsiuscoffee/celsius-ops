@@ -72,7 +72,8 @@ export async function buildBalanceSheet(input: BsInput): Promise<BsReport> {
   const txnDate = new Map((txns ?? []).map((t) => [t.id as string, t.txn_date as string]));
 
   const byCode = new Map<string, number>();
-  let pnlYtd = 0;     // for retained-earnings synthetic line
+  let pnlYtd = 0;     // current fiscal year earnings → synthetic equity line
+  let pnlPrior = 0;   // pre-fiscal-year earnings → retained earnings b/f
 
   if (txnIds.length > 0) {
     const chunkSize = 200;
@@ -93,16 +94,29 @@ export async function buildBalanceSheet(input: BsInput): Promise<BsReport> {
         if (meta.type === "asset" || meta.type === "liability" || meta.type === "equity") {
           const sign = meta.type === "asset" ? debit - credit : credit - debit;
           byCode.set(code, round2((byCode.get(code) ?? 0) + sign));
-        } else if (date >= fiscalYearStart && date <= input.asOf) {
-          // Income/cogs/expense — accrue to YTD P&L for retained earnings.
-          if (meta.type === "income") pnlYtd += credit - debit;
-          else pnlYtd -= debit - credit; // cogs + expense subtract
+        } else {
+          // Income/cogs/expense accrue to earnings. There are no year-end
+          // closing entries in this ledger, so PRIOR-year P&L must roll into
+          // retained earnings brought forward — dropping it left the whole of
+          // last year's net income out of equity and the BS out of balance by
+          // exactly that amount.
+          const contribution = meta.type === "income" ? credit - debit : -(debit - credit);
+          if (date >= fiscalYearStart && date <= input.asOf) pnlYtd += contribution;
+          else pnlPrior += contribution;
         }
       }
     }
   }
 
-  // Inject retained earnings (current period) under equity if non-zero.
+  // Inject earnings under equity: prior years brought forward + current year.
+  if (pnlPrior !== 0) {
+    byCode.set("RE-PRIOR", round2(pnlPrior));
+    accountMeta.set("RE-PRIOR", {
+      name: "Retained earnings (brought forward)",
+      type: "equity",
+      parent: null,
+    });
+  }
   if (pnlYtd !== 0) {
     byCode.set("RE-CURRENT", round2(pnlYtd));
     accountMeta.set("RE-CURRENT", {
