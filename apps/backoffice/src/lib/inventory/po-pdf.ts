@@ -59,13 +59,19 @@ export async function generatePoPdf(input: PoPdfInput): Promise<Buffer> {
   text("Qty", qtyX, 10, bold, gray);
   y -= 17;
 
-  // Items — one per line, long names clipped so the qty column stays aligned.
+  // Items — item name + the order quantity as a plain number in the Qty column, with the pack
+  // unit on a light sub-line beneath the name. Keeps the qty ("2") from running into a pack
+  // label that itself starts with a number (e.g. "1 Cake (12 slices)" was rendering as a
+  // confusing "2 1 Cake (12 slices)").
   input.items.forEach((it, i) => {
     newPageIfNeeded();
     const label = `${i + 1}. ${it.name}`;
     text(label.length > 58 ? label.slice(0, 57) + "…" : label, MX, 11);
-    text(`${it.quantity} ${it.uom}`, qtyX, 11);
-    y -= 17;
+    text(String(it.quantity), qtyX, 11, bold);
+    y -= 13;
+    const unit = it.uom.replace(/^\s*1\s+/, "").trim(); // drop a redundant leading "1 "
+    if (unit) text(`× ${unit}`, MX + 14, 9, font, gray);
+    y -= 15;
   });
 
   y -= 8;
