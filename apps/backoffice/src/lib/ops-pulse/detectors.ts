@@ -511,34 +511,30 @@ export async function detectMenuSnoozed(now: Date): Promise<Breach[]> {
     }
   }
 
-  const itemsBySlug = new Map<string, string[]>();
+  const countBySlug = new Map<string, number>();
   for (const row of rows) {
     if (!row.outlet_id) continue;
     if (row.product_id && disabled.has(row.product_id)) continue; // globally off-menu
-    (itemsBySlug.get(row.outlet_id) ?? itemsBySlug.set(row.outlet_id, []).get(row.outlet_id)!).push(row.product_id ?? "?");
+    countBySlug.set(row.outlet_id, (countBySlug.get(row.outlet_id) ?? 0) + 1);
   }
-  if (itemsBySlug.size === 0) return [];
+  if (countBySlug.size === 0) return [];
 
   const outlets = await prisma.outlet.findMany({
-    where: { status: "ACTIVE", pickupStoreId: { in: [...itemsBySlug.keys()] } },
+    where: { status: "ACTIVE", pickupStoreId: { in: [...countBySlug.keys()] } },
     select: { id: true, name: true, pickupStoreId: true },
   });
 
-  // Dedupe on the SET of snoozed items, not the calendar day: an unchanged 86
-  // list alerts exactly once (a per-day key re-fired at the first cron tick after
-  // midnight — 14 messages at 00:30, 2026-07-01). Any change to the set (item
-  // added or restored) is a new key and re-alerts.
-  const sig = (ids: string[]): string => {
-    const s = [...ids].sort().join(",");
-    let h = 5381;
-    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-    return (h >>> 0).toString(36);
-  };
+  // Dedupe PER DAY (one 86 reminder per outlet per day). An earlier attempt keyed
+  // on the snoozed-item SET to "re-alert on change" — but availability churns
+  // constantly during service (items flip 5<->38 within minutes, likely the Grab
+  // sync flapping), so every tick was a new key = ~23 sends/day of daytime spam.
+  // The midnight re-fire that the set-key was meant to solve is instead handled
+  // by the business-hours gate in runStoreStatusNudges; per-day is the right key.
+  const { ymd } = mytToday(now);
   const minItems = THRESHOLDS.menuSnooze.minItems;
   const breaches: Breach[] = [];
   for (const o of outlets) {
-    const items = o.pickupStoreId ? itemsBySlug.get(o.pickupStoreId) ?? [] : [];
-    const n = items.length;
+    const n = o.pickupStoreId ? countBySlug.get(o.pickupStoreId) ?? 0 : 0;
     if (n < minItems) continue;
     breaches.push({
       signal: "MENU_SNOOZED",
@@ -546,7 +542,7 @@ export async function detectMenuSnoozed(now: Date): Promise<Breach[]> {
       outletName: o.name,
       severity: "MED",
       routeKey: "operations",
-      dedupeKey: `MENU_SNOOZED:${o.id}:${sig(items)}`,
+      dedupeKey: `MENU_SNOOZED:${o.id}:${ymd}`,
       summary: `${n} menu item${n === 1 ? "" : "s"} snoozed (86'd) at ${o.name}`,
       detail: { snoozed: n },
     });
