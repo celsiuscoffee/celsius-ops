@@ -64,19 +64,29 @@ async function findRosterShift(userId: string, clockIn: Date): Promise<{ schedul
   const prevMyt = mytDateString(new Date(clockIn.getTime() - 24 * 3600 * 1000));
   const { data } = await supabase
     .from("hr_schedule_shifts")
-    // Only stamp from a PUBLISHED roster (same filter the /hr/shifts route uses)
-    // so a draft shift's times don't drive lateness / auto-close.
-    .select("shift_date, start_time, end_time, hr_schedules!inner(status)")
+    // Prefer a PUBLISHED roster but accept a DRAFT — rosters are often left
+    // unpublished, and a draft shift's end time is a far better reference for
+    // lateness / auto-close than nothing (which forced the cron to fall back to
+    // the 1am sweep time). Published wins when both exist (see sort below).
+    .select("shift_date, start_time, end_time, hr_schedules(status)")
     .eq("user_id", userId)
-    .eq("hr_schedules.status", "published")
     .in("shift_date", [prevMyt, todayMyt]);
-  const shifts = (data ?? []) as { shift_date: string; start_time: string; end_time: string | null }[];
+  const shifts = (data ?? []) as {
+    shift_date: string;
+    start_time: string;
+    end_time: string | null;
+    hr_schedules: { status: string } | null;
+  }[];
+  const isPublished = (s: (typeof shifts)[number]) => s.hr_schedules?.status === "published";
   let best: { shift: (typeof shifts)[number]; diff: number } | null = null;
   for (const s of shifts) {
     const startInstant = mytInstant(s.shift_date, s.start_time);
     if (!startInstant) continue;
     const diff = Math.abs(clockIn.getTime() - startInstant.getTime());
-    if (!best || diff < best.diff) best = { shift: s, diff };
+    // Prefer the closest shift; break ties toward a published one.
+    if (!best || diff < best.diff || (diff === best.diff && isPublished(s) && !isPublished(best.shift))) {
+      best = { shift: s, diff };
+    }
   }
   if (!best) return null;
   return { scheduled_start: best.shift.start_time, scheduled_end: best.shift.end_time, scheduled_date: best.shift.shift_date };

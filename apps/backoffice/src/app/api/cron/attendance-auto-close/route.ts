@@ -120,21 +120,22 @@ export async function GET(req: NextRequest) {
         ? mytInstant(mytDateString(new Date(shiftNoon.getTime() + 24 * 3600 * 1000)), "01:00")
         : null;
       if (oneAmCutoff && now >= oneAmCutoff) {
-        // Prefer the rostered end; fall back to outlet close, then the cutoff,
-        // only when there's no roster to read.
+        // Close at the SHIFT END, never at the 1am sweep time (that's just when
+        // we noticed). Prefer the stamped rostered end; else the outlet's close
+        // on the SHIFT'S OWN date — NOT rolled to the next day, which lands in
+        // the future and gets clamped to `now` (why closes were showing 01:01am).
         let end = schedEndInstant;
         if (!end) {
           const outlet = outletMap.get(log.outlet_id);
-          if (outlet?.closeTime) {
-            let oc = mytInstant(mytDateString(clockIn), outlet.closeTime);
-            if (oc && oc < clockIn) {
-              oc = mytInstant(mytDateString(new Date(clockIn.getTime() + 24 * 3600 * 1000)), outlet.closeTime);
-            }
-            end = oc;
-          }
+          if (outlet?.closeTime) end = mytInstant(shiftDate, outlet.closeTime);
         }
-        closeAt = end ?? oneAmCutoff;
-        reason = "forgot_clockout";
+        // Only close when we have a real shift-end reference; never before
+        // clock-in. With no roster AND no outlet close, leave it for the (2)
+        // backstop rather than inventing a time.
+        if (end) {
+          closeAt = end < clockIn ? clockIn : end;
+          reason = "forgot_clockout";
+        }
       }
     }
 
