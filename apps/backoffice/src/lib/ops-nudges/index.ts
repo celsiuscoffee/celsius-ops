@@ -652,3 +652,83 @@ export async function runStoreStatusNudges(now = new Date()): Promise<NudgeRunRe
   const managerSent = await sendManagerDigestToOps(headline, managerLines, mode);
   return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }
+
+// ── 7. Roster not published → managers ────────────────────────────────────────
+// The guardrail for the silent roster gap (Shah Alam, week of 2026-06-29: the
+// roster was BUILT at 00:26 but the publish never landed; the ops loops treated
+// the whole outlet as unrostered for 5 days and nobody was told). Every active
+// outlet must have a PUBLISHED schedule covering the current week: without one,
+// staff can't be assigned checklists, the lateness nudge has nothing to measure
+// against, and the on-shift team resolves empty. Distinguishes "built but not
+// published" (one click) from "no roster created" (real work). Managers only.
+// Deduped per (outlet, week) so it fires once per gap, not daily.
+export async function runRosterPublishNudges(now = new Date()): Promise<NudgeRunResult> {
+  const mode = nudgesMode();
+  const ranAt = now.toISOString();
+  if (mode === "off") return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  const ymd = mytYmd(now);
+  // Monday of the current MYT week — the dedupe anchor for outlets with no
+  // schedule row at all (rows with a draft dedupe on the draft's own week_start).
+  const myt = new Date(now.getTime() + 8 * 3_600_000);
+  const monday = new Date(
+    Date.UTC(myt.getUTCFullYear(), myt.getUTCMonth(), myt.getUTCDate() - ((myt.getUTCDay() + 6) % 7)),
+  )
+    .toISOString()
+    .slice(0, 10);
+  const outlets = await prisma.outlet.findMany({
+    where: { status: "ACTIVE", type: "OUTLET" },
+    select: { id: true, name: true },
+  });
+  if (outlets.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  // Schedules covering today, any status. status juggling ends at the trigger
+  // (migration 068): status='published' <=> published_at set, so gate on status.
+  const rows = await prisma.$queryRaw<
+    Array<{ outlet_id: string; status: string; week_start: string; shifts: bigint }>
+  >`
+    SELECT sc.outlet_id, sc.status, sc.week_start::text AS week_start,
+           (SELECT count(*) FROM hr_schedule_shifts s WHERE s.schedule_id = sc.id) AS shifts
+    FROM hr_schedules sc
+    WHERE sc.week_start <= ${ymd}::date AND sc.week_end >= ${ymd}::date
+  `;
+  const byOutlet = new Map<string, { status: string; week_start: string; shifts: number }[]>();
+  for (const r of rows) {
+    (byOutlet.get(r.outlet_id) ?? byOutlet.set(r.outlet_id, []).get(r.outlet_id)!).push({
+      status: r.status,
+      week_start: r.week_start,
+      shifts: Number(r.shifts),
+    });
+  }
+
+  const managerLines: string[] = [];
+  for (const o of outlets) {
+    const scheds = byOutlet.get(o.id) ?? [];
+    if (scheds.some((s) => s.status === "published")) continue; // covered
+    const draft = scheds.find((s) => s.status !== "published");
+    const line = draft
+      ? `${o.name}: this week's roster is built (${draft.shifts} shifts) but NOT published. One click in HR, Schedules.`
+      : `${o.name}: no roster created for this week. Staff get no checklists or lateness tracking until one is published.`;
+    const b: Breach = {
+      signal: "ROSTER_MISSING",
+      outletId: o.id,
+      outletName: o.name,
+      severity: "HIGH",
+      routeKey: "operations",
+      // Key on the outlet + the week so one gap pings once, not every morning.
+      dedupeKey: `ROSTER_MISSING:${o.id}:${draft?.week_start ?? monday}`,
+      summary: line,
+      detail: { weekOf: ymd, built: !!draft, shifts: draft?.shifts ?? 0 },
+    };
+    if (mode === "armed") {
+      const { isNew } = await recordBreach(b, null);
+      if (!isNew) continue;
+    }
+    managerLines.push(line);
+  }
+  if (managerLines.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  const headline = `${managerLines.length} outlet roster${managerLines.length === 1 ? "" : "s"} not published for this week`;
+  const managerSent = await sendManagerDigestToOps(headline, managerLines, mode);
+  return { mode, ranAt, items: managerLines.length, staffSent: 0, managerSent };
+}

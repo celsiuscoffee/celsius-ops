@@ -15,7 +15,8 @@ export type OpsSignal =
   | "MENU_SNOOZED"
   | "NO_CLOCK_IN"
   | "POS_NOT_OPEN"
-  | "RESTOCK_NEEDED";
+  | "RESTOCK_NEEDED"
+  | "ROSTER_MISSING";
 
 export type Severity = "LOW" | "MED" | "HIGH";
 
