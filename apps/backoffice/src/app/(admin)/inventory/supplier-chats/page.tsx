@@ -1250,7 +1250,7 @@ export default function SupplierChatsPage() {
                                 setPoQty((q) => {
                                   const next = { ...q };
                                   for (const p of poProducts) {
-                                    if ((p.suggestedQty ?? 0) > 0 && !next[p.productId]) next[p.productId] = p.suggestedQty!;
+                                    if ((p.suggestedQty ?? 0) > 0 && !next[p.supplierProductId]) next[p.supplierProductId] = p.suggestedQty!;
                                   }
                                   return next;
                                 })
