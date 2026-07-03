@@ -4,6 +4,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { resolveOwner } from "./router";
+import { sendOpsDigest } from "./sender";
 import type { Assignee, Breach } from "./types";
 
 export interface LedgerAlert {
@@ -13,6 +15,75 @@ export interface LedgerAlert {
   assigneeUserId: string | null;
   summary: string;
   outletId: string;
+}
+
+// ── Runaway guard ────────────────────────────────────────────────────────────
+// A well-behaved signal creates a bounded number of alerts per outlet per day.
+// A churning dedupeKey (e.g. hashing volatile state, like the menu-86 set-hash
+// that re-fired ~23x on 2026-07-03 because availability flapped) silently emits
+// dozens. This caps NEW alerts per (signal, outlet, day) so ANY future dedupe
+// bug is stopped at the source AND pages the owner once — instead of blasting
+// staff until someone reads the logs. The cap is a backstop, not the primary
+// mechanism: a correct dedupeKey never approaches it.
+//
+// Singletons should be ~1/outlet/day (tight cap). The per-entity signals run
+// higher — CHECKLIST is per task (~10-26/outlet/day), NO_CLOCK_IN per staff
+// (~20), REVIEW per review — so they get generous headroom.
+const SINGLETON_SIGNALS = new Set([
+  "MENU_SNOOZED",
+  "POS_NOT_OPEN",
+  "PHONE_CAPTURE",
+  "STOCK_COUNT",
+  "ROSTER_MISSING",
+  "RESTOCK_NEEDED",
+]);
+const RUNAWAY_CAP_SINGLETON = 3;
+const RUNAWAY_CAP_MULTI = 60;
+
+function mytDayStart(): Date {
+  const ymd = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
+  return new Date(`${ymd}T00:00:00+08:00`);
+}
+
+// A suppressed breach looks not-new to callers (they skip it), with a stub the
+// callers never dereference (they only touch `alert` on the isNew path).
+function suppressedStub(breach: Breach): LedgerAlert {
+  return { id: "", dedupeKey: breach.dedupeKey, status: "SUPPRESSED", assigneeUserId: null, summary: breach.summary, outletId: breach.outletId };
+}
+
+// Log + page the owner ONCE per (signal, outlet, day). The marker row's unique
+// dedupeKey is the once-per-day dedup: the owner DM only sends when the marker
+// create succeeds (first trip). Best-effort — never throws into the caller.
+async function handleRunaway(breach: Breach, count: number, cap: number): Promise<void> {
+  console.error(
+    `[ledger] RUNAWAY ${breach.signal} @outlet ${breach.outletId}: ${count} alerts today (cap ${cap}) — suppressing further sends; a dedupeKey is likely churning`,
+  );
+  const ymd = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
+  try {
+    await prisma.opsAlert.create({
+      data: {
+        signal: "RUNAWAY",
+        outletId: breach.outletId,
+        severity: "HIGH",
+        dedupeKey: `RUNAWAY:${breach.signal}:${breach.outletId}:${ymd}`,
+        summary: `Ops nudge auto-suppressed: ${breach.signal} fired ${count}+ times today`,
+        detail: { signal: breach.signal, count, cap } as Prisma.InputJsonValue,
+        status: "OPEN",
+      },
+    });
+    // Marker created => first trip today => tell the owner.
+    const owner = await resolveOwner();
+    if (owner?.phone) {
+      await sendOpsDigest(owner.phone, "Ops nudge auto-suppressed", [
+        `${breach.signal} fired ${count}+ times today at one outlet and was capped. Likely a loop or dedupe bug, not real events. Check the ops nudges.`,
+      ]);
+    }
+  } catch (err) {
+    // P2002 = already alerted today (marker exists) — expected, stay silent.
+    if ((err as { code?: string } | null)?.code !== "P2002") {
+      console.error("[ledger] runaway owner-alert failed:", err);
+    }
+  }
 }
 
 const ALERT_SELECT = {
@@ -36,6 +107,18 @@ export async function recordBreach(
     select: ALERT_SELECT,
   });
   if (existing) return { alert: existing, isNew: false };
+
+  // Runaway guard: a genuinely-new dedupeKey, but has this (signal, outlet)
+  // already blown its daily cap? If so a dedupeKey is churning — suppress the
+  // send and page the owner once, rather than blast staff all day.
+  const cap = SINGLETON_SIGNALS.has(breach.signal) ? RUNAWAY_CAP_SINGLETON : RUNAWAY_CAP_MULTI;
+  const todayCount = await prisma.opsAlert.count({
+    where: { signal: breach.signal, outletId: breach.outletId, createdAt: { gte: mytDayStart() } },
+  });
+  if (todayCount >= cap) {
+    await handleRunaway(breach, todayCount, cap);
+    return { alert: suppressedStub(breach), isNew: false };
+  }
 
   try {
     const created = await prisma.opsAlert.create({
