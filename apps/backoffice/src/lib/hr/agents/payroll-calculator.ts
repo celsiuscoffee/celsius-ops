@@ -138,12 +138,15 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     attendanceByUser.set(a.user_id, list);
   });
 
-  // 2b. YTD totals — sum confirmed runs earlier in the same year for PCB carryover
+  // 2b. YTD totals — sum confirmed runs earlier in the same year for PCB carryover.
+  // Includes prior MONTHLY runs (period_month < month) AND the H1 "opening_balance"
+  // run (period_month NULL) that carries the BrioHR Jan-Jun YTD, so the cumulative
+  // PCB / EPF / gross continue correctly across the mid-year switch off BrioHR.
   const { data: priorRuns } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
     .select("id")
     .eq("period_year", year)
-    .lt("period_month", month)
+    .or(`period_month.lt.${month},cycle_type.eq.opening_balance`)
     .in("status", ["confirmed", "paid"]);
   const priorRunIds = (priorRuns || []).map((r: { id: string }) => r.id);
   const ytdByUser = new Map<string, { gross: number; pcb: number }>();
