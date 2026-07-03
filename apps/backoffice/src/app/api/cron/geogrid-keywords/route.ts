@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
 import { prisma } from "@/lib/prisma";
 import { refreshKeywords, seedTargetKeywords } from "@/lib/geogrid/keywords";
+import { buildKeywordStrategy } from "@/lib/geogrid/keyword-selection";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -29,5 +30,16 @@ export async function GET(req: NextRequest) {
     results.push({ outlet: o.name, seeded: seeded.length, auto });
   }
 
-  return NextResponse.json({ ran_at: new Date().toISOString(), topN: TOP_N, results });
+  // Shadow: recompute the keyword-selection strategy from the scans so far and
+  // log its shape. Read-only — retiring a keyword stays an approval click on
+  // /reviews/geogrid/keywords, never automatic. Best-effort; never fails the seed.
+  let strategy: Record<string, unknown> | null = null;
+  try {
+    const report = await buildKeywordStrategy();
+    strategy = { mode: "shadow", summary: report.summary };
+  } catch (e) {
+    strategy = { error: (e as Error).message };
+  }
+
+  return NextResponse.json({ ran_at: new Date().toISOString(), topN: TOP_N, results, strategy });
 }
