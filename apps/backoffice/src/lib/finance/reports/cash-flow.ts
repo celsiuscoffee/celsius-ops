@@ -1,13 +1,21 @@
-// Cash Flow statement — indirect method.
+// Cash Flow statement — indirect method, built so it TIES BY CONSTRUCTION.
 //
-// Operating activities  = net income
-//                       + non-cash add-backs (depreciation 6512)
-//                       + working-capital changes (∆ AR, ∆ AP, ∆ Inventory, ...)
-// Investing activities  = ∆ PP&E (1500), exclude acc dep
-// Financing activities  = ∆ Loans (3010, 3500, 3400), ∆ Equity (4001)
+// Every posted journal line hits either a cash account (1000-*) or something
+// else; since debits always equal credits, the cash movement of the period is
+// exactly the sum of (credit − debit) over every NON-cash account. So instead
+// of enumerating a fixed list of accounts (the old builder missed Suspense,
+// channel debtors, inter-company and dividends — everything it missed became
+// an unexplained "reconciliation gap"), this walks the ledger once, buckets
+// every non-cash account into a named line, and sweeps the remainder into an
+// explicit "Other movements" line. The gap can then only be rounding.
 //
-// Net change in cash    = ∆ on bank accounts (1000-*)
-// Reconciliation: operating + investing + financing should ≈ net change in cash.
+// Operating  = net income (all 5*/6* accounts, depreciation stays inside)
+//            + working-capital deltas + channel-debtor settlements + Suspense
+// Investing  = ∆ PP&E net (1500*, accumulated depreciation included)
+// Financing  = ∆ loans (3010/3500/3400) + inter-company (3600*)
+//            + owner capital & dividends (4*)
+//
+// Net change in cash = ∆ on 1000-* accounts.
 
 import { getFinanceClient } from "../supabase";
 
@@ -37,130 +45,118 @@ export type CfInput = {
   end: string;
 };
 
-// Compute the closing balance for a code as of a given date (debit-positive
-// for asset/expense/cogs accounts, credit-positive for the rest).
-async function balanceFor(
-  companyId: string,
-  codePrefix: string,
-  asOfDate: string,
-  signMode: "debit" | "credit"
-): Promise<number> {
-  const client = getFinanceClient();
-  const { data: txns } = await client
-    .from("fin_transactions")
-    .select("id")
-    .eq("company_id", companyId)
-    .eq("status", "posted")
-    .lte("txn_date", asOfDate);
-  const txnIds = (txns ?? []).map((t) => t.id as string);
-  if (txnIds.length === 0) return 0;
+// Which named line a non-cash account belongs to. First match wins.
+type BucketKey =
+  | "pnl" | "ar" | "inventory" | "prepay" | "channelDebtors" | "suspense"
+  | "ap" | "sst" | "payroll" | "otherOperating"
+  | "ppe"
+  | "shortLoan" | "longLoan" | "directors" | "interco" | "equity";
 
-  let total = 0;
-  const chunkSize = 200;
-  for (let i = 0; i < txnIds.length; i += chunkSize) {
-    const chunk = txnIds.slice(i, i + chunkSize);
-    const { data: lines } = await client
-      .from("fin_journal_lines")
-      .select("account_code, debit, credit")
-      .in("transaction_id", chunk)
-      .like("account_code", `${codePrefix}%`);
-    for (const l of lines ?? []) {
-      total +=
-        signMode === "debit"
-          ? Number(l.debit) - Number(l.credit)
-          : Number(l.credit) - Number(l.debit);
-    }
-  }
-  return round2(total);
-}
-
-async function rangeMovement(
-  companyId: string,
-  codePrefix: string,
-  start: string,
-  end: string,
-  signMode: "debit" | "credit"
-): Promise<number> {
-  // Movement = balanceFor(end) - balanceFor(start - 1 day)
-  const dayBefore = oneDayBefore(start);
-  const closing = await balanceFor(companyId, codePrefix, end, signMode);
-  const opening = await balanceFor(companyId, codePrefix, dayBefore, signMode);
-  return round2(closing - opening);
+function bucketFor(code: string): BucketKey {
+  if (code.startsWith("5") || code.startsWith("6")) return "pnl";
+  if (code === "1001" || code.startsWith("1001-")) return "ar";
+  if (code === "1002" || code.startsWith("1002-")) return "inventory";
+  if (code === "1003" || code.startsWith("1003-")) return "prepay";
+  if (code === "1005" || code === "1006" || code === "1007" || code.startsWith("1005-") || code.startsWith("1006-") || code.startsWith("1007-")) return "channelDebtors";
+  if (code === "1999") return "suspense";
+  if (code === "3001" || code.startsWith("3001-")) return "ap";
+  if (code === "3002" || code.startsWith("3002-")) return "sst";
+  if (code >= "3004" && code <= "3008") return "payroll";
+  if (code.startsWith("3004") || code.startsWith("3005") || code.startsWith("3006") || code.startsWith("3007") || code.startsWith("3008")) return "payroll";
+  if (code.startsWith("1500")) return "ppe";
+  if (code === "3010" || code.startsWith("3010-")) return "shortLoan";
+  if (code.startsWith("3500")) return "longLoan";
+  if (code.startsWith("3400")) return "directors";
+  if (code.startsWith("3600")) return "interco";
+  if (code.startsWith("4")) return "equity";
+  return "otherOperating"; // any 1xxx/2xxx/3xxx not named above
 }
 
 export async function buildCashFlow(input: CfInput): Promise<CfReport> {
+  const client = getFinanceClient();
   const dayBefore = oneDayBefore(input.start);
 
-  // Net income for the range — re-compute from journals to match P&L exactly.
-  const netIncome = await rangeMovement(input.companyId, "5", input.start, input.end, "credit")
-    - await rangeMovement(input.companyId, "6000", input.start, input.end, "debit")
-    - await rangeMovement(input.companyId, "6001", input.start, input.end, "debit")
-    - await rangeMovement(input.companyId, "6002", input.start, input.end, "debit")
-    - await rangeMovement(input.companyId, "6003", input.start, input.end, "debit")
-    - await rangeMovement(input.companyId, "65", input.start, input.end, "debit")
-    - await rangeMovement(input.companyId, "69", input.start, input.end, "debit");
+  // One ledger walk: every posted txn through the period end.
+  const { data: txns } = await client
+    .from("fin_transactions")
+    .select("id, txn_date")
+    .eq("company_id", input.companyId)
+    .eq("status", "posted")
+    .lte("txn_date", input.end);
+  const txnDate = new Map((txns ?? []).map((t) => [t.id as string, t.txn_date as string]));
+  const txnIds = [...txnDate.keys()];
 
-  // Depreciation add-back
-  const depreciation = await rangeMovement(input.companyId, "6512", input.start, input.end, "debit");
+  let cashAtStart = 0;
+  let cashAtEnd = 0;
+  const flows = new Map<BucketKey, number>(); // (credit − debit) per bucket, in-range only
 
-  // Working capital changes (signs flipped: increase in asset = use of cash;
-  // increase in liability = source of cash)
-  const deltaAr = -await rangeMovement(input.companyId, "1001", input.start, input.end, "debit");
-  const deltaInventory = -await rangeMovement(input.companyId, "1002", input.start, input.end, "debit");
-  const deltaPrepay = -await rangeMovement(input.companyId, "1003", input.start, input.end, "debit");
-  const deltaAp = await rangeMovement(input.companyId, "3001", input.start, input.end, "credit");
-  const deltaSstPayable = await rangeMovement(input.companyId, "3002", input.start, input.end, "credit");
-  const deltaPayrollControls =
-    await rangeMovement(input.companyId, "3004", input.start, input.end, "credit") +
-    await rangeMovement(input.companyId, "3005", input.start, input.end, "credit") +
-    await rangeMovement(input.companyId, "3006", input.start, input.end, "credit") +
-    await rangeMovement(input.companyId, "3007", input.start, input.end, "credit") +
-    await rangeMovement(input.companyId, "3008", input.start, input.end, "credit");
+  for (let i = 0; i < txnIds.length; i += 200) {
+    const chunk = txnIds.slice(i, i + 200);
+    const { data: lines } = await client
+      .from("fin_journal_lines")
+      .select("transaction_id, account_code, debit, credit")
+      .in("transaction_id", chunk);
+    for (const l of lines ?? []) {
+      const date = txnDate.get(l.transaction_id as string) ?? "";
+      const code = l.account_code as string;
+      const debit = Number(l.debit);
+      const credit = Number(l.credit);
+      if (code.startsWith("1000")) {
+        const mov = debit - credit;
+        if (date <= dayBefore) cashAtStart += mov;
+        cashAtEnd += mov;
+        continue;
+      }
+      if (date < input.start || date > input.end) continue;
+      // Cash-flow contribution of a non-cash account: credit = source of
+      // cash (+), debit = use of cash (−) — for every account type.
+      const b = bucketFor(code);
+      flows.set(b, (flows.get(b) ?? 0) + (credit - debit));
+    }
+  }
+
+  const f = (k: BucketKey) => round2(flows.get(k) ?? 0);
+  const netIncome = f("pnl");
 
   const operating: CfSection = {
     title: "Operating",
     lines: [
-      { label: "Net income", amount: round2(netIncome) },
-      { label: "Depreciation", amount: round2(depreciation), code: "6512" },
-      { label: "∆ Accounts receivable", amount: round2(deltaAr), code: "1001" },
-      { label: "∆ Inventory", amount: round2(deltaInventory), code: "1002" },
-      { label: "∆ Deposits & prepayments", amount: round2(deltaPrepay), code: "1003" },
-      { label: "∆ Accounts payable", amount: round2(deltaAp), code: "3001" },
-      { label: "∆ SST payable", amount: round2(deltaSstPayable), code: "3002" },
-      { label: "∆ Payroll controls", amount: round2(deltaPayrollControls) },
-    ],
+      { label: "Net income (depreciation included)", amount: netIncome },
+      { label: "∆ Accounts receivable", amount: f("ar"), code: "1001" },
+      { label: "∆ Inventory", amount: f("inventory"), code: "1002" },
+      { label: "∆ Deposits & prepayments", amount: f("prepay"), code: "1003" },
+      { label: "∆ Channel debtors (card / Grab settlements)", amount: f("channelDebtors"), code: "1005-1007" },
+      { label: "∆ Accounts payable", amount: f("ap"), code: "3001" },
+      { label: "∆ SST payable", amount: f("sst"), code: "3002" },
+      { label: "∆ Payroll controls", amount: f("payroll"), code: "3004-3008" },
+      { label: "Unreconciled inflows (Suspense)", amount: f("suspense"), code: "1999" },
+      { label: "Other movements", amount: f("otherOperating") },
+    ].filter((l) => l.amount !== 0 || l.label.startsWith("Net income")),
     total: 0,
   };
   operating.total = round2(operating.lines.reduce((s, l) => s + l.amount, 0));
 
-  // Investing = ∆ PP&E (capex). Negative = cash spent on PP&E.
-  const deltaPpe = -await rangeMovement(input.companyId, "1500", input.start, input.end, "debit");
   const investing: CfSection = {
     title: "Investing",
-    lines: [{ label: "∆ Property, Plant & Equipment", amount: round2(deltaPpe), code: "1500" }],
-    total: round2(deltaPpe),
+    lines: [{ label: "∆ Property, Plant & Equipment (net)", amount: f("ppe"), code: "1500" }],
+    total: f("ppe"),
   };
-
-  // Financing = ∆ loans + ∆ equity contributions
-  const deltaShortLoan = await rangeMovement(input.companyId, "3010", input.start, input.end, "credit");
-  const deltaLongLoan = await rangeMovement(input.companyId, "3500", input.start, input.end, "credit");
-  const deltaDirectorLoan = await rangeMovement(input.companyId, "3400", input.start, input.end, "credit");
-  const deltaCapital = await rangeMovement(input.companyId, "4001", input.start, input.end, "credit");
 
   const financing: CfSection = {
     title: "Financing",
     lines: [
-      { label: "∆ Short-term loans", amount: round2(deltaShortLoan), code: "3010" },
-      { label: "∆ Long-term loans", amount: round2(deltaLongLoan), code: "3500" },
-      { label: "∆ Due to directors", amount: round2(deltaDirectorLoan), code: "3400" },
-      { label: "∆ Owner capital", amount: round2(deltaCapital), code: "4001" },
-    ],
+      { label: "∆ Short-term loans", amount: f("shortLoan"), code: "3010" },
+      { label: "∆ Long-term loans", amount: f("longLoan"), code: "3500" },
+      { label: "∆ Due to directors", amount: f("directors"), code: "3400" },
+      { label: "∆ Inter-company balances", amount: f("interco"), code: "3600" },
+      { label: "Owner capital & dividends", amount: f("equity"), code: "4xxx" },
+    ].filter((l) => l.amount !== 0),
     total: 0,
   };
   financing.total = round2(financing.lines.reduce((s, l) => s + l.amount, 0));
 
-  const cashAtStart = await balanceFor(input.companyId, "1000", dayBefore, "debit");
-  const cashAtEnd = await balanceFor(input.companyId, "1000", input.end, "debit");
+  cashAtStart = round2(cashAtStart);
+  cashAtEnd = round2(cashAtEnd);
   const netChange = round2(cashAtEnd - cashAtStart);
   const computed = round2(operating.total + investing.total + financing.total);
 
@@ -168,13 +164,13 @@ export async function buildCashFlow(input: CfInput): Promise<CfReport> {
     companyId: input.companyId,
     start: input.start,
     end: input.end,
-    netIncome: round2(netIncome),
+    netIncome,
     operating,
     investing,
     financing,
     netChangeInCash: netChange,
-    cashAtStart: round2(cashAtStart),
-    cashAtEnd: round2(cashAtEnd),
+    cashAtStart,
+    cashAtEnd,
     reconciliationGap: round2(computed - netChange),
   };
 }
