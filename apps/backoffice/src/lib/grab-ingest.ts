@@ -325,7 +325,10 @@ export async function ingestGrabOrder(
     order_id: order.id,
     payment_method: payload.paymentType === "CASH" ? "cash" : "grabpay",
     amount: total,
-    status: "paid",
+    // Must be one of the pos_order_payments_status_check values
+    // (pending|completed|failed|refunded); "paid" was rejected (23514), silently
+    // orphaning every Grab payment row. "completed" == card/qr's paid state.
+    status: "completed",
     provider: "grabfood",
     provider_ref: orderID,
     refund_amount: 0,
