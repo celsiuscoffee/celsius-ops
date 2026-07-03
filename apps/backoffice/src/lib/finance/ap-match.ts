@@ -18,6 +18,7 @@
 //   tiers: AUTO ≥ 0.85 (needs amount-exact AND name) · REVIEW ≥ 0.55 · else none
 
 import { prisma } from "@/lib/prisma";
+import { getFinanceClient } from "./supabase";
 import type { CashCategory } from "@celsius/db";
 
 // Categories that can never be the settlement of a SUPPLIER invoice — wages
@@ -300,11 +301,33 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
     .map((l) => ({ bankLineId: l.id, desc: (l.description ?? "").replace(/\s+/g, " ").slice(0, 60), date: ymd(l.txnDate), amount: round2(Number(l.amount)), category: l.category as string | null }))
     .sort((a, b) => b.amount - a.amount);
 
+  // Human verdicts are final: a pair the owner rejected (or unmatched) never
+  // re-surfaces in review and never auto-applies — without this, every propose
+  // run would resurrect the same wrong suggestion.
+  const rejected = await fetchMatchRejections();
+  const keep = (m: ApMatch) => !rejected.has(`${m.bankLineId}|${m.invoiceId}`);
+  const keepMulti = (m: ApMultiMatch) => m.invoiceIds.every((inv) => !rejected.has(`${m.bankLineId}|${inv}`));
+
   return {
-    auto, review, multi,
+    auto: auto.filter(keep),
+    review: review.filter(keep),
+    multi: multi.filter(keepMulti),
     unmatchedInvoices: unmatchedInvoices.filter((i) => !matchedInvoiceIds.has(i.invoiceId)),
     unmatchedOutflows, doublePayments,
   };
+}
+
+// Rejected (bank line, invoice) pairs as "lineId|invoiceId" keys. Failure to
+// read must not take the matcher down — degrade to no filtering.
+async function fetchMatchRejections(): Promise<Set<string>> {
+  try {
+    const client = getFinanceClient();
+    const { data, error } = await client.from("fin_ap_match_rejections").select("bank_line_id, invoice_id");
+    if (error) return new Set();
+    return new Set((data ?? []).map((r) => `${r.bank_line_id}|${r.invoice_id}`));
+  } catch {
+    return new Set();
+  }
 }
 
 // ── VERIFIER + APPLY ────────────────────────────────────────────────────────
