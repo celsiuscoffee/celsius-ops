@@ -36,6 +36,7 @@ const TAB_GROUPS: { module: string; tabs: { href: string; label: string }[] }[] 
     module: "Time & Attendance",
     tabs: [
       { href: "/hr/attendance", label: "Attendance" },
+      { href: "/hr/roster-attendance", label: "Roster" },
       { href: "/hr/overtime", label: "Overtime" },
       { href: "/hr/shift-swaps", label: "Shift Swaps" },
     ],
