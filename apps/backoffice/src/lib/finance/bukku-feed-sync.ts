@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { classifyBankLine } from "./bank-line-classifier";
+import { fetchLearnedHints } from "./category-hints";
 import {
   listBankFeeds,
   fetchRawFeedLines,
@@ -149,8 +150,12 @@ async function syncAccount(
     const outlets = await prisma.outlet.findMany({ select: { id: true, code: true } });
     const codeToId = new Map(outlets.map((o) => [o.code, o.id]));
     const vendorHints = await supplierVendorHints();
+    // Learned corrections (fin_category_hints) outrank keyword rules; a payee
+    // the owner corrected once classifies right on every future feed rebuild.
+    let learnedHints: Awaited<ReturnType<typeof fetchLearnedHints>> = [];
+    try { learnedHints = await fetchLearnedHints(); } catch { /* additive */ }
     const classify = (l: BukkuBankLineDraft) => {
-      const cls = classifyBankLine({ description: l.description, reference: l.reference, amount: l.amount, direction: l.direction, accountKey: accountName, vendorHints });
+      const cls = classifyBankLine({ description: l.description, reference: l.reference, amount: l.amount, direction: l.direction, accountKey: accountName, vendorHints, learnedHints });
       return {
         category: cls.category,
         outletId: cls.outletCode ? codeToId.get(cls.outletCode) ?? null : null,

@@ -22,7 +22,8 @@ export async function GET(req: NextRequest) {
   const err = await guard(req);
   if (err) return err;
   try {
-    return NextResponse.json(await reclassifyBankLines({ commit: false }));
+    const full = new URL(req.url).searchParams.get("full") === "true";
+    return NextResponse.json(await reclassifyBankLines({ commit: false, full }));
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
@@ -32,7 +33,9 @@ export async function POST(req: NextRequest) {
   const err = await guard(req);
   if (err) return err;
   try {
-    return NextResponse.json(await reclassifyBankLines({ commit: true }));
+    let body: { full?: boolean } = {};
+    try { body = await req.json(); } catch { /* optional body */ }
+    return NextResponse.json(await reclassifyBankLines({ commit: true, full: body.full ?? false }));
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }

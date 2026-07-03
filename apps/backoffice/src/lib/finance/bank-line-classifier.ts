@@ -27,6 +27,11 @@ export type ClassifyInput = {
   // one of these classifies as RAW_MATERIALS — so onboarding a supplier in
   // procurement is enough for their payments to classify, no rule edit needed.
   vendorHints?: string[];
+  // Learned counterparty -> category associations from manual classifications
+  // (fin_category_hints). Checked BEFORE the keyword rules: a user correction
+  // on a specific payee outranks a generic keyword — "GET RENTAL SDN BHD" is
+  // an equipment vendor even though \bRENTAL\b reads as rent.
+  learnedHints?: { phrase: string; category: CashCategory; direction: Direction | null }[];
 };
 
 export type ClassifyResult = {
@@ -351,6 +356,23 @@ export function classifyBankLine(input: ClassifyInput): ClassifyResult {
   if (/^CELSIUS\s?COFFEE/.test(rawUpper) && rawUpper.length > 20) {
     const stripped = rawUpper.slice(20).replace(/\s+/g, " ").trim();
     if (stripped) candidates.push(stripped);
+  }
+
+  // Learned hints first: a manual classification on this counterparty is the
+  // strongest signal we have — it must beat generic keyword rules or the same
+  // misclassification would just come back on the next line from that payee.
+  if (input.learnedHints?.length) {
+    for (const hint of input.learnedHints) {
+      if (hint.direction && hint.direction !== input.direction) continue;
+      if (candidates.some((c) => c.includes(hint.phrase))) {
+        return {
+          category: hint.category,
+          outletCode: inferOutlet(desc),
+          isInterCo: intercoCounterparty,
+          ruleName: "learned_hint",
+        };
+      }
+    }
   }
 
   const rules = input.direction === "CR" ? INFLOW_RULES : OUTFLOW_RULES;

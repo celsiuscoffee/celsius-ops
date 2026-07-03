@@ -70,7 +70,11 @@ export default function ReconPage() {
     setReclassifying(true);
     setReclassNote(null);
     try {
-      const res = await fetch("/api/finance/reclassify", { method: "POST" });
+      // full sweep: learned corrections must also fix lines a generic rule
+      // already (mis)classified, not just the OTHER_* pile.
+      const res = await fetch("/api/finance/reclassify", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ full: true }),
+      });
       const j = await res.json();
       setReclassNote(res.ok
         ? `Re-classified ${j.changed} lines (RM ${Math.round(j.changedValue).toLocaleString("en-MY")}); ${j.unstampedJournals} journals queued for GL re-key.`
