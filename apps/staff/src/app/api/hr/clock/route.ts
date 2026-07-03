@@ -62,13 +62,14 @@ async function pickOutletByLocation(candidateIds: string[], lat: number | undefi
 async function findRosterShift(userId: string, clockIn: Date): Promise<{ scheduled_start: string; scheduled_end: string | null; scheduled_date: string } | null> {
   const todayMyt = mytDateString(clockIn);
   const prevMyt = mytDateString(new Date(clockIn.getTime() - 24 * 3600 * 1000));
+  // Accept ANY roster shift (draft or published). Rosters are often left as
+  // draft, and a draft shift's end time is a far better reference for lateness /
+  // auto-close than nothing (which forced the cron to fall back to the 1am sweep
+  // time). We no longer filter on hr_schedules.status.
   const { data } = await supabase
     .from("hr_schedule_shifts")
-    // Only stamp from a PUBLISHED roster (same filter the /hr/shifts route uses)
-    // so a draft shift's times don't drive lateness / auto-close.
-    .select("shift_date, start_time, end_time, hr_schedules!inner(status)")
+    .select("shift_date, start_time, end_time")
     .eq("user_id", userId)
-    .eq("hr_schedules.status", "published")
     .in("shift_date", [prevMyt, todayMyt]);
   const shifts = (data ?? []) as { shift_date: string; start_time: string; end_time: string | null }[];
   let best: { shift: (typeof shifts)[number]; diff: number } | null = null;
