@@ -16,6 +16,7 @@ import {
   ClipboardList,
   UtensilsCrossed,
   BarChart3,
+  Scissors,
   Power,
   Users,
   Package,
@@ -346,6 +347,7 @@ const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Overview",  href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:overview" },
           { label: "Campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,        moduleKey: "ads:campaigns" },
+          { label: "Optimizer", href: "/ads/optimizer", icon: <Scissors className={ICON_SIZE} />,         moduleKey: "ads:campaigns" },
           { label: "Invoices",  href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,          moduleKey: "ads:invoices" },
         ],
       },

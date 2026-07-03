@@ -1664,6 +1664,7 @@ model AdsCampaign {
   keywords    AdsKeywordMetric[]
   searchTerms AdsSearchTermDaily[]
   exclusions  AdsTermExclusion[]
+  budgetChanges AdsBudgetChange[]
 
   @@unique([accountId, campaignId])
   @@index([accountId])
@@ -1760,6 +1761,32 @@ model AdsTermExclusion {
 
   @@unique([campaignId, searchTerm])
   @@map("ads_term_exclusion")
+}
+
+// Approval ledger for cutting a Smart campaign's daily budget (reclaim spend to
+// redeploy to other marketing). Rows exist only from explicit human decisions
+// on the Optimizer page — the Google Ads mutation fires on approval, never
+// automatically. prevDailyMicros retains the pre-cut amount for undo.
+model AdsBudgetChange {
+  id                   String    @id
+  campaignId           String    @map("campaign_id")
+  status               String // applied | failed | rejected
+  prevDailyMicros      BigInt?   @map("prev_daily_micros")
+  newDailyMicros       BigInt    @map("new_daily_micros")
+  monthlySavingMyr     Decimal?  @map("monthly_saving_myr") @db.Decimal(12, 2)
+  projConvLostPerMonth Int?      @map("proj_conv_lost_per_month")
+  reason               String? // the efficiency evidence at decision time
+  budgetResource       String?   @map("budget_resource") // Ads CampaignBudget resource name
+  error                String?
+  decidedBy            String?   @map("decided_by")
+  decidedAt            DateTime  @default(now()) @map("decided_at")
+  appliedAt            DateTime? @map("applied_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  campaign AdsCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, decidedAt(sort: Desc)])
+  @@map("ads_budget_change")
 }
 
 model AdsInvoice {
