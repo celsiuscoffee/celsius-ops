@@ -357,7 +357,7 @@ export default function SchedulesPage() {
 
     setSaving(true);
     try {
-      await fetch("/api/hr/schedules/cell", {
+      const res = await fetch("/api/hr/schedules/cell", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -368,6 +368,13 @@ export default function SchedulesPage() {
           template_id: templateId,
         }),
       });
+      // Never silently swallow a failed save — that let managers believe a
+      // roster was saved when it wasn't. Surface it and keep the picker open.
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Couldn't save this shift: ${err.error || res.status}. Nothing was changed — please try again.`);
+        return;
+      }
       mutate();
       setPickerOpen(null);
       setPendingCheck(null);
@@ -381,7 +388,7 @@ export default function SchedulesPage() {
     if (!selectedOutlet) return;
     setSaving(true);
     try {
-      await fetch("/api/hr/schedules/cell", {
+      const res = await fetch("/api/hr/schedules/cell", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -398,6 +405,11 @@ export default function SchedulesPage() {
           },
         }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Couldn't save this shift: ${err.error || res.status}. Nothing was changed — please try again.`);
+        return;
+      }
       mutate();
       setPickerOpen(null);
     } finally {
