@@ -160,8 +160,12 @@ export default function ReconPage() {
             <MatchTable rows={data.auto} />
           </Section>
 
-          <Section id="recon-review" title="Needs review" desc="Likely matches that aren't certain enough to auto-clear — confirm or reject.">
-            <MatchTable rows={data.review} showReasons />
+          <Section id="recon-review" title="Needs review" desc="Likely matches that aren't certain enough to auto-clear. Confirm applies the match (links the line, marks the invoice paid unless it was settled elsewhere); Reject dismisses it for good.">
+            <MatchTable rows={data.review} showReasons actionable onDone={() => mutate()} />
+          </Section>
+
+          <Section id="recon-matched" title="Matched lines — review applied matches" desc="Everything the matcher (or you) has linked to an invoice, newest first. If one looks wrong, Unmatch reverses it: the link is removed, the invoice's paid status is reverted only if this match is what paid it, and the pair never auto-matches again.">
+            <MatchedTable />
           </Section>
 
           <Section id="recon-unmatched-out" title="Unmatched outflows — unreconciled cash-out" desc="Bank payments with no matching invoice yet. Reconcile manually: pick a category (books it to that expense) or match it to its invoice.">
@@ -500,7 +504,31 @@ function Section({ id, title, desc, children }: { id?: string; title: string; de
   );
 }
 
-function MatchTable({ rows, showReasons }: { rows: ApMatch[]; showReasons?: boolean }) {
+function MatchTable({ rows, showReasons, actionable, onDone }: { rows: ApMatch[]; showReasons?: boolean; actionable?: boolean; onDone?: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null); // key of the row being acted on
+  const [notes, setNotes] = useState<Record<string, string>>({});
+
+  async function act(m: ApMatch, action: "confirm" | "reject") {
+    const key = m.invoiceId + m.bankLineId;
+    setBusy(key);
+    try {
+      const res = action === "confirm"
+        ? await fetch("/api/finance/bank-lines/match", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bankLineId: m.bankLineId, invoiceId: m.invoiceId }),
+          })
+        : await fetch("/api/finance/bank-lines/reject-match", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bankLineId: m.bankLineId, invoiceId: m.invoiceId }),
+          });
+      const j = await res.json();
+      if (!res.ok) setNotes((n) => ({ ...n, [key]: j.error ?? `Failed (${res.status})` }));
+      else onDone?.();
+    } catch (e) {
+      setNotes((n) => ({ ...n, [key]: e instanceof Error ? e.message : String(e) }));
+    } finally { setBusy(null); }
+  }
+
   if (rows.length === 0) return <p className="px-4 py-4 text-xs text-gray-400">Nothing here.</p>;
   return (
     <div className="overflow-x-auto">
@@ -509,20 +537,116 @@ function MatchTable({ rows, showReasons }: { rows: ApMatch[]; showReasons?: bool
           <th className="px-3 py-2 font-medium">Invoice payee</th><th className="px-3 py-2 text-right font-medium">Amount</th>
           <th className="px-3 py-2 font-medium">Bank line</th><th className="px-3 py-2 font-medium">Category</th>
           <th className="px-3 py-2 text-right font-medium">Score</th>{showReasons && <th className="px-3 py-2 font-medium">Why</th>}
+          {actionable && <th className="px-3 py-2 font-medium">Decide</th>}
         </tr></thead>
         <tbody className="divide-y">
-          {rows.map((m) => (
-            <tr key={m.invoiceId + m.bankLineId} className="hover:bg-gray-50">
+          {rows.map((m) => {
+            const key = m.invoiceId + m.bankLineId;
+            return (
+            <tr key={key} className="hover:bg-gray-50">
               <td className="px-3 py-2 text-xs text-gray-700">{m.payee}{m.invoiceNumber ? <span className="text-gray-400"> · {m.invoiceNumber}</span> : ""}<div className="text-[10px] text-gray-400">{m.issueDate}</div></td>
               <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{fmtRM(m.amount)}</td>
               <td className="px-3 py-2 text-xs text-gray-600">{m.bankDesc}<div className="text-[10px] text-gray-400">{m.bankDate}</div></td>
               <td className="px-3 py-2 text-[11px] text-gray-400">{m.bankCategory ?? "—"}</td>
               <td className="px-3 py-2 text-right font-mono text-xs"><span className={m.score >= 0.85 ? "text-green-700" : "text-amber-700"}>{m.score.toFixed(2)}</span></td>
               {showReasons && <td className="px-3 py-2 text-[10px] text-gray-400">{m.reasons.join(", ")}</td>}
+              {actionable && (
+                <td className="whitespace-nowrap px-3 py-2">
+                  {notes[key] ? <span className="text-[10px] text-rose-600">{notes[key]}</span> : (
+                    <span className="flex items-center gap-1.5">
+                      <button onClick={() => act(m, "confirm")} disabled={busy === key}
+                        className="rounded border border-green-600/30 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+                        Confirm
+                      </button>
+                      <button onClick={() => act(m, "reject")} disabled={busy === key}
+                        className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                        Reject
+                      </button>
+                      {busy === key && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
+                    </span>
+                  )}
+                </td>
+              )}
             </tr>
-          ))}
+          );})}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// The applied-matches review: everything linked to an invoice, searchable,
+// with Unmatch to reverse a wrong one.
+type MatchedRow = {
+  bankLineId: string; date: string; desc: string; amount: number; category: string | null;
+  matchedAt: string | null; invoiceId: string | null; invoiceNumber: string | null;
+  payee: string; invoiceAmount: number | null; paidByMatch: boolean;
+};
+
+function MatchedTable() {
+  const [q, setQ] = useState("");
+  const { data, mutate } = useFetch<{ total: number; rows: MatchedRow[] }>(
+    `/api/finance/bank-lines/matched?q=${encodeURIComponent(q)}&limit=100`
+  );
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function unmatch(r: MatchedRow) {
+    setBusy(r.bankLineId); setNote(null);
+    try {
+      const res = await fetch("/api/finance/bank-lines/unmatch", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankLineId: r.bankLineId }),
+      });
+      const j = await res.json();
+      if (!res.ok) setNote(j.error ?? `Failed (${res.status})`);
+      else {
+        setNote(`Unmatched ${r.payee}${j.invoicesReverted ? ` — invoice reverted to pending` : ` — invoice untouched (paid via another route)`}.`);
+        mutate();
+      }
+    } catch (e) { setNote(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-2">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search payee, invoice no, description or amount…"
+          className="h-7 w-72 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700" />
+        {data && <span className="text-[11px] text-gray-400 tabular-nums">{data.rows.length} shown · {data.total} matched in total</span>}
+        {note && <span className="text-[11px] text-gray-500">{note}</span>}
+      </div>
+      {!data ? <p className="px-4 py-4 text-xs text-gray-400">Loading…</p> : data.rows.length === 0 ? (
+        <p className="px-4 py-4 text-xs text-gray-400">{q ? "No matches for the search." : "Nothing matched yet."}</p>
+      ) : (
+        <table className="w-full min-w-[760px] text-sm">
+          <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+            <th className="px-3 py-2 font-medium">Bank line</th>
+            <th className="px-3 py-2 text-right font-medium">Amount</th>
+            <th className="px-3 py-2 font-medium">Matched invoice</th>
+            <th className="px-3 py-2 font-medium">Category</th>
+            <th className="px-3 py-2 font-medium">How</th>
+            <th className="px-3 py-2" />
+          </tr></thead>
+          <tbody className="divide-y">
+            {data.rows.map((r) => (
+              <tr key={r.bankLineId} className="hover:bg-gray-50">
+                <td className="px-3 py-2 text-xs text-gray-600">{r.desc}<div className="text-[10px] text-gray-400">{r.date}</div></td>
+                <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{fmtRM(r.amount)}</td>
+                <td className="px-3 py-2 text-xs text-gray-700">{r.payee}{r.invoiceNumber ? <span className="text-gray-400"> · {r.invoiceNumber}</span> : ""}{r.invoiceAmount !== null && Math.abs(r.invoiceAmount - r.amount) > 0.01 && <span className="ml-1 text-[10px] text-amber-600">(invoice {fmtRM(r.invoiceAmount)})</span>}</td>
+                <td className="px-3 py-2 text-[11px] text-gray-400">{r.category ?? "—"}</td>
+                <td className="px-3 py-2 text-[10px] text-gray-400">{r.paidByMatch ? "match paid the invoice" : "link-only (paid elsewhere)"}{r.matchedAt ? ` · ${r.matchedAt}` : ""}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-right">
+                  <button onClick={() => unmatch(r)} disabled={busy === r.bankLineId}
+                    className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                    {busy === r.bankLineId ? "Unmatching…" : "Unmatch"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
