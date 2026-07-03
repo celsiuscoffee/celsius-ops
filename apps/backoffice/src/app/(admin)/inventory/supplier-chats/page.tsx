@@ -315,8 +315,10 @@ export default function SupplierChatsPage() {
       return;
     }
     const items = poProducts
-      .filter((p) => (poQty[p.productId] ?? 0) > 0)
-      .map((p) => ({ productId: p.productId, productPackageId: p.productPackageId, quantity: poQty[p.productId], unitPrice: p.price }));
+      // Key qty by supplierProductId (unique per product+package), NOT productId — the same
+      // product sold in two package sizes appears twice, and keying by productId collided them.
+      .filter((p) => (poQty[p.supplierProductId] ?? 0) > 0)
+      .map((p) => ({ productId: p.productId, productPackageId: p.productPackageId, quantity: poQty[p.supplierProductId], unitPrice: p.price }));
     if (items.length === 0) {
       setPoError("Set a quantity on at least one item.");
       return;
@@ -347,7 +349,7 @@ export default function SupplierChatsPage() {
       setPoBusy(false);
     }
   }
-  const poTotal = poProducts.reduce((s, p) => s + (poQty[p.productId] ?? 0) * p.price, 0);
+  const poTotal = poProducts.reduce((s, p) => s + (poQty[p.supplierProductId] ?? 0) * p.price, 0);
 
   const [modeBusy, setModeBusy] = useState(false);
   async function setMode(mode: AutomationMode) {
@@ -1260,7 +1262,7 @@ export default function SupplierChatsPage() {
                           </div>
                         )}
                         {poProducts.map((p) => (
-                          <div key={p.productId} className="flex items-center gap-2 border-b border-border py-1.5">
+                          <div key={p.supplierProductId} className="flex items-center gap-2 border-b border-border py-1.5">
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-[12px]">{p.name}</div>
                               <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
@@ -1270,7 +1272,7 @@ export default function SupplierChatsPage() {
                                 </span>
                                 {(p.suggestedQty ?? 0) > 0 && (
                                   <button
-                                    onClick={() => setPoQty((q) => ({ ...q, [p.productId]: p.suggestedQty! }))}
+                                    onClick={() => setPoQty((q) => ({ ...q, [p.supplierProductId]: p.suggestedQty! }))}
                                     title="Below par at this outlet — tap to use the suggested order quantity (par shortfall, capped by MOQ / max level / shelf life)"
                                     className="shrink-0 rounded bg-amber-100 px-1.5 py-px font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-200"
                                   >
@@ -1282,9 +1284,9 @@ export default function SupplierChatsPage() {
                             <input
                               type="number"
                               min={0}
-                              value={poQty[p.productId] ?? ""}
+                              value={poQty[p.supplierProductId] ?? ""}
                               onChange={(e) =>
-                                setPoQty((q) => ({ ...q, [p.productId]: Math.max(0, Number(e.target.value) || 0) }))
+                                setPoQty((q) => ({ ...q, [p.supplierProductId]: Math.max(0, Number(e.target.value) || 0) }))
                               }
                               placeholder="0"
                               className="h-7 w-14 rounded-md border border-border bg-background px-1.5 text-right text-[12px] text-foreground"
