@@ -120,3 +120,22 @@ describe("bank-line-classifier", () => {
     expect(classifyBankLine({ description: "SOME ACME BEANS ROASTERY CREDIT", amount: 100, direction: "CR", vendorHints: hints }).category).toBe("OTHER_INFLOW");
   });
 });
+
+describe("learned category hints", () => {
+  const hints = [{ phrase: "GET RENTAL", category: "EQUIPMENTS" as const, direction: "DR" as const }];
+
+  it("outranks generic keyword rules — a corrected payee never regresses", () => {
+    // \bRENTAL\b alone would read this as RENT; the learned correction wins.
+    const res = classifyBankLine({ description: "I2606-0155 GET RENTAL SDN. BHD* I2606-0155", amount: 399, direction: "DR", learnedHints: hints });
+    expect(res.category).toBe("EQUIPMENTS");
+    expect(res.ruleName).toBe("learned_hint");
+  });
+
+  it("sees through the glued 20-char sender prefix", () => {
+    expect(classifyBankLine({ description: "CELSIUS COFFEE PUTRAGET RENTAL SDN. BHD*X", amount: 399, direction: "DR", learnedHints: hints }).category).toBe("EQUIPMENTS");
+  });
+
+  it("respects the hint direction and falls through otherwise", () => {
+    expect(classifyBankLine({ description: "GET RENTAL SDN BHD REFUND", amount: 399, direction: "CR", learnedHints: hints }).category).toBe("REFUND");
+  });
+});

@@ -13,6 +13,7 @@
 import { prisma } from "@/lib/prisma";
 import { classifyBankLine } from "./bank-line-classifier";
 import { supplierVendorHints } from "./bukku-feed-sync";
+import { fetchLearnedHints } from "./category-hints";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -25,13 +26,22 @@ export type ReclassifyResult = {
   byRule: { ruleName: string; category: string; n: number; amount: number }[];
 };
 
-export async function reclassifyBankLines(opts: { commit?: boolean } = {}): Promise<ReclassifyResult> {
+export async function reclassifyBankLines(opts: { commit?: boolean; full?: boolean } = {}): Promise<ReclassifyResult> {
   const commit = opts.commit ?? false;
+  // full=true widens the sweep to EVERY rule-classified line, not just the
+  // OTHER_* pile — needed when a correction changes a category that a generic
+  // rule got wrong (GET RENTAL sat in RENT, Mikofee's dividend in
+  // RAW_MATERIALS; neither is in the catch-all pile). Still never touches
+  // user classifications or AP-matched lines, and a line only changes when
+  // the classifier gives a SPECIFIC answer (fallback never downgrades).
+  const full = opts.full ?? false;
   const vendorHints = await supplierVendorHints();
+  let learnedHints: Awaited<ReturnType<typeof fetchLearnedHints>> = [];
+  try { learnedHints = await fetchLearnedHints(); } catch { /* hints are additive */ }
 
   const lines = await prisma.bankStatementLine.findMany({
     where: {
-      OR: [{ category: null }, { category: { in: ["OTHER_OUTFLOW", "OTHER_INFLOW"] } }],
+      ...(full ? {} : { OR: [{ category: null }, { category: { in: ["OTHER_OUTFLOW", "OTHER_INFLOW"] } }] }),
       AND: [{ OR: [{ classifiedBy: null }, { classifiedBy: "rule" }] }],
       apInvoiceId: null,
     },
@@ -51,6 +61,7 @@ export async function reclassifyBankLines(opts: { commit?: boolean } = {}): Prom
       direction: l.direction as "CR" | "DR",
       accountKey: l.statement.accountName ?? undefined,
       vendorHints,
+      learnedHints,
     });
     if (!res.category || res.category === l.category) continue;
     if (res.category === "OTHER_OUTFLOW" || res.category === "OTHER_INFLOW") continue;

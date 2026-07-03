@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { CashCategory } from "@prisma/client";
+import { learnHintsFromLines } from "@/lib/finance/category-hints";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
 
   const lines = await prisma.bankStatementLine.findMany({
     where: { id: { in: ids } },
-    select: { id: true, glTransactionId: true, apInvoiceId: true },
+    select: { id: true, glTransactionId: true, apInvoiceId: true, description: true, direction: true },
   });
   if (!lines.length) return NextResponse.json({ error: "Bank lines not found" }, { status: 404 });
   const matched = lines.filter((l) => l.apInvoiceId).length;
@@ -50,10 +51,19 @@ export async function POST(req: NextRequest) {
       });
     }
   });
+  // Teach the categorizer: this correction becomes a counterparty hint the
+  // classifier consults before its keyword rules, so the same payee never
+  // needs correcting twice. Failure to learn must not fail the classify.
+  let learned = 0;
+  try {
+    learned = await learnHintsFromLines(writable, category as CashCategory);
+  } catch { /* hint learning is best-effort */ }
+
   return NextResponse.json({
     ok: true,
     classified: writable.length,
     rekeyedJournals: journalIds.length,
     skippedMatched: matched, // AP-matched lines are settlement records — unmatch first
+    learnedHints: learned,
   });
 }
