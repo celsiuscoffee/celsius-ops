@@ -32,6 +32,12 @@ export const MAX_TRIM_PCT = 0.20;       // never cut more than 20% of daily budg
 export const FLOOR_PCT = 0.5;           // never drop below 50% of current budget (visibility floor)
 export const CAPPED_AT = 0.9;           // spending ≥ 90% of budget ⇒ budget-limited
 
+// sync-campaigns stores campaign.status straight from the Ads API, which
+// serializes the CampaignStatus enum as its NUMBER ("2" = ENABLED, "3" =
+// PAUSED, "4" = REMOVED) — not the label. Match both so the filter survives
+// any future change to how the enum is serialized.
+export const ENABLED_STATUSES = ["2", "ENABLED"];
+
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const round0 = (n: number) => Math.round(n);
 
@@ -115,7 +121,7 @@ export async function buildAdsOptimizerReport(windowDays = 30): Promise<Optimize
 
   const [campaigns, metrics, paidOrganic] = await Promise.all([
     prisma.adsCampaign.findMany({
-      where: { status: "ENABLED", account: { isManager: false } },
+      where: { status: { in: ENABLED_STATUSES }, account: { isManager: false } },
       select: { id: true, name: true, dailyBudgetMicros: true, outletId: true },
     }),
     prisma.adsMetricDaily.groupBy({
