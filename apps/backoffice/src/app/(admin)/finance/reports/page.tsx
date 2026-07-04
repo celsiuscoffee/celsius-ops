@@ -743,7 +743,10 @@ type CfReport = {
   reconciliationGap: number;
 };
 
-function CfSectionTable({ s }: { s: CfSection }) {
+function CfSectionTable({ s, cmp, showCompare }: { s: CfSection; cmp?: CfSection | null; showCompare?: boolean }) {
+  // Match the comparison period's lines back to this period by label; a line
+  // present now but absent then reads as "new", and vice-versa.
+  const cmpByLabel = new Map((cmp?.lines ?? []).map((l) => [l.label, l.amount] as const));
   return (
     <div className="overflow-hidden rounded-md border bg-card">
       <header className="border-b bg-muted/30 px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">
@@ -752,21 +755,26 @@ function CfSectionTable({ s }: { s: CfSection }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <tbody>
-            {s.lines.map((l, i) => (
-              <tr key={i} className="border-t">
-                <td className="px-3 py-1.5">{l.label}</td>
-                <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground tabular-nums">
-                  {l.code ?? ""}
-                </td>
-                <td
-                  className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${
-                    l.amount < 0 ? "text-rose-600 dark:text-rose-400" : ""
-                  }`}
-                >
-                  {RM(l.amount)}
-                </td>
-              </tr>
-            ))}
+            {s.lines.map((l, i) => {
+              const prev = showCompare ? (cmpByLabel.has(l.label) ? cmpByLabel.get(l.label)! : null) : undefined;
+              return (
+                <tr key={i} className="border-t">
+                  <td className="px-3 py-1.5">{l.label}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground tabular-nums">
+                    {l.code ?? ""}
+                  </td>
+                  <td
+                    className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${
+                      l.amount < 0 ? "text-rose-600 dark:text-rose-400" : ""
+                    }`}
+                  >
+                    {RM(l.amount)}
+                  </td>
+                  {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">{prev == null ? "—" : RM(prev)}</td>}
+                  {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctChange(l.amount, prev)}</td>}
+                </tr>
+              );
+            })}
             <tr className="border-t bg-muted/30">
               <td colSpan={2} className="px-3 py-2 font-semibold">
                 Net cash from {s.title.toLowerCase()}
@@ -778,6 +786,8 @@ function CfSectionTable({ s }: { s: CfSection }) {
               >
                 {RM(s.total)}
               </td>
+              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold text-muted-foreground">{cmp == null ? "—" : RM(cmp.total)}</td>}
+              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums font-semibold text-muted-foreground">{pctChange(s.total, cmp?.total)}</td>}
             </tr>
           </tbody>
         </table>
@@ -786,11 +796,38 @@ function CfSectionTable({ s }: { s: CfSection }) {
   );
 }
 
+function CfSummaryCard({ label, amount, prev, showCompare, negative }: { label: string; amount: number; prev?: number | null; showCompare?: boolean; negative?: boolean }) {
+  return (
+    <div className="rounded-md border bg-card p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={`truncate text-lg font-semibold tabular-nums ${negative && amount < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(amount)}</div>
+      {showCompare && (
+        <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+          {prev == null ? "vs —" : `vs ${RM(prev)}`} {pctChange(amount, prev) && <span>({pctChange(amount, prev)})</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CfTab() {
   const { start, end } = useControls();
+  const [compare, setCompare] = useState<CompareMode>("none");
   const { data, isLoading, error } = useFetch<{ report: CfReport }>(
     `/api/finance/reports/cash-flow?start=${start}&end=${end}`
   );
+  // Same compare windows as the P&L: the immediately-preceding equal-length
+  // period, or the same dates a year back.
+  const cmpRange = useMemo(() => {
+    if (compare === "prev") { const cEnd = addDaysStr(start, -1); return { s: addDaysStr(cEnd, -daysBetween(start, end)), e: cEnd }; }
+    if (compare === "year") return { s: addYearsStr(start, -1), e: addYearsStr(end, -1) };
+    return null;
+  }, [compare, start, end]);
+  const { data: cmpData } = useFetch<{ report: CfReport }>(
+    cmpRange ? `/api/finance/reports/cash-flow?start=${cmpRange.s}&end=${cmpRange.e}` : null
+  );
+  const showCompare = compare !== "none" && !!cmpData;
+  const cmp = cmpData?.report;
 
   return (
     <div className="space-y-4">
@@ -802,28 +839,24 @@ function CfTab() {
       )}
       {data && (
         <div className="space-y-3">
-          <CfSectionTable s={data.report.operating} />
-          <CfSectionTable s={data.report.investing} />
-          <CfSectionTable s={data.report.financing} />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <label className="flex items-center gap-1 text-[11px] text-muted-foreground">Compare
+              <select value={compare} onChange={(e) => setCompare(e.target.value as CompareMode)}
+                className="h-7 rounded-md border bg-background px-1.5 text-xs">
+                <option value="none">off</option>
+                <option value="prev">previous period</option>
+                <option value="year">previous year</option>
+              </select>
+            </label>
+            {showCompare && cmpRange && <span className="text-[10px] text-muted-foreground tabular-nums">vs {cmpRange.s} → {cmpRange.e}</span>}
+          </div>
+          <CfSectionTable s={data.report.operating} cmp={cmp?.operating} showCompare={showCompare} />
+          <CfSectionTable s={data.report.investing} cmp={cmp?.investing} showCompare={showCompare} />
+          <CfSectionTable s={data.report.financing} cmp={cmp?.financing} showCompare={showCompare} />
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-md border bg-card p-3">
-              <div className="text-xs text-muted-foreground">Cash at start</div>
-              <div className="truncate text-lg font-semibold tabular-nums">{RM(data.report.cashAtStart)}</div>
-            </div>
-            <div className="rounded-md border bg-card p-3">
-              <div className="text-xs text-muted-foreground">Net change</div>
-              <div
-                className={`truncate text-lg font-semibold tabular-nums ${
-                  data.report.netChangeInCash < 0 ? "text-rose-600 dark:text-rose-400" : ""
-                }`}
-              >
-                {RM(data.report.netChangeInCash)}
-              </div>
-            </div>
-            <div className="rounded-md border bg-card p-3">
-              <div className="text-xs text-muted-foreground">Cash at end</div>
-              <div className="truncate text-lg font-semibold tabular-nums">{RM(data.report.cashAtEnd)}</div>
-            </div>
+            <CfSummaryCard label="Cash at start" amount={data.report.cashAtStart} prev={cmp?.cashAtStart} showCompare={showCompare} />
+            <CfSummaryCard label="Net change" amount={data.report.netChangeInCash} prev={cmp?.netChangeInCash} showCompare={showCompare} negative />
+            <CfSummaryCard label="Cash at end" amount={data.report.cashAtEnd} prev={cmp?.cashAtEnd} showCompare={showCompare} />
           </div>
           {Math.abs(data.report.reconciliationGap) > 0.01 && (
             <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
