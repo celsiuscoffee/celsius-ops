@@ -21,6 +21,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "asOf (YYYY-MM-DD) required" }, { status: 400 });
   }
   try {
+    // companyId=consolidated (same param as the pnl route) → the GROUP balance
+    // sheet: all active companies summed, 3600-xx inter-company balances netted.
     const report = await buildBalanceSheet({ companyId, asOf });
     return NextResponse.json({ report });
   } catch (err) {

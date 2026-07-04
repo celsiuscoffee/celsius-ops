@@ -9,7 +9,22 @@
 // surfaced as a synthetic "Retained earnings (current period)" line so the
 // equation A = L + E balances even before the close agent sweeps to 4000.
 
+// Consolidated mode (companyId = "consolidated"): every account balance is
+// summed across all active companies. The 3600 family (inter-company due-to
+// and due-from current accounts) is the exception: each entity's balance is a
+// mirror of another entity's, so the group figure must NET them. They collapse
+// into one "Inter-company balances (net)" line; a net beyond 0.01 is surfaced
+// via intercoResidual so the UI can warn that the group books do not fully
+// offset. Payroll and statutory controls (3008, 3004 to 3007) sum normally:
+// gl-posting-map routes both the accrual and the clearing payment to the same
+// account inside the paying company, and cross-company salary funding is
+// booked to 3600 (INTERCO_PEOPLE), so they are not cross-company mirrors.
+
 import { getFinanceClient } from "../supabase";
+
+export const CONSOLIDATED_COMPANY_ID = "consolidated";
+
+const isIntercoCode = (code: string) => code === "3600" || code.startsWith("3600-");
 
 export type BsLine = {
   code: string;
@@ -35,6 +50,10 @@ export type BsReport = {
   // Difference should be zero. Any non-zero amount indicates an imbalance the
   // UI flags loudly (likely an unclosed period or a malformed manual journal).
   imbalance: number;
+  // Consolidated only: net of all 3600-xx inter-company balances across the
+  // group. Should be ~0 (due-to in one entity mirrors due-from in another);
+  // a residual beyond 0.01 means a leg is missing or misclassified.
+  intercoResidual?: number;
 };
 
 export type BsInput = {
@@ -44,6 +63,7 @@ export type BsInput = {
 
 export async function buildBalanceSheet(input: BsInput): Promise<BsReport> {
   const client = getFinanceClient();
+  const consolidated = input.companyId === CONSOLIDATED_COMPANY_ID;
   const fiscalYearStart = `${input.asOf.slice(0, 4)}-01-01`;
 
   const { data: accounts } = await client
@@ -61,19 +81,33 @@ export async function buildBalanceSheet(input: BsInput): Promise<BsReport> {
     ])
   );
 
-  // Posted txns through asOf
-  const { data: txns } = await client
+  // Posted txns through asOf. Consolidated = every active company's ledger;
+  // summing all their journal lines per account IS the group balance.
+  let txnQuery = client
     .from("fin_transactions")
     .select("id, txn_date")
-    .eq("company_id", input.companyId)
     .eq("status", "posted")
     .lte("txn_date", input.asOf);
+  if (consolidated) {
+    const { data: cos } = await client
+      .from("fin_companies")
+      .select("id")
+      .eq("is_active", true);
+    txnQuery = txnQuery.in("company_id", (cos ?? []).map((c) => c.id as string));
+  } else {
+    txnQuery = txnQuery.eq("company_id", input.companyId);
+  }
+  const { data: txns } = await txnQuery;
   const txnIds = (txns ?? []).map((t) => t.id as string);
   const txnDate = new Map((txns ?? []).map((t) => [t.id as string, t.txn_date as string]));
 
   const byCode = new Map<string, number>();
   let pnlYtd = 0;     // current fiscal year earnings → synthetic equity line
   let pnlPrior = 0;   // pre-fiscal-year earnings → retained earnings b/f
+  // Consolidated: 3600-xx accumulated in raw credit-minus-debit terms (not the
+  // per-type display sign), so a due-from booked in one entity offsets the
+  // mirrored due-to in another regardless of how each account is typed.
+  let intercoNet = 0;
 
   if (txnIds.length > 0) {
     const chunkSize = 200;
@@ -91,7 +125,9 @@ export async function buildBalanceSheet(input: BsInput): Promise<BsReport> {
         const credit = Number(l.credit);
         const date = txnDate.get(l.transaction_id as string) ?? "";
 
-        if (meta.type === "asset" || meta.type === "liability" || meta.type === "equity") {
+        if (consolidated && isIntercoCode(code)) {
+          intercoNet += credit - debit;
+        } else if (meta.type === "asset" || meta.type === "liability" || meta.type === "equity") {
           const sign = meta.type === "asset" ? debit - credit : credit - debit;
           byCode.set(code, round2((byCode.get(code) ?? 0) + sign));
         } else {
@@ -105,6 +141,24 @@ export async function buildBalanceSheet(input: BsInput): Promise<BsReport> {
           else pnlPrior += contribution;
         }
       }
+    }
+  }
+
+  // Consolidated: the 3600-xx due-to/due-from lines collapse to ONE net line.
+  // A clean group nets to zero and the line disappears; a residual stays
+  // visible (as a liability line, credit-positive) and is flagged so the UI
+  // can warn instead of silently absorbing it.
+  let intercoResidual: number | undefined;
+  if (consolidated) {
+    intercoNet = round2(intercoNet);
+    intercoResidual = Math.abs(intercoNet) > 0.01 ? intercoNet : 0;
+    if (intercoNet !== 0) {
+      byCode.set("IC-NET", intercoNet);
+      accountMeta.set("IC-NET", {
+        name: "Inter-company balances (net)",
+        type: "liability",
+        parent: null,
+      });
     }
   }
 
@@ -164,6 +218,7 @@ export async function buildBalanceSheet(input: BsInput): Promise<BsReport> {
     equity,
     totalLiabilitiesAndEquity: totalLE,
     imbalance: round2(assets.total - totalLE),
+    ...(consolidated ? { intercoResidual } : {}),
   };
 }
 

@@ -22,6 +22,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "start, end (YYYY-MM-DD) required" }, { status: 400 });
   }
   try {
+    // companyId=consolidated (same param as the pnl route) → the GROUP cash
+    // flow: all active companies summed, inter-company transfer legs cancel.
     const report = await buildCashFlow({ companyId, start, end });
     return NextResponse.json({ report });
   } catch (err) {
