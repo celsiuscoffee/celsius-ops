@@ -16,6 +16,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma, type CashCategory } from "@prisma/client";
 import { getFinanceClient } from "../supabase";
+import { getDefaultCompanyId } from "../companies";
 import { effectiveGrabRate } from "./pnl-sourced";
 import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
 
@@ -145,25 +146,31 @@ async function drillPurchases(companyId: string, start: string, end: string, out
   }));
 }
 
-// MKT-ADS: Google Ads spend per day.
-async function drillAds(start: string, end: string): Promise<DrillLine[]> {
-  const rows = await prisma.adsMetricDaily.groupBy({
-    by: ["date"],
-    where: { date: { gte: dStart(start), lte: dEnd(end) } },
-    _sum: { costMicros: true },
-    orderBy: { date: "asc" },
-  });
-  return rows
-    .map((r) => ({ day: r.date.toISOString().slice(0, 10), amt: round2(Number(r._sum.costMicros ?? 0) / 1_000_000) }))
+// MKT-ADS: Google Ads spend per day, attributed to the company/outlet via the
+// campaign's outletId — mirrors the P&L so the drill ties to the line.
+async function drillAds(companyId: string, start: string, end: string, outletId?: string | null): Promise<DrillLine[]> {
+  const outletIds = await companyOutlets(companyId, outletId);
+  const defaultCompany = await getDefaultCompanyId();
+  const includeUntagged = !outletId && (companyId === CONSOLIDATED || companyId === defaultCompany);
+  const outletSet = new Set(outletIds);
+  const rows = await prisma.$queryRaw<{ date: Date; outlet_id: string | null; spend: number }[]>(Prisma.sql`
+    SELECT m.date, c.outlet_id, COALESCE(SUM(m.cost_micros), 0)::float / 1e6 AS spend
+    FROM ads_metric_daily m LEFT JOIN ads_campaign c ON c.id = m.campaign_id
+    WHERE m.date >= ${dStart(start)} AND m.date <= ${dEnd(end)}
+    GROUP BY m.date, c.outlet_id ORDER BY m.date ASC
+  `);
+  const byDay = new Map<string, number>();
+  for (const r of rows) {
+    const keep = (r.outlet_id && outletSet.has(r.outlet_id)) || (!r.outlet_id && includeUntagged);
+    if (!keep) continue;
+    const day = r.date.toISOString().slice(0, 10);
+    byDay.set(day, (byDay.get(day) ?? 0) + Number(r.spend));
+  }
+  return [...byDay.entries()]
+    .map(([day, amt]) => ({ day, amt: round2(amt) }))
     .filter((r) => r.amt !== 0)
-    .map((r) => ({
-      transactionId: `ads-${r.day}`,
-      txnDate: r.day,
-      description: "Google Ads spend",
-      amount: r.amt,
-      debit: r.amt,
-      credit: 0,
-    }));
+    .sort((a, b) => (a.day < b.day ? -1 : 1))
+    .map((r) => ({ transactionId: `ads-${r.day}`, txnDate: r.day, description: "Google Ads spend", amount: r.amt, debit: r.amt, credit: 0 }));
 }
 
 // Bridge Outlet UUIDs → loyalty ids (pos_orders / grab_ads_spend key).
@@ -278,7 +285,7 @@ export async function sourcedPnlDrillDown(args: {
   if (code === "REV-EVENTS") return drillBank("MEETINGS_EVENTS", companyId, start, end, outletId, "CR");
   if (code.startsWith("REV-")) return drillRevenue(code, companyId, start, end, outletId);
   if (code === "PROC") return drillPurchases(companyId, start, end, outletId);
-  if (code === "MKT-ADS") return drillAds(start, end);
+  if (code === "MKT-ADS") return drillAds(companyId, start, end, outletId);
   if (code === "MKT-GRAB-PROMO") return drillGrabPromo(companyId, start, end, outletId);
   if (code === "MKT-GRAB-ADS") return drillGrabAds(companyId, start, end, outletId);
   // Management fee is recognised on accrual (paid a month in arrears), so its
