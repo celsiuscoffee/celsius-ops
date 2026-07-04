@@ -12,6 +12,7 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { CashCategory } from "@prisma/client";
 import { learnHintsFromLines } from "@/lib/finance/category-hints";
+import { logBankLineEvents } from "@/lib/finance/bank-line-events";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   const lines = await prisma.bankStatementLine.findMany({
     where: { id: { in: ids } },
-    select: { id: true, glTransactionId: true, apInvoiceId: true, description: true, direction: true },
+    select: { id: true, glTransactionId: true, apInvoiceId: true, description: true, direction: true, category: true },
   });
   if (!lines.length) return NextResponse.json({ error: "Bank lines not found" }, { status: 404 });
   const matched = lines.filter((l) => l.apInvoiceId).length;
@@ -57,6 +58,18 @@ export async function POST(req: NextRequest) {
       });
     }
   });
+  // Audit trail: one event per line, inserted in one batch. Best-effort, the
+  // helper never throws.
+  await logBankLineEvents(
+    writable.map((l) => ({
+      lineId: l.id,
+      event: "classify" as const,
+      oldValue: { category: l.category ?? null },
+      newValue: { category },
+    })),
+    auth.user.name,
+  );
+
   // Teach the categorizer: this correction becomes a counterparty hint the
   // classifier consults before its keyword rules, so the same payee never
   // needs correcting twice. Failure to learn must not fail the classify.
