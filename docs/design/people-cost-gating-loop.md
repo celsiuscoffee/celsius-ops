@@ -139,17 +139,26 @@ why the GL looked untagged. Pre-June bank lines have no outlet prefix at
 all ("TRANSFER FR A/C <NAME>"), so historical attribution needs a
 payee-name → employee → `User.outletId` map.
 
+**PT cross-check against the owner's part-timer detail sheet** (Google
+Sheets, per-outlet monthly PT wages, 2025–2026): June-2026 sheet figures
+are Conezion 5,942 / Shah Alam 9,239 / Tamarind 6,344 / Nilai 3,220 / IOI
+Mall 712 (total 25,457). The bank-line parse lands within ~4% of the sheet
+(24,403); deltas are week-worked vs payment-date timing plus the "IOI MALL
+PUTRAJAYA" prefix missing from the parse. The sheet's May Nilai figure
+(4,391) matches the manpower workbook's Nilai line exactly — sheet, GL,
+and workbook are one chain. The classifier fix should reconcile monthly
+against this sheet until the sheet can be retired.
+
 **Full June reconstruction** (outlet FT gross+employer from payroll + PT
-from bank lines + ⅓ Syafiq, Area Manager excluded — the workbook's
-definition): Conezion 25,011 = 19.5% (workbook 22.8%), Shah Alam 22,501 =
-21.2% (24.3%), Tamarind 21,663 = 26.8% (30.6%). Same ranking, same
-red/amber verdicts, ~3pts below the workbook everywhere. Known residuals,
-in likely size order: all six 2026 monthly payroll runs are still `draft`
-(OT and allowances not finalised); PT counted here by payment date, not
-week worked (the late-June week pays in early July); 61 June shifts held
-by users with no `hr_employee_profiles` row; one FT with no outlet
-(Shella, RM2,507). Closing the draft runs and switching PT to
-week-worked accrual should converge the two numbers.
+from the detail sheet + ⅓ Syafiq, Area Manager excluded — the workbook's
+definition): Conezion 25,850 = 20.1% (workbook 22.8%), Shah Alam 22,572 =
+21.2% (24.3%), Tamarind 21,929 = 27.1% (30.6%). Same ranking, same
+red/amber verdicts, a consistent ~RM3k/outlet below the workbook. That
+residual is now isolated to the FT side: all six 2026 monthly payroll runs
+are still `draft` (OT and allowances not finalised), plus one FT with no
+outlet (Shella, RM2,507) and the question of whether IOI Mall PT (712)
+folds into Conezion (would take it to 20.7%). Finalising the draft runs
+should converge the two numbers.
 
 **Half-built infra worth reusing:** `hr_schedules` already has
 `total_labor_hours` and `estimated_labor_cost` columns, but only 7 of 35
@@ -159,10 +168,12 @@ mandatory-and-trusted rather than invent a new one.
 
 **Data repairs before the gate ships (in order):**
 1. Fix the `partimer` bank-classifier rule to stamp `outletId` for the
-   "Seksyen 13 Shah Alam" and "Gastrohub Nilai" prefixes (one-rule fix;
-   the June-onward bank format makes it trivially parseable). The Monday
-   actuals then read PT cost per outlet straight from the GL, keyed to
-   the "PT Week NN/YY" token for week-worked accrual.
+   "Seksyen 13 Shah Alam", "Gastrohub Nilai", and "IOI Mall Putrajaya"
+   prefixes (one-rule fix; the June-onward bank format makes it trivially
+   parseable). The Monday actuals then read PT cost per outlet straight
+   from the GL, keyed to the "PT Week NN/YY" token for week-worked
+   accrual, reconciled monthly against the owner's part-timer detail
+   sheet until that sheet is retired.
 2. Create HR profiles (with rates) for every scheduled user (61 orphan
    June shifts); add a publish-time check refusing shifts for profile-less
    or rate-less users — the forward-looking gate prices the roster from
