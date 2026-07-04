@@ -226,12 +226,18 @@ export async function GET(req: NextRequest) {
   for (const r of appRows) {
     if (!isAppSale(r.status)) continue;
     const d = getMYTDateStr(r.created_at);
-    // Same as the POS loop: net `total`, and only COMPLETED orders count toward
-    // revenue/series/breakdowns (pickup/app orders sit in paid/preparing/ready
-    // before completion — backoffice waits for completed, so we do too). Phone
-    // capture + growth splits keep the broader isAppSale base.
+    // QR/app orders count as soon as they're PLACED & PAID — the moment the
+    // customer pays (status paid/preparing/ready/collected/completed), not only
+    // after staff close the ticket. QR-table dine-in tickets sit unclosed for a
+    // median ~15–20 min (tail 1–2h), so gating revenue on `completed` made those
+    // sales surface that late on the live dashboard. `isAppSale` already excludes
+    // pending (unpaid) and cancelled/refunded, so every row here is real, paid
+    // revenue. Trade-off: the headline can lead the completed-only finance/EOD
+    // figure by whatever is still open, and they reconcile once tickets close.
+    // Applied symmetrically to cur/prev so the comparison stays like-for-like.
+    // Phone capture + growth splits use this same base.
     const net = r.total || 0;
-    const counts = (r.status || "").toLowerCase() === "completed";
+    const counts = isAppSale(r.status);
     if (inCur(d)) {
       curAppOrd++;
       // Native = the iOS/Android binary (orders.source app_ios|app_android);
