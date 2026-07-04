@@ -7,6 +7,7 @@
 // client-side for instant feel. Row click opens a detail drawer.
 
 import { useState, useMemo } from "react";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { useFetch } from "@/lib/use-fetch";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, Badge, Button } from "@celsius/ui";
 import { Loader2, Search, X, ArrowUp, ArrowDown, ChevronsUpDown, Building2, Download } from "lucide-react";
@@ -344,12 +345,7 @@ export default function FinanceLedgerPage() {
               <option value="custom">Custom range…</option>
             </select>
           </label>
-          <label className="flex items-center gap-1">From
-            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPeriodSel("custom"); }} className="h-8 rounded-md border bg-background px-2 text-xs" />
-          </label>
-          <label className="flex items-center gap-1">To
-            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPeriodSel("custom"); }} className="h-8 rounded-md border bg-background px-2 text-xs" />
-          </label>
+          <DateRangePicker size="xs" start={dateFrom} end={dateTo} onChange={(s, e) => { setDateFrom(s); setDateTo(e); setPeriodSel("custom"); }} />
           <label className="flex items-center gap-1">Min RM
             <input type="number" inputMode="decimal" value={amountMin} onChange={(e) => setAmountMin(e.target.value)} className="h-8 w-24 rounded-md border bg-background px-2 text-xs tabular-nums" />
           </label>

@@ -13,6 +13,7 @@ import {
   SheetTitle,
 } from "@celsius/ui";
 import { Loader2, Download, FileText, AlertTriangle } from "lucide-react";
+import { DateRangePicker } from "@/components/date-range-picker";
 
 // Accounting format: negatives in parentheses, the convention every
 // accounting package (Xero, QuickBooks, Bukku) uses on statements.
@@ -190,11 +191,7 @@ function ReportControlsBar({ c, outletApplies }: { c: ReturnType<typeof useRepor
         {PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
       </select>
       {c.preset === "custom" && (
-        <div className="flex items-center gap-1.5">
-          <input type="date" value={c.customStart} max={c.customEnd} onChange={(e) => c.setCustomStart(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-sm" />
-          <span className="text-xs text-muted-foreground">to</span>
-          <input type="date" value={c.customEnd} min={c.customStart} onChange={(e) => c.setCustomEnd(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-sm" />
-        </div>
+        <DateRangePicker start={c.customStart} end={c.customEnd} onChange={(s, e) => { c.setCustomStart(s); c.setCustomEnd(e); }} />
       )}
       <span className="text-[11px] text-muted-foreground tabular-nums">{c.start} → {c.end}</span>
       <select
@@ -1032,13 +1029,9 @@ function ReconTab() {
   const { data, isLoading } = useFetch<{ report: Recon }>(`/api/finance/reports/reconciliation?start=${start}&end=${end}`);
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="text-xs text-muted-foreground">From
-          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
-        </label>
-        <label className="text-xs text-muted-foreground">To
-          <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="ml-2 rounded border px-2 py-1 text-sm" />
-        </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">Period</span>
+        <DateRangePicker start={start} end={end} onChange={(s, e) => { setStart(s); setEnd(e); }} />
       </div>
       {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
         <div className="overflow-x-auto rounded-lg border">
