@@ -77,6 +77,7 @@ import {
   CreditCard,
   QrCode,
   Printer,
+  Landmark,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -371,6 +372,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Reports", href: "/finance/reports", icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "finance:reports" },
       { label: "Reconciliation", href: "/finance/recon", icon: <Scale className={ICON_SIZE} />, moduleKey: "finance:reports" },
       { label: "Chart of Accounts", href: "/finance/coa", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "finance:reports" },
+      { label: "Fixed Assets", href: "/finance/fixed-assets", icon: <Landmark className={ICON_SIZE} />, moduleKey: "finance:reports" },
       // Legacy (pre-agentic) views — kept until the new module reaches parity.
       { label: "Cashflow", href: "/finance/cashflow", icon: <LineChart className={ICON_SIZE} />, moduleKey: "finance:cashflow" },
       { label: "Cash Tracking", href: "/finance/cash-tracking", icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
