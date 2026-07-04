@@ -852,7 +852,7 @@ function CfTab() {
     <div className="space-y-4">
       {consolidated && (
         <p className="text-[11px] text-muted-foreground">
-          Consolidated group cash flow: all companies summed, inter-company transfer legs cancel so only external movements show. Cash at start and end is the group's total bank position.
+          Consolidated group cash flow: all companies summed, inter-company transfer legs cancel so only external movements show. Cash at start and end is the group&apos;s total bank position.
         </p>
       )}
       {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
