@@ -145,6 +145,15 @@ const dStart = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const dEnd = (s: string) => new Date(`${s}T23:59:59.999Z`);
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
+// Shift a YYYY-MM-DD date by n calendar months, clamping the day to the target
+// month's length (Jan 31 + 1 month = Feb 28/29, not Mar 3).
+function addMonths(s: string, n: number): string {
+  const [y, m, d] = s.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1 + n, 1));
+  const lastDay = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(d, lastDay)).padStart(2, "0")}`;
+}
+
 // Cheapest active supplier cost per BASE unit, per stock product — the same
 // basis the BOM/menu costing uses. Values physical stock counts for the COGS
 // formula (Opening + Purchases − Closing).
@@ -431,7 +440,9 @@ export async function buildSourcedPnl(input: {
       const cat = (g.category as string | null) ?? null;
       const amt = round2(Number(g._sum?.amount ?? 0));
       if (!amt) continue;
-      if (cat && (BANK_COGS.has(cat) || BANK_NONOPEX.has(cat) || BANK_DIGITAL_ADS.has(cat))) continue;
+      // MANAGEMENT_FEE is recognised on an ACCRUAL basis below (paid in arrears
+      // for the previous month), not at the cash date — skip it here.
+      if (cat && (BANK_COGS.has(cat) || BANK_NONOPEX.has(cat) || BANK_DIGITAL_ADS.has(cat) || cat === "MANAGEMENT_FEE")) continue;
       const isReview = !cat || BANK_REVIEW.has(cat);
       const isMkt = !!cat && BANK_MARKETING.has(cat);
       expenseLines.push({
@@ -441,6 +452,28 @@ export async function buildSourcedPnl(input: {
         parentCode: null,
       });
       totalExpenses += amt;
+    }
+
+    // Management fee accrual: HQ bills a month in arrears, so the fee that
+    // BELONGS to this period [start,end] is the one PAID the following month.
+    // Recognise payments in [start+1mo, end+1mo] as this period's expense — so
+    // a month's P&L carries its own fee, not the prior month's cash payment.
+    const mfAgg = await prisma.bankStatementLine.aggregate({
+      _sum: { amount: true },
+      where: {
+        direction: "DR",
+        category: "MANAGEMENT_FEE",
+        txnDate: { gte: dStart(addMonths(start, 1)), lte: dEnd(addMonths(end, 1)) },
+        statement: { accountName: { contains: suffix } },
+        apInvoiceId: null,
+        ...(outletId ? { outletId } : {}),
+        ...(excludeInterCo ? { isInterCo: false } : {}),
+      },
+    });
+    const mfAmt = round2(Number(mfAgg._sum?.amount ?? 0));
+    if (mfAmt) {
+      expenseLines.push({ code: "BANK:MANAGEMENT_FEE", name: "Management Fee (accrued — paid next month)", amount: mfAmt, parentCode: null });
+      totalExpenses += mfAmt;
     }
   }
   totalExpenses = round2(totalExpenses);
