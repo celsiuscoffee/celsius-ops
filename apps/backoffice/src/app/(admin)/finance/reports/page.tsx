@@ -177,7 +177,7 @@ function ReportControlsBar({ c, outletApplies }: { c: ReturnType<typeof useRepor
         onChange={(e) => switchCompany(e.target.value)}
         disabled={!co || switching}
         className="h-8 rounded-md border bg-background px-2 text-sm font-semibold"
-        title="Active company — every report is scoped to this legal entity. Consolidated = all companies with inter-company legs eliminated (P&L only)."
+        title="Active company. Every report is scoped to this legal entity. Consolidated = all companies with inter-company legs eliminated (P&L, Balance Sheet and Cash Flow)."
       >
         {!co && <option value="">Company…</option>}
         {(co?.companies ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
@@ -603,6 +603,7 @@ type BsReport = {
   equity: BsSection;
   totalLiabilitiesAndEquity: number;
   imbalance: number;
+  intercoResidual?: number;
 };
 
 function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, showCompare }: { title: string; total: number; lines: BsLine[]; onDrill: (code: string) => void; cmpByCode?: Map<string, number>; cmpTotal?: number | null; showCompare?: boolean }) {
@@ -644,16 +645,19 @@ function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, sho
 }
 
 function BsTab() {
-  const { start, end: asOf } = useControls();
+  const { start, end: asOf, consolidated } = useControls();
   const [compare, setCompare] = useState<CompareMode>("none");
+  // Consolidation scope applies to the primary AND the comparison fetch, so a
+  // group figure is never compared against a single-entity one.
+  const scope = consolidated ? "&companyId=consolidated" : "";
   const { data, isLoading, error } = useFetch<{ report: BsReport }>(
-    `/api/finance/reports/balance-sheet?asOf=${asOf}`
+    `/api/finance/reports/balance-sheet?asOf=${asOf}${scope}`
   );
   // A balance sheet compares as-OF dates: the prior period-end (the day before
   // the current period starts) or the same date a year earlier.
   const cmpAsOf = compare === "prev" ? addDaysStr(start, -1) : compare === "year" ? addYearsStr(asOf, -1) : null;
   const { data: cmpData } = useFetch<{ report: BsReport }>(
-    cmpAsOf ? `/api/finance/reports/balance-sheet?asOf=${cmpAsOf}` : null
+    cmpAsOf ? `/api/finance/reports/balance-sheet?asOf=${cmpAsOf}${scope}` : null
   );
   const showCompare = compare !== "none" && !!cmpData;
   const cmp = cmpData?.report;
@@ -666,6 +670,11 @@ function BsTab() {
 
   return (
     <div className="space-y-4">
+      {consolidated && (
+        <p className="text-[11px] text-muted-foreground">
+          Consolidated group balance sheet: all companies summed, inter-company (3600) balances netted to one line.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-xs text-muted-foreground">Balance as of <span className="tabular-nums">{asOf}</span> (the period end). Click any line to see its journal entries.</p>
         <label className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">Compare
@@ -690,6 +699,14 @@ function BsTab() {
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
               <span>
                 Imbalance of {RM(data.report.imbalance)} — likely an unposted period or malformed manual journal.
+              </span>
+            </div>
+          )}
+          {data.report.intercoResidual != null && Math.abs(data.report.intercoResidual) > 0.01 && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <span>
+                Inter-company balances do not fully offset: {RM(data.report.intercoResidual)} net remains. One entity is missing (or misbooking) its due-to or due-from leg.
               </span>
             </div>
           )}
@@ -718,7 +735,7 @@ function BsTab() {
             </SheetTitle>
             <p className="text-xs text-muted-foreground tabular-nums">{drillCode} · journal lines through {asOf}</p>
           </SheetHeader>
-          {drillCode && <DrillDown code={drillCode} start="2020-01-01" end={asOf} />}
+          {drillCode && <DrillDown code={drillCode} start="2020-01-01" end={asOf} consolidated={consolidated} />}
         </SheetContent>
       </Sheet>
     </div>
@@ -811,10 +828,12 @@ function CfSummaryCard({ label, amount, prev, showCompare, negative }: { label: 
 }
 
 function CfTab() {
-  const { start, end } = useControls();
+  const { start, end, consolidated } = useControls();
   const [compare, setCompare] = useState<CompareMode>("none");
+  // Consolidation scope applies to the primary AND the comparison fetch.
+  const scope = consolidated ? "&companyId=consolidated" : "";
   const { data, isLoading, error } = useFetch<{ report: CfReport }>(
-    `/api/finance/reports/cash-flow?start=${start}&end=${end}`
+    `/api/finance/reports/cash-flow?start=${start}&end=${end}${scope}`
   );
   // Same compare windows as the P&L: the immediately-preceding equal-length
   // period, or the same dates a year back.
@@ -824,13 +843,18 @@ function CfTab() {
     return null;
   }, [compare, start, end]);
   const { data: cmpData } = useFetch<{ report: CfReport }>(
-    cmpRange ? `/api/finance/reports/cash-flow?start=${cmpRange.s}&end=${cmpRange.e}` : null
+    cmpRange ? `/api/finance/reports/cash-flow?start=${cmpRange.s}&end=${cmpRange.e}${scope}` : null
   );
   const showCompare = compare !== "none" && !!cmpData;
   const cmp = cmpData?.report;
 
   return (
     <div className="space-y-4">
+      {consolidated && (
+        <p className="text-[11px] text-muted-foreground">
+          Consolidated group cash flow: all companies summed, inter-company transfer legs cancel so only external movements show. Cash at start and end is the group's total bank position.
+        </p>
+      )}
       {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">

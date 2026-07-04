@@ -16,8 +16,17 @@
 //            + owner capital & dividends (4*)
 //
 // Net change in cash = ∆ on 1000-* accounts.
+//
+// Consolidated mode (companyId = "consolidated"): every active company's
+// ledger is walked and summed, so opening and closing cash are the group's
+// total bank position. Inter-company transfer legs (3600-xx) appear once as a
+// negative in the sender and once as a positive in the receiver, so summed
+// they cancel; the group statement therefore shows only external movements.
+// Any residual (one leg missing or misclassified) stays visible as a single
+// net Financing line so the statement still ties to the bank delta.
 
 import { getFinanceClient } from "../supabase";
+import { CONSOLIDATED_COMPANY_ID } from "./balance-sheet";
 
 export type CfSection = {
   title: string;
@@ -74,15 +83,26 @@ function bucketFor(code: string): BucketKey {
 
 export async function buildCashFlow(input: CfInput): Promise<CfReport> {
   const client = getFinanceClient();
+  const consolidated = input.companyId === CONSOLIDATED_COMPANY_ID;
   const dayBefore = oneDayBefore(input.start);
 
-  // One ledger walk: every posted txn through the period end.
-  const { data: txns } = await client
+  // One ledger walk: every posted txn through the period end. Consolidated
+  // spans all active companies, so cash and every bucket sum across the group.
+  let txnQuery = client
     .from("fin_transactions")
     .select("id, txn_date")
-    .eq("company_id", input.companyId)
     .eq("status", "posted")
     .lte("txn_date", input.end);
+  if (consolidated) {
+    const { data: cos } = await client
+      .from("fin_companies")
+      .select("id")
+      .eq("is_active", true);
+    txnQuery = txnQuery.in("company_id", (cos ?? []).map((c) => c.id as string));
+  } else {
+    txnQuery = txnQuery.eq("company_id", input.companyId);
+  }
+  const { data: txns } = await txnQuery;
   const txnDate = new Map((txns ?? []).map((t) => [t.id as string, t.txn_date as string]));
   const txnIds = [...txnDate.keys()];
 
@@ -142,13 +162,22 @@ export async function buildCashFlow(input: CfInput): Promise<CfReport> {
     total: f("ppe"),
   };
 
+  // Consolidated: the 3600-xx legs of group-internal transfers cancel when the
+  // companies are summed, so a clean group shows no inter-company line at all.
+  // A residual beyond rounding is kept visible (net) so ops + inv + fin still
+  // equals the group bank delta and the gap check stays honest.
+  const intercoFlow = f("interco");
+  const intercoLine = consolidated
+    ? { label: "Inter-company transfers (net residual, legs should cancel)", amount: Math.abs(intercoFlow) > 0.01 ? intercoFlow : 0, code: "3600" }
+    : { label: "∆ Inter-company balances", amount: intercoFlow, code: "3600" };
+
   const financing: CfSection = {
     title: "Financing",
     lines: [
       { label: "∆ Short-term loans", amount: f("shortLoan"), code: "3010" },
       { label: "∆ Long-term loans", amount: f("longLoan"), code: "3500" },
       { label: "∆ Due to directors", amount: f("directors"), code: "3400" },
-      { label: "∆ Inter-company balances", amount: f("interco"), code: "3600" },
+      intercoLine,
       { label: "Owner capital & dividends", amount: f("equity"), code: "4xxx" },
     ].filter((l) => l.amount !== 0),
     total: 0,
