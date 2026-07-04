@@ -605,7 +605,7 @@ type BsReport = {
   imbalance: number;
 };
 
-function BsSectionTable({ title, total, lines, onDrill }: { title: string; total: number; lines: BsLine[]; onDrill: (code: string) => void }) {
+function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, showCompare }: { title: string; total: number; lines: BsLine[]; onDrill: (code: string) => void; cmpByCode?: Map<string, number>; cmpTotal?: number | null; showCompare?: boolean }) {
   return (
     <div className="overflow-hidden rounded-md border bg-card">
       <header className="border-b bg-muted/30 px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">
@@ -614,7 +614,9 @@ function BsSectionTable({ title, total, lines, onDrill }: { title: string; total
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <tbody>
-            {lines.map((l) => (
+            {lines.map((l) => {
+              const c = cmpByCode?.get(l.code);
+              return (
               <tr key={l.code} className="cursor-pointer border-t hover:bg-muted/30" onClick={() => onDrill(l.code)} title="Show journal lines">
                 <td
                   className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground"
@@ -623,16 +625,16 @@ function BsSectionTable({ title, total, lines, onDrill }: { title: string; total
                   {l.code}
                 </td>
                 <td className="px-3 py-1.5">{l.name}</td>
-                <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
-                  {RM(l.amount)}
-                </td>
+                <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(l.amount)}</td>
+                {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">{c == null ? "—" : RM(c)}</td>}
+                {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctChange(l.amount, c)}</td>}
               </tr>
-            ))}
+            );})}
             <tr className="border-t bg-muted/30">
               <td colSpan={2} className="px-3 py-2 font-semibold">Total {title}</td>
-              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold">
-                {RM(total)}
-              </td>
+              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold">{RM(total)}</td>
+              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold text-muted-foreground">{cmpTotal == null ? "—" : RM(cmpTotal)}</td>}
+              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums font-semibold text-muted-foreground">{pctChange(total, cmpTotal)}</td>}
             </tr>
           </tbody>
         </table>
@@ -642,15 +644,39 @@ function BsSectionTable({ title, total, lines, onDrill }: { title: string; total
 }
 
 function BsTab() {
-  const { end: asOf } = useControls();
+  const { start, end: asOf } = useControls();
+  const [compare, setCompare] = useState<CompareMode>("none");
   const { data, isLoading, error } = useFetch<{ report: BsReport }>(
     `/api/finance/reports/balance-sheet?asOf=${asOf}`
   );
+  // A balance sheet compares as-OF dates: the prior period-end (the day before
+  // the current period starts) or the same date a year earlier.
+  const cmpAsOf = compare === "prev" ? addDaysStr(start, -1) : compare === "year" ? addYearsStr(asOf, -1) : null;
+  const { data: cmpData } = useFetch<{ report: BsReport }>(
+    cmpAsOf ? `/api/finance/reports/balance-sheet?asOf=${cmpAsOf}` : null
+  );
+  const showCompare = compare !== "none" && !!cmpData;
+  const cmp = cmpData?.report;
+  const cmpByCode = useMemo(() => {
+    const m = new Map<string, number>();
+    if (cmp) for (const l of [...cmp.assets.lines, ...cmp.liabilities.lines, ...cmp.equity.lines]) m.set(l.code, l.amount);
+    return m;
+  }, [cmp]);
   const [drillCode, setDrillCode] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">Balance as of <span className="tabular-nums">{asOf}</span> (the period end). Click any line to see its journal entries.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-xs text-muted-foreground">Balance as of <span className="tabular-nums">{asOf}</span> (the period end). Click any line to see its journal entries.</p>
+        <label className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">Compare
+          <select value={compare} onChange={(e) => setCompare(e.target.value as CompareMode)} className="h-7 rounded-md border bg-background px-1.5 text-xs">
+            <option value="none">off</option>
+            <option value="prev">previous period-end</option>
+            <option value="year">previous year</option>
+          </select>
+        </label>
+        {showCompare && cmpAsOf && <span className="text-[10px] text-muted-foreground tabular-nums">vs {cmpAsOf}</span>}
+      </div>
       {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
@@ -668,13 +694,14 @@ function BsTab() {
             </div>
           )}
           <div className="grid gap-3 lg:grid-cols-2">
-            <BsSectionTable title="Assets" total={data.report.assets.total} lines={data.report.assets.lines} onDrill={setDrillCode} />
+            <BsSectionTable title="Assets" total={data.report.assets.total} lines={data.report.assets.lines} onDrill={setDrillCode} cmpByCode={cmpByCode} cmpTotal={cmp?.assets.total} showCompare={showCompare} />
             <div className="space-y-3">
-              <BsSectionTable title="Liabilities" total={data.report.liabilities.total} lines={data.report.liabilities.lines} onDrill={setDrillCode} />
-              <BsSectionTable title="Equity" total={data.report.equity.total} lines={data.report.equity.lines} onDrill={setDrillCode} />
+              <BsSectionTable title="Liabilities" total={data.report.liabilities.total} lines={data.report.liabilities.lines} onDrill={setDrillCode} cmpByCode={cmpByCode} cmpTotal={cmp?.liabilities.total} showCompare={showCompare} />
+              <BsSectionTable title="Equity" total={data.report.equity.total} lines={data.report.equity.lines} onDrill={setDrillCode} cmpByCode={cmpByCode} cmpTotal={cmp?.equity.total} showCompare={showCompare} />
               <div className="rounded-md border bg-muted/20 p-3 text-sm font-semibold">
                 Liabilities + Equity:{" "}
                 <span className="tabular-nums">{RM(data.report.totalLiabilitiesAndEquity)}</span>
+                {showCompare && cmp && <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">vs {RM(cmp.totalLiabilitiesAndEquity)} ({pctChange(data.report.totalLiabilitiesAndEquity, cmp.totalLiabilitiesAndEquity)})</span>}
               </div>
             </div>
           </div>
