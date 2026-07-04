@@ -39,10 +39,16 @@ export async function POST(req: NextRequest) {
   const writable = lines.filter((l) => !l.apInvoiceId);
   const journalIds = [...new Set(writable.map((l) => l.glTransactionId).filter((x): x is string => !!x))];
 
+  // Inter-company categories also flip the isInterCo flag, so the line is
+  // excluded from the Ledger's operating view and eliminated in the
+  // consolidated P&L (which filter on the flag), consistent with the GL
+  // booking it to a 3600 Due-to/from account.
+  const isInterco = category.startsWith("INTERCO_");
+
   await prisma.$transaction(async (tx) => {
     await tx.bankStatementLine.updateMany({
       where: { id: { in: writable.map((l) => l.id) } },
-      data: { category: category as CashCategory, classifiedBy: "user", ruleName: "manual" },
+      data: { category: category as CashCategory, classifiedBy: "user", ruleName: "manual", ...(isInterco ? { isInterCo: true } : {}) },
     });
     if (journalIds.length) {
       await tx.bankStatementLine.updateMany({
@@ -56,7 +62,9 @@ export async function POST(req: NextRequest) {
   // needs correcting twice. Failure to learn must not fail the classify.
   let learned = 0;
   try {
-    learned = await learnHintsFromLines(writable, category as CashCategory);
+    // Inter-company is a one-off routing decision, not a stable payee rule —
+    // don't teach a hint that could mislabel future transactions.
+    if (!isInterco) learned = await learnHintsFromLines(writable, category as CashCategory);
   } catch { /* hint learning is best-effort */ }
 
   return NextResponse.json({

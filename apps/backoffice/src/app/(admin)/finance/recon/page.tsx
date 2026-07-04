@@ -37,20 +37,35 @@ const fmtRM0 = (n: number) => `RM ${n.toLocaleString("en-MY", { maximumFractionD
 // against the Prisma enum). Each books to a COA account via CONTRA_ACCOUNT
 // (statutory/salary route through control accounts in resolveContra), shown in
 // the dropdown so the pick IS a chart-of-accounts decision.
+// Inter-company: one entity paid for another's cost (or funded it). Booking
+// both mirror legs to the "Due to/from" control accounts (3600-xx, routed by
+// the counterparty in the narration) offsets them — neither P&L is touched and
+// they eliminate on consolidation. Four flavours keep the balance-sheet nature
+// (general / equipment / stock / salary funding); all post to 3600-xx.
+const INTERCO_CATEGORIES = [
+  "INTERCO_EXPENSES", "INTERCO_INVESTMENTS", "INTERCO_RAW_MATERIAL", "INTERCO_PEOPLE",
+] as const;
 const OUTFLOW_CATEGORIES = [
   "RAW_MATERIALS", "RENT", "UTILITIES", "MAINTENANCE", "EQUIPMENTS", "SOFTWARE",
   "STAFF_CLAIM", "PARTIMER", "EMPLOYEE_SALARY", "STATUTORY_PAYMENT", "TAX",
   "COMPLIANCE", "LICENSING_FEE", "BANK_FEE", "MARKETPLACE_FEE", "OTHER_MARKETING",
   "KOL", "DELIVERY", "PETTY_CASH", "LOAN", "DIVIDEND", "DIRECTORS_ALLOWANCE",
   "CAPITAL", "INVESTMENTS", "MANAGEMENT_FEE", "CFS_FEE", "CUSTOMER_REFUND",
+  ...INTERCO_CATEGORIES,
 ] as const;
 const INFLOW_CATEGORIES = [
   "QR", "CARD", "GRAB", "STOREHUB", "FOODPANDA", "REVENUE_MONSTER",
   "GASTROHUB", "MEETINGS_EVENTS", "REFUND", "LOAN", "CAPITAL",
   "MANAGEMENT_FEE", "EMPLOYEE_SALARY", "STATUTORY_PAYMENT",
+  ...INTERCO_CATEGORIES,
 ] as const;
-// Control-account routes that CONTRA_ACCOUNT doesn't carry (resolveContra does).
-const CONTROL_COA: Record<string, string> = { EMPLOYEE_SALARY: "3008", STATUTORY_PAYMENT: "3004-7" };
+// Control-account routes that CONTRA_ACCOUNT doesn't carry (resolveContra does):
+// salary/statutory controls, and the inter-company Due-to/from account (3600-xx
+// by counterparty — the label shows the parent 3600).
+const CONTROL_COA: Record<string, string> = {
+  EMPLOYEE_SALARY: "3008", STATUTORY_PAYMENT: "3004-7",
+  INTERCO_EXPENSES: "3600", INTERCO_INVESTMENTS: "3600", INTERCO_RAW_MATERIAL: "3600", INTERCO_PEOPLE: "3600",
+};
 function categoryLabel(c: string, accountNames: Map<string, string>): string {
   const code = CONTRA_ACCOUNT[c] ?? CONTROL_COA[c];
   const name = code ? accountNames.get(code) : undefined;
