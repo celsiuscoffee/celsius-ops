@@ -504,36 +504,92 @@ function Section({ id, title, desc, children }: { id?: string; title: string; de
   );
 }
 
+const matchKey = (m: ApMatch) => m.invoiceId + m.bankLineId;
+
+async function applyMatchAction(m: ApMatch, action: "confirm" | "reject"): Promise<string | null> {
+  // Returns an error string, or null on success.
+  try {
+    const res = action === "confirm"
+      ? await fetch("/api/finance/bank-lines/match", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bankLineId: m.bankLineId, invoiceId: m.invoiceId }),
+        })
+      : await fetch("/api/finance/bank-lines/reject-match", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bankLineId: m.bankLineId, invoiceId: m.invoiceId }),
+        });
+    if (res.ok) return null;
+    const j = await res.json().catch(() => ({}));
+    return j.error ?? `Failed (${res.status})`;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
 function MatchTable({ rows, showReasons, actionable, onDone }: { rows: ApMatch[]; showReasons?: boolean; actionable?: boolean; onDone?: () => void }) {
   const [busy, setBusy] = useState<string | null>(null); // key of the row being acted on
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkNote, setBulkNote] = useState<string | null>(null);
+
+  const allSelected = rows.length > 0 && rows.every((m) => sel.has(matchKey(m)));
+  function toggle(key: string) {
+    setSel((s) => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }
+  function toggleAll() {
+    setSel(allSelected ? new Set() : new Set(rows.map(matchKey)));
+  }
 
   async function act(m: ApMatch, action: "confirm" | "reject") {
-    const key = m.invoiceId + m.bankLineId;
+    const key = matchKey(m);
     setBusy(key);
-    try {
-      const res = action === "confirm"
-        ? await fetch("/api/finance/bank-lines/match", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bankLineId: m.bankLineId, invoiceId: m.invoiceId }),
-          })
-        : await fetch("/api/finance/bank-lines/reject-match", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bankLineId: m.bankLineId, invoiceId: m.invoiceId }),
-          });
-      const j = await res.json();
-      if (!res.ok) setNotes((n) => ({ ...n, [key]: j.error ?? `Failed (${res.status})` }));
-      else onDone?.();
-    } catch (e) {
-      setNotes((n) => ({ ...n, [key]: e instanceof Error ? e.message : String(e) }));
-    } finally { setBusy(null); }
+    const err = await applyMatchAction(m, action);
+    if (err) setNotes((n) => ({ ...n, [key]: err }));
+    else onDone?.();
+    setBusy(null);
+  }
+
+  // Bulk: apply the action to every selected row (sequentially, each is its own
+  // idempotent call), then refresh once. Failures are counted, not fatal.
+  async function bulk(action: "confirm" | "reject") {
+    if (sel.size === 0) return;
+    setBulkBusy(true); setBulkNote(null);
+    const targets = rows.filter((m) => sel.has(matchKey(m)));
+    let ok = 0, failed = 0;
+    for (const m of targets) {
+      const err = await applyMatchAction(m, action);
+      if (err) { failed++; setNotes((n) => ({ ...n, [matchKey(m)]: err })); }
+      else ok++;
+    }
+    setBulkNote(`${action === "confirm" ? "Confirmed" : "Rejected"} ${ok}${failed ? `, ${failed} failed` : ""}.`);
+    setSel(new Set());
+    setBulkBusy(false);
+    onDone?.();
   }
 
   if (rows.length === 0) return <p className="px-4 py-4 text-xs text-gray-400">Nothing here.</p>;
   return (
     <div className="overflow-x-auto">
+      {actionable && sel.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-terracotta/30 bg-terracotta/5 px-4 py-2">
+          <span className="text-xs font-medium text-gray-700">{sel.size} selected</span>
+          <button onClick={() => bulk("confirm")} disabled={bulkBusy}
+            className="rounded border border-green-600/30 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+            Confirm selected
+          </button>
+          <button onClick={() => bulk("reject")} disabled={bulkBusy}
+            className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+            Reject selected
+          </button>
+          <button onClick={() => setSel(new Set())} disabled={bulkBusy} className="text-[11px] text-gray-500 underline">clear</button>
+          {bulkBusy && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+        </div>
+      )}
+      {bulkNote && <p className="border-b border-gray-100 px-4 py-1.5 text-[11px] text-gray-500">{bulkNote}</p>}
       <table className="w-full min-w-[720px] text-sm">
         <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+          {actionable && <th className="w-8 px-3 py-2"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="h-3.5 w-3.5 accent-terracotta" /></th>}
           <th className="px-3 py-2 font-medium">Invoice payee</th><th className="px-3 py-2 text-right font-medium">Amount</th>
           <th className="px-3 py-2 font-medium">Bank line</th><th className="px-3 py-2 font-medium">Category</th>
           <th className="px-3 py-2 text-right font-medium">Score</th>{showReasons && <th className="px-3 py-2 font-medium">Why</th>}
@@ -541,9 +597,10 @@ function MatchTable({ rows, showReasons, actionable, onDone }: { rows: ApMatch[]
         </tr></thead>
         <tbody className="divide-y">
           {rows.map((m) => {
-            const key = m.invoiceId + m.bankLineId;
+            const key = matchKey(m);
             return (
-            <tr key={key} className="hover:bg-gray-50">
+            <tr key={key} className={`hover:bg-gray-50 ${sel.has(key) ? "bg-terracotta/5" : ""}`}>
+              {actionable && <td className="px-3 py-2"><input type="checkbox" checked={sel.has(key)} onChange={() => toggle(key)} className="h-3.5 w-3.5 accent-terracotta" /></td>}
               <td className="px-3 py-2 text-xs text-gray-700">{m.payee}{m.invoiceNumber ? <span className="text-gray-400"> · {m.invoiceNumber}</span> : ""}<div className="text-[10px] text-gray-400">{m.issueDate}</div></td>
               <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{fmtRM(m.amount)}</td>
               <td className="px-3 py-2 text-xs text-gray-600">{m.bankDesc}<div className="text-[10px] text-gray-400">{m.bankDate}</div></td>
@@ -554,11 +611,11 @@ function MatchTable({ rows, showReasons, actionable, onDone }: { rows: ApMatch[]
                 <td className="whitespace-nowrap px-3 py-2">
                   {notes[key] ? <span className="text-[10px] text-rose-600">{notes[key]}</span> : (
                     <span className="flex items-center gap-1.5">
-                      <button onClick={() => act(m, "confirm")} disabled={busy === key}
+                      <button onClick={() => act(m, "confirm")} disabled={busy === key || bulkBusy}
                         className="rounded border border-green-600/30 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
                         Confirm
                       </button>
-                      <button onClick={() => act(m, "reject")} disabled={busy === key}
+                      <button onClick={() => act(m, "reject")} disabled={busy === key || bulkBusy}
                         className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50 disabled:opacity-50">
                         Reject
                       </button>
