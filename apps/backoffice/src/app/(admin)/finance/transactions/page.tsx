@@ -8,6 +8,7 @@
 
 import { useState, useMemo } from "react";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { JournalsPanel } from "@/components/finance/journals";
 import { useFetch } from "@/lib/use-fetch";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, Badge, Button } from "@celsius/ui";
 import { Loader2, Search, X, ArrowUp, ArrowDown, ChevronsUpDown, Building2, Download } from "lucide-react";
@@ -118,6 +119,9 @@ function SortTh({
 }
 
 export default function FinanceLedgerPage() {
+  // Two views share this page: the classified bank-statement lines (default)
+  // and the double-entry journals (fin_transactions) with manual entry.
+  const [view, setView] = useState<"bank" | "journals">("bank");
   const [openLine, setOpenLine] = useState<BankLine | null>(null);
 
   // Server-windowed date range. Defaults to last 3 months; driven by the
@@ -270,14 +274,37 @@ export default function FinanceLedgerPage() {
 
   return (
     <div className="space-y-4 p-3 sm:p-6">
-      <header className="min-w-0">
-        <h1 className="text-xl sm:text-2xl font-semibold">Ledger</h1>
-        <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
-          Real cash ledger from the bank statements — every deposit and payment, classified. Sort any column; filter like a spreadsheet.
-          {data && <span className="ml-1">Showing from {data.from}{data.to ? ` to ${data.to}` : ""}.</span>}
-        </p>
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold">Ledger</h1>
+          {view === "bank" ? (
+            <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
+              Real cash ledger from the bank statements, every deposit and payment, classified. Sort any column; filter like a spreadsheet.
+              {data && <span className="ml-1">Showing from {data.from}{data.to ? ` to ${data.to}` : ""}.</span>}
+            </p>
+          ) : (
+            <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
+              Double-entry journals behind the books, from the finance agents and manual adjusting entries. Click a journal to see its lines or reverse it.
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 rounded-lg border bg-card p-0.5">
+          {([["bank", "Bank lines"], ["journals", "Journals"]] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setView(id)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${view === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/40"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </header>
 
+      {view === "journals" && <JournalsPanel />}
+
+      {view === "bank" && <>
       {/* Filter toolbar */}
       <div className="space-y-2 rounded-lg border bg-card p-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -498,6 +525,7 @@ export default function FinanceLedgerPage() {
           )}
         </SheetContent>
       </Sheet>
+      </>}
     </div>
   );
 }

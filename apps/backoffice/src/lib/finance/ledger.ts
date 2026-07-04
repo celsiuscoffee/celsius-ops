@@ -115,7 +115,14 @@ export async function postJournal(input: PostJournalInput): Promise<PostJournalR
 //  - Period reopen flows
 export async function reverseTransaction(
   originalId: string,
-  opts: { reason: string; agent: PostJournalInput["agent"]; agentVersion: string }
+  opts: {
+    reason: string;
+    agent: PostJournalInput["agent"];
+    agentVersion: string;
+    // Optional reversal date (YYYY-MM-DD). Defaults to today. Manual reversals
+    // from the Ledger UI can backdate into any still-open period.
+    date?: string;
+  }
 ): Promise<PostJournalResult> {
   const client = getFinanceClient();
 
@@ -143,7 +150,7 @@ export async function reverseTransaction(
 
   const result = await postJournal({
     companyId: original.company_id as string,
-    txnDate: new Date().toISOString().slice(0, 10),
+    txnDate: opts.date ?? new Date().toISOString().slice(0, 10),
     description: `Reversal of ${originalId}: ${opts.reason}`,
     txnType: "reversal",
     outletId: original.outlet_id,
