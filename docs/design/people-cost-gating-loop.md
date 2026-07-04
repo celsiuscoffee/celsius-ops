@@ -124,16 +124,32 @@ Shah Alam RM11,992 (5), Tamarind RM14,244 (6). Spot checks against the
 workbook: Head of Dept 11,877 vs 11,876; Syafiq 3,988 vs 4,022 (⅓ =
 1,341 ✓); Area Manager 4,444 vs the RM4,500 cap.
 
-**PT labour: DATA GAP — this is the repair the build waits on.** Part-timer
-items appear in the Jan–Mar payroll runs (RM9–10k/mo) and then vanish:
-zero PT items in Apr/May/Jun. Scheduled-hours × `hourly_rate` for June
-gives Conezion 4,402 / Shah Alam 10,606 / Tamarind 3,029, which brings the
-reconstruction to within ~RM2–6k per outlet of the workbook's implied
-labour (24.3k vs 29.3k / 23.9k vs 25.8k / 18.6k vs 24.8k). The residue is
-(a) 61 June shifts held by users with no `hr_employee_profiles` row (~570
-scheduled hours, uncostable), (b) one FT with no outlet (Shella, RM2,507),
-and (c) whatever PT top-ups are paid off-system. All six 2026 monthly
-payroll runs are still status `draft`.
+**PT labour: FOUND IN THE FINANCE MODULE.** Part-timer items appear in the
+Jan–Mar payroll runs (RM9–10k/mo) and then vanish from payroll — because
+PT wages are paid as weekly bank transfers and land in the GL instead:
+account `6500-03 Part timer staff` via `BankStatementLine` rows classified
+by the `partimer` rule (June total RM24,403). Since June the bank
+description even carries the outlet and the work week ("Seksyen 13 Shah
+AlamENGKU EMRAN… PT Week 23/26"), so June PT per outlet is exact:
+Conezion 5,103 / Shah Alam 9,168 / Tamarind 6,078 / Nilai 3,892. The only
+defect is a classifier bug: the rule stamps `outletId` for "Conezion
+Putrajaya" and "Tamarind Square" prefixes but NOT for "Seksyen 13 Shah
+Alam" or "Gastrohub Nilai" — those lines land with NULL outlet, which is
+why the GL looked untagged. Pre-June bank lines have no outlet prefix at
+all ("TRANSFER FR A/C <NAME>"), so historical attribution needs a
+payee-name → employee → `User.outletId` map.
+
+**Full June reconstruction** (outlet FT gross+employer from payroll + PT
+from bank lines + ⅓ Syafiq, Area Manager excluded — the workbook's
+definition): Conezion 25,011 = 19.5% (workbook 22.8%), Shah Alam 22,501 =
+21.2% (24.3%), Tamarind 21,663 = 26.8% (30.6%). Same ranking, same
+red/amber verdicts, ~3pts below the workbook everywhere. Known residuals,
+in likely size order: all six 2026 monthly payroll runs are still `draft`
+(OT and allowances not finalised); PT counted here by payment date, not
+week worked (the late-June week pays in early July); 61 June shifts held
+by users with no `hr_employee_profiles` row; one FT with no outlet
+(Shella, RM2,507). Closing the draft runs and switching PT to
+week-worked accrual should converge the two numbers.
 
 **Half-built infra worth reusing:** `hr_schedules` already has
 `total_labor_hours` and `estimated_labor_cost` columns, but only 7 of 35
@@ -142,15 +158,22 @@ generation path) and gated on never. The gate should make this column
 mandatory-and-trusted rather than invent a new one.
 
 **Data repairs before the gate ships (in order):**
-1. Route PT wages back through payroll runs (or a PT wage ledger the gate
-   can read) — Apr–Jun PT cost is invisible to the system today.
-2. Create HR profiles (with rates) for every scheduled user; add a
-   publish-time check refusing shifts for profile-less or rate-less users.
+1. Fix the `partimer` bank-classifier rule to stamp `outletId` for the
+   "Seksyen 13 Shah Alam" and "Gastrohub Nilai" prefixes (one-rule fix;
+   the June-onward bank format makes it trivially parseable). The Monday
+   actuals then read PT cost per outlet straight from the GL, keyed to
+   the "PT Week NN/YY" token for week-worked accrual.
+2. Create HR profiles (with rates) for every scheduled user (61 orphan
+   June shifts); add a publish-time check refusing shifts for profile-less
+   or rate-less users — the forward-looking gate prices the roster from
+   rates × hours, so this is its data contract.
 3. Backfill `User.outletId` for the one unassigned FT; formalise the
    rovers/HQ list (HoD, Area Manager, Syafiq, Director×2) so outlet
    attribution is total.
 4. Derive FT `hourly_rate` at read time from `basic_salary`/26/7.5 instead
    of waiting on a column backfill.
+5. Finalise the six `draft` payroll runs so FT actuals include OT and
+   allowances — until then the actuals side reads ~3pts flattering.
 
 ## Approaches Considered
 
@@ -188,9 +211,11 @@ a gate on a wrong number is worse than no gate.
 ## Open Questions
 - ~~How many active employees have NULL `hourly_rate` today?~~ Answered:
   31 of 55 actives (all FT/contract) — derivable from `basic_salary`.
-- Where are Apr–Jun part-timer wages actually being computed and paid?
-  (BrioHR leftover? manual sheets?) The gate needs that flow inside the
-  system.
+- ~~Where are Apr–Jun part-timer wages actually paid?~~ Answered: weekly
+  bank transfers → `BankStatementLine` (`partimer` rule) → GL `6500-03`.
+  Remaining sub-question: who computes the weekly PT amounts upstream of
+  the bank transfer, and can that computation read the same scheduled
+  hours the gate prices?
 - Does "Head of Ops" roster through the same publish endpoint, or via a
   side path the gate must also cover?
 - Post-publish shift **adds**: gate them at insert (strict) or only count
@@ -212,8 +237,10 @@ a gate on a wrong number is worse than no gate.
 
 ## The Assignment (one concrete next step)
 ~~Reconstruct June-2026 labour % per outlet from live data.~~ DONE
-2026-07-04 (see Verification Results). The revenue denominator and FT cost
-are gate-ready today; the build now waits on one thing: **bring part-timer
-wages back inside the system** (repair #1 above) and profile the 61
-orphan-scheduled users (repair #2). Once PT cost is queryable, the gate's
-number matches payroll and the publish gate ships as designed.
+2026-07-04 (see Verification Results): revenue exact, FT exact, PT found
+in the finance GL (`6500-03` via `partimer` bank lines). Full June
+reconstruction: 19.5% / 21.2% / 26.8% vs workbook 22.8% / 24.3% / 30.6% —
+same ranking and verdicts; residue is the draft payroll runs +
+payment-date vs week-worked timing. Next step is repair #1 (the
+one-rule outlet-tag fix on the bank classifier) and repair #2 (profiles
+for the 61 orphan shifts) — then the publish gate ships as designed.
