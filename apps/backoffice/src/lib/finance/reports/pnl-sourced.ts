@@ -37,10 +37,15 @@ const BANK_COGS = new Set(["RAW_MATERIALS", "DELIVERY", "INTERCO_RAW_MATERIAL"])
 const BANK_DIGITAL_ADS = new Set(["DIGITAL_ADS"]);                                // = ads module (dedup)
 const BANK_MARKETING = new Set(["MARKETPLACE_FEE", "KOL", "OTHER_MARKETING"]);     // non-digital marketing
 const BANK_NONOPEX = new Set([                                                    // internal / financing / capex / distributions — not operating
-  "CAPITAL", "LOAN", "MANAGEMENT_FEE", "INTERCO_PEOPLE", "INTERCO_INVESTMENTS",
+  "CAPITAL", "LOAN", "INTERCO_PEOPLE", "INTERCO_INVESTMENTS",
   "INTERCO_EXPENSES", "INVESTMENTS", "EQUIPMENTS", "ADTD", "TRANSFER_NOT_SUCCESSFUL",
   "DIVIDEND", "DIRECTORS_ALLOWANCE",  // shareholder/owner distributions, not P&L opex
 ]);
+// NOTE: MANAGEMENT_FEE is deliberately NOT excluded — the fee a location pays HQ
+// is a real operating expense in that entity's standalone P&L (books to 6511-06
+// Management fees). It is still flagged isInterCo on the bank line, so the
+// CONSOLIDATED P&L (which runs with excludeInterCo) drops it and the group
+// figure isn't inflated by an internal charge.
 // Catch-all + unclassified bank outflows. Surfaced as a flagged "needs review"
 // line rather than buried in opex, because it double-counts COGS (unnamed
 // supplier payments already in procurement) + internal transfers until the AP
