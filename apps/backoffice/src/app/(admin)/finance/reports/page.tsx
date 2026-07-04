@@ -236,6 +236,15 @@ type DrillLine = {
   amount: number;
   debit: number;
   credit: number;
+  meta?: {
+    reference?: string | null;
+    category?: string | null;
+    company?: string | null;
+    account?: string | null;
+    isInterCo?: boolean;
+    classifiedBy?: string | null;
+    ruleName?: string | null;
+  };
 };
 
 // Common-size %: every P&L line expressed against total income — the standard
@@ -388,7 +397,7 @@ function PnlTab() {
             )}
           </SheetHeader>
           {drillCode && data && (
-            <DrillDown code={drillCode} start={data.report.start} end={data.report.end} outletId={outletId || undefined} />
+            <DrillDown code={drillCode} start={data.report.start} end={data.report.end} outletId={outletId || undefined} consolidated={consolidated} />
           )}
         </SheetContent>
       </Sheet>
@@ -396,28 +405,27 @@ function PnlTab() {
   );
 }
 
-function DrillDown({ code, start, end, outletId }: { code: string; start: string; end: string; outletId?: string }) {
+function DrillDown({ code, start, end, outletId, consolidated }: { code: string; start: string; end: string; outletId?: string; consolidated?: boolean }) {
   const { data, isLoading } = useFetch<{ lines: DrillLine[] }>(
-    `/api/finance/reports/drilldown?accountCode=${encodeURIComponent(code)}&start=${start}&end=${end}${outletId ? `&outletId=${outletId}` : ""}`
+    `/api/finance/reports/drilldown?accountCode=${encodeURIComponent(code)}&start=${start}&end=${end}${consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : ""}`
   );
+  const [openRow, setOpenRow] = useState<string | null>(null);
   if (isLoading) return <div className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>;
   if (!data) return null;
   if (data.lines.length === 0) {
     return <div className="p-6 text-sm text-muted-foreground">No entries in this period.</div>;
   }
 
-  // Source drills are one-sided (all debits or all credits) — show a single
-  // Amount column so nothing gets pushed off-screen. Debit/Credit columns only
-  // when the entries genuinely mix both sides (ledger drills).
   const hasDebit = data.lines.some((l) => l.debit > 0);
   const hasCredit = data.lines.some((l) => l.credit > 0);
   const oneSided = !(hasDebit && hasCredit);
   const amountOf = (l: DrillLine) => (l.debit > 0 ? l.debit : l.credit > 0 ? l.credit : l.amount);
   const totalDebit = data.lines.reduce((s, l) => s + l.debit, 0);
   const totalCredit = data.lines.reduce((s, l) => s + l.credit, 0);
+  // Multi-company drill (consolidated) → show which entity each line belongs to.
+  const showCompany = consolidated && data.lines.some((l) => l.meta?.company);
+  const cols = 2 + (showCompany ? 1 : 0) + (oneSided ? 1 : 2);
 
-  // "Vendor · INV-123 · Outlet" reads as one noisy wrapping line — keep the
-  // first segment as the entry title and demote the rest to a muted meta line.
   const splitDesc = (d: string): [string, string | null] => {
     const parts = d.split(" · ");
     return parts.length > 1 ? [parts[0], parts.slice(1).join(" · ")] : [d, null];
@@ -425,31 +433,39 @@ function DrillDown({ code, start, end, outletId }: { code: string; start: string
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-      <table className="w-full table-fixed text-sm">
+      <table className="w-full text-sm">
         <thead className="sticky top-0 bg-background text-left text-xs uppercase tracking-wide text-muted-foreground">
           <tr className="border-b">
-            <th className="w-20 py-2 pr-2 font-medium">Date</th>
+            <th className="w-16 py-2 pr-2 font-medium">Date</th>
             <th className="py-2 pr-2 font-medium">Description</th>
+            {showCompany && <th className="w-36 py-2 pr-2 font-medium">Company</th>}
             {oneSided
               ? <th className="w-28 py-2 text-right font-medium">Amount</th>
               : <>
-                  <th className="w-28 py-2 text-right font-medium">Debit</th>
-                  <th className="w-28 py-2 text-right font-medium">Credit</th>
+                  <th className="w-24 py-2 text-right font-medium">Debit</th>
+                  <th className="w-24 py-2 text-right font-medium">Credit</th>
                 </>}
           </tr>
         </thead>
         <tbody className="divide-y">
           {data.lines.map((l, i) => {
-            const [main, meta] = splitDesc(l.description);
+            const [main, metaLine] = splitDesc(l.description);
+            const key = `${l.transactionId}-${i}`;
+            const expandable = !!l.meta;
+            const open = openRow === key;
             return (
-              <tr key={`${l.transactionId}-${i}`} className="align-top">
-                <td className="whitespace-nowrap py-2 pr-2 text-xs tabular-nums text-muted-foreground">
-                  {l.txnDate.slice(5)}
-                </td>
+              <Fragment key={key}>
+              <tr className={`align-top ${expandable ? "cursor-pointer hover:bg-muted/30" : ""}`}
+                  onClick={expandable ? () => setOpenRow(open ? null : key) : undefined}
+                  title={expandable ? "Click to see the transaction detail" : undefined}>
+                <td className="whitespace-nowrap py-2 pr-2 text-xs tabular-nums text-muted-foreground">{l.txnDate.slice(5)}</td>
                 <td className="break-words py-2 pr-2">
-                  {main}
-                  {meta && <div className="text-[11px] leading-snug text-muted-foreground">{meta}</div>}
+                  <span className="flex items-start gap-1">
+                    {expandable && <span className="mt-0.5 text-[10px] text-muted-foreground">{open ? "▾" : "▸"}</span>}
+                    <span>{main}{metaLine && <span className="block text-[11px] leading-snug text-muted-foreground">{metaLine}</span>}</span>
+                  </span>
                 </td>
+                {showCompany && <td className="py-2 pr-2 text-xs text-muted-foreground">{l.meta?.company ?? "—"}</td>}
                 {oneSided
                   ? <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(amountOf(l))}</td>
                   : <>
@@ -457,12 +473,26 @@ function DrillDown({ code, start, end, outletId }: { code: string; start: string
                       <td className="whitespace-nowrap py-2 text-right tabular-nums">{l.credit ? RM(l.credit) : ""}</td>
                     </>}
               </tr>
+              {open && l.meta && (
+                <tr className="bg-muted/20">
+                  <td colSpan={cols} className="px-3 py-2">
+                    <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-[11px]">
+                      {l.meta.account && (<><dt className="text-muted-foreground">Bank account</dt><dd>{l.meta.account}</dd></>)}
+                      {l.meta.reference && (<><dt className="text-muted-foreground">Reference</dt><dd className="break-words">{l.meta.reference}</dd></>)}
+                      {l.meta.category !== undefined && (<><dt className="text-muted-foreground">Category</dt><dd>{l.meta.category ? l.meta.category.toLowerCase().replace(/_/g, " ") : "unclassified"}</dd></>)}
+                      <><dt className="text-muted-foreground">Inter-company</dt><dd>{l.meta.isInterCo ? "yes" : "no"}</dd></>
+                      {(l.meta.classifiedBy || l.meta.ruleName) && (<><dt className="text-muted-foreground">Classified</dt><dd>{l.meta.classifiedBy ?? "rule"}{l.meta.ruleName ? ` · ${l.meta.ruleName}` : ""}</dd></>)}
+                    </dl>
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             );
           })}
         </tbody>
         <tfoot>
           <tr className="border-t-2 font-semibold">
-            <td className="py-2 pr-2" colSpan={2}>Total · {data.lines.length} entries</td>
+            <td className="py-2 pr-2" colSpan={showCompany ? 3 : 2}>Total · {data.lines.length} entries</td>
             {oneSided
               ? <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(totalDebit + totalCredit)}</td>
               : <>

@@ -30,7 +30,19 @@ export type DrillLine = {
   amount: number;
   debit: number;
   credit: number;
+  // Extra detail shown when a bank-line row is expanded ("see the tx behind it").
+  meta?: {
+    reference?: string | null;
+    category?: string | null;
+    company?: string | null;
+    account?: string | null;
+    isInterCo?: boolean;
+    classifiedBy?: string | null;
+    ruleName?: string | null;
+  };
 };
+
+const CONSOLIDATED = "consolidated";
 
 // Mirrors BANK_ACCOUNT_SUFFIX in pnl-sourced.ts.
 const BANK_ACCOUNT_SUFFIX: Record<string, string> = {
@@ -39,13 +51,31 @@ const BANK_ACCOUNT_SUFFIX: Record<string, string> = {
   celsiustamarind: "9345",
 };
 
+// Company that owns a Maybank account, from the 4-digit suffix in the name.
+function companyForAccount(accountName: string | null): string {
+  const a = (accountName ?? "").toUpperCase();
+  if (a.includes("2644") || a.includes("CONEZION")) return "Celsius Coffee Conezion";
+  if (a.includes("9345") || a.includes("TAMARIND")) return "Celsius Coffee Tamarind";
+  if (a.includes("4384") || a.includes("CELSIUS COFFEE SDN")) return "Celsius Coffee SB";
+  return accountName ?? "—";
+}
+function addMonths(s: string, n: number): string {
+  const [y, m, d] = s.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1 + n, 1));
+  const lastDay = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(d, lastDay)).padStart(2, "0")}`;
+}
+
 export function isSourcedPnlCode(code: string): boolean {
   return /^(REV-|PROC$|INV-|MKT-|BANK:)/.test(code);
 }
 
 async function companyOutlets(companyId: string, outletId?: string | null): Promise<string[]> {
   const client = getFinanceClient();
-  const { data } = await client.from("fin_outlet_companies").select("outlet_id").eq("company_id", companyId);
+  // Consolidated → every company's outlets, so the drill spans all entities.
+  let q = client.from("fin_outlet_companies").select("outlet_id");
+  if (companyId !== CONSOLIDATED) q = q.eq("company_id", companyId);
+  const { data } = await q;
   const all = (data ?? []).map((r) => r.outlet_id as string);
   return outletId && all.includes(outletId) ? [outletId] : all;
 }
@@ -192,18 +222,26 @@ async function drillGrabAds(companyId: string, start: string, end: string, outle
 // BANK:<CAT> — the classified bank lines behind the opex line. Also serves the
 // bank-sourced income lines (GastroHub, Meetings & Events) on the CR side.
 async function drillBank(cat: string, companyId: string, start: string, end: string, outletId?: string | null, direction: "DR" | "CR" = "DR"): Promise<DrillLine[]> {
+  const consolidated = companyId === CONSOLIDATED;
   const suffix = BANK_ACCOUNT_SUFFIX[companyId];
-  if (!suffix) return [];
+  if (!consolidated && !suffix) return [];
   const lines = await prisma.bankStatementLine.findMany({
     where: {
       direction,
       txnDate: { gte: dStart(start), lte: dEnd(end) },
-      statement: { accountName: { contains: suffix } },
+      // Per-company: filter to that account. Consolidated: all accounts, but
+      // drop inter-company legs (they eliminate on consolidation) so the drill
+      // ties to the consolidated line.
+      ...(consolidated ? { isInterCo: false } : { statement: { accountName: { contains: suffix } } }),
       ...(direction === "DR" ? { apInvoiceId: null } : {}),
       category: cat === "NULL" ? null : (cat as CashCategory),
       ...(outletId ? { outletId } : {}),
     },
-    select: { id: true, txnDate: true, description: true, amount: true },
+    select: {
+      id: true, txnDate: true, description: true, amount: true, reference: true,
+      category: true, isInterCo: true, classifiedBy: true, ruleName: true,
+      statement: { select: { accountName: true } },
+    },
     orderBy: { txnDate: "asc" },
     take: 400,
   });
@@ -214,6 +252,15 @@ async function drillBank(cat: string, companyId: string, start: string, end: str
     amount: round2(Number(l.amount)),
     debit: direction === "DR" ? round2(Number(l.amount)) : 0,
     credit: direction === "CR" ? round2(Number(l.amount)) : 0,
+    meta: {
+      reference: l.reference,
+      category: l.category as string | null,
+      company: companyForAccount(l.statement?.accountName ?? null),
+      account: l.statement?.accountName ?? null,
+      isInterCo: l.isInterCo,
+      classifiedBy: l.classifiedBy,
+      ruleName: l.ruleName,
+    },
   }));
 }
 
@@ -234,6 +281,10 @@ export async function sourcedPnlDrillDown(args: {
   if (code === "MKT-ADS") return drillAds(start, end);
   if (code === "MKT-GRAB-PROMO") return drillGrabPromo(companyId, start, end, outletId);
   if (code === "MKT-GRAB-ADS") return drillGrabAds(companyId, start, end, outletId);
+  // Management fee is recognised on accrual (paid a month in arrears), so its
+  // drill uses the same shifted window as the P&L line — payments in the
+  // following month, which are this period's fee.
+  if (code === "BANK:MANAGEMENT_FEE") return drillBank("MANAGEMENT_FEE", companyId, addMonths(start, 1), addMonths(end, 1), outletId);
   if (code.startsWith("BANK:")) return drillBank(code.slice(5), companyId, start, end, outletId);
   if (code === "MKT-GRAB-COMM") {
     // A derived line, not transactions — the drawer explains the calculation.
