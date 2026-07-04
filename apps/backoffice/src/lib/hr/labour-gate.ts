@@ -29,49 +29,46 @@ const PICKUP_STORE_BY_LOYALTY: Record<string, string> = {
 // in-house POS (`pos_orders`, GrabFood included) + the pickup app (`orders`);
 // StoreHub retired 2026-06-17, so post-cutover weeks are fully covered.
 export async function forecastWeekRevenue(
-  loyaltyOutletId: string | null,
+  outlet: { id: string; loyaltyOutletId: string | null },
   weekStart: string,
 ): Promise<number> {
-  if (!loyaltyOutletId) return 0;
-  const storeId = PICKUP_STORE_BY_LOYALTY[loyaltyOutletId] ?? "";
-  const rows = await prisma.$queryRaw<Array<{ revenue: number | null }>>`
-    SELECT (
-      COALESCE((
-        SELECT sum(total) / 100.0 FROM pos_orders
-        WHERE outlet_id = ${loyaltyOutletId}
-          AND status = 'completed' AND refund_of_order_id IS NULL
-          AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-              BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-      ), 0)
-      +
-      COALESCE((
-        SELECT sum(total) / 100.0 FROM orders
-        WHERE store_id = ${storeId}
-          AND status IN ('completed','ready','collected','paid')
-          AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-              BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-      ), 0)
-    )::float AS revenue
-  `;
-  const monthRevenue = rows[0]?.revenue ?? 0;
+  const monthRevenue = await revenueBetween(outlet, addDays(weekStart, -28), addDays(weekStart, -1));
   return monthRevenue / 4;
 }
 
 // Actual revenue for a completed week — same sources, actual dates.
 export async function actualWeekRevenue(
-  loyaltyOutletId: string | null,
+  outlet: { id: string; loyaltyOutletId: string | null },
   weekStart: string,
 ): Promise<number> {
-  if (!loyaltyOutletId) return 0;
-  const storeId = PICKUP_STORE_BY_LOYALTY[loyaltyOutletId] ?? "";
+  return revenueBetween(outlet, weekStart, addDays(weekStart, 6));
+}
+
+function addDays(ymd: string, days: number): string {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Revenue across all capture systems for a MYT date range (inclusive):
+// in-house POS (`pos_orders`, GrabFood included) + pickup app (`orders`) +
+// StoreHub (`storehub_sales` — retired 2026-06-17, contributes zero after,
+// but keeps trailing windows honest while the cutover is inside them).
+async function revenueBetween(
+  outlet: { id: string; loyaltyOutletId: string | null },
+  fromDate: string,
+  toDate: string,
+): Promise<number> {
+  const lid = outlet.loyaltyOutletId ?? "";
+  const storeId = PICKUP_STORE_BY_LOYALTY[lid] ?? "";
   const rows = await prisma.$queryRaw<Array<{ revenue: number | null }>>`
     SELECT (
       COALESCE((
         SELECT sum(total) / 100.0 FROM pos_orders
-        WHERE outlet_id = ${loyaltyOutletId}
+        WHERE outlet_id = ${lid}
           AND status = 'completed' AND refund_of_order_id IS NULL
           AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-              BETWEEN ${weekStart}::date AND ${weekStart}::date + 6
+              BETWEEN ${fromDate}::date AND ${toDate}::date
       ), 0)
       +
       COALESCE((
@@ -79,7 +76,15 @@ export async function actualWeekRevenue(
         WHERE store_id = ${storeId}
           AND status IN ('completed','ready','collected','paid')
           AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-              BETWEEN ${weekStart}::date AND ${weekStart}::date + 6
+              BETWEEN ${fromDate}::date AND ${toDate}::date
+      ), 0)
+      +
+      COALESCE((
+        SELECT sum(total) FROM storehub_sales
+        WHERE outlet_id = ${outlet.id}
+          AND transaction_type = 'Sale' AND COALESCE(is_cancelled, false) = false
+          AND (transaction_time AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+              BETWEEN ${fromDate}::date AND ${toDate}::date
       ), 0)
     )::float AS revenue
   `;
@@ -149,7 +154,7 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
 
   const { cost, hours, blockers, warnings } = costRoster(rows);
   const rosterCost = Math.round(cost + ROVER_SHARE_WEEKLY);
-  const forecastRevenue = Math.round(await forecastWeekRevenue(outlet.loyaltyOutletId, weekStart));
+  const forecastRevenue = Math.round(await forecastWeekRevenue(outlet, weekStart));
   const pct = forecastRevenue > 0 ? rosterCost / forecastRevenue : null;
 
   return {

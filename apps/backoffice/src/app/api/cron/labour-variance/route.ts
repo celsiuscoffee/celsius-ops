@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
       plannedPct = gate.pct;
     }
 
-    const revenue = await actualWeekRevenue(outlet.loyaltyOutletId, weekStart);
+    const revenue = await actualWeekRevenue(outlet, weekStart);
     if (revenue <= 0 && !plannedCost) continue;
 
     const actualPct = revenue > 0 ? plannedCost / revenue : null;

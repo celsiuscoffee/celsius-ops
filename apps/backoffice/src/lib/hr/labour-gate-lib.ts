@@ -18,7 +18,7 @@
 import {
   WORKING_DAYS_PER_MONTH,
   NORMAL_WORKING_HOURS_PER_DAY,
-} from "@/lib/hr/constants";
+} from "./constants";
 
 // Per-outlet labour budgets (fraction of forecast revenue), keyed by
 // Outlet.code. Tamarind's interim budget is deliberately above the company
