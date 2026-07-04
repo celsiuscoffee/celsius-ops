@@ -14,6 +14,7 @@ import {
 } from "@celsius/ui";
 import { Loader2, Download, FileText, AlertTriangle } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { OUTFLOW_CATEGORIES, INFLOW_CATEGORIES, categoryLabel } from "@/lib/finance/cash-categories";
 
 // Accounting format: negatives in parentheses, the convention every
 // accounting package (Xero, QuickBooks, Bukku) uses on statements.
@@ -308,7 +309,7 @@ function PnlTab() {
     () => `start=${start}&end=${end}${consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : ""}`,
     [start, end, outletId, consolidated],
   );
-  const { data, error, isLoading } = useFetch<{ report: PnlReport }>(
+  const { data, error, isLoading, mutate } = useFetch<{ report: PnlReport }>(
     `/api/finance/reports/pnl?${qs}`
   );
   const [drillCode, setDrillCode] = useState<string | null>(null);
@@ -397,7 +398,7 @@ function PnlTab() {
             )}
           </SheetHeader>
           {drillCode && data && (
-            <DrillDown code={drillCode} start={data.report.start} end={data.report.end} outletId={outletId || undefined} consolidated={consolidated} />
+            <DrillDown code={drillCode} start={data.report.start} end={data.report.end} outletId={outletId || undefined} consolidated={consolidated} onChanged={() => mutate()} />
           )}
         </SheetContent>
       </Sheet>
@@ -405,11 +406,33 @@ function PnlTab() {
   );
 }
 
-function DrillDown({ code, start, end, outletId, consolidated }: { code: string; start: string; end: string; outletId?: string; consolidated?: boolean }) {
-  const { data, isLoading } = useFetch<{ lines: DrillLine[] }>(
+function DrillDown({ code, start, end, outletId, consolidated, onChanged }: { code: string; start: string; end: string; outletId?: string; consolidated?: boolean; onChanged?: () => void }) {
+  const { data, isLoading, mutate } = useFetch<{ lines: DrillLine[] }>(
     `/api/finance/reports/drilldown?accountCode=${encodeURIComponent(code)}&start=${start}&end=${end}${consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : ""}`
   );
+  const { data: acctData } = useFetch<{ accounts: { code: string; name: string }[] }>("/api/finance/accounts");
+  const accountNames = new Map((acctData?.accounts ?? []).map((a) => [a.code, a.name]));
   const [openRow, setOpenRow] = useState<string | null>(null);
+  const [busyRow, setBusyRow] = useState<string | null>(null);
+  const [rowNote, setRowNote] = useState<Record<string, string>>({});
+
+  // Recategorise a bank line straight from the report — the accounting-software
+  // way. Books it to the new category (GL re-keys), then refreshes the drill and
+  // the P&L behind it.
+  async function recategorise(bankLineId: string, category: string) {
+    if (!category) return;
+    setBusyRow(bankLineId); setRowNote((n) => ({ ...n, [bankLineId]: "" }));
+    try {
+      const res = await fetch("/api/finance/bank-lines/classify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankLineId, category }),
+      });
+      const j = await res.json();
+      if (!res.ok) setRowNote((n) => ({ ...n, [bankLineId]: j.error ?? `Failed (${res.status})` }));
+      else { await mutate(); onChanged?.(); }
+    } catch (e) { setRowNote((n) => ({ ...n, [bankLineId]: e instanceof Error ? e.message : String(e) })); }
+    finally { setBusyRow(null); }
+  }
   if (isLoading) return <div className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>;
   if (!data) return null;
   if (data.lines.length === 0) {
@@ -483,6 +506,19 @@ function DrillDown({ code, start, end, outletId, consolidated }: { code: string;
                       <><dt className="text-muted-foreground">Inter-company</dt><dd>{l.meta.isInterCo ? "yes" : "no"}</dd></>
                       {(l.meta.classifiedBy || l.meta.ruleName) && (<><dt className="text-muted-foreground">Classified</dt><dd>{l.meta.classifiedBy ?? "rule"}{l.meta.ruleName ? ` · ${l.meta.ruleName}` : ""}</dd></>)}
                     </dl>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[11px] text-muted-foreground">Recategorise to</span>
+                      <select defaultValue="" disabled={busyRow === l.transactionId}
+                        onChange={(e) => { recategorise(l.transactionId, e.target.value); e.target.value = ""; }}
+                        className="h-7 max-w-[280px] rounded border bg-background px-1 text-[11px] disabled:opacity-50">
+                        <option value="" disabled>Choose a category…</option>
+                        {(l.credit > 0 ? INFLOW_CATEGORIES : OUTFLOW_CATEGORIES).map((c) => (
+                          <option key={c} value={c}>{categoryLabel(c, accountNames)}</option>
+                        ))}
+                      </select>
+                      {busyRow === l.transactionId && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                      {rowNote[l.transactionId] && <span className="text-[10px] text-rose-600">{rowNote[l.transactionId]}</span>}
+                    </div>
                   </td>
                 </tr>
               )}
