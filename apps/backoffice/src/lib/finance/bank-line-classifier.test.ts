@@ -38,6 +38,23 @@ describe("bank-line-classifier", () => {
     expect(dr("TRANSFER FR A/C NURFARAH QURAISYA B SCC Week 36").category).toBe("EMPLOYEE_SALARY");
   });
 
+  it("tags part-timer weekly transfers with the outlet from the venue prefix", () => {
+    // June-2026 bank format: venue name prefixes the payee. These four venues
+    // previously fell through inferOutlet, leaving PT wages unattributed.
+    const sa = dr("Seksyen 13 Shah AlamENGKU EMRAN DZULKAR* PT Week 23/26");
+    expect(sa.category).toBe("PARTIMER");
+    expect(sa.outletCode).toBe("CC002");
+    const nilai = dr("Gastrohub Nilai AIMI NADHIRA BINTI * PT Week 23/26");
+    expect(nilai.category).toBe("PARTIMER");
+    expect(nilai.outletCode).toBe("CF Nilai");
+    const ioi = dr("IOI MALL PUTRAJAYA MOHAMA* PT WEEK 23/26");
+    expect(ioi.category).toBe("PARTIMER");
+    expect(ioi.outletCode).toBe("CF IOI Mall");
+    // Existing prefixes keep working
+    expect(dr("TAMARIND SQUARE CHE QASEH QAZRINA B* PT WEEK 23/26").outletCode).toBe("CC003");
+    expect(dr("Conezion Putrajaya NURHAN DANIAL BIN S* PT Week 23/26").outletCode).toBe("CC001");
+  });
+
   it("maps statutory + known opex vendors", () => {
     expect(dr("M2UBEPF KWSP PAYMENT").category).toBe("STATUTORY_PAYMENT");
     expect(dr("PAYMENT TO TNB TENAGA NASIONAL").category).toBe("UTILITIES");

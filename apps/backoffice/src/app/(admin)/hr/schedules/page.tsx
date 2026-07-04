@@ -74,6 +74,18 @@ type GridData = {
   templates: ShiftTemplate[];
 };
 
+type LabourGateInfo = {
+  forecastRevenue: number;
+  rosterCost: number;
+  rosterHours: number;
+  pct: number | null;
+  targetPct: number;
+  ceilingPct: number;
+  verdict: "green" | "amber" | "red" | "unknown";
+  blockers: string[];
+  warnings: string[];
+};
+
 type SwapRequest = {
   id: string;
   status: string;
@@ -155,6 +167,7 @@ export default function SchedulesPage() {
     limit: number;
   }>(null);
   const [publishing, setPublishing] = useState(false);
+  const [gate, setGate] = useState<LabourGateInfo | null>(null);
   const [generating, setGenerating] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [swapAction, setSwapAction] = useState<string | null>(null);
@@ -176,6 +189,29 @@ export default function SchedulesPage() {
     : null;
 
   const { data: grid, mutate } = useFetch<GridData>(gridUrl);
+
+  // Labour-cost gate preview — reprices the week whenever the roster changes
+  // so the manager sees the projected labour % while still editing.
+  const shiftCount = grid?.shifts?.length ?? -1;
+  useEffect(() => {
+    if (!selectedOutlet || shiftCount < 0) return;
+    let cancelled = false;
+    fetch("/api/hr/schedules/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ outlet_id: selectedOutlet, week_start: weekStart, action: "preview" }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setGate(d?.gate ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setGate(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedOutlet, weekStart, shiftCount]);
   const { data: swapData, mutate: mutateSwaps } = useFetch<{ swaps: SwapRequest[] }>("/api/hr/swap");
   const pendingSwaps = swapData?.swaps || [];
 
@@ -422,11 +458,37 @@ export default function SchedulesPage() {
     setPublishing(true);
     try {
       const action = grid.schedule.status === "published" ? "unpublish" : "publish";
-      await fetch("/api/hr/schedules/publish", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ outlet_id: selectedOutlet, week_start: weekStart, action }),
-      });
+      const publishOnce = (extra: Record<string, string>) =>
+        fetch("/api/hr/schedules/publish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ outlet_id: selectedOutlet, week_start: weekStart, action, ...extra }),
+        });
+
+      let res = await publishOnce({});
+      if (action === "publish" && !res.ok) {
+        // The labour gate pushed back — amber needs a reason, red needs an
+        // owner override; blockers just get reported.
+        const data = await res.json().catch(() => ({}) as { error?: string; gate?: LabourGateInfo });
+        if (data.gate) setGate(data.gate);
+        const verdict = data.gate?.verdict;
+        if (res.status === 422 && (verdict === "amber" || verdict === "unknown")) {
+          const reason = prompt(`${data.error}\n\nReason for publishing over target:`);
+          if (!reason) return;
+          res = await publishOnce({ reason });
+        } else if (verdict === "red") {
+          const override = prompt(`${data.error}\n\nOwner override reason (owner only):`);
+          if (!override) return;
+          res = await publishOnce({ override_reason: override });
+        }
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}) as { error?: string });
+          alert(err.error || `Publish failed (${res.status})`);
+          return;
+        }
+      }
+      const ok = await res.json().catch(() => null);
+      if (ok?.gate) setGate(ok.gate);
       mutate();
     } finally {
       setPublishing(false);
@@ -568,6 +630,33 @@ export default function SchedulesPage() {
         <div className="text-sm text-muted-foreground">
           Week of <strong>{weekStart}</strong> → {grid?.week_end || "..."}
         </div>
+
+        {gate && (
+          <div
+            className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium ${
+              gate.verdict === "green"
+                ? "border-green-300 bg-green-50 text-green-700"
+                : gate.verdict === "amber" || gate.verdict === "unknown"
+                  ? "border-amber-300 bg-amber-50 text-amber-700"
+                  : "border-red-300 bg-red-50 text-red-700"
+            }`}
+            title={[
+              `Roster RM${gate.rosterCost.toLocaleString()} vs forecast RM${gate.forecastRevenue.toLocaleString()}`,
+              `Budget ${(gate.targetPct * 100).toFixed(0)}% target / ${(gate.ceilingPct * 100).toFixed(0)}% ceiling`,
+              ...gate.blockers,
+              ...gate.warnings,
+            ].join("\n")}
+          >
+            Labour{" "}
+            {gate.pct == null ? "—" : `${(gate.pct * 100).toFixed(1)}%`}
+            <span className="font-normal opacity-70">
+              / {(gate.targetPct * 100).toFixed(0)}%
+            </span>
+            {(gate.blockers.length > 0 || gate.warnings.length > 0) && (
+              <span className="font-normal">⚠ {gate.blockers.length + gate.warnings.length}</span>
+            )}
+          </div>
+        )}
 
         <div className="ml-auto text-sm">
           <span className="text-muted-foreground">Total labor: </span>

@@ -55,6 +55,13 @@ function inferOutlet(desc: string): string | null {
   // GastroHub settles for Nilai; Kiddytopia is the IOI Mall events venue.
   if (/\bGYRO\s*GASTRO\b/i.test(desc)) return "CF Nilai";
   if (/\bKIDDYTOPIA\b/i.test(desc)) return "CF IOI Mall";
+  // Weekly part-timer transfers (June-2026 bank format) prefix the outlet's
+  // venue name: "Seksyen 13 Shah AlamENGKU… PT Week 23/26",
+  // "Gastrohub Nilai AIMI… PT Week 23/26", "IOI MALL PUTRAJAYA MOHAMA…".
+  // IOI MALL must be tested before the CONEZION/PUTRAJAYA rules below.
+  if (/\bIOI\s*MALL\b/i.test(desc)) return "CF IOI Mall";
+  if (/\bGASTROHUB\b/i.test(desc)) return "CF Nilai";
+  if (/\bSEKSYEN\s*13\b/i.test(desc) || /\bSHAH\s*ALAM\b/i.test(desc)) return "CC002";
   if (/\bTAMARIND\b/i.test(desc) || /\bCELSIUSCOFFEE\s*T\b/i.test(desc)) return "CC003";
   if (/\bCONEZION\b/i.test(desc) || /\bCELSIUSCOFFEE\s*C\b/i.test(desc)) return "CC001";
   if (/\bCELSIUSCOFFEE\s*SA\b/i.test(desc)) return "CC002";    // Shah Alam

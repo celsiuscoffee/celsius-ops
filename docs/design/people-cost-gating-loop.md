@@ -246,6 +246,40 @@ a gate on a wrong number is worse than no gate.
 - Blended 3-outlet labour % ≤ 18% within two full months (June baseline:
   ~25% blended).
 
+## Implementation (2026-07-05)
+
+Shipped on this branch:
+- **Classifier fix** (`bank-line-classifier.ts`): "Seksyen 13 Shah Alam",
+  "Gastrohub Nilai", and "IOI Mall Putrajaya" prefixes now infer the outlet;
+  migration 071 backfilled 266 already-ingested PARTIMER lines (179 SA /
+  63 Nilai / 24 IOI). June PT per outlet from tagged bank lines now
+  reconciles with zero untagged lines.
+- **Labour gate** (`lib/hr/labour-gate-lib.ts` pure + `labour-gate.ts` IO):
+  per-outlet budgets (CC001 16/18, CC002 18/20, CC003 22/25 interim),
+  forecast = trailing-28-day revenue/4 from `pos_orders` + `orders`,
+  FT priced at salary/26/7.5 + employer statutory, PT at hourly rate,
+  rovers RM0 with a 2-shift/outlet-week quota, ⅓ rover-lead share
+  (RM309/wk) added per outlet. Unit-tested.
+- **Publish gate** (`api/hr/schedules/publish`): green publishes; amber
+  (and unknown-forecast) requires a typed reason; red is owner-override
+  only; rosters with profile-less or rate-less shifts are refused (422).
+  Gate outcome + reasons append to `hr_schedules.ai_notes`;
+  `estimated_labor_cost` / `total_labor_hours` stamp on every publish.
+- **Editor badge** (schedules page): live labour-% chip (green/amber/red)
+  repriced as shifts change, with cost, forecast, blockers and quota
+  warnings in the tooltip; amber/red publishes prompt for the reason.
+- **Monday digest** (`api/cron/labour-variance`, Mondays 09:30 MYT):
+  per-outlet last-week labour % on actual revenue vs planned; ships in
+  SHADOW (`LABOUR_VARIANCE_MODE`, log-only) until output is reviewed.
+
+Still on the humans:
+- HR profiles + rates for the 4 orphan-scheduled staff (Hidayat, Irfan,
+  Haziq×2nd, Fatin — 61 June shifts between them). The gate blocks their
+  outlets' publishes until done.
+- Finalise the six `draft` 2026 payroll runs (closes the ~RM3k/outlet FT
+  residual vs the workbook).
+- Flip `LABOUR_VARIANCE_MODE=armed` after one shadow Monday looks sane.
+
 ## The Assignment (one concrete next step)
 ~~Reconstruct June-2026 labour % per outlet from live data.~~ DONE
 2026-07-04 (see Verification Results): revenue exact, FT exact, PT found
