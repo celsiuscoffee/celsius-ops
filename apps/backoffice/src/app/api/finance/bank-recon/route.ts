@@ -180,7 +180,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const { error, user } = await guard(req);
-  if (error || !user) return error;
+  if (error) return error;
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   let body: { account?: string; month?: string } = {};
   try { body = await req.json(); } catch { /* handled below */ }
   const month = normalizeMonth(body.month);
@@ -222,7 +223,8 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const { error, user } = await guard(req);
-  if (error || !user) return error;
+  if (error) return error;
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   let body: { account?: string; month?: string } = {};
   try { body = await req.json(); } catch { /* handled below */ }
   const month = normalizeMonth(body.month);
