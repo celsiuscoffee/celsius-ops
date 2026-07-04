@@ -88,18 +88,69 @@ because Conezion over-delivers.
 1. **Every rosterable employee has a costable rate.** `hourly_rate` is
    nullable in `apps/staff/src/lib/hr/types.ts`; a NULL rate silently
    under-counts the roster and the gate lies. Backfill + NOT-NULL-at-publish
-   check required. UNVERIFIED.
-2. **The projected % is credible** — reconstructing June-2026 from
-   attendance × rates / `pos_orders` must land within ~1pt of the workbook's
-   22.8 / 24.3 / 30.6. If it can't, the AM learns to distrust the number and
-   overrides become routine. UNVERIFIED — this is the assignment below.
+   check required. VERIFIED 2026-07-04 — see results below: all 24 active
+   part-timers have rates; all 31 FT/contract have NULL `hourly_rate` but a
+   `basic_salary`, so the FT rate is derivable (salary / 26 / 7.5, the
+   formula already in `apps/staff/src/lib/hr/constants.ts`).
+2. **The projected % is credible** — reconstructing June-2026 from live data
+   must land within ~1pt of the workbook's 22.8 / 24.3 / 30.6. If it can't,
+   the AM learns to distrust the number and overrides become routine.
+   PARTIALLY VERIFIED — revenue side exact, FT labour exact, PT labour has
+   a data gap (details below).
 3. **All scheduling flows through the app.** If the AM can WhatsApp someone
    onto a shift and pay them via OT/claims, the gate binds nothing. The
    Monday variance report is the detector for this leak, but the owner has
-   to enforce "not in the system = not paid".
+   to enforce "not in the system = not paid". PARTIALLY FAILED as of today:
+   61 June shifts were assigned to users with no HR profile, and PT wages
+   have been paid outside `hr_payroll_runs` since April.
 4. **The owner will hold the red line.** A gate whose override is free is a
    nudge. Override requires the owner's action and shows up on the weekly
    scoreboard with the typed reason.
+
+## Verification Results (2026-07-04, run against production Supabase)
+
+**Revenue: RECONCILED EXACTLY.** June revenue per outlet = `storehub_sales`
+(to the ~Jun-15/16/17 per-outlet retirement) + `pos_orders` (in-house POS,
+live from Jun-8/15/18, includes GrabFood) + `orders` (pickup app):
+Conezion 128,517 vs workbook 128,376 (+0.1%); Shah Alam 106,343 vs 106,344;
+Tamarind 80,962 vs 80,961. May validates too (StoreHub alone: 138,295 /
+116,125 exact / 82,797 exact). The cutover overlap is complementary
+channels, not double-counting. The gate's forecast denominator must UNION
+all three sources (from July onward: `pos_orders` + `orders`).
+
+**FT labour: RECONCILED.** June `hr_payroll_items` (gross + employer
+statutory) joined through `User.outletId`: Conezion RM18,567 (10 staff),
+Shah Alam RM11,992 (5), Tamarind RM14,244 (6). Spot checks against the
+workbook: Head of Dept 11,877 vs 11,876; Syafiq 3,988 vs 4,022 (⅓ =
+1,341 ✓); Area Manager 4,444 vs the RM4,500 cap.
+
+**PT labour: DATA GAP — this is the repair the build waits on.** Part-timer
+items appear in the Jan–Mar payroll runs (RM9–10k/mo) and then vanish:
+zero PT items in Apr/May/Jun. Scheduled-hours × `hourly_rate` for June
+gives Conezion 4,402 / Shah Alam 10,606 / Tamarind 3,029, which brings the
+reconstruction to within ~RM2–6k per outlet of the workbook's implied
+labour (24.3k vs 29.3k / 23.9k vs 25.8k / 18.6k vs 24.8k). The residue is
+(a) 61 June shifts held by users with no `hr_employee_profiles` row (~570
+scheduled hours, uncostable), (b) one FT with no outlet (Shella, RM2,507),
+and (c) whatever PT top-ups are paid off-system. All six 2026 monthly
+payroll runs are still status `draft`.
+
+**Half-built infra worth reusing:** `hr_schedules` already has
+`total_labor_hours` and `estimated_labor_cost` columns, but only 7 of 35
+published schedules have a cost — the field is written sometimes (AI
+generation path) and gated on never. The gate should make this column
+mandatory-and-trusted rather than invent a new one.
+
+**Data repairs before the gate ships (in order):**
+1. Route PT wages back through payroll runs (or a PT wage ledger the gate
+   can read) — Apr–Jun PT cost is invisible to the system today.
+2. Create HR profiles (with rates) for every scheduled user; add a
+   publish-time check refusing shifts for profile-less or rate-less users.
+3. Backfill `User.outletId` for the one unassigned FT; formalise the
+   rovers/HQ list (HoD, Area Manager, Syafiq, Director×2) so outlet
+   attribution is total.
+4. Derive FT `hourly_rate` at read time from `basic_salary`/26/7.5 instead
+   of waiting on a column backfill.
 
 ## Approaches Considered
 
@@ -135,7 +186,11 @@ data show where rosters still leak. What flips this: if premise 2 fails
 a gate on a wrong number is worse than no gate.
 
 ## Open Questions
-- How many active employees have NULL `hourly_rate` today? (premise 1)
+- ~~How many active employees have NULL `hourly_rate` today?~~ Answered:
+  31 of 55 actives (all FT/contract) — derivable from `basic_salary`.
+- Where are Apr–Jun part-timer wages actually being computed and paid?
+  (BrioHR leftover? manual sheets?) The gate needs that flow inside the
+  system.
 - Does "Head of Ops" roster through the same publish endpoint, or via a
   side path the gate must also cover?
 - Post-publish shift **adds**: gate them at insert (strict) or only count
@@ -156,10 +211,9 @@ a gate on a wrong number is worse than no gate.
   ~25% blended).
 
 ## The Assignment (one concrete next step)
-Before writing any gate code: **reconstruct June-2026 labour % per outlet
-from live data** — attendance hours × `hourly_rate` × (1 + employer
-statutory) + Syafiq's third, over `pos_orders` revenue — and reconcile
-against the workbook's 22.8 / 24.3 / 30.6. In the same pass, count active
-employees with NULL `hourly_rate`. Those two results decide whether this is
-a days-scale build or a data-repair project first — and no amount of
-gate-building substitutes for a number the Area Manager can't argue with.
+~~Reconstruct June-2026 labour % per outlet from live data.~~ DONE
+2026-07-04 (see Verification Results). The revenue denominator and FT cost
+are gate-ready today; the build now waits on one thing: **bring part-timer
+wages back inside the system** (repair #1 above) and profile the 61
+orphan-scheduled users (repair #2). Once PT cost is queryable, the gate's
+number matches payroll and the publish gate ships as designed.
