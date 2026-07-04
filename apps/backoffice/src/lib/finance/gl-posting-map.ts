@@ -20,6 +20,7 @@ export const CONTRA_ACCOUNT: Record<string, string> = {
   MEETINGS_EVENTS: "5000-10",
   GASTROHUB: "5000-09",
   REFUND: "6000-01",       // money back from a supplier — reduces COGS
+  CUSTOMER_REFUND: "5002", // money paid back to a customer (sales return) — contra-revenue
 
   // ── cost of sales ──
   RAW_MATERIALS: "6000-01",
