@@ -19,6 +19,7 @@ import { getFinanceClient } from "../supabase";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { getDefaultCompanyId } from "../companies";
+import { depreciationTotal } from "../fixed-assets";
 import type { PnlReport, PnlLine } from "./pnl";
 import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
 
@@ -486,6 +487,23 @@ export async function buildSourcedPnl(input: {
     if (mfAmt) {
       expenseLines.push({ code: "BANK:MANAGEMENT_FEE", name: "Management Fee (accrued — paid next month)", amount: mfAmt, parentCode: null });
       totalExpenses += mfAmt;
+    }
+  }
+
+  // Depreciation: straight-line from the fixed-asset register (source-driven,
+  // no journal dependency). Equipment purchases NEVER hit this P&L as an
+  // expense (EQUIPMENTS sits in BANK_NONOPEX above), so recognising the
+  // depreciation charge here is the whole cost story, with no double count
+  // whether or not a purchase line has been capitalized into an asset yet.
+  // Month convention (documented in lib/finance/fixed-assets.ts): charges
+  // start the first full month after acquisition, are dated on each month's
+  // last day (so a window includes a month iff its last day is inside), and
+  // stop from the disposal month onward.
+  {
+    const dep = await depreciationTotal({ companyId, start, end, outletId });
+    if (dep) {
+      expenseLines.push({ code: "DEP", name: "Depreciation (fixed assets, straight-line)", amount: dep, parentCode: null });
+      totalExpenses += dep;
     }
   }
   totalExpenses = round2(totalExpenses);

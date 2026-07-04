@@ -14,6 +14,7 @@
 // proper ZIP packaging is a follow-up using a streaming archiver.
 
 import { getFinanceClient } from "../supabase";
+import { accumulatedDepreciation, listFixedAssets, netBookValue } from "../fixed-assets";
 import { buildPnl } from "./pnl";
 import { buildBalanceSheet } from "./balance-sheet";
 
@@ -216,30 +217,29 @@ async function apListingCsv(
 }
 
 async function fixedAssetCsv(companyId: string): Promise<AuditorPackFile> {
-  const client = getFinanceClient();
-  const { data } = await client
-    .from("fin_fixed_assets")
-    .select("id, account_code, outlet_id, description, acquired_date, cost, useful_life_months, accumulated_dep, status, disposed_date, disposed_amount")
-    .eq("company_id", companyId)
-    .order("acquired_date");
-  const rows = ["asset_id,account_code,outlet_id,description,acquired_date,cost,useful_life_months,accumulated_dep,nbv,status,disposed_date,disposed_amount"];
-  for (const r of data ?? []) {
-    const cost = Number(r.cost);
-    const acc = Number(r.accumulated_dep);
+  // Real register export. Accumulated depreciation and NBV are DERIVED from
+  // the same straight-line engine the P&L and GL posting use (one month
+  // convention everywhere), computed as of today.
+  const assets = await listFixedAssets(companyId);
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = ["asset_id,name,company,account_code,outlet_id,acquired_date,cost,residual,useful_life_months,accumulated_dep,nbv,status,disposed_date"];
+  for (const a of assets) {
+    const acc = accumulatedDepreciation(a, today);
     rows.push(
       [
-        r.id,
-        r.account_code,
-        r.outlet_id ?? "",
-        `"${csvEscape((r.description as string) ?? "")}"`,
-        r.acquired_date,
-        cost.toFixed(2),
-        r.useful_life_months,
+        a.id,
+        `"${csvEscape(a.name)}"`,
+        a.companyId ?? "",
+        a.accountCode,
+        a.outletId ?? "",
+        a.acquiredDate,
+        a.cost.toFixed(2),
+        a.residual.toFixed(2),
+        a.usefulLifeMonths,
         acc.toFixed(2),
-        (cost - acc).toFixed(2),
-        r.status,
-        r.disposed_date ?? "",
-        r.disposed_amount ?? "",
+        netBookValue(a, today).toFixed(2),
+        a.status,
+        a.disposedDate ?? "",
       ].join(",")
     );
   }

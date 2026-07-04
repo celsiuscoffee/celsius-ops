@@ -17,6 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma, type CashCategory } from "@prisma/client";
 import { getFinanceClient } from "../supabase";
 import { getDefaultCompanyId } from "../companies";
+import { depreciationByAsset } from "../fixed-assets";
 import { effectiveGrabRate } from "./pnl-sourced";
 import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
 
@@ -68,7 +69,7 @@ function addMonths(s: string, n: number): string {
 }
 
 export function isSourcedPnlCode(code: string): boolean {
-  return /^(REV-|PROC$|INV-|MKT-|BANK:)/.test(code);
+  return /^(REV-|PROC$|INV-|MKT-|BANK:|DEP$)/.test(code);
 }
 
 async function companyOutlets(companyId: string, outletId?: string | null): Promise<string[]> {
@@ -226,6 +227,26 @@ async function drillGrabAds(companyId: string, start: string, end: string, outle
   }));
 }
 
+// DEP: per-asset depreciation for the period, from the SAME math as the P&L
+// line (lib/finance/fixed-assets.ts), so the drill total ties to the line.
+async function drillDepreciation(companyId: string, start: string, end: string, outletId?: string | null): Promise<DrillLine[]> {
+  const rows = await depreciationByAsset({
+    companyId: companyId === CONSOLIDATED ? null : companyId,
+    start,
+    end,
+    outletId,
+  });
+  return rows.map(({ asset, amount }) => ({
+    transactionId: asset.id,
+    txnDate: asset.acquiredDate,
+    description: `${asset.name}: cost RM${asset.cost.toFixed(2)}, life ${asset.usefulLifeMonths} months (${asset.accountCode})`,
+    amount,
+    debit: amount,
+    credit: 0,
+    meta: { company: asset.companyId, account: asset.accountCode },
+  }));
+}
+
 // BANK:<CAT> — the classified bank lines behind the opex line. Also serves the
 // bank-sourced income lines (GastroHub, Meetings & Events) on the CR side.
 async function drillBank(cat: string, companyId: string, start: string, end: string, outletId?: string | null, direction: "DR" | "CR" = "DR"): Promise<DrillLine[]> {
@@ -288,6 +309,7 @@ export async function sourcedPnlDrillDown(args: {
   if (code === "MKT-ADS") return drillAds(companyId, start, end, outletId);
   if (code === "MKT-GRAB-PROMO") return drillGrabPromo(companyId, start, end, outletId);
   if (code === "MKT-GRAB-ADS") return drillGrabAds(companyId, start, end, outletId);
+  if (code === "DEP") return drillDepreciation(companyId, start, end, outletId);
   // Management fee is recognised on accrual (paid a month in arrears), so its
   // drill uses the same shifted window as the P&L line — payments in the
   // following month, which are this period's fee.
