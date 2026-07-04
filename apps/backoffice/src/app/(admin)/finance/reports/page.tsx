@@ -255,10 +255,25 @@ function pctOfIncome(amount: number, totalIncome: number): string {
   return `${((amount / totalIncome) * 100).toFixed(1)}%`;
 }
 
+// Period-over-period change vs the comparison column. Blank when there's
+// nothing to compare against; "new" when this period has a value and the
+// comparison was zero.
+function pctChange(cur: number, prev: number | null | undefined): string {
+  if (prev == null) return "";
+  if (prev === 0) return cur === 0 ? "" : "new";
+  const p = ((cur - prev) / Math.abs(prev)) * 100;
+  return `${p >= 0 ? "+" : ""}${p.toFixed(0)}%`;
+}
+
+// Compare-period date helpers (plain YYYY-MM-DD, no TZ shift).
+const addDaysStr = (s: string, n: number) => { const d = new Date(`${s}T00:00:00.000Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const addYearsStr = (s: string, n: number) => { const [y, m, d] = s.split("-"); return `${Number(y) + n}-${m}-${d}`; };
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+
 // Row components live at module scope (not inside PnlTab) so their
 // identity is stable across renders; ReportRow takes the drill-down
 // callback as a prop instead of closing over PnlTab state.
-function ReportRow({ line, totalIncome, onDrill }: { line: PnlLine; totalIncome: number; onDrill: (code: string) => void }) {
+function ReportRow({ line, totalIncome, onDrill, compareAmount, showCompare }: { line: PnlLine; totalIncome: number; onDrill: (code: string) => void; compareAmount?: number | null; showCompare?: boolean }) {
   return (
     <tr
       className="cursor-pointer border-t transition hover:bg-muted/30"
@@ -272,46 +287,65 @@ function ReportRow({ line, totalIncome, onDrill }: { line: PnlLine; totalIncome:
       </td>
       <td className="px-3 py-1.5">{line.name}</td>
       <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(line.amount)}</td>
+      {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">{compareAmount == null ? "—" : RM(compareAmount)}</td>}
+      {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctChange(line.amount, compareAmount)}</td>}
       <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctOfIncome(line.amount, totalIncome)}</td>
     </tr>
   );
 }
 
-function TotalRow({ label, amount, totalIncome, bold = true }: { label: string; amount: number; totalIncome: number; bold?: boolean }) {
+function TotalRow({ label, amount, totalIncome, bold = true, compareAmount, showCompare }: { label: string; amount: number; totalIncome: number; bold?: boolean; compareAmount?: number | null; showCompare?: boolean }) {
+  const f = bold ? "font-semibold" : "";
   return (
     <tr className="border-t bg-muted/30">
-      <td colSpan={2} className={`px-3 py-2 ${bold ? "font-semibold" : ""}`}>
+      <td colSpan={2} className={`px-3 py-2 ${f}`}>{label}</td>
+      <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${f}`}>{RM(amount)}</td>
+      {showCompare && <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground ${f}`}>{compareAmount == null ? "—" : RM(compareAmount)}</td>}
+      {showCompare && <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${f}`}>{pctChange(amount, compareAmount)}</td>}
+      <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${f}`}>{pctOfIncome(amount, totalIncome)}</td>
+    </tr>
+  );
+}
+
+function SectionHeader({ label, cols }: { label: string; cols: number }) {
+  return (
+    <tr>
+      <td colSpan={cols} className="bg-muted/50 px-3 py-1.5 text-xs uppercase tracking-wide text-muted-foreground">
         {label}
-      </td>
-      <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${bold ? "font-semibold" : ""}`}>
-        {RM(amount)}
-      </td>
-      <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${bold ? "font-semibold" : ""}`}>
-        {pctOfIncome(amount, totalIncome)}
       </td>
     </tr>
   );
 }
 
-function SectionHeader({ label }: { label: string }) {
-  return (
-    <tr>
-      <td colSpan={4} className="bg-muted/50 px-3 py-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </td>
-    </tr>
-  );
-}
+type CompareMode = "none" | "prev" | "year";
 
 function PnlTab() {
   const { start, end, outletId, consolidated } = useControls();
-  const qs = useMemo(
-    () => `start=${start}&end=${end}${consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : ""}`,
-    [start, end, outletId, consolidated],
-  );
+  const [compare, setCompare] = useState<CompareMode>("none");
+  const scope = consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : "";
+  const qs = useMemo(() => `start=${start}&end=${end}${scope}`, [start, end, scope]);
   const { data, error, isLoading, mutate } = useFetch<{ report: PnlReport }>(
     `/api/finance/reports/pnl?${qs}`
   );
+  // Comparison period: the immediately-preceding equal-length window, or the
+  // same dates a year earlier. Fetched only when a comparison is selected.
+  const cmpRange = useMemo(() => {
+    if (compare === "prev") { const cEnd = addDaysStr(start, -1); return { s: addDaysStr(cEnd, -daysBetween(start, end)), e: cEnd }; }
+    if (compare === "year") return { s: addYearsStr(start, -1), e: addYearsStr(end, -1) };
+    return null;
+  }, [compare, start, end]);
+  const { data: cmpData } = useFetch<{ report: PnlReport }>(
+    cmpRange ? `/api/finance/reports/pnl?start=${cmpRange.s}&end=${cmpRange.e}${scope}` : null
+  );
+  const showCompare = compare !== "none" && !!cmpData;
+  const cmpByCode = useMemo(() => {
+    const m = new Map<string, number>();
+    const r = cmpData?.report;
+    if (r) for (const l of [...r.income.lines, ...r.cogs.lines, ...r.expenses.lines]) m.set(l.code, l.amount);
+    return m;
+  }, [cmpData]);
+  const cmp = cmpData?.report;
+  const cols = 4 + (showCompare ? 2 : 0);
   const [drillCode, setDrillCode] = useState<string | null>(null);
 
   return (
@@ -336,19 +370,31 @@ function PnlTab() {
 
       {data && (
         <>
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">Compare
+            <select value={compare} onChange={(e) => setCompare(e.target.value as CompareMode)}
+              className="h-7 rounded-md border bg-background px-1.5 text-xs">
+              <option value="none">off</option>
+              <option value="prev">previous period</option>
+              <option value="year">previous year</option>
+            </select>
+          </label>
+          {showCompare && cmpRange && <span className="text-[10px] text-muted-foreground tabular-nums">vs {cmpRange.s} → {cmpRange.e}</span>}
           <ExportCsvButton onExport={() => {
             const r = data.report;
-            const rows: Array<Array<string | number>> = [["Section", "Code", "Account", "Amount", "% of income"]];
-            const push = (section: string, lines: PnlLine[], total: number, totalLabel: string) => {
-              for (const l of lines) rows.push([section, l.code, l.name, l.amount, pctOfIncome(l.amount, r.income.total)]);
-              rows.push([section, "", totalLabel, total, pctOfIncome(total, r.income.total)]);
+            const head = ["Section", "Code", "Account", "Amount", ...(showCompare ? ["Compare", "Change %"] : []), "% of income"];
+            const rows: Array<Array<string | number>> = [head];
+            const cell = (l: PnlLine) => [l.code, l.name, l.amount, ...(showCompare ? [cmpByCode.get(l.code) ?? "", pctChange(l.amount, cmpByCode.get(l.code))] : []), pctOfIncome(l.amount, r.income.total)];
+            const tot = (label: string, amt: number, cAmt?: number | null) => ["", "", label, amt, ...(showCompare ? [cAmt ?? "", pctChange(amt, cAmt)] : []), pctOfIncome(amt, r.income.total)];
+            const push = (section: string, lines: PnlLine[], total: number, totalLabel: string, cTotal?: number | null) => {
+              for (const l of lines) rows.push([section, ...cell(l)]);
+              rows.push([section, ...tot(totalLabel, total, cTotal).slice(2)]);
             };
-            push("Income", r.income.lines, r.income.total, "Total Income");
-            push("Cost of Sales", r.cogs.lines, r.cogs.total, "Total COGS");
-            rows.push(["", "", "Gross Profit", r.grossProfit, pctOfIncome(r.grossProfit, r.income.total)]);
-            push("Expenses", r.expenses.lines, r.expenses.total, "Total Expenses");
-            rows.push(["", "", "Net Income", r.netIncome, pctOfIncome(r.netIncome, r.income.total)]);
+            push("Income", r.income.lines, r.income.total, "Total Income", cmp?.income.total);
+            push("Cost of Sales", r.cogs.lines, r.cogs.total, "Total COGS", cmp?.cogs.total);
+            rows.push(tot("Gross Profit", r.grossProfit, cmp?.grossProfit));
+            push("Expenses", r.expenses.lines, r.expenses.total, "Total Expenses", cmp?.expenses.total);
+            rows.push(tot("Net Income", r.netIncome, cmp?.netIncome));
             downloadCsv(`pnl_${r.start}_${r.end}.csv`, rows);
           }} />
         </div>
@@ -359,24 +405,26 @@ function PnlTab() {
                 <th className="whitespace-nowrap px-3 py-2">Code</th>
                 <th className="px-3 py-2">Account</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right">Amount</th>
+                {showCompare && <th className="whitespace-nowrap px-3 py-2 text-right">{compare === "year" ? "Prev year" : "Prev period"}</th>}
+                {showCompare && <th className="whitespace-nowrap px-3 py-2 text-right" title="Change vs comparison period">Δ</th>}
                 <th className="whitespace-nowrap px-3 py-2 text-right" title="Share of total income">% of income</th>
               </tr>
             </thead>
             <tbody>
-              <SectionHeader label="Income" />
-              {data.report.income.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} />)}
-              <TotalRow label="Total Income" amount={data.report.income.total} totalIncome={data.report.income.total} />
+              <SectionHeader label="Income" cols={cols} />
+              {data.report.income.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompare} />)}
+              <TotalRow label="Total Income" amount={data.report.income.total} totalIncome={data.report.income.total} compareAmount={cmp?.income.total} showCompare={showCompare} />
 
-              <SectionHeader label="Cost of Sales" />
-              {data.report.cogs.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} />)}
-              <TotalRow label="Total COGS" amount={data.report.cogs.total} totalIncome={data.report.income.total} />
-              <TotalRow label="Gross Profit" amount={data.report.grossProfit} totalIncome={data.report.income.total} />
+              <SectionHeader label="Cost of Sales" cols={cols} />
+              {data.report.cogs.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompare} />)}
+              <TotalRow label="Total COGS" amount={data.report.cogs.total} totalIncome={data.report.income.total} compareAmount={cmp?.cogs.total} showCompare={showCompare} />
+              <TotalRow label="Gross Profit" amount={data.report.grossProfit} totalIncome={data.report.income.total} compareAmount={cmp?.grossProfit} showCompare={showCompare} />
 
-              <SectionHeader label="Expenses" />
-              {data.report.expenses.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} />)}
-              <TotalRow label="Total Expenses" amount={data.report.expenses.total} totalIncome={data.report.income.total} />
+              <SectionHeader label="Expenses" cols={cols} />
+              {data.report.expenses.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompare} />)}
+              <TotalRow label="Total Expenses" amount={data.report.expenses.total} totalIncome={data.report.income.total} compareAmount={cmp?.expenses.total} showCompare={showCompare} />
 
-              <TotalRow label="Net Income" amount={data.report.netIncome} totalIncome={data.report.income.total} />
+              <TotalRow label="Net Income" amount={data.report.netIncome} totalIncome={data.report.income.total} compareAmount={cmp?.netIncome} showCompare={showCompare} />
             </tbody>
           </table>
         </div>
