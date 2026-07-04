@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { getFinanceClient } from "@/lib/finance/supabase";
+import { logBankLineEvents } from "@/lib/finance/bank-line-events";
 
 export const dynamic = "force-dynamic";
 
@@ -25,5 +26,16 @@ export async function POST(req: NextRequest) {
     { onConflict: "bank_line_id,invoice_id" },
   );
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Audit trail: who rejected this proposed pair. Best-effort.
+  await logBankLineEvents(
+    [{
+      lineId: body.bankLineId,
+      event: "reject_match",
+      oldValue: null,
+      newValue: { invoiceId: body.invoiceId },
+    }],
+    auth.user.name,
+  );
   return NextResponse.json({ ok: true });
 }

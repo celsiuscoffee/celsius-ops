@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFinanceClient } from "@/lib/finance/supabase";
+import { logBankLineEvents } from "@/lib/finance/bank-line-events";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,20 @@ export async function POST(req: NextRequest) {
   await client.from("fin_ap_match_rejections").upsert(
     { bank_line_id: line.id, invoice_id: invoiceId, reason: "unmatched" },
     { onConflict: "bank_line_id,invoice_id" },
+  );
+
+  // Audit trail: who unlinked this line from which invoice. Best-effort.
+  const inv = await prisma.invoice
+    .findUnique({ where: { id: invoiceId }, select: { invoiceNumber: true } })
+    .catch(() => null);
+  await logBankLineEvents(
+    [{
+      lineId: line.id,
+      event: "unmatch",
+      oldValue: { invoiceId, invoiceNumber: inv?.invoiceNumber ?? null },
+      newValue: null,
+    }],
+    auth.user.name,
   );
 
   return NextResponse.json({

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { OUTFLOW_CATEGORIES, INFLOW_CATEGORIES, categoryLabel } from "@/lib/finance/cash-categories";
-import { Loader2, CheckCircle2, AlertTriangle, HelpCircle, Copy, ArrowDownCircle, Paperclip } from "lucide-react";
+import { Loader2, CheckCircle2, AlertTriangle, HelpCircle, Copy, ArrowDownCircle, Paperclip, History } from "lucide-react";
 
 type ApMatch = {
   invoiceId: string; invoiceNumber: string | null; payee: string; amount: number; issueDate: string;
@@ -36,7 +36,7 @@ const fmtRM0 = (n: number) => `RM ${n.toLocaleString("en-MY", { maximumFractionD
 // Category lists + labels live in @/lib/finance/cash-categories (shared with
 // the Reports drill-down so both offer the same recategorization choices).
 
-type ReconTab = "categorise" | "review" | "matched" | "invoices" | "cashin";
+type ReconTab = "categorise" | "review" | "matched" | "invoices" | "cashin" | "bankrecon";
 
 export default function ReconPage() {
   const [days, setDays] = useState(90);
@@ -109,6 +109,7 @@ export default function ReconPage() {
               ["matched", "Matched", null],
               ["invoices", "Open invoices", data.summary.unmatchedInvoices],
               ["cashin", "Cash-in", null],
+              ["bankrecon", "Bank recon", null],
             ] as [ReconTab, string, number | null][]).map(([id, label, count]) => (
               <button key={id} onClick={() => setTab(id)}
                 className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors ${tab === id ? "border-terracotta font-medium text-gray-900" : "border-transparent text-gray-500 hover:text-gray-800"}`}>
@@ -194,9 +195,141 @@ export default function ReconPage() {
                 )}
               </QueueCard>
             )}
+
+            {tab === "bankrecon" && <BankReconPanel />}
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Bank reconciliation tick.
+// The owner's monthly checklist: per account, does opening balance + the
+// month's ledger lines land exactly on the statement closing balance?
+// Zero delta earns a green check and can be signed off; anything else means
+// lines are missing or duplicated, or the statement balance is wrong.
+
+type ReconMonth = {
+  month: string;
+  opening: number | null;
+  linesTotal: number;
+  computedClose: number | null;
+  statedClose: number | null;
+  delta: number | null;
+  unclassified: number;
+  hasStatement: boolean;
+  signedOffBy: string | null;
+  signedOffAt: string | null;
+};
+type BankReconData = { accounts: { account: string; months: ReconMonth[] }[] };
+
+const fmtMonth = (m: string) =>
+  new Date(`${m}T00:00:00.000Z`).toLocaleDateString("en-MY", { month: "short", year: "numeric", timeZone: "UTC" });
+const fmtDay = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" });
+
+function BankReconPanel() {
+  const { data, isLoading, mutate } = useFetch<BankReconData>("/api/finance/bank-recon");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function signOff(account: string, month: string, undo: boolean) {
+    setBusy(account + month); setNote(null);
+    try {
+      const res = await fetch("/api/finance/bank-recon", {
+        method: undo ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account, month }),
+      });
+      const j = await res.json();
+      if (!res.ok) setNote(j.error ?? `Failed (${res.status})`);
+      else mutate();
+    } catch (e) { setNote(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
+
+  if (isLoading || !data) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>;
+  if (data.accounts.length === 0) return <p className="px-4 py-4 text-xs text-gray-400">No bank statements uploaded yet.</p>;
+
+  return (
+    <div className="space-y-4">
+      {note && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">{note}</p>}
+      {data.accounts.map(({ account, months }) => (
+        <QueueCard key={account} title={`Bank recon: ${account}`} desc="Opening balance plus the month's ledger lines must equal the statement close. Sign off each month once the delta is zero.">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] text-sm">
+              <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+                <th className="px-3 py-2 font-medium">Month</th>
+                <th className="px-3 py-2 text-right font-medium">Opening</th>
+                <th className="px-3 py-2 text-right font-medium">Lines total</th>
+                <th className="px-3 py-2 text-right font-medium">Computed close</th>
+                <th className="px-3 py-2 text-right font-medium">Statement close</th>
+                <th className="px-3 py-2 text-right font-medium">Delta</th>
+                <th className="px-3 py-2 font-medium">Status</th>
+              </tr></thead>
+              <tbody className="divide-y">
+                {months.map((m) => {
+                  const key = account + m.month;
+                  if (!m.hasStatement) {
+                    return (
+                      <tr key={key} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{fmtMonth(m.month)}</td>
+                        <td colSpan={6} className="px-3 py-2 text-[11px] text-gray-400">no statement</td>
+                      </tr>
+                    );
+                  }
+                  const reconciled = m.delta != null && Math.abs(m.delta) <= 0.01;
+                  return (
+                    <tr key={key} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{fmtMonth(m.month)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">{m.opening == null ? <span className="text-gray-400">no prior statement</span> : fmtRM(m.opening)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                        {fmtRM(m.linesTotal)}
+                        {m.unclassified > 0 && <div className="text-[10px] font-sans text-amber-600">{m.unclassified} unclassified</div>}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{m.computedClose == null ? "" : fmtRM(m.computedClose)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{m.statedClose == null ? "" : fmtRM(m.statedClose)}</td>
+                      <td className="px-3 py-2 text-right">
+                        {m.delta == null ? (
+                          <span className="text-[11px] text-gray-400">n/a</span>
+                        ) : reconciled ? (
+                          <CheckCircle2 className="ml-auto h-4 w-4 text-green-600" />
+                        ) : (
+                          <span className="font-mono text-xs text-rose-600" title="lines missing or duplicated, or statement balance wrong">
+                            {fmtRM(m.delta)}
+                            <div className="text-[10px] font-sans text-rose-400">lines missing or duplicated, or statement balance wrong</div>
+                          </span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2">
+                        {m.signedOffBy ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700">
+                              Reconciled by {m.signedOffBy}{m.signedOffAt ? ` on ${fmtDay(m.signedOffAt)}` : ""}
+                            </span>
+                            <button onClick={() => signOff(account, m.month, true)} disabled={busy === key}
+                              className="text-[10px] text-gray-400 underline hover:text-gray-600 disabled:opacity-50">
+                              undo
+                            </button>
+                          </span>
+                        ) : reconciled ? (
+                          <button onClick={() => signOff(account, m.month, false)} disabled={busy === key}
+                            className="rounded border border-green-600/30 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+                            {busy === key ? "Signing off" : "Sign off"}
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-gray-400">fix delta first</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </QueueCard>
+      ))}
     </div>
   );
 }
@@ -342,6 +475,18 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
   const [attachOpen, setAttachOpen] = useState(false);
   const [attachments, setAttachments] = useState<{ id: string; filename: string; url: string | null }[] | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [events, setEvents] = useState<LineEvent[] | null>(null);
+
+  function toggleHistory() {
+    const next = !historyOpen;
+    setHistoryOpen(next);
+    if (next && events === null) {
+      fetch(`/api/finance/bank-lines/events?lineId=${row.bankLineId}`)
+        .then((res) => res.json().then((j) => setEvents(res.ok ? j.events : [])))
+        .catch(() => setEvents([]));
+    }
+  }
 
   async function loadAttachments() {
     try {
@@ -455,6 +600,14 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
             >
               <Paperclip className="h-3 w-3" />{attachments && attachments.length > 0 ? attachments.length : ""}
             </button>
+            <button
+              onClick={toggleHistory}
+              disabled={busy}
+              title="Who changed this line's category or match, and when"
+              className={`flex h-6 items-center rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${historyOpen ? "border-terracotta text-terracotta" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+            >
+              <History className="h-3 w-3" />
+            </button>
           </div>
         </td>
       </tr>
@@ -515,8 +668,52 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
           </td>
         </tr>
       )}
+      {historyOpen && (
+        <tr className="bg-gray-50/60">
+          <td colSpan={6} className="px-3 py-2">
+            {events === null ? (
+              <span className="text-[11px] text-gray-400">Loading history...</span>
+            ) : events.length === 0 ? (
+              <span className="text-[11px] text-gray-400">No manual changes recorded for this line yet.</span>
+            ) : (
+              <ul className="flex flex-col gap-0.5">
+                {events.map((e) => (
+                  <li key={e.id} className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                    <History className="h-3 w-3 shrink-0 text-gray-400" />
+                    <span>{fmtEventDay(e.created_at)}, {eventLabel(e)} by {e.actor ?? "system"}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </td>
+        </tr>
+      )}
     </>
   );
+}
+
+// Per-line audit trail (fin_bank_line_events), rendered as compact sentences
+// like "31 May, categorised RENT to EQUIPMENTS by Ammar".
+type LineEventValue = { category?: string | null; invoiceId?: string; invoiceNumber?: string | null; payee?: string | null; linkOnly?: boolean } | null;
+type LineEvent = { id: string; event: string; old_value: LineEventValue; new_value: LineEventValue; actor: string | null; created_at: string };
+
+const fmtEventDay = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-MY", { day: "numeric", month: "short" });
+
+function eventLabel(e: LineEvent): string {
+  const invoiceRef = (v: LineEventValue) => v?.invoiceNumber ?? (v?.payee ? `from ${v.payee}` : v?.invoiceId ?? "unknown");
+  switch (e.event) {
+    case "classify":
+      return `categorised ${e.old_value?.category ?? "unclassified"} to ${e.new_value?.category ?? "unclassified"}`;
+    case "match":
+      return `matched to invoice ${invoiceRef(e.new_value)}${e.new_value?.linkOnly ? " (link only)" : ""}`;
+    case "unmatch":
+      return `unmatched from invoice ${invoiceRef(e.old_value)}`;
+    case "reject_match":
+      return `rejected proposed match with invoice ${invoiceRef(e.new_value)}`;
+    default:
+      return e.event.replace(/_/g, " ");
+  }
 }
 
 function Tile({ icon, label, value, sub, tone, onClick, active }: { icon: React.ReactNode; label: string; value: number; sub?: string; tone: "green" | "amber" | "red" | "gray"; onClick: () => void; active?: boolean }) {

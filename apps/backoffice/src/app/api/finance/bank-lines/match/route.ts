@@ -7,26 +7,27 @@
 //                            route — then it's link-only, invoice untouched).
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, type SessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { writeApMatch, digitRuns, invoiceRefInDesc, type ApMatch } from "@/lib/finance/ap-match";
+import { logBankLineEvents } from "@/lib/finance/bank-line-events";
 
 export const dynamic = "force-dynamic";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
-async function guard(req: NextRequest) {
+async function guard(req: NextRequest): Promise<{ error: NextResponse | null; user: SessionUser | null }> {
   const auth = await requireAuth(req);
-  if (auth.error) return auth.error;
+  if (auth.error) return { error: auth.error, user: null };
   if (!["OWNER", "ADMIN"].includes(auth.user.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }), user: null };
   }
-  return null;
+  return { error: null, user: auth.user };
 }
 
 export async function GET(req: NextRequest) {
-  const err = await guard(req);
+  const { error: err } = await guard(req);
   if (err) return err;
   const bankLineId = new URL(req.url).searchParams.get("bankLineId");
   if (!bankLineId) return NextResponse.json({ error: "bankLineId required" }, { status: 400 });
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const err = await guard(req);
+  const { error: err, user } = await guard(req);
   if (err) return err;
   let body: { bankLineId?: string; invoiceId?: string } = {};
   try { body = await req.json(); } catch { /* handled below */ }
@@ -118,5 +119,15 @@ export async function POST(req: NextRequest) {
       data: { glTransactionId: null, glPostedAt: null },
     });
   }
+  // Audit trail: who linked this line to which invoice. Best-effort.
+  await logBankLineEvents(
+    [{
+      lineId: line.id,
+      event: "match",
+      oldValue: null,
+      newValue: { invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, payee: m.payee, linkOnly },
+    }],
+    user?.name,
+  );
   return NextResponse.json({ ok: true, linkOnly });
 }
