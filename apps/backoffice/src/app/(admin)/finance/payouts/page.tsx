@@ -7,6 +7,7 @@
 // server-windowed date range, client-side filter/sort, row-click detail drawer.
 
 import { useState, useMemo, useEffect } from "react";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { useFetch } from "@/lib/use-fetch";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, Badge, Button } from "@celsius/ui";
 import { Loader2, Search, X, ArrowUp, ArrowDown, ChevronsUpDown, Building2, Download, CheckCircle2, AlertTriangle } from "lucide-react";
@@ -211,12 +212,7 @@ export default function FinancePayoutsPage() {
               <option value="custom">Custom range…</option>
             </select>
           </label>
-          <label className="flex items-center gap-1">From
-            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPeriodSel("custom"); }} className="h-8 rounded-md border bg-background px-2 text-xs" />
-          </label>
-          <label className="flex items-center gap-1">To
-            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPeriodSel("custom"); }} className="h-8 rounded-md border bg-background px-2 text-xs" />
-          </label>
+          <DateRangePicker size="xs" start={dateFrom} end={dateTo} onChange={(s, e) => { setDateFrom(s); setDateTo(e); setPeriodSel("custom"); }} />
           <Button variant="outline" size="sm" className="h-8" onClick={exportCsv} disabled={filtered.length === 0} title="Export the filtered payouts to CSV">
             <Download className="mr-1 h-3 w-3" /> Export
           </Button>
