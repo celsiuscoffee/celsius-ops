@@ -348,14 +348,26 @@ export async function buildSourcedPnl(input: {
   const expenseLines: PnlLine[] = [];
   let totalExpenses = 0;
 
-  // Marketing — digital ads are brand-level (ad accounts carry no outlet), so
-  // attribute them to the default company only to avoid splitting/duplication.
-  if (companyId === defaultCompany) {
-    const adsAgg = await prisma.adsMetricDaily.aggregate({
-      _sum: { costMicros: true },
-      where: { date: { gte: dStart(start), lte: dEnd(end) } },
-    });
-    const adsSpend = round2(Number(adsAgg._sum.costMicros ?? 0) / 1_000_000);
+  // Marketing — Google Ads attributed PER OUTLET via the campaign's outletId
+  // (set in the ads module). A campaign tagged to an outlet lands in that
+  // outlet's / company's P&L; untagged brand-level campaigns stay with the
+  // default company. Per-outlet view shows only that outlet's tagged spend.
+  {
+    const adsByOutlet = await prisma.$queryRaw<{ outlet_id: string | null; spend: number }[]>(Prisma.sql`
+      SELECT c.outlet_id, COALESCE(SUM(m.cost_micros), 0)::float / 1e6 AS spend
+      FROM ads_metric_daily m
+      LEFT JOIN ads_campaign c ON c.id = m.campaign_id
+      WHERE m.date >= ${dStart(start)} AND m.date <= ${dEnd(end)}
+      GROUP BY c.outlet_id
+    `);
+    let adsSpend = 0;
+    for (const r of adsByOutlet) {
+      const oid = r.outlet_id;
+      if (oid && outletIds.includes(oid)) adsSpend += Number(r.spend);
+      // Untagged brand-level spend → default company, company-level view only.
+      else if (!oid && !outletId && companyId === defaultCompany) adsSpend += Number(r.spend);
+    }
+    adsSpend = round2(adsSpend);
     if (adsSpend) {
       expenseLines.push({ code: "MKT-ADS", name: "Marketing — Digital ads (Google)", amount: adsSpend, parentCode: null });
       totalExpenses += adsSpend;

@@ -14,6 +14,7 @@ import {
 } from "@celsius/ui";
 import { Loader2, Download, FileText, AlertTriangle } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { OUTFLOW_CATEGORIES, INFLOW_CATEGORIES, categoryLabel } from "@/lib/finance/cash-categories";
 
 // Accounting format: negatives in parentheses, the convention every
 // accounting package (Xero, QuickBooks, Bukku) uses on statements.
@@ -236,6 +237,15 @@ type DrillLine = {
   amount: number;
   debit: number;
   credit: number;
+  meta?: {
+    reference?: string | null;
+    category?: string | null;
+    company?: string | null;
+    account?: string | null;
+    isInterCo?: boolean;
+    classifiedBy?: string | null;
+    ruleName?: string | null;
+  };
 };
 
 // Common-size %: every P&L line expressed against total income — the standard
@@ -245,10 +255,25 @@ function pctOfIncome(amount: number, totalIncome: number): string {
   return `${((amount / totalIncome) * 100).toFixed(1)}%`;
 }
 
+// Period-over-period change vs the comparison column. Blank when there's
+// nothing to compare against; "new" when this period has a value and the
+// comparison was zero.
+function pctChange(cur: number, prev: number | null | undefined): string {
+  if (prev == null) return "";
+  if (prev === 0) return cur === 0 ? "" : "new";
+  const p = ((cur - prev) / Math.abs(prev)) * 100;
+  return `${p >= 0 ? "+" : ""}${p.toFixed(0)}%`;
+}
+
+// Compare-period date helpers (plain YYYY-MM-DD, no TZ shift).
+const addDaysStr = (s: string, n: number) => { const d = new Date(`${s}T00:00:00.000Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const addYearsStr = (s: string, n: number) => { const [y, m, d] = s.split("-"); return `${Number(y) + n}-${m}-${d}`; };
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+
 // Row components live at module scope (not inside PnlTab) so their
 // identity is stable across renders; ReportRow takes the drill-down
 // callback as a prop instead of closing over PnlTab state.
-function ReportRow({ line, totalIncome, onDrill }: { line: PnlLine; totalIncome: number; onDrill: (code: string) => void }) {
+function ReportRow({ line, totalIncome, onDrill, compareAmount, showCompare }: { line: PnlLine; totalIncome: number; onDrill: (code: string) => void; compareAmount?: number | null; showCompare?: boolean }) {
   return (
     <tr
       className="cursor-pointer border-t transition hover:bg-muted/30"
@@ -262,46 +287,65 @@ function ReportRow({ line, totalIncome, onDrill }: { line: PnlLine; totalIncome:
       </td>
       <td className="px-3 py-1.5">{line.name}</td>
       <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(line.amount)}</td>
+      {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">{compareAmount == null ? "—" : RM(compareAmount)}</td>}
+      {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctChange(line.amount, compareAmount)}</td>}
       <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctOfIncome(line.amount, totalIncome)}</td>
     </tr>
   );
 }
 
-function TotalRow({ label, amount, totalIncome, bold = true }: { label: string; amount: number; totalIncome: number; bold?: boolean }) {
+function TotalRow({ label, amount, totalIncome, bold = true, compareAmount, showCompare }: { label: string; amount: number; totalIncome: number; bold?: boolean; compareAmount?: number | null; showCompare?: boolean }) {
+  const f = bold ? "font-semibold" : "";
   return (
     <tr className="border-t bg-muted/30">
-      <td colSpan={2} className={`px-3 py-2 ${bold ? "font-semibold" : ""}`}>
+      <td colSpan={2} className={`px-3 py-2 ${f}`}>{label}</td>
+      <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${f}`}>{RM(amount)}</td>
+      {showCompare && <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground ${f}`}>{compareAmount == null ? "—" : RM(compareAmount)}</td>}
+      {showCompare && <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${f}`}>{pctChange(amount, compareAmount)}</td>}
+      <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${f}`}>{pctOfIncome(amount, totalIncome)}</td>
+    </tr>
+  );
+}
+
+function SectionHeader({ label, cols }: { label: string; cols: number }) {
+  return (
+    <tr>
+      <td colSpan={cols} className="bg-muted/50 px-3 py-1.5 text-xs uppercase tracking-wide text-muted-foreground">
         {label}
-      </td>
-      <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${bold ? "font-semibold" : ""}`}>
-        {RM(amount)}
-      </td>
-      <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${bold ? "font-semibold" : ""}`}>
-        {pctOfIncome(amount, totalIncome)}
       </td>
     </tr>
   );
 }
 
-function SectionHeader({ label }: { label: string }) {
-  return (
-    <tr>
-      <td colSpan={4} className="bg-muted/50 px-3 py-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </td>
-    </tr>
-  );
-}
+type CompareMode = "none" | "prev" | "year";
 
 function PnlTab() {
   const { start, end, outletId, consolidated } = useControls();
-  const qs = useMemo(
-    () => `start=${start}&end=${end}${consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : ""}`,
-    [start, end, outletId, consolidated],
-  );
-  const { data, error, isLoading } = useFetch<{ report: PnlReport }>(
+  const [compare, setCompare] = useState<CompareMode>("none");
+  const scope = consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : "";
+  const qs = useMemo(() => `start=${start}&end=${end}${scope}`, [start, end, scope]);
+  const { data, error, isLoading, mutate } = useFetch<{ report: PnlReport }>(
     `/api/finance/reports/pnl?${qs}`
   );
+  // Comparison period: the immediately-preceding equal-length window, or the
+  // same dates a year earlier. Fetched only when a comparison is selected.
+  const cmpRange = useMemo(() => {
+    if (compare === "prev") { const cEnd = addDaysStr(start, -1); return { s: addDaysStr(cEnd, -daysBetween(start, end)), e: cEnd }; }
+    if (compare === "year") return { s: addYearsStr(start, -1), e: addYearsStr(end, -1) };
+    return null;
+  }, [compare, start, end]);
+  const { data: cmpData } = useFetch<{ report: PnlReport }>(
+    cmpRange ? `/api/finance/reports/pnl?start=${cmpRange.s}&end=${cmpRange.e}${scope}` : null
+  );
+  const showCompare = compare !== "none" && !!cmpData;
+  const cmpByCode = useMemo(() => {
+    const m = new Map<string, number>();
+    const r = cmpData?.report;
+    if (r) for (const l of [...r.income.lines, ...r.cogs.lines, ...r.expenses.lines]) m.set(l.code, l.amount);
+    return m;
+  }, [cmpData]);
+  const cmp = cmpData?.report;
+  const cols = 4 + (showCompare ? 2 : 0);
   const [drillCode, setDrillCode] = useState<string | null>(null);
 
   return (
@@ -326,19 +370,31 @@ function PnlTab() {
 
       {data && (
         <>
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">Compare
+            <select value={compare} onChange={(e) => setCompare(e.target.value as CompareMode)}
+              className="h-7 rounded-md border bg-background px-1.5 text-xs">
+              <option value="none">off</option>
+              <option value="prev">previous period</option>
+              <option value="year">previous year</option>
+            </select>
+          </label>
+          {showCompare && cmpRange && <span className="text-[10px] text-muted-foreground tabular-nums">vs {cmpRange.s} → {cmpRange.e}</span>}
           <ExportCsvButton onExport={() => {
             const r = data.report;
-            const rows: Array<Array<string | number>> = [["Section", "Code", "Account", "Amount", "% of income"]];
-            const push = (section: string, lines: PnlLine[], total: number, totalLabel: string) => {
-              for (const l of lines) rows.push([section, l.code, l.name, l.amount, pctOfIncome(l.amount, r.income.total)]);
-              rows.push([section, "", totalLabel, total, pctOfIncome(total, r.income.total)]);
+            const head = ["Section", "Code", "Account", "Amount", ...(showCompare ? ["Compare", "Change %"] : []), "% of income"];
+            const rows: Array<Array<string | number>> = [head];
+            const cell = (l: PnlLine) => [l.code, l.name, l.amount, ...(showCompare ? [cmpByCode.get(l.code) ?? "", pctChange(l.amount, cmpByCode.get(l.code))] : []), pctOfIncome(l.amount, r.income.total)];
+            const tot = (label: string, amt: number, cAmt?: number | null) => ["", "", label, amt, ...(showCompare ? [cAmt ?? "", pctChange(amt, cAmt)] : []), pctOfIncome(amt, r.income.total)];
+            const push = (section: string, lines: PnlLine[], total: number, totalLabel: string, cTotal?: number | null) => {
+              for (const l of lines) rows.push([section, ...cell(l)]);
+              rows.push([section, ...tot(totalLabel, total, cTotal).slice(2)]);
             };
-            push("Income", r.income.lines, r.income.total, "Total Income");
-            push("Cost of Sales", r.cogs.lines, r.cogs.total, "Total COGS");
-            rows.push(["", "", "Gross Profit", r.grossProfit, pctOfIncome(r.grossProfit, r.income.total)]);
-            push("Expenses", r.expenses.lines, r.expenses.total, "Total Expenses");
-            rows.push(["", "", "Net Income", r.netIncome, pctOfIncome(r.netIncome, r.income.total)]);
+            push("Income", r.income.lines, r.income.total, "Total Income", cmp?.income.total);
+            push("Cost of Sales", r.cogs.lines, r.cogs.total, "Total COGS", cmp?.cogs.total);
+            rows.push(tot("Gross Profit", r.grossProfit, cmp?.grossProfit));
+            push("Expenses", r.expenses.lines, r.expenses.total, "Total Expenses", cmp?.expenses.total);
+            rows.push(tot("Net Income", r.netIncome, cmp?.netIncome));
             downloadCsv(`pnl_${r.start}_${r.end}.csv`, rows);
           }} />
         </div>
@@ -349,24 +405,26 @@ function PnlTab() {
                 <th className="whitespace-nowrap px-3 py-2">Code</th>
                 <th className="px-3 py-2">Account</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right">Amount</th>
+                {showCompare && <th className="whitespace-nowrap px-3 py-2 text-right">{compare === "year" ? "Prev year" : "Prev period"}</th>}
+                {showCompare && <th className="whitespace-nowrap px-3 py-2 text-right" title="Change vs comparison period">Δ</th>}
                 <th className="whitespace-nowrap px-3 py-2 text-right" title="Share of total income">% of income</th>
               </tr>
             </thead>
             <tbody>
-              <SectionHeader label="Income" />
-              {data.report.income.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} />)}
-              <TotalRow label="Total Income" amount={data.report.income.total} totalIncome={data.report.income.total} />
+              <SectionHeader label="Income" cols={cols} />
+              {data.report.income.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompare} />)}
+              <TotalRow label="Total Income" amount={data.report.income.total} totalIncome={data.report.income.total} compareAmount={cmp?.income.total} showCompare={showCompare} />
 
-              <SectionHeader label="Cost of Sales" />
-              {data.report.cogs.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} />)}
-              <TotalRow label="Total COGS" amount={data.report.cogs.total} totalIncome={data.report.income.total} />
-              <TotalRow label="Gross Profit" amount={data.report.grossProfit} totalIncome={data.report.income.total} />
+              <SectionHeader label="Cost of Sales" cols={cols} />
+              {data.report.cogs.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompare} />)}
+              <TotalRow label="Total COGS" amount={data.report.cogs.total} totalIncome={data.report.income.total} compareAmount={cmp?.cogs.total} showCompare={showCompare} />
+              <TotalRow label="Gross Profit" amount={data.report.grossProfit} totalIncome={data.report.income.total} compareAmount={cmp?.grossProfit} showCompare={showCompare} />
 
-              <SectionHeader label="Expenses" />
-              {data.report.expenses.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} />)}
-              <TotalRow label="Total Expenses" amount={data.report.expenses.total} totalIncome={data.report.income.total} />
+              <SectionHeader label="Expenses" cols={cols} />
+              {data.report.expenses.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompare} />)}
+              <TotalRow label="Total Expenses" amount={data.report.expenses.total} totalIncome={data.report.income.total} compareAmount={cmp?.expenses.total} showCompare={showCompare} />
 
-              <TotalRow label="Net Income" amount={data.report.netIncome} totalIncome={data.report.income.total} />
+              <TotalRow label="Net Income" amount={data.report.netIncome} totalIncome={data.report.income.total} compareAmount={cmp?.netIncome} showCompare={showCompare} />
             </tbody>
           </table>
         </div>
@@ -388,7 +446,7 @@ function PnlTab() {
             )}
           </SheetHeader>
           {drillCode && data && (
-            <DrillDown code={drillCode} start={data.report.start} end={data.report.end} outletId={outletId || undefined} />
+            <DrillDown code={drillCode} start={data.report.start} end={data.report.end} outletId={outletId || undefined} consolidated={consolidated} onChanged={() => mutate()} />
           )}
         </SheetContent>
       </Sheet>
@@ -396,28 +454,49 @@ function PnlTab() {
   );
 }
 
-function DrillDown({ code, start, end, outletId }: { code: string; start: string; end: string; outletId?: string }) {
-  const { data, isLoading } = useFetch<{ lines: DrillLine[] }>(
-    `/api/finance/reports/drilldown?accountCode=${encodeURIComponent(code)}&start=${start}&end=${end}${outletId ? `&outletId=${outletId}` : ""}`
+function DrillDown({ code, start, end, outletId, consolidated, onChanged }: { code: string; start: string; end: string; outletId?: string; consolidated?: boolean; onChanged?: () => void }) {
+  const { data, isLoading, mutate } = useFetch<{ lines: DrillLine[] }>(
+    `/api/finance/reports/drilldown?accountCode=${encodeURIComponent(code)}&start=${start}&end=${end}${consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : ""}`
   );
+  const { data: acctData } = useFetch<{ accounts: { code: string; name: string }[] }>("/api/finance/accounts");
+  const accountNames = new Map((acctData?.accounts ?? []).map((a) => [a.code, a.name]));
+  const [openRow, setOpenRow] = useState<string | null>(null);
+  const [busyRow, setBusyRow] = useState<string | null>(null);
+  const [rowNote, setRowNote] = useState<Record<string, string>>({});
+
+  // Recategorise a bank line straight from the report — the accounting-software
+  // way. Books it to the new category (GL re-keys), then refreshes the drill and
+  // the P&L behind it.
+  async function recategorise(bankLineId: string, category: string) {
+    if (!category) return;
+    setBusyRow(bankLineId); setRowNote((n) => ({ ...n, [bankLineId]: "" }));
+    try {
+      const res = await fetch("/api/finance/bank-lines/classify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankLineId, category }),
+      });
+      const j = await res.json();
+      if (!res.ok) setRowNote((n) => ({ ...n, [bankLineId]: j.error ?? `Failed (${res.status})` }));
+      else { await mutate(); onChanged?.(); }
+    } catch (e) { setRowNote((n) => ({ ...n, [bankLineId]: e instanceof Error ? e.message : String(e) })); }
+    finally { setBusyRow(null); }
+  }
   if (isLoading) return <div className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>;
   if (!data) return null;
   if (data.lines.length === 0) {
     return <div className="p-6 text-sm text-muted-foreground">No entries in this period.</div>;
   }
 
-  // Source drills are one-sided (all debits or all credits) — show a single
-  // Amount column so nothing gets pushed off-screen. Debit/Credit columns only
-  // when the entries genuinely mix both sides (ledger drills).
   const hasDebit = data.lines.some((l) => l.debit > 0);
   const hasCredit = data.lines.some((l) => l.credit > 0);
   const oneSided = !(hasDebit && hasCredit);
   const amountOf = (l: DrillLine) => (l.debit > 0 ? l.debit : l.credit > 0 ? l.credit : l.amount);
   const totalDebit = data.lines.reduce((s, l) => s + l.debit, 0);
   const totalCredit = data.lines.reduce((s, l) => s + l.credit, 0);
+  // Multi-company drill (consolidated) → show which entity each line belongs to.
+  const showCompany = consolidated && data.lines.some((l) => l.meta?.company);
+  const cols = 2 + (showCompany ? 1 : 0) + (oneSided ? 1 : 2);
 
-  // "Vendor · INV-123 · Outlet" reads as one noisy wrapping line — keep the
-  // first segment as the entry title and demote the rest to a muted meta line.
   const splitDesc = (d: string): [string, string | null] => {
     const parts = d.split(" · ");
     return parts.length > 1 ? [parts[0], parts.slice(1).join(" · ")] : [d, null];
@@ -425,31 +504,39 @@ function DrillDown({ code, start, end, outletId }: { code: string; start: string
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-      <table className="w-full table-fixed text-sm">
+      <table className="w-full text-sm">
         <thead className="sticky top-0 bg-background text-left text-xs uppercase tracking-wide text-muted-foreground">
           <tr className="border-b">
-            <th className="w-20 py-2 pr-2 font-medium">Date</th>
+            <th className="w-16 py-2 pr-2 font-medium">Date</th>
             <th className="py-2 pr-2 font-medium">Description</th>
+            {showCompany && <th className="w-36 py-2 pr-2 font-medium">Company</th>}
             {oneSided
               ? <th className="w-28 py-2 text-right font-medium">Amount</th>
               : <>
-                  <th className="w-28 py-2 text-right font-medium">Debit</th>
-                  <th className="w-28 py-2 text-right font-medium">Credit</th>
+                  <th className="w-24 py-2 text-right font-medium">Debit</th>
+                  <th className="w-24 py-2 text-right font-medium">Credit</th>
                 </>}
           </tr>
         </thead>
         <tbody className="divide-y">
           {data.lines.map((l, i) => {
-            const [main, meta] = splitDesc(l.description);
+            const [main, metaLine] = splitDesc(l.description);
+            const key = `${l.transactionId}-${i}`;
+            const expandable = !!l.meta;
+            const open = openRow === key;
             return (
-              <tr key={`${l.transactionId}-${i}`} className="align-top">
-                <td className="whitespace-nowrap py-2 pr-2 text-xs tabular-nums text-muted-foreground">
-                  {l.txnDate.slice(5)}
-                </td>
+              <Fragment key={key}>
+              <tr className={`align-top ${expandable ? "cursor-pointer hover:bg-muted/30" : ""}`}
+                  onClick={expandable ? () => setOpenRow(open ? null : key) : undefined}
+                  title={expandable ? "Click to see the transaction detail" : undefined}>
+                <td className="whitespace-nowrap py-2 pr-2 text-xs tabular-nums text-muted-foreground">{l.txnDate.slice(5)}</td>
                 <td className="break-words py-2 pr-2">
-                  {main}
-                  {meta && <div className="text-[11px] leading-snug text-muted-foreground">{meta}</div>}
+                  <span className="flex items-start gap-1">
+                    {expandable && <span className="mt-0.5 text-[10px] text-muted-foreground">{open ? "▾" : "▸"}</span>}
+                    <span>{main}{metaLine && <span className="block text-[11px] leading-snug text-muted-foreground">{metaLine}</span>}</span>
+                  </span>
                 </td>
+                {showCompany && <td className="py-2 pr-2 text-xs text-muted-foreground">{l.meta?.company ?? "—"}</td>}
                 {oneSided
                   ? <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(amountOf(l))}</td>
                   : <>
@@ -457,12 +544,39 @@ function DrillDown({ code, start, end, outletId }: { code: string; start: string
                       <td className="whitespace-nowrap py-2 text-right tabular-nums">{l.credit ? RM(l.credit) : ""}</td>
                     </>}
               </tr>
+              {open && l.meta && (
+                <tr className="bg-muted/20">
+                  <td colSpan={cols} className="px-3 py-2">
+                    <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-[11px]">
+                      {l.meta.account && (<><dt className="text-muted-foreground">Bank account</dt><dd>{l.meta.account}</dd></>)}
+                      {l.meta.reference && (<><dt className="text-muted-foreground">Reference</dt><dd className="break-words">{l.meta.reference}</dd></>)}
+                      {l.meta.category !== undefined && (<><dt className="text-muted-foreground">Category</dt><dd>{l.meta.category ? l.meta.category.toLowerCase().replace(/_/g, " ") : "unclassified"}</dd></>)}
+                      <><dt className="text-muted-foreground">Inter-company</dt><dd>{l.meta.isInterCo ? "yes" : "no"}</dd></>
+                      {(l.meta.classifiedBy || l.meta.ruleName) && (<><dt className="text-muted-foreground">Classified</dt><dd>{l.meta.classifiedBy ?? "rule"}{l.meta.ruleName ? ` · ${l.meta.ruleName}` : ""}</dd></>)}
+                    </dl>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[11px] text-muted-foreground">Recategorise to</span>
+                      <select defaultValue="" disabled={busyRow === l.transactionId}
+                        onChange={(e) => { recategorise(l.transactionId, e.target.value); e.target.value = ""; }}
+                        className="h-7 max-w-[280px] rounded border bg-background px-1 text-[11px] disabled:opacity-50">
+                        <option value="" disabled>Choose a category…</option>
+                        {(l.credit > 0 ? INFLOW_CATEGORIES : OUTFLOW_CATEGORIES).map((c) => (
+                          <option key={c} value={c}>{categoryLabel(c, accountNames)}</option>
+                        ))}
+                      </select>
+                      {busyRow === l.transactionId && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                      {rowNote[l.transactionId] && <span className="text-[10px] text-rose-600">{rowNote[l.transactionId]}</span>}
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             );
           })}
         </tbody>
         <tfoot>
           <tr className="border-t-2 font-semibold">
-            <td className="py-2 pr-2" colSpan={2}>Total · {data.lines.length} entries</td>
+            <td className="py-2 pr-2" colSpan={showCompany ? 3 : 2}>Total · {data.lines.length} entries</td>
             {oneSided
               ? <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(totalDebit + totalCredit)}</td>
               : <>
