@@ -80,4 +80,6 @@ and the migration guard. Always typecheck before pushing.
 - `docs/finance-module-spec.md`, `docs/hr-payroll-spec.md` — module specs
 - `docs/design/` — business-loop specs and retrospectives (procurement, ops KPI
   pulse, reviews recovery, SMS/loyalty, GBP)
-- `.claude/skills/` — executable runbooks (db-migration, ota-release, procurement-e2e)
+- `.claude/skills/` — executable runbooks (db-migration, ota-release,
+  procurement-e2e, finance-module, sentry-triage)
+- `.claude/workflows/` — named multi-agent workflows (rls-audit)

@@ -21,6 +21,16 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 - 2026-07-04 — Stock accuracy is shadow-only (consumption engine off); reorder
   runs off receipts − wastage/transfers, not sales. Going live needs unit
   normalisation + recipe import (`docs/design/procurement-qa-2026-06-26.md`).
+- 2026-07-04 — RLS: only `orders` and `order_items` have it enabled; everything
+  else goes through the service-role key. Path B (key hardening) chosen for
+  now, Path A (per-table policies) is the destination; all Path B checkboxes in
+  `docs/rls-strategy.md` are still unticked.
+- 2026-07-04 — 14 Vercel crons fail silently into logs (no heartbeat
+  monitoring wired yet). `reconcile-pending` (order, every 1 min) is the
+  payments-critical one. See `docs/monitoring-setup.md`.
+- 2026-07-04 — Exception-inbox corrections update `fin_agent_decisions`
+  (`corrected=true, corrected_to=…`) — this is the finance agents' eval/
+  retraining dataset. Preserve the write path in any refactor.
 
 ## General rules
 
@@ -44,9 +54,12 @@ _None recorded yet. Format:_
 
 ## Resume pointer
 
-- 2026-07-04 — Claude Code harness scaffolding added (this file, root
-  `CLAUDE.md`, `.claude/skills/{db-migration,ota-release,procurement-e2e}`).
-  Next candidates: a skill for the finance close process
-  (`docs/finance-module-spec.md`), a scheduled routine for Sentry triage
-  (Sentry MCP already configured in `.mcp.json`), and an eval loop built from
-  finance exception-inbox resolutions.
+- 2026-07-04 — Harness scaffolding rounds 1+2 done: root `CLAUDE.md`, this
+  file, skills `{db-migration,ota-release,procurement-e2e,finance-module,
+  sentry-triage}`, workflow `.claude/workflows/rls-audit.js`, and a nightly
+  Sentry-triage routine scheduled (05:00 MYT, fresh session per run —
+  manage via the Routines/triggers list).
+  Next candidates: run the `rls-audit` workflow and act on the report;
+  build the finance eval replay (corrected `fin_agent_decisions` rows →
+  regression set per agent, see finance-module skill); wire cron heartbeat
+  monitors (`docs/monitoring-setup.md` §2).
