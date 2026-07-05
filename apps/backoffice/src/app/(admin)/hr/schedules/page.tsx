@@ -2,7 +2,7 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { minConcurrentInSlot } from "@/lib/hr/coverage";
-import { useState, useMemo, useEffect } from "react";
+import { Fragment, useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   Bot, CalendarDays, Send, Loader2, ArrowLeftRight,
@@ -1175,14 +1175,33 @@ function DayView({
   const working = dayShifts.filter((s) => s.notes !== "rest_day");
   const onLeave = grid.leaves.filter((l) => date >= l.start_date && date <= l.end_date);
 
-  // Group by identical shift (label + span), ordered by start time.
-  const groups = new Map<string, { label: string; start: string; end: string; shifts: Shift[] }>();
-  for (const s of [...working].sort((a, b) => a.start_time.localeCompare(b.start_time))) {
-    const key = `${s.start_time}-${s.end_time}-${s.role_type ?? ""}`;
-    const g = groups.get(key) ?? { label: s.role_type || "Shift", start: s.start_time, end: s.end_time, shifts: [] };
-    g.shifts.push(s);
-    groups.set(key, g);
+  // Hour-by-hour timeline: one row per person, one column per opening hour,
+  // FOH and BOH sectioned so each hour's head-split is readable at a glance.
+  const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  const spanOf = (s: Shift) => {
+    const start = toMin(s.start_time);
+    let end = toMin(s.end_time);
+    if (end <= start) end = 24 * 60; // closing shift ending at midnight
+    return { start, end };
+  };
+  const sorted = [...working].sort(
+    (a, b) => a.start_time.localeCompare(b.start_time) || a.end_time.localeCompare(b.end_time),
+  );
+  const fohRows = sorted.filter((s) => !isBOH(s.user_id));
+  const bohRows = sorted.filter((s) => isBOH(s.user_id));
+  let minH = 24;
+  let maxH = 0;
+  for (const s of working) {
+    const { start, end } = spanOf(s);
+    minH = Math.min(minH, Math.floor(start / 60));
+    maxH = Math.max(maxH, Math.ceil(end / 60));
   }
+  const hours = working.length ? Array.from({ length: maxH - minH }, (_, i) => minH + i) : [];
+  const covers = (s: Shift, h: number) => {
+    const { start, end } = spanOf(s);
+    return start < (h + 1) * 60 && end > h * 60;
+  };
+  const countAt = (list: Shift[], h: number) => list.filter((s) => covers(s, h)).length;
   const cov = gate?.coverage?.find((c) => c.date === date);
 
   return (
@@ -1213,59 +1232,93 @@ function DayView({
         )}
       </div>
 
-      {groups.size === 0 && (
+      {working.length === 0 && (
         <div className="rounded-xl border bg-card py-12 text-center text-sm text-muted-foreground">
           No shifts on {date} — use the week view to assign.
         </div>
       )}
 
-      {[...groups.values()].map((g) => {
-        const boh = g.shifts.filter((s) => isBOH(s.user_id));
-        const foh = g.shifts.filter((s) => !isBOH(s.user_id));
-        const crew = (s: Shift) => (
-          <li
-            key={s.id}
-            className={`rounded-lg border px-3 py-2 text-sm ${
-              s.notes === "pt_suggestion" ? "border-dashed border-amber-400 bg-amber-50" : "bg-muted/30"
-            }`}
-          >
-            <span className="font-medium">
-              {s.notes === "pt_suggestion" ? "PT? " : ""}
-              {nameOf.get(s.user_id) ?? s.user_id.slice(0, 8)}
-            </span>
-            {positionOf.get(s.user_id) && (
-              <span className="ml-1 text-xs text-muted-foreground">· {positionOf.get(s.user_id)}</span>
-            )}
-          </li>
-        );
-        return (
-          <div key={`${g.start}-${g.end}-${g.label}`} className="rounded-xl border bg-card p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold">{g.label}</h3>
-              <span className="text-sm text-muted-foreground">
-                {g.start.slice(0, 5)} – {g.end.slice(0, 5)} · {g.shifts.length} pax
-                {boh.length > 0 && ` (${foh.length} FOH / ${boh.length} BOH)`}
-              </span>
-            </div>
-            {foh.length > 0 && (
-              <>
-                <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Front of house · {foh.length}
-                </div>
-                <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{foh.map(crew)}</ul>
-              </>
-            )}
-            {boh.length > 0 && (
-              <>
-                <div className={`mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground ${foh.length > 0 ? "mt-3" : ""}`}>
-                  Back of house · {boh.length}
-                </div>
-                <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{boh.map(crew)}</ul>
-              </>
-            )}
-          </div>
-        );
-      })}
+      {working.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border bg-card p-4">
+          <table className="w-full border-separate border-spacing-0 text-sm">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-10 bg-card pr-3 text-left font-medium text-muted-foreground">
+                  Staff
+                </th>
+                {hours.map((h) => (
+                  <th key={h} className="min-w-8 px-0.5 pb-1 text-center text-xs font-medium text-muted-foreground">
+                    {String(h % 24).padStart(2, "0")}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { title: "Front of house", list: fohRows, fill: "bg-terracotta/80", count: "text-terracotta" },
+                { title: "Back of house", list: bohRows, fill: "bg-slate-500/80", count: "text-slate-600" },
+              ]
+                .filter((sec) => sec.list.length > 0)
+                .map((sec) => (
+                  <Fragment key={sec.title}>
+                    <tr>
+                      <td
+                        colSpan={hours.length + 1}
+                        className="sticky left-0 bg-card pt-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                      >
+                        {sec.title} · {sec.list.length}
+                      </td>
+                    </tr>
+                    {sec.list.map((s) => (
+                      <tr key={s.id}>
+                        <td className="sticky left-0 z-10 whitespace-nowrap bg-card py-0.5 pr-3">
+                          <span className="font-medium">
+                            {s.notes === "pt_suggestion" ? "PT? " : ""}
+                            {nameOf.get(s.user_id) ?? s.user_id.slice(0, 8)}
+                          </span>
+                          {positionOf.get(s.user_id) && (
+                            <span className="ml-1 text-xs text-muted-foreground">· {positionOf.get(s.user_id)}</span>
+                          )}
+                        </td>
+                        {hours.map((h) => (
+                          <td key={h} className="p-0" title={`${s.start_time.slice(0, 5)} – ${s.end_time.slice(0, 5)}`}>
+                            {covers(s, h) && (
+                              <div
+                                className={`h-5 ${
+                                  s.notes === "pt_suggestion"
+                                    ? "border border-dashed border-amber-500 bg-amber-200"
+                                    : sec.fill
+                                } ${!covers(s, h - 1) ? "rounded-l" : ""} ${!covers(s, h + 1) ? "rounded-r" : ""}`}
+                              />
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    <tr>
+                      <td className="sticky left-0 z-10 bg-card py-0.5 pr-3 text-xs text-muted-foreground">on shift</td>
+                      {hours.map((h) => (
+                        <td key={h} className={`text-center text-xs font-semibold ${sec.count}`}>
+                          {countAt(sec.list, h) || ""}
+                        </td>
+                      ))}
+                    </tr>
+                  </Fragment>
+                ))}
+              <tr>
+                <td className="sticky left-0 z-10 border-t bg-card py-1 pr-3 text-xs font-medium text-muted-foreground">
+                  Total
+                </td>
+                {hours.map((h) => (
+                  <td key={h} className="border-t text-center text-xs font-semibold">
+                    {countAt(working, h) || ""}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {(resting.length > 0 || onLeave.length > 0) && (
         <div className="rounded-xl border bg-card p-4">
