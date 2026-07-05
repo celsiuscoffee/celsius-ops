@@ -306,56 +306,87 @@ function addMonths(s: string, n: number): string {
 // Cheapest active supplier cost per BASE unit, per stock product — the same
 // basis the BOM/menu costing uses. Values physical stock counts for the COGS
 // formula (Opening + Purchases − Closing).
-async function costPerBaseUnit(): Promise<Map<string, number>> {
+// Two cost views, because a stock count line can be recorded in EITHER unit:
+//  - byBase   : cheapest supplier cost per BASE unit (per g / ml / piece),
+//               used when a count line has NO productPackageId (countedQty is
+//               a base quantity like 86000 ml).
+//  - byPackage: cheapest supplier price for a SPECIFIC package, used when the
+//               line carries a productPackageId (countedQty is a package count
+//               like 4 cartons). Valuing those against the per-base cost was
+//               the bug: it divided every packaged line by its conversion
+//               factor (24000x, 1000x) down to pennies, so whole counts read
+//               RM40 and got rejected, forcing the purchases proxy.
+type CostMaps = { byBase: Map<string, number>; byPackage: Map<string, number> };
+async function costPerBaseUnit(): Promise<CostMaps> {
   const sps = await prisma.supplierProduct.findMany({
     where: { isActive: true, price: { gt: 0 } },
-    select: { productId: true, price: true, productPackage: { select: { conversionFactor: true } }, supplier: { select: { supplierCode: true } } },
+    select: { productId: true, productPackageId: true, price: true, productPackage: { select: { conversionFactor: true } }, supplier: { select: { supplierCode: true } } },
   });
-  const m = new Map<string, number>();
+  const byBase = new Map<string, number>();
+  const byPackage = new Map<string, number>();
   for (const sp of sps) {
     if (sp.supplier?.supplierCode === "ADHOC") continue;
+    const price = Number(sp.price);
+    if (sp.productPackageId) {
+      const ex = byPackage.get(sp.productPackageId);
+      if (ex == null || price < ex) byPackage.set(sp.productPackageId, price);
+    }
     const conv = Number(sp.productPackage?.conversionFactor ?? 0);
     if (conv <= 0) continue;
-    const c = Number(sp.price) / conv;
-    const ex = m.get(sp.productId);
-    if (ex == null || c < ex) m.set(sp.productId, c);
+    const c = price / conv;
+    const ex = byBase.get(sp.productId);
+    if (ex == null || c < ex) byBase.set(sp.productId, c);
   }
-  return m;
+  return { byBase, byPackage };
 }
 
+// A single bar's ingredient stock is a few hundred ringgit per line at most; a
+// line worth more than this is a mis-keyed quantity (a base amount typed into
+// a package line, or vice versa). One such line once inflated a whole count to
+// RM10.9M, so a count carrying any is treated as broken and skipped.
+const MAX_PLAUSIBLE_LINE = 8000;
+// A full outlet bar count lands roughly here; outside the band the count is
+// partial or broken, so fall back to the proxy rather than print a wrong COGS.
+const MIN_PLAUSIBLE_TOTAL = 2000;
+const MAX_PLAUSIBLE_TOTAL = 60000;
+
 // Value inventory at a period boundary from the nearest finalized
-// (REVIEWED/SUBMITTED) stock count per outlet within 25 days. Returns null
-// (→ caller falls back to the purchases proxy) when no usable count exists, or
-// when a full count values implausibly low (a broken/mis-unit count) — so we
-// never print a wrong COGS. coverage exposes how complete the count was.
+// (REVIEWED/SUBMITTED) stock count per outlet within 25 days. Each line is
+// valued in its own recorded unit (package price when the line names a
+// package, base cost otherwise). Returns null (→ caller falls back to the
+// purchases proxy) when no usable count exists or a count values implausibly,
+// so a wrong COGS is never printed. coverage exposes how complete the count was.
 async function valueInventoryAt(
   outletIds: string[],
   boundary: Date,
-  cost: Map<string, number>,
+  cost: CostMaps,
 ): Promise<{ value: number; dates: string[]; coverage: string } | null> {
   if (!outletIds.length) return null;
   const since = new Date(boundary.getTime() - 25 * 86400_000);
   const counts = await prisma.stockCount.findMany({
     where: { outletId: { in: outletIds }, status: { in: ["REVIEWED", "SUBMITTED"] }, countDate: { gte: since, lte: boundary } },
     orderBy: { countDate: "desc" },
-    select: { outletId: true, countDate: true, items: { select: { productId: true, countedQty: true } } },
+    select: { outletId: true, countDate: true, items: { select: { productId: true, productPackageId: true, countedQty: true } } },
   });
-  // Per outlet, take the latest count that is a real FULL inventory: ≥100
-  // counted items and a plausible value (skip partials like a 65-item count
-  // and broken/mis-unit counts worth a few ringgit). Keep looking back through
-  // the window if the newest count is partial.
+  // Per outlet, take the latest count that is a real FULL inventory: >=100
+  // counted items and a plausible total. Keep looking back through the window
+  // if the newest count is partial or broken.
   const MIN_ITEMS = 100;
   const used = new Map<string, { date: Date; value: number; items: number; costed: number }>();
   for (const c of counts) {
     if (used.has(c.outletId)) continue;
-    let v = 0, n = 0, costed = 0;
+    let v = 0, n = 0, costed = 0, broken = false;
     for (const it of c.items) {
       if (it.countedQty == null) continue;
       n++;
-      const u = cost.get(it.productId);
-      if (u != null) { costed++; v += Number(it.countedQty) * u; }
+      // Package line -> its package price; base line -> per-base cost.
+      const u = it.productPackageId ? cost.byPackage.get(it.productPackageId) : cost.byBase.get(it.productId);
+      if (u == null) continue;
+      const lineValue = Number(it.countedQty) * u;
+      if (lineValue > MAX_PLAUSIBLE_LINE) { broken = true; break; }
+      costed++; v += lineValue;
     }
-    if (n < MIN_ITEMS || v < 2000) continue; // partial or broken — skip
+    if (broken || n < MIN_ITEMS || v < MIN_PLAUSIBLE_TOTAL || v > MAX_PLAUSIBLE_TOTAL) continue;
     used.set(c.outletId, { date: c.countDate, value: v, items: n, costed });
   }
   if (used.size === 0) return null;
