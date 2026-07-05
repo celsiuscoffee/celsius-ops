@@ -268,14 +268,16 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
 
     for (const [group, t] of [[opening, tpl.opening], [closing, tpl.closing]] as const) {
       for (const s of group) {
+        // Same row shape as a manual picker selection (cell route):
+        // role_type = template label, notes = template id.
         rows.push({
           user_id: s.id,
           shift_date: date,
           start_time: hhmmss(t.start_time),
           end_time: hhmmss(t.end_time),
-          role_type: isBOH(s.position) ? "BOH" : "FOH",
+          role_type: t.label,
           break_minutes: t.break_minutes,
-          notes: null,
+          notes: t.id,
         });
         ftHours.set(s.id, (ftHours.get(s.id) ?? 0) + workingHours(t));
       }
@@ -286,7 +288,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         shift_date: date,
         start_time: "00:00:00",
         end_time: "00:00:00",
-        role_type: "OFF",
+        role_type: "Rest Day",
         break_minutes: 0,
         notes: "rest_day",
       });
@@ -311,7 +313,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         .filter((s) => s.schedule_id !== existing?.id)
         .map((s) => `${s.user_id}:${s.shift_date}`),
     );
-    const ftHeads = (date: string) => rows.filter((r) => r.shift_date === date && r.notes === null).length;
+    const ftHeads = (date: string) => rows.filter((r) => r.shift_date === date && r.notes !== "rest_day").length;
     for (const rover of roverUsers) {
       const days = dates
         .filter((d) => daysOpen.has(dow(d)) && !busy.has(`${rover.id}:${d}`) && !onLeave.has(`${rover.id}:${d}`))
@@ -319,17 +321,17 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         .slice(0, 2);
       for (const date of days) {
         // Lead joins whichever anchor shift is thinner that day.
-        const openHeads = rows.filter((r) => r.shift_date === date && r.notes === null && r.start_time === hhmmss(tpl.opening.start_time)).length;
-        const closeHeads = rows.filter((r) => r.shift_date === date && r.notes === null && r.start_time === hhmmss(tpl.closing.start_time)).length;
+        const openHeads = rows.filter((r) => r.shift_date === date && r.notes !== "rest_day" && r.start_time === hhmmss(tpl.opening.start_time)).length;
+        const closeHeads = rows.filter((r) => r.shift_date === date && r.notes !== "rest_day" && r.start_time === hhmmss(tpl.closing.start_time)).length;
         const t = openHeads <= closeHeads ? tpl.opening : tpl.closing;
         rows.push({
           user_id: rover.id,
           shift_date: date,
           start_time: hhmmss(t.start_time),
           end_time: hhmmss(t.end_time),
-          role_type: "LEAD",
+          role_type: t.label,
           break_minutes: t.break_minutes,
-          notes: null,
+          notes: t.id,
         });
       }
       if (days.length > 0) {
@@ -398,7 +400,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       for (let h = startH; h < endH; h++) {
         const need = demand.get(`${dow(date)}:${h}`) ?? 0;
         const have = rows.filter(
-          (r) => r.shift_date === date && r.notes === null &&
+          (r) => r.shift_date === date && r.notes !== "rest_day" &&
             Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
         ).length;
         if (need > have) gapHours += need - have;
@@ -489,7 +491,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       shift_date: p.date,
       start_time: hhmmss(t.start_time),
       end_time: hhmmss(t.end_time),
-      role_type: "PT",
+      role_type: t.label,
       break_minutes: t.break_minutes,
       notes: "pt_suggestion",
     });
