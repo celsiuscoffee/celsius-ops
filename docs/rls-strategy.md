@@ -1,5 +1,10 @@
 # Row-Level Security strategy
 
+> **⚠️ Stale (2026-07-05):** the coverage claims below are outdated and some
+> table names in "Path A scoping" don't exist under those names. See
+> `docs/rls-access-map-2026-07-05.md` for the verified current map, real
+> table names, and the ranked fix list (including one critical finding).
+
 ## Where we stand today
 
 - Supabase Postgres holds 95+ tables
