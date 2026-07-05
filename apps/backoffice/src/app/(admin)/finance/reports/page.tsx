@@ -12,7 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@celsius/ui";
-import { Loader2, Download, FileText, AlertTriangle, ChevronRight, ChevronDown, ListTree, X } from "lucide-react";
+import { Loader2, Download, FileText, AlertTriangle, ChevronRight, ChevronDown, Paperclip, X } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { OUTFLOW_CATEGORIES, INFLOW_CATEGORIES, categoryLabel, categoryChipLabel } from "@/lib/finance/cash-categories";
 
@@ -887,7 +887,45 @@ type SourceLine = {
   direction: "DR" | "CR"; reference: string | null; category: string | null;
   isInterCo: boolean; classifiedBy: string | null; ruleName: string | null;
   apInvoiceId: string | null; matchedInvoice: MatchedInvoice | null;
+  attachments: number;
 };
+
+// Paperclip indicator on a bank line that has uploaded attachments (invoice,
+// receipt, charge advice). Clicking fetches the signed links lazily.
+function AttachmentBadge({ bankLineId, count }: { bankLineId: string; count: number }) {
+  const [open, setOpen] = useState(false);
+  const { data, isLoading } = useFetch<{ attachments: { id: string; filename: string; url: string | null }[] }>(
+    open ? `/api/finance/bank-lines/attach?bankLineId=${encodeURIComponent(bankLineId)}` : null
+  );
+  return (
+    <span className="relative inline-flex items-center">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        title={`${count} attachment${count > 1 ? "s" : ""}. Click to view.`}
+        className="inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:text-foreground hover:ring-1 hover:ring-ring"
+      >
+        <Paperclip className="h-3 w-3" /> {count}
+      </button>
+      {open && (
+        <span className="absolute left-0 top-full z-20 mt-1 w-56 rounded-md border bg-card p-2 shadow-lg">
+          {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          {(data?.attachments ?? []).map((a) =>
+            a.url ? (
+              <a key={a.id} href={a.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+                 className="block truncate py-0.5 text-[11px] underline-offset-2 hover:underline">
+                {a.filename}
+              </a>
+            ) : (
+              <span key={a.id} className="block truncate py-0.5 text-[11px] text-muted-foreground">{a.filename}</span>
+            )
+          )}
+          {data && data.attachments.length === 0 && <span className="text-[11px] text-muted-foreground">No attachments.</span>}
+        </span>
+      )}
+    </span>
+  );
+}
 
 // The bank statement lines a bank-agent journal was posted from, each with
 // the same fix-in-place chips as the P&L drill. A fix re-keys the journal,
@@ -915,6 +953,7 @@ function GlSourceLines({ transactionId, accountNames, onChanged }: {
           <span className="min-w-0 flex-1 break-words">{l.description}</span>
           <CategoryChip bankLineId={l.id} category={l.category} direction={l.direction} accountNames={accountNames} onSaved={refresh} />
           {l.matchedInvoice && <MatchedChip bankLineId={l.id} invoice={l.matchedInvoice} onSaved={refresh} />}
+          {l.attachments > 0 && <AttachmentBadge bankLineId={l.id} count={l.attachments} />}
           <span className="whitespace-nowrap tabular-nums">{RM(l.amount)} <span className="text-[10px] text-muted-foreground">{l.direction}</span></span>
         </div>
       ))}
@@ -1509,19 +1548,50 @@ function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
 }
 
 // ─── General Ledger tab ─────────────────────────────────────────
-type GlEntry = { transactionId: string; postedByAgent: string | null; date: string; txnType: string; description: string; debit: number; credit: number; balance: number };
-type Gl = { accountCode: string; accountName: string; start: string; end: string; opening: number; entries: GlEntry[]; closing: number; totalDebit: number; totalCredit: number };
+// Bukku-grade ledger view: multiple account sections, opening balance row,
+// Date / Ref / Contact / Description / Debit / Credit / Balance columns,
+// and every row expanding inline into the full journal entry (all legs,
+// posted-by provenance, and the source bank lines with fix-in-place chips).
+
+type GlEntry = {
+  transactionId: string; reference: string; postedByAgent: string | null;
+  actor: string | null; contact: string | null;
+  date: string; txnType: string; description: string; memo: string | null;
+  debit: number; credit: number; balance: number;
+};
+type GlAccountSection = {
+  account: { code: string; name: string; type: string };
+  opening: number; entries: GlEntry[]; closing: number;
+  totalDebit: number; totalCredit: number;
+};
+type GlMulti = { companyId: string; start: string; end: string; accounts: GlAccountSection[] };
+
+// Full journal detail behind one GL row, from /api/finance/transactions/:id.
+type JournalDetail = {
+  transaction: {
+    id: string; txn_date: string; description: string | null; txn_type: string;
+    posted_by_agent: string | null; agent_version: string | null; status: string; amount: number;
+  };
+  lines: { id: string; account_code: string; account_name: string | null; debit: number; credit: number; memo: string | null }[];
+};
+
+function glAgentLine(agent: string | null, agentVersion: string | null): string {
+  if (agent === "manual") return `Manual, ${agentVersion ?? "unknown"}`;
+  if (!agent) return "System";
+  const name = `${agent.charAt(0).toUpperCase()}${agent.slice(1)} agent`;
+  return agentVersion ? `${name}, ${agentVersion}` : name;
+}
 
 type CoaAccount = { code: string; name: string; type: string };
 
 // Searchable COA picker — nobody should have to know "6000-01" by heart.
 // Type a code OR a name fragment ("raw", "rental", "grab") and pick from the
 // chart of accounts, the way Xero's Account Transactions report does it.
-function AccountPicker({ value, onChange }: { value: string; onChange: (code: string) => void }) {
+function AccountPicker({ value, onChange, placeholder, exclude }: { value: string; onChange: (code: string) => void; placeholder?: string; exclude?: string[] }) {
   const { data } = useFetch<{ accounts: CoaAccount[] }>("/api/finance/accounts");
   const [q, setQ] = useState<string | null>(null); // null = not editing, show the selection
   const [open, setOpen] = useState(false);
-  const accounts = data?.accounts ?? [];
+  const accounts = (data?.accounts ?? []).filter((a) => !exclude?.includes(a.code));
   const current = accounts.find((a) => a.code === value);
   const shown = q !== null ? q : current ? `${current.code} · ${current.name}` : value;
   const t = (q ?? "").trim().toLowerCase();
@@ -1536,7 +1606,7 @@ function AccountPicker({ value, onChange }: { value: string; onChange: (code: st
         onFocus={() => { setQ(""); setOpen(true); }}
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
         onBlur={() => { setOpen(false); setQ(null); }}
-        placeholder="Search account code or name…"
+        placeholder={placeholder ?? "Search account code or name…"}
         className="h-8 w-64 sm:w-80 rounded-md border bg-background px-2 text-sm"
       />
       {open && matches.length > 0 && (
@@ -1560,87 +1630,306 @@ function AccountPicker({ value, onChange }: { value: string; onChange: (code: st
   );
 }
 
-function GlTab({ account, setAccount }: { account: string; setAccount: (c: string) => void }) {
+// The expanded panel behind one GL row: every leg of the journal with the
+// current account's leg highlighted, the provenance line, and (for
+// bank-agent journals) the source bank lines with fix-in-place chips.
+// Detail is fetched lazily on first expand and cached per transactionId in
+// the tab's state; a fix drops the cache so open panels reload fresh.
+function JournalPanel({ transactionId, currentAccount, accountNames, detail, onLoaded, onFixed }: {
+  transactionId: string;
+  currentAccount: string;
+  accountNames: Map<string, string>;
+  detail: JournalDetail | undefined;
+  onLoaded: (id: string, d: JournalDetail) => void;
+  onFixed: () => void;
+}) {
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (detail) return;
+    let alive = true;
+    setErr(null);
+    (async () => {
+      try {
+        const res = await fetch(`/api/finance/transactions/${transactionId}`);
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error ?? `Failed (${res.status})`);
+        if (alive) onLoaded(transactionId, j as JournalDetail);
+      } catch (e) {
+        if (alive) setErr(e instanceof Error ? e.message : String(e));
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch keyed on id + cache presence only
+  }, [transactionId, detail]);
+
+  if (err) return <div className="px-4 py-2 text-xs text-rose-600">{err}</div>;
+  if (!detail) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-2.5 text-xs text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading journal…
+      </div>
+    );
+  }
+
+  const t = detail.transaction;
+  return (
+    <div className="space-y-2 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        <span className="font-medium text-foreground">Journal {t.id.slice(0, 8).toUpperCase()}</span>
+        <span className="tabular-nums">{t.txn_date}</span>
+        <span>{t.txn_type}</span>
+        <span>Posted by {glAgentLine(t.posted_by_agent, t.agent_version)}</span>
+        {t.status !== "posted" && <span className="uppercase text-amber-600">{t.status}</span>}
+      </div>
+      {t.description && <div className="text-xs">{t.description}</div>}
+      <table className="w-full max-w-3xl text-xs">
+        <thead>
+          <tr className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+            <th className="py-1 pr-2 font-medium">Account</th>
+            <th className="py-1 pr-2 font-medium">Memo</th>
+            <th className="w-24 py-1 pr-2 text-right font-medium">Debit</th>
+            <th className="w-24 py-1 text-right font-medium">Credit</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {detail.lines.map((l) => {
+            const mine = l.account_code === currentAccount;
+            return (
+              <tr key={l.id} className={mine ? "bg-muted/60 font-medium" : ""}>
+                <td className="whitespace-nowrap py-1 pr-2">
+                  <span className="tabular-nums text-muted-foreground">{l.account_code}</span>{" "}
+                  {l.account_name ?? accountNames.get(l.account_code) ?? ""}
+                  {mine && <span className="ml-1.5 rounded-full border px-1.5 text-[10px] font-normal text-muted-foreground">this account</span>}
+                </td>
+                <td className="py-1 pr-2 text-muted-foreground">{l.memo ?? ""}</td>
+                <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">{Number(l.debit) ? RM(Number(l.debit)) : ""}</td>
+                <td className="whitespace-nowrap py-1 text-right tabular-nums">{Number(l.credit) ? RM(Number(l.credit)) : ""}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {t.posted_by_agent === "bank" && (
+        <div className="rounded-md border bg-background/60">
+          <GlSourceLines transactionId={transactionId} accountNames={accountNames} onChanged={onFixed} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One account section, Bukku style: header with code + name, opening balance
+// row, dated entries with a running balance, closing balance and totals.
+function GlAccountCard({ section, start, openRows, onToggle, detailCache, onDetailLoaded, accountNames, onFixed }: {
+  section: GlAccountSection;
+  start: string;
+  openRows: Set<string>;
+  onToggle: (key: string) => void;
+  detailCache: Record<string, JournalDetail>;
+  onDetailLoaded: (id: string, d: JournalDetail) => void;
+  accountNames: Map<string, string>;
+  onFixed: () => void;
+}) {
+  const a = section.account;
+  return (
+    <section className="rounded-lg border bg-card">
+      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b bg-muted/40 px-3 py-2">
+        <span className="text-sm font-semibold tabular-nums">{a.code}</span>
+        <span className="text-sm font-medium">{a.name}</span>
+        <span className="text-[10px] uppercase text-muted-foreground">{a.type}</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          Opening <span className="font-medium tabular-nums text-foreground">{RM(section.opening)}</span>
+        </span>
+      </header>
+      <div className="max-h-[70vh] overflow-auto">
+        <table className="w-full min-w-[880px] text-sm">
+          <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th className={`${TH} w-6`} />
+              <th className={`${TH} whitespace-nowrap`}>Date</th>
+              <th className={`${TH} whitespace-nowrap`} title="Journal voucher reference. Expand the row for the full entry.">Ref</th>
+              <th className={TH}>Contact</th>
+              <th className={TH}>Description</th>
+              <th className={`${TH} whitespace-nowrap text-right`}>Debit</th>
+              <th className={`${TH} whitespace-nowrap text-right`}>Credit</th>
+              <th className={`${TH} whitespace-nowrap text-right`}>Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-t bg-muted/20 text-muted-foreground">
+              <td className="py-1.5" />
+              <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums">{start}</td>
+              <td colSpan={3} className="px-3 py-1.5 text-xs">Opening balance</td>
+              <td colSpan={2} />
+              <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(section.opening)}</td>
+            </tr>
+            {section.entries.length === 0 && (
+              <tr className="border-t">
+                <td colSpan={8} className="px-3 py-4 text-center text-xs text-muted-foreground">
+                  No movements in this period. Opening equals closing.
+                </td>
+              </tr>
+            )}
+            {section.entries.map((e, i) => {
+              const key = `${a.code}:${e.transactionId}:${i}`;
+              const open = openRows.has(key);
+              return (
+                <Fragment key={key}>
+                  <tr
+                    className={`cursor-pointer border-t align-top transition ${i % 2 === 1 ? "bg-muted/20" : ""} hover:bg-muted/30`}
+                    onClick={() => onToggle(key)}
+                    title="Click to see the full journal entry"
+                  >
+                    <td className="py-1.5 pl-2 text-[10px] text-muted-foreground">{open ? "▾" : "▸"}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground">{e.date}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground" title={e.transactionId}>{e.reference}</td>
+                    <td className="max-w-[13rem] truncate px-3 py-1.5 text-xs" title={e.contact ?? undefined}>{e.contact ?? ""}</td>
+                    <td className="px-3 py-1.5 text-xs">
+                      {e.description}
+                      {e.memo && e.memo !== e.description && (
+                        <span className="block text-[11px] leading-snug text-muted-foreground">{e.memo}</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{e.debit ? RM(e.debit) : ""}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{e.credit ? RM(e.credit) : ""}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(e.balance)}</td>
+                  </tr>
+                  {open && (
+                    <tr className="border-t bg-muted/20">
+                      <td colSpan={8} className="p-0" onClick={(ev) => ev.stopPropagation()}>
+                        <JournalPanel
+                          transactionId={e.transactionId}
+                          currentAccount={a.code}
+                          accountNames={accountNames}
+                          detail={detailCache[e.transactionId]}
+                          onLoaded={onDetailLoaded}
+                          onFixed={onFixed}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t bg-muted/20 text-muted-foreground">
+              <td className="py-1.5" />
+              <td colSpan={4} className="px-3 py-1.5 text-xs">Closing balance</td>
+              <td colSpan={2} />
+              <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(section.closing)}</td>
+            </tr>
+            <tr className="border-t-2 font-semibold">
+              <td colSpan={5} className="px-3 py-2">Period total · {section.entries.length} entries</td>
+              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{RM(section.totalDebit)}</td>
+              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{RM(section.totalCredit)}</td>
+              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{RM(section.closing)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function GlTab({ accounts, setAccounts }: { accounts: string[]; setAccounts: (codes: string[]) => void }) {
   const { start, end } = useControls();
-  const { data, isLoading, error, mutate } = useFetch<{ report: Gl }>(`/api/finance/reports/general-ledger?account=${encodeURIComponent(account)}&start=${start}&end=${end}`);
-  const { data: acctData } = useFetch<{ accounts: { code: string; name: string }[] }>("/api/finance/accounts");
-  const accountNames = new Map((acctData?.accounts ?? []).map((a) => [a.code, a.name]));
-  // Which entry row is expanded to show the journal's source bank lines.
-  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const { data: acctData } = useFetch<{ accounts: CoaAccount[] }>("/api/finance/accounts");
+  const accountNames = useMemo(() => new Map((acctData?.accounts ?? []).map((a) => [a.code, a.name])), [acctData]);
+  const url = accounts.length
+    ? `/api/finance/reports/general-ledger?accounts=${encodeURIComponent(accounts.join(","))}&start=${start}&end=${end}`
+    : null;
+  const { data, isLoading, error, mutate } = useFetch<{ report: GlMulti }>(url);
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+  const [detailCache, setDetailCache] = useState<Record<string, JournalDetail>>({});
+
+  const toggleRow = (key: string) =>
+    setOpenRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  const onDetailLoaded = (id: string, d: JournalDetail) => setDetailCache((prev) => ({ ...prev, [id]: d }));
+  // A fix (recategorise, unmatch) re-keys journals: refetch the ledger and
+  // drop cached journal details so any open panel reloads fresh.
+  const onFixed = () => { setDetailCache({}); mutate(); };
+
+  const addAccount = (code: string) => { if (!accounts.includes(code)) setAccounts([...accounts, code]); };
+  const removeAccount = (code: string) => setAccounts(accounts.filter((c) => c !== code));
+
+  const exportCsv = () => {
+    if (!data?.report) return;
+    const r = data.report;
+    const rows: Array<Array<string | number>> = [["Account", "Date", "Ref", "Contact", "Description", "Debit", "Credit", "Balance"]];
+    for (const s of r.accounts) {
+      const label = `${s.account.code} ${s.account.name}`;
+      rows.push([label, "", "", "", "Opening balance", "", "", s.opening]);
+      for (const e of s.entries) rows.push([label, e.date, e.reference, e.contact ?? "", e.description, e.debit || "", e.credit || "", e.balance]);
+      rows.push([label, "", "", "", "Period total / closing", s.totalDebit, s.totalCredit, s.closing]);
+    }
+    downloadCsv(`general-ledger_${r.start}_${r.end}.csv`, rows);
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">Account
-          <AccountPicker value={account} onChange={setAccount} />
-        </label>
+        <span className="text-xs text-muted-foreground">Accounts</span>
+        {accounts.map((code) => (
+          <span key={code} className="inline-flex items-center gap-1 rounded-full border bg-muted/30 px-2 py-0.5 text-xs">
+            <span className="tabular-nums text-muted-foreground">{code}</span>
+            <span className="max-w-[14rem] truncate">{accountNames.get(code) ?? ""}</span>
+            <button
+              type="button"
+              onClick={() => removeAccount(code)}
+              title="Remove this account from the view"
+              className="rounded-full text-muted-foreground transition hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        <AccountPicker value="" onChange={addAccount} placeholder="Add account…" exclude={accounts} />
         <span className="text-xs text-muted-foreground tabular-nums">{start} → {end}</span>
         {data?.report && (
           <div className="ml-auto">
-            <ExportCsvButton onExport={() => {
-              const r = data.report;
-              const rows: Array<Array<string | number>> = [["Date", "Description", "Debit", "Credit", "Balance"]];
-              rows.push(["", "Opening balance", "", "", r.opening]);
-              for (const e of r.entries) rows.push([e.date, e.description, e.debit || "", e.credit || "", e.balance]);
-              rows.push(["", "Period total / closing", r.totalDebit, r.totalCredit, r.closing]);
-              downloadCsv(`general-ledger_${r.accountCode}_${r.start}_${r.end}.csv`, rows);
-            }} />
+            <ExportCsvButton onExport={exportCsv} />
           </div>
         )}
       </div>
-      {error ? <div className="py-12 text-center text-sm text-muted-foreground">No ledger for this account. Pick another account above.</div>
-      : isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
-        <div className="overflow-x-auto rounded-lg border">
-          <div className="border-b bg-muted/40 px-3 py-2 text-sm font-medium">{data.report.accountCode} · {data.report.accountName}</div>
-          <table className="w-full min-w-[640px] text-sm">
-            <thead><tr className="border-b text-left text-muted-foreground">
-              <th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Description</th>
-              <th className="px-3 py-2 text-right font-medium">Debit</th><th className="px-3 py-2 text-right font-medium">Credit</th><th className="px-3 py-2 text-right font-medium">Balance</th>
-            </tr></thead>
-            <tbody className="divide-y">
-              <tr className="bg-muted/20 text-muted-foreground"><td className="px-3 py-1.5" colSpan={4}>Opening balance</td><td className="px-3 py-1.5 text-right tabular-nums">{RM(data.report.opening)}</td></tr>
-              {data.report.entries.map((e, i) => (
-                <Fragment key={i}>
-                <tr className="hover:bg-muted/40">
-                  <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground tabular-nums">{e.date}</td>
-                  <td className="px-3 py-1.5 text-xs">
-                    <span className="flex items-center gap-1.5">
-                      <span className="min-w-0">{e.description}</span>
-                      {e.postedByAgent === "bank" && (
-                        <button
-                          type="button"
-                          onClick={() => setOpenIdx(openIdx === i ? null : i)}
-                          title="Show the source bank lines behind this journal"
-                          className={`shrink-0 rounded p-0.5 text-muted-foreground transition hover:text-foreground ${openIdx === i ? "bg-muted text-foreground" : ""}`}
-                        >
-                          <ListTree className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </span>
-                  </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{e.debit ? RM(e.debit) : ""}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{e.credit ? RM(e.credit) : ""}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{RM(e.balance)}</td>
-                </tr>
-                {openIdx === i && e.postedByAgent === "bank" && (
-                  <tr className="bg-muted/20">
-                    <td colSpan={5} className="p-0">
-                      <GlSourceLines transactionId={e.transactionId} accountNames={accountNames} onChanged={() => mutate()} />
-                    </td>
-                  </tr>
-                )}
-                </Fragment>
-              ))}
-              {data.report.entries.length === 0 && <tr><td colSpan={5} className="px-3 py-4 text-center text-xs text-muted-foreground">No movements in this period.</td></tr>}
-            </tbody>
-            <tfoot><tr className="border-t-2 font-semibold">
-              <td className="px-3 py-2" colSpan={2}>Period total / closing</td>
-              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.totalDebit)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.totalCredit)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{RM(data.report.closing)}</td>
-            </tr></tfoot>
-          </table>
+
+      {accounts.length === 0 && (
+        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+          No accounts selected. Add an account above to see its ledger.
         </div>
       )}
+      {error && accounts.length > 0 && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+          Failed to load the ledger. Check the account codes and try again.
+        </div>
+      )}
+      {!error && accounts.length > 0 && !data?.report && (
+        <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div>
+      )}
+      {!error && data?.report && (
+        <div className={`space-y-4 ${isLoading ? "opacity-60" : ""}`}>
+          {data.report.accounts.map((section) => (
+            <GlAccountCard
+              key={section.account.code}
+              section={section}
+              start={data.report.start}
+              openRows={openRows}
+              onToggle={toggleRow}
+              detailCache={detailCache}
+              onDetailLoaded={onDetailLoaded}
+              accountNames={accountNames}
+              onFixed={onFixed}
+            />
+          ))}
+        </div>
+      )}
+      <p className="text-[11px] text-muted-foreground">
+        Click any row to open the full journal entry: every leg, who posted it, and the source bank lines with fix-in-place category chips. Contact is best effort, derived from the bank payee, the matched invoice supplier, the sales channel, or the manual actor.
+      </p>
     </div>
   );
 }
@@ -1824,13 +2113,65 @@ function ReconTab() {
   );
 }
 
+const GL_ACCOUNTS_KEY = "finance:reports:gl-accounts";
+
 export default function FinanceReportsPage() {
   const [tab, setTab] = useState<"pnl" | "bs" | "cf" | "tb" | "gl" | "ap" | "recon" | "audit">("pnl");
-  const [glAccount, setGlAccount] = useState("1000-01"); // shared so TB rows can drill into GL
+  const [glAccounts, setGlAccounts] = useState<string[]>(["1000-01"]); // shared so TB rows can drill into GL
+  const [glHydrated, setGlHydrated] = useState(false);
   const controls = useReportControlsState();
   // Tabs driven by the shared date range + outlet filter. Recon has its own
   // matched-period control; Auditor pack works by fiscal year.
   const usesControls = tab !== "recon" && tab !== "audit";
+
+  // Deep link: /finance/reports?tab=gl&accounts=6505,6504&start=...&end=...
+  // URL wins over localStorage; localStorage restores the last GL selection.
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const acc = p.get("accounts");
+      const codes = (acc ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      if (codes.length) {
+        setGlAccounts([...new Set(codes)]);
+        setTab("gl");
+      } else {
+        const saved = localStorage.getItem(GL_ACCOUNTS_KEY);
+        if (saved) {
+          const arr = JSON.parse(saved) as unknown;
+          if (Array.isArray(arr) && arr.length && arr.every((x) => typeof x === "string")) setGlAccounts(arr as string[]);
+        }
+        if (p.get("tab") === "gl") setTab("gl");
+      }
+      const s = p.get("start"), e = p.get("end");
+      if (s && e && /^\d{4}-\d{2}-\d{2}$/.test(s) && /^\d{4}-\d{2}-\d{2}$/.test(e)) {
+        controls.setPreset("custom");
+        controls.setCustomStart(s);
+        controls.setCustomEnd(e);
+      }
+    } catch { /* ignore */ }
+    setGlHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time URL + localStorage read on mount
+  }, []);
+
+  useEffect(() => {
+    if (!glHydrated) return;
+    try { localStorage.setItem(GL_ACCOUNTS_KEY, JSON.stringify(glAccounts)); } catch { /* ignore */ }
+  }, [glHydrated, glAccounts]);
+
+  // Keep the URL shareable while on the GL tab; strip the params when leaving
+  // so the other tabs' state handling stays untouched.
+  useEffect(() => {
+    if (!glHydrated) return;
+    const u = new URL(window.location.href);
+    for (const k of ["tab", "accounts", "start", "end"]) u.searchParams.delete(k);
+    if (tab === "gl") {
+      u.searchParams.set("tab", "gl");
+      if (glAccounts.length) u.searchParams.set("accounts", glAccounts.join(","));
+      u.searchParams.set("start", controls.start);
+      u.searchParams.set("end", controls.end);
+    }
+    window.history.replaceState(null, "", u.toString());
+  }, [glHydrated, tab, glAccounts, controls.start, controls.end]);
 
   return (
     <div className="space-y-4 p-3 sm:p-6">
@@ -1887,8 +2228,8 @@ export default function FinanceReportsPage() {
         {tab === "pnl" && <PnlTab />}
         {tab === "bs" && <BsTab />}
         {tab === "cf" && <CfTab />}
-        {tab === "tb" && <TbTab onDrill={(code) => { setGlAccount(code); setTab("gl"); }} />}
-        {tab === "gl" && <GlTab account={glAccount} setAccount={setGlAccount} />}
+        {tab === "tb" && <TbTab onDrill={(code) => { setGlAccounts([code]); setTab("gl"); }} />}
+        {tab === "gl" && <GlTab accounts={glAccounts} setAccounts={setGlAccounts} />}
         {tab === "ap" && <ApTab />}
         {tab === "recon" && <ReconTab />}
         {tab === "audit" && <AuditorPack />}

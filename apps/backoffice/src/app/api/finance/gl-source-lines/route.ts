@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getFinanceClient } from "@/lib/finance/supabase";
 import { matchedInvoiceSummaries } from "@/lib/finance/reports/pnl-sourced-drill";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,23 @@ export async function GET(req: NextRequest) {
     take: 500,
   });
   const invById = await matchedInvoiceSummaries(lines.map((l) => l.apInvoiceId));
+
+  // Attachment count per line (bank_line_attachment docs key source_ref to
+  // the bank line id), one batched query so the UI can show an indicator.
+  const attachCount = new Map<string, number>();
+  if (lines.length > 0) {
+    const fin = getFinanceClient();
+    const { data: docs } = await fin
+      .from("fin_documents")
+      .select("source_ref")
+      .eq("doc_type", "bank_line_attachment")
+      .in("source_ref", lines.map((l) => l.id));
+    for (const d of docs ?? []) {
+      const ref = d.source_ref as string;
+      attachCount.set(ref, (attachCount.get(ref) ?? 0) + 1);
+    }
+  }
+
   return NextResponse.json({
     transactionId,
     lines: lines.map((l) => ({
@@ -50,6 +68,7 @@ export async function GET(req: NextRequest) {
       ruleName: l.ruleName,
       apInvoiceId: l.apInvoiceId,
       matchedInvoice: l.apInvoiceId ? invById.get(l.apInvoiceId) ?? null : null,
+      attachments: attachCount.get(l.id) ?? 0,
     })),
   });
 }
