@@ -7,8 +7,9 @@
  * Celsius ops person would ("Hi bos, boleh keluarkan invois untuk order X?").
  *
  * Driven by the /api/cron/request-invoices cron. Same gates as the chat agent:
- * PROCUREMENT_AGENT_ENABLED + PROCUREMENT_AGENT_ALLOWLIST (so the first live run
- * is scoped to the Test supplier). Inside an open 24h window it sends free text;
+ * PROCUREMENT_AGENT_ENABLED (master switch) + the per-supplier automationMode
+ * dial (OFF = hands-off; ASSIST/AUTO = chase) — replaces the retired global
+ * PROCUREMENT_AGENT_ALLOWLIST. Inside an open 24h window it sends free text;
  * otherwise it uses the approved `invoice_request` template (business-initiated).
  * De-duped via the outbound row's raw.invoiceRequestFor so a PO is asked at most
  * once. Never throws.
@@ -37,18 +38,6 @@ function enabled(): boolean {
   return process.env.PROCUREMENT_AGENT_ENABLED === "true";
 }
 
-function allowed(phone: string | null | undefined): boolean {
-  const raw = process.env.PROCUREMENT_AGENT_ALLOWLIST?.trim();
-  if (!raw) return true;
-  const tail = digits(phone).slice(-8);
-  if (!tail) return false;
-  return raw
-    .split(",")
-    .map((s) => digits(s).slice(-8))
-    .filter(Boolean)
-    .includes(tail);
-}
-
 const firstName = (name: string) => (name || "bos").trim().split(/\s+/)[0];
 
 export interface InvoiceRequestSummary {
@@ -66,7 +55,8 @@ export async function runInvoiceRequests(): Promise<InvoiceRequestSummary> {
       orderType: "PURCHASE_ORDER",
       status: { in: INVOICE_DUE_STATUSES },
       invoices: { none: {} },
-      supplier: { phone: { not: null }, status: "ACTIVE" },
+      // Per-supplier dial: OFF = the agent never contacts this supplier.
+      supplier: { phone: { not: null }, status: "ACTIVE", automationMode: { not: "OFF" } },
     },
     orderBy: { createdAt: "asc" },
     take: 100,
@@ -81,7 +71,7 @@ export async function runInvoiceRequests(): Promise<InvoiceRequestSummary> {
   let skipped = 0;
   for (const o of orders) {
     const sup = o.supplier;
-    if (!sup?.phone || !allowed(sup.phone)) {
+    if (!sup?.phone) {
       skipped++;
       continue;
     }
