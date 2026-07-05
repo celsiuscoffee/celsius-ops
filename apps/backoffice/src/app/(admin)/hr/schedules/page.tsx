@@ -658,6 +658,15 @@ export default function SchedulesPage() {
           </div>
         )}
 
+        {(() => {
+          const ptSuggestions = (grid?.shifts || []).filter((s) => s.notes === "pt_suggestion").length;
+          return ptSuggestions > 0 ? (
+            <div className="flex items-center gap-1 rounded-lg border border-dashed border-amber-400 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700">
+              {ptSuggestions} PT suggestion{ptSuggestions > 1 ? "s" : ""} to confirm
+            </div>
+          ) : null;
+        })()}
+
         <div className="ml-auto text-sm">
           <span className="text-muted-foreground">Total labor: </span>
           <span className="font-semibold">{totalHours.toFixed(1)}h</span>
@@ -802,16 +811,23 @@ export default function SchedulesPage() {
                               const net = Math.max(0, gross - (shift.break_minutes || 0));
                               const netH = net / 60;
                               const hoursLabel = netH % 1 === 0 ? `${netH}h` : `${netH.toFixed(1)}h`;
+                              const isPtSuggestion = shift.notes === "pt_suggestion";
                               return (
                                 <button
                                   onClick={(e) => openPicker(u.id, d, e)}
                                   className={`w-full rounded-lg border p-2 text-left ${
-                                    COLOR_MAP[guessColor(shift)] || COLOR_MAP.gray
+                                    isPtSuggestion
+                                      ? "border-dashed border-amber-400 bg-amber-50"
+                                      : COLOR_MAP[guessColor(shift)] || COLOR_MAP.gray
                                   } disabled:cursor-default`}
                                   disabled={isPublished}
+                                  title={isPtSuggestion ? "AI-suggested part-timer shift — click to confirm or change" : undefined}
                                 >
                                   <div className="flex items-center justify-between gap-1">
-                                    <span className="text-[10px] font-bold truncate">{shift.role_type || "Shift"}</span>
+                                    <span className="text-[10px] font-bold truncate">
+                                      {isPtSuggestion ? "PT? " : ""}
+                                      {shift.role_type || "Shift"}
+                                    </span>
                                     <span className="shrink-0 rounded bg-white/60 px-1 text-[9px] font-semibold tabular-nums">{hoursLabel}</span>
                                   </div>
                                   <div className="text-[10px]">

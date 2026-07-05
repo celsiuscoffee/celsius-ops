@@ -1,647 +1,527 @@
-import { hrSupabaseAdmin } from "../supabase";
+// AI Schedule Generator — rewrite (2026-07, people-cost gating loop).
+//
+// The previous greedy generator treated FT and PT as interchangeable slot
+// fillers and persisted by DELETE-then-INSERT, which wiped the week when a
+// run failed mid-way. This version follows the owner's rostering rules:
+//
+//   1. Default shift templates only (the outlet's morning/middle/closing
+//      from shift-templates.ts) — no invented time ranges.
+//   2. Full-timers first: they are salaried (sunk cost), so they carry the
+//      floor. Each FT gets 6 working days ≈ 45h/week (Employment Act cap).
+//   3. Every FT gets an explicit rest day (profile rest_day if set, else
+//      staggered Mon–Thu — full crew stays on Fri–Sun, per the manpower
+//      workbook).
+//   4. Part-timers are SUGGESTIONS, not commitments: PT is the only spend
+//      that moves labour % (FT is fixed), so PT slots are chosen inside the
+//      remaining budget envelope (target% × forecast − FT cost − rover
+//      share) and inserted with notes='pt_suggestion' for the manager to
+//      confirm or delete in the grid.
+//
+// The "agentic" part: an LLM pass proposes WHERE the PT hours do the most
+// good — it sees the demand curve (hourly sales), each PT's rate and recent
+// hours (fairness), leave, and the budget — but every proposal is validated
+// in code against the hard constraints before it is saved. The model
+// proposes; the validator disposes. With no API key (or on any model
+// failure) a greedy fallback fills the largest demand gaps with the
+// cheapest available PT, so generation never depends on the model.
+//
+// Persistence is atomic (single transaction): the old week is only replaced
+// together with the successful insert of the new one. A published week is
+// never touched — unpublish first.
+
+import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
-import { minConcurrentInSlot } from "../coverage";
+import { hrSupabaseAdmin } from "../supabase";
+import { templatesForOutlet, workingHours, type ShiftTemplate } from "../shift-templates";
+import {
+  costRoster,
+  OUTLET_BUDGETS,
+  DEFAULT_BUDGET,
+  ROVER_SHARE_WEEKLY,
+  type ShiftCostRow,
+} from "../labour-gate-lib";
+import { forecastWeekRevenue } from "../labour-gate";
 
-// ─── Types ───────────────────────────────────────────────────────────
-type RoleCategory = "FOH" | "BOH" | "OTHER";
+const MODEL = "claude-sonnet-4-6";
+// One labour-hour must earn this much revenue to sit at ~18% labour — the
+// manpower workbook's staffing heuristic, used to size demand.
+const REVENUE_PER_LABOUR_HOUR = 69;
+const PT_MAX_HOURS_PER_WEEK = 24;
+const PT_MAX_DAYS_PER_WEEK = 5;
 
-type StaffInfo = {
+const ROVER_POSITIONS = new Set(["manager", "area manager", "head of department", "barista lead"]);
+
+type Staff = {
   id: string;
   name: string;
-  role: string;
-  outletId: string | null;
   position: string | null;
-  employment_type: "full_time" | "part_time" | "contract" | "intern";
+  employment_type: string;
   basic_salary: number;
   hourly_rate: number | null;
-  role_category: RoleCategory;
-  is_rotating: boolean;
-  outlet_count: number;
-  rotation_outlet_ids: string[]; // explicit rotation set; empty = rotate across all outletIds
+  rest_day: number | null; // 0=Sun … 6=Sat
 };
 
-type ShiftSlot = {
+type ShiftRow = {
   user_id: string;
   shift_date: string;
-  start_time: string;
+  start_time: string; // HH:MM:SS
   end_time: string;
   role_type: string;
   break_minutes: number;
+  notes: string | null;
 };
 
 type GenerateResult = {
   scheduleId: string;
   shifts: number;
+  ptSuggestions: number;
   totalHours: number;
   estimatedCost: number;
   notes: string[];
 };
 
-// ─── Employment + shift config ───────────────────────────────────────
-const EMPLOYMENT_RULES = {
-  full_time: { shiftDuration: 8.5, breakMinutes: 60, workingHoursPerShift: 7.5, maxWorkingHoursPerWeek: 45, maxDaysPerWeek: 6 },
-  contract:  { shiftDuration: 8.5, breakMinutes: 60, workingHoursPerShift: 7.5, maxWorkingHoursPerWeek: 45, maxDaysPerWeek: 6 },
-  part_time: { shiftDuration: 5.5, breakMinutes: 30, workingHoursPerShift: 5.0, maxWorkingHoursPerWeek: 24, maxDaysPerWeek: 5 },
-  intern:    { shiftDuration: 5.5, breakMinutes: 30, workingHoursPerShift: 5.0, maxWorkingHoursPerWeek: 24, maxDaysPerWeek: 5 },
-};
+// ─── helpers ─────────────────────────────────────────────────────────
 
-// FT shifts — cover the full outlet day. PT fills gaps.
-const SHIFT_SLOTS = {
-  opening:   { start: "08:00", end: "16:30", label: "Opening" },   // 7.5h + 1h break
-  closing:   { start: "13:30", end: "22:00", label: "Closing" },   // 7.5h + 1h break
-  morning:   { start: "08:00", end: "13:30", label: "Morning PT" }, // 5h PT
-  afternoon: { start: "13:30", end: "19:00", label: "Afternoon PT" },
-  evening:   { start: "16:30", end: "22:00", label: "Evening PT" },
-};
-
-// Required staffing per shift, by day type.
-// Weekday = Mon-Fri, Weekend = Sat-Sun.
-// Each shift (opening + closing) needs this mix.
-const REQUIRED_STAFF = {
-  weekday: { foh_min: 2, foh_max: 2, boh_min: 1, boh_max: 2, total_min: 3, total_max: 4 },
-  weekend: { foh_min: 2, foh_max: 3, boh_min: 2, boh_max: 2, total_min: 4, total_max: 5 },
-};
-
-const MAX_MONTHLY_LABOR_COST_PER_OUTLET = 19000;
-
-// Map position string → FOH/BOH/OTHER
-function classifyRole(position: string | null | undefined): RoleCategory {
-  if (!position) return "FOH"; // default fallback — most staff are FOH
-  const p = position.toLowerCase();
-  if (p.includes("kitchen") || p.includes("chef") || p.includes("boh")) return "BOH";
-  if (
-    p.includes("barista") || p.includes("cashier") || p.includes("foh") ||
-    p.includes("shift lead") || p.includes("supervisor") || p.includes("manager")
-  ) return "FOH";
-  return "FOH"; // fallback
+function weekDates(weekStart: string): string[] {
+  const out: string[] = [];
+  const start = new Date(weekStart + "T00:00:00Z");
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setUTCDate(start.getUTCDate() + i);
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
 }
 
-/**
- * AI Schedule Generator — rewrite (2026-04)
- *
- * Algorithm: balanced greedy with role-aware slot assignment.
- *   1. Build the list of required slots for the week (one entry per FOH/BOH slot per shift per day).
- *   2. For each slot, pick the eligible staff member with the LOWEST cumulative hours so far (fairness).
- *   3. FT fills first (opening/closing). PT fills gaps after.
- *   4. Enforce: 1 off day/week, rest gap, consecutive-days cap, weekly hour cap, role match.
- *
- * This replaces the previous slice-based algorithm that caused stacking on day 1.
- */
-export async function generateSchedule(
-  outletId: string,
-  weekStart: string,
-): Promise<GenerateResult> {
+function dow(date: string): number {
+  return new Date(date + "T00:00:00Z").getUTCDay(); // 0=Sun … 6=Sat
+}
+
+function hhmmss(t: string): string {
+  return t.length === 5 ? `${t}:00` : t;
+}
+
+function isBOH(position: string | null): boolean {
+  const p = (position ?? "").toLowerCase();
+  return p.includes("kitchen") || p.includes("chef") || p.includes("boh");
+}
+
+// Pick the outlet's working templates in start-time order and name their
+// roles: first = opening, last = closing, anything between = middle. The
+// generic full-day template is used only when an outlet has no named shifts.
+function outletTemplates(code: string): { opening: ShiftTemplate; middle: ShiftTemplate | null; closing: ShiftTemplate } {
+  const all = templatesForOutlet(code)
+    .filter((t) => t.id !== "full_day")
+    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  if (all.length === 0) {
+    const fallback = templatesForOutlet(code)[0];
+    return { opening: fallback, middle: null, closing: fallback };
+  }
+  if (all.length === 1) return { opening: all[0], middle: null, closing: all[0] };
+  return {
+    opening: all[0],
+    closing: all[all.length - 1],
+    middle: all.length > 2 ? all[1] : null,
+  };
+}
+
+// ─── generator ───────────────────────────────────────────────────────
+
+export async function generateSchedule(outletId: string, weekStart: string): Promise<GenerateResult> {
   const notes: string[] = [];
+  const dates = weekDates(weekStart);
+  const weekEnd = dates[6];
 
-  // 0. Load company-wide working time rules
-  const { data: settings } = await hrSupabaseAdmin
-    .from("hr_company_settings")
-    .select("max_regular_hours_per_week, hard_cap_hours_per_week, max_consecutive_days, min_rest_between_shifts_hours")
-    .limit(1)
-    .maybeSingle();
-
-  const MAX_REG_HOURS = Number(settings?.max_regular_hours_per_week ?? 45);
-  const HARD_CAP_HOURS = Number(settings?.hard_cap_hours_per_week ?? 60);
-  const MAX_CONSEC_DAYS = Number(settings?.max_consecutive_days ?? 6);
-  const MIN_REST_HOURS = Number(settings?.min_rest_between_shifts_hours ?? 11);
-
-  // 1. Outlet
+  // Outlet + budget
   const outlet = await prisma.outlet.findUnique({
     where: { id: outletId },
-    select: { id: true, name: true, openTime: true, closeTime: true, daysOpen: true },
+    select: { id: true, code: true, name: true, loyaltyOutletId: true, daysOpen: true },
   });
   if (!outlet) throw new Error("Outlet not found");
-  const daysOpen = outlet.daysOpen || [1, 2, 3, 4, 5, 6, 7];
+  const budget = OUTLET_BUDGETS[outlet.code ?? ""] ?? DEFAULT_BUDGET;
+  const daysOpen = new Set(outlet.daysOpen?.length ? outlet.daysOpen.map((d) => d % 7) : [0, 1, 2, 3, 4, 5, 6]);
+  const tpl = outletTemplates(outlet.code ?? "");
 
-  // 2. Staff for this outlet
+  // A published week is the manager's committed roster — never regenerate over it.
+  const { data: existing } = await hrSupabaseAdmin
+    .from("hr_schedules")
+    .select("id, status")
+    .eq("outlet_id", outletId)
+    .eq("week_start", weekStart)
+    .maybeSingle();
+  if (existing?.status === "published") {
+    throw new Error("This week is published — unpublish it before regenerating");
+  }
+
+  // Staff + profiles
   const users = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
       OR: [{ outletId }, { outletIds: { has: outletId } }],
       role: { in: ["STAFF", "MANAGER"] },
     },
-    select: { id: true, name: true, role: true, outletId: true, outletIds: true },
+    select: { id: true, name: true },
   });
-
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, basic_salary, hourly_rate, schedule_required, is_rotating_multi_outlet, preferred_outlet_id, rotation_outlet_ids")
-    .in("user_id", users.map((u) => u.id));
+    .select("user_id, position, employment_type, basic_salary, hourly_rate, schedule_required, rest_day")
+    .in("user_id", users.length ? users.map((u) => u.id) : ["-"]);
+  type ProfileRow = {
+    user_id: string; position: string | null; employment_type: string;
+    basic_salary: number | null; hourly_rate: number | null;
+    schedule_required: boolean | null; rest_day: number | null;
+  };
+  const profileMap = new Map<string, ProfileRow>(((profiles ?? []) as ProfileRow[]).map((p) => [p.user_id, p]));
 
-  const profileMap = new Map(
-    (profiles || []).map((p: {
-      user_id: string; position: string | null; employment_type: string;
-      basic_salary: number; hourly_rate: number | null;
-      schedule_required: boolean | null; is_rotating_multi_outlet: boolean | null;
-      preferred_outlet_id: string | null;
-      rotation_outlet_ids: string[] | null;
-    }) => [p.user_id, p]),
-  );
-
-  const staff: StaffInfo[] = users
-    .filter((u) => {
-      const p = profileMap.get(u.id);
-      return !p || p.schedule_required !== false;
-    })
+  const staff: Staff[] = users
+    .filter((u) => profileMap.get(u.id)?.schedule_required !== false)
     .map((u) => {
       const p = profileMap.get(u.id);
-      const outletIds = u.outletIds || [];
       return {
         id: u.id,
         name: u.name,
-        role: u.role,
-        outletId: u.outletId,
-        position: p?.position || null,
-        employment_type: (p?.employment_type as StaffInfo["employment_type"]) || "full_time",
-        basic_salary: Number(p?.basic_salary) || 1500,
-        hourly_rate: p?.hourly_rate ? Number(p.hourly_rate) : null,
-        role_category: classifyRole(p?.position),
-        is_rotating: !!p?.is_rotating_multi_outlet,
-        outlet_count: Math.max(1, outletIds.length),
-        rotation_outlet_ids: (p?.rotation_outlet_ids || []) as string[],
+        position: p?.position ?? null,
+        employment_type: p?.employment_type ?? "full_time",
+        basic_salary: Number(p?.basic_salary) || 0,
+        hourly_rate: p?.hourly_rate == null ? null : Number(p.hourly_rate),
+        rest_day: p?.rest_day ?? null,
       };
     })
-    // Rotating staff: if rotation_outlet_ids is populated, skip them when
-    // scheduling an outlet that's NOT in their explicit rotation set.
-    // (outletIds may include outlets they only have app access to, e.g. for
-    // attendance review, but shouldn't be auto-scheduled at.)
-    .filter((s) => {
-      if (!s.is_rotating) return true;
-      if (s.rotation_outlet_ids.length === 0) return true; // no explicit set → rotate across all outletIds
-      return s.rotation_outlet_ids.includes(outletId);
-    });
-
-  if (staff.length === 0) throw new Error(`No active staff assigned to outlet ${outlet.name}`);
+    // Rovers (AM / HoD / rover lead) are HQ-scheduled by hand, not auto-filled.
+    .filter((s) => !ROVER_POSITIONS.has((s.position ?? "").trim().toLowerCase()));
 
   const fullTimers = staff.filter((s) => s.employment_type === "full_time" || s.employment_type === "contract");
-  const partTimers = staff.filter((s) => s.employment_type === "part_time");
-  const rotating = staff.filter((s) => s.is_rotating);
+  const partTimers = staff.filter((s) => s.employment_type === "part_time" || s.employment_type === "intern");
+  if (fullTimers.length === 0 && partTimers.length === 0) {
+    throw new Error(`No schedulable staff at ${outlet.name}`);
+  }
+  notes.push(`${fullTimers.length} FT + ${partTimers.length} PT schedulable (rovers excluded)`);
 
-  notes.push(`${staff.length} staff: ${fullTimers.length} FT, ${partTimers.length} PT (${rotating.length} multi-outlet rotating)`);
-
-  const fohCount = fullTimers.filter((s) => s.role_category === "FOH").length;
-  const bohCount = fullTimers.filter((s) => s.role_category === "BOH").length;
-  notes.push(`FT role mix: ${fohCount} FOH, ${bohCount} BOH`);
-
-  // 3. Leave, blockouts, PH
-  const weekEnd = getWeekEnd(weekStart);
+  // Approved leave
   const { data: leaves } = await hrSupabaseAdmin
     .from("hr_leave_requests")
     .select("user_id, start_date, end_date")
     .in("status", ["approved", "ai_approved"])
     .lte("start_date", weekEnd)
     .gte("end_date", weekStart);
-  const leaveSet = new Set<string>();
-  (leaves || []).forEach((l: { user_id: string; start_date: string; end_date: string }) => {
-    const s = new Date(l.start_date + "T00:00:00Z");
-    const e = new Date(l.end_date + "T00:00:00Z");
-    for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) {
-      leaveSet.add(`${l.user_id}:${d.toISOString().slice(0, 10)}`);
-    }
-  });
-
-  const { data: availabilities } = await hrSupabaseAdmin
-    .from("hr_staff_availability")
-    .select("user_id, date, availability")
-    .gte("date", weekStart)
-    .lte("date", weekEnd)
-    .eq("availability", "unavailable");
-  const blockoutSet = new Set<string>();
-  (availabilities || []).forEach((a: { user_id: string; date: string }) => {
-    blockoutSet.add(`${a.user_id}:${a.date}`);
-  });
-
-  // Weekly recurring availability — applies to part-timers. A PT with ANY
-  // weekly-availability row is treated as "only available on those day/window
-  // combinations"; a PT with NO rows is treated as generally available (legacy).
-  const { data: weeklyAvail } = await hrSupabaseAdmin
-    .from("hr_staff_weekly_availability")
-    .select("user_id, day_of_week, start_time, end_time");
-  type WeeklyAvailRow = { user_id: string; day_of_week: number; start_time: string; end_time: string };
-  const weeklyByUser = new Map<string, WeeklyAvailRow[]>();
-  for (const row of (weeklyAvail || []) as WeeklyAvailRow[]) {
-    const list = weeklyByUser.get(row.user_id) || [];
-    list.push(row);
-    weeklyByUser.set(row.user_id, list);
+  const onLeave = new Set<string>();
+  for (const l of (leaves ?? []) as { user_id: string; start_date: string; end_date: string }[]) {
+    for (const d of dates) if (d >= l.start_date && d <= l.end_date) onLeave.add(`${l.user_id}:${d}`);
   }
-  // Returns true when the given user is NOT available for any shift that starts
-  // at startTime on the JS day-of-week (0=Sun). Only applies when the user has
-  // at least one weekly-availability row — otherwise we treat them as available.
-  const outsideWeeklyAvailability = (userId: string, dow: number, shiftStart: string): boolean => {
-    const rows = weeklyByUser.get(userId);
-    if (!rows || rows.length === 0) return false; // opt-out → always considered available
-    const dayRows = rows.filter((r) => r.day_of_week === dow);
-    if (dayRows.length === 0) return true; // day not covered at all
-    // Match if shiftStart falls within any [start_time, end_time) on that day
-    return !dayRows.some((r) => r.start_time <= shiftStart && shiftStart < r.end_time);
-  };
 
-  const { data: holidays } = await hrSupabaseAdmin
-    .from("hr_public_holidays")
-    .select("date, name")
-    .gte("date", weekStart)
-    .lte("date", weekEnd);
-  const publicHolidayMap = new Map<string, string>();
-  (holidays || []).forEach((h: { date: string; name: string }) => publicHolidayMap.set(h.date, h.name));
+  // ── Stage 1: FT skeleton — templates, 45h, rest days ────────────────
+  const rows: ShiftRow[] = [];
+  // Rest days: profile value wins; otherwise stagger Mon(1)–Thu(4) so the
+  // full crew is on Fri–Sun. Sorted by name for a stable rotation.
+  const sortedFT = [...fullTimers].sort((a, b) => a.name.localeCompare(b.name));
+  const restDayOf = new Map<string, number>();
+  sortedFT.forEach((s, i) => restDayOf.set(s.id, s.rest_day ?? ((i % 4) + 1)));
 
-  // Approved OT — raises weekly cap
-  const { data: otApprovals } = await hrSupabaseAdmin
-    .from("hr_overtime_requests")
-    .select("user_id, hours_approved")
-    .gte("date", weekStart)
-    .lte("date", weekEnd)
-    .in("status", ["approved", "partial"]);
-  const otHoursByUser = new Map<string, number>();
-  (otApprovals || []).forEach((r: { user_id: string; hours_approved: number | null }) => {
-    otHoursByUser.set(r.user_id, (otHoursByUser.get(r.user_id) || 0) + Number(r.hours_approved || 0));
-  });
-
-  // 4. State tracking
-  const shifts: ShiftSlot[] = [];
-  const hoursPerStaff = new Map<string, number>();
-  const daysWorked = new Map<string, number>();
-  const consecutiveDays = new Map<string, number>();
-  const lastShiftEndISO = new Map<string, string>();
-  const shiftsByStaffDate = new Map<string, ShiftSlot>(); // userId:date → shift
-  staff.forEach((s) => {
-    hoursPerStaff.set(s.id, 0);
-    daysWorked.set(s.id, 0);
-    consecutiveDays.set(s.id, 0);
-  });
-
-  // Compute week dates early so we can pre-assign off days
-  const dates = getWeekDates(weekStart);
-
-  // Pre-assign each FT staff an OFF DAY distributed across the week so
-  // Sunday doesn't end up empty (previous bug: greedy filled Mon-Sat then
-  // everyone maxed out for Sunday). Each FT gets exactly 1 off day.
-  // Rotating staff skip this — they're limited by hours cap anyway.
-  const preferredOffDay = new Map<string, string>(); // userId → YYYY-MM-DD
-  const nonRotatingFT = fullTimers.filter((s) => !s.is_rotating);
-  nonRotatingFT.forEach((s, idx) => {
-    // Spread off days across 7 days of the week (round-robin)
-    // Index 0 = Mon dates[0], 1 = Tue dates[1], ..., 6 = Sun dates[6]
-    preferredOffDay.set(s.id, dates[idx % 7]);
-  });
-
-  // Rotating staff split their weekly cap across their rotation outlets.
-  // Use rotation_outlet_ids.length if set (Syafiq/Adam = 3), else full outletIds.
-  const rotationShare = (s: StaffInfo) =>
-    s.rotation_outlet_ids.length > 0 ? s.rotation_outlet_ids.length : Math.max(1, s.outlet_count);
-
-  const weeklyCap = (s: StaffInfo) => {
-    const typeCap = EMPLOYMENT_RULES[s.employment_type].maxWorkingHoursPerWeek;
-    const otCap = MAX_REG_HOURS + (otHoursByUser.get(s.id) || 0);
-    let cap = Math.min(typeCap, otCap, HARD_CAP_HOURS);
-    if (s.is_rotating) cap = Math.floor(cap / rotationShare(s)); // e.g. 45/3 = 15h per outlet = 2 shifts
-    return cap;
-  };
-
-  const maxDaysFor = (s: StaffInfo) => {
-    const rules = EMPLOYMENT_RULES[s.employment_type];
-    if (s.is_rotating) return Math.max(2, Math.floor(rules.maxDaysPerWeek / rotationShare(s)));
-    return rules.maxDaysPerWeek;
-  };
-
-  // Can this staff take this shift on this date?
-  // `relaxed` mode is used in the fallback pass when a shift is still below
-  // minimum staffing — drops rest-gap floor to 9h and allows up to 7
-  // consecutive days. Hard limits (leave, same-day, weekly cap) are never
-  // relaxed.
-  const canWork = (
-    s: StaffInfo,
-    date: string,
-    shiftStart: string,
-    shiftHours: number,
-    relaxed = false,
-  ): string | true => {
-    if (leaveSet.has(`${s.id}:${date}`)) return "on leave";
-    if (blockoutSet.has(`${s.id}:${date}`)) return "blocked out";
-    if (shiftsByStaffDate.has(`${s.id}:${date}`)) return "already assigned today";
-    // Weekly recurring availability — PT only. Staff with no weekly rows are
-    // treated as always available (legacy opt-out).
-    if (s.employment_type === "part_time") {
-      const dow = new Date(date + "T00:00:00Z").getUTCDay();
-      if (outsideWeeklyAvailability(s.id, dow, shiftStart)) {
-        return "outside weekly availability";
-      }
-    }
-    // Preferred off day — skip in normal pass, allow in relaxed pass
-    if (!relaxed && preferredOffDay.get(s.id) === date) return "preferred off day";
-    const worked = daysWorked.get(s.id) || 0;
-    const maxDays = relaxed ? maxDaysFor(s) + 1 : maxDaysFor(s);
-    if (worked >= maxDays) return `max days reached (${worked})`;
-    const consec = consecutiveDays.get(s.id) || 0;
-    const maxConsec = relaxed ? MAX_CONSEC_DAYS + 1 : MAX_CONSEC_DAYS;
-    if (consec >= maxConsec) return `max consecutive days`;
-    const hours = hoursPerStaff.get(s.id) || 0;
-    if (hours + shiftHours > weeklyCap(s)) return `weekly cap`;
-    const lastEnd = lastShiftEndISO.get(s.id);
-    if (lastEnd) {
-      const [h, m] = shiftStart.split(":").map(Number);
-      const thisStart = new Date(`${date}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
-      const prevEnd = new Date(lastEnd);
-      const gapHours = (thisStart.getTime() - prevEnd.getTime()) / 3600000;
-      const minGap = relaxed ? Math.min(9, MIN_REST_HOURS) : MIN_REST_HOURS;
-      if (gapHours < minGap) return `rest gap ${gapHours.toFixed(1)}h < ${minGap}h`;
-    }
-    return true;
-  };
-
-  const assignShift = (s: StaffInfo, date: string, slot: typeof SHIFT_SLOTS.opening, workingHours: number, breakMin: number) => {
-    const shift: ShiftSlot = {
-      user_id: s.id,
-      shift_date: date,
-      start_time: slot.start,
-      end_time: slot.end,
-      role_type: s.position || (s.role_category === "BOH" ? "Kitchen Crew" : "Barista"),
-      break_minutes: breakMin,
-    };
-    shifts.push(shift);
-    shiftsByStaffDate.set(`${s.id}:${date}`, shift);
-    hoursPerStaff.set(s.id, (hoursPerStaff.get(s.id) || 0) + workingHours);
-    daysWorked.set(s.id, (daysWorked.get(s.id) || 0) + 1);
-    consecutiveDays.set(s.id, (consecutiveDays.get(s.id) || 0) + 1);
-    lastShiftEndISO.set(s.id, `${date}T${slot.end}:00`);
-  };
-
-  // 5. Main loop — greedy balanced by hours
+  const ftHours = new Map<string, number>();
   for (const date of dates) {
-    const dayOfWeek = new Date(date).getDay();
-    const dayNum = dayOfWeek === 0 ? 7 : dayOfWeek;
-    if (!daysOpen.includes(dayNum)) continue;
+    if (!daysOpen.has(dow(date))) continue;
+    const working = sortedFT.filter((s) => restDayOf.get(s.id) !== dow(date) && !onLeave.has(`${s.id}:${date}`));
+    const resting = sortedFT.filter((s) => restDayOf.get(s.id) === dow(date) && !onLeave.has(`${s.id}:${date}`));
 
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const req = isWeekend ? REQUIRED_STAFF.weekend : REQUIRED_STAFF.weekday;
-    const phName = publicHolidayMap.get(date);
-    if (phName) notes.push(`${date}: Public Holiday (${phName})`);
+    // Split the day's crew between opening and closing, kitchen (BOH) spread
+    // first so both shifts keep a kitchen hand, then FOH balances the count.
+    const boh = working.filter((s) => isBOH(s.position));
+    const foh = working.filter((s) => !isBOH(s.position));
+    const opening: Staff[] = [];
+    const closing: Staff[] = [];
+    boh.forEach((s, i) => (i % 2 === 0 ? opening : closing).push(s));
+    for (const s of foh) (opening.length <= closing.length ? opening : closing).push(s);
 
-    // Track already-assigned-today to avoid double-assigning within the day
-    // (same user can't take opening AND closing same day).
-    for (const shiftKey of ["opening", "closing"] as const) {
-      const slot = SHIFT_SLOTS[shiftKey];
-      let fohAssigned = 0;
-      let bohAssigned = 0;
-      let rotatingOnThisShift = false; // at most 1 rotating (Syafiq/Adam) per shift
-
-      // Try to fill FOH first, then BOH
-      for (const category of ["FOH", "BOH"] as const) {
-        const targetMin = category === "FOH" ? req.foh_min : req.boh_min;
-        const targetMax = category === "FOH" ? req.foh_max : req.boh_max;
-
-        while (
-          (category === "FOH" ? fohAssigned : bohAssigned) < targetMax
-        ) {
-          // Stop once min reached and total would exceed max
-          if ((category === "FOH" ? fohAssigned : bohAssigned) >= targetMin &&
-              (fohAssigned + bohAssigned) >= req.total_max) break;
-
-          // Build candidate list: FT first, then PT. Only matching role_category.
-          // Sort by (current hours ascending) for fairness.
-          const candidates = [...fullTimers, ...partTimers]
-            .filter((s) => s.role_category === category)
-            .sort((a, b) => {
-              // FT before PT
-              const aIsFT = a.employment_type !== "part_time" ? 0 : 1;
-              const bIsFT = b.employment_type !== "part_time" ? 0 : 1;
-              if (aIsFT !== bIsFT) return aIsFT - bIsFT;
-              return (hoursPerStaff.get(a.id) || 0) - (hoursPerStaff.get(b.id) || 0);
-            });
-
-          let picked: StaffInfo | null = null;
-          for (const s of candidates) {
-            // At most 1 rotating staff (Syafiq/Adam) per shift — they come
-            // in AS the lead, two of them on the same shift is redundant.
-            if (s.is_rotating && rotatingOnThisShift) continue;
-            const rules = EMPLOYMENT_RULES[s.employment_type];
-            const ok = canWork(s, date, slot.start, rules.workingHoursPerShift);
-            if (ok === true) { picked = s; break; }
-          }
-
-          if (!picked) break; // can't fill any more of this role
-
-          const rules = EMPLOYMENT_RULES[picked.employment_type];
-          assignShift(picked, date, slot, rules.workingHoursPerShift, rules.breakMinutes);
-          if (picked.is_rotating) rotatingOnThisShift = true;
-          if (category === "FOH") fohAssigned++;
-          else bohAssigned++;
-        }
-      }
-
-      // Second pass — if still below minimum, retry with RELAXED constraints
-      // (preferred off day, rest gap to 9h, +1 consecutive day).
-      for (const category of ["FOH", "BOH"] as const) {
-        const currentMin = category === "FOH" ? req.foh_min : req.boh_min;
-        const assigned = () => category === "FOH" ? fohAssigned : bohAssigned;
-        while (assigned() < currentMin) {
-          const candidates = [...fullTimers, ...partTimers]
-            .filter((s) => s.role_category === category)
-            .sort((a, b) => (hoursPerStaff.get(a.id) || 0) - (hoursPerStaff.get(b.id) || 0));
-          let picked: StaffInfo | null = null;
-          for (const s of candidates) {
-            if (s.is_rotating && rotatingOnThisShift) continue;
-            const rules = EMPLOYMENT_RULES[s.employment_type];
-            const ok = canWork(s, date, slot.start, rules.workingHoursPerShift, /* relaxed */ true);
-            if (ok === true) { picked = s; break; }
-          }
-          if (!picked) break;
-          const rules = EMPLOYMENT_RULES[picked.employment_type];
-          assignShift(picked, date, slot, rules.workingHoursPerShift, rules.breakMinutes);
-          if (picked.is_rotating) rotatingOnThisShift = true;
-          if (category === "FOH") fohAssigned++;
-          else bohAssigned++;
-          notes.push(`ℹ️ ${date} ${shiftKey}: filled ${category} with ${picked.name} (relaxed)`);
-        }
-      }
-
-      // Third pass (ULTRA-relaxed) — if STILL below min, try PT from any role
-      // (cross-role fill: FOH can cover BOH slot) and allow exceeding weekly
-      // cap by one shift (flagged as OT-needed). Last resort before leaving
-      // the slot empty.
-      for (const category of ["FOH", "BOH"] as const) {
-        const currentMin = category === "FOH" ? req.foh_min : req.boh_min;
-        const assigned = () => category === "FOH" ? fohAssigned : bohAssigned;
-        while (assigned() < currentMin) {
-          // Prefer PT first (to avoid busting FT's OT budget), then FT. Any role.
-          const candidates = [...partTimers, ...fullTimers]
-            .sort((a, b) => (hoursPerStaff.get(a.id) || 0) - (hoursPerStaff.get(b.id) || 0));
-          let picked: StaffInfo | null = null;
-          for (const s of candidates) {
-            if (s.is_rotating && rotatingOnThisShift) continue;
-            if (leaveSet.has(`${s.id}:${date}`)) continue;
-            if (blockoutSet.has(`${s.id}:${date}`)) continue;
-            if (shiftsByStaffDate.has(`${s.id}:${date}`)) continue;
-            // Even in the emergency "uncovered slot" fallback, respect PT weekly availability.
-            if (s.employment_type === "part_time") {
-              const dow = new Date(date + "T00:00:00Z").getUTCDay();
-              if (outsideWeeklyAvailability(s.id, dow, slot.start)) continue;
-            }
-            const rules = EMPLOYMENT_RULES[s.employment_type];
-            // Allow up to +1 shift over weekly cap (OT) + skip all other constraints
-            const hours = hoursPerStaff.get(s.id) || 0;
-            if (hours + rules.workingHoursPerShift > weeklyCap(s) + rules.workingHoursPerShift) continue;
-            // Rest gap: still respect 8h minimum (safety floor)
-            const lastEnd = lastShiftEndISO.get(s.id);
-            if (lastEnd) {
-              const [h, m] = slot.start.split(":").map(Number);
-              const thisStart = new Date(`${date}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
-              const prevEnd = new Date(lastEnd);
-              if ((thisStart.getTime() - prevEnd.getTime()) / 3600000 < 8) continue;
-            }
-            picked = s;
-            break;
-          }
-          if (!picked) break;
-          const rules = EMPLOYMENT_RULES[picked.employment_type];
-          assignShift(picked, date, slot, rules.workingHoursPerShift, rules.breakMinutes);
-          if (picked.is_rotating) rotatingOnThisShift = true;
-          if (category === "FOH") fohAssigned++;
-          else bohAssigned++;
-          const crossRole = picked.role_category !== category ? ` (cross-role ${picked.role_category}→${category})` : "";
-          const overCap = (hoursPerStaff.get(picked.id) || 0) > weeklyCap(picked) ? " — OT approval needed" : "";
-          notes.push(`⚠️ ${date} ${shiftKey}: filled ${category} with ${picked.name}${crossRole}${overCap}`);
-        }
-      }
-
-      // Warn if STILL understaffed after all 3 passes
-      if (fohAssigned < req.foh_min) {
-        notes.push(`🚨 ${date} ${shiftKey}: FOH understaffed ${fohAssigned}/${req.foh_min} — hire or cover manually`);
-      }
-      if (bohAssigned < req.boh_min) {
-        notes.push(`🚨 ${date} ${shiftKey}: BOH understaffed ${bohAssigned}/${req.boh_min} — hire or cover manually`);
+    for (const [group, t] of [[opening, tpl.opening], [closing, tpl.closing]] as const) {
+      for (const s of group) {
+        rows.push({
+          user_id: s.id,
+          shift_date: date,
+          start_time: hhmmss(t.start_time),
+          end_time: hhmmss(t.end_time),
+          role_type: isBOH(s.position) ? "BOH" : "FOH",
+          break_minutes: t.break_minutes,
+          notes: null,
+        });
+        ftHours.set(s.id, (ftHours.get(s.id) ?? 0) + workingHours(t));
       }
     }
+    for (const s of resting) {
+      rows.push({
+        user_id: s.id,
+        shift_date: date,
+        start_time: "00:00:00",
+        end_time: "00:00:00",
+        role_type: "OFF",
+        break_minutes: 0,
+        notes: "rest_day",
+      });
+    }
+  }
+  const under45 = sortedFT.filter((s) => (ftHours.get(s.id) ?? 0) < 40);
+  if (under45.length > 0) {
+    notes.push(`⚠ under 45h/wk (leave or closed days): ${under45.map((s) => `${s.name} ${Math.round(ftHours.get(s.id) ?? 0)}h`).join(", ")}`);
+  }
 
-    // Reset consecutive counter for staff NOT working today
-    staff.forEach((s) => {
-      if (!shiftsByStaffDate.has(`${s.id}:${date}`)) {
-        consecutiveDays.set(s.id, 0);
-      }
+  // ── Stage 2: PT budget envelope — the only spend that moves labour % ─
+  const forecast = Math.round(await forecastWeekRevenue(outlet, weekStart));
+  const ftCostRows: ShiftCostRow[] = rows
+    .filter((r) => r.notes !== "rest_day")
+    .map((r) => {
+      const s = staff.find((x) => x.id === r.user_id)!;
+      return {
+        user_id: r.user_id, shift_date: r.shift_date, start_time: r.start_time, end_time: r.end_time,
+        userName: s.name, position: s.position, employment_type: s.employment_type,
+        hourly_rate: s.hourly_rate, basic_salary: s.basic_salary, epf_employer_rate: null,
+      };
     });
-  }
+  const ftCost = Math.round(costRoster(ftCostRows).cost);
+  const ptBudget = Math.max(0, Math.round(budget.target * forecast - ftCost - ROVER_SHARE_WEEKLY));
+  notes.push(
+    `Budget: forecast RM${forecast.toLocaleString()} × ${(budget.target * 100).toFixed(0)}% = RM${Math.round(budget.target * forecast).toLocaleString()}; ` +
+      `FT (fixed) RM${ftCost.toLocaleString()} + rover RM${ROVER_SHARE_WEEKLY} → PT envelope RM${ptBudget.toLocaleString()}`,
+  );
 
-  // 6. Flag staff with insufficient days (FT should have 6 = 1 off day)
-  fullTimers.forEach((s) => {
-    const d = daysWorked.get(s.id) || 0;
-    if (d < 5 && !leaveSet.has(`${s.id}:${weekStart}`)) {
-      notes.push(`Note: ${s.name} scheduled only ${d} days — check availability or role match`);
-    }
-  });
+  // Demand gaps: hourly sales (trailing 28 days, per day-of-week) → staff
+  // needed per hour vs FT heads on the floor. Positive gap-hours ranked.
+  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; rev: number }>>`
+    SELECT EXTRACT(DOW FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
+           EXTRACT(HOUR FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
+           (sum(total) / 100.0 / 4)::float AS rev
+    FROM pos_orders
+    WHERE outlet_id = ${outlet.loyaltyOutletId ?? ""}
+      AND status = 'completed' AND refund_of_order_id IS NULL
+      AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+    GROUP BY 1, 2
+  `;
+  const demand = new Map<string, number>(); // "dw:hr" → staff needed
+  for (const h of hourly) demand.set(`${h.dw}:${h.hr}`, Math.ceil(h.rev / REVENUE_PER_LABOUR_HOUR));
 
-  // 7. Cost estimate
-  let totalHours = 0;
-  let weeklyCost = 0;
-  staff.forEach((s) => {
-    const h = hoursPerStaff.get(s.id) || 0;
-    totalHours += h;
-    if (h === 0) return;
-    if (s.employment_type === "part_time" && s.hourly_rate) {
-      weeklyCost += s.hourly_rate * h;
-    } else {
-      const hourlyFT = s.basic_salary / 26 / 7.5;
-      weeklyCost += hourlyFT * h;
-    }
-  });
-  const estimatedCost = Math.round(weeklyCost * 100) / 100;
-  const projectedMonthly = estimatedCost * 4.33;
-  if (projectedMonthly > MAX_MONTHLY_LABOR_COST_PER_OUTLET) {
-    notes.push(`⚠️ Budget: projected RM ${projectedMonthly.toFixed(0)} > RM ${MAX_MONTHLY_LABOR_COST_PER_OUTLET.toLocaleString()}`);
-  } else {
-    notes.push(`Projected monthly: RM ${projectedMonthly.toFixed(0)} (${Math.round(projectedMonthly / MAX_MONTHLY_LABOR_COST_PER_OUTLET * 100)}% of budget)`);
-  }
-
-  const ftHours = fullTimers.reduce((s, x) => s + (hoursPerStaff.get(x.id) || 0), 0);
-  const ptHours = partTimers.reduce((s, x) => s + (hoursPerStaff.get(x.id) || 0), 0);
-  notes.push(`${shifts.length} shifts: ${ftHours}h FT, ${ptHours}h PT. Total ${totalHours}h, cost RM ${estimatedCost.toLocaleString()}`);
-
-  // Any staff with 0 hours?
-  staff.forEach((s) => {
-    if ((hoursPerStaff.get(s.id) || 0) === 0 && !leaveSet.has(`${s.id}:${weekStart}`)) {
-      notes.push(`Note: ${s.name} (${s.role_category}) has 0 hours`);
-    }
-  });
-
-  // 7b. Coverage audit — check generated shifts against outlet coverage rules.
-  // Flags under-covered slots so HR sees gaps immediately in the AI notes.
-  const { data: coverageRules } = await hrSupabaseAdmin
-    .from("hr_outlet_coverage_rules")
-    .select("day_of_week, slot_start, slot_end, min_staff, slot_label")
-    .eq("outlet_id", outletId);
-
-  if (coverageRules && coverageRules.length > 0) {
-    const gaps: string[] = [];
-    const dates = getWeekDates(weekStart);
-    for (const date of dates) {
-      const dow = new Date(date + "T00:00:00Z").getUTCDay();
-      const rulesForDay = coverageRules.filter((r: { day_of_week: number }) => r.day_of_week === dow);
-      for (const rule of rulesForDay) {
-        const covered = shifts.filter(
-          (s) => s.shift_date === date &&
-            s.start_time < rule.slot_end &&
-            s.end_time > rule.slot_start,
-        );
-        const concurrent = minConcurrentInSlot(covered, rule.slot_start, rule.slot_end);
-        if (concurrent < rule.min_staff) {
-          const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow];
-          const label = rule.slot_label ? `${rule.slot_label} ` : "";
-          gaps.push(`${dayName} ${rule.slot_start.slice(0, 5)}-${rule.slot_end.slice(0, 5)} ${label}(${concurrent}/${rule.min_staff})`);
-        }
+  type Gap = { date: string; template: ShiftTemplate; slot: string; gapHours: number };
+  const gaps: Gap[] = [];
+  const candidates: Array<[string, ShiftTemplate]> = tpl.middle
+    ? [["middle", tpl.middle], ["opening", tpl.opening], ["closing", tpl.closing]]
+    : [["opening", tpl.opening], ["closing", tpl.closing]];
+  for (const date of dates) {
+    if (!daysOpen.has(dow(date))) continue;
+    for (const [slot, t] of candidates) {
+      const startH = Number(t.start_time.slice(0, 2));
+      const endH = Number(t.end_time.slice(0, 2));
+      let gapHours = 0;
+      for (let h = startH; h < endH; h++) {
+        const need = demand.get(`${dow(date)}:${h}`) ?? 0;
+        const have = rows.filter(
+          (r) => r.shift_date === date && r.notes === null &&
+            Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
+        ).length;
+        if (need > have) gapHours += need - have;
       }
+      if (gapHours > 0) gaps.push({ date, template: t, slot, gapHours });
     }
-    if (gaps.length > 0) {
-      notes.push(`⚠ Coverage gaps (${gaps.length}): ${gaps.slice(0, 5).join("; ")}${gaps.length > 5 ? ` +${gaps.length - 5} more` : ""}`);
-    } else {
-      notes.push(`✓ All ${coverageRules.length} coverage rules met`);
+  }
+  gaps.sort((a, b) => b.gapHours - a.gapHours);
+
+  // Fairness input: confirmed PT hours over the last 4 weeks.
+  const { data: recentPt } = await hrSupabaseAdmin
+    .from("hr_schedule_shifts")
+    .select("user_id, start_time, end_time, hr_schedules!inner(outlet_id, week_start)")
+    .in("user_id", partTimers.length ? partTimers.map((p) => p.id) : ["-"])
+    .gte("hr_schedules.week_start", addDaysStr(weekStart, -28))
+    .lt("hr_schedules.week_start", weekStart);
+  const recentHours = new Map<string, number>();
+  for (const r of (recentPt ?? []) as Array<{ user_id: string; start_time: string; end_time: string }>) {
+    const h = (Number(r.end_time.slice(0, 2)) * 60 + Number(r.end_time.slice(3, 5)) - Number(r.start_time.slice(0, 2)) * 60 - Number(r.start_time.slice(3, 5))) / 60;
+    if (h > 0) recentHours.set(r.user_id, (recentHours.get(r.user_id) ?? 0) + h);
+  }
+
+  // ── Stage 3: agentic PT proposal, validated in code ──────────────────
+  type Proposal = { user_id: string; date: string; slot: string; reason?: string };
+  let proposals: Proposal[] = [];
+  let agentUsed = false;
+  const eligiblePt = partTimers.filter((p) => p.hourly_rate && p.hourly_rate > 0);
+  const skippedPt = partTimers.length - eligiblePt.length;
+  if (skippedPt > 0) notes.push(`⚠ ${skippedPt} PT skipped — no hourly rate on profile`);
+
+  if (eligiblePt.length > 0 && ptBudget > 0 && gaps.length > 0 && process.env.ANTHROPIC_API_KEY) {
+    try {
+      proposals = await proposePtWithModel({
+        outletName: outlet.name,
+        ptBudget,
+        gaps: gaps.slice(0, 20),
+        partTimers: eligiblePt.map((p) => ({
+          user_id: p.id,
+          name: p.name,
+          hourly_rate: p.hourly_rate!,
+          recent_4wk_hours: Math.round(recentHours.get(p.id) ?? 0),
+          leave_dates: dates.filter((d) => onLeave.has(`${p.id}:${d}`)),
+        })),
+        slots: Object.fromEntries(candidates.map(([slot, t]) => [slot, `${t.start_time}-${t.end_time} (${workingHours(t)}h)`])),
+      });
+      agentUsed = true;
+    } catch (err) {
+      notes.push(`Agent pass failed (${err instanceof Error ? err.message : "error"}) — greedy fallback used`);
+    }
+  }
+  if (proposals.length === 0 && eligiblePt.length > 0 && ptBudget > 0) {
+    // Greedy fallback: biggest gap first, least-used cheapest PT first.
+    const byFairness = [...eligiblePt].sort(
+      (a, b) => (recentHours.get(a.id) ?? 0) - (recentHours.get(b.id) ?? 0) || a.hourly_rate! - b.hourly_rate!,
+    );
+    let i = 0;
+    for (const g of gaps) {
+      proposals.push({ user_id: byFairness[i % byFairness.length].id, date: g.date, slot: g.slot, reason: `gap ${g.gapHours}h` });
+      i++;
     }
   }
 
-  // 8. Persist
+  // Validate every proposal against the hard constraints; violations drop.
+  const slotByName = new Map<string, ShiftTemplate>(candidates.map(([slot, t]) => [slot, t]));
+  const ptRows: ShiftRow[] = [];
+  const ptSpend = { rm: 0 };
+  const ptWeek = new Map<string, { hours: number; days: Set<string> }>();
+  const suggestionLines: string[] = [];
+  for (const p of proposals) {
+    const person = eligiblePt.find((x) => x.id === p.user_id);
+    const t = slotByName.get(p.slot);
+    if (!person || !t || !dates.includes(p.date)) continue;
+    if (onLeave.has(`${person.id}:${p.date}`)) continue;
+    if (ptRows.some((r) => r.user_id === person.id && r.shift_date === p.date)) continue; // one shift/day
+    const h = workingHours(t);
+    const cost = h * person.hourly_rate!;
+    if (ptSpend.rm + cost > ptBudget) continue;
+    const wk = ptWeek.get(person.id) ?? { hours: 0, days: new Set<string>() };
+    if (wk.hours + h > PT_MAX_HOURS_PER_WEEK || wk.days.size >= PT_MAX_DAYS_PER_WEEK) continue;
+    wk.hours += h;
+    wk.days.add(p.date);
+    ptWeek.set(person.id, wk);
+    ptSpend.rm += cost;
+    ptRows.push({
+      user_id: person.id,
+      shift_date: p.date,
+      start_time: hhmmss(t.start_time),
+      end_time: hhmmss(t.end_time),
+      role_type: "PT",
+      break_minutes: t.break_minutes,
+      notes: "pt_suggestion",
+    });
+    suggestionLines.push(`${p.date} ${t.label} — ${person.name} (RM${Math.round(cost)}${p.reason ? `, ${p.reason}` : ""})`);
+  }
+  notes.push(
+    ptRows.length > 0
+      ? `${ptRows.length} PT SUGGESTIONS (RM${Math.round(ptSpend.rm)} of RM${ptBudget} envelope, ${agentUsed ? "agent" : "greedy"}) — confirm in grid:\n  ${suggestionLines.join("\n  ")}`
+      : `No PT suggested (envelope RM${ptBudget}, ${gaps.length} demand gaps, ${eligiblePt.length} eligible PT)`,
+  );
+
+  // ── Stage 4: atomic persist — never lose the old week on failure ─────
+  const allRows = [...rows, ...ptRows];
+  const totalHours = Math.round(
+    allRows.filter((r) => r.notes !== "rest_day").reduce((sum, r) => {
+      const mins = Number(r.end_time.slice(0, 2)) * 60 + Number(r.end_time.slice(3, 5)) -
+        Number(r.start_time.slice(0, 2)) * 60 - Number(r.start_time.slice(3, 5)) - r.break_minutes;
+      return sum + mins / 60;
+    }, 0),
+  );
+  const estimatedCost = ftCost + Math.round(ptSpend.rm) + ROVER_SHARE_WEEKLY;
+
+  let scheduleId = existing?.id as string | undefined;
+  if (!scheduleId) {
+    const { data: created, error } = await hrSupabaseAdmin
+      .from("hr_schedules")
+      .insert({ outlet_id: outletId, week_start: weekStart, week_end: weekEnd, status: "ai_generated", generated_by: "ai" })
+      .select("id")
+      .single();
+    if (error) throw new Error(`Failed to create schedule: ${error.message}`);
+    scheduleId = created.id;
+  }
+
+  // One transaction: replace the week's shifts. If the insert fails the
+  // delete rolls back with it — the old roster survives.
+  await prisma.$transaction([
+    prisma.$executeRaw`DELETE FROM hr_schedule_shifts WHERE schedule_id = ${scheduleId}::uuid`,
+    prisma.$executeRaw`
+      INSERT INTO hr_schedule_shifts
+        (schedule_id, user_id, shift_date, start_time, end_time, role_type, break_minutes, notes, is_ai_assigned)
+      SELECT ${scheduleId}::uuid, u, d::date, s::time, e::time, r, b, n, true
+      FROM unnest(
+        ${allRows.map((r) => r.user_id)}::text[],
+        ${allRows.map((r) => r.shift_date)}::text[],
+        ${allRows.map((r) => r.start_time)}::text[],
+        ${allRows.map((r) => r.end_time)}::text[],
+        ${allRows.map((r) => r.role_type)}::text[],
+        ${allRows.map((r) => r.break_minutes)}::int[],
+        ${allRows.map((r) => r.notes)}::text[]
+      ) AS t(u, d, s, e, r, b, n)
+    `,
+  ]);
+
   await hrSupabaseAdmin
     .from("hr_schedules")
-    .delete()
-    .eq("outlet_id", outletId)
-    .eq("week_start", weekStart)
-    .in("status", ["draft", "ai_generated"]);
-
-  const { data: schedule, error: schedError } = await hrSupabaseAdmin
-    .from("hr_schedules")
-    .insert({
-      outlet_id: outletId,
-      week_start: weekStart,
-      week_end: weekEnd,
+    .update({
       status: "ai_generated",
       generated_by: "ai",
+      week_end: weekEnd,
       ai_notes: notes.join("\n"),
       total_labor_hours: totalHours,
       estimated_labor_cost: estimatedCost,
     })
-    .select()
-    .single();
-  if (schedError) throw new Error(`Failed to save schedule: ${schedError.message}`);
+    .eq("id", scheduleId);
 
-  if (shifts.length > 0) {
-    const { error: shiftError } = await hrSupabaseAdmin
-      .from("hr_schedule_shifts")
-      .insert(shifts.map((s) => ({ schedule_id: schedule.id, ...s, is_ai_assigned: true })));
-    if (shiftError) throw new Error(`Failed to save shifts: ${shiftError.message}`);
-  }
-
-  return { scheduleId: schedule.id, shifts: shifts.length, totalHours, estimatedCost, notes };
+  return {
+    scheduleId: scheduleId!,
+    shifts: allRows.filter((r) => r.notes !== "rest_day").length,
+    ptSuggestions: ptRows.length,
+    totalHours,
+    estimatedCost,
+    notes,
+  };
 }
 
-function getWeekDates(weekStart: string): string[] {
-  const dates: string[] = [];
-  const start = new Date(weekStart);
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    dates.push(d.toISOString().slice(0, 10));
-  }
-  return dates;
-}
-
-function getWeekEnd(weekStart: string): string {
-  const d = new Date(weekStart);
-  d.setDate(d.getDate() + 6);
+function addDaysStr(ymd: string, days: number): string {
+  const d = new Date(ymd + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+// ─── the agentic pass ────────────────────────────────────────────────
+
+async function proposePtWithModel(input: {
+  outletName: string;
+  ptBudget: number;
+  gaps: Array<{ date: string; slot: string; gapHours: number }>;
+  partTimers: Array<{ user_id: string; name: string; hourly_rate: number; recent_4wk_hours: number; leave_dates: string[] }>;
+  slots: Record<string, string>;
+}): Promise<Array<{ user_id: string; date: string; slot: string; reason?: string }>> {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const res = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1500,
+    messages: [
+      {
+        role: "user",
+        content: [
+          `You allocate part-timer shifts for ${input.outletName}, a specialty coffee outlet in Malaysia.`,
+          `Full-timers are already rostered (salaried, fixed cost). Part-timers are the only spend that moves labour % — total PT cost this week must stay under RM${input.ptBudget}.`,
+          ``,
+          `Shift slots: ${JSON.stringify(input.slots)}`,
+          `Demand gaps, biggest first (gapHours = staff-hours short of the sales-derived need):`,
+          JSON.stringify(input.gaps),
+          `Part-timers (recent_4wk_hours = hours they got in the last 4 weeks; spread work fairly — favour whoever has fewer recent hours when rates are similar, and never assign on their leave_dates):`,
+          JSON.stringify(input.partTimers),
+          ``,
+          `Reply with ONLY a JSON array, no prose: [{"user_id": "...", "date": "YYYY-MM-DD", "slot": "opening|middle|closing", "reason": "few words"}]`,
+          `Cover the biggest gaps first, stay under budget, at most one shift per person per day.`,
+        ].join("\n"),
+      },
+    ],
+  });
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) throw new Error("model returned no JSON array");
+  const parsed = JSON.parse(match[0]);
+  if (!Array.isArray(parsed)) throw new Error("model output is not an array");
+  return parsed;
 }
