@@ -27,6 +27,7 @@
 
 import { getFinanceClient } from "../supabase";
 import { CONSOLIDATED_COMPANY_ID } from "./balance-sheet";
+import { pagedJournalLines, pagedPostedTxns } from "./paged";
 
 export type CfSection = {
   title: string;
@@ -88,35 +89,26 @@ export async function buildCashFlow(input: CfInput): Promise<CfReport> {
 
   // One ledger walk: every posted txn through the period end. Consolidated
   // spans all active companies, so cash and every bucket sum across the group.
-  let txnQuery = client
-    .from("fin_transactions")
-    .select("id, txn_date")
-    .eq("status", "posted")
-    .lte("txn_date", input.end);
+  // Paged reads: the ledger outgrew Supabase's 1000-row cap, which silently
+  // truncated this walk and made the CF disagree with the TB and GL.
+  let companyIds: string[];
   if (consolidated) {
     const { data: cos } = await client
       .from("fin_companies")
       .select("id")
       .eq("is_active", true);
-    txnQuery = txnQuery.in("company_id", (cos ?? []).map((c) => c.id as string));
+    companyIds = (cos ?? []).map((c) => c.id as string);
   } else {
-    txnQuery = txnQuery.eq("company_id", input.companyId);
+    companyIds = [input.companyId];
   }
-  const { data: txns } = await txnQuery;
-  const txnDate = new Map((txns ?? []).map((t) => [t.id as string, t.txn_date as string]));
-  const txnIds = [...txnDate.keys()];
+  const { txnIds, txnDate } = await pagedPostedTxns(companyIds, input.end);
 
   let cashAtStart = 0;
   let cashAtEnd = 0;
   const flows = new Map<BucketKey, number>(); // (credit − debit) per bucket, in-range only
 
-  for (let i = 0; i < txnIds.length; i += 200) {
-    const chunk = txnIds.slice(i, i + 200);
-    const { data: lines } = await client
-      .from("fin_journal_lines")
-      .select("transaction_id, account_code, debit, credit")
-      .in("transaction_id", chunk);
-    for (const l of lines ?? []) {
+  for await (const lines of pagedJournalLines(txnIds)) {
+    for (const l of lines) {
       const date = txnDate.get(l.transaction_id as string) ?? "";
       const code = l.account_code as string;
       const debit = Number(l.debit);
