@@ -269,6 +269,7 @@ function pctChange(cur: number, prev: number | null | undefined): string {
 const addDaysStr = (s: string, n: number) => { const d = new Date(`${s}T00:00:00.000Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const addYearsStr = (s: string, n: number) => { const [y, m, d] = s.split("-"); return `${Number(y) + n}-${m}-${d}`; };
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -529,6 +530,49 @@ function PnlTab() {
     byMonth ? amtByMonth.map((m) => m.get(code)) : undefined;
   const totMonths = (f: (r: PnlReport) => number): MonthAmount[] | undefined =>
     byMonth ? months.map((m) => f(m.report)) : undefined;
+  // In by-month mode the row list is the UNION of the full-period lines and
+  // any line that only exists in individual months (a month with a usable
+  // stock count breaks COGS into opening, purchases and closing while the
+  // full period may fall back to the single purchases proxy). Row and
+  // subtotal Totals are then derived by summing the month figures so the
+  // table cross-foots in both directions.
+  const secLines = useMemo(() => {
+    const build = (sec: (typeof PNL_SECTIONS)[number]): PnlLine[] => {
+      const base = report?.[sec].lines ?? [];
+      if (!byMonth) return base;
+      const monthTotal = (code: string) => round2(amtByMonth.reduce((s, m) => s + (m.get(code) ?? 0), 0));
+      const seen = new Set(base.map((l) => l.code));
+      const merged = base.map((l) => ({ ...l, amount: monthTotal(l.code) }));
+      for (const m of months) {
+        for (const l of m.report[sec].lines) {
+          if (seen.has(l.code)) continue;
+          seen.add(l.code);
+          merged.push({ ...l, amount: monthTotal(l.code) });
+        }
+      }
+      return merged;
+    };
+    return { income: build("income"), cogs: build("cogs"), expenses: build("expenses") };
+  }, [report, byMonth, months, amtByMonth]);
+  const monthSum = (f: (r: PnlReport) => number) => round2(months.reduce((s, m) => s + f(m.report), 0));
+  // Displayed totals: month sums in by-month mode (so columns add up), the
+  // official full-period figures otherwise.
+  const totals = byMonth ? {
+    income: monthSum((r) => r.income.total),
+    cogs: monthSum((r) => r.cogs.total),
+    expenses: monthSum((r) => r.expenses.total),
+    grossProfit: monthSum((r) => r.grossProfit),
+    netIncome: monthSum((r) => r.netIncome),
+  } : {
+    income: report?.income.total ?? 0,
+    cogs: report?.cogs.total ?? 0,
+    expenses: report?.expenses.total ?? 0,
+    grossProfit: report?.grossProfit ?? 0,
+    netIncome: report?.netIncome ?? 0,
+  };
+  // When month COGS methods differ from the full-period method the two nets
+  // legitimately diverge; surface it instead of leaving a silent mismatch.
+  const methodologyGap = byMonth && report ? round2(totals.netIncome - report.netIncome) : 0;
   const trend: TrendPoint[] = months.map((m) => ({
     month: m.month,
     income: m.report.income.total,
@@ -554,14 +598,14 @@ function PnlTab() {
       const pushTotal = (section: string, label: string, amt: number, f: (x: PnlReport) => number) => {
         rows.push([section, "", label, ...months.map((m) => f(m.report)), amt]);
       };
-      pushLines("Income", r.income.lines);
-      pushTotal("Income", "Total Income", r.income.total, (x) => x.income.total);
-      pushLines("Cost of Sales", r.cogs.lines);
-      pushTotal("Cost of Sales", "Total COGS", r.cogs.total, (x) => x.cogs.total);
-      pushTotal("", "Gross Profit", r.grossProfit, (x) => x.grossProfit);
-      pushLines("Expenses", r.expenses.lines);
-      pushTotal("Expenses", "Total Expenses", r.expenses.total, (x) => x.expenses.total);
-      pushTotal("", "Net Income", r.netIncome, (x) => x.netIncome);
+      pushLines("Income", secLines.income);
+      pushTotal("Income", "Total Income", totals.income, (x) => x.income.total);
+      pushLines("Cost of Sales", secLines.cogs);
+      pushTotal("Cost of Sales", "Total COGS", totals.cogs, (x) => x.cogs.total);
+      pushTotal("", "Gross Profit", totals.grossProfit, (x) => x.grossProfit);
+      pushLines("Expenses", secLines.expenses);
+      pushTotal("Expenses", "Total Expenses", totals.expenses, (x) => x.expenses.total);
+      pushTotal("", "Net Income", totals.netIncome, (x) => x.netIncome);
       downloadCsv(`pnl_${r.start}_${r.end}_by-month.csv`, rows);
       return;
     }
@@ -605,12 +649,17 @@ function PnlTab() {
       {report && (
         <>
         <div className="grid gap-3 sm:grid-cols-3">
-          <KpiTile label="Income" amount={report.income.total} prev={cmp?.income.total} showCompare={showCompare} />
-          <KpiTile label="Expenses" amount={report.cogs.total + report.expenses.total} prev={cmp ? cmp.cogs.total + cmp.expenses.total : null} showCompare={showCompare} />
-          <KpiTile label="Net Profit" amount={report.netIncome} prev={cmp?.netIncome} showCompare={showCompare} signed />
+          <KpiTile label="Income" amount={totals.income} prev={cmp?.income.total} showCompare={showCompare} />
+          <KpiTile label="Expenses" amount={totals.cogs + totals.expenses} prev={cmp ? cmp.cogs.total + cmp.expenses.total : null} showCompare={showCompare} />
+          <KpiTile label="Net Profit" amount={totals.netIncome} prev={cmp?.netIncome} showCompare={showCompare} signed />
         </div>
         {byMonth && monthData?.truncated && (
           <p className="text-[11px] text-amber-600">Range exceeds 12 months; showing the last 12.</p>
+        )}
+        {byMonth && Math.abs(methodologyGap) > 0.01 && (
+          <p className="text-[11px] text-muted-foreground">
+            Totals here sum the month columns. Months with a usable stock count use count-adjusted COGS, so they can differ from the full-period statement (net {RM(report.netIncome)} for this range in Total columns mode).
+          </p>
         )}
         {byMonth && showChart && <TrendChart points={trend} />}
         <div className="flex flex-wrap items-center gap-2">
@@ -667,19 +716,19 @@ function PnlTab() {
             </thead>
             <tbody>
               <SectionHeader label="Income" cols={cols} collapsed={!!collapsed.income} onToggle={() => toggleSection("income")} />
-              {!collapsed.income && report.income.lines.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
-              <TotalRow label="Total Income" amount={report.income.total} totalIncome={report.income.total} compareAmount={cmp?.income.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.income.total)} />
+              {!collapsed.income && secLines.income.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={totals.income} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
+              <TotalRow label="Total Income" amount={totals.income} totalIncome={totals.income} compareAmount={cmp?.income.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.income.total)} />
 
               <SectionHeader label="Cost of Sales" cols={cols} collapsed={!!collapsed.cogs} onToggle={() => toggleSection("cogs")} />
-              {!collapsed.cogs && report.cogs.lines.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
-              <TotalRow label="Total COGS" amount={report.cogs.total} totalIncome={report.income.total} compareAmount={cmp?.cogs.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.cogs.total)} />
-              <TotalRow label="Gross Profit" amount={report.grossProfit} totalIncome={report.income.total} compareAmount={cmp?.grossProfit} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.grossProfit)} />
+              {!collapsed.cogs && secLines.cogs.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={totals.income} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
+              <TotalRow label="Total COGS" amount={totals.cogs} totalIncome={totals.income} compareAmount={cmp?.cogs.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.cogs.total)} />
+              <TotalRow label="Gross Profit" amount={totals.grossProfit} totalIncome={totals.income} compareAmount={cmp?.grossProfit} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.grossProfit)} />
 
               <SectionHeader label="Expenses" cols={cols} collapsed={!!collapsed.expenses} onToggle={() => toggleSection("expenses")} />
-              {!collapsed.expenses && report.expenses.lines.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
-              <TotalRow label="Total Expenses" amount={report.expenses.total} totalIncome={report.income.total} compareAmount={cmp?.expenses.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.expenses.total)} />
+              {!collapsed.expenses && secLines.expenses.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={totals.income} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
+              <TotalRow label="Total Expenses" amount={totals.expenses} totalIncome={totals.income} compareAmount={cmp?.expenses.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.expenses.total)} />
 
-              <TotalRow label="Net Income" amount={report.netIncome} totalIncome={report.income.total} compareAmount={cmp?.netIncome} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.netIncome)} signed />
+              <TotalRow label="Net Income" amount={totals.netIncome} totalIncome={totals.income} compareAmount={cmp?.netIncome} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.netIncome)} signed />
             </tbody>
           </table>
         </div>
@@ -690,8 +739,8 @@ function PnlTab() {
         <SheetContent side="right" className="w-full sm:max-w-3xl flex flex-col gap-0 p-0">
           <SheetHeader className="border-b px-4 py-4 sm:px-6">
             <SheetTitle>
-              {(drillCode && report &&
-                [...report.income.lines, ...report.cogs.lines, ...report.expenses.lines]
+              {(drillCode &&
+                [...secLines.income, ...secLines.cogs, ...secLines.expenses]
                   .find((l) => l.code === drillCode)?.name) ?? drillCode}
             </SheetTitle>
             {report && (
