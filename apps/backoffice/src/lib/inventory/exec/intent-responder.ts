@@ -264,11 +264,17 @@ async function maybeSendToSupplier(phone: string, text: string): Promise<boolean
 /** POs whose promised delivery date has passed with no GRN → chase for a fresh ETA. */
 async function chaseMissedPromises(): Promise<number> {
   const now = new Date();
+  // Only chase a RECENTLY-overdue delivery. A PO weeks past its date with still no GRN is almost
+  // always a missing-receiving (ops didn't record the goods), NOT a late delivery — chasing the
+  // supplier for a "new ETA" on a 6-week-old PO is wrong and looks disorganised. Beyond this
+  // window it's left for ops to reconcile (the goods likely arrived and just need receiving).
+  const CHASE_MAX_OVERDUE_DAYS = 7;
+  const chaseFloor = new Date(now.getTime() - CHASE_MAX_OVERDUE_DAYS * 24 * 60 * 60 * 1000);
   const overdue = await prisma.order.findMany({
     where: {
       orderType: "PURCHASE_ORDER",
       status: { in: AWAITING_STATUSES },
-      deliveryDate: { lt: now },
+      deliveryDate: { lt: now, gte: chaseFloor },
       receivings: { none: {} },
     },
     take: 30,
