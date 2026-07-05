@@ -2256,6 +2256,141 @@ type QrTender = {
 };
 type Recon = { start: string; end: string; channels: ReconChannel[]; qrTender: QrTender; totals: { salesRecognised: number; settledToBank: number; unreconciled: number } };
 
+// ─── Channel settlement reconciliation (per company + consolidated) ──
+type ChannelMonth = {
+  month: string; accrued: number; settled: number; residual: number;
+  commission: number; residualAfterCommission: number;
+};
+type ChannelRow = {
+  code: string; label: string; accrued: number; settled: number; residual: number;
+  commission: number; residualAfterCommission: number; months: ChannelMonth[];
+};
+type CompanyChannelSettlement = {
+  companyId: string; companyName: string; channels: ChannelRow[];
+  entityNet: number; totalCommission: number; entityNetAfterCommission: number;
+};
+type ChannelSettlement = {
+  start: string; end: string;
+  companies: CompanyChannelSettlement[];
+  consolidated: { channels: ChannelRow[]; entityNet: number; totalCommission: number; entityNetAfterCommission: number };
+};
+
+// One company (or the consolidated total) rendered as a channel table with an
+// expandable monthly drill per channel and a prominent entity-net summary row.
+function ChannelSettlementCard({ title, channels, entityNet, totalCommission, entityNetAfterCommission, idPrefix }: {
+  title: string;
+  channels: ChannelRow[];
+  entityNet: number;
+  totalCommission: number;
+  entityNetAfterCommission: number;
+  idPrefix: string;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const totAccrued = channels.reduce((s, c) => s + c.accrued, 0);
+  const totSettled = channels.reduce((s, c) => s + c.settled, 0);
+  const totResidual = channels.reduce((s, c) => s + c.residual, 0);
+  const totAfterComm = channels.reduce((s, c) => s + c.residualAfterCommission, 0);
+  return (
+    <div className="space-y-2">
+      <h4 className="text-sm font-semibold">{title}</h4>
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Channel</th>
+            <th className="px-3 py-2 text-right font-medium">Sales accrued</th>
+            <th className="px-3 py-2 text-right font-medium">Cash settled</th>
+            <th className="px-3 py-2 text-right font-medium">Net residual</th>
+            <th className="px-3 py-2 text-right font-medium">Commission booked</th>
+            <th className="px-3 py-2 text-right font-medium">Residual after commission</th>
+          </tr></thead>
+          <tbody className="divide-y">
+            {channels.map((c) => (
+              <Fragment key={c.code}>
+                <tr className="cursor-pointer hover:bg-muted/40" onClick={() => setOpen(open === c.code ? null : c.code)} title="Show monthly breakdown">
+                  <td className="px-3 py-1.5">
+                    <span className="font-medium">{c.label}</span>
+                    <span className="ml-2 text-xs text-muted-foreground tabular-nums">{c.code}</span>
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{RM(c.accrued)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{RM(c.settled)}</td>
+                  <td className={`px-3 py-1.5 text-right tabular-nums ${c.residual < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(c.residual)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{RM(c.commission)}</td>
+                  <td className={`px-3 py-1.5 text-right tabular-nums ${c.residualAfterCommission < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(c.residualAfterCommission)}</td>
+                </tr>
+                {open === c.code && c.months.map((m) => (
+                  <tr key={`${idPrefix}-${c.code}-${m.month}`} className="bg-muted/20 text-xs">
+                    <td className="px-3 py-1 pl-8 text-muted-foreground tabular-nums">{m.month}</td>
+                    <td className="px-3 py-1 text-right tabular-nums">{RM(m.accrued)}</td>
+                    <td className="px-3 py-1 text-right tabular-nums">{RM(m.settled)}</td>
+                    <td className={`px-3 py-1 text-right tabular-nums ${m.residual < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(m.residual)}</td>
+                    <td className="px-3 py-1 text-right tabular-nums">{RM(m.commission)}</td>
+                    <td className={`px-3 py-1 text-right tabular-nums ${m.residualAfterCommission < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(m.residualAfterCommission)}</td>
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t font-medium">
+              <td className="px-3 py-1.5">All channels</td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{RM(totAccrued)}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{RM(totSettled)}</td>
+              <td className={`px-3 py-1.5 text-right tabular-nums ${totResidual < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(totResidual)}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{RM(totalCommission)}</td>
+              <td className={`px-3 py-1.5 text-right tabular-nums ${totAfterComm < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(totAfterComm)}</td>
+            </tr>
+            <tr className="border-t-2 bg-muted/30 font-semibold">
+              <td className="px-3 py-2" title="Total across the three debtors of accrued minus settled. The true unreconciled figure, since per-channel splits are noisy.">Entity net (real unreconciled)</td>
+              <td className="px-3 py-2" colSpan={2} />
+              <td className={`px-3 py-2 text-right tabular-nums ${entityNet < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(entityNet)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{RM(totalCommission)}</td>
+              <td className={`px-3 py-2 text-right tabular-nums ${entityNetAfterCommission < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(entityNetAfterCommission)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ChannelSettlementSection({ start, end }: { start: string; end: string }) {
+  const { data, isLoading } = useFetch<{ report: ChannelSettlement }>(`/api/finance/reports/channel-settlement?start=${start}&end=${end}`);
+  if (isLoading || !data?.report) {
+    return <div className="py-8 text-center text-sm text-muted-foreground">Loading channel settlement…</div>;
+  }
+  const r = data.report;
+  return (
+    <div className="mt-6 space-y-4">
+      <div className="flex items-baseline justify-between">
+        <h3 className="text-sm font-semibold">Channel settlement reconciliation</h3>
+        <span className="text-[11px] text-muted-foreground">accrued vs settled per channel debtor, by entity</span>
+      </div>
+      <ChannelSettlementCard
+        title="Consolidated (all entities)"
+        channels={r.consolidated.channels}
+        entityNet={r.consolidated.entityNet}
+        totalCommission={r.consolidated.totalCommission}
+        entityNetAfterCommission={r.consolidated.entityNetAfterCommission}
+        idPrefix="consolidated"
+      />
+      {r.companies.map((co) => (
+        <ChannelSettlementCard
+          key={co.companyId}
+          title={co.companyName}
+          channels={co.channels}
+          entityNet={co.entityNet}
+          totalCommission={co.totalCommission}
+          entityNetAfterCommission={co.entityNetAfterCommission}
+          idPrefix={co.companyId}
+        />
+      ))}
+      <p className="text-[11px] text-muted-foreground">
+        Sales are accrued as a debit to each channel debtor (Card 1006, GrabFood 1005, Cash &amp; QR 1000-02); bank settlements credit it. The residual splits into three causes. Per-channel gaps are inflated by settlement cash arriving under a different channel label than the sale was accrued under (for example a Grab payout crediting Card 1006 instead of 1005), so the per-channel columns are noisy and the <span className="font-medium">entity net</span> across all three debtors is the real unreconciled figure. Commission is the expected permanent portion, already expensed (GrabFood commission at the payout-derived rate applied to gross Grab accrual, card MDR as bank fees), so residual after commission is the misattribution-plus-timing part; whatever remains after that is timing (recent sales not yet settled). This view is strictly read-only. The clearing actions (retag misattributed settlements, post commission clearing) are a deliberate follow-up and are not done here.
+      </p>
+    </div>
+  );
+}
+
 function ReconTab() {
   // Default to the matched period: sales archive + bank feed both exist from
   // 2026-01, so the channels net to true fees/timing (before that the bank feed
@@ -2353,6 +2488,8 @@ function ReconTab() {
           <p className="text-[11px] text-muted-foreground">DuitNow QR settles same-day at full value (no commission), so QR sales rung should equal QR settled to the cent. Read from the tender source (StoreHub archive + POS-native QR vs the bank QR category) rather than the commingled Cash &amp; QR ledger account. Each month nets to a small settlement-timing gap; the first month also carries the prior-December QR that settled in January.</p>
         </div>
       )}
+
+      <ChannelSettlementSection start={start} end={end} />
     </div>
   );
 }
