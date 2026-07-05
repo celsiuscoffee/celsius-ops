@@ -33,7 +33,9 @@ async function isValidAdminToken(token: string): Promise<boolean> {
 }
 
 // Paths that must NOT be rewritten to the PWA SPA shell — Next.js
-// routes (api, staff), build assets, and known static files.
+// routes (api), build assets, and known static files. `/staff` is kept
+// reserved so a stale bookmark to the retired staff/KDS web pages 404s via
+// routing instead of falling through to the customer SPA shell.
 const PWA_PASSTHROUGH = [
   /^\/api(\/|$)/,
   /^\/staff(\/|$)/,
