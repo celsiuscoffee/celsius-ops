@@ -250,9 +250,57 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   const rows: ShiftRow[] = [];
   // Rest days: profile value wins; otherwise stagger Mon(1)–Thu(4) so the
   // full crew is on Fri–Sun. Sorted by name for a stable rotation.
+  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; rev: number }>>`
+    SELECT EXTRACT(DOW FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
+           EXTRACT(HOUR FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
+           (sum(total) / 100.0 / 4)::float AS rev
+    FROM pos_orders
+    WHERE outlet_id = ${outlet.loyaltyOutletId ?? ""}
+      AND status = 'completed' AND refund_of_order_id IS NULL
+      AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+    GROUP BY 1, 2
+  `;
+  const demand = new Map<string, number>(); // "dw:hr" → staff needed
+  // Sales-derived need, floored at the service minimum while trading — a
+  // quiet Tuesday close still needs 3 on the floor.
+  for (const h of hourly) {
+    if (h.rev <= 0) continue;
+    demand.set(`${h.dw}:${h.hr}`, Math.max(Math.ceil(h.rev / REVENUE_PER_LABOUR_HOUR), SERVICE_FLOOR));
+  }
+
+  // Weekday busyness (sales-need hours per day-of-week) — used to place the
+  // unavoidable rest-day doubles on the quietest days.
+  const dowLoad = new Map<number, number>();
+  for (const [key, n] of demand) {
+    const dw = Number(key.split(":")[0]);
+    dowLoad.set(dw, (dowLoad.get(dw) ?? 0) + n);
+  }
+
   const sortedFT = [...fullTimers].sort((a, b) => a.name.localeCompare(b.name));
+  // Rest days: profile value wins. Everyone else spreads across Mon–Thu so no
+  // day loses more than its share of crew — one rest per day first, and when
+  // there are more FT than rest slots, the doubles land on the quietest
+  // weekdays instead of stacking on Monday/Tuesday.
+  const restSlots = [1, 2, 3, 4]
+    .filter((d) => daysOpen.has(d))
+    .sort((a, b) => (dowLoad.get(a) ?? 0) - (dowLoad.get(b) ?? 0));
+  const restCount = new Map<number, number>(restSlots.map((d) => [d, 0]));
   const restDayOf = new Map<string, number>();
-  sortedFT.forEach((s, i) => restDayOf.set(s.id, s.rest_day ?? ((i % 4) + 1)));
+  for (const s of sortedFT) {
+    if (s.rest_day != null) {
+      restDayOf.set(s.id, s.rest_day);
+      if (restCount.has(s.rest_day)) restCount.set(s.rest_day, (restCount.get(s.rest_day) ?? 0) + 1);
+    }
+  }
+  for (const s of sortedFT) {
+    if (restDayOf.has(s.id)) continue;
+    const day = restSlots.length
+      ? [...restSlots].sort((a, b) => (restCount.get(a) ?? 0) - (restCount.get(b) ?? 0))[0]
+      : 1;
+    restDayOf.set(s.id, day);
+    restCount.set(day, (restCount.get(day) ?? 0) + 1);
+  }
 
   const ftHours = new Map<string, number>();
   for (const date of dates) {
@@ -392,24 +440,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
 
   // Demand gaps: hourly sales (trailing 28 days, per day-of-week) → staff
   // needed per hour vs FT heads on the floor. Positive gap-hours ranked.
-  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; rev: number }>>`
-    SELECT EXTRACT(DOW FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
-           EXTRACT(HOUR FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
-           (sum(total) / 100.0 / 4)::float AS rev
-    FROM pos_orders
-    WHERE outlet_id = ${outlet.loyaltyOutletId ?? ""}
-      AND status = 'completed' AND refund_of_order_id IS NULL
-      AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-    GROUP BY 1, 2
-  `;
-  const demand = new Map<string, number>(); // "dw:hr" → staff needed
-  // Sales-derived need, floored at the service minimum while trading — a
-  // quiet Tuesday close still needs 3 on the floor.
-  for (const h of hourly) {
-    if (h.rev <= 0) continue;
-    demand.set(`${h.dw}:${h.hr}`, Math.max(Math.ceil(h.rev / REVENUE_PER_LABOUR_HOUR), SERVICE_FLOOR));
-  }
+  // (hourly demand computed above, before the FT skeleton)
 
   type Gap = { date: string; template: ShiftTemplate; slot: string; gapHours: number };
   const gaps: Gap[] = [];
