@@ -273,21 +273,3 @@ export async function fetchAllRedemptions(brandId: string = "brand-celsius"): Pr
     return [];
   }
 }
-
-// ─── Staff ───────────────────────────────────────────
-export async function verifyStaffPin(
-  outletId: string,
-  pin: string,
-): Promise<{ success: boolean; staff_name?: string; outlet_name?: string; error?: string }> {
-  try {
-    const res = await fetch("/api/staff/verify-pin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ outlet_id: outletId, pin }),
-    });
-    return res.json();
-  } catch {
-    return { success: false, error: "Network error" };
-  }
-}
