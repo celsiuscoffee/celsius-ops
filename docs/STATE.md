@@ -41,6 +41,27 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   writes `fin_matches`. Only `ap`/`categorization` exceptions have a
   resolver; other exception types noop on resolve.
 
+- 2026-07-05 — **Revenue is split across 3 tables** and reconciles to the
+  manpower workbook to the ringgit: `storehub_sales` (per-outlet retirement
+  Jun 15–17), `pos_orders` (in-house POS from Jun 8/15/18, GrabFood
+  included), `orders` (pickup app). Any revenue query must UNION all three
+  while the cutover is in a trailing window (`lib/hr/labour-gate.ts`
+  `revenueBetween`).
+- 2026-07-05 — **PT wages never flow through payroll runs** (Apr+): they are
+  weekly bank transfers → `BankStatementLine` (`partimer` rule) → GL
+  `6500-03`. June per outlet: Con 5,103 / SA 9,168 / Tam 6,078 / Nilai
+  3,892. Outlet venue prefixes exist in descriptions since June; classifier
+  fixed + 266 rows backfilled (migration 071).
+- 2026-07-05 — All six 2026 monthly payroll runs are status `draft` (no
+  OT/allowances finalised) — FT actuals read ~RM3k/outlet flattering vs the
+  workbook until closed.
+- 2026-07-05 — 4 scheduled staff have no `hr_employee_profiles` row
+  (Hidayat, Irfan, a 2nd Haziq — Putrajaya; Fatin — Tamarind). The labour
+  gate blocks publishes that include them until profiles+rates exist.
+- 2026-07-05 — Shift templates of record are the `hr_shift_templates` DB
+  rows (Opening / Middle 1–3 / Closing per outlet); `lib/hr/shift-templates.ts`
+  is only the fallback when the table is empty.
+
 ## General rules
 
 - Typecheck before pushing — every time. CI enforces it, but catch it locally.
@@ -82,7 +103,24 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   Pass commit messages via env var, not inline in the shell command (backticks/
   `*`/newlines get shell-expanded). (Source: `.github/workflows/pos-native-ota.yml`.)
 
+- 2026-07-05 — The AI Fill week-wipe (60 shifts) was the old generator's
+  DELETE-then-INSERT persist with no transaction; `hr_schedule_shift_audit`
+  (migration 070) held every deleted row and `jsonb_populate_record` restored
+  them losslessly. Replace-style writers must delete+insert in ONE
+  transaction, and the delete-audit pattern pays for itself.
+
 ## Resume pointer
+
+- 2026-07-05 — **People-cost gating loop shipped** (PRs #765/#780/#785 all
+  merged): labour gate + publish enforcement (green/amber/red, per-outlet
+  budgets Con 16/18, SA 18/20, Tam 22/25 interim), editor badge + per-day
+  coverage chips, PT bank-line outlet tagging, Monday variance digest
+  (`cron/labour-variance`, SHADOW — flip `LABOUR_VARIANCE_MODE=armed` after
+  one sane Monday), and a rule-based+agentic AI Fill (DB templates, FT 45h +
+  rest days, rovers 2 days/outlet, PT as amber `pt_suggestion` cells inside
+  the budget envelope). Design + verification:
+  `docs/design/people-cost-gating-loop.md`. Humans owe: profiles for the 4
+  orphan staff, finalise 6 draft payroll runs, confirm Tamarind 22/25.
 
 - 2026-07-04 — Harness scaffolding rounds 1+2 done: root `CLAUDE.md`, this
   file, skills `{db-migration,ota-release,procurement-e2e,finance-module,
