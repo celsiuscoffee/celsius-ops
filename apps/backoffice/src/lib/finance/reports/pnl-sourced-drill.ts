@@ -20,6 +20,12 @@ import { getDefaultCompanyId } from "../companies";
 import { depreciationByAsset } from "../fixed-assets";
 import { effectiveGrabRate, fetchRecognisedBankLines } from "./pnl-sourced";
 import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
+import {
+  peopleCostDrill,
+  PEOPLE_SALARY_CODE,
+  PEOPLE_STAT_CODE,
+  type PeopleDrillRow,
+} from "./people-cost";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const dStart = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -94,7 +100,7 @@ function companyForAccount(accountName: string | null): string {
   return accountName ?? "—";
 }
 export function isSourcedPnlCode(code: string): boolean {
-  return /^(REV-|PROC$|INV-|MKT-|BANK:|DEP$)/.test(code);
+  return /^(REV-|PROC$|INV-|MKT-|BANK:|DEP$|PEOPLE-)/.test(code);
 }
 
 async function companyOutlets(companyId: string, outletId?: string | null): Promise<string[]> {
@@ -374,6 +380,58 @@ async function drillBank(cat: string, companyId: string, start: string, end: str
   }));
 }
 
+// PEOPLE-SALARY / PEOPLE-STAT (and their -UNASSIGNED variants): the per-employee
+// payroll items behind the accrued people-cost line, from the SAME aggregation
+// as buildSourcedPnl (people-cost.ts) so the drill total ties to the line. Each
+// row is one employee in one payroll-run month; the unassigned variant lists the
+// employees with no assigned outlet.
+async function drillPeople(
+  code: string,
+  companyId: string,
+  start: string,
+  end: string,
+  outletId?: string | null,
+): Promise<DrillLine[]> {
+  const isUnassigned = code.endsWith("-UNASSIGNED");
+  const metric: "salary" | "statutory" = code.startsWith(PEOPLE_STAT_CODE) ? "statutory" : "salary";
+  const outletIds = await companyOutlets(companyId, outletId);
+  let scopeKind: "company" | "outlet" | "consolidated" | "unassigned";
+  if (isUnassigned) scopeKind = "unassigned";
+  else if (outletId) scopeKind = "outlet";
+  else if (companyId === CONSOLIDATED) scopeKind = "consolidated";
+  else scopeKind = "company";
+
+  const rows: PeopleDrillRow[] = await peopleCostDrill({
+    metric,
+    scopeKind,
+    companyId,
+    outletIds,
+    start,
+    end,
+  });
+
+  // Resolve outlet names once for the row descriptions (assigned staff only).
+  const oids = [...new Set(rows.map((r) => r.outletId).filter((x): x is string => !!x))];
+  const outletNames = new Map<string, string>();
+  if (oids.length) {
+    const outlets = await prisma.outlet.findMany({ where: { id: { in: oids } }, select: { id: true, name: true } });
+    for (const o of outlets) outletNames.set(o.id, o.name);
+  }
+
+  const monthLabel = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}`;
+  return rows.map((r) => {
+    const where = r.outletId ? outletNames.get(r.outletId) ?? "(outlet)" : "no assigned outlet";
+    return {
+      transactionId: `people-${metric}-${r.userId}-${r.year}-${r.month}`,
+      txnDate: `${monthLabel(r.year, r.month)}-01`,
+      description: `${r.name ?? r.userId} · ${where} · payroll ${monthLabel(r.year, r.month)}`,
+      amount: r.amount,
+      debit: r.amount,
+      credit: 0,
+    };
+  });
+}
+
 export async function sourcedPnlDrillDown(args: {
   companyId: string;
   code: string;
@@ -395,6 +453,10 @@ export async function sourcedPnlDrillDown(args: {
   if (code === "MKT-GRAB-PROMO") return drillGrabPromo(companyId, start, end, outletId);
   if (code === "MKT-GRAB-ADS") return drillGrabAds(companyId, start, end, outletId);
   if (code === "DEP") return drillDepreciation(companyId, start, end, outletId);
+  // People cost (accrued from HR payroll): drill into the per-employee items.
+  if (code.startsWith(PEOPLE_SALARY_CODE) || code.startsWith(PEOPLE_STAT_CODE)) {
+    return drillPeople(code, companyId, start, end, outletId);
+  }
   // Every opex bank line drills through the shared expense-month recognition
   // (override > matched invoice month > category shift > cash), so shifted
   // categories like management fee, salary, utilities and statutory tie to
