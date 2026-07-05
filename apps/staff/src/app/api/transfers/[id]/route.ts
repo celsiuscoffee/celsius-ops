@@ -10,6 +10,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json();
   const { status } = body;
 
+  // Outlet scope: a non-admin may only act on a transfer they're an endpoint
+  // of (source or destination outlet). Without this, any staffer could
+  // complete any transfer by id and inject stock into an arbitrary outlet
+  // (adjustStockBalance(toOutletId, …) below).
+  const existing = await prisma.stockTransfer.findUnique({
+    where: { id },
+    select: { fromOutletId: true, toOutletId: true },
+  });
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const isAdmin = session.role === "OWNER" || session.role === "ADMIN";
+  if (
+    !isAdmin &&
+    session.outletId !== existing.fromOutletId &&
+    session.outletId !== existing.toOutletId
+  ) {
+    return NextResponse.json({ error: "Transfer not in your outlet" }, { status: 403 });
+  }
+
   const data: Record<string, unknown> = { status };
 
   if (status === "COMPLETED") {

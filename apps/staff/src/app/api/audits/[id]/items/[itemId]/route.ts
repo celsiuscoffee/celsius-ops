@@ -22,6 +22,35 @@ export async function PATCH(
     return NextResponse.json({ error: "Item not found" }, { status: 404 });
   }
 
+  // Only the auditor / managers-in-outlet / admins may write item ratings —
+  // not the staff member being audited. Mirrors PATCH /api/audits/[id]; without
+  // it any staffer could rewrite ratings/notes/photos on any audit by id.
+  const report = await prisma.auditReport.findUnique({
+    where: { id },
+    select: { auditorId: true, outletId: true },
+  });
+  if (!report) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  const isAdmin = session.role === "OWNER" || session.role === "ADMIN";
+  let allowed = isAdmin || report.auditorId === session.id;
+  if (!allowed) {
+    const me = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { moduleAccess: true, outletId: true, outletIds: true },
+    });
+    const ops = (me?.moduleAccess as Record<string, unknown> | null)?.["ops"];
+    const hasAuditModule = ops === true || (Array.isArray(ops) && ops.includes("audit"));
+    const myOutlets = new Set<string>([
+      ...(me?.outletId ? [me.outletId] : []),
+      ...(me?.outletIds ?? []),
+    ]);
+    allowed = hasAuditModule && myOutlets.has(report.outletId);
+  }
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const data: Record<string, unknown> = {};
   if (rating !== undefined) data.rating = rating;
   if (notes !== undefined) data.notes = notes;

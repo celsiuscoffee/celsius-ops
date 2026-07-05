@@ -6,7 +6,13 @@ export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const outletId = new URL(req.url).searchParams.get("outletId") || undefined;
+  // Non-admins only ever see their own outlet's figures — the client
+  // ?outletId= is ignored for them (was a cross-outlet leak of
+  // spend/approvals/wastage). OWNER/ADMIN may scope to any outlet, or omit
+  // for the all-outlets view.
+  const isAdmin = session.role === "OWNER" || session.role === "ADMIN";
+  const requestedOutletId = new URL(req.url).searchParams.get("outletId") || undefined;
+  const outletId = isAdmin ? requestedOutletId : (session.outletId ?? undefined);
   const outletFilter = outletId ? { outletId } : undefined;
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
