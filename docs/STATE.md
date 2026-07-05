@@ -31,6 +31,13 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 - 2026-07-04 — Exception-inbox corrections update `fin_agent_decisions`
   (`corrected=true, corrected_to=…`) — this is the finance agents' eval/
   retraining dataset. Preserve the write path in any refactor.
+- 2026-07-05 — Categorizer runs on `claude-haiku-4-5` with a prompt-cached
+  COA block; its vendor context is the last **5** bills, not the 50 the
+  spec describes (spec drift, `categorizer.ts` `supplierHistory()`).
+- 2026-07-05 — The Anomaly agent from the finance spec is **not built**;
+  matching is rules-based (`ap-match.ts`) + an LLM verifier — nothing
+  writes `fin_matches`. Only `ap`/`categorization` exceptions have a
+  resolver; other exception types noop on resolve.
 
 ## General rules
 
@@ -42,8 +49,22 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Open failures
 
-_None recorded yet. Format:_
-- `YYYY-MM-DD — <symptom> — <what was tried> — <current hypothesis> — <blocking?>`
+- 2026-07-05 — **Correction mis-attribution in the finance eval dataset** —
+  `recordCorrection()` (`apps/backoffice/src/lib/finance/inbox.ts` ~L215)
+  tags the *most recent* categorizer decision (`order created_at desc,
+  take first`) instead of the one belonging to the corrected exception;
+  `fin_agent_decisions.related_id` is never populated by `logDecision()`
+  (`categorizer.ts` ~L227), so a correct join isn't possible today. Under
+  concurrent AP ingestion, corrections land on the wrong rows — silently
+  corrupting the retraining/eval set. Fix: populate `related_type`/
+  `related_id` at decision time, return the decision id from
+  `categorize()`, and join on it in `recordCorrection`. Not blocking
+  day-to-day finance ops; blocking for the eval-replay loop.
+- 2026-07-05 — `fin_agent_decisions.applied` is written `false` and never
+  updated by any code path — can't distinguish auto-posted decisions from
+  ignored ones when building eval cohorts.
+
+_Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <blocking?>`_
 
 ## Lessons learned
 
