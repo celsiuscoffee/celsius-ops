@@ -47,6 +47,9 @@ const MODEL = "claude-sonnet-4-6";
 // manpower workbook's staffing heuristic, used to size demand.
 const REVENUE_PER_LABOUR_HOUR = 69;
 const PT_MAX_HOURS_PER_WEEK = 24;
+// Minimum concurrent heads while the outlet is open — the workbook's service
+// floor (Tamarind explicitly 3/shift; the shift plans floor every outlet at 3).
+const SERVICE_FLOOR = 3;
 const PT_MAX_DAYS_PER_WEEK = 5;
 
 const ROVER_POSITIONS = new Set(["manager", "area manager", "head of department", "barista lead"]);
@@ -257,16 +260,38 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     const working = sortedFT.filter((s) => restDayOf.get(s.id) !== dow(date) && !onLeave.has(`${s.id}:${date}`));
     const resting = sortedFT.filter((s) => restDayOf.get(s.id) === dow(date) && !onLeave.has(`${s.id}:${date}`));
 
-    // Split the day's crew between opening and closing, kitchen (BOH) spread
-    // first so both shifts keep a kitchen hand, then FOH balances the count.
+    // Split the day's crew: kitchen (BOH) spread first so both anchor shifts
+    // keep a kitchen hand, then FOH balances the count. Ties go to CLOSING —
+    // the close needs the supervision/cash-up head, and an extra opener does
+    // nothing for the evening floor. Once both anchors hold the service
+    // floor (3+3), any surplus works a MIDDLE instead of overstaffing the
+    // open — the workbook's mid-shift pattern.
     const boh = working.filter((s) => isBOH(s.position));
     const foh = working.filter((s) => !isBOH(s.position));
     const opening: Staff[] = [];
     const closing: Staff[] = [];
-    boh.forEach((s, i) => (i % 2 === 0 ? opening : closing).push(s));
-    for (const s of foh) (opening.length <= closing.length ? opening : closing).push(s);
+    const middleCrew: Staff[] = [];
+    boh.forEach((s, i) => (i % 2 === 0 ? closing : opening).push(s));
+    for (const s of foh) {
+      if (
+        tpl.middles.length > 0 &&
+        opening.length >= SERVICE_FLOOR &&
+        closing.length >= SERVICE_FLOOR
+      ) {
+        middleCrew.push(s);
+      } else if (closing.length <= opening.length) {
+        closing.push(s);
+      } else {
+        opening.push(s);
+      }
+    }
 
-    for (const [group, t] of [[opening, tpl.opening], [closing, tpl.closing]] as const) {
+    const dayGroups: Array<[Staff[], ShiftTemplate]> = [
+      [opening, tpl.opening],
+      [closing, tpl.closing],
+      ...middleCrew.map((s, i): [Staff[], ShiftTemplate] => [[s], tpl.middles[i % tpl.middles.length]]),
+    ];
+    for (const [group, t] of dayGroups) {
       for (const s of group) {
         // Same row shape as a manual picker selection (cell route):
         // role_type = template label, notes = template id.
@@ -379,7 +404,12 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     GROUP BY 1, 2
   `;
   const demand = new Map<string, number>(); // "dw:hr" → staff needed
-  for (const h of hourly) demand.set(`${h.dw}:${h.hr}`, Math.ceil(h.rev / REVENUE_PER_LABOUR_HOUR));
+  // Sales-derived need, floored at the service minimum while trading — a
+  // quiet Tuesday close still needs 3 on the floor.
+  for (const h of hourly) {
+    if (h.rev <= 0) continue;
+    demand.set(`${h.dw}:${h.hr}`, Math.max(Math.ceil(h.rev / REVENUE_PER_LABOUR_HOUR), SERVICE_FLOOR));
+  }
 
   type Gap = { date: string; template: ShiftTemplate; slot: string; gapHours: number };
   const gaps: Gap[] = [];
