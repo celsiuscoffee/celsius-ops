@@ -22,17 +22,17 @@ async function loadAccounts(): Promise<Map<string, AccountMeta>> {
 }
 
 // Posted transaction ids for a company up to (and optionally from) a date.
-async function postedTxns(companyId: string, opts: { from?: string; to: string }): Promise<Map<string, { date: string; description: string; type: string }>> {
+async function postedTxns(companyId: string, opts: { from?: string; to: string }): Promise<Map<string, { date: string; description: string; type: string; agent: string | null }>> {
   const client = getFinanceClient();
   let q = client
     .from("fin_transactions")
-    .select("id, txn_date, description, txn_type")
+    .select("id, txn_date, description, txn_type, posted_by_agent")
     .eq("company_id", companyId)
     .eq("status", "posted")
     .lte("txn_date", opts.to);
   if (opts.from) q = q.gte("txn_date", opts.from);
   const { data } = await q;
-  return new Map((data ?? []).map((t) => [t.id as string, { date: t.txn_date as string, description: (t.description as string) ?? "", type: (t.txn_type as string) ?? "" }]));
+  return new Map((data ?? []).map((t) => [t.id as string, { date: t.txn_date as string, description: (t.description as string) ?? "", type: (t.txn_type as string) ?? "", agent: (t.posted_by_agent as string | null) ?? null }]));
 }
 
 async function* journalLinesFor(txnIds: string[], accountCode?: string) {
@@ -81,7 +81,9 @@ export async function buildTrialBalance(input: { companyId: string; asOf: string
 
 // ─── General Ledger (one account, with running balance) ─────────────────────
 
-export type GlEntry = { date: string; txnType: string; description: string; memo: string | null; debit: number; credit: number; balance: number };
+// transactionId + postedByAgent let the UI expand a bank-agent journal into
+// its source bank statement lines (fix a wrong booking from the report).
+export type GlEntry = { transactionId: string; postedByAgent: string | null; date: string; txnType: string; description: string; memo: string | null; debit: number; credit: number; balance: number };
 export type GeneralLedger = {
   companyId: string; accountCode: string; accountName: string; type: string;
   start: string; end: string;
@@ -102,11 +104,11 @@ export async function buildGeneralLedger(input: { companyId: string; accountCode
   }
 
   const inPeriod = await postedTxns(input.companyId, { from: input.start, to: input.end });
-  const raw: { date: string; txnType: string; description: string; memo: string | null; debit: number; credit: number }[] = [];
+  const raw: { transactionId: string; postedByAgent: string | null; date: string; txnType: string; description: string; memo: string | null; debit: number; credit: number }[] = [];
   for await (const lines of journalLinesFor([...inPeriod.keys()], input.accountCode)) {
     for (const l of lines) {
       const t = inPeriod.get(l.transaction_id)!;
-      raw.push({ date: t.date, txnType: t.type, description: t.description, memo: l.memo, debit: round2(Number(l.debit)), credit: round2(Number(l.credit)) });
+      raw.push({ transactionId: l.transaction_id, postedByAgent: t.agent, date: t.date, txnType: t.type, description: t.description, memo: l.memo, debit: round2(Number(l.debit)), credit: round2(Number(l.credit)) });
     }
   }
   raw.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));

@@ -167,12 +167,15 @@ export async function pnlDrillDown(args: {
     amount: number;
     debit: number;
     credit: number;
+    // Which agent posted the journal; "bank" journals can expand into their
+    // source bank statement lines (the fix-from-report flow).
+    meta?: { glAgent?: string | null };
   }>
 > {
   const client = getFinanceClient();
   const { data: txns } = await client
     .from("fin_transactions")
-    .select("id, txn_date, description, amount")
+    .select("id, txn_date, description, amount, posted_by_agent")
     .eq("company_id", args.companyId)
     .eq("status", "posted")
     .gte("txn_date", args.start)
@@ -188,6 +191,7 @@ export async function pnlDrillDown(args: {
     amount: number;
     debit: number;
     credit: number;
+    meta?: { glAgent?: string | null };
   }> = [];
 
   const chunkSize = 200;
@@ -201,6 +205,7 @@ export async function pnlDrillDown(args: {
     for (const l of lines ?? []) {
       const t = txnMap.get(l.transaction_id as string);
       if (!t) continue;
+      const agent = (t as { posted_by_agent?: string | null }).posted_by_agent ?? null;
       results.push({
         transactionId: l.transaction_id as string,
         txnDate: t.txn_date as string,
@@ -208,6 +213,7 @@ export async function pnlDrillDown(args: {
         amount: Number(t.amount),
         debit: Number(l.debit),
         credit: Number(l.credit),
+        ...(agent ? { meta: { glAgent: agent } } : {}),
       });
     }
   }
