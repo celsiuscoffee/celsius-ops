@@ -106,23 +106,43 @@ function isBOH(position: string | null): boolean {
   return p.includes("kitchen") || p.includes("chef") || p.includes("boh");
 }
 
-// Pick the outlet's working templates in start-time order and name their
-// roles: first = opening, last = closing, anything between = middle. The
-// generic full-day template is used only when an outlet has no named shifts.
-function outletTemplates(code: string): { opening: ShiftTemplate; middle: ShiftTemplate | null; closing: ShiftTemplate } {
-  const all = templatesForOutlet(code)
-    .filter((t) => t.id !== "full_day")
-    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+// Load the outlet's working templates — the SAME list the grid's shift
+// picker shows: DB `hr_shift_templates` (outlet-specific + generic, active)
+// first, code fallback when the table is empty. Sorted by start time:
+// earliest = opening, latest = closing, everything between = middles
+// (e.g. "Middle 1/2/3") — FT anchors on opening/closing; every middle is a
+// candidate slot for PT suggestions.
+async function loadTemplates(
+  outletId: string,
+  code: string,
+): Promise<{ opening: ShiftTemplate; middles: ShiftTemplate[]; closing: ShiftTemplate }> {
+  const { data: dbTemplates } = await hrSupabaseAdmin
+    .from("hr_shift_templates")
+    .select("id, label, start_time, end_time, break_minutes")
+    .eq("is_active", true)
+    .or(`outlet_id.eq.${outletId},outlet_id.is.null`)
+    .order("start_time");
+
+  type DbTpl = { id: string; label: string; start_time: string; end_time: string; break_minutes: number | null };
+  let all: ShiftTemplate[] = ((dbTemplates ?? []) as DbTpl[]).map((t) => ({
+    id: t.id,
+    label: t.label,
+    start_time: t.start_time.slice(0, 5),
+    end_time: t.end_time.slice(0, 5),
+    break_minutes: t.break_minutes ?? 30,
+    color: "gray",
+  }));
+  if (all.length === 0) {
+    all = templatesForOutlet(code)
+      .filter((t) => t.id !== "full_day")
+      .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  }
   if (all.length === 0) {
     const fallback = templatesForOutlet(code)[0];
-    return { opening: fallback, middle: null, closing: fallback };
+    return { opening: fallback, middles: [], closing: fallback };
   }
-  if (all.length === 1) return { opening: all[0], middle: null, closing: all[0] };
-  return {
-    opening: all[0],
-    closing: all[all.length - 1],
-    middle: all.length > 2 ? all[1] : null,
-  };
+  if (all.length === 1) return { opening: all[0], middles: [], closing: all[0] };
+  return { opening: all[0], middles: all.slice(1, -1), closing: all[all.length - 1] };
 }
 
 // ─── generator ───────────────────────────────────────────────────────
@@ -140,7 +160,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   if (!outlet) throw new Error("Outlet not found");
   const budget = OUTLET_BUDGETS[outlet.code ?? ""] ?? DEFAULT_BUDGET;
   const daysOpen = new Set(outlet.daysOpen?.length ? outlet.daysOpen.map((d) => d % 7) : [0, 1, 2, 3, 4, 5, 6]);
-  const tpl = outletTemplates(outlet.code ?? "");
+  const tpl = await loadTemplates(outletId, outlet.code ?? "");
 
   // A published week is the manager's committed roster — never regenerate over it.
   const { data: existing } = await hrSupabaseAdmin
@@ -187,8 +207,22 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         rest_day: p?.rest_day ?? null,
       };
     })
-    // Rovers (AM / HoD / rover lead) are HQ-scheduled by hand, not auto-filled.
+    // Rovers are placed separately below (2 days/outlet-week); HoD stays HQ.
     .filter((s) => !ROVER_POSITIONS.has((s.position ?? "").trim().toLowerCase()));
+
+  // Rovers — the Area Manager and the rover lead rotate 2 days/week at each
+  // outlet (workbook Rover Coverage). They are HQ-costed: RM0 to the outlet
+  // in the labour gate, capped at the 2-shift rover quota. HoD excluded.
+  const { data: roverProfiles } = await hrSupabaseAdmin
+    .from("hr_employee_profiles")
+    .select("user_id, position")
+    .in("position", ["Manager", "Area Manager", "Barista Lead"])
+    .is("end_date", null);
+  const roverIds = ((roverProfiles ?? []) as { user_id: string; position: string }[]).map((p) => p.user_id);
+  const roverUsers = roverIds.length
+    ? await prisma.user.findMany({ where: { id: { in: roverIds }, status: "ACTIVE" }, select: { id: true, name: true } })
+    : [];
+  const roverPositionOf = new Map(((roverProfiles ?? []) as { user_id: string; position: string }[]).map((p) => [p.user_id, p.position]));
 
   const fullTimers = staff.filter((s) => s.employment_type === "full_time" || s.employment_type === "contract");
   const partTimers = staff.filter((s) => s.employment_type === "part_time" || s.employment_type === "intern");
@@ -263,16 +297,63 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     notes.push(`⚠ under 45h/wk (leave or closed days): ${under45.map((s) => `${s.name} ${Math.round(ftHours.get(s.id) ?? 0)}h`).join(", ")}`);
   }
 
+  // Rover placement: 2 days each at this outlet, on the days with the
+  // thinnest FT crew, skipping days they're already rostered at another
+  // outlet this week (their full week is 2 days × 3 outlets).
+  if (roverUsers.length > 0) {
+    const { data: elsewhere } = await hrSupabaseAdmin
+      .from("hr_schedule_shifts")
+      .select("user_id, shift_date, schedule_id, hr_schedules!inner(week_start)")
+      .in("user_id", roverUsers.map((r) => r.id))
+      .eq("hr_schedules.week_start", weekStart);
+    const busy = new Set(
+      ((elsewhere ?? []) as Array<{ user_id: string; shift_date: string; schedule_id: string }>)
+        .filter((s) => s.schedule_id !== existing?.id)
+        .map((s) => `${s.user_id}:${s.shift_date}`),
+    );
+    const ftHeads = (date: string) => rows.filter((r) => r.shift_date === date && r.notes === null).length;
+    for (const rover of roverUsers) {
+      const days = dates
+        .filter((d) => daysOpen.has(dow(d)) && !busy.has(`${rover.id}:${d}`) && !onLeave.has(`${rover.id}:${d}`))
+        .sort((a, b) => ftHeads(a) - ftHeads(b))
+        .slice(0, 2);
+      for (const date of days) {
+        // Lead joins whichever anchor shift is thinner that day.
+        const openHeads = rows.filter((r) => r.shift_date === date && r.notes === null && r.start_time === hhmmss(tpl.opening.start_time)).length;
+        const closeHeads = rows.filter((r) => r.shift_date === date && r.notes === null && r.start_time === hhmmss(tpl.closing.start_time)).length;
+        const t = openHeads <= closeHeads ? tpl.opening : tpl.closing;
+        rows.push({
+          user_id: rover.id,
+          shift_date: date,
+          start_time: hhmmss(t.start_time),
+          end_time: hhmmss(t.end_time),
+          role_type: "LEAD",
+          break_minutes: t.break_minutes,
+          notes: null,
+        });
+      }
+      if (days.length > 0) {
+        notes.push(`Rover ${rover.name} (${roverPositionOf.get(rover.id)}): ${days.join(", ")} — RM0 to outlet, HQ-costed`);
+      }
+    }
+  }
+
   // ── Stage 2: PT budget envelope — the only spend that moves labour % ─
   const forecast = Math.round(await forecastWeekRevenue(outlet, weekStart));
   const ftCostRows: ShiftCostRow[] = rows
     .filter((r) => r.notes !== "rest_day")
     .map((r) => {
-      const s = staff.find((x) => x.id === r.user_id)!;
+      const s = staff.find((x) => x.id === r.user_id);
+      const rover = roverUsers.find((x) => x.id === r.user_id);
       return {
         user_id: r.user_id, shift_date: r.shift_date, start_time: r.start_time, end_time: r.end_time,
-        userName: s.name, position: s.position, employment_type: s.employment_type,
-        hourly_rate: s.hourly_rate, basic_salary: s.basic_salary, epf_employer_rate: null,
+        userName: s?.name ?? rover?.name ?? r.user_id.slice(0, 8),
+        // Rovers carry their rover position so costRoster prices them at RM0.
+        position: s?.position ?? roverPositionOf.get(r.user_id) ?? null,
+        employment_type: s?.employment_type ?? "full_time",
+        hourly_rate: s?.hourly_rate ?? null,
+        basic_salary: s?.basic_salary ?? 0,
+        epf_employer_rate: null,
       };
     });
   const ftCost = Math.round(costRoster(ftCostRows).cost);
@@ -300,9 +381,14 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
 
   type Gap = { date: string; template: ShiftTemplate; slot: string; gapHours: number };
   const gaps: Gap[] = [];
-  const candidates: Array<[string, ShiftTemplate]> = tpl.middle
-    ? [["middle", tpl.middle], ["opening", tpl.opening], ["closing", tpl.closing]]
-    : [["opening", tpl.opening], ["closing", tpl.closing]];
+  // Every picker template is a candidate PT slot, keyed by template id —
+  // middles first, since a mid shift bridging lunch is usually the cheapest
+  // way to cover a trough between two peaks (workbook Mid-Shift Analysis).
+  const candidates: Array<[string, ShiftTemplate]> = [
+    ...tpl.middles.map((m) => [m.id, m] as [string, ShiftTemplate]),
+    [tpl.opening.id, tpl.opening],
+    [tpl.closing.id, tpl.closing],
+  ];
   for (const date of dates) {
     if (!daysOpen.has(dow(date))) continue;
     for (const [slot, t] of candidates) {
@@ -356,7 +442,9 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
           recent_4wk_hours: Math.round(recentHours.get(p.id) ?? 0),
           leave_dates: dates.filter((d) => onLeave.has(`${p.id}:${d}`)),
         })),
-        slots: Object.fromEntries(candidates.map(([slot, t]) => [slot, `${t.start_time}-${t.end_time} (${workingHours(t)}h)`])),
+        slots: Object.fromEntries(
+          candidates.map(([slot, t]) => [slot, `${t.label} ${t.start_time}-${t.end_time} (${workingHours(t)}h)`]),
+        ),
       });
       agentUsed = true;
     } catch (err) {
@@ -509,7 +597,7 @@ async function proposePtWithModel(input: {
           `Part-timers (recent_4wk_hours = hours they got in the last 4 weeks; spread work fairly — favour whoever has fewer recent hours when rates are similar, and never assign on their leave_dates):`,
           JSON.stringify(input.partTimers),
           ``,
-          `Reply with ONLY a JSON array, no prose: [{"user_id": "...", "date": "YYYY-MM-DD", "slot": "opening|middle|closing", "reason": "few words"}]`,
+          `Reply with ONLY a JSON array, no prose: [{"user_id": "...", "date": "YYYY-MM-DD", "slot": "<one of the slot keys above>", "reason": "few words"}]`,
           `Cover the biggest gaps first, stay under budget, at most one shift per person per day.`,
         ].join("\n"),
       },

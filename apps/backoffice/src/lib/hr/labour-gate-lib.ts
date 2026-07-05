@@ -75,6 +75,9 @@ export type LabourGateResult = {
   verdict: "green" | "amber" | "red" | "unknown";
   blockers: string[]; // data problems that refuse publish outright
   warnings: string[]; // quota breaches etc. — publish allowed, logged
+  // Per-day demand coverage: staff-hours needed (hourly sales / RM69) vs
+  // staff-hours rostered; shortHours > 0 means the day is under-covered.
+  coverage: Array<{ date: string; neededHours: number; scheduledHours: number; shortHours: number }>;
 };
 
 export function shiftHours(start: string, end: string): number {
