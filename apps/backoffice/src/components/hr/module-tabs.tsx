@@ -45,6 +45,7 @@ const TAB_GROUPS: { module: string; tabs: { href: string; label: string }[] }[] 
     module: "Scheduling",
     tabs: [
       { href: "/hr/schedules", label: "Schedules" },
+      { href: "/hr/schedule-assist", label: "Assist" },
       { href: "/hr/availability", label: "Availability" },
       { href: "/hr/coverage", label: "Coverage Rules" },
     ],
