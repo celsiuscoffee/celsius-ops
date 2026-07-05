@@ -115,6 +115,25 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-05 — **Staff access-control audit + hotfixes** (`docs/staff-access-
+  audit-2026-07-05.md`). Application-layer RBAC audit across POS login, staff
+  app, checklists, stock count, receiving, own audit/performance, backoffice,
+  and the cross-app identity layer. Root cause: enforcement copy-pasted inline
+  into ~470 routes, 3 divergent `getSession`/`requireRole` impls, client-only
+  module/UI gates. Much was fixed in parallel: #697 (order `/api/staff/*` +
+  staff dashboard/products/settings auth), #802 (anon RLS surface 24→0), #799
+  (vitest `@/` alias). This session added: **decommission** of the retired
+  order `/staff/*` web surface + dead feed routes (kept `staff-token.ts` +
+  `/api/orders/[orderId]/status`, load-bearing for pickup-native collect), and
+  **staff hotfixes** (audit `[id]` read/write scoping, `transfers/[id]`
+  outlet check, `switch-outlet` outletIds, dashboard outlet-pin). **Still
+  open:** C-2 (POS `verify-manager` PIN oracle, OTA-coupled), H-1 (backoffice
+  `ops/audit-*` reachable by STAFF cross-app token — wrong `getSession`
+  import), H-4 (MANAGER over-reach across ~150 `requireAuth`-only backoffice
+  routes), H-5 (session revocation unwired), M-1 (`CUSTOMER_JWT_SECRET`
+  fallback). Durable fix = the `withAuth({roles,module,scope})` guard + CI
+  check in §5 of the doc (not yet built).
+
 - 2026-07-05 — **Ads + local-rank loop hardened** (PRs #732/#751/#781/#783/#797
   all merged): budget-cut optimizer live at `/ads/optimizer` (waste tier +
   efficiency trims vs fleet-best cost/conv, `ads_budget_change` ledger applied
