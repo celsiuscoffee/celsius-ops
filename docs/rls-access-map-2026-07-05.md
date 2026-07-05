@@ -5,6 +5,31 @@ and what RLS actually covers today. Supersedes that doc's "where we stand"
 section, which is stale (see corrections below). Evidence gathered by
 code/migration sweep on this date.
 
+> **⚠️ Live-DB correction (same day, evening):** this map was built from the
+> repo's migration files, and the live database (kqdcdhpnyuwrxqhbuyfl) had
+> drifted **ahead** of them. Verified against `pg_policies` +
+> `role_table_grants` directly:
+> - **Exposure 1 below was already fixed in production** — the `USING (true)`
+>   policies are gone, anon's DML grants on members / member_brands /
+>   point_transactions / redemptions / otp_codes are revoked (permission
+>   denied before RLS applies), and `staff_users` no longer exists. The
+>   proposal SQL is superseded (marked in-file).
+> - **`hr_payroll_runs` already has RLS enabled** (deny-all) — exposure 3 is
+>   closed too.
+> - The **real live exposure was `public.outlets`**: a postgres-owned VIEW
+>   over `"Outlet"` without `security_invoker` (writes bypass RLS), with
+>   full anon/authenticated DML grants — an anon-key write path into outlet
+>   master config. **Fixed 2026-07-05**:
+>   `supabase/migrations/073_revoke_anon_writes_outlets_view.sql`.
+> - Exposure 2 (pickup page browser reads) was real but manifested as the
+>   loyalty/inventory tabs silently returning nothing (deny-all), not as a
+>   data leak; the server-side route shipped in #782 fixes the loyalty tab.
+>   The inventory tab reads tables (`ingredients`, `stock_levels`) that
+>   exist in NEITHER Supabase project — pre-existing dead feature, still
+>   returning empty via the new route.
+> - Lesson: **audit the live database, not migration files.** The weekly
+>   rls-audit routine now includes a live `pg_policies`/grants/views check.
+
 ## Corrections to `rls-strategy.md`
 
 1. **"Only `orders`/`order_items` have RLS" is outdated.** Three later
@@ -75,6 +100,41 @@ Fold into the next deny-all batch.
 
 Native apps (`pos-native`, `pickup-native`, `staff-native`) touch none of
 these tables — their anon clients read POS/catalog tables only.
+
+## Live advisor snapshot — 2026-07-05 (get_advisors, project kqdcdhpnyuwrxqhbuyfl)
+
+Running Supabase's own security linter surfaced a wider surface than the
+code sweep. Totals: 30 ERROR, 44 WARN, 187 INFO.
+
+**Fixed this session (verified live):**
+- `outlets` view — anon/authenticated DML revoked
+  (`073_revoke_anon_writes_outlets_view.sql`).
+- 10 dated snapshot/soft-delete tables — deny-all RLS enabled
+  (`074_enable_rls_backup_snapshot_tables.sql`).
+
+**Fixed 2026-07-05 (batch 2, migration 075) — all 14 remaining
+anon-reachable tables locked:** `PendingPop` (POP `token`; Prisma-only
+writer, RLS-exempt), grab_* (webhook_events/reconcile_runs/campaigns/
+ads_spend/modifier_links), ads_* (budget_change/search_term_daily/
+term_exclusion), poster_events + pos_poster_perf, challenge_nudge_assignment,
+product_*_seed. All verified server-only (no native/browser/client-component
+anon access). Deny-all, zero app impact.
+
+**Post-batch advisor state (verified):** `rls_disabled_in_public` 24 → **0**;
+`sensitive_columns_exposed` 2 → **0**; security ERRORs 30 → **4**.
+
+**Still open — deliberately not touched:**
+
+| Finding | Why left | Note |
+| --- | --- | --- |
+| 14× `rls_policy_always_true` on `pos_*` + `orders` | **the SUNMI till architecture** — registers write via the anon key by design | do NOT revoke without a data-layer plan (rls-strategy.md Path A); this is the POS hot path |
+| 4× `security_definer_view` (`unified_sales`, `unified_sale_items`, `pos_pair_upsell_report`, `outlets`) | hardening; `outlets` write path already revoked (073) | convert to `security_invoker` when convenient |
+| ~12× `function_search_path_mutable`, `pg_net` in public, exposed materialized view | low-risk hardening | next pass |
+
+The `pos_*` always-true policies are load-bearing: the tills authenticate
+with the anon key and INSERT/UPDATE orders/payments/shifts directly.
+Tightening them means moving those writes behind a server API (Path A's real
+cost) — a project, not a migration. Flag, don't touch.
 
 ## Proposed order of work
 
