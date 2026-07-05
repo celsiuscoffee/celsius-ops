@@ -22,12 +22,52 @@
 // line attributed to the default company (company + consolidated views only),
 // never silently dropped.
 //
-// Excludes the opening_balance run (a BrioHR YTD migration artifact).
+// Source of truth: the BrioHR migration. BrioHR was the prior payroll system;
+// its real, PAID figures were migrated as a single "opening_balance" run that
+// holds each employee's actual gross and employer statutory for the months it
+// covers (2026-01 to 2026-06) as a year-to-date lump. That is the authoritative
+// actual, so those months are captured from it, spread evenly across the months
+// it covers (the lump carries no per-month split). The in-house 'monthly' runs
+// are draft computations, used ONLY for months the BrioHR run does not cover
+// (2026-07 onward), until real monthly runs are confirmed there too.
 
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const ymKey = (year: number, month: number) => `${year}-${String(month).padStart(2, "0")}`;
+
+// The BrioHR migration run and the calendar months it covers. Read from the
+// opening_balance run's period so it is not hardcoded to the current migration.
+type BrioCoverage = { months: Set<string>; n: number };
+async function brioCoverage(): Promise<BrioCoverage> {
+  const rows = await prisma.$queryRaw<{ ps: Date; pe: Date }[]>(Prisma.sql`
+    SELECT period_start AS ps, period_end AS pe
+    FROM hr_payroll_runs
+    WHERE cycle_type = 'opening_balance' AND period_start IS NOT NULL AND period_end IS NOT NULL
+    ORDER BY created_at DESC LIMIT 1
+  `);
+  const months = new Set<string>();
+  if (!rows.length) return { months, n: 0 };
+  const ps = rows[0].ps, pe = rows[0].pe;
+  let y = ps.getUTCFullYear(), m = ps.getUTCMonth() + 1;
+  const ey = pe.getUTCFullYear(), em = pe.getUTCMonth() + 1;
+  for (let i = 0; i < 240 && (y < ey || (y === ey && m <= em)); i++) {
+    months.add(ymKey(y, m));
+    if (++m > 12) { m = 1; y++; }
+  }
+  return { months, n: months.size };
+}
+
+// Split the P&L window into the months BrioHR covers (captured from the paid
+// migration, evenly spread) and the months it does not (fall back to the draft
+// monthly runs).
+function splitWindow(start: string, end: string, brio: BrioCoverage) {
+  const all = monthsInWindow(start, end);
+  const brioMonths = all.filter((mo) => brio.months.has(ymKey(mo.year, mo.month)));
+  const monthlyMonths = all.filter((mo) => !brio.months.has(ymKey(mo.year, mo.month)));
+  return { brioMonths, monthlyMonths };
+}
 
 // P&L line codes emitted for the two HR-sourced people-cost lines.
 export const PEOPLE_SALARY_CODE = "PEOPLE-SALARY";
@@ -89,8 +129,7 @@ export type PeopleCostResult = {
 // The month-window predicate as a raw SQL fragment matching monthly runs whose
 // (period_year, period_month) is in the window. Built from the JS month list so
 // the accrual boundary is identical to monthsInWindow above.
-function monthPredicate(start: string, end: string): Prisma.Sql {
-  const months = monthsInWindow(start, end);
+function monthListPredicate(months: { year: number; month: number }[]): Prisma.Sql {
   if (!months.length) return Prisma.sql`FALSE`;
   const tuples = months.map((mo) => Prisma.sql`(${mo.year}, ${mo.month})`);
   return Prisma.sql`(r.period_year, r.period_month) IN (${Prisma.join(tuples)})`;
@@ -106,25 +145,56 @@ function monthPredicate(start: string, end: string): Prisma.Sql {
 //   - consolidated: items summed across all companies plus the unassigned pool.
 export async function peopleCostForScope(scope: PeopleCostScope): Promise<PeopleCostResult> {
   const { companyId, defaultCompanyId, start, end, outletIds, outletScoped } = scope;
-  const inWindow = monthPredicate(start, end);
+  const brio = await brioCoverage();
+  const { brioMonths, monthlyMonths } = splitWindow(start, end, brio);
 
-  // One grouped pass. bucket is the mapped company_id, 'UNASSIGNED' when the
-  // employee has no assigned outlet, keyed to the specific outlet too so an
-  // outlet-scoped view can slice exactly.
-  const rows = await prisma.$queryRaw<
-    { outlet_id: string | null; company_id: string | null; salary: number; statutory: number }[]
-  >(Prisma.sql`
-    SELECT p.preferred_outlet_id AS outlet_id,
-           fc.company_id AS company_id,
-           COALESCE(SUM(i.total_gross), 0)::float AS salary,
-           COALESCE(SUM(i.epf_employer + i.socso_employer + i.eis_employer), 0)::float AS statutory
-    FROM hr_payroll_items i
-    JOIN hr_payroll_runs r ON r.id = i.payroll_run_id AND r.cycle_type = 'monthly'
-    LEFT JOIN hr_employee_profiles p ON p.user_id = i.user_id
-    LEFT JOIN fin_outlet_companies fc ON fc.outlet_id = p.preferred_outlet_id
-    WHERE ${inWindow}
-    GROUP BY p.preferred_outlet_id, fc.company_id
-  `);
+  type Row = { outlet_id: string | null; company_id: string | null; salary: number; statutory: number };
+  const merged = new Map<string, Row>();
+  const add = (rows: Row[], factor: number) => {
+    for (const r of rows) {
+      const key = `${r.outlet_id ?? "NULL"}|${r.company_id ?? "NULL"}`;
+      const cur = merged.get(key) ?? { outlet_id: r.outlet_id, company_id: r.company_id, salary: 0, statutory: 0 };
+      cur.salary += Number(r.salary) * factor;
+      cur.statutory += Number(r.statutory) * factor;
+      merged.set(key, cur);
+    }
+  };
+
+  // BrioHR (authoritative, paid) for the months it covers: the run is a YTD
+  // lump, so each covered month is that lump / n, and the window picks up
+  // brioMonths.length of them.
+  if (brio.n > 0 && brioMonths.length) {
+    const brioRows = await prisma.$queryRaw<Row[]>(Prisma.sql`
+      SELECT p.preferred_outlet_id AS outlet_id,
+             fc.company_id AS company_id,
+             COALESCE(SUM(i.total_gross), 0)::float AS salary,
+             COALESCE(SUM(i.epf_employer + i.socso_employer + i.eis_employer), 0)::float AS statutory
+      FROM hr_payroll_items i
+      JOIN hr_payroll_runs r ON r.id = i.payroll_run_id AND r.cycle_type = 'opening_balance'
+      LEFT JOIN hr_employee_profiles p ON p.user_id = i.user_id
+      LEFT JOIN fin_outlet_companies fc ON fc.outlet_id = p.preferred_outlet_id
+      GROUP BY p.preferred_outlet_id, fc.company_id
+    `);
+    add(brioRows, brioMonths.length / brio.n);
+  }
+
+  // Draft monthly runs only for months BrioHR does not cover.
+  if (monthlyMonths.length) {
+    const monthlyRows = await prisma.$queryRaw<Row[]>(Prisma.sql`
+      SELECT p.preferred_outlet_id AS outlet_id,
+             fc.company_id AS company_id,
+             COALESCE(SUM(i.total_gross), 0)::float AS salary,
+             COALESCE(SUM(i.epf_employer + i.socso_employer + i.eis_employer), 0)::float AS statutory
+      FROM hr_payroll_items i
+      JOIN hr_payroll_runs r ON r.id = i.payroll_run_id AND r.cycle_type = 'monthly'
+      LEFT JOIN hr_employee_profiles p ON p.user_id = i.user_id
+      LEFT JOIN fin_outlet_companies fc ON fc.outlet_id = p.preferred_outlet_id
+      WHERE ${monthListPredicate(monthlyMonths)}
+      GROUP BY p.preferred_outlet_id, fc.company_id
+    `);
+    add(monthlyRows, 1);
+  }
+  const rows = [...merged.values()];
 
   let salary = 0;
   let statutory = 0;
@@ -194,7 +264,8 @@ export async function peopleCostDrill(args: {
   end: string;
 }): Promise<PeopleDrillRow[]> {
   const { metric, scopeKind, companyId, outletIds, start, end } = args;
-  const inWindow = monthPredicate(start, end);
+  const brio = await brioCoverage();
+  const { brioMonths, monthlyMonths } = splitWindow(start, end, brio);
   const amountExpr =
     metric === "salary"
       ? Prisma.sql`i.total_gross`
@@ -212,32 +283,45 @@ export async function peopleCostDrill(args: {
     scopeFilter = Prisma.sql`fc.company_id = ${companyId}`;
   }
 
-  const rows = await prisma.$queryRaw<
-    { user_id: string; name: string | null; outlet_id: string | null; year: number; month: number; amount: number }[]
-  >(Prisma.sql`
-    SELECT i.user_id,
-           u.name AS name,
-           p.preferred_outlet_id AS outlet_id,
-           r.period_year AS year,
-           r.period_month AS month,
-           ${amountExpr}::float AS amount
-    FROM hr_payroll_items i
-    JOIN hr_payroll_runs r ON r.id = i.payroll_run_id AND r.cycle_type = 'monthly'
-    LEFT JOIN hr_employee_profiles p ON p.user_id = i.user_id
-    LEFT JOIN fin_outlet_companies fc ON fc.outlet_id = p.preferred_outlet_id
-    LEFT JOIN "User" u ON u.id = i.user_id
-    WHERE ${inWindow} AND (${scopeFilter})
-    ORDER BY r.period_year ASC, r.period_month ASC, u.name ASC
-  `);
+  const out: PeopleDrillRow[] = [];
 
-  return rows
-    .map((r) => ({
-      userId: r.user_id,
-      name: r.name,
-      outletId: r.outlet_id,
-      year: Number(r.year),
-      month: Number(r.month),
-      amount: round2(Number(r.amount)),
-    }))
-    .filter((r) => r.amount !== 0);
+  // BrioHR: one per-employee YTD amount, shown as one row per covered month in
+  // window at amount/n (the migration carries no per-month split).
+  if (brio.n > 0 && brioMonths.length) {
+    const brioRows = await prisma.$queryRaw<{ user_id: string; name: string | null; outlet_id: string | null; amount: number }[]>(Prisma.sql`
+      SELECT i.user_id, u.name AS name, p.preferred_outlet_id AS outlet_id, ${amountExpr}::float AS amount
+      FROM hr_payroll_items i
+      JOIN hr_payroll_runs r ON r.id = i.payroll_run_id AND r.cycle_type = 'opening_balance'
+      LEFT JOIN hr_employee_profiles p ON p.user_id = i.user_id
+      LEFT JOIN fin_outlet_companies fc ON fc.outlet_id = p.preferred_outlet_id
+      LEFT JOIN "User" u ON u.id = i.user_id
+      WHERE (${scopeFilter})
+      ORDER BY u.name ASC
+    `);
+    for (const mo of brioMonths) {
+      for (const r of brioRows) {
+        out.push({ userId: r.user_id, name: r.name, outletId: r.outlet_id, year: mo.year, month: mo.month, amount: round2(Number(r.amount) / brio.n) });
+      }
+    }
+  }
+
+  // Draft monthly runs for the months BrioHR does not cover.
+  if (monthlyMonths.length) {
+    const rows = await prisma.$queryRaw<{ user_id: string; name: string | null; outlet_id: string | null; year: number; month: number; amount: number }[]>(Prisma.sql`
+      SELECT i.user_id, u.name AS name, p.preferred_outlet_id AS outlet_id,
+             r.period_year AS year, r.period_month AS month, ${amountExpr}::float AS amount
+      FROM hr_payroll_items i
+      JOIN hr_payroll_runs r ON r.id = i.payroll_run_id AND r.cycle_type = 'monthly'
+      LEFT JOIN hr_employee_profiles p ON p.user_id = i.user_id
+      LEFT JOIN fin_outlet_companies fc ON fc.outlet_id = p.preferred_outlet_id
+      LEFT JOIN "User" u ON u.id = i.user_id
+      WHERE ${monthListPredicate(monthlyMonths)} AND (${scopeFilter})
+      ORDER BY r.period_year ASC, r.period_month ASC, u.name ASC
+    `);
+    for (const r of rows) {
+      out.push({ userId: r.user_id, name: r.name, outletId: r.outlet_id, year: Number(r.year), month: Number(r.month), amount: round2(Number(r.amount)) });
+    }
+  }
+
+  return out.filter((r) => r.amount !== 0);
 }
