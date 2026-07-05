@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import {
   costRoster,
+  shiftHours,
   verdictFor,
+  weeklySalaryShare,
   OUTLET_BUDGETS,
   DEFAULT_BUDGET,
   ROVER_SHARE_WEEKLY,
@@ -152,8 +154,44 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     });
   }
 
-  const { cost, hours, blockers, warnings } = costRoster(rows);
-  const rosterCost = Math.round(cost + ROVER_SHARE_WEEKLY);
+  // costRoster still validates the roster (blockers, quota warnings,
+  // hours), but the COST side splits: FT salaries are sunk, so every
+  // schedulable FT assigned to this outlet is charged their full weekly
+  // share whether the roster uses them for 30h or 45h. Only PT hours move
+  // with the roster — the owner's rule: PT is the spend that moves %.
+  const { hours, blockers, warnings } = costRoster(rows);
+  const { data: ftProfiles } = await hrSupabaseAdmin
+    .from("hr_employee_profiles")
+    .select("user_id, position, employment_type, basic_salary, epf_employer_rate, schedule_required")
+    .is("end_date", null)
+    .in("employment_type", ["full_time", "contract"]);
+  type FtRow = {
+    user_id: string; position: string | null; employment_type: string;
+    basic_salary: number | null; epf_employer_rate: number | null; schedule_required: boolean | null;
+  };
+  const ftCandidates = ((ftProfiles ?? []) as FtRow[]).filter(
+    (p) =>
+      p.schedule_required !== false &&
+      !["manager", "area manager", "head of department", "barista lead"].includes(
+        (p.position ?? "").trim().toLowerCase(),
+      ),
+  );
+  const outletFtUsers = ftCandidates.length
+    ? await prisma.user.findMany({
+        where: { id: { in: ftCandidates.map((p) => p.user_id) }, status: "ACTIVE", outletId },
+        select: { id: true },
+      })
+    : [];
+  const outletFtIds = new Set(outletFtUsers.map((u) => u.id));
+  const ftWeekly = ftCandidates
+    .filter((p) => outletFtIds.has(p.user_id))
+    .reduce((sum, p) => sum + weeklySalaryShare(Number(p.basic_salary) || 0, p.epf_employer_rate == null ? null : Number(p.epf_employer_rate)), 0);
+  const ptCost = rows.reduce((sum, r) => {
+    if (r.employment_type !== "part_time" && r.employment_type !== "intern") return sum;
+    if (!r.hourly_rate || r.hourly_rate <= 0) return sum;
+    return sum + shiftHours(r.start_time, r.end_time) * r.hourly_rate;
+  }, 0);
+  const rosterCost = Math.round(ftWeekly + ptCost + ROVER_SHARE_WEEKLY);
   const forecastRevenue = Math.round(await forecastWeekRevenue(outlet, weekStart));
   const pct = forecastRevenue > 0 ? rosterCost / forecastRevenue : null;
 

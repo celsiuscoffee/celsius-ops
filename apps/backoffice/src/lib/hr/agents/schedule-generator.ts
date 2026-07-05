@@ -34,11 +34,10 @@ import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "../supabase";
 import { templatesForOutlet, workingHours, type ShiftTemplate } from "../shift-templates";
 import {
-  costRoster,
+  weeklySalaryShare,
   OUTLET_BUDGETS,
   DEFAULT_BUDGET,
   ROVER_SHARE_WEEKLY,
-  type ShiftCostRow,
 } from "../labour-gate-lib";
 import { forecastWeekRevenue } from "../labour-gate";
 
@@ -282,7 +281,11 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   // day loses more than its share of crew — one rest per day first, and when
   // there are more FT than rest slots, the doubles land on the quietest
   // weekdays instead of stacking on Monday/Tuesday.
-  const restSlots = [1, 2, 3, 4]
+  // Spread across ALL open days (not just Mon–Thu): one rest per day before
+  // any day takes a second, extras landing quietest-day-first — so a large
+  // crew no longer stacks 3–4 rests onto the early week, and the busiest
+  // day (usually Saturday) is the last to lose anyone.
+  const restSlots = [0, 1, 2, 3, 4, 5, 6]
     .filter((d) => daysOpen.has(d))
     .sort((a, b) => (dowLoad.get(a) ?? 0) - (dowLoad.get(b) ?? 0));
   const restCount = new Map<number, number>(restSlots.map((d) => [d, 0]));
@@ -415,23 +418,11 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
 
   // ── Stage 2: PT budget envelope — the only spend that moves labour % ─
   const forecast = Math.round(await forecastWeekRevenue(outlet, weekStart));
-  const ftCostRows: ShiftCostRow[] = rows
-    .filter((r) => r.notes !== "rest_day")
-    .map((r) => {
-      const s = staff.find((x) => x.id === r.user_id);
-      const rover = roverUsers.find((x) => x.id === r.user_id);
-      return {
-        user_id: r.user_id, shift_date: r.shift_date, start_time: r.start_time, end_time: r.end_time,
-        userName: s?.name ?? rover?.name ?? r.user_id.slice(0, 8),
-        // Rovers carry their rover position so costRoster prices them at RM0.
-        position: s?.position ?? roverPositionOf.get(r.user_id) ?? null,
-        employment_type: s?.employment_type ?? "full_time",
-        hourly_rate: s?.hourly_rate ?? null,
-        basic_salary: s?.basic_salary ?? 0,
-        epf_employer_rate: null,
-      };
-    });
-  const ftCost = Math.round(costRoster(ftCostRows).cost);
+  // FT salaries are sunk — the envelope charges every schedulable FT their
+  // full weekly share whether the roster fills them to 45h or not.
+  const ftCost = Math.round(
+    fullTimers.reduce((sum, s) => sum + weeklySalaryShare(s.basic_salary, null), 0),
+  );
   const ptBudget = Math.max(0, Math.round(budget.target * forecast - ftCost - ROVER_SHARE_WEEKLY));
   notes.push(
     `Budget: forecast RM${forecast.toLocaleString()} × ${(budget.target * 100).toFixed(0)}% = RM${Math.round(budget.target * forecast).toLocaleString()}; ` +
