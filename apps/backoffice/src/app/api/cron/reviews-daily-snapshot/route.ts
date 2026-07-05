@@ -3,6 +3,7 @@ import { checkCronAuth } from "@celsius/shared";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews } from "@/lib/reviews/gbp";
+import { relinkGbpLocations } from "@/lib/reviews/relink";
 import { fetchNextAheadCompetitor } from "@/lib/reviews/competitors";
 import { buildScoreboard } from "@/lib/reviews/scoreboard";
 import { sendMessage } from "@/lib/telegram";
@@ -28,6 +29,18 @@ export async function GET(req: NextRequest) {
   today.setUTCHours(0, 0, 0, 0);
   const now = Date.now();
   const DAY = 86400000;
+
+  // Self-heal before snapshotting: if an outlet's gbpLocationName provably
+  // points at the wrong listing (placeId mismatch vs the account's own
+  // location list), repair it so tonight's snapshot — and everything
+  // downstream — reads the right shop. Idempotent; best-effort.
+  let relink: Record<string, unknown> | null = null;
+  try {
+    const r = await relinkGbpLocations(true);
+    relink = { repaired: r.repaired, results: r.results.filter((x) => x.status !== "ok") };
+  } catch (err) {
+    relink = { error: err instanceof Error ? err.message : String(err) };
+  }
 
   const outlets = await prisma.outlet.findMany({
     where: { status: "ACTIVE" },
@@ -108,5 +121,5 @@ export async function GET(req: NextRequest) {
     console.error("[reviews-daily-snapshot] nudge failed", err);
   }
 
-  return NextResponse.json({ snapshotDate: today.toISOString().slice(0, 10), outlets: results, nudged });
+  return NextResponse.json({ snapshotDate: today.toISOString().slice(0, 10), relink, outlets: results, nudged });
 }
