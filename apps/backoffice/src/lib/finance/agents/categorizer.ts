@@ -25,6 +25,10 @@ export type CategorizationInput = {
   total: number;
   outletHint?: { id: string; name: string } | null;
   contextNotes?: string;
+  // Source artefact this categorization belongs to (e.g. the fin_documents
+  // row). Written to fin_agent_decisions.related_type/related_id so inbox
+  // corrections can be attributed to THIS decision instead of "the latest".
+  related?: { type: "document"; id: string } | null;
 };
 
 export type CategorizationResult = {
@@ -32,6 +36,7 @@ export type CategorizationResult = {
   confidence: number;
   reasoning: string;
   alternativeCodes: string[];   // top 3 alternatives the human can pick from in the inbox
+  decisionId?: string | null;   // fin_agent_decisions row logged for this call
 };
 
 // Pulls the categorize-able accounts (expenses + cogs + selected current
@@ -219,18 +224,19 @@ export async function categorize(input: CategorizationInput): Promise<Categoriza
   };
 
   // Log every decision for audit + retraining
-  await logDecision(input, result);
+  const decisionId = await logDecision(input, result);
 
-  return result;
+  return { ...result, decisionId };
 }
 
 async function logDecision(
   input: CategorizationInput,
   result: CategorizationResult
-): Promise<void> {
+): Promise<string> {
   const client = getFinanceClient();
+  const id = randomUUID();
   await client.from("fin_agent_decisions").insert({
-    id: randomUUID(),
+    id,
     agent: "categorizer",
     agent_version: CATEGORIZER_VERSION,
     input: {
@@ -246,6 +252,20 @@ async function logDecision(
       alternatives: result.alternativeCodes,
     },
     confidence: result.confidence,
-    applied: false,  // set by AP agent / inbox resolver when actually used
+    related_type: input.related?.type ?? null,
+    related_id: input.related?.id ?? null,
+    applied: false,  // set true by markDecisionApplied when the proposal is used as-is
   });
+  return id;
+}
+
+// Called when a decision's proposal is actually used unchanged — the AP
+// agent's auto-post path or an inbox "approve". Corrections don't set
+// applied; corrected=true covers them (see recordCorrection in inbox.ts).
+export async function markDecisionApplied(decisionId: string): Promise<void> {
+  const client = getFinanceClient();
+  await client
+    .from("fin_agent_decisions")
+    .update({ applied: true })
+    .eq("id", decisionId);
 }

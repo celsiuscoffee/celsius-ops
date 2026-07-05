@@ -21,7 +21,7 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getFinanceClient } from "../supabase";
 import { postJournal } from "../ledger";
-import { categorize } from "./categorizer";
+import { categorize, markDecisionApplied } from "./categorizer";
 import { parseSupplierDoc, type ParsedBill } from "../parsers/supplier-doc";
 import { resolveCompanyFromOutlet, getDefaultCompanyId } from "../companies";
 import type { JournalLineInput } from "../types";
@@ -168,6 +168,7 @@ export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestR
       ? await resolveOutletNameById(outletId)
       : null,
     contextNotes: parsed.notes ?? undefined,
+    related: { type: "document", id: docId },
   });
 
   // 8. Decision: auto-post or exception
@@ -263,6 +264,8 @@ export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestR
   });
 
   await client.from("fin_documents").update({ status: "processed", ingested_at: new Date().toISOString() }).eq("id", docId);
+
+  if (cat.decisionId) await markDecisionApplied(cat.decisionId);
 
   return { kind: "posted", transactionId: journal.transactionId, billId, total: parsed.total };
 }
