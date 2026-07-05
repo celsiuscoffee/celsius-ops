@@ -26,7 +26,16 @@ const PREFIXES = [
 ];
 
 // Words that make a phrase too generic to be a counterparty signature.
-const STOPLIST = new Set(["CELSIUS", "COFFEE", "TRANSFER", "PAYMENT", "REMITTANCE", "DEPOSIT", "CREDIT", "DEBIT"]);
+// Generic transaction and channel words. A phrase made only of these is not a
+// distinctive counterparty, so it is never learned as a hint. Channel markers
+// (CARD, SALES, QR, GRAB, MN for the terminal merchant number) are owned by the
+// keyword rules, so a "CARD SALES MN" description must classify by rule, not by
+// an over-generic learned hint that outranks the rules (that once sent card
+// settlements to QR and broke the QR reconciliation).
+const STOPLIST = new Set([
+  "CELSIUS", "COFFEE", "TRANSFER", "PAYMENT", "REMITTANCE", "DEPOSIT", "CREDIT", "DEBIT",
+  "CARD", "SALES", "SALE", "QR", "GRAB", "MN", "POS", "TERMINAL", "SETTLEMENT",
+]);
 
 // Extract the counterparty signature from a bank description: strip the glued
 // 20-char sender prefix and transfer boilerplate, then take the longest run of
