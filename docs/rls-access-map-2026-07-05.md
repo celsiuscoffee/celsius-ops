@@ -112,18 +112,24 @@ code sweep. Totals: 30 ERROR, 44 WARN, 187 INFO.
 - 10 dated snapshot/soft-delete tables — deny-all RLS enabled
   (`074_enable_rls_backup_snapshot_tables.sql`).
 
-**Still open — need per-table decision (NOT changed; several hit hard rule 6):**
+**Fixed 2026-07-05 (batch 2, migration 075) — all 14 remaining
+anon-reachable tables locked:** `PendingPop` (POP `token`; Prisma-only
+writer, RLS-exempt), grab_* (webhook_events/reconcile_runs/campaigns/
+ads_spend/modifier_links), ads_* (budget_change/search_term_daily/
+term_exclusion), poster_events + pos_poster_perf, challenge_nudge_assignment,
+product_*_seed. All verified server-only (no native/browser/client-component
+anon access). Deny-all, zero app impact.
 
-| Table(s) | Why sensitive | anon grants | Note |
-| --- | --- | --- | --- |
-| `PendingPop` | POP `token` column (payments-adjacent) | full DML, no RLS | verify who writes it before locking |
-| `grab_webhook_events`, `grab_reconcile_runs`, `grab_campaigns`, `grab_ads_spend`, `grab_modifier_links` | Grab financial/ops | full DML, no RLS | webhooks land via server route (service-role) — likely safe to deny-all, verify |
-| `ads_budget_change`, `ads_search_term_daily`, `ads_term_exclusion` | ad spend | no RLS | server-written; verify |
-| `poster_events`, `pos_poster_perf` | `session_id` | no RLS | telemetry |
-| `challenge_nudge_assignment` | loyalty experiment assignment | full DML, no RLS | |
-| `product_co_purchase_seed`, `product_round_seed` | loop seed data | no RLS | check no anon-client read before deny-all |
-| 14× `rls_policy_always_true` on `pos_*` + `orders` | **the SUNMI till architecture** — registers write via the anon key by design | intentional | do NOT revoke without a data-layer plan (rls-strategy.md Path A); this is the POS hot path |
-| 4× `security_definer_view`, 12× `function_search_path_mutable`, `pg_net` in public, exposed materialized view | hardening | — | lower priority |
+**Post-batch advisor state (verified):** `rls_disabled_in_public` 24 → **0**;
+`sensitive_columns_exposed` 2 → **0**; security ERRORs 30 → **4**.
+
+**Still open — deliberately not touched:**
+
+| Finding | Why left | Note |
+| --- | --- | --- |
+| 14× `rls_policy_always_true` on `pos_*` + `orders` | **the SUNMI till architecture** — registers write via the anon key by design | do NOT revoke without a data-layer plan (rls-strategy.md Path A); this is the POS hot path |
+| 4× `security_definer_view` (`unified_sales`, `unified_sale_items`, `pos_pair_upsell_report`, `outlets`) | hardening; `outlets` write path already revoked (073) | convert to `security_invoker` when convenient |
+| ~12× `function_search_path_mutable`, `pg_net` in public, exposed materialized view | low-risk hardening | next pass |
 
 The `pos_*` always-true policies are load-bearing: the tills authenticate
 with the anon key and INSERT/UPDATE orders/payments/shifts directly.

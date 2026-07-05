@@ -72,19 +72,10 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Open failures
 
-- 2026-07-05 — **14 public tables still anon-reachable with no RLS** (live
-  get_advisors, kqdcdhpnyuwrxqhbuyfl): `PendingPop` (POP `token`), grab_*
-  financial (webhook_events/reconcile_runs/campaigns/ads_spend/
-  modifier_links), ads_* , poster_events, pos_poster_perf,
-  challenge_nudge_assignment, product_*_seed. Need per-table check — some
-  server-written (safe deny-all), PendingPop/grab hit hard rule 6. Table +
-  grants in `docs/rls-access-map-2026-07-05.md` "Live advisor snapshot".
-  10 dated backup/snapshot tables from the same sweep already locked
-  (migration 074). Decision pending: rls-audit workflow vs hand-reviewed
-  batch.
 - 2026-07-05 — **`pos_*` + `orders`: 14 `USING(true)` policies are BY
   DESIGN** (SUNMI tills write via the anon key). Do NOT lint-fix — needs a
-  data-layer plan (rls-strategy.md Path A).
+  data-layer plan (rls-strategy.md Path A). 4 `security_definer_view` +
+  ~12 `function_search_path_mutable` remain as low-risk hardening.
 - 2026-07-05 — 13 of 14 Vercel crons still have no heartbeat monitoring
   (`reconcile-pending` wired 2026-07-05; the rest fail silently).
 - 2026-07-05 — Pickup dashboard **inventory tab reads tables that don't
@@ -97,7 +88,11 @@ _Resolved 2026-07-05 evening (see Lessons + access-map correction): the
 "loyalty tables anon-writable" finding was already fixed in production —
 live DB had drifted ahead of repo migration files. Actual live exposure
 was the `outlets` view (anon DML, RLS bypass); revoked same day
-(supabase/migrations/073, applied via Supabase MCP, verified)._
+(supabase/migrations/073, applied via Supabase MCP, verified). Full
+get_advisors sweep then closed ALL remaining anon-reachable tables:
+10 backup snapshots (074) + 14 server-only tables incl. PendingPop/grab_*
+(075). Verified: rls_disabled_in_public 24→0, sensitive_columns_exposed
+2→0, security ERRORs 30→4 (the 4 left are SECURITY DEFINER views)._
 
 _Fixed 2026-07-05 (see Lessons): categorizer correction mis-attribution +
 never-set `applied` flag — `related_id` now populated at decision time,
