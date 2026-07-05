@@ -5,6 +5,14 @@
 export const BANK_CASH = "1000-01"; // Bank Account (per company via fin_transactions.company_id)
 export const SUSPENSE = "1999";     // Suspense / Unclassified — keeps the bank tied out
 
+// GL posting cutover. 2025 books live in Bukku (reconciled through Dec 2025);
+// this GL owns 2026 onward with opening balances posted as at the cutover.
+// No automated path may post before this date: the bank bridge hard filters
+// its candidate lines, the EOD ingestors refuse pre-cutover dates, and the
+// salary accrual skips pre-cutover months. This keeps backfill and cron reruns
+// from recreating 2025 journals after the balance sheet surgery deletes them.
+export const GL_POSTING_CUTOVER = "2026-01-01";
+
 // CashCategory → contra GL account code. The bank line's direction (CR in / DR
 // out) decides which side BANK_CASH sits on; the contra always takes the other.
 export const CONTRA_ACCOUNT: Record<string, string> = {
@@ -13,7 +21,7 @@ export const CONTRA_ACCOUNT: Record<string, string> = {
   STOREHUB: "1006",        // legacy POS card-style settlement
   QR: "1000-02",           // DuitNow QR / cash banked out of Cash on Hand
   GRAB: "1005",            // Grabfood debtors
-  GRAB_PUTRAJAYA: "1999",  // settles into HQ bank but debtor sits in Conezion — cross-entity, park in suspense
+  GRAB_PUTRAJAYA: "1999",  // settles into HQ bank but debtor sits in Conezion; CR lines route via resolveGrabSettlementRouting, this fallback only parks odd cases (DR side, or the outlet company's own bank)
   FOODPANDA: "1005",       // marketplace debtor (no separate FP account yet)
   REVENUE_MONSTER: "1000-02", // RM terminal settling pickup/table QR+e-wallet sales already accrued by EOD → clears the Cash & QR debtor (crediting income here double-counted revenue)
   // ── inflows NOT in EOD (B2B / online) → recognise income directly ──
@@ -88,6 +96,71 @@ function intercoAccount(descUpper: string): string {
   if (/CONEZION|\bCONE\b/.test(descUpper)) return "3600-01";
   if (/CELSIUS\s*COFFEE\s*SDN|\bCCSB\b/.test(descUpper)) return "3600-02";
   return "3600"; // generic inter-company current account
+}
+
+// "Due to/from <entity>" inter-company account keyed by the COUNTERPARTY
+// company id. Same accounts intercoAccount() resolves from bank narratives,
+// but addressable by fin_companies.id for programmatic routing.
+export const INTERCO_DUE_ACCOUNT: Record<string, string> = {
+  celsiustamarind: "3600-00",
+  celsiusconezion: "3600-01",
+  celsius: "3600-02",
+};
+
+export const GRAB_DEBTOR = "1005"; // Grabfood debtors (keep aligned with CONTRA_ACCOUNT.GRAB)
+
+// Categories that represent a Grab payout settling into a bank account.
+// GRAB_PUTRAJAYA is the legacy hand-applied label for Grab money earned by the
+// Putrajaya (Conezion) outlet that settles into the SB account.
+export const GRAB_SETTLEMENT_CATS = new Set(["GRAB", "GRAB_PUTRAJAYA"]);
+
+export type GrabSettlementRouting = {
+  // Contra credited in the RECEIVING company's journal: due to the outlet's company.
+  contra: string;
+  // Second journal posted in the OUTLET's company.
+  mirror: {
+    company: string;       // the outlet's legal entity
+    debitAccount: string;  // 3600-xx due from the receiving company
+    creditAccount: string; // 1005 Grabfood debtors, cleared where EOD accrued them
+  };
+};
+
+// Cross-entity Grab settlement routing.
+//
+// ALL Grab payouts land in Celsius Coffee SB's bank account (4384), including
+// money earned by the Putrajaya (Conezion) and Tamarind outlets, while the EOD
+// AR agent accrues those sales as Dr 1005 in the OUTLET's company. Crediting
+// the receiving company's own 1005 (or parking in suspense) leaves the outlet
+// company's 1005 debits uncleared forever and piles phantom credits on SB.
+// Instead the settlement posts as TWO balanced journals:
+//   receiving company: Dr 1000-01 bank, Cr 3600-xx (due to the outlet's company)
+//   outlet's company:  Dr 3600-yy (due from the receiver), Cr 1005 Grabfood debtors
+//
+// Returns null when the line is not a Grab settlement, when the outlet's
+// company cannot be resolved, or when the outlet belongs to the receiving
+// company itself. Own-outlet settlements (Shah Alam, Nilai in SB's account)
+// keep the plain single-journal behavior: Dr bank, Cr 1005.
+export function resolveGrabSettlementRouting(
+  category: string,
+  bankCompany: string,
+  outletCompanyId: string | null,
+): GrabSettlementRouting | null {
+  if (!GRAB_SETTLEMENT_CATS.has(category)) return null;
+  // The GRAB_PUTRAJAYA category itself carries the outlet identity, so lines
+  // without a resolved outlet still route to Conezion.
+  const outletCompany = outletCompanyId ?? (category === "GRAB_PUTRAJAYA" ? "celsiusconezion" : null);
+  if (!outletCompany || outletCompany === bankCompany) return null;
+  const dueToOutletCompany = INTERCO_DUE_ACCOUNT[outletCompany];
+  const dueFromBankCompany = INTERCO_DUE_ACCOUNT[bankCompany];
+  if (!dueToOutletCompany || !dueFromBankCompany) return null;
+  return {
+    contra: dueToOutletCompany,
+    mirror: {
+      company: outletCompany,
+      debitAccount: dueFromBankCompany,
+      creditAccount: GRAB_DEBTOR,
+    },
+  };
 }
 
 // Resolve the contra account for a bank line — the accurate version that mirrors

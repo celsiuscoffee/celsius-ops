@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
   // 4. post the classified bank lines into the GL (bounded; drains over runs)
   await step("glPost", async () => {
     const r = await postBankLinesToGl({ commit: true, limit: GL_LINES_PER_RUN });
-    return { journals: r.journals, reusedJournals: r.reusedJournals, gcJournals: r.gcJournals, postedLines: r.postedLines, suspenseLines: r.suspenseLines, errors: r.errors.length };
+    return { journals: r.journals, reusedJournals: r.reusedJournals, mirrorJournals: r.mirrorJournals, gcJournals: r.gcJournals, postedLines: r.postedLines, suspenseLines: r.suspenseLines, errors: r.errors.length };
   });
   // 5. clear the payroll control accounts — cash-basis salary expense for what
   //    the bank paid (self-reconciling; a no-op once real HR payroll accruals
