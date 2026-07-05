@@ -157,6 +157,42 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
   const forecastRevenue = Math.round(await forecastWeekRevenue(outlet, weekStart));
   const pct = forecastRevenue > 0 ? rosterCost / forecastRevenue : null;
 
+  // Per-day coverage: sales-derived staff need (hourly revenue / RM69, the
+  // workbook's labour-hour heuristic) vs heads rostered in each hour.
+  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; rev: number }>>`
+    SELECT EXTRACT(DOW FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
+           EXTRACT(HOUR FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
+           (sum(total) / 100.0 / 4)::float AS rev
+    FROM pos_orders
+    WHERE outlet_id = ${outlet.loyaltyOutletId ?? ""}
+      AND status = 'completed' AND refund_of_order_id IS NULL
+      AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+    GROUP BY 1, 2
+  `;
+  const need = new Map<string, number>();
+  for (const h of hourly) need.set(`${h.dw}:${h.hr}`, Math.ceil(h.rev / 69));
+  const coverage: LabourGateResult["coverage"] = [];
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(weekStart, i);
+    const dw = new Date(`${date}T00:00:00Z`).getUTCDay();
+    let neededHours = 0;
+    let scheduledHours = 0;
+    let shortHours = 0;
+    for (let h = 0; h < 24; h++) {
+      const n = need.get(`${dw}:${h}`) ?? 0;
+      if (n === 0) continue;
+      const have = rows.filter(
+        (r) => r.shift_date === date &&
+          Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
+      ).length;
+      neededHours += n;
+      scheduledHours += Math.min(have, n);
+      if (n > have) shortHours += n - have;
+    }
+    coverage.push({ date, neededHours, scheduledHours, shortHours });
+  }
+
   return {
     outletId: outlet.id,
     outletCode: outlet.code ?? "",
@@ -171,5 +207,6 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     verdict: verdictFor(pct, budget),
     blockers,
     warnings,
+    coverage,
   };
 }

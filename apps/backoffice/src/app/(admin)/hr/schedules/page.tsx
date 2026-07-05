@@ -84,6 +84,7 @@ type LabourGateInfo = {
   verdict: "green" | "amber" | "red" | "unknown";
   blockers: string[];
   warnings: string[];
+  coverage?: Array<{ date: string; neededHours: number; scheduledHours: number; shortHours: number }>;
 };
 
 type SwapRequest = {
@@ -666,6 +667,31 @@ export default function SchedulesPage() {
             </div>
           ) : null;
         })()}
+
+        {gate?.coverage && gate.coverage.some((c) => c.neededHours > 0) && (
+          <div className="flex items-center gap-1" title="Sales-derived coverage: staff-hours rostered vs needed per day">
+            {gate.coverage.map((c) => {
+              const day = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][new Date(c.date + "T00:00:00Z").getUTCDay()];
+              const ok = c.shortHours === 0;
+              return (
+                <span
+                  key={c.date}
+                  className={`rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
+                    c.neededHours === 0
+                      ? "bg-muted text-muted-foreground"
+                      : ok
+                        ? "bg-green-50 text-green-700 border border-green-200"
+                        : "bg-amber-50 text-amber-700 border border-amber-300"
+                  }`}
+                  title={`${c.date}: ${c.scheduledHours}/${c.neededHours} staff-hours covered${ok ? "" : ` — ${c.shortHours}h short`}`}
+                >
+                  {day}
+                  {ok ? "✓" : `−${c.shortHours}`}
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         <div className="ml-auto text-sm">
           <span className="text-muted-foreground">Total labor: </span>
