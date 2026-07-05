@@ -28,6 +28,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
   }
 
+  // A manager may only switch to an outlet within their own scope. OWNER/ADMIN
+  // are unscoped. Without this, a manager assigned to outlet A could mint a
+  // session for any outlet (existence was the only check) and reach outlet-B
+  // data on every outlet-scoped route downstream.
+  if (session.role === "MANAGER") {
+    const me = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { outletId: true, outletIds: true },
+    });
+    const myOutlets = new Set<string>([
+      ...(me?.outletId ? [me.outletId] : []),
+      ...(me?.outletIds ?? []),
+    ]);
+    if (!myOutlets.has(outlet.id)) {
+      return NextResponse.json({ error: "Outlet not in your scope" }, { status: 403 });
+    }
+  }
+
   // Create new session with updated outlet
   await createSession({
     id: session.id,

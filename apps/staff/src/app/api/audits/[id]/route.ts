@@ -2,6 +2,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
+// Authorization for a single audit report. Mirrors the list/DELETE routes:
+//   - OWNER/ADMIN: any report.
+//   - The auditor who created it: always.
+//   - The auditee (staff being audited): read-only, their own report — this is
+//     the "see your own performance" path (allowAuditee).
+//   - A manager with ops:audit: reports at an outlet in their scope.
+// Everyone else: forbidden. Without this, any authenticated staffer could read
+// or rewrite any audit by id (their own or a colleague's scores/notes).
+async function canAccessReport(
+  session: { id: string; role: string },
+  report: { auditorId: string; auditeeId: string | null; outletId: string },
+  opts: { allowAuditee: boolean },
+): Promise<boolean> {
+  if (session.role === "OWNER" || session.role === "ADMIN") return true;
+  if (report.auditorId === session.id) return true;
+  if (opts.allowAuditee && report.auditeeId === session.id) return true;
+
+  const me = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: { moduleAccess: true, outletId: true, outletIds: true },
+  });
+  const moduleAccess = (me?.moduleAccess ?? null) as Record<string, unknown> | null;
+  if (!hasModule(session.role, moduleAccess, "ops:audit")) return false;
+
+  const myOutlets = new Set<string>([
+    ...(me?.outletId ? [me.outletId] : []),
+    ...(me?.outletIds ?? []),
+  ]);
+  return myOutlets.has(report.outletId);
+}
+
 // GET /api/audits/[id] — full audit report detail
 export async function GET(
   _req: NextRequest,
@@ -24,6 +55,10 @@ export async function GET(
 
   if (!report) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  if (!(await canAccessReport(session, report, { allowAuditee: true }))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   return NextResponse.json({
@@ -59,6 +94,18 @@ export async function PATCH(
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+
+  // Only the auditor / managers-in-outlet / admins may finalize or edit an
+  // audit — the auditee cannot score their own report.
+  const existing = await prisma.auditReport.findUnique({
+    where: { id },
+    select: { auditorId: true, auditeeId: true, outletId: true },
+  });
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!(await canAccessReport(session, existing, { allowAuditee: false }))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const body = await req.json();
   const { overallNotes, complete } = body;
 
