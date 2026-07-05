@@ -153,6 +153,16 @@ export function costRoster(rows: ShiftCostRow[]): {
   return { cost, hours, blockers, warnings };
 }
 
+// A salaried FT's cost to the outlet per roster week: the full monthly
+// gross + employer statutory, prorated to a week — REGARDLESS of hours
+// rostered. Salaries are sunk: an FT rostered 30h costs the same as one
+// rostered 45h, so pricing FT by rostered hours understates labour %.
+export function weeklySalaryShare(basicSalary: number, epfEmployerRate: number | null): number {
+  const stat = normalizeRate(epfEmployerRate);
+  const load = stat != null && stat > 0 ? stat + 0.0175 + 0.002 : DEFAULT_EMPLOYER_STATUTORY;
+  return (basicSalary * (1 + load) * 12) / 52;
+}
+
 export function verdictFor(
   pct: number | null,
   budget: { target: number; ceiling: number },

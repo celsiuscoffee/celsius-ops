@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "../prisma";
 
 // ─── Par-level calculation (shared by the manual route + weekly cron) ────
 //

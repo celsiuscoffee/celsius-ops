@@ -169,6 +169,8 @@ export default function SchedulesPage() {
   }>(null);
   const [publishing, setPublishing] = useState(false);
   const [gate, setGate] = useState<LabourGateInfo | null>(null);
+  const [view, setView] = useState<"week" | "day">("week");
+  const [dayIdx, setDayIdx] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [swapAction, setSwapAction] = useState<string | null>(null);
@@ -632,6 +634,18 @@ export default function SchedulesPage() {
           Week of <strong>{weekStart}</strong> → {grid?.week_end || "..."}
         </div>
 
+        <div className="flex overflow-hidden rounded-lg border text-sm">
+          {(["week", "day"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-3 py-1.5 font-medium capitalize ${view === v ? "bg-terracotta text-white" : "hover:bg-muted"}`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+
         {gate && (
           <div
             className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium ${
@@ -745,7 +759,9 @@ export default function SchedulesPage() {
       )}
 
       {/* Grid */}
-      {grid && grid.users.length > 0 ? (
+      {grid && grid.users.length > 0 && view === "day" ? (
+        <DayView grid={grid} dayIdx={dayIdx} setDayIdx={setDayIdx} gate={gate} />
+      ) : grid && grid.users.length > 0 ? (
         <div className="flex-1 min-h-0 overflow-auto rounded-xl border bg-card shadow-sm overflow-x-auto">
           <table className="w-full text-sm min-w-[720px]">
             <thead className="sticky top-0 z-20">
@@ -1129,4 +1145,121 @@ function guessColor(shift: Shift): string {
   if (label.includes("middle")) return "blue";
   if (label.includes("nilai")) return "purple";
   return "gray";
+}
+
+// Day view — one date at a time: who opens, who's on each middle, who
+// closes, who's resting or on leave, and that day's coverage. Read-only;
+// editing stays in the week grid.
+function DayView({
+  grid,
+  dayIdx,
+  setDayIdx,
+  gate,
+}: {
+  grid: GridData;
+  dayIdx: number;
+  setDayIdx: (i: number) => void;
+  gate: LabourGateInfo | null;
+}) {
+  const date = grid.days[Math.min(dayIdx, grid.days.length - 1)];
+  const nameOf = new Map(grid.users.map((u) => [u.id, u.fullName || u.name]));
+  const positionOf = new Map(grid.users.map((u) => [u.id, u.profile?.position ?? ""]));
+
+  const dayShifts = grid.shifts.filter((s) => s.shift_date === date);
+  const resting = dayShifts.filter((s) => s.notes === "rest_day");
+  const working = dayShifts.filter((s) => s.notes !== "rest_day");
+  const onLeave = grid.leaves.filter((l) => date >= l.start_date && date <= l.end_date);
+
+  // Group by identical shift (label + span), ordered by start time.
+  const groups = new Map<string, { label: string; start: string; end: string; shifts: Shift[] }>();
+  for (const s of [...working].sort((a, b) => a.start_time.localeCompare(b.start_time))) {
+    const key = `${s.start_time}-${s.end_time}-${s.role_type ?? ""}`;
+    const g = groups.get(key) ?? { label: s.role_type || "Shift", start: s.start_time, end: s.end_time, shifts: [] };
+    g.shifts.push(s);
+    groups.set(key, g);
+  }
+  const cov = gate?.coverage?.find((c) => c.date === date);
+
+  return (
+    <div className="flex-1 min-h-0 space-y-3 overflow-auto">
+      <div className="flex flex-wrap items-center gap-1">
+        {grid.days.map((d, i) => (
+          <button
+            key={d}
+            onClick={() => setDayIdx(i)}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+              d === date ? "border-terracotta bg-terracotta text-white" : "hover:bg-muted"
+            }`}
+          >
+            {DAY_NAMES[i]} {formatDay(d)}
+          </button>
+        ))}
+        {cov && cov.neededHours > 0 && (
+          <span
+            className={`ml-auto rounded-lg border px-3 py-1.5 text-sm font-medium ${
+              cov.shortHours === 0
+                ? "border-green-200 bg-green-50 text-green-700"
+                : "border-amber-300 bg-amber-50 text-amber-700"
+            }`}
+          >
+            Coverage {cov.scheduledHours}/{cov.neededHours} staff-hours
+            {cov.shortHours > 0 ? ` — ${cov.shortHours}h short` : " ✓"}
+          </span>
+        )}
+      </div>
+
+      {groups.size === 0 && (
+        <div className="rounded-xl border bg-card py-12 text-center text-sm text-muted-foreground">
+          No shifts on {date} — use the week view to assign.
+        </div>
+      )}
+
+      {[...groups.values()].map((g) => (
+        <div key={`${g.start}-${g.end}-${g.label}`} className="rounded-xl border bg-card p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="font-semibold">{g.label}</h3>
+            <span className="text-sm text-muted-foreground">
+              {g.start.slice(0, 5)} – {g.end.slice(0, 5)} · {g.shifts.length} pax
+            </span>
+          </div>
+          <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+            {g.shifts.map((s) => (
+              <li
+                key={s.id}
+                className={`rounded-lg border px-3 py-2 text-sm ${
+                  s.notes === "pt_suggestion" ? "border-dashed border-amber-400 bg-amber-50" : "bg-muted/30"
+                }`}
+              >
+                <span className="font-medium">
+                  {s.notes === "pt_suggestion" ? "PT? " : ""}
+                  {nameOf.get(s.user_id) ?? s.user_id.slice(0, 8)}
+                </span>
+                {positionOf.get(s.user_id) && (
+                  <span className="ml-1 text-xs text-muted-foreground">· {positionOf.get(s.user_id)}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+
+      {(resting.length > 0 || onLeave.length > 0) && (
+        <div className="rounded-xl border bg-card p-4">
+          <h3 className="mb-2 font-semibold">Off today</h3>
+          <div className="flex flex-wrap gap-1.5 text-sm">
+            {resting.map((s) => (
+              <span key={s.id} className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-red-700">
+                {nameOf.get(s.user_id) ?? "?"} · rest day
+              </span>
+            ))}
+            {onLeave.map((l, i) => (
+              <span key={i} className="rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1 text-purple-700">
+                {nameOf.get(l.user_id) ?? "?"} · {l.leave_type}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
