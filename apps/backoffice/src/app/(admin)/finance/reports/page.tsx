@@ -671,7 +671,7 @@ function PnlTab() {
       )}
       {!consolidated && outletId && (
         <p className="text-[11px] text-amber-600">
-          Per-outlet view: revenue + COGS + outlet-tagged costs only (contribution margin). Shared/HQ opex is paid from the entity account and can&apos;t be split per outlet.
+          Per-outlet view: revenue + COGS + outlet-tagged costs. Salary and statutory are allocated across the entity&apos;s outlets by staff payroll weight; other shared/HQ opex stays entity level and isn&apos;t split per outlet, so this reads as a contribution margin.
         </p>
       )}
 

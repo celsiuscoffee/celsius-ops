@@ -18,7 +18,7 @@ import { Prisma, type CashCategory } from "@prisma/client";
 import { getFinanceClient } from "../supabase";
 import { getDefaultCompanyId } from "../companies";
 import { depreciationByAsset } from "../fixed-assets";
-import { effectiveGrabRate, fetchRecognisedBankLines } from "./pnl-sourced";
+import { effectiveGrabRate, fetchRecognisedBankLines, outletPayrollWeights } from "./pnl-sourced";
 import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -373,6 +373,38 @@ async function drillBank(cat: string, companyId: string, start: string, end: str
   }));
 }
 
+// Allocated people-cost drill (EMPLOYEE_SALARY, STATUTORY_PAYMENT) in a
+// per-outlet view. These P&L lines are an ALLOCATION of the entity total by
+// staff payroll weight, not per-outlet transactions, so the honest drill shows
+// the entity's actual salary/statutory bank lines for the period with a header
+// row stating this outlet's weight percent and the entity total. The
+// transactions are entity-level; only the P&L line is the outlet's share.
+async function drillAllocatedPeopleCost(
+  cat: string,
+  companyId: string,
+  start: string,
+  end: string,
+  outletId: string,
+): Promise<DrillLine[]> {
+  // Entity-level lines: no outletId filter, so the whole entity's salary or
+  // statutory shows (matches the entity total the P&L allocated from).
+  const lines = await drillBankRecognised(cat, companyId, start, end, null, "DR");
+  const total = round2(lines.reduce((s, l) => s + l.amount, 0));
+  const weights = await outletPayrollWeights(companyId);
+  const share = weights.get(outletId) ?? 0;
+  const sharePct = Math.round(share * 1000) / 10;
+  const allocated = round2(total * share);
+  const header: DrillLine = {
+    transactionId: `alloc-${cat}`,
+    txnDate: end,
+    description: `Allocation basis: this outlet's P&L figure is ${sharePct}% of the entity total RM${total.toFixed(2)}, which is RM${allocated.toFixed(2)}, split by staff payroll weight. The rows below are the entity's actual salary and statutory bank lines for the period (entity-level, not per outlet).`,
+    amount: 0,
+    debit: 0,
+    credit: 0,
+  };
+  return [header, ...lines];
+}
+
 export async function sourcedPnlDrillDown(args: {
   companyId: string;
   code: string;
@@ -398,7 +430,15 @@ export async function sourcedPnlDrillDown(args: {
   // (override > matched invoice month > category shift > cash), so shifted
   // categories like management fee, salary, utilities and statutory tie to
   // their accrual-recognised P&L lines.
-  if (code.startsWith("BANK:")) return drillBankRecognised(code.slice(5), companyId, start, end, outletId);
+  if (code.startsWith("BANK:")) {
+    const cat = code.slice(5);
+    // Per-outlet salary/statutory are an allocation of the entity total, so drill
+    // the entity's lines with a header note about this outlet's share.
+    if (outletId && (cat === "EMPLOYEE_SALARY" || cat === "STATUTORY_PAYMENT")) {
+      return drillAllocatedPeopleCost(cat, companyId, start, end, outletId);
+    }
+    return drillBankRecognised(cat, companyId, start, end, outletId);
+  }
   if (code === "MKT-GRAB-COMM") {
     // A derived line, not transactions — the drawer explains the calculation.
     const [rev, gr] = await Promise.all([

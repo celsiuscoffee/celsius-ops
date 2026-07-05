@@ -289,6 +289,69 @@ export async function effectiveGrabRate(end: string): Promise<GrabRate> {
   }
 }
 
+// ─── Per-outlet payroll weights, for allocating centrally-paid people cost ───
+// Centrally-paid EMPLOYEE_SALARY and STATUTORY_PAYMENT bank lines are mostly
+// UNtagged (paid from the entity account, no outletId), so they vanish from the
+// per-outlet view. The owner allocates them across the entity's outlets by each
+// outlet's share of active full-time and contract staff basic salary.
+//
+// Weight source (owner-confirmed): hr_employee_profiles.basic_salary for ACTIVE
+// FT/contract staff, mapped to an outlet via preferred_outlet_id and to the
+// entity via fin_outlet_companies. "Active" = end_date IS NULL AND resigned_at
+// IS NULL AND COALESCE(basic_salary,0) > 0 AND employment_type IN
+// ('full_time','contract'). hr_employee_profiles is an hr_ table managed outside
+// Prisma, so it is queried with $queryRaw, not a Prisma model.
+//
+// Returns a Map<outletId, share 0..1> covering EVERY outlet of the entity (an
+// outlet with no salaried staff mapped gets share 0). A single-outlet entity
+// gives that outlet 1.0. If the entity's total weight is 0 (no salaried staff
+// mapped at all), it falls back to an equal split across the entity's outlets
+// so a real salary/statutory cost is never silently dropped from every outlet.
+export async function outletPayrollWeights(companyId: string): Promise<Map<string, number>> {
+  const client = getFinanceClient();
+  const { data: oc } = await client
+    .from("fin_outlet_companies").select("outlet_id").eq("company_id", companyId);
+  const outletIds = (oc ?? []).map((r) => r.outlet_id as string);
+  const weights = new Map<string, number>();
+  if (!outletIds.length) return weights;
+  if (outletIds.length === 1) {
+    weights.set(outletIds[0], 1);
+    return weights;
+  }
+
+  const rows = await prisma.$queryRaw<{ outlet_id: string; weight: number }[]>(Prisma.sql`
+    SELECT p.preferred_outlet_id AS outlet_id, SUM(p.basic_salary)::float AS weight
+    FROM hr_employee_profiles p
+    WHERE p.preferred_outlet_id IN (${Prisma.join(outletIds)})
+      AND p.end_date IS NULL AND p.resigned_at IS NULL
+      AND COALESCE(p.basic_salary, 0) > 0
+      AND p.employment_type IN ('full_time', 'contract')
+    GROUP BY p.preferred_outlet_id
+  `);
+  const byOutlet = new Map<string, number>();
+  let total = 0;
+  for (const r of rows) {
+    const w = Number(r.weight) || 0;
+    byOutlet.set(r.outlet_id, w);
+    total += w;
+  }
+
+  if (total <= 0) {
+    // No salaried staff mapped to any of the entity's outlets: split equally so
+    // the entity's real people cost still shows per outlet instead of vanishing.
+    const equal = 1 / outletIds.length;
+    for (const id of outletIds) weights.set(id, equal);
+    return weights;
+  }
+  for (const id of outletIds) weights.set(id, (byOutlet.get(id) ?? 0) / total);
+  return weights;
+}
+
+// The two centrally-paid people-cost categories allocated per outlet by payroll
+// weight in the per-outlet view. Everything else keeps its outlet-tagged
+// behaviour (PARTIMER is already tagged, utilities stay entity-level).
+const ALLOCATED_PEOPLE_CATEGORIES = new Set(["EMPLOYEE_SALARY", "STATUTORY_PAYMENT"]);
+
 function humanCat(c: string | null): string {
   if (!c) return "Unclassified";
   return c.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
@@ -648,6 +711,11 @@ export async function buildSourcedPnl(input: {
     for (const l of opexLines) {
       const cat = l.category;
       if (cat && (BANK_COGS.has(cat) || BANK_NONOPEX.has(cat) || BANK_DIGITAL_ADS.has(cat))) continue;
+      // Per-outlet view: EMPLOYEE_SALARY and STATUTORY_PAYMENT are centrally paid
+      // and mostly untagged, so the tagged filter here would understate them. They
+      // are allocated from the ENTITY total by payroll weight below instead, so
+      // skip them in this outlet-tagged loop to avoid counting them twice.
+      if (outletId && cat && ALLOCATED_PEOPLE_CATEGORIES.has(cat)) continue;
       byCat.set(cat ?? "NULL", (byCat.get(cat ?? "NULL") ?? 0) + l.amount);
     }
     for (const [key, sum] of byCat) {
@@ -667,6 +735,44 @@ export async function buildSourcedPnl(input: {
         parentCode: null,
       });
       totalExpenses += amt;
+    }
+
+    // Per-outlet allocation of centrally-paid people cost. EMPLOYEE_SALARY and
+    // STATUTORY_PAYMENT are paid from the entity account and mostly untagged, so
+    // the tagged filter above understates them. Take the ENTITY TOTAL for each
+    // category over the same recognition window and rules the company-level view
+    // uses (fetchRecognisedBankLines for the whole entity, no outletId filter),
+    // then multiply by this outlet's payroll-weight share. The line keeps the
+    // stable BANK:<CAT> code so drill-down still routes, and its name states the
+    // entity total and the allocation basis. The company-level and consolidated
+    // views never enter this branch, so their salary/statutory totals are
+    // unchanged (no allocation).
+    if (outletId) {
+      const [entityLines, weights] = await Promise.all([
+        fetchRecognisedBankLines({ direction: "DR", start, end, suffix, excludeInterCo }),
+        outletPayrollWeights(companyId),
+      ]);
+      const share = weights.get(outletId) ?? 0;
+      const entityTotal = new Map<string, number>();
+      for (const l of entityLines) {
+        const cat = l.category;
+        if (cat && ALLOCATED_PEOPLE_CATEGORIES.has(cat)) {
+          entityTotal.set(cat, (entityTotal.get(cat) ?? 0) + l.amount);
+        }
+      }
+      const sharePct = Math.round(share * 1000) / 10; // one decimal place
+      for (const cat of ["EMPLOYEE_SALARY", "STATUTORY_PAYMENT"]) {
+        const total = round2(entityTotal.get(cat) ?? 0);
+        if (!total) continue;
+        const allocated = round2(total * share);
+        if (!allocated) continue;
+        const name =
+          cat === "EMPLOYEE_SALARY"
+            ? `Employee salary (this outlet's ${sharePct}% share of RM${total.toFixed(2)}, by staff payroll)`
+            : `Statutory EPF/SOCSO/EIS/PCB (this outlet's ${sharePct}% share of RM${total.toFixed(2)}, by staff payroll)`;
+        expenseLines.push({ code: `BANK:${cat}`, name, amount: allocated, parentCode: null });
+        totalExpenses += allocated;
+      }
     }
   }
 
