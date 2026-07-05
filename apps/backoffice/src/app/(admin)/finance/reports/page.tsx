@@ -1026,6 +1026,129 @@ function GlSourceLines({ transactionId, accountNames, onChanged }: {
   );
 }
 
+type InvoiceDetailResp = {
+  invoice: {
+    id: string;
+    invoiceNumber: string;
+    issueDate: string | null;
+    dueDate: string | null;
+    amount: number;
+    amountPaid: number;
+    status: string;
+    vendor: string | null;
+    outlet: string | null;
+    orderNumber: string | null;
+    deliveryCharge: number;
+    notes: string | null;
+    paidAt: string | null;
+    paidVia: string | null;
+    paymentRef: string | null;
+  };
+  lines: { id: string; description: string; quantity: number; unitPrice: number; lineTotal: number }[];
+  payments: { id: string; txnDate: string | null; description: string; reference: string | null; amount: number; account: string | null; matchedAt: string | null }[];
+};
+
+// Invoice detail sub-panel for a PROC (procurement invoice) drill row. Lazily
+// fetched on first expand (SWR caches per id, so re-opening is instant and the
+// URL is only requested when open). Shows the invoice header, its line items
+// (or an honest empty note for header-only imports) and the bank payment(s)
+// that settled it, or the out-of-band / unmatched paid state.
+function InvoiceDetail({ invoiceId, open }: { invoiceId: string; open: boolean }) {
+  const { data, isLoading, error } = useFetch<InvoiceDetailResp>(
+    open ? `/api/finance/invoices/${encodeURIComponent(invoiceId)}` : null
+  );
+  if (isLoading || !data) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted-foreground">
+        {error ? "Could not load invoice detail." : <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading invoice detail...</>}
+      </div>
+    );
+  }
+  const { invoice, lines, payments } = data;
+  const isPaid = invoice.status === "PAID";
+  return (
+    <div className="space-y-3 px-3 py-2.5">
+      <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-[11px]">
+        <dt className="text-muted-foreground">Supplier</dt><dd>{invoice.vendor ?? "(no vendor)"}</dd>
+        <dt className="text-muted-foreground">Invoice no.</dt><dd>{invoice.invoiceNumber}{invoice.orderNumber ? <span className="text-muted-foreground"> · PO {invoice.orderNumber}</span> : null}</dd>
+        <dt className="text-muted-foreground">Issue date</dt><dd className="tabular-nums">{invoice.issueDate ?? "n/a"}{invoice.dueDate ? <span className="text-muted-foreground"> · due {invoice.dueDate}</span> : null}</dd>
+        {invoice.outlet && (<><dt className="text-muted-foreground">Outlet</dt><dd>{invoice.outlet}</dd></>)}
+        <dt className="text-muted-foreground">Total</dt><dd className="tabular-nums">{RM(invoice.amount)}{invoice.deliveryCharge ? <span className="text-muted-foreground"> (incl. {RM(invoice.deliveryCharge)} delivery)</span> : null}</dd>
+        <dt className="text-muted-foreground">Status</dt>
+        <dd>
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${isPaid ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-amber-500/15 text-amber-700 dark:text-amber-400"}`}>
+            {invoice.status.toLowerCase().replace(/_/g, " ")}
+          </span>
+          {!isPaid && invoice.amountPaid > 0 && <span className="ml-2 text-muted-foreground tabular-nums">{RM(invoice.amountPaid)} paid so far</span>}
+        </dd>
+      </dl>
+
+      <div>
+        <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Line items</div>
+        {lines.length === 0 ? (
+          <div className="text-[11px] text-muted-foreground">No itemised lines recorded for this invoice.</div>
+        ) : (
+          <table className="w-full text-[11px]">
+            <thead className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+              <tr className="border-b">
+                <th className="px-2 py-1 font-medium">Item</th>
+                <th className="whitespace-nowrap px-2 py-1 text-right font-medium">Qty</th>
+                <th className="whitespace-nowrap px-2 py-1 text-right font-medium">Unit price</th>
+                <th className="whitespace-nowrap px-2 py-1 text-right font-medium">Line total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((it) => (
+                <tr key={it.id} className="border-t">
+                  <td className="px-2 py-1">{it.description}</td>
+                  <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{it.quantity}</td>
+                  <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{RM(it.unitPrice)}</td>
+                  <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{RM(it.lineTotal)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div>
+        <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Payment</div>
+        {payments.length > 0 ? (
+          <table className="w-full text-[11px]">
+            <thead className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+              <tr className="border-b">
+                <th className="whitespace-nowrap px-2 py-1 font-medium">Date</th>
+                <th className="px-2 py-1 font-medium">Bank line</th>
+                <th className="whitespace-nowrap px-2 py-1 font-medium">Account</th>
+                <th className="whitespace-nowrap px-2 py-1 text-right font-medium">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((p) => (
+                <tr key={p.id} className="border-t">
+                  <td className="whitespace-nowrap px-2 py-1 tabular-nums text-muted-foreground">{p.txnDate ?? "n/a"}</td>
+                  <td className="px-2 py-1">
+                    <span className="break-words">{p.description}</span>
+                    {p.reference && <span className="block text-[10px] text-muted-foreground">ref {p.reference}</span>}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">{p.account ?? "n/a"}</td>
+                  <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{RM(p.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : invoice.paidAt ? (
+          <div className="text-[11px] text-muted-foreground">
+            Marked paid {invoice.paidAt}{invoice.paidVia ? ` via ${invoice.paidVia}` : ""}{invoice.paymentRef ? ` (ref ${invoice.paymentRef})` : ""}, but not matched to a bank line.
+          </div>
+        ) : (
+          <div className="text-[11px] text-muted-foreground">Not yet matched to a bank payment.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Inline drill panel: the source rows behind one P&L line, rendered
 // full-width directly beneath the clicked report row (the same accordion
 // pattern as the General Ledger workbench). One transaction per line with
@@ -1109,13 +1232,17 @@ function DrillDown({ code, name, start, end, outletId, consolidated, onChanged, 
               const isBankRow = !!l.meta?.bankLineId;
               const isBankJournal = !isBankRow && l.meta?.glAgent === "bank";
               const hasDetail = !!l.meta && !l.meta.glAgent;
-              const expandable = hasDetail || isBankJournal;
+              // PROC rows are procurement invoices: transactionId is the
+              // Invoice id, and they carry no meta. Expanding lazy-loads the
+              // invoice + payment detail.
+              const isProcRow = code === "PROC";
+              const expandable = hasDetail || isBankJournal || isProcRow;
               const open = openRow === key;
               return (
                 <Fragment key={key}>
                 <tr className={`border-t ${i % 2 === 1 ? "bg-muted/20" : ""} ${expandable ? "cursor-pointer hover:bg-muted/30" : ""}`}
                     onClick={expandable ? () => setOpenRow(open ? null : key) : undefined}
-                    title={expandable ? (isBankJournal ? "Click to see the source bank lines" : "Click to see the transaction detail") : undefined}>
+                    title={expandable ? (isBankJournal ? "Click to see the source bank lines" : isProcRow ? "Click to see the invoice and payment detail" : "Click to see the transaction detail") : undefined}>
                   <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground">
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 text-[10px]">{expandable ? (open ? "▾" : "▸") : ""}</span>
@@ -1172,6 +1299,13 @@ function DrillDown({ code, name, start, end, outletId, consolidated, onChanged, 
                   <tr className="border-t bg-muted/20">
                     <td colSpan={cols} className="p-0" onClick={(e) => e.stopPropagation()}>
                       <GlSourceLines transactionId={l.transactionId} accountNames={accountNames} onChanged={refresh} />
+                    </td>
+                  </tr>
+                )}
+                {open && isProcRow && (
+                  <tr className="border-t bg-muted/20">
+                    <td colSpan={cols} className="p-0" onClick={(e) => e.stopPropagation()}>
+                      <InvoiceDetail invoiceId={l.transactionId} open={open} />
                     </td>
                   </tr>
                 )}
