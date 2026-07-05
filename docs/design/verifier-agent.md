@@ -1,103 +1,122 @@
 # Verifier Agent — closing the loop between alerts and reality
 
+*Revised 2026-07-05 after root-cause dig. The original draft proposed "escalate-on-repeat";
+Ammar's correction ("checklists are auto-assigned by the system — escalation to a manager
+won't help") sent us back to the data, and the data agreed with him.*
+
 ## Problem Statement
-Ops-pulse fires WhatsApp alerts correctly, but nothing checks whether they *work*. The
-ledger's `RESOLVED` status is a claim (someone replied "DONE", which bulk-closes ALL their
-open alerts) verified against nothing; if nobody replies, alerts stay OPEN forever even when
-the task actually got done. The system's only response to an ignored nudge is sending the
-identical message to the same person the next day — an infinite loop at RM0.07/send with no
-exit and no learning.
+The ops-alert layer verifies nothing and diagnoses nothing. When a goal fails, it cannot tell
+*where in the chain* it failed — so it nudges humans about defects only code can fix. The
+checklist pipeline is the proven case:
 
-## Demand Evidence
-From the send log (`WhatsAppMessage`) and ledger, last 10 days — all verified by SQL, not vibes:
+1. **61% of checklists are born ownerless and stay that way.** Daily generation (staff-app
+   `/api/checklists/generate`, Source 1) creates them with `assignedToId: null` — "anyone can
+   claim". Nobody ever claims: **0 of 279 unassigned checklists completed in 10 days (0%)**,
+   vs **56.3%** for assigned ones. The claim model is dead on arrival.
+2. **The assigner only runs when a human touches the roster.** `linkChecklistsToSchedule`
+   fires solely on HR schedule save/publish. Checklists created by the daily cron get an owner
+   only if a manager happens to re-save the roster afterwards. Days nobody touches it (
+   weekends, today: 33/39 ownerless *despite rosters existing for all 3 outlets*), everything
+   stays unowned.
+3. **The alert layer then screams into the void.** "Overdue checklist, no owner on shift"
+   fired 5 consecutive days / 36 sends at RM0.07 each — to recipients who cannot fix
+   ownership, about a condition the system itself created.
+4. The ledger's `RESOLVED` is a claim, not a fact — a "DONE" reply bulk-closes ALL the
+   sender's open alerts, verified against nothing.
 
-- "1 overdue checklist with no owner on shift" fired **5 consecutive days**, 36 sends. Nobody claimed it.
-- "Full stock count due today @ Putrajaya" fired 3 days / 19 sends; the count still wasn't done.
-- Personal nudges ignored for days: Firdaus (4 days), Aina (4 days), Nur (3 days) — same person, same checklist, daily.
-- 12 distinct alert bodies fired ≥3 days running.
-- Two send-side runaways (menu-86 nudge spam, store-status churn: 147 sends in one day) ran for
-  days and were caught **by accident** — one by staff annoyance, one by an ad-hoc cost query.
-  (#750/#752 patched those two specifically; nothing watches for the next one systemically.)
+## Demand Evidence (all SQL-verified, 10-day window)
+- Unassigned checklists: **279 total, 0 completed (0.0%)**. Assigned: 176, 99 completed (56.3%).
+- Completion tracks assignment day-by-day: Jul 1–4 (linker ran, 1–6 unassigned/outlet) → 16–19
+  done/day; Jun 27–29 + Jul 5 (linker didn't run, 33–40 unassigned) → 1–6 done/day.
+- Named assignees (Aina, Firdaus, Nur) WERE rostered on every nudged day — those are real
+  compliance cases, not premise failures; the named-nudge layer half-works (56%).
+- Nilai: no roster rows at all → 7 permanently-ownerless checklists/day → daily alert spam.
+- Two send-side runaways (menu-86, store-status: 147 sends/day) caught only by accident.
+- 12 distinct alert bodies fired ≥3 consecutive days.
 
 ## Status Quo (what users do now)
-Nothing owns this. Failures surface via staff complaining in WhatsApp (catches spam only,
-costs credibility) or Ammar stumbling on anomalies during unrelated QA. Resolution metrics
-don't exist because RESOLVED is unverified. Cost: ~RM3–4.50/day in sends, a meaningful slice
-of which is provably dead repeats; unowned checklists sitting 5 days = audit/food-safety risk.
+Nothing owns verification. Failures surface via staff annoyance or Ammar stumbling on
+anomalies in ad-hoc queries (both runaways, and this ownership hole, were found exactly that
+way). Cost: ~RM3–4.50/day of sends, much provably dead; ~24 checklists/day generated into a
+state with a known-0% completion rate — unowned food-safety/audit work.
 
 ## Target User (named person, role, consequence)
-**Ammar (founder/ops)** — week-1 recipient of escalation proposals. He already receives the
-"no owner on shift" alerts; today they give him no way to distinguish "handled" from "ignored 5
-days running". Consequence of status quo: pays for nudges that change nothing, finds out about
-dead loops by accident. Second-ring users: the two ops numbers already on the no-owner
-distribution (60163230590, 60176579149) — confirm identity/role before widening.
+**Ammar (founder/ops).** He receives the void-alerts today and pays for them twice: RM for the
+sends, and false confidence that "the system is chasing it" when the chase provably does
+nothing. Second ring: outlet staff who get nudged for structurally impossible goals — every
+such nudge burns credibility of ALL nudges (the 56% that work included).
 
-## Narrowest Wedge
-**Escalate-on-repeat, in ASSIST mode.** When the same goal fails N days running (N=3), the
-verifier STOPS re-nudging the same person and proposes ONE escalation ("Aina has ignored her
-checklist nudge 4 days running — escalate to outlet manager?"). Ammar approves/rejects with
-one tap (ASSIST principle: agent does all the work, human only decides). Repeat detection is
-nearly free: a repeat fire *is* a failed verification — ops-pulse re-checks conditions daily,
-so firing again proves yesterday's nudge failed.
+## Narrowest Wedge — Sprint 0 (before any agent): assign-at-birth
+Make the ownership premise true mechanically, days of work:
+1. **Assign at creation.** Checklist generation looks up that day's `hr_schedule_shifts` and
+   assigns each Source-1 checklist to the rostered person matching its shift window (opener →
+   OPENING, etc.). Deterministic rule, no AI.
+2. **Daily linker sweep.** Run `linkChecklistsToSchedule` logic from a morning cron, not only
+   on roster-publish — catches roster edits and late generation.
+3. **Re-aim the residual alert.** "No owner" fires only when there's genuinely no roster to
+   assign from — once per outlet-day, to whoever owns rosters, with a deep link to fix it.
+   (Nilai instantly becomes one actionable alert instead of 7/day of noise.)
+
+Expected effect: unassigned rate 61% → roster-gaps only; the 279-checklist dead pool moves
+into the 56%-completion band; "no owner" spam collapses.
 
 ## Premises (explicit assumptions)
-1. **Repeat fire = unresolved goal** — holds for condition-based signals (CHECKLIST,
-   STOCK_COUNT, REVIEW, no-owner). Does NOT hold for per-shift signals (NO_CLOCK_IN is a new
-   instance daily) — goal declarations must be per-signal, not generic.
-2. **Ground truth is queryable in the same DB** for every signal we verify: checklist
-   completion rows, timesheets, stock-count records, review responses.
-3. **"DONE" replies are claims, not facts** — `resolveOpenAlertsForUser` bulk-closes
-   everything; the verifier treats data as truth and replies as hints.
-4. **An escalation target who acts exists** — UNPROVEN. This is the load-bearing premise of
-   the whole action layer, and it is being tested manually before code (see Assignment).
+1. **Assignment causes completion** (not just correlates). Strong evidence: the 0%-vs-56%
+   split and the day-by-day tracking. Sprint 0 is also the experiment that proves causation —
+   if completion doesn't move once everything is assigned, adoption is the real problem.
+2. **Repeat fire = unresolved goal** — holds for condition-based signals; NOT for per-shift
+   ones (clock-in is a new instance daily). Goal declarations must be per-signal.
+3. **"DONE" replies are claims** — verifier treats data as truth, replies as hints.
+4. ~~"An escalation target who acts exists"~~ — **KILLED 2026-07-05.** Assignment is systemic;
+   there is no human whose scolding fixes a linker that doesn't run. Escalation returns later
+   only for verified *compliance* failures (rostered, on-shift, nudged, still not done).
 
 ## Approaches Considered
-### Approach A — escalate-on-repeat rule (days)
-Hardcoded rule in ops-pulse: N repeat fires → escalate, stop re-nudging. Cheapest; but it's
-one more bespoke per-signal rule — the exact pattern that produced the dedupe-spam bug class.
-
+### Approach A — escalate-on-repeat rule (days) — REJECTED as first move
+Would have escalated 279 system-defect alerts to managers who can't act on them. The
+diagnostic that killed it is the strongest argument FOR premise-verification.
 ### Approach B — weekly effectiveness scorecard (~1 week)
-Agent computes per-alert verified resolution rates, WhatsApps a weekly digest (which alerts
-work, which are noise). Measurement without action; nobody's fired for ignoring a dashboard.
-
+Measurement without action; folds into the verifier's metrics for free after Sprint 0.
 ### Approach C — full verifier agent (weeks–months)
-Every automation declares a goal + ground-truth check; agent tracks outcomes, verifies
-resolutions, pauses ineffective alerts, adapts recipients/wording. Kills the bespoke-logic bug
-class, fits the ASSIST architecture — but grants an agent autonomous action over
-infrastructure before any trust is earned, and builds an action layer on the unproven premise
-that escalations get acted on.
+Goal declarations + outcome tracking + adaptive actions. Right destination, wrong first step —
+adaptive authority must be earned on the same OFF→ASSIST→AUTO ladder as the procurement agent.
 
-## Recommended Approach
-**C-via-A ladder** (chosen 2026-07-05). C is the architecture, A is its first shipped
-behavior:
-- Day 1: verifier agent exists; each signal type declares `goal` + `verifyGoal()`
-  (ground-truth query). Verifier runs daily after the pulse.
-- Week-1 behaviors, ASSIST only: (a) auto-resolve alerts whose condition verifiably cleared
-  (makes RESOLVED mean something, retroactively fixes metrics); (b) propose-escalation on N≥3
-  repeat failures; (c) flag "DONE"-claimed-but-data-says-incomplete.
-- Adaptive layer (pause alert types, change recipients, reword) stays LOCKED until a human
-  demonstrably acts on ≥1 escalation. Same OFF→ASSIST→AUTO trust ladder as the procurement
-  agent, per alert-signal.
+## Recommended Approach — Sprint 0, then C-via-A
+- **Sprint 0 (now, no agent):** assign-at-birth + daily linker sweep + re-aimed roster-gap
+  alert. This is a bug fix the verifier would have demanded anyway.
+- **Verifier v1 (ASSIST only), aimed by the chain model.** Every goal declares its chain:
+  *created → owned → owner rostered/on-shift → nudged → verifiably done*. The verifier's
+  daily pass reports the FIRST broken link, not the last symptom:
+  - premise checks: ownerless work, assignee not rostered, roster missing → propose a system
+    fix to Ammar, never a staff nudge;
+  - verified auto-resolve: close alerts whose condition actually cleared (makes RESOLVED real);
+  - claim audit: "DONE" replied but data says incomplete → flag;
+  - compliance repeat (rostered + nudged + still pending ≥3 days) → NOW propose escalation,
+    because the premise is verified and only then does a human conversation help.
+- **Adaptive layer stays locked** until a human acts on ≥1 verifier proposal.
 
 ## Open Questions
-- Who is the per-outlet escalation target above Nur/Aina/Firdaus? (Names + numbers.)
-- Do "DONE" replies map to specific alerts, or stay bulk? (Bulk-close undermines per-alert metrics.)
-- NO_CLOCK_IN goal semantics: verify against timesheet within X minutes of shift start?
-- Where do ASSIST proposals surface — WhatsApp to Ammar, or the Ops Workspace approval queue (or both)?
+- Who owns rosters per outlet (the roster-gap alert recipient)? Nilai has none at all — who
+  should?
+- Shift-window → checklist matching rule when multiple staff overlap (senior-most? explicit
+  role tags?).
+- Do "DONE" replies stay bulk-close, or map to specific alerts?
+- Where do verifier proposals surface — WhatsApp to Ammar, Ops Workspace queue, or both?
 
 ## Success Criteria (measurable)
-- **Week 1:** ≥1 escalation proposal approved AND the underlying condition clears within 48h.
-- **Week 2:** 100% of CHECKLIST / STOCK_COUNT / no-owner alerts carry verified (data-checked)
-  resolution status; unverified "DONE" closures visible as a separate count.
-- **Week 4:** distinct alerts firing ≥3 consecutive days drops from baseline 12 → ≤6; repeat
-  sends to the same person for the same goal drop to ~0 (replaced by one escalation).
-- **Guard:** daily template spend stays ≤ RM5 (verifier must reduce sends, not add net spam).
+- **Sprint 0, week 1:** unassigned-at-due-time rate < 10% (roster gaps only); "no owner"
+  sends ≤ 1/outlet/day (baseline: 36 sends / 5 days for one alert).
+- **Sprint 0, week 2:** overall checklist completion ≥ 45% (baseline 21.8% = 99/455), i.e.
+  the former dead pool performs near the assigned band. If it doesn't move → adoption problem,
+  revisit before building the agent.
+- **Verifier v1, week 4:** 100% of CHECKLIST/STOCK_COUNT alerts carry verified resolution;
+  alerts firing ≥3 consecutive days drop 12 → ≤6; daily template spend ≤ RM5.
 
 ## The Assignment (one concrete next step)
-Before any code: **test the load-bearing premise by hand.** Next time the "overdue checklist
-with no owner on shift" alert fires (it has fired 5 days straight — it will fire tomorrow),
-manually WhatsApp the outlet manager exactly the escalation the agent would send: "*This
-checklist has had no owner for 5 days at [outlet]. Can you assign someone today?*" If the
-condition clears within 48h, the action layer has its proof. If it's ignored the same way the
-nudges were, we've learned the fix isn't a verifier agent — it's an accountability
-conversation, and no amount of architecture substitutes for it.
+~~Manually escalate to the outlet manager~~ — killed; there's nothing a manager can do about a
+linker that doesn't run. The new assignment is a build task plus one human question:
+1. **Ship Sprint 0** (assign-at-birth + daily sweep + roster-gap alert) and watch one number:
+   checklist completion rate, 7 days before vs 7 days after. That single delta decides whether
+   the verifier agent gets built on proof or on hope.
+2. **One human question for Ammar:** who owns the Nilai roster? It has zero shifts entered —
+   no code fixes an outlet nobody rosters.
