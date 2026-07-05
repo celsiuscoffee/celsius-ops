@@ -11,7 +11,11 @@ export const maxDuration = 300;
 // only up to the monthly budget cap — so spend lands where rank needs improving.
 const MONTHLY_CAP = Number(process.env.GEOGRID_MONTHLY_SCAN_CAP || 40);
 const GRID_SIZE = Number(process.env.GEOGRID_GRID_SIZE || 9);
-const RANGE_MILES = Number(process.env.GEOGRID_RANGE_MILES || 0.2); // ~1.8km, to see the 2km goal
+// 2.5km point spacing on a 9×9 grid = a ±10km catchment — the agreed target
+// radius, and the same setting as the owner's manual baseline scans (1.553mi),
+// so auto and manual scans stay comparable. The old 0.2mi default measured
+// only ~±1.3km around the storefront, which trivially over-reports rank.
+const RANGE_MILES = Number(process.env.GEOGRID_RANGE_MILES || 1.5534);
 
 export async function GET(req: NextRequest) {
   const auth = checkCronAuth(req.headers);
