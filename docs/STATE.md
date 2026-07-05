@@ -107,6 +107,14 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   prompts ignore `--non-interactive`; set `CI=1` in the environment instead.
   Pass commit messages via env var, not inline in the shell command (backticks/
 
+- 2026-07-05 — A hook must never return a component whose identity changes per
+  render (`usePrompt`'s `PromptDialog` was a `useCallback` with state deps):
+  React sees a new element type each keystroke, remounts the subtree, and
+  `autoFocus` re-focuses with the caret at 0 — text comes out reversed. Fix
+  pattern: hoist the JSX to a module-level view component + return a
+  `useState`-created stable wrapper reading latest props from a ref
+  (`packages/ui/src/prompt-dialog.tsx`).
+
 - 2026-07-05 — The AI Fill week-wipe (60 shifts) was the old generator's
   DELETE-then-INSERT persist with no transaction; `hr_schedule_shift_audit`
   (migration 070) held every deleted row and `jsonb_populate_record` restored
