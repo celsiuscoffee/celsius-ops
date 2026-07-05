@@ -1164,6 +1164,11 @@ function DayView({
   const date = grid.days[Math.min(dayIdx, grid.days.length - 1)];
   const nameOf = new Map(grid.users.map((u) => [u.id, u.fullName || u.name]));
   const positionOf = new Map(grid.users.map((u) => [u.id, u.profile?.position ?? ""]));
+  // Same FOH/BOH split the AI Fill generator uses to spread kitchen cover.
+  const isBOH = (userId: string) => {
+    const p = (positionOf.get(userId) ?? "").toLowerCase();
+    return p.includes("kitchen") || p.includes("chef") || p.includes("boh");
+  };
 
   const dayShifts = grid.shifts.filter((s) => s.shift_date === date);
   const resting = dayShifts.filter((s) => s.notes === "rest_day");
@@ -1214,34 +1219,53 @@ function DayView({
         </div>
       )}
 
-      {[...groups.values()].map((g) => (
-        <div key={`${g.start}-${g.end}-${g.label}`} className="rounded-xl border bg-card p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="font-semibold">{g.label}</h3>
-            <span className="text-sm text-muted-foreground">
-              {g.start.slice(0, 5)} – {g.end.slice(0, 5)} · {g.shifts.length} pax
+      {[...groups.values()].map((g) => {
+        const boh = g.shifts.filter((s) => isBOH(s.user_id));
+        const foh = g.shifts.filter((s) => !isBOH(s.user_id));
+        const crew = (s: Shift) => (
+          <li
+            key={s.id}
+            className={`rounded-lg border px-3 py-2 text-sm ${
+              s.notes === "pt_suggestion" ? "border-dashed border-amber-400 bg-amber-50" : "bg-muted/30"
+            }`}
+          >
+            <span className="font-medium">
+              {s.notes === "pt_suggestion" ? "PT? " : ""}
+              {nameOf.get(s.user_id) ?? s.user_id.slice(0, 8)}
             </span>
+            {positionOf.get(s.user_id) && (
+              <span className="ml-1 text-xs text-muted-foreground">· {positionOf.get(s.user_id)}</span>
+            )}
+          </li>
+        );
+        return (
+          <div key={`${g.start}-${g.end}-${g.label}`} className="rounded-xl border bg-card p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="font-semibold">{g.label}</h3>
+              <span className="text-sm text-muted-foreground">
+                {g.start.slice(0, 5)} – {g.end.slice(0, 5)} · {g.shifts.length} pax
+                {boh.length > 0 && ` (${foh.length} FOH / ${boh.length} BOH)`}
+              </span>
+            </div>
+            {foh.length > 0 && (
+              <>
+                <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Front of house · {foh.length}
+                </div>
+                <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{foh.map(crew)}</ul>
+              </>
+            )}
+            {boh.length > 0 && (
+              <>
+                <div className={`mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground ${foh.length > 0 ? "mt-3" : ""}`}>
+                  Back of house · {boh.length}
+                </div>
+                <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{boh.map(crew)}</ul>
+              </>
+            )}
           </div>
-          <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-            {g.shifts.map((s) => (
-              <li
-                key={s.id}
-                className={`rounded-lg border px-3 py-2 text-sm ${
-                  s.notes === "pt_suggestion" ? "border-dashed border-amber-400 bg-amber-50" : "bg-muted/30"
-                }`}
-              >
-                <span className="font-medium">
-                  {s.notes === "pt_suggestion" ? "PT? " : ""}
-                  {nameOf.get(s.user_id) ?? s.user_id.slice(0, 8)}
-                </span>
-                {positionOf.get(s.user_id) && (
-                  <span className="ml-1 text-xs text-muted-foreground">· {positionOf.get(s.user_id)}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+        );
+      })}
 
       {(resting.length > 0 || onLeave.length > 0) && (
         <div className="rounded-xl border bg-card p-4">
