@@ -24,10 +24,9 @@ import {
 // Outlet.code. Tamarind's interim budget is deliberately above the company
 // 18% target: its 3-pax service floor can't reach 18% at current weekday
 // revenue — the fix there is sales growth, reviewed monthly, not a gate
-// that cries wolf every week. Blended still lands ≤18% because Conezion
-// runs under.
+// that cries wolf every week.
 export const OUTLET_BUDGETS: Record<string, { target: number; ceiling: number }> = {
-  CC001: { target: 0.16, ceiling: 0.18 }, // Conezion (Putrajaya)
+  CC001: { target: 0.18, ceiling: 0.2 }, // Conezion (Putrajaya) — owner set 18/20, 2026-07-05
   CC002: { target: 0.18, ceiling: 0.2 }, // Shah Alam
   CC003: { target: 0.22, ceiling: 0.25 }, // Tamarind — interim, revenue plan attached
 };

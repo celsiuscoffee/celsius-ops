@@ -87,23 +87,20 @@ export async function POST(req: NextRequest) {
       }
       gateNote = `${gate.verdict} ${pctLabel} reason: ${reason.trim()}`;
     } else {
-      // red — over ceiling
-      if (session.role !== "OWNER") {
+      // red — over ceiling. Interim policy (owner, 2026-07-05): a typed
+      // reason publishes, from any role allowed here — still logged loudly
+      // as an override so the weekly variance digest surfaces it.
+      const redReason = (override_reason ?? reason ?? "").trim();
+      if (redReason.length < 5) {
         return NextResponse.json(
           {
-            error: `Roster is ${pctLabel} of forecast — over the ${(gate.ceilingPct * 100).toFixed(0)}% ceiling. Owner override required.`,
+            error: `Roster is ${pctLabel} of forecast — over the ${(gate.ceilingPct * 100).toFixed(0)}% ceiling. A reason is required to publish.`,
             gate,
           },
-          { status: 403 },
-        );
-      }
-      if (!override_reason || override_reason.trim().length < 5) {
-        return NextResponse.json(
-          { error: "Over-ceiling publish requires an override reason", gate },
           { status: 422 },
         );
       }
-      gateNote = `RED OVERRIDE ${pctLabel} by owner: ${override_reason.trim()}`;
+      gateNote = `RED OVERRIDE ${pctLabel} by ${session.role.toLowerCase()}: ${redReason}`;
     }
     for (const w of gate.warnings) gateNote += ` | ${w}`;
 
