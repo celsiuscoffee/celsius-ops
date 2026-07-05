@@ -35,6 +35,8 @@ export type PnlReport = {
   expenses: PnlSection;
   netIncome: number;
   txnCount: number;
+  // Optional reader notes (e.g. the sourced P&L's accrual boundary note).
+  notes?: string[];
 };
 
 export type PnlInput = {

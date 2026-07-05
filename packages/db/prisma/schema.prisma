@@ -2058,6 +2058,10 @@ model BankStatementLine {
   // posted; null = not yet in the ledger. Idempotency key for the poster.
   glTransactionId String?
   glPostedAt      DateTime?
+  // Per-line expense-month override for the accrual P&L: first day of the
+  // month this payment's expense belongs to. Null = derive from the category
+  // shift map / matched invoice / cash date. Cash Flow and GL stay cash-dated.
+  expenseMonth    DateTime? @db.Date
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

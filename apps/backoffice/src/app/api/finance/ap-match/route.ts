@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
           txnDate: { gte: new Date(Date.now() - sinceDays * 86400_000) },
           OR: [{ category: null }, { category: "OTHER_INFLOW" }],
         },
-        select: { id: true, description: true, txnDate: true, amount: true, category: true },
+        select: { id: true, description: true, txnDate: true, amount: true, category: true, expenseMonth: true },
         orderBy: { amount: "desc" },
         take: 300,
       }),
@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
       date: l.txnDate.toISOString().slice(0, 10),
       amount: Math.round(Number(l.amount) * 100) / 100,
       category: l.category as string | null,
+      expenseMonth: l.expenseMonth ? l.expenseMonth.toISOString().slice(0, 7) : null,
     }));
     const summary = {
       auto: result.auto.length,

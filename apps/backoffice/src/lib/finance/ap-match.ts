@@ -67,7 +67,7 @@ export type ApMatchResult = {
   review: ApMatch[];
   multi: ApMultiMatch[];
   unmatchedInvoices: { invoiceId: string; invoiceNumber: string | null; payee: string; amount: number; issueDate: string }[];
-  unmatchedOutflows: { bankLineId: string; desc: string; date: string; amount: number; category: string | null }[];
+  unmatchedOutflows: { bankLineId: string; desc: string; date: string; amount: number; category: string | null; expenseMonth: string | null }[];
   doublePayments: ApMatch[];
 };
 
@@ -139,7 +139,7 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
       direction: "DR", isInterCo: false, txnDate: { gte: since }, apInvoiceId: null,
       OR: [{ category: null }, { category: { notIn: NON_SUPPLIER_CATEGORIES } }],
     },
-    select: { id: true, description: true, amount: true, txnDate: true, category: true },
+    select: { id: true, description: true, amount: true, txnDate: true, category: true, expenseMonth: true },
   });
 
   // Index bank lines by rounded amount for fast candidate lookup.
@@ -298,7 +298,7 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
   // (the real "needs review" cash-out the user asked to see).
   const unmatchedOutflows = lines
     .filter((l) => !usedBankLineIds.has(l.id) && (l.category === null || l.category === "OTHER_OUTFLOW"))
-    .map((l) => ({ bankLineId: l.id, desc: (l.description ?? "").replace(/\s+/g, " ").slice(0, 60), date: ymd(l.txnDate), amount: round2(Number(l.amount)), category: l.category as string | null }))
+    .map((l) => ({ bankLineId: l.id, desc: (l.description ?? "").replace(/\s+/g, " ").slice(0, 60), date: ymd(l.txnDate), amount: round2(Number(l.amount)), category: l.category as string | null, expenseMonth: l.expenseMonth ? ymd(l.expenseMonth).slice(0, 7) : null }))
     .sort((a, b) => b.amount - a.amount);
 
   // Human verdicts are final: a pair the owner rejected (or unmatched) never

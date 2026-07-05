@@ -18,7 +18,7 @@ import { Prisma, type CashCategory } from "@prisma/client";
 import { getFinanceClient } from "../supabase";
 import { getDefaultCompanyId } from "../companies";
 import { depreciationByAsset } from "../fixed-assets";
-import { effectiveGrabRate } from "./pnl-sourced";
+import { effectiveGrabRate, fetchRecognisedBankLines } from "./pnl-sourced";
 import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -47,6 +47,11 @@ export type DrillLine = {
     direction?: "DR" | "CR";
     apInvoiceId?: string | null;
     matchedInvoice?: MatchedInvoiceSummary | null;
+    // Expense-month recognition: the month (YYYY-MM) the P&L recognised this
+    // line in, and whether a per-line override drove it. Lets the UI flag
+    // lines whose expense month differs from their cash date.
+    expenseMonth?: string | null;
+    expenseMonthOverride?: boolean;
     // Journal-backed rows (ledger drill): the agent that posted the journal.
     // "bank" journals can expand into their source bank lines.
     glAgent?: string | null;
@@ -88,13 +93,6 @@ function companyForAccount(accountName: string | null): string {
   if (a.includes("4384") || a.includes("CELSIUS COFFEE SDN")) return "Celsius Coffee SB";
   return accountName ?? "—";
 }
-function addMonths(s: string, n: number): string {
-  const [y, m, d] = s.split("-").map(Number);
-  const t = new Date(Date.UTC(y, m - 1 + n, 1));
-  const lastDay = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
-  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(d, lastDay)).padStart(2, "0")}`;
-}
-
 export function isSourcedPnlCode(code: string): boolean {
   return /^(REV-|PROC$|INV-|MKT-|BANK:|DEP$)/.test(code);
 }
@@ -274,8 +272,59 @@ async function drillDepreciation(companyId: string, start: string, end: string, 
   }));
 }
 
-// BANK:<CAT> — the classified bank lines behind the opex line. Also serves the
-// bank-sourced income lines (GastroHub, Meetings & Events) on the CR side.
+// BANK:<CAT> opex drill: the classified bank lines behind the line, using the
+// SAME expense-month recognition as buildSourcedPnl (per-line override >
+// matched invoice issue month > category shift map > cash month), so the
+// drill total ties to the line for shifted categories too. Also serves the
+// REV-MGMT income drill on the CR side.
+async function drillBankRecognised(
+  cat: string,
+  companyId: string,
+  start: string,
+  end: string,
+  outletId?: string | null,
+  direction: "DR" | "CR" = "DR",
+): Promise<DrillLine[]> {
+  const consolidated = companyId === CONSOLIDATED;
+  const suffix = BANK_ACCOUNT_SUFFIX[companyId];
+  if (!consolidated && !suffix) return [];
+  const all = await fetchRecognisedBankLines({
+    direction,
+    start,
+    end,
+    suffix: consolidated ? undefined : suffix,
+    consolidated,
+    outletId,
+  });
+  const lines = all.filter((l) => (cat === "NULL" ? l.category === null : l.category === cat));
+  const invById = await matchedInvoiceSummaries(lines.map((l) => l.apInvoiceId));
+  return lines.map((l) => ({
+    transactionId: l.id,
+    txnDate: l.txnDate,
+    description: l.description || "(no description)",
+    amount: l.amount,
+    debit: direction === "DR" ? l.amount : 0,
+    credit: direction === "CR" ? l.amount : 0,
+    meta: {
+      reference: l.reference,
+      category: l.category,
+      company: companyForAccount(l.accountName),
+      account: l.accountName,
+      isInterCo: l.isInterCo,
+      classifiedBy: l.classifiedBy,
+      ruleName: l.ruleName,
+      bankLineId: l.id,
+      direction,
+      apInvoiceId: l.apInvoiceId,
+      matchedInvoice: l.apInvoiceId ? invById.get(l.apInvoiceId) ?? null : null,
+      expenseMonth: l.recognisedMonth,
+      expenseMonthOverride: l.hasOverride,
+    },
+  }));
+}
+
+// Cash-dated CR drill for the bank-sourced income lines (GastroHub,
+// Meetings & Events), those P&L lines aggregate at the transaction date.
 async function drillBank(cat: string, companyId: string, start: string, end: string, outletId?: string | null, direction: "DR" | "CR" = "DR"): Promise<DrillLine[]> {
   const consolidated = companyId === CONSOLIDATED;
   const suffix = BANK_ACCOUNT_SUFFIX[companyId];
@@ -336,17 +385,20 @@ export async function sourcedPnlDrillDown(args: {
   // no POS orders behind them) — must route before the generic REV-* branch.
   if (code === "REV-GASTRO") return drillBank("GASTROHUB", companyId, start, end, outletId, "CR");
   if (code === "REV-EVENTS") return drillBank("MEETINGS_EVENTS", companyId, start, end, outletId, "CR");
+  // Management fee income (HQ side): the MANAGEMENT_FEE inflow lines, with the
+  // same one-month-arrears recognition as the P&L line.
+  if (code === "REV-MGMT") return drillBankRecognised("MANAGEMENT_FEE", companyId, start, end, outletId, "CR");
   if (code.startsWith("REV-")) return drillRevenue(code, companyId, start, end, outletId);
   if (code === "PROC") return drillPurchases(companyId, start, end, outletId);
   if (code === "MKT-ADS") return drillAds(companyId, start, end, outletId);
   if (code === "MKT-GRAB-PROMO") return drillGrabPromo(companyId, start, end, outletId);
   if (code === "MKT-GRAB-ADS") return drillGrabAds(companyId, start, end, outletId);
   if (code === "DEP") return drillDepreciation(companyId, start, end, outletId);
-  // Management fee is recognised on accrual (paid a month in arrears), so its
-  // drill uses the same shifted window as the P&L line — payments in the
-  // following month, which are this period's fee.
-  if (code === "BANK:MANAGEMENT_FEE") return drillBank("MANAGEMENT_FEE", companyId, addMonths(start, 1), addMonths(end, 1), outletId);
-  if (code.startsWith("BANK:")) return drillBank(code.slice(5), companyId, start, end, outletId);
+  // Every opex bank line drills through the shared expense-month recognition
+  // (override > matched invoice month > category shift > cash), so shifted
+  // categories like management fee, salary, utilities and statutory tie to
+  // their accrual-recognised P&L lines.
+  if (code.startsWith("BANK:")) return drillBankRecognised(code.slice(5), companyId, start, end, outletId);
   if (code === "MKT-GRAB-COMM") {
     // A derived line, not transactions — the drawer explains the calculation.
     const [rev, gr] = await Promise.all([
