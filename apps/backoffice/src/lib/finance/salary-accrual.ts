@@ -28,6 +28,7 @@
 
 import { getFinanceClient } from "./supabase";
 import { postJournal } from "./ledger";
+import { GL_POSTING_CUTOVER } from "./gl-posting-map";
 import type { JournalLineInput } from "./types";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -85,12 +86,15 @@ export async function accrueSalaryControls(opts: { commit?: boolean } = {}): Pro
   // Positive deltas per company|month.
   const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10); // MYT
   const currentMonth = today.slice(0, 7);
+  const cutoverMonth = GL_POSTING_CUTOVER.slice(0, 7);
   const byMonth = new Map<string, Record<string, number>>();
   for (const [key, v] of agg) {
     const delta = round2(v.d - v.c);
     if (delta <= 0.005) continue;
     const [company, month, account] = key.split("|");
     if (month > currentMonth) continue;
+    if (month < cutoverMonth) continue; // pre-cutover months belong to Bukku; never accrue into them
+
     const mk = `${company}|${month}`;
     const rec = byMonth.get(mk) ?? {};
     rec[account] = delta;

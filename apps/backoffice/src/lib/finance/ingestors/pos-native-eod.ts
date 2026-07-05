@@ -31,6 +31,7 @@ import { Prisma } from "@prisma/client";
 import { getFinanceClient } from "../supabase";
 import { postDailyAr, type EodSummary, type EodChannelSplit } from "../agents/ar";
 import { resolveCompanyFromOutlet, getDefaultCompanyId } from "../companies";
+import { GL_POSTING_CUTOVER } from "../gl-posting-map";
 import type { IngestEodResult } from "./storehub-eod";
 import { ingestOutletEod } from "./storehub-eod";
 
@@ -211,6 +212,13 @@ export async function ingestOutletNativeEod(
   opts: { includeStorehubDelivery?: boolean } = {},
 ): Promise<IngestEodResult> {
   const { id: outletId, name: outletName } = outlet;
+
+  // GL posting cutover: 2025 books live in Bukku. Refusing pre-cutover dates
+  // here (not just in the cron router) keeps backfills and manual replays from
+  // recreating 2025 AR journals after the balance sheet surgery deletes them.
+  if (date < GL_POSTING_CUTOVER) {
+    return { outletId, outletName, date, transactionsFetched: 0, skipped: `pre-cutover date (GL starts ${GL_POSTING_CUTOVER})` };
+  }
 
   // Already posted for this outlet/day? (matches storehub-eod's guard.) A
   // REVERSED journal doesn't count — that's how the cutover backfill re-posts a

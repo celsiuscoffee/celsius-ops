@@ -27,6 +27,7 @@ import { prisma } from "@/lib/prisma";
 import { getFinanceClient } from "../supabase";
 import { postDailyAr, type EodSummary, type EodChannelSplit } from "../agents/ar";
 import { resolveCompanyFromOutlet, getDefaultCompanyId } from "../companies";
+import { GL_POSTING_CUTOVER } from "../gl-posting-map";
 import type { StoreHubTransaction } from "@/lib/storehub";
 
 type ChannelKey = keyof EodChannelSplit;
@@ -228,6 +229,11 @@ export async function ingestOutletEod(
   outletId: string,
   date: string                     // YYYY-MM-DD (MYT)
 ): Promise<IngestEodResult> {
+  // GL posting cutover: 2025 books live in Bukku. Never post pre-cutover AR
+  // journals from here, even on manual replays or backfills.
+  if (date < GL_POSTING_CUTOVER) {
+    return { outletId, outletName: "?", date, transactionsFetched: 0, skipped: `pre-cutover date (GL starts ${GL_POSTING_CUTOVER})` };
+  }
   const outlet = await prisma.outlet.findUnique({
     where: { id: outletId },
     select: { id: true, name: true, storehubId: true },
