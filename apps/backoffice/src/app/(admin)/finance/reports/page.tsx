@@ -5,13 +5,7 @@
 
 import { useState, useMemo, Fragment, createContext, useContext, useEffect } from "react";
 import { useFetch } from "@/lib/use-fetch";
-import {
-  Button,
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@celsius/ui";
+import { Button } from "@celsius/ui";
 import { Loader2, Download, FileText, AlertTriangle, ChevronRight, ChevronDown, Paperclip, X } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { OUTFLOW_CATEGORIES, INFLOW_CATEGORIES, categoryLabel, categoryChipLabel } from "@/lib/finance/cash-categories";
@@ -410,12 +404,12 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
 // a month with no value for the line stays blank.
 type MonthAmount = number | undefined;
 
-function ReportRow({ line, totalIncome, onDrill, compareAmount, showCompare, showPct = true, monthAmounts, zebra }: { line: PnlLine; totalIncome: number; onDrill: (code: string) => void; compareAmount?: number | null; showCompare?: boolean; showPct?: boolean; monthAmounts?: MonthAmount[]; zebra?: boolean }) {
+function ReportRow({ line, totalIncome, onDrill, compareAmount, showCompare, showPct = true, monthAmounts, zebra, open }: { line: PnlLine; totalIncome: number; onDrill: (code: string) => void; compareAmount?: number | null; showCompare?: boolean; showPct?: boolean; monthAmounts?: MonthAmount[]; zebra?: boolean; open?: boolean }) {
   return (
     <tr
-      className={`group cursor-pointer border-t transition ${zebra ? "bg-muted/20" : ""} hover:bg-muted/30`}
+      className={`group cursor-pointer border-t transition ${open ? "bg-muted/40" : zebra ? "bg-muted/20" : ""} hover:bg-muted/30`}
       onClick={() => onDrill(line.code)}
-      title="Click to drill into this line"
+      title={open ? "Click to close this drill" : "Click to drill into this line"}
     >
       <td
         className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground"
@@ -434,7 +428,7 @@ function ReportRow({ line, totalIncome, onDrill, compareAmount, showCompare, sho
       {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctChange(line.amount, compareAmount)}</td>}
       {showPct && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctOfIncome(line.amount, totalIncome)}</td>}
       <td className="w-6 py-1.5 pr-2">
-        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
+        <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition ${open ? "rotate-90 opacity-100" : "opacity-0 group-hover:opacity-100"}`} />
       </td>
     </tr>
   );
@@ -599,6 +593,33 @@ function PnlTab() {
   const loading = !report && !error && (isLoading || monthsLoading || byMonth);
   const allCollapsed = PNL_SECTIONS.every((s) => collapsed[s]);
   const toggleSection = (s: string) => setCollapsed((c) => ({ ...c, [s]: !c[s] }));
+  // Clicking a line toggles its inline drill panel; opening one closes any
+  // other (a single accordion, same as the General Ledger workbench rows).
+  const toggleDrill = (code: string) => setDrillCode((c) => (c === code ? null : code));
+
+  // The report line row plus, when drilled, a full-width panel row directly
+  // beneath it spanning every column of the statement table.
+  const renderLine = (l: PnlLine, i: number) => (
+    <Fragment key={l.code}>
+      <ReportRow line={l} totalIncome={totals.income} onDrill={toggleDrill} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} open={drillCode === l.code} />
+      {drillCode === l.code && report && (
+        <tr>
+          <td colSpan={cols} className="p-0">
+            <DrillDown
+              code={l.code}
+              name={l.name}
+              start={report.start}
+              end={report.end}
+              outletId={outletId || undefined}
+              consolidated={consolidated}
+              onChanged={() => { mutate(); if (byMonth) mutateMonths(); }}
+              onClose={() => setDrillCode(null)}
+            />
+          </td>
+        </tr>
+      )}
+    </Fragment>
+  );
 
   const exportCsv = () => {
     if (!report) return;
@@ -731,16 +752,16 @@ function PnlTab() {
             </thead>
             <tbody>
               <SectionHeader label="Income" cols={cols} collapsed={!!collapsed.income} onToggle={() => toggleSection("income")} />
-              {!collapsed.income && secLines.income.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={totals.income} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
+              {!collapsed.income && secLines.income.map(renderLine)}
               <TotalRow label="Total Income" amount={totals.income} totalIncome={totals.income} compareAmount={cmp?.income.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.income.total)} />
 
               <SectionHeader label="Cost of Sales" cols={cols} collapsed={!!collapsed.cogs} onToggle={() => toggleSection("cogs")} />
-              {!collapsed.cogs && secLines.cogs.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={totals.income} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
+              {!collapsed.cogs && secLines.cogs.map(renderLine)}
               <TotalRow label="Total COGS" amount={totals.cogs} totalIncome={totals.income} compareAmount={cmp?.cogs.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.cogs.total)} />
               <TotalRow label="Gross Profit" amount={totals.grossProfit} totalIncome={totals.income} compareAmount={cmp?.grossProfit} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.grossProfit)} />
 
               <SectionHeader label="Expenses" cols={cols} collapsed={!!collapsed.expenses} onToggle={() => toggleSection("expenses")} />
-              {!collapsed.expenses && secLines.expenses.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={totals.income} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
+              {!collapsed.expenses && secLines.expenses.map(renderLine)}
               <TotalRow label="Total Expenses" amount={totals.expenses} totalIncome={totals.income} compareAmount={cmp?.expenses.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.expenses.total)} />
 
               <TotalRow label="Net Income" amount={totals.netIncome} totalIncome={totals.income} compareAmount={cmp?.netIncome} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.netIncome)} signed />
@@ -752,26 +773,6 @@ function PnlTab() {
         ))}
         </>
       )}
-
-      <Sheet open={!!drillCode} onOpenChange={(o) => !o && setDrillCode(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-3xl flex flex-col gap-0 p-0">
-          <SheetHeader className="border-b px-4 py-4 sm:px-6">
-            <SheetTitle>
-              {(drillCode &&
-                [...secLines.income, ...secLines.cogs, ...secLines.expenses]
-                  .find((l) => l.code === drillCode)?.name) ?? drillCode}
-            </SheetTitle>
-            {report && (
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {drillCode} · {report.start} → {report.end}
-              </p>
-            )}
-          </SheetHeader>
-          {drillCode && report && (
-            <DrillDown code={drillCode} start={report.start} end={report.end} outletId={outletId || undefined} consolidated={consolidated} onChanged={() => { mutate(); if (byMonth) mutateMonths(); }} />
-          )}
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
@@ -1025,7 +1026,12 @@ function GlSourceLines({ transactionId, accountNames, onChanged }: {
   );
 }
 
-function DrillDown({ code, start, end, outletId, consolidated, onChanged }: { code: string; start: string; end: string; outletId?: string; consolidated?: boolean; onChanged?: () => void }) {
+// Inline drill panel: the source rows behind one P&L line, rendered
+// full-width directly beneath the clicked report row (the same accordion
+// pattern as the General Ledger workbench). One transaction per line with
+// dedicated chip columns; expand a row for the full detail (reference,
+// classification provenance, expense-month control).
+function DrillDown({ code, name, start, end, outletId, consolidated, onChanged, onClose }: { code: string; name?: string; start: string; end: string; outletId?: string; consolidated?: boolean; onChanged?: () => void; onClose?: () => void }) {
   const { data, isLoading, mutate } = useFetch<{ lines: DrillLine[] }>(
     `/api/finance/reports/drilldown?accountCode=${encodeURIComponent(code)}&start=${start}&end=${end}${consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : ""}`
   );
@@ -1036,21 +1042,17 @@ function DrillDown({ code, start, end, outletId, consolidated, onChanged }: { co
   // Any fix (recategorise, unmatch) refreshes the drill AND the report behind
   // it, so the totals move without a page reload.
   const refresh = async () => { await mutate(); onChanged?.(); };
-  if (isLoading) return <div className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>;
-  if (!data) return null;
-  if (data.lines.length === 0) {
-    return <div className="p-6 text-sm text-muted-foreground">No entries in this period.</div>;
-  }
 
-  const hasDebit = data.lines.some((l) => l.debit > 0);
-  const hasCredit = data.lines.some((l) => l.credit > 0);
+  const lines = data?.lines ?? [];
+  const hasDebit = lines.some((l) => l.debit > 0);
+  const hasCredit = lines.some((l) => l.credit > 0);
   const oneSided = !(hasDebit && hasCredit);
   const amountOf = (l: DrillLine) => (l.debit > 0 ? l.debit : l.credit > 0 ? l.credit : l.amount);
-  const totalDebit = data.lines.reduce((s, l) => s + l.debit, 0);
-  const totalCredit = data.lines.reduce((s, l) => s + l.credit, 0);
+  const totalDebit = lines.reduce((s, l) => s + l.debit, 0);
+  const totalCredit = lines.reduce((s, l) => s + l.credit, 0);
   // Multi-company drill (consolidated) → show which entity each line belongs to.
-  const showCompany = consolidated && data.lines.some((l) => l.meta?.company);
-  const cols = 2 + (showCompany ? 1 : 0) + (oneSided ? 1 : 2);
+  const showCompany = !!consolidated && lines.some((l) => l.meta?.company);
+  const cols = 4 + (showCompany ? 1 : 0) + (oneSided ? 1 : 2);
 
   const splitDesc = (d: string): [string, string | null] => {
     const parts = d.split(" · ");
@@ -1058,131 +1060,165 @@ function DrillDown({ code, start, end, outletId, consolidated, onChanged }: { co
   };
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-background text-left text-xs uppercase tracking-wide text-muted-foreground">
-          <tr className="border-b">
-            <th className="w-16 py-2 pr-2 font-medium">Date</th>
-            <th className="py-2 pr-2 font-medium">Description</th>
-            {showCompany && <th className="w-36 py-2 pr-2 font-medium">Company</th>}
-            {oneSided
-              ? <th className="w-28 py-2 text-right font-medium">Amount</th>
-              : <>
-                  <th className="w-24 py-2 text-right font-medium">Debit</th>
-                  <th className="w-24 py-2 text-right font-medium">Credit</th>
-                </>}
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {data.lines.map((l, i) => {
-            const [main, metaLine] = splitDesc(l.description);
-            const key = `${l.transactionId}-${i}`;
-            // Three flavors of expandable row: bank lines and assets show a
-            // detail panel; bank-agent journals (Balance Sheet drill) expand
-            // into their source bank lines with the same chips.
-            const isBankRow = !!l.meta?.bankLineId;
-            const isBankJournal = !isBankRow && l.meta?.glAgent === "bank";
-            const hasDetail = !!l.meta && !l.meta.glAgent;
-            const expandable = hasDetail || isBankJournal;
-            const open = openRow === key;
-            return (
-              <Fragment key={key}>
-              <tr className={`align-top ${expandable ? "cursor-pointer hover:bg-muted/30" : ""}`}
-                  onClick={expandable ? () => setOpenRow(open ? null : key) : undefined}
-                  title={expandable ? (isBankJournal ? "Click to see the source bank lines" : "Click to see the transaction detail") : undefined}>
-                <td className="whitespace-nowrap py-2 pr-2 text-xs tabular-nums text-muted-foreground">{l.txnDate.slice(5)}</td>
-                <td className="break-words py-2 pr-2">
-                  <span className="flex items-start gap-1">
-                    {expandable && <span className="mt-0.5 text-[10px] text-muted-foreground">{open ? "▾" : "▸"}</span>}
-                    <span>
-                      {main}{metaLine && <span className="block text-[11px] leading-snug text-muted-foreground">{metaLine}</span>}
-                      {isBankRow && l.meta?.bankLineId && (
-                        <span className="mt-1 flex flex-wrap items-center gap-1">
-                          <CategoryChip
-                            bankLineId={l.meta.bankLineId}
-                            category={l.meta.category ?? null}
-                            direction={l.meta.direction ?? (l.credit > 0 ? "CR" : "DR")}
-                            accountNames={accountNames}
-                            onSaved={refresh}
-                          />
-                          {l.meta.matchedInvoice && (
-                            <MatchedChip bankLineId={l.meta.bankLineId} invoice={l.meta.matchedInvoice} onSaved={refresh} />
-                          )}
-                          {l.meta.expenseMonth && l.meta.expenseMonth !== l.txnDate.slice(0, 7) && (
-                            <span
-                              title={`Recognised in ${monthLabel(l.meta.expenseMonth)}; paid ${l.txnDate}`}
-                              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground"
-                            >
-                              {l.meta.expenseMonthOverride && <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />}
-                              in {monthLabel(l.meta.expenseMonth)}
-                            </span>
-                          )}
-                          {l.meta.expenseMonthOverride && l.meta.expenseMonth === l.txnDate.slice(0, 7) && (
-                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" title="Expense month overridden" />
-                          )}
+    <div className="border-y bg-muted/10">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/40 px-3 py-1.5 text-xs">
+        <span className="font-semibold">{name ?? code}</span>
+        <span className="tabular-nums text-muted-foreground">{code} · {start} → {end}</span>
+        {data && lines.length > 0 && (
+          <span className="ml-auto font-medium tabular-nums">
+            {lines.length} entries · {oneSided ? RM(totalDebit + totalCredit) : `${RM(totalDebit)} DR / ${RM(totalCredit)} CR`}
+          </span>
+        )}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close this drill"
+            className={`${data && lines.length > 0 ? "" : "ml-auto "}rounded text-muted-foreground transition hover:text-foreground`}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      {isLoading && <div className="px-3 py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>}
+      {data && lines.length === 0 && <div className="px-3 py-3 text-sm text-muted-foreground">No entries in this period.</div>}
+      {lines.length > 0 && (
+        <table className="w-full text-sm">
+          <thead className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+            <tr className="border-b">
+              <th className="whitespace-nowrap px-3 py-1.5 font-medium">Date</th>
+              {showCompany && <th className="whitespace-nowrap px-3 py-1.5 font-medium">Company</th>}
+              <th className="px-3 py-1.5 font-medium">Description</th>
+              <th className="whitespace-nowrap px-3 py-1.5 font-medium">Category</th>
+              <th className="whitespace-nowrap px-3 py-1.5 font-medium">Matched</th>
+              {oneSided
+                ? <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">Amount</th>
+                : <>
+                    <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">Debit</th>
+                    <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">Credit</th>
+                  </>}
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l, i) => {
+              const [main, metaLine] = splitDesc(l.description);
+              const key = `${l.transactionId}-${i}`;
+              // Three flavors of expandable row: bank lines and assets show a
+              // detail panel; bank-agent journals expand into their source
+              // bank lines with the same chips.
+              const isBankRow = !!l.meta?.bankLineId;
+              const isBankJournal = !isBankRow && l.meta?.glAgent === "bank";
+              const hasDetail = !!l.meta && !l.meta.glAgent;
+              const expandable = hasDetail || isBankJournal;
+              const open = openRow === key;
+              return (
+                <Fragment key={key}>
+                <tr className={`border-t ${i % 2 === 1 ? "bg-muted/20" : ""} ${expandable ? "cursor-pointer hover:bg-muted/30" : ""}`}
+                    onClick={expandable ? () => setOpenRow(open ? null : key) : undefined}
+                    title={expandable ? (isBankJournal ? "Click to see the source bank lines" : "Click to see the transaction detail") : undefined}>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 text-[10px]">{expandable ? (open ? "▾" : "▸") : ""}</span>
+                      {l.txnDate}
+                    </span>
+                  </td>
+                  {showCompany && <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground">{l.meta?.company ?? ""}</td>}
+                  <td className="w-full max-w-0 px-3 py-1.5" title={l.description}>
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <span className="truncate">{main}</span>
+                      {metaLine && <span className="min-w-0 truncate text-[11px] text-muted-foreground">{metaLine}</span>}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    {isBankRow && l.meta?.bankLineId ? (
+                      <CategoryChip
+                        bankLineId={l.meta.bankLineId}
+                        category={l.meta.category ?? null}
+                        direction={l.meta.direction ?? (l.credit > 0 ? "CR" : "DR")}
+                        accountNames={accountNames}
+                        onSaved={refresh}
+                      />
+                    ) : l.meta?.category ? (
+                      <span className="text-[11px] text-muted-foreground">{l.meta.category.toLowerCase().replace(/_/g, " ")}</span>
+                    ) : null}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <span className="flex items-center gap-1">
+                      {isBankRow && l.meta?.bankLineId && l.meta.matchedInvoice && (
+                        <MatchedChip bankLineId={l.meta.bankLineId} invoice={l.meta.matchedInvoice} onSaved={refresh} />
+                      )}
+                      {isBankRow && l.meta?.expenseMonth && l.meta.expenseMonth !== l.txnDate.slice(0, 7) && (
+                        <span
+                          title={`Recognised in ${monthLabel(l.meta.expenseMonth)}; paid ${l.txnDate}`}
+                          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground"
+                        >
+                          {l.meta.expenseMonthOverride && <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />}
+                          in {monthLabel(l.meta.expenseMonth)}
                         </span>
                       )}
-                    </span>
-                  </span>
-                </td>
-                {showCompany && <td className="py-2 pr-2 text-xs text-muted-foreground">{l.meta?.company ?? "—"}</td>}
-                {oneSided
-                  ? <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(amountOf(l))}</td>
-                  : <>
-                      <td className="whitespace-nowrap py-2 text-right tabular-nums">{l.debit ? RM(l.debit) : ""}</td>
-                      <td className="whitespace-nowrap py-2 text-right tabular-nums">{l.credit ? RM(l.credit) : ""}</td>
-                    </>}
-              </tr>
-              {open && isBankJournal && (
-                <tr className="bg-muted/20">
-                  <td colSpan={cols} className="p-0" onClick={(e) => e.stopPropagation()}>
-                    <GlSourceLines transactionId={l.transactionId} accountNames={accountNames} onChanged={refresh} />
-                  </td>
-                </tr>
-              )}
-              {open && hasDetail && l.meta && (
-                <tr className="bg-muted/20">
-                  <td colSpan={cols} className="px-3 py-2">
-                    <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-[11px]">
-                      {l.meta.account && (<><dt className="text-muted-foreground">Bank account</dt><dd>{l.meta.account}</dd></>)}
-                      {l.meta.reference && (<><dt className="text-muted-foreground">Reference</dt><dd className="break-words">{l.meta.reference}</dd></>)}
-                      {l.meta.category !== undefined && (<><dt className="text-muted-foreground">Category</dt><dd>{l.meta.category ? l.meta.category.toLowerCase().replace(/_/g, " ") : "unclassified"}</dd></>)}
-                      {l.meta.matchedInvoice && (<><dt className="text-muted-foreground">Matched invoice</dt><dd>{l.meta.matchedInvoice.invoiceNumber ?? "(no number)"}{l.meta.matchedInvoice.vendor ? ` · ${l.meta.matchedInvoice.vendor}` : ""} · {RM(l.meta.matchedInvoice.amount)}</dd></>)}
-                      <><dt className="text-muted-foreground">Inter-company</dt><dd>{l.meta.isInterCo ? "yes" : "no"}</dd></>
-                      {(l.meta.classifiedBy || l.meta.ruleName) && (<><dt className="text-muted-foreground">Classified</dt><dd>{l.meta.classifiedBy ?? "rule"}{l.meta.ruleName ? ` · ${l.meta.ruleName}` : ""}</dd></>)}
-                      {l.meta.bankLineId && l.meta.expenseMonth && (
-                        <>
-                          <dt className="text-muted-foreground">Expense month</dt>
-                          <dd>
-                            <ExpenseMonthControl
-                              bankLineId={l.meta.bankLineId}
-                              effectiveMonth={l.meta.expenseMonth}
-                              overridden={!!l.meta.expenseMonthOverride}
-                              onSaved={refresh}
-                            />
-                          </dd>
-                        </>
+                      {isBankRow && l.meta?.expenseMonthOverride && l.meta.expenseMonth === l.txnDate.slice(0, 7) && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" title="Expense month overridden" />
                       )}
-                    </dl>
+                    </span>
                   </td>
+                  {oneSided
+                    ? <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(amountOf(l))}</td>
+                    : <>
+                        <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{l.debit ? RM(l.debit) : ""}</td>
+                        <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{l.credit ? RM(l.credit) : ""}</td>
+                      </>}
                 </tr>
-              )}
-              </Fragment>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr className="border-t-2 font-semibold">
-            <td className="py-2 pr-2" colSpan={showCompany ? 3 : 2}>Total · {data.lines.length} entries</td>
-            {oneSided
-              ? <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(totalDebit + totalCredit)}</td>
-              : <>
-                  <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(totalDebit)}</td>
-                  <td className="whitespace-nowrap py-2 text-right tabular-nums">{RM(totalCredit)}</td>
-                </>}
-          </tr>
-        </tfoot>
-      </table>
+                {open && isBankJournal && (
+                  <tr className="border-t bg-muted/20">
+                    <td colSpan={cols} className="p-0" onClick={(e) => e.stopPropagation()}>
+                      <GlSourceLines transactionId={l.transactionId} accountNames={accountNames} onChanged={refresh} />
+                    </td>
+                  </tr>
+                )}
+                {open && hasDetail && l.meta && (
+                  <tr className="border-t bg-muted/20">
+                    <td colSpan={cols} className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                      <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-[11px]">
+                        {l.meta.account && (<><dt className="text-muted-foreground">Bank account</dt><dd>{l.meta.account}</dd></>)}
+                        {l.meta.reference && (<><dt className="text-muted-foreground">Reference</dt><dd className="break-words">{l.meta.reference}</dd></>)}
+                        {l.meta.category !== undefined && (<><dt className="text-muted-foreground">Category</dt><dd>{l.meta.category ? l.meta.category.toLowerCase().replace(/_/g, " ") : "unclassified"}</dd></>)}
+                        {l.meta.matchedInvoice && (<><dt className="text-muted-foreground">Matched invoice</dt><dd>{l.meta.matchedInvoice.invoiceNumber ?? "(no number)"}{l.meta.matchedInvoice.vendor ? ` · ${l.meta.matchedInvoice.vendor}` : ""} · {RM(l.meta.matchedInvoice.amount)}</dd></>)}
+                        <><dt className="text-muted-foreground">Inter-company</dt><dd>{l.meta.isInterCo ? "yes" : "no"}</dd></>
+                        {(l.meta.classifiedBy || l.meta.ruleName) && (<><dt className="text-muted-foreground">Classified</dt><dd>{l.meta.classifiedBy ?? "rule"}{l.meta.ruleName ? ` · ${l.meta.ruleName}` : ""}</dd></>)}
+                        {l.meta.bankLineId && l.meta.expenseMonth && (
+                          <>
+                            <dt className="text-muted-foreground">Expense month</dt>
+                            <dd>
+                              <ExpenseMonthControl
+                                bankLineId={l.meta.bankLineId}
+                                effectiveMonth={l.meta.expenseMonth}
+                                overridden={!!l.meta.expenseMonthOverride}
+                                onSaved={refresh}
+                              />
+                            </dd>
+                          </>
+                        )}
+                      </dl>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 font-semibold">
+              <td className="px-3 py-2" colSpan={cols - (oneSided ? 1 : 2)}>Total · {lines.length} entries</td>
+              {oneSided
+                ? <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{RM(totalDebit + totalCredit)}</td>
+                : <>
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{RM(totalDebit)}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{RM(totalCredit)}</td>
+                  </>}
+            </tr>
+          </tfoot>
+        </table>
+      )}
     </div>
   );
 }
@@ -1218,7 +1254,7 @@ function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, sho
             {lines.map((l, i) => {
               const c = cmpByCode?.get(l.code);
               return (
-              <tr key={l.code} className={`group cursor-pointer border-t ${i % 2 === 1 ? "bg-muted/20" : ""} hover:bg-muted/30`} onClick={() => onDrill(l.code)} title="Show journal lines">
+              <tr key={l.code} className={`group cursor-pointer border-t ${i % 2 === 1 ? "bg-muted/20" : ""} hover:bg-muted/30`} onClick={() => onDrill(l.code)} title="Open this account in the General Ledger">
                 <td
                   className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground"
                   style={{ paddingLeft: l.parentCode ? 32 : 12 }}
@@ -1246,13 +1282,13 @@ function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, sho
   );
 }
 
-function BsTab() {
+function BsTab({ onDrill }: { onDrill: (code: string) => void }) {
   const { start, end: asOf, consolidated } = useControls();
   const [compare, setCompare] = useState<CompareMode>("none");
   // Consolidation scope applies to the primary AND the comparison fetch, so a
   // group figure is never compared against a single-entity one.
   const scope = consolidated ? "&companyId=consolidated" : "";
-  const { data, isLoading, error, mutate } = useFetch<{ report: BsReport }>(
+  const { data, isLoading, error } = useFetch<{ report: BsReport }>(
     `/api/finance/reports/balance-sheet?asOf=${asOf}${scope}`
   );
   // A balance sheet compares as-OF dates: the prior period-end (the day before
@@ -1268,7 +1304,6 @@ function BsTab() {
     if (cmp) for (const l of [...cmp.assets.lines, ...cmp.liabilities.lines, ...cmp.equity.lines]) m.set(l.code, l.amount);
     return m;
   }, [cmp]);
-  const [drillCode, setDrillCode] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
@@ -1279,7 +1314,7 @@ function BsTab() {
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-xs text-muted-foreground">Balance as of <span className="tabular-nums">{asOf}</span> (the period end). Click any line to see its journal entries.</p>
+        <p className="text-xs text-muted-foreground">Balance as of <span className="tabular-nums">{asOf}</span> (the period end). Click any line to open its account in the General Ledger, full width, with opening balance, every journal line and closing balance.</p>
         <label className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">Compare
           <select value={compare} onChange={(e) => setCompare(e.target.value as CompareMode)} className="h-7 rounded-md border bg-background px-1.5 text-xs">
             <option value="none">off</option>
@@ -1314,10 +1349,10 @@ function BsTab() {
             </div>
           )}
           <div className="grid gap-3 lg:grid-cols-2">
-            <BsSectionTable title="Assets" total={data.report.assets.total} lines={data.report.assets.lines} onDrill={setDrillCode} cmpByCode={cmpByCode} cmpTotal={cmp?.assets.total} showCompare={showCompare} />
+            <BsSectionTable title="Assets" total={data.report.assets.total} lines={data.report.assets.lines} onDrill={onDrill} cmpByCode={cmpByCode} cmpTotal={cmp?.assets.total} showCompare={showCompare} />
             <div className="space-y-3">
-              <BsSectionTable title="Liabilities" total={data.report.liabilities.total} lines={data.report.liabilities.lines} onDrill={setDrillCode} cmpByCode={cmpByCode} cmpTotal={cmp?.liabilities.total} showCompare={showCompare} />
-              <BsSectionTable title="Equity" total={data.report.equity.total} lines={data.report.equity.lines} onDrill={setDrillCode} cmpByCode={cmpByCode} cmpTotal={cmp?.equity.total} showCompare={showCompare} signed />
+              <BsSectionTable title="Liabilities" total={data.report.liabilities.total} lines={data.report.liabilities.lines} onDrill={onDrill} cmpByCode={cmpByCode} cmpTotal={cmp?.liabilities.total} showCompare={showCompare} />
+              <BsSectionTable title="Equity" total={data.report.equity.total} lines={data.report.equity.lines} onDrill={onDrill} cmpByCode={cmpByCode} cmpTotal={cmp?.equity.total} showCompare={showCompare} signed />
               <div className="rounded-md border bg-muted/20 p-3 text-sm font-semibold">
                 Liabilities + Equity:{" "}
                 <span className={`tabular-nums ${data.report.totalLiabilitiesAndEquity < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(data.report.totalLiabilitiesAndEquity)}</span>
@@ -1327,20 +1362,6 @@ function BsTab() {
           </div>
         </>
       )}
-
-      <Sheet open={!!drillCode} onOpenChange={(o) => !o && setDrillCode(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-3xl flex flex-col gap-0 p-0">
-          <SheetHeader className="border-b px-4 py-4 sm:px-6">
-            <SheetTitle>
-              {(drillCode && data &&
-                [...data.report.assets.lines, ...data.report.liabilities.lines, ...data.report.equity.lines]
-                  .find((l) => l.code === drillCode)?.name) ?? drillCode}
-            </SheetTitle>
-            <p className="text-xs text-muted-foreground tabular-nums">{drillCode} · journal lines through {asOf}</p>
-          </SheetHeader>
-          {drillCode && <DrillDown code={drillCode} start="2020-01-01" end={asOf} consolidated={consolidated} onChanged={() => mutate()} />}
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
@@ -2315,7 +2336,7 @@ export default function FinanceReportsPage() {
 
       <ControlsCtx.Provider value={{ start: controls.start, end: controls.end, outletId: controls.outletId, consolidated: controls.consolidated }}>
         {tab === "pnl" && <PnlTab />}
-        {tab === "bs" && <BsTab />}
+        {tab === "bs" && <BsTab onDrill={(code) => { setGlAccounts([code]); setTab("gl"); }} />}
         {tab === "cf" && <CfTab />}
         {tab === "tb" && <TbTab onDrill={(code) => { setGlAccounts([code]); setTab("gl"); }} />}
         {tab === "gl" && <GlTab accounts={glAccounts} setAccounts={setGlAccounts} />}
