@@ -70,6 +70,18 @@ const TEMPLATE_DEFS = [
     sample: ["Jiju Cakes To Share", "CC-CC002-0215"],
   },
   {
+    // Cold invoice chase (procurement). The invoice-requester cron falls back to
+    // this template when the supplier's 24h window is closed. {{1}} = supplier
+    // first name, {{2}} = PO number — must match sendWhatsAppTemplate in
+    // agents/invoice-requester.ts. Registered under the "en" language code (like
+    // every template here) even though the copy is Malay — the requester sends
+    // with "en" to match; Meta only requires the CODES to agree, not the language
+    // of the text. Until this is approved, every cold chase fails with #132001.
+    name: "invoice_request",
+    body: "Hi {{1}}, boleh keluarkan invois untuk order {{2}}? Terima kasih.",
+    sample: ["Faiz", "CC-CC002-0249"],
+  },
+  {
     // Multi-line LIST: a headline ({{1}}) + up to four item lines ({{2}}..{{5}}),
     // each on its OWN line — the only way to get real line breaks (a single param
     // can't contain newlines). Generous fixed text wraps the variables: Meta

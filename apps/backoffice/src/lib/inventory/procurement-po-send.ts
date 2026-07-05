@@ -112,8 +112,8 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
     if (!windowOpen) {
       // Preferred cold path: send the FULL order as a PDF on an approved DOCUMENT template — the
       // supplier gets the whole order in one message, no "reply for details" round-trip. Returns
-      // true when it handled the send (delivered OR a template failure recorded — don't also
-      // prompt); false to fall back to the prompt (PDF/upload error).
+      // true only when the PDF was DELIVERED; false (PDF/upload error, or Meta rejected the
+      // template send) falls through to the prompt flow so the PO still goes out.
       if (PO_DOC_TEMPLATE && (await sendPoAsDocument(order, supplier, dest))) return;
       // Fallback cold path: WhatsApp blocks free text, so ping with the approved prompt template
       // (if configured) so the supplier replies and opens the window; the full PO block then
@@ -233,9 +233,9 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
 }
 
 // Cold-send a PO to the supplier as a PDF attached to an approved document template — the full
-// order in ONE message, no reply-prompt. Returns true when the send was handled (delivered OR a
-// template failure recorded — caller should NOT also prompt), false to fall back to the prompt
-// (PDF generation / upload failed). Deduped via poSentFor. Records the real caption + the PDF as
+// order in ONE message, no reply-prompt. Returns true only when the PDF send was DELIVERED;
+// false (PDF generation / upload failed, or Meta rejected the template send — recorded as a
+// failed row) tells the caller to fall back to the prompt flow. Deduped via poSentFor. Records the real caption + the PDF as
 // mediaUrl so the chat shows the actual message + attachment.
 async function sendPoAsDocument(
   order: PoForSend,
@@ -308,7 +308,11 @@ async function sendPoAsDocument(
       },
     });
     console.log(`[po-send] po=${order.orderNumber} cold → PDF document template (${PO_DOC_TEMPLATE}) ok=${t.ok}`);
-    return true;
+    // A rejected template send (#132000 param mismatch, #132001 missing template,
+    // bad env name) delivered NOTHING — fall back to the approved prompt flow so
+    // the PO still reaches the supplier instead of dead-ending as "failed" until
+    // someone fixes the template. Observed live: 365EAT FOOD's two POs on Jul 3.
+    return t.ok;
   } catch (e) {
     console.warn(`[po-send] po=${order.orderNumber} PDF send failed, falling back to prompt:`, e instanceof Error ? e.message : e);
     return false;

@@ -50,12 +50,18 @@ export interface InvoiceRequestSummary {
 export async function runInvoiceRequests(): Promise<InvoiceRequestSummary> {
   if (!enabled()) return { scanned: 0, requested: 0, skipped: 0 };
 
-  // POs confirmed/in-delivery with NO invoice attached yet.
+  // POs confirmed/in-delivery with NO invoice attached yet. RECENT only: old
+  // completed POs (pre-dating invoice tracking, or long settled outside the
+  // system) are noise to chase — a 12-week-old "boleh keluarkan invois?" reads
+  // as a mistake to the supplier and drowns the real asks.
+  const since = new Date();
+  since.setDate(since.getDate() - 30);
   const orders = await prisma.order.findMany({
     where: {
       orderType: "PURCHASE_ORDER",
       status: { in: INVOICE_DUE_STATUSES },
       invoices: { none: {} },
+      createdAt: { gte: since },
       // Per-supplier dial: OFF = the agent never contacts this supplier.
       supplier: { phone: { not: null }, status: "ACTIVE", automationMode: { not: "OFF" } },
     },
@@ -119,10 +125,13 @@ async function requestOne(
     const text = `Hi ${firstName(supplierName)} 🙏 boleh keluarkan invois untuk order ${orderNumber}? Terima kasih`;
 
     // Inside the window → free text. Outside → approved business-initiated template
-    // (fails gracefully until `invoice_request` is approved in WhatsApp Manager).
+    // (fails with #132001 until `invoice_request` is approved — submit it via
+    // /api/ops/workspace/templates?action=create). Language code "en" matches how
+    // the templates route registers ALL templates (the copy itself is Malay);
+    // sending "ms" against an en-registered template is itself a #132001.
     const res = windowOpen
       ? await sendWhatsAppText(dest, text)
-      : await sendWhatsAppTemplate(dest, TEMPLATE_NAME, "ms", [
+      : await sendWhatsAppTemplate(dest, TEMPLATE_NAME, "en", [
           {
             type: "body",
             parameters: [
