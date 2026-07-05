@@ -72,17 +72,32 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Open failures
 
-- 2026-07-05 — **Loyalty tables anon-writable** — and wider than the access
-  map first said: the `USING (true)` "Service full access" policies in
-  `apps/order/supabase/migrations/001_initial_schema.sql:186-195` also
-  cover `staff_users` and `otp_codes`, and make the four public-read
-  tables anon-WRITABLE too. Code prerequisite is DONE (pickup page reads
-  moved behind `/api/pickup/dashboard-stats`); remaining step is applying
-  `docs/proposals/2026-07-05-loyalty-rls-policy-fix.sql` (human approval,
-  loyalty Supabase project) after that deploys. Checklist:
-  `docs/ops-hardening-checklist.md` §5.
+- 2026-07-05 — **14 public tables still anon-reachable with no RLS** (live
+  get_advisors, kqdcdhpnyuwrxqhbuyfl): `PendingPop` (POP `token`), grab_*
+  financial (webhook_events/reconcile_runs/campaigns/ads_spend/
+  modifier_links), ads_* , poster_events, pos_poster_perf,
+  challenge_nudge_assignment, product_*_seed. Need per-table check — some
+  server-written (safe deny-all), PendingPop/grab hit hard rule 6. Table +
+  grants in `docs/rls-access-map-2026-07-05.md` "Live advisor snapshot".
+  10 dated backup/snapshot tables from the same sweep already locked
+  (migration 074). Decision pending: rls-audit workflow vs hand-reviewed
+  batch.
+- 2026-07-05 — **`pos_*` + `orders`: 14 `USING(true)` policies are BY
+  DESIGN** (SUNMI tills write via the anon key). Do NOT lint-fix — needs a
+  data-layer plan (rls-strategy.md Path A).
 - 2026-07-05 — 13 of 14 Vercel crons still have no heartbeat monitoring
   (`reconcile-pending` wired 2026-07-05; the rest fail silently).
+- 2026-07-05 — Pickup dashboard **inventory tab reads tables that don't
+  exist** (`ingredients`, `stock_levels`, `ingredient_outlet_settings` —
+  absent from BOTH Supabase projects); it has been silently empty. Either
+  wire it to the real procurement stock tables (`StockBalance` etc.) or
+  remove the tab.
+
+_Resolved 2026-07-05 evening (see Lessons + access-map correction): the
+"loyalty tables anon-writable" finding was already fixed in production —
+live DB had drifted ahead of repo migration files. Actual live exposure
+was the `outlets` view (anon DML, RLS bypass); revoked same day
+(supabase/migrations/073, applied via Supabase MCP, verified)._
 
 _Fixed 2026-07-05 (see Lessons): categorizer correction mis-attribution +
 never-set `applied` flag — `related_id` now populated at decision time,
@@ -96,7 +111,6 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 - 2026-07-04 — `eas update` shells out to `expo export`, whose interactive
   prompts ignore `--non-interactive`; set `CI=1` in the environment instead.
   Pass commit messages via env var, not inline in the shell command (backticks/
-  `*`/newlines get shell-expanded). (Source: `.github/workflows/pos-native-ota.yml`.)
 
 - 2026-07-05 — The AI Fill week-wipe (60 shifts) was the old generator's
   DELETE-then-INSERT persist with no transaction; `hr_schedule_shift_audit`

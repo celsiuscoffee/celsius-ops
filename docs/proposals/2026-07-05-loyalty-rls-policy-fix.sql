@@ -1,3 +1,16 @@
+-- ⚠️ SUPERSEDED 2026-07-05 — NOT NEEDED. Live-DB verification (pg_policies,
+-- role_table_grants on project kqdcdhpnyuwrxqhbuyfl) showed production had
+-- already drifted AHEAD of the repo migrations: the USING(true) "Service
+-- full access" policies no longer exist, anon's DML grants on the sensitive
+-- tables were already revoked (permission denied before RLS even applies),
+-- and staff_users was dropped entirely. The real live exposure was the
+-- `outlets` VIEW instead — fixed in
+-- supabase/migrations/073_revoke_anon_writes_outlets_view.sql.
+-- Kept for the record of what the repo's migration files (wrongly) implied.
+-- Lesson: audit the live DB, not migration files (STATE.md 2026-07-05).
+--
+-- Original header follows.
+--
 -- PROPOSAL — NOT APPLIED. Requires human approval (CLAUDE.md hard rule 6)
 -- and must ship AFTER the pickup dashboard-stats API route is deployed
 -- (the page's browser reads move server-side in the same PR as this file).
