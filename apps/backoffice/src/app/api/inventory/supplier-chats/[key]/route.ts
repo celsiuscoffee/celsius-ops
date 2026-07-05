@@ -144,11 +144,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
   // PO_PROMPT_TEMPLATE in procurement-po-send.ts.
   const canColdPrompt = !!(process.env.PROCUREMENT_PO_PROMPT_TEMPLATE?.trim() || "procurement_new_order");
 
-  // Surface the supplier-chat agent's latest open proposal: only when the most
-  // recent message WE sent was an agent escalation (a holding reply with a
-  // structured proposal) and the supplier hasn't been answered by a human since.
-  // That's the "AI proposes / human approves" handoff — the human sees the
-  // concrete suggested PO edit and acts on it (the agent never applies it).
+  // Surface the supplier-chat agent's latest OPEN proposal (holding reply with a
+  // structured suggested PO edit): the human sees it and acts on it — the agent
+  // never applies it itself in ASSIST.
   let agentProposal: {
     messageId: string;
     orderId: string | null;
@@ -176,11 +174,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     } | null;
     at: string;
   } | null = null;
-  const lastOutbound = await prisma.whatsAppMessage.findFirst({
+  const recentOutbound = await prisma.whatsAppMessage.findMany({
     where: { ...counter, direction: "outbound" },
     orderBy: { timestamp: "desc" },
+    take: 30,
     select: { id: true, raw: true, timestamp: true },
   });
+  const lastOutbound = recentOutbound[0] ?? null;
   const raw = (lastOutbound?.raw ?? null) as Record<string, unknown> | null;
   // Human takeover: if the last outbound was typed by a human (no system marker) and is
   // recent, the agent is standing down — you're handling this thread.
@@ -190,14 +190,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
     (!raw.agent && !raw.invoiceRequestFor && !raw.receivingChaseFor && !raw.poSentFor && !raw.execBriefDate && !raw.soaHandoffFor && !raw.promiseChaseFor);
   const humanHandling =
     !!lastOutbound && lastOutByHuman && Date.now() - +new Date(lastOutbound.timestamp) < HUMAN_TAKEOVER_MS;
-  // raw.proposalResolved is stamped when a human applies the proposal — once
-  // resolved, stop surfacing the banner even though it's still the last message.
-  if (raw && raw.escalated === true && raw.proposalResolved !== true && raw.proposal && typeof raw.proposal === "object") {
-    const p = raw.proposal as Record<string, unknown>;
+  // The banner surfaces the most recent UNRESOLVED escalation anywhere in the
+  // recent outbound window — not only when it happens to be the very last
+  // message. Any invoice chase / follow-up reply used to bury the escalation
+  // permanently; now it stays visible until raw.proposalResolved is stamped
+  // (Apply button, chat approval) — that's the "AI proposes / human approves"
+  // handoff this mode depends on.
+  const propMsg =
+    recentOutbound.find((m) => {
+      const r = (m.raw ?? null) as Record<string, unknown> | null;
+      return !!r && r.escalated === true && r.proposalResolved !== true && !!r.proposal && typeof r.proposal === "object";
+    }) ?? null;
+  const propRaw = (propMsg?.raw ?? null) as Record<string, unknown> | null;
+  if (propMsg && propRaw) {
+    const p = propRaw.proposal as Record<string, unknown>;
     const pa = (p.poAction ?? null) as Record<string, unknown> | null;
     const ia = (p.invoiceAction ?? null) as Record<string, unknown> | null;
     agentProposal = {
-      messageId: lastOutbound!.id,
+      messageId: propMsg.id,
       orderId: typeof p.orderId === "string" ? p.orderId : null,
       intent: String(p.intent ?? "unclear"),
       escalationReason: String(p.escalationReason ?? "guardrail"),
@@ -225,7 +235,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
               toNumber: typeof ia.toNumber === "string" ? ia.toNumber : null,
             }
           : null,
-      at: lastOutbound!.timestamp.toISOString(),
+      at: propMsg.timestamp.toISOString(),
     };
   }
 

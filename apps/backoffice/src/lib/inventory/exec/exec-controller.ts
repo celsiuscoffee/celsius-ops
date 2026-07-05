@@ -218,8 +218,16 @@ export async function runProcurementExec(): Promise<ExecRunSummary> {
   }
 
   const today = todayMyt();
+  // Only a SUCCESSFUL brief counts as sent — a failed attempt must not burn the
+  // day (the cron only fires once daily, so there is no other retry).
   const alreadyToday = await prisma.whatsAppMessage.findFirst({
-    where: { direction: "outbound", raw: { path: ["execBriefDate"], equals: today } },
+    where: {
+      direction: "outbound",
+      AND: [
+        { raw: { path: ["execBriefDate"], equals: today } },
+        { raw: { path: ["ok"], equals: true } },
+      ],
+    },
     select: { id: true },
   });
   if (alreadyToday) {
