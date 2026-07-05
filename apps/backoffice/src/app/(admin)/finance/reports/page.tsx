@@ -12,9 +12,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@celsius/ui";
-import { Loader2, Download, FileText, AlertTriangle, ChevronRight, ChevronDown } from "lucide-react";
+import { Loader2, Download, FileText, AlertTriangle, ChevronRight, ChevronDown, ListTree, X } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
-import { OUTFLOW_CATEGORIES, INFLOW_CATEGORIES, categoryLabel } from "@/lib/finance/cash-categories";
+import { OUTFLOW_CATEGORIES, INFLOW_CATEGORIES, categoryLabel, categoryChipLabel } from "@/lib/finance/cash-categories";
 
 // Accounting format: negatives in parentheses, the convention every
 // accounting package (Xero, QuickBooks, Bukku) uses on statements.
@@ -230,6 +230,8 @@ type PnlReport = {
   txnCount: number;
 };
 
+type MatchedInvoice = { invoiceNumber: string | null; vendor: string | null; amount: number };
+
 type DrillLine = {
   transactionId: string;
   txnDate: string;
@@ -245,6 +247,14 @@ type DrillLine = {
     isInterCo?: boolean;
     classifiedBy?: string | null;
     ruleName?: string | null;
+    // Bank-sourced rows: the line id behind the fix-in-place chips.
+    bankLineId?: string;
+    direction?: "DR" | "CR";
+    apInvoiceId?: string | null;
+    matchedInvoice?: MatchedInvoice | null;
+    // Journal-backed rows: the posting agent ("bank" journals expand into
+    // their source bank lines).
+    glAgent?: string | null;
   };
 };
 
@@ -709,6 +719,160 @@ function PnlTab() {
   );
 }
 
+// Inline "fix it where you found it" chip: the bank line's category. Clicking
+// opens a compact select; booking a new category POSTs classify (the GL
+// re-keys), then refreshes the view it sits in AND the parent report.
+function CategoryChip({ bankLineId, category, direction, accountNames, onSaved }: {
+  bankLineId: string;
+  category: string | null;
+  direction: "DR" | "CR";
+  accountNames: Map<string, string>;
+  onSaved: () => Promise<void> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save(next: string) {
+    setEditing(false);
+    if (!next || next === category) return;
+    setBusy(true); setErr(null);
+    try {
+      const res = await fetch("/api/finance/bank-lines/classify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankLineId, category: next }),
+      });
+      const j = await res.json();
+      if (!res.ok) setErr(j.error ?? `Failed (${res.status})`);
+      else await onSaved();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  if (editing) {
+    return (
+      <select
+        autoFocus
+        defaultValue={category ?? ""}
+        onChange={(e) => save(e.target.value)}
+        onBlur={() => setEditing(false)}
+        onKeyDown={(e) => { if (e.key === "Escape") setEditing(false); }}
+        onClick={(e) => e.stopPropagation()}
+        className="h-6 max-w-[260px] rounded border bg-background px-1 text-[11px]"
+      >
+        {!category && <option value="" disabled>unclassified…</option>}
+        {(direction === "CR" ? INFLOW_CATEGORIES : OUTFLOW_CATEGORIES).map((c) => (
+          <option key={c} value={c}>{categoryLabel(c, accountNames)}</option>
+        ))}
+      </select>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+        title="Category this line is booked to. Click to recategorise."
+        className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground transition hover:text-foreground hover:ring-1 hover:ring-ring disabled:opacity-60"
+      >
+        {busy && <Loader2 className="h-3 w-3 animate-spin" />}
+        {categoryChipLabel(category)}
+      </button>
+      {err && <span className="text-[10px] text-rose-600">{err}</span>}
+    </span>
+  );
+}
+
+// AP-matched lines carry the invoice their match settled. The x unmatches
+// (the invoice reverts to unpaid when this match is what paid it); the
+// category chip can then rebook the freed line.
+function MatchedChip({ bankLineId, invoice, onSaved }: {
+  bankLineId: string;
+  invoice: MatchedInvoice;
+  onSaved: () => Promise<void> | void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const label = invoice.invoiceNumber ?? "invoice";
+
+  async function unmatch() {
+    if (!window.confirm(`Unmatch this line from ${label}? The invoice reverts to unpaid if this match paid it.`)) return;
+    setBusy(true); setErr(null);
+    try {
+      const res = await fetch("/api/finance/bank-lines/unmatch", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankLineId }),
+      });
+      const j = await res.json();
+      if (!res.ok) setErr(j.error ?? `Failed (${res.status})`);
+      else await onSaved();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span
+        title={`Matched to ${label}${invoice.vendor ? ` from ${invoice.vendor}` : ""}, ${RM(invoice.amount)}`}
+        className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-400"
+      >
+        Matched: {label}{invoice.vendor ? ` (${invoice.vendor})` : ""}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={(e) => { e.stopPropagation(); unmatch(); }}
+          title="Unmatch this line from the invoice"
+          className="rounded-full transition hover:text-amber-900 disabled:opacity-60 dark:hover:text-amber-200"
+        >
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+        </button>
+      </span>
+      {err && <span className="text-[10px] text-rose-600">{err}</span>}
+    </span>
+  );
+}
+
+type SourceLine = {
+  id: string; txnDate: string; description: string; amount: number;
+  direction: "DR" | "CR"; reference: string | null; category: string | null;
+  isInterCo: boolean; classifiedBy: string | null; ruleName: string | null;
+  apInvoiceId: string | null; matchedInvoice: MatchedInvoice | null;
+};
+
+// The bank statement lines a bank-agent journal was posted from, each with
+// the same fix-in-place chips as the P&L drill. A fix re-keys the journal,
+// so the parent view refetches via onChanged.
+function GlSourceLines({ transactionId, accountNames, onChanged }: {
+  transactionId: string;
+  accountNames: Map<string, string>;
+  onChanged: () => void;
+}) {
+  const { data, isLoading, mutate } = useFetch<{ lines: SourceLine[] }>(
+    `/api/finance/gl-source-lines?transactionId=${encodeURIComponent(transactionId)}`
+  );
+  const refresh = async () => { await mutate(); onChanged(); };
+  if (isLoading) return <div className="px-3 py-2"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>;
+  const lines = data?.lines ?? [];
+  if (lines.length === 0) {
+    return <div className="px-3 py-2 text-[11px] text-muted-foreground">No bank lines reference this journal. It may have just been re-keyed; the poster rebuilds it on the next run.</div>;
+  }
+  return (
+    <div className="space-y-1.5 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Source bank lines</div>
+      {lines.map((l) => (
+        <div key={l.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+          <span className="whitespace-nowrap tabular-nums text-muted-foreground">{l.txnDate}</span>
+          <span className="min-w-0 flex-1 break-words">{l.description}</span>
+          <CategoryChip bankLineId={l.id} category={l.category} direction={l.direction} accountNames={accountNames} onSaved={refresh} />
+          {l.matchedInvoice && <MatchedChip bankLineId={l.id} invoice={l.matchedInvoice} onSaved={refresh} />}
+          <span className="whitespace-nowrap tabular-nums">{RM(l.amount)} <span className="text-[10px] text-muted-foreground">{l.direction}</span></span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DrillDown({ code, start, end, outletId, consolidated, onChanged }: { code: string; start: string; end: string; outletId?: string; consolidated?: boolean; onChanged?: () => void }) {
   const { data, isLoading, mutate } = useFetch<{ lines: DrillLine[] }>(
     `/api/finance/reports/drilldown?accountCode=${encodeURIComponent(code)}&start=${start}&end=${end}${consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : ""}`
@@ -716,26 +880,10 @@ function DrillDown({ code, start, end, outletId, consolidated, onChanged }: { co
   const { data: acctData } = useFetch<{ accounts: { code: string; name: string }[] }>("/api/finance/accounts");
   const accountNames = new Map((acctData?.accounts ?? []).map((a) => [a.code, a.name]));
   const [openRow, setOpenRow] = useState<string | null>(null);
-  const [busyRow, setBusyRow] = useState<string | null>(null);
-  const [rowNote, setRowNote] = useState<Record<string, string>>({});
 
-  // Recategorise a bank line straight from the report — the accounting-software
-  // way. Books it to the new category (GL re-keys), then refreshes the drill and
-  // the P&L behind it.
-  async function recategorise(bankLineId: string, category: string) {
-    if (!category) return;
-    setBusyRow(bankLineId); setRowNote((n) => ({ ...n, [bankLineId]: "" }));
-    try {
-      const res = await fetch("/api/finance/bank-lines/classify", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankLineId, category }),
-      });
-      const j = await res.json();
-      if (!res.ok) setRowNote((n) => ({ ...n, [bankLineId]: j.error ?? `Failed (${res.status})` }));
-      else { await mutate(); onChanged?.(); }
-    } catch (e) { setRowNote((n) => ({ ...n, [bankLineId]: e instanceof Error ? e.message : String(e) })); }
-    finally { setBusyRow(null); }
-  }
+  // Any fix (recategorise, unmatch) refreshes the drill AND the report behind
+  // it, so the totals move without a page reload.
+  const refresh = async () => { await mutate(); onChanged?.(); };
   if (isLoading) return <div className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>;
   if (!data) return null;
   if (data.lines.length === 0) {
@@ -777,18 +925,40 @@ function DrillDown({ code, start, end, outletId, consolidated, onChanged }: { co
           {data.lines.map((l, i) => {
             const [main, metaLine] = splitDesc(l.description);
             const key = `${l.transactionId}-${i}`;
-            const expandable = !!l.meta;
+            // Three flavors of expandable row: bank lines and assets show a
+            // detail panel; bank-agent journals (Balance Sheet drill) expand
+            // into their source bank lines with the same chips.
+            const isBankRow = !!l.meta?.bankLineId;
+            const isBankJournal = !isBankRow && l.meta?.glAgent === "bank";
+            const hasDetail = !!l.meta && !l.meta.glAgent;
+            const expandable = hasDetail || isBankJournal;
             const open = openRow === key;
             return (
               <Fragment key={key}>
               <tr className={`align-top ${expandable ? "cursor-pointer hover:bg-muted/30" : ""}`}
                   onClick={expandable ? () => setOpenRow(open ? null : key) : undefined}
-                  title={expandable ? "Click to see the transaction detail" : undefined}>
+                  title={expandable ? (isBankJournal ? "Click to see the source bank lines" : "Click to see the transaction detail") : undefined}>
                 <td className="whitespace-nowrap py-2 pr-2 text-xs tabular-nums text-muted-foreground">{l.txnDate.slice(5)}</td>
                 <td className="break-words py-2 pr-2">
                   <span className="flex items-start gap-1">
                     {expandable && <span className="mt-0.5 text-[10px] text-muted-foreground">{open ? "▾" : "▸"}</span>}
-                    <span>{main}{metaLine && <span className="block text-[11px] leading-snug text-muted-foreground">{metaLine}</span>}</span>
+                    <span>
+                      {main}{metaLine && <span className="block text-[11px] leading-snug text-muted-foreground">{metaLine}</span>}
+                      {isBankRow && l.meta?.bankLineId && (
+                        <span className="mt-1 flex flex-wrap items-center gap-1">
+                          <CategoryChip
+                            bankLineId={l.meta.bankLineId}
+                            category={l.meta.category ?? null}
+                            direction={l.meta.direction ?? (l.credit > 0 ? "CR" : "DR")}
+                            accountNames={accountNames}
+                            onSaved={refresh}
+                          />
+                          {l.meta.matchedInvoice && (
+                            <MatchedChip bankLineId={l.meta.bankLineId} invoice={l.meta.matchedInvoice} onSaved={refresh} />
+                          )}
+                        </span>
+                      )}
+                    </span>
                   </span>
                 </td>
                 {showCompany && <td className="py-2 pr-2 text-xs text-muted-foreground">{l.meta?.company ?? "—"}</td>}
@@ -799,29 +969,24 @@ function DrillDown({ code, start, end, outletId, consolidated, onChanged }: { co
                       <td className="whitespace-nowrap py-2 text-right tabular-nums">{l.credit ? RM(l.credit) : ""}</td>
                     </>}
               </tr>
-              {open && l.meta && (
+              {open && isBankJournal && (
+                <tr className="bg-muted/20">
+                  <td colSpan={cols} className="p-0" onClick={(e) => e.stopPropagation()}>
+                    <GlSourceLines transactionId={l.transactionId} accountNames={accountNames} onChanged={refresh} />
+                  </td>
+                </tr>
+              )}
+              {open && hasDetail && l.meta && (
                 <tr className="bg-muted/20">
                   <td colSpan={cols} className="px-3 py-2">
                     <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-[11px]">
                       {l.meta.account && (<><dt className="text-muted-foreground">Bank account</dt><dd>{l.meta.account}</dd></>)}
                       {l.meta.reference && (<><dt className="text-muted-foreground">Reference</dt><dd className="break-words">{l.meta.reference}</dd></>)}
                       {l.meta.category !== undefined && (<><dt className="text-muted-foreground">Category</dt><dd>{l.meta.category ? l.meta.category.toLowerCase().replace(/_/g, " ") : "unclassified"}</dd></>)}
+                      {l.meta.matchedInvoice && (<><dt className="text-muted-foreground">Matched invoice</dt><dd>{l.meta.matchedInvoice.invoiceNumber ?? "(no number)"}{l.meta.matchedInvoice.vendor ? ` · ${l.meta.matchedInvoice.vendor}` : ""} · {RM(l.meta.matchedInvoice.amount)}</dd></>)}
                       <><dt className="text-muted-foreground">Inter-company</dt><dd>{l.meta.isInterCo ? "yes" : "no"}</dd></>
                       {(l.meta.classifiedBy || l.meta.ruleName) && (<><dt className="text-muted-foreground">Classified</dt><dd>{l.meta.classifiedBy ?? "rule"}{l.meta.ruleName ? ` · ${l.meta.ruleName}` : ""}</dd></>)}
                     </dl>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2" onClick={(e) => e.stopPropagation()}>
-                      <span className="text-[11px] text-muted-foreground">Recategorise to</span>
-                      <select defaultValue="" disabled={busyRow === l.transactionId}
-                        onChange={(e) => { recategorise(l.transactionId, e.target.value); e.target.value = ""; }}
-                        className="h-7 max-w-[280px] rounded border bg-background px-1 text-[11px] disabled:opacity-50">
-                        <option value="" disabled>Choose a category…</option>
-                        {(l.credit > 0 ? INFLOW_CATEGORIES : OUTFLOW_CATEGORIES).map((c) => (
-                          <option key={c} value={c}>{categoryLabel(c, accountNames)}</option>
-                        ))}
-                      </select>
-                      {busyRow === l.transactionId && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-                      {rowNote[l.transactionId] && <span className="text-[10px] text-rose-600">{rowNote[l.transactionId]}</span>}
-                    </div>
                   </td>
                 </tr>
               )}
@@ -910,7 +1075,7 @@ function BsTab() {
   // Consolidation scope applies to the primary AND the comparison fetch, so a
   // group figure is never compared against a single-entity one.
   const scope = consolidated ? "&companyId=consolidated" : "";
-  const { data, isLoading, error } = useFetch<{ report: BsReport }>(
+  const { data, isLoading, error, mutate } = useFetch<{ report: BsReport }>(
     `/api/finance/reports/balance-sheet?asOf=${asOf}${scope}`
   );
   // A balance sheet compares as-OF dates: the prior period-end (the day before
@@ -996,7 +1161,7 @@ function BsTab() {
             </SheetTitle>
             <p className="text-xs text-muted-foreground tabular-nums">{drillCode} · journal lines through {asOf}</p>
           </SheetHeader>
-          {drillCode && <DrillDown code={drillCode} start="2020-01-01" end={asOf} consolidated={consolidated} />}
+          {drillCode && <DrillDown code={drillCode} start="2020-01-01" end={asOf} consolidated={consolidated} onChanged={() => mutate()} />}
         </SheetContent>
       </Sheet>
     </div>
@@ -1295,7 +1460,7 @@ function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
 }
 
 // ─── General Ledger tab ─────────────────────────────────────────
-type GlEntry = { date: string; txnType: string; description: string; debit: number; credit: number; balance: number };
+type GlEntry = { transactionId: string; postedByAgent: string | null; date: string; txnType: string; description: string; debit: number; credit: number; balance: number };
 type Gl = { accountCode: string; accountName: string; start: string; end: string; opening: number; entries: GlEntry[]; closing: number; totalDebit: number; totalCredit: number };
 
 type CoaAccount = { code: string; name: string; type: string };
@@ -1348,7 +1513,11 @@ function AccountPicker({ value, onChange }: { value: string; onChange: (code: st
 
 function GlTab({ account, setAccount }: { account: string; setAccount: (c: string) => void }) {
   const { start, end } = useControls();
-  const { data, isLoading, error } = useFetch<{ report: Gl }>(`/api/finance/reports/general-ledger?account=${encodeURIComponent(account)}&start=${start}&end=${end}`);
+  const { data, isLoading, error, mutate } = useFetch<{ report: Gl }>(`/api/finance/reports/general-ledger?account=${encodeURIComponent(account)}&start=${start}&end=${end}`);
+  const { data: acctData } = useFetch<{ accounts: { code: string; name: string }[] }>("/api/finance/accounts");
+  const accountNames = new Map((acctData?.accounts ?? []).map((a) => [a.code, a.name]));
+  // Which entry row is expanded to show the journal's source bank lines.
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -1381,13 +1550,36 @@ function GlTab({ account, setAccount }: { account: string; setAccount: (c: strin
             <tbody className="divide-y">
               <tr className="bg-muted/20 text-muted-foreground"><td className="px-3 py-1.5" colSpan={4}>Opening balance</td><td className="px-3 py-1.5 text-right tabular-nums">{RM(data.report.opening)}</td></tr>
               {data.report.entries.map((e, i) => (
-                <tr key={i} className="hover:bg-muted/40">
+                <Fragment key={i}>
+                <tr className="hover:bg-muted/40">
                   <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground tabular-nums">{e.date}</td>
-                  <td className="px-3 py-1.5 text-xs">{e.description}</td>
+                  <td className="px-3 py-1.5 text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <span className="min-w-0">{e.description}</span>
+                      {e.postedByAgent === "bank" && (
+                        <button
+                          type="button"
+                          onClick={() => setOpenIdx(openIdx === i ? null : i)}
+                          title="Show the source bank lines behind this journal"
+                          className={`shrink-0 rounded p-0.5 text-muted-foreground transition hover:text-foreground ${openIdx === i ? "bg-muted text-foreground" : ""}`}
+                        >
+                          <ListTree className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{e.debit ? RM(e.debit) : ""}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{e.credit ? RM(e.credit) : ""}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{RM(e.balance)}</td>
                 </tr>
+                {openIdx === i && e.postedByAgent === "bank" && (
+                  <tr className="bg-muted/20">
+                    <td colSpan={5} className="p-0">
+                      <GlSourceLines transactionId={e.transactionId} accountNames={accountNames} onChanged={() => mutate()} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
               {data.report.entries.length === 0 && <tr><td colSpan={5} className="px-3 py-4 text-center text-xs text-muted-foreground">No movements in this period.</td></tr>}
             </tbody>

@@ -41,8 +41,35 @@ export type DrillLine = {
     isInterCo?: boolean;
     classifiedBy?: string | null;
     ruleName?: string | null;
+    // Fix-in-place: the bank line id lets the UI recategorise or unmatch the
+    // row straight from the report, QuickBooks style.
+    bankLineId?: string;
+    direction?: "DR" | "CR";
+    apInvoiceId?: string | null;
+    matchedInvoice?: MatchedInvoiceSummary | null;
+    // Journal-backed rows (ledger drill): the agent that posted the journal.
+    // "bank" journals can expand into their source bank lines.
+    glAgent?: string | null;
   };
 };
+
+export type MatchedInvoiceSummary = { invoiceNumber: string | null; vendor: string | null; amount: number };
+
+// One batched Invoice lookup for AP-matched bank lines. BankStatementLine has
+// no prisma relation on apInvoiceId, so the join is manual.
+export async function matchedInvoiceSummaries(invoiceIds: Array<string | null | undefined>): Promise<Map<string, MatchedInvoiceSummary>> {
+  const ids = [...new Set(invoiceIds.filter((x): x is string => !!x))];
+  if (!ids.length) return new Map();
+  const invoices = await prisma.invoice.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, invoiceNumber: true, vendorName: true, amount: true, supplier: { select: { name: true } } },
+  });
+  return new Map(invoices.map((i) => [i.id, {
+    invoiceNumber: i.invoiceNumber ?? null,
+    vendor: i.supplier?.name ?? i.vendorName ?? null,
+    amount: round2(Number(i.amount)),
+  }]));
+}
 
 const CONSOLIDATED = "consolidated";
 
@@ -267,12 +294,13 @@ async function drillBank(cat: string, companyId: string, start: string, end: str
     },
     select: {
       id: true, txnDate: true, description: true, amount: true, reference: true,
-      category: true, isInterCo: true, classifiedBy: true, ruleName: true,
+      category: true, isInterCo: true, classifiedBy: true, ruleName: true, apInvoiceId: true,
       statement: { select: { accountName: true } },
     },
     orderBy: { txnDate: "asc" },
     take: 400,
   });
+  const invById = await matchedInvoiceSummaries(lines.map((l) => l.apInvoiceId));
   return lines.map((l) => ({
     transactionId: l.id,
     txnDate: l.txnDate.toISOString().slice(0, 10),
@@ -288,6 +316,10 @@ async function drillBank(cat: string, companyId: string, start: string, end: str
       isInterCo: l.isInterCo,
       classifiedBy: l.classifiedBy,
       ruleName: l.ruleName,
+      bankLineId: l.id,
+      direction,
+      apInvoiceId: l.apInvoiceId,
+      matchedInvoice: l.apInvoiceId ? invById.get(l.apInvoiceId) ?? null : null,
     },
   }));
 }

@@ -42,3 +42,11 @@ export function categoryLabel(c: string, accountNames: Map<string, string>): str
   const human = c.toLowerCase().replace(/_/g, " ");
   return code ? `${human} → ${code}${name ? ` ${name}` : ""}` : human;
 }
+
+// Compact form for inline chips: category plus COA code, no account name.
+export function categoryChipLabel(c: string | null | undefined): string {
+  if (!c) return "unclassified";
+  const code = CONTRA_ACCOUNT[c] ?? CONTROL_COA[c];
+  const human = c.toLowerCase().replace(/_/g, " ");
+  return code ? `${human} · ${code}` : human;
+}
