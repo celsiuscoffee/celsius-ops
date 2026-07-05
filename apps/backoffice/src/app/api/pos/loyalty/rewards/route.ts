@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { requirePosApiAuth } from "@/lib/pos-auth";
 import {
   fetchActiveVouchersForMember,
   fetchAffordableCatalogForMember,
@@ -44,6 +45,9 @@ const BRAND_ID = "brand-celsius";
  * endpoint too) so POS + Pickup never drift on filter logic or shape.
  */
 export async function GET(req: NextRequest) {
+  const { block } = await requirePosApiAuth(req, "pos/loyalty/rewards");
+  if (block) return block;
+
   const supabase = getSupabase();
   try {
     const memberId = req.nextUrl.searchParams.get("member_id");

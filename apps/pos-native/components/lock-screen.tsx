@@ -59,12 +59,13 @@ export default function LockScreen() {
         ? { pin: override!.staffPin, outletId, overridePin: fullPin }
         : { pin: fullPin, outletId };
       try {
-        const u = await apiPost<{ id: string; name: string; role: string; shiftEnd?: string | null }>(
+        const u = await apiPost<{ id: string; name: string; role: string; shiftEnd?: string | null; token?: string }>(
           "/api/pos/auth/pin", payload,
         );
         const shiftEndsAt = u.shiftEnd ? Date.parse(u.shiftEnd) : null;
         // setStaff stamps a fresh session AND clears `locked` → this unmounts.
-        setStaff({ staffId: u.id, staffName: u.name, role: u.role }, shiftEndsAt);
+        // Refresh the Bearer token too (unlock is a full re-auth).
+        setStaff({ staffId: u.id, staffName: u.name, role: u.role, token: u.token ?? null }, shiftEndsAt);
         setOverride(null);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (e: any) {

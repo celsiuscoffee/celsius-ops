@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { verifyPin, hashPin } from "@celsius/auth";
+import { signStaffToken } from "@/lib/staff-token";
 
 const attempts = new Map<string, { count: number; resetAt: number }>();
 
@@ -104,6 +105,7 @@ export async function POST(request: NextRequest) {
                 staffName: user.name,
                 staffId:   user.id,
                 source:    "backoffice",
+                token:     signStaffToken({ storeId, staffId: user.id, staffName: user.name }),
               });
             }
           }
@@ -133,6 +135,7 @@ export async function POST(request: NextRequest) {
         staffName: member.name,
         staffId:   member.id,
         source:    "legacy",
+        token:     signStaffToken({ storeId, staffId: member.id, staffName: member.name }),
       });
     }
 
@@ -162,6 +165,7 @@ export async function POST(request: NextRequest) {
       staffName: null,
       staffId:   null,
       source:    "outlet_pin",
+      token:     signStaffToken({ storeId, staffId: null, staffName: null }),
     });
   } catch (err) {
     console.error("Staff auth error:", err);

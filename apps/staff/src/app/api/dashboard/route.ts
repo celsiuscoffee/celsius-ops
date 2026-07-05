@@ -1,7 +1,11 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const outletId = new URL(req.url).searchParams.get("outletId") || undefined;
   const outletFilter = outletId ? { outletId } : undefined;
   const now = new Date();

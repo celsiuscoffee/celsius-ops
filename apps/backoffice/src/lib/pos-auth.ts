@@ -214,3 +214,61 @@ export async function requireAuth(
   }
   return { user, error: null };
 }
+
+// ─── POS API request auth (Bearer for native till, cookie for web register) ──
+//
+// The PIN login (/api/pos/auth/pin) already mints a 12h JWT via createToken and
+// sets it as the httpOnly celsius-pos-session cookie. The web register replays
+// that cookie automatically; the native till (apps/pos-native) can't read an
+// httpOnly cookie, so it captures the token from the login response body and
+// replays it as `Authorization: Bearer <token>`. Both resolve here.
+
+/** True when POS API auth is enforced. During the rollout window this stays
+ *  unset, so an unauthenticated POS call is allowed-but-logged while the native
+ *  tills ship the Bearer token — flip POS_AUTH_ENFORCE=1 once every till sends
+ *  it (watch the [pos-auth] warnings drop to zero first). */
+export function posAuthEnforced(): boolean {
+  const v = process.env.POS_AUTH_ENFORCE;
+  return v === "1" || v === "true";
+}
+
+/** Resolve the POS staff session from a Bearer header (native till) or the
+ *  celsius-pos-session cookie (web register). */
+export async function getPosUser(
+  request: NextRequest,
+): Promise<SessionUser | null> {
+  const bearer = (request.headers.get("authorization") ?? "").match(
+    /^Bearer\s+(.+)$/i,
+  );
+  if (bearer) {
+    const u = await verifyToken(bearer[1]);
+    if (u) return u;
+  }
+  const cookieTok = request.cookies.get(COOKIE_NAME)?.value;
+  if (cookieTok) {
+    const u = await verifyToken(cookieTok);
+    if (u) return u;
+  }
+  return null;
+}
+
+/** Guard a POS API route. When `block` is non-null the route must return it (a
+ *  401). Unauthenticated calls pass through (block=null) during the rollout
+ *  grace period unless POS_AUTH_ENFORCE is set — see posAuthEnforced. */
+export async function requirePosApiAuth(
+  request: NextRequest,
+  label: string,
+): Promise<{ user: SessionUser | null; block: NextResponse | null }> {
+  const user = await getPosUser(request);
+  if (user) return { user, block: null };
+  if (posAuthEnforced()) {
+    return {
+      user: null,
+      block: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    };
+  }
+  console.warn(
+    `[pos-auth] unauthenticated ${label} (grace period — set POS_AUTH_ENFORCE=1 to reject)`,
+  );
+  return { user: null, block: null };
+}

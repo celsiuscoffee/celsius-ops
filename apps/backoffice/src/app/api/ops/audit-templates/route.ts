@@ -4,6 +4,9 @@ import { getSession } from "@celsius/auth";
 
 // GET — list all audit templates
 export async function GET() {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const templates = await prisma.auditTemplate.findMany({
     include: {
       createdBy: { select: { id: true, name: true } },

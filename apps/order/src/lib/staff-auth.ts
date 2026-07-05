@@ -8,6 +8,10 @@ export interface StaffSession {
   storeName:  string;
   staffName:  string | null;
   staffId:    string | null;
+  /** KDS/staff JWT from /api/staff/auth, sent as `Authorization: Bearer` on the
+   *  staff-only routes (order status transitions + /api/staff/* feeds). Optional
+   *  so sessions saved before this field existed still parse. */
+  token?:     string | null;
   loggedInAt: number;
   expiresAt:  number;
 }
@@ -36,12 +40,14 @@ export function saveSession(
   storeName: string,
   staffName: string | null = null,
   staffId:   string | null = null,
+  token:     string | null = null,
 ) {
   const session: StaffSession = {
     storeId,
     storeName,
     staffName,
     staffId,
+    token,
     loggedInAt: Date.now(),
     expiresAt:  Date.now() + TTL,
   };
@@ -51,4 +57,12 @@ export function saveSession(
 
 export function clearSession() {
   localStorage.removeItem(KEY);
+}
+
+/** Authorization headers for staff-only API calls — the Bearer token minted at
+ *  login. Returns {} when there's no session/token (pre-token sessions), so the
+ *  call still goes out and the server's grace period handles it. */
+export function staffAuthHeaders(): Record<string, string> {
+  const token = getSession()?.token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }

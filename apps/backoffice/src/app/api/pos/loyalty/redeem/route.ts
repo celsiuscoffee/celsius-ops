@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { requirePosApiAuth } from "@/lib/pos-auth";
 import {
   markVoucherUsed,
   rowToDiscountSpec,
@@ -49,6 +50,9 @@ function generateCode(): string {
  * consolidation) — the same spec native + QR-table resolve from.
  */
 export async function POST(req: NextRequest) {
+  const { block } = await requirePosApiAuth(req, "pos/loyalty/redeem");
+  if (block) return block;
+
   const supabase = getSupabase();
   try {
     const { member_id, reward_id, outlet_id, issued_reward_id, preview } = await req.json();

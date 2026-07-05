@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { requireStaffSession } from "@/lib/staff-token";
 
 /**
  * Returns the count of "preparing" orders at a store that are older than
@@ -9,6 +10,9 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
  *   GET /api/staff/orders/overdue-count?store=X&before=ISO
  */
 export async function GET(request: NextRequest) {
+  const { error: authError } = requireStaffSession(request, "staff/orders/overdue-count");
+  if (authError) return authError;
+
   const sp = request.nextUrl.searchParams;
   const storeId = sp.get("store");
   const before  = sp.get("before");

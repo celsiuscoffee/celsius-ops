@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requirePosApiAuth } from "@/lib/pos-auth";
 
 /**
  * POST /api/loyalty/claim
@@ -129,6 +130,9 @@ async function creditBonusBeans(
 }
 
 export async function POST(req: NextRequest) {
+  const { block } = await requirePosApiAuth(req, "pos/loyalty/claim");
+  if (block) return block;
+
   try {
     const { member_id, claimable_id } = await req.json();
     if (!member_id || !claimable_id) {

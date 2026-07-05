@@ -14,6 +14,11 @@ export type StaffSession = {
   staffId: string;
   staffName: string;
   role: string;
+  /** POS session JWT from /api/pos/auth/pin, replayed as `Authorization:
+   *  Bearer <token>` on POS API calls. The till can't use the httpOnly
+   *  celsius-pos-session cookie the same endpoint sets, so it carries the
+   *  token here. Null for sessions minted before this field existed. */
+  token: string | null;
 };
 
 /** Staff sessions auto-expire 2 hours after sign-in — the till re-prompts for
