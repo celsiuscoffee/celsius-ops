@@ -532,27 +532,149 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   }
 
   // Unowned = NO ONE present at the outlet (the lead is already in the pool
-  // fallback above, so a present lead would have become the owner). → managers.
-  for (const [, u] of unowned) {
-    let fresh: Item[] = u.items;
+  // fallback above, so a present lead would have become the owner). → managers,
+  // ONE line per outlet per day. The old per-checklist dedupe re-fired the digest
+  // as each new checklist came due (36 sends over 5 days for one condition); the
+  // condition is outlet-level — usually "nobody clocked in via the app" — so the
+  // alert is outlet-level too, and says so (adoption problem, not absence).
+  for (const [outletId, u] of unowned) {
+    const rosteredHere = new Set(roster.filter((r) => r.outlet_id === outletId).map((r) => r.user_id));
+    const presentHere = [...rosteredHere].filter((id) => clockedIn.has(id)).length;
+    const line = `${u.name}: ${u.items.length} overdue checklist${u.items.length === 1 ? "" : "s"} with no owner on shift — ${rosteredHere.size} rostered, ${presentHere} clocked in via the app`;
+    const b: Breach = {
+      signal: "CHECKLIST",
+      outletId,
+      outletName: u.name,
+      severity: "MED",
+      routeKey: "operations",
+      dedupeKey: `CHECKLIST_UNOWNED:${outletId}:${ymd}`, // once per outlet-day
+      summary: line,
+      detail: { count: u.items.length, rostered: rosteredHere.size, clockedIn: presentHere },
+    };
     if (mode === "armed") {
-      fresh = [];
-      for (const it of u.items) {
-        const { isNew } = await recordBreach(mkBreach(it, "mgr"), null);
-        if (isNew) fresh.push(it);
-      }
+      const { isNew } = await recordBreach(b, null);
+      if (!isNew) continue;
     }
-    if (fresh.length === 0) continue;
-    items += fresh.length;
+    items += u.items.length;
     if (mode === "shadow") {
-      console.log("[ops-nudge:checklist:shadow:unowned]", JSON.stringify({ outlet: u.name, items: fresh.map((f) => f.label) }));
+      console.log("[ops-nudge:checklist:shadow:unowned]", JSON.stringify({ outlet: u.name, items: u.items.map((f) => f.label) }));
     }
-    managerLines.push(...fresh.map((f) => `${u.name}: ${f.label} (no one on shift to own it)`));
+    managerLines.push(line);
   }
 
-  const headline = `${managerLines.length} overdue checklist${managerLines.length === 1 ? "" : "s"} with no owner on shift`;
+  const headline = `${managerLines.length} outlet${managerLines.length === 1 ? "" : "s"} with unowned overdue checklists`;
   const managerSent = await sendManagerDigestToOps(headline, managerLines, mode);
   return { mode, ranAt, items, staffSent, managerSent };
+}
+
+// ── 5b. Shift-start fair PRE-assignment (Sprint 0, verifier-agent design) ─────
+// The JIT engine above assigns owners only when a checklist is ALREADY overdue
+// and only to clocked-in staff — so on low clock-in-adoption days everything
+// stays ownerless, and unowned checklists complete at 0% (0/279 in the 10 days
+// to 2026-07-05, vs 56% when assigned). This pass assigns every still-unowned
+// checklist for TODAY a fair owner from the published ROSTER (the plan), using
+// the same station + lightest-load rules, so the app shows ownership all day.
+// Clock-in stays the truth at nudge time: the JIT pass re-owns to whoever is
+// actually present ("explicit assignment wins IF on shift"), so a pre-assigned
+// absentee is never nudged for a shift they didn't work.
+// Design: docs/design/verifier-agent.md.
+export interface AssignRunResult {
+  mode: NudgesMode;
+  ranAt: string;
+  scanned: number; // unassigned checklists for today
+  assigned: number; // owners persisted (or would-be, in shadow)
+}
+
+export async function assignTodaysChecklists(now = new Date()): Promise<AssignRunResult> {
+  const mode = nudgesMode();
+  const ranAt = now.toISOString();
+  if (mode === "off") return { mode, ranAt, scanned: 0, assigned: 0 };
+
+  const ymd = mytYmd(now);
+  // Checklist.date is @db.Date, stored as UTC midnight of the MYT calendar day
+  // (matches the staff generator and the linker).
+  const dateOnly = new Date(`${ymd}T00:00:00Z`);
+  const dayStart = new Date(`${ymd}T00:00:00+08:00`);
+  const dayEnd = new Date(dayStart.getTime() + 86_400_000);
+
+  const unassigned = await prisma.checklist.findMany({
+    where: { date: dateOnly, assignedToId: null, status: { in: ["PENDING", "IN_PROGRESS"] } },
+    select: {
+      id: true,
+      outletId: true,
+      timeSlot: true,
+      outlet: { select: { name: true, status: true } },
+      sop: { select: { title: true } },
+    },
+    orderBy: { dueAt: "asc" },
+    take: 300,
+  });
+  const todo = unassigned.filter((c) => c.outletId && c.outlet?.status === "ACTIVE");
+  if (todo.length === 0) return { mode, ranAt, scanned: 0, assigned: 0 };
+
+  // Today's PUBLISHED roster with job positions — presence (clock-in) is NOT
+  // required here: this is plan-ownership, and the JIT nudge pass corrects to
+  // whoever actually shows up.
+  const roster = await prisma.$queryRaw<
+    Array<{ outlet_id: string; position: string; user_id: string; start_time: string | null; end_time: string | null }>
+  >`
+    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, u.id AS user_id,
+           s.start_time::text AS start_time, s.end_time::text AS end_time
+    FROM hr_schedule_shifts s
+    JOIN hr_schedules sch ON sch.id = s.schedule_id
+    JOIN "User" u ON u.id = s.user_id
+    LEFT JOIN hr_employee_profiles p ON p.user_id = u.id
+    WHERE s.shift_date = ${ymd}::date AND sch.published_at IS NOT NULL AND u.status = 'ACTIVE'
+  `;
+  type Rostered = { outlet_id: string; position: string; user_id: string; start_time: string | null; end_time: string | null };
+  const rosterByOutlet = new Map<string, Rostered[]>();
+  for (const r of roster) (rosterByOutlet.get(r.outlet_id) ?? rosterByOutlet.set(r.outlet_id, []).get(r.outlet_id)!).push(r);
+
+  // Same day-total load balancing as the JIT pass.
+  const loadRows = await prisma.$queryRaw<Array<{ uid: string; n: bigint }>>`
+    SELECT "assignedToId" AS uid, count(*) AS n FROM "Checklist"
+    WHERE "date" >= ${dayStart} AND "date" < ${dayEnd} AND "assignedToId" IS NOT NULL GROUP BY 1
+  `;
+  const load = new Map<string, number>(loadRows.map((r) => [r.uid, Number(r.n)]));
+  const lightestRostered = (pool: Rostered[]): Rostered | null => {
+    let best: Rostered | null = null;
+    for (const p of pool) if (!best || (load.get(p.user_id) ?? 0) < (load.get(best.user_id) ?? 0)) best = p;
+    return best;
+  };
+
+  let assigned = 0;
+  for (const c of todo) {
+    const here = rosterByOutlet.get(c.outletId) ?? [];
+    const slotMin = toMin(c.timeSlot);
+    // One row per user among shifts covering the task's slot (split shifts dedupe).
+    const crew = [
+      ...new Map(
+        (slotMin === null ? here : here.filter((p) => shiftCovers(p.start_time, p.end_time, slotMin))).map(
+          (p) => [p.user_id, p],
+        ),
+      ).values(),
+    ];
+    if (crew.length === 0) continue; // no rostered shift covers it — roster gap, alert #7's turf
+
+    const station = SOP_STATION[(c.sop?.title ?? "").toLowerCase()] ?? "cleaning";
+    let pool =
+      station === "barista" || station === "kitchen" || station === "lead"
+        ? crew.filter((p) => STATION_POSITIONS[station].includes(p.position))
+        : crew;
+    if (pool.length === 0 && station !== "lead") pool = crew.filter((p) => LEAD_POSITIONS.includes(p.position));
+    if (pool.length === 0) pool = crew;
+    const owner = lightestRostered(pool);
+    if (!owner) continue;
+
+    if (mode === "shadow") {
+      console.log("[ops-assign:shadow]", JSON.stringify({ checklist: c.sop?.title, outlet: c.outlet!.name, to: owner.user_id.slice(0, 8) }));
+    } else {
+      await prisma.checklist.update({ where: { id: c.id }, data: { assignedToId: owner.user_id } }).catch(() => {});
+    }
+    load.set(owner.user_id, (load.get(owner.user_id) ?? 0) + 1);
+    assigned += 1;
+  }
+  return { mode, ranAt, scanned: todo.length, assigned };
 }
 
 // ── 6. Store status: POS-not-open + menu 86'd → on-shift team + managers ──────

@@ -46,19 +46,33 @@ sends, and false confidence that "the system is chasing it" when the chase prova
 nothing. Second ring: outlet staff who get nudged for structurally impossible goals — every
 such nudge burns credibility of ALL nudges (the 56% that work included).
 
-## Narrowest Wedge — Sprint 0 (before any agent): assign-at-birth
-Make the ownership premise true mechanically, days of work:
-1. **Assign at creation.** Checklist generation looks up that day's `hr_schedule_shifts` and
-   assigns each Source-1 checklist to the rostered person matching its shift window (opener →
-   OPENING, etc.). Deterministic rule, no AI.
-2. **Daily linker sweep.** Run `linkChecklistsToSchedule` logic from a morning cron, not only
-   on roster-publish — catches roster edits and late generation.
-3. **Re-aim the residual alert.** "No owner" fires only when there's genuinely no roster to
-   assign from — once per outlet-day, to whoever owns rosters, with a deep link to fix it.
-   (Nilai instantly becomes one actionable alert instead of 7/day of noise.)
+## Narrowest Wedge — Sprint 0 (before any agent): pre-assign from the roster
+*(Revised again after the implementation dig, 2026-07-05 evening.)* Deeper diagnosis: a fair
+JIT assignment engine ALREADY exists (`runChecklistNudges` §5 — station match, lightest-load,
+clock-in-verified, persists `assignedToId`; owner decision 2026-06-29 "roster = plan, clock-in
+= truth"), and a roster-gap alert already exists (§7 `runRosterPublishNudges`). The broken
+leg is neither: it's that the JIT engine only acts once a task is ALREADY overdue and only
+recognizes staff who clocked in via the app — and **app clock-in adoption is erratic (0–13 of
+~18 rostered/day; rosters ARE published, all 281 unassigned checklists HAVE due times)**.
+Completion tracks clock-ins day-for-day: Jul 1–4 (9–13 clock-ins) were exactly the
+high-assignment/high-completion days.
 
-Expected effect: unassigned rate 61% → roster-gaps only; the 279-checklist dead pool moves
-into the 56%-completion band; "no owner" spam collapses.
+Shipped as Sprint 0 (all in `ops-nudges`):
+1. **Shift-start pre-assignment (`assignTodaysChecklists` + `/api/cron/checklist-assign`,
+   every 30 min through the trading day).** Every still-unowned checklist for today gets a
+   fair owner from the PUBLISHED ROSTER — same station/lightest-load rules, clock-in NOT
+   required. The plan owns it by default; the app shows ownership all day.
+2. **JIT re-owning stands.** At nudge time the existing pass still reassigns to whoever
+   actually clocked in ("explicit assignment wins IF on shift") — a pre-assigned absentee is
+   never nudged for a shift they didn't work. Plan-ownership and truth-nudging compose.
+3. **Unowned digest → once per outlet-day, cause included.** Was per-checklist (36 sends / 5
+   days for one condition); now one line per outlet per day: "*N overdue checklists with no
+   owner on shift — 18 rostered, 0 clocked in via the app*" — pointing at the adoption
+   problem, not phantom absence.
+
+Expected effect: unassigned rate 61% → ~0 (roster gaps only); the dead pool moves toward the
+56% band; unowned-digest spam collapses to ≤1/outlet/day. NOT fixed by code: clock-in
+adoption itself — surfaced explicitly by the new digest line.
 
 ## Premises (explicit assumptions)
 1. **Assignment causes completion** (not just correlates). Strong evidence: the 0%-vs-56%
