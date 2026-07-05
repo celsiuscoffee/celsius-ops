@@ -12,7 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@celsius/ui";
-import { Loader2, Download, FileText, AlertTriangle } from "lucide-react";
+import { Loader2, Download, FileText, AlertTriangle, ChevronRight, ChevronDown } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { OUTFLOW_CATEGORIES, INFLOW_CATEGORIES, categoryLabel } from "@/lib/finance/cash-categories";
 
@@ -181,7 +181,7 @@ function ReportControlsBar({ c, outletApplies }: { c: ReturnType<typeof useRepor
       >
         {!co && <option value="">Company…</option>}
         {(co?.companies ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-        <option value="__consolidated__">Consolidated — all companies</option>
+        <option value="__consolidated__">Consolidated (all companies)</option>
       </select>
       <select
         value={c.preset}
@@ -270,14 +270,136 @@ const addDaysStr = (s: string, n: number) => { const d = new Date(`${s}T00:00:00
 const addYearsStr = (s: string, n: number) => { const [y, m, d] = s.split("-"); return `${Number(y) + n}-${m}-${d}`; };
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+// "2026-04" to "Apr 2026" for month column headers and the trend chart.
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  return `${MONTHS_SHORT[(m || 1) - 1]} ${y}`;
+}
+
+// "2026-04-01" to "1 April 2026" for the statement header period line.
+function longDate(s: string): string {
+  const [y, m, d] = s.split("-").map(Number);
+  return `${d} ${MONTHS_LONG[(m || 1) - 1]} ${y}`;
+}
+
+// Compact RM labels for the chart axis ("50k", "1.2M").
+function compactRm(n: number): string {
+  const a = Math.abs(n);
+  if (a >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (a >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return `${Math.round(n)}`;
+}
+
+// Centered statement header the way QuickBooks Modern View frames a report:
+// company, statement title, period, and a muted prepared-on line.
+function StatementHeader({ title, periodLine }: { title: string; periodLine: string }) {
+  const { consolidated } = useControls();
+  const { data: co } = useFetch<{ companies: FinCompany[]; activeCompanyId: string }>("/api/finance/companies");
+  const company = consolidated
+    ? "Consolidated, all companies"
+    : co?.companies.find((x) => x.id === co.activeCompanyId)?.name ?? "";
+  return (
+    <div className="space-y-0.5 pt-1 text-center">
+      <div className="text-sm font-medium">{company || " "}</div>
+      <div className="text-lg font-semibold">{title}</div>
+      <div className="text-sm text-muted-foreground tabular-nums">{periodLine}</div>
+      <div className="text-[11px] text-muted-foreground">Prepared on {longDate(todayMyt())}</div>
+    </div>
+  );
+}
+
+// Headline tiles above the P&L, QuickBooks-style. Net Profit is signed:
+// emerald when positive, rose when negative.
+function KpiTile({ label, amount, prev, showCompare, signed }: { label: string; amount: number; prev?: number | null; showCompare?: boolean; signed?: boolean }) {
+  const tone = signed ? (amount < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400") : "";
+  return (
+    <div className="rounded-lg border bg-card p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={`truncate text-xl font-semibold tabular-nums ${tone}`}>{RM(amount)}</div>
+      {showCompare && prev != null && (
+        <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+          vs {RM(prev)} {pctChange(amount, prev) && <span>({pctChange(amount, prev)})</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type TrendPoint = { month: string; income: number; expense: number; net: number };
+
+// Hand-rolled SVG monthly trend: grouped Income and Expenses bars plus a Net
+// line with dots. Sized via viewBox so it stays responsive; exact values sit
+// in <title> elements for native hover. No chart library.
+function TrendChart({ points }: { points: TrendPoint[] }) {
+  if (points.length === 0) return null;
+  const W = 760, H = 180, padL = 48, padR = 10, padT = 10, padB = 22;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const hi = Math.max(1, ...points.map((p) => Math.max(p.income, p.expense, p.net)));
+  const lo = Math.min(0, ...points.map((p) => Math.min(p.net, 0)));
+  const span = hi - lo || 1;
+  const y = (v: number) => padT + innerH - ((v - lo) / span) * innerH;
+  const group = innerW / points.length;
+  const barW = Math.max(4, Math.min(26, group * 0.26));
+  const cx = (i: number) => padL + group * i + group / 2;
+  const ticks = [0, 1, 2, 3].map((i) => lo + (span * i) / 3);
+  const bar = (v: number, x: number) => ({ x, y: Math.min(y(v), y(0)), h: Math.max(1, Math.abs(y(0) - y(v))) });
+  return (
+    <div className="rounded-lg border bg-card p-3">
+      <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" /> Income</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-rose-500" /> Expenses (COGS + opex)</span>
+        <span className="flex items-center gap-1"><span className="h-0.5 w-3 rounded bg-foreground" /> Net</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Monthly income, expenses and net profit">
+        {ticks.map((t, i) => (
+          <g key={i}>
+            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="currentColor" strokeWidth={0.5} className="text-border" />
+            <text x={padL - 6} y={y(t) + 3} textAnchor="end" fontSize={9} fill="currentColor" className="text-muted-foreground tabular-nums">{compactRm(t)}</text>
+          </g>
+        ))}
+        {lo < 0 && <line x1={padL} x2={W - padR} y1={y(0)} y2={y(0)} stroke="currentColor" strokeWidth={1} className="text-border" />}
+        {points.map((p, i) => {
+          const inc = bar(p.income, cx(i) - barW - 1);
+          const exp = bar(p.expense, cx(i) + 1);
+          return (
+            <g key={p.month}>
+              <rect x={inc.x} y={inc.y} width={barW} height={inc.h} rx={1} fill="currentColor" className="text-emerald-500">
+                <title>{`Income ${monthLabel(p.month)}: ${RM(p.income)}`}</title>
+              </rect>
+              <rect x={exp.x} y={exp.y} width={barW} height={exp.h} rx={1} fill="currentColor" className="text-rose-500">
+                <title>{`Expenses ${monthLabel(p.month)}: ${RM(p.expense)}`}</title>
+              </rect>
+              <text x={cx(i)} y={H - 8} textAnchor="middle" fontSize={9} fill="currentColor" className="text-muted-foreground">{monthLabel(p.month)}</text>
+            </g>
+          );
+        })}
+        <polyline fill="none" stroke="currentColor" strokeWidth={1.5} className="text-foreground" points={points.map((p, i) => `${cx(i)},${y(p.net)}`).join(" ")} />
+        {points.map((p, i) => (
+          <circle key={p.month} cx={cx(i)} cy={y(p.net)} r={2.5} fill="currentColor" className="text-foreground">
+            <title>{`Net ${monthLabel(p.month)}: ${RM(p.net)}`}</title>
+          </circle>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 // Row components live at module scope (not inside PnlTab) so their
 // identity is stable across renders; ReportRow takes the drill-down
 // callback as a prop instead of closing over PnlTab state.
-function ReportRow({ line, totalIncome, onDrill, compareAmount, showCompare }: { line: PnlLine; totalIncome: number; onDrill: (code: string) => void; compareAmount?: number | null; showCompare?: boolean }) {
+// monthAmounts (by-month mode) renders one column per month before the Total;
+// a month with no value for the line stays blank.
+type MonthAmount = number | undefined;
+
+function ReportRow({ line, totalIncome, onDrill, compareAmount, showCompare, showPct = true, monthAmounts, zebra }: { line: PnlLine; totalIncome: number; onDrill: (code: string) => void; compareAmount?: number | null; showCompare?: boolean; showPct?: boolean; monthAmounts?: MonthAmount[]; zebra?: boolean }) {
   return (
     <tr
-      className="cursor-pointer border-t transition hover:bg-muted/30"
+      className={`group cursor-pointer border-t transition ${zebra ? "bg-muted/20" : ""} hover:bg-muted/30`}
       onClick={() => onDrill(line.code)}
+      title="Click to drill into this line"
     >
       <td
         className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground"
@@ -286,46 +408,92 @@ function ReportRow({ line, totalIncome, onDrill, compareAmount, showCompare }: {
         {line.code}
       </td>
       <td className="px-3 py-1.5">{line.name}</td>
-      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(line.amount)}</td>
-      {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">{compareAmount == null ? "—" : RM(compareAmount)}</td>}
+      {monthAmounts?.map((a, i) => (
+        <td key={i} className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{a == null ? "" : RM(a)}</td>
+      ))}
+      <td className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${monthAmounts ? "font-medium" : ""}`}>
+        <span className="underline-offset-2 group-hover:underline">{RM(line.amount)}</span>
+      </td>
+      {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">{compareAmount == null ? "" : RM(compareAmount)}</td>}
       {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctChange(line.amount, compareAmount)}</td>}
-      <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctOfIncome(line.amount, totalIncome)}</td>
+      {showPct && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctOfIncome(line.amount, totalIncome)}</td>}
+      <td className="w-6 py-1.5 pr-2">
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
+      </td>
     </tr>
   );
 }
 
-function TotalRow({ label, amount, totalIncome, bold = true, compareAmount, showCompare }: { label: string; amount: number; totalIncome: number; bold?: boolean; compareAmount?: number | null; showCompare?: boolean }) {
+function TotalRow({ label, amount, totalIncome, bold = true, compareAmount, showCompare, showPct = true, monthAmounts, signed }: { label: string; amount: number; totalIncome: number; bold?: boolean; compareAmount?: number | null; showCompare?: boolean; showPct?: boolean; monthAmounts?: MonthAmount[]; signed?: boolean }) {
   const f = bold ? "font-semibold" : "";
+  const tone = signed ? (amount < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400") : "";
   return (
     <tr className="border-t bg-muted/30">
       <td colSpan={2} className={`px-3 py-2 ${f}`}>{label}</td>
-      <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${f}`}>{RM(amount)}</td>
-      {showCompare && <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground ${f}`}>{compareAmount == null ? "—" : RM(compareAmount)}</td>}
+      {monthAmounts?.map((a, i) => (
+        <td key={i} className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${f} ${tone}`}>{a == null ? "" : RM(a)}</td>
+      ))}
+      <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${f} ${tone}`}>{RM(amount)}</td>
+      {showCompare && <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground ${f}`}>{compareAmount == null ? "" : RM(compareAmount)}</td>}
       {showCompare && <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${f}`}>{pctChange(amount, compareAmount)}</td>}
-      <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${f}`}>{pctOfIncome(amount, totalIncome)}</td>
+      {showPct && <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${f}`}>{pctOfIncome(amount, totalIncome)}</td>}
+      <td className="w-6 py-2 pr-2" />
     </tr>
   );
 }
 
-function SectionHeader({ label, cols }: { label: string; cols: number }) {
+function SectionHeader({ label, cols, collapsed, onToggle }: { label: string; cols: number; collapsed: boolean; onToggle: () => void }) {
   return (
     <tr>
       <td colSpan={cols} className="bg-muted/50 px-3 py-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
+        <button type="button" onClick={onToggle} className="flex items-center gap-1 uppercase tracking-wide" title={collapsed ? "Expand section" : "Collapse section"}>
+          <ChevronDown className={`h-3 w-3 transition-transform ${collapsed ? "-rotate-90" : ""}`} />
+          {label}
+        </button>
       </td>
     </tr>
   );
 }
 
 type CompareMode = "none" | "prev" | "year";
+type ColumnsMode = "total" | "month";
+type PnlMonths = { report: PnlReport; months: { month: string; report: PnlReport }[]; truncated?: boolean };
+
+// Sticky header cell: opaque background so rows never bleed through while the
+// table body scrolls underneath.
+const TH = "sticky top-0 z-10 bg-muted px-3 py-2";
+
+const PNL_CHART_KEY = "finance:reports:pnl-chart";
+const PNL_SECTIONS = ["income", "cogs", "expenses"] as const;
 
 function PnlTab() {
   const { start, end, outletId, consolidated } = useControls();
   const [compare, setCompare] = useState<CompareMode>("none");
+  const [columns, setColumns] = useState<ColumnsMode>("total");
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [showChart, setShowChart] = useState(true);
+  const [drillCode, setDrillCode] = useState<string | null>(null);
+
+  // Chart visibility persists so hiding it sticks across visits.
+  useEffect(() => {
+    try { if (localStorage.getItem(PNL_CHART_KEY) === "0") setShowChart(false); } catch { /* ignore */ }
+  }, []);
+  const toggleChart = () => setShowChart((s) => {
+    try { localStorage.setItem(PNL_CHART_KEY, s ? "0" : "1"); } catch { /* ignore */ }
+    return !s;
+  });
+
   const scope = consolidated ? "&companyId=consolidated" : outletId ? `&outletId=${outletId}` : "";
   const qs = useMemo(() => `start=${start}&end=${end}${scope}`, [start, end, scope]);
   const { data, error, isLoading, mutate } = useFetch<{ report: PnlReport }>(
     `/api/finance/reports/pnl?${qs}`
+  );
+  // By-month mode fetches the same report split into calendar months (one
+  // column per month). The full-period report in the payload drives the row
+  // list, so every line appears even if some months lack it.
+  const byMonth = columns === "month";
+  const { data: monthData, isLoading: monthsLoading, mutate: mutateMonths } = useFetch<PnlMonths>(
+    byMonth ? `/api/finance/reports/pnl?${qs}&byMonth=1` : null
   );
   // Comparison period: the immediately-preceding equal-length window, or the
   // same dates a year earlier. Fetched only when a comparison is selected.
@@ -338,6 +506,10 @@ function PnlTab() {
     cmpRange ? `/api/finance/reports/pnl?start=${cmpRange.s}&end=${cmpRange.e}${scope}` : null
   );
   const showCompare = compare !== "none" && !!cmpData;
+  // Compare and % of income columns hide in by-month mode (the KPI tiles keep
+  // showing the comparison); QuickBooks simplifies the combo the same way.
+  const showCompareCols = showCompare && !byMonth;
+  const showPct = !byMonth;
   const cmpByCode = useMemo(() => {
     const m = new Map<string, number>();
     const r = cmpData?.report;
@@ -345,14 +517,76 @@ function PnlTab() {
     return m;
   }, [cmpData]);
   const cmp = cmpData?.report;
-  const cols = 4 + (showCompare ? 2 : 0);
-  const [drillCode, setDrillCode] = useState<string | null>(null);
+
+  const report = byMonth ? monthData?.report : data?.report;
+  const months = useMemo(() => (byMonth ? monthData?.months ?? [] : []), [byMonth, monthData]);
+  const amtByMonth = useMemo(() => months.map((m) => {
+    const map = new Map<string, number>();
+    for (const l of [...m.report.income.lines, ...m.report.cogs.lines, ...m.report.expenses.lines]) map.set(l.code, l.amount);
+    return map;
+  }), [months]);
+  const rowMonths = (code: string): MonthAmount[] | undefined =>
+    byMonth ? amtByMonth.map((m) => m.get(code)) : undefined;
+  const totMonths = (f: (r: PnlReport) => number): MonthAmount[] | undefined =>
+    byMonth ? months.map((m) => f(m.report)) : undefined;
+  const trend: TrendPoint[] = months.map((m) => ({
+    month: m.month,
+    income: m.report.income.total,
+    expense: m.report.cogs.total + m.report.expenses.total,
+    net: m.report.netIncome,
+  }));
+
+  const cols = 3 + months.length + (showCompareCols ? 2 : 0) + (showPct ? 1 : 0) + 1;
+  const loading = !report && !error && (isLoading || monthsLoading || byMonth);
+  const allCollapsed = PNL_SECTIONS.every((s) => collapsed[s]);
+  const toggleSection = (s: string) => setCollapsed((c) => ({ ...c, [s]: !c[s] }));
+
+  const exportCsv = () => {
+    if (!report) return;
+    const r = report;
+    if (byMonth) {
+      const rows: Array<Array<string | number>> = [
+        ["Section", "Code", "Account", ...months.map((m) => monthLabel(m.month)), "Total"],
+      ];
+      const pushLines = (section: string, lines: PnlLine[]) => {
+        for (const l of lines) rows.push([section, l.code, l.name, ...amtByMonth.map((m) => m.get(l.code) ?? ""), l.amount]);
+      };
+      const pushTotal = (section: string, label: string, amt: number, f: (x: PnlReport) => number) => {
+        rows.push([section, "", label, ...months.map((m) => f(m.report)), amt]);
+      };
+      pushLines("Income", r.income.lines);
+      pushTotal("Income", "Total Income", r.income.total, (x) => x.income.total);
+      pushLines("Cost of Sales", r.cogs.lines);
+      pushTotal("Cost of Sales", "Total COGS", r.cogs.total, (x) => x.cogs.total);
+      pushTotal("", "Gross Profit", r.grossProfit, (x) => x.grossProfit);
+      pushLines("Expenses", r.expenses.lines);
+      pushTotal("Expenses", "Total Expenses", r.expenses.total, (x) => x.expenses.total);
+      pushTotal("", "Net Income", r.netIncome, (x) => x.netIncome);
+      downloadCsv(`pnl_${r.start}_${r.end}_by-month.csv`, rows);
+      return;
+    }
+    const head = ["Section", "Code", "Account", "Amount", ...(showCompare ? ["Compare", "Change %"] : []), "% of income"];
+    const rows: Array<Array<string | number>> = [head];
+    const cell = (l: PnlLine) => [l.code, l.name, l.amount, ...(showCompare ? [cmpByCode.get(l.code) ?? "", pctChange(l.amount, cmpByCode.get(l.code))] : []), pctOfIncome(l.amount, r.income.total)];
+    const tot = (label: string, amt: number, cAmt?: number | null) => ["", "", label, amt, ...(showCompare ? [cAmt ?? "", pctChange(amt, cAmt)] : []), pctOfIncome(amt, r.income.total)];
+    const push = (section: string, lines: PnlLine[], total: number, totalLabel: string, cTotal?: number | null) => {
+      for (const l of lines) rows.push([section, ...cell(l)]);
+      rows.push([section, ...tot(totalLabel, total, cTotal).slice(2)]);
+    };
+    push("Income", r.income.lines, r.income.total, "Total Income", cmp?.income.total);
+    push("Cost of Sales", r.cogs.lines, r.cogs.total, "Total COGS", cmp?.cogs.total);
+    rows.push(tot("Gross Profit", r.grossProfit, cmp?.grossProfit));
+    push("Expenses", r.expenses.lines, r.expenses.total, "Total Expenses", cmp?.expenses.total);
+    rows.push(tot("Net Income", r.netIncome, cmp?.netIncome));
+    downloadCsv(`pnl_${r.start}_${r.end}.csv`, rows);
+  };
 
   return (
     <div className="space-y-4">
+      <StatementHeader title="Profit and Loss" periodLine={`${longDate(start)} to ${longDate(end)}`} />
       {consolidated && (
         <p className="text-[11px] text-muted-foreground">
-          Consolidated group P&amp;L: all companies summed with inter-company legs eliminated — HQ-paid salary, Google Ads and management fees count once as group cost. Other tabs stay per-company; switch to a company to drill into a line.
+          Consolidated group P&amp;L: all companies summed with inter-company legs eliminated, so HQ-paid salary, Google Ads and management fees count once as group cost. Other tabs stay per-company; switch to a company to drill into a line.
         </p>
       )}
       {!consolidated && outletId && (
@@ -361,16 +595,32 @@ function PnlTab() {
         </p>
       )}
 
-      {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+      {loading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
           Failed to load.
         </div>
       )}
 
-      {data && (
+      {report && (
         <>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <KpiTile label="Income" amount={report.income.total} prev={cmp?.income.total} showCompare={showCompare} />
+          <KpiTile label="Expenses" amount={report.cogs.total + report.expenses.total} prev={cmp ? cmp.cogs.total + cmp.expenses.total : null} showCompare={showCompare} />
+          <KpiTile label="Net Profit" amount={report.netIncome} prev={cmp?.netIncome} showCompare={showCompare} signed />
+        </div>
+        {byMonth && monthData?.truncated && (
+          <p className="text-[11px] text-amber-600">Range exceeds 12 months; showing the last 12.</p>
+        )}
+        {byMonth && showChart && <TrendChart points={trend} />}
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">Columns
+            <select value={columns} onChange={(e) => setColumns(e.target.value as ColumnsMode)}
+              className="h-7 rounded-md border bg-background px-1.5 text-xs">
+              <option value="total">Total</option>
+              <option value="month">By month</option>
+            </select>
+          </label>
           <label className="flex items-center gap-1 text-[11px] text-muted-foreground">Compare
             <select value={compare} onChange={(e) => setCompare(e.target.value as CompareMode)}
               className="h-7 rounded-md border bg-background px-1.5 text-xs">
@@ -379,52 +629,57 @@ function PnlTab() {
               <option value="year">previous year</option>
             </select>
           </label>
-          {showCompare && cmpRange && <span className="text-[10px] text-muted-foreground tabular-nums">vs {cmpRange.s} → {cmpRange.e}</span>}
-          <ExportCsvButton onExport={() => {
-            const r = data.report;
-            const head = ["Section", "Code", "Account", "Amount", ...(showCompare ? ["Compare", "Change %"] : []), "% of income"];
-            const rows: Array<Array<string | number>> = [head];
-            const cell = (l: PnlLine) => [l.code, l.name, l.amount, ...(showCompare ? [cmpByCode.get(l.code) ?? "", pctChange(l.amount, cmpByCode.get(l.code))] : []), pctOfIncome(l.amount, r.income.total)];
-            const tot = (label: string, amt: number, cAmt?: number | null) => ["", "", label, amt, ...(showCompare ? [cAmt ?? "", pctChange(amt, cAmt)] : []), pctOfIncome(amt, r.income.total)];
-            const push = (section: string, lines: PnlLine[], total: number, totalLabel: string, cTotal?: number | null) => {
-              for (const l of lines) rows.push([section, ...cell(l)]);
-              rows.push([section, ...tot(totalLabel, total, cTotal).slice(2)]);
-            };
-            push("Income", r.income.lines, r.income.total, "Total Income", cmp?.income.total);
-            push("Cost of Sales", r.cogs.lines, r.cogs.total, "Total COGS", cmp?.cogs.total);
-            rows.push(tot("Gross Profit", r.grossProfit, cmp?.grossProfit));
-            push("Expenses", r.expenses.lines, r.expenses.total, "Total Expenses", cmp?.expenses.total);
-            rows.push(tot("Net Income", r.netIncome, cmp?.netIncome));
-            downloadCsv(`pnl_${r.start}_${r.end}.csv`, rows);
-          }} />
+          <button
+            type="button"
+            onClick={() => setCollapsed(allCollapsed ? {} : { income: true, cogs: true, expenses: true })}
+            className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            {allCollapsed ? "Expand all" : "Collapse all"}
+          </button>
+          {showCompareCols && cmpRange && <span className="text-[10px] text-muted-foreground tabular-nums">vs {cmpRange.s} → {cmpRange.e}</span>}
+          <div className="ml-auto flex items-center gap-2">
+            {byMonth && (
+              <button
+                type="button"
+                onClick={toggleChart}
+                className={`h-7 rounded-full border px-2.5 text-xs transition ${showChart ? "bg-muted/50" : "text-muted-foreground hover:text-foreground"}`}
+                title="Show or hide the monthly trend chart"
+              >
+                Chart
+              </button>
+            )}
+            <ExportCsvButton onExport={exportCsv} />
+          </div>
         </div>
-        <div className="overflow-x-auto rounded-lg border bg-card">
+        <div className="max-h-[75vh] overflow-auto rounded-lg border bg-card">
           <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="whitespace-nowrap px-3 py-2">Code</th>
-                <th className="px-3 py-2">Account</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right">Amount</th>
-                {showCompare && <th className="whitespace-nowrap px-3 py-2 text-right">{compare === "year" ? "Prev year" : "Prev period"}</th>}
-                {showCompare && <th className="whitespace-nowrap px-3 py-2 text-right" title="Change vs comparison period">Δ</th>}
-                <th className="whitespace-nowrap px-3 py-2 text-right" title="Share of total income">% of income</th>
+                <th className={`${TH} whitespace-nowrap`}>Code</th>
+                <th className={TH}>Account</th>
+                {months.map((m) => <th key={m.month} className={`${TH} whitespace-nowrap text-right`}>{monthLabel(m.month)}</th>)}
+                <th className={`${TH} whitespace-nowrap text-right`}>{byMonth ? "Total" : "Amount"}</th>
+                {showCompareCols && <th className={`${TH} whitespace-nowrap text-right`}>{compare === "year" ? "Prev year" : "Prev period"}</th>}
+                {showCompareCols && <th className={`${TH} whitespace-nowrap text-right`} title="Change vs comparison period">Δ</th>}
+                {showPct && <th className={`${TH} whitespace-nowrap text-right`} title="Share of total income">% of income</th>}
+                <th className={`${TH} w-6`} />
               </tr>
             </thead>
             <tbody>
-              <SectionHeader label="Income" cols={cols} />
-              {data.report.income.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompare} />)}
-              <TotalRow label="Total Income" amount={data.report.income.total} totalIncome={data.report.income.total} compareAmount={cmp?.income.total} showCompare={showCompare} />
+              <SectionHeader label="Income" cols={cols} collapsed={!!collapsed.income} onToggle={() => toggleSection("income")} />
+              {!collapsed.income && report.income.lines.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
+              <TotalRow label="Total Income" amount={report.income.total} totalIncome={report.income.total} compareAmount={cmp?.income.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.income.total)} />
 
-              <SectionHeader label="Cost of Sales" cols={cols} />
-              {data.report.cogs.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompare} />)}
-              <TotalRow label="Total COGS" amount={data.report.cogs.total} totalIncome={data.report.income.total} compareAmount={cmp?.cogs.total} showCompare={showCompare} />
-              <TotalRow label="Gross Profit" amount={data.report.grossProfit} totalIncome={data.report.income.total} compareAmount={cmp?.grossProfit} showCompare={showCompare} />
+              <SectionHeader label="Cost of Sales" cols={cols} collapsed={!!collapsed.cogs} onToggle={() => toggleSection("cogs")} />
+              {!collapsed.cogs && report.cogs.lines.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
+              <TotalRow label="Total COGS" amount={report.cogs.total} totalIncome={report.income.total} compareAmount={cmp?.cogs.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.cogs.total)} />
+              <TotalRow label="Gross Profit" amount={report.grossProfit} totalIncome={report.income.total} compareAmount={cmp?.grossProfit} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.grossProfit)} />
 
-              <SectionHeader label="Expenses" cols={cols} />
-              {data.report.expenses.lines.map((l) => <ReportRow key={l.code} line={l} totalIncome={data.report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompare} />)}
-              <TotalRow label="Total Expenses" amount={data.report.expenses.total} totalIncome={data.report.income.total} compareAmount={cmp?.expenses.total} showCompare={showCompare} />
+              <SectionHeader label="Expenses" cols={cols} collapsed={!!collapsed.expenses} onToggle={() => toggleSection("expenses")} />
+              {!collapsed.expenses && report.expenses.lines.map((l, i) => <ReportRow key={l.code} line={l} totalIncome={report.income.total} onDrill={setDrillCode} compareAmount={cmpByCode.get(l.code) ?? null} showCompare={showCompareCols} showPct={showPct} monthAmounts={rowMonths(l.code)} zebra={i % 2 === 1} />)}
+              <TotalRow label="Total Expenses" amount={report.expenses.total} totalIncome={report.income.total} compareAmount={cmp?.expenses.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.expenses.total)} />
 
-              <TotalRow label="Net Income" amount={data.report.netIncome} totalIncome={data.report.income.total} compareAmount={cmp?.netIncome} showCompare={showCompare} />
+              <TotalRow label="Net Income" amount={report.netIncome} totalIncome={report.income.total} compareAmount={cmp?.netIncome} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.netIncome)} signed />
             </tbody>
           </table>
         </div>
@@ -435,18 +690,18 @@ function PnlTab() {
         <SheetContent side="right" className="w-full sm:max-w-3xl flex flex-col gap-0 p-0">
           <SheetHeader className="border-b px-4 py-4 sm:px-6">
             <SheetTitle>
-              {(drillCode && data &&
-                [...data.report.income.lines, ...data.report.cogs.lines, ...data.report.expenses.lines]
+              {(drillCode && report &&
+                [...report.income.lines, ...report.cogs.lines, ...report.expenses.lines]
                   .find((l) => l.code === drillCode)?.name) ?? drillCode}
             </SheetTitle>
-            {data && (
+            {report && (
               <p className="text-xs text-muted-foreground tabular-nums">
-                {drillCode} · {data.report.start} → {data.report.end}
+                {drillCode} · {report.start} → {report.end}
               </p>
             )}
           </SheetHeader>
-          {drillCode && data && (
-            <DrillDown code={drillCode} start={data.report.start} end={data.report.end} outletId={outletId || undefined} consolidated={consolidated} onChanged={() => mutate()} />
+          {drillCode && report && (
+            <DrillDown code={drillCode} start={report.start} end={report.end} outletId={outletId || undefined} consolidated={consolidated} onChanged={() => { mutate(); if (byMonth) mutateMonths(); }} />
           )}
         </SheetContent>
       </Sheet>
@@ -606,19 +861,22 @@ type BsReport = {
   intercoResidual?: number;
 };
 
-function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, showCompare }: { title: string; total: number; lines: BsLine[]; onDrill: (code: string) => void; cmpByCode?: Map<string, number>; cmpTotal?: number | null; showCompare?: boolean }) {
+function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, showCompare, signed }: { title: string; total: number; lines: BsLine[]; onDrill: (code: string) => void; cmpByCode?: Map<string, number>; cmpTotal?: number | null; showCompare?: boolean; signed?: boolean }) {
+  const tone = signed ? (total < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400") : "";
   return (
-    <div className="overflow-hidden rounded-md border bg-card">
-      <header className="border-b bg-muted/30 px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">
-        {title}
+    <div className="rounded-md border bg-card">
+      <header className="sticky top-0 z-10 rounded-t-md bg-card">
+        <div className="rounded-t-md border-b bg-muted/30 px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">
+          {title}
+        </div>
       </header>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <tbody>
-            {lines.map((l) => {
+            {lines.map((l, i) => {
               const c = cmpByCode?.get(l.code);
               return (
-              <tr key={l.code} className="cursor-pointer border-t hover:bg-muted/30" onClick={() => onDrill(l.code)} title="Show journal lines">
+              <tr key={l.code} className={`group cursor-pointer border-t ${i % 2 === 1 ? "bg-muted/20" : ""} hover:bg-muted/30`} onClick={() => onDrill(l.code)} title="Show journal lines">
                 <td
                   className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground"
                   style={{ paddingLeft: l.parentCode ? 32 : 12 }}
@@ -626,14 +884,16 @@ function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, sho
                   {l.code}
                 </td>
                 <td className="px-3 py-1.5">{l.name}</td>
-                <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(l.amount)}</td>
-                {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">{c == null ? "—" : RM(c)}</td>}
+                <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                  <span className="underline-offset-2 group-hover:underline">{RM(l.amount)}</span>
+                </td>
+                {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">{c == null ? "" : RM(c)}</td>}
                 {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctChange(l.amount, c)}</td>}
               </tr>
             );})}
             <tr className="border-t bg-muted/30">
               <td colSpan={2} className="px-3 py-2 font-semibold">Total {title}</td>
-              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold">{RM(total)}</td>
+              <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold ${tone}`}>{RM(total)}</td>
               {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold text-muted-foreground">{cmpTotal == null ? "—" : RM(cmpTotal)}</td>}
               {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums font-semibold text-muted-foreground">{pctChange(total, cmpTotal)}</td>}
             </tr>
@@ -670,6 +930,7 @@ function BsTab() {
 
   return (
     <div className="space-y-4">
+      <StatementHeader title="Balance Sheet" periodLine={`As of ${longDate(asOf)}`} />
       {consolidated && (
         <p className="text-[11px] text-muted-foreground">
           Consolidated group balance sheet: all companies summed, inter-company (3600) balances netted to one line.
@@ -698,7 +959,7 @@ function BsTab() {
             <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
               <span>
-                Imbalance of {RM(data.report.imbalance)} — likely an unposted period or malformed manual journal.
+                Imbalance of {RM(data.report.imbalance)}, likely an unposted period or malformed manual journal.
               </span>
             </div>
           )}
@@ -714,10 +975,10 @@ function BsTab() {
             <BsSectionTable title="Assets" total={data.report.assets.total} lines={data.report.assets.lines} onDrill={setDrillCode} cmpByCode={cmpByCode} cmpTotal={cmp?.assets.total} showCompare={showCompare} />
             <div className="space-y-3">
               <BsSectionTable title="Liabilities" total={data.report.liabilities.total} lines={data.report.liabilities.lines} onDrill={setDrillCode} cmpByCode={cmpByCode} cmpTotal={cmp?.liabilities.total} showCompare={showCompare} />
-              <BsSectionTable title="Equity" total={data.report.equity.total} lines={data.report.equity.lines} onDrill={setDrillCode} cmpByCode={cmpByCode} cmpTotal={cmp?.equity.total} showCompare={showCompare} />
+              <BsSectionTable title="Equity" total={data.report.equity.total} lines={data.report.equity.lines} onDrill={setDrillCode} cmpByCode={cmpByCode} cmpTotal={cmp?.equity.total} showCompare={showCompare} signed />
               <div className="rounded-md border bg-muted/20 p-3 text-sm font-semibold">
                 Liabilities + Equity:{" "}
-                <span className="tabular-nums">{RM(data.report.totalLiabilitiesAndEquity)}</span>
+                <span className={`tabular-nums ${data.report.totalLiabilitiesAndEquity < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(data.report.totalLiabilitiesAndEquity)}</span>
                 {showCompare && cmp && <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">vs {RM(cmp.totalLiabilitiesAndEquity)} ({pctChange(data.report.totalLiabilitiesAndEquity, cmp.totalLiabilitiesAndEquity)})</span>}
               </div>
             </div>
@@ -765,9 +1026,11 @@ function CfSectionTable({ s, cmp, showCompare }: { s: CfSection; cmp?: CfSection
   // present now but absent then reads as "new", and vice-versa.
   const cmpByLabel = new Map((cmp?.lines ?? []).map((l) => [l.label, l.amount] as const));
   return (
-    <div className="overflow-hidden rounded-md border bg-card">
-      <header className="border-b bg-muted/30 px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">
-        {s.title}
+    <div className="rounded-md border bg-card">
+      <header className="sticky top-0 z-10 rounded-t-md bg-card">
+        <div className="rounded-t-md border-b bg-muted/30 px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">
+          {s.title}
+        </div>
       </header>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -775,7 +1038,7 @@ function CfSectionTable({ s, cmp, showCompare }: { s: CfSection; cmp?: CfSection
             {s.lines.map((l, i) => {
               const prev = showCompare ? (cmpByLabel.has(l.label) ? cmpByLabel.get(l.label)! : null) : undefined;
               return (
-                <tr key={i} className="border-t">
+                <tr key={i} className={`border-t ${i % 2 === 1 ? "bg-muted/20" : ""} hover:bg-muted/30`}>
                   <td className="px-3 py-1.5">{l.label}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground tabular-nums">
                     {l.code ?? ""}
@@ -814,10 +1077,11 @@ function CfSectionTable({ s, cmp, showCompare }: { s: CfSection; cmp?: CfSection
 }
 
 function CfSummaryCard({ label, amount, prev, showCompare, negative }: { label: string; amount: number; prev?: number | null; showCompare?: boolean; negative?: boolean }) {
+  const tone = !negative ? "" : amount < 0 ? "text-rose-600 dark:text-rose-400" : amount > 0 ? "text-emerald-600 dark:text-emerald-400" : "";
   return (
     <div className="rounded-md border bg-card p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={`truncate text-lg font-semibold tabular-nums ${negative && amount < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(amount)}</div>
+      <div className={`truncate text-lg font-semibold tabular-nums ${tone}`}>{RM(amount)}</div>
       {showCompare && (
         <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
           {prev == null ? "vs —" : `vs ${RM(prev)}`} {pctChange(amount, prev) && <span>({pctChange(amount, prev)})</span>}
@@ -850,6 +1114,7 @@ function CfTab() {
 
   return (
     <div className="space-y-4">
+      <StatementHeader title="Cash Flow Statement" periodLine={`${longDate(start)} to ${longDate(end)}`} />
       {consolidated && (
         <p className="text-[11px] text-muted-foreground">
           Consolidated group cash flow: all companies summed, inter-company transfer legs cancel so only external movements show. Cash at start and end is the group&apos;s total bank position.
@@ -1143,8 +1408,8 @@ function GlTab({ account, setAccount }: { account: string; setAccount: (c: strin
 type AgedRow = { vendor: string; count: number; current: number; d1_30: number; d31_60: number; d61_90: number; d90_plus: number; total: number };
 type AgedPayables = { asOf: string; rows: AgedRow[]; totals: { current: number; d1_30: number; d31_60: number; d61_90: number; d90_plus: number }; grandTotal: number; invoiceCount: number };
 const AP_COLS: { key: keyof AgedPayables["totals"]; label: string }[] = [
-  { key: "current", label: "Current" }, { key: "d1_30", label: "1–30" }, { key: "d31_60", label: "31–60" },
-  { key: "d61_90", label: "61–90" }, { key: "d90_plus", label: "90+" },
+  { key: "current", label: "Current" }, { key: "d1_30", label: "1-30" }, { key: "d31_60", label: "31-60" },
+  { key: "d61_90", label: "61-90" }, { key: "d90_plus", label: "90+" },
 ];
 
 function ApTab() {
@@ -1200,7 +1465,7 @@ function ApTab() {
           </table>
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">Open supplier bills by how overdue they are (from due date). Aged Receivables is not shown — sales settle same-day via card/QR/grab, so there is no open receivables ledger.</p>
+      <p className="text-[11px] text-muted-foreground">Open supplier bills by how overdue they are (from due date). Aged Receivables is not shown because sales settle same-day via card/QR/grab, so there is no open receivables ledger.</p>
     </div>
   );
 }
@@ -1282,7 +1547,7 @@ function ReconTab() {
       {data?.report?.qrTender && (
         <div className="mt-4 space-y-2">
           <div className="flex items-baseline justify-between">
-            <h3 className="text-sm font-semibold">DuitNow QR — tender reconciliation</h3>
+            <h3 className="text-sm font-semibold">DuitNow QR tender reconciliation</h3>
             <span className="text-[11px] text-muted-foreground">from tender source, exact to the cent</span>
           </div>
           <div className="overflow-x-auto rounded-lg border">

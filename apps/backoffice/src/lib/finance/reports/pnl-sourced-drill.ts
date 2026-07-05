@@ -120,7 +120,7 @@ async function drillRevenue(code: string, companyId: string, start: string, end:
     .map((r) => ({
       transactionId: `rev-${r.day}-${r.outlet}`,
       txnDate: r.day,
-      description: `${r.outlet} — ${r.n} orders`,
+      description: `${r.outlet}, ${r.n} orders`,
       amount: round2(r.amt),
       debit: 0,
       credit: round2(r.amt),
@@ -199,7 +199,7 @@ async function drillGrabPromo(companyId: string, start: string, end: string, out
   return rows.map((r) => ({
     transactionId: `grabpromo-${r.day}-${r.outlet_id}`,
     txnDate: r.day,
-    description: `${nameOf.get(r.outlet_id) ?? r.outlet_id} — merchant-funded promo on ${Number(r.n)} orders`,
+    description: `${nameOf.get(r.outlet_id) ?? r.outlet_id}, merchant-funded promo on ${Number(r.n)} orders`,
     amount: round2(Number(r.promo_sen) / 100),
     debit: round2(Number(r.promo_sen) / 100),
     credit: 0,
@@ -220,7 +220,7 @@ async function drillGrabAds(companyId: string, start: string, end: string, outle
   return rows.map((r) => ({
     transactionId: r.id,
     txnDate: r.period_start,
-    description: `${nameOf.get(r.outlet_id) ?? r.outlet_id} — GrabAds ${r.period_start} to ${r.period_end}${r.note ? ` (${r.note})` : ""}`,
+    description: `${nameOf.get(r.outlet_id) ?? r.outlet_id}, GrabAds ${r.period_start} to ${r.period_end}${r.note ? ` (${r.note})` : ""}`,
     amount: round2(r.amount_sen / 100),
     debit: round2(r.amount_sen / 100),
     credit: 0,
