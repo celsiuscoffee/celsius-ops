@@ -22,6 +22,15 @@ import { getDefaultCompanyId } from "../companies";
 import { depreciationTotal } from "../fixed-assets";
 import type { PnlReport, PnlLine } from "./pnl";
 import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
+import {
+  peopleCostForScope,
+  PEOPLE_SALARY_CODE,
+  PEOPLE_STAT_CODE,
+  PEOPLE_SALARY_NAME,
+  PEOPLE_STAT_NAME,
+  PEOPLE_UNASSIGNED_SALARY_NAME,
+  PEOPLE_UNASSIGNED_STAT_NAME,
+} from "./people-cost";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -37,6 +46,12 @@ const BANK_ACCOUNT_SUFFIX: Record<string, string> = {
 const BANK_COGS = new Set(["RAW_MATERIALS", "DELIVERY", "INTERCO_RAW_MATERIAL"]); // COGS comes from procurement
 const BANK_DIGITAL_ADS = new Set(["DIGITAL_ADS"]);                                // = ads module (dedup)
 const BANK_MARKETING = new Set(["MARKETPLACE_FEE", "KOL", "OTHER_MARKETING"]);     // non-digital marketing
+// Salary + employer statutory now come from the HR payroll module on an accrual
+// basis (see people-cost.ts), so their bank outflows are the cash settlement
+// only and must NOT feed the P&L expense, so dropping them here avoids double
+// counting the people cost. The bank lines still exist for the cash ledger,
+// recon and GL. PARTIMER is intentionally NOT here: it stays outlet-tagged cash.
+const BANK_PEOPLE_ACCRUED = new Set(["EMPLOYEE_SALARY", "STATUTORY_PAYMENT"]);
 const BANK_NONOPEX = new Set([                                                    // internal / financing / capex / distributions — not operating
   "CAPITAL", "LOAN", "INTERCO_PEOPLE", "INTERCO_INVESTMENTS",
   "INTERCO_EXPENSES", "INVESTMENTS", "EQUIPMENTS", "ADTD", "TRANSFER_NOT_SUCCESSFUL",
@@ -85,7 +100,7 @@ const ACCRUED_SUFFIX = " (accrued, paid the following month)";
 // procurement invoice already counted in COGS purchases and stay excluded.
 function isOpexFeedCategory(cat: string | null): boolean {
   if (!cat) return false;
-  return !BANK_COGS.has(cat) && !BANK_NONOPEX.has(cat) && !BANK_DIGITAL_ADS.has(cat) && !BANK_REVIEW.has(cat);
+  return !BANK_COGS.has(cat) && !BANK_NONOPEX.has(cat) && !BANK_DIGITAL_ADS.has(cat) && !BANK_REVIEW.has(cat) && !BANK_PEOPLE_ACCRUED.has(cat);
 }
 
 export type RecognisedBankLine = {
@@ -466,6 +481,8 @@ export async function buildSourcedPnl(input: {
   let saleCount = 0;
   // Any accrual-shifted line in the period adds a short note to the report.
   let shiftedPresent = false;
+  // HR-sourced people cost present in the period adds its own accrual note.
+  let peoplePresent = false;
   const perOutlet = await Promise.all(
     outletRows.map((o) =>
       getUnifiedSalesForOutlet(
@@ -676,7 +693,7 @@ export async function buildSourcedPnl(input: {
     const byCat = new Map<string, number>();
     for (const l of opexLines) {
       const cat = l.category;
-      if (cat && (BANK_COGS.has(cat) || BANK_NONOPEX.has(cat) || BANK_DIGITAL_ADS.has(cat))) continue;
+      if (cat && (BANK_COGS.has(cat) || BANK_NONOPEX.has(cat) || BANK_DIGITAL_ADS.has(cat) || BANK_PEOPLE_ACCRUED.has(cat))) continue;
       byCat.set(cat ?? "NULL", (byCat.get(cat ?? "NULL") ?? 0) + l.amount);
     }
     for (const [key, sum] of byCat) {
@@ -696,6 +713,44 @@ export async function buildSourcedPnl(input: {
         parentCode: null,
       });
       totalExpenses += amt;
+    }
+  }
+
+  // People cost: salary + employer statutory, ACCRUED from the HR payroll runs
+  // for the period (people-cost.ts), replacing the bank EMPLOYEE_SALARY /
+  // STATUTORY_PAYMENT outflows dropped above. The cost lands in the work month
+  // of the run, independent of when the bank paid it, so the latest month is
+  // always populated once its run exists. Per outlet uses each employee's
+  // assigned outlet exactly; staff with no assigned outlet fall into a single
+  // visible unassigned line (default company + consolidated only).
+  {
+    const pc = await peopleCostForScope({
+      companyId,
+      defaultCompanyId: defaultCompany,
+      start,
+      end,
+      outletIds,
+      outletScoped: !!outletId,
+      consolidated: !!excludeInterCo,
+    });
+    if (pc.salary) {
+      expenseLines.push({ code: PEOPLE_SALARY_CODE, name: PEOPLE_SALARY_NAME, amount: pc.salary, parentCode: null });
+      totalExpenses += pc.salary;
+    }
+    if (pc.statutory) {
+      expenseLines.push({ code: PEOPLE_STAT_CODE, name: PEOPLE_STAT_NAME, amount: pc.statutory, parentCode: null });
+      totalExpenses += pc.statutory;
+    }
+    if (pc.unassignedSalary) {
+      expenseLines.push({ code: `${PEOPLE_SALARY_CODE}-UNASSIGNED`, name: PEOPLE_UNASSIGNED_SALARY_NAME, amount: pc.unassignedSalary, parentCode: null });
+      totalExpenses += pc.unassignedSalary;
+    }
+    if (pc.unassignedStatutory) {
+      expenseLines.push({ code: `${PEOPLE_STAT_CODE}-UNASSIGNED`, name: PEOPLE_UNASSIGNED_STAT_NAME, amount: pc.unassignedStatutory, parentCode: null });
+      totalExpenses += pc.unassignedStatutory;
+    }
+    if (pc.salary || pc.statutory || pc.unassignedSalary || pc.unassignedStatutory) {
+      peoplePresent = true;
     }
   }
 
@@ -732,10 +787,17 @@ export async function buildSourcedPnl(input: {
     netIncome,
     txnCount: saleCount,
     // Boundary honesty: with a one-month-arrears shift, the newest month of a
-    // report only fills once the following month's payments are recorded.
-    ...(shiftedPresent ? { notes: [ACCRUAL_NOTE] } : {}),
+    // report only fills once the following month's payments are recorded. The
+    // people-cost note flags the HR-accrual semantics separately.
+    ...((shiftedPresent || peoplePresent)
+      ? { notes: [...(shiftedPresent ? [ACCRUAL_NOTE] : []), ...(peoplePresent ? [PEOPLE_ACCRUAL_NOTE] : [])] }
+      : {}),
   };
 }
+
+// Shown under the P&L whenever an HR-sourced people-cost line is present.
+const PEOPLE_ACCRUAL_NOTE =
+  "Salary and statutory are accrued from the HR payroll runs for the period, so they land in the month worked, not when paid. Per outlet uses each employee's assigned outlet. A month shows people cost once its payroll run exists.";
 
 // Shown under the P&L whenever a shift-recognised line is present.
 const ACCRUAL_NOTE =
