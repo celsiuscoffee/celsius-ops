@@ -21,6 +21,7 @@
 // booked to 3600 (INTERCO_PEOPLE), so they are not cross-company mirrors.
 
 import { getFinanceClient } from "../supabase";
+import { pagedJournalLines, pagedPostedTxns } from "./paged";
 
 export const CONSOLIDATED_COMPANY_ID = "consolidated";
 
@@ -83,23 +84,19 @@ export async function buildBalanceSheet(input: BsInput): Promise<BsReport> {
 
   // Posted txns through asOf. Consolidated = every active company's ledger;
   // summing all their journal lines per account IS the group balance.
-  let txnQuery = client
-    .from("fin_transactions")
-    .select("id, txn_date")
-    .eq("status", "posted")
-    .lte("txn_date", input.asOf);
+  // Paged reads: the ledger outgrew Supabase's 1000-row cap, which silently
+  // truncated this walk and made the BS disagree with the TB and GL.
+  let companyIds: string[];
   if (consolidated) {
     const { data: cos } = await client
       .from("fin_companies")
       .select("id")
       .eq("is_active", true);
-    txnQuery = txnQuery.in("company_id", (cos ?? []).map((c) => c.id as string));
+    companyIds = (cos ?? []).map((c) => c.id as string);
   } else {
-    txnQuery = txnQuery.eq("company_id", input.companyId);
+    companyIds = [input.companyId];
   }
-  const { data: txns } = await txnQuery;
-  const txnIds = (txns ?? []).map((t) => t.id as string);
-  const txnDate = new Map((txns ?? []).map((t) => [t.id as string, t.txn_date as string]));
+  const { txnIds, txnDate } = await pagedPostedTxns(companyIds, input.asOf);
 
   const byCode = new Map<string, number>();
   let pnlYtd = 0;     // current fiscal year earnings → synthetic equity line
@@ -110,14 +107,8 @@ export async function buildBalanceSheet(input: BsInput): Promise<BsReport> {
   let intercoNet = 0;
 
   if (txnIds.length > 0) {
-    const chunkSize = 200;
-    for (let i = 0; i < txnIds.length; i += chunkSize) {
-      const chunk = txnIds.slice(i, i + chunkSize);
-      const { data: lines } = await client
-        .from("fin_journal_lines")
-        .select("transaction_id, account_code, debit, credit")
-        .in("transaction_id", chunk);
-      for (const l of lines ?? []) {
+    for await (const lines of pagedJournalLines(txnIds)) {
+      for (const l of lines) {
         const code = l.account_code as string;
         const meta = accountMeta.get(code);
         if (!meta) continue;
