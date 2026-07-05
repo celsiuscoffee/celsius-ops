@@ -590,6 +590,7 @@ export async function buildSourcedPnl(input: {
       FROM ads_metric_daily m
       LEFT JOIN ads_campaign c ON c.id = m.campaign_id
       WHERE m.date >= ${dStart(start)} AND m.date <= ${dEnd(end)}
+        AND m.campaign_id IS NOT NULL
       GROUP BY c.outlet_id
     `);
     let adsSpend = 0;

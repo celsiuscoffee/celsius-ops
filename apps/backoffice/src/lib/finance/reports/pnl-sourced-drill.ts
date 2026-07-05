@@ -183,6 +183,7 @@ async function drillAds(companyId: string, start: string, end: string, outletId?
     SELECT m.date, c.outlet_id, COALESCE(SUM(m.cost_micros), 0)::float / 1e6 AS spend
     FROM ads_metric_daily m LEFT JOIN ads_campaign c ON c.id = m.campaign_id
     WHERE m.date >= ${dStart(start)} AND m.date <= ${dEnd(end)}
+      AND m.campaign_id IS NOT NULL
     GROUP BY m.date, c.outlet_id ORDER BY m.date ASC
   `);
   const byDay = new Map<string, number>();
