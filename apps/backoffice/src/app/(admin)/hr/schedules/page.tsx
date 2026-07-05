@@ -480,7 +480,7 @@ export default function SchedulesPage() {
           if (!reason) return;
           res = await publishOnce({ reason });
         } else if (verdict === "red") {
-          const override = prompt(`${data.error}\n\nOwner override reason (owner only):`);
+          const override = prompt(`${data.error}\n\nOverride reason:`);
           if (!override) return;
           res = await publishOnce({ override_reason: override });
         }
