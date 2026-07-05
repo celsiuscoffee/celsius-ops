@@ -10,6 +10,9 @@ type ExtractedItem = {
   unitPrice: number;
   totalPrice: number;
   uom: string | null;
+  // Exact catalog product name when the invoice line matches the provided
+  // catalog, null when it's a genuinely new item not in the catalog yet.
+  catalogMatch: string | null;
 };
 
 type ExtractedInvoice = {
@@ -95,9 +98,9 @@ ${outletNames?.length ? `\nKNOWN OUTLETS:\n${outletNames.join("\n")}\n\nFor "out
 5. Return the EXACT outlet name from the list above. If no clear match, return null — never guess blindly.` : ""}
 ${productNames?.length ? `\nKNOWN PRODUCT CATALOG (use these exact names when matching items on the invoice):\n${productNames.join("\n")}\n\nIMPORTANT MATCHING RULES:
 1. Match each invoice line item to the CLOSEST product from the catalog. Products may have different names on the invoice vs catalog (e.g. "Celsius Blend" = "Home Blend (Collective)", brand names may differ from product names).
-2. Use the EXACT catalog name (without the SKU in brackets) in the "name" field.
-3. ONLY include items that match a product in the catalog. Do NOT include items that have no catalog match.
-4. Delivery charges, shipping fees, service charges, discounts, and similar non-product charges should NOT be in the items array — put them in "deliveryCharge" or "notes" instead.` : ""}
+2. When a line matches a catalog product: use the EXACT catalog name (without the SKU in brackets) in BOTH the "name" and "catalogMatch" fields.
+3. When a line is a genuine product but has NO catalog match (a new item): still include it — keep "name" as printed on the invoice and set "catalogMatch" to null. Include ALL product line items either way; never drop one.
+4. Delivery charges, shipping fees, service charges, taxes, rounding, discounts, and similar non-product charges should NOT be in the items array — put them in "deliveryCharge" or "notes" instead.` : ""}
 ${orderItems?.length ? `\nCURRENT ORDER ITEMS (these are what was ordered — use this to understand the expected packaging and pricing):
 ${orderItems.join("\n")}
 
@@ -118,7 +121,7 @@ Return a JSON object with these fields:
 - amount: total amount as a number (number or null). Only the final total, not subtotals.
 - supplierName: the vendor/supplier/company name (string or null)
 - outletName: the Celsius Coffee outlet/branch on the invoice (string or null). Match to one of the KNOWN OUTLETS above if provided; return the exact name. Only set this when the invoice clearly identifies a specific branch — never guess.
-- items: array of line items, each with { name: string, quantity: number, unitPrice: number, totalPrice: number, uom: string|null }. ONLY include items that match the product catalog. uom = unit of measure (e.g. "pcs", "kg", "pack", "carton").
+- items: array of ALL product line items, each with { name: string, quantity: number, unitPrice: number, totalPrice: number, uom: string|null, catalogMatch: string|null }. catalogMatch = the exact catalog product name when the line matches the KNOWN PRODUCT CATALOG, null when it's a new item not in the catalog (or no catalog was provided). uom = unit of measure (e.g. "pcs", "kg", "pack", "carton").
 - deliveryCharge: delivery/shipping fee as a number (number or null)
 - notes: any relevant notes like payment terms, bank details summary (string or null)
 - vendorBankName: the bank name printed on the invoice for payment (e.g. "Maybank", "CIMB", "Public Bank"). String or null. Invoices for one-off vendors / asset purchases / maintenance often print "Please transfer to:" followed by bank details — extract them here.
@@ -131,7 +134,9 @@ IMPORTANT: Return ONLY the JSON object, no markdown, no explanation. If a field 
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 2000,
+      // Items array now carries every product line (incl. new items) — long
+      // invoices need more room than the old catalog-matched-only output.
+      max_tokens: 3000,
       messages: [{ role: "user", content: contentBlocks }],
     });
 

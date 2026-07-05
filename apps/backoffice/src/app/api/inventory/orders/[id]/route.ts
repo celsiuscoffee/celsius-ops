@@ -101,9 +101,50 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       effectiveDeliveryCharge = deliveryChargeInput;
     }
 
-    // Update individual items (quantity, unitPrice, or remove)
+    // Update individual items (quantity, unitPrice, remove — or add a new line)
     if (items && Array.isArray(items)) {
-      for (const item of items as { id: string; quantity?: number; unitPrice?: number; remove?: boolean }[]) {
+      for (const item of items as {
+        id?: string;
+        quantity?: number;
+        unitPrice?: number;
+        remove?: boolean;
+        add?: boolean;
+        productId?: string;
+        productPackageId?: string | null;
+        notes?: string | null;
+      }[]) {
+        // Add a new item to the PO (manual "Add Item" or AI invoice auto-add).
+        // The (orderId, productId, productPackageId) unique means a re-add of
+        // an existing line becomes an update instead of a P2002 failure.
+        if (item.add) {
+          if (!item.productId || typeof item.quantity !== "number" || item.quantity <= 0) continue;
+          const qty = item.quantity;
+          const price = typeof item.unitPrice === "number" && item.unitPrice >= 0 ? item.unitPrice : 0;
+          const pkgId = item.productPackageId || null;
+          const existing = await prisma.orderItem.findFirst({
+            where: { orderId: id, productId: item.productId, productPackageId: pkgId },
+          });
+          if (existing) {
+            await prisma.orderItem.update({
+              where: { id: existing.id },
+              data: { quantity: qty, unitPrice: price, totalPrice: qty * price },
+            });
+          } else {
+            await prisma.orderItem.create({
+              data: {
+                orderId: id,
+                productId: item.productId,
+                productPackageId: pkgId,
+                quantity: qty,
+                unitPrice: price,
+                totalPrice: qty * price,
+                notes: item.notes ?? null,
+              },
+            });
+          }
+          continue;
+        }
+        if (!item.id) continue;
         if (item.remove) {
           await prisma.orderItem.delete({ where: { id: item.id } });
         } else {
