@@ -106,6 +106,28 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-05 — **Ads + local-rank loop hardened** (PRs #732/#751/#781/#783/#797
+  all merged): budget-cut optimizer live at `/ads/optimizer` (waste tier +
+  efficiency trims vs fleet-best cost/conv, `ads_budget_change` ledger applied
+  to prod, approval-gated, weekly shadow inside `ads-daily` Mondays); keyword
+  strategy board at `/reviews/geogrid/keywords` (own/focus/prominence/retire,
+  opportunity-sorted). **Measurement bugs fixed:** `ads_campaign.status` stores
+  Google's numeric enum ("2"=ENABLED) — filter with `ENABLED_STATUSES`; the
+  geogrid auto-scan defaulted to 0.2mi (storefront) — now 1.5534mi = the ±10km
+  catchment; keyword buckets only trust complete catchment-scale scans (Nilai's
+  "owned" verdicts were 0.1mi artifacts). **Tamarind was wired to Shah Alam's
+  GBP location** (poisoned snapshots Jul 3–5, deleted from prod; the fake
+  160.6/day velocity was the count-jump): `reviews-daily-snapshot` now
+  self-heals `gbpLocationName` nightly by matching `gbpPlaceId` (set for all 4
+  outlets from verified scan/QR evidence) against `listAccountLocations`;
+  on-demand check at `/api/reviews/gbp-relink[?apply=1]`. **Lever validation:**
+  categories = strongest rank lever; review velocity ≈20% and the binding
+  constraint (Nilai 2/30d, SA ~11, Tam ~17, Putrajaya 34); GBP description is
+  NOT a rank factor — stop treating geo-in-description as a rank play.
+  **Next:** after the first true-10km scan (Mon Jul 6, 1pm MYT) read fresh
+  baselines and propose per-outlet GBP category adds; owner still owes the ads
+  search-term backfill curl (CRON_SECRET) and the review-velocity ops push.
+
 - 2026-07-05 — **People-cost gating loop shipped** (PRs #765/#780/#785 all
   merged): labour gate + publish enforcement (green/amber/red, per-outlet
   budgets Con 16/18, SA 18/20, Tam 22/25 interim), editor badge + per-day
