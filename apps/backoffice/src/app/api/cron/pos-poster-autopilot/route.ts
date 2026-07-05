@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
+import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 import { planPosterRotation } from "@/lib/pos/poster-autopilot";
+import { cronRoute } from "@/lib/cron-monitor";
 
 /**
  * GET /api/cron/pos-poster-autopilot  (daily ~07:00 MYT)
@@ -36,10 +36,7 @@ function isoDate(d: Date): string {
 }
 const modeFor = (d: Date): "autopilot" | "control" => (dayOfYear(d) % 2 === 0 ? "autopilot" : "control");
 
-export async function GET(req: NextRequest) {
-  const auth = checkCronAuth(req.headers);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
-
+async function runPosPosterAutopilot() {
   const supabase = getSupabaseAdmin();
 
   const { data: flagRow } = await supabase
@@ -97,3 +94,5 @@ export async function GET(req: NextRequest) {
   console.warn(`[cron/pos-poster-autopilot] mode=${mode} applied=${applied} perf_logged=${logged}`);
   return NextResponse.json({ ok: true, mode, applied, perfLogged: logged, activeByPlacement });
 }
+
+export const GET = cronRoute("pos-poster-autopilot", runPosPosterAutopilot);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { timingSafeEqual } from "node:crypto";
 import { getSession } from "@/lib/auth";
 import { runCelsiusOverviewAgent } from "@/lib/ai-agent/celsius-overview";
@@ -49,6 +50,9 @@ async function runHandler(req: NextRequest) {
       snapshot: result.snapshot,
     });
   } catch (err) {
+    // Scheduled 4×/day — a failure here previously died in Vercel logs.
+    Sentry.captureException(err, { tags: { cron: "celsius-overview" } });
+    await Sentry.flush(2000);
     console.error("[ai-agent] run failed:", err);
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

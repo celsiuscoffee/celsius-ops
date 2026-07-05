@@ -30,21 +30,34 @@ Expected response:
 
 ### Cron heartbeats (per-cron, alert if missing)
 
-The 14 Vercel crons silently fail into logs unless you wire heartbeat
-monitoring. **Recommended:** Sentry Cron Monitors (lives next to your
-existing Sentry setup, no new account).
-
-| Cron | Schedule | App |
-|------|----------|-----|
-| /api/cron/attendance-auto-close | Every 15 min | backoffice |
-| /api/cron/campaigns-auto | Hourly | backoffice |
-| /api/cron/ads-daily | 3 AM MYT | backoffice |
-| /api/cron/ads-monthly | 4 AM 2nd of month | backoffice |
-| /api/cron/deactivate-resigned | Nightly | backoffice |
-| /api/cron/expire-orders | Every 10 min | order |
-| /api/cron/reconcile-pending | Every 1 min | order |
-| /api/cron/auto-hours | Hourly | order |
-| /api/cron/reset-checklists | 12am MYT | staff |
+> **2026-07-05 — wired in code.** The real fleet is ~59 scheduled cron
+> entries (44 backoffice, 14 order, 1 staff — the old "14 crons" figure
+> here was stale). Every scheduled cron route now goes through
+> `cronRoute()` (`src/lib/cron-monitor.ts` in each app — identical
+> copies; `@celsius/shared` stays Sentry-free on purpose), which does
+> fail-closed cron auth + Sentry error capture, in two tiers:
+>
+> - **Heartbeat tier (16 monitors — Sentry bills per monitor):**
+>   Sentry Cron Monitor auto-created on first production run; alerts on
+>   missed windows, overruns, and errors. Chosen where a silent no-run
+>   costs money: backoffice `finance-eod`, `consumption-post`,
+>   `bukku-feed-sync`, `pos-loyalty-reconcile`, `grab-reconcile`,
+>   `attendance-auto-close`, `procurement-exec`, `request-invoices`,
+>   `request-receivings`, `ads-daily`; order `reconcile-pending`,
+>   `expire-orders`, `promote-scheduled`, `auto-hours`,
+>   `sync-rm-payouts`; staff `reset-checklists`.
+> - **Error-capture tier (everything else):** thrown errors reach
+>   Sentry tagged `cron:<slug>` instead of dying in Vercel logs. A cron
+>   that stops being *invoked* is not detected in this tier — promote it
+>   to heartbeat if it ever bites.
+>
+> The monitor's `schedule` config MUST match the crontab in that app's
+> `vercel.json` — update both together or Sentry will alert on phantom
+> missed runs.
+>
+> **Remaining human step:** Sentry → Crons → set the alert rule
+> (notify on missed check-in / error) once the monitors appear after
+> first production run.
 
 ## Recommended setup (free / low cost)
 
@@ -102,9 +115,9 @@ If you want the absolute minimum to not be flying blind:
 That covers "is the site up" and "did the last deploy fail" — 90% of
 "things are broken" alerts.
 
-The Sentry cron monitor wiring is more work (needs code change per
-cron) — leave for the next sprint unless a specific cron has been
-silently failing.
+The Sentry cron monitor wiring is DONE in code (2026-07-05, see the
+cron-heartbeats section above) — what's left of it is the Sentry alert
+rule, which is dashboard work.
 
 ## What to verify in Supabase dashboard
 

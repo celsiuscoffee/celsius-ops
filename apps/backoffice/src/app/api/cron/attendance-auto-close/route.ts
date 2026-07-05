@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
-import { checkCronAuth } from "@celsius/shared";
 import { deriveHours, mytDateString, mytDayOfWeek, mytInstant } from "@/lib/hr/hours";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +26,7 @@ export const dynamic = "force-dynamic";
 // overtime request). Every auto-close AUTO-RESOLVES (approved + excused) — a
 // forgotten tap-out isn't a staff violation, so it must not flood the review
 // queue. Day-type (PH/rest-day) classification is preserved for the regular pay.
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runAttendanceAutoClose() {
   const now = new Date();
 
   // Load thresholds
@@ -209,3 +206,9 @@ export async function GET(req: NextRequest) {
     thresholds: { staleMin, abandonedMin },
   });
 }
+
+// Heartbeat tier: a silent no-run leaves forgotten clock-outs open, so payroll
+// hours (money) go wrong for every affected shift.
+export const GET = cronRoute("attendance-auto-close", runAttendanceAutoClose, {
+  schedule: "*/15 * * * *",
+});

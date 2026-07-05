@@ -12,17 +12,14 @@ export const dynamic = "force-dynamic";
 // guarded by checking issued_rewards for source_type=birthday with
 // source_ref_id = `birthday-${year}`.
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 import { issueVoucher } from "@/lib/loyalty/v2";
 
 const BRAND_ID = (process.env.LOYALTY_BRAND_ID ?? "brand-celsius").trim();
 
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runBirthdayTreats() {
   const supabase = getSupabaseAdmin();
 
   // Birthday voucher template — admin-configured. Fail fast if missing.
@@ -93,3 +90,5 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ candidates: candidates.length, issued });
 }
+
+export const GET = cronRoute("birthday-treats", runBirthdayTreats);

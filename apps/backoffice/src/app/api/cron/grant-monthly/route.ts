@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
 import {
   fetchTierRewardMap,
@@ -17,12 +17,7 @@ export const maxDuration = 300;
 //
 // Re-homed from the loyalty app (was loyalty.celsiuscoffee.com
 // /api/loyalty/benefits/grant-monthly) as part of retiring that app.
-export async function GET(request: NextRequest) {
-  const cronAuth = checkCronAuth(request.headers);
-  if (!cronAuth.ok) {
-    return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-  }
-
+async function runGrantMonthly(request: NextRequest) {
   const url = new URL(request.url);
   const brandId = url.searchParams.get("brand_id") || "brand-celsius";
   const periodKey = monthlyPeriodKey(new Date());
@@ -62,3 +57,5 @@ export async function GET(request: NextRequest) {
     results: summary.results,
   });
 }
+
+export const GET = cronRoute("grant-monthly", runGrantMonthly);

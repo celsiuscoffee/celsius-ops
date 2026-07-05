@@ -6,9 +6,9 @@
 // Idempotent: re-running for a date that's already been posted skips the
 // outlet (shared outlet+date guard in the ingestors).
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { ingestEodForDate } from "@/lib/finance/ingestors/pos-native-eod";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -20,10 +20,7 @@ function yesterdayMyt(): string {
   return myt.toISOString().slice(0, 10);
 }
 
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runFinanceEod() {
   const date = yesterdayMyt();
   const results = await ingestEodForDate(date);
 
@@ -38,3 +35,10 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ summary, results });
 }
+
+// Heartbeat tier: EOD ingestion is the finance book of record — a
+// silently skipped night must page, not wait to be noticed at month end.
+export const GET = cronRoute("finance-eod", runFinanceEod, {
+  schedule: "0 20 * * *",
+  maxRuntime: 8, // maxDuration 300s + margin
+});

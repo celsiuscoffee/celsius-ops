@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
+import { NextResponse } from "next/server";
 import { runDailyPulse } from "@/lib/ops-pulse";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,10 +15,7 @@ export const maxDuration = 60;
  *
  * Design: docs/design/ops-kpi-pulse-loop.md.
  */
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runOpsPulseDaily() {
   try {
     const result = await runDailyPulse();
     console.log(`[cron/ops-pulse-daily] mode=${result.mode} items=${result.breachCount} sent=${result.sent}`);
@@ -29,3 +26,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+export const GET = cronRoute("ops-pulse-daily", runOpsPulseDaily);

@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic";
 // push were removed when the streak-chest feature was retired — keep
 // the streak count maintenance so Wrapped continues to work.
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 const MY_OFFSET_HOURS = 8;
 
@@ -24,10 +24,7 @@ function thisWeekStartIso(now = new Date()): string {
 
 const SAVER_REFILL_DAYS = 90;
 
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runStreakUpdate() {
   const supabase = getSupabaseAdmin();
   const weekStart = thisWeekStartIso();
   const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
@@ -119,3 +116,5 @@ export async function GET(req: NextRequest) {
     refilled,
   });
 }
+
+export const GET = cronRoute("streak-update", runStreakUpdate);

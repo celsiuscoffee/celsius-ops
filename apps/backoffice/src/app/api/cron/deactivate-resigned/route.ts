@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,10 +11,7 @@ export const maxDuration = 60;
 // (16:05 UTC previous day).
 //
 // Auth: Bearer token in CRON_SECRET env var (Vercel auto-sets).
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runDeactivateResigned() {
   const today = new Date().toISOString().slice(0, 10);
 
   // Find profiles with end_date on/before today
@@ -47,3 +44,5 @@ export async function GET(req: NextRequest) {
     names: deactivated,
   });
 }
+
+export const GET = cronRoute("deactivate-resigned", runDeactivateResigned);

@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
+import { NextResponse } from "next/server";
+import { cronRoute } from "@/lib/cron-monitor";
 import { prisma } from "@/lib/prisma";
 import { runScan, isDue, needScore } from "@/lib/geogrid/scan-runner";
 
@@ -17,10 +17,7 @@ const GRID_SIZE = Number(process.env.GEOGRID_GRID_SIZE || 9);
 // only ~±1.3km around the storefront, which trivially over-reports rank.
 const RANGE_MILES = Number(process.env.GEOGRID_RANGE_MILES || 1.5534);
 
-export async function GET(req: NextRequest) {
-  const auth = checkCronAuth(req.headers);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
-
+async function runGeogridScan() {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) return NextResponse.json({ skipped: "GOOGLE_PLACES_API_KEY not set" });
 
@@ -79,3 +76,5 @@ export async function GET(req: NextRequest) {
     results,
   });
 }
+
+export const GET = cronRoute("geogrid-scan", runGeogridScan);

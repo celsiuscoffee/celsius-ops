@@ -9,15 +9,12 @@ export const dynamic = "force-dynamic";
 //      `status='active' AND expires_at < now()` rows accumulating
 //      forever — confusing customers + polluting analytics.
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 import { notifyVoucherExpiringSoon } from "@/lib/push/templates";
 
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runVoucherExpiring() {
   const supabase = getSupabaseAdmin();
 
   // ── 1) Sweep already-expired vouchers ─────────────────────────────
@@ -65,3 +62,5 @@ export async function GET(req: NextRequest) {
     sent,
   });
 }
+
+export const GET = cronRoute("voucher-expiring", runVoucherExpiring);

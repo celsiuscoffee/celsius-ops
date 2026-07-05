@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews } from "@/lib/reviews/gbp";
@@ -7,6 +6,7 @@ import { relinkGbpLocations } from "@/lib/reviews/relink";
 import { fetchNextAheadCompetitor } from "@/lib/reviews/competitors";
 import { buildScoreboard } from "@/lib/reviews/scoreboard";
 import { sendMessage } from "@/lib/telegram";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -16,14 +16,7 @@ export const maxDuration = 300;
 // (reviews/day vs the rate needed to out-review the leader). Idempotent per
 // day via the (outletId, snapshotDate) unique key, so re-running just refreshes
 // today's row.
-export async function GET(req: NextRequest) {
-  // Cron secret OR an authenticated admin (so it can be triggered manually).
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) {
-    const user = await getUserFromHeaders(req.headers);
-    if (!user) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-  }
-
+async function runReviewsDailySnapshot() {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
@@ -122,4 +115,14 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ snapshotDate: today.toISOString().slice(0, 10), relink, outlets: results, nudged });
+}
+
+const cronHandler = cronRoute("reviews-daily-snapshot", runReviewsDailySnapshot);
+
+// Cron secret (via cronRoute) OR an authenticated admin (so it can be
+// triggered manually).
+export async function GET(req: NextRequest) {
+  const user = await getUserFromHeaders(req.headers);
+  if (user) return runReviewsDailySnapshot();
+  return cronHandler(req);
 }

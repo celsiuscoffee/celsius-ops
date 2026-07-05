@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
+import { NextResponse } from "next/server";
+import { cronRoute } from "@/lib/cron-monitor";
 import { assignTodaysChecklists } from "@/lib/ops-nudges";
 
 export const dynamic = "force-dynamic";
@@ -18,9 +18,7 @@ export const maxDuration = 60;
  * everything is owned. OPS_NUDGES_MODE (off|shadow|armed, default armed).
  * Design: docs/design/verifier-agent.md.
  */
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
+async function runChecklistAssign() {
   try {
     const result = await assignTodaysChecklists();
     console.log(
@@ -33,3 +31,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+export const GET = cronRoute("checklist-assign", runChecklistAssign);

@@ -12,24 +12,21 @@
 // Each is idempotent + bounded, so re-running every 6h is safe and drains the
 // backlog over a few runs.
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { syncBukkuFeedLedger } from "@/lib/finance/bukku-feed-sync";
 import { applyApMatches } from "@/lib/finance/ap-match";
 import { applyVerifiedReview } from "@/lib/finance/agents/ap-verifier";
 import { createWagePaymentSlips } from "@/lib/finance/payment-slips";
 import { postBankLinesToGl } from "@/lib/finance/gl-posting";
 import { accrueSalaryControls } from "@/lib/finance/salary-accrual";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const GL_LINES_PER_RUN = 3000; // bounded so the whole loop stays inside maxDuration
 
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runBukkuFeedSync() {
   const out: Record<string, unknown> = {};
   const step = async (name: string, fn: () => Promise<unknown>) => {
     try { out[name] = await fn(); }
@@ -64,3 +61,10 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(out);
 }
+
+// Heartbeat tier: the entire finance loop (bank ingest → AP match → GL post)
+// rides this single schedule — a silent no-run stalls the books.
+export const GET = cronRoute("bukku-feed-sync", runBukkuFeedSync, {
+  schedule: "0 */6 * * *",
+  maxRuntime: 8, // maxDuration 300s + margin
+});

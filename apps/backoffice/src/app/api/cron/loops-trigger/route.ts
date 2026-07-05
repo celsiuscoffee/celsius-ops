@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
+import { NextResponse } from "next/server";
+import { cronRoute } from "@/lib/cron-monitor";
 import { runTriggeredLoops, autoMeasureDueRounds, runRoundGapDaily } from "@/lib/loyalty/loop-engine";
 
 export const dynamic = "force-dynamic";
@@ -10,9 +10,7 @@ export const maxDuration = 300;
 // voucher + sending the SMS to each newly-qualifying member. Also auto-measures
 // any sent round whose attribution window has closed so the leaderboard learns
 // without a manual click. No budget cap; cooldowns prevent double-targeting.
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
+async function runLoopsTrigger() {
   try {
     const triggered = await runTriggeredLoops();
     const roundGap = await runRoundGapDaily(); // per-segment promo loop (its own mechanic)
@@ -23,3 +21,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+export const GET = cronRoute("loops-trigger", runLoopsTrigger);

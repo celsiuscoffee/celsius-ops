@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
+import { NextResponse } from "next/server";
+import { cronRoute } from "@/lib/cron-monitor";
 import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { actualWeekRevenue, gateSchedule } from "@/lib/hr/labour-gate";
@@ -36,10 +36,7 @@ function lastWeekMonday(now: Date): string {
   return myt.toISOString().slice(0, 10);
 }
 
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runLabourVariance() {
   const runMode = mode();
   if (runMode === "off") return NextResponse.json({ ok: true, mode: runMode, lines: [] });
 
@@ -105,3 +102,5 @@ export async function GET(req: NextRequest) {
   }
   return NextResponse.json({ ok: true, mode: runMode, weekStart, lines, sent });
 }
+
+export const GET = cronRoute("labour-variance", runLabourVariance);

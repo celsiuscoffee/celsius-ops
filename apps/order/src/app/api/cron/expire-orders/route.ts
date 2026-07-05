@@ -4,9 +4,9 @@ export const dynamic = "force-dynamic";
 // times out mid-sweep (leftovers re-qualify on the next run).
 export const maxDuration = 60;
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 import { queryCheckoutStatus } from "@/lib/revenue-monster/client";
 import { markRmOrderPaid, markRmOrderFailed } from "@/lib/revenue-monster/order-status";
 
@@ -14,10 +14,7 @@ import { markRmOrderPaid, markRmOrderFailed } from "@/lib/revenue-monster/order-
 // This cleans up abandoned payments (user left FPX page, browser closed, etc.).
 // reconcile-pending runs every 5 min and resolves Stripe-known cases earlier.
 
-export async function GET(request: NextRequest) {
-  const cronAuth = checkCronAuth(request.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runExpireOrders() {
   try {
     const supabase = getSupabaseAdmin();
     const cutoff   = new Date(Date.now() - 10 * 60 * 1000).toISOString(); // 10 minutes ago
@@ -92,3 +89,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
+
+// Heartbeat tier: if this sweep silently stops, abandoned pending orders
+// pile up and dropped RM successes never settle — that costs money/orders.
+export const GET = cronRoute("expire-orders", runExpireOrders, {
+  schedule: "*/15 * * * *",
+});
