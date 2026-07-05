@@ -51,27 +51,22 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Open failures
 
-- 2026-07-05 — **Correction mis-attribution in the finance eval dataset** —
-  `recordCorrection()` (`apps/backoffice/src/lib/finance/inbox.ts` ~L215)
-  tags the *most recent* categorizer decision (`order created_at desc,
-  take first`) instead of the one belonging to the corrected exception;
-  `fin_agent_decisions.related_id` is never populated by `logDecision()`
-  (`categorizer.ts` ~L227), so a correct join isn't possible today. Under
-  concurrent AP ingestion, corrections land on the wrong rows — silently
-  corrupting the retraining/eval set. Fix: populate `related_type`/
-  `related_id` at decision time, return the decision id from
-  `categorize()`, and join on it in `recordCorrection`. Not blocking
-  day-to-day finance ops; blocking for the eval-replay loop.
-- 2026-07-05 — `fin_agent_decisions.applied` is written `false` and never
-  updated by any code path — can't distinguish auto-posted decisions from
-  ignored ones when building eval cohorts.
-- 2026-07-05 — **Loyalty tables anon-writable** (`members`, `member_brands`,
-  `point_transactions`, `redemptions`): RLS policies in
-  `apps/order/supabase/migrations/001_initial_schema.sql:186-195` are
-  `USING (true)` with no `TO service_role`. Blocked on: moving the
-  backoffice pickup page's browser reads (`(admin)/pickup/page.tsx`
-  ~L192-202) behind an API route first, then a policy-fix migration
-  (human approval). Ranked plan in `docs/rls-access-map-2026-07-05.md`.
+- 2026-07-05 — **Loyalty tables anon-writable** — and wider than the access
+  map first said: the `USING (true)` "Service full access" policies in
+  `apps/order/supabase/migrations/001_initial_schema.sql:186-195` also
+  cover `staff_users` and `otp_codes`, and make the four public-read
+  tables anon-WRITABLE too. Code prerequisite is DONE (pickup page reads
+  moved behind `/api/pickup/dashboard-stats`); remaining step is applying
+  `docs/proposals/2026-07-05-loyalty-rls-policy-fix.sql` (human approval,
+  loyalty Supabase project) after that deploys. Checklist:
+  `docs/ops-hardening-checklist.md` §5.
+- 2026-07-05 — 13 of 14 Vercel crons still have no heartbeat monitoring
+  (`reconcile-pending` wired 2026-07-05; the rest fail silently).
+
+_Fixed 2026-07-05 (see Lessons): categorizer correction mis-attribution +
+never-set `applied` flag — `related_id` now populated at decision time,
+corrections join decisionId → document → supplier, `applied` set on
+auto-post and inbox approve._
 
 _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <blocking?>`_
 
@@ -93,10 +88,13 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   build the finance eval replay (corrected `fin_agent_decisions` rows →
   regression set per agent, see finance-module skill); wire cron heartbeat
   monitors (`docs/monitoring-setup.md` §2).
-- 2026-07-05 — Both exploration passes done and documented (finance code
-  map → finance-module skill; RLS access map →
-  `docs/rls-access-map-2026-07-05.md`). Highest-priority next work, in
-  order: (1) pickup-page loyalty reads behind an API route, (2) loyalty
-  RLS policy-fix migration [approval], (3) `related_id` attribution fix in
-  the finance decisions log, (4) `hr_payroll_runs` deny-all migration
-  [approval].
+- 2026-07-05 — Hardening batch shipped: pickup-page reads moved server-side,
+  `related_id`/`applied` fixes, `reconcile-pending` Sentry heartbeat,
+  `docs/ops-hardening-checklist.md` (human dashboard items + quarterly
+  key-rotation calendar reminder on barista@, next 2026-10-01), and the
+  loyalty policy-fix proposal in `docs/proposals/`. **Waiting on human:**
+  apply the proposal SQL after deploy (checklist §5), `hr_payroll_runs`
+  RLS one-liner (§6), IP allowlist (§1), BetterUptime + Vercel→Slack (§3),
+  PITR decision (§4). SMS attribution holdout (loop #1) still needs the
+  two owner decisions: exact reward + success bar
+  (`docs/design/sms-loop-engineering.md`).

@@ -157,28 +157,10 @@ export default function PickupDashboard() {
   const loadInventory = useCallback(async () => {
     if (invLoaded) return;
     setInvLoading(true);
-    const supabase = getSupabaseClient();
-    const [ingR, lvlR, parR] = await Promise.all([
-      supabase.from("ingredients").select("id,name,unit").eq("is_active", true),
-      supabase.from("stock_levels").select("ingredient_id,quantity"),
-      supabase.from("ingredient_outlet_settings").select("ingredient_id,par_level"),
-    ]);
-    const ingredients = ingR.data  as Array<{ id: string; name: string; unit: string }>       | null;
-    const stockLevels = lvlR.data  as Array<{ ingredient_id: string; quantity: number }>      | null;
-    const parSettings = parR.data  as Array<{ ingredient_id: string; par_level: number }>     | null;
-    const ing    = ingredients ?? [];
-    const lvlMap = Object.fromEntries((stockLevels ?? []).map((l) => [l.ingredient_id, l.quantity as number]));
-    const parMap = Object.fromEntries((parSettings ?? []).map((s) => [s.ingredient_id, s.par_level as number]));
-    const lowItems = ing
-      .filter((i) => { const qty = lvlMap[i.id] ?? 0; const par = parMap[i.id] ?? 0; return qty > 0 && par > 0 && qty < par; })
-      .map((i) => ({ name: i.name as string, qty: lvlMap[i.id] ?? 0, unit: i.unit as string }))
-      .slice(0, 5);
-    setInvStats({
-      total:    ing.length,
-      lowStock: lowItems.length,
-      outStock: ing.filter((i) => (lvlMap[i.id] ?? 0) === 0).length,
-      lowItems,
-    });
+    const stats = await fetch("/api/pickup/dashboard-stats?section=inventory", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    if (stats) setInvStats(stats);
     setInvLoading(false);
     setInvLoaded(true);
   }, [invLoaded]);
@@ -186,43 +168,10 @@ export default function PickupDashboard() {
   const loadLoyalty = useCallback(async () => {
     if (loyaltyLoaded) return;
     setLoyaltyLoading(true);
-    const supabase   = getSupabaseClient();
-    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-    const [mbRes, rdmRes, { count }] = await Promise.all([
-      supabase.from("member_brands")
-        .select("points_balance, total_points_earned, last_visit_at, members(name, phone, created_at)")
-        .eq("brand_id", "brand-celsius").order("last_visit_at", { ascending: false }).limit(5),
-      supabase.from("redemptions").select("id", { count: "exact", head: true }).eq("brand_id", "brand-celsius"),
-      supabase.from("member_brands").select("*", { count: "exact", head: true }).eq("brand_id", "brand-celsius"),
-    ]);
-    const { count: activeCount } = await supabase.from("member_brands")
-      .select("*", { count: "exact", head: true })
-      .eq("brand_id", "brand-celsius")
-      .gte("last_visit_at", monthStart.toISOString());
-    const pointsRaw   = await supabase.from("member_brands")
-      .select("total_points_earned").eq("brand_id", "brand-celsius");
-    const pointsData  = pointsRaw.data as Array<{ total_points_earned: number }> | null;
-    const pointsIssued = (pointsData ?? []).reduce((s, m) => s + (m.total_points_earned ?? 0), 0);
-
-    type MbRow = {
-      points_balance: number;
-      total_points_earned: number;
-      last_visit_at: string | null;
-      members: { name: string | null; phone: string; created_at: string } | null;
-    };
-
-    setLoyaltyStats({
-      totalMembers:  count ?? 0,
-      activeMonth:   activeCount ?? 0,
-      pointsIssued,
-      redemptions:   rdmRes.count ?? 0,
-      recentMembers: ((mbRes.data ?? []) as unknown as MbRow[]).map((m) => ({
-        name:   m.members?.name ?? null,
-        phone:  m.members?.phone ?? "",
-        joined: m.members?.created_at ?? "",
-        points: m.points_balance,
-      })),
-    });
+    const stats = await fetch("/api/pickup/dashboard-stats?section=loyalty", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    if (stats) setLoyaltyStats(stats);
     setLoyaltyLoading(false);
     setLoyaltyLoaded(true);
   }, [loyaltyLoaded]);

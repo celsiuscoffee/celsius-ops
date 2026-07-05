@@ -63,7 +63,12 @@ export async function resolveException(
     supplierId?: string;
     supplierName?: string;
     outletId?: string | null;
-    categorize?: { accountCode: string | null; confidence: number; reasoning: string };
+    categorize?: {
+      accountCode: string | null;
+      confidence: number;
+      reasoning: string;
+      decisionId?: string | null;
+    };
     bill?: {
       supplierName: string | null;
       billNumber: string | null;
@@ -187,34 +192,64 @@ export async function resolveException(
   // correction so the next run learns from it.
   if (action.kind === "correct" && proposal.categorize?.accountCode !== accountCode) {
     await recordCorrection({
+      decisionId: proposal.categorize?.decisionId ?? null,
+      relatedId: (exc.related_id as string) ?? null,
       supplierId: proposal.supplierId,
       originalCode: proposal.categorize?.accountCode ?? null,
       correctedTo: { accountCode, outletId, reasoning: "human override" },
       correctedBy: userId,
     });
+  } else if (action.kind === "approve" && proposal.categorize?.decisionId) {
+    // The proposal was used as-is — the decision counts as applied.
+    await client
+      .from("fin_agent_decisions")
+      .update({ applied: true })
+      .eq("id", proposal.categorize.decisionId);
   }
 
   return { kind: "posted", transactionId: result.transactionId, amount: total };
 }
 
 async function recordCorrection(args: {
+  decisionId: string | null;
+  relatedId: string | null;
   supplierId: string;
   originalCode: string | null;
   correctedTo: { accountCode: string; outletId: string | null; reasoning: string };
   correctedBy: string;
 }): Promise<void> {
   const client = getFinanceClient();
-  // Find the most recent categorizer decision for this supplier.
-  const { data } = await client
-    .from("fin_agent_decisions")
-    .select("id")
-    .eq("agent", "categorizer")
-    .order("created_at", { ascending: false })
-    .limit(20);
-  if (!data || data.length === 0) return;
-  // Heuristic: tag the most recent decision. A future iteration can join on
-  // input.supplier_id when we add a pg index.
-  const target = data[0];
+
+  // Resolve the decision this correction belongs to, most exact first:
+  // 1. The decision id carried in the exception's proposal (new rows).
+  // 2. The decision logged against the same source document.
+  // 3. The latest decision for the same supplier (legacy rows from before
+  //    related_id was populated — better than "latest overall", which
+  //    mis-attributed corrections under concurrent ingestion).
+  let targetId = args.decisionId;
+  if (!targetId && args.relatedId) {
+    const { data } = await client
+      .from("fin_agent_decisions")
+      .select("id")
+      .eq("agent", "categorizer")
+      .eq("related_type", "document")
+      .eq("related_id", args.relatedId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    targetId = data?.[0]?.id ?? null;
+  }
+  if (!targetId) {
+    const { data } = await client
+      .from("fin_agent_decisions")
+      .select("id")
+      .eq("agent", "categorizer")
+      .eq("input->>supplier_id", args.supplierId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    targetId = data?.[0]?.id ?? null;
+  }
+  if (!targetId) return;
+
   await client
     .from("fin_agent_decisions")
     .update({
@@ -223,7 +258,7 @@ async function recordCorrection(args: {
       corrected_by: args.correctedBy,
       corrected_at: new Date().toISOString(),
     })
-    .eq("id", target.id);
+    .eq("id", targetId);
 }
 
 function round2(n: number): number {
