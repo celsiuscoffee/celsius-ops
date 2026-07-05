@@ -1,5 +1,3 @@
-import { prisma } from "@/lib/prisma";
-
 // ─── Par-level calculation (shared by the manual route + weekly cron) ────
 //
 // Formula (base UOM):
@@ -119,6 +117,13 @@ export interface ParCalcResult {
 }
 
 export async function recalcOutletParLevels(outletId: string, opts: ParCalcOptions = {}): Promise<ParCalcResult> {
+  // Lazy import so the pure exports above (classifyByDailyValue,
+  // VALUE_CLASS_PARAMS) can be unit-tested without the test runner having to
+  // resolve the `@/lib/prisma` alias — importing prisma at module top level
+  // made par-calc.test.ts fail with ERR_MODULE_NOT_FOUND. Runtime behaviour is
+  // unchanged: the module cache resolves this once on first recalc.
+  const { prisma } = await import("@/lib/prisma");
+
   const lookbackDays = opts.lookbackDays ?? PAR_DEFAULTS.lookbackDays;
   const safetyDays = opts.safetyDays ?? PAR_DEFAULTS.safetyDays;
   // null ⇒ class-based coverage (the default); a number ⇒ manual override for all classes.
