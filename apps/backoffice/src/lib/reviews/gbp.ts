@@ -270,6 +270,35 @@ export async function getLocationGeo(
   };
 }
 
+// Every location in the GBP account, with the Places id Google holds for it.
+// This is the only way to map a public place id back to the internal
+// locations/NNN name — used to detect/repair outlets whose stored
+// gbpLocationName points at the wrong listing.
+export async function listAccountLocations(
+  accountId: string,
+): Promise<{ name: string; title: string | null; placeId: string | null }[]> {
+  const token = await getAccessToken();
+  const out: { name: string; title: string | null; placeId: string | null }[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({ readMask: "name,title,metadata", pageSize: "100" });
+    if (pageToken) params.set("pageToken", pageToken);
+    const res = await fetch(`${GBP_INFO_BASE}/${accountId}/locations?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`GBP list locations error ${res.status}: ${body}`);
+    }
+    const data = await res.json();
+    for (const l of data.locations ?? []) {
+      out.push({ name: l.name, title: l.title ?? null, placeId: l.metadata?.placeId ?? null });
+    }
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  return out;
+}
+
 // The relevance-bearing profile fields — what Google reads to decide which
 // keywords this location is a match for. Input to the keyword relevance audit.
 export type GbpLocationProfile = {
