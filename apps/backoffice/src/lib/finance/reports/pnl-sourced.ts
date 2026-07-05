@@ -275,10 +275,10 @@ export async function buildSourcedPnl(input: {
   }
   const grabGrossRevenue = round2(rev.grab); // gross Grab, for the commission line
   const incomeLines: PnlLine[] = [
-    { code: "REV-INSTORE", name: "Sales — In-store (dine-in + takeaway)", amount: round2(rev.instore), parentCode: null },
-    { code: "REV-ONLINE", name: "Sales — Online (pickup + table-QR)", amount: round2(rev.online), parentCode: null },
-    { code: "REV-GRAB", name: "Sales — GrabFood (gross)", amount: round2(rev.grab), parentCode: null },
-    { code: "REV-PANDA", name: "Sales — FoodPanda", amount: round2(rev.foodpanda), parentCode: null },
+    { code: "REV-INSTORE", name: "In-store sales (dine-in + takeaway)", amount: round2(rev.instore), parentCode: null },
+    { code: "REV-ONLINE", name: "Online sales (pickup + table QR)", amount: round2(rev.online), parentCode: null },
+    { code: "REV-GRAB", name: "GrabFood sales (gross)", amount: round2(rev.grab), parentCode: null },
+    { code: "REV-PANDA", name: "FoodPanda sales", amount: round2(rev.foodpanda), parentCode: null },
   ].filter((l) => l.amount !== 0);
   let totalIncome = round2(rev.instore + rev.online + rev.grab + rev.foodpanda);
 
@@ -305,8 +305,8 @@ export async function buildSourcedPnl(input: {
       if (!amt) continue;
       incomeLines.push(
         g.category === "GASTROHUB"
-          ? { code: "REV-GASTRO", name: "Sales — GastroHub (Nilai)", amount: amt, parentCode: null }
-          : { code: "REV-EVENTS", name: "Sales — Meetings & Events", amount: amt, parentCode: null },
+          ? { code: "REV-GASTRO", name: "GastroHub sales (Nilai)", amount: amt, parentCode: null }
+          : { code: "REV-EVENTS", name: "Meetings and events sales", amount: amt, parentCode: null },
       );
       totalIncome = round2(totalIncome + amt);
     }
@@ -341,7 +341,7 @@ export async function buildSourcedPnl(input: {
   } else {
     cogsTotal = purchases;
     cogsLines = purchases
-      ? [{ code: "PROC", name: "Purchases (procurement) — no usable stock count, COGS = purchases", amount: purchases, parentCode: null }]
+      ? [{ code: "PROC", name: "Purchases (procurement, COGS = purchases, no usable stock count)", amount: purchases, parentCode: null }]
       : [];
   }
 
@@ -370,7 +370,7 @@ export async function buildSourcedPnl(input: {
     }
     adsSpend = round2(adsSpend);
     if (adsSpend) {
-      expenseLines.push({ code: "MKT-ADS", name: "Marketing — Digital ads (Google)", amount: adsSpend, parentCode: null });
+      expenseLines.push({ code: "MKT-ADS", name: "Digital ads (Google)", amount: adsSpend, parentCode: null });
       totalExpenses += adsSpend;
     }
   }
@@ -400,7 +400,7 @@ export async function buildSourcedPnl(input: {
       `);
       const grabPromo = round2(Number(promoAgg[0]?.promo_sen ?? 0) / 100);
       if (grabPromo) {
-        expenseLines.push({ code: "MKT-GRAB-PROMO", name: "Marketing — GrabFood promos", amount: grabPromo, parentCode: null });
+        expenseLines.push({ code: "MKT-GRAB-PROMO", name: "GrabFood promos (merchant-funded)", amount: grabPromo, parentCode: null });
         totalExpenses += grabPromo;
       }
 
@@ -412,7 +412,7 @@ export async function buildSourcedPnl(input: {
       `);
       const grabAds = round2(Number(adAgg[0]?.ad_sen ?? 0) / 100);
       if (grabAds) {
-        expenseLines.push({ code: "MKT-GRAB-ADS", name: "Marketing — GrabAds", amount: grabAds, parentCode: null });
+        expenseLines.push({ code: "MKT-GRAB-ADS", name: "GrabAds", amount: grabAds, parentCode: null });
         totalExpenses += grabAds;
       }
     }
@@ -427,7 +427,7 @@ export async function buildSourcedPnl(input: {
     const grabComm = round2(grabGrossRevenue * gr.rate);
     expenseLines.push({
       code: "MKT-GRAB-COMM",
-      name: `Marketplace fee — GrabFood commission (${Math.round(gr.rate * 100)}% ${gr.source === "recon" ? "effective, from payout recon" : "est."})`,
+      name: `GrabFood commission (${Math.round(gr.rate * 100)}% ${gr.source === "recon" ? "effective, from payout recon" : "estimated"})`,
       amount: grabComm,
       parentCode: null,
     });
@@ -460,7 +460,7 @@ export async function buildSourcedPnl(input: {
       const isMkt = !!cat && BANK_MARKETING.has(cat);
       expenseLines.push({
         code: `BANK:${cat ?? "NULL"}`,
-        name: isReview ? "Unclassified — pending AP match (review)" : (isMkt ? "Marketing — " : "") + humanCat(cat),
+        name: isReview ? "Unclassified (pending AP match review)" : humanCat(cat) + (isMkt ? " (marketing)" : ""),
         amount: amt,
         parentCode: null,
       });
@@ -485,7 +485,7 @@ export async function buildSourcedPnl(input: {
     });
     const mfAmt = round2(Number(mfAgg._sum?.amount ?? 0));
     if (mfAmt) {
-      expenseLines.push({ code: "BANK:MANAGEMENT_FEE", name: "Management Fee (accrued — paid next month)", amount: mfAmt, parentCode: null });
+      expenseLines.push({ code: "BANK:MANAGEMENT_FEE", name: "Management fee (accrued, paid the following month)", amount: mfAmt, parentCode: null });
       totalExpenses += mfAmt;
     }
   }
