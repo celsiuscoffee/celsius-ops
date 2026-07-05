@@ -228,6 +228,7 @@ type PnlReport = {
   expenses: PnlSection;
   netIncome: number;
   txnCount: number;
+  notes?: string[];
 };
 
 type MatchedInvoice = { invoiceNumber: string | null; vendor: string | null; amount: number };
@@ -252,6 +253,10 @@ type DrillLine = {
     direction?: "DR" | "CR";
     apInvoiceId?: string | null;
     matchedInvoice?: MatchedInvoice | null;
+    // Expense-month recognition: the month (YYYY-MM) the P&L recognised the
+    // line in, and whether a per-line override drove it.
+    expenseMonth?: string | null;
+    expenseMonthOverride?: boolean;
     // Journal-backed rows: the posting agent ("bank" journals expand into
     // their source bank lines).
     glAgent?: string | null;
@@ -742,6 +747,9 @@ function PnlTab() {
             </tbody>
           </table>
         </div>
+        {(report.notes ?? []).map((n) => (
+          <p key={n} className="text-[11px] text-muted-foreground">{n}</p>
+        ))}
         </>
       )}
 
@@ -877,6 +885,62 @@ function MatchedChip({ bankLineId, invoice, onSaved }: {
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
         </button>
       </span>
+      {err && <span className="text-[10px] text-rose-600">{err}</span>}
+    </span>
+  );
+}
+
+// Expense-month control for a bank line in the drill: which month the P&L
+// recognises this line in. Prefilled with the effective month (override if
+// set, else the automatic recognition month); picking a month saves an
+// override, the x clears it. Cash Flow and the GL stay on the payment date.
+function ExpenseMonthControl({ bankLineId, effectiveMonth, overridden, onSaved }: {
+  bankLineId: string;
+  effectiveMonth: string; // YYYY-MM
+  overridden: boolean;
+  onSaved: () => Promise<void> | void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save(expenseMonth: string | null) {
+    setBusy(true); setErr(null);
+    try {
+      const res = await fetch("/api/finance/bank-lines/expense-month", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankLineId, expenseMonth }),
+      });
+      const j = await res.json();
+      if (!res.ok) setErr(j.error ?? `Failed (${res.status})`);
+      else await onSaved();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      {overridden && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" title="Expense month overridden" />}
+      <input
+        type="month"
+        key={`${overridden}-${effectiveMonth}`}
+        defaultValue={effectiveMonth}
+        disabled={busy}
+        onChange={(e) => { if (e.target.value && e.target.value !== effectiveMonth) save(e.target.value); }}
+        className="h-6 rounded border bg-background px-1 text-[11px] disabled:opacity-60"
+        title="Expense month: which month this payment's cost sits in on the P&L. Cash flow keeps the payment date."
+      />
+      {overridden && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => save(null)}
+          title="Clear the override (back to the automatic expense month)"
+          className="text-muted-foreground transition hover:text-foreground disabled:opacity-60"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+      {busy && <Loader2 className="h-3 w-3 animate-spin" />}
       {err && <span className="text-[10px] text-rose-600">{err}</span>}
     </span>
   );
@@ -1044,6 +1108,18 @@ function DrillDown({ code, start, end, outletId, consolidated, onChanged }: { co
                           {l.meta.matchedInvoice && (
                             <MatchedChip bankLineId={l.meta.bankLineId} invoice={l.meta.matchedInvoice} onSaved={refresh} />
                           )}
+                          {l.meta.expenseMonth && l.meta.expenseMonth !== l.txnDate.slice(0, 7) && (
+                            <span
+                              title={`Recognised in ${monthLabel(l.meta.expenseMonth)}; paid ${l.txnDate}`}
+                              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground"
+                            >
+                              {l.meta.expenseMonthOverride && <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />}
+                              in {monthLabel(l.meta.expenseMonth)}
+                            </span>
+                          )}
+                          {l.meta.expenseMonthOverride && l.meta.expenseMonth === l.txnDate.slice(0, 7) && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" title="Expense month overridden" />
+                          )}
                         </span>
                       )}
                     </span>
@@ -1074,6 +1150,19 @@ function DrillDown({ code, start, end, outletId, consolidated, onChanged }: { co
                       {l.meta.matchedInvoice && (<><dt className="text-muted-foreground">Matched invoice</dt><dd>{l.meta.matchedInvoice.invoiceNumber ?? "(no number)"}{l.meta.matchedInvoice.vendor ? ` · ${l.meta.matchedInvoice.vendor}` : ""} · {RM(l.meta.matchedInvoice.amount)}</dd></>)}
                       <><dt className="text-muted-foreground">Inter-company</dt><dd>{l.meta.isInterCo ? "yes" : "no"}</dd></>
                       {(l.meta.classifiedBy || l.meta.ruleName) && (<><dt className="text-muted-foreground">Classified</dt><dd>{l.meta.classifiedBy ?? "rule"}{l.meta.ruleName ? ` · ${l.meta.ruleName}` : ""}</dd></>)}
+                      {l.meta.bankLineId && l.meta.expenseMonth && (
+                        <>
+                          <dt className="text-muted-foreground">Expense month</dt>
+                          <dd>
+                            <ExpenseMonthControl
+                              bankLineId={l.meta.bankLineId}
+                              effectiveMonth={l.meta.expenseMonth}
+                              overridden={!!l.meta.expenseMonthOverride}
+                              onSaved={refresh}
+                            />
+                          </dd>
+                        </>
+                      )}
                     </dl>
                   </td>
                 </tr>

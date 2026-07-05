@@ -9,7 +9,7 @@ import { getFinanceClient } from "./supabase";
 
 export type BankLineEventInput = {
   lineId: string;
-  event: "classify" | "match" | "unmatch" | "reject_match";
+  event: "classify" | "match" | "unmatch" | "reject_match" | "expense_month";
   oldValue?: Record<string, unknown> | null;
   newValue?: Record<string, unknown> | null;
 };

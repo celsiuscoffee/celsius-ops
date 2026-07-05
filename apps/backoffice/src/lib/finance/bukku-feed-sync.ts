@@ -179,6 +179,7 @@ async function syncAccount(
           txnDate: true, amount: true, direction: true, description: true,
           category: true, classifiedBy: true, ruleName: true, isInterCo: true, outletId: true,
           glTransactionId: true, glPostedAt: true, apInvoiceId: true, apMatchedAt: true,
+          expenseMonth: true,
         },
         orderBy: [{ txnDate: "asc" }, { id: "asc" }],
       });
@@ -233,6 +234,9 @@ async function syncAccount(
           const data: CarryData = {};
           if (old.glTransactionId) { data.glTransactionId = old.glTransactionId; data.glPostedAt = old.glPostedAt; }
           if (old.apInvoiceId) { data.apInvoiceId = old.apInvoiceId; data.apMatchedAt = old.apMatchedAt; }
+          // Expense-month overrides are user state, they must survive the
+          // rebuild or the accrual P&L silently reverts within 6 hours.
+          if (old.expenseMonth) { data.expenseMonth = old.expenseMonth; }
           if (old.classifiedBy && old.classifiedBy !== "rule") {
             data.category = old.category; data.classifiedBy = old.classifiedBy; data.ruleName = old.ruleName;
             data.isInterCo = old.isInterCo; data.outletId = old.outletId;

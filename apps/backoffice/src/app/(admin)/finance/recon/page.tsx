@@ -16,7 +16,7 @@ type CashIn = {
   salesByChannel: { channel: string; amount: number }[];
   grab: { gross: number; settled: number; deductionPct: number | null };
 };
-type UnmatchedLine = { bankLineId: string; desc: string; date: string; amount: number; category: string | null };
+type UnmatchedLine = { bankLineId: string; desc: string; date: string; amount: number; category: string | null; expenseMonth: string | null };
 type ReconData = {
   summary: {
     auto: number; review: number; doublePayments: number; unmatchedInvoices: number;
@@ -564,7 +564,14 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
         <td className="px-3 py-2 align-top">
           <input type="checkbox" checked={selected} onChange={onToggle} className="h-3.5 w-3.5 accent-terracotta" />
         </td>
-        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap align-top">{row.date}</td>
+        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap align-top">
+          {row.date}
+          {row.expenseMonth && (
+            <div className="text-[10px] text-amber-600" title="Expense month override: this line sits in this month on the P&L">
+              → {row.expenseMonth}
+            </div>
+          )}
+        </td>
         <td className="px-3 py-2 text-xs text-gray-700 align-top">
           {row.desc}
           {note && <div className="mt-0.5 text-[10px] text-red-600">{note}</div>}
@@ -608,6 +615,12 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
             >
               <History className="h-3 w-3" />
             </button>
+            <ExpenseMonthControl
+              bankLineId={row.bankLineId}
+              txnMonth={row.date.slice(0, 7)}
+              override={row.expenseMonth}
+              onDone={onDone}
+            />
           </div>
         </td>
       </tr>
@@ -694,7 +707,7 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
 
 // Per-line audit trail (fin_bank_line_events), rendered as compact sentences
 // like "31 May, categorised RENT to EQUIPMENTS by Ammar".
-type LineEventValue = { category?: string | null; invoiceId?: string; invoiceNumber?: string | null; payee?: string | null; linkOnly?: boolean } | null;
+type LineEventValue = { category?: string | null; invoiceId?: string; invoiceNumber?: string | null; payee?: string | null; linkOnly?: boolean; expenseMonth?: string | null } | null;
 type LineEvent = { id: string; event: string; old_value: LineEventValue; new_value: LineEventValue; actor: string | null; created_at: string };
 
 const fmtEventDay = (iso: string) =>
@@ -711,6 +724,8 @@ function eventLabel(e: LineEvent): string {
       return `unmatched from invoice ${invoiceRef(e.old_value)}`;
     case "reject_match":
       return `rejected proposed match with invoice ${invoiceRef(e.new_value)}`;
+    case "expense_month":
+      return `moved expense month from ${e.old_value?.expenseMonth ?? "auto"} to ${e.new_value?.expenseMonth ?? "auto"}`;
     default:
       return e.event.replace(/_/g, " ");
   }
@@ -793,6 +808,57 @@ function OpenInvoicesTable({ rows }: { rows: { invoiceId: string; invoiceNumber:
       </table>
       {filtered.length > pageSize && <p className="px-3 py-2 text-[11px] text-gray-400">Showing {pageSize} of {filtered.length}. Increase rows above to see more.</p>}
     </div>
+  );
+}
+
+// Per-line expense-month override: the month this payment's cost belongs to
+// on the P&L (cash flow and the bank recon stay on the payment date). The
+// input is prefilled with the effective month (override if set, else the
+// transaction month); picking a month saves it, the x clears the override.
+function ExpenseMonthControl({ bankLineId, txnMonth, override, onDone }: {
+  bankLineId: string;
+  txnMonth: string;          // YYYY-MM from the transaction date
+  override: string | null;   // YYYY-MM override, or null
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save(expenseMonth: string | null) {
+    setBusy(true); setErr(null);
+    try {
+      const res = await fetch("/api/finance/bank-lines/expense-month", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankLineId, expenseMonth }),
+      });
+      const j = await res.json();
+      if (!res.ok) setErr(j.error ?? `Failed (${res.status})`);
+      else onDone();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <span className="flex items-center gap-1" title="Expense month: which month this payment's cost sits in on the P&L. Cash flow keeps the payment date.">
+      {override && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" title="Expense month overridden" />}
+      <input
+        type="month"
+        key={override ?? "auto"}
+        defaultValue={override ?? txnMonth}
+        disabled={busy}
+        onChange={(e) => { if (e.target.value && e.target.value !== (override ?? txnMonth)) save(e.target.value); }}
+        className="h-6 rounded border border-gray-200 bg-white px-1 text-[11px] text-gray-700 disabled:opacity-50"
+      />
+      {override && (
+        <button onClick={() => save(null)} disabled={busy}
+          title="Clear the override (back to the automatic expense month)"
+          className="text-[11px] text-gray-400 hover:text-gray-600 disabled:opacity-50">
+          ×
+        </button>
+      )}
+      {busy && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
+      {err && <span className="text-[10px] text-red-600">{err}</span>}
+    </span>
   );
 }
 

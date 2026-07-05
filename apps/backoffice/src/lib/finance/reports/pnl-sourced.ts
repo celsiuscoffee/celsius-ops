@@ -53,6 +53,154 @@ const BANK_NONOPEX = new Set([                                                  
 // auto-match re-tags them. Visible so it can't silently inflate the P&L.
 const BANK_REVIEW = new Set(["OTHER_OUTFLOW"]);
 
+// ─── Expense-month accrual: the category shift map ──────────────────────────
+// "A payment in month N belongs to month N + shift." The P&L recognises a
+// shifted category's expense for [start, end] from the payments dated in
+// [start - shift, end - shift] (for shift -1 that is the following month),
+// the same window arithmetic the bespoke management-fee block used before it
+// was generalised here. A per-line expenseMonth override (set from the recon
+// page or the P&L drill) always outranks this map, and an AP-matched opex
+// line outranks it with its invoice issue month. Cash Flow, the cashflow
+// projections and the bank recon tie stay strictly cash-dated.
+export const EXPENSE_MONTH_SHIFT: Record<string, number> = {
+  MANAGEMENT_FEE: -1,   // HQ bills one month in arrears
+  EMPLOYEE_SALARY: -1,  // salary paid early in month N pays for month N-1 work
+  UTILITIES: -1,        // TNB and water bill the prior month's usage
+  STATUTORY_PAYMENT: -1, // EPF/SOCSO/EIS/PCB due by the 15th for the prior month
+};
+// PARTIMER is deliberately NOT shifted: the owner wants part timer wages
+// matched to HR payroll runs in a later phase, so they stay on a cash basis
+// until then. RENT is unshifted too, it is paid in the month, for the month.
+
+// P&L line-name suffix for shift-recognised categories.
+const ACCRUED_SUFFIX = " (accrued, paid the following month)";
+
+// Categories that feed the P&L as their own opex line (not COGS, not
+// non-operating, not the digital-ads dedup, not the flagged review pile).
+// Only these keep an AP-matched bank line in opex, recognised at the matched
+// invoice's issue month; AP-matched lines outside this set settle a
+// procurement invoice already counted in COGS purchases and stay excluded.
+function isOpexFeedCategory(cat: string | null): boolean {
+  if (!cat) return false;
+  return !BANK_COGS.has(cat) && !BANK_NONOPEX.has(cat) && !BANK_DIGITAL_ADS.has(cat) && !BANK_REVIEW.has(cat);
+}
+
+export type RecognisedBankLine = {
+  id: string;
+  txnDate: string;         // cash date, YYYY-MM-DD
+  description: string;
+  reference: string | null;
+  amount: number;
+  category: string | null;
+  isInterCo: boolean;
+  classifiedBy: string | null;
+  ruleName: string | null;
+  apInvoiceId: string | null;
+  accountName: string | null;
+  outletId: string | null;
+  recognisedDate: string;  // the date the P&L recognises the line at
+  recognisedMonth: string; // YYYY-MM of recognisedDate
+  recognisedBy: "override" | "invoice" | "shift" | "cash";
+  hasOverride: boolean;
+};
+
+// Bank lines with their effective expense-month recognition applied, for a
+// P&L period [start, end]. Shared by buildSourcedPnl and the drill so the
+// drill total always ties to the line amount. Precedence per line:
+//   expenseMonth override > matched invoice issue month (DR opex only)
+//   > category shift map > cash month.
+// Inclusion is by recognisedDate within [start, end]; the fetch window covers
+// the following month (shift -1 pulls payments from there) plus any line
+// whose override drags it into the period from further away.
+export async function fetchRecognisedBankLines(args: {
+  direction: "DR" | "CR";
+  start: string;
+  end: string;
+  suffix?: string;          // company bank-account tail (per-company view)
+  consolidated?: boolean;   // all accounts, inter-company legs dropped
+  outletId?: string | null;
+  excludeInterCo?: boolean;
+}): Promise<RecognisedBankLine[]> {
+  const { direction, start, end, suffix, consolidated, outletId, excludeInterCo } = args;
+  if (!consolidated && !suffix) return [];
+  const monthFirst = (s: string) => `${s.slice(0, 7)}-01`;
+  const rows = await prisma.bankStatementLine.findMany({
+    where: {
+      direction,
+      ...(consolidated ? { isInterCo: false } : { statement: { accountName: { contains: suffix ?? "" } } }),
+      ...(outletId ? { outletId } : {}),
+      ...(excludeInterCo ? { isInterCo: false } : {}),
+      OR: [
+        { txnDate: { gte: dStart(start), lte: dEnd(addMonths(end, 1)) } },
+        { expenseMonth: { gte: dStart(monthFirst(start)), lte: dEnd(monthFirst(end)) } },
+      ],
+    },
+    select: {
+      id: true, txnDate: true, description: true, reference: true, amount: true,
+      category: true, isInterCo: true, classifiedBy: true, ruleName: true,
+      apInvoiceId: true, expenseMonth: true, outletId: true,
+      statement: { select: { accountName: true } },
+    },
+    orderBy: { txnDate: "asc" },
+  });
+
+  // AP-matched DR lines: settled procurement invoices (COGS) drop out of opex
+  // entirely; matched OPEX lines stay and recognise at the invoice issue
+  // month. One batched lookup, no per-line queries.
+  const kept = rows.filter((l) => {
+    if (direction === "CR" || !l.apInvoiceId) return true;
+    return isOpexFeedCategory((l.category as string | null) ?? null);
+  });
+  const invoiceIds = [...new Set(kept.filter((l) => direction === "DR" && l.apInvoiceId).map((l) => l.apInvoiceId as string))];
+  const issueById = new Map<string, string>();
+  if (invoiceIds.length) {
+    const invoices = await prisma.invoice.findMany({
+      where: { id: { in: invoiceIds } },
+      select: { id: true, issueDate: true },
+    });
+    for (const inv of invoices) issueById.set(inv.id, ymd(inv.issueDate));
+  }
+
+  const out: RecognisedBankLine[] = [];
+  for (const l of kept) {
+    const cat = (l.category as string | null) ?? null;
+    const txn = ymd(l.txnDate);
+    let recognisedDate = txn;
+    let recognisedBy: RecognisedBankLine["recognisedBy"] = "cash";
+    if (l.expenseMonth) {
+      recognisedDate = ymd(l.expenseMonth);
+      recognisedBy = "override";
+    } else if (direction === "DR" && l.apInvoiceId && issueById.has(l.apInvoiceId)) {
+      recognisedDate = issueById.get(l.apInvoiceId)!;
+      recognisedBy = "invoice";
+    } else if (cat && EXPENSE_MONTH_SHIFT[cat]) {
+      recognisedDate = addMonths(txn, EXPENSE_MONTH_SHIFT[cat]);
+      recognisedBy = "shift";
+    }
+    if (recognisedDate < start || recognisedDate > end) continue;
+    out.push({
+      id: l.id,
+      txnDate: txn,
+      description: l.description,
+      reference: l.reference,
+      amount: round2(Number(l.amount)),
+      category: cat,
+      isInterCo: l.isInterCo,
+      classifiedBy: l.classifiedBy,
+      ruleName: l.ruleName,
+      apInvoiceId: l.apInvoiceId,
+      accountName: l.statement?.accountName ?? null,
+      outletId: l.outletId,
+      recognisedDate,
+      recognisedMonth: recognisedDate.slice(0, 7),
+      recognisedBy,
+      hasOverride: !!l.expenseMonth,
+    });
+  }
+  out.sort((a, b) => a.recognisedDate.localeCompare(b.recognisedDate) || a.txnDate.localeCompare(b.txnDate));
+  return out;
+}
+
 // GrabFood revenue is booked GROSS in income, but Grab deducts a commission
 // (marketplace fee) at source before paying out — so it never appears in the
 // bank feed and must be recognised as a cost here, else Grab margin is wildly
@@ -254,6 +402,8 @@ export async function buildSourcedPnl(input: {
     : [];
   const rev = { instore: 0, online: 0, grab: 0, foodpanda: 0 };
   let saleCount = 0;
+  // Any accrual-shifted line in the period adds a short note to the report.
+  let shiftedPresent = false;
   const perOutlet = await Promise.all(
     outletRows.map((o) =>
       getUnifiedSalesForOutlet(
@@ -309,6 +459,25 @@ export async function buildSourcedPnl(input: {
           : { code: "REV-EVENTS", name: "Meetings and events sales", amount: amt, parentCode: null },
       );
       totalIncome = round2(totalIncome + amt);
+    }
+
+    // Management fee INCOME (HQ side): the fee the group outlets pay lands as
+    // a MANAGEMENT_FEE inflow in this company's account. Bukku's books carried
+    // these receipts on account 5007 Management fees, so they keep their own
+    // revenue line here rather than folding into sales. Recognised with the
+    // same one-month-arrears shift as the expense side, and the lines are
+    // flagged isInterCo so the consolidated view (excludeInterCo) eliminates
+    // them against the outlets' management-fee expense.
+    const feeInflows = await fetchRecognisedBankLines({
+      direction: "CR", start, end, suffix: incomeSuffix, outletId, excludeInterCo,
+    });
+    const mgmtFeeIncome = round2(
+      feeInflows.filter((l) => l.category === "MANAGEMENT_FEE").reduce((s, l) => s + l.amount, 0),
+    );
+    if (mgmtFeeIncome) {
+      incomeLines.push({ code: "REV-MGMT", name: "Management fees (from group outlets)", amount: mgmtFeeIncome, parentCode: null });
+      totalIncome = round2(totalIncome + mgmtFeeIncome);
+      shiftedPresent = true;
     }
   }
 
@@ -434,59 +603,36 @@ export async function buildSourcedPnl(input: {
     totalExpenses += grabComm;
   }
 
-  // Bank-classified outflows for this company's account.
+  // Bank-classified outflows for this company's account, each line recognised
+  // in its expense month (per-line override > matched invoice issue month >
+  // category shift map > cash month). The shift map replaced the bespoke
+  // management-fee accrual block; the window arithmetic is unchanged.
   const suffix = BANK_ACCOUNT_SUFFIX[companyId];
   if (suffix) {
-    const grouped = await prisma.bankStatementLine.groupBy({
-      by: ["category"],
-      where: {
-        direction: "DR",
-        txnDate: { gte: dStart(start), lte: dEnd(end) },
-        statement: { accountName: { contains: suffix } },
-        apInvoiceId: null, // AP-matched lines settle a procurement invoice (COGS) — not opex
-        ...(outletId ? { outletId } : {}), // per-outlet: only outlet-tagged costs
-        ...(excludeInterCo ? { isInterCo: false } : {}),
-      },
-      _sum: { amount: true },
-    });
-    for (const g of grouped) {
-      const cat = (g.category as string | null) ?? null;
-      const amt = round2(Number(g._sum?.amount ?? 0));
+    const opexLines = await fetchRecognisedBankLines({ direction: "DR", start, end, suffix, outletId, excludeInterCo });
+    const byCat = new Map<string, number>();
+    for (const l of opexLines) {
+      const cat = l.category;
+      if (cat && (BANK_COGS.has(cat) || BANK_NONOPEX.has(cat) || BANK_DIGITAL_ADS.has(cat))) continue;
+      byCat.set(cat ?? "NULL", (byCat.get(cat ?? "NULL") ?? 0) + l.amount);
+    }
+    for (const [key, sum] of byCat) {
+      const cat = key === "NULL" ? null : key;
+      const amt = round2(sum);
       if (!amt) continue;
-      // MANAGEMENT_FEE is recognised on an ACCRUAL basis below (paid in arrears
-      // for the previous month), not at the cash date — skip it here.
-      if (cat && (BANK_COGS.has(cat) || BANK_NONOPEX.has(cat) || BANK_DIGITAL_ADS.has(cat) || cat === "MANAGEMENT_FEE")) continue;
       const isReview = !cat || BANK_REVIEW.has(cat);
       const isMkt = !!cat && BANK_MARKETING.has(cat);
+      const isShifted = !!cat && !!EXPENSE_MONTH_SHIFT[cat];
+      if (isShifted) shiftedPresent = true;
       expenseLines.push({
         code: `BANK:${cat ?? "NULL"}`,
-        name: isReview ? "Unclassified (pending AP match review)" : humanCat(cat) + (isMkt ? " (marketing)" : ""),
+        name: isReview
+          ? "Unclassified (pending AP match review)"
+          : humanCat(cat) + (isMkt ? " (marketing)" : "") + (isShifted ? ACCRUED_SUFFIX : ""),
         amount: amt,
         parentCode: null,
       });
       totalExpenses += amt;
-    }
-
-    // Management fee accrual: HQ bills a month in arrears, so the fee that
-    // BELONGS to this period [start,end] is the one PAID the following month.
-    // Recognise payments in [start+1mo, end+1mo] as this period's expense — so
-    // a month's P&L carries its own fee, not the prior month's cash payment.
-    const mfAgg = await prisma.bankStatementLine.aggregate({
-      _sum: { amount: true },
-      where: {
-        direction: "DR",
-        category: "MANAGEMENT_FEE",
-        txnDate: { gte: dStart(addMonths(start, 1)), lte: dEnd(addMonths(end, 1)) },
-        statement: { accountName: { contains: suffix } },
-        apInvoiceId: null,
-        ...(outletId ? { outletId } : {}),
-        ...(excludeInterCo ? { isInterCo: false } : {}),
-      },
-    });
-    const mfAmt = round2(Number(mfAgg._sum?.amount ?? 0));
-    if (mfAmt) {
-      expenseLines.push({ code: "BANK:MANAGEMENT_FEE", name: "Management fee (accrued, paid the following month)", amount: mfAmt, parentCode: null });
-      totalExpenses += mfAmt;
     }
   }
 
@@ -522,8 +668,15 @@ export async function buildSourcedPnl(input: {
     expenses: { type: "expense", total: totalExpenses, lines: expenseLines },
     netIncome,
     txnCount: saleCount,
+    // Boundary honesty: with a one-month-arrears shift, the newest month of a
+    // report only fills once the following month's payments are recorded.
+    ...(shiftedPresent ? { notes: [ACCRUAL_NOTE] } : {}),
   };
 }
+
+// Shown under the P&L whenever a shift-recognised line is present.
+const ACCRUAL_NOTE =
+  "Accrued lines are shown in the month the cost belongs to, not the payment month. The latest month completes once the following month's payments land.";
 
 // ─── Consolidated P&L — the GROUP statement ─────────────────────────────────
 // Per-company P&Ls distort where the group pays centrally: HQ carries all
@@ -557,6 +710,7 @@ export async function buildConsolidatedPnl(input: { start: string; end: string }
   const income = mergeLines(reports.map((r) => r.income.lines));
   const cogs = mergeLines(reports.map((r) => r.cogs.lines));
   const expenses = mergeLines(reports.map((r) => r.expenses.lines));
+  const notes = [...new Set(reports.flatMap((r) => r.notes ?? []))];
   const totalIncome = round2(reports.reduce((s, r) => s + r.income.total, 0));
   const cogsTotal = round2(reports.reduce((s, r) => s + r.cogs.total, 0));
   const totalExpenses = round2(reports.reduce((s, r) => s + r.expenses.total, 0));
@@ -572,5 +726,6 @@ export async function buildConsolidatedPnl(input: { start: string; end: string }
     expenses: { type: "expense", total: totalExpenses, lines: expenses },
     netIncome: round2(grossProfit - totalExpenses),
     txnCount: reports.reduce((s, r) => s + r.txnCount, 0),
+    ...(notes.length ? { notes } : {}),
   };
 }
