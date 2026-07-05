@@ -6,9 +6,10 @@
  * in the app — so a delivered order doesn't sit un-received and silently break
  * stock + invoice matching.
  *
- * Cron /api/cron/request-receivings. Gated by PROCUREMENT_AGENT_ENABLED, scoped to
- * allow-listed SUPPLIERS (PROCUREMENT_AGENT_ALLOWLIST) during rollout. Messages the
- * PO creator; set PROCUREMENT_RECEIVING_CHASE_TO to route all chases to one number
+ * Cron /api/cron/request-receivings. Gated by PROCUREMENT_AGENT_ENABLED (master
+ * switch) + the per-supplier automationMode dial (OFF = hands-off for that
+ * supplier's POs) — replaces the retired global PROCUREMENT_AGENT_ALLOWLIST.
+ * Messages the PO creator; set PROCUREMENT_RECEIVING_CHASE_TO to route all chases to one number
  * for testing. Free text inside the 24h window; outside it skipped + logged (a
  * staff-reminder template is the production path). De-duped per PO via
  * raw.receivingChaseFor. Never throws.
@@ -30,18 +31,6 @@ function enabled(): boolean {
   return process.env.PROCUREMENT_AGENT_ENABLED === "true";
 }
 
-function allowedSupplier(phone: string | null | undefined): boolean {
-  const raw = process.env.PROCUREMENT_AGENT_ALLOWLIST?.trim();
-  if (!raw) return true;
-  const tail = digits(phone).slice(-8);
-  if (!tail) return false;
-  return raw
-    .split(",")
-    .map((s) => digits(s).slice(-8))
-    .filter(Boolean)
-    .includes(tail);
-}
-
 const firstName = (name: string | null | undefined) => (name || "team").trim().split(/\s+/)[0];
 
 export interface ReceivingRequestSummary {
@@ -61,7 +50,8 @@ export async function runReceivingRequests(): Promise<ReceivingRequestSummary> {
       orderType: "PURCHASE_ORDER",
       status: { in: DUE_STATUSES },
       receivings: { none: {} },
-      supplier: { phone: { not: null }, status: "ACTIVE" },
+      // Per-supplier dial: OFF = the agent stays hands-off for this supplier's POs.
+      supplier: { phone: { not: null }, status: "ACTIVE", automationMode: { not: "OFF" } },
       OR: [
         { deliveryDate: { lt: now } },
         { deliveryDate: null, sentAt: { lt: staleSentBefore } },
@@ -82,7 +72,7 @@ export async function runReceivingRequests(): Promise<ReceivingRequestSummary> {
   let requested = 0;
   let skipped = 0;
   for (const o of orders) {
-    if (!o.supplier?.phone || !allowedSupplier(o.supplier.phone)) {
+    if (!o.supplier?.phone) {
       skipped++;
       continue;
     }

@@ -12,8 +12,8 @@
  *
  * Guardrails are enforced in CODE, not left to the model:
  *   - Off unless PROCUREMENT_AGENT_ENABLED=true.
- *   - Only acts for suppliers on PROCUREMENT_AGENT_ALLOWLIST (last-8 phone digits)
- *     when set — so the first live run is scoped to the Test supplier.
+ *   - Scope is the per-supplier automationMode dial (OFF | ASSIST | AUTO) — the
+ *     retired global PROCUREMENT_AGENT_ALLOWLIST no longer gates anything.
  *   - substitutions, full cancellations, payment/PoP/reconciliation, complaints,
  *     and ANY low-confidence call ESCALATE: a safe holding reply, no PO change.
  *   - every decision is stamped on the outbound message's `raw` for audit, and
