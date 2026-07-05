@@ -114,6 +114,11 @@ describe("bank-line-classifier", () => {
 
   it("classifies purpose suffixes that run into references", () => {
     expect(dr("TRANSFER FR A/C ENCIK AZLAND ZULFIZ Q1 DIVIDENDQ1 2 MBB").category).toBe("DIVIDEND");
+    // Maybank truncates the reference mid-word: "Q1 2026 Divide" is a
+    // shareholder dividend (owner confirmed), and a dividend to a name that is
+    // ALSO a supplier stays a dividend (Mikofee went to RAW_MATERIALS once).
+    expect(dr("TRANSFER FR A/C BADRUL AZMI BIN JAM Q1 2026 Divide").category).toBe("DIVIDEND");
+    expect(dr("TRANSFER FR A/C MIKOFEE SDN. BHD. Q4 2025 Dividend MBB CT").category).toBe("DIVIDEND");
     expect(dr("TRANSFER FR A/C AAS TAXATION SDN. B TAX FORMC").category).toBe("TAX");
     expect(dr("CELSIUSCOFFEE SB ASSOCIATES * HALF AUDIT FEE").category).toBe("COMPLIANCE");
     expect(dr("ELECTRONIC REMITTANCE - GIR RENTOKIL INITIAL (M").category).toBe("MAINTENANCE");

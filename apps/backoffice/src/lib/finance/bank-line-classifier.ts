@@ -191,8 +191,10 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "purpose_renovation",       match: /\bRENOVATION\b|\bRENOVATE\b/i,          direction: "DR", category: "INVESTMENTS" as CashCategory },
   { name: "purpose_legal",            match: /\bLEGAL\s*FEE|\bASHRAF\s*&\s*PARTNERS|\bLAWYER\b/i, direction: "DR", category: "COMPLIANCE" as CashCategory },
   // No trailing boundary: Maybank purpose suffixes run straight into references
-  // ("DIVIDENDQ1 2"), which a \b after the word would reject.
-  { name: "purpose_dividend",         match: /\bDIVIDEN/i,                            direction: "DR", category: "DIVIDEND" as CashCategory },
+  // ("DIVIDENDQ1 2"), which a \b after the word would reject. Maybank ALSO
+  // truncates the reference field mid-word ("Q1 2026 Divide"), so accept the
+  // standalone stem too (owner confirmed: those are shareholder dividends).
+  { name: "purpose_dividend",         match: /\bDIVIDEN|\bDIVIDE\b/i,                 direction: "DR", category: "DIVIDEND" as CashCategory },
   { name: "purpose_cfs_contract",     match: /\bCFS\s*CONTRACT\b|\bCFS\s*FEE\b/i,     direction: "DR", category: "CFS_FEE" as CashCategory },
   { name: "purpose_audit",            match: /\bAUDIT\s*FEE\b|\bAUDIT\b/i,            direction: "DR", category: "COMPLIANCE" as CashCategory },
   { name: "purpose_tax_agent",        match: /\bTAXATION\b|\bTAX\s*(FORM|AGENT|FILING)/i, direction: "DR", category: "TAX" as CashCategory },
