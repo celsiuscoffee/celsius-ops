@@ -115,6 +115,12 @@ export async function POST(req: NextRequest) {
   if (action === "confirm") {
     if (!run_id) return NextResponse.json({ error: "run_id required" }, { status: 400 });
 
+    // Only a not-yet-confirmed run can be confirmed. The status filter makes
+    // this atomic: a concurrent double-confirm — or confirming an already-paid
+    // run, which would otherwise silently DOWNGRADE it back to "confirmed" and
+    // desync the bank files already generated from it — matches zero rows on
+    // the losing call instead of racing. maybeSingle() then returns null, and
+    // we read the current status to return a clear 409.
     const { data, error } = await hrSupabaseAdmin
       .from("hr_payroll_runs")
       .update({
@@ -123,10 +129,23 @@ export async function POST(req: NextRequest) {
         confirmed_at: new Date().toISOString(),
       })
       .eq("id", run_id)
+      .in("status", ["ai_computed", "draft"])
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) {
+      const { data: cur } = await hrSupabaseAdmin
+        .from("hr_payroll_runs")
+        .select("status")
+        .eq("id", run_id)
+        .maybeSingle();
+      if (!cur) return NextResponse.json({ error: "Payroll run not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: `Payroll run is already ${cur.status}; only a computed or draft run can be confirmed.` },
+        { status: 409 },
+      );
+    }
 
     await logActivity({
       actorId: session.id,

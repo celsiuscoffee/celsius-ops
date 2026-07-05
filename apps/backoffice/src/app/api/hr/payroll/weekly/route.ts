@@ -178,6 +178,29 @@ export async function PATCH(req: NextRequest) {
     .single();
   if (!existing) return NextResponse.json({ error: "Item not found" }, { status: 404 });
 
+  // Guard the parent run before mutating an item:
+  //  • confirmed/paid runs are locked (bank files already generated) — mirror
+  //    the monthly items/[item_id] and adjustments routes, which both refuse.
+  //  • this endpoint applies part-time semantics below (net_pay = gross, no
+  //    statutory deductions), so it must only ever touch a WEEKLY run. Pointed
+  //    at a monthly item it would wipe that item's EPF/SOCSO/EIS/PCB by
+  //    overwriting net_pay with gross.
+  const { data: parentRun } = await hrSupabaseAdmin
+    .from("hr_payroll_runs")
+    .select("status, cycle_type")
+    .eq("id", existing.payroll_run_id)
+    .maybeSingle();
+  if (!parentRun) return NextResponse.json({ error: "Run not found" }, { status: 404 });
+  if (["confirmed", "paid"].includes(parentRun.status)) {
+    return NextResponse.json({ error: `Cannot edit a ${parentRun.status} run` }, { status: 400 });
+  }
+  if (parentRun.cycle_type !== "weekly") {
+    return NextResponse.json(
+      { error: "This endpoint only edits weekly (part-time) runs; use the monthly item route." },
+      { status: 400 },
+    );
+  }
+
   const newHours = hours !== undefined ? Number(hours) : Number(existing.total_regular_hours || 0);
   const newRate = hourly_rate !== undefined
     ? Number(hourly_rate)
