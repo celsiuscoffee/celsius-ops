@@ -67,6 +67,7 @@ export async function GET(req: NextRequest) {
     lastDirection: string;
     verifierFailed: boolean;
     sendFailed: boolean;
+    pendingProposal: boolean;
   };
   const threads = new Map<string, T>();
   for (const m of rows) {
@@ -92,12 +93,20 @@ export async function GET(req: NextRequest) {
         lastDirection: m.direction,
         verifierFailed: m.direction === "outbound" && !!raw?.agent && v?.rating === "fail",
         sendFailed: m.direction === "outbound" && raw?.sendFailed === true,
+        pendingProposal: false,
       };
       threads.set(counter, t);
     }
     t.count++;
     if (m.supplierId && !t.supplierId) t.supplierId = m.supplierId;
     if (m.direction === "inbound" && t.lastInbound === null) t.lastInbound = m.body ?? `[${m.type}]`;
+    // An escalated-but-unresolved proposal anywhere in the recent window keeps the
+    // thread in "needs attention" — NOT just when it happens to be the newest
+    // message. Without this, any later chase/reply buried the escalation forever.
+    if (m.direction === "outbound" && raw?.proposalResolved !== true) {
+      const pa = (raw?.proposal as { poAction?: { type?: string } } | undefined)?.poAction;
+      if (pa?.type && pa.type !== "none") t.pendingProposal = true;
+    }
   }
 
   // Resolve each thread to a supplier (by soft-matched id, else by phone), and note
@@ -149,6 +158,7 @@ export async function GET(req: NextRequest) {
     lastAt: Date | null;
     count: number;
     needsAttention: boolean;
+    pendingProposal: boolean;
     awaitingReply: boolean;
     toPay: boolean;
     awaitingDelivery: boolean;
@@ -167,6 +177,7 @@ export async function GET(req: NextRequest) {
     const needsAttention =
       t.verifierFailed ||
       t.sendFailed ||
+      t.pendingProposal ||
       (!!t.lastInbound && ATTENTION_RX.test(t.lastInbound)) ||
       (!!t.supplierId && overdue.has(t.supplierId));
     out.push({
@@ -178,6 +189,7 @@ export async function GET(req: NextRequest) {
       lastAt: t.lastAt,
       count: t.count,
       needsAttention,
+      pendingProposal: t.pendingProposal,
       awaitingReply: t.lastDirection === "inbound",
       toPay: !!t.supplierId && unpaidSet.has(t.supplierId),
       awaitingDelivery: !!t.supplierId && deliverySet.has(t.supplierId),
@@ -198,6 +210,7 @@ export async function GET(req: NextRequest) {
       lastAt: null,
       count: 0,
       needsAttention: overdue.has(s.id),
+      pendingProposal: false,
       awaitingReply: false,
       toPay: unpaidSet.has(s.id),
       awaitingDelivery: deliverySet.has(s.id),

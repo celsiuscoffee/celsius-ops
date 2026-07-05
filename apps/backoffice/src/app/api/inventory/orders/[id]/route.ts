@@ -160,8 +160,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     });
 
     // Auto-send the order block to the supplier on the SENT / AWAITING_DELIVERY
-    // transition (gated + allow-listed + de-duped per PO). Awaited so it runs to
-    // completion before the response; it's internally guarded and never throws.
+    // transition (flag-gated + automationMode dial + de-duped per PO). Awaited so it
+    // runs to completion before the response; it's internally guarded and never throws.
     if (status === "SENT" || status === "AWAITING_DELIVERY") {
       await sendPurchaseOrder(order);
     }

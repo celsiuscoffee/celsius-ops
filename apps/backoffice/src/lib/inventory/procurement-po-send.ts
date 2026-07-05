@@ -8,7 +8,8 @@
  * dial: OFF = manual/group lane (skipped + noted here), ASSIST/AUTO = auto-send. (The old global
  * PROCUREMENT_AGENT_ALLOWLIST gate was removed — it shadowed the dial, so an ASSIST supplier was
  * still blocked; automationMode is the real control now.) De-duped per PO via the outbound row's
- * raw.poSentFor. Free text inside the 24h customer-service window; OUTSIDE it, when
+ * raw.poSentFor on SUCCESSFUL sends only — failures retry on the next trigger.
+ * Free text inside the 24h customer-service window; OUTSIDE it, when
  * PROCUREMENT_PO_PROMPT_TEMPLATE is set we ping the supplier with that approved UTILITY
  * template to invite a reply (which opens the window so the PO block can follow); else the
  * cold send is skipped + logged. Never throws.
@@ -62,21 +63,40 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
     if (!enabled()) return;
     const supplier = order.supplier;
     if (!supplier?.phone) return;
+    // Fail CLOSED on the automation dial: if the caller's shape didn't carry
+    // automationMode, resolve it from the DB rather than assuming it's on.
+    const automationMode =
+      supplier.automationMode ??
+      (
+        await prisma.supplier.findUnique({
+          where: { id: supplier.id },
+          select: { automationMode: true },
+        })
+      )?.automationMode ??
+      "OFF";
     // OFF = the manual lane: these suppliers are ordered from by hand on the Smart Order
     // page (incl. WhatsApp GROUPS via the wa.me picker, which the Cloud API can't reach).
     // Don't also fire a Cloud-API send for them, or they'd get a duplicate 1:1 message.
     // Still leave an internal note in the thread so "PO sent" is visible there —
     // without it the chat shows nothing while the rail lists open POs.
-    if (supplier.automationMode === "OFF") {
+    if (automationMode === "OFF") {
       console.log(`[po-send] po=${order.orderNumber} skipped — supplier is OFF (manual / group send)`);
       await recordPoThreadNote(order, "supplier is on the manual lane (wa.me / group send)");
       return;
     }
     const dest = digits(supplier.phone);
 
-    // Dedupe: already sent this PO once?
+    // Dedupe on SUCCESSFUL sends only — same rule as the prompt path below. A
+    // failed block send (token hiccup, Meta 4xx) must not mark the PO delivered
+    // forever; the next trigger (status re-save or supplier inbound) retries it.
     const already = await prisma.whatsAppMessage.findFirst({
-      where: { direction: "outbound", raw: { path: ["poSentFor"], equals: order.id } },
+      where: {
+        direction: "outbound",
+        AND: [
+          { raw: { path: ["poSentFor"], equals: order.id } },
+          { raw: { path: ["ok"], equals: true } },
+        ],
+      },
       select: { id: true },
     });
     if (already) return;
@@ -149,6 +169,8 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
           via: "template-prompt",
           ok: t.ok,
           error: t.error ?? null,
+          // Surfaces the thread in the inbox "needs attention" tab on failure.
+          ...(t.ok ? {} : { sendFailed: true }),
         },
       });
       console.log(`[po-send] po=${order.orderNumber} cold → new-order prompt sent (${PO_PROMPT_TEMPLATE}) ok=${t.ok}`);
@@ -199,6 +221,8 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
         via: "freetext",
         ok: res.ok,
         error: res.error ?? null,
+        // Surfaces the thread in the inbox "needs attention" tab on failure.
+        ...(res.ok ? {} : { sendFailed: true }),
       },
     });
 
@@ -219,8 +243,16 @@ async function sendPoAsDocument(
   dest: string,
 ): Promise<boolean> {
   try {
+    // Successful deliveries only — a failed PDF template send must retry on the
+    // next trigger instead of counting as delivered forever.
     const already = await prisma.whatsAppMessage.findFirst({
-      where: { direction: "outbound", raw: { path: ["poSentFor"], equals: order.id } },
+      where: {
+        direction: "outbound",
+        AND: [
+          { raw: { path: ["poSentFor"], equals: order.id } },
+          { raw: { path: ["ok"], equals: true } },
+        ],
+      },
       select: { id: true },
     });
     if (already) return true; // already delivered — don't prompt
@@ -265,7 +297,15 @@ async function sendPoAsDocument(
       mediaUrl: url,
       supplierId: supplier.id,
       status: t.ok ? "sent" : "failed",
-      raw: { agent: PO_SEND_VERSION, poSentFor: order.id, poNumber: order.orderNumber, via: "pdf-template", ok: t.ok, error: t.error ?? null },
+      raw: {
+        agent: PO_SEND_VERSION,
+        poSentFor: order.id,
+        poNumber: order.orderNumber,
+        via: "pdf-template",
+        ok: t.ok,
+        error: t.error ?? null,
+        ...(t.ok ? {} : { sendFailed: true }),
+      },
     });
     console.log(`[po-send] po=${order.orderNumber} cold → PDF document template (${PO_DOC_TEMPLATE}) ok=${t.ok}`);
     return true;
@@ -364,7 +404,13 @@ export async function sendPendingPurchaseOrders(fromNumber: string): Promise<voi
         select: { raw: true },
       }),
     ]);
-    const sentIds = new Set(delivered.map((m) => String((m.raw as Record<string, unknown>)?.poSentFor ?? "")));
+    // Only SUCCESSFUL block sends count as delivered — a failed attempt must
+    // leave the PO in the pending set so this inbound retries it.
+    const sentIds = new Set(
+      delivered
+        .filter((m) => (m.raw as Record<string, unknown>)?.ok === true)
+        .map((m) => String((m.raw as Record<string, unknown>)?.poSentFor ?? "")),
+    );
     const pendingIds = [
       ...new Set(
         prompted

@@ -216,6 +216,7 @@ export async function POST(req: NextRequest) {
             productId: true,
             productPackageId: true,
             receivedQty: true,
+            orderedQty: true,
           },
         },
       },
@@ -225,6 +226,26 @@ export async function POST(req: NextRequest) {
       for (const it of r.items) {
         const key = `${it.productId}::${it.productPackageId ?? ""}`;
         cumulativeByLine.set(key, (cumulativeByLine.get(key) ?? 0) + Number(it.receivedQty));
+      }
+    }
+
+    // Short-delivery detection against the ORIGINAL ordered qty (snapshotted on
+    // receiving lines — OrderItem.quantity is overwritten below, so it can't be
+    // the reference on follow-up deliveries; take the MAX across receivings).
+    const originalOrdered = new Map<string, number>();
+    for (const r of allReceivings) {
+      for (const it of r.items) {
+        if (it.orderedQty == null) continue;
+        const key = `${it.productId}::${it.productPackageId ?? ""}`;
+        originalOrdered.set(key, Math.max(originalOrdered.get(key) ?? 0, Number(it.orderedQty)));
+      }
+    }
+    let stillShort = false;
+    for (const [key, cum] of cumulativeByLine) {
+      const ordered = originalOrdered.get(key);
+      if (ordered !== undefined && cum < ordered) {
+        stillShort = true;
+        break;
       }
     }
 
@@ -248,12 +269,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // After overwrite, ordered == received per line, so status always
-    // collapses to COMPLETED. If supplier delivers more later, another
-    // receiving will expand the PO line again and re-mark COMPLETED.
+    // A short delivery leaves the PO PARTIALLY_RECEIVED (still receivable, still
+    // chased by the exec's awaiting-delivery pass) instead of force-completing —
+    // force-complete silently swallowed every shortfall. Fully received → COMPLETED.
+    // If the supplier won't deliver the balance, procurement closes it on the PO page.
     await prisma.order.update({
       where: { id: orderId },
-      data: { totalAmount: newTotalAmount, status: "COMPLETED" },
+      data: { totalAmount: newTotalAmount, status: stillShort ? "PARTIALLY_RECEIVED" : "COMPLETED" },
     });
   }
 

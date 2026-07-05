@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
       where: { orderId },
       select: {
         items: {
-          select: { productId: true, productPackageId: true, receivedQty: true },
+          select: { productId: true, productPackageId: true, receivedQty: true, orderedQty: true },
         },
       },
     });
@@ -210,6 +210,29 @@ export async function POST(req: NextRequest) {
       for (const it of r.items) {
         const key = `${it.productId}::${it.productPackageId ?? ""}`;
         cumulativeByLine.set(key, (cumulativeByLine.get(key) ?? 0) + Number(it.receivedQty));
+      }
+    }
+
+    // Is anything still short across ALL deliveries so far? Judged against the
+    // ORIGINAL ordered qty snapshotted on each receiving line — OrderItem.quantity
+    // is overwritten below, so on a follow-up delivery it no longer holds the
+    // original target (take the MAX across receivings: the first one saw the
+    // pre-overwrite PO). Lines never touched by any receiving keep the legacy
+    // assumption (recorded-complete), same as the per-request hasShort check.
+    const originalOrdered = new Map<string, number>();
+    for (const r of allReceivings) {
+      for (const it of r.items) {
+        if (it.orderedQty == null) continue;
+        const key = `${it.productId}::${it.productPackageId ?? ""}`;
+        originalOrdered.set(key, Math.max(originalOrdered.get(key) ?? 0, Number(it.orderedQty)));
+      }
+    }
+    let stillShort = false;
+    for (const [key, cum] of cumulativeByLine) {
+      const ordered = originalOrdered.get(key);
+      if (ordered !== undefined && cum < ordered) {
+        stillShort = true;
+        break;
       }
     }
 
@@ -233,9 +256,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // A short delivery must NOT close the PO: PARTIALLY_RECEIVED keeps it
+    // receivable for the balance, keeps it in the exec's awaiting-delivery /
+    // overdue-GRN chase, and tells procurement the shortfall exists. It used to
+    // force-complete here, which silently swallowed every short delivery. If the
+    // supplier won't deliver the balance, procurement closes it from the PO page.
     await prisma.order.update({
       where: { id: orderId },
-      data: { totalAmount: newTotalAmount, status: "COMPLETED" },
+      data: { totalAmount: newTotalAmount, status: stillShort ? "PARTIALLY_RECEIVED" : "COMPLETED" },
     });
 
     // Placeholder invoice (GRNI). Staff app needs this so the supplier

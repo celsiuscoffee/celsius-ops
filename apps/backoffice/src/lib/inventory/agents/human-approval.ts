@@ -11,8 +11,10 @@
  *  - cancel_order → not auto-applied (too consequential — left for the PO page)
  *
  * Triggered from the human-send route AFTER the message is recorded. Best-effort: only
- * fires on a short affirmative AND a pending unresolved proposal, so normal chatter is
- * untouched. Stamps raw.proposalResolved so it can't double-apply. Never throws.
+ * fires on a short affirmative AND a pending unresolved proposal that is BOTH the
+ * newest real outbound on the thread AND ≤48h old — if anything was said since (or the
+ * proposal went stale), the affirmative is ambiguous and the inbox Apply flow is the
+ * only path. Stamps raw.proposalResolved so it can't double-apply. Never throws.
  */
 import { prisma } from "@/lib/prisma";
 import { createReSourcePO } from "@/lib/inventory/agents/resource-po";
@@ -40,27 +42,45 @@ export async function tryApplyHumanApproval(
   try {
     if (!APPROVE_RX.test(text)) return null;
 
-    // Most recent UNRESOLVED, actionable proposal on this thread = the one the human
-    // is approving.
+    // The "ok" only applies a proposal when the context is unambiguous:
+    //  1. the NEWEST real outbound on the thread IS the pending proposal (internal
+    //     "PO sent" notes don't count as conversation) — if the agent or a human has
+    //     said anything since, the affirmative may be about that instead, so we
+    //     refuse and leave the proposal for the inbox banner / Apply button;
+    //  2. the proposal is fresh (≤48h) — a stale "ok" days later must never
+    //     silently mutate a PO.
     const recent = await prisma.whatsAppMessage.findMany({
       where: { OR: [{ fromNumber: key }, { toNumber: key }], direction: "outbound" },
       orderBy: { timestamp: "desc" },
       take: 12,
-      select: { id: true, raw: true },
+      select: { id: true, raw: true, timestamp: true },
     });
     let msgId: string | null = null;
     let proposal: Proposal | null = null;
+    let proposalAt: Date | null = null;
     for (const m of recent) {
       const raw = (m.raw ?? {}) as Record<string, unknown>;
-      if (raw.proposalResolved === true) continue;
+      if (raw.poThreadNote) continue; // internal note, not part of the conversation
       const p = raw.proposal as Proposal | null;
-      if (p && typeof p === "object" && p.poAction && p.poAction.type && p.poAction.type !== "none") {
+      if (
+        raw.proposalResolved !== true &&
+        p &&
+        typeof p === "object" &&
+        p.poAction &&
+        p.poAction.type &&
+        p.poAction.type !== "none"
+      ) {
         msgId = m.id;
         proposal = p;
-        break;
+        proposalAt = m.timestamp;
       }
+      break; // only the newest real outbound counts — anything else is ambiguous
     }
     if (!msgId || !proposal?.poAction || !proposal.orderId) return null;
+    if (!proposalAt || Date.now() - +new Date(proposalAt) > 48 * 60 * 60 * 1000) {
+      console.warn(`[human-approval] ${key} affirmative ignored — pending proposal older than 48h, use the inbox Apply flow`);
+      return null;
+    }
 
     const pa = proposal.poAction;
     if (!pa.poItemId) return null;

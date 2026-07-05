@@ -86,12 +86,16 @@ export default function ParLevelsPage() {
     salesTransactions: number;
     menuItemsWithSales: number;
     lookbackDays: number;
-    settings: { safetyDays: number; coverageDays: number };
-    details: { productId: string; name: string; dailyUsage: number; leadTime: number; reorderPoint: number; parLevel: number; maxLevel: number }[];
+    settings: { safetyDays: number; coverageDays: number | null };
+    projectedParValue?: number;
+    valueByClass?: Record<"A" | "B" | "C", { products: number; parValue: number }>;
+    details: { productId: string; name: string; dailyUsage: number; valueClass?: "A" | "B" | "C"; parValue?: number; leadTime: number; reorderPoint: number; parLevel: number; maxLevel: number }[];
   } | null>(null);
   const [showRecalcResult, setShowRecalcResult] = useState(false);
   const [recalcSafetyDays, setRecalcSafetyDays] = useState("1");
-  const [recalcCoverageDays, setRecalcCoverageDays] = useState("3");
+  // Empty = auto: the engine picks coverage per value class (A 2d / B 3d / C 5d)
+  // to cap the ringgit tied up at par. A number forces that coverage for everything.
+  const [recalcCoverageDays, setRecalcCoverageDays] = useState("");
   const [showRecalcSettings, setShowRecalcSettings] = useState(false);
 
   // Load outlets and products on mount
@@ -297,7 +301,8 @@ export default function ParLevelsPage() {
         body: JSON.stringify({
           outletId: selectedOutletId,
           safetyDays: parseInt(recalcSafetyDays) || 1,
-          coverageDays: parseInt(recalcCoverageDays) || 3,
+          // Omit coverageDays when blank so the engine uses value-class coverage.
+          ...(parseInt(recalcCoverageDays) > 0 ? { coverageDays: parseInt(recalcCoverageDays) } : {}),
         }),
       });
       const data = await res.json();
@@ -703,7 +708,11 @@ export default function ParLevelsPage() {
               <div className="mt-2 space-y-1 text-xs text-purple-600">
                 <p><strong>Reorder Point</strong> = Daily Usage × (Lead Time + Safety Days)</p>
                 <p><strong>Par Level</strong> = Daily Usage × (Lead Time + Safety + Coverage Days)</p>
-                <p><strong>Max Level</strong> = Par Level × 1.5</p>
+                <p><strong>Max Level</strong> = Par Level × class multiplier (A 1.25× · B 1.5× · C 2×)</p>
+                <p>
+                  <strong>Coverage</strong> is set per value class to cap inventory value: high-spend
+                  items (A) hold 2 days, mid (B) 3, cheap tail (C) 5.
+                </p>
               </div>
             </div>
 
@@ -727,10 +736,11 @@ export default function ParLevelsPage() {
                   type="number"
                   min="1"
                   max="30"
+                  placeholder="Auto (by value class)"
                   value={recalcCoverageDays}
                   onChange={(e) => setRecalcCoverageDays(e.target.value)}
                 />
-                <p className="mt-1 text-xs text-gray-400">Stock after reorder arrives</p>
+                <p className="mt-1 text-xs text-gray-400">Leave blank to optimise by value class</p>
               </div>
             </div>
 
@@ -772,7 +782,7 @@ export default function ParLevelsPage() {
           {recalcResult && (
             <div className="grid gap-4 py-2">
               {/* Summary Cards */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div className="rounded-lg border border-green-100 bg-green-50 p-3 text-center">
                   <p className="text-2xl font-bold text-green-700">{recalcResult.productsUpdated}</p>
                   <p className="text-xs text-green-600">Products Updated</p>
@@ -785,6 +795,14 @@ export default function ParLevelsPage() {
                   <p className="text-2xl font-bold text-purple-700">{recalcResult.lookbackDays}d</p>
                   <p className="text-xs text-purple-600">Lookback Period</p>
                 </div>
+                <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-700">
+                    {recalcResult.projectedParValue != null
+                      ? `RM ${Math.round(recalcResult.projectedParValue).toLocaleString()}`
+                      : "—"}
+                  </p>
+                  <p className="text-xs text-amber-600">Value at Par (cap)</p>
+                </div>
               </div>
 
               <div className="flex items-center gap-3 text-xs text-gray-500">
@@ -792,12 +810,26 @@ export default function ParLevelsPage() {
                   <AlertTriangle className="h-3 w-3" /> Safety: {recalcResult.settings?.safetyDays}d
                 </span>
                 <span className="flex items-center gap-1">
-                  <Package className="h-3 w-3" /> Coverage: {recalcResult.settings?.coverageDays}d
+                  <Package className="h-3 w-3" /> Coverage:{" "}
+                  {recalcResult.settings?.coverageDays != null
+                    ? `${recalcResult.settings.coverageDays}d`
+                    : "by value class (A 2d · B 3d · C 5d)"}
                 </span>
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" /> Menu items with sales: {recalcResult.menuItemsWithSales}
                 </span>
               </div>
+
+              {recalcResult.valueByClass && (
+                <div className="flex items-center gap-3 text-xs text-gray-500">
+                  {(["A", "B", "C"] as const).map((c) => (
+                    <span key={c} className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5">
+                      Class {c}: {recalcResult.valueByClass![c].products} items · RM{" "}
+                      {Math.round(recalcResult.valueByClass![c].parValue).toLocaleString()}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/* Details Table */}
               <div className="rounded-lg border border-gray-200 overflow-x-auto">
@@ -805,11 +837,13 @@ export default function ParLevelsPage() {
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50">
                       <th className="px-3 py-2 text-left font-medium text-gray-500">Product</th>
+                      <th className="px-3 py-2 text-center font-medium text-gray-500">Class</th>
                       <th className="px-3 py-2 text-right font-medium text-gray-500">Daily Usage</th>
                       <th className="px-3 py-2 text-right font-medium text-gray-500">Lead Time</th>
                       <th className="px-3 py-2 text-right font-medium text-gray-500">Reorder Pt</th>
                       <th className="px-3 py-2 text-right font-medium text-gray-500">Par Level</th>
                       <th className="px-3 py-2 text-right font-medium text-gray-500">Max Level</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-500">Value @ Par</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -822,6 +856,23 @@ export default function ParLevelsPage() {
                             <span className="font-medium text-gray-900">{d.name}</span>
                             <span className="ml-1 text-xs text-gray-400">{getPackageLabel(d.productId)}</span>
                           </td>
+                          <td className="px-3 py-2 text-center">
+                            {d.valueClass ? (
+                              <span
+                                className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold ${
+                                  d.valueClass === "A"
+                                    ? "bg-red-100 text-red-700"
+                                    : d.valueClass === "B"
+                                      ? "bg-amber-100 text-amber-700"
+                                      : "bg-gray-100 text-gray-500"
+                                }`}
+                              >
+                                {d.valueClass}
+                              </span>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-right text-gray-600">{toPkg(d.dailyUsage)}</td>
                           <td className="px-3 py-2 text-right">
                             <span className="inline-flex items-center gap-1 text-gray-600">
@@ -832,12 +883,15 @@ export default function ParLevelsPage() {
                           <td className="px-3 py-2 text-right font-medium text-amber-600">{toPkg(d.reorderPoint)}</td>
                           <td className="px-3 py-2 text-right font-medium text-blue-600">{toPkg(d.parLevel)}</td>
                           <td className="px-3 py-2 text-right font-medium text-purple-600">{toPkg(d.maxLevel)}</td>
+                          <td className="px-3 py-2 text-right text-gray-600">
+                            {d.parValue != null && d.parValue > 0 ? `RM ${d.parValue.toLocaleString()}` : "—"}
+                          </td>
                         </tr>
                       );
                     })}
                     {(!recalcResult.details || recalcResult.details.length === 0) && (
                       <tr>
-                        <td colSpan={6} className="px-3 py-8 text-center text-sm text-gray-400">
+                        <td colSpan={8} className="px-3 py-8 text-center text-sm text-gray-400">
                           No products calculated. Ensure sales data and menu ingredients are set up.
                         </td>
                       </tr>

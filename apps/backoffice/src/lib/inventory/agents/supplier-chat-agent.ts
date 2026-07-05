@@ -359,9 +359,13 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       // ...except payment/finance: force a short "waiting on finance" line so the agent
       // doesn't free-write a prepay explainer (reads stiff + risks over-promising).
       if (decision.intent === "payment_gating_or_chase") replyText = FINANCE_HOLDING_REPLY[lang];
-      // QA gate blocked the planned action — the model's line was written assuming we'd
-      // apply it (often a confirmation), so it must NOT go out. Use a neutral holding line.
-      if (qaBlocked) replyText = HOLDING_REPLY[lang];
+      // The planned PO edits are NOT being applied (held for human approval) — but the
+      // playbook REQUIRES the model to confirm each adjusted line whenever it plans
+      // actions, so its reply reads as agreement ("ok noted, X 5, Y 3"). Sending that
+      // while the PO is untouched tells the supplier a cut was agreed when it wasn't
+      // (bit ASSIST suppliers in the pilot). Same reasoning as qaBlocked: any withheld
+      // action ⇒ neutral holding line, never the confirmation.
+      if (qaBlocked || actions.length > 0) replyText = HOLDING_REPLY[lang];
     } else {
       // Fetch the system user once if any line is being removed (for the re-source PO).
       const systemUser = actions.some((a) => a.type === "remove_item")

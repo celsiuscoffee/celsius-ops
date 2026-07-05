@@ -11,8 +11,9 @@
  * dial (OFF = hands-off; ASSIST/AUTO = chase) — replaces the retired global
  * PROCUREMENT_AGENT_ALLOWLIST. Inside an open 24h window it sends free text;
  * otherwise it uses the approved `invoice_request` template (business-initiated).
- * De-duped via the outbound row's raw.invoiceRequestFor so a PO is asked at most
- * once. Never throws.
+ * De-duped via the outbound row's raw.invoiceRequestFor on SUCCESSFUL sends only,
+ * so a PO is asked at most once but a failed attempt retries on a later cron
+ * pass. Never throws.
  */
 import type { OrderStatus } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
@@ -90,9 +91,16 @@ async function requestOne(
   phone: string,
 ): Promise<boolean> {
   try {
-    // Dedupe: have we already asked for this PO's invoice?
+    // Dedupe on SUCCESSFUL asks only — a failed send (template not yet approved,
+    // transient Meta error) must not mark this PO as chased forever.
     const already = await prisma.whatsAppMessage.findFirst({
-      where: { direction: "outbound", raw: { path: ["invoiceRequestFor"], equals: orderId } },
+      where: {
+        direction: "outbound",
+        AND: [
+          { raw: { path: ["invoiceRequestFor"], equals: orderId } },
+          { raw: { path: ["ok"], equals: true } },
+        ],
+      },
       select: { id: true },
     });
     if (already) return false;
