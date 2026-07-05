@@ -353,51 +353,79 @@ const MAX_PLAUSIBLE_LINE = 8000;
 const MIN_PLAUSIBLE_TOTAL = 2000;
 const MAX_PLAUSIBLE_TOTAL = 60000;
 
-// Value inventory at a period boundary from the nearest finalized
-// (REVIEWED/SUBMITTED) stock count per outlet within 25 days. Each line is
-// valued in its own recorded unit (package price when the line names a
-// package, base cost otherwise). Returns null (→ caller falls back to the
-// purchases proxy) when no usable count exists or a count values implausibly,
-// so a wrong COGS is never printed. coverage exposes how complete the count was.
+// Outlets often finalise a month-end count a few days into the next month
+// (an end-of-May count dated 2 June), so match a count to a boundary within a
+// window that reaches a little PAST it, not only before, and pick the count
+// nearest the boundary. Wider back than forward: a slightly-late count is
+// fine, a stale month-old one is not.
+const COUNT_LOOKBACK_DAYS = 25;
+const COUNT_LOOKAHEAD_DAYS = 12;
+// A single fat-fingered line (a base amount typed into a package line) should
+// not kill an otherwise good count, so lines above this are dropped as typos.
+// But if too many lines are typos the whole count is untrustworthy, so reject
+// it once the typo share crosses this fraction.
+const MAX_TYPO_LINE_SHARE = 0.1;
+
+// Evaluate one stock count: value each line in its recorded unit (package
+// price when the line names a package, base cost otherwise), drop obvious
+// per-line typos, and decide whether the cleaned count is a usable full
+// inventory. Returns null when it is partial (too few real items), too
+// corrupted (too many typo lines), or values outside the plausible band.
+function evaluateCount(
+  items: { productId: string; productPackageId: string | null; countedQty: unknown }[],
+  cost: CostMaps,
+): { value: number; items: number; costed: number; dropped: number } | null {
+  const MIN_ITEMS = 100;
+  let value = 0, counted = 0, costed = 0, dropped = 0;
+  for (const it of items) {
+    if (it.countedQty == null) continue;
+    counted++;
+    const u = it.productPackageId ? cost.byPackage.get(it.productPackageId) : cost.byBase.get(it.productId);
+    if (u == null) continue;
+    const lineValue = Number(it.countedQty) * u;
+    if (lineValue > MAX_PLAUSIBLE_LINE) { dropped++; continue; } // fat-finger typo
+    costed++; value += lineValue;
+  }
+  if (counted === 0) return null;
+  if (dropped / counted > MAX_TYPO_LINE_SHARE) return null; // systematically mis-keyed
+  const kept = counted - dropped;
+  if (kept < MIN_ITEMS || value < MIN_PLAUSIBLE_TOTAL || value > MAX_PLAUSIBLE_TOTAL) return null;
+  return { value: round2(value), items: kept, costed, dropped };
+}
+
+// Value inventory at a period boundary from the finalized (REVIEWED/SUBMITTED)
+// stock count nearest the boundary per outlet. Returns null (→ caller falls
+// back to the purchases proxy) when no usable count sits near the boundary, so
+// a wrong COGS is never printed. coverage exposes how complete the count was.
 async function valueInventoryAt(
   outletIds: string[],
   boundary: Date,
   cost: CostMaps,
 ): Promise<{ value: number; dates: string[]; coverage: string } | null> {
   if (!outletIds.length) return null;
-  const since = new Date(boundary.getTime() - 25 * 86400_000);
+  const since = new Date(boundary.getTime() - COUNT_LOOKBACK_DAYS * 86400_000);
+  const until = new Date(boundary.getTime() + COUNT_LOOKAHEAD_DAYS * 86400_000);
   const counts = await prisma.stockCount.findMany({
-    where: { outletId: { in: outletIds }, status: { in: ["REVIEWED", "SUBMITTED"] }, countDate: { gte: since, lte: boundary } },
-    orderBy: { countDate: "desc" },
+    where: { outletId: { in: outletIds }, status: { in: ["REVIEWED", "SUBMITTED"] }, countDate: { gte: since, lte: until } },
     select: { outletId: true, countDate: true, items: { select: { productId: true, productPackageId: true, countedQty: true } } },
   });
-  // Per outlet, take the latest count that is a real FULL inventory: >=100
-  // counted items and a plausible total. Keep looking back through the window
-  // if the newest count is partial or broken.
-  const MIN_ITEMS = 100;
-  const used = new Map<string, { date: Date; value: number; items: number; costed: number }>();
+  // Per outlet, the usable count CLOSEST to the boundary wins (a count on the
+  // 2nd represents the 1st better than one from three weeks earlier).
+  const used = new Map<string, { date: Date; value: number; items: number; costed: number; dropped: number; gap: number }>();
   for (const c of counts) {
-    if (used.has(c.outletId)) continue;
-    let v = 0, n = 0, costed = 0, broken = false;
-    for (const it of c.items) {
-      if (it.countedQty == null) continue;
-      n++;
-      // Package line -> its package price; base line -> per-base cost.
-      const u = it.productPackageId ? cost.byPackage.get(it.productPackageId) : cost.byBase.get(it.productId);
-      if (u == null) continue;
-      const lineValue = Number(it.countedQty) * u;
-      if (lineValue > MAX_PLAUSIBLE_LINE) { broken = true; break; }
-      costed++; v += lineValue;
-    }
-    if (broken || n < MIN_ITEMS || v < MIN_PLAUSIBLE_TOTAL || v > MAX_PLAUSIBLE_TOTAL) continue;
-    used.set(c.outletId, { date: c.countDate, value: v, items: n, costed });
+    const ok = evaluateCount(c.items, cost);
+    if (!ok) continue;
+    const gap = Math.abs(c.countDate.getTime() - boundary.getTime());
+    const prev = used.get(c.outletId);
+    if (!prev || gap < prev.gap) used.set(c.outletId, { date: c.countDate, ...ok, gap });
   }
   if (used.size === 0) return null;
 
-  let value = 0, tot = 0, costed = 0;
+  let value = 0, tot = 0, costed = 0, dropped = 0;
   const dates: string[] = [];
-  for (const u of used.values()) { value += u.value; tot += u.items; costed += u.costed; dates.push(ymd(u.date)); }
-  return { value: round2(value), dates: [...new Set(dates)].sort(), coverage: `${costed}/${tot} items` };
+  for (const u of used.values()) { value += u.value; tot += u.items; costed += u.costed; dropped += u.dropped; dates.push(ymd(u.date)); }
+  const note = dropped ? `${costed}/${tot} items, ${dropped} typo dropped` : `${costed}/${tot} items`;
+  return { value: round2(value), dates: [...new Set(dates)].sort(), coverage: note };
 }
 
 export async function buildSourcedPnl(input: {
