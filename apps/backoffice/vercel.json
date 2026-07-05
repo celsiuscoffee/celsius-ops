@@ -13,6 +13,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/checklist-assign",
+      "schedule": "*/30 0-15 * * *"
+    },
+    {
       "path": "/api/cron/sweep-stale-orders",
       "schedule": "0 * * * *"
     },
