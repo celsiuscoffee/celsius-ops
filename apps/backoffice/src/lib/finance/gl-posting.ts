@@ -38,7 +38,7 @@
 // resolveGrabSettlementRouting, upsertMirrorJournal, and the mirror-aware GC.
 
 import { createHash } from "crypto";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "../prisma";
 import { postJournal } from "./ledger";
 import { getFinanceClient } from "./supabase";
 import type { JournalLineInput } from "./types";
