@@ -63,14 +63,17 @@ const BANK_REVIEW = new Set(["OTHER_OUTFLOW"]);
 // line outranks it with its invoice issue month. Cash Flow, the cashflow
 // projections and the bank recon tie stay strictly cash-dated.
 export const EXPENSE_MONTH_SHIFT: Record<string, number> = {
-  MANAGEMENT_FEE: -1,   // HQ bills one month in arrears
-  EMPLOYEE_SALARY: -1,  // salary paid early in month N pays for month N-1 work
-  UTILITIES: -1,        // TNB and water bill the prior month's usage
-  STATUTORY_PAYMENT: -1, // EPF/SOCSO/EIS/PCB due by the 15th for the prior month
+  MANAGEMENT_FEE: -1,   // HQ bills one month in arrears (owner-confirmed accrual)
 };
-// PARTIMER is deliberately NOT shifted: the owner wants part timer wages
-// matched to HR payroll runs in a later phase, so they stay on a cash basis
-// until then. RENT is unshifted too, it is paid in the month, for the month.
+// Only the management fee is auto-shifted. Salary, statutory (EPF/SOCSO/EIS/PCB)
+// and utilities are paid slightly in arrears too, but auto-shifting them made
+// the latest month you view look empty until the NEXT month's payment landed
+// (June statutory needed July's payment), which read as missing spend. They now
+// recognise on the payment date, so a month always shows what was actually paid
+// in it. To book a specific payment to a different month, set the per-line
+// expenseMonth override on the recon page or the P&L drill; it outranks this
+// map. PARTIMER stays cash basis until matched to HR payroll runs; RENT is
+// paid in-month for the month.
 
 // P&L line-name suffix for shift-recognised categories.
 const ACCRUED_SUFFIX = " (accrued, paid the following month)";
