@@ -147,6 +147,63 @@ function startOfWeek(d: Date): Date {
   return r;
 }
 
+// --- Cash-generated granularity -----------------------------------------
+//
+// The "cash generated per month (actual)" table can be re-bucketed to a
+// Daily or Weekly cadence. Monthly keeps the reconciled header-based build
+// (loadMonthlyHistory) untouched. Daily and Weekly are summed from
+// individual BankStatementLine rows (CR = cash in, DR = cash out) because
+// the header totals have no sub-month granularity.
+//
+// An optional account filter (last-4 suffix of accountName: 4384 = Celsius
+// Coffee SB, 2644 = Conezion, 9345 = Tamarind) narrows every path to a
+// single account. "All accounts" keeps the consolidated behavior.
+export type Cadence = "DAILY" | "WEEKLY" | "MONTHLY";
+
+// Row cap per cadence. Keeps the table readable and bounds the query.
+const CASH_GEN_DAILY_DAYS = 90;    // last ~90 days
+const CASH_GEN_WEEKLY_WEEKS = 26;  // last ~26 weeks
+const CASH_GEN_MONTHLY_MONTHS = 12;
+
+export type CashGeneratedRow = {
+  // Bucket key: YYYY-MM-DD for daily/weekly (week = Monday start),
+  // YYYY-MM for monthly.
+  period: string;
+  label: string;            // human label for the bucket
+  cashIn: number;
+  cashOut: number;
+  netGenerated: number;     // cashIn - cashOut
+  minBalance: number | null;
+  minBalanceDate: string | null;
+  accountsReporting: number; // # of accounts with any line in the bucket
+};
+
+export type CashGeneratedResult = {
+  cadence: Cadence;
+  account: string | null;   // last-4 suffix when filtered; null = all
+  accountLabel: string | null; // display name of the selected account
+  rangeLabel: string;       // e.g. "last 90 days" / "last 26 weeks" / "last 12 months"
+  rows: CashGeneratedRow[];
+  // How many bank accounts exist in scope, used for the coverage column.
+  // 1 when a single account is selected; else the max seen consolidated.
+  accountsInScope: number;
+  // For MONTHLY + all-accounts we reuse the reconciled monthlyHistory rows,
+  // so the numbers match the cash-tracking spreadsheet exactly.
+  reconciled: boolean;
+};
+
+// Map a last-4 account suffix to a display label. Kept in one place so the
+// API and the table header agree.
+const ACCOUNT_LABELS: Record<string, string> = {
+  "4384": "Celsius Coffee SB",
+  "2644": "Conezion",
+  "9345": "Tamarind",
+};
+
+function accountSuffix(accountName: string | null): string | null {
+  return accountName?.match(/(\d{4})\)?\s*$/)?.[1] ?? null;
+}
+
 function ymd(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -846,11 +903,16 @@ export async function computeCashflow(opts: {
 //
 // Falls back to (totalInflows - totalOutflows) when no prior-month
 // closing exists for an account (typically the first month uploaded).
-async function loadMonthlyHistory(): Promise<CashflowResult["monthlyHistory"]> {
+async function loadMonthlyHistory(accountFilter?: string | null): Promise<CashflowResult["monthlyHistory"]> {
   const since = new Date();
   since.setMonth(since.getMonth() - 12);
   const rows = await prisma.bankStatement.findMany({
-    where: { periodStart: { not: null, gte: since } },
+    where: {
+      periodStart: { not: null, gte: since },
+      // Account filter: match statements whose accountName carries the
+      // selected last-4 suffix. Null / empty = all accounts (consolidated).
+      ...(accountFilter ? { accountName: { contains: `(${accountFilter})` } } : {}),
+    },
     select: {
       accountName: true, periodStart: true, periodEnd: true,
       closingBalance: true,
@@ -1053,6 +1115,201 @@ function minBalancePerMonth(dailyConsolidated: Map<string, number>): Map<string,
     if (!cur || bal < cur.min) minByMonth.set(month, { min: round2(bal), date: day });
   }
   return minByMonth;
+}
+
+// Generalised min-balance-per-bucket. Given a daily balance map
+// (YYYY-MM-DD → balance) and a bucketing function that maps a day to its
+// bucket key, returns the lowest balance (and the day it hit) per bucket.
+// Reuses the same reconstructed daily series the monthly min-balance column
+// is built from, just grouped per-day or per-week instead of per-month.
+function minBalancePerBucket(
+  daily: Map<string, number>,
+  bucketOf: (day: string) => string,
+): Map<string, { min: number; date: string }> {
+  const out = new Map<string, { min: number; date: string }>();
+  for (const [day, bal] of daily.entries()) {
+    const key = bucketOf(day);
+    const cur = out.get(key);
+    if (!cur || bal < cur.min) out.set(key, { min: round2(bal), date: day });
+  }
+  return out;
+}
+
+// Bucket key for a YYYY-MM-DD day at a given cadence. Weekly snaps to the
+// Monday that starts the ISO-ish week; daily is the day itself; monthly is
+// YYYY-MM.
+function bucketKeyForDay(day: string, cadence: Cadence): string {
+  if (cadence === "MONTHLY") return day.slice(0, 7);
+  if (cadence === "DAILY") return day;
+  // WEEKLY: snap to Monday. Parse at noon UTC to dodge DST edges.
+  const d = new Date(`${day}T12:00:00Z`);
+  const dow = d.getUTCDay();               // 0=Sun..6=Sat
+  const offset = dow === 0 ? -6 : 1 - dow; // back up to Monday
+  const monday = new Date(d.getTime() + offset * DAY_MS);
+  return ymd(new Date(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate()));
+}
+
+// Pure line-bucketing for the Daily/Weekly cash-generated table. Sums CR as
+// cash in and DR as cash out into per-bucket totals, and tracks how many
+// distinct accounts posted a line in each bucket (the honest coverage
+// count for sub-month cadences). Exported for unit testing.
+export function bucketCashGeneratedLines(
+  lines: Array<{ txnDate: Date; direction: string; amount: number; account: string }>,
+  cadence: Cadence,
+): Map<string, { cashIn: number; cashOut: number; accounts: Set<string> }> {
+  const byBucket = new Map<string, { cashIn: number; cashOut: number; accounts: Set<string> }>();
+  for (const l of lines) {
+    const key = bucketKeyForDay(ymd(l.txnDate), cadence);
+    let b = byBucket.get(key);
+    if (!b) {
+      b = { cashIn: 0, cashOut: 0, accounts: new Set<string>() };
+      byBucket.set(key, b);
+    }
+    if (l.direction === "CR") b.cashIn += l.amount;
+    else b.cashOut += l.amount;
+    b.accounts.add(l.account);
+  }
+  return byBucket;
+}
+
+// Human label for a bucket period at a given cadence.
+function cashGenBucketLabel(period: string, cadence: Cadence): string {
+  if (cadence === "MONTHLY") return period;
+  if (cadence === "DAILY") return period;
+  // WEEKLY, "week of YYYY-MM-DD"
+  return `Week of ${period}`;
+}
+
+// Load the cash-generated table at the requested cadence, optionally scoped
+// to a single account (last-4 suffix). MONTHLY reuses the reconciled
+// header-based loadMonthlyHistory so its numbers never drift; DAILY and
+// WEEKLY are summed from individual bank lines.
+export async function loadCashGenerated(
+  cadence: Cadence,
+  accountFilter?: string | null,
+): Promise<CashGeneratedResult> {
+  const account = accountFilter && ACCOUNT_LABELS[accountFilter] ? accountFilter : null;
+  const accountLabel = account ? ACCOUNT_LABELS[account] : null;
+
+  if (cadence === "MONTHLY") {
+    const history = await loadMonthlyHistory(account);
+    // Min balance: consolidated (all accounts) reuses the standard daily
+    // reconstruction; a single account uses just that account's series.
+    const db = await buildDailyBalances(CASH_GEN_MONTHLY_MONTHS);
+    const daily = account
+      ? accountDailyBalance(db, account)
+      : db.dailyConsolidated;
+    const minByMonth = minBalancePerBucket(daily, (d) => d.slice(0, 7));
+    const rows: CashGeneratedRow[] = history
+      .slice(-CASH_GEN_MONTHLY_MONTHS)
+      .map((m) => {
+        const mb = minByMonth.get(m.month);
+        return {
+          period: m.month,
+          label: m.month,
+          cashIn: m.cashIn,
+          cashOut: m.cashOut,
+          netGenerated: m.netGenerated,
+          minBalance: mb ? mb.min : m.minBalance,
+          minBalanceDate: mb ? mb.date : m.minBalanceDate,
+          accountsReporting: account ? 1 : m.accountsReporting,
+        };
+      });
+    const accountsInScope = account
+      ? 1
+      : Math.max(1, ...history.map((m) => m.accountsReporting));
+    return {
+      cadence,
+      account,
+      accountLabel,
+      rangeLabel: "last 12 months",
+      rows,
+      accountsInScope,
+      reconciled: !account, // all-accounts monthly = reconciled spreadsheet figure
+    };
+  }
+
+  // DAILY / WEEKLY: line-based aggregation.
+  const daysBack = cadence === "DAILY" ? CASH_GEN_DAILY_DAYS : CASH_GEN_WEEKLY_WEEKS * 7;
+  const since = new Date();
+  since.setDate(since.getDate() - daysBack);
+  since.setHours(0, 0, 0, 0);
+
+  const rawLines = await prisma.bankStatementLine.findMany({
+    where: {
+      txnDate: { gte: since },
+      ...(account
+        ? { statement: { accountName: { contains: `(${account})` } } }
+        : {}),
+    },
+    select: {
+      txnDate: true,
+      direction: true,
+      amount: true,
+      statement: { select: { accountName: true } },
+    },
+    orderBy: { txnDate: "asc" },
+  });
+
+  const lines = rawLines.map((l) => ({
+    txnDate: l.txnDate,
+    direction: l.direction,
+    amount: Number(l.amount),
+    account: accountSuffix(l.statement?.accountName ?? null) ?? "__unknown__",
+  }));
+
+  const byBucket = bucketCashGeneratedLines(lines, cadence);
+
+  // Min balance per bucket from the reconstructed daily balance series.
+  const db = await buildDailyBalances(cadence === "DAILY" ? 4 : 8);
+  const daily = account ? accountDailyBalance(db, account) : db.dailyConsolidated;
+  const minByBucket = minBalancePerBucket(daily, (d) => bucketKeyForDay(d, cadence));
+
+  const maxRows = cadence === "DAILY" ? CASH_GEN_DAILY_DAYS : CASH_GEN_WEEKLY_WEEKS;
+  const rows: CashGeneratedRow[] = Array.from(byBucket.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-maxRows)
+    .map(([period, agg]) => {
+      const mb = minByBucket.get(period);
+      const cashIn = round2(agg.cashIn);
+      const cashOut = round2(agg.cashOut);
+      return {
+        period,
+        label: cashGenBucketLabel(period, cadence),
+        cashIn,
+        cashOut,
+        netGenerated: round2(agg.cashIn - agg.cashOut),
+        minBalance: mb ? mb.min : null,
+        minBalanceDate: mb ? mb.date : null,
+        accountsReporting: account ? 1 : agg.accounts.size,
+      };
+    });
+
+  const accountsInScope = account
+    ? 1
+    : Math.max(1, ...Array.from(byBucket.values()).map((b) => b.accounts.size), 1);
+
+  return {
+    cadence,
+    account,
+    accountLabel,
+    rangeLabel: cadence === "DAILY" ? "last 90 days" : "last 26 weeks",
+    rows,
+    accountsInScope,
+    reconciled: false,
+  };
+}
+
+// Pull a single account's daily balance series out of the reconstructed
+// DailyBalances. Accounts are keyed by their full accountName in the
+// reconstruction, so match on the last-4 suffix.
+function accountDailyBalance(db: DailyBalances, suffix: string): Map<string, number> {
+  for (const acct of db.accounts) {
+    if (accountSuffix(acct) === suffix) {
+      return db.dailyByAccount.get(acct) ?? new Map<string, number>();
+    }
+  }
+  return new Map<string, number>();
 }
 
 // Shape the reconstructed balances into the chart series: sorted daily
