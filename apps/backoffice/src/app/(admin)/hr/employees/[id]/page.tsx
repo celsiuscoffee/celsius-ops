@@ -63,6 +63,16 @@ const POSITIONS = [
   "Accountant", "Executive", "Director",
 ];
 
+// Station drives who a checklist auto-assigns to. Blank = infer from the
+// position above (Barista→bar, Kitchen Crew→kitchen, etc.); set it explicitly
+// only when the job title doesn't imply the station.
+const STATIONS = [
+  { value: "", label: "— From position —" },
+  { value: "foh", label: "FOH — front of house (bar)" },
+  { value: "boh", label: "BOH — back of house (kitchen)" },
+  { value: "lead", label: "Shift lead / supervisor" },
+];
+
 const MY_BANKS = [
   "Maybank", "CIMB Bank", "Public Bank", "RHB Bank", "Hong Leong Bank",
   "AmBank", "Bank Islam", "Bank Rakyat", "Bank Muamalat", "BSN",
@@ -254,6 +264,7 @@ export default function EmployeeDetailPage() {
 
   const [form, setForm] = useState({
     position: "",
+    station: "",
     employment_type: "full_time",
     join_date: "",
     manager_user_id: "",
@@ -430,6 +441,7 @@ export default function EmployeeDetailPage() {
       const p = profile as unknown as Record<string, unknown>;
       setForm({
         position: profile.position || "",
+        station: profile.station || "",
         employment_type: profile.employment_type || "full_time",
         join_date: profile.join_date?.slice(0, 10) || "",
         manager_user_id: profile.manager_user_id || "",
@@ -488,6 +500,7 @@ export default function EmployeeDetailPage() {
         overtime_flat_rate: form.overtime_flat_rate ? parseFloat(form.overtime_flat_rate) : null,
         ea_commencement_date: form.ea_commencement_date || null,
         ssfw_number: form.ssfw_number || null,
+        station: form.station || null, // "" = infer from position
       };
       if (canSeeSalary) {
         payload.basic_salary = form.basic_salary ? parseFloat(form.basic_salary) : 0;
@@ -723,6 +736,11 @@ export default function EmployeeDetailPage() {
               <select value={form.position} onChange={(e) => update("position", e.target.value)} className="input">
                 <option value="">Select...</option>
                 {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </Field>
+            <Field label="Station — who checklists auto-assign to">
+              <select value={form.station} onChange={(e) => update("station", e.target.value)} className="input">
+                {STATIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </Field>
             <Field label="Type">

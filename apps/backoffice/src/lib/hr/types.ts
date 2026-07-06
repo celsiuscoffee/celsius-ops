@@ -11,6 +11,9 @@ export type EmployeeProfile = {
   probation_end_date: string | null;
   employment_type: "full_time" | "part_time" | "contract" | "intern";
   position: string | null;
+  // House area this person works (FOH = bar, BOH = kitchen) — overrides the
+  // position→area inference used by checklist auto-assign. null = infer.
+  station: "foh" | "boh" | "lead" | "shared" | null;
   manager_user_id: string | null;
   basic_salary: number;
   hourly_rate: number | null;

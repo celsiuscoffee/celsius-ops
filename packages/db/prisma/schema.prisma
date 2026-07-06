@@ -1090,6 +1090,12 @@ model Sop {
   category    SopCategory @relation(fields: [categoryId], references: [id])
   content     String?
   status      SopStatus   @default(DRAFT)
+  // Physical station(s) this SOP's work belongs to — drives checklist
+  // ownership: auto-assign picks an owner from the matching staff (FOH = bar,
+  // BOH = kitchen). Multi-valued: a SOP can span FOH+BOH, or be "shared"
+  // (anyone on shift). Empty = not mapped → the code falls back to its title
+  // map, then "shared".
+  stations    SopStation[] @default([])
   sortOrder   Int         @default(0)
   version     Int         @default(1)
   createdById String
@@ -1118,6 +1124,17 @@ enum SopStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
+}
+
+// A house area / station used for checklist ownership. FOH (front of house =
+// bar/barista) and BOH (back of house = kitchen) are the two work areas; "lead"
+// = supervisor/shift lead; "shared" = anyone on shift (whole-outlet work like
+// opening/closing). Used both on Sop.stations and hr_employee_profiles.station.
+enum SopStation {
+  foh
+  boh
+  lead
+  shared
 }
 
 model SopStep {

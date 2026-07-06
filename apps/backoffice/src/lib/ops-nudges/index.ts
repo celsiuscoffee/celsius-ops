@@ -330,29 +330,48 @@ export async function runReviewNudges(now = new Date()): Promise<NudgeRunResult>
 // completion attributes. Same-day, recently overdue (grace–3h); deduped per (checklist,
 // person). Design: docs/design/checklist-individual-accountability.md.
 const CHECKLIST_OWNER_WINDOW_MS = 3 * 3_600_000;
-// SOP title (lowercased) → station group. "shared" = whole-outlet collective work
-// (opening/closing/grease trap) → fairly assigned to ONE on-shift crew member,
-// rotated by load balance. "cleaning" = balanced across whoever's on shift. Unmapped
-// → cleaning.
-const SOP_STATION: Record<string, "barista" | "kitchen" | "lead" | "cleaning" | "shared"> = {
-  "coffee calibration": "barista",
-  "fridge & storage": "kitchen",
-  "first food out": "kitchen",
+// House areas a SOP can belong to. FOH = front of house (bar/barista), BOH =
+// back of house (kitchen), "lead" = supervisor, "shared" = anyone on shift
+// (whole-outlet work: opening/closing/grease trap). A SOP carries a SET of
+// these (Sop.stations) — it can be FOH+BOH.
+type Station = "foh" | "boh" | "lead" | "shared";
+// FALLBACK ONLY. The stations of record are Sop.stations (set per SOP in the
+// backoffice). This title map is used solely when a SOP hasn't been tagged yet,
+// so a fresh/untagged SOP still routes somewhere sane. Keep it in sync with the
+// backfill in migration 20260706_sop_station.
+const SOP_STATION: Record<string, Station> = {
+  "coffee calibration": "foh",
+  "fridge & storage": "boh",
+  "first food out": "boh",
   "grease trap cleaning": "shared",
-  "ice machine cleaning": "kitchen",
-  "pest control check": "kitchen",
+  "ice machine cleaning": "foh", // machine lives at the bar
+  "pest control check": "boh",
   "opening checklist": "shared",
   closing: "shared",
-  "door & window cleaning": "cleaning",
-  "toilet cleaning": "cleaning",
+  "door & window cleaning": "foh",
+  "toilet cleaning": "shared",
 };
-// Job positions (hr_employee_profiles.position, lowercased) that staff each station.
+// Stations of record = Sop.stations; fall back to the title map, then "shared".
+const resolveStations = (title: string | null | undefined, stations: Station[] | null | undefined): Station[] => {
+  if (stations && stations.length > 0) return stations;
+  const s = SOP_STATION[(title ?? "").toLowerCase()];
+  return s ? [s] : ["shared"];
+};
+// Job positions (hr_employee_profiles.position, lowercased) that staff each area.
 const STATION_POSITIONS: Record<string, string[]> = {
-  barista: ["barista", "barista lead"],
-  kitchen: ["kitchen crew", "kitchen lead"],
+  foh: ["barista", "barista lead", "cashier"],
+  boh: ["kitchen crew", "kitchen lead"],
   lead: ["supervisor", "manager", "shift lead", "barista lead", "kitchen lead"],
 };
-const LEAD_POSITIONS = STATION_POSITIONS.lead;
+// A person matches an area by their explicit HR-profile station (if set),
+// otherwise by their job position. Lets ops override the position→area
+// inference per employee (hr_employee_profiles.station).
+const inStation = (p: { position: string; station?: string | null }, station: Station): boolean =>
+  p.station ? p.station === station : (STATION_POSITIONS[station]?.includes(p.position) ?? false);
+// Eligibility for a SOP's set of areas: a "shared" (or unmapped) SOP is anyone
+// on shift; otherwise the union of people matching any of its areas.
+const matchesAnyStation = (p: { position: string; station?: string | null }, stations: Station[]): boolean =>
+  stations.includes("shared") || stations.some((s) => inStation(p, s));
 // "HH:MM[:SS]" → minutes since midnight (null if unparseable).
 const toMin = (t: string | null): number | null => {
   if (!t) return null;
@@ -389,7 +408,7 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
       timeSlot: true,
       assignedToId: true,
       outlet: { select: { name: true, status: true } },
-      sop: { select: { title: true } },
+      sop: { select: { title: true, stations: true } },
     },
     orderBy: { dueAt: "asc" },
     take: 200,
@@ -401,9 +420,10 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   // today's clock-ins, batched once. The roster gives PRESENCE; the profile gives
   // the station. De-duped to one row per present user.
   const roster = await prisma.$queryRaw<
-    Array<{ outlet_id: string; position: string; user_id: string; name: string; phone: string | null; start_time: string | null; end_time: string | null }>
+    Array<{ outlet_id: string; position: string; station: string; user_id: string; name: string; phone: string | null; start_time: string | null; end_time: string | null }>
   >`
-    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, u.id AS user_id, u.name, u.phone,
+    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, lower(coalesce(p.station, '')) AS station,
+           u.id AS user_id, u.name, u.phone,
            s.start_time::text AS start_time, s.end_time::text AS end_time
     FROM hr_schedule_shifts s
     JOIN hr_schedules sch ON sch.id = s.schedule_id
@@ -415,7 +435,7 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
     SELECT DISTINCT user_id FROM hr_attendance_logs WHERE clock_in >= ${dayStart} AND clock_in < ${dayEnd}
   `;
   const clockedIn = new Set(clockRows.map((r) => r.user_id));
-  type Present = { outlet_id: string; position: string; user_id: string; name: string; phone: string; start_time: string | null; end_time: string | null };
+  type Present = { outlet_id: string; position: string; station: string; user_id: string; name: string; phone: string; start_time: string | null; end_time: string | null };
   const present = [
     ...new Map(
       roster.filter((r): r is Present => !!r.phone && clockedIn.has(r.user_id)).map((r) => [r.user_id, r]),
@@ -442,7 +462,7 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   const unowned = new Map<string, { name: string; items: Item[] }>();
 
   for (const c of active) {
-    const station = SOP_STATION[(c.sop?.title ?? "").toLowerCase()] ?? "cleaning";
+    const stations = resolveStations(c.sop?.title, c.sop?.stations);
     const item: Item = {
       id: c.id,
       label: `${c.sop?.title ?? "Checklist"} (${String(c.shift).toLowerCase()})`,
@@ -458,15 +478,12 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
     // 1. explicit assignment wins if that person is on shift.
     let owner = crew.find((p) => p.user_id === c.assignedToId) ?? null;
     if (!owner) {
-      // 2. EVERY task gets ONE fair owner. Station-specific → that station's job
-      //    position; "shared" (opening/closing/grease) & "cleaning" → the whole
-      //    on-shift crew. Either way the LIGHTEST-loaded is picked, so the shared
-      //    work rotates fairly across the crew over time (= the fair/shared part).
-      let pool =
-        station === "barista" || station === "kitchen" || station === "lead"
-          ? crew.filter((p) => STATION_POSITIONS[station].includes(p.position))
-          : crew;
-      if (pool.length === 0 && station !== "lead") pool = crew.filter((p) => LEAD_POSITIONS.includes(p.position)); // no station person → lead
+      // 2. EVERY task gets ONE fair owner. Area-specific (FOH/BOH/lead) → the
+      //    people matching any of the SOP's areas; "shared" → the whole on-shift
+      //    crew. Either way the LIGHTEST-loaded is picked, so the shared work
+      //    rotates fairly across the crew over time (= the fair/shared part).
+      let pool = crew.filter((p) => matchesAnyStation(p, stations));
+      if (pool.length === 0) pool = crew.filter((p) => inStation(p, "lead")); // no area person → lead
       if (pool.length === 0) pool = crew; // last resort: anyone on shift
       owner = lightest(pool);
     }
@@ -604,7 +621,7 @@ export async function assignTodaysChecklists(now = new Date()): Promise<AssignRu
       outletId: true,
       timeSlot: true,
       outlet: { select: { name: true, status: true } },
-      sop: { select: { title: true } },
+      sop: { select: { title: true, stations: true } },
     },
     orderBy: { dueAt: "asc" },
     take: 300,
@@ -616,17 +633,17 @@ export async function assignTodaysChecklists(now = new Date()): Promise<AssignRu
   // required here: this is plan-ownership, and the JIT nudge pass corrects to
   // whoever actually shows up.
   const roster = await prisma.$queryRaw<
-    Array<{ outlet_id: string; position: string; user_id: string; start_time: string | null; end_time: string | null }>
+    Array<{ outlet_id: string; position: string; station: string; user_id: string; start_time: string | null; end_time: string | null }>
   >`
-    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, u.id AS user_id,
-           s.start_time::text AS start_time, s.end_time::text AS end_time
+    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, lower(coalesce(p.station, '')) AS station,
+           u.id AS user_id, s.start_time::text AS start_time, s.end_time::text AS end_time
     FROM hr_schedule_shifts s
     JOIN hr_schedules sch ON sch.id = s.schedule_id
     JOIN "User" u ON u.id = s.user_id
     LEFT JOIN hr_employee_profiles p ON p.user_id = u.id
     WHERE s.shift_date = ${ymd}::date AND sch.published_at IS NOT NULL AND u.status = 'ACTIVE'
   `;
-  type Rostered = { outlet_id: string; position: string; user_id: string; start_time: string | null; end_time: string | null };
+  type Rostered = { outlet_id: string; position: string; station: string; user_id: string; start_time: string | null; end_time: string | null };
   const rosterByOutlet = new Map<string, Rostered[]>();
   for (const r of roster) (rosterByOutlet.get(r.outlet_id) ?? rosterByOutlet.set(r.outlet_id, []).get(r.outlet_id)!).push(r);
 
@@ -656,12 +673,9 @@ export async function assignTodaysChecklists(now = new Date()): Promise<AssignRu
     ];
     if (crew.length === 0) continue; // no rostered shift covers it — roster gap, alert #7's turf
 
-    const station = SOP_STATION[(c.sop?.title ?? "").toLowerCase()] ?? "cleaning";
-    let pool =
-      station === "barista" || station === "kitchen" || station === "lead"
-        ? crew.filter((p) => STATION_POSITIONS[station].includes(p.position))
-        : crew;
-    if (pool.length === 0 && station !== "lead") pool = crew.filter((p) => LEAD_POSITIONS.includes(p.position));
+    const stations = resolveStations(c.sop?.title, c.sop?.stations);
+    let pool = crew.filter((p) => matchesAnyStation(p, stations));
+    if (pool.length === 0) pool = crew.filter((p) => inStation(p, "lead"));
     if (pool.length === 0) pool = crew;
     const owner = lightestRostered(pool);
     if (!owner) continue;
