@@ -150,6 +150,7 @@ export default function CashflowPage() {
   // Cash-generated table controls: cadence toggle + single-account filter.
   const [cadence, setCadence] = useState<Cadence>("MONTHLY");
   const [account, setAccount] = useState<string>(""); // "" = all accounts
+  const [includeInterco, setIncludeInterco] = useState(true); // inter-entity transfers
   // Table filter + sort, client-side over the fetched rows.
   type SortCol = "period" | "cashIn" | "cashOut" | "netGenerated" | "minBalance";
   const [sortCol, setSortCol] = useState<SortCol>("period");
@@ -168,6 +169,7 @@ export default function CashflowPage() {
 
   const cashGenParams = new URLSearchParams({ cadence });
   if (account) cashGenParams.set("account", account);
+  if (!includeInterco) cashGenParams.set("interco", "exclude");
   const { data: cashGen, isLoading: cashGenLoading } =
     useFetch<CashGeneratedResult>(`/api/finance/cashflow/cash-generated?${cashGenParams.toString()}`);
 
@@ -414,6 +416,15 @@ export default function CashflowPage() {
                     <option key={a.code} value={a.code}>{a.name}</option>
                   ))}
                 </select>
+                <button
+                  type="button"
+                  onClick={() => setIncludeInterco((v) => !v)}
+                  aria-pressed={includeInterco}
+                  title="Include or exclude inter-entity transfers"
+                  className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${includeInterco ? "border-terracotta bg-terracotta/10 text-terracotta" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
+                >
+                  Interco {includeInterco ? "on" : "off"}
+                </button>
                 <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
                   {CADENCES.map((c) => (
                     <button key={c.key} onClick={() => setCadence(c.key)}
@@ -491,7 +502,7 @@ export default function CashflowPage() {
                   </table>
                 </div>
                 <p className="border-t border-gray-100 px-4 py-2 text-[10px] text-gray-400">
-                  Net generated = Cash in − Cash out, including transfers between Celsius entities. Min balance is the lowest {cashGen.account == null ? "consolidated" : "account"} daily balance reached in the period.
+                  Net generated = Cash in − Cash out, {includeInterco ? "including" : "excluding"} transfers between Celsius entities. Min balance is the lowest {cashGen.account == null ? "consolidated" : "account"} daily balance reached in the period (always the real bank balance).
                   {cadence === "MONTHLY" && cashGen.reconciled
                     ? " Monthly is the reconciled statement figure that matches the consolidated cash-tracking spreadsheet."
                     : " Daily and weekly are summed from individual bank transactions and may differ by a small amount from the monthly statement totals (bank fees, timing); monthly is the reconciled statement figure."}
