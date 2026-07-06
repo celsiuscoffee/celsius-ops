@@ -12,6 +12,15 @@ import { useFetch } from "@/lib/use-fetch";
 type Category = { id: string; name: string };
 type StepInput = { title: string; description: string; photoRequired: boolean };
 
+// House area(s) the checklist auto-assigns to. FOH = bar, BOH = kitchen; a SOP
+// can span both; "shared" = anyone on shift.
+const STATION_OPTIONS: { value: string; label: string }[] = [
+  { value: "foh", label: "FOH — front of house (bar)" },
+  { value: "boh", label: "BOH — back of house (kitchen)" },
+  { value: "lead", label: "Shift lead / supervisor" },
+  { value: "shared", label: "Shared — anyone on shift" },
+];
+
 export default function NewSopPage() {
   const router = useRouter();
   const { data: categories } = useFetch<Category[]>("/api/ops/sop-categories");
@@ -19,6 +28,7 @@ export default function NewSopPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [stations, setStations] = useState<string[]>([]);
   const [content, setContent] = useState("");
   const [steps, setSteps] = useState<StepInput[]>([]);
   const [saving, setSaving] = useState(false);
@@ -41,7 +51,7 @@ export default function NewSopPage() {
     try {
       const res = await fetch("/api/ops/sops", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), description: description.trim() || undefined, categoryId, content: content.trim() || undefined, status }),
+        body: JSON.stringify({ title: title.trim(), description: description.trim() || undefined, categoryId, stations, content: content.trim() || undefined, status }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Failed"); return; }
@@ -78,6 +88,18 @@ export default function NewSopPage() {
               <option value="">Select category</option>
               {categories?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select></div>
+          <div><label className="mb-1.5 block text-sm font-medium">Station(s)</label>
+            <div className="space-y-1.5">
+              {STATION_OPTIONS.map((o) => (
+                <label key={o.value} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={stations.includes(o.value)}
+                    onChange={(e) => setStations((prev) => e.target.checked ? [...prev, o.value] : prev.filter((s) => s !== o.value))}
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-terracotta focus:ring-terracotta" />
+                  <span>{o.label}</span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-gray-400">Who the checklist auto-assigns to. Tick more than one if it spans areas.</p></div>
           <div><label className="mb-1.5 block text-sm font-medium">Content / Notes</label>
             <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Detailed instructions..." rows={5}
               className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm resize-y" /></div>

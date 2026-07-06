@@ -68,8 +68,8 @@ const POSITIONS = [
 // only when the job title doesn't imply the station.
 const STATIONS = [
   { value: "", label: "— From position —" },
-  { value: "barista", label: "Bar (barista)" },
-  { value: "kitchen", label: "Kitchen" },
+  { value: "foh", label: "FOH — front of house (bar)" },
+  { value: "boh", label: "BOH — back of house (kitchen)" },
   { value: "lead", label: "Shift lead / supervisor" },
 ];
 
