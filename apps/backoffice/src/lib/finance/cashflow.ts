@@ -1187,6 +1187,7 @@ function cashGenBucketLabel(period: string, cadence: Cadence): string {
 export async function loadCashGenerated(
   cadence: Cadence,
   accountFilter?: string | null,
+  includeInterco: boolean = true,
 ): Promise<CashGeneratedResult> {
   const account = accountFilter && ACCOUNT_LABELS[accountFilter] ? accountFilter : null;
   const accountLabel = account ? ACCOUNT_LABELS[account] : null;
@@ -1204,12 +1205,16 @@ export async function loadCashGenerated(
       .slice(-CASH_GEN_MONTHLY_MONTHS)
       .map((m) => {
         const mb = minByMonth.get(m.month);
+        // Interco OFF: strip inter-entity transfers so the row is cash from
+        // EXTERNAL activity only. Min balance stays as the real bank balance.
+        const cashIn = includeInterco ? m.cashIn : round2(m.cashIn - m.interCoInflows);
+        const cashOut = includeInterco ? m.cashOut : round2(m.cashOut - m.interCoOutflows);
         return {
           period: m.month,
           label: m.month,
-          cashIn: m.cashIn,
-          cashOut: m.cashOut,
-          netGenerated: m.netGenerated,
+          cashIn,
+          cashOut,
+          netGenerated: includeInterco ? m.netGenerated : round2(cashIn - cashOut),
           minBalance: mb ? mb.min : m.minBalance,
           minBalanceDate: mb ? mb.date : m.minBalanceDate,
           accountsReporting: account ? 1 : m.accountsReporting,
@@ -1225,7 +1230,9 @@ export async function loadCashGenerated(
       rangeLabel: "last 12 months",
       rows,
       accountsInScope,
-      reconciled: !account, // all-accounts monthly = reconciled spreadsheet figure
+      // Only the all-accounts, interco-included monthly view is the reconciled
+      // spreadsheet figure; stripping interco makes it a derived view.
+      reconciled: !account && includeInterco,
     };
   }
 
@@ -1238,6 +1245,7 @@ export async function loadCashGenerated(
   const rawLines = await prisma.bankStatementLine.findMany({
     where: {
       txnDate: { gte: since },
+      ...(includeInterco ? {} : { isInterCo: false }),
       ...(account
         ? { statement: { accountName: { contains: `(${account})` } } }
         : {}),

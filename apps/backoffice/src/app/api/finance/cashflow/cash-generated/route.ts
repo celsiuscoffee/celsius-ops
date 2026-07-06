@@ -19,9 +19,11 @@ export async function GET(req: NextRequest) {
   const cadence: Cadence =
     cadenceParam === "DAILY" || cadenceParam === "WEEKLY" ? cadenceParam : "MONTHLY";
   const account = req.nextUrl.searchParams.get("account") || null;
+  // interco=exclude strips inter-entity transfers (default includes them).
+  const includeInterco = req.nextUrl.searchParams.get("interco") !== "exclude";
 
   try {
-    const result = await loadCashGenerated(cadence, account);
+    const result = await loadCashGenerated(cadence, account, includeInterco);
     return NextResponse.json(result);
   } catch (err) {
     console.error("[finance/cashflow/cash-generated]", err);
