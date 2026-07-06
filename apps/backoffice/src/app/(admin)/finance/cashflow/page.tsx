@@ -38,6 +38,41 @@ type MonthlyHistory = {
   accountsReporting: number;
 };
 
+type Cadence = "DAILY" | "WEEKLY" | "MONTHLY";
+
+type CashGeneratedRow = {
+  period: string;
+  label: string;
+  cashIn: number;
+  cashOut: number;
+  netGenerated: number;
+  minBalance: number | null;
+  minBalanceDate: string | null;
+  accountsReporting: number;
+};
+
+type CashGeneratedResult = {
+  cadence: Cadence;
+  account: string | null;
+  accountLabel: string | null;
+  rangeLabel: string;
+  rows: CashGeneratedRow[];
+  accountsInScope: number;
+  reconciled: boolean;
+};
+
+const CADENCES: { key: Cadence; label: string }[] = [
+  { key: "DAILY", label: "Daily" },
+  { key: "WEEKLY", label: "Weekly" },
+  { key: "MONTHLY", label: "Monthly" },
+];
+
+const ACCOUNTS: { code: string; name: string }[] = [
+  { code: "4384", name: "Celsius Coffee SB" },
+  { code: "2644", name: "Conezion" },
+  { code: "9345", name: "Tamarind" },
+];
+
 type ProjectedMin = { closing: number; weekStart: string; weekEnd: string };
 
 type DailyBalance = {
@@ -91,6 +126,13 @@ function fmtDay(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00+08:00");
   return `${d.getDate()} ${d.toLocaleString("en-MY", { month: "short" })}`;
 }
+// Label a cash-generated bucket for the table's first column. Daily shows
+// "5 Jul", weekly shows "Week of 30 Jun", monthly shows the YYYY-MM key.
+function fmtCashGenLabel(row: { period: string; label: string }, cadence: Cadence): string {
+  if (cadence === "MONTHLY") return row.period;
+  if (cadence === "DAILY") return fmtDay(row.period);
+  return `Week of ${fmtDay(row.period)}`;
+}
 function shortRange(start: string, end: string): string {
   const s = new Date(start);
   const e = new Date(end);
@@ -105,11 +147,19 @@ export default function CashflowPage() {
   const [weeks, setWeeks] = useState<number>(8);
   const [outletIds, setOutletIds] = useState<string[]>([]);
   const [outletPickerOpen, setOutletPickerOpen] = useState(false);
+  // Cash-generated table controls: cadence toggle + single-account filter.
+  const [cadence, setCadence] = useState<Cadence>("MONTHLY");
+  const [account, setAccount] = useState<string>(""); // "" = all accounts
 
   const params = new URLSearchParams({ weeks: String(weeks) });
   outletIds.forEach((id) => params.append("outlet", id));
   const { data, isLoading } = useFetch<CashflowResult>(`/api/finance/cashflow?${params.toString()}`);
   const { data: outlets } = useFetch<Outlet[]>("/api/settings/outlets");
+
+  const cashGenParams = new URLSearchParams({ cadence });
+  if (account) cashGenParams.set("account", account);
+  const { data: cashGen, isLoading: cashGenLoading } =
+    useFetch<CashGeneratedResult>(`/api/finance/cashflow/cash-generated?${cashGenParams.toString()}`);
 
   const toggleOutlet = (id: string) =>
     setOutletIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -289,59 +339,104 @@ export default function CashflowPage() {
             </div>
           </div>
 
-          {/* Monthly historical — actuals from bank statements */}
-          {data.monthlyHistory.length > 0 && (
-            <div className="mt-4 rounded-xl border border-gray-200 bg-white">
-              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cash generated per month (actual)</p>
-                <p className="text-[10px] text-gray-400">From {data.monthlyHistory.length} months of bank statements</p>
+          {/* Cash generated (actuals from bank statements). Daily / Weekly /
+              Monthly cadence toggle + single-account filter. Monthly (all
+              accounts) is the reconciled header figure; Daily/Weekly are
+              summed from individual bank lines. */}
+          <div className="mt-4 rounded-xl border border-gray-200 bg-white">
+            <div className="flex flex-col gap-2 border-b border-gray-100 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Cash generated {cadence === "DAILY" ? "per day" : cadence === "WEEKLY" ? "per week" : "per month"} (actual)
+                </p>
+                <p className="text-[10px] text-gray-400">
+                  {cashGen
+                    ? `${cashGen.accountLabel ?? "All accounts"} · ${cashGen.rangeLabel} · ${cashGen.rows.length} rows`
+                    : "Loading..."}
+                </p>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm">
-                  <thead>
-                    <tr className="border-b bg-gray-50/50 text-left text-gray-500">
-                      <th className="px-4 py-2 font-medium">Month</th>
-                      <th className="px-4 py-2 text-right font-medium text-green-600">Cash in</th>
-                      <th className="px-4 py-2 text-right font-medium text-red-600">Cash out</th>
-                      <th className="px-4 py-2 text-right font-medium">Net generated</th>
-                      <th className="px-4 py-2 text-right font-medium">Min balance</th>
-                      <th className="px-4 py-2 font-medium">Coverage</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {data.monthlyHistory.map((m) => {
-                      const expectedAccounts = Math.max(...data.monthlyHistory.map((x) => x.accountsReporting));
-                      const incomplete = m.accountsReporting < expectedAccounts;
-                      return (
-                        <tr key={m.month} className={`hover:bg-gray-50 ${m.netGenerated < 0 ? "bg-red-50/30" : ""}`}>
-                          <td className="px-4 py-2 text-xs font-medium text-gray-700">{m.month}</td>
-                          <td className="px-4 py-2 text-right font-mono text-xs text-green-700">+{fmtMYR(m.cashIn)}</td>
-                          <td className="px-4 py-2 text-right font-mono text-xs text-red-700">−{fmtMYR(m.cashOut)}</td>
-                          <td className={`px-4 py-2 text-right font-mono text-xs font-bold ${m.netGenerated >= 0 ? "text-green-700" : "text-red-700"}`}>
-                            {m.netGenerated >= 0 ? "+" : ""}{fmtMYR(m.netGenerated)}
-                          </td>
-                          <td className={`px-4 py-2 text-right font-mono text-xs ${m.minBalance == null ? "text-gray-400" : m.minBalance < 0 ? "text-red-600 font-semibold" : m.minBalance < 10000 ? "text-amber-600" : "text-gray-700"}`}>
-                            {m.minBalance == null ? "—" : fmtMYR(m.minBalance)}
-                            {m.minBalanceDate && (
-                              <span className="ml-1 text-[10px] text-gray-400">({m.minBalanceDate.slice(8, 10)}/{m.minBalanceDate.slice(5, 7)})</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2 text-[11px]">
-                            {incomplete
-                              ? <span className="text-amber-600">{m.accountsReporting}/{expectedAccounts} accounts ⚠</span>
-                              : <span className="text-gray-500">{m.accountsReporting}/{expectedAccounts} accounts</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={account}
+                  onChange={(e) => setAccount(e.target.value)}
+                  className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-700 focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta"
+                  aria-label="Filter by bank account"
+                >
+                  <option value="">All accounts</option>
+                  {ACCOUNTS.map((a) => (
+                    <option key={a.code} value={a.code}>{a.name}</option>
+                  ))}
+                </select>
+                <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
+                  {CADENCES.map((c) => (
+                    <button key={c.key} onClick={() => setCadence(c.key)}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${cadence === c.key ? "bg-terracotta text-white" : "text-gray-600 hover:bg-gray-50"}`}>
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <p className="border-t border-gray-100 px-4 py-2 text-[10px] text-gray-400">
-                Net generated = Cash in − Cash out, including transfers between Celsius entities — matches the consolidated cash-tracking spreadsheet. Min balance is the lowest consolidated daily balance reached that month.
-              </p>
             </div>
-          )}
+            {cashGenLoading || !cashGen ? (
+              <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
+            ) : cashGen.rows.length === 0 ? (
+              <p className="px-4 py-8 text-center text-xs text-gray-400">No bank statement data for this range.</p>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-sm">
+                    <thead>
+                      <tr className="border-b bg-gray-50/50 text-left text-gray-500">
+                        <th className="px-4 py-2 font-medium">
+                          {cadence === "DAILY" ? "Day" : cadence === "WEEKLY" ? "Week" : "Month"}
+                        </th>
+                        <th className="px-4 py-2 text-right font-medium text-green-600">Cash in</th>
+                        <th className="px-4 py-2 text-right font-medium text-red-600">Cash out</th>
+                        <th className="px-4 py-2 text-right font-medium">Net generated</th>
+                        <th className="px-4 py-2 text-right font-medium">Min balance</th>
+                        {cashGen.account == null && <th className="px-4 py-2 font-medium">Coverage</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {cashGen.rows.map((m) => {
+                        const expectedAccounts = cashGen.accountsInScope;
+                        const incomplete = cashGen.account == null && m.accountsReporting < expectedAccounts;
+                        return (
+                          <tr key={m.period} className={`hover:bg-gray-50 ${m.netGenerated < 0 ? "bg-red-50/30" : ""}`}>
+                            <td className="px-4 py-2 text-xs font-medium text-gray-700">{fmtCashGenLabel(m, cadence)}</td>
+                            <td className="px-4 py-2 text-right font-mono text-xs text-green-700">+{fmtMYR(m.cashIn)}</td>
+                            <td className="px-4 py-2 text-right font-mono text-xs text-red-700">−{fmtMYR(m.cashOut)}</td>
+                            <td className={`px-4 py-2 text-right font-mono text-xs font-bold ${m.netGenerated >= 0 ? "text-green-700" : "text-red-700"}`}>
+                              {m.netGenerated >= 0 ? "+" : ""}{fmtMYR(m.netGenerated)}
+                            </td>
+                            <td className={`px-4 py-2 text-right font-mono text-xs ${m.minBalance == null ? "text-gray-400" : m.minBalance < 0 ? "text-red-600 font-semibold" : m.minBalance < 10000 ? "text-amber-600" : "text-gray-700"}`}>
+                              {m.minBalance == null ? "-" : fmtMYR(m.minBalance)}
+                              {m.minBalanceDate && (
+                                <span className="ml-1 text-[10px] text-gray-400">({m.minBalanceDate.slice(8, 10)}/{m.minBalanceDate.slice(5, 7)})</span>
+                              )}
+                            </td>
+                            {cashGen.account == null && (
+                              <td className="px-4 py-2 text-[11px]">
+                                {incomplete
+                                  ? <span className="text-amber-600">{m.accountsReporting}/{expectedAccounts} accounts ⚠</span>
+                                  : <span className="text-gray-500">{m.accountsReporting}/{expectedAccounts} accounts</span>}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="border-t border-gray-100 px-4 py-2 text-[10px] text-gray-400">
+                  Net generated = Cash in − Cash out, including transfers between Celsius entities. Min balance is the lowest {cashGen.account == null ? "consolidated" : "account"} daily balance reached in the period.
+                  {cadence === "MONTHLY" && cashGen.reconciled
+                    ? " Monthly is the reconciled statement figure that matches the consolidated cash-tracking spreadsheet."
+                    : " Daily and weekly are summed from individual bank transactions and may differ by a small amount from the monthly statement totals (bank fees, timing); monthly is the reconciled statement figure."}
+                </p>
+              </>
+            )}
+          </div>
 
           {/* Operating Cash Flow drill-down — sales vs operating costs */}
           {data.operatingCashFlow.length > 0 && (
