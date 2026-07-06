@@ -63,11 +63,10 @@ const POSITIONS = [
   "Accountant", "Executive", "Director",
 ];
 
-// Station drives who a checklist auto-assigns to. Blank = infer from the
-// position above (Barista→bar, Kitchen Crew→kitchen, etc.); set it explicitly
-// only when the job title doesn't imply the station.
+// Station(s) drive who a checklist auto-assigns to. Multi-select: tick more than
+// one for a floating shift lead/supervisor who works both areas. None ticked =
+// infer from the position above (Barista→FOH, Kitchen Crew→BOH, etc.).
 const STATIONS = [
-  { value: "", label: "— From position —" },
   { value: "foh", label: "FOH — front of house (bar)" },
   { value: "boh", label: "BOH — back of house (kitchen)" },
   { value: "lead", label: "Shift lead / supervisor" },
@@ -264,7 +263,7 @@ export default function EmployeeDetailPage() {
 
   const [form, setForm] = useState({
     position: "",
-    station: "",
+    stations: [] as string[],
     employment_type: "full_time",
     join_date: "",
     manager_user_id: "",
@@ -441,7 +440,7 @@ export default function EmployeeDetailPage() {
       const p = profile as unknown as Record<string, unknown>;
       setForm({
         position: profile.position || "",
-        station: profile.station || "",
+        stations: profile.stations ?? [],
         employment_type: profile.employment_type || "full_time",
         join_date: profile.join_date?.slice(0, 10) || "",
         manager_user_id: profile.manager_user_id || "",
@@ -500,7 +499,7 @@ export default function EmployeeDetailPage() {
         overtime_flat_rate: form.overtime_flat_rate ? parseFloat(form.overtime_flat_rate) : null,
         ea_commencement_date: form.ea_commencement_date || null,
         ssfw_number: form.ssfw_number || null,
-        station: form.station || null, // "" = infer from position
+        stations: form.stations, // [] = infer from position
       };
       if (canSeeSalary) {
         payload.basic_salary = form.basic_salary ? parseFloat(form.basic_salary) : 0;
@@ -738,10 +737,27 @@ export default function EmployeeDetailPage() {
                 {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </Field>
-            <Field label="Station — who checklists auto-assign to">
-              <select value={form.station} onChange={(e) => update("station", e.target.value)} className="input">
-                {STATIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
+            <Field label="Station(s) — who checklists auto-assign to">
+              <div className="space-y-1.5">
+                {STATIONS.map((s) => (
+                  <label key={s.value} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.stations.includes(s.value)}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          stations: e.target.checked
+                            ? [...f.stations, s.value]
+                            : f.stations.filter((x) => x !== s.value),
+                        }))
+                      }
+                    />
+                    <span>{s.label}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">Tick both FOH and BOH for a floater. None ticked = infer from position.</p>
             </Field>
             <Field label="Type">
               <select value={form.employment_type} onChange={(e) => update("employment_type", e.target.value)} className="input">
