@@ -360,7 +360,11 @@ const STATION_POSITIONS: Record<string, string[]> = {
   kitchen: ["kitchen crew", "kitchen lead"],
   lead: ["supervisor", "manager", "shift lead", "barista lead", "kitchen lead"],
 };
-const LEAD_POSITIONS = STATION_POSITIONS.lead;
+// A person matches a station by their explicit HR-profile station (if set),
+// otherwise by their job position. Lets ops override the position→station
+// inference per employee (hr_employee_profiles.station).
+const inStation = (p: { position: string; station?: string | null }, station: Station): boolean =>
+  p.station ? p.station === station : (STATION_POSITIONS[station]?.includes(p.position) ?? false);
 // "HH:MM[:SS]" → minutes since midnight (null if unparseable).
 const toMin = (t: string | null): number | null => {
   if (!t) return null;
@@ -409,9 +413,10 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   // today's clock-ins, batched once. The roster gives PRESENCE; the profile gives
   // the station. De-duped to one row per present user.
   const roster = await prisma.$queryRaw<
-    Array<{ outlet_id: string; position: string; user_id: string; name: string; phone: string | null; start_time: string | null; end_time: string | null }>
+    Array<{ outlet_id: string; position: string; station: string; user_id: string; name: string; phone: string | null; start_time: string | null; end_time: string | null }>
   >`
-    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, u.id AS user_id, u.name, u.phone,
+    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, lower(coalesce(p.station, '')) AS station,
+           u.id AS user_id, u.name, u.phone,
            s.start_time::text AS start_time, s.end_time::text AS end_time
     FROM hr_schedule_shifts s
     JOIN hr_schedules sch ON sch.id = s.schedule_id
@@ -423,7 +428,7 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
     SELECT DISTINCT user_id FROM hr_attendance_logs WHERE clock_in >= ${dayStart} AND clock_in < ${dayEnd}
   `;
   const clockedIn = new Set(clockRows.map((r) => r.user_id));
-  type Present = { outlet_id: string; position: string; user_id: string; name: string; phone: string; start_time: string | null; end_time: string | null };
+  type Present = { outlet_id: string; position: string; station: string; user_id: string; name: string; phone: string; start_time: string | null; end_time: string | null };
   const present = [
     ...new Map(
       roster.filter((r): r is Present => !!r.phone && clockedIn.has(r.user_id)).map((r) => [r.user_id, r]),
@@ -472,9 +477,9 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
       //    work rotates fairly across the crew over time (= the fair/shared part).
       let pool =
         station === "barista" || station === "kitchen" || station === "lead"
-          ? crew.filter((p) => STATION_POSITIONS[station].includes(p.position))
+          ? crew.filter((p) => inStation(p, station))
           : crew;
-      if (pool.length === 0 && station !== "lead") pool = crew.filter((p) => LEAD_POSITIONS.includes(p.position)); // no station person → lead
+      if (pool.length === 0 && station !== "lead") pool = crew.filter((p) => inStation(p, "lead")); // no station person → lead
       if (pool.length === 0) pool = crew; // last resort: anyone on shift
       owner = lightest(pool);
     }
@@ -624,17 +629,17 @@ export async function assignTodaysChecklists(now = new Date()): Promise<AssignRu
   // required here: this is plan-ownership, and the JIT nudge pass corrects to
   // whoever actually shows up.
   const roster = await prisma.$queryRaw<
-    Array<{ outlet_id: string; position: string; user_id: string; start_time: string | null; end_time: string | null }>
+    Array<{ outlet_id: string; position: string; station: string; user_id: string; start_time: string | null; end_time: string | null }>
   >`
-    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, u.id AS user_id,
-           s.start_time::text AS start_time, s.end_time::text AS end_time
+    SELECT sch.outlet_id, lower(coalesce(p.position, '')) AS position, lower(coalesce(p.station, '')) AS station,
+           u.id AS user_id, s.start_time::text AS start_time, s.end_time::text AS end_time
     FROM hr_schedule_shifts s
     JOIN hr_schedules sch ON sch.id = s.schedule_id
     JOIN "User" u ON u.id = s.user_id
     LEFT JOIN hr_employee_profiles p ON p.user_id = u.id
     WHERE s.shift_date = ${ymd}::date AND sch.published_at IS NOT NULL AND u.status = 'ACTIVE'
   `;
-  type Rostered = { outlet_id: string; position: string; user_id: string; start_time: string | null; end_time: string | null };
+  type Rostered = { outlet_id: string; position: string; station: string; user_id: string; start_time: string | null; end_time: string | null };
   const rosterByOutlet = new Map<string, Rostered[]>();
   for (const r of roster) (rosterByOutlet.get(r.outlet_id) ?? rosterByOutlet.set(r.outlet_id, []).get(r.outlet_id)!).push(r);
 
@@ -667,9 +672,9 @@ export async function assignTodaysChecklists(now = new Date()): Promise<AssignRu
     const station = resolveStation(c.sop?.title, c.sop?.station);
     let pool =
       station === "barista" || station === "kitchen" || station === "lead"
-        ? crew.filter((p) => STATION_POSITIONS[station].includes(p.position))
+        ? crew.filter((p) => inStation(p, station))
         : crew;
-    if (pool.length === 0 && station !== "lead") pool = crew.filter((p) => LEAD_POSITIONS.includes(p.position));
+    if (pool.length === 0 && station !== "lead") pool = crew.filter((p) => inStation(p, "lead"));
     if (pool.length === 0) pool = crew;
     const owner = lightestRostered(pool);
     if (!owner) continue;
