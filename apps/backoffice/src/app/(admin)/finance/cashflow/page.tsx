@@ -193,6 +193,26 @@ export default function CashflowPage() {
     return rows;
   }, [cashGen, netFilter, rowQuery, sortCol, sortDir, cadence]);
 
+  // Summary KPIs over the filtered cash-generated rows: they move with every
+  // cadence / account / interco / period / net filter applied to the table.
+  const cashGenSummary = useMemo(() => {
+    const rows = cashGenRows;
+    if (!rows.length) return null;
+    const n = rows.length;
+    const totalIn = rows.reduce((s, r) => s + r.cashIn, 0);
+    const totalOut = rows.reduce((s, r) => s + r.cashOut, 0);
+    const net = rows.reduce((s, r) => s + r.netGenerated, 0);
+    const mins = rows.map((r) => r.minBalance).filter((v): v is number => v != null);
+    let minBal: number | null = null;
+    let minBalRow: (typeof rows)[number] | null = null;
+    for (const r of rows) {
+      if (r.minBalance == null) continue;
+      if (minBal == null || r.minBalance < minBal) { minBal = r.minBalance; minBalRow = r; }
+    }
+    return { avgIn: totalIn / n, avgOut: totalOut / n, net, minBal: mins.length ? minBal : null, minBalRow, n };
+  }, [cashGenRows]);
+  const cadenceUnit = cadence === "DAILY" ? "day" : cadence === "WEEKLY" ? "week" : "month";
+
   const toggleOutlet = (id: string) =>
     setOutletIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const clearOutlets = () => setOutletIds([]);
@@ -300,74 +320,42 @@ export default function CashflowPage() {
             </div>
           )}
 
-          {/* Headline — Cash Generation. The primary KPI. */}
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
+          {/* Headline KPIs, computed over the FILTERED cash-generated rows,
+              so they move with the cadence / account / interco / period / net
+              filters on the table below. */}
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
             <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-              <p className="text-xs text-gray-500">Last month generated</p>
-              {data.cashGeneration.lastMonth ? (
-                <>
-                  <p className={`mt-0.5 flex items-center gap-1 text-lg font-bold ${data.cashGeneration.lastMonth.net >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    {data.cashGeneration.lastMonth.net >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                    {fmtMYR2(data.cashGeneration.lastMonth.net)}
-                  </p>
-                  <p className="text-[10px] text-gray-400">{data.cashGeneration.lastMonth.month}</p>
-                </>
-              ) : (
-                <>
-                  <p className="mt-0.5 text-lg font-bold text-gray-400">—</p>
-                  <p className="text-[10px] text-gray-400">No complete months yet</p>
-                </>
-              )}
+              <p className="text-xs text-gray-500">Avg cash in</p>
+              <p className="mt-0.5 text-lg font-bold text-green-600">
+                {cashGenSummary ? fmtMYR2(cashGenSummary.avgIn) : "—"}
+              </p>
+              <p className="text-[10px] text-gray-400">per {cadenceUnit}{cashGenSummary ? ` · ${cashGenSummary.n} ${cadenceUnit}s` : ""}</p>
             </div>
             <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-              <p className="text-xs text-gray-500">3-month avg / month</p>
-              {data.cashGeneration.avg3Month != null ? (
-                <p className={`mt-0.5 text-lg font-bold ${data.cashGeneration.avg3Month >= 0 ? "text-green-600" : "text-red-600"}`}>
-                  {fmtMYR2(data.cashGeneration.avg3Month)}
-                </p>
-              ) : (
-                <p className="mt-0.5 text-lg font-bold text-gray-400">—</p>
-              )}
-              <p className="text-[10px] text-gray-400">From bank statements</p>
+              <p className="text-xs text-gray-500">Avg cash out</p>
+              <p className="mt-0.5 text-lg font-bold text-red-600">
+                {cashGenSummary ? fmtMYR2(cashGenSummary.avgOut) : "—"}
+              </p>
+              <p className="text-[10px] text-gray-400">per {cadenceUnit}</p>
             </div>
             <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-              <p className="text-xs text-gray-500">Cash on hand</p>
-              <p className="mt-0.5 text-lg font-bold text-gray-900">{fmtMYR2(data.openingBalance.amount)}</p>
+              <p className="text-xs text-gray-500">Min balance</p>
+              <p className={`mt-0.5 text-lg font-bold ${cashGenSummary?.minBal == null ? "text-gray-400" : cashGenSummary.minBal < 0 ? "text-red-600" : cashGenSummary.minBal < 10000 ? "text-amber-600" : "text-gray-900"}`}>
+                {cashGenSummary?.minBal == null ? "—" : fmtMYR2(cashGenSummary.minBal)}
+              </p>
               <p className="text-[10px] text-gray-400">
-                {data.openingBalance.statementDate ? `As of ${data.openingBalance.statementDate}` : "No statement uploaded"}
+                {cashGenSummary?.minBalRow?.minBalanceDate
+                  ? `lowest, ${cashGenSummary.minBalRow.minBalanceDate}`
+                  : "lowest in range"}
               </p>
             </div>
             <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-              <p className="text-xs text-gray-500">Runway</p>
-              {data.cashGeneration.runwayMonths != null ? (
-                <>
-                  <p className={`mt-0.5 text-lg font-bold ${data.cashGeneration.runwayMonths < 3 ? "text-red-600" : data.cashGeneration.runwayMonths < 6 ? "text-amber-600" : "text-gray-900"}`}>
-                    {data.cashGeneration.runwayMonths.toFixed(1)} months
-                  </p>
-                  <p className="text-[10px] text-gray-400">at current burn ({fmtMYR(data.cashGeneration.burnPerMonth ?? 0)}/mo)</p>
-                </>
-              ) : (
-                <>
-                  <p className="mt-0.5 text-lg font-bold text-green-600">∞</p>
-                  <p className="text-[10px] text-gray-400">3-month avg is positive</p>
-                </>
-              )}
-            </div>
-            {/* Projected min balance — QuickBooks-style cash-crunch
-                indicator. Lowest closing balance the projection forecasts
-                across the horizon. Red if it dips negative or near zero. */}
-            <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-              <p className="text-xs text-gray-500">Projected min balance</p>
-              {data.projectedMin ? (
-                <>
-                  <p className={`mt-0.5 text-lg font-bold ${data.projectedMin.closing < 0 ? "text-red-600" : data.projectedMin.closing < 10000 ? "text-amber-600" : "text-gray-900"}`}>
-                    {fmtMYR2(data.projectedMin.closing)}
-                  </p>
-                  <p className="text-[10px] text-gray-400">{shortRange(data.projectedMin.weekStart, data.projectedMin.weekEnd)}</p>
-                </>
-              ) : (
-                <p className="mt-0.5 text-lg font-bold text-gray-400">—</p>
-              )}
+              <p className="text-xs text-gray-500">Cash generated</p>
+              <p className={`mt-0.5 flex items-center gap-1 text-lg font-bold ${!cashGenSummary ? "text-gray-400" : cashGenSummary.net >= 0 ? "text-green-600" : "text-red-600"}`}>
+                {cashGenSummary && (cashGenSummary.net >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />)}
+                {cashGenSummary ? fmtMYR2(cashGenSummary.net) : "—"}
+              </p>
+              <p className="text-[10px] text-gray-400">net over {cashGen ? cashGen.rangeLabel : "range"}{includeInterco ? "" : ", interco off"}</p>
             </div>
           </div>
 
