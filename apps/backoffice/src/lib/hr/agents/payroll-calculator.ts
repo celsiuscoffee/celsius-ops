@@ -431,8 +431,13 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     const employeeReliefs = reliefsByUser.get(profile.user_id);
     const stat = await calcAllStatutory({
       wage: statutoryBasis,
+      // PERKESO SOCSO/EIS wages include overtime; EPF (statutoryBasis) excludes
+      // it. Pass the OT-inclusive figure so SOCSO/EIS aren't under-contributed.
+      socsoEisWage: statutoryBasis + totalOT,
       monthlyGross: gross,
       currentMonth: month,
+      periodYear: year,
+      periodMonth: month,
       ytdGross: ytd.gross,
       ytdTaxPaid: ytd.pcb,
       employmentType: profile.employment_type as string | undefined,

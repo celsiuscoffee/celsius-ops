@@ -3,6 +3,12 @@
 // updated via SQL when KWSP/PERKESO/LHDN publish new schedules.
 
 import { hrSupabaseAdmin } from "../supabase";
+import {
+  epfContribution,
+  socsoContribution,
+  eisContribution,
+  roundToCents,
+} from "./formulas";
 
 export type EpfInputs = {
   wage: number;              // OT + basic + fixed allowances (EPF-contributing items only)
@@ -38,17 +44,16 @@ export async function calcEPF(
 
   if (!rate) return { employee: 0, employer: 0, bracket: 0 };
 
-  const bracket = Math.ceil(inputs.wage / 20) * 20;
-  const employeeRate = inputs.employeeRateOverride ?? Number(rate.employee_rate);
-  const employerRate = inputs.employerRateOverride ?? Number(
-    inputs.wage <= 5000 ? rate.employer_rate_below_5000 : rate.employer_rate_above_5000,
-  );
-
-  // EPF Schedule A rounds up to nearest RM for contributions
-  const employee = Math.ceil((bracket * employeeRate) / 100);
-  const employer = Math.ceil((bracket * employerRate) / 100);
-
-  return { employee, employer, bracket };
+  // Band width is RM20 up to RM5,000 and RM100 above it (KWSP Third Schedule).
+  // Pure math lives in ./formulas so it can be unit-tested against the schedule.
+  return epfContribution({
+    wage: inputs.wage,
+    employeeRate: Number(rate.employee_rate),
+    employerRateBelow5000: Number(rate.employer_rate_below_5000),
+    employerRateAbove5000: Number(rate.employer_rate_above_5000),
+    employeeRateOverride: inputs.employeeRateOverride,
+    employerRateOverride: inputs.employerRateOverride,
+  });
 }
 
 // ─── SOCSO (Act 4) ──────────────────────────────────────────────
@@ -72,18 +77,18 @@ export async function calcSOCSO(
     .maybeSingle();
   if (!cfg) return { employee: 0, employer: 0, tier: 0 };
 
-  const cappedWage = Math.min(wage, Number(cfg.wage_ceiling));
-  const tier = Math.ceil(cappedWage / Number(cfg.round_to)) * Number(cfg.round_to);
-
-  if (category === 1) {
-    const employee = roundToCents(tier * (Number(cfg.cat1_employee_rate) / 100));
-    const employer = roundToCents(tier * (Number(cfg.cat1_employer_rate) / 100));
-    return { employee, employer, tier };
-  } else {
-    // Category 2: employer-only, injury-only scheme
-    const employer = roundToCents(tier * (Number(cfg.cat2_employer_rate) / 100));
-    return { employee: 0, employer, tier };
-  }
+  // Contribution is charged on the band's assumed wage (midpoint), not the
+  // ceiling — see ./formulas. `tier` now carries that assumed wage.
+  const { employee, employer, assumedWage } = socsoContribution({
+    wage,
+    category,
+    wageCeiling: Number(cfg.wage_ceiling),
+    roundTo: Number(cfg.round_to),
+    cat1EmployeeRate: Number(cfg.cat1_employee_rate),
+    cat1EmployerRate: Number(cfg.cat1_employer_rate),
+    cat2EmployerRate: Number(cfg.cat2_employer_rate),
+  });
+  return { employee, employer, tier: assumedWage };
 }
 
 // ─── EIS (Act 800) ──────────────────────────────────────────────
@@ -104,12 +109,16 @@ export async function calcEIS(
     .maybeSingle();
   if (!cfg) return { employee: 0, employer: 0, tier: 0 };
 
-  const cappedWage = Math.min(wage, Number(cfg.wage_ceiling));
-  const tier = Math.ceil(cappedWage / Number(cfg.round_to)) * Number(cfg.round_to);
-
-  const employee = roundToCents(tier * (Number(cfg.employee_rate) / 100));
-  const employer = roundToCents(tier * (Number(cfg.employer_rate) / 100));
-  return { employee, employer, tier };
+  // Charged on the band's assumed wage (midpoint), not the ceiling — see
+  // ./formulas. `tier` now carries that assumed wage.
+  const { employee, employer, assumedWage } = eisContribution({
+    wage,
+    wageCeiling: Number(cfg.wage_ceiling),
+    roundTo: Number(cfg.round_to),
+    employeeRate: Number(cfg.employee_rate),
+    employerRate: Number(cfg.employer_rate),
+  });
+  return { employee, employer, tier: assumedWage };
 }
 
 // ─── HRDF (PSMB) ────────────────────────────────────────────────
@@ -130,6 +139,8 @@ export async function calcHRDF(
   if (!cfg) return { employer: 0 };
   return { employer: roundToCents(wage * (Number(cfg.employer_rate) / 100)) };
 }
+
+// roundToCents lives in ./formulas (shared with the pure statutory math).
 
 // ─── PCB 2026 MTD Formula Method (LHDN PU(A) 354/2020) ─────────
 // Simplified for regular monthly remuneration (not TP3 mid-year):
@@ -264,9 +275,18 @@ export async function calcPCB(
 
 // ─── One-shot helper: compute all statutory contributions for an employee ──
 export type EmployeeStatutoryInputs = {
-  wage: number;
+  wage: number;                  // EPF basis (basic + fixed allowances, OT EXCLUDED)
+  // SOCSO/EIS basis. PERKESO "wages" INCLUDE overtime (EPF excludes it), so the
+  // caller passes wage + OT here. Defaults to `wage` when omitted so existing
+  // callers keep their prior behaviour.
+  socsoEisWage?: number;
   monthlyGross: number;
   currentMonth?: number;
+  // Payroll period, so statutory rates/PCB brackets are resolved as-of the month
+  // being paid rather than whenever the calc happens to run (a Dec run recomputed
+  // in Jan must use Dec's schedules). Falls back to "today" when omitted.
+  periodYear?: number;
+  periodMonth?: number;
   ytdGross?: number;
   ytdTaxPaid?: number;
   // Profile
@@ -307,20 +327,33 @@ export async function calcAllStatutory(inputs: EmployeeStatutoryInputs) {
   const socsoCat = inputs.socsoCategory === "injury_only" ? 2
     : inputs.socsoCategory === "exempt" ? null : 1;
 
+  // Resolve rate schedules as-of the payroll period (first of the paid month),
+  // not the wall-clock time the calc runs. Falls back to "now" when the caller
+  // doesn't supply a period.
+  const effectiveDate =
+    inputs.periodYear && inputs.periodMonth
+      ? new Date(Date.UTC(inputs.periodYear, inputs.periodMonth - 1, 1))
+      : new Date();
+  const pcbYear = inputs.periodYear ?? effectiveDate.getUTCFullYear();
+
+  // PERKESO wages include OT; EPF wages don't. Default to `wage` for callers
+  // that don't distinguish.
+  const socsoEisWage = inputs.socsoEisWage ?? inputs.wage;
+
   const epf = await calcEPF({
     wage: inputs.wage,
     epfCategory: epfCat,
     employeeRateOverride: inputs.epfEmployeeRateOverride,
     employerRateOverride: inputs.epfEmployerRateOverride,
-  });
+  }, effectiveDate);
 
   const socso = socsoCat
-    ? await calcSOCSO(inputs.wage, socsoCat as 1 | 2, true)
+    ? await calcSOCSO(socsoEisWage, socsoCat as 1 | 2, true, effectiveDate)
     : { employee: 0, employer: 0, tier: 0 };
 
-  const eis = await calcEIS(inputs.wage, inputs.eisEnabled ?? true);
+  const eis = await calcEIS(socsoEisWage, inputs.eisEnabled ?? true, effectiveDate);
 
-  const hrdf = await calcHRDF(inputs.wage, inputs.hrdfApplicable ?? true);
+  const hrdf = await calcHRDF(inputs.wage, inputs.hrdfApplicable ?? true, effectiveDate);
 
   const pcb = await calcPCB({
     monthlyGross: inputs.monthlyGross,
@@ -337,7 +370,7 @@ export async function calcAllStatutory(inputs: EmployeeStatutoryInputs) {
     disabledSpouse: inputs.disabledSpouse,
     taxResidentCategory: inputs.taxResidentCategory,
     reliefs: inputs.tp3Reliefs,
-  });
+  }, pcbYear);
 
   return {
     epf: { employee: epf.employee, employer: epf.employer },
@@ -350,6 +383,3 @@ export async function calcAllStatutory(inputs: EmployeeStatutoryInputs) {
   };
 }
 
-function roundToCents(amount: number): number {
-  return Math.round(amount * 20) / 20;  // round to RM 0.05
-}
