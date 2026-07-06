@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
 import { sendSMS, providerAutoPrependsSender, getActiveSmsProvider } from "@/lib/loyalty/sms";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -170,10 +170,7 @@ async function findAlreadySentPhones(
   return new Set((data || []).map((r: { phone: string }) => r.phone));
 }
 
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runCampaignsAuto() {
   const nowIso = new Date().toISOString();
 
   const { data: campaignRows, error: cErr } = await supabaseAdmin
@@ -395,3 +392,5 @@ export async function GET(req: NextRequest) {
     results,
   });
 }
+
+export const GET = cronRoute("campaigns-auto", runCampaignsAuto);

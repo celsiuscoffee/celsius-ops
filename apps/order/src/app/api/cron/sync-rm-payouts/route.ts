@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import {
   getDailySettlementReport,
@@ -46,10 +46,7 @@ function resolveStore(storeName: string | null, orderStore: string | null): { sl
   return { slug: orderStore || "unknown", entity: storeName || "Unknown" };
 }
 
-export async function GET(request: NextRequest) {
-  const cronAuth = checkCronAuth(request.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runSyncRmPayouts(request: NextRequest) {
   const p = request.nextUrl.searchParams;
 
   // ── Probe: one call, raw + parsed, no DB writes. Fail-fast endpoint check. ──
@@ -176,3 +173,9 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(result);
 }
+
+// Heartbeat tier: a silent stop means settlement batches never land in the
+// finance Payouts tab — money movement goes unreconciled until someone notices.
+export const GET = cronRoute("sync-rm-payouts", runSyncRmPayouts, {
+  schedule: "0 21 * * *",
+});

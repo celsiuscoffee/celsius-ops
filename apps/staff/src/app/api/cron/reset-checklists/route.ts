@@ -1,6 +1,6 @@
-import { NextResponse, NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 /**
  * GET /api/cron/reset-checklists
@@ -13,10 +13,7 @@ import { checkCronAuth } from "@celsius/shared";
  *
  * Protected by CRON_SECRET to prevent unauthorized access.
  */
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runResetChecklists() {
   // 12am MYT = the start of the new MYT day
   const mytDateStr = new Date(Date.now() + 8 * 60 * 60 * 1000)
     .toISOString()
@@ -48,3 +45,9 @@ export async function GET(req: NextRequest) {
     deletedItems: deletedItems.count,
   });
 }
+
+// Heartbeat tier: daily ops accountability breaks silently if this stops —
+// stale checklists never regenerate and outlets skip their opening checks.
+export const GET = cronRoute("reset-checklists", runResetChecklists, {
+  schedule: "0 16 * * *",
+});

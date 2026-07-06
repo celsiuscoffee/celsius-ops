@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
+import { NextResponse } from "next/server";
+import { cronRoute } from "@/lib/cron-monitor";
 import { prisma } from "@/lib/prisma";
 import { refreshKeywords, seedTargetKeywords } from "@/lib/geogrid/keywords";
 import { buildKeywordStrategy } from "@/lib/geogrid/keyword-selection";
@@ -14,10 +14,7 @@ export const maxDuration = 120;
 // Branded/navigational and competitor-brand terms are filtered out throughout.
 const TOP_N = Number(process.env.GEOGRID_KEYWORDS_PER_OUTLET || 4);
 
-export async function GET(req: NextRequest) {
-  const auth = checkCronAuth(req.headers);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
-
+async function runGeogridKeywords() {
   const outlets = await prisma.outlet.findMany({
     where: { status: "ACTIVE" },
     include: { reviewSettings: true },
@@ -43,3 +40,5 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ ran_at: new Date().toISOString(), topN: TOP_N, results, strategy });
 }
+
+export const GET = cronRoute("geogrid-keywords", runGeogridKeywords);

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews, replyToReview } from "@/lib/reviews/gbp";
 import { generateReply, extractImprovement, POSITIVE_THRESHOLD } from "@/lib/reviews/auto-reply";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -40,14 +40,7 @@ type OutletResult = {
   error?: string;
 };
 
-export async function GET(req: NextRequest) {
-  // Cron secret OR an authenticated admin (so it can be triggered manually).
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) {
-    const user = await getUserFromHeaders(req.headers);
-    if (!user) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-  }
-
+async function runReviewsAutoReply() {
   const outlets = await prisma.outlet.findMany({
     where: { status: "ACTIVE" },
     include: { reviewSettings: true },
@@ -182,4 +175,14 @@ export async function GET(req: NextRequest) {
     total_flagged: totalFlagged,
     results,
   });
+}
+
+const cronHandler = cronRoute("reviews-auto-reply", runReviewsAutoReply);
+
+// Cron secret (via cronRoute) OR an authenticated admin (so it can be
+// triggered manually).
+export async function GET(req: NextRequest) {
+  const user = await getUserFromHeaders(req.headers);
+  if (user) return runReviewsAutoReply();
+  return cronHandler(req);
 }

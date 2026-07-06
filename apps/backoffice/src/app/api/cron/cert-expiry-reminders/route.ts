@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -12,10 +12,7 @@ export const maxDuration = 30;
 // Idempotent via hr_certification_reminders unique(certification_id, stage).
 //
 // Auth: Bearer CRON_SECRET.
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runCertExpiryReminders() {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const isoToday = today.toISOString().slice(0, 10);
@@ -102,3 +99,5 @@ export async function GET(req: NextRequest) {
     }, {}),
   });
 }
+
+export const GET = cronRoute("cert-expiry-reminders", runCertExpiryReminders);

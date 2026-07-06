@@ -76,8 +76,6 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   DESIGN** (SUNMI tills write via the anon key). Do NOT lint-fix — needs a
   data-layer plan (rls-strategy.md Path A). 4 `security_definer_view` +
   ~12 `function_search_path_mutable` remain as low-risk hardening.
-- 2026-07-05 — 13 of 14 Vercel crons still have no heartbeat monitoring
-  (`reconcile-pending` wired 2026-07-05; the rest fail silently).
 - 2026-07-05 — Pickup dashboard **inventory tab reads tables that don't
   exist** (`ingredients`, `stock_levels`, `ingredient_outlet_settings` —
   absent from BOTH Supabase projects); it has been silently empty. Either
@@ -93,6 +91,17 @@ get_advisors sweep then closed ALL remaining anon-reachable tables:
 10 backup snapshots (074) + 14 server-only tables incl. PendingPop/grab_*
 (075). Verified: rls_disabled_in_public 24→0, sensitive_columns_exposed
 2→0, security ERRORs 30→4 (the 4 left are SECURITY DEFINER views)._
+
+_Resolved 2026-07-05 evening: "13 of 14 Vercel crons unmonitored" — the
+real fleet was ~59 scheduled crons, not 14. All now route through
+`cronRoute()` (per-app `src/lib/cron-monitor.ts`): 16 money-critical
+crons carry Sentry Cron Monitor heartbeats, the rest get Sentry error
+capture (tag `cron:<slug>`). Also fixed en route: the 2 fail-open cron
+auths (`hr/{overtime-requests,review-penalties}/sync` GET),
+loyalty-pushes' spoofable `x-vercel-cron` + `?secret=` auth paths, and
+the phantom `music-alerts` vercel.json entry (404 every 5 min — route
+never existed). Human owes: Sentry → Crons alert rule after first prod
+run (monitors auto-create). Tier list: `docs/monitoring-setup.md`._
 
 _Fixed 2026-07-05 (see Lessons): categorizer correction mis-attribution +
 never-set `applied` flag — `related_id` now populated at decision time,
@@ -115,6 +124,18 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-05 (evening) — **Security + observability batch.** Cron
+  observability wired repo-wide (see resolved Open-failure note above;
+  branch `claude/apps-fragmented-software-letsr7`, PR #805). Security
+  items §5/§6 of the hardening checklist turned out ALREADY CLOSED in
+  prod — live DB drifted ahead of repo migrations; verified independently
+  (`hr_payroll_runs`/`hr_payroll_items` relrowsecurity=true, 0 policies)
+  and cross-checked against PR #802. Checklist now has only true
+  human-dashboard items open: §1 IP allowlist, §3 BetterUptime +
+  Vercel→Slack + Sentry cron alert rule, §4 PITR decision. Next session:
+  watch Sentry → Crons after first prod runs (16 monitors auto-create;
+  schedules must stay in lockstep with vercel.json), and consider
+  promoting any error-tier cron that bites.
 - 2026-07-05 — **Staff access-control audit + hotfixes** (`docs/staff-access-
   audit-2026-07-05.md`). Application-layer RBAC audit across POS login, staff
   app, checklists, stock count, receiving, own audit/performance, backoffice,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
 import { getSession } from "@/lib/auth";
 import { runProcurementExec } from "@/lib/inventory/exec/exec-controller";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -12,14 +12,7 @@ export const maxDuration = 120;
 //
 // Auth: the Vercel cron secret, or an authenticated OWNER/ADMIN (run on demand for
 // testing without the secret).
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) {
-    const user = await getSession();
-    if (!user || !["OWNER", "ADMIN"].includes(user.role)) {
-      return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-    }
-  }
+async function runProcurementExecCron() {
   try {
     const result = await runProcurementExec();
     return NextResponse.json({ ok: true, ...result });
@@ -27,4 +20,20 @@ export async function GET(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "procurement-exec failed";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+// Heartbeat tier: a silent no-run means unsent re-source orders and overdue
+// POs go unchased — stockouts and supplier money slip by unnoticed.
+const cronGET = cronRoute("procurement-exec", runProcurementExecCron, {
+  schedule: "0 1 * * *",
+  maxRuntime: 5, // maxDuration 120s + margin
+});
+
+// Preserved extra auth: an OWNER/ADMIN may trigger on demand without the cron
+// secret (cronRoute would reject them), so check the session first and only
+// then defer to the wrapped cron route.
+export async function GET(req: NextRequest) {
+  const user = await getSession();
+  if (user && ["OWNER", "ADMIN"].includes(user.role)) return runProcurementExecCron();
+  return cronGET(req);
 }

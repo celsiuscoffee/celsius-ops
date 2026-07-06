@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { mytDayWindow, type ConsumptionResult } from "@/lib/inventory/consumption";
 import { postOutletConsumption } from "@/lib/inventory/consumption-post";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -20,15 +20,7 @@ export const maxDuration = 120;
 //
 // Auth: Vercel cron secret, or an OWNER/ADMIN may trigger on demand (and pass
 // ?date=YYYY-MM-DD to backfill a specific MYT day).
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) {
-    const user = await getSession();
-    if (!user || !["OWNER", "ADMIN"].includes(user.role)) {
-      return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-    }
-  }
-
+async function runConsumptionPost(req: NextRequest) {
   try {
     const dateParam = req.nextUrl.searchParams.get("date");
     // Default to yesterday in MYT (sales for a full closed day).
@@ -80,4 +72,20 @@ export async function GET(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "consumption-post failed";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+// Heartbeat tier: a silent no-run means stock never depletes for sales, so
+// inventory (and everything ordered off it) drifts from reality unnoticed.
+const cronGET = cronRoute("consumption-post", runConsumptionPost, {
+  schedule: "25 19 * * *",
+  maxRuntime: 5, // maxDuration 120s + margin
+});
+
+// Preserved extra auth: an OWNER/ADMIN may trigger on demand without the cron
+// secret (cronRoute would reject them), so check the session first and only
+// then defer to the wrapped cron route.
+export async function GET(req: NextRequest) {
+  const user = await getSession();
+  if (user && ["OWNER", "ADMIN"].includes(user.role)) return runConsumptionPost(req);
+  return cronGET(req);
 }

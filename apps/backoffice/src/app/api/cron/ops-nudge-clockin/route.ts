@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
+import { NextResponse } from "next/server";
 import { runClockInNudges } from "@/lib/ops-nudges";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,9 +18,7 @@ export const maxDuration = 60;
  * (off|shadow|armed), default armed.
  * Design: docs/design/ops-performance-loop.md.
  */
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
+async function runOpsNudgeClockin() {
   try {
     const result = await runClockInNudges();
     console.log(`[cron/ops-nudge-clockin] mode=${result.mode} items=${result.items} staff=${result.staffSent} mgr=${result.managerSent}`);
@@ -31,3 +29,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+export const GET = cronRoute("ops-nudge-clockin", runOpsNudgeClockin);

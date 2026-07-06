@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews } from "@/lib/reviews/gbp";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 
@@ -94,14 +95,9 @@ async function runSync() {
   });
 }
 
-// Vercel Cron — Bearer CRON_SECRET
-export async function GET(req: NextRequest) {
-  const auth = req.headers.get("authorization");
-  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  return runSync();
-}
+// Vercel Cron — cronRoute replaces the old inline check, which was
+// fail-open (a missing CRON_SECRET made this a public endpoint).
+export const GET = cronRoute("hr-review-penalties-sync", () => runSync());
 
 // Manual admin trigger from UI
 export async function POST() {

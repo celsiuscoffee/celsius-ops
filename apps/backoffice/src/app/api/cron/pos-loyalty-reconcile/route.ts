@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth, createSupabaseAdmin } from "@celsius/shared";
+import { NextResponse } from "next/server";
+import { createSupabaseAdmin } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -22,10 +23,7 @@ export const maxDuration = 60;
  * cron only heals fresh misses; a wider sweep can be run manually by calling
  * the DB function with a larger p_since_hours.
  */
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runPosLoyaltyReconcile() {
   const supabase = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -44,3 +42,10 @@ export async function GET(req: NextRequest) {
   }
   return NextResponse.json({ ok: true, ...(row ?? { orders_fixed: 0, points_awarded: 0, drops_created: 0 }) });
 }
+
+// Heartbeat tier: this IS the safety net — if it silently stops, offline-sale
+// members quietly lose their Beans and Mystery drops with no other backstop.
+export const GET = cronRoute("pos-loyalty-reconcile", runPosLoyaltyReconcile, {
+  schedule: "*/5 * * * *",
+  maxRuntime: 4, // maxDuration 60s + margin
+});

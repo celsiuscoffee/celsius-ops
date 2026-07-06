@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +26,7 @@ export const dynamic = "force-dynamic";
  */
 const STALE_HOURS = 3;
 
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runSweepStaleOrders() {
   const supabase = getSupabaseAdmin();
   const cutoff = new Date(Date.now() - STALE_HOURS * 3_600_000).toISOString();
   const nowIso = new Date().toISOString();
@@ -66,3 +63,5 @@ export async function GET(req: NextRequest) {
   }
   return NextResponse.json({ ok: true, ...summary });
 }
+
+export const GET = cronRoute("sweep-stale-orders", runSweepStaleOrders);

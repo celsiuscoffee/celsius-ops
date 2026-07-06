@@ -1,11 +1,10 @@
 export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from "next/server";
-import * as Sentry from "@sentry/nextjs";
+import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 import { queryCheckoutStatus } from "@/lib/revenue-monster/client";
 import { markRmOrderPaid, markRmOrderFailed } from "@/lib/revenue-monster/order-status";
 
@@ -37,29 +36,16 @@ type OrderLite = {
 
 const RM_METHODS = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card"]);
 
-export async function GET(request: NextRequest) {
-  const cronAuth = checkCronAuth(request.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
-  // Heartbeat: this cron settles payments and fails silently into logs
-  // otherwise (docs/monitoring-setup.md). withMonitor upserts the Sentry
-  // Cron Monitor on first check-in and alerts on missed windows or thrown
-  // errors — config errors below throw (instead of returning 500 directly)
-  // so they register as failed runs, not healthy ones.
-  try {
-    return await Sentry.withMonitor("reconcile-pending", () => runReconcile(), {
-      schedule: { type: "crontab", value: "* * * * *" },
-      checkinMargin: 5,
-      maxRuntime: 10,
-      timezone: "Etc/UTC",
-    });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "reconcile-pending failed" },
-      { status: 500 },
-    );
-  }
-}
+// Heartbeat: this cron settles payments and fails silently into logs
+// otherwise (docs/monitoring-setup.md). cronRoute's withMonitor upserts the
+// Sentry Cron Monitor on first check-in and alerts on missed windows or
+// thrown errors — config errors below throw (instead of returning 500
+// directly) so they register as failed runs, not healthy ones.
+export const GET = cronRoute("reconcile-pending", runReconcile, {
+  schedule: "* * * * *",
+  checkinMargin: 5,
+  maxRuntime: 10,
+});
 
 async function runReconcile(): Promise<NextResponse> {
   const stripe = getStripe();

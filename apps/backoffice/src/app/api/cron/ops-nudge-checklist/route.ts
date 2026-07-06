@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
+import { NextResponse } from "next/server";
 import { runChecklistNudges } from "@/lib/ops-nudges";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -17,9 +17,7 @@ export const maxDuration = 60;
  * Runs every 15 min. OPS_NUDGES_MODE (off|shadow|armed, default armed).
  * Design: docs/design/checklist-individual-accountability.md.
  */
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
+async function runOpsNudgeChecklist() {
   try {
     const result = await runChecklistNudges();
     console.log(
@@ -32,3 +30,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+export const GET = cronRoute("ops-nudge-checklist", runOpsNudgeChecklist);

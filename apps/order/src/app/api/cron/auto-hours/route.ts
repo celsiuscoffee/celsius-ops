@@ -1,8 +1,8 @@
 export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 interface StoreHours {
   open: string;
@@ -20,10 +20,7 @@ function timeToMinutes(time: string): number {
 // GET /api/cron/auto-hours
 // Reads outlet_hours from app_settings, checks current Malaysia time (UTC+8),
 // and updates outlet_settings.is_open accordingly.
-export async function GET(request: NextRequest) {
-  const cronAuth = checkCronAuth(request.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runAutoHours() {
   try {
     const supabase = getSupabaseAdmin();
 
@@ -135,3 +132,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+// Heartbeat tier: if this stops silently, outlets stay marked closed past
+// opening (lost orders) or open past closing (orders nobody will make).
+export const GET = cronRoute("auto-hours", runAutoHours, {
+  schedule: "*/10 * * * *",
+});

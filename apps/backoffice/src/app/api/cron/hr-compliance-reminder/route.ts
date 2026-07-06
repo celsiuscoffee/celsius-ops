@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -12,10 +12,7 @@ export const maxDuration = 30;
 // the HR dashboard widget renders the right colours.
 //
 // Auth: Bearer CRON_SECRET (Vercel auto-sets).
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runHrComplianceReminder() {
   const today = new Date().toISOString().slice(0, 10);
 
   // 1. Mark overdue: due_date < today, status = pending → overdue
@@ -59,3 +56,5 @@ export async function GET(req: NextRequest) {
     },
   });
 }
+
+export const GET = cronRoute("hr-compliance-reminder", runHrComplianceReminder);

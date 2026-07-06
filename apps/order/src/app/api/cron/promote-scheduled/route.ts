@@ -1,9 +1,9 @@
 export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { notifyOrderPreparing } from "@/lib/push/templates";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 /**
  * Runs every 2 minutes. Finds scheduled orders sitting in "paid"
@@ -17,10 +17,7 @@ import { checkCronAuth } from "@celsius/shared";
  * outlet's prep time isn't set we default to 10 min (matches the
  * checkout-side default).
  */
-export async function GET(request: NextRequest) {
-  const cronAuth = checkCronAuth(request.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runPromoteScheduled() {
   const supabase = getSupabaseAdmin();
 
   // Fetch held scheduled orders. Look at every "paid" row with a
@@ -95,3 +92,9 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(result);
 }
+
+// Heartbeat tier: a silent stop leaves scheduled orders stuck in "paid" —
+// the kitchen never sees them, so customers wait on drinks nobody is making.
+export const GET = cronRoute("promote-scheduled", runPromoteScheduled, {
+  schedule: "*/2 * * * *",
+});

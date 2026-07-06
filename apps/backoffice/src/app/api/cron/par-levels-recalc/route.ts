@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkCronAuth } from "@celsius/shared";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recalcOutletParLevels } from "@/lib/inventory/par-calc";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -16,14 +16,7 @@ export const maxDuration = 120;
 // Pars are engine-managed: each run overwrites the outlet's rows. Outlets with
 // no POS sales in the window are skipped (their stale pars are left alone
 // rather than zeroed).
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) {
-    const user = await getSession();
-    if (!user || !["OWNER", "ADMIN"].includes(user.role)) {
-      return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-    }
-  }
+async function runParLevelsRecalc() {
   try {
     const outlets = await prisma.outlet.findMany({
       where: { loyaltyOutletId: { not: null } },
@@ -57,4 +50,16 @@ export async function GET(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "par-levels-recalc failed";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+const cronHandler = cronRoute("par-levels-recalc", runParLevelsRecalc);
+
+// Cron secret (via cronRoute) OR an authenticated OWNER/ADMIN session, so the
+// recalc can be run on demand.
+export async function GET(req: NextRequest) {
+  const user = await getSession();
+  if (user && ["OWNER", "ADMIN"].includes(user.role)) {
+    return runParLevelsRecalc();
+  }
+  return cronHandler(req);
 }

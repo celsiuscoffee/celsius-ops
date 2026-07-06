@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 import {
   listPosterAssets,
   loadReferencedUrls,
@@ -34,12 +34,7 @@ export const maxDuration = 60;
  */
 const GRACE_DAYS = 7;
 
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) {
-    return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-  }
-
+async function runPrunePosterAssets() {
   // Fail-closed if Cloudinary isn't configured, rather than half-running.
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -111,3 +106,5 @@ export async function GET(req: NextRequest) {
   }
   return NextResponse.json({ ok: true, ...summary });
 }
+
+export const GET = cronRoute("prune-poster-assets", runPrunePosterAssets);

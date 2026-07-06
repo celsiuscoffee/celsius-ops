@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncAccounts } from "@/lib/ads/sync-accounts";
 import { syncCampaigns } from "@/lib/ads/sync-campaigns";
@@ -6,7 +6,7 @@ import { syncMetrics } from "@/lib/ads/sync-metrics";
 import { syncSearchTerms } from "@/lib/ads/sync-search-terms";
 import { runSync } from "@/lib/ads/run-sync";
 import { buildAdsOptimizerReport } from "@/lib/ads/optimizer";
-import { checkCronAuth } from "@celsius/shared";
+import { cronRoute } from "@/lib/cron-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 min
@@ -14,10 +14,7 @@ export const maxDuration = 300; // 5 min
 // Runs daily @ 3 AM MYT via Vercel Cron.
 // - Refreshes account list
 // - For each non-manager account: refreshes campaigns, then pulls yesterday's metrics.
-export async function GET(req: NextRequest) {
-  const cronAuth = checkCronAuth(req.headers);
-  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
-
+async function runAdsDaily() {
   const settings = await prisma.adsSettings.findUnique({ where: { id: "singleton" } });
   if (settings && !settings.dailySyncEnabled) {
     return NextResponse.json({ skipped: true, reason: "daily_sync_disabled" });
@@ -93,3 +90,10 @@ export async function GET(req: NextRequest) {
     optimizer,
   });
 }
+
+// Heartbeat tier: a silent no-run means live ad spend keeps burning with no
+// fresh metrics or optimizer input — money spent blind until someone notices.
+export const GET = cronRoute("ads-daily", runAdsDaily, {
+  schedule: "0 19 * * *",
+  maxRuntime: 8, // maxDuration 300s + margin
+});

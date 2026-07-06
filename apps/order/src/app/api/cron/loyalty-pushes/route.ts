@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cronRoute } from "@/lib/cron-monitor";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import {
   notifyBirthdayReward,
@@ -35,48 +36,31 @@ import { evaluateAudience, reachableCandidateMemberIds, type RuleNode } from "@/
  *   "0  3 * * *"     /api/cron/loyalty-pushes?job=sitting-on-beans (11am MYT)
  *   "0  3 * * 1"     /api/cron/loyalty-pushes?job=miss-you        (11am MYT Mon)
  *
- * Auth: header `Authorization: Bearer ${CRON_SECRET}` OR Vercel-
- * native `x-vercel-cron` header. Local dev: pass ?secret= for
- * manual testing.
+ * Auth: header `Authorization: Bearer ${CRON_SECRET}` (checkCronAuth,
+ * enforced by cronRoute).
  */
 
 const BRAND_ID = "brand-celsius";
 
-function authorized(req: NextRequest): boolean {
-  if (req.headers.get("x-vercel-cron")) return true;
-  const expected = process.env.CRON_SECRET;
-  if (!expected) return false;
-  const header = req.headers.get("authorization");
-  const bearer = header?.startsWith("Bearer ") ? header.slice(7) : null;
-  const qs     = req.nextUrl.searchParams.get("secret");
-  return bearer === expected || qs === expected;
-}
-
-export async function GET(request: NextRequest) {
-  if (!authorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+async function runLoyaltyPushes(request: NextRequest) {
   const job = request.nextUrl.searchParams.get("job") ?? "";
 
-  try {
-    switch (job) {
-      case "birthday":         return NextResponse.json(await runBirthday());
-      case "reward-expiring":  return NextResponse.json(await runRewardExpiring());
-      case "tier-at-risk":     return NextResponse.json(await runTierAtRisk());
-      case "miss-you":         return NextResponse.json(await runMissYou());
-      case "sitting-on-beans": return NextResponse.json(await runSittingOnBeans());
-      case "custom":           return NextResponse.json(await runCustomCampaigns());
-      default:
-        return NextResponse.json(
-          { error: "unknown job — expected birthday|reward-expiring|tier-at-risk|miss-you|sitting-on-beans|custom" },
-          { status: 400 },
-        );
-    }
-  } catch (err) {
-    console.error("[cron/loyalty-pushes]", err);
-    return NextResponse.json({ error: "Cron job failed" }, { status: 500 });
+  switch (job) {
+    case "birthday":         return NextResponse.json(await runBirthday());
+    case "reward-expiring":  return NextResponse.json(await runRewardExpiring());
+    case "tier-at-risk":     return NextResponse.json(await runTierAtRisk());
+    case "miss-you":         return NextResponse.json(await runMissYou());
+    case "sitting-on-beans": return NextResponse.json(await runSittingOnBeans());
+    case "custom":           return NextResponse.json(await runCustomCampaigns());
+    default:
+      return NextResponse.json(
+        { error: "unknown job — expected birthday|reward-expiring|tier-at-risk|miss-you|sitting-on-beans|custom" },
+        { status: 400 },
+      );
   }
 }
+
+export const GET = cronRoute("loyalty-pushes", runLoyaltyPushes);
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Birthday                                                                   */
