@@ -115,6 +115,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-06 — **Checklist auto-assign: data-driven FOH/BOH station** (PR #824,
+  branch `claude/auto-assign-checklist-hqqzfd`, draft — NOT yet merged). Root
+  cause of "auto-assign didn't assign the attended person": station came from a
+  hardcoded title map in `ops-nudges` that mis-classed *Ice Machine Cleaning* as
+  kitchen (it's at the bar → FOH). Now data-driven both sides: `Sop.stations`
+  (enum `SopStation{foh,boh,lead,shared}`, **array/multi-select** — a SOP can be
+  FOH+BOH or shared) + `hr_employee_profiles.station` (text, nullable = infer
+  from position). Auto-assign pools anyone matching ANY of the SOP's areas
+  (`matchesAnyStation`); explicit employee station overrides position;
+  `STATION_POSITIONS` foh←barista/cashier, boh←kitchen. UI: multi-select on SOP
+  create+detail pages; FOH/BOH/lead selector on the employee Employment card.
+  **Both migrations APPLIED to prod + verified 2026-07-06** (`sop_station`,
+  `hr_profile_station`); today's 3 ice-machine rows repointed to FOH baristas.
+  **Still open:** merge+deploy PR #824 so the new routing runs (until then the
+  OLD armed cron/JIT still uses the kitchen map — the old JIT could re-own
+  tonight's ice machine to kitchen only if the FOH assignee never clocks in).
+
 - 2026-07-05 — **Staff access-control audit + hotfixes** (`docs/staff-access-
   audit-2026-07-05.md`). Application-layer RBAC audit across POS login, staff
   app, checklists, stock count, receiving, own audit/performance, backoffice,
