@@ -150,6 +150,16 @@ export default function CashflowPage() {
   // Cash-generated table controls: cadence toggle + single-account filter.
   const [cadence, setCadence] = useState<Cadence>("MONTHLY");
   const [account, setAccount] = useState<string>(""); // "" = all accounts
+  // Table filter + sort, client-side over the fetched rows.
+  type SortCol = "period" | "cashIn" | "cashOut" | "netGenerated" | "minBalance";
+  const [sortCol, setSortCol] = useState<SortCol>("period");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [netFilter, setNetFilter] = useState<"all" | "pos" | "neg">("all");
+  const [rowQuery, setRowQuery] = useState("");
+  const toggleSort = (col: SortCol) => {
+    if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortCol(col); setSortDir(col === "period" ? "asc" : "desc"); }
+  };
 
   const params = new URLSearchParams({ weeks: String(weeks) });
   outletIds.forEach((id) => params.append("outlet", id));
@@ -160,6 +170,26 @@ export default function CashflowPage() {
   if (account) cashGenParams.set("account", account);
   const { data: cashGen, isLoading: cashGenLoading } =
     useFetch<CashGeneratedResult>(`/api/finance/cashflow/cash-generated?${cashGenParams.toString()}`);
+
+  // Filter + sort the cash-generated rows client-side.
+  const cashGenRows = useMemo(() => {
+    if (!cashGen) return [];
+    const q = rowQuery.trim().toLowerCase();
+    let rows = cashGen.rows.filter((m) => {
+      if (netFilter === "pos" && m.netGenerated < 0) return false;
+      if (netFilter === "neg" && m.netGenerated >= 0) return false;
+      if (q && !`${m.period} ${m.label ?? ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    const dir = sortDir === "asc" ? 1 : -1;
+    rows = [...rows].sort((a, b) => {
+      if (sortCol === "period") return a.period.localeCompare(b.period) * dir;
+      const av = sortCol === "minBalance" ? (a.minBalance ?? Number.NEGATIVE_INFINITY) : a[sortCol];
+      const bv = sortCol === "minBalance" ? (b.minBalance ?? Number.NEGATIVE_INFINITY) : b[sortCol];
+      return (av - bv) * dir;
+    });
+    return rows;
+  }, [cashGen, netFilter, rowQuery, sortCol, sortDir]);
 
   const toggleOutlet = (id: string) =>
     setOutletIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -356,6 +386,23 @@ export default function CashflowPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <input
+                  value={rowQuery}
+                  onChange={(e) => setRowQuery(e.target.value)}
+                  placeholder="Filter period..."
+                  className="w-28 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-700 focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta"
+                  aria-label="Filter rows by period"
+                />
+                <select
+                  value={netFilter}
+                  onChange={(e) => setNetFilter(e.target.value as "all" | "pos" | "neg")}
+                  className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-700 focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta"
+                  aria-label="Filter by net sign"
+                >
+                  <option value="all">All net</option>
+                  <option value="pos">Net positive</option>
+                  <option value="neg">Net negative</option>
+                </select>
                 <select
                   value={account}
                   onChange={(e) => setAccount(e.target.value)}
@@ -387,18 +434,26 @@ export default function CashflowPage() {
                   <table className="w-full min-w-[640px] text-sm">
                     <thead>
                       <tr className="border-b bg-gray-50/50 text-left text-gray-500">
-                        <th className="px-4 py-2 font-medium">
-                          {cadence === "DAILY" ? "Day" : cadence === "WEEKLY" ? "Week" : "Month"}
-                        </th>
-                        <th className="px-4 py-2 text-right font-medium text-green-600">Cash in</th>
-                        <th className="px-4 py-2 text-right font-medium text-red-600">Cash out</th>
-                        <th className="px-4 py-2 text-right font-medium">Net generated</th>
-                        <th className="px-4 py-2 text-right font-medium">Min balance</th>
+                        {([
+                          { col: "period" as const, label: cadence === "DAILY" ? "Day" : cadence === "WEEKLY" ? "Week" : "Month", align: "left" },
+                          { col: "cashIn" as const, label: "Cash in", align: "right", cls: "text-green-600" },
+                          { col: "cashOut" as const, label: "Cash out", align: "right", cls: "text-red-600" },
+                          { col: "netGenerated" as const, label: "Net generated", align: "right" },
+                          { col: "minBalance" as const, label: "Min balance", align: "right" },
+                        ]).map((h) => (
+                          <th key={h.col}
+                            onClick={() => toggleSort(h.col)}
+                            className={`cursor-pointer select-none px-4 py-2 font-medium hover:text-gray-800 ${h.align === "right" ? "text-right" : ""} ${h.cls ?? ""}`}
+                            title="Click to sort">
+                            {h.label}
+                            <span className="ml-0.5 text-[9px] text-gray-400">{sortCol === h.col ? (sortDir === "asc" ? "▲" : "▼") : "↕"}</span>
+                          </th>
+                        ))}
                         {cashGen.account == null && <th className="px-4 py-2 font-medium">Coverage</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {cashGen.rows.map((m) => {
+                      {cashGenRows.map((m) => {
                         const expectedAccounts = cashGen.accountsInScope;
                         const incomplete = cashGen.account == null && m.accountsReporting < expectedAccounts;
                         return (
@@ -425,6 +480,13 @@ export default function CashflowPage() {
                           </tr>
                         );
                       })}
+                      {cashGenRows.length === 0 && (
+                        <tr>
+                          <td colSpan={cashGen.account == null ? 6 : 5} className="px-4 py-6 text-center text-xs text-gray-400">
+                            No rows match the filter.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
