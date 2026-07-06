@@ -180,7 +180,7 @@ export default function CashflowPage() {
     let rows = cashGen.rows.filter((m) => {
       if (netFilter === "pos" && m.netGenerated < 0) return false;
       if (netFilter === "neg" && m.netGenerated >= 0) return false;
-      if (q && !`${m.period} ${m.label ?? ""}`.toLowerCase().includes(q)) return false;
+      if (q && !`${m.period} ${m.label ?? ""} ${fmtCashGenLabel(m, cadence)}`.toLowerCase().includes(q)) return false;
       return true;
     });
     const dir = sortDir === "asc" ? 1 : -1;
@@ -191,7 +191,7 @@ export default function CashflowPage() {
       return (av - bv) * dir;
     });
     return rows;
-  }, [cashGen, netFilter, rowQuery, sortCol, sortDir]);
+  }, [cashGen, netFilter, rowQuery, sortCol, sortDir, cadence]);
 
   const toggleOutlet = (id: string) =>
     setOutletIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -383,7 +383,7 @@ export default function CashflowPage() {
                 </p>
                 <p className="text-[10px] text-gray-400">
                   {cashGen
-                    ? `${cashGen.accountLabel ?? "All accounts"} · ${cashGen.rangeLabel} · ${cashGen.rows.length} rows`
+                    ? `${cashGen.accountLabel ?? "All accounts"} · ${cashGen.rangeLabel} · ${cashGenRows.length}${cashGenRows.length !== cashGen.rows.length ? ` of ${cashGen.rows.length}` : ""} rows`
                     : "Loading..."}
                 </p>
               </div>
