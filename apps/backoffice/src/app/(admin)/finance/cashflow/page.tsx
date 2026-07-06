@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
 import { Loader2, AlertTriangle, Banknote, ArrowRight, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
 import DailyBalancePanel from "./DailyBalancePanel";
+import { DateRangePicker } from "@/components/date-range-picker";
 
 type Outlet = { id: string; name: string; code: string };
 
@@ -133,6 +134,22 @@ function fmtCashGenLabel(row: { period: string; label: string }, cadence: Cadenc
   if (cadence === "DAILY") return fmtDay(row.period);
   return `Week of ${fmtDay(row.period)}`;
 }
+// Add N days to a YYYY-MM-DD string (UTC, timezone-agnostic).
+function addDaysStr(s: string, n: number): string {
+  const d = new Date(`${s}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+// Whether a cash-generated row overlaps the selected [start, end] range. Empty
+// bounds mean no filter. Period granularity follows the cadence: a daily row is
+// one day, a weekly row spans its 7-day window, a monthly row spans its month.
+function rowInDateRange(row: { period: string }, cadence: Cadence, start: string, end: string): boolean {
+  if (!start || !end) return true;
+  if (cadence === "MONTHLY") return row.period >= start.slice(0, 7) && row.period <= end.slice(0, 7);
+  if (cadence === "DAILY") return row.period >= start && row.period <= end;
+  // WEEKLY: row.period is the week start; include if the week overlaps the range.
+  return addDaysStr(row.period, 6) >= start && row.period <= end;
+}
 function shortRange(start: string, end: string): string {
   const s = new Date(start);
   const e = new Date(end);
@@ -156,7 +173,10 @@ export default function CashflowPage() {
   const [sortCol, setSortCol] = useState<SortCol>("period");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [netFilter, setNetFilter] = useState<"all" | "pos" | "neg">("all");
-  const [rowQuery, setRowQuery] = useState("");
+  // Date-range filter over the fetched rows. "" = no range (show all). Uses the
+  // shared single-calendar range picker (one calendar, click start then end).
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
   const toggleSort = (col: SortCol) => {
     if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortCol(col); setSortDir(col === "period" ? "asc" : "desc"); }
@@ -176,11 +196,10 @@ export default function CashflowPage() {
   // Filter + sort the cash-generated rows client-side.
   const cashGenRows = useMemo(() => {
     if (!cashGen) return [];
-    const q = rowQuery.trim().toLowerCase();
     let rows = cashGen.rows.filter((m) => {
       if (netFilter === "pos" && m.netGenerated < 0) return false;
       if (netFilter === "neg" && m.netGenerated >= 0) return false;
-      if (q && !`${m.period} ${m.label ?? ""} ${fmtCashGenLabel(m, cadence)}`.toLowerCase().includes(q)) return false;
+      if (!rowInDateRange(m, cadence, dateStart, dateEnd)) return false;
       return true;
     });
     const dir = sortDir === "asc" ? 1 : -1;
@@ -191,7 +210,7 @@ export default function CashflowPage() {
       return (av - bv) * dir;
     });
     return rows;
-  }, [cashGen, netFilter, rowQuery, sortCol, sortDir, cadence]);
+  }, [cashGen, netFilter, dateStart, dateEnd, sortCol, sortDir, cadence]);
 
   // Summary KPIs over the filtered cash-generated rows: they move with every
   // cadence / account / interco / period / net filter applied to the table.
@@ -376,13 +395,22 @@ export default function CashflowPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <input
-                  value={rowQuery}
-                  onChange={(e) => setRowQuery(e.target.value)}
-                  placeholder="Filter period..."
-                  className="w-28 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-700 focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta"
-                  aria-label="Filter rows by period"
+                <DateRangePicker
+                  start={dateStart}
+                  end={dateEnd}
+                  onChange={(s, e) => { setDateStart(s); setDateEnd(e); }}
+                  size="xs"
                 />
+                {(dateStart || dateEnd) && (
+                  <button
+                    type="button"
+                    onClick={() => { setDateStart(""); setDateEnd(""); }}
+                    className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-500 hover:bg-gray-50"
+                    aria-label="Clear date filter"
+                  >
+                    Clear
+                  </button>
+                )}
                 <select
                   value={netFilter}
                   onChange={(e) => setNetFilter(e.target.value as "all" | "pos" | "neg")}
