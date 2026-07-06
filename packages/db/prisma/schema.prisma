@@ -1090,6 +1090,11 @@ model Sop {
   category    SopCategory @relation(fields: [categoryId], references: [id])
   content     String?
   status      SopStatus   @default(DRAFT)
+  // Physical station this SOP's work belongs to. Drives checklist ownership:
+  // the auto-assign picks an owner from the matching job positions (bar person
+  // owns the bar, kitchen person the kitchen). null = not mapped → the code
+  // falls back to its title map, then "cleaning" (anyone on shift).
+  station     SopStation?
   sortOrder   Int         @default(0)
   version     Int         @default(1)
   createdById String
@@ -1118,6 +1123,18 @@ enum SopStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
+}
+
+// Physical station a SOP is worked at. Maps to the job positions eligible to
+// own the checklist (see STATION_POSITIONS in ops-nudges). "shared" = whole-
+// outlet work assigned to one on-shift crew member (rotated by load);
+// "cleaning" = anyone on shift.
+enum SopStation {
+  barista
+  kitchen
+  lead
+  cleaning
+  shared
 }
 
 model SopStep {

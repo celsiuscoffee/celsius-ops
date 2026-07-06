@@ -25,6 +25,7 @@ type SopDetail = {
   id: string; title: string; description: string | null; categoryId: string;
   category: { id: string; name: string; slug: string };
   content: string | null; status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  station: "barista" | "kitchen" | "lead" | "cleaning" | "shared" | null;
   sortOrder: number; version: number;
   expectedRecurrence: "SHIFT" | "SPECIFIC_TIMES" | "HOURLY";
   expectedTimesPerDay: number;
@@ -42,6 +43,20 @@ const STATUS_COLORS: Record<string, string> = {
   ARCHIVED: "bg-gray-100 text-gray-500 border-gray-200",
 };
 
+// Physical station that owns this SOP's work — drives who the checklist
+// auto-assigns to (bar person owns the bar, kitchen the kitchen). "" = not
+// mapped (falls back to the built-in title map, then anyone on shift).
+const STATION_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Not mapped" },
+  { value: "barista", label: "Bar (barista)" },
+  { value: "kitchen", label: "Kitchen" },
+  { value: "lead", label: "Shift lead / supervisor" },
+  { value: "shared", label: "Shared — one on-shift crew (rotated)" },
+  { value: "cleaning", label: "Cleaning — anyone on shift" },
+];
+const STATION_LABEL = (v: string | null): string =>
+  STATION_OPTIONS.find((o) => o.value === (v ?? ""))?.label ?? "Not mapped";
+
 export default function SopDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -52,6 +67,7 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [station, setStation] = useState("");
   const [content, setContent] = useState("");
   const [steps, setSteps] = useState<{ title: string; description: string; photoRequired: boolean }[]>([]);
   const [assignedOutletIds, setAssignedOutletIds] = useState<Set<string>>(new Set());
@@ -79,7 +95,7 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
     setExpectedTimes(sop.expectedTimes ?? []);
     setExpectedDueMinutes(sop.expectedDueMinutes);
     setAppliesToAllOutlets(sop.appliesToAllOutlets);
-    setCategoryId(sop.categoryId); setContent(sop.content ?? "");
+    setCategoryId(sop.categoryId); setStation(sop.station ?? ""); setContent(sop.content ?? "");
     setSteps(sop.steps.map((s) => ({ title: s.title, description: s.description ?? "", photoRequired: s.photoRequired })));
     setAssignedOutletIds(new Set(sop.sopOutlets.map((a) => a.outlet.id)));
   }, [sop]);
@@ -120,7 +136,7 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
     try {
       const res = await fetch(`/api/ops/sops/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), description: description.trim() || undefined, categoryId, content: content.trim() || undefined }),
+        body: JSON.stringify({ title: title.trim(), description: description.trim() || undefined, categoryId, station: station || null, content: content.trim() || undefined }),
       });
       if (!res.ok) { const d = await res.json(); alert(d.error); return; }
       mutate(); showSaved("Details saved"); setEditingDetails(false);
@@ -242,13 +258,18 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                     <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
                       {categories?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select></div>
+                  <div><label className="mb-1 block text-xs font-medium text-gray-500">Station</label>
+                    <select value={station} onChange={(e) => setStation(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
+                      {STATION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <p className="mt-1 text-[11px] text-gray-400">Who the checklist auto-assigns to — the job position that works this station.</p></div>
                   <div><label className="mb-1 block text-xs font-medium text-gray-500">Content / Notes</label>
                     <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={4} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm resize-y" /></div>
                   <div className="flex gap-2">
                     <Button onClick={saveDetails} disabled={saving} size="sm" className="bg-terracotta hover:bg-terracotta-dark">
                       {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}Save
                     </Button>
-                    <Button onClick={() => { setEditingDetails(false); if (sop) { setTitle(sop.title); setDescription(sop.description ?? ""); setCategoryId(sop.categoryId); setContent(sop.content ?? ""); } }} size="sm" variant="outline">Cancel</Button>
+                    <Button onClick={() => { setEditingDetails(false); if (sop) { setTitle(sop.title); setDescription(sop.description ?? ""); setCategoryId(sop.categoryId); setStation(sop.station ?? ""); setContent(sop.content ?? ""); } }} size="sm" variant="outline">Cancel</Button>
                   </div>
                 </div>
               ) : (
@@ -362,6 +383,10 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                 <div className="flex justify-between">
                   <span className="text-gray-500">Category</span>
                   <span className="font-medium text-gray-900">{sop.category.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Station</span>
+                  <span className={`font-medium ${sop.station ? "text-gray-900" : "text-gray-400 italic"}`}>{STATION_LABEL(sop.station)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Steps</span>

@@ -334,18 +334,26 @@ const CHECKLIST_OWNER_WINDOW_MS = 3 * 3_600_000;
 // (opening/closing/grease trap) → fairly assigned to ONE on-shift crew member,
 // rotated by load balance. "cleaning" = balanced across whoever's on shift. Unmapped
 // → cleaning.
-const SOP_STATION: Record<string, "barista" | "kitchen" | "lead" | "cleaning" | "shared"> = {
+type Station = "barista" | "kitchen" | "lead" | "cleaning" | "shared";
+// FALLBACK ONLY. The station of record is Sop.station (set per SOP in the
+// backoffice). This title map is used solely when a SOP hasn't been tagged yet,
+// so a fresh/untagged SOP still routes somewhere sane. Keep it in sync with the
+// backfill in migration 20260706_sop_station.
+const SOP_STATION: Record<string, Station> = {
   "coffee calibration": "barista",
   "fridge & storage": "kitchen",
   "first food out": "kitchen",
   "grease trap cleaning": "shared",
-  "ice machine cleaning": "kitchen",
+  "ice machine cleaning": "barista", // machine lives at the bar
   "pest control check": "kitchen",
   "opening checklist": "shared",
   closing: "shared",
-  "door & window cleaning": "cleaning",
-  "toilet cleaning": "cleaning",
+  "door & window cleaning": "barista",
+  "toilet cleaning": "shared",
 };
+// Station of record = Sop.station; fall back to the title map, then "cleaning".
+const resolveStation = (title: string | null | undefined, station: Station | null | undefined): Station =>
+  station ?? SOP_STATION[(title ?? "").toLowerCase()] ?? "cleaning";
 // Job positions (hr_employee_profiles.position, lowercased) that staff each station.
 const STATION_POSITIONS: Record<string, string[]> = {
   barista: ["barista", "barista lead"],
@@ -389,7 +397,7 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
       timeSlot: true,
       assignedToId: true,
       outlet: { select: { name: true, status: true } },
-      sop: { select: { title: true } },
+      sop: { select: { title: true, station: true } },
     },
     orderBy: { dueAt: "asc" },
     take: 200,
@@ -442,7 +450,7 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
   const unowned = new Map<string, { name: string; items: Item[] }>();
 
   for (const c of active) {
-    const station = SOP_STATION[(c.sop?.title ?? "").toLowerCase()] ?? "cleaning";
+    const station = resolveStation(c.sop?.title, c.sop?.station);
     const item: Item = {
       id: c.id,
       label: `${c.sop?.title ?? "Checklist"} (${String(c.shift).toLowerCase()})`,
@@ -604,7 +612,7 @@ export async function assignTodaysChecklists(now = new Date()): Promise<AssignRu
       outletId: true,
       timeSlot: true,
       outlet: { select: { name: true, status: true } },
-      sop: { select: { title: true } },
+      sop: { select: { title: true, station: true } },
     },
     orderBy: { dueAt: "asc" },
     take: 300,
@@ -656,7 +664,7 @@ export async function assignTodaysChecklists(now = new Date()): Promise<AssignRu
     ];
     if (crew.length === 0) continue; // no rostered shift covers it — roster gap, alert #7's turf
 
-    const station = SOP_STATION[(c.sop?.title ?? "").toLowerCase()] ?? "cleaning";
+    const station = resolveStation(c.sop?.title, c.sop?.station);
     let pool =
       station === "barista" || station === "kitchen" || station === "lead"
         ? crew.filter((p) => STATION_POSITIONS[station].includes(p.position))

@@ -33,6 +33,8 @@ const updateSchema = z.object({
   description: z.string().max(1000).optional(),
   categoryId: z.string().uuid().optional(),
   content: z.string().optional(),
+  // Physical station that owns this SOP's work; null clears the mapping.
+  station: z.enum(["barista", "kitchen", "lead", "cleaning", "shared"]).nullable().optional(),
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).optional(),
   sortOrder: z.number().int().min(0).optional(),
   expectedRecurrence: z.enum(["SHIFT", "SPECIFIC_TIMES", "HOURLY"]).optional(),
