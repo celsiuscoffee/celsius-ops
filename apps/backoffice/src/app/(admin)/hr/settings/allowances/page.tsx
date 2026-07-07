@@ -6,34 +6,44 @@ import { Loader2, Save, AlertTriangle } from "lucide-react";
 import { BackToHR } from "@/components/hr/back-to-hr";
 import { AllowanceTabs } from "@/components/hr/allowance-tabs";
 
+// Mirrors the LIVE engine (lib/hr/allowances.ts — "Performance Allowance v2").
+// ONE performance pool split across 4 EARN levers, each scored on its own KPI and
+// paid nothing / half / full; then lateness + absence + negative-review DEDUCTIONS.
 type Settings = {
   id: string;
-  attendance_allowance_amount: number;
-  attendance_penalty_absent: number;
-  attendance_penalty_early_out: number;
-  attendance_penalty_missed_clockout: number;
-  attendance_penalty_exceeded_break: number;
-  attendance_late_tier_1_max_minutes: number;
-  attendance_late_tier_2_max_minutes: number;
-  attendance_late_tier_3_max_minutes: number;
-  attendance_late_tier_4_max_minutes: number;
-  attendance_late_tier_2_penalty: number;
-  attendance_late_tier_3_penalty: number;
-  attendance_late_tier_4_penalty: number;
-  attendance_early_out_threshold_minutes: number;
-  attendance_break_overage_threshold_minutes: number;
   performance_allowance_amount: number;
-  performance_allowance_mode: "tiered" | "linear";
-  performance_tier_full_threshold: number;
-  performance_tier_half_threshold: number;
-  performance_tier_quarter_threshold: number;
-  perf_weight_checklists: number;
-  perf_weight_reviews: number;
-  perf_weight_audit: number;
+  perf_lever_checklist: number;
+  perf_lever_phone: number;
+  perf_lever_serving: number;
+  perf_lever_audit: number;
+  checklist_full_pct: number;
+  checklist_half_pct: number;
+  perf_tier_perform_pct: number;
+  perf_tier_ok_pct: number;
+  phone_capture_default_baseline_pct: number;
+  phone_capture_target_uplift_pp: number;
+  serving_full_minutes: number;
+  serving_half_minutes: number;
+  attendance_lateness_grace_minutes: number;
+  attendance_lateness_penalty: number;
+  attendance_lateness_absent_minutes: number;
+  attendance_penalty_absent: number;
   review_penalty_amount: number;
   review_penalty_max_star_rating: number;
   review_penalty_auto_dismiss_days: number;
 };
+
+const V2_KEYS: (keyof Settings)[] = [
+  "performance_allowance_amount",
+  "perf_lever_checklist", "perf_lever_phone", "perf_lever_serving", "perf_lever_audit",
+  "checklist_full_pct", "checklist_half_pct",
+  "perf_tier_perform_pct", "perf_tier_ok_pct",
+  "phone_capture_default_baseline_pct", "phone_capture_target_uplift_pp",
+  "serving_full_minutes", "serving_half_minutes",
+  "attendance_lateness_grace_minutes", "attendance_lateness_penalty", "attendance_lateness_absent_minutes",
+  "attendance_penalty_absent",
+  "review_penalty_amount", "review_penalty_max_star_rating", "review_penalty_auto_dismiss_days",
+];
 
 export default function AllowanceSettingsPage() {
   const { data, mutate } = useFetch<{ settings: Settings }>("/api/hr/company-settings");
@@ -47,36 +57,31 @@ export default function AllowanceSettingsPage() {
 
   if (!form) return <div className="p-6"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 
-  const update = <K extends keyof Settings>(k: K, v: Settings[K]) => {
-    setForm({ ...form, [k]: v });
-    setSaved(false);
-  };
-
   const num = (k: keyof Settings) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    update(k, Number(e.target.value) as never);
+    setForm({ ...form, [k]: Number(e.target.value) });
+    setSaved(false);
   };
 
   const save = async () => {
     setSaving(true);
     try {
+      // Send ONLY the v2 allowance keys (+ id) so unrelated company settings
+      // (statutory IDs, signature, …) are never touched.
+      const body: Record<string, unknown> = { id: form.id };
+      for (const k of V2_KEYS) body[k] = form[k];
       const res = await fetch("/api/hr/company-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(body),
       });
-      if (res.ok) {
-        setSaved(true);
-        mutate();
-      } else {
-        const { error } = await res.json();
-        alert(error || "Save failed");
-      }
+      if (res.ok) { setSaved(true); mutate(); }
+      else { const { error } = await res.json(); alert(error || "Save failed"); }
     } finally {
       setSaving(false);
     }
   };
 
-  const perfWeightSum = form.perf_weight_checklists + form.perf_weight_reviews + form.perf_weight_audit;
+  const leverSum = form.perf_lever_checklist + form.perf_lever_phone + form.perf_lever_serving + form.perf_lever_audit;
 
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto space-y-6">
@@ -85,133 +90,104 @@ export default function AllowanceSettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Allowance Rules</h1>
-          <p className="text-sm text-gray-600">Configure attendance penalties, performance scoring, and review penalty rules.</p>
+          <p className="text-sm text-gray-600">Performance allowance (v2): one pool, four KPI levers, minus attendance and review deductions.</p>
         </div>
-        <button
-          onClick={save}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 rounded bg-terracotta text-white hover:opacity-90 disabled:opacity-50"
-        >
+        <button onClick={save} disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 rounded bg-terracotta text-white hover:opacity-90 disabled:opacity-50">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {saved ? "Saved" : "Save"}
         </button>
       </div>
 
-      {/* Attendance allowance (punish) */}
+      {/* Performance pool + levers */}
       <section className="mt-6 bg-white rounded-lg border p-5">
-        <h2 className="text-lg font-semibold mb-1">Attendance allowance (punish model)</h2>
-        <p className="text-xs text-gray-500 mb-4">All staff start at base amount. Violations deduct. Floor at RM0.</p>
-
+        <h2 className="text-lg font-semibold mb-1">Performance allowance (full-time only)</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Full-time staff earn ONE pool split across four levers. Each lever is scored on its OWN KPI and pays nothing / half / full.
+          A lever that doesn&apos;t apply to a person (e.g. kitchen never runs the register) drops and its RM redistributes across their
+          applicable levers. Part-time / contract / intern are not eligible.
+        </p>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Base amount (RM)">
-            <input type="number" value={form.attendance_allowance_amount} onChange={num("attendance_allowance_amount")} className="input" min={0} step={1} />
-          </Field>
-          <Field label="Absent / no-show (RM)">
-            <input type="number" value={form.attendance_penalty_absent} onChange={num("attendance_penalty_absent")} className="input" min={0} step={0.01} />
-          </Field>
-          <Field label="Early-out threshold (min)">
-            <input type="number" value={form.attendance_early_out_threshold_minutes} onChange={num("attendance_early_out_threshold_minutes")} className="input" min={0} />
-          </Field>
-          <Field label="Early-out penalty (RM)">
-            <input type="number" value={form.attendance_penalty_early_out} onChange={num("attendance_penalty_early_out")} className="input" min={0} step={0.01} />
-          </Field>
-          <Field label="Missed clock-out (RM)">
-            <input type="number" value={form.attendance_penalty_missed_clockout} onChange={num("attendance_penalty_missed_clockout")} className="input" min={0} step={0.01} />
-          </Field>
-          <Field label="Exceeded break threshold (min)">
-            <input type="number" value={form.attendance_break_overage_threshold_minutes} onChange={num("attendance_break_overage_threshold_minutes")} className="input" min={0} />
-          </Field>
-          <Field label="Exceeded break penalty (RM)">
-            <input type="number" value={form.attendance_penalty_exceeded_break} onChange={num("attendance_penalty_exceeded_break")} className="input" min={0} step={0.01} />
+          <Field label="Total pool (RM)">
+            <input type="number" value={form.performance_allowance_amount} onChange={num("performance_allowance_amount")} className="input" min={0} step={1} />
           </Field>
         </div>
 
-        {/* Late tiers */}
         <div className="mt-5">
-          <h3 className="text-sm font-semibold mb-2">Late tiers (by minutes)</h3>
-          <p className="text-xs text-gray-500 mb-2">Staff are penalised based on how late they are. Beyond tier 4, the full absent penalty applies.</p>
-          <div className="grid grid-cols-4 gap-2 text-xs font-medium text-gray-600 mb-1">
-            <div>Tier</div><div>Up to (min)</div><div>Penalty (RM)</div><div>Notes</div>
+          <h3 className="text-sm font-semibold mb-1">Lever split (RM)</h3>
+          <p className="text-xs text-gray-500 mb-2">
+            How the pool divides across the four levers (sum = {leverSum}
+            {leverSum !== form.performance_allowance_amount && <span className="text-amber-600"> — differs from the pool; the levers are scaled to it automatically</span>}).
+          </p>
+          <div className="grid grid-cols-4 gap-3">
+            <Field label="Checklist (all roles)">
+              <input type="number" value={form.perf_lever_checklist} onChange={num("perf_lever_checklist")} className="input" min={0} />
+            </Field>
+            <Field label="Phone capture (FOH)">
+              <input type="number" value={form.perf_lever_phone} onChange={num("perf_lever_phone")} className="input" min={0} />
+            </Field>
+            <Field label="Serving time (shift)">
+              <input type="number" value={form.perf_lever_serving} onChange={num("perf_lever_serving")} className="input" min={0} />
+            </Field>
+            <Field label="Audit (outlet)">
+              <input type="number" value={form.perf_lever_audit} onChange={num("perf_lever_audit")} className="input" min={0} />
+            </Field>
           </div>
-          <div className="grid grid-cols-4 gap-2 items-center mb-1">
-            <div>1 (grace)</div>
-            <input type="number" value={form.attendance_late_tier_1_max_minutes} onChange={num("attendance_late_tier_1_max_minutes")} className="input" min={0} />
-            <div className="text-gray-500">RM 0</div>
-            <div className="text-xs text-gray-500">No penalty</div>
+        </div>
+
+        <div className="mt-5">
+          <h3 className="text-sm font-semibold mb-2">Lever thresholds (full / half / none)</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Checklist — full at completion % ≥">
+              <input type="number" value={form.checklist_full_pct} onChange={num("checklist_full_pct")} className="input" min={0} max={100} />
+            </Field>
+            <Field label="Checklist — half at completion % ≥">
+              <input type="number" value={form.checklist_half_pct} onChange={num("checklist_half_pct")} className="input" min={0} max={100} />
+            </Field>
+            <Field label="Phone & Audit — full at achievement % ≥">
+              <input type="number" value={form.perf_tier_perform_pct} onChange={num("perf_tier_perform_pct")} className="input" min={0} max={100} />
+            </Field>
+            <Field label="Phone & Audit — half at achievement % ≥">
+              <input type="number" value={form.perf_tier_ok_pct} onChange={num("perf_tier_ok_pct")} className="input" min={0} max={100} />
+            </Field>
+            <Field label="Serving — full at avg ≤ (min)">
+              <input type="number" value={form.serving_full_minutes} onChange={num("serving_full_minutes")} className="input" min={0} />
+            </Field>
+            <Field label="Serving — half at avg ≤ (min)">
+              <input type="number" value={form.serving_half_minutes} onChange={num("serving_half_minutes")} className="input" min={0} />
+            </Field>
           </div>
-          <div className="grid grid-cols-4 gap-2 items-center mb-1">
-            <div>2</div>
-            <input type="number" value={form.attendance_late_tier_2_max_minutes} onChange={num("attendance_late_tier_2_max_minutes")} className="input" min={0} />
-            <input type="number" value={form.attendance_late_tier_2_penalty} onChange={num("attendance_late_tier_2_penalty")} className="input" min={0} step={0.01} />
-            <div className="text-xs text-gray-500">Minor</div>
-          </div>
-          <div className="grid grid-cols-4 gap-2 items-center mb-1">
-            <div>3</div>
-            <input type="number" value={form.attendance_late_tier_3_max_minutes} onChange={num("attendance_late_tier_3_max_minutes")} className="input" min={0} />
-            <input type="number" value={form.attendance_late_tier_3_penalty} onChange={num("attendance_late_tier_3_penalty")} className="input" min={0} step={0.01} />
-            <div className="text-xs text-gray-500">Mid</div>
-          </div>
-          <div className="grid grid-cols-4 gap-2 items-center mb-1">
-            <div>4</div>
-            <input type="number" value={form.attendance_late_tier_4_max_minutes} onChange={num("attendance_late_tier_4_max_minutes")} className="input" min={0} />
-            <input type="number" value={form.attendance_late_tier_4_penalty} onChange={num("attendance_late_tier_4_penalty")} className="input" min={0} step={0.01} />
-            <div className="text-xs text-gray-500">Heavy</div>
-          </div>
-          <div className="grid grid-cols-4 gap-2 items-center">
-            <div>5+</div>
-            <div className="text-gray-500">beyond tier 4</div>
-            <div className="text-gray-500">RM {form.attendance_penalty_absent}</div>
-            <div className="text-xs text-gray-500">Counted as absent</div>
+          <p className="text-xs text-gray-500 mt-3">
+            Phone capture is scored against the outlet target = its trailing-90-day capture rate + an uplift. Set the fallback baseline and uplift below.
+          </p>
+          <div className="grid grid-cols-2 gap-4 mt-2">
+            <Field label="Phone target — default baseline (%) when no outlet history">
+              <input type="number" value={form.phone_capture_default_baseline_pct} onChange={num("phone_capture_default_baseline_pct")} className="input" min={0} max={100} />
+            </Field>
+            <Field label="Phone target — uplift over baseline (pp)">
+              <input type="number" value={form.phone_capture_target_uplift_pp} onChange={num("phone_capture_target_uplift_pp")} className="input" min={0} />
+            </Field>
           </div>
         </div>
       </section>
 
-      {/* Performance allowance (award) */}
+      {/* Deductions */}
       <section className="mt-6 bg-white rounded-lg border p-5">
-        <h2 className="text-lg font-semibold mb-1">Performance allowance (award model — FT only)</h2>
-        <p className="text-xs text-gray-500 mb-4">Full-time staff earn based on a composite score. Part-time and contract staff always get RM0.</p>
-
+        <h2 className="text-lg font-semibold mb-1">Deductions</h2>
+        <p className="text-xs text-gray-500 mb-4">Taken off the earned performance allowance each month. Floored at RM0.</p>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Base amount (RM)">
-            <input type="number" value={form.performance_allowance_amount} onChange={num("performance_allowance_amount")} className="input" min={0} />
+          <Field label="Lateness grace (min)">
+            <input type="number" value={form.attendance_lateness_grace_minutes} onChange={num("attendance_lateness_grace_minutes")} className="input" min={0} />
           </Field>
-          <Field label="Payout mode">
-            <select
-              value={form.performance_allowance_mode}
-              onChange={(e) => update("performance_allowance_mode", e.target.value as "tiered" | "linear")}
-              className="input"
-            >
-              <option value="tiered">Tiered (full/half/quarter/none)</option>
-              <option value="linear">Linear (score % × base)</option>
-            </select>
+          <Field label="Lateness penalty (RM, once past grace)">
+            <input type="number" value={form.attendance_lateness_penalty} onChange={num("attendance_lateness_penalty")} className="input" min={0} step={0.01} />
           </Field>
-          <Field label="Full tier threshold (score ≥)">
-            <input type="number" value={form.performance_tier_full_threshold} onChange={num("performance_tier_full_threshold")} className="input" min={0} max={100} />
+          <Field label="Counts as absent past (min late)">
+            <input type="number" value={form.attendance_lateness_absent_minutes} onChange={num("attendance_lateness_absent_minutes")} className="input" min={0} />
           </Field>
-          <Field label="Half tier threshold (score ≥)">
-            <input type="number" value={form.performance_tier_half_threshold} onChange={num("performance_tier_half_threshold")} className="input" min={0} max={100} />
+          <Field label="Absence penalty (RM, no-show / very late)">
+            <input type="number" value={form.attendance_penalty_absent} onChange={num("attendance_penalty_absent")} className="input" min={0} step={0.01} />
           </Field>
-          <Field label="Quarter tier threshold (score ≥)">
-            <input type="number" value={form.performance_tier_quarter_threshold} onChange={num("performance_tier_quarter_threshold")} className="input" min={0} max={100} />
-          </Field>
-        </div>
-
-        <div className="mt-5">
-          <h3 className="text-sm font-semibold mb-2">Score weights</h3>
-          <p className="text-xs text-gray-500 mb-2">
-            How much each factor contributes to the composite score. Currently sum = {perfWeightSum} (normalized automatically).
-          </p>
-          <div className="grid grid-cols-3 gap-4">
-            <Field label="Checklists (team-avg relative)">
-              <input type="number" value={form.perf_weight_checklists} onChange={num("perf_weight_checklists")} className="input" min={0} />
-            </Field>
-            <Field label="Reviews (outlet GBP avg)">
-              <input type="number" value={form.perf_weight_reviews} onChange={num("perf_weight_reviews")} className="input" min={0} />
-            </Field>
-            <Field label="Audit (report mentions)">
-              <input type="number" value={form.perf_weight_audit} onChange={num("perf_weight_audit")} className="input" min={0} />
-            </Field>
-          </div>
         </div>
       </section>
 
@@ -222,7 +198,7 @@ export default function AllowanceSettingsPage() {
           <h2 className="text-lg font-semibold">Review penalty</h2>
         </div>
         <p className="text-xs text-gray-600 mb-4">
-          Bad Google reviews flagged for manager attribution. Applied penalty deducts from the staff&apos;s total allowance.
+          Bad Google reviews flagged for manager attribution. An applied penalty deducts from the staff&apos;s earned allowance.
         </p>
         <div className="grid grid-cols-3 gap-4">
           <Field label="Default penalty (RM, per staff)">
