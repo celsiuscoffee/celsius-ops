@@ -20,9 +20,15 @@ async function runSync() {
   const maxStar = Number(settings?.review_penalty_max_star_rating ?? 3);
   const autoDismissDays = Number(settings?.review_penalty_auto_dismiss_days ?? 7);
 
-  // 1. Auto-dismiss stale pending rows
+  // 1. Auto-dismiss stale pending rows — but NOT rows from the current (unpaid)
+  // month. Those wait for the end-of-month "decide before salary" reminder so a
+  // manager gets a deliberate attribute-or-dismiss decision before payroll,
+  // instead of the penalty silently vanishing days after the review lands.
+  // Only prior-month rows still pending past the grace window are swept.
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - autoDismissDays);
+  const nowMyt = new Date(Date.now() + 8 * 3600_000);
+  const currentMonthStart = `${nowMyt.getUTCFullYear()}-${String(nowMyt.getUTCMonth() + 1).padStart(2, "0")}-01`;
   const { data: dismissed } = await hrSupabaseAdmin
     .from("hr_review_penalty")
     .update({
@@ -33,6 +39,7 @@ async function runSync() {
     })
     .eq("status", "pending")
     .lt("created_at", cutoffDate.toISOString())
+    .lt("review_date", currentMonthStart)
     .select("id");
 
   // 2. Fetch GBP reviews per outlet + create pending rows
