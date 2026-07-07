@@ -2391,6 +2391,210 @@ function ChannelSettlementSection({ start, end }: { start: string; end: string }
   );
 }
 
+// ─── Inter-company pairing reconciliation ───────────────────────────
+type IntercoBalanceRow = {
+  code: string; name: string; debits: number; credits: number; net: number; lines: number;
+  bareLines: number; bareAmount: number; selfLines: number; selfAmount: number;
+};
+type OutboundLeg = {
+  postingCompanyId: string; postingCompany: string;
+  counterpartyCode: string; counterpartyName: string;
+  debits: number; lines: number; hygiene: "self" | "bare" | null;
+};
+type InboundLeg = {
+  receivingCompanyId: string; receivingCompany: string; category: string;
+  amount: number; lines: number; shouldRouteTo3600: boolean;
+};
+type WouldNetRow = {
+  code: string; name: string; entity: string | null;
+  currentNet: number; inboundFundingCredit: number; wouldNet: number;
+};
+type IntercoReconciliation = {
+  start: string; end: string;
+  balances: IntercoBalanceRow[]; groupNet: number;
+  outbound: OutboundLeg[]; inbound: InboundLeg[];
+  managementFeeInbound: { amount: number; lines: number };
+  mislabelledInboundTotal: number;
+  wouldNet: WouldNetRow[]; groupWouldNet: number;
+  hygiene: { bareLines: number; bareAmount: number; selfLines: number; selfAmount: number };
+};
+
+function IntercoReconciliationSection({ start, end }: { start: string; end: string }) {
+  const { data, isLoading } = useFetch<{ report: IntercoReconciliation }>(`/api/finance/reports/interco-reconciliation?start=${start}&end=${end}`);
+  if (isLoading || !data?.report) {
+    return <div className="py-8 text-center text-sm text-muted-foreground">Loading inter-company reconciliation…</div>;
+  }
+  const r = data.report;
+  const inboundFundingTotal = r.mislabelledInboundTotal;
+  return (
+    <div className="mt-6 space-y-5">
+      <div className="flex items-baseline justify-between">
+        <h3 className="text-sm font-semibold">Inter-company pairing reconciliation</h3>
+        <span className="text-[11px] text-muted-foreground">why the 3600 due-to/from accounts do not net to zero</span>
+      </div>
+
+      {/* 1. 3600 balances */}
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold">3600 due-to/from control balances</h4>
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+              <th className="px-3 py-2 font-medium">Account</th>
+              <th className="px-3 py-2 text-right font-medium">Debits</th>
+              <th className="px-3 py-2 text-right font-medium">Credits</th>
+              <th className="px-3 py-2 text-right font-medium">Net</th>
+              <th className="px-3 py-2 text-right font-medium">Lines</th>
+              <th className="px-3 py-2 text-left font-medium">Hygiene</th>
+            </tr></thead>
+            <tbody className="divide-y">
+              {r.balances.map((b) => {
+                const flags: string[] = [];
+                if (b.bareLines > 0) flags.push(`bare code (${b.bareLines})`);
+                if (b.selfLines > 0) flags.push(`self-posting (${b.selfLines})`);
+                return (
+                  <tr key={b.code} className="hover:bg-muted/40">
+                    <td className="px-3 py-1.5">
+                      <span className="font-medium">{b.name}</span>
+                      <span className="ml-2 text-xs text-muted-foreground tabular-nums">{b.code}</span>
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{RM(b.debits)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{RM(b.credits)}</td>
+                    <td className={`px-3 py-1.5 text-right tabular-nums ${b.net < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(b.net)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{b.lines}</td>
+                    <td className="px-3 py-1.5 text-left text-[11px] text-amber-700 dark:text-amber-400">{flags.join(", ")}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot><tr className="border-t-2 font-semibold">
+              <td className="px-3 py-2">Group net</td>
+              <td className="px-3 py-2 text-right tabular-nums">{RM(r.balances.reduce((s, b) => s + b.debits, 0))}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{RM(r.balances.reduce((s, b) => s + b.credits, 0))}</td>
+              <td className={`px-3 py-2 text-right tabular-nums ${r.groupNet < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(r.groupNet)}</td>
+              <td className="px-3 py-2" colSpan={2} />
+            </tr></tfoot>
+          </table>
+        </div>
+        {(r.hygiene.bareLines > 0 || r.hygiene.selfLines > 0) && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-400">
+            Hygiene: {r.hygiene.bareLines} line(s) booked to the bare 3600 code ({RM(r.hygiene.bareAmount)}); {r.hygiene.selfLines} self-referential line(s) where an entity posted to its own due-to/from control ({RM(r.hygiene.selfAmount)}). These should be re-coded to the correct counterparty 3600-xx account.
+          </p>
+        )}
+      </div>
+
+      {/* 2. Transfer legs: outbound + inbound */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold">Outbound legs (Dr 3600, payer side)</h4>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[420px] text-sm">
+              <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+                <th className="px-3 py-2 font-medium">Posting entity</th>
+                <th className="px-3 py-2 font-medium">Counterparty account</th>
+                <th className="px-3 py-2 text-right font-medium">Debits</th>
+                <th className="px-3 py-2 text-right font-medium">Lines</th>
+              </tr></thead>
+              <tbody className="divide-y">
+                {r.outbound.map((o) => (
+                  <tr key={`${o.postingCompanyId}-${o.counterpartyCode}`} className="hover:bg-muted/40">
+                    <td className="px-3 py-1.5">{o.postingCompany}</td>
+                    <td className="px-3 py-1.5">
+                      <span>{o.counterpartyName}</span>
+                      <span className="ml-2 text-xs text-muted-foreground tabular-nums">{o.counterpartyCode}</span>
+                      {o.hygiene && <span className="ml-2 text-[10px] text-amber-700 dark:text-amber-400">{o.hygiene}</span>}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{RM(o.debits)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{o.lines}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-muted-foreground">The payer records Dr 3600-xx (due from the counterparty) / Cr bank via resolveContra on the INTERCO_* categories. These legs are present, which is why every 3600 account is all debits.</p>
+        </div>
+
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold">Inbound legs (CR bank, receiver side)</h4>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[460px] text-sm">
+              <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+                <th className="px-3 py-2 font-medium">Receiving entity</th>
+                <th className="px-3 py-2 font-medium">Current category</th>
+                <th className="px-3 py-2 text-right font-medium">Amount</th>
+                <th className="px-3 py-2 text-right font-medium">Lines</th>
+                <th className="px-3 py-2 text-left font-medium">Should route to</th>
+              </tr></thead>
+              <tbody className="divide-y">
+                {r.inbound.map((i) => (
+                  <tr key={`${i.receivingCompanyId}-${i.category}`} className={`hover:bg-muted/40 ${i.shouldRouteTo3600 ? "bg-amber-50/60 dark:bg-amber-950/20" : ""}`}>
+                    <td className="px-3 py-1.5">{i.receivingCompany}</td>
+                    <td className="px-3 py-1.5 text-xs">{i.category}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{RM(i.amount)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{i.lines}</td>
+                    <td className="px-3 py-1.5 text-left text-[11px]">{i.shouldRouteTo3600 ? <span className="text-amber-700 dark:text-amber-400">3600 (mislabelled)</span> : <span className="text-muted-foreground">{i.category === "MANAGEMENT_FEE" ? "6511 (real service fee)" : "stays"}</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t font-medium">
+                  <td className="px-3 py-1.5" colSpan={2}>Mislabelled funding (should route to 3600)</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{RM(inboundFundingTotal)}</td>
+                  <td className="px-3 py-1.5" colSpan={2} />
+                </tr>
+                <tr className="font-medium">
+                  <td className="px-3 py-1.5" colSpan={2}>Management fee inbound (real HQ service fee, own row)</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{RM(r.managementFeeInbound.amount)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{r.managementFeeInbound.lines}</td>
+                  <td className="px-3 py-1.5" />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p className="text-[11px] text-muted-foreground">The receiver leg (Dr bank / Cr 3600) is tagged with a purpose category instead of an INTERCO_* one, so it never credits 3600. Management fee inbound is a real HQ service fee (books 6511, eliminated in consolidation), kept as its own row and never counted as a 3600 leg.</p>
+        </div>
+      </div>
+
+      {/* 3. Would net to */}
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold">Would net to (after routing mislabelled inbound funding through 3600)</h4>
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+              <th className="px-3 py-2 font-medium">Account</th>
+              <th className="px-3 py-2 text-right font-medium">Current net</th>
+              <th className="px-3 py-2 text-right font-medium">Inbound funding credit</th>
+              <th className="px-3 py-2 text-right font-medium">Would net to</th>
+            </tr></thead>
+            <tbody className="divide-y">
+              {r.wouldNet.map((w) => (
+                <tr key={w.code} className="hover:bg-muted/40">
+                  <td className="px-3 py-1.5">
+                    <span className="font-medium">{w.name}</span>
+                    <span className="ml-2 text-xs text-muted-foreground tabular-nums">{w.code}</span>
+                  </td>
+                  <td className={`px-3 py-1.5 text-right tabular-nums ${w.currentNet < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(w.currentNet)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{RM(w.inboundFundingCredit)}</td>
+                  <td className={`px-3 py-1.5 text-right tabular-nums ${w.wouldNet < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(w.wouldNet)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot><tr className="border-t-2 font-semibold">
+              <td className="px-3 py-2">Group</td>
+              <td className={`px-3 py-2 text-right tabular-nums ${r.groupNet < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(r.groupNet)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{RM(inboundFundingTotal)}</td>
+              <td className={`px-3 py-2 text-right tabular-nums ${r.groupWouldNet < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(r.groupWouldNet)}</td>
+            </tr></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground">
+        The 3600 due-to/from control accounts should net to zero across the group: every inter-entity transfer has a payer leg (Dr 3600) and a receiver leg (Cr 3600) that cancel. Today the group nets to {RM(r.groupNet)}, all debits, because the receiver leg is booked to a purpose category (salary, statutory, other inflow, loan, raw materials) instead of the 3600 control, so it never credits back. Routing that mislabelled inbound funding ({RM(inboundFundingTotal)}) through 3600 shows how much of the residual is pairable versus genuinely unmatched (group would net to {RM(r.groupWouldNet)}). Management fee inbound ({RM(r.managementFeeInbound.amount)}) is a real HQ service fee and is excluded. The clearing (retag the mislabelled inbound legs to INTERCO_*, post the 3600 clearing journals, re-code the bare 3600 and self-referential lines) is a deliberate follow-up and is not done here. This view is strictly read-only.
+      </p>
+    </div>
+  );
+}
+
 function ReconTab() {
   // Default to the matched period: sales archive + bank feed both exist from
   // 2026-01, so the channels net to true fees/timing (before that the bank feed
@@ -2490,6 +2694,8 @@ function ReconTab() {
       )}
 
       <ChannelSettlementSection start={start} end={end} />
+
+      <IntercoReconciliationSection start={start} end={end} />
     </div>
   );
 }
