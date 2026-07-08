@@ -124,9 +124,11 @@ export function fetchMemos() {
 }
 
 export function acknowledgeMemo(memoId: string, notes?: string) {
-  return api<{ success: boolean }>(`/api/hr/memos/${memoId}/acknowledge`, {
-    method: "POST",
-    body: JSON.stringify({ notes }),
+  // Ack is an idempotent upsert on the memos collection route: PATCH
+  // /api/hr/memos with { id, notes } (there is no /{id}/acknowledge route).
+  return api<{ success: boolean }>("/api/hr/memos", {
+    method: "PATCH",
+    body: JSON.stringify({ id: memoId, notes }),
   });
 }
 
