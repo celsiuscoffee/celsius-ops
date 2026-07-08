@@ -16,7 +16,6 @@ import {
   FileText,
   ListChecks,
   Plane,
-  Sparkles,
   Star,
   Target,
   Wallet,
@@ -27,6 +26,7 @@ import {
   fetchAllowances,
   fetchMyReviews,
   type AllowanceBreakdown,
+  type AllowanceLever,
 } from "../../../lib/hr/api";
 import { getClockStatus, type ClockStatus } from "../../../lib/hr/clock";
 
@@ -186,8 +186,10 @@ export default function HrIndex() {
           {isClockedIn ? <CheckCircle2 color="#15803D" size={20} /> : null}
         </Pressable>
 
-        {/* Allowances */}
-        {allowance && clock?.outletId ? (
+        {/* Performance allowance (v2: one pool split across KPI levers, minus
+            deductions). Decoupled from the clock fetch so a clock hiccup can't
+            hide it. */}
+        {allowance?.eligible ? (
           <View className="mt-5 rounded-3xl border border-primary/30 bg-primary-50/30 p-4">
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center gap-2">
@@ -196,7 +198,7 @@ export default function HrIndex() {
                 </View>
                 <View>
                   <Text className="text-base font-body-semi text-espresso">
-                    {MONTHS[allowance.period.month - 1]} allowances
+                    {MONTHS[allowance.period.month - 1]} allowance
                   </Text>
                   <Text className="text-xs font-body text-muted">
                     {allowance.period.daysRemaining} day
@@ -206,33 +208,57 @@ export default function HrIndex() {
               </View>
               <View className="items-end">
                 <Text className="text-2xl font-display text-primary">
-                  RM {allowance.totalEarned}
+                  RM {Number(allowance.totalEarned ?? 0).toFixed(2)}
                 </Text>
                 <Text className="text-xs font-body text-muted">
-                  of RM {allowance.totalMax}
+                  of RM {Number(allowance.totalMax ?? 0).toFixed(2)}
                 </Text>
               </View>
             </View>
-            {/* Attendance bar */}
-            <AllowanceBar
-              label="Attendance"
-              earned={allowance.attendance.earned}
-              base={allowance.attendance.base}
-              tip={allowance.attendance.tip}
-              barColor="#3B82F6"
-              icon={Clock}
-            />
-            {allowance.performance.eligible ? (
-              <AllowanceBar
-                label="Performance"
-                earned={allowance.performance.earned}
-                base={allowance.performance.base}
-                tip={allowance.performance.tip}
-                barColor="#F59E0B"
-                icon={Sparkles}
-                badge={`score ${allowance.performance.score}/100`}
-              />
+
+            {(allowance.levers ?? [])
+              .filter((l) => l.applicable)
+              .map((lever) => (
+                <LeverBar key={lever.key} lever={lever} />
+              ))}
+
+            {(allowance.attendance?.total ?? 0) > 0 ||
+            (allowance.reviewPenalty?.total ?? 0) > 0 ? (
+              <View className="mt-3 flex-row items-center justify-between rounded-2xl bg-surface px-3 py-2.5">
+                <View>
+                  <Text className="text-sm font-body-semi text-espresso">
+                    Deductions
+                  </Text>
+                  <Text className="text-xs font-body text-muted">
+                    {allowance.attendance?.lateCount ?? 0} late ·{" "}
+                    {allowance.attendance?.absentCount ?? 0} absent
+                    {(allowance.reviewPenalty?.entries?.length ?? 0) > 0
+                      ? ` · ${allowance.reviewPenalty.entries.length} review`
+                      : ""}
+                  </Text>
+                </View>
+                <Text className="text-base font-body-bold text-danger">
+                  - RM{" "}
+                  {Number(
+                    (allowance.attendance?.total ?? 0) +
+                      (allowance.reviewPenalty?.total ?? 0),
+                  ).toFixed(2)}
+                </Text>
+              </View>
             ) : null}
+
+            {allowance.tip ? (
+              <Text className="mt-3 text-xs font-body text-muted-fg">
+                {allowance.tip}
+              </Text>
+            ) : null}
+          </View>
+        ) : allowance ? (
+          <View className="mt-5 flex-row items-center gap-2 rounded-3xl border border-border bg-surface p-4">
+            <Wallet color="#9CA3AF" size={18} />
+            <Text className="flex-1 text-sm font-body text-muted-fg">
+              The performance allowance is for full-time staff.
+            </Text>
           </View>
         ) : loading ? (
           <View className="mt-5 items-center py-3">
@@ -275,45 +301,33 @@ export default function HrIndex() {
   );
 }
 
-function AllowanceBar({
-  label,
-  earned,
-  base,
-  tip,
-  barColor,
-  icon: Icon,
-  badge,
-}: {
-  label: string;
-  earned: number;
-  base: number;
-  tip: string;
-  barColor: string;
-  icon: React.ComponentType<{ color?: string; size?: number }>;
-  badge?: string;
-}) {
-  const pct = base > 0 ? (earned / base) * 100 : 0;
+function LeverBar({ lever }: { lever: AllowanceLever }) {
+  // Colour the bar by earn tier: perform = amber, ok = blue, under = grey.
+  const tierColor =
+    lever.tier === "perform"
+      ? "#F59E0B"
+      : lever.tier === "ok"
+        ? "#3B82F6"
+        : "#9CA3AF";
+  const pct = Math.min(100, Math.max(0, Number(lever.score ?? 0)));
   return (
-    <View className="mt-3 rounded-2xl bg-white/70 px-3 py-2.5">
+    <View className="mt-3 rounded-2xl bg-surface px-3 py-2.5">
       <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center gap-1.5">
-          <Icon color={barColor} size={14} />
-          <Text className="text-base font-body-semi text-espresso">{label}</Text>
-          {badge ? (
-            <Text className="text-xs font-body text-muted">· {badge}</Text>
-          ) : null}
-        </View>
+        <Text className="text-base font-body-semi text-espresso">
+          {lever.label}
+        </Text>
         <Text className="text-base font-body-bold text-espresso">
-          RM {earned} / RM {base}
+          RM {Number(lever.earned ?? 0).toFixed(2)} / RM{" "}
+          {Number(lever.slice ?? 0).toFixed(2)}
         </Text>
       </View>
-      <View className="mt-2 h-2 overflow-hidden rounded-full bg-gray-200">
+      <View className="mt-2 h-2 overflow-hidden rounded-full bg-primary-50">
         <View
           className="h-full"
-          style={{ width: `${pct}%`, backgroundColor: barColor }}
+          style={{ width: `${pct}%`, backgroundColor: tierColor }}
         />
       </View>
-      <Text className="mt-1 text-xs font-body text-muted-fg">{tip}</Text>
+      <Text className="mt-1 text-xs font-body text-muted-fg">{lever.detail}</Text>
     </View>
   );
 }

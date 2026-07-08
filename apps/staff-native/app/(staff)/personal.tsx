@@ -270,7 +270,7 @@ export default function PersonalScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Pinned bottom CTA — floating above tab bar */}
+      {/* Pinned bottom CTA, floating above tab bar */}
       <View
         style={{
           shadowColor: "#160800",
@@ -332,7 +332,7 @@ function TextField({
       <TextInput
         value={value ?? ""}
         onChangeText={(t) => onChange(t === "" ? null : t)}
-        placeholder="—"
+        placeholder="-"
         placeholderTextColor="#9B9B9B"
         keyboardType={keyboardType ?? "default"}
         autoCapitalize={autoCapitalize ?? "sentences"}

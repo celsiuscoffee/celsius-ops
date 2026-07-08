@@ -7,7 +7,7 @@ import type { NativeStackNavigationOptions } from "@react-navigation/native-stac
 export const stackScreenOptions = {
   headerStyle: { backgroundColor: "#FFFFFF" },
   headerTintColor: "#1A0200",
-  // Peachi Bold per CC Brand System v2026 — display face also used
+  // Peachi Bold per CC Brand System v2026, display face also used
   // in PageHeader so the title voice is consistent at every scale.
   headerTitleStyle: { fontFamily: "Peachi-Bold", fontSize: 18 },
   headerShadowVisible: false,

@@ -7,7 +7,7 @@ type Props = PropsWithChildren<{
   spacing?: "tight" | "default" | "loose";
 }>;
 
-// Labeled section with a small terracotta dot before the label —
+// Labeled section with a small terracotta dot before the label,
 // the dot is the visual rhythm marker that quietly repeats across
 // the app.
 export function Section({ title, action, children, spacing = "default" }: Props) {

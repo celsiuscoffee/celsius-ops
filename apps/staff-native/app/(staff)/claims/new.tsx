@@ -42,7 +42,7 @@ export default function NewClaim() {
   const router = useRouter();
   const qc = useQueryClient();
   const session = useStaff((s) => s.session);
-  // Payment Request flow is manager-only — matches the server-side
+  // Payment Request flow is manager-only, matches the server-side
   // 403 guard on /api/claims POST. Hiding the toggle for non-managers
   // keeps the UI honest.
   const canRequestVendorPayment =
@@ -85,6 +85,12 @@ export default function NewClaim() {
       if (!session?.userId) throw new Error("Sign in again to submit.");
       if (!amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
         throw new Error("Enter a valid amount.");
+      }
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(purchaseDate) ||
+        Number.isNaN(new Date(`${purchaseDate}T00:00:00`).getTime())
+      ) {
+        throw new Error("Enter a valid purchase date (YYYY-MM-DD).");
       }
       if (flow === "REQUEST" && !vendorName.trim()) {
         throw new Error("Enter the vendor's name.");
@@ -233,7 +239,7 @@ export default function NewClaim() {
             onRetake={() => setCameraOpen(true)}
           />
 
-        {/* Flow toggle — only shown to managers. Regular staff can
+        {/* Flow toggle, only shown to managers. Regular staff can
             only submit reimbursement claims (the legacy default). */}
         {canRequestVendorPayment ? (
           <>
@@ -269,8 +275,8 @@ export default function NewClaim() {
             </View>
             <Text className="mt-1.5 text-xs font-body text-muted-fg">
               {flow === "CLAIM"
-                ? "You paid out-of-pocket — finance reimburses you."
-                : "Finance pays the vendor directly — no out-of-pocket."}
+                ? "You paid out-of-pocket, finance reimburses you."
+                : "Finance pays the vendor directly, no out-of-pocket."}
             </Text>
           </>
         ) : null}
@@ -278,7 +284,7 @@ export default function NewClaim() {
         <Field label="Outlet">
           <View className="h-14 justify-center rounded-2xl bg-primary-50 px-4">
             <Text className="text-base font-body-semi text-espresso">
-              {session?.outletName ?? "—"}
+              {session?.outletName ?? "-"}
             </Text>
           </View>
         </Field>

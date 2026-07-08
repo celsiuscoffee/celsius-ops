@@ -35,7 +35,7 @@ export async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
   });
 
   if (res.status === 401 && auth) {
-    // Token expired or revoked — wipe BOTH the disk session AND the
+    // Token expired or revoked, wipe BOTH the disk session AND the
     // in-memory Zustand store. Previously only AsyncStorage was
     // cleared, leaving the store with a dead session: UI kept
     // rendering stale data, every subsequent fetch silently failed

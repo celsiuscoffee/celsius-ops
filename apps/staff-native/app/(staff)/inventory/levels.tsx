@@ -64,9 +64,9 @@ export default function StockLevelsScreen() {
       if (status !== "all" && i.status !== status) return false;
       if (!q) return true;
       return (
-        i.name.toLowerCase().includes(q) ||
-        i.sku.toLowerCase().includes(q) ||
-        i.category.toLowerCase().includes(q)
+        (i.name ?? "").toLowerCase().includes(q) ||
+        (i.sku ?? "").toLowerCase().includes(q) ||
+        (i.category ?? "").toLowerCase().includes(q)
       );
     });
     const byArea = new Map<string, StockItem[]>();
@@ -262,5 +262,5 @@ function statusStyle(s: StockItem["status"]) {
     };
   if (s === "ok")
     return { tint: "text-success", bg: "bg-success/10", label: "OK" };
-  return { tint: "text-muted-fg", bg: "bg-muted/10", label: "—" };
+  return { tint: "text-muted-fg", bg: "bg-muted/10", label: "-" };
 }

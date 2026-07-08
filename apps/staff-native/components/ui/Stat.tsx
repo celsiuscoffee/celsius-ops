@@ -14,7 +14,7 @@ const COLOR: Record<NonNullable<Props["tone"]>, string> = {
 };
 
 // Big-number display for dashboards / cards. Renders in Peachi Bold per
-// the brand spec — Peachi is the display face that carries the Celsius
+// the brand spec: Peachi is the display face that carries the Celsius
 // typographic voice. Labels stay in Space Grotesk for quiet legibility.
 export function Stat({ value, label, tone = "default" }: Props) {
   return (

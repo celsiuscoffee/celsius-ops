@@ -102,12 +102,12 @@ export default function OrderDetailScreen() {
     try {
       await sendOrder(order.id);
       // Try to open WhatsApp with a pre-filled message to the supplier.
-      // Best-effort — if the supplier has no phone, just shows the status
+      // Best-effort, if the supplier has no phone, just shows the status
       // change confirmation.
       const phone = order.supplierPhone?.replace(/\D/g, "");
       if (phone) {
         const msg = encodeURIComponent(
-          `Hi ${order.supplier},\n\nPlease find attached PO ${order.orderNumber} for ${order.outlet}. Total: RM ${order.totalAmount.toFixed(2)}.\n\nThanks!`,
+          `Hi ${order.supplier},\n\nPlease find attached PO ${order.orderNumber} for ${order.outlet}. Total: RM ${Number(order.totalAmount ?? 0).toFixed(2)}.\n\nThanks!`,
         );
         Linking.openURL(`https://wa.me/${phone}?text=${msg}`).catch(() => {});
       }
@@ -240,7 +240,7 @@ export default function OrderDetailScreen() {
           <View className="mt-3 flex-row items-center justify-between border-t border-border pt-3">
             <Text className="text-xs font-body text-muted-fg">Total</Text>
             <Text className="text-lg font-body-bold text-espresso tabular-nums">
-              RM {order.totalAmount.toFixed(2)}
+              RM {Number(order.totalAmount ?? 0).toFixed(2)}
             </Text>
           </View>
           {order.deliveryDate ? (
@@ -270,10 +270,10 @@ export default function OrderDetailScreen() {
 
         {/* Items */}
         <Text className="mt-5 mb-2 text-xs font-body-semi uppercase tracking-wider text-muted">
-          Items ({order.items.length})
+          Items ({order.items?.length ?? 0})
         </Text>
         <View className="gap-2">
-          {order.items.map((item) => (
+          {(order.items ?? []).map((item) => (
             <View
               key={item.id}
               className="rounded-3xl border border-border bg-surface px-4 py-3"
@@ -297,7 +297,7 @@ export default function OrderDetailScreen() {
                   ) : null}
                 </View>
                 <Text className="text-base font-body-bold text-espresso tabular-nums">
-                  RM {item.totalPrice.toFixed(2)}
+                  RM {Number(item.totalPrice ?? 0).toFixed(2)}
                 </Text>
               </View>
             </View>
@@ -387,7 +387,7 @@ export default function OrderDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Manager actions — pinned bottom */}
+      {/* Manager actions, pinned bottom */}
       {(canApprove || canSend || canCancel) && (
         <View
           style={{

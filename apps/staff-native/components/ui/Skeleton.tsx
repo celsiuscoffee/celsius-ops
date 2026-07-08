@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Animated, View, type ViewStyle } from "react-native";
 
 type Props = {
-  /** Width — number (px) or string ("100%", "50%") */
+  /** Width: number (px) or string ("100%", "50%") */
   width?: number | string;
   /** Height in px */
   height?: number;
@@ -12,7 +12,7 @@ type Props = {
   className?: string;
 };
 
-// Branded skeleton loader — soft pulsing terracotta-tinted block.
+// Branded skeleton loader, soft pulsing terracotta-tinted block.
 // Use in place of <ActivityIndicator /> on list-shaped screens; the
 // shape-of-the-content telegraphs what's loading instead of a blank
 // spinner.
@@ -59,7 +59,7 @@ export function Skeleton({
   );
 }
 
-// Standard row skeleton — mirrors the shape of a typical list card so
+// Standard row skeleton, mirrors the shape of a typical list card so
 // the transition from loading → loaded feels seamless.
 export function SkeletonRow() {
   return (

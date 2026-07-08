@@ -94,7 +94,7 @@ const OPS: Op[] = [
   {
     href: "/(staff)/invoices",
     title: "Invoices",
-    subtitle: "Supplier invoices — paid, unpaid, overdue",
+    subtitle: "Supplier invoices: paid, unpaid, overdue",
     icon: FileText,
     iconBg: "bg-indigo-100/70",
     iconColor: "#4F46E5",
@@ -176,7 +176,7 @@ export default function InventoryHub() {
                 Stock alert
               </Text>
               <Text className="mt-0.5 text-xs font-body text-danger/80">
-                {counts?.critical ?? 0} out, {counts?.low ?? 0} low — tap to
+                {counts?.critical ?? 0} out, {counts?.low ?? 0} low, tap to
                 review
               </Text>
             </View>
@@ -196,7 +196,7 @@ export default function InventoryHub() {
                 Stock levels healthy
               </Text>
               <Text className="mt-0.5 text-xs font-body text-success/80">
-                Nothing below par — tap to browse
+                Nothing below par, tap to browse
               </Text>
             </View>
             <ChevronRight color="#15803D" size={16} />

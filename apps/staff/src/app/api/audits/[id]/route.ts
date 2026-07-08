@@ -121,7 +121,10 @@ export async function PATCH(
     let totalScore = 0;
     let maxScore = 0;
     for (const item of items) {
-      if (item.rating !== null) {
+      // N/A ratings are encoded as a negative value (e.g. -1). Exclude them
+      // from BOTH numerator and denominator so an item marked "not
+      // applicable" doesn't drag the score down, it's simply not counted.
+      if (item.rating !== null && item.rating >= 0) {
         if (item.ratingType === "pass_fail") {
           totalScore += item.rating; // 0 or 1
           maxScore += 1;

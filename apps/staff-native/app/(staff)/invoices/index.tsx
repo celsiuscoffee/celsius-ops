@@ -40,7 +40,7 @@ import {
 type Supplier = { id: string; name: string };
 type Outlet = { id: string; name: string };
 
-// Phase 10 filter set — kept independent of the tab pills so a manager
+// Phase 10 filter set, kept independent of the tab pills so a manager
 // can e.g. tab "Paid" + filter "POP not sent" to find the actionable
 // backlog. Empty/null on every field = no filter.
 type FilterState = {
@@ -103,14 +103,15 @@ export default function InvoicesList() {
 
   const [items, setItems] = useState<InvoiceListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<TabKey>("unpaid");
-  // Inline Send-POP per row — track which invoice is mid-flight so the
+  // Inline Send-POP per row, track which invoice is mid-flight so the
   // tapped row shows a spinner instead of the icon. Single value (only
   // one POP fires at a time).
   const [sendingPopId, setSendingPopId] = useState<string | null>(null);
 
-  // Phase 10 filter state — kept separate from `tab` so a tab change
+  // Phase 10 filter state, kept separate from `tab` so a tab change
   // doesn't clobber filters. `pendingFilters` is the draft inside the
   // sheet; we only commit to `filters` (which triggers a re-fetch) on
   // Apply, so dragging the date sheet around doesn't spam the API.
@@ -175,13 +176,24 @@ export default function InvoicesList() {
       const url = phone
         ? `https://wa.me/${phone}?text=${text}`
         : `https://wa.me/?text=${text}`;
-      Linking.openURL(url).catch(() => {});
+      // Only mark the POP as sent once WhatsApp actually opens. If the
+      // deeplink fails (WhatsApp not installed), stamping popSentAt would
+      // wrongly flag the invoice as "POP sent" forever.
+      try {
+        await Linking.openURL(url);
+      } catch {
+        Alert.alert(
+          "Couldn't open WhatsApp",
+          "Install WhatsApp or send the POP manually.",
+        );
+        return;
+      }
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => {});
-      // Fire-and-forget: stamp popSentAt on the server so the "POP sent"
-      // pill shows up after refresh. Optimistically patch local state
-      // first so the row updates immediately even before the round-trip.
+      // Stamp popSentAt on the server so the "POP sent" pill shows up
+      // after refresh. Optimistically patch local state first so the row
+      // updates immediately even before the round-trip.
       const optimisticTs = new Date().toISOString();
       setItems((prev) =>
         prev.map((x) =>
@@ -189,7 +201,7 @@ export default function InvoicesList() {
         ),
       );
       markPopSent(inv.id).catch(() => {
-        // Network failure — leave the optimistic pill in place. Next
+        // Network failure, leave the optimistic pill in place. Next
         // pull-to-refresh will reconcile against the server.
       });
     } finally {
@@ -208,8 +220,13 @@ export default function InvoicesList() {
           outletId: filters.outletId || undefined,
           dateFrom: filters.dateFrom || undefined,
           dateTo: filters.dateTo || undefined,
-        }).catch(() => ({ items: [] as InvoiceListItem[] }));
+        });
         setItems(data.items);
+        setError(false);
+      } catch {
+        // Distinguish a fetch failure from an empty result so a server
+        // error doesn't masquerade as "no invoices".
+        setError(true);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -228,7 +245,7 @@ export default function InvoicesList() {
   );
 
   // Lazy-load the filter-sheet lookups (suppliers, outlets) on first
-  // open — keeps the list-screen mount lean. Outlets only for managers.
+  // open, keeps the list-screen mount lean. Outlets only for managers.
   useEffect(() => {
     if (!filterSheet) return;
     if (suppliers.length === 0) {
@@ -243,7 +260,7 @@ export default function InvoicesList() {
     }
   }, [filterSheet, isManager, suppliers.length, outlets.length]);
 
-  // Quick GRNI count for the summary card — sourced from the
+  // Quick GRNI count for the summary card, sourced from the
   // pending_invoice tab regardless of the active tab.
   const [grniCount, setGrniCount] = useState(0);
   useEffect(() => {
@@ -281,7 +298,7 @@ export default function InvoicesList() {
           />
         }
       >
-        {/* GRNI summary card — surface invoices waiting to be attached */}
+        {/* GRNI summary card, surface invoices waiting to be attached */}
         {grniCount > 0 && tab !== "pending_invoice" ? (
           <Pressable
             onPress={() => setTab("pending_invoice")}
@@ -295,20 +312,20 @@ export default function InvoicesList() {
                 {grniCount} invoice{grniCount === 1 ? "" : "s"} to attach
               </Text>
               <Text className="mt-0.5 text-xs font-body text-amber-700/80">
-                Goods received — waiting for the real supplier invoice
+                Goods received, waiting for the real supplier invoice
               </Text>
             </View>
             <ChevronRight color="#D97706" size={16} />
           </Pressable>
         ) : null}
 
-        {/* Tabs row — filter trigger pinned at the right (fixed width)
+        {/* Tabs row, filter trigger pinned at the right (fixed width)
             with the tab pills taking the remaining space. The previous
             implementation wrapped tabs in a horizontal ScrollView with
             no flex constraint, which on some viewports expanded to fit
             content and pushed the funnel off-screen entirely. With 4
             short tabs ("Unpaid/Paid/All/Pending") horizontal scroll
-            isn't needed — they fit even on iPhone SE. */}
+            isn't needed, they fit even on iPhone SE. */}
         <View className="mb-3 flex-row items-center gap-2">
           <View className="flex-1 flex-row flex-wrap gap-2">
             {(["unpaid", "paid", "all", "pending_invoice"] as TabKey[]).map(
@@ -331,7 +348,7 @@ export default function InvoicesList() {
               ),
             )}
           </View>
-          {/* Filter trigger — labelled (not just an icon) so it's
+          {/* Filter trigger, labelled (not just an icon) so it's
               unmissable even on first run. Tappable target is wide
               enough that users with thicker fingers can hit it
               cleanly without zooming. */}
@@ -362,7 +379,7 @@ export default function InvoicesList() {
           </Pressable>
         </View>
 
-        {/* Active filter chips — tap to clear a single filter without
+        {/* Active filter chips, tap to clear a single filter without
             opening the sheet. Keeps the user oriented when results look
             unexpectedly thin. */}
         {activeFilterCount(filters) > 0 ? (
@@ -426,6 +443,22 @@ export default function InvoicesList() {
 
         {loading && items.length === 0 ? (
           <SkeletonList count={4} />
+        ) : error && items.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="Couldn't load invoices"
+            subtitle="Something went wrong. Check your connection and try again."
+            action={
+              <Pressable
+                onPress={() => load()}
+                className="h-14 items-center justify-center rounded-2xl bg-primary active:opacity-90"
+              >
+                <Text className="text-base font-body-bold text-white">
+                  Retry
+                </Text>
+              </Pressable>
+            }
+          />
         ) : items.length === 0 ? (
           <EmptyState
             icon={FileText}
@@ -461,7 +494,7 @@ export default function InvoicesList() {
         )}
       </ScrollView>
 
-      {/* Filter sheet — committed only on Apply so date typing doesn't
+      {/* Filter sheet, committed only on Apply so date typing doesn't
           spam the API. Pickers (supplier/outlet) open as page-sheets on
           top so we don't lose other in-flight filter edits. */}
       <Modal
@@ -485,7 +518,7 @@ export default function InvoicesList() {
           <ScrollView contentContainerClassName="px-4 py-4 gap-5"
       showsVerticalScrollIndicator={false}
     >
-            {/* POP status — paid-only meaning. Three-state segmented. */}
+            {/* POP status, paid-only meaning. Three-state segmented. */}
             <View>
               <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
                 POP status
@@ -563,7 +596,7 @@ export default function InvoicesList() {
               </Pressable>
             </View>
 
-            {/* Outlet — manager only */}
+            {/* Outlet, manager only */}
             {isManager ? (
               <View>
                 <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
@@ -601,7 +634,7 @@ export default function InvoicesList() {
               </View>
             ) : null}
 
-            {/* Date range — issueDate. Plain text inputs to keep this
+            {/* Date range, issueDate. Plain text inputs to keep this
                 screen lean; we can swap in a date picker later. */}
             <View>
               <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
@@ -877,7 +910,7 @@ function InvoiceCard({
         </Text>
       </View>
 
-      {/* Inline Send POP — paid statuses only. onPress stop is implicit:
+      {/* Inline Send POP, paid statuses only. onPress stop is implicit:
           this Pressable is rendered as a sibling so it doesn't fire the
           outer card onPress (tap propagation only goes up through the
           tree, and React Native treats sibling Pressables independently). */}

@@ -38,7 +38,7 @@ export function getClockStatus() {
 export function postClockAction(
   action: ClockAction,
   coords: { latitude: number; longitude: number } | null,
-  // Base64-encoded JPEG (no data URL prefix needed — the route handles
+  // Base64-encoded JPEG (no data URL prefix needed, the route handles
   // both). Server uploads to the `hr-photos` Supabase bucket and
   // stamps clock_in_photo_url / clock_out_photo_url on the log.
   photoBase64?: string | null,

@@ -61,7 +61,7 @@ const PRIORITY_COPY: Record<TaskPriority, string> = {
 
 export default function Home() {
   const role = useStaff((s) => s.session?.role);
-  // Owners/admins don't run floor ops — their Home IS the Sales dashboard.
+  // Owners/admins don't run floor ops, their Home IS the Sales dashboard.
   if (role === "OWNER" || role === "ADMIN") return <SalesScreen />;
   return <StaffHome />;
 }
@@ -205,7 +205,7 @@ function StaffHome() {
 
   return (
     <Screen>
-      {/* Frozen header — sits OUTSIDE the ScrollView so the avatar +
+      {/* Frozen header, sits OUTSIDE the ScrollView so the avatar +
           gear icon stay tappable while you scroll the task list. */}
       <View className="flex-row items-center gap-3 pt-3 pb-3">
         <Pressable
@@ -222,7 +222,7 @@ function StaffHome() {
           </View>
           <View className="flex-1">
             {/* Greeting matches the standard page-title size (24px
-                Peachi-Bold) — same anchor weight as every other screen
+                Peachi-Bold), same anchor weight as every other screen
                 so Home doesn't feel like a different app. */}
             <Text className="text-2xl font-display text-espresso">
               {greeting()}, {firstName(session?.name)}
@@ -256,7 +256,7 @@ function StaffHome() {
           />
         }
       >
-        {/* Clock card — biggest CTA on the page (matches web behavior). */}
+        {/* Clock card, biggest CTA on the page (matches web behavior). */}
         {session?.outletId ? (
           <Pressable
             onPress={() => router.push("/(staff)/clock")}
@@ -284,7 +284,7 @@ function StaffHome() {
                       Clocked in · {clockedSince}
                     </Text>
                     <Text className="mt-0.5 text-xl font-display text-success tabular-nums">
-                      {elapsed || "—"}
+                      {elapsed || "-"}
                     </Text>
                     <Text className="text-xs font-body text-success/80">
                       Tap to clock out

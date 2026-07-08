@@ -10,7 +10,7 @@ type Props = {
 };
 
 // Floating Action Button. Sits in the bottom-right corner above the
-// tab bar — terracotta primary with white icon. Soft shadow gives it
+// tab bar, terracotta primary with white icon. Soft shadow gives it
 // elevation against the scroll content. Optional `label` turns it
 // into an extended FAB (pill-shaped with icon + text), otherwise it's
 // a 56×56 circle.

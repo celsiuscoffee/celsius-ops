@@ -21,13 +21,13 @@ import { ApiError } from "../../lib/api";
 
 const LAST_OUTLET_KEY = "celsius_staff_last_outlet_v1";
 
-// Dark-themed login screen — matches the POS dark aesthetic so cashiers
+// Dark-themed login screen, matches the POS dark aesthetic so cashiers
 // on both apps see the same lock-screen vibe. Always dark regardless of
 // system/user color-scheme preference, since the brand mark reads
 // better on espresso.
 // Tuned contrast: previous surface (#2A1411) was only ~5 lumin steps
 // above the espresso bg, so the keypad buttons rendered invisibly on
-// device — only the digits appeared, "all over the place". Bumped
+// device, only the digits appeared, "all over the place". Bumped
 // surface ≈ 3× brighter so buttons read as distinct rounded cards on
 // the dark background.
 const COLORS = {
@@ -67,7 +67,7 @@ export default function Login() {
     })();
   }, []);
 
-  // Auto-submit when the user hits 6 digits — same as POS. The Sign in
+  // Auto-submit when the user hits 6 digits, same as POS. The Sign in
   // button is gone; entering the 6th digit IS the submit.
   async function submit(code: string) {
     if (busy) return;
@@ -122,7 +122,7 @@ export default function Login() {
       ? "embedded"
       : Updates.updateId
         ? Updates.updateId.slice(0, 8)
-        : "—"
+        : "-"
   }`;
 
   return (
@@ -137,7 +137,7 @@ export default function Login() {
             gap: 22,
           }}
         >
-          {/* Brand mark — icon + role tag. The wordmark.png is black and
+          {/* Brand mark: icon + role tag. The wordmark.png is black and
               renders invisibly on the dark login bg; until a white
               variant is provided, just show the icon + subtitle. */}
           <View style={{ alignItems: "center", gap: 14 }}>
@@ -164,7 +164,7 @@ export default function Login() {
             error={outletsError}
           />
 
-          {/* PIN dots — grow + colour-shift when filled, flash danger
+          {/* PIN dots, grow + colour-shift when filled, flash danger
               on error, brand colour otherwise. */}
           <View style={{ alignItems: "center", gap: 12 }}>
             <View style={{ flexDirection: "row", gap: 16 }}>
@@ -350,13 +350,13 @@ function OutletPicker({
   );
 }
 
-// 4x3 keypad — mirrors the POS lock-screen keypad (apps/pos-native):
+// 4x3 keypad, mirrors the POS lock-screen keypad (apps/pos-native):
 // fixed rounded-square keys on a raised surface, centered grid, with
 // Clear (red tint) · 0 · Delete (backspace icon) on the bottom row.
 // Clear wipes all 6 digits in one tap; Delete pops the last digit.
 // Auto-submit on 6 digits means no Sign in button. All styling is
 // inline (not className) so the keys always render regardless of the
-// NativeWind config — the bug this replaces was buttons rendering
+// NativeWind config, the bug this replaces was buttons rendering
 // invisibly, leaving bare digits scattered down the screen.
 function NumPad({
   onPress,

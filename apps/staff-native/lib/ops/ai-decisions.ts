@@ -43,7 +43,7 @@ export type AIDecisionsResponse = {
 };
 
 // Pulls Smart-order recommendations from the backoffice via the staff
-// proxy. Native PO create surfaces these as a tappable list — tap one
+// proxy. Native PO create surfaces these as a tappable list, tap one
 // to pre-fill the cart with the supplier + items.
 export function fetchAIDecisions(outletId?: string) {
   const params = new URLSearchParams();

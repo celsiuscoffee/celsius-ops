@@ -9,9 +9,12 @@ export function initSentry() {
     enableNative: true,
     tracesSampleRate: __DEV__ ? 1.0 : 0.1,
     profilesSampleRate: 0,
+    // Shared celsius-ops project also holds the web apps' events, so tag every
+    // native event app=staff-native + set dist so RN crashes filter apart.
     initialScope: {
-      tags: { channel: RELEASE_CHANNEL },
+      tags: { channel: RELEASE_CHANNEL, app: "staff-native" },
     },
+    dist: "staff-native",
   });
 }
 

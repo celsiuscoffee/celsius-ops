@@ -42,7 +42,7 @@ export default function StaffLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        // Brand-dark tab bar — stays dark in both light AND dark modes
+        // Brand-dark tab bar, stays dark in both light AND dark modes
         // since it's brand chrome. Uses the v2026 anchor #160800.
         tabBarActiveTintColor: "#FFFFFF",
         tabBarInactiveTintColor: "rgba(255, 255, 255, 0.45)",
@@ -94,7 +94,7 @@ export default function StaffLayout() {
         );
       })}
 
-      {/* Hidden routes — reached via Home cards, HR landing, profile button, or notifications. */}
+      {/* Hidden routes, reached via Home cards, HR landing, profile button, or notifications. */}
       <Tabs.Screen name="clock"        options={{ href: null }} />
       <Tabs.Screen name="claims"       options={{ href: null }} />
       <Tabs.Screen name="profile"      options={{ href: null }} />
@@ -103,7 +103,7 @@ export default function StaffLayout() {
       <Tabs.Screen name="wastage"      options={{ href: null }} />
       <Tabs.Screen name="receiving"    options={{ href: null }} />
       <Tabs.Screen name="transfers"    options={{ href: null }} />
-      {/* Phase 8 procurement modules — reached from Inventory hub. */}
+      {/* Phase 8 procurement modules, reached from Inventory hub. */}
       <Tabs.Screen name="orders"       options={{ href: null }} />
       <Tabs.Screen name="invoices"     options={{ href: null }} />
     </Tabs>

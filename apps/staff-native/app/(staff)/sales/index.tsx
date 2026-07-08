@@ -34,7 +34,7 @@ function deltaStr(d: number | null): string { return d == null ? "New" : `${d >=
 function deltaUp(d: number | null): boolean { return d == null ? true : d >= 0; }
 function rmDeltaStr(cur: number, prev: number): string {
   const d = cur - prev;
-  return `${d >= 0 ? "+" : "−"}RM ${numF(Math.abs(d))}`;
+  return `${d >= 0 ? "+" : "-"}RM ${numF(Math.abs(d))}`;
 }
 
 const PAY_ICON: Record<string, any> = { cash: Banknote, card: CreditCard, duitnow_qr: QrCode, tng: Smartphone, grabpay: Bike, shopeepay: ShoppingBag, fpx: Landmark, wallet: Wallet };
@@ -68,7 +68,7 @@ export default function SalesScreen() {
 
   // One react-query entry per (mode, outlet, custom range). Switching Day/Week/
   // Month just swaps the queryKey, so a tab you've already opened comes back from
-  // cache instantly instead of re-fetching — the slow part the user hit.
+  // cache instantly instead of re-fetching, the slow part the user hit.
   const queryKey = useMemo(
     () => ["sales-dashboard", mode, selectedOutlet ?? "self", mode === "custom" ? cFrom : "", mode === "custom" ? cTo : ""] as const,
     [mode, selectedOutlet, cFrom, cTo],
@@ -77,6 +77,10 @@ export default function SalesScreen() {
     queryKey,
     queryFn: () => fetchSalesDashboard(mode, selectedOutlet, mode === "custom" ? cFrom : undefined, mode === "custom" ? cTo : undefined),
     staleTime: 60_000,
+    // Keep the previous dashboard on screen while switching outlet or
+    // opening an uncached tab (v5 keepPreviousData), the "Updating…" pill
+    // covers the refetch instead of a full-screen spinner flash.
+    placeholderData: (prev) => prev,
   });
   const error = isError ? (qError instanceof Error ? qError.message : "Failed to load") : null;
 
@@ -126,11 +130,11 @@ export default function SalesScreen() {
 
   const s = data?.summary;
   const g = data?.growth;
-  const maxRound = data ? Math.max(1, ...data.rounds.map((r) => r.revenue)) : 1;
+  const maxRound = data?.rounds?.length ? Math.max(1, ...data.rounds.map((r) => r.revenue)) : 1;
 
   return (
     <SafeAreaView className="flex-1 bg-[#160800]" edges={["top", "left", "right"]}>
-      {/* Fixed header — pinned at top while the content below scrolls */}
+      {/* Fixed header, pinned at top while the content below scrolls */}
       <View className="px-4 pt-3">
         <View className="flex-row items-center gap-3 pb-4">
           <View className="h-9 w-9 items-center justify-center rounded-xl bg-[#A2492C]">
@@ -212,7 +216,7 @@ export default function SalesScreen() {
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
               <Text className="font-display text-base text-[#F5F3F0]">Total Accumulative Sales <Text className="font-body text-[#F5F3F057]">(RM)</Text></Text>
               <Text className="mb-2 mt-0.5 font-body text-[13px] text-[#F5F3F08a]">{data.cur.label} vs {data.prev.label} · running total</Text>
-              <AccumChart series={data.series} curLabel={data.cur.label} prevLabel={data.prev.label} />
+              <AccumChart series={data.series ?? []} curLabel={data.cur.label} prevLabel={data.prev.label} />
               <View className="mt-3 flex-row justify-center gap-4">
                 <Legend color="#FBBF24" label={data.cur.label} />
                 <Legend color="#8FB3F0" label={data.prev.label} />
@@ -274,7 +278,7 @@ export default function SalesScreen() {
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
               <Text className="font-display text-base text-[#F5F3F0]">Payment methods</Text>
               <Text className="mb-1 mt-0.5 font-body text-[13px] text-[#F5F3F08a]">How customers paid</Text>
-              {data.payments.length === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No payments in this period.</Text> :
+              {(data.payments?.length ?? 0) === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No payments in this period.</Text> :
                 data.payments.map((p) => (
                   <Row key={p.key} icon={PAY_ICON[p.key] ?? Wallet} color={PAY_COLOR[p.key] ?? "#a78bfa"} name={p.label} pct={p.pct} amount={rmF(p.amount)} />
                 ))}
@@ -291,9 +295,9 @@ export default function SalesScreen() {
                 ))}
               </View>
               {dim === "channel"
-                ? (data.channels.length === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No sales in this period.</Text> :
+                ? ((data.channels?.length ?? 0) === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No sales in this period.</Text> :
                     data.channels.map((c) => <Row key={c.key} icon={CHAN_ICON[c.key] ?? Utensils} color={CHAN_COLOR[c.key] ?? "#E0875F"} name={c.label} pct={c.pct} amount={rmF(c.revenue)} orders={c.orders} />))
-                : data.rounds.map((r) => <Row key={r.key} icon={ROUND_ICON[r.key] ?? Coffee} color="#FBBF24" name={r.label} pct={Math.round((r.revenue / maxRound) * 100)} amount={rmF(r.revenue)} orders={r.orders} />)}
+                : (data.rounds ?? []).map((r) => <Row key={r.key} icon={ROUND_ICON[r.key] ?? Coffee} color="#FBBF24" name={r.label} pct={Math.round((r.revenue / maxRound) * 100)} amount={rmF(r.revenue)} orders={r.orders} />)}
             </View>
 
             {data.warnings?.length ? (

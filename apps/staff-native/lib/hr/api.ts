@@ -124,8 +124,8 @@ export function fetchMemos() {
 }
 
 export function acknowledgeMemo(memoId: string, notes?: string) {
-  // Ack is an idempotent upsert on the memos collection route: PATCH
-  // /api/hr/memos with { id, notes } (there is no /{id}/acknowledge route).
+  // Acknowledge via PATCH /api/hr/memos with { id, notes }. There is no
+  // /[id]/acknowledge subroute on the staff API (that path 404s).
   return api<{ success: boolean }>("/api/hr/memos", {
     method: "PATCH",
     body: JSON.stringify({ id: memoId, notes }),
@@ -204,36 +204,59 @@ export function fetchMyReviews() {
   return api<{ reviews: MyReview[]; count: number }>("/api/hr/my-reviews");
 }
 
-// ── Allowances breakdown ───
+// ── Allowances breakdown (Performance Allowance v2) ───
+// One RM pool split into 4 KPI levers (each scored on its own metric, paid in
+// nothing / half / full steps), minus attendance + review deductions. Shape
+// mirrors the server's AllowanceBreakdown in apps/staff/src/lib/hr/allowances.ts.
+export type AllowanceLever = {
+  key: "checklist" | "phone" | "serving" | "audit";
+  label: string;
+  applicable: boolean;
+  score: number; // 0-100 display proxy (completion / achievement %)
+  tier: "under" | "ok" | "perform";
+  slice: number; // RM allocated to this lever
+  earned: number; // RM earned
+  detail: string;
+};
+export type AllowanceDeduction = {
+  kind: "late" | "absent" | "review";
+  label: string;
+  amount: number;
+  date?: string;
+};
 export type AllowanceBreakdown = {
+  userId: string;
+  employmentType: string | null;
   isFullTime: boolean;
+  eligible: boolean;
   period: {
     year: number;
     month: number;
     daysElapsed: number;
     daysRemaining: number;
   };
+  pool: number;
+  levers: AllowanceLever[];
+  performanceEarned: number;
   attendance: {
-    base: number;
-    earned: number;
-    tip: string;
-    metrics: { lateCount: number; absentCount: number };
-  };
-  performance: {
-    base: number;
-    earned: number;
-    score: number;
-    mode: string;
-    eligible: boolean;
-    breakdown: { checklists: number; reviews: number; audit: number };
-    tip: string;
+    deductions: AllowanceDeduction[];
+    lateCount: number;
+    absentCount: number;
+    total: number; // RM deducted
   };
   reviewPenalty: {
     total: number;
-    entries: { id: string; reviewDate: string; rating: number; amount: number }[];
+    entries: {
+      id: string;
+      reviewDate: string;
+      rating: number;
+      amount: number;
+      reviewText?: string | null;
+    }[];
   };
   totalEarned: number;
   totalMax: number;
+  tip: string;
 };
 
 export function fetchAllowances() {

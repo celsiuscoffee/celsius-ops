@@ -188,7 +188,7 @@ export default function StockCount() {
         ...g,
         items: g.items.filter(
           (i) =>
-            i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q),
+            (i.name ?? "").toLowerCase().includes(q) || (i.sku ?? "").toLowerCase().includes(q),
         ),
       }))
       .filter((g) => g.items.length > 0);
@@ -343,7 +343,7 @@ export default function StockCount() {
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => {});
-      Alert.alert("Done", `Stock count finalized — ${countedItems} items.`);
+      Alert.alert("Done", `Stock count finalized, ${countedItems} items.`);
       setCounts({});
       setCountId(null);
       setServerItems({});
@@ -425,7 +425,7 @@ export default function StockCount() {
   return (
     <Screen>
       <PageHeader title="Stock count" back />
-      {/* Sticky frequency tabs — sits below the PageHeader. */}
+      {/* Sticky frequency tabs, sits below the PageHeader. */}
       <View className="border-b border-border bg-background pb-3">
         <View className="flex-row items-center gap-2">
           {(["daily", "weekly", "monthly"] as Frequency[]).map((f) => (
@@ -590,7 +590,7 @@ export default function StockCount() {
                               isCounted ? "text-success" : "text-muted"
                             }`}
                           >
-                            {isCounted ? c.qty : "—"}
+                            {isCounted ? c.qty : "-"}
                           </Text>
                         </View>
                         <View className="flex-1">
@@ -700,7 +700,7 @@ export default function StockCount() {
                   <Text className="mt-1 text-sm font-body text-muted-fg">
                     They saved{" "}
                     <Text className="text-espresso font-body-bold">
-                      {conflict.serverQty ?? "—"}
+                      {conflict.serverQty ?? "-"}
                     </Text>
                     . You're overwriting with{" "}
                     <Text className="text-espresso font-body-bold">

@@ -3,8 +3,8 @@ import { PanResponder, Text, View } from "react-native";
 import Svg, { Path, Line, Circle, Text as SvgText } from "react-native-svg";
 import type { SeriesPoint } from "@/lib/sales/dashboard";
 
-const CUR = "#FBBF24"; // amber — current period
-const PREV = "#8FB3F0"; // blue — previous period
+const CUR = "#FBBF24"; // amber, current period
+const PREV = "#8FB3F0"; // blue, previous period
 const GRID = "rgba(245,243,240,0.08)";
 const AXIS = "rgba(245,243,240,0.40)";
 
@@ -28,7 +28,7 @@ function rmShort(v: number): string {
  * point. The marker defaults to the latest point that has data ("now").
  */
 export function AccumChart({
-  series,
+  series = [],
   curLabel = "Today",
   prevLabel = "Yesterday",
   height = 210,
@@ -72,7 +72,7 @@ export function AccumChart({
         onPanResponderGrant: (e) => pick(e.nativeEvent.locationX),
         onPanResponderMove: (e) => pick(e.nativeEvent.locationX),
       }),
-    // pick closes over innerW/padL/n — refresh when width or point count changes
+    // pick closes over innerW/padL/n, refresh when width or point count changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [w, n],
   );
@@ -143,7 +143,7 @@ export function AccumChart({
             <Text style={{ color: AXIS, fontSize: 11, fontFamily: "SpaceGrotesk_600SemiBold" }}>
               {series[idx]?.label ?? ""}
             </Text>
-            <TipRow color={CUR} label={curLabel} value={curV != null ? rmShort(curV) : "—"} />
+            <TipRow color={CUR} label={curLabel} value={curV != null ? rmShort(curV) : "-"} />
             <TipRow color={PREV} label={prevLabel} value={rmShort(prevV)} />
           </View>
         </>

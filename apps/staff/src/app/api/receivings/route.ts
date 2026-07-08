@@ -3,6 +3,7 @@ import { baseQtyByProduct } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { adjustStockBalance } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
+import { checkModuleAccess } from "@/lib/check-module-access";
 import { logActivity } from "@/lib/activity-log";
 import { aiPrefillInvoice } from "@/lib/ai-prefill";
 
@@ -75,11 +76,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // DB-backed RBAC (revocation-safe), mirroring the sibling PO routes
+  // (apps/staff/src/app/api/orders/route.ts). Recording a receiving
+  // requires the `inventory:receivings` module key, not just any logged-in
+  // session. The outlet-ownership check below still applies on top.
+  const guard = await checkModuleAccess(req, "inventory:receivings");
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
+
   const body = await req.json();
   const { orderId, outletId, supplierId, items, notes, status, invoicePhotos } = body;
-
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Staff/managers may only record receivings for their own outlet.
   const isAdmin = session.role === "OWNER" || session.role === "ADMIN";

@@ -288,7 +288,7 @@ export default function AuditDetail() {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Sticky progress bar — sits right below PageHeader */}
+        {/* Sticky progress bar, sits right below PageHeader */}
         <View className="border-b border-border bg-background pb-3">
           <View className="h-1.5 overflow-hidden rounded-full bg-primary-50">
             <View
@@ -587,7 +587,7 @@ export default function AuditDetail() {
                   {rated < total ? (
                     <Text className="mt-1 text-xs font-body text-amber-700">
                       {total - rated} item{total - rated === 1 ? "" : "s"} still
-                      unrated — they will be treated as N/A.
+                      unrated, they will be treated as N/A.
                     </Text>
                   ) : null}
                 </View>

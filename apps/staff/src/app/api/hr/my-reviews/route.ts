@@ -82,6 +82,12 @@ export async function GET() {
     createdAt: r.review_timestamp || `${r.review_date}T12:00:00Z`,
     isPenalty: r.status === "applied",
     penaltyStatus: r.status,
+    // Aliases the native MyReview type reads (apps/staff-native/lib/hr/api.ts,
+    // consumed by apps/staff-native/app/(staff)/hr/reviews.tsx). The penalty
+    // table has no `source` column, so these all originate from GBP review sync.
+    review_date: r.review_date,
+    reviewer_name: r.reviewer_name,
+    source: "review",
   }));
   out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 

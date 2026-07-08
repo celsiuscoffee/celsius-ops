@@ -107,7 +107,7 @@ export default function InvoiceDetailScreen() {
             prev ? { ...prev, popShortLink: r.shortLink } : prev,
           );
         } catch {
-          // ignore — falls through to the photo fallback
+          // ignore, falls through to the photo fallback
         }
       }
       if (!receiptUrl && invoice.photos.length > 0) {
@@ -143,13 +143,24 @@ export default function InvoiceDetailScreen() {
       const url = phone
         ? `https://wa.me/${phone}?text=${text}`
         : `https://wa.me/?text=${text}`;
-      Linking.openURL(url).catch(() => {});
+      // Only mark the POP as sent once WhatsApp actually opens. If the
+      // deeplink fails (WhatsApp not installed), stamping popSentAt would
+      // wrongly flag the invoice as "POP sent" forever.
+      try {
+        await Linking.openURL(url);
+      } catch {
+        Alert.alert(
+          "Couldn't open WhatsApp",
+          "Install WhatsApp or send the POP manually.",
+        );
+        return;
+      }
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => {});
       // Stamp popSentAt on the server so the list shows a "POP sent"
-      // pill on this row after returning. Fire-and-forget; the WhatsApp
-      // open already succeeded so a failed stamp is cosmetic only.
+      // pill on this row after returning. The WhatsApp open already
+      // succeeded so a failed stamp is cosmetic only.
       const optimisticTs = new Date().toISOString();
       setInvoice((prev) =>
         prev ? { ...prev, popSentAt: optimisticTs } : prev,
@@ -332,7 +343,7 @@ export default function InvoiceDetailScreen() {
             <View className="flex-row items-center gap-2">
               <FileText color="#D97706" size={18} />
               <Text className="text-sm font-body-bold text-amber-700">
-                Goods received — waiting for invoice
+                Goods received, waiting for invoice
               </Text>
             </View>
             <Text className="mt-2 text-xs font-body text-amber-700/80">
@@ -344,7 +355,7 @@ export default function InvoiceDetailScreen() {
         ) : null}
       </ScrollView>
 
-      {/* Pinned action — placeholder gets Attach, paid invoices get
+      {/* Pinned action, placeholder gets Attach, paid invoices get
           Send POP via WhatsApp. PARTIALLY_PAID / DEPOSIT_PAID / PAID
           all trigger the POP flow with a status-aware message. */}
       {!isPlaceholder &&

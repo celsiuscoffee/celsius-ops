@@ -52,7 +52,7 @@ export type CreateClaimInput = {
   outletId: string;
   supplierId?: string;
   supplierName?: string | null;
-  // Optional in REQUEST flow (no claimant — finance pays the vendor).
+  // Optional in REQUEST flow (no claimant, finance pays the vendor).
   claimedById?: string;
   amount: number;
   purchaseDate: string;
