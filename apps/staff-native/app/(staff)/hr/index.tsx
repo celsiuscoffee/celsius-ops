@@ -206,10 +206,10 @@ export default function HrIndex() {
               </View>
               <View className="items-end">
                 <Text className="text-2xl font-display text-primary">
-                  RM {allowance.totalEarned.toFixed(2)}
+                  RM {Number(allowance.totalEarned ?? 0).toFixed(2)}
                 </Text>
                 <Text className="text-xs font-body text-muted">
-                  of RM {allowance.totalMax.toFixed(2)}
+                  of RM {Number(allowance.totalMax ?? 0).toFixed(2)}
                 </Text>
               </View>
             </View>
@@ -304,7 +304,7 @@ function AllowanceBar({
           ) : null}
         </View>
         <Text className="text-base font-body-bold text-espresso">
-          RM {earned.toFixed(2)} / RM {base.toFixed(2)}
+          RM {Number(earned ?? 0).toFixed(2)} / RM {Number(base ?? 0).toFixed(2)}
         </Text>
       </View>
       <View className="mt-2 h-2 overflow-hidden rounded-full bg-primary-50">
