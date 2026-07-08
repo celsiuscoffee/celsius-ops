@@ -87,9 +87,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Manual edits to invoiceNumber/dueDate/issueDate/amount also clear it
     // implicitly — if procurement edited a field, they've effectively
     // reviewed it.
+    let confirmingCapture = false;
     if (body.confirmAiPrefill === true) {
       data.aiPrefilledAt = null;
       data.aiPrefilledFields = null;
+      confirmingCapture = true;
     } else if (
       body.invoiceNumber !== undefined ||
       body.dueDate !== undefined ||
@@ -98,6 +100,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     ) {
       data.aiPrefilledAt = null;
       data.aiPrefilledFields = null;
+      confirmingCapture = true;
+    }
+    // Promote a reviewed capture to a real payable. An AI-captured invoice lands
+    // as DRAFT and is NEVER payable (getActions has no DRAFT action, and the
+    // payment guard blocks DRAFT), so confirming/editing it must move it to
+    // PENDING — otherwise it's stranded in DRAFT forever with no way out. Only
+    // from DRAFT, and only when the caller didn't set an explicit status itself.
+    if (confirmingCapture && status === undefined) {
+      const cur = await prisma.invoice.findUnique({ where: { id }, select: { status: true } });
+      if (cur?.status === "DRAFT") data.status = "PENDING";
     }
 
     // Amount edited on an already-PAID invoice (e.g. the supplier's real total

@@ -1552,7 +1552,7 @@ export default function InvoicesPage() {
                       Reject
                     </button>
                   )}
-                  {inv.aiPrefilledAt && (
+                  {(inv.aiPrefilledAt || inv.status === "DRAFT") && (
                     <button
                       onClick={async () => {
                         await fetch(`/api/inventory/invoices/${inv.id}`, {
@@ -1563,9 +1563,10 @@ export default function InvoicesPage() {
                         await loadInvoices(undefined, { revalidate: true });
                       }}
                       className="inline-flex items-center gap-1 rounded-md bg-violet-500 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-violet-600"
+                      title="Confirm the captured details and make this a payable"
                     >
                       <Check className="h-3.5 w-3.5" />
-                      Confirm AI Prefill
+                      {inv.status === "DRAFT" ? "Confirm invoice" : "Confirm AI Prefill"}
                     </button>
                   )}
                   {inv.possiblePop && (
@@ -1794,6 +1795,23 @@ export default function InvoicesPage() {
                         >
                           {confirmingPopId === inv.possiblePop.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                           Confirm POP
+                        </button>
+                      )}
+                      {(inv.aiPrefilledAt || inv.status === "DRAFT") && (
+                        <button
+                          onClick={async () => {
+                            await fetch(`/api/inventory/invoices/${inv.id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ confirmAiPrefill: true }),
+                            });
+                            await loadInvoices(undefined, { revalidate: true });
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md bg-violet-500 px-2 py-1 text-[10px] font-medium text-white hover:bg-violet-600"
+                          title="Confirm the captured details and make this a payable"
+                        >
+                          <Check className="h-3 w-3" />
+                          {inv.status === "DRAFT" ? "Confirm invoice" : "Confirm AI Prefill"}
                         </button>
                       )}
                       {actions.map((a) => (
