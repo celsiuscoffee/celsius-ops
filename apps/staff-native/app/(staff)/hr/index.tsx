@@ -187,7 +187,7 @@ export default function HrIndex() {
         </Pressable>
 
         {/* Allowances */}
-        {allowance && clock?.outletId ? (
+        {allowance?.period && allowance?.attendance && clock?.outletId ? (
           <View className="mt-5 rounded-3xl border border-primary/30 bg-primary-50/30 p-4">
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center gap-2">
@@ -222,7 +222,7 @@ export default function HrIndex() {
               barColor="#3B82F6"
               icon={Clock}
             />
-            {allowance.performance.eligible ? (
+            {allowance.performance?.eligible ? (
               <AllowanceBar
                 label="Performance"
                 earned={allowance.performance.earned}
