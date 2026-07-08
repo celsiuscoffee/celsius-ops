@@ -41,6 +41,7 @@ type ScorecardData = {
     topPerformer: string | null;
     totalSpend: number;
   };
+  outlets: Array<{ id: string; name: string }>;
   suppliers: SupplierScore[];
 };
 
@@ -101,8 +102,9 @@ export default function SupplierScorecardPage() {
   const [to, setTo] = useState(now.toISOString().split("T")[0]);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("score");
+  const [outletId, setOutletId] = useState("");
 
-  const url = `/api/inventory/reports/supplier-scorecard?from=${from}T00:00:00.000Z&to=${to}T23:59:59.999Z`;
+  const url = `/api/inventory/reports/supplier-scorecard?from=${from}T00:00:00.000Z&to=${to}T23:59:59.999Z${outletId ? `&outletId=${outletId}` : ""}`;
 
   const { data, isLoading } = useFetch<ScorecardData>(url);
 
@@ -220,6 +222,16 @@ export default function SupplierScorecardPage() {
             className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
           />
         </div>
+        <select
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          value={outletId}
+          onChange={(e) => setOutletId(e.target.value)}
+        >
+          <option value="">All outlets</option>
+          {data?.outlets?.map((o) => (
+            <option key={o.id} value={o.id}>{o.name}</option>
+          ))}
+        </select>
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input

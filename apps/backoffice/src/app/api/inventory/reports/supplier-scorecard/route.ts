@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
   if (auth.error) return auth.error;
   const params = new URL(req.url).searchParams;
   const supplierId = params.get("supplierId");
+  const outletId = params.get("outletId");
   const now = new Date();
   const from = params.get("from")
     ? new Date(params.get("from")!)
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
           supplierId: supplier.id,
           status: { notIn: ["DRAFT", "CANCELLED"] },
           createdAt: { gte: from, lte: to },
+          ...(outletId ? { outletId } : {}),
         },
         select: {
           id: true,
@@ -76,6 +78,7 @@ export async function GET(req: NextRequest) {
           receiving: {
             supplierId: supplier.id,
             receivedAt: { gte: from, lte: to },
+            ...(outletId ? { outletId } : {}),
           },
         },
         select: {
@@ -172,15 +175,22 @@ export async function GET(req: NextRequest) {
     })
   );
 
+  // When scoped to one outlet, only show suppliers that actually served it in
+  // the window (otherwise every active supplier lists as N/A). Company view keeps
+  // all active suppliers so you can still see who has had no orders.
+  const scoped = outletId
+    ? scorecards.filter((s) => s.totalOrders > 0)
+    : scorecards;
+
   // Sort by score descending (nulls at end)
-  scorecards.sort((a, b) => {
+  scoped.sort((a, b) => {
     if (a.score === null && b.score === null) return 0;
     if (a.score === null) return 1;
     if (b.score === null) return -1;
     return b.score - a.score;
   });
 
-  const suppliersWithScore = scorecards.filter((s) => s.score !== null);
+  const suppliersWithScore = scoped.filter((s) => s.score !== null);
   const avgScore =
     suppliersWithScore.length > 0
       ? Math.round(
@@ -193,15 +203,23 @@ export async function GET(req: NextRequest) {
   const topPerformer =
     suppliersWithScore.length > 0 ? suppliersWithScore[0].name : null;
 
-  const totalSpend = scorecards.reduce((sum, s) => sum + s.totalSpend, 0);
+  const totalSpend = scoped.reduce((sum, s) => sum + s.totalSpend, 0);
+
+  // Outlet list for the report's outlet filter dropdown.
+  const outlets = await prisma.outlet.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
 
   return NextResponse.json({
     summary: {
-      totalSuppliers: scorecards.length,
+      totalSuppliers: scoped.length,
       avgScore,
       topPerformer,
       totalSpend,
     },
-    suppliers: scorecards,
+    outlets,
+    suppliers: scoped,
   });
 }
