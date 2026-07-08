@@ -46,7 +46,7 @@ export default function PayslipsScreen() {
 
 function PayslipCard({ payslip }: { payslip: Payslip }) {
   const run = payslip.hr_payroll_runs;
-  // hr_payroll_runs is a joined relation — a filtered/absent run leaves it null,
+  // hr_payroll_runs is a joined relation, a filtered/absent run leaves it null,
   // and dereferencing period_year/status below would crash the whole list.
   if (!run) return null;
   const periodLabel = new Date(run.period_year, run.period_month - 1, 1)

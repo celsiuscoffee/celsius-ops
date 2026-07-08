@@ -8,7 +8,7 @@ type Props = {
   action?: ReactNode;
 };
 
-// Warm-copy empty state. Brand voice is "never-rushed" — leave room
+// Warm-copy empty state. Brand voice is "never-rushed", leave room
 // around the message; don't crowd it with a wall of help text.
 export function EmptyState({ icon: Icon, title, subtitle, action }: Props) {
   return (

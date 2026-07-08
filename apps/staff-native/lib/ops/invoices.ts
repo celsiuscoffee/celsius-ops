@@ -16,13 +16,13 @@ export type InvoiceListItem = {
   amount: number;
   amountPaid: number;
   depositAmount: number;
-  // Phase 9b — extra fields so the list can fire Send POP inline
+  // Phase 9b: extra fields so the list can fire Send POP inline
   // without a detail fetch.
   depositPercent: number | null;
   depositRef: string | null;
   paymentRef: string | null;
   popShortLink: string | null;
-  // Phase 10 — null means the supplier hasn't been sent the POP yet.
+  // Phase 10: null means the supplier hasn't been sent the POP yet.
   // Used to render the "POP sent" pill and the unsent-only filter.
   popSentAt: string | null;
   status: InvoiceStatus;
@@ -38,12 +38,12 @@ export type InvoiceListItem = {
   outletName: string | null;
 };
 
-// `tab` and `cardFilter` are independent — the latter wins server-side
+// `tab` and `cardFilter` are independent, the latter wins server-side
 // when both are set (the user clicked a summary card). Native list
 // screen drives this via tab pills + the GRNI card.
 //
 // Phase 10 adds optional filters layered on top:
-//   - popStatus:  "sent" | "not_sent"  — narrow by POP-sent state
+//   - popStatus:  "sent" | "not_sent"  - narrow by POP-sent state
 //   - supplierId: drill into one supplier
 //   - outletId:   manager-only outlet override (non-managers stay
 //                 scoped to their assigned outlet server-side)
@@ -81,7 +81,7 @@ export function listInvoices(opts: InvoiceListFilters = {}) {
 }
 
 // Stamp popSentAt on the server right after the user fires the Send
-// POP WhatsApp deeplink. Fire-and-forget on the client — failure here
+// POP WhatsApp deeplink. Fire-and-forget on the client, failure here
 // just leaves the row without a "POP sent" pill until next sync; the
 // supplier still got the message.
 export function markPopSent(id: string) {
@@ -117,7 +117,7 @@ export function attachInvoice(
   );
 }
 
-// Mint (or fetch existing) a short link to the latest invoice photo —
+// Mint (or fetch existing) a short link to the latest invoice photo,
 // used as the "Receipt: <url>" line in POP WhatsApp messages so the
 // supplier opens one canonical URL instead of a 200-char Supabase
 // signed link. Proxies to backoffice (single generator).
@@ -187,6 +187,6 @@ export function buildPopMessage(
       .join("\n");
   }
 
-  // PAID (default) — full payment
-  return `Hi, payment has been made for invoice ${inv.invoiceNumber} — ${fmt(inv.amount)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nReceipt: ${receiptUrl}\n\nThank you.`;
+  // PAID (default): full payment
+  return `Hi, payment has been made for invoice ${inv.invoiceNumber}: ${fmt(inv.amount)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nReceipt: ${receiptUrl}\n\nThank you.`;
 }

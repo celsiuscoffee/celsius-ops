@@ -106,7 +106,7 @@ function RootLayout() {
     //   back in. That manifests as "wrong data, restart fixes it"
     //   from the user's POV.
     //
-    //   401 here means the cached token is dead — clear everything
+    //   401 here means the cached token is dead, clear everything
     //   and let the layout route to /login on next render.
     loadSession()
       .then(async (cached) => {
@@ -129,7 +129,7 @@ function RootLayout() {
             outletName?: string | null;
             moduleAccess?: Record<string, unknown>;
           };
-          // Trust the server response as the source of truth — a null
+          // Trust the server response as the source of truth, a null
           // outletId from /api/auth/me is meaningful (means the user
           // had their outlet assignment removed), so we must NOT use
           // nullish coalescing to fall back to the cached value here.
@@ -221,7 +221,7 @@ function RootLayout() {
 }
 
 // Outer boundary so a throw in RootLayout's OWN render (fonts, boot wiring)
-// during launch shows the recoverable card instead of a white-screen crash —
+// during launch shows the recoverable card instead of a white-screen crash.
 // the inner boundary around <Stack> only covers the screens below it.
 function RootLayoutWithBoundary() {
   return (

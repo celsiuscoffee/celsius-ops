@@ -73,7 +73,7 @@ export function listOrders(opts: {
 }
 
 export function getOrder(id: string) {
-  // Backoffice response shape is a single order with includes — cast
+  // Backoffice response shape is a single order with includes, cast
   // through the OrderDetail surface; native screens only read the
   // fields they need.
   return api<OrderDetail & Record<string, unknown>>(`/api/orders/${id}`);
@@ -107,7 +107,7 @@ export function updateOrderStatus(id: string, status: OrderStatus) {
   });
 }
 
-// Convenience aliases — the underlying PATCH is the same.
+// Convenience aliases, the underlying PATCH is the same.
 export function approveOrder(id: string) {
   return updateOrderStatus(id, "APPROVED");
 }

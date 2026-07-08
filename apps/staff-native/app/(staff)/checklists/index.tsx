@@ -101,7 +101,7 @@ export default function ChecklistsList() {
   const total = items.length;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-  // Personal contribution across every checklist today — sum of
+  // Personal contribution across every checklist today, sum of
   // items the calling user has marked done divided by the total
   // possible items across all checklists. Surfaces the "you did X
   // of Y" number staff care about (vs the team-level X/Y above).
@@ -136,7 +136,7 @@ export default function ChecklistsList() {
           }
           ListHeaderComponent={
             <View>
-              {/* Progress card — team progress on top (checklists
+              {/* Progress card, team progress on top (checklists
                   fully completed) + personal contribution below
                   (items the calling user has ticked off across every
                   checklist today). */}

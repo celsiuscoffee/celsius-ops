@@ -378,7 +378,7 @@ function ReceiveDetail({
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View className="flex-1 bg-background">
-        {/* Sticky PO header — paddingTop clears the status bar / Dynamic
+        {/* Sticky PO header, paddingTop clears the status bar / Dynamic
             Island so the close button is always tappable. */}
         <View
           className="flex-row items-center justify-between border-b border-border bg-background px-5 pb-4"

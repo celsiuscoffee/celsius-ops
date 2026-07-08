@@ -143,7 +143,7 @@ export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
         )}
 
         <Text className="mt-3 text-center text-xs font-body-semi text-[#F5F3F08a]">
-          {dEnd ? `${fmtD(dStart)} – ${fmtD(dEnd)}` : dStart ? `${fmtD(dStart)} – tap end date…` : "Tap a start date…"}
+          {dEnd ? `${fmtD(dStart)} to ${fmtD(dEnd)}` : dStart ? `${fmtD(dStart)} to tap end date…` : "Tap a start date…"}
         </Text>
 
         <Pressable

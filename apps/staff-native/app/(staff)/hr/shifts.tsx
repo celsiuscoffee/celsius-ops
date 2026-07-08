@@ -64,7 +64,7 @@ function ShiftCard({ shift }: { shift: Shift }) {
       </View>
       <View className="ml-4 flex-1 justify-center">
         <Text className="text-base font-display-medium text-espresso">
-          {fmtTime(shift.start_time)} – {fmtTime(shift.end_time)}
+          {fmtTime(shift.start_time)} to {fmtTime(shift.end_time)}
         </Text>
         {shift.position ? (
           <Text className="mt-1 text-sm text-muted-fg">{shift.position}</Text>

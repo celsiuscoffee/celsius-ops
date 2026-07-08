@@ -3,7 +3,7 @@ import { loadSession } from "./session";
 
 /**
  * Upload a captured photo to /api/upload and return the public URL.
- * Re-used across claims, checklists, audit, receiving — any flow that
+ * Re-used across claims, checklists, audit, receiving, any flow that
  * needs proof photos persisted to storage.
  */
 export async function uploadPhoto(photo: {

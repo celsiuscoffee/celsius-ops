@@ -10,11 +10,11 @@ type Props = {
   /** Right-aligned slot for actions (icon button or pill). */
   right?: ReactNode;
   /** Set to true on inner pages to show a chevron-back. Tab roots omit
-   *  this prop entirely — back button is not appropriate on a tab root. */
+   *  this prop entirely, back button is not appropriate on a tab root. */
   back?: boolean;
 };
 
-// Page-level header — single source of truth for every "this is the
+// Page-level header, single source of truth for every "this is the
 // screen title" line across the staff app. Standardised here so screens
 // can't drift on size or font:
 //
@@ -25,11 +25,11 @@ type Props = {
 // labels stay on Space Grotesk so the brand voice stays distinctive
 // without getting tired.
 //
-// `right` slot is for inline action buttons (e.g. "+ New audit") —
+// `right` slot is for inline action buttons (e.g. "+ New audit"),
 // matches the web pattern of putting the primary action next to the
 // title rather than as a floating chrome strip.
 //
-// Earlier the title used `text-xl font-peachi` — but `font-peachi`
+// Earlier the title used `text-xl font-peachi`, but `font-peachi`
 // was never registered in tailwind.config.js, so every page title
 // silently fell back to the system font. Fixed by renaming to
 // `font-display` (Peachi-Bold) globally; size bumped to 24px so the
@@ -43,7 +43,7 @@ export function PageHeader({ title, subtitle, right, back }: Props) {
     // Top padding lives HERE so screens don't have to wrap PageHeader
     // in `<View className="pt-3">` (some forgot to, some used pt-8,
     // some omitted entirely). One canonical position for every page
-    // header across the app — title always lands at the same Y.
+    // header across the app, title always lands at the same Y.
     <View className="pt-3 pb-3">
       {back ? (
         <Pressable

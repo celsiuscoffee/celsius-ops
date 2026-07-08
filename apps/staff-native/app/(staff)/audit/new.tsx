@@ -25,7 +25,7 @@ import {
 export default function NewAudit() {
   const router = useRouter();
   // Coverage cards on /audit pass `?templateId=...&auditeeId=...` so
-  // the form opens pre-filled — one tap from "this staff needs audit"
+  // the form opens pre-filled, one tap from "this staff needs audit"
   // to actually doing the audit.
   const params = useLocalSearchParams<{
     templateId?: string;
