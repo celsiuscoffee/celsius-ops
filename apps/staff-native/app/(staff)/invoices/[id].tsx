@@ -143,13 +143,24 @@ export default function InvoiceDetailScreen() {
       const url = phone
         ? `https://wa.me/${phone}?text=${text}`
         : `https://wa.me/?text=${text}`;
-      Linking.openURL(url).catch(() => {});
+      // Only mark the POP as sent once WhatsApp actually opens. If the
+      // deeplink fails (WhatsApp not installed), stamping popSentAt would
+      // wrongly flag the invoice as "POP sent" forever.
+      try {
+        await Linking.openURL(url);
+      } catch {
+        Alert.alert(
+          "Couldn't open WhatsApp",
+          "Install WhatsApp or send the POP manually.",
+        );
+        return;
+      }
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => {});
       // Stamp popSentAt on the server so the list shows a "POP sent"
-      // pill on this row after returning. Fire-and-forget; the WhatsApp
-      // open already succeeded so a failed stamp is cosmetic only.
+      // pill on this row after returning. The WhatsApp open already
+      // succeeded so a failed stamp is cosmetic only.
       const optimisticTs = new Date().toISOString();
       setInvoice((prev) =>
         prev ? { ...prev, popSentAt: optimisticTs } : prev,

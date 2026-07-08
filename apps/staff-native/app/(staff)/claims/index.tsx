@@ -49,10 +49,19 @@ export default function ClaimsList() {
           <ActivityIndicator />
         </View>
       ) : error ? (
-        <View className="flex-1 items-center justify-center px-4">
-          <Text className="text-sm text-danger text-center">
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-center text-base font-body-bold text-espresso">
+            Couldn't load claims
+          </Text>
+          <Text className="mt-2 text-center text-sm font-body text-muted-fg">
             {(error as Error).message}
           </Text>
+          <Pressable
+            onPress={() => refetch()}
+            className="mt-6 h-12 items-center justify-center rounded-2xl bg-primary px-8 active:opacity-80"
+          >
+            <Text className="text-base font-body-bold text-white">Retry</Text>
+          </Pressable>
         </View>
       ) : claims.length === 0 ? (
         <EmptyState onNew={() => router.push("/(staff)/claims/new")} />

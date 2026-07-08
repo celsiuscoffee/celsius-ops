@@ -48,6 +48,7 @@ export default function WastagePage() {
   const [entries, setEntries] = useState<WastageEntry[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [step, setStep] = useState<Step>("product");
@@ -60,12 +61,18 @@ export default function WastagePage() {
 
   const load = useCallback(async () => {
     try {
-      const [entriesData, productsData] = await Promise.all([
-        listWastage(session?.outletId).catch(() => []),
-        listProducts().catch(() => []),
-      ]);
+      // Products are a best-effort lookup for the record sheet, so a
+      // failure there shouldn't blank the screen. The wastage list is the
+      // primary content, a fetch failure there is surfaced as an error
+      // state (not an empty list) so a server error can't look like "no
+      // wastage yet".
+      const productsData = await listProducts().catch(() => []);
+      const entriesData = await listWastage(session?.outletId);
       setEntries(entriesData);
       setProducts(productsData);
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -180,9 +187,28 @@ export default function WastagePage() {
         }
         ItemSeparatorComponent={() => <View className="h-2" />}
         ListEmptyComponent={
-          <Text className="mt-8 text-center text-sm font-body text-muted">
-            No wastage records yet
-          </Text>
+          error ? (
+            <View className="mt-8 items-center px-6">
+              <Text className="text-center text-base font-body-bold text-espresso">
+                Couldn't load wastage
+              </Text>
+              <Text className="mt-2 text-center text-sm font-body text-muted-fg">
+                Something went wrong. Check your connection and try again.
+              </Text>
+              <Pressable
+                onPress={() => load()}
+                className="mt-6 h-12 items-center justify-center rounded-2xl bg-primary px-8 active:opacity-80"
+              >
+                <Text className="text-base font-body-bold text-white">
+                  Retry
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Text className="mt-8 text-center text-sm font-body text-muted">
+              No wastage records yet
+            </Text>
+          )
         }
         renderItem={({ item: w }) => (
           <View className="rounded-2xl border border-border bg-surface px-3 py-2.5">
@@ -192,7 +218,7 @@ export default function WastagePage() {
                   {w.product}
                 </Text>
                 <Text className="text-xs font-body text-muted">
-                  {w.quantity} · {w.reason ?? "—"} · {fmtDate(w.createdAt)}
+                  {w.quantity} · {w.reason ?? ", "} · {fmtDate(w.createdAt)}
                 </Text>
                 <Text className="text-xs font-body text-muted">
                   by {w.adjustedBy}
@@ -222,7 +248,7 @@ export default function WastagePage() {
         </Pressable>
       </View>
 
-      {/* Bottom sheet — 3 steps */}
+      {/* Bottom sheet, 3 steps */}
       <Modal
         visible={sheetOpen}
         animationType="slide"
@@ -426,7 +452,7 @@ export default function WastagePage() {
                     {selectedProduct?.name}
                   </Text>
                   <Text className="text-sm font-body text-muted-fg">
-                    {qty} {selectedProduct?.baseUom} · {reason || "—"}
+                    {qty} {selectedProduct?.baseUom} · {reason || ", "}
                   </Text>
                 </View>
 

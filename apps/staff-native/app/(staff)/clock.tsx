@@ -206,6 +206,7 @@ export default function ClockScreen() {
             ? `Clocked in at ${formatTime(status.activeLog.clock_in)}`
             : "Not clocked in"
         }
+        back
       />
 
       {!permsReady ? (

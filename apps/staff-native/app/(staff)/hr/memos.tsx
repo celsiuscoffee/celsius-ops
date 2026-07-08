@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   Text,
@@ -42,7 +44,7 @@ export default function MemosScreen() {
         <MemoCard
           memo={item}
           onAcknowledge={async () => {
-            await acknowledgeMemo(item.id).catch(() => {});
+            await acknowledgeMemo(item.id);
             qc.invalidateQueries({ queryKey: ["hr-memos"] });
           }}
         />
@@ -64,9 +66,26 @@ function MemoCard({
   onAcknowledge,
 }: {
   memo: Memo;
-  onAcknowledge: () => void;
+  onAcknowledge: () => Promise<void>;
 }) {
   const acked = !!memo.my_acknowledged_at;
+  const [acking, setAcking] = useState(false);
+
+  async function handleAcknowledge() {
+    if (acking) return;
+    setAcking(true);
+    try {
+      await onAcknowledge();
+    } catch (e) {
+      Alert.alert(
+        "Couldn't acknowledge",
+        e instanceof Error ? e.message : "Try again.",
+      );
+    } finally {
+      setAcking(false);
+    }
+  }
+
   return (
     <View className="rounded-3xl border border-border bg-surface p-5">
       <Text className="text-xs font-body-semi text-muted uppercase tracking-wide">
@@ -89,12 +108,19 @@ function MemoCard({
           </Text>
         ) : (
           <Pressable
-            onPress={onAcknowledge}
-            className="mt-3 h-10 items-center justify-center rounded-2xl bg-primary"
+            onPress={handleAcknowledge}
+            disabled={acking}
+            className={`mt-3 h-10 items-center justify-center rounded-2xl ${
+              acking ? "bg-primary/50" : "bg-primary"
+            }`}
           >
-            <Text className="text-sm font-body-bold text-white">
-              Acknowledge
-            </Text>
+            {acking ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text className="text-sm font-body-bold text-white">
+                Acknowledge
+              </Text>
+            )}
           </Pressable>
         )
       ) : null}

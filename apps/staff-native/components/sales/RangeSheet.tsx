@@ -60,8 +60,12 @@ export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
     onApply(ymd(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate()), ymd(e.getUTCFullYear(), e.getUTCMonth(), e.getUTCDate()));
   };
 
-  const startDow = new Date(calY, calM, 1).getDay();
-  const daysIn = new Date(calY, calM + 1, 0).getDate();
+  // Compute the grid alignment in MYT, not device-local time. On devices
+  // behind UTC+8 a local first-of-month can land on the previous day and
+  // shift the whole calendar by one column. Anchor to +08:00 (matching
+  // fmtD / dowMYT) so the grid is stable regardless of device timezone.
+  const startDow = new Date(`${ymd(calY, calM, 1)}T12:00:00+08:00`).getUTCDay();
+  const daysIn = new Date(Date.UTC(calY, calM + 1, 0)).getUTCDate();
   const cells: (number | null)[] = [];
   for (let i = 0; i < startDow; i++) cells.push(null);
   for (let d = 1; d <= daysIn; d++) cells.push(d);
