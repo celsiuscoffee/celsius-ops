@@ -26,13 +26,14 @@ export default function StaffLayout() {
   const session = useStaff((s) => s.session);
   const isAdmin = session?.role === "OWNER" || session?.role === "ADMIN";
 
-  // Heal sessions saved before Phase 5b (no moduleAccess) — fetch fresh
-  // from /api/auth/me and persist so the bottom bar gates correctly.
+  // Refresh moduleAccess + outletId from /api/auth/me on every launch so
+  // access-preset changes and outlet assignments propagate WITHOUT a forced
+  // re-login (previously this only ran when moduleAccess was entirely missing,
+  // so a staff member granted a new module never saw it until they signed out).
   useEffect(() => {
-    if (session && session.moduleAccess == null) {
-      refreshSession().catch(() => {});
-    }
-  }, [session]);
+    refreshSession().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const allowed = (key: string) =>
     hasAccess(session?.role, session?.moduleAccess, key);

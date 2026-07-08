@@ -17,6 +17,7 @@ const TAB_GROUPS: { module: string; tabs: { href: string; label: string }[] }[] 
     module: "People",
     tabs: [
       { href: "/hr/employees", label: "Employees" },
+      { href: "/hr/access-presets", label: "App Access" },
       { href: "/hr/certifications", label: "Certifications" },
       { href: "/hr/memos", label: "Memos" },
     ],
