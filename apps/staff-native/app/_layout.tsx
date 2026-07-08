@@ -18,6 +18,7 @@ import {
   SpaceGrotesk_700Bold,
 } from "@expo-google-fonts/space-grotesk";
 import { initSentry, Sentry } from "../lib/sentry";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import {
   clearSession,
   loadSession,
@@ -201,15 +202,17 @@ function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: {
-                backgroundColor: scheme === "dark" ? "#1A0200" : "#FFFFFF",
-              },
-              animation: "slide_from_right",
-            }}
-          />
+          <ErrorBoundary>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: {
+                  backgroundColor: scheme === "dark" ? "#1A0200" : "#FFFFFF",
+                },
+                animation: "slide_from_right",
+              }}
+            />
+          </ErrorBoundary>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
