@@ -92,7 +92,7 @@ type Detail = {
     overdueTotal: number;
     recentPOs: { id: string; orderNumber: string; status: string }[];
     unpaidInvoices: { id: string; invoiceNumber: string; balance: number; status: string; dueDate: string | null; overdue: boolean }[];
-    draftInvoices?: { id: string; invoiceNumber: string; amount: number; orderNumber: string | null; aiPrefilled: boolean }[];
+    draftInvoices?: { id: string; invoiceNumber: string; amount: number; orderNumber: string | null; aiPrefilled: boolean; photoUrl: string | null }[];
   };
   windowOpen: boolean;
   // The approved new-order prompt template is configured, so "Create & send"
@@ -1442,7 +1442,20 @@ export default function SupplierChatsPage() {
                     {detail.context.draftInvoices!.map((inv) => (
                       <div key={inv.id} className="flex items-center justify-between gap-2 rounded px-1 py-1 text-[11px]">
                         <span className="min-w-0 flex-1 truncate">
-                          <span className="font-medium">{inv.invoiceNumber}</span>
+                          {inv.photoUrl ? (
+                            <a
+                              href={inv.photoUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                              title="Open the captured invoice to verify the amount"
+                            >
+                              {inv.invoiceNumber}
+                              <ExternalLink size={10} className="opacity-60" />
+                            </a>
+                          ) : (
+                            <span className="font-medium">{inv.invoiceNumber}</span>
+                          )}
                           {inv.orderNumber && <span className="ml-1 text-muted-foreground">· {inv.orderNumber}</span>}
                         </span>
                         <span className="shrink-0 text-muted-foreground">{formatRM(inv.amount)}</span>
@@ -1458,7 +1471,7 @@ export default function SupplierChatsPage() {
                       </div>
                     ))}
                     <div className="mt-1 px-1 text-[9.5px] text-muted-foreground">
-                      Verify the amount against the photo in the thread before approving — approving makes it payable.
+                      Tap the invoice number to open the photo and check the amount, then Approve to make it payable.
                     </div>
                   </div>
                 )}
