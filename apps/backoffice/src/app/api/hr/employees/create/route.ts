@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { hashPin } from "@celsius/auth";
+import { applyStaffPreset } from "@/lib/staff-access-presets";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,9 @@ export async function POST(req: NextRequest) {
         role,
         outletId: outletId || null,
         status: "ACTIVE",
-        appAccess: [],
-        moduleAccess: {},
+        // Provision staff-app access from the position's preset instead of an
+        // empty footprint, so new hires can see their tabs on day one.
+        ...applyStaffPreset({ appAccess: [], moduleAccess: {} }, position),
         pin: pin ? await hashPin(pin) : null,
       },
       select: { id: true, name: true, role: true, outletId: true },

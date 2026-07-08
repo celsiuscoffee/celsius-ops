@@ -126,7 +126,7 @@ export function fetchMemos() {
 export function acknowledgeMemo(memoId: string, notes?: string) {
   // Acknowledge via PATCH /api/hr/memos with { id, notes }. There is no
   // /[id]/acknowledge subroute on the staff API (that path 404s).
-  return api<{ success: boolean }>(`/api/hr/memos`, {
+  return api<{ success: boolean }>("/api/hr/memos", {
     method: "PATCH",
     body: JSON.stringify({ id: memoId, notes }),
   });

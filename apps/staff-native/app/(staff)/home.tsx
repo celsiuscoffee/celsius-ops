@@ -28,6 +28,7 @@ import { Screen } from "../../components/Screen";
 import { listChecklists, type ChecklistSummary } from "../../lib/ops/checklists";
 import { getClockStatus, type ClockStatus } from "../../lib/hr/clock";
 import { useStaff } from "../../lib/store";
+import { hasAccess } from "../../lib/access";
 import { ApiError } from "../../lib/api";
 import SalesScreen from "./sales";
 
@@ -432,77 +433,90 @@ function StaffHome() {
           </View>
         ) : null}
 
-        {/* Quick actions */}
-        <View className="mt-6">
-          <Text className="mb-2 text-base font-body-semi text-espresso">
-            Quick actions
-          </Text>
-          <View className="flex-row flex-wrap gap-2">
-            <QuickAction
-              icon={ClipboardCheck}
-              label="Count"
-              onPress={() => router.push("/stock-count")}
-            />
-            <QuickAction
-              icon={Package}
-              label="Receive"
-              onPress={() => router.push("/receiving")}
-            />
-            <QuickAction
-              icon={Trash2}
-              label="Wastage"
-              onPress={() => router.push("/wastage")}
-            />
-            <QuickAction
-              icon={ArrowLeftRight}
-              label="Transfer"
-              onPress={() => router.push("/transfers")}
-            />
-            <QuickAction
-              icon={Receipt}
-              label="Claim"
-              onPress={() => router.push("/(staff)/claims/new")}
-            />
-          </View>
-        </View>
+        {/* Quick actions — gated per inventory sub-module, mirroring the
+            Inventory hub, so a staffer without inventory access doesn't see
+            buttons that would only error server-side. */}
+        {(() => {
+          const can = (k: string) => hasAccess(session?.role, session?.moduleAccess, k);
+          if (
+            !(
+              can("inventory:stock-count") ||
+              can("inventory:receivings") ||
+              can("inventory:wastage") ||
+              can("inventory:transfers") ||
+              can("inventory:pay-and-claim")
+            )
+          ) {
+            return null;
+          }
+          return (
+            <View className="mt-6">
+              <Text className="mb-2 text-base font-body-semi text-espresso">
+                Quick actions
+              </Text>
+              <View className="flex-row flex-wrap gap-2">
+                {can("inventory:stock-count") && (
+                  <QuickAction icon={ClipboardCheck} label="Count" onPress={() => router.push("/stock-count")} />
+                )}
+                {can("inventory:receivings") && (
+                  <QuickAction icon={Package} label="Receive" onPress={() => router.push("/receiving")} />
+                )}
+                {can("inventory:wastage") && (
+                  <QuickAction icon={Trash2} label="Wastage" onPress={() => router.push("/wastage")} />
+                )}
+                {can("inventory:transfers") && (
+                  <QuickAction icon={ArrowLeftRight} label="Transfer" onPress={() => router.push("/transfers")} />
+                )}
+                {can("inventory:pay-and-claim") && (
+                  <QuickAction icon={Receipt} label="Claim" onPress={() => router.push("/(staff)/claims/new")} />
+                )}
+              </View>
+            </View>
+          );
+        })()}
 
-        {/* Inventory + audits hub entry */}
-        <View className="mt-6 gap-2">
-          <Pressable
-            onPress={() => router.push("/checklists")}
-            className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
-          >
-            <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
-              <ClipboardCheck color="#A2492C" size={20} />
+        {/* Checklists + audits hub entry — gated like the tab bar so a staffer
+            without the module doesn't land on a screen that 401s. */}
+        {(() => {
+          const can = (k: string) => hasAccess(session?.role, session?.moduleAccess, k);
+          const showChecklists = can("ops:checklists");
+          const showAudit = can("ops:audit");
+          if (!showChecklists && !showAudit) return null;
+          return (
+            <View className="mt-6 gap-2">
+              {showChecklists && (
+                <Pressable
+                  onPress={() => router.push("/checklists")}
+                  className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
+                >
+                  <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
+                    <ClipboardCheck color="#A2492C" size={20} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-base font-body-semi text-espresso">Checklists</Text>
+                    <Text className="text-xs font-body text-muted-fg">Today's SOPs to complete</Text>
+                  </View>
+                  <ArrowRight color="#9CA3AF" size={16} />
+                </Pressable>
+              )}
+              {showAudit && (
+                <Pressable
+                  onPress={() => router.push("/audit")}
+                  className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
+                >
+                  <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
+                    <ClipboardList color="#A2492C" size={20} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-base font-body-semi text-espresso">Audits</Text>
+                    <Text className="text-xs font-body text-muted-fg">Spot checks & quality audits</Text>
+                  </View>
+                  <ArrowRight color="#9CA3AF" size={16} />
+                </Pressable>
+              )}
             </View>
-            <View className="flex-1">
-              <Text className="text-base font-body-semi text-espresso">
-                Checklists
-              </Text>
-              <Text className="text-xs font-body text-muted-fg">
-                Today's SOPs to complete
-              </Text>
-            </View>
-            <ArrowRight color="#9CA3AF" size={16} />
-          </Pressable>
-          <Pressable
-            onPress={() => router.push("/audit")}
-            className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
-          >
-            <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
-              <ClipboardList color="#A2492C" size={20} />
-            </View>
-            <View className="flex-1">
-              <Text className="text-base font-body-semi text-espresso">
-                Audits
-              </Text>
-              <Text className="text-xs font-body text-muted-fg">
-                Spot checks & quality audits
-              </Text>
-            </View>
-            <ArrowRight color="#9CA3AF" size={16} />
-          </Pressable>
-        </View>
+          );
+        })()}
       </ScrollView>
     </Screen>
   );
