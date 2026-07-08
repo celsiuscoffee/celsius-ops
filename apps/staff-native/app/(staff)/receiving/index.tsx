@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
@@ -86,6 +87,11 @@ export default function ReceivingPage() {
   useEffect(() => {
     load();
   }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const openPO = (po: PendingOrder) => {
     setSelectedPO(po);

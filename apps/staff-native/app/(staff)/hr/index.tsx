@@ -206,10 +206,10 @@ export default function HrIndex() {
               </View>
               <View className="items-end">
                 <Text className="text-2xl font-display text-primary">
-                  RM {allowance.totalEarned}
+                  RM {allowance.totalEarned.toFixed(2)}
                 </Text>
                 <Text className="text-xs font-body text-muted">
-                  of RM {allowance.totalMax}
+                  of RM {allowance.totalMax.toFixed(2)}
                 </Text>
               </View>
             </View>
@@ -292,9 +292,9 @@ function AllowanceBar({
   icon: React.ComponentType<{ color?: string; size?: number }>;
   badge?: string;
 }) {
-  const pct = base > 0 ? (earned / base) * 100 : 0;
+  const pct = base > 0 ? Math.min(100, (earned / base) * 100) : 0;
   return (
-    <View className="mt-3 rounded-2xl bg-white/70 px-3 py-2.5">
+    <View className="mt-3 rounded-2xl bg-surface px-3 py-2.5">
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-1.5">
           <Icon color={barColor} size={14} />
@@ -304,10 +304,10 @@ function AllowanceBar({
           ) : null}
         </View>
         <Text className="text-base font-body-bold text-espresso">
-          RM {earned} / RM {base}
+          RM {earned.toFixed(2)} / RM {base.toFixed(2)}
         </Text>
       </View>
-      <View className="mt-2 h-2 overflow-hidden rounded-full bg-gray-200">
+      <View className="mt-2 h-2 overflow-hidden rounded-full bg-primary-50">
         <View
           className="h-full"
           style={{ width: `${pct}%`, backgroundColor: barColor }}

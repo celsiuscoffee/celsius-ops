@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { RotateCcw, X as XIcon } from "lucide-react-native";
@@ -57,16 +57,22 @@ export function SelfieCapture({
     setBusy(true);
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        // Lower quality than receipt capture — selfies are for audit,
+        // Lower quality than receipt capture, selfies are for audit,
         // not OCR. Keeps the base64 payload manageable for the JSON
-        // POST body (~80–120 KB at 0.5 quality).
+        // POST body (~80-120 KB at 0.5 quality).
         quality: 0.5,
         base64: true,
         exif: false,
       });
-      if (photo?.base64) {
-        onCapture({ uri: photo.uri, base64: photo.base64 });
+      // Selfie is mandatory for clock in/out, a missing base64 payload
+      // must surface as an error, not a silent no-op.
+      if (!photo?.base64) {
+        Alert.alert("Camera error", "Couldn't take the photo. Try again.");
+        return;
       }
+      onCapture({ uri: photo.uri, base64: photo.base64 });
+    } catch {
+      Alert.alert("Camera error", "Couldn't take the photo. Try again.");
     } finally {
       setBusy(false);
     }
@@ -96,7 +102,7 @@ export function SelfieCapture({
         />
       </View>
 
-      {/* Top bar — cancel + flip */}
+      {/* Top bar, cancel + flip */}
       <View
         className="absolute inset-x-0 flex-row items-center justify-between px-5"
         style={{ top: insets.top + 8 }}

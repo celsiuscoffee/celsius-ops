@@ -297,7 +297,7 @@ export default function Profile() {
                   Change PIN
                 </Text>
                 <Text className="mt-0.5 text-xs font-body text-muted-fg">
-                  Update your 4–6 digit login PIN.
+                  Update your 6-digit login PIN.
                 </Text>
               </View>
               <ChevronRight color="#9CA3AF" size={18} />
@@ -472,8 +472,8 @@ function ChangePinSheet({
 
   async function submit() {
     setError(null);
-    if (!/^\d{4,6}$/.test(newPin)) {
-      setError("New PIN must be 4-6 digits.");
+    if (!/^\d{6}$/.test(newPin)) {
+      setError("New PIN must be exactly 6 digits.");
       return;
     }
     if (newPin !== confirmPin) {
@@ -550,7 +550,7 @@ function ChangePinSheet({
                   onChange={setCurrentPin}
                 />
                 <PinField
-                  label="New PIN (4-6 digits)"
+                  label="New PIN (6 digits)"
                   value={newPin}
                   onChange={setNewPin}
                 />

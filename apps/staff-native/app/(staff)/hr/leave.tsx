@@ -59,13 +59,21 @@ export default function LeaveScreen() {
     load();
   }, [load]);
 
-  const totalDays =
-    startDate && endDate && endDate >= startDate
-      ? Math.ceil(
-          (new Date(endDate).getTime() - new Date(startDate).getTime()) /
-            (1000 * 60 * 60 * 24),
-        ) + 1
-      : 0;
+  // Guard against malformed free-text dates: a bad end date made `endDate >=
+  // startDate` (a string compare) pass while new Date() was NaN, so totalDays
+  // came out NaN and slipped past the `<= 0` submit/button guards, POSTing
+  // total_days: null. Require real ISO dates before computing anything.
+  const isISODate = (s: string) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(s) &&
+    !Number.isNaN(new Date(`${s}T00:00:00`).getTime());
+  const datesValid =
+    isISODate(startDate) && isISODate(endDate) && endDate >= startDate;
+  const totalDays = datesValid
+    ? Math.ceil(
+        (new Date(endDate).getTime() - new Date(startDate).getTime()) /
+          (1000 * 60 * 60 * 24),
+      ) + 1
+    : 0;
 
   const submit = async () => {
     if (!startDate || !endDate || totalDays <= 0) return;

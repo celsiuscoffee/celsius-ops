@@ -34,7 +34,7 @@ function deltaStr(d: number | null): string { return d == null ? "New" : `${d >=
 function deltaUp(d: number | null): boolean { return d == null ? true : d >= 0; }
 function rmDeltaStr(cur: number, prev: number): string {
   const d = cur - prev;
-  return `${d >= 0 ? "+" : "−"}RM ${numF(Math.abs(d))}`;
+  return `${d >= 0 ? "+" : "-"}RM ${numF(Math.abs(d))}`;
 }
 
 const PAY_ICON: Record<string, any> = { cash: Banknote, card: CreditCard, duitnow_qr: QrCode, tng: Smartphone, grabpay: Bike, shopeepay: ShoppingBag, fpx: Landmark, wallet: Wallet };
@@ -68,7 +68,7 @@ export default function SalesScreen() {
 
   // One react-query entry per (mode, outlet, custom range). Switching Day/Week/
   // Month just swaps the queryKey, so a tab you've already opened comes back from
-  // cache instantly instead of re-fetching — the slow part the user hit.
+  // cache instantly instead of re-fetching, the slow part the user hit.
   const queryKey = useMemo(
     () => ["sales-dashboard", mode, selectedOutlet ?? "self", mode === "custom" ? cFrom : "", mode === "custom" ? cTo : ""] as const,
     [mode, selectedOutlet, cFrom, cTo],
@@ -77,6 +77,10 @@ export default function SalesScreen() {
     queryKey,
     queryFn: () => fetchSalesDashboard(mode, selectedOutlet, mode === "custom" ? cFrom : undefined, mode === "custom" ? cTo : undefined),
     staleTime: 60_000,
+    // Keep the previous dashboard on screen while switching outlet or
+    // opening an uncached tab (v5 keepPreviousData), the "Updating…" pill
+    // covers the refetch instead of a full-screen spinner flash.
+    placeholderData: (prev) => prev,
   });
   const error = isError ? (qError instanceof Error ? qError.message : "Failed to load") : null;
 
@@ -130,7 +134,7 @@ export default function SalesScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-[#160800]" edges={["top", "left", "right"]}>
-      {/* Fixed header — pinned at top while the content below scrolls */}
+      {/* Fixed header, pinned at top while the content below scrolls */}
       <View className="px-4 pt-3">
         <View className="flex-row items-center gap-3 pb-4">
           <View className="h-9 w-9 items-center justify-center rounded-xl bg-[#A2492C]">

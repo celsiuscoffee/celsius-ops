@@ -86,6 +86,12 @@ export default function NewClaim() {
       if (!amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
         throw new Error("Enter a valid amount.");
       }
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(purchaseDate) ||
+        Number.isNaN(new Date(`${purchaseDate}T00:00:00`).getTime())
+      ) {
+        throw new Error("Enter a valid purchase date (YYYY-MM-DD).");
+      }
       if (flow === "REQUEST" && !vendorName.trim()) {
         throw new Error("Enter the vendor's name.");
       }

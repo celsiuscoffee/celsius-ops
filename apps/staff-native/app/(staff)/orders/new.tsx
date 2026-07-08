@@ -39,7 +39,7 @@ import {
 
 // Mirrors backoffice /api/inventory/suppliers/products. Each supplier
 // carries its own product list (with negotiated price + the supplier's
-// packaging) so the picker iterates over `supplier.products` — there's
+// packaging) so the picker iterates over `supplier.products`, there's
 // no separate global product catalog fetch. This matches the backoffice
 // PO-create flow exactly; suppliers and the products they sell are the
 // same atomic unit.
@@ -74,6 +74,13 @@ type CartLine = {
 export default function NewPO() {
   const router = useRouter();
   const session = useStaff((s) => s.session);
+  // Sending a PO to a supplier is manager-only, matches the gating in
+  // orders/[id].tsx. Non-managers can still save a draft for a manager
+  // to review and send.
+  const isManager =
+    session?.role === "OWNER" ||
+    session?.role === "ADMIN" ||
+    session?.role === "MANAGER";
   const { colorScheme } = useColorScheme();
   const iconColor = colorScheme === "dark" ? "#FAFAFA" : "#160800";
 
@@ -82,7 +89,7 @@ export default function NewPO() {
 
   const [tab, setTab] = useState<"smart" | "all">("smart");
 
-  // Smart-tab AI recommendations — proxied through staff /api/ai-decisions
+  // Smart-tab AI recommendations, proxied through staff /api/ai-decisions
   // to backoffice. Scoped to the user's outlet on load.
   const [aiRecs, setAiRecs] = useState<PORecommendation[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
@@ -108,7 +115,7 @@ export default function NewPO() {
     let cancelled = false;
     (async () => {
       try {
-        // Single fetch — `/api/suppliers/products` returns suppliers
+        // Single fetch, `/api/suppliers/products` returns suppliers
         // with their products + packages + negotiated price already
         // joined. Mirrors the backoffice PO flow; no global product
         // catalog call needed.
@@ -117,7 +124,7 @@ export default function NewPO() {
         );
         if (cancelled) return;
         // Hide the "Ad-hoc Purchase" pseudo-supplier from the native
-        // picker — that's a backoffice-only construct for one-off
+        // picker, that's a backoffice-only construct for one-off
         // purchases that don't have a real supplier record.
         setSuppliers(
           Array.isArray(s) ? s.filter((x) => x.name !== "Ad-hoc Purchase") : [],
@@ -137,11 +144,11 @@ export default function NewPO() {
   // - Outlet-scoped users (BARISTA, BARISTA_LEAD): pass their outletId,
   //   backoffice scopes recs to just their outlet.
   // - Managers (OWNER / ADMIN / MANAGER) often have outletId=null in
-  //   the user record — they oversee multiple outlets. We omit outletId
+  //   the user record, they oversee multiple outlets. We omit outletId
   //   so the backoffice returns recommendations across ALL outlets.
   //   Previously the early-return guard `if (!outletId) return;` meant
   //   the fetch never fired for these users and the Smart tab silently
-  //   showed "Nothing to restock right now" — looked like nothing was
+  //   showed "Nothing to restock right now", looked like nothing was
   //   broken, but the AI never ran.
   // - Surface real errors in the empty state (instead of silently
   //   collapsing to []) so we can tell "AI ran and found nothing" from
@@ -151,7 +158,7 @@ export default function NewPO() {
     let cancelled = false;
     setAiLoading(true);
     setAiError(null);
-    // session.outletId may be null for managers/owners — that's intentional.
+    // session.outletId may be null for managers/owners, that's intentional.
     fetchAIDecisions(session?.outletId ?? undefined)
       .then((data) => {
         if (cancelled) return;
@@ -200,7 +207,7 @@ export default function NewPO() {
   }
 
   // Inline menu-style flow: each product row owns its own quantity.
-  // setProductQty(p, n) replaces addProduct(p) — qty=0 means "not in
+  // setProductQty(p, n) replaces addProduct(p), qty=0 means "not in
   // cart", any positive value means "in cart with that quantity".
   // Identity is (productId, packageId) so the same product in
   // different packages stays distinct (ADHOC case).
@@ -237,7 +244,7 @@ export default function NewPO() {
     if (next > 0) Haptics.selectionAsync().catch(() => {});
   }
 
-  // Per-product price override — kept simple as a value-update on the
+  // Per-product price override, kept simple as a value-update on the
   // cart line. The catalog price stays the supplier default.
   function setProductPrice(p: SupplierProduct, price: number) {
     setCart((prev) =>
@@ -261,7 +268,7 @@ export default function NewPO() {
     [cart],
   );
 
-  // Pre-formatted WhatsApp message — mirrors the backoffice template.
+  // Pre-formatted WhatsApp message, mirrors the backoffice template.
   function buildWhatsAppMessage() {
     const supp = suppliers.find((s) => s.id === supplierId);
     const today = new Date().toLocaleDateString("en-MY", {
@@ -270,9 +277,9 @@ export default function NewPO() {
       year: "numeric",
     });
     let msg = `📋 *Order from Celsius Coffee*\n`;
-    msg += `Outlet: ${session?.outletName ?? "—"}\nDate: ${today}\n\n`;
+    msg += `Outlet: ${session?.outletName ?? ", "}\nDate: ${today}\n\n`;
     cart.forEach((line, i) => {
-      msg += `${i + 1}. ${line.productName} — ${line.quantity} ${line.unitLabel}\n`;
+      msg += `${i + 1}. ${line.productName}, ${line.quantity} ${line.unitLabel}\n`;
     });
     if (deliveryDate)
       msg += `\nDelivery: ${new Date(deliveryDate).toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" })}`;
@@ -284,6 +291,9 @@ export default function NewPO() {
 
   async function submit(mode: "draft" | "send") {
     if (!canSubmit || !session?.outletId) return;
+    // Only managers may send a PO to the supplier. Guard here too (not
+    // just the hidden button) so the send path can't be reached.
+    if (mode === "send" && !isManager) return;
     setSubmitting(mode);
     try {
       const res = await createOrder({
@@ -303,9 +313,11 @@ export default function NewPO() {
       ).catch(() => {});
 
       if (mode === "send") {
-        // Transition to AWAITING_DELIVERY (stamps sentAt) and open the
-        // supplier's WhatsApp chat with the pre-filled itemized message.
-        await sendOrder(res.id).catch(() => {});
+        // Transition to AWAITING_DELIVERY (stamps sentAt) FIRST, only if
+        // it succeeds do we open the supplier's WhatsApp chat and
+        // navigate. A failed transition must not silently leave a PO that
+        // WhatsApp says was sent.
+        await sendOrder(res.id);
         const { msg, phone } = buildWhatsAppMessage();
         const text = encodeURIComponent(msg);
         const cleaned = phone?.replace(/\D/g, "");
@@ -318,7 +330,7 @@ export default function NewPO() {
       router.replace(`/(staff)/orders/${res.id}` as never);
     } catch (e) {
       Alert.alert(
-        "Couldn't create PO",
+        mode === "send" ? "Couldn't send" : "Couldn't create PO",
         e instanceof Error ? e.message : "Try again.",
       );
     } finally {
@@ -338,7 +350,7 @@ export default function NewPO() {
 
   // Picker is just the selected supplier's product list. Empty array
   // when no supplier is chosen (the picker can't be opened in that
-  // state anyway — empty-state card disables the trigger).
+  // state anyway, empty-state card disables the trigger).
   const pickerSource: SupplierProduct[] = supplier?.products ?? [];
   const filtered = search
     ? pickerSource.filter(
@@ -416,7 +428,7 @@ export default function NewPO() {
                   {session?.outletId
                     ? "at your outlet"
                     : "across all outlets"}{" "}
-                  per current par levels — switch to Manual to create a
+                  per current par levels, switch to Manual to create a
                   one-off PO.
                 </Text>
               </View>
@@ -514,7 +526,7 @@ export default function NewPO() {
             />
           </Field>
 
-          {/* Inline product list — menu-style. No modal hop: pick the
+          {/* Inline product list, menu-style. No modal hop: pick the
               supplier above and the catalog renders directly below.
               Each row owns its qty via a stepper; qty=0 means "not in
               cart". When qty>0 the row tints + the price input
@@ -550,7 +562,7 @@ export default function NewPO() {
             </View>
           ) : (
             <>
-              {/* Summary header — count + total. Sticks visually below
+              {/* Summary header, count + total. Sticks visually below
                   the supplier/date fields so the user always sees
                   what's in the cart while scrolling the catalog. */}
               <View className="mt-5 flex-row items-center justify-between">
@@ -657,7 +669,7 @@ export default function NewPO() {
                             </Pressable>
                           )}
                         </View>
-                        {/* Price + line total — only when in cart. Lets
+                        {/* Price + line total, only when in cart. Lets
                             the user override the catalog price if it's
                             stale, and confirms the line subtotal. */}
                         {inCart ? (
@@ -695,14 +707,14 @@ export default function NewPO() {
                 )}
               </View>
 
-              {/* Notes — only relevant once there's something to note
+              {/* Notes, only relevant once there's something to note
                   about. Sits below the catalog list. */}
               {cart.length > 0 ? (
                 <Field label="Notes (optional)">
                   <TextInput
                     value={notes}
                     onChangeText={setNotes}
-                    placeholder="e.g. urgent — needed by morning shift"
+                    placeholder="e.g. urgent, needed by morning shift"
                     placeholderTextColor="#9CA3AF"
                     multiline
                     className="min-h-14 rounded-2xl border border-border bg-surface px-4 py-3 text-base font-body text-espresso"
@@ -714,7 +726,7 @@ export default function NewPO() {
         </ScrollView>
         )}
 
-        {/* Pinned action bar — only on Manual tab (Smart has no cart yet) */}
+        {/* Pinned action bar, only on Manual tab (Smart has no cart yet) */}
         {tab === "all" ? (
           <View
             style={{
@@ -743,26 +755,30 @@ export default function NewPO() {
                   </Text>
                 )}
               </Pressable>
-              <Pressable
-                onPress={() => submit("send")}
-                disabled={!canSubmit || !!submitting}
-                className={`h-14 flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl ${
-                  canSubmit && !submitting
-                    ? "bg-primary active:opacity-90"
-                    : "bg-primary/40"
-                }`}
-              >
-                {submitting === "send" ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Send color="#FFFFFF" size={16} />
-                    <Text className="text-sm font-body-bold text-white">
-                      Send via WhatsApp
-                    </Text>
-                  </>
-                )}
-              </Pressable>
+              {/* Send is manager-only. Non-managers save a draft for a
+                  manager to review and send. */}
+              {isManager ? (
+                <Pressable
+                  onPress={() => submit("send")}
+                  disabled={!canSubmit || !!submitting}
+                  className={`h-14 flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl ${
+                    canSubmit && !submitting
+                      ? "bg-primary active:opacity-90"
+                      : "bg-primary/40"
+                  }`}
+                >
+                  {submitting === "send" ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Send color="#FFFFFF" size={16} />
+                      <Text className="text-sm font-body-bold text-white">
+                        Send via WhatsApp
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              ) : null}
             </View>
           </View>
         ) : null}
@@ -793,7 +809,7 @@ export default function NewPO() {
               <XIcon color={iconColor} size={20} />
             </Pressable>
           </View>
-          {/* Search bar — name OR phone match. 40+ active suppliers
+          {/* Search bar, name OR phone match. 40+ active suppliers
               makes scrolling painful without this. */}
           <View className="px-4 pt-3">
             <View className="flex-row items-center gap-2 rounded-2xl border border-border bg-surface px-3">
