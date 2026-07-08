@@ -46,7 +46,7 @@ export default function ClockScreen() {
   const [gps, setGps] = useState<GpsState>({ kind: "idle" });
   const [busy, setBusy] = useState(false);
   const [permsReady, setPermsReady] = useState(false);
-  // Pending action — set when the user taps Clock In/Out and we open
+  // Pending action, set when the user taps Clock In/Out and we open
   // the SelfieCapture modal. After the photo is captured we hand it
   // (plus the pending action) to submitClockAction.
   const [pendingAction, setPendingAction] = useState<
@@ -134,13 +134,13 @@ export default function ClockScreen() {
   }
 
   // Two-step flow:
-  //  1. startClockAction — biometric gate (if enabled), then open the
+  //  1. startClockAction: biometric gate (if enabled), then open the
   //     SelfieCapture modal. Defers the API call until we have a photo.
-  //  2. submitClockAction — fires once the selfie comes back; sends the
+  //  2. submitClockAction: fires once the selfie comes back; sends the
   //     base64 photo + coords to /api/hr/clock. Server uploads to
   //     hr-photos and stamps clock_in_photo_url on the log.
   //
-  //  Selfie is a HARD requirement now — there's no "skip" path. Audit
+  //  Selfie is a HARD requirement now, there's no "skip" path. Audit
   //  trail relies on every clock-in/out having a photo.
   async function startClockAction(action: "clock_in" | "clock_out") {
     if (busy || pendingAction) return;
@@ -215,7 +215,7 @@ export default function ClockScreen() {
             Enable location for auto clock-in
           </Text>
           <Text className="mt-2 text-sm font-body text-muted-fg">
-            We'll notify you to clock in when you arrive at your outlet — and
+            We'll notify you to clock in when you arrive at your outlet, and
             to clock out when you leave. Location is checked at the outlet
             boundary only, never tracked continuously.
           </Text>
@@ -247,7 +247,7 @@ export default function ClockScreen() {
                       inZone ? "text-success" : "text-espresso"
                     }`}
                   >
-                    {distance != null ? `${distance}m` : "—"}
+                    {distance != null ? `${distance}m` : "-"}
                   </Text>
                 </View>
               ) : (
@@ -318,7 +318,7 @@ export default function ClockScreen() {
         </Text>
       </View>
 
-      {/* Selfie capture — full-screen modal. Cancel returns to the
+      {/* Selfie capture, full-screen modal. Cancel returns to the
           clock screen without firing the API call; capture sends the
           base64 photo through submitClockAction. */}
       <Modal

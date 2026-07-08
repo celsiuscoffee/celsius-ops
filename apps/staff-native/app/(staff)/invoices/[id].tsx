@@ -107,7 +107,7 @@ export default function InvoiceDetailScreen() {
             prev ? { ...prev, popShortLink: r.shortLink } : prev,
           );
         } catch {
-          // ignore — falls through to the photo fallback
+          // ignore, falls through to the photo fallback
         }
       }
       if (!receiptUrl && invoice.photos.length > 0) {
@@ -343,7 +343,7 @@ export default function InvoiceDetailScreen() {
             <View className="flex-row items-center gap-2">
               <FileText color="#D97706" size={18} />
               <Text className="text-sm font-body-bold text-amber-700">
-                Goods received — waiting for invoice
+                Goods received, waiting for invoice
               </Text>
             </View>
             <Text className="mt-2 text-xs font-body text-amber-700/80">
@@ -355,7 +355,7 @@ export default function InvoiceDetailScreen() {
         ) : null}
       </ScrollView>
 
-      {/* Pinned action — placeholder gets Attach, paid invoices get
+      {/* Pinned action, placeholder gets Attach, paid invoices get
           Send POP via WhatsApp. PARTIALLY_PAID / DEPOSIT_PAID / PAID
           all trigger the POP flow with a status-aware message. */}
       {!isPlaceholder &&

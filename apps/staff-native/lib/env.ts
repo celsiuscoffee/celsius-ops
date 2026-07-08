@@ -7,7 +7,7 @@ export const SUPABASE_URL =
 export const SUPABASE_ANON_KEY =
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
-// celsius-ops project DSN (a public client value — it ships in the app bundle
+// celsius-ops project DSN (a public client value, it ships in the app bundle
 // regardless). Hardcoded as a prod fallback so crash reporting works on the CI
 // OTA even though no EXPO_PUBLIC_SENTRY_DSN is set in the EAS environment; dev
 // stays Sentry-dark to avoid local noise.

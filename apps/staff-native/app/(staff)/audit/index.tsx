@@ -40,7 +40,7 @@ export default function AuditList() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      // Parallel — list of past audits + per-template coverage.
+      // Parallel: list of past audits + per-template coverage.
       const [auditList, cov] = await Promise.all([
         listAudits().catch(() => []),
         fetchAuditCoverage().catch(() => ({ templates: [], windowDays: 30 })),
@@ -93,7 +93,7 @@ export default function AuditList() {
         }
         ListHeaderComponent={
           <View>
-            {/* Coverage cards — one per active STAFF template
+            {/* Coverage cards, one per active STAFF template
                 (Barista skills, Kitchen skills, etc.). Shows who's
                 NOT been audited in the last 30 days + the average
                 score of those who have. Tap any card to expand the
@@ -191,7 +191,7 @@ export default function AuditList() {
   );
 }
 
-// Per-template coverage card — surfaces "who's not audited yet"
+// Per-template coverage card, surfaces "who's not audited yet"
 // and the average score of those who have been. Tap to expand the
 // auditee list and start an audit on any specific staff member.
 function CoverageCard({
@@ -210,7 +210,7 @@ function CoverageCard({
   const Chevron = open ? ChevronUp : ChevronDown;
 
   // Sort auditees so pending (never / stale) bubble to the top, then
-  // by score asc within recent — lowest performers first so managers
+  // by score asc within recent, lowest performers first so managers
   // see who to coach.
   const sorted = useMemo(() => {
     const order: Record<string, number> = { never: 0, stale: 1, recent: 2 };

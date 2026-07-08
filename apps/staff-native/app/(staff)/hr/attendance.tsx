@@ -85,7 +85,7 @@ function AttendanceCard({ item }: { item: AttendanceItem }) {
       <View className="flex-row items-center justify-between">
         <Text className="text-base font-body-semi text-espresso">{dayLabel}</Text>
         <Text className="text-sm font-display-medium text-espresso">
-          {item.total_hours != null ? `${item.total_hours.toFixed(2)}h` : "—"}
+          {item.total_hours != null ? `${item.total_hours.toFixed(2)}h` : "-"}
         </Text>
       </View>
       <Text className="mt-1 text-xs text-muted-fg">

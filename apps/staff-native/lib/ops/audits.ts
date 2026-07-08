@@ -152,7 +152,7 @@ export function getAuditInsights(outletId?: string) {
   return api<AuditInsightsResponse>(`/api/audits/insights${q}`);
 }
 
-// Per-staff audit coverage — answers "who hasn't been audited yet, and
+// Per-staff audit coverage, answers "who hasn't been audited yet, and
 // how did the ones audited do?". Returned per active STAFF template.
 export type AuditCoverageStatus = "never" | "stale" | "recent";
 

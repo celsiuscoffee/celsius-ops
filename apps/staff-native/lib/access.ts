@@ -1,4 +1,4 @@
-// Mirror of apps/staff/src/lib/access.ts — gates UI to what the
+// Mirror of apps/staff/src/lib/access.ts, gates UI to what the
 // signed-in user has access to. Server endpoints still validate
 // independently, so this is UX only.
 //

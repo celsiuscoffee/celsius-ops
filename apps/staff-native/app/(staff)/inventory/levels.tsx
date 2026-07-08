@@ -262,5 +262,5 @@ function statusStyle(s: StockItem["status"]) {
     };
   if (s === "ok")
     return { tint: "text-success", bg: "bg-success/10", label: "OK" };
-  return { tint: "text-muted-fg", bg: "bg-muted/10", label: "—" };
+  return { tint: "text-muted-fg", bg: "bg-muted/10", label: "-" };
 }

@@ -5,7 +5,7 @@ type Props = PropsWithChildren<{
   onPress?: () => void;
   variant?: "default" | "muted" | "accent";
   pad?: "sm" | "md" | "lg";
-  /** Default true — soft terracotta-tinted shadow gives every card
+  /** Default true, soft terracotta-tinted shadow gives every card
    *  depth against the page surface. Opt out with `elevated={false}`
    *  on tightly-packed list rows where the shadow would crowd. */
   elevated?: boolean;

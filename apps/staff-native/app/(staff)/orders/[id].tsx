@@ -102,7 +102,7 @@ export default function OrderDetailScreen() {
     try {
       await sendOrder(order.id);
       // Try to open WhatsApp with a pre-filled message to the supplier.
-      // Best-effort — if the supplier has no phone, just shows the status
+      // Best-effort, if the supplier has no phone, just shows the status
       // change confirmation.
       const phone = order.supplierPhone?.replace(/\D/g, "");
       if (phone) {
@@ -387,7 +387,7 @@ export default function OrderDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Manager actions — pinned bottom */}
+      {/* Manager actions, pinned bottom */}
       {(canApprove || canSend || canCancel) && (
         <View
           style={{

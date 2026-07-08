@@ -110,7 +110,7 @@ export default function Profile() {
     }
   }
 
-  // Manual OTA pull — the default expo-updates flow downloads in the
+  // Manual OTA pull, the default expo-updates flow downloads in the
   // background and only applies on the NEXT cold launch, which is
   // confusing for testers who expect "tap refresh, see new UI". This
   // forces the fetch + reload synchronously.
@@ -119,7 +119,7 @@ export default function Profile() {
     if (checkingUpdate) return;
     setCheckingUpdate(true);
     try {
-      // Skip in dev — Updates APIs no-op (or throw) in Expo Go / dev
+      // Skip in dev, Updates APIs no-op (or throw) in Expo Go / dev
       // client, and there's nothing to fetch anyway.
       if (__DEV__ || !Updates.isEnabled) {
         Alert.alert(
@@ -193,7 +193,7 @@ export default function Profile() {
                   className="text-xl font-display text-espresso"
                   numberOfLines={1}
                 >
-                  {session?.name ?? "—"}
+                  {session?.name ?? "-"}
                 </Text>
                 <Text className="mt-0.5 text-sm font-body-semi text-primary">
                   {role}
@@ -238,7 +238,7 @@ export default function Profile() {
                 {incomplete ? "Complete your personal info" : "Personal info"}
               </Text>
               <Text className="mt-0.5 text-xs font-body text-muted-fg">
-                Address, IC, emergency contact — needed for payslips and tax.
+                Address, IC, emergency contact, needed for payslips and tax.
               </Text>
               {incomplete ? (
                 <View className="mt-3 flex-row items-center gap-2">
@@ -305,7 +305,7 @@ export default function Profile() {
           </View>
         </Section>
 
-        {/* Appearance — Light / Dark / System tri-toggle */}
+        {/* Appearance: Light / Dark / System tri-toggle */}
         <Section title="Appearance">
           <View className="flex-row items-center gap-2 rounded-3xl border border-border bg-surface p-2">
             <AppearanceChip
@@ -357,7 +357,7 @@ export default function Profile() {
           </Section>
         ) : null}
 
-        {/* App — manual OTA pull. Default expo-updates behavior is
+        {/* App: manual OTA pull. Default expo-updates behavior is
             background-download + apply-on-next-launch, which trips up
             testers expecting a refresh button. This forces fetch +
             reload synchronously. */}
@@ -380,7 +380,7 @@ export default function Profile() {
                 Check for updates
               </Text>
               <Text className="mt-0.5 text-xs font-body text-muted-fg">
-                Pull the latest build now — no need to force-quit.
+                Pull the latest build now, no need to force-quit.
               </Text>
             </View>
             <ChevronRight color="#9CA3AF" size={18} />

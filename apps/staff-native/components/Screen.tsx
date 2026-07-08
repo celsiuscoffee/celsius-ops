@@ -7,7 +7,7 @@ type Props = PropsWithChildren<{
   // Screens with a pinned bottom action bar pass ["top","left","right"]
   // so the bar sits flush against the device tab bar instead of leaving
   // a 34px home-indicator gap. Previously this prop was silently
-  // dropped at runtime — the type didn't declare it and the component
+  // dropped at runtime, the type didn't declare it and the component
   // ignored it, so every "fix" that passed edges had no effect.
   edges?: ReadonlyArray<Edge>;
 }>;
