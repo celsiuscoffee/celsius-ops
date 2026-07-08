@@ -188,7 +188,7 @@ export default function MySkills() {
                       {a.date}
                     </Text>
                     <Text className="flex-1 text-xs font-body text-muted-fg">
-                      {a.auditor.name}
+                      {a.auditor?.name ?? "Unknown"}
                     </Text>
                     <View
                       className={`rounded-full px-2 py-0.5 ${

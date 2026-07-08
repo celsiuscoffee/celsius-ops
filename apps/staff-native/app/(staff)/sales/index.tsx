@@ -126,7 +126,7 @@ export default function SalesScreen() {
 
   const s = data?.summary;
   const g = data?.growth;
-  const maxRound = data ? Math.max(1, ...data.rounds.map((r) => r.revenue)) : 1;
+  const maxRound = data?.rounds?.length ? Math.max(1, ...data.rounds.map((r) => r.revenue)) : 1;
 
   return (
     <SafeAreaView className="flex-1 bg-[#160800]" edges={["top", "left", "right"]}>
@@ -212,7 +212,7 @@ export default function SalesScreen() {
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
               <Text className="font-display text-base text-[#F5F3F0]">Total Accumulative Sales <Text className="font-body text-[#F5F3F057]">(RM)</Text></Text>
               <Text className="mb-2 mt-0.5 font-body text-[13px] text-[#F5F3F08a]">{data.cur.label} vs {data.prev.label} · running total</Text>
-              <AccumChart series={data.series} curLabel={data.cur.label} prevLabel={data.prev.label} />
+              <AccumChart series={data.series ?? []} curLabel={data.cur.label} prevLabel={data.prev.label} />
               <View className="mt-3 flex-row justify-center gap-4">
                 <Legend color="#FBBF24" label={data.cur.label} />
                 <Legend color="#8FB3F0" label={data.prev.label} />
@@ -274,7 +274,7 @@ export default function SalesScreen() {
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
               <Text className="font-display text-base text-[#F5F3F0]">Payment methods</Text>
               <Text className="mb-1 mt-0.5 font-body text-[13px] text-[#F5F3F08a]">How customers paid</Text>
-              {data.payments.length === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No payments in this period.</Text> :
+              {(data.payments?.length ?? 0) === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No payments in this period.</Text> :
                 data.payments.map((p) => (
                   <Row key={p.key} icon={PAY_ICON[p.key] ?? Wallet} color={PAY_COLOR[p.key] ?? "#a78bfa"} name={p.label} pct={p.pct} amount={rmF(p.amount)} />
                 ))}
@@ -291,9 +291,9 @@ export default function SalesScreen() {
                 ))}
               </View>
               {dim === "channel"
-                ? (data.channels.length === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No sales in this period.</Text> :
+                ? ((data.channels?.length ?? 0) === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No sales in this period.</Text> :
                     data.channels.map((c) => <Row key={c.key} icon={CHAN_ICON[c.key] ?? Utensils} color={CHAN_COLOR[c.key] ?? "#E0875F"} name={c.label} pct={c.pct} amount={rmF(c.revenue)} orders={c.orders} />))
-                : data.rounds.map((r) => <Row key={r.key} icon={ROUND_ICON[r.key] ?? Coffee} color="#FBBF24" name={r.label} pct={Math.round((r.revenue / maxRound) * 100)} amount={rmF(r.revenue)} orders={r.orders} />)}
+                : (data.rounds ?? []).map((r) => <Row key={r.key} icon={ROUND_ICON[r.key] ?? Coffee} color="#FBBF24" name={r.label} pct={Math.round((r.revenue / maxRound) * 100)} amount={rmF(r.revenue)} orders={r.orders} />)}
             </View>
 
             {data.warnings?.length ? (

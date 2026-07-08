@@ -28,7 +28,7 @@ function rmShort(v: number): string {
  * point. The marker defaults to the latest point that has data ("now").
  */
 export function AccumChart({
-  series,
+  series = [],
   curLabel = "Today",
   prevLabel = "Yesterday",
   height = 210,

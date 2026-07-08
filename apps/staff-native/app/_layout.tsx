@@ -18,6 +18,7 @@ import {
   SpaceGrotesk_700Bold,
 } from "@expo-google-fonts/space-grotesk";
 import { initSentry, Sentry } from "../lib/sentry";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import {
   clearSession,
   loadSession,
@@ -153,6 +154,7 @@ function RootLayout() {
           // will re-trigger this on the next launch.
         }
       })
+      .catch(() => setSession(null))
       .finally(() => setSessionHydrated(true));
   }, [setSession]);
 
@@ -201,19 +203,32 @@ function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: {
-                backgroundColor: scheme === "dark" ? "#1A0200" : "#FFFFFF",
-              },
-              animation: "slide_from_right",
-            }}
-          />
+          <ErrorBoundary>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: {
+                  backgroundColor: scheme === "dark" ? "#1A0200" : "#FFFFFF",
+                },
+                animation: "slide_from_right",
+              }}
+            />
+          </ErrorBoundary>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
 
-export default Sentry.wrap(RootLayout);
+// Outer boundary so a throw in RootLayout's OWN render (fonts, boot wiring)
+// during launch shows the recoverable card instead of a white-screen crash —
+// the inner boundary around <Stack> only covers the screens below it.
+function RootLayoutWithBoundary() {
+  return (
+    <ErrorBoundary>
+      <RootLayout />
+    </ErrorBoundary>
+  );
+}
+
+export default Sentry.wrap(RootLayoutWithBoundary);

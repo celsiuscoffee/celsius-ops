@@ -53,9 +53,9 @@ function StatsCard({ stats }: { stats: { totalHours: number; totalOT: number; da
         Last 30 days
       </Text>
       <View className="mt-3 flex-row justify-between">
-        <Stat label="Days" value={String(stats.daysWorked)} />
-        <Stat label="Hours" value={stats.totalHours.toFixed(1)} />
-        <Stat label="OT" value={stats.totalOT.toFixed(1)} />
+        <Stat label="Days" value={String(stats.daysWorked ?? 0)} />
+        <Stat label="Hours" value={Number(stats.totalHours ?? 0).toFixed(1)} />
+        <Stat label="OT" value={Number(stats.totalOT ?? 0).toFixed(1)} />
       </View>
     </View>
   );

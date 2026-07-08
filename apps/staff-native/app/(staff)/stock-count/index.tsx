@@ -188,7 +188,7 @@ export default function StockCount() {
         ...g,
         items: g.items.filter(
           (i) =>
-            i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q),
+            (i.name ?? "").toLowerCase().includes(q) || (i.sku ?? "").toLowerCase().includes(q),
         ),
       }))
       .filter((g) => g.items.length > 0);
