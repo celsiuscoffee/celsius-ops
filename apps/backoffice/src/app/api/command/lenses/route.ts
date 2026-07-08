@@ -88,25 +88,46 @@ export async function GET(request: NextRequest) {
     } catch (e) { console.error("[lenses] wastage", e); return null; }
   })();
 
-  // ── People cost (latest confirmed monthly payroll, vs that month's sales) ─
-  // Company figure = whole payroll vs whole-company sales. Per-outlet figure =
-  // only the staff directly assigned to that outlet (User.outletId) vs that
-  // outlet's sales — HQ / rotating / unassigned staff have no single outlet, so
-  // they sit in `unassignedRM` and the company total, never in one outlet's %.
+  // ── People cost (latest closed payroll month, per outlet, vs that month's sales) ─
+  // Payroll is monthly and lands in fin_payroll_actuals — the authoritative
+  // BrioHR ledger, one row per (period, company, outlet), tagged to the real
+  // outlet so the per-outlet split is the actual assigned cost. The current
+  // calendar month is usually still open (no actuals yet), so we show the most
+  // recent month that HAS actuals at or before the selected window — normally the
+  // last closed month, labelled so it reads as e.g. "Jun 2026". HQ / management
+  // rows (outlet_id NULL) are a group cost: they sit in the company roll-up and
+  // `unassignedRM`, never inside a single outlet's %.
   const peopleCost = (async () => {
     try {
-      const { data: runs } = await supabase
-        .from("hr_payroll_runs")
-        .select("id, period_month, period_year, total_gross, total_employer_cost")
-        .in("status", ["confirmed", "paid"]).eq("cycle_type", "monthly")
-        .order("period_year", { ascending: false }).order("period_month", { ascending: false }).limit(1);
-      const run = runs?.[0];
-      if (!run) return null;
-      const companyCostRM = (Number(run.total_gross) || 0) + (Number(run.total_employer_cost) || 0);
-      const mFrom = new Date(`${run.period_year}-${String(run.period_month).padStart(2, "0")}-01T00:00:00+08:00`);
-      const mTo = new Date(Date.UTC(run.period_year, run.period_month, 0, 23, 59, 59)); // last day of month
+      const monthEnd = toDate.slice(0, 7); // 'YYYY-MM'
+      const latest = await prisma.$queryRaw<{ ym: string }[]>`
+        SELECT to_char(period, 'YYYY-MM') AS ym FROM fin_payroll_actuals
+        WHERE to_char(period, 'YYYY-MM') <= ${monthEnd}
+        ORDER BY period DESC LIMIT 1`;
+      const ym = latest[0]?.ym;
+      if (!ym) return null;
+      const [py, pm] = ym.split("-").map(Number);
 
-      // Per-outlet sales for the payroll month.
+      // Per-outlet salary + employer statutory for that month.
+      const rows = await prisma.$queryRaw<{ outlet_id: string | null; cost: number }[]>`
+        SELECT outlet_id, COALESCE(SUM(salary + employer_stat), 0)::float AS cost
+        FROM fin_payroll_actuals
+        WHERE to_char(period, 'YYYY-MM') = ${ym}
+        GROUP BY outlet_id`;
+      const inScope = new Set(outlets.map((o) => o.id));
+      const costByOutlet: Record<string, number> = {};
+      let unassignedRM = 0;   // HQ / management (null outlet)
+      let companyCostRM = 0;  // total group people cost for the month
+      for (const r of rows) {
+        const c = Number(r.cost) || 0;
+        companyCostRM += c;
+        if (r.outlet_id && inScope.has(r.outlet_id)) costByOutlet[r.outlet_id] = (costByOutlet[r.outlet_id] || 0) + c;
+        else if (r.outlet_id == null) unassignedRM += c;
+      }
+
+      // Sales for that same payroll month, per in-scope outlet.
+      const mFrom = new Date(`${ym}-01T00:00:00+08:00`);
+      const mTo = new Date(Date.UTC(py, pm, 0, 23, 59, 59)); // last day of month
       const salesByOutlet: Record<string, number> = {};
       await Promise.all(outlets.map(async (o) => {
         salesByOutlet[o.id] = await getUnifiedSalesForOutlet({ outletId: o.id, storehubStoreId: o.storehubId, loyaltyOutletId: o.loyaltyOutletId, pickupStoreId: o.pickupStoreId, cutoverAt: o.posNativeCutoverAt }, mFrom, mTo)
@@ -114,25 +135,6 @@ export async function GET(request: NextRequest) {
       }));
       const monthSales = Object.values(salesByOutlet).reduce((a, b) => a + b, 0);
 
-      // Per-outlet labour cost = payroll items mapped to each staff's assigned outlet.
-      const { data: items } = await supabase
-        .from("hr_payroll_items")
-        .select("user_id, total_gross, epf_employer, socso_employer, eis_employer")
-        .eq("payroll_run_id", run.id);
-      const users = await prisma.user.findMany({
-        where: { id: { in: (items ?? []).map((i) => i.user_id) } },
-        select: { id: true, outletId: true },
-      });
-      const outletByUser = new Map(users.map((u) => [u.id, u.outletId]));
-      const inScope = new Set(outlets.map((o) => o.id));
-      const costByOutlet: Record<string, number> = {};
-      let unassignedRM = 0;
-      for (const it of items ?? []) {
-        const cost = (Number(it.total_gross) || 0) + (Number(it.epf_employer) || 0) + (Number(it.socso_employer) || 0) + (Number(it.eis_employer) || 0);
-        const oid = outletByUser.get(it.user_id);
-        if (oid && inScope.has(oid)) costByOutlet[oid] = (costByOutlet[oid] || 0) + cost;
-        else unassignedRM += cost;
-      }
       const byOutlet: Record<string, { costRM: number; pct: number | null }> = {};
       for (const o of outlets) {
         const c = Math.round(costByOutlet[o.id] || 0);
@@ -144,7 +146,7 @@ export async function GET(request: NextRequest) {
       // that outlet's figure at the top level; otherwise show the company roll-up.
       const scoped = scopeOutletId ? byOutlet[scopeOutletId] : null;
       return {
-        label: `${MONTHS[run.period_month - 1]} ${run.period_year}`,
+        label: `${MONTHS[pm - 1]} ${py}`,
         costRM: scoped ? scoped.costRM : Math.round(companyCostRM),
         pct: scoped ? scoped.pct : monthSales > 0 ? Math.round((companyCostRM / monthSales) * 100) : null,
         unassignedRM: Math.round(unassignedRM),
