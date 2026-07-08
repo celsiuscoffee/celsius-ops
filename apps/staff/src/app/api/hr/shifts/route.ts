@@ -23,5 +23,11 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ shifts: shifts || [] });
+  // The native Shift type (apps/staff-native/lib/hr/api.ts) reads
+  // `shift.position`, but the row stores it as `role_type` (no `position`
+  // column). Alias it additively, same mapping the backoffice grid uses.
+  const rows = (shifts || []) as Array<Record<string, unknown>>;
+  const mapped = rows.map((row) => ({ ...row, position: row.role_type ?? null }));
+
+  return NextResponse.json({ shifts: mapped });
 }

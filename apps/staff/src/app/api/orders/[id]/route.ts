@@ -68,7 +68,53 @@ export async function GET(
     },
   });
   if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(order);
+
+  // Flatten to the same shape the LIST route emits (see
+  // apps/staff/src/app/api/orders/route.ts) so the native detail screen
+  // (apps/staff-native/app/(staff)/orders/[id].tsx, OrderDetail in
+  // apps/staff-native/lib/ops/orders.ts) reads flat string fields,
+  // `supplier`/`outlet`/`product` are names, Decimals become numbers.
+  // `invoices[]` is passed through as the native list expects it.
+  return NextResponse.json({
+    id: order.id,
+    orderNumber: order.orderNumber,
+    outlet: order.outlet.name,
+    outletCode: order.outlet.code,
+    supplierId: order.supplier?.id ?? "",
+    supplier: order.supplier?.name ?? "Unknown",
+    supplierPhone: order.supplier?.phone ?? "",
+    status: order.status,
+    totalAmount: Number(order.totalAmount),
+    notes: order.notes,
+    deliveryDate: order.deliveryDate?.toISOString().split("T")[0] ?? null,
+    createdBy: order.createdBy?.name ?? "",
+    approvedBy: order.approvedBy?.name ?? null,
+    approvedAt: order.approvedAt?.toISOString() ?? null,
+    sentAt: order.sentAt?.toISOString() ?? null,
+    createdAt: order.createdAt.toISOString(),
+    items: order.items.map((i) => ({
+      id: i.id,
+      productId: i.productId,
+      product: i.product.name,
+      sku: i.product.sku,
+      uom: i.productPackage?.packageLabel ?? i.product.baseUom,
+      shelfLifeDays: i.product.shelfLifeDays,
+      package: i.productPackage?.packageLabel ?? i.productPackage?.packageName ?? "",
+      quantity: Number(i.quantity),
+      unitPrice: Number(i.unitPrice),
+      totalPrice: Number(i.totalPrice),
+      notes: i.notes,
+    })),
+    invoices: order.invoices.map((inv) => ({
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      amount: Number(inv.amount),
+      status: inv.status,
+      dueDate: inv.dueDate?.toISOString() ?? null,
+      paidAt: inv.paidAt?.toISOString() ?? null,
+    })),
+    receivingCount: order._count.receivings,
+  });
 }
 
 export async function PATCH(
