@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import type { OrderStatus } from "@celsius/db";
+import type { OrderStatus, InvoiceStatus } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { paymentModel } from "@/lib/inventory/payment-model";
@@ -77,12 +77,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
       dueDate: string | null;
       overdue: boolean;
     }[],
+    // AI-captured invoices awaiting human sign-off (DRAFT). Kept OUT of the
+    // unpaid figures — a draft is an unverified capture, not a confirmed
+    // liability — and surfaced with an Approve action right here in the chat,
+    // where the supplier's invoice message lives.
+    draftInvoices: [] as {
+      id: string;
+      invoiceNumber: string;
+      amount: number;
+      orderNumber: string | null;
+      aiPrefilled: boolean;
+    }[],
   };
 
   if (supplierId) {
     const closedStatuses: OrderStatus[] = ["COMPLETED", "CANCELLED"];
     const openFilter = { supplierId, status: { notIn: closedStatuses } };
-    const [s, openPOs, recentPOs, unpaid, overdue, unpaidList] = await Promise.all([
+    // Confirmed payables exclude DRAFT (an unverified AI capture) — those are
+    // surfaced separately as draftInvoices with an Approve action.
+    const payableExcluded: InvoiceStatus[] = ["PAID", "DRAFT"];
+    const payableFilter = { supplierId, status: { notIn: payableExcluded } };
+    const [s, openPOs, recentPOs, unpaid, overdue, unpaidList, draftList] = await Promise.all([
       prisma.supplier.findUnique({
         where: { id: supplierId },
         select: { id: true, name: true, phone: true, deliveryDays: true, paymentTerms: true, leadTimeDays: true, depositPercent: true, automationMode: true },
@@ -95,18 +110,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
         select: { id: true, orderNumber: true, status: true },
       }),
       prisma.invoice.aggregate({
-        where: { supplierId, status: { not: "PAID" } },
+        where: payableFilter,
         _sum: { amount: true, amountPaid: true },
       }),
       prisma.invoice.aggregate({
-        where: { supplierId, status: { not: "PAID" }, dueDate: { lt: new Date() } },
+        where: { ...payableFilter, dueDate: { lt: new Date() } },
         _sum: { amount: true, amountPaid: true },
       }),
       prisma.invoice.findMany({
-        where: { supplierId, status: { not: "PAID" } },
+        where: payableFilter,
         orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
         take: 12,
         select: { id: true, invoiceNumber: true, amount: true, amountPaid: true, status: true, dueDate: true },
+      }),
+      prisma.invoice.findMany({
+        where: { supplierId, status: "DRAFT" },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+        select: { id: true, invoiceNumber: true, amount: true, aiPrefilledAt: true, order: { select: { orderNumber: true } } },
       }),
     ]);
     supplier = s
@@ -127,6 +148,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
         status: i.status,
         dueDate: i.dueDate ? i.dueDate.toISOString().slice(0, 10) : null,
         overdue: !!i.dueDate && i.dueDate.getTime() < nowMs,
+      })),
+      draftInvoices: draftList.map((i) => ({
+        id: i.id,
+        invoiceNumber: i.invoiceNumber,
+        amount: Number(i.amount),
+        orderNumber: i.order?.orderNumber ?? null,
+        aiPrefilled: i.aiPrefilledAt != null,
       })),
     };
   }

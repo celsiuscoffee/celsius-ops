@@ -92,6 +92,7 @@ type Detail = {
     overdueTotal: number;
     recentPOs: { id: string; orderNumber: string; status: string }[];
     unpaidInvoices: { id: string; invoiceNumber: string; balance: number; status: string; dueDate: string | null; overdue: boolean }[];
+    draftInvoices?: { id: string; invoiceNumber: string; amount: number; orderNumber: string | null; aiPrefilled: boolean }[];
   };
   windowOpen: boolean;
   // The approved new-order prompt template is configured, so "Create & send"
@@ -262,6 +263,7 @@ export default function SupplierChatsPage() {
   const [replyingTo, setReplyingTo] = useState<Msg | null>(null);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [approvingInvId, setApprovingInvId] = useState<string | null>(null);
 
   // ── New PO panel ──────────────────────────────────────────────
   const [poOpen, setPoOpen] = useState(false);
@@ -654,6 +656,33 @@ export default function SupplierChatsPage() {
       setApplyError("Network error");
     } finally {
       setApplying(false);
+    }
+  }
+
+  // Approve a captured DRAFT invoice straight from the chat — confirms the AI
+  // read and promotes it DRAFT → PENDING (a real payable). Same endpoint the
+  // Invoices screen uses; approving here just saves the trip since the
+  // supplier's invoice message lives in this thread.
+  async function approveDraftInvoice(invoiceId: string) {
+    if (!selected || approvingInvId) return;
+    setApprovingInvId(invoiceId);
+    setApplyError(null);
+    try {
+      const res = await fetch(`/api/inventory/invoices/${invoiceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmAiPrefill: true }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setApplyError(json.error ?? "Approve failed");
+        return;
+      }
+      mutateDetail();
+    } catch {
+      setApplyError("Network error");
+    } finally {
+      setApprovingInvId(null);
     }
   }
 
@@ -1405,6 +1434,34 @@ export default function SupplierChatsPage() {
                     </a>
                   )}
                 </div>
+                {(detail.context.draftInvoices?.length ?? 0) > 0 && (
+                  <div className="border-b border-border py-3">
+                    <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-violet-600 dark:text-violet-400">
+                      <FileText size={12} /> Captured — approve to pay
+                    </div>
+                    {detail.context.draftInvoices!.map((inv) => (
+                      <div key={inv.id} className="flex items-center justify-between gap-2 rounded px-1 py-1 text-[11px]">
+                        <span className="min-w-0 flex-1 truncate">
+                          <span className="font-medium">{inv.invoiceNumber}</span>
+                          {inv.orderNumber && <span className="ml-1 text-muted-foreground">· {inv.orderNumber}</span>}
+                        </span>
+                        <span className="shrink-0 text-muted-foreground">{formatRM(inv.amount)}</span>
+                        <button
+                          onClick={() => approveDraftInvoice(inv.id)}
+                          disabled={approvingInvId === inv.id}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-md bg-violet-500 px-2 py-1 text-[10px] font-medium text-white hover:bg-violet-600 disabled:opacity-50"
+                          title="Confirm the captured amount and make this a payable"
+                        >
+                          {approvingInvId === inv.id ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                          Approve
+                        </button>
+                      </div>
+                    ))}
+                    <div className="mt-1 px-1 text-[9.5px] text-muted-foreground">
+                      Verify the amount against the photo in the thread before approving — approving makes it payable.
+                    </div>
+                  </div>
+                )}
                 {detail.context.unpaidInvoices.length > 0 && (
                   <div className="border-b border-border py-3">
                     <div className="mb-1.5 text-[11px] text-muted-foreground">Unpaid invoices</div>
