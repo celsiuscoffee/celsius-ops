@@ -35,7 +35,20 @@ export async function GET(
   if (!invoice) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  return NextResponse.json(invoice);
+  // Serialize Prisma Decimals to numbers (raw Prisma emits them as strings),
+  // mirroring the list route (apps/staff/src/app/api/invoices/route.ts). The
+  // native detail screen (apps/staff-native/app/(staff)/invoices/[id].tsx)
+  // reads amount/amountPaid/depositAmount and order.totalAmount as numbers.
+  return NextResponse.json({
+    ...invoice,
+    amount: Number(invoice.amount),
+    amountPaid: invoice.amountPaid != null ? Number(invoice.amountPaid) : null,
+    depositAmount:
+      invoice.depositAmount != null ? Number(invoice.depositAmount) : null,
+    order: invoice.order
+      ? { ...invoice.order, totalAmount: Number(invoice.order.totalAmount) }
+      : invoice.order,
+  });
 }
 
 export async function PATCH(

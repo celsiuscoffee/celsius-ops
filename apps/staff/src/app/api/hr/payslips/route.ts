@@ -25,5 +25,32 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ payslips: items || [] });
+  // Add the flat aliases the native Payslip type reads
+  // (apps/staff-native/lib/hr/api.ts): base_salary, overtime_pay (sum of
+  // all OT tiers), pcb, and allowances as a NUMBER (sum of the
+  // `allowances` jsonb amounts). Raw columns + the joined run are kept.
+  const rows = (items || []) as Array<Record<string, unknown>>;
+  const payslips = rows.map((row) => {
+    const num = (v: unknown) => Number(v ?? 0) || 0;
+    const overtime_pay =
+      num(row.ot_1x_amount) +
+      num(row.ot_1_5x_amount) +
+      num(row.ot_2x_amount) +
+      num(row.ot_3x_amount);
+    const alloc = (row.allowances ?? null) as
+      | Record<string, { amount?: number } | null>
+      | null;
+    const allowancesTotal = alloc
+      ? Object.values(alloc).reduce((sum, a) => sum + num(a?.amount), 0)
+      : 0;
+    return {
+      ...row,
+      base_salary: num(row.basic_salary),
+      overtime_pay,
+      pcb: num(row.pcb_tax),
+      allowances: allowancesTotal,
+    };
+  });
+
+  return NextResponse.json({ payslips });
 }
