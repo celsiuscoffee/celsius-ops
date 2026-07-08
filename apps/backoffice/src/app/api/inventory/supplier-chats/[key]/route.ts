@@ -87,6 +87,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
       amount: number;
       orderNumber: string | null;
       aiPrefilled: boolean;
+      photoUrl: string | null;
     }[],
   };
 
@@ -127,7 +128,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
         where: { supplierId, status: "DRAFT" },
         orderBy: { createdAt: "desc" },
         take: 12,
-        select: { id: true, invoiceNumber: true, amount: true, aiPrefilledAt: true, order: { select: { orderNumber: true } } },
+        select: { id: true, invoiceNumber: true, amount: true, aiPrefilledAt: true, photos: true, order: { select: { orderNumber: true } } },
       }),
     ]);
     supplier = s
@@ -155,6 +156,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
         amount: Number(i.amount),
         orderNumber: i.order?.orderNumber ?? null,
         aiPrefilled: i.aiPrefilledAt != null,
+        photoUrl: i.photos?.[0] ?? null,
       })),
     };
   }
