@@ -5,6 +5,7 @@ export default function HrLayout() {
     <Stack screenOptions={{ headerShown: false }}
     >
       <Stack.Screen name="index" options={{ title: "HR", headerShown: false }} />
+      <Stack.Screen name="scoreboard" options={{ title: "My Scoreboard" }} />
       <Stack.Screen name="shifts" options={{ title: "My Shifts" }} />
       <Stack.Screen name="attendance" options={{ title: "Attendance" }} />
       <Stack.Screen name="leave" options={{ title: "Leave" }} />
