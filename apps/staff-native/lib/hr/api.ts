@@ -40,22 +40,28 @@ export type LeaveRequest = {
 
 export type Payslip = {
   id: string;
-  gross_pay: number;
   net_pay: number;
   base_salary: number;
   overtime_pay: number;
   allowances: number;
-  deductions: number;
+  total_gross: number;
+  total_deductions: number;
   epf_employee: number;
   socso_employee: number;
   eis_employee: number;
   pcb: number;
+  epf_employer: number;
+  socso_employer: number;
+  eis_employer: number;
   hr_payroll_runs: {
     status: string;
-    period_month: number;
-    period_year: number;
+    cycle_type: string | null;
+    period_month: number | null;
+    period_year: number | null;
+    period_start: string | null;
+    period_end: string | null;
     confirmed_at: string | null;
-  };
+  } | null;
 };
 
 export type Memo = {
