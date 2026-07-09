@@ -178,9 +178,30 @@ function RootLayout() {
       const data = res.notification.request.content.data as
         | { kind?: string }
         | undefined;
-      if (!data) return;
-      if (data.kind === "geofence_enter" || data.kind === "geofence_exit") {
+      const kind = data?.kind;
+      if (!kind) return;
+      if (kind === "geofence_enter" || kind === "geofence_exit") {
         router.push("/(staff)/clock");
+        return;
+      }
+      // Ops-workspace notifications (mirrors of the WhatsApp ops pulse, tagged by
+      // classifyPush in backoffice ops-pulse/sender). Open the most relevant
+      // screen; the full detail lives in WhatsApp + the ops inbox.
+      switch (kind) {
+        case "scoreboard":
+          router.push("/(staff)/sales");
+          return;
+        case "audit":
+          router.push("/(staff)/audit");
+          return;
+        case "reminder":
+        case "instruction":
+        case "digest":
+        case "escalation":
+        case "nudge":
+        case "ops":
+          router.push("/(staff)/home");
+          return;
       }
     }
     const sub = Notifications.addNotificationResponseReceivedListener(
