@@ -25,6 +25,11 @@ const TAB_DEFS = [
 export default function StaffLayout() {
   const session = useStaff((s) => s.session);
   const isAdmin = session?.role === "OWNER" || session?.role === "ADMIN";
+  // Sales is a manager-and-up concern (revenue, payment mix, growth). Owners and
+  // admins get it as their Home tab (relabelled below); managers get the
+  // standalone Sales tab. Plain STAFF never see Sales, even if an access preset
+  // happens to grant them the "sales" module.
+  const isManagerPlus = isAdmin || session?.role === "MANAGER";
 
   // Refresh moduleAccess + outletId from /api/auth/me on every launch so
   // access-preset changes and outlet assignments propagate WITHOUT a forced
@@ -86,7 +91,8 @@ export default function StaffLayout() {
                 </View>
               ),
               href:
-                (isAdmin && t.name === "sales") || !allowed(t.moduleKey)
+                (t.name === "sales" && (isAdmin || !isManagerPlus)) ||
+                !allowed(t.moduleKey)
                   ? null
                   : undefined,
             }}
