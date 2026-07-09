@@ -19,6 +19,7 @@ import {
 } from "@/lib/whatsapp";
 import { TEMPLATES } from "./config";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
+import { sendOpsPush } from "@/lib/ops-push";
 
 const NOT_CONFIGURED: WhatsAppSendResult = {
   ok: false,
@@ -87,9 +88,10 @@ function sanitizeParam(s: string): string {
 
 // `freeForm` is the full multi-line text (in-window fallback); `templateVar` is
 // the newline-free {{1}} content used when an approved template is configured.
-// Exported so the workspace's reminder + instruction senders reuse the exact
-// same template-or-free-form delivery + message-store recording.
-export async function sendProactive(
+// Core WhatsApp delivery (approved template, free-form fallback) + message-store
+// recording. Wrapped by sendProactive below, which also mirrors the send to the
+// recipient's staff-native devices as a push notification.
+async function deliverProactive(
   to: string,
   templateName: string,
   freeForm: string,
@@ -134,6 +136,64 @@ export async function sendProactive(
     raw: { kind: templateName }, // durable classification for the ops message monitor
   });
   return ff;
+}
+
+// Map an ops template to a push classification + short title. The kind lands in
+// the notification's data payload and drives native tap-routing (staff-native
+// app/_layout routeFromNotification).
+function classifyPush(templateName: string): { kind: string; title: string } {
+  switch (templateName) {
+    case TEMPLATES.reminder:
+      return { kind: "reminder", title: "Reminder" };
+    case TEMPLATES.instruction:
+      return { kind: "instruction", title: "New instruction" };
+    case TEMPLATES.scoreboard:
+      return { kind: "scoreboard", title: "Weekly scoreboard" };
+    case TEMPLATES.audit:
+      return { kind: "audit", title: "Audit" };
+    case TEMPLATES.managerDigest:
+    case TEMPLATES.dailyDigest:
+      return { kind: "digest", title: "Ops digest" };
+    case TEMPLATES.ownerEscalation:
+      return { kind: "escalation", title: "Escalation" };
+    case TEMPLATES.nudge:
+    case TEMPLATES.list:
+      return { kind: "nudge", title: "Ops update" };
+    default:
+      return { kind: "ops", title: "Celsius Ops" };
+  }
+}
+
+// Send an ops message. Delivers over WhatsApp (the source of truth) and ALSO
+// mirrors it to the recipient's staff-native devices as a push notification, so
+// every ops event (reminders, instructions, the scoreboard, digests, nudges)
+// reaches the phone. The push is best-effort and never affects the WhatsApp
+// result. `push` lets a caller pass the recipient's user id directly (skips the
+// phone lookup) or override the derived kind/title; otherwise the kind/title are
+// derived from the template and the phone is resolved against the staff directory.
+//
+// Exported so the workspace's reminder + instruction senders reuse the exact
+// same delivery + recording + push path.
+export async function sendProactive(
+  to: string,
+  templateName: string,
+  freeForm: string,
+  templateVar: string,
+  push?: { userId?: string | null; kind?: string; title?: string; body?: string },
+): Promise<WhatsAppSendResult> {
+  const result = await deliverProactive(to, templateName, freeForm, templateVar);
+  const derived = classifyPush(templateName);
+  // Awaited (not fire-and-forget) so it completes before a serverless function
+  // freezes. The free-form text is the human-readable body; the template {{1}}
+  // summary is one-line/truncated, so freeForm reads better in a notification.
+  await sendOpsPush({
+    userId: push?.userId ?? null,
+    phone: to,
+    kind: push?.kind ?? derived.kind,
+    title: push?.title ?? derived.title,
+    body: push?.body ?? freeForm,
+  });
+  return result;
 }
 
 // Number of item-lines in the ops_list template ({{2}}..{{5}}).
