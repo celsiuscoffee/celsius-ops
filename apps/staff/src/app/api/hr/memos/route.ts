@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+// hr_memos has RLS enabled with no policies, so the anon client reads zero rows
+// (memos silently never appeared). Use the service-role client like every other
+// hr_* read route; access stays scoped by the getSession gate + the user_ids
+// containment filter below (and recipient check in PATCH), not by RLS.
+import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";

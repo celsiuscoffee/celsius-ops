@@ -70,7 +70,9 @@ export type Memo = {
   body: string;
   issued_at: string;
   issued_by: string;
-  requires_acknowledgement: boolean;
+  issued_by_name?: string;
+  // hr_memos has no requires_acknowledgement column; every active memo is
+  // acknowledgeable, gated purely on whether THIS user has acked it yet.
   my_acknowledged_at: string | null;
 };
 

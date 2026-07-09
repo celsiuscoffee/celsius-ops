@@ -72,20 +72,24 @@ export default function TransfersPage() {
       renderItem={({ item: t }) => (
         <View className="rounded-2xl border border-border bg-surface p-4">
           <View className="flex-row items-center gap-2">
-            <Text className="text-base font-body-medium text-espresso">
-              {t.fromOutlet}
+            <Text
+              className="shrink text-base font-body-medium text-espresso"
+              numberOfLines={1}
+            >
+              {shortOutlet(t.fromOutlet)}
             </Text>
             <ArrowRight color="#9CA3AF" size={14} />
-            <Text className="text-base font-body-medium text-espresso">
-              {t.toOutlet}
-            </Text>
-            <Text className="ml-auto text-xs font-body text-muted">
-              {fmtDate(t.createdAt)}
+            <Text
+              className="shrink text-base font-body-medium text-espresso"
+              numberOfLines={1}
+            >
+              {shortOutlet(t.toOutlet)}
             </Text>
           </View>
           <Text className="mt-1 text-xs font-body text-muted">
             {t.items.length} item{t.items.length === 1 ? "" : "s"} ·{" "}
-            {t.transferredBy} · {t.status.replace("_", " ").toLowerCase()}
+            {t.transferredBy} · {t.status.replace("_", " ").toLowerCase()} ·{" "}
+            {fmtDate(t.createdAt)}
           </Text>
           {t.notes ? (
             <Text className="mt-2 text-xs font-body text-muted-fg">
@@ -99,6 +103,12 @@ export default function TransfersPage() {
       )}
     </Screen>
   );
+}
+
+// Every outlet is stored as "Celsius Coffee <place>"; the prefix is redundant
+// on both ends of the route and is what pushed the second name off-screen.
+function shortOutlet(name: string): string {
+  return name.replace(/^Celsius Coffee\s+/i, "").trim() || name;
 }
 
 function fmtDate(s: string): string {
