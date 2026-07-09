@@ -44,7 +44,7 @@ export default function TransfersPage() {
       className="flex-1"
       data={items}
       keyExtractor={(t) => t.id}
-      contentContainerClassName="pt-2 pb-12"
+      contentContainerClassName="pt-2 pb-24"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

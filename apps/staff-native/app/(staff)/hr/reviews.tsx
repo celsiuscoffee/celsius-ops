@@ -45,7 +45,7 @@ export default function ReviewsScreen() {
       className="flex-1"
       data={reviews}
       keyExtractor={(r) => r.id}
-      contentContainerClassName="pt-2 pb-12"
+      contentContainerClassName="pt-2 pb-24"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

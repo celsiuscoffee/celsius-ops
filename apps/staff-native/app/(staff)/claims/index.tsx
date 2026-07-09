@@ -71,7 +71,7 @@ export default function ClaimsList() {
           data={claims}
           keyExtractor={(c) => c.id}
           ItemSeparatorComponent={() => <View className="h-3" />}
-          contentContainerClassName="pb-12"
+          contentContainerClassName="pb-24"
           renderItem={({ item }) => <ClaimCard claim={item} />}
       showsVerticalScrollIndicator={false}
     />

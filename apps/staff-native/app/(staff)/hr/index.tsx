@@ -140,7 +140,7 @@ export default function HrIndex() {
     <Screen>
       <PageHeader title="HR" />
       <ScrollView
-        contentContainerClassName="pb-12"
+        contentContainerClassName="pb-24"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

@@ -246,7 +246,7 @@ function StaffHome() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="pb-12"
+        contentContainerClassName="pb-24"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
