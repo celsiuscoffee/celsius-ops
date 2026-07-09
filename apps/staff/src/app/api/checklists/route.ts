@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     select: {
       id: true, date: true, shift: true, timeSlot: true, dueAt: true,
       status: true, completedAt: true,
-      sop: { select: { id: true, title: true, category: { select: { name: true } } } },
+      sop: { select: { id: true, title: true, stations: true, category: { select: { name: true } } } },
       outlet: { select: { id: true, code: true, name: true } },
       assignedTo: { select: { id: true, name: true } },
       completedBy: { select: { id: true, name: true } },
@@ -50,7 +50,8 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  const result = checklists.map(({ items, ...cl }) => {
+  const result = checklists.map(({ items, sop, ...cl }) => {
+    const { stations, ...sopRest } = sop;
     const totalItems = cl._count.items;
     const completedItems = items.length;
     const myCompletedItems = items.filter(
@@ -58,6 +59,11 @@ export async function GET(req: NextRequest) {
     ).length;
     return {
       ...cl,
+      sop: sopRest,
+      // A "shared" SOP (opening/closing/cleaning) is whole-outlet work anyone on
+      // shift owns, so the native Mine tab shows it to everyone, not just the
+      // person it happened to be auto-assigned to.
+      shared: (stations ?? []).includes("shared"),
       totalItems,
       completedItems,
       myCompletedItems,

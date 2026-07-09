@@ -93,13 +93,17 @@ export default function ChecklistsList() {
     }, [load]),
   );
 
-  // "Mine" = checklists assigned to me, ones I've already ticked items on, or
+  // "Mine" = shared whole-outlet tasks (opening/closing/cleaning, everyone's
+  // job), checklists assigned to me, ones I've already ticked items on, or
   // unassigned ("Anyone") ones I can pick up; it hides only checklists assigned
   // to someone else that I haven't touched. Default view so staff land on their
   // own work, with an "All" toggle for the full outlet board.
   const myId = session?.userId ?? null;
   const isMine = (c: ChecklistSummary) =>
-    !c.assignedTo || c.assignedTo.id === myId || (c.myCompletedItems ?? 0) > 0;
+    c.shared ||
+    !c.assignedTo ||
+    c.assignedTo.id === myId ||
+    (c.myCompletedItems ?? 0) > 0;
   const mineCount = items.filter(isMine).length;
   const visible = scope === "all" ? items : items.filter(isMine);
 
@@ -309,7 +313,11 @@ function ChecklistRow({
           <Text className="text-[10px] font-body text-muted">
             {cl.sop.category.name} · {cl.completedItems}/{cl.totalItems} items
             {cl.myCompletedItems > 0 ? ` · ${cl.myCompletedItems} by you` : ""}
-            {cl.assignedTo ? ` · ${cl.assignedTo.name}` : " · Anyone"}
+            {cl.shared
+              ? " · Shared"
+              : cl.assignedTo
+                ? ` · ${cl.assignedTo.name}`
+                : " · Anyone"}
           </Text>
         </View>
         <View className="items-end">
