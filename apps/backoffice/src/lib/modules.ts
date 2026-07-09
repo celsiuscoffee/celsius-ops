@@ -10,7 +10,14 @@
 // NOTE: finance:* is intentionally absent — Finance is OWNER/ADMIN-only and
 // cannot be granted to managers, so it's not a "grantable module".
 
-export type ModuleDef = { label: string; key: string };
+// Which real app(s) actually read this module grant at runtime. Omitted =
+// backoffice-only. Purely ADDITIVE metadata — no reader consumes it yet. It
+// exists to become the single source of truth for "which app does this grant
+// affect", so that fact stops living only in scattered reader code (staff
+// access.ts route maps, native tab configs). Drives the future editor
+// grouping/badges and the withAuth({ app, module }) enforcement wrapper.
+export type AppSurface = "backoffice" | "staff";
+export type ModuleDef = { label: string; key: string; apps?: AppSurface[] };
 
 export const APP_MODULES: Record<string, ModuleDef[]> = {
   pickup: [
@@ -28,13 +35,13 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
     { label: "Suppliers", key: "suppliers" },
     { label: "Categories", key: "categories" },
     { label: "Menu & BOM", key: "menus" },
-    { label: "Purchase Orders", key: "orders" },
-    { label: "Receivings", key: "receivings" },
-    { label: "Invoices", key: "invoices" },
-    { label: "Payment Requests", key: "pay-and-claim" },
-    { label: "Stock Count", key: "stock-count" },
-    { label: "Wastage", key: "wastage" },
-    { label: "Transfers", key: "transfers" },
+    { label: "Purchase Orders", key: "orders", apps: ["backoffice", "staff"] },
+    { label: "Receivings", key: "receivings", apps: ["backoffice", "staff"] },
+    { label: "Invoices", key: "invoices", apps: ["backoffice", "staff"] },
+    { label: "Payment Requests", key: "pay-and-claim", apps: ["backoffice", "staff"] },
+    { label: "Stock Count", key: "stock-count", apps: ["backoffice", "staff"] },
+    { label: "Wastage", key: "wastage", apps: ["backoffice", "staff"] },
+    { label: "Transfers", key: "transfers", apps: ["backoffice", "staff"] },
     { label: "Par Levels", key: "par-levels" },
     { label: "Reports", key: "reports" },
   ],
@@ -47,7 +54,7 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
     { label: "Engage", key: "engage" },
   ],
   sales: [
-    { label: "Dashboard", key: "dashboard" },
+    { label: "Dashboard", key: "dashboard", apps: ["backoffice", "staff"] },
   ],
   settings: [
     { label: "Outlets", key: "outlets" },
@@ -59,9 +66,15 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
   ],
   ops: [
     { label: "Dashboard & Performance", key: "performance" },
-    { label: "Audit", key: "audit" },
-    { label: "SOPs", key: "sops" },
-    { label: "Categories", key: "categories" },
+    { label: "Audit", key: "audit", apps: ["backoffice", "staff"] },
+    { label: "SOPs", key: "sops", apps: ["backoffice", "staff"] },
+    { label: "Categories", key: "categories", apps: ["backoffice", "staff"] },
+    // Staff-only: the staff app gates /checklists and /schedules on
+    // ops:checklists, but the key was missing from this registry — so it could
+    // never be granted and Checklists was effectively OWNER/ADMIN-only. Adding
+    // it here (and to NAV_TABS below) makes it grantable. Additive: nothing is
+    // auto-granted; access is unchanged until an admin ticks it.
+    { label: "Checklists & Schedules", key: "checklists", apps: ["staff"] },
     { label: "Ops Workspace", key: "chat-inbox" },
   ],
   hr: [
@@ -236,6 +249,7 @@ export const NAV_TABS: GrantTab[] = [
           m("ops", "audit", "Audits"),
           m("ops", "sops", "SOPs & Templates"),
           m("ops", "categories", "Categories"),
+          m("ops", "checklists", "Checklists & Schedules"),
           m("ops", "chat-inbox", "Ops Workspace"),
         ],
       },
