@@ -352,6 +352,16 @@ export const GRANTABLE_MODULE_KEYS: ReadonlySet<string> = new Set(
   Object.entries(APP_MODULES).flatMap(([app, mods]) => mods.map((mod) => `${app}:${mod.key}`)),
 );
 
+// Which real app surface(s) actually read a given `${app}:${key}` grant.
+// Defaults to backoffice-only when the module doesn't declare `apps`. The
+// Staff & Access editor uses this to (a) show a module toggle only when the
+// user holds the app that consumes it and (b) badge grants that also drive the
+// staff phone app. It's the read side of the ModuleDef.apps metadata.
+export function moduleApps(app: string, key: string): AppSurface[] {
+  const def = APP_MODULES[app]?.find((m) => m.key === key);
+  return def?.apps ?? ["backoffice"];
+}
+
 // Dev-time guard: keep NAV_TABS and the grantable registry in lock-step. A
 // stray key here (typo / removed module) would render a dead toggle; a missing
 // key would hide a grantable module from the editor entirely.
