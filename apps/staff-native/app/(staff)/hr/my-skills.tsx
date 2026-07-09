@@ -315,8 +315,10 @@ function scoreTone(score: number | null): { bg: string; text: string } {
   return { bg: "bg-danger/10", text: "text-danger" };
 }
 
-// Render an item's rating: pass_fail -> Pass/Fail, rating_5 -> "n/5", coloured by
-// how good it is. Unknown types fall back to the raw number.
+// Render an item's rating in the vocabulary the auditor entered it in
+// (see app/(staff)/audit/[id].tsx): pass_fail -> Pass (1) / Fail (0) / N/A (-1),
+// rating_5 -> "n/5", rating_3 -> Good/Fair/Poor. Coloured by how good it is;
+// unknown types fall back to the raw number.
 function ratingDisplay(item: SkillsAuditItem): {
   label: string;
   bg: string;
@@ -328,14 +330,21 @@ function ratingDisplay(item: SkillsAuditItem): {
   const na = { bg: "bg-primary-50", text: "text-muted-fg" };
 
   if (item.ratingType === "pass_fail") {
+    // On the form: 1 = Pass, 0 = Fail, -1 = N/A. Match that exactly — a Fail
+    // must never read as "N/A", nor an N/A as "Fail".
     if (item.rating === 1) return { label: "Pass", ...good };
-    if (item.rating != null && item.rating < 0) return { label: "Fail", ...bad };
+    if (item.rating === 0) return { label: "Fail", ...bad };
     return { label: "N/A", ...na };
   }
   if (item.rating == null) return { label: "N/A", ...na };
   if (item.ratingType === "rating_5") {
     const tone = item.rating >= 4 ? good : item.rating >= 3 ? ok : bad;
     return { label: `${item.rating}/5`, ...tone };
+  }
+  if (item.ratingType === "rating_3") {
+    if (item.rating >= 3) return { label: "Good", ...good };
+    if (item.rating === 2) return { label: "Fair", ...ok };
+    return { label: "Poor", ...bad };
   }
   return { label: String(item.rating), ...ok };
 }
