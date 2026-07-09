@@ -226,7 +226,7 @@ export default function ReceivingPage() {
   }
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title="Receive" back />
       <FlatList
         className="flex-1"

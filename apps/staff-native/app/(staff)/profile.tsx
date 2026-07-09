@@ -170,13 +170,13 @@ export default function Profile() {
   const incomplete = completeness && !completeness.complete;
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       {/* Sticky header */}
       <PageHeader title="Profile" subtitle="Personal info, PIN, biometric" />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="pb-24"
+        contentContainerClassName="pb-6"
       >
 
         {/* Hero user card */}

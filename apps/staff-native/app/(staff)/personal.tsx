@@ -86,7 +86,7 @@ export default function PersonalScreen() {
 
   if (loading || !profile) {
     return (
-      <Screen>
+      <Screen edges={["top", "left", "right"]}>
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#C2452D" />
         </View>

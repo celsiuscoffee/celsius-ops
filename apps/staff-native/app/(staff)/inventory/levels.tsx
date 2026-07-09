@@ -87,7 +87,7 @@ export default function StockLevelsScreen() {
   }, [items]);
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader
         title="Stock levels"
         subtitle={
@@ -99,7 +99,7 @@ export default function StockLevelsScreen() {
       />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="pt-2 pb-32"
+        contentContainerClassName="pt-2 pb-6"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

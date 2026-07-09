@@ -34,7 +34,7 @@ export default function ReviewsScreen() {
   }, [load]);
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title="Feedback" back />
       {loading ? (
         <View className="flex-1 items-center justify-center">
@@ -45,7 +45,7 @@ export default function ReviewsScreen() {
       className="flex-1"
       data={reviews}
       keyExtractor={(r) => r.id}
-      contentContainerClassName="pt-2 pb-24"
+      contentContainerClassName="pt-2 pb-6"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

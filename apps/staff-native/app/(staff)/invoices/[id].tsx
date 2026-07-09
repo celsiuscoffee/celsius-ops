@@ -191,7 +191,7 @@ export default function InvoiceDetailScreen() {
 
   if (loading) {
     return (
-      <Screen>
+      <Screen edges={["top", "left", "right"]}>
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#C2452D" />
         </View>
@@ -201,7 +201,7 @@ export default function InvoiceDetailScreen() {
 
   if (!invoice) {
     return (
-      <Screen>
+      <Screen edges={["top", "left", "right"]}>
         <PageHeader title="Invoice" back />
         <View className="flex-1 items-center justify-center">
           <Text className="text-sm font-body text-muted-fg">Not found</Text>

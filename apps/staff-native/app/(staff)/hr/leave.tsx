@@ -106,7 +106,7 @@ export default function LeaveScreen() {
 
   if (loading) {
     return (
-      <Screen>
+      <Screen edges={["top", "left", "right"]}>
         <PageHeader title="Leave" back />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#A2492C" />
