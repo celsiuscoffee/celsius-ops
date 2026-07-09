@@ -1,18 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Pressable,
   RefreshControl,
   ScrollView,
   Text,
   View,
 } from "react-native";
-import { Sparkles, Target, TrendingDown, TrendingUp } from "lucide-react-native";
+import {
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  Target,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { useStaff } from "../../../lib/store";
 import {
   fetchMySkills,
   fetchMySkillsCoach,
+  type SkillsAuditEntry,
+  type SkillsAuditItem,
   type SkillsCoachInsights,
   type SkillsResponse,
 } from "../../../lib/hr/api";
@@ -179,39 +189,8 @@ export default function MySkills() {
               {[...audits]
                 .reverse()
                 .slice(0, 4)
-                .map((a) => (
-                  <View
-                    key={a.id}
-                    className="flex-row items-center gap-2"
-                  >
-                    <Text className="w-16 text-[10px] font-body text-muted">
-                      {a.date}
-                    </Text>
-                    <Text className="flex-1 text-xs font-body text-muted-fg">
-                      {a.auditor?.name ?? "Unknown"}
-                    </Text>
-                    <View
-                      className={`rounded-full px-2 py-0.5 ${
-                        (a.overallScore ?? 0) >= 80
-                          ? "bg-success/10"
-                          : (a.overallScore ?? 0) >= 60
-                            ? "bg-amber-100"
-                            : "bg-danger/10"
-                      }`}
-                    >
-                      <Text
-                        className={`text-[10px] font-body-bold ${
-                          (a.overallScore ?? 0) >= 80
-                            ? "text-success"
-                            : (a.overallScore ?? 0) >= 60
-                              ? "text-amber-700"
-                              : "text-danger"
-                        }`}
-                      >
-                        {a.overallScore ?? 0}%
-                      </Text>
-                    </View>
-                  </View>
+                .map((a, idx) => (
+                  <AuditRow key={a.id} audit={a} defaultOpen={idx === 0} />
                 ))}
             </View>
           </View>
@@ -237,4 +216,126 @@ function DeltaBadge({ delta }: { delta: number }) {
       </Text>
     </View>
   );
+}
+
+// One audit in the history: a tappable summary (date, auditor, overall score)
+// that expands to show exactly WHAT was assessed, grouped by section, with the
+// per-item rating and the auditor's note. Latest audit opens by default so the
+// detail is visible without a tap.
+function AuditRow({
+  audit,
+  defaultOpen,
+}: {
+  audit: SkillsAuditEntry;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const tone = scoreTone(audit.overallScore);
+  const hasItems = audit.items.length > 0;
+
+  // Group items by section, preserving the audit's order.
+  const sections: { name: string; items: SkillsAuditItem[] }[] = [];
+  for (const it of audit.items) {
+    const name = it.sectionName || "General";
+    let sec = sections.find((s) => s.name === name);
+    if (!sec) {
+      sec = { name, items: [] };
+      sections.push(sec);
+    }
+    sec.items.push(it);
+  }
+
+  return (
+    <View>
+      <Pressable
+        onPress={() => hasItems && setOpen((o) => !o)}
+        className="flex-row items-center gap-2 py-1 active:opacity-70"
+      >
+        <Text className="w-16 text-[10px] font-body text-muted">{audit.date}</Text>
+        <Text className="flex-1 text-xs font-body text-muted-fg">
+          {audit.auditor?.name ?? "Unknown"}
+        </Text>
+        <View className={`rounded-full px-2 py-0.5 ${tone.bg}`}>
+          <Text className={`text-[10px] font-body-bold ${tone.text}`}>
+            {audit.overallScore ?? 0}%
+          </Text>
+        </View>
+        {hasItems ? (
+          open ? (
+            <ChevronUp color="#9CA3AF" size={14} />
+          ) : (
+            <ChevronDown color="#9CA3AF" size={14} />
+          )
+        ) : (
+          <View className="w-3.5" />
+        )}
+      </Pressable>
+
+      {open && hasItems ? (
+        <View className="mb-2 mt-1 gap-3 rounded-2xl bg-primary-50/40 p-3">
+          {sections.map((sec) => (
+            <View key={sec.name} className="gap-1.5">
+              <Text className="text-[10px] font-body-bold uppercase tracking-wide text-muted">
+                {sec.name}
+              </Text>
+              {sec.items.map((it, i) => (
+                <ItemRow key={i} item={it} />
+              ))}
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ItemRow({ item }: { item: SkillsAuditItem }) {
+  const r = ratingDisplay(item);
+  return (
+    <View className="flex-row items-start justify-between gap-3">
+      <View className="flex-1">
+        <Text className="text-xs font-body text-espresso">{item.itemTitle}</Text>
+        {item.notes ? (
+          <Text className="mt-0.5 text-[11px] font-body italic text-muted-fg">
+            {item.notes}
+          </Text>
+        ) : null}
+      </View>
+      <View className={`rounded-md px-1.5 py-0.5 ${r.bg}`}>
+        <Text className={`text-[10px] font-body-bold ${r.text}`}>{r.label}</Text>
+      </View>
+    </View>
+  );
+}
+
+function scoreTone(score: number | null): { bg: string; text: string } {
+  const s = score ?? 0;
+  if (s >= 80) return { bg: "bg-success/10", text: "text-success" };
+  if (s >= 60) return { bg: "bg-amber-100", text: "text-amber-700" };
+  return { bg: "bg-danger/10", text: "text-danger" };
+}
+
+// Render an item's rating: pass_fail -> Pass/Fail, rating_5 -> "n/5", coloured by
+// how good it is. Unknown types fall back to the raw number.
+function ratingDisplay(item: SkillsAuditItem): {
+  label: string;
+  bg: string;
+  text: string;
+} {
+  const good = { bg: "bg-success/10", text: "text-success" };
+  const ok = { bg: "bg-amber-100", text: "text-amber-700" };
+  const bad = { bg: "bg-danger/10", text: "text-danger" };
+  const na = { bg: "bg-primary-50", text: "text-muted-fg" };
+
+  if (item.ratingType === "pass_fail") {
+    if (item.rating === 1) return { label: "Pass", ...good };
+    if (item.rating != null && item.rating < 0) return { label: "Fail", ...bad };
+    return { label: "N/A", ...na };
+  }
+  if (item.rating == null) return { label: "N/A", ...na };
+  if (item.ratingType === "rating_5") {
+    const tone = item.rating >= 4 ? good : item.rating >= 3 ? ok : bad;
+    return { label: `${item.rating}/5`, ...tone };
+  }
+  return { label: String(item.rating), ...ok };
 }
