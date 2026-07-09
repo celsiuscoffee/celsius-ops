@@ -40,7 +40,6 @@ import {
   type CapturedPhoto,
 } from "../../../components/ReceiptCapture";
 import { uploadPhoto } from "../../../lib/upload";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 
 const PENDING_STATUSES = ["SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
 
@@ -367,7 +366,6 @@ function ReceiveDetail({
   onSubmit: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
   const allFilled = useMemo(
     () => po.items.every((item) => (received[item.id]?.qty ?? "") !== ""),
     [po.items, received],
@@ -403,7 +401,7 @@ function ReceiveDetail({
         <ScrollView
           className="flex-1"
           contentContainerClassName="px-5 pt-4"
-          contentContainerStyle={{ paddingBottom: tabBarHeight + 96 }}
+          contentContainerStyle={{ paddingBottom: 96 }}
           keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
@@ -542,7 +540,7 @@ function ReceiveDetail({
 
         {/* Pinned bottom submit */}
         <View
-          style={{ paddingBottom: tabBarHeight + 12 }}
+          style={{ paddingBottom: 12 }}
           className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
         >
           {!hasPhoto ? (

@@ -14,7 +14,6 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import {
@@ -46,7 +45,6 @@ type Step = "product" | "quantity" | "reason";
 
 export default function WastagePage() {
   const session = useStaff((s) => s.session);
-  const tabBarHeight = useBottomTabBarHeight();
   const [entries, setEntries] = useState<WastageEntry[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,14 +148,14 @@ export default function WastagePage() {
   }
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title="Wastage" back />
       <FlatList
         className="flex-1"
         data={entries}
         keyExtractor={(w) => w.id}
         contentContainerClassName="pt-2"
-        contentContainerStyle={{ paddingBottom: tabBarHeight + 96 }}
+        contentContainerStyle={{ paddingBottom: 96 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -240,7 +238,7 @@ export default function WastagePage() {
 
       {/* Pinned bottom CTA */}
       <View
-        style={{ paddingBottom: tabBarHeight + 12 }}
+        style={{ paddingBottom: 12 }}
         className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
       >
         <Pressable

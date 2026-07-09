@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Check, ChevronDown } from "lucide-react-native";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import {
@@ -25,7 +24,6 @@ import {
 
 export default function NewAudit() {
   const router = useRouter();
-  const tabBarHeight = useBottomTabBarHeight();
   // Coverage cards on /audit pass `?templateId=...&auditeeId=...` so
   // the form opens pre-filled, one tap from "this staff needs audit"
   // to actually doing the audit.
@@ -122,14 +120,14 @@ export default function NewAudit() {
   }
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader
         title="New audit"
         subtitle="Pick a template and outlet to start."
         back
       />
       <ScrollView
-        contentContainerStyle={{ paddingBottom: tabBarHeight + 96 }}
+        contentContainerStyle={{ paddingBottom: 96 }}
         showsVerticalScrollIndicator={false}
       >
 
@@ -162,7 +160,7 @@ export default function NewAudit() {
       </ScrollView>
 
       <View
-        style={{ paddingBottom: tabBarHeight + 12 }}
+        style={{ paddingBottom: 12 }}
         className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
       >
         <Pressable

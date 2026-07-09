@@ -8,7 +8,6 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import {
@@ -31,7 +30,6 @@ import {
 
 export default function AuditList() {
   const router = useRouter();
-  const tabBarHeight = useBottomTabBarHeight();
   const [items, setItems] = useState<AuditListItem[]>([]);
   const [coverage, setCoverage] = useState<AuditCoverageTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,14 +74,13 @@ export default function AuditList() {
   }
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title="Audits" />
       <FlatList
         data={[]}
         keyExtractor={() => ""}
         renderItem={() => null}
-        contentContainerClassName="pt-2"
-        contentContainerStyle={{ paddingBottom: tabBarHeight + 96 }}
+        contentContainerClassName="pt-2 pb-24"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -178,11 +175,11 @@ export default function AuditList() {
       showsVerticalScrollIndicator={false}
     />
 
-      {/* Pinned bottom CTA */}
-      <View
-        style={{ paddingBottom: tabBarHeight + 12 }}
-        className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
-      >
+      {/* Pinned bottom CTA. The tab bar is in-flow (opaque, not absolute), so
+          this screen's bottom already ends at the tab bar; a small pb-3 sits it
+          just above, no useBottomTabBarHeight padding (that double-counted the
+          tab bar and left a big frozen gap). */}
+      <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3 pb-3">
         <Pressable
           onPress={() => router.push("/audit/new")}
           className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary active:opacity-80"

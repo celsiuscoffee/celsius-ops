@@ -37,7 +37,6 @@ import {
   getInvoice,
 } from "../../../lib/ops/invoices";
 import { uploadPhoto } from "../../../lib/upload";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 
 type Invoice = {
   id: string;
@@ -84,7 +83,6 @@ const STATUS_TONE: Record<
 
 export default function InvoiceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const tabBarHeight = useBottomTabBarHeight();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -241,7 +239,7 @@ export default function InvoiceDetailScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: tabBarHeight + 96 }}
+        contentContainerStyle={{ paddingBottom: 96 }}
       >
         {/* Summary card */}
         <View className="rounded-3xl border border-border bg-surface px-4 py-3.5">
@@ -366,7 +364,7 @@ export default function InvoiceDetailScreen() {
         invoice.status === "PARTIALLY_PAID") ? (
         <View
           style={{
-            paddingBottom: tabBarHeight + 12,
+            paddingBottom: 12,
             shadowColor: "#160800",
             shadowOffset: { width: 0, height: -4 },
             shadowOpacity: 0.06,
@@ -398,7 +396,7 @@ export default function InvoiceDetailScreen() {
       {isPlaceholder ? (
         <View
           style={{
-            paddingBottom: tabBarHeight + 12,
+            paddingBottom: 12,
             shadowColor: "#160800",
             shadowOffset: { width: 0, height: -4 },
             shadowOpacity: 0.06,
