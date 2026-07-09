@@ -36,7 +36,7 @@ export default function MemosScreen() {
       ) : (
     <FlatList
       className="flex-1"
-      contentContainerClassName="pt-2 pb-8"
+      contentContainerClassName="pt-2 pb-24"
       data={memos}
       keyExtractor={(m) => m.id}
       ItemSeparatorComponent={() => <View className="h-3" />}

@@ -72,7 +72,7 @@ export default function MySkills() {
       ) : (
     <ScrollView
       className="flex-1"
-      contentContainerClassName="pt-2 pb-12 gap-3"
+      contentContainerClassName="pt-2 pb-24 gap-3"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

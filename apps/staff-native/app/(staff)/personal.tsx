@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Screen } from "../../components/Screen";
 import { PageHeader } from "../../components/PageHeader";
 import * as Haptics from "expo-haptics";
@@ -38,6 +39,7 @@ type Field = keyof Profile;
 
 export default function PersonalScreen() {
   const router = useRouter();
+  const tabBarHeight = useBottomTabBarHeight();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [percent, setPercent] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -273,6 +275,7 @@ export default function PersonalScreen() {
       {/* Pinned bottom CTA, floating above tab bar */}
       <View
         style={{
+          paddingBottom: tabBarHeight + 12,
           shadowColor: "#160800",
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: 0.06,

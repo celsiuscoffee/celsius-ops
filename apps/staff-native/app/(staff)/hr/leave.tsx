@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Bot, CheckCircle2, Clock, Plus, XCircle } from "lucide-react-native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import {
@@ -31,6 +32,7 @@ const LEAVE_TYPES = [
 ];
 
 export default function LeaveScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,7 +122,8 @@ export default function LeaveScreen() {
       <PageHeader title="Leave" back />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="px-5 pt-4 pb-32"
+        contentContainerClassName="px-5 pt-4"
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 96 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -180,7 +183,10 @@ export default function LeaveScreen() {
       </ScrollView>
 
       {/* Pinned bottom CTA */}
-      <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3 pb-8">
+      <View
+        style={{ paddingBottom: tabBarHeight + 12 }}
+        className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
+      >
         <Pressable
           onPress={() => setSheetOpen(true)}
           className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary active:opacity-80"

@@ -279,7 +279,7 @@ export default function ChecklistDetail() {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="pt-2 pb-12"
+          contentContainerClassName="pt-2 pb-24"
           keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >

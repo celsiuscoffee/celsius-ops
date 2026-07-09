@@ -27,7 +27,7 @@ export default function PayslipsScreen() {
       ) : (
         <FlatList
           className="flex-1"
-          contentContainerClassName="pt-2 pb-8"
+          contentContainerClassName="pt-2 pb-24"
           data={payslips}
           keyExtractor={(p) => p.id}
           ItemSeparatorComponent={() => <View className="h-3" />}

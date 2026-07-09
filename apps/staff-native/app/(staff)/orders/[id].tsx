@@ -18,6 +18,7 @@ import {
   Truck,
   X as XIcon,
 } from "lucide-react-native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { Pill } from "../../../components/ui";
@@ -46,6 +47,7 @@ export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const session = useStaff((s) => s.session);
+  const tabBarHeight = useBottomTabBarHeight();
   const isManager =
     session?.role === "OWNER" ||
     session?.role === "ADMIN" ||
@@ -206,7 +208,7 @@ export default function OrderDetailScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="pb-24"
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 96 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -391,6 +393,7 @@ export default function OrderDetailScreen() {
       {(canApprove || canSend || canCancel) && (
         <View
           style={{
+            paddingBottom: tabBarHeight + 12,
             shadowColor: "#160800",
             shadowOffset: { width: 0, height: -4 },
             shadowOpacity: 0.06,

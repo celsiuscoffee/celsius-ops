@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import {
@@ -54,6 +55,7 @@ function key(productId: string, packageId: string | null): string {
 
 export default function StockCount() {
   const session = useStaff((s) => s.session);
+  const tabBarHeight = useBottomTabBarHeight();
   const [frequency, setFrequency] = useState<Frequency>("daily");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -525,7 +527,8 @@ export default function StockCount() {
       <FlatList
         data={filteredGroups}
         keyExtractor={(g) => g.area}
-        contentContainerClassName="px-5 pt-3 pb-32"
+        contentContainerClassName="px-5 pt-3"
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 96 }}
         renderItem={({ item: group }) => {
           const isCollapsed = collapsed.has(group.area);
           const total = group.items.length;
@@ -633,7 +636,10 @@ export default function StockCount() {
     />
 
       {/* Finalize CTA pinned bottom */}
-      <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3 pb-8">
+      <View
+        style={{ paddingBottom: tabBarHeight + 12 }}
+        className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
+      >
         <Pressable
           onPress={handleFinalize}
           disabled={countedItems < totalItems || finalizing}

@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import {
@@ -30,6 +31,7 @@ import {
 
 export default function AuditList() {
   const router = useRouter();
+  const tabBarHeight = useBottomTabBarHeight();
   const [items, setItems] = useState<AuditListItem[]>([]);
   const [coverage, setCoverage] = useState<AuditCoverageTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,7 +82,8 @@ export default function AuditList() {
         data={[]}
         keyExtractor={() => ""}
         renderItem={() => null}
-        contentContainerClassName="pt-2 pb-32"
+        contentContainerClassName="pt-2"
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 96 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -176,7 +179,10 @@ export default function AuditList() {
     />
 
       {/* Pinned bottom CTA */}
-      <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3 pb-8">
+      <View
+        style={{ paddingBottom: tabBarHeight + 12 }}
+        className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
+      >
         <Pressable
           onPress={() => router.push("/audit/new")}
           className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary active:opacity-80"

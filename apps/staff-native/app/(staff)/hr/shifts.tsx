@@ -36,7 +36,7 @@ export default function ShiftsScreen() {
       ) : (
         <FlatList
           className="flex-1"
-          contentContainerClassName="pt-2 pb-8"
+          contentContainerClassName="pt-2 pb-24"
           data={shifts}
           keyExtractor={(s) => s.id}
           ItemSeparatorComponent={() => <View className="h-3" />}

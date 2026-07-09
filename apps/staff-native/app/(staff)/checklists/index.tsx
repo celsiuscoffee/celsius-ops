@@ -123,7 +123,7 @@ export default function ChecklistsList() {
         <FlatList
           data={grouped}
           keyExtractor={(g) => g.shift}
-          contentContainerClassName="pt-2 pb-12"
+          contentContainerClassName="pt-2 pb-24"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

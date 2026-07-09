@@ -28,7 +28,7 @@ export default function AttendanceScreen() {
       ) : (
         <FlatList
           className="flex-1"
-          contentContainerClassName="pt-2 pb-8"
+          contentContainerClassName="pt-2 pb-24"
           data={items}
           keyExtractor={(a) => a.id}
           ListHeaderComponent={stats ? <StatsCard stats={stats} /> : null}
