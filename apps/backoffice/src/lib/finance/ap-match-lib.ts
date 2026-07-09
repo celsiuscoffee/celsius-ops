@@ -43,6 +43,38 @@ export function invoiceRefInDesc(invoiceNumber: string | null | undefined, descR
   return descRuns.some((r) => r === invDigits || r.endsWith(invDigits) || invDigits.endsWith(r));
 }
 
+// The distinctive numeric signature of an invoice number (digits, leading zeros
+// dropped). Only signatures of >= 5 digits are treated as identifying — shorter
+// runs collide with dates/amounts/account tails and would over-veto.
+export function invoiceSig(invoiceNumber: string | null | undefined): string {
+  return (invoiceNumber ?? "").replace(/\D/g, "").replace(/^0+/, "");
+}
+
+// True when a bank description quotes a DISTINCTIVE invoice number that is NOT
+// this invoice's — i.e. the transfer is spoken for by a different, known
+// invoice, so amount + payee-name alone must NOT auto-settle THIS invoice
+// against that line. This is the guard against the fixed-amount mis-match:
+// suppliers like TMM / Milk n Moka bill the same amount every order, so
+// amount+payee matched the wrong same-amount invoice while the bank narration
+// clearly named another. `knownSigs` is the set of invoiceSig() over every
+// invoice in play (already filtered to >= 5 digits).
+export function descNamesForeignInvoice(
+  descLower: string | null | undefined,
+  knownSigs: Set<string>,
+  thisInvoiceNumber: string | null | undefined,
+): boolean {
+  const runs = digitRuns(descLower);
+  if (runs.length === 0 || knownSigs.size === 0) return false;
+  // If the line names THIS invoice, it's confirmation, not a foreign ref.
+  if (invoiceRefInDesc(thisInvoiceNumber, runs)) return false;
+  const mine = invoiceSig(thisInvoiceNumber);
+  for (const sig of knownSigs) {
+    if (sig.length < 5 || sig === mine) continue;
+    if (runs.some((r) => r === sig || r.endsWith(sig) || sig.endsWith(r))) return true;
+  }
+  return false;
+}
+
 // Subset of invoice amounts (in cents) summing to the target — suppliers are
 // routinely paid for several invoices in ONE transfer, which single-invoice
 // amount matching can never see. DFS over amounts sorted desc with pruning;

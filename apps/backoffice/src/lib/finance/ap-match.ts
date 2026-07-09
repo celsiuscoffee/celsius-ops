@@ -91,7 +91,7 @@ function nameInDesc(nameTokens: string[], descLower: string): boolean {
   return hits >= 2 || (hits === 1 && nameTokens.some((t) => t.length >= 5 && descLower.includes(t)));
 }
 
-import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc } from "./ap-match-lib";
+import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc, invoiceSig, descNamesForeignInvoice } from "./ap-match-lib";
 export { digitRuns, invoiceRefInDesc, subsetSumIdx } from "./ap-match-lib";
 
 export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promise<ApMatchResult> {
@@ -149,6 +149,15 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
     (byAmount.get(k) ?? byAmount.set(k, []).get(k)!).push(l);
   }
 
+  // Distinctive (>= 5 digit) invoice-number signatures across every invoice in
+  // play. Used to detect a bank line whose narration NAMES a specific, different
+  // invoice — those lines belong to the invoice they name, so amount+payee must
+  // not auto-settle a same-amount sibling against them (the fixed-amount
+  // mis-match: TMM / Milk n Moka bill identical amounts every order).
+  const knownSigs = new Set<string>(
+    invoices.map((i) => invoiceSig(i.invoiceNumber)).filter((s) => s.length >= 5),
+  );
+
   const auto: ApMatch[] = [];
   const review: ApMatch[] = [];
   const doublePayments: ApMatch[] = [];
@@ -181,6 +190,12 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
       if (l.txnDate.getTime() < issue.getTime() - 7 * DAY || dDays > 60) continue;
 
       const descLower = (l.description ?? "").toLowerCase();
+      // Skip a line that quotes a DIFFERENT known invoice number: it belongs to
+      // the invoice it names, not this same-amount sibling. Leaving it unmatched
+      // (it surfaces for human review) beats silently mis-assigning the payment.
+      // The invoice the line DOES name will match it in its own turn (a name hit
+      // scores highest), regardless of processing order.
+      if (descNamesForeignInvoice(descLower, knownSigs, inv.invoiceNumber)) continue;
       const amtDiff = Math.abs(Number(l.amount) - amt);
       const reasons: string[] = [];
       let score = 0;
@@ -414,12 +429,28 @@ export async function writeMultiMatch(m: ApMultiMatch): Promise<void> {
   });
 }
 
-export async function applyApMatches(opts: { commit?: boolean; sinceDays?: number } = {}): Promise<ApplyResult> {
+// markOpenPaid gates whether this run may MARK AN OPEN INVOICE PAID from the
+// bank statement. Default FALSE: the Telegram proof-of-payment flow is the
+// primary payer, so the routine (6-hourly) run only RECONCILES — it applies
+// link-only matches (tag a bank line to an invoice already paid via POP/manual,
+// dropping it out of P&L opex) and holds any open-invoice match for the EOM
+// bank reconciliation. Set TRUE only for the month-end recon runner, which is
+// allowed to settle whatever the POP flow didn't catch.
+export async function applyApMatches(
+  opts: { commit?: boolean; sinceDays?: number; markOpenPaid?: boolean } = {},
+): Promise<ApplyResult> {
   const commit = opts.commit ?? false;
+  const markOpenPaid = opts.markOpenPaid ?? false;
   const { auto, multi } = await proposeApMatches({ sinceDays: opts.sinceDays });
   const skipped: ApplyResult["skipped"] = [];
   let applied = 0;
   for (const m of auto) {
+    // Reconcile-only by default: an open-invoice match waits for the Telegram
+    // POP (primary) or the EOM bank reconciliation, never a silent no-POP pay.
+    if (!m.linkOnly && !markOpenPaid) {
+      skipped.push({ payee: m.payee, amount: m.amount, reason: "open invoice — held for POP / EOM bank reconciliation" });
+      continue;
+    }
     const v = verifyMatch(m);
     if (!v.ok) { skipped.push({ payee: m.payee, amount: m.amount, reason: v.reason! }); continue; }
     if (commit) await writeApMatch(m);
@@ -427,6 +458,12 @@ export async function applyApMatches(opts: { commit?: boolean; sinceDays?: numbe
   }
   for (const m of multi) {
     if (m.tier !== "auto") { skipped.push({ payee: m.payee, amount: m.amount, reason: "multi-invoice bundle not ref-confirmed" }); continue; }
+    // A bundle settles its OPEN members, so it's an open-invoice payment too —
+    // hold it for the EOM reconciliation unless explicitly enabled.
+    if (!markOpenPaid) {
+      skipped.push({ payee: m.payee, amount: m.amount, reason: "multi-invoice bundle — held for POP / EOM bank reconciliation" });
+      continue;
+    }
     if (commit) await writeMultiMatch(m);
     applied++;
   }

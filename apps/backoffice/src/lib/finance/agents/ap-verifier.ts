@@ -90,9 +90,14 @@ export type ReviewApplyResult = {
 // The autonomous review-tier step: LLM-verify every REVIEW match, auto-apply the
 // confident confirms, drop the rejects, leave only genuine uncertainties for a
 // human. This is what shrinks the bookkeeper's queue toward nothing.
-export async function applyVerifiedReview(opts: { commit?: boolean; sinceDays?: number; minConfidence?: number } = {}): Promise<ReviewApplyResult> {
+export async function applyVerifiedReview(opts: { commit?: boolean; sinceDays?: number; minConfidence?: number; markOpenPaid?: boolean } = {}): Promise<ReviewApplyResult> {
   const commit = opts.commit ?? false;
   const minConfidence = opts.minConfidence ?? 0.9;
+  // Same policy as applyApMatches: reconcile-only by default (Telegram POP is
+  // the primary payer). An LLM-confirmed match that would mark an OPEN invoice
+  // paid waits for the EOM bank reconciliation; link-only reconciliations still
+  // apply so POP-paid invoices leave the P&L opex pile promptly.
+  const markOpenPaid = opts.markOpenPaid ?? false;
   const { review } = await proposeApMatches({ sinceDays: opts.sinceDays });
   const verdicts = await verifyApMatches(review);
   const byLine = new Map(verdicts.map((v) => [v.bankLineId, v]));
@@ -101,6 +106,7 @@ export async function applyVerifiedReview(opts: { commit?: boolean; sinceDays?: 
     const v = byLine.get(m.bankLineId);
     if (v?.verdict === "reject") { rejected++; continue; }
     if (v?.verdict === "confirm" && v.confidence >= minConfidence) {
+      if (!m.linkOnly && !markOpenPaid) { uncertain++; continue; }
       if (commit) await writeApMatch(m);
       confirmedApplied++;
     } else {
