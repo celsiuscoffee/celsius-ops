@@ -41,7 +41,12 @@ export async function GET(req: NextRequest) {
     const { accounts } = await syncBukkuFeedLedger({ commit: true });
     return { accounts: accounts.length, newLines: accounts.reduce((s, a) => s + a.newLines, 0) };
   });
-  // 2. match supplier outflows → invoices (rules tier, then LLM verifier tier)
+  // 2. reconcile supplier outflows → invoices (rules tier, then LLM verifier
+  //    tier). RECONCILE-ONLY: the Telegram proof-of-payment flow is the primary
+  //    payer, so this routine loop only links bank lines to invoices already
+  //    paid via POP (dropping them out of P&L opex). Open invoices are NOT
+  //    marked paid from the bank statement here — that's the EOM bank
+  //    reconciliation's job (ap-match-apply, markOpenPaid:true).
   await step("apMatchAuto", async () => ({ applied: (await applyApMatches({ commit: true, sinceDays: 120 })).applied }));
   await step("apMatchReview", async () => {
     const r = await applyVerifiedReview({ commit: true, sinceDays: 120 });

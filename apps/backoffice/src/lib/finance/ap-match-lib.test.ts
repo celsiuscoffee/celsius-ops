@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc } from "./ap-match-lib";
+import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc, invoiceSig, descNamesForeignInvoice } from "./ap-match-lib";
 
 describe("ap-match-lib", () => {
   it("extracts digit runs from bank descriptions", () => {
@@ -35,6 +35,22 @@ describe("ap-match-lib", () => {
   it("tolerates 1-2 sen rounding drift", () => {
     const idx = subsetSumIdx([10001, 20001], 30000);
     expect(idx).not.toBeNull();
+  });
+
+  it("flags a bank line that names a DIFFERENT known invoice (the fixed-amount mis-match guard)", () => {
+    // Every TMM order bills the same amount; the bank line quotes 1-15150 but we
+    // are scoring it against 1-15288 → foreign ref, must not auto-settle.
+    const sigs = new Set([invoiceSig("1-15150"), invoiceSig("1-15288"), invoiceSig("IVCT-00012166")]);
+    expect(descNamesForeignInvoice("celsius coffee tamartmm resources * 1-15150", sigs, "1-15288")).toBe(true);
+    // The line that names THIS invoice is confirmation, not foreign.
+    expect(descNamesForeignInvoice("celsius coffee tamartmm resources * 1-15288", sigs, "1-15288")).toBe(false);
+    // Milk n Moka: bank names IVCT-00012166, scoring against IVCT-00012222 → foreign.
+    const mm = new Set([invoiceSig("IVCT-00012166"), invoiceSig("IVCT-00012222")]);
+    expect(descNamesForeignInvoice("milk & moka marketi* ivct-00012166", mm, "IVCT-00012222")).toBe(true);
+    // No invoice number in the narration → payee+amount is the only signal, not foreign.
+    expect(descNamesForeignInvoice("transfer to milk & moka marketing", mm, "IVCT-00012222")).toBe(false);
+    // A digit run that matches no known invoice (a date/amount) → not foreign.
+    expect(descNamesForeignInvoice("payment 2026 rm432", mm, "IVCT-00012222")).toBe(false);
   });
 
   it("bridges payee aliases: TMM = The Milk Ministry, Ad-hoc Purchase = Ariff Izham", () => {
