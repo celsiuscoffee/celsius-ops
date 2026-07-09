@@ -68,13 +68,65 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cannot submit stock count for another outlet" }, { status: 403 });
   }
 
+  // Variance baseline comes from the server, never the client. Staff count in
+  // package units and the staff flow does not carry a trustworthy expectedQty,
+  // so we read the current on-hand from StockBalance (kept in base UOM) and
+  // compare in base UOM. Trusting a client-supplied expectedQty meant every
+  // count read as "clean" (no baseline) and auto-approved, so real
+  // discrepancies never reached a manager. This mirrors the backoffice route
+  // at apps/backoffice/src/app/api/inventory/stock-checks.
+  type CountLine = {
+    productId: string;
+    productPackageId?: string | null;
+    countedQty?: number | null;
+    isConfirmed?: boolean;
+    varianceReason?: string;
+  };
+  const lines = (items as CountLine[]) ?? [];
+  const countedProductIds = [...new Set(lines.map((i) => i.productId))];
+  const packageIds = [
+    ...new Set(
+      lines.map((i) => i.productPackageId).filter((x): x is string => !!x),
+    ),
+  ];
+
+  const [packages, balances] = await Promise.all([
+    prisma.productPackage.findMany({
+      where: { id: { in: packageIds } },
+      select: { id: true, conversionFactor: true },
+    }),
+    prisma.stockBalance.findMany({
+      where: {
+        outletId,
+        productId: { in: countedProductIds },
+        productPackageId: null,
+      },
+      select: { productId: true, quantity: true },
+    }),
+  ]);
+  const factorByPackage: Record<string, number> = {};
+  for (const p of packages) factorByPackage[p.id] = Number(p.conversionFactor) || 1;
+  const balanceByProduct: Record<string, number> = {};
+  for (const b of balances) balanceByProduct[b.productId] = Number(b.quantity);
+  const factorFor = (i: CountLine) =>
+    i.productPackageId ? factorByPackage[i.productPackageId] ?? 1 : 1;
+
+  // Counted quantity per product in base UOM (summed across any package lines).
+  const countedBaseByProduct: Record<string, number> = {};
+  for (const i of lines) {
+    if (i.countedQty == null) continue;
+    countedBaseByProduct[i.productId] =
+      (countedBaseByProduct[i.productId] ?? 0) + Number(i.countedQty) * factorFor(i);
+  }
+
   // Zero-variance counts auto-approve straight to REVIEWED; only counts with a
-  // real discrepancy land in the manager's review queue (SUBMITTED).
+  // real discrepancy land in the manager's review queue (SUBMITTED). Products
+  // with no balance row have no baseline, so isCleanCount skips them.
   const now = new Date();
   const autoApprove = isCleanCount(
-    (items as Array<{ expectedQty?: number | null; countedQty?: number | null }>).map((i) => ({
-      expectedQty: i.expectedQty ?? null,
-      countedQty: i.countedQty ?? null,
+    countedProductIds.map((pid) => ({
+      expectedQty: pid in balanceByProduct ? balanceByProduct[pid] : null,
+      countedQty: pid in countedBaseByProduct ? countedBaseByProduct[pid] : null,
     })),
   );
 
@@ -88,14 +140,21 @@ export async function POST(req: NextRequest) {
       ...(autoApprove ? { reviewedAt: now } : {}),
       notes: notes || null,
       items: {
-        create: items.map((i: { productId: string; productPackageId?: string; expectedQty?: number; countedQty?: number; isConfirmed?: boolean; varianceReason?: string }) => ({
-          productId: i.productId,
-          productPackageId: i.productPackageId || null,
-          expectedQty: i.expectedQty ?? null,
-          countedQty: i.countedQty ?? null,
-          isConfirmed: i.isConfirmed ?? false,
-          varianceReason: i.varianceReason || null,
-        })),
+        create: lines.map((i) => {
+          // Store the expected on-hand in this line's package units so the
+          // review screen compares like-for-like against countedQty.
+          const balBase =
+            i.productId in balanceByProduct ? balanceByProduct[i.productId] : null;
+          const expectedQty = balBase == null ? null : balBase / factorFor(i);
+          return {
+            productId: i.productId,
+            productPackageId: i.productPackageId || null,
+            expectedQty,
+            countedQty: i.countedQty ?? null,
+            isConfirmed: i.isConfirmed ?? false,
+            varianceReason: i.varianceReason || null,
+          };
+        }),
       },
     },
     include: {

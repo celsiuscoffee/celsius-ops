@@ -27,6 +27,7 @@ export async function GET(
           orderNumber: true,
           status: true,
           totalAmount: true,
+          outletId: true,
           outlet: { select: { name: true, code: true } },
         },
       },
@@ -34,6 +35,22 @@ export async function GET(
   });
   if (!invoice) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  // Outlet ownership: a caller may only read invoices for outlets they are
+  // assigned to (outletId scalar + outletIds array). OWNER/ADMIN see all.
+  // Return 404 (not 403) so an out-of-scope invoice's existence stays hidden.
+  if (guard.session.role !== "OWNER" && guard.session.role !== "ADMIN") {
+    const me = await prisma.user.findUnique({
+      where: { id: guard.session.id },
+      select: { outletId: true, outletIds: true },
+    });
+    const allowed = new Set<string>([
+      ...(me?.outletId ? [me.outletId] : []),
+      ...(me?.outletIds ?? []),
+    ]);
+    if (!invoice.order || !allowed.has(invoice.order.outletId)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
   }
   // Serialize Prisma Decimals to numbers (raw Prisma emits them as strings),
   // mirroring the list route (apps/staff/src/app/api/invoices/route.ts). The
@@ -58,6 +75,26 @@ export async function PATCH(
   const guard = await checkModuleAccess(req, "inventory:invoices");
   if (!guard.ok) return guard.response;
   const { id } = await params;
+  // Outlet ownership: mirror the GET guard before mutating an invoice.
+  if (guard.session.role !== "OWNER" && guard.session.role !== "ADMIN") {
+    const [target, me] = await Promise.all([
+      prisma.invoice.findUnique({
+        where: { id },
+        select: { order: { select: { outletId: true } } },
+      }),
+      prisma.user.findUnique({
+        where: { id: guard.session.id },
+        select: { outletId: true, outletIds: true },
+      }),
+    ]);
+    const allowed = new Set<string>([
+      ...(me?.outletId ? [me.outletId] : []),
+      ...(me?.outletIds ?? []),
+    ]);
+    if (!target?.order || !allowed.has(target.order.outletId)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+  }
   const body = await req.json();
   const { invoiceNumber, dueDate, photos, amount, notes } = body;
 

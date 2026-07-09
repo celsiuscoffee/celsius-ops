@@ -112,11 +112,17 @@ export async function processLeaveRequest(requestId: string): Promise<LeaveDecis
     })
     .eq("id", requestId);
 
-  // Update pending_days on balance
+  // Auto-approved leave is consumed immediately, so move the days into
+  // used_days and draw down pending_days. This mirrors the backoffice
+  // manager-approve path (apps/backoffice/src/app/api/hr/leave). The old code
+  // added the days to pending_days instead, so approved leave never left the
+  // pending bucket and used_days never reflected days actually taken, which
+  // overstated pending and left balances permanently wrong.
   await hrSupabaseAdmin
     .from("hr_leave_balances")
     .update({
-      pending_days: Number(balance.pending_days) + total_days,
+      used_days: Number(balance.used_days) + total_days,
+      pending_days: Math.max(0, Number(balance.pending_days) - total_days),
     })
     .eq("id", balance.id);
 
