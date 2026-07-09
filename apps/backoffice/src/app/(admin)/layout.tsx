@@ -194,8 +194,8 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Orders",              href: "/pickup/orders",           icon: <ClipboardList className={ICON_SIZE} />,   moduleKey: "pickup:orders" },
       { label: "Customers",           href: "/loyalty/members",         icon: <Users className={ICON_SIZE} />,           moduleKey: "loyalty:members" },
       { label: "Compare",             href: "/sales/compare",           icon: <Scale className={ICON_SIZE} />,           moduleKey: "sales:dashboard" },
-      { label: "Reports",             href: "/pos/reports",             icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "pickup:settings" },
-      { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,           moduleKey: "pickup:settings" },
+      { label: "Reports",             href: "/pos/reports",             icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "sales:reports" },
+      { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,           moduleKey: "sales:reports" },
       { label: "Store / Menu Status", href: "/pos/store-menu-status",    icon: <Power className={ICON_SIZE} />,           moduleKey: "pickup:settings" },
     ],
   },
@@ -297,7 +297,7 @@ const NAV_SECTIONS: NavSection[] = [
         // reached via Sales → Customers (same /loyalty/members route).
         label: "Members",
         items: [
-          { label: "Manual Grant",  href: "/loyalty/manual-grant",  icon: <HandCoins className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
+          { label: "Manual Grant",  href: "/loyalty/manual-grant",  icon: <HandCoins className={ICON_SIZE} />, moduleKey: "loyalty:manual-grant" },
         ],
       },
       {
@@ -560,6 +560,15 @@ if (process.env.NODE_ENV !== "production") {
 
 // ─── RBAC helper ────────────────────────────────────────────────────────
 
+// Finer module keys carved out of a broader grant, mapped to the parent that
+// still satisfies them during transition. Lets us split coarse bundles without
+// a data backfill: existing parent-holders keep the carved-out pages until
+// their grants are migrated to the finer keys (see canAccess).
+const LEGACY_MODULE_FALLBACK: Record<string, string> = {
+  "sales:reports": "pickup:settings",
+  "loyalty:manual-grant": "loyalty:rewards",
+};
+
 function canAccess(user: UserProfile | undefined, moduleKey?: string): boolean {
   if (!user) return false;
   // Finance module — consolidated cashflow + bank balances + payroll run-rate.
@@ -577,7 +586,13 @@ function canAccess(user: UserProfile | undefined, moduleKey?: string): boolean {
   if (user.role === "ADMIN" || user.role === "OWNER") return true;
   if (!moduleKey) return true;
   if (!user.moduleAccess) return false;
-  return user.moduleAccess.includes(moduleKey);
+  if (user.moduleAccess.includes(moduleKey)) return true;
+  // Backward-compat for keys split out of a broader grant: anyone who still
+  // holds the original parent keeps access to the carved-out pages, so the
+  // split disturbs no existing grant and needs no data backfill. Drop an entry
+  // here once its grant has been migrated to the finer key.
+  const legacyParent = LEGACY_MODULE_FALLBACK[moduleKey];
+  return legacyParent ? user.moduleAccess.includes(legacyParent) : false;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
