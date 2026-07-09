@@ -4,7 +4,7 @@ import { Stack, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
@@ -29,15 +29,12 @@ import { API_BASE_URL } from "../lib/env";
 import { useStaff } from "../lib/store";
 import { registerForPush } from "../lib/push";
 import { useOtaAutoUpdate } from "../lib/use-ota-auto-update";
+import { queryClient } from "../lib/queryClient";
 import { useColorScheme } from "nativewind";
 import { themes, loadColorSchemePref } from "../lib/theme";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 initSentry();
-
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
-});
 
 function applyDefaultFont() {
   const TextAny = Text as unknown as { defaultProps?: Record<string, unknown> };

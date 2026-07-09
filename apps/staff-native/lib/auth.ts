@@ -2,6 +2,7 @@ import { api } from "./api";
 import { clearSession, saveSession, type StaffSession } from "./session";
 import { useStaff } from "./store";
 import { deregisterPush } from "./push";
+import { queryClient } from "./queryClient";
 
 type PinLoginResponse = {
   token: string;
@@ -35,6 +36,11 @@ export async function loginWithPin(pin: string, outletId: string | null) {
     moduleAccess: res.user.moduleAccess,
   };
   await saveSession(session);
+  // Drop any cached queries from a PREVIOUS user before this session's screens
+  // mount, otherwise react-query serves the last user's data (payslips, memos,
+  // sales, etc.) until each query's staleTime expires. This is why logging in
+  // still showed the previous account for a while.
+  queryClient.clear();
   useStaff.getState().setSession(session);
   return session;
 }
@@ -42,5 +48,7 @@ export async function loginWithPin(pin: string, outletId: string | null) {
 export async function logout() {
   await deregisterPush().catch(() => {});
   await clearSession();
+  // Wipe the previous user's cached queries so the next account starts clean.
+  queryClient.clear();
   useStaff.getState().setSession(null);
 }

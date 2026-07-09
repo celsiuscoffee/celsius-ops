@@ -47,9 +47,22 @@ export function useOtaAutoUpdate(): void {
         const fetched = await Updates.fetchUpdateAsync();
         // Only reload if a genuinely new bundle landed, reloadAsync restarts the
         // JS app, so we never do it speculatively.
-        if (fetched.isNew) {
-          await Updates.reloadAsync();
-        }
+        if (!fetched.isNew) return;
+        // Forward-only guard: never reload the device into an OLDER bundle. If an
+        // OTA is ever published to this channel from a branch behind main (an
+        // out-of-order publish), it becomes the channel's "latest" and we would
+        // otherwise reload backwards mid-session, the "it reverted to the old
+        // build" symptom. Compare the fetched bundle's createdAt to the running
+        // one; if we can't read it, fall through and reload (normal behaviour).
+        const runningAt = Updates.createdAt?.getTime() ?? 0;
+        const manifest = fetched.manifest as unknown as
+          | { createdAt?: string }
+          | undefined;
+        const fetchedAt = manifest?.createdAt
+          ? new Date(manifest.createdAt).getTime()
+          : Number.POSITIVE_INFINITY;
+        if (fetchedAt < runningAt) return;
+        await Updates.reloadAsync();
       } catch {
         // Network blip / mid-publish race / anything else, swallow. The next
         // foreground (or the next cold start) retries; a failed update check must
