@@ -204,7 +204,10 @@ function StaffHome() {
     : null;
 
   return (
-    <Screen>
+    // edges without "bottom": the tab bar is opaque + in-flow, so a bottom
+    // safe-area inset would clip the scroll ~34px above the tab bar and leave a
+    // white gap. Dropping it lets the task list run flush to the tab bar.
+    <Screen edges={["top", "left", "right"]}>
       {/* Frozen header, sits OUTSIDE the ScrollView so the avatar +
           gear icon stay tappable while you scroll the task list. */}
       <View className="flex-row items-center gap-3 pt-3 pb-3">
@@ -246,7 +249,7 @@ function StaffHome() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="pb-24"
+        contentContainerClassName="pb-6"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
