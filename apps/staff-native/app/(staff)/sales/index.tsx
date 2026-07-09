@@ -5,7 +5,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import {
   Banknote, CreditCard, QrCode, Smartphone, Bike, ShoppingBag, Landmark, Wallet,
   Utensils, Package, Sunrise, Sunset, Sun, Moon, Coffee, Sandwich, UtensilsCrossed,
-  TrendingUp, TrendingDown, UserPlus, BarChart3, ChevronDown, Settings,
+  TrendingUp, TrendingDown, UserPlus, BarChart3, ChevronDown, Settings, Store,
 } from "lucide-react-native";
 import { useStaff } from "@/lib/store";
 import { hasAccess } from "@/lib/access";
@@ -194,6 +194,16 @@ export default function SalesScreen() {
           <View className="items-center justify-center py-24"><ActivityIndicator color="#FBBF24" /></View>
         ) : error ? (
           <View className="rounded-2xl border border-[#F5F3F01a] bg-[#2a1508] p-5"><Text className="font-body text-sm text-[#f87171]">{error}</Text></View>
+        ) : data && !data.onPos ? (
+          <View className="items-center px-8 py-24">
+            <View className="h-16 w-16 items-center justify-center rounded-3xl bg-[#2a1508]">
+              <Store color="#E0875F" size={28} />
+            </View>
+            <Text className="mt-4 font-display text-lg text-[#F5F3F0]">Not on POS yet</Text>
+            <Text className="mt-2 text-center font-body text-sm leading-5 text-[#F5F3F08a]">
+              {data.outletName} isn't connected to the POS, so there's no sales data to show here yet.
+            </Text>
+          </View>
         ) : data && s && g ? (
           <View className="gap-3.5">
             {/* Hero */}
