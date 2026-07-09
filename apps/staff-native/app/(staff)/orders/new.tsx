@@ -26,7 +26,6 @@ import {
   X as XIcon,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { Field, Pill, SkeletonList } from "../../../components/ui";
@@ -75,7 +74,6 @@ type CartLine = {
 export default function NewPO() {
   const router = useRouter();
   const session = useStaff((s) => s.session);
-  const tabBarHeight = useBottomTabBarHeight();
   // Sending a PO to a supplier is manager-only, matches the gating in
   // orders/[id].tsx. Non-managers can still save a draft for a manager
   // to review and send.
@@ -493,7 +491,7 @@ export default function NewPO() {
           // its content, leaving the bottom action bar floating over
           // whitespace when the cart has zero items. paddingBottom clears
           // the pinned action bar, which now sits above the opaque tab bar.
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: tabBarHeight + 96 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 96 }}
           keyboardShouldPersistTaps="handled"
         >
           {/* Supplier */}
@@ -730,7 +728,7 @@ export default function NewPO() {
         {tab === "all" ? (
           <View
             style={{
-              paddingBottom: tabBarHeight + 12,
+              paddingBottom: 12,
               shadowColor: "#160800",
               shadowOffset: { width: 0, height: -4 },
               shadowOpacity: 0.06,
