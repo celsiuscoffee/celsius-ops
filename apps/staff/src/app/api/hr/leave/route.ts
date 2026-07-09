@@ -28,8 +28,19 @@ export async function GET() {
       .limit(20),
   ]);
 
+  // hr_leave_balances stores entitled/used/pending/carried_forward but not the
+  // "remaining" headline the app shows, so compute it: what the staff can still
+  // take = entitled + carried forward, minus used and pending. Values come back
+  // as numeric strings, so coerce.
+  const num = (v: unknown) => Number(v ?? 0) || 0;
+  const balances = (balancesRes.data || []).map((b: Record<string, unknown>) => ({
+    ...b,
+    remaining_days:
+      num(b.entitled_days) + num(b.carried_forward) - num(b.used_days) - num(b.pending_days),
+  }));
+
   return NextResponse.json({
-    balances: balancesRes.data || [],
+    balances,
     requests: requestsRes.data || [],
   });
 }

@@ -33,7 +33,7 @@ export default function TransfersPage() {
   }, [load]);
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title="Transfers" back />
       {loading ? (
         <View className="flex-1 items-center justify-center">
@@ -44,7 +44,7 @@ export default function TransfersPage() {
       className="flex-1"
       data={items}
       keyExtractor={(t) => t.id}
-      contentContainerClassName="pt-2 pb-24"
+      contentContainerClassName="pt-2 pb-6"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

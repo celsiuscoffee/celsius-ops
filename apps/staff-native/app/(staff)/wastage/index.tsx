@@ -138,7 +138,7 @@ export default function WastagePage() {
 
   if (loading) {
     return (
-      <Screen>
+      <Screen edges={["top", "left", "right"]}>
         <PageHeader title="Wastage" back />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#A2492C" />

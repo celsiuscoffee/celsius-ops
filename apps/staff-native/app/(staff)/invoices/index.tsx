@@ -276,7 +276,7 @@ export default function InvoicesList() {
   }, []);
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader
           title="Invoices"
           subtitle="Supplier invoices & payment status"
@@ -285,7 +285,7 @@ export default function InvoicesList() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="pb-24"
+        contentContainerClassName="pb-6"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

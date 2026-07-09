@@ -29,7 +29,7 @@ export default function ClaimsList() {
   const claims = data?.claims ?? [];
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader
         title="Claims"
         subtitle="Out-of-pocket purchases"
@@ -71,7 +71,7 @@ export default function ClaimsList() {
           data={claims}
           keyExtractor={(c) => c.id}
           ItemSeparatorComponent={() => <View className="h-3" />}
-          contentContainerClassName="pb-24"
+          contentContainerClassName="pb-6"
           renderItem={({ item }) => <ClaimCard claim={item} />}
       showsVerticalScrollIndicator={false}
     />

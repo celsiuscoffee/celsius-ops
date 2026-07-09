@@ -20,7 +20,7 @@ export default function PayslipsScreen() {
   const payslips = data?.payslips ?? [];
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title="Payslips" back />
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
@@ -35,7 +35,7 @@ export default function PayslipsScreen() {
       ) : (
         <FlatList
           className="flex-1"
-          contentContainerClassName="pt-2 pb-24"
+          contentContainerClassName="pt-2 pb-6"
           data={payslips}
           keyExtractor={(p) => p.id}
           ItemSeparatorComponent={() => <View className="h-3" />}

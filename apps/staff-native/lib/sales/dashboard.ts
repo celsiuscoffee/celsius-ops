@@ -11,6 +11,9 @@ export type Payment = { key: string; label: string; amount: number; pct: number 
 export type SalesDashboard = {
   outletId: string;
   outletName: string;
+  // False when the selected outlet has no POS/pickup/StoreHub source yet (e.g.
+  // Nilai, IOI): the screen shows a "not on POS yet" state instead of RM0.
+  onPos: boolean;
   availableOutlets?: { id: string; name: string }[];
   mode: Mode;
   granularity: Granularity;

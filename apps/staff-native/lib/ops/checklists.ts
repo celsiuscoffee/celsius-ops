@@ -13,6 +13,9 @@ export type ChecklistSummary = {
   sop: { id: string; title: string; category: { name: string } };
   outlet: { id: string; code: string; name: string };
   assignedTo: { id: string; name: string } | null;
+  // Whole-outlet work (opening/closing/cleaning) anyone on shift owns. Shared
+  // checklists appear in everyone's "Mine" tab, not just the auto-assigned owner.
+  shared: boolean;
   completedBy: { id: string; name: string } | null;
   totalItems: number;
   completedItems: number;

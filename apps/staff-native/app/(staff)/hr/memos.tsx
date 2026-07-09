@@ -21,7 +21,7 @@ export default function MemosScreen() {
   const memos = data?.memos ?? [];
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title="Memos" back />
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
@@ -36,7 +36,7 @@ export default function MemosScreen() {
       ) : (
     <FlatList
       className="flex-1"
-      contentContainerClassName="pt-2 pb-24"
+      contentContainerClassName="pt-2 pb-6"
       data={memos}
       keyExtractor={(m) => m.id}
       ItemSeparatorComponent={() => <View className="h-3" />}
