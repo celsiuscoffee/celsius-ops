@@ -49,12 +49,18 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
     { label: "Overview", key: "dashboard" },
     { label: "Members", key: "members" },
     { label: "Rewards", key: "rewards" },
+    // Split out of loyalty:rewards: issuing points/vouchers by hand is a
+    // sensitive action worth granting (or withholding) on its own.
+    { label: "Manual Grant", key: "manual-grant" },
     { label: "Redemptions", key: "redemptions" },
     { label: "Campaigns", key: "campaigns" },
     { label: "Engage", key: "engage" },
   ],
   sales: [
     { label: "Dashboard", key: "dashboard", apps: ["backoffice", "staff"] },
+    // Split out of pickup:settings so Reports/Cashier Performance can be granted
+    // without also handing over POS/printer configuration.
+    { label: "Reports & Cashier Performance", key: "reports" },
   ],
   settings: [
     { label: "Outlets", key: "outlets" },
@@ -151,7 +157,7 @@ export const NAV_TABS: GrantTab[] = [
           m("sales", "dashboard", "Dashboard & Compare"),
           m("pickup", "orders", "Orders"),
           m("loyalty", "members", "Customers"),
-          m("pickup", "settings", "Reports & Cashier Performance"),
+          m("sales", "reports", "Reports & Cashier Performance"),
         ],
       },
     ],
@@ -202,7 +208,10 @@ export const NAV_TABS: GrantTab[] = [
       },
       {
         label: "Rewards & Promotions",
-        modules: [m("loyalty", "rewards", "Challenges, Mystery, Manual Grant & Setup")],
+        modules: [
+          m("loyalty", "rewards", "Challenges, Mystery & Setup"),
+          m("loyalty", "manual-grant", "Manual Grant (issue points/vouchers)"),
+        ],
       },
       {
         label: "History",

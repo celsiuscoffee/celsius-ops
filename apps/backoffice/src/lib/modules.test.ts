@@ -44,6 +44,18 @@ describe("ops:checklists drift fix", () => {
   });
 });
 
+describe("coarse-bundle splits", () => {
+  it("Reports & Cashier Performance is grantable on its own key", () => {
+    expect(GRANTABLE_MODULE_KEYS.has("sales:reports")).toBe(true);
+    expect(moduleApps("sales", "reports")).toEqual(["backoffice"]);
+  });
+
+  it("Manual Grant is grantable on its own key", () => {
+    expect(GRANTABLE_MODULE_KEYS.has("loyalty:manual-grant")).toBe(true);
+    expect(moduleApps("loyalty", "manual-grant")).toEqual(["backoffice"]);
+  });
+});
+
 describe("editor visibility matrix", () => {
   it("a Staff-App-only user sees the staff operational modules, not backoffice-only ones", () => {
     const staff = visibleKeys(["ops"]);

@@ -194,8 +194,8 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Orders",              href: "/pickup/orders",           icon: <ClipboardList className={ICON_SIZE} />,   moduleKey: "pickup:orders" },
       { label: "Customers",           href: "/loyalty/members",         icon: <Users className={ICON_SIZE} />,           moduleKey: "loyalty:members" },
       { label: "Compare",             href: "/sales/compare",           icon: <Scale className={ICON_SIZE} />,           moduleKey: "sales:dashboard" },
-      { label: "Reports",             href: "/pos/reports",             icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "pickup:settings" },
-      { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,           moduleKey: "pickup:settings" },
+      { label: "Reports",             href: "/pos/reports",             icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "sales:reports" },
+      { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,           moduleKey: "sales:reports" },
       { label: "Store / Menu Status", href: "/pos/store-menu-status",    icon: <Power className={ICON_SIZE} />,           moduleKey: "pickup:settings" },
     ],
   },
@@ -297,7 +297,7 @@ const NAV_SECTIONS: NavSection[] = [
         // reached via Sales → Customers (same /loyalty/members route).
         label: "Members",
         items: [
-          { label: "Manual Grant",  href: "/loyalty/manual-grant",  icon: <HandCoins className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
+          { label: "Manual Grant",  href: "/loyalty/manual-grant",  icon: <HandCoins className={ICON_SIZE} />, moduleKey: "loyalty:manual-grant" },
         ],
       },
       {
@@ -560,6 +560,15 @@ if (process.env.NODE_ENV !== "production") {
 
 // ─── RBAC helper ────────────────────────────────────────────────────────
 
+// Finer module keys carved out of a broader grant, mapped to the parent that
+// still satisfies them during transition. Lets us split coarse bundles without
+// a data backfill: existing parent-holders keep the carved-out pages until
+// their grants are migrated to the finer keys (see canAccess).
+const LEGACY_MODULE_FALLBACK: Record<string, string> = {
+  "sales:reports": "pickup:settings",
+  "loyalty:manual-grant": "loyalty:rewards",
+};
+
 function canAccess(user: UserProfile | undefined, moduleKey?: string): boolean {
   if (!user) return false;
   // Finance module — consolidated cashflow + bank balances + payroll run-rate.
@@ -577,7 +586,13 @@ function canAccess(user: UserProfile | undefined, moduleKey?: string): boolean {
   if (user.role === "ADMIN" || user.role === "OWNER") return true;
   if (!moduleKey) return true;
   if (!user.moduleAccess) return false;
-  return user.moduleAccess.includes(moduleKey);
+  if (user.moduleAccess.includes(moduleKey)) return true;
+  // Backward-compat for keys split out of a broader grant: anyone who still
+  // holds the original parent keeps access to the carved-out pages, so the
+  // split disturbs no existing grant and needs no data backfill. Drop an entry
+  // here once its grant has been migrated to the finer key.
+  const legacyParent = LEGACY_MODULE_FALLBACK[moduleKey];
+  return legacyParent ? user.moduleAccess.includes(legacyParent) : false;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -942,6 +957,28 @@ function PasswordChangeDialog({ hasPassword }: { hasPassword?: boolean }) {
   );
 }
 
+// The backoffice home (/dashboard) is the company KPI command centre. Managers
+// see it only with the Sales dashboard grant; OWNER/ADMIN always do. Anyone
+// without it is routed to their first accessible page instead.
+const DASHBOARD_HOME_MODULE = "sales:dashboard";
+
+// First nav destination a user can actually open, in sidebar order. Used as the
+// safe redirect target so a gated page never bounces someone to a home they
+// also can't see. Returns undefined only when the user has NO accessible page —
+// callers then keep them on /dashboard as the ultimate harbour (never a loop).
+function firstAccessibleHref(user: UserProfile): string | undefined {
+  for (const section of NAV_SECTIONS) {
+    const items = [
+      ...(section.items ?? []),
+      ...(section.subgroups?.flatMap((sg) => sg.items) ?? []),
+    ];
+    for (const item of items) {
+      if (canAccess(user, item.moduleKey)) return item.href;
+    }
+  }
+  return undefined;
+}
+
 // ─── Admin Layout ───────────────────────────────────────────────────────
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -970,24 +1007,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Block direct URL access to unauthorized pages
   useEffect(() => {
     if (!user || !pathname) return;
-    // Dashboard is always accessible
-    if (pathname === "/dashboard" || pathname === "/") return;
-    // OWNER and ADMIN bypass all checks
+    // OWNER and ADMIN bypass all checks (including the home dashboard).
     if (user.role === "ADMIN" || user.role === "OWNER") return;
-    // NOTE: there is no "empty moduleAccess = full access" escape here. The
-    // sidebar render path (canAccess) already denies every gated item when
-    // moduleAccess is empty, so such a manager only ever sees Dashboard in the
-    // nav. Letting the URL guard fall through to the same canAccess check below
-    // keeps direct-URL access consistent with what the sidebar exposes —
-    // previously an empty-moduleAccess manager had a blank sidebar but could
-    // still reach every non-finance page by typing the URL.
 
-    // Match the current path to the MOST SPECIFIC (longest-href) nav item,
-    // then gate on that item's module. A first-match loop let a broad parent
-    // like the Settings "Hub" (/settings) shadow more specific siblings such
-    // as /settings/staff — so a manager who has settings:staff but not the
-    // Hub's settings:outlets got bounced to /dashboard the instant they
-    // opened Settings. Longest-match mirrors the sidebar's active-link logic.
+    // Home (/dashboard) is now gated on the Sales dashboard grant. A manager
+    // without it is routed to their first accessible page; a manager with no
+    // accessible page at all stays here — /dashboard remains the ultimate safe
+    // harbour, so this can never become a redirect loop. (No "empty moduleAccess
+    // = full access" escape: canAccess denies every gated item when moduleAccess
+    // is empty, keeping direct-URL access consistent with the sidebar.)
+    if (pathname === "/dashboard" || pathname === "/") {
+      if (canAccess(user, DASHBOARD_HOME_MODULE)) return;
+      const dest = firstAccessibleHref(user);
+      if (dest) router.replace(dest);
+      return;
+    }
+
+    // Match the current path to the MOST SPECIFIC (longest-href) nav item, then
+    // gate on that item's module. Longest-match mirrors the sidebar's active-link
+    // logic so a broad parent (e.g. the Settings "Hub") can't shadow a specific
+    // sibling (e.g. /settings/staff) and wrongly bounce the user.
     let best: NavItem | undefined;
     for (const section of NAV_SECTIONS) {
       const allItems = [
@@ -1001,7 +1040,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       }
     }
     if (best?.moduleKey && !canAccess(user, best.moduleKey)) {
-      router.replace("/dashboard");
+      // Send them somewhere they can actually use, not a home they may not hold.
+      router.replace(firstAccessibleHref(user) ?? "/dashboard");
     }
   }, [user, pathname, router]);
 
