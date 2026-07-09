@@ -22,7 +22,7 @@ export default function ShiftsScreen() {
   const shifts = data?.shifts ?? [];
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title="My Shifts" back />
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
@@ -46,7 +46,7 @@ export default function ShiftsScreen() {
       ) : (
         <FlatList
           className="flex-1"
-          contentContainerClassName="pt-2 pb-24"
+          contentContainerClassName="pt-2 pb-6"
           data={shifts}
           keyExtractor={(s) => s.id}
           ItemSeparatorComponent={() => <View className="h-3" />}

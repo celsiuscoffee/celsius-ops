@@ -179,7 +179,7 @@ export default function NewClaim() {
 
   if (step === "capture") {
     return (
-      <Screen>
+      <Screen edges={["top", "left", "right"]}>
         <PageHeader
           title="New claim"
           subtitle="Snap the receipt and we'll fill in the details."
@@ -218,7 +218,7 @@ export default function NewClaim() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Screen>
+      <Screen edges={["top", "left", "right"]}>
         {/* Sticky header */}
                   <PageHeader
             title="New claim"
@@ -228,7 +228,7 @@ export default function NewClaim() {
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerClassName="pb-24"
+          contentContainerClassName="pb-6"
           keyboardShouldPersistTaps="handled"
         >
           <PhotoStatus

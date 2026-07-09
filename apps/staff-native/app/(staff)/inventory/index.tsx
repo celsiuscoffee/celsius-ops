@@ -142,13 +142,13 @@ export default function InventoryHub() {
   );
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       {/* Sticky header */}
       <PageHeader title="Inventory" subtitle="Stock operations" />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="pb-24"
+        contentContainerClassName="pb-6"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

@@ -340,7 +340,7 @@ export default function NewPO() {
 
   if (loading) {
     return (
-      <Screen>
+      <Screen edges={["top", "left", "right"]}>
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#C2452D" />
         </View>

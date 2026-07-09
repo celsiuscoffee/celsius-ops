@@ -198,7 +198,7 @@ export default function ClockScreen() {
   const canClockIn = !clockedIn && (!zone || inZone);
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader
         title="Clock"
         subtitle={

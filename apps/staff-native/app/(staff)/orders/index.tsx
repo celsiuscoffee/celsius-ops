@@ -92,7 +92,7 @@ export default function OrdersList() {
   }, [items, tab]);
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       {/* Sticky header with inline "+ New PO" */}
               <PageHeader
           title="Purchase Orders"
@@ -136,7 +136,7 @@ export default function OrdersList() {
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerClassName="pb-24"
+          contentContainerClassName="pb-6"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

@@ -124,7 +124,7 @@ export default function ChecklistsList() {
   const totalItemCount = items.reduce((s, c) => s + c.totalItems, 0);
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title="Checklists" />
       {loading && items.length === 0 ? (
         <View className="flex-1 items-center justify-center">
@@ -138,7 +138,7 @@ export default function ChecklistsList() {
         <FlatList
           data={grouped}
           keyExtractor={(g) => g.shift}
-          contentContainerClassName="pt-2 pb-24"
+          contentContainerClassName="pt-2 pb-6"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

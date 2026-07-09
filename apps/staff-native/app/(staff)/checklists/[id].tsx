@@ -267,7 +267,7 @@ export default function ChecklistDetail() {
   }
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader
         title={detail.sop.title}
         subtitle={`${detail.outlet.name} · ${detail.sop.category.name}`}
@@ -279,7 +279,7 @@ export default function ChecklistDetail() {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="pt-2 pb-24"
+          contentContainerClassName="pt-2 pb-6"
           keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >

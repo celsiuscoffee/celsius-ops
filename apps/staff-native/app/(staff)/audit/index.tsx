@@ -64,7 +64,7 @@ export default function AuditList() {
 
   if (loading && items.length === 0) {
     return (
-      <Screen>
+      <Screen edges={["top", "left", "right"]}>
         <PageHeader title="Audits" />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#A2492C" />

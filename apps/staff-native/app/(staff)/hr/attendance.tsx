@@ -13,7 +13,7 @@ export default function AttendanceScreen() {
   const stats = data?.stats;
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title="Attendance" back />
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
@@ -28,7 +28,7 @@ export default function AttendanceScreen() {
       ) : (
         <FlatList
           className="flex-1"
-          contentContainerClassName="pt-2 pb-24"
+          contentContainerClassName="pt-2 pb-6"
           data={items}
           keyExtractor={(a) => a.id}
           ListHeaderComponent={stats ? <StatsCard stats={stats} /> : null}

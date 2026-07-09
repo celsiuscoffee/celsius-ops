@@ -61,7 +61,7 @@ export default function MySkills() {
   const templates = data?.templates ?? [];
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title="My Skills" back />
       {loading ? (
         <View className="flex-1 items-center justify-center">
@@ -82,7 +82,7 @@ export default function MySkills() {
       ) : (
     <ScrollView
       className="flex-1"
-      contentContainerClassName="pt-2 pb-24 gap-3"
+      contentContainerClassName="pt-2 pb-6 gap-3"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

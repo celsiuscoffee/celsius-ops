@@ -278,7 +278,7 @@ export default function AuditDetail() {
   }
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader
         title={audit.template.name}
         subtitle={`${cursor + 1} of ${total} · ${rated} rated`}
@@ -301,7 +301,7 @@ export default function AuditDetail() {
         {/* Question */}
         <ScrollView
           className="flex-1"
-          contentContainerClassName="px-5 pt-6 pb-12"
+          contentContainerClassName="px-5 pt-6 pb-6"
       showsVerticalScrollIndicator={false}
     >
           <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
@@ -574,7 +574,7 @@ export default function AuditDetail() {
                   </Text>
                 </Pressable>
               </View>
-              <ScrollView contentContainerClassName="px-5 pt-4 pb-12"
+              <ScrollView contentContainerClassName="px-5 pt-4 pb-6"
       showsVerticalScrollIndicator={false}
     >
                 <View className="rounded-2xl border border-border bg-surface p-4">
@@ -706,9 +706,9 @@ function CompletedView({
   }, [audit.items]);
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <PageHeader title={audit.template.name} subtitle="Completed audit" back />
-      <ScrollView contentContainerClassName="pt-2 pb-12"
+      <ScrollView contentContainerClassName="pt-2 pb-6"
       showsVerticalScrollIndicator={false}
     >
         <View className="mt-1 flex-row items-end gap-2">
