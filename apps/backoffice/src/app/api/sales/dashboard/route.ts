@@ -20,7 +20,7 @@ import {
 } from "../_lib/storehub-helpers";
 import { getUnifiedSalesForOutlet, type UnifiedSale } from "../_lib/unified-sales";
 import { getActiveTargets } from "../_lib/targets";
-import { startOfWeekMYT, startOfMonthMYT } from "@celsius/shared";
+import { startOfWeekMYT, startOfMonthMYT, addDaysMYT, salesPeriodRange } from "@celsius/shared";
 
 // ─── GET /api/sales/dashboard ────────────────────────────────────────────
 
@@ -80,29 +80,51 @@ export async function GET(request: NextRequest) {
       toDate = todayMYT;
     }
 
-    // Calculate previous period for comparison
-    // Use noon to avoid rounding issues with midnight boundaries
-    const fromD = new Date(fromDate + "T12:00:00+08:00");
-    const toD = new Date(toDate + "T12:00:00+08:00");
-    const periodDays = Math.round((toD.getTime() - fromD.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const prevToD = new Date(fromD);
-    prevToD.setDate(prevToD.getDate() - 1);
-    const prevFromD = new Date(prevToD);
-    prevFromD.setDate(prevFromD.getDate() - periodDays + 1);
-    const prevFromMYT = new Date(prevFromD.getTime() + 8 * 60 * 60 * 1000);
-    const prevToMYT = new Date(prevToD.getTime() + 8 * 60 * 60 * 1000);
-    const prevFromDate = prevFromMYT.toISOString().split("T")[0];
-    const prevToDate = prevToMYT.toISOString().split("T")[0];
+    // Calculate previous period for comparison.
+    // Anchor at noon MYT to avoid rounding issues with midnight boundaries.
+    const periodDays =
+      Math.round(
+        (new Date(toDate + "T12:00:00+08:00").getTime() -
+          new Date(fromDate + "T12:00:00+08:00").getTime()) /
+          (1000 * 60 * 60 * 24),
+      ) + 1;
+
+    // Which previous period do we compare against?
+    //   • Calendar-anchored to-date views (This Week / This Month) compare
+    //     against the EQUIVALENT span of the prior calendar week/month — same
+    //     weekday / day-of-month offset — so the headline agrees with the
+    //     accumulative chart's week/month-over-period line.
+    //   • Rolling windows (Last 7/30 Days), single days, and custom ranges
+    //     compare against the same number of days immediately before.
+    // Bug this fixes: the old code ALWAYS took `periodDays` ending the day before
+    // the period start, so "This Month" (e.g. Jul 1–9) compared against Jun 22–30
+    // instead of Jun 1–9 — an unrelated slice of the month that could make
+    // revenue read as UP when, month-over-month to the same day, it was DOWN.
+    let prevFromDate: string;
+    let prevToDate: string;
+    if (period === "monthly" || period === "weekly") {
+      const { prev } = salesPeriodRange(period === "monthly" ? "month" : "week", todayMYT);
+      prevFromDate = prev.from;
+      prevToDate = addDaysMYT(prev.from, periodDays - 1);
+    } else {
+      prevFromDate = addDaysMYT(fromDate, -periodDays);
+      prevToDate = addDaysMYT(fromDate, -1);
+    }
 
     // Like-for-like ("realtime") comparison: when the current period is still
     // in progress (it runs up to today), the previous period must be measured
     // to the SAME elapsed point — otherwise a partial day/week/month reads as a
     // huge drop against the prior FULL one (e.g. today-so-far vs all of
-    // yesterday → "-70%"). Shifting `now` back exactly periodDays reproduces the
-    // same time-of-day / weekday offset the chart's running-total already uses,
-    // so the headline deltas match the Today-vs-Yesterday curve.
+    // yesterday → "-70%"). Shifting `now` back by the gap between the two period
+    // starts reproduces the same time-of-day / weekday offset the chart's
+    // running-total already uses, so the headline deltas match the curve.
     const inProgress = toDate === todayMYT;
-    const prevCutoffMs = now.getTime() - periodDays * 24 * 60 * 60 * 1000;
+    const prevStartOffsetDays = Math.round(
+      (new Date(fromDate + "T12:00:00+08:00").getTime() -
+        new Date(prevFromDate + "T12:00:00+08:00").getTime()) /
+        (1000 * 60 * 60 * 24),
+    );
+    const prevCutoffMs = now.getTime() - prevStartOffsetDays * 24 * 60 * 60 * 1000;
 
     // Fetch outlets. Include every active outlet that sells on EITHER system:
     // StoreHub history (storehubId) OR the native POS (loyaltyOutletId). The
