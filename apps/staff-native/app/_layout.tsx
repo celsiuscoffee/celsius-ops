@@ -191,6 +191,13 @@ function RootLayout() {
         case "audit":
           router.push("/(staff)/audit");
           return;
+        // Personal HR events (backoffice sends these via sendOpsPush directly).
+        case "memo":
+          router.push("/(staff)/hr/memos");
+          return;
+        case "shift":
+          router.push("/(staff)/hr/shifts");
+          return;
         case "reminder":
         case "instruction":
         case "digest":
