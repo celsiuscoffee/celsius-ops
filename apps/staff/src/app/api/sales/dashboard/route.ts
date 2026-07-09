@@ -442,6 +442,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     outletId: scopeId,
     outletName,
+    // Whether the selected outlet has ANY sales-data source (POS code, pickup
+    // store, or StoreHub). An outlet that isn't on POS yet (e.g. Nilai, IOI)
+    // returns false so the app can say "not on POS yet" instead of showing an
+    // all-zero dashboard that reads as zero sales. "All" is always true.
+    onPos:
+      scope === "all" ||
+      posCodes.length > 0 ||
+      storeIds.length > 0 ||
+      scopeOutlets.some((o) => !!o.storehubId),
     availableOutlets,
     mode,
     granularity,
