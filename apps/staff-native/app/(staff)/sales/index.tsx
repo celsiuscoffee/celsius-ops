@@ -188,7 +188,7 @@ export default function SalesScreen() {
       <ScrollView
         contentContainerClassName="px-4 pb-16"
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FBBF24" colors={["#FBBF24"]} progressBackgroundColor="#2a1508" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A2492C" colors={["#A2492C"]} progressBackgroundColor="#2a1508" />}
       >
         {isLoading ? (
           <View className="items-center justify-center py-24"><ActivityIndicator color="#FBBF24" /></View>
