@@ -471,7 +471,7 @@ export default function NewPO() {
                       </Text>
                       <View className="mt-2 flex-row items-center justify-between">
                         <Text className="text-base font-body-bold text-espresso tabular-nums">
-                          RM {rec.totalAmount.toFixed(2)}
+                          RM {Number(rec.totalAmount ?? 0).toFixed(2)}
                         </Text>
                         <Text className="text-xs font-body-bold text-primary">
                           Tap to apply →
@@ -630,7 +630,7 @@ export default function NewPO() {
                               {p.sku ? `${p.sku} · ` : ""}
                               {p.packageLabel}
                               {p.price > 0
-                                ? ` · RM ${p.price.toFixed(2)}`
+                                ? ` · RM ${Number(p.price ?? 0).toFixed(2)}`
                                 : ""}
                             </Text>
                           </View>
@@ -695,7 +695,7 @@ export default function NewPO() {
                               </View>
                             </View>
                             <Text className="text-base font-body-bold text-espresso tabular-nums">
-                              RM {(qty * unitPrice).toFixed(2)}
+                              RM {(Number(qty ?? 0) * Number(unitPrice ?? 0)).toFixed(2)}
                             </Text>
                           </View>
                         ) : null}

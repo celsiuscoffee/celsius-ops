@@ -29,7 +29,7 @@ function rmF(n: number): string {
   const [i, d] = (Math.round(n * 100) / 100).toFixed(2).split(".");
   return "RM " + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + d;
 }
-function numF(n: number): string { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+function numF(n: number): string { return Math.round(Number(n ?? 0)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 function deltaStr(d: number | null): string { return d == null ? "New" : `${d >= 0 ? "+" : ""}${d}%`; }
 function deltaUp(d: number | null): boolean { return d == null ? true : d >= 0; }
 function rmDeltaStr(cur: number, prev: number): string {

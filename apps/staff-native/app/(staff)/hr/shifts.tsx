@@ -12,7 +12,7 @@ import { CalendarPlus, Clock } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { fetchShifts, type Shift } from "../../../lib/hr/api";
-import { buildShiftCalendarUrl, formatDuration } from "../../../lib/hr/calendar";
+import { buildShiftIcsUrl, formatDuration } from "../../../lib/hr/calendar";
 
 export default function ShiftsScreen() {
   const { data, isLoading, error } = useQuery({
@@ -80,7 +80,7 @@ function ShiftCard({ shift }: { shift: Shift }) {
   const duration = formatDuration(shift.start_time, shift.end_time);
 
   const addToCalendar = () => {
-    const url = buildShiftCalendarUrl(shift);
+    const url = buildShiftIcsUrl(shift);
     Linking.openURL(url).catch(() =>
       Alert.alert(
         "Couldn't open calendar",

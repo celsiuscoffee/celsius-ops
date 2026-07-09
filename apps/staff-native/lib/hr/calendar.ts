@@ -1,7 +1,8 @@
 import type { Shift } from "./api";
+import { API_BASE_URL } from "../env";
 
 // Malaysia has a single timezone with no DST, so we can pin every shift to
-// Asia/Kuala_Lumpur and hand Google Calendar wall-clock times directly.
+// Asia/Kuala_Lumpur wall-clock times directly.
 const TZ = "Asia/Kuala_Lumpur";
 
 // "2026-07-09" + "15:30:00" -> "20260709T153000" (Google TEMPLATE local stamp)
@@ -40,12 +41,13 @@ export function formatDuration(startTime: string, endTime: string): string {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
-// Build a Google Calendar "add event" URL for a shift. We use the web
-// TEMPLATE endpoint (opened via Linking) rather than expo-calendar so the
-// feature ships over-the-air — no native module, no calendar permission,
-// works on iOS and Android, and the org already lives in Google Workspace.
-export function buildShiftCalendarUrl(shift: Shift): string {
-  const role = shift.position ? ` — ${shift.position}` : "";
+// Build the .ics endpoint URL for a shift. Opened with Linking, iOS hands the
+// text/calendar response to Apple Calendar and Android to its default calendar,
+// so the event lands in the user's OWN device calendar. We serve an .ics (via
+// the backend) rather than a Google Calendar link so it isn't tied to Google,
+// and it still ships over-the-air (no native calendar/file module needed).
+export function buildShiftIcsUrl(shift: Shift): string {
+  const role = shift.position ? ` (${shift.position})` : "";
   const title = `Celsius shift${role}`;
   const start = stamp(shift.shift_date, shift.start_time);
   // A closing shift can cross midnight; roll the end date forward when it does.
@@ -54,19 +56,15 @@ export function buildShiftCalendarUrl(shift: Shift): string {
       ? nextDay(shift.shift_date)
       : shift.shift_date;
   const end = stamp(endDate, shift.end_time);
-  const details = "Celsius Coffee shift";
 
-  // Build the query manually: React Native's URLSearchParams polyfill is
-  // limited and mangles non-ASCII (e.g. the em dash in the title), so encode
-  // each value with encodeURIComponent instead.
   const q = [
-    ["action", "TEMPLATE"],
-    ["text", title],
-    ["dates", `${start}/${end}`],
-    ["ctz", TZ],
-    ["details", details],
+    ["title", title],
+    ["details", "Celsius Coffee shift"],
+    ["start", start],
+    ["end", end],
+    ["tz", TZ],
   ]
     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
     .join("&");
-  return `https://www.google.com/calendar/render?${q}`;
+  return `${API_BASE_URL}/api/hr/shifts/ics?${q}`;
 }
