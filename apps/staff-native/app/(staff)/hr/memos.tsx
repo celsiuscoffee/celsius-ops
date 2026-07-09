@@ -101,29 +101,27 @@ function MemoCard({
       <Text className="mt-2 text-sm font-body text-espresso leading-5">
         {memo.body}
       </Text>
-      {memo.requires_acknowledgement ? (
-        acked ? (
-          <Text className="mt-3 text-xs font-body-semi text-success">
-            Acknowledged
-          </Text>
-        ) : (
-          <Pressable
-            onPress={handleAcknowledge}
-            disabled={acking}
-            className={`mt-3 h-10 items-center justify-center rounded-2xl ${
-              acking ? "bg-primary/50" : "bg-primary"
-            }`}
-          >
-            {acking ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text className="text-sm font-body-bold text-white">
-                Acknowledge
-              </Text>
-            )}
-          </Pressable>
-        )
-      ) : null}
+      {acked ? (
+        <Text className="mt-3 text-xs font-body-semi text-success">
+          Acknowledged
+        </Text>
+      ) : (
+        <Pressable
+          onPress={handleAcknowledge}
+          disabled={acking}
+          className={`mt-3 h-10 items-center justify-center rounded-2xl ${
+            acking ? "bg-primary/50" : "bg-primary"
+          }`}
+        >
+          {acking ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text className="text-sm font-body-bold text-white">
+              Acknowledge
+            </Text>
+          )}
+        </Pressable>
+      )}
     </View>
   );
 }
