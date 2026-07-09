@@ -18,6 +18,7 @@ import {
   Plane,
   Star,
   Target,
+  Users,
   Wallet,
 } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
@@ -51,6 +52,12 @@ const items = [
     title: "My Shifts",
     subtitle: "Today and upcoming",
     icon: Calendar,
+  },
+  {
+    href: "/(staff)/hr/whos-working",
+    title: "Who's Working",
+    subtitle: "Your team's shifts by day",
+    icon: Users,
   },
   {
     href: "/(staff)/hr/attendance",
