@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useConfirm, toast } from "@celsius/ui";
 import { Plus, Loader2, Eye, EyeOff, Key, Lock, Hash, Check, X, Search, Trash2, RotateCcw } from "lucide-react";
-import { NAV_TABS, BACKOFFICE_SUB_APPS, type GrantModule } from "@/lib/modules";
+import { NAV_TABS, moduleApps, type GrantModule } from "@/lib/modules";
 
 type ModuleAccess = Record<string, string[]>;
 
@@ -172,7 +172,7 @@ export default function StaffPage() {
         outletId: form.outletId || null,
         outletIds: form.outletIds,
         username: form.username || null,
-        appAccess: isOwnerOrAdmin ? ["backoffice", "inventory", "sales", "loyalty", "pickup", "ops"] : form.appAccess,
+        appAccess: isOwnerOrAdmin ? ["backoffice", "ops", "pos"] : form.appAccess,
         moduleAccess: isOwnerOrAdmin ? {} : form.moduleAccess,
       };
 
@@ -232,22 +232,24 @@ export default function StaffPage() {
 
   const isAdminOrManager = form.role === "OWNER" || form.role === "ADMIN" || form.role === "MANAGER";
 
-  // Keep aligned with every `appAccess.includes("…")` gate in the monorepo.
-  // Each entry MUST be toggleable here, otherwise admins can't grant what an
-  // app actually requires. kds/staff_app/order belong to the order/KDS app
-  // (apps/order/src/app/api/staff/auth/route.ts).
-  const availableApps = ["backoffice", "pickup", "inventory", "loyalty", "sales", "ops", "kds", "staff_app", "order"] as const;
-  const appLabel: Record<string, string> = { backoffice: "BO", inventory: "INV", sales: "SALES", loyalty: "LOY", pickup: "PU", ops: "OPS", kds: "KDS", staff_app: "STAFF", order: "ORDER" };
+  // The three real apps a user can be granted. Everything the editor used to
+  // list (pickup/inventory/loyalty/sales/kds/staff_app/order) was either a
+  // backoffice nav-section flag that nothing actually gates on, or a
+  // decommissioned surface — see docs/access-control-guide.md. The stored login
+  // gates: `backoffice` (backoffice), `ops` (staff app), `pos` (till, Phase 2).
+  // Module visibility now derives from these via each module's `apps` tag.
+  const REAL_APPS = ["backoffice", "ops", "pos"] as const;
+  const APP_META: Record<string, { label: string; desc: string }> = {
+    backoffice: { label: "Back Office", desc: "Admin console — finance, HR, procurement, marketing" },
+    ops: { label: "Staff App", desc: "Staff phone & web app — checklists, stock, receiving" },
+    pos: { label: "POS", desc: "Point-of-sale till — also requires being on shift" },
+  };
+  // Short codes for the list table's "Apps" column (real apps only).
+  const appLabel: Record<string, string> = { backoffice: "BO", ops: "Staff", pos: "POS" };
   const appColor: Record<string, string> = {
     backoffice: "bg-slate-100 text-slate-600",
-    inventory: "bg-emerald-50 text-emerald-600",
-    sales: "bg-blue-50 text-blue-600",
-    loyalty: "bg-purple-50 text-purple-600",
-    pickup: "bg-orange-50 text-orange-600",
     ops: "bg-terracotta/10 text-terracotta",
-    kds: "bg-cyan-50 text-cyan-600",
-    staff_app: "bg-yellow-50 text-yellow-700",
-    order: "bg-rose-50 text-rose-600",
+    pos: "bg-emerald-50 text-emerald-600",
   };
   const isOwnerOrAdmin = form.role === "OWNER" || form.role === "ADMIN";
 
@@ -273,17 +275,23 @@ export default function StaffPage() {
     });
   };
 
-  // Is a module's owning app available to grant? Direct apps come from
-  // appAccess; settings/hr/reviews/ads are backoffice sub-apps, surfaced
-  // whenever the user holds "backoffice".
-  const appVisible = (app: string) =>
-    form.appAccess.includes(app) ||
-    ((BACKOFFICE_SUB_APPS as readonly string[]).includes(app) && form.appAccess.includes("backoffice"));
+  // A module toggle is shown only when the user holds an app that actually
+  // reads it — Back Office for backoffice modules, Staff App (`ops`) for staff
+  // ones — using the module's `apps` tag (lib/modules.ts). This replaces the
+  // old per-nav-section appAccess flags (inventory/loyalty/…) and doubles as the
+  // guard-rail: you can't grant a module without granting its hosting app first.
+  const moduleVisible = (mod: GrantModule) => {
+    const surfaces = moduleApps(mod.app, mod.key);
+    return (
+      (surfaces.includes("backoffice") && form.appAccess.includes("backoffice")) ||
+      (surfaces.includes("staff") && form.appAccess.includes("ops"))
+    );
+  };
 
   // The grantable modules in a tab the current editor can actually show:
-  // app available + (for managers) within the caller's own grants.
+  // hosting app held + (for managers) within the caller's own grants.
   const tabGrantableModules = (mods: GrantModule[]) =>
-    mods.filter((mod) => appVisible(mod.app) && canGrantModule(mod.app, mod.key));
+    mods.filter((mod) => moduleVisible(mod) && canGrantModule(mod.app, mod.key));
 
   const moduleSelected = (mod: GrantModule) =>
     (form.moduleAccess[mod.app] ?? []).includes(mod.key);
@@ -394,14 +402,15 @@ export default function StaffPage() {
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     {(s.role === "OWNER" || s.role === "ADMIN"
-                      ? ["backoffice", "inventory", "sales", "loyalty", "pickup", "ops"]
-                      : (s.appAccess || [])
+                      ? ["backoffice", "ops", "pos"]
+                      : (s.appAccess || []).filter((a) => (REAL_APPS as readonly string[]).includes(a))
                     ).map((app) => (
                       <span key={app} className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${appColor[app] || "bg-gray-100 text-gray-500"}`}>
                         {appLabel[app] || app}
                       </span>
                     ))}
-                    {s.role !== "OWNER" && s.role !== "ADMIN" && (!s.appAccess || s.appAccess.length === 0) && (
+                    {s.role !== "OWNER" && s.role !== "ADMIN" &&
+                      (s.appAccess || []).filter((a) => (REAL_APPS as readonly string[]).includes(a)).length === 0 && (
                       <span className="text-[10px] text-gray-300">None</span>
                     )}
                   </div>
@@ -543,39 +552,48 @@ export default function StaffPage() {
                 <p className="text-xs text-gray-400 mb-3">
                   {isOwnerOrAdmin ? "Owner and Admin roles have full access to all apps." : "Select which apps this user can access."}
                 </p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {availableApps.filter((app) => canGrantApp(app)).map((app) => {
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                  {REAL_APPS.filter((app) => canGrantApp(app)).map((app) => {
                     const isSelected = isOwnerOrAdmin || form.appAccess.includes(app);
+                    const meta = APP_META[app];
                     return (
                       <button
                         key={app}
                         onClick={() => { if (!isOwnerOrAdmin) toggleAppAccess(app); }}
                         disabled={isOwnerOrAdmin}
-                        className={`flex items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+                        className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
                           isSelected
                             ? "border-terracotta/30 bg-terracotta/5"
                             : "border-gray-200 hover:bg-gray-50"
                         } ${isOwnerOrAdmin ? "cursor-default opacity-75" : "cursor-pointer"}`}
                       >
-                        <div className="flex items-center gap-2">
-                          <div className={`flex h-5 w-5 items-center justify-center rounded ${isSelected ? "bg-terracotta text-white" : "border border-gray-300"}`}>
-                            {isSelected && <Check className="h-3 w-3" />}
-                          </div>
-                          <span className={`capitalize ${isSelected ? "font-medium text-gray-900" : "text-gray-600"}`}>{app}</span>
+                        <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded ${isSelected ? "bg-terracotta text-white" : "border border-gray-300"}`}>
+                          {isSelected && <Check className="h-3 w-3" />}
+                        </div>
+                        <div>
+                          <span className={`block ${isSelected ? "font-medium text-gray-900" : "text-gray-700"}`}>{meta.label}</span>
+                          <span className="mt-0.5 block text-[10px] leading-tight text-gray-400">{meta.desc}</span>
                         </div>
                       </button>
                     );
                   })}
                 </div>
+                {!isOwnerOrAdmin && form.appAccess.includes("pos") && (
+                  <p className="mt-2 text-[10px] text-amber-600">
+                    POS access isn&apos;t enforced yet — it&apos;s being rolled out safely (Phase 2). For now the
+                    schedule still controls till login; granting it here pre-authorises the user.
+                  </p>
+                )}
               </div>
 
               {/* Module Access — one card per sidebar tab (mirrors NAV_SECTIONS) */}
-              {!isOwnerOrAdmin && form.appAccess.length > 0 && (
+              {!isOwnerOrAdmin && (form.appAccess.includes("backoffice") || form.appAccess.includes("ops")) && (
                 <div className="mb-5">
                   <h3 className="text-sm font-semibold text-gray-900 mb-1">Module Access</h3>
                   <p className="text-xs text-gray-400 mb-3">
-                    Check the modules this user can see, grouped the same way as the sidebar. Some
-                    permissions power more than one tab — toggling one updates it everywhere it appears.
+                    Check the modules this user can see, grouped like the sidebar. Toggles appear only
+                    for apps granted above. A <span className="font-medium text-blue-600">Staff&nbsp;App</span> tag
+                    marks a grant that also drives the staff phone app.
                   </p>
                   <div className="space-y-4">
                     {NAV_TABS.map((tab) => {
@@ -603,7 +621,12 @@ export default function StaffPage() {
                             <div className={`flex h-4 w-4 items-center justify-center rounded ${isOn ? "bg-terracotta text-white" : "border border-gray-300"}`}>
                               {isOn && <Check className="h-2.5 w-2.5" />}
                             </div>
-                            {mod.label}
+                            <span className="truncate">{mod.label}</span>
+                            {moduleApps(mod.app, mod.key).includes("staff") && (
+                              <span className="ml-auto shrink-0 rounded bg-blue-50 px-1 py-0.5 text-[9px] font-medium text-blue-600" title="Also drives the staff phone app">
+                                Staff App
+                              </span>
+                            )}
                           </button>
                         );
                       };
