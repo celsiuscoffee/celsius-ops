@@ -1,7 +1,7 @@
 // Celsius Staff — Service Worker
 // Precache the app shell for offline, keep the network authoritative for HTML
 // (so auth/fresh data always win) and never cache API responses.
-const CACHE_NAME = "celsius-staff-v2";
+const CACHE_NAME = "celsius-staff-v3";
 const PRECACHE_URLS = ["/home", "/apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {
