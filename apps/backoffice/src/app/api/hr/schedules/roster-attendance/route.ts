@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { computeLateMinutes, mytDateString } from "@/lib/hr/hours";
 import { GRACE_PERIOD_MINUTES } from "@/lib/hr/constants";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
+import { signAttendancePhotos } from "@/lib/hr/photos";
 
 export const dynamic = "force-dynamic";
 
@@ -150,6 +151,12 @@ export async function GET(req: NextRequest) {
     if (!logByKey.has(k)) logByKey.set(k, l);
   }
 
+  // Selfies live in a PRIVATE bucket as object paths — mint short-lived signed
+  // URLs so the detail panel can actually render them.
+  const photoUrls = await signAttendancePhotos(
+    (logs || []).flatMap((l) => [l.clock_in_photo_url, l.clock_out_photo_url]),
+  );
+
   // 3. Names + positions for everyone involved.
   const userIds = Array.from(
     new Set([...shifts.map((s) => s.user_id), ...(logs || []).map((l) => l.user_id)]),
@@ -187,8 +194,8 @@ export async function GET(req: NextRequest) {
       clock_in_lng: log?.clock_in_lng ?? null,
       clock_out_lat: log?.clock_out_lat ?? null,
       clock_out_lng: log?.clock_out_lng ?? null,
-      clock_in_photo_url: log?.clock_in_photo_url ?? null,
-      clock_out_photo_url: log?.clock_out_photo_url ?? null,
+      clock_in_photo_url: log?.clock_in_photo_url ? (photoUrls.get(log.clock_in_photo_url) ?? null) : null,
+      clock_out_photo_url: log?.clock_out_photo_url ? (photoUrls.get(log.clock_out_photo_url) ?? null) : null,
       total_hours: log?.total_hours ?? null,
       regular_hours: log?.regular_hours ?? null,
       overtime_hours: log?.overtime_hours ?? null,
