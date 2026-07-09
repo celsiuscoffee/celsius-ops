@@ -4,6 +4,7 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { linkChecklistsToSchedule } from "@/lib/hr/agents/checklist-linker";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { gateSchedule } from "@/lib/hr/labour-gate";
+import { sendOpsPush } from "@/lib/ops-push";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +121,32 @@ export async function POST(req: NextRequest) {
       })
       .eq("id", schedule.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Notify everyone rostered this week that their shifts are live (best-effort,
+    // same push channel as the ops workspace). Tap routes to My Shifts. Skip
+    // "00:00" placeholder rows so only real shift-holders are pinged.
+    const { data: shiftRows } = await hrSupabaseAdmin
+      .from("hr_schedule_shifts")
+      .select("user_id")
+      .eq("schedule_id", schedule.id)
+      .neq("start_time", "00:00");
+    const affected = [
+      ...new Set(
+        (shiftRows ?? [])
+          .map((r) => r.user_id as string)
+          .filter(Boolean),
+      ),
+    ];
+    await Promise.allSettled(
+      affected.map((uid) =>
+        sendOpsPush({
+          userId: uid,
+          kind: "shift",
+          title: "Schedule published",
+          body: "Your new shifts have been published.",
+        }),
+      ),
+    );
 
     // Auto-link SOPs/checklists to shifts
     let checklistResult = null;

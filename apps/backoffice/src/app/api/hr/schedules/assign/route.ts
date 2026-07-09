@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
+import { sendOpsPush } from "@/lib/ops-push";
 
 export const dynamic = "force-dynamic";
 
@@ -121,6 +122,19 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
   if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
+
+  // Tell the staffer they're on a new shift (best-effort, same push channel as
+  // the ops workspace; tap routes to My Shifts). Only when the schedule is
+  // already published: a draft shift isn't visible to staff yet, so they'd get
+  // the week's "Schedule published" push later instead.
+  if (schedule.status === "published") {
+    await sendOpsPush({
+      userId: user_id,
+      kind: "shift",
+      title: "New shift",
+      body: `You've been added to a shift on ${shift_date}.`,
+    });
+  }
 
   // Derive the override flag server-side: assigned != the model's top pick.
   const wasOverride = !!top_candidate_user_id && top_candidate_user_id !== user_id;

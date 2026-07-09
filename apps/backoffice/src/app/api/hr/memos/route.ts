@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
+import { sendOpsPush } from "@/lib/ops-push";
 
 export const dynamic = "force-dynamic";
 
@@ -147,6 +148,23 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Mirror the memo to each recipient's staff-native devices (best-effort, same
+  // channel as the ops-workspace push). Deliberately generic: the memo title
+  // can be sensitive (warnings), so we keep it off the lock screen and route
+  // the tap to the Memos screen. Never the issuer.
+  const pushTargets = recipientIds.filter((id) => id !== session.id);
+  await Promise.allSettled(
+    pushTargets.map((uid) =>
+      sendOpsPush({
+        userId: uid,
+        kind: "memo",
+        title: "New memo",
+        body: `${session.name} sent you a new memo.`,
+      }),
+    ),
+  );
+
   return NextResponse.json({ memo: data });
 }
 
