@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+// Service-role client: these hr_* tables are RLS-enabled with no policies, so the
+// anon client reads zero rows (screen shows empty). Access stays scoped by the
+// getSession gate + the per-user filters below.
+import { supabaseAdmin as supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
