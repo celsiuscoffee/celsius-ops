@@ -906,7 +906,7 @@ function InvoiceCard({
                 })}`}
         </Text>
         <Text className="text-base font-body-bold text-espresso tabular-nums">
-          RM {invoice.amount.toFixed(2)}
+          RM {Number(invoice.amount ?? 0).toFixed(2)}
         </Text>
       </View>
 
