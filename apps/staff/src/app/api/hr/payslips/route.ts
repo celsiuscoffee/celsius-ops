@@ -15,11 +15,18 @@ export async function GET() {
   // Confirmed/paid payroll items for THIS user only. Order by confirmed_at so
   // both cycles interleave correctly — weekly runs have null period_year/month,
   // so month/year ordering would sink them below every monthly payslip.
+  //
+  // EXCLUDE opening_balance runs: the BrioHR migration loaded a single
+  // Jan-to-Jun 2026 YTD aggregate (cycle_type 'opening_balance') purely to seed
+  // PCB carry-forward. It is NOT a payslip, and surfacing it here showed staff a
+  // 6-month total mislabelled as one month. Only real monthly/weekly payroll
+  // runs are payslips.
   const { data: items, error } = await supabaseAdmin
     .from("hr_payroll_items")
     .select("*, hr_payroll_runs!inner(status, cycle_type, period_month, period_year, period_start, period_end, confirmed_at)")
     .eq("user_id", session.id)
     .in("hr_payroll_runs.status", ["confirmed", "paid"])
+    .neq("hr_payroll_runs.cycle_type", "opening_balance")
     .order("confirmed_at", { ascending: false, foreignTable: "hr_payroll_runs" })
     .limit(24);
 
