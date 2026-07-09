@@ -207,7 +207,9 @@ export async function POST(req: NextRequest) {
           notes: fullNotes,
           // REQUEST flow doesn't have a claimant (no one to reimburse) —
           // null is fine here.
-          claimedById: requestFlow === "CLAIM" ? claimedById : null,
+          // Claimant is always the authenticated submitter; a client-supplied
+          // id must never be trusted since it controls who gets reimbursed.
+          claimedById: requestFlow === "CLAIM" ? session.id : null,
           createdById: session.id,
           ...(items?.length
             ? {
@@ -234,7 +236,7 @@ export async function POST(req: NextRequest) {
           amount,
           status: "DRAFT",
           paymentType: invoicePaymentType,
-          claimedById: requestFlow === "CLAIM" ? claimedById : null,
+          claimedById: requestFlow === "CLAIM" ? session.id : null,
           issueDate: new Date(purchaseDate),
           photos,
           notes: fullNotes,
