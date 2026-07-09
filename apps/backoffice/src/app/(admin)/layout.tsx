@@ -957,6 +957,28 @@ function PasswordChangeDialog({ hasPassword }: { hasPassword?: boolean }) {
   );
 }
 
+// The backoffice home (/dashboard) is the company KPI command centre. Managers
+// see it only with the Sales dashboard grant; OWNER/ADMIN always do. Anyone
+// without it is routed to their first accessible page instead.
+const DASHBOARD_HOME_MODULE = "sales:dashboard";
+
+// First nav destination a user can actually open, in sidebar order. Used as the
+// safe redirect target so a gated page never bounces someone to a home they
+// also can't see. Returns undefined only when the user has NO accessible page —
+// callers then keep them on /dashboard as the ultimate harbour (never a loop).
+function firstAccessibleHref(user: UserProfile): string | undefined {
+  for (const section of NAV_SECTIONS) {
+    const items = [
+      ...(section.items ?? []),
+      ...(section.subgroups?.flatMap((sg) => sg.items) ?? []),
+    ];
+    for (const item of items) {
+      if (canAccess(user, item.moduleKey)) return item.href;
+    }
+  }
+  return undefined;
+}
+
 // ─── Admin Layout ───────────────────────────────────────────────────────
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -985,24 +1007,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Block direct URL access to unauthorized pages
   useEffect(() => {
     if (!user || !pathname) return;
-    // Dashboard is always accessible
-    if (pathname === "/dashboard" || pathname === "/") return;
-    // OWNER and ADMIN bypass all checks
+    // OWNER and ADMIN bypass all checks (including the home dashboard).
     if (user.role === "ADMIN" || user.role === "OWNER") return;
-    // NOTE: there is no "empty moduleAccess = full access" escape here. The
-    // sidebar render path (canAccess) already denies every gated item when
-    // moduleAccess is empty, so such a manager only ever sees Dashboard in the
-    // nav. Letting the URL guard fall through to the same canAccess check below
-    // keeps direct-URL access consistent with what the sidebar exposes —
-    // previously an empty-moduleAccess manager had a blank sidebar but could
-    // still reach every non-finance page by typing the URL.
 
-    // Match the current path to the MOST SPECIFIC (longest-href) nav item,
-    // then gate on that item's module. A first-match loop let a broad parent
-    // like the Settings "Hub" (/settings) shadow more specific siblings such
-    // as /settings/staff — so a manager who has settings:staff but not the
-    // Hub's settings:outlets got bounced to /dashboard the instant they
-    // opened Settings. Longest-match mirrors the sidebar's active-link logic.
+    // Home (/dashboard) is now gated on the Sales dashboard grant. A manager
+    // without it is routed to their first accessible page; a manager with no
+    // accessible page at all stays here — /dashboard remains the ultimate safe
+    // harbour, so this can never become a redirect loop. (No "empty moduleAccess
+    // = full access" escape: canAccess denies every gated item when moduleAccess
+    // is empty, keeping direct-URL access consistent with the sidebar.)
+    if (pathname === "/dashboard" || pathname === "/") {
+      if (canAccess(user, DASHBOARD_HOME_MODULE)) return;
+      const dest = firstAccessibleHref(user);
+      if (dest) router.replace(dest);
+      return;
+    }
+
+    // Match the current path to the MOST SPECIFIC (longest-href) nav item, then
+    // gate on that item's module. Longest-match mirrors the sidebar's active-link
+    // logic so a broad parent (e.g. the Settings "Hub") can't shadow a specific
+    // sibling (e.g. /settings/staff) and wrongly bounce the user.
     let best: NavItem | undefined;
     for (const section of NAV_SECTIONS) {
       const allItems = [
@@ -1016,7 +1040,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       }
     }
     if (best?.moduleKey && !canAccess(user, best.moduleKey)) {
-      router.replace("/dashboard");
+      // Send them somewhere they can actually use, not a home they may not hold.
+      router.replace(firstAccessibleHref(user) ?? "/dashboard");
     }
   }, [user, pathname, router]);
 
