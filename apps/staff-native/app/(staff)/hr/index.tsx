@@ -18,6 +18,7 @@ import {
   Plane,
   Star,
   Target,
+  Trophy,
   Wallet,
 } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
@@ -46,6 +47,12 @@ const MONTHS = [
 ];
 
 const items = [
+  {
+    href: "/(staff)/hr/scoreboard",
+    title: "My Scoreboard",
+    subtitle: "KPIs and allowance this month",
+    icon: Trophy,
+  },
   {
     href: "/(staff)/hr/shifts",
     title: "My Shifts",

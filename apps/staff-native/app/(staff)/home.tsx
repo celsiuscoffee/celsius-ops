@@ -22,6 +22,7 @@ import {
   Receipt,
   Settings,
   Trash2,
+  Trophy,
 } from "lucide-react-native";
 import * as Updates from "expo-updates";
 import { Screen } from "../../components/Screen";
@@ -314,6 +315,26 @@ function StaffHome() {
             </View>
           </Pressable>
         ) : null}
+
+        {/* Personal 4DX scoreboard: your KPI levers + allowance this month.
+            A daily hook into the full breakdown (hr/scoreboard). */}
+        <Pressable
+          onPress={() => router.push("/(staff)/hr/scoreboard")}
+          className="mt-4 flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
+        >
+          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
+            <Trophy color="#A2492C" size={20} />
+          </View>
+          <View className="flex-1">
+            <Text className="text-base font-body-semi text-espresso">
+              My Scoreboard
+            </Text>
+            <Text className="text-xs font-body text-muted-fg">
+              Your KPIs and allowance this month
+            </Text>
+          </View>
+          <ArrowRight color="#9CA3AF" size={16} />
+        </Pressable>
 
         {/* Progress card */}
         {totalCount > 0 ? (
