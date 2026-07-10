@@ -720,6 +720,41 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     if (byOutlet.length > 0) candidates = byOutlet;
   }
 
+  // 8. Reference-vs-candidate guard. When the receipt NAMES a specific invoice
+  // (e.g. "IVCT-00012222") and none of the amount-matched candidates IS that
+  // invoice, the payment belongs to the named invoice — not a same-amount
+  // sibling. This is the fixed-amount trap: Milk n Moka / TMM bill identical
+  // amounts every order, so blind amount-matching lands the payment on the
+  // wrong invoice AND trips the "reference matches a paid invoice" double-pay
+  // review. Only vetoes when the reference is a REAL, known invoice number (not
+  // OCR noise): drop the mismatched siblings so this routes to the AI verifier /
+  // finance instead of silently paying the wrong one. The correctly-named
+  // invoice, when still open, already matched in step 1.
+  if (candidates.length > 0 && pop.invoiceReference) {
+    const refNorm = pop.invoiceReference.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    if (refNorm.length >= 5) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      const refHitsCandidate = candidates.some((c: any) => {
+        const n = (c.invoiceNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+        return n.length >= 5 && (n === refNorm || n.endsWith(refNorm) || refNorm.endsWith(n));
+      });
+      if (!refHitsCandidate) {
+        const named = await prisma.invoice.findFirst({
+          where: { invoiceNumber: { contains: pop.invoiceReference, mode: "insensitive" } },
+          select: { id: true, invoiceNumber: true, status: true, paidVia: true },
+        });
+        const namedNorm = named ? named.invoiceNumber.replace(/[^a-z0-9]/gi, "").toLowerCase() : "";
+        const namesReal = !!named && (namedNorm === refNorm || namedNorm.endsWith(refNorm) || refNorm.endsWith(namedNorm));
+        if (namesReal) {
+          console.warn(
+            `[telegram:pop] ref "${pop.invoiceReference}" names ${named!.invoiceNumber} (${named!.status}) — not among the RM${amount} candidates; not auto-paying a same-amount sibling`,
+          );
+          candidates = [];
+        }
+      }
+    }
+  }
+
   return await resolvePop(chatId, msgId, photoUrl, pop, amount, candidates);
 }
 
