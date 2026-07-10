@@ -160,3 +160,8 @@ function fmtTime(t: string): string {
   d.setHours(Number(h), Number(m), 0, 0);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+
+// Route-level boundary: a throw in this screen degrades to an inline retry
+// card instead of unmounting the whole HR stack (see the Who's Working
+// incident, docs in components/RouteErrorBoundary.tsx).
+export { RouteErrorFallback as ErrorBoundary } from "../../../components/RouteErrorBoundary";
