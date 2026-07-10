@@ -9,6 +9,7 @@ export type TxnType =
   | "payment"
   | "journal"
   | "depreciation"
+  | "mgmt_fee_accrual"
   | "fx_adj"
   | "reversal";
 

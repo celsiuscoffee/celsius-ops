@@ -65,6 +65,10 @@
       "schedule": "0 20 * * *"
     },
     {
+      "path": "/api/cron/finance-close-prep",
+      "schedule": "30 22 1 * *"
+    },
+    {
       "path": "/api/cron/bukku-feed-sync",
       "schedule": "0 */6 * * *"
     },
