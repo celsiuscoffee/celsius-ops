@@ -10,6 +10,7 @@ export type TxnType =
   | "journal"
   | "depreciation"
   | "mgmt_fee_accrual"
+  | "grab_clearing"
   | "fx_adj"
   | "reversal";
 

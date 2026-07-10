@@ -1,8 +1,9 @@
 // Close Agent — month-end close runner. Posts depreciation for active fixed
 // assets, accrues the management fee shortfall owed to HQ (6.8% of the
-// month's revenue less what was already paid — see close-prep.ts), snapshots
-// P&L/BS for the period, and (when explicitly told) flips the period to
-// status='closed' which the DB trigger uses to block further posts.
+// month's revenue less what was already paid), clears the Grab debtor for the
+// month (commission + the Conezion interco leg — model in close-prep.ts),
+// snapshots P&L/BS for the period, and (when explicitly told) flips the
+// period to status='closed' which the DB trigger uses to block further posts.
 //
 // Reopens require fin_periods.status = 'open' + a reason; the API route
 // handles that and feeds back into the audit log via fin_set_actor.
@@ -10,9 +11,12 @@
 import { getFinanceClient } from "../supabase";
 import { postJournal } from "../ledger";
 import type { JournalLineInput } from "../types";
-import { mgmtFeeAccrual, MGMT_FEE_EXPENSE_CODE, DUE_TO_HQ_CODE } from "../close-prep";
+import {
+  mgmtFeeAccrual, MGMT_FEE_EXPENSE_CODE, DUE_TO_HQ_CODE,
+  grabClearingForPeriod, MARKETPLACE_FEE_CODE, GRAB_DEBTOR_CODE, DUE_TO_CONEZION_CODE,
+} from "../close-prep";
 
-export const CLOSE_AGENT_VERSION = "close-v2";
+export const CLOSE_AGENT_VERSION = "close-v3";
 
 export type RunCloseInput = {
   companyId: string;          // legal entity being closed
@@ -26,6 +30,7 @@ export type RunCloseResult = {
   period: string;
   depreciation: { posted: number; transactionIds: string[] };
   mgmtFee: { accrued: number; transactionId: string | null; skipped: string | null };
+  grabClearing: { commission: number; intercoLeg: number; transactionId: string | null; skipped: string | null };
   snapshot: { pnl: PnlSnapshot; bs: BsSnapshot };
   locked: boolean;
 };
@@ -316,6 +321,80 @@ async function postMgmtFeeShortfall(
   return { accrued: fee.shortfall, transactionId: result.transactionId, skipped: null };
 }
 
+// Post the month's Grab debtor clearing (see close-prep.ts for the model and
+// why it is rate-derived). One balanced journal per company per period,
+// idempotent via txn_type='grab_clearing' + the period's closing date:
+//   Conezion:  Dr 3600-02 payout + Dr 6519 commission / Cr 1005 gross
+//   HQ:        Dr 1005 payout + Dr 6519 commission / Cr 3600-01 payout + Cr 1005 commission
+//   Tamarind:  Dr 6519 commission / Cr 1005 commission
+async function postGrabClearing(
+  companyId: string,
+  period: string,
+): Promise<RunCloseResult["grabClearing"]> {
+  const g = await grabClearingForPeriod(companyId, period);
+  if (!g.applicable) return { commission: 0, intercoLeg: 0, transactionId: null, skipped: "no Grab activity" };
+  if (g.commission <= 0 && g.intercoLeg <= 0) {
+    return { commission: 0, intercoLeg: 0, transactionId: null, skipped: "nothing to clear" };
+  }
+
+  const [year, month] = period.split("-").map(Number);
+  const txnDate = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+
+  const client = getFinanceClient();
+  const { data: existing } = await client
+    .from("fin_transactions")
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("txn_type", "grab_clearing")
+    .eq("txn_date", txnDate)
+    .limit(1);
+  if (existing && existing.length > 0) {
+    return { commission: 0, intercoLeg: 0, transactionId: existing[0].id as string, skipped: "already cleared" };
+  }
+
+  const rateNote = `rate ${g.payoutRate} from Tamarind trailing actuals`;
+  const lines: JournalLineInput[] = [];
+  if (companyId === "celsiusconezion") {
+    lines.push(
+      { accountCode: DUE_TO_HQ_CODE, outletId: null, debit: g.intercoLeg, memo: `Grab payouts ${period} collected by HQ (${rateNote})` },
+      { accountCode: MARKETPLACE_FEE_CODE, outletId: null, debit: g.commission, memo: `Grab commission ${period}` },
+      { accountCode: GRAB_DEBTOR_CODE, outletId: null, credit: round2(g.intercoLeg + g.commission), memo: `Clear Grab debtor ${period}` },
+    );
+  } else if (companyId === "celsius") {
+    if (g.intercoLeg > 0) {
+      lines.push(
+        { accountCode: GRAB_DEBTOR_CODE, outletId: null, debit: g.intercoLeg, memo: `Return Conezion payouts absorbed by 1005 ${period}` },
+        { accountCode: DUE_TO_CONEZION_CODE, outletId: null, credit: g.intercoLeg, memo: `Due to Conezion — Grab payouts ${period} (${rateNote})` },
+      );
+    }
+    if (g.commission > 0) {
+      lines.push(
+        { accountCode: MARKETPLACE_FEE_CODE, outletId: null, debit: g.commission, memo: `Grab commission ${period} (${rateNote})` },
+        { accountCode: GRAB_DEBTOR_CODE, outletId: null, credit: g.commission, memo: `Clear Grab commission ${period}` },
+      );
+    }
+  } else {
+    lines.push(
+      { accountCode: MARKETPLACE_FEE_CODE, outletId: null, debit: g.commission, memo: `Grab commission ${period} (${rateNote})` },
+      { accountCode: GRAB_DEBTOR_CODE, outletId: null, credit: g.commission, memo: `Clear Grab commission ${period}` },
+    );
+  }
+
+  const result = await postJournal({
+    companyId,
+    txnDate,
+    description: `Grab debtor clearing ${period}`,
+    txnType: "grab_clearing",
+    outletId: null,
+    sourceDocId: null,
+    agent: "close",
+    agentVersion: CLOSE_AGENT_VERSION,
+    confidence: 1.0,
+    lines,
+  });
+  return { commission: g.commission, intercoLeg: g.intercoLeg, transactionId: result.transactionId, skipped: null };
+}
+
 export async function runClose(input: RunCloseInput): Promise<RunCloseResult> {
   if (!/^\d{4}-\d{2}$/.test(input.period)) {
     throw new Error(`Invalid period format: ${input.period}`);
@@ -349,7 +428,11 @@ export async function runClose(input: RunCloseInput): Promise<RunCloseResult> {
   //    the period's P&L and Due-to-HQ balance include it.
   const mgmtFee = await postMgmtFeeShortfall(input.companyId, input.period);
 
-  // 3. Snapshot
+  // 3. Grab debtor clearing (commission + Conezion interco) — also before the
+  //    snapshot so the period's P&L carries the marketplace fee.
+  const grabClearing = await postGrabClearing(input.companyId, input.period);
+
+  // 4. Snapshot
   const pnl = await buildPnl(input.companyId, input.period);
   const bs = await buildBs(input.companyId, input.period);
 
@@ -374,6 +457,7 @@ export async function runClose(input: RunCloseInput): Promise<RunCloseResult> {
     period: input.period,
     depreciation,
     mgmtFee,
+    grabClearing,
     snapshot: { pnl, bs },
     locked: !!input.lock,
   };

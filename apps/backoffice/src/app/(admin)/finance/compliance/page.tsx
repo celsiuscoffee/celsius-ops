@@ -315,6 +315,7 @@ type ClosePrep = {
   checks: { key: string; label: string; ok: boolean; detail: string }[];
   ready: boolean;
   mgmtFee: { applicable: boolean; revenue: number; accrued: number; paid: number; shortfall: number };
+  grabClearing: { applicable: boolean; gross: number; payoutRate: number; commission: number; intercoLeg: number; exact: boolean };
   depreciationPreview: number;
 };
 
@@ -330,7 +331,7 @@ function PeriodSection() {
     if (!p.ready) {
       const blockers = p.checks.filter((c) => !c.ok).map((c) => `• ${c.label}: ${c.detail}`).join("\n");
       if (!window.confirm(`${p.companyName} is not ready to close:\n\n${blockers}\n\nClose and lock anyway?`)) return;
-    } else if (!window.confirm(`Close and lock ${p.companyName} for ${period}?${p.mgmtFee.shortfall > 0 ? `\n\nThis posts a management fee accrual of ${RM(p.mgmtFee.shortfall)} (Due to HQ).` : ""}${p.depreciationPreview > 0 ? `\nDepreciation ${RM(p.depreciationPreview)} will be posted.` : ""}`)) {
+    } else if (!window.confirm(`Close and lock ${p.companyName} for ${period}?${p.mgmtFee.shortfall > 0 ? `\n\nThis posts a management fee accrual of ${RM(p.mgmtFee.shortfall)} (Due to HQ).` : ""}${p.grabClearing.applicable && (p.grabClearing.commission > 0 || p.grabClearing.intercoLeg > 0) ? `\nGrab clearing: commission ${RM(p.grabClearing.commission)}${p.grabClearing.intercoLeg > 0 ? ` + interco ${RM(p.grabClearing.intercoLeg)}` : ""} (rate-derived).` : ""}${p.depreciationPreview > 0 ? `\nDepreciation ${RM(p.depreciationPreview)} will be posted.` : ""}`)) {
       return;
     }
     setBusyCompany(companyId);
@@ -451,6 +452,15 @@ function PeriodSection() {
                   ) : (
                     <span> · settled</span>
                   )}
+                </p>
+              )}
+              {p.grabClearing.applicable && (
+                <p className="text-[11px] text-muted-foreground">
+                  Grab clearing: commission {RM(p.grabClearing.commission)}
+                  {p.grabClearing.intercoLeg > 0 && (p.companyId === "celsiusconezion"
+                    ? <> · {RM(p.grabClearing.intercoLeg)} held by HQ (interco)</>
+                    : <> · owes Conezion {RM(p.grabClearing.intercoLeg)} (interco)</>)}
+                  {" "}· rate {Math.round(p.grabClearing.payoutRate * 100)}% derived
                 </p>
               )}
               {p.depreciationPreview > 0 && (
