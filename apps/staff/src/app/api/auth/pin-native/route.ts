@@ -57,9 +57,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
   }
   if (matches.length > 1) {
+    // Names stay server-side only: this response reaches UNAUTHENTICATED
+    // callers, so echoing the colliding accounts leaked real staff names and
+    // confirmed the guessed PIN was live. Ops can identify the pair from logs.
     const names = matches.map((u) => u.name).join(", ");
+    console.warn(`[AUTH] Duplicate PIN detected for: ${names}`);
     return NextResponse.json(
-      { error: `Duplicate PIN — contact manager (${names})` },
+      { error: "PIN conflict. Ask your manager to reset your PIN." },
       { status: 409 },
     );
   }

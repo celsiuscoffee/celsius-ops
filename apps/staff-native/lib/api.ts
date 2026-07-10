@@ -1,6 +1,7 @@
 import { API_BASE_URL } from "./env";
 import { clearSession, loadSession } from "./session";
 import { useStaff } from "./store";
+import { deregisterPush } from "./push";
 
 export class ApiError extends Error {
   status: number;
@@ -10,6 +11,24 @@ export class ApiError extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+// Outlet Wi-Fi reality: captive portals and dying hotspots accept the TCP
+// connection then stall forever. RN's fetch has no default timeout (iOS ~60s+,
+// Android ~10s), which pinned busy-spinners on clock-in and uploads. Abort
+// after a bounded wait and surface a retryable error instead.
+const REQUEST_TIMEOUT_MS = 15_000;
+
+export function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return fetch(url, { ...init, signal: ctrl.signal }).finally(() =>
+    clearTimeout(timer),
+  );
 }
 
 type ApiOptions = RequestInit & { auth?: boolean };
@@ -29,10 +48,25 @@ export async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
     }
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...rest,
-    headers: finalHeaders,
-  });
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
+      ...rest,
+      headers: finalHeaders,
+    });
+  } catch (e) {
+    // Abort (timeout) and network failures land here. Normalize to an ApiError
+    // so every screen's existing error branch shows a human message instead of
+    // a raw "Aborted" TypeError.
+    const aborted = e instanceof Error && e.name === "AbortError";
+    throw new ApiError(
+      0,
+      aborted
+        ? "No connection. Check your internet and try again."
+        : "Network error. Check your internet and try again.",
+      null,
+    );
+  }
 
   if (res.status === 401 && auth) {
     // Token expired or revoked, wipe BOTH the disk session AND the
@@ -42,7 +76,12 @@ export async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
     // (no token on disk), and the user only got out of the loop by
     // force-quitting (which reloaded null from disk and bounced to
     // login). Now the layout's session selector flips to null on the
-    // first 401 and the user is routed to login immediately.
+    // first 401 and the (staff) layout redirects to login.
+    //
+    // Also release this device's push token: without this, a device whose
+    // session died kept receiving the previous user's HR pushes on the lock
+    // screen until someone else logged in. Best-effort, never blocks the wipe.
+    deregisterPush().catch(() => {});
     await clearSession();
     useStaff.getState().setSession(null);
   }

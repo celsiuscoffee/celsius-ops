@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./env";
 import { loadSession } from "./session";
+import { fetchWithTimeout } from "./api";
 
 /**
  * Upload a captured photo to /api/upload and return the public URL.
@@ -19,13 +20,19 @@ export async function uploadPhoto(photo: {
     type: "image/jpeg",
   } as unknown as Blob);
 
-  const res = await fetch(`${API_BASE_URL}/api/upload`, {
-    method: "POST",
-    body: form,
-    headers: session?.token
-      ? { Authorization: `Bearer ${session.token}` }
-      : undefined,
-  });
+  // 30s (double the api() default): photo uploads on outlet 4G are legitimately
+  // slow, but an unbounded hang froze the selfie/receipt flows on dead Wi-Fi.
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/upload`,
+    {
+      method: "POST",
+      body: form,
+      headers: session?.token
+        ? { Authorization: `Bearer ${session.token}` }
+        : undefined,
+    },
+    30_000,
+  );
 
   const text = await res.text();
   let body: unknown = null;

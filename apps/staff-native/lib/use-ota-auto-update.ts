@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import * as Updates from "expo-updates";
+import { Sentry } from "./sentry";
 
 /**
  * Self-applying OTA updates for the staff app.
@@ -13,10 +14,14 @@ import * as Updates from "expo-updates";
  * showing an old number" / "you fixed it but it still happens" symptom: the
  * screen re-fetches data fine, but it's an OLD screen bundle.
  *
- * Here we check on every foreground (the screen waking is the natural moment to
- * swap the bundle) and, when a newer update has been fetched, reload into it.
- * After this ships once, every future fix lands within seconds of a screen-wake
- * with zero staff action. Mirrors the pos-native till hook (PR #340).
+ * Fetch/apply split (crash-review fix): we CHECK + FETCH on foreground, but we
+ * only RELOAD when the app goes to the background. reloadAsync() restarts the
+ * whole JS app, and doing that on the "active" event meant a staffer could lose
+ * an in-progress PO cart, claim draft, or clock-in selfie the moment a merge
+ * landed. Backgrounding is the natural safe point: nothing is mid-gesture, and
+ * if the OS kills the app before the reload runs, expo-updates applies the
+ * fetched bundle on the next cold start anyway. Net effect: fixes land within
+ * one background/foreground cycle instead of interrupting live use.
  *
  * Fully crash-safe + gated: a no-op in dev / Expo Go / when updates are disabled
  * (`Updates.isEnabled` false). Throttled so a flurry of foreground events can't
@@ -31,29 +36,34 @@ const MIN_CHECK_INTERVAL_MS = 60 * 1000;
 export function useOtaAutoUpdate(): void {
   const lastCheckAt = useRef(0);
   const checking = useRef(false);
+  const pendingReload = useRef(false);
 
   useEffect(() => {
     // Dev client / Expo Go / updates disabled → nothing to do.
     if (!Updates.isEnabled || __DEV__) return;
 
-    const checkAndApply = async () => {
+    const checkAndFetch = async () => {
       const now = Date.now();
-      if (checking.current || now - lastCheckAt.current < MIN_CHECK_INTERVAL_MS) return;
+      if (
+        checking.current ||
+        pendingReload.current ||
+        now - lastCheckAt.current < MIN_CHECK_INTERVAL_MS
+      )
+        return;
       checking.current = true;
       lastCheckAt.current = now;
       try {
         const res = await Updates.checkForUpdateAsync();
         if (!res.isAvailable) return;
         const fetched = await Updates.fetchUpdateAsync();
-        // Only reload if a genuinely new bundle landed, reloadAsync restarts the
-        // JS app, so we never do it speculatively.
+        // Only mark for reload if a genuinely new bundle landed.
         if (!fetched.isNew) return;
         // Forward-only guard: never reload the device into an OLDER bundle. If an
         // OTA is ever published to this channel from a branch behind main (an
         // out-of-order publish), it becomes the channel's "latest" and we would
         // otherwise reload backwards mid-session, the "it reverted to the old
         // build" symptom. Compare the fetched bundle's createdAt to the running
-        // one; if we can't read it, fall through and reload (normal behaviour).
+        // one; if we can't read it, fall through and mark (normal behaviour).
         const runningAt = Updates.createdAt?.getTime() ?? 0;
         const manifest = fetched.manifest as unknown as
           | { createdAt?: string }
@@ -62,7 +72,7 @@ export function useOtaAutoUpdate(): void {
           ? new Date(manifest.createdAt).getTime()
           : Number.POSITIVE_INFINITY;
         if (fetchedAt < runningAt) return;
-        await Updates.reloadAsync();
+        pendingReload.current = true;
       } catch {
         // Network blip / mid-publish race / anything else, swallow. The next
         // foreground (or the next cold start) retries; a failed update check must
@@ -72,11 +82,27 @@ export function useOtaAutoUpdate(): void {
       }
     };
 
+    const applyIfPending = async () => {
+      if (!pendingReload.current) return;
+      pendingReload.current = false;
+      try {
+        // Drain any queued crash/error events before the JS context is torn
+        // down; a reload racing an unflushed envelope silently drops it.
+        await Sentry.flush().catch(() => {});
+        await Updates.reloadAsync();
+      } catch {
+        // If the reload fails (or the OS suspends us first), the fetched
+        // update still applies on the next cold start.
+      }
+    };
+
     // Check once on mount (covers a long-running session that was already
-    // foregrounded when this code first ships), then on every return to active.
-    void checkAndApply();
+    // foregrounded when this code first ships), then fetch on every return to
+    // active and apply on every drop to background.
+    void checkAndFetch();
     const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
-      if (state === "active") void checkAndApply();
+      if (state === "active") void checkAndFetch();
+      else if (state === "background") void applyIfPending();
     });
     return () => sub.remove();
   }, []);

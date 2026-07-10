@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { outletId, productId, adjustmentType, quantity, costAmount, reason } = body;
+  const { outletId, productId, adjustmentType, quantity, costAmount, reason, notes } = body;
 
   if (!quantity || quantity <= 0) {
     return NextResponse.json({ error: "Quantity must be positive" }, { status: 400 });
@@ -86,7 +86,13 @@ export async function POST(req: NextRequest) {
       adjustmentType,
       quantity,
       costAmount: resolvedCost,
-      reason: reason || null,
+      // StockAdjustment has no notes column; the native sheet collects a
+      // free-text note that was previously discarded silently. Fold it into
+      // reason so what staff typed actually reaches the reviewer.
+      reason:
+        [typeof reason === "string" ? reason.trim() : "", typeof notes === "string" ? notes.trim() : ""]
+          .filter(Boolean)
+          .join(" - ") || null,
       adjustedById: session.id,
     },
     include: {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { checkModuleAccess } from "@/lib/check-module-access";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase";
 import { Prisma } from "@prisma/client";
@@ -15,7 +15,7 @@ import { getStorehubFromDB } from "../_lib/storehub-bridge";
 
 // GET /api/sales/dashboard?mode=day|week|month|custom&from=&to=&outletId=
 // Consolidated native POS (pos_orders + pos_order_payments) + pickup (orders).
-// Auth: getSession (cookie for web staff, Bearer for native staff).
+// Auth: checkModuleAccess "sales" (cookie for web staff, Bearer for native staff).
 
 // Always recompute — never serve a cached body. The native app's HTTP layer
 // (esp. iOS NSURLCache) would otherwise heuristically cache this GET and show a
@@ -23,8 +23,13 @@ import { getStorehubFromDB } from "../_lib/storehub-bridge";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const user = await getSession();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Module gate (crash-review fix): revenue/AOV/growth was gated only in the
+  // native UI, so any authenticated staffer could curl their outlet's full
+  // sales dashboard with their own bearer token. checkModuleAccess enforces
+  // the same `sales` key the tab bar uses (OWNER/ADMIN bypass built in).
+  const guard = await checkModuleAccess(req, "sales");
+  if (!guard.ok) return guard.response;
+  const user = guard.session;
 
   const sp = new URL(req.url).searchParams;
   const mode = (sp.get("mode") || "day") as Mode;
