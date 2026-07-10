@@ -17,7 +17,10 @@
 import { prisma } from "@/lib/prisma";
 
 export function lessonsEnabled(): boolean {
-  return process.env.PROCUREMENT_AGENT_LESSONS === "true";
+  // Default ON (owner call, 2026-07-10): the learning loop is the "improves by
+  // itself" half of the QA system and there's no reason to run without it.
+  // Set PROCUREMENT_AGENT_LESSONS=false to disable for debugging.
+  return process.env.PROCUREMENT_AGENT_LESSONS !== "false";
 }
 
 /**
