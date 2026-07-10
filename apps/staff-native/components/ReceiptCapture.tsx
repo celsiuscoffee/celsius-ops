@@ -22,19 +22,19 @@ export function ReceiptCapture({
   if (!perm.granted) {
     return (
       <View className="flex-1 items-center justify-center bg-espresso px-6">
-        <Text className="text-base text-white text-center">
+        <Text className="text-base text-background text-center">
           Camera access is needed to capture a receipt.
         </Text>
         <Pressable
           onPress={requestPerm}
-          className="mt-4 h-12 items-center justify-center rounded-2xl bg-white px-6"
+          className="mt-4 h-12 items-center justify-center rounded-2xl bg-background px-6"
         >
           <Text className="text-base font-body-bold text-espresso">
             Allow camera
           </Text>
         </Pressable>
         <Pressable onPress={onCancel} className="mt-3">
-          <Text className="text-sm text-white/80">Cancel</Text>
+          <Text className="text-sm text-background/80">Cancel</Text>
         </Pressable>
       </View>
     );
