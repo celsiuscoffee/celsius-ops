@@ -32,10 +32,16 @@ export const PO_SEND_VERSION = "po-send-v1";
 const PO_PROMPT_TEMPLATE = process.env.PROCUREMENT_PO_PROMPT_TEMPLATE?.trim() || "procurement_new_order";
 
 // PREFERRED cold path: send the full order as a PDF on an approved DOCUMENT template, so a cold
-// supplier gets the whole order in ONE message (no reply-prompt round-trip). Set this to the
-// approved template's name to enable; unset → the prompt flow. The template needs a DOCUMENT
-// header + a body with {{1}} = supplier name, {{2}} = PO number.
-const PO_DOC_TEMPLATE = process.env.PROCUREMENT_PO_DOC_TEMPLATE?.trim();
+// supplier gets the whole order in ONE message (no reply-prompt round-trip). The template needs
+// a DOCUMENT header + a body with {{1}} = supplier name, {{2}} = PO number.
+//
+// DISABLED (owner call, 2026-07-10): the template PROCUREMENT_PO_DOC_TEMPLATE pointed at never
+// matched that shape — 16/16 sends failed with #132000 (param mismatch) in the last week and the
+// prompt fallback carried every cold send. Ignoring the env var stops the failed-send noise
+// while keeping the code path ready: once the template in WhatsApp Manager actually has a
+// DOCUMENT header + {{1}}/{{2}} body, restore the env read below to re-enable.
+// const PO_DOC_TEMPLATE = process.env.PROCUREMENT_PO_DOC_TEMPLATE?.trim();
+const PO_DOC_TEMPLATE: string | undefined = undefined;
 
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
 
