@@ -15,21 +15,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
   const { key } = await params; // counterparty number (digits)
   const counter = { OR: [{ fromNumber: key }, { toNumber: key }] };
 
-  const messages = await prisma.whatsAppMessage.findMany({
-    where: counter,
-    orderBy: { timestamp: "asc" },
-    take: 500,
-    select: {
-      id: true,
-      waMessageId: true,
-      direction: true,
-      type: true,
-      body: true,
-      mediaUrl: true,
-      status: true,
-      timestamp: true,
-    },
-  });
+  // Newest 500, then flipped chronological — `asc + take` kept the OLDEST 500,
+  // so a busy thread truncated its most recent messages.
+  const messages = (
+    await prisma.whatsAppMessage.findMany({
+      where: counter,
+      orderBy: { timestamp: "desc" },
+      take: 500,
+      select: {
+        id: true,
+        waMessageId: true,
+        direction: true,
+        type: true,
+        body: true,
+        mediaUrl: true,
+        status: true,
+        timestamp: true,
+      },
+    })
+  ).reverse();
 
   let supplierId =
     (
@@ -192,6 +196,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
       newQuantity: number | null;
       note: string | null;
     } | null;
+    // ALL planned line edits (multi-item shortfalls) — poAction is [0] for back-compat.
+    poActions?: Array<{
+      type: string;
+      poItemId: string | null;
+      itemName: string | null;
+      newQuantity: number | null;
+      note: string | null;
+    }>;
     // A supplier-sent revised invoice: the concrete amount/number change to approve.
     invoiceAction: {
       invoiceId: string;
@@ -253,6 +265,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
             note: typeof pa.note === "string" ? pa.note : null,
           }
         : null,
+      poActions: Array.isArray(p.poActions)
+        ? (p.poActions as Record<string, unknown>[]).map((a) => ({
+            type: String(a.type ?? ""),
+            poItemId: typeof a.poItemId === "string" ? a.poItemId : null,
+            itemName: typeof a.itemName === "string" ? a.itemName : null,
+            newQuantity: typeof a.newQuantity === "number" ? a.newQuantity : null,
+            note: typeof a.note === "string" ? a.note : null,
+          }))
+        : undefined,
       invoiceAction:
         ia && typeof ia.invoiceId === "string"
           ? {

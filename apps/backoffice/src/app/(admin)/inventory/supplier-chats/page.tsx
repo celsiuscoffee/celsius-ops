@@ -109,6 +109,7 @@ type Detail = {
     paymentModel?: string;
     popDeliveryCritical?: boolean;
     poAction: { type: string; poItemId: string | null; itemName: string | null; newQuantity: number | null; note: string | null } | null;
+    poActions?: { type: string; poItemId: string | null; itemName: string | null; newQuantity: number | null; note: string | null }[];
     invoiceAction: {
       invoiceId: string;
       invoiceNumber: string;
@@ -635,16 +636,12 @@ export default function SupplierChatsPage() {
     setApplying(true);
     setApplyError(null);
     try {
+      // action:"apply" = apply the agent-STAMPED actions server-side (all lines
+      // of a multi-item proposal) — the server never trusts client-sent edits.
       const res = await fetch(`/api/inventory/supplier-chats/${selected}/apply-proposal`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messageId: p.messageId,
-          orderId: p.orderId,
-          poItemId: p.poAction.poItemId,
-          action: p.poAction.type,
-          newQuantity: p.poAction.newQuantity,
-        }),
+        body: JSON.stringify({ messageId: p.messageId, orderId: p.orderId, action: "apply" }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -1078,13 +1075,20 @@ export default function SupplierChatsPage() {
                         </>
                       ) : detail.agentProposal.poAction ? (
                         <>
-                          {detail.agentProposal.poAction.type === "substitute_item" && "Substitution offered"}
-                          {detail.agentProposal.poAction.type === "cancel_order" && "Cancel requested"}
-                          {detail.agentProposal.poAction.type === "remove_item" && "Remove line"}
-                          {detail.agentProposal.poAction.type === "reduce_qty" && "Reduce qty"}
-                          {detail.agentProposal.poAction.itemName && <> · <span className="font-medium">{detail.agentProposal.poAction.itemName}</span></>}
-                          {detail.agentProposal.poAction.newQuantity != null && <> → {detail.agentProposal.poAction.newQuantity}</>}
-                          {detail.agentProposal.poAction.note && <div className="mt-0.5 text-[11px] text-muted-foreground">“{detail.agentProposal.poAction.note}”</div>}
+                          {((detail.agentProposal.poActions?.length ?? 0) > 1
+                            ? detail.agentProposal.poActions!
+                            : [detail.agentProposal.poAction]
+                          ).map((a, i) => (
+                            <div key={i}>
+                              {a.type === "substitute_item" && "Substitution offered"}
+                              {a.type === "cancel_order" && "Cancel requested"}
+                              {a.type === "remove_item" && "Remove line"}
+                              {a.type === "reduce_qty" && "Reduce qty"}
+                              {a.itemName && <> · <span className="font-medium">{a.itemName}</span></>}
+                              {a.newQuantity != null && <> → {a.newQuantity}</>}
+                              {a.note && <div className="mt-0.5 text-[11px] text-muted-foreground">“{a.note}”</div>}
+                            </div>
+                          ))}
                         </>
                       ) : (
                         <span className="capitalize">{detail.agentProposal.intent.replace(/_/g, " ")}</span>
@@ -1122,7 +1126,9 @@ export default function SupplierChatsPage() {
                               className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-50"
                             >
                               {applying ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                              {pa?.type === "remove_item" ? "Apply: remove line" : "Apply: reduce qty"}
+                              {(detail.agentProposal.poActions?.filter((a) => a.type === "remove_item" || a.type === "reduce_qty").length ?? 0) > 1
+                                ? `Apply all ${detail.agentProposal.poActions!.filter((a) => a.type === "remove_item" || a.type === "reduce_qty").length} line changes`
+                                : pa?.type === "remove_item" ? "Apply: remove line" : "Apply: reduce qty"}
                             </button>
                           )}
                           {detail.agentProposal.orderId && (
