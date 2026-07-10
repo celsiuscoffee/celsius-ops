@@ -115,6 +115,26 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-10 — **Backoffice nav UX rework** (branch
+  `claude/backoffice-tabs-ux-bhtaxq`, draft PR). Owner said the tabs were
+  "haywire". Nav config extracted from `(admin)/layout.tsx` into
+  `src/lib/nav.tsx` (single registry shared by sidebar + ⌘K palette + route
+  gate). Behavior fixes: section headers now expand/collapse WITHOUT
+  navigating (icon-collapsed rail still navigates — submenu can't render
+  there), section highlight stays on while open, mobile sheet closes on page
+  pick. Structure: rail reordered into clusters (Sales/Procurement/Ops ·
+  HR/Finance · Rewards/Marketing · Catalog/Settings, with rail dividers —
+  `dividerBefore` was previously dead config, now rendered); duplicate
+  Packaging entry removed (single home: Catalog); supplier-chats renamed
+  "Supplier Chats" and /inventory/orders is now "Purchase Orders" (labels
+  were reversed-ish); GrabFood folded into Marketing → Advertising;
+  single-item subgroups merged (HR Leave→Time & Leave, Rewards Manual
+  Grant→Channels, Settings People→Business, Procurement Analytics→Overview);
+  HR icon Bot→Users. ⌘K palette now searches nav pages (RBAC-filtered) above
+  employees. **No URL or moduleKey changes** — perms dev-guard still covers
+  every grantable key. All verified: tsc, eslint (3 pre-existing warn-level),
+  347 vitest, next build.
+
 - 2026-07-06 — **Checklist auto-assign: data-driven FOH/BOH station** (PR #824,
   branch `claude/auto-assign-checklist-hqqzfd`, draft — NOT yet merged). Root
   cause of "auto-assign didn't assign the attended person": station came from a
