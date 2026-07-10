@@ -103,9 +103,13 @@ export async function GET(req: NextRequest) {
     // An escalated-but-unresolved proposal anywhere in the recent window keeps the
     // thread in "needs attention" — NOT just when it happens to be the newest
     // message. Without this, any later chase/reply buried the escalation forever.
+    // Counts BOTH kinds of actionable proposal: a PO edit (poAction) and an
+    // invoice revision (invoiceAction, the #835 flow) — revisions used to be
+    // invisible here and only surfaced if someone happened to open the thread.
     if (m.direction === "outbound" && raw?.proposalResolved !== true) {
-      const pa = (raw?.proposal as { poAction?: { type?: string } } | undefined)?.poAction;
-      if (pa?.type && pa.type !== "none") t.pendingProposal = true;
+      const prop = raw?.proposal as { poAction?: { type?: string } | null; invoiceAction?: unknown } | undefined;
+      const actionable = (prop?.poAction?.type && prop.poAction.type !== "none") || !!prop?.invoiceAction;
+      if (actionable) t.pendingProposal = true;
     }
   }
 
@@ -123,7 +127,7 @@ export async function GET(req: NextRequest) {
   const matchedIds = [...supplierWithThread];
   const overdueRows = matchedIds.length
     ? await prisma.invoice.findMany({
-        where: { supplierId: { in: matchedIds }, status: { not: "PAID" }, dueDate: { lt: new Date() } },
+        where: { supplierId: { in: matchedIds }, status: { notIn: ["PAID", "DRAFT"] }, dueDate: { lt: new Date() } },
         select: { supplierId: true },
         distinct: ["supplierId"],
       })
@@ -136,7 +140,11 @@ export async function GET(req: NextRequest) {
   const allSupplierIds = suppliers.map((s) => s.id);
   const [unpaidRows, deliveryRows] = await Promise.all([
     prisma.invoice.findMany({
-      where: { supplierId: { in: allSupplierIds }, status: { not: "PAID" } },
+      // DRAFT excluded: an unverified AI capture isn't a confirmed liability —
+      // same rule as the thread detail ([key]/route.ts payableFilter). A junk
+      // draft with a parsed past dueDate used to pin threads in "needs
+      // attention" until someone deleted it.
+      where: { supplierId: { in: allSupplierIds }, status: { notIn: ["PAID", "DRAFT"] } },
       select: { supplierId: true },
       distinct: ["supplierId"],
     }),

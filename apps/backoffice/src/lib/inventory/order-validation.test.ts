@@ -13,6 +13,20 @@ describe("boundedReorderQty", () => {
     expect(r).toMatchObject({ orderQty: 50, cap: "max_level", moqForced: false });
   });
 
+  it("returns 0 when the ceiling caps to zero and there is no MOQ (no phantom 1-package floor)", () => {
+    // Already at/over max: suggesting 1 package anyway breached the ceiling and
+    // made proactive-order's orderQty <= 0 guard unreachable.
+    expect(boundedReorderQty({ neededBase: 30, conversionFactor: 10, moq: 0, headroomBase: 0 })).toMatchObject({
+      orderQty: 0,
+      cap: "max_level",
+    });
+    // ...but a real MOQ still forces the floor (flagged).
+    expect(boundedReorderQty({ neededBase: 30, conversionFactor: 10, moq: 2, headroomBase: 0 })).toMatchObject({
+      orderQty: 2,
+      moqForced: true,
+    });
+  });
+
   it("caps at shelf-life usable qty (spoilage guard)", () => {
     const r = boundedReorderQty({ neededBase: 100, conversionFactor: 1, moq: 1, shelfUsableBase: 30 });
     expect(r).toMatchObject({ orderQty: 30, cap: "shelf_life" });

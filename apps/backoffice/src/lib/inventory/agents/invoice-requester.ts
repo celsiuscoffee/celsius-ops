@@ -56,23 +56,32 @@ export async function runInvoiceRequests(): Promise<InvoiceRequestSummary> {
   // as a mistake to the supplier and drowns the real asks.
   const since = new Date();
   since.setDate(since.getDate() - 30);
-  const orders = await prisma.order.findMany({
+  const candidates = await prisma.order.findMany({
     where: {
       orderType: "PURCHASE_ORDER",
       status: { in: INVOICE_DUE_STATUSES },
-      invoices: { none: {} },
       createdAt: { gte: since },
       // Per-supplier dial: OFF = the agent never contacts this supplier.
       supplier: { phone: { not: null }, status: "ACTIVE", automationMode: { not: "OFF" } },
     },
     orderBy: { createdAt: "asc" },
-    take: 100,
+    take: 200,
     select: {
       id: true,
       orderNumber: true,
       supplier: { select: { id: true, name: true, phone: true } },
+      invoices: { select: { invoiceNumber: true, status: true, dueDate: true } },
     },
   });
+  // "Has an invoice" must mean a REAL supplier invoice. The receiving flow and
+  // the AWAITING_DELIVERY transition auto-create a GRNI placeholder (INV-####,
+  // PENDING, no due date) on nearly every PO — which used to satisfy the old
+  // `invoices: none` filter and suppress the chase for practically everything.
+  // A placeholder means the invoice is MISSING; those POs are exactly the ones
+  // to chase. Real invoices (supplier-numbered, or dated, or paid) stop it.
+  const isPlaceholder = (i: { invoiceNumber: string; status: string; dueDate: Date | null }) =>
+    i.invoiceNumber.startsWith("INV-") && i.dueDate == null && i.status === "PENDING";
+  const orders = candidates.filter((o) => o.invoices.every(isPlaceholder)).slice(0, 100);
 
   let requested = 0;
   let skipped = 0;
@@ -164,6 +173,8 @@ async function requestOne(
         via: windowOpen ? "freetext" : "template",
         ok: res.ok,
         error: res.error ?? null,
+        // Surfaces the thread in the inbox "needs attention" tab on failure.
+        ...(res.ok ? {} : { sendFailed: true }),
       },
     });
 

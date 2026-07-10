@@ -38,6 +38,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // and need manual reversal first. Placeholder + real-but-PENDING invoices
     // are fine to cancel through (placeholders cascade-delete below).
     if (status === "CANCELLED") {
+      // GOODS RECEIVED = not cancellable. A (partially) received PO has stock
+      // already incremented and a GRNI payable the supplier WILL bill — the
+      // cascade below would delete that payable while the goods stay on the
+      // shelf. Close the PO short instead (mark COMPLETED keeps the payable
+      // at the received total, which the receiving reconcile already set).
+      const received = await prisma.receiving.findFirst({ where: { orderId: id }, select: { id: true } });
+      if (received) {
+        return NextResponse.json(
+          {
+            error:
+              "Cannot cancel — goods were already received against this PO. " +
+              "To close a short delivery, mark the PO Completed instead (the total already reflects what arrived); the supplier will still bill the received goods.",
+          },
+          { status: 400 },
+        );
+      }
       const blockingInvoice = await prisma.invoice.findFirst({
         where: {
           orderId: id,

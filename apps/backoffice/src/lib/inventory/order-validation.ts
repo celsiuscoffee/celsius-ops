@@ -66,7 +66,11 @@ export function boundedReorderQty(input: {
     }
   }
 
-  return { orderQty: Math.max(orderQty, moq > 0 ? moq : 1), cap: which, moqForced };
+  // No artificial 1-package floor: when the ceilings cap the order to ZERO
+  // (already at/over max, or nothing shelf-usable) and there's no MOQ, the
+  // right answer IS 0 — the old `max(qty, 1)` suggested a package above max
+  // level and made proactive-order's `orderQty <= 0` guard unreachable.
+  return { orderQty: Math.max(orderQty, moq), cap: which, moqForced };
 }
 
 export type OrderWarningCode = "BELOW_MOQ" | "DELIVERY_DAY";

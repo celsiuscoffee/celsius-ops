@@ -26,7 +26,7 @@ import { outletConfirmEnabled, readOutletDeliveryState, askOutletIfArrived } fro
 
 const DAY = 24 * 60 * 60 * 1000;
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
-const AWAITING_STATUSES: OrderStatus[] = ["SENT", "CONFIRMED", "AWAITING_DELIVERY"];
+const AWAITING_STATUSES: OrderStatus[] = ["SENT", "CONFIRMED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"]; // partials stay chased until the balance lands or a human closes short
 
 function todayMyt(): string {
   return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -63,12 +63,12 @@ export async function runIntentResponder(): Promise<ResponderSummary> {
   const recent = await prisma.whatsAppMessage.findMany({
     where: { direction: "inbound", supplierId: { not: null }, timestamp: { gte: since } },
     orderBy: { timestamp: "desc" },
-    select: { id: true, supplierId: true, fromNumber: true, raw: true },
+    select: { id: true, waMessageId: true, supplierId: true, fromNumber: true, raw: true },
     take: 1000,
   });
 
   // Latest actionable message per (supplier, category) — don't double-handle.
-  type Job = { supplierId: string; phone: string; messageId: string; category: string };
+  type Job = { supplierId: string; phone: string; messageId: string; waMessageId: string | null; category: string };
   const seen = new Set<string>();
   const jobs: Job[] = [];
   for (const m of recent) {
@@ -80,13 +80,17 @@ export async function runIntentResponder(): Promise<ResponderSummary> {
     const k = `${m.supplierId}:${cat}`;
     if (seen.has(k)) continue;
     seen.add(k);
-    jobs.push({ supplierId: m.supplierId!, phone: m.fromNumber, messageId: m.id, category: cat });
+    jobs.push({ supplierId: m.supplierId!, phone: m.fromNumber, messageId: m.id, waMessageId: m.waMessageId, category: cat });
   }
 
   for (const job of jobs) {
     const supplier = await prisma.supplier.findUnique({ where: { id: job.supplierId }, select: { name: true, phone: true, automationMode: true } });
     if (!supplier) continue;
     const name = supplier.name;
+    // Only a HANDLED job gets marked responded. Failures (handler threw, send
+    // rejected) stay unmarked so tomorrow's run retries them — marking them
+    // responded used to permanently drop the message on the first hiccup.
+    let handled = false;
     try {
       if (job.category === "soa") {
         const r = await handleSoa(job.supplierId, name, financeDest, today);
@@ -94,21 +98,43 @@ export async function runIntentResponder(): Promise<ResponderSummary> {
           out.soaHandoffs++;
           out.actions.push(`🧾 SOA ${name}: RM${r.outstanding.toFixed(0)} outstanding (${r.count} inv) → finance${r.sent ? " ✅" : ""}`);
         }
+        handled = true;
       } else if (job.category === "vendorpush") {
-        const draft = await draftWeeklyOrder(job.supplierId, name);
-        if (draft) {
-          out.vendorPushDrafts++;
-          const sent = supplier.automationMode === "AUTO" && (await maybeSendToSupplier(job.phone, draft));
-          out.actions.push(`🛒 ${name} asked for an order — ${sent ? "replied" : "draft ready"}: ${draft.slice(0, 60)}…`);
+        // DOUBLE-REPLY guard: the chat agent replies in real time to every
+        // supplier message when an open PO exists — if it already answered THIS
+        // inbound (raw.inReplyTo on an agent outbound), a second, next-morning
+        // "yes please prepare: …" reply here would contradict it. The intel
+        // classification is still consumed (marked responded) so the brief
+        // doesn't re-surface the same message daily.
+        const agentReplied = await prisma.whatsAppMessage.findFirst({
+          where: {
+            direction: "outbound",
+            supplierId: job.supplierId,
+            raw: { path: ["inReplyTo"], equals: job.waMessageId ?? "" },
+          },
+          select: { id: true },
+        });
+        if (agentReplied) {
+          out.actions.push(`🛒 ${name} asked for an order — chat agent already replied (no exec follow-up)`);
+          handled = true;
+        } else {
+          const draft = await draftWeeklyOrder(job.supplierId, name);
+          if (draft) {
+            out.vendorPushDrafts++;
+            const sent = supplier.automationMode === "AUTO" && (await maybeSendToSupplier(job.phone, draft));
+            out.actions.push(`🛒 ${name} asked for an order — ${sent ? "replied" : "draft ready"}: ${draft.slice(0, 60)}…`);
+          }
+          handled = true;
         }
       } else if (job.category === "price" || job.category === "invchange") {
         out.flagged++;
         out.actions.push(`${job.category === "price" ? "💲 price-change" : "📝 invoice/CN"} from ${name} — review`);
+        handled = true;
       }
     } catch (e) {
-      console.warn(`[intent-responder] ${job.category} for ${name} failed:`, e instanceof Error ? e.message : e);
+      console.warn(`[intent-responder] ${job.category} for ${name} failed (will retry next run):`, e instanceof Error ? e.message : e);
     }
-    await markResponded(job.messageId);
+    if (handled) await markResponded(job.messageId);
   }
 
   // Delivery promise missed → chase for a fresh ETA (AUTO suppliers only).

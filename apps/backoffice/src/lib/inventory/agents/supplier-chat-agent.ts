@@ -189,20 +189,29 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       return { invoiceCaptured: false };
     }
 
-    // Most recent open PO for this supplier + its line items + invoice presence.
-    const order = await prisma.order.findFirst({
+    // Open POs for this supplier — the agent must act on the PO the supplier is
+    // TALKING ABOUT, not blindly the newest one. A multi-outlet supplier (Jiju
+    // delivers to Putrajaya, Shah Alam AND Tamarind on the same morning) often
+    // has several open POs; "Earl Grey takde stok" about the Tamarind order
+    // used to edit whichever PO was created last. Resolution order:
+    //   1. the message quotes a PO number → that PO
+    //   2. the message names exactly one PO's outlet → that PO
+    //   3. fall back to the most recent open PO (single-PO suppliers: same as before)
+    const openPos = await prisma.order.findMany({
       where: {
         supplierId: supplier.id,
         orderType: "PURCHASE_ORDER",
         status: { in: OPEN_ORDER_STATUSES },
       },
       orderBy: { createdAt: "desc" },
+      take: 10,
       select: {
         id: true,
         orderNumber: true,
         status: true,
         outletId: true,
         totalAmount: true,
+        outlet: { select: { name: true, code: true } },
         items: {
           select: {
             id: true,
@@ -214,7 +223,28 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
         invoices: { select: { id: true }, take: 1 },
       },
     });
-    if (!order) return { invoiceCaptured: false }; // no open PO — nothing to act on
+    if (openPos.length === 0) return { invoiceCaptured: false }; // no open PO — nothing to act on
+    const msgNorm = (evt.text ?? "").toLowerCase().replace(/\s+/g, "");
+    const byNumber = openPos.find((o) => msgNorm.includes(o.orderNumber.toLowerCase().replace(/\s+/g, "")));
+    const byOutlet = (() => {
+      if (byNumber || openPos.length < 2) return null;
+      const msgLower = (evt.text ?? "").toLowerCase();
+      const hits = openPos.filter((o) => {
+        const name = o.outlet?.name?.toLowerCase() ?? "";
+        const code = o.outlet?.code?.toLowerCase() ?? "";
+        // Outlet names share the "Celsius Coffee" prefix — match on the
+        // distinctive tail ("putrajaya", "tamarind") or the code.
+        const tail = name.replace(/celsius\s*coffee\s*/g, "").trim();
+        return (tail.length >= 4 && msgLower.includes(tail)) || (code.length >= 4 && msgLower.includes(code));
+      });
+      // Only trust the outlet hint when it's UNAMBIGUOUS.
+      const uniq = new Set(hits.map((h) => h.id));
+      return uniq.size === 1 ? hits[0] : null;
+    })();
+    const order = byNumber ?? byOutlet ?? openPos[0];
+    if (byNumber || byOutlet) {
+      console.log(`[supplier-agent] resolved target PO ${order.orderNumber} from ${byNumber ? "PO number" : "outlet"} in message`);
+    }
 
     // Recent thread for context (chronological, last 8).
     const history = await prisma.whatsAppMessage.findMany({
@@ -366,6 +396,14 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       // (bit ASSIST suppliers in the pilot). Same reasoning as qaBlocked: any withheld
       // action ⇒ neutral holding line, never the confirmation.
       if (qaBlocked || actions.length > 0) replyText = HOLDING_REPLY[lang];
+      // A supplier-stated ETA is benign metadata, not a PO edit — apply it even
+      // on escalation (unless QA blocked the whole read). ASSIST suppliers'
+      // ETAs used to be dropped entirely here, so deliveryDate stayed wrong and
+      // drove false "overdue for receiving" chases.
+      if (!qaBlocked && isValidIsoDate(decision.delivery_date)) {
+        await applyDeliveryDate(order.id, decision.delivery_date);
+        deliveryUpdated = decision.delivery_date;
+      }
     } else {
       // Fetch the system user once if any line is being removed (for the re-source PO).
       const systemUser = actions.some((a) => a.type === "remove_item")
@@ -407,6 +445,16 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
       decision.po_action.po_item_id
         ? order.items.find((i) => i.id === decision.po_action.po_item_id)
         : undefined;
+    // ALL planned line edits — a multi-item shortfall ("X takde, Y tinggal 3,
+    // Z pun habis") used to stamp only po_actions[0]; lines 2..n were silently
+    // dropped from the proposal with no record or UI path.
+    const proposedActions = actions.map((a) => ({
+      type: a.type,
+      poItemId: a.po_item_id,
+      itemName: order.items.find((i) => i.id === a.po_item_id)?.product.name ?? null,
+      newQuantity: a.new_quantity,
+      note: a.note,
+    }));
     const proposal = escalate
       ? {
           intent: decision.intent,
@@ -425,6 +473,9 @@ export async function handleSupplierMessage(evt: SupplierMessageEvent): Promise<
                   note: decision.po_action.note,
                 }
               : null,
+          // Every planned line (poAction above stays = poActions[0] for
+          // back-compat with older UI/approval readers).
+          poActions: proposedActions.length > 0 ? proposedActions : null,
           // A supplier-sent REVISED invoice → the concrete update for a human to approve
           // (apply-proposal patches the invoice; never touches a PAID one). ASSIST does the work,
           // staff only decides. See assist-mode-principle.
