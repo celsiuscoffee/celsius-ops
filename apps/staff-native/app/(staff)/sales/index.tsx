@@ -175,9 +175,13 @@ export default function SalesScreen() {
           })}
         </View>
 
-        {/* Background-refresh indicator (cached tab being revalidated). First load
-            of a tab shows the full spinner below instead. */}
-        {isFetching && !isLoading && !refreshing ? (
+        {/* Refresh indicator: any revalidation of an already-loaded screen,
+            INCLUDING pull-to-refresh. It used to be hidden while `refreshing`
+            (deferring to the RefreshControl spinner), but on this dark screen
+            the platform spinner is subtle enough that pulls read as "nothing
+            happened". This row is the guaranteed-visible feedback; first load
+            still shows the full-page spinner below instead. */}
+        {isFetching && !isLoading ? (
           <View className="mb-3 -mt-1 flex-row items-center justify-center gap-1.5">
             <ActivityIndicator size="small" color="#FBBF24" />
             <Text className="font-body text-[11px] text-[#F5F3F08a]">Updating…</Text>
