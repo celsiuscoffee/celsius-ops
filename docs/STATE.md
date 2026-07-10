@@ -138,6 +138,32 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-10 — **Backoffice nav UX rework** (PR #894, merged on owner's
+  approval after a clickable preview artifact). Owner said the tabs were
+  "haywire". Nav config extracted from `(admin)/layout.tsx` into
+  `src/lib/nav.tsx` (single registry shared by sidebar + ⌘K palette + route
+  gate). Behavior fixes: section headers now expand/collapse WITHOUT
+  navigating (icon-collapsed rail still navigates — submenu can't render
+  there), section highlight stays on while open, mobile sheet closes on page
+  pick. Structure: rail reordered into clusters (Sales/Procurement/Ops ·
+  HR/Finance · Rewards/Marketing · Catalog/Settings, with rail dividers —
+  `dividerBefore` was previously dead config, now rendered); duplicate
+  Packaging entry removed (single home: Catalog); supplier-chats renamed
+  "Supplier Chats" and /inventory/orders is now "Purchase Orders" (labels
+  were reversed-ish); GrabFood folded into Marketing → Advertising;
+  single-item subgroups merged (HR Leave→Time & Leave, Rewards Manual
+  Grant→Channels, Settings People→Business, Procurement Analytics→Overview);
+  HR icon Bot→Users. ⌘K palette now searches nav pages (RBAC-filtered) above
+  employees. **No URL or moduleKey changes** — perms dev-guard still covers
+  every grantable key. All verified: tsc, eslint (3 pre-existing warn-level),
+  347 vitest, next build. Round 2 (owner: "sub tabs need arranging too"):
+  Sales/Ops/Finance flat lists → subgroups (Overview/Daily/Reports,
+  Overview/Daily/Setup, Books/Reference/Legacy), Catalog reordered
+  products→BOM→cards→packaging→posters. NOTE: GitHub Actions dropped the
+  `synchronize` CI runs for the round-2 pushes (only the first commit got a
+  PR run); verified locally (tsc/eslint/vitest) and via the on-merge main
+  CI run instead.
+
 - 2026-07-10 — **Procurement loop QA round 2 + "fix all"** (PRs #883 #885 #891
   #895 merged; earlier same-arc: #714 par ABC value-cap, #806 cold-send fixes,
   #835/#836 invoice-capture approve flow). Root findings: the cron cap (see
