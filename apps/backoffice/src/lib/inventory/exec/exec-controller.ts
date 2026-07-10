@@ -27,6 +27,8 @@ import type { OrderStatus } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppText } from "@/lib/whatsapp";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
+import { sendProactive } from "@/lib/ops-pulse/sender";
+import { TEMPLATES as OPS_TEMPLATES } from "@/lib/ops-pulse/config";
 import { createReorderDraftPO } from "@/lib/inventory/exec/proactive-order";
 import { behaviorTag } from "@/lib/inventory/exec/supplier-behavior";
 import { runMessageIntel, type IntelSummary } from "@/lib/inventory/exec/message-intel";
@@ -41,7 +43,7 @@ const RESOURCE_NOTE_PREFIX = "Auto re-source by supplier-chat agent";
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
 const DAY = 24 * 60 * 60 * 1000;
 
-const AWAITING_STATUSES: OrderStatus[] = ["SENT", "CONFIRMED", "AWAITING_DELIVERY"];
+const AWAITING_STATUSES: OrderStatus[] = ["SENT", "CONFIRMED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"]; // partials stay chased until the balance lands or a human closes short
 const OPEN_ORDER_STATUSES: OrderStatus[] = [
   "DRAFT",
   "PENDING_APPROVAL",
@@ -142,7 +144,10 @@ export async function runProcurementExec(): Promise<ExecRunSummary> {
         orderType: "PURCHASE_ORDER",
         status: { in: AWAITING_STATUSES },
         deliveryDate: { lt: now },
-        receivings: { none: {} },
+        // No receiving at all, OR a partial one — a short-delivered PO has
+        // receivings but its balance is still outstanding and must stay on
+        // the overdue list until it lands or a human closes the PO short.
+        OR: [{ receivings: { none: {} } }, { status: "PARTIALLY_RECEIVED" }],
       },
       orderBy: { deliveryDate: "asc" },
       take: 50,
@@ -242,8 +247,30 @@ export async function runProcurementExec(): Promise<ExecRunSummary> {
   });
   const windowOpen = !!lastInbound && Date.now() - +new Date(lastInbound.timestamp) < DAY;
   if (!windowOpen) {
-    console.log(`[procurement-exec] brief skipped — window closed for ${dest} (needs a template)\n${brief}`);
-    summary.skipped = "window-closed";
+    // The brief used to die here indefinitely unless the owner happened to have
+    // texted the bot in the last 24h — the loop's ONLY human channel, best-effort
+    // on the window. Fall back to the approved ops-pulse digest template with a
+    // one-line summary ({{1}} can't hold newlines): the owner still learns
+    // TODAY's counts, and replying anything reopens the window so tomorrow's
+    // brief arrives in full.
+    const summaryLine =
+      `Procurement: ${supply.oosRisk.length} OOS risk, ${overdue.length} overdue delivery, ` +
+      `${finance.length} supplier(s) overdue payment, ${proactive.length} draft PO(s). ` +
+      `Reply anything to get the full brief daily.`;
+    const t = await sendProactive(dest, OPS_TEMPLATES.managerDigest, brief, summaryLine);
+    await recordOutboundMessage({
+      waMessageId: t.messageId,
+      fromNumber: "",
+      toNumber: dest,
+      type: "text",
+      body: brief,
+      supplierId: null,
+      status: t.ok ? "sent" : "failed",
+      raw: { agent: EXEC_VERSION, execBriefDate: today, via: "template-brief", ok: t.ok, error: t.error ?? null },
+    });
+    summary.briefSent = t.ok;
+    if (!t.ok) summary.skipped = "window-closed-template-failed";
+    console.log(`[procurement-exec] brief window closed → template summary sent=${t.ok}`);
     return summary;
   }
 

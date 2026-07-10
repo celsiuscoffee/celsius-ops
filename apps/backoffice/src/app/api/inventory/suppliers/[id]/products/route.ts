@@ -87,7 +87,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         shelfUsableBase:
           r.product.shelfLifeDays && avgDaily > 0 ? r.product.shelfLifeDays * avgDaily : null,
       });
-      if (orderQty > 0) suggested.set(r.product.id, orderQty);
+      // Keyed per supplier-product ROW, not per product: the qty is in THIS
+      // row's package units, and a product listed in two pack sizes (1kg bag +
+      // 5kg carton) got the same number shown on both rows — tapping the other
+      // pack over/under-ordered by the conversion ratio.
+      if (orderQty > 0) suggested.set(r.id, orderQty);
     }
   }
 
@@ -100,7 +104,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       productPackageId: r.productPackageId,
       price: Number(r.price),
       moq: Number(r.moq) || 0,
-      suggestedQty: suggested.get(r.product.id) ?? 0,
+      suggestedQty: suggested.get(r.id) ?? 0,
     })),
   );
 }

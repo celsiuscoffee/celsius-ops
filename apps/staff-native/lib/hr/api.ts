@@ -10,6 +10,21 @@ export type Shift = {
   hr_schedules: { outlet_id: string; week_start: string };
 };
 
+// A teammate rostered at your outlet on a given day (from /api/hr/whos-working).
+export type TeamMate = {
+  user_id: string;
+  name: string;
+  position: string | null;
+  start_time: string;
+  end_time: string;
+  is_me: boolean;
+};
+
+export function fetchWhosWorking(date?: string) {
+  const qs = date ? `?date=${encodeURIComponent(date)}` : "";
+  return api<{ date: string; team: TeamMate[] }>(`/api/hr/whos-working${qs}`);
+}
+
 export type LeaveBalance = {
   id: string;
   leave_type: string;

@@ -175,8 +175,9 @@ export default function SalesScreen() {
           })}
         </View>
 
-        {/* Background-refresh indicator (cached tab being revalidated). First load
-            of a tab shows the full spinner below instead. */}
+        {/* Background-refresh indicator (cached tab being revalidated). Pull-
+            to-refresh feedback is the RefreshControl spinner, same as every
+            other tab; first load shows the full-page spinner below instead. */}
         {isFetching && !isLoading && !refreshing ? (
           <View className="mb-3 -mt-1 flex-row items-center justify-center gap-1.5">
             <ActivityIndicator size="small" color="#FBBF24" />
@@ -188,8 +189,35 @@ export default function SalesScreen() {
       <ScrollView
         contentContainerClassName="px-4 pb-16"
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A2492C" colors={["#A2492C"]} progressBackgroundColor="#2a1508" />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            // Standard pattern (see checklists/index.tsx), tint only. Honored
+            // on Android/older iOS; iOS 26's redesigned spinner largely
+            // ignores tintColor, which is why the cream well below exists.
+            tintColor="#A2492C"
+          />
+        }
       >
+        {/* Cream pull-well: painted into the TOP overscroll area only, so the
+            pull gesture reveals a light backing behind whatever spinner the OS
+            draws. iOS 26 ignores RefreshControl tintColor (user report:
+            "cursor works, cannot see because of the colour"), so on this dark
+            espresso screen contrast must come from the backdrop, not the tint.
+            Matches the checklist look (spinner on cream); never visible while
+            scrolled; RN exposes no iOS backgroundColor prop for this. */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: -300,
+            height: 300,
+            left: -16,
+            right: -16,
+            backgroundColor: "#F5F1EA",
+          }}
+        />
         {isLoading ? (
           <View className="items-center justify-center py-24"><ActivityIndicator color="#FBBF24" /></View>
         ) : error ? (

@@ -19,6 +19,7 @@ import {
   Star,
   Target,
   Trophy,
+  Users,
   Wallet,
 } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
@@ -58,6 +59,12 @@ const items = [
     title: "My Shifts",
     subtitle: "Today and upcoming",
     icon: Calendar,
+  },
+  {
+    href: "/(staff)/hr/whos-working",
+    title: "Who's Working",
+    subtitle: "Your team's shifts by day",
+    icon: Users,
   },
   {
     href: "/(staff)/hr/attendance",
@@ -338,3 +345,8 @@ function LeverBar({ lever }: { lever: AllowanceLever }) {
     </View>
   );
 }
+
+// Route-level boundary: a throw in this screen degrades to an inline retry
+// card instead of unmounting the whole HR stack (see the Who's Working
+// incident, docs in components/RouteErrorBoundary.tsx).
+export { RouteErrorFallback as ErrorBoundary } from "../../../components/RouteErrorBoundary";

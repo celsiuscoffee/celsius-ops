@@ -27,6 +27,7 @@ import type { Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { fetchWhatsAppMedia } from "@/lib/whatsapp";
 import { storeWhatsAppMedia } from "@/lib/whatsapp-media";
+import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { parseSupplierDoc } from "@/lib/finance/parsers/supplier-doc";
 import { detectCreationFlags } from "@/lib/inventory/flag-detector";
 
@@ -216,6 +217,15 @@ export async function captureInvoice(
     console.log(`[invoice-capture] skipped — ${priorSameNo.invoiceNumber} already on file (same amount)`);
     return { captured: false, revision: null };
   }
+  // Same number, DIFFERENT amount, but the prior invoice isn't revisable (paid,
+  // or too old — suppliers reset sequences monthly/per book): this is a NEW
+  // bill re-using a number, not a correction. File it under a de-collided
+  // number instead of letting the unique (supplierId, invoiceNumber) constraint
+  // silently swallow the create below.
+  if (priorSameNo && extractedNumber && amtChanged(Number(priorSameNo.amount)) && !isRevisable(priorSameNo)) {
+    extractedNumber = `${extractedNumber} (2)`.slice(0, 64);
+    console.log(`[invoice-capture] number reuse — filing as "${extractedNumber}" (prior is paid/old, not a revision)`);
+  }
 
   if (target) {
     // Dedup anchor: the invoice already filed against this PO.
@@ -392,7 +402,66 @@ export async function captureSupplierDocument(evt: SupplierDocumentEvent): Promi
     if (res.captured) {
       console.log(`[invoice-capture] fallback captured for ${supplier.name}`);
     }
+    // A REVISION means the supplier re-sent a bill we already hold with a
+    // corrected amount/number — the CREDIT-TERMS NORM when the real invoice
+    // arrives after receiving created a placeholder. The chat agent surfaces
+    // revisions as an ASSIST proposal; this fallback path used to just DROP
+    // them (OFF suppliers / post-completion invoices vanished without a
+    // trace). Record the same proposal shape as an internal note so the
+    // thread banner + needs-attention list pick it up and a human approves
+    // the update — never auto-applied.
+    if (res.revision) {
+      await recordRevisionProposal(supplier.id, evt.fromNumber, res.revision);
+    }
   } catch (err) {
     console.error("[invoice-capture] fallback error:", err instanceof Error ? err.message : err);
+  }
+}
+
+// Internal escalation note carrying an invoiceAction proposal — mirrors the
+// chat agent's raw.proposal shape so the supplier-chats banner and Approve
+// flow work on it unchanged. Deduped per (invoice, proposed amount/number).
+async function recordRevisionProposal(
+  supplierId: string,
+  fromNumber: string,
+  revision: InvoiceRevision,
+): Promise<void> {
+  try {
+    const dedupeKey = `${revision.invoiceId}:${revision.toAmount ?? ""}:${revision.toNumber ?? ""}`;
+    const already = await prisma.whatsAppMessage.findFirst({
+      where: { direction: "outbound", raw: { path: ["revisionProposalKey"], equals: dedupeKey } },
+      select: { id: true },
+    });
+    if (already) return;
+    const change = [
+      revision.toAmount != null ? `amount RM${revision.fromAmount} → RM${revision.toAmount}` : null,
+      revision.toNumber ? `number ${revision.fromNumber} → ${revision.toNumber}` : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    await recordOutboundMessage({
+      waMessageId: undefined,
+      fromNumber: "",
+      toNumber: fromNumber.replace(/\D/g, ""),
+      type: "text",
+      body: `📄 Supplier sent a revised invoice for ${revision.orderNumber || revision.invoiceNumber}: ${change || "details updated"}. Review + approve the update. (Internal note.)`,
+      supplierId,
+      status: "note",
+      raw: {
+        agent: "invoice-capture-fallback",
+        escalated: true,
+        revisionProposalKey: dedupeKey,
+        proposal: {
+          intent: "invoice_or_soa",
+          escalationReason: "supplier sent a revised invoice (universal capture)",
+          orderId: null,
+          poAction: null,
+          invoiceAction: revision,
+        },
+      },
+    });
+    console.log(`[invoice-capture] revision proposal recorded for invoice ${revision.invoiceNumber}`);
+  } catch (e) {
+    console.warn("[invoice-capture] revision proposal failed:", e instanceof Error ? e.message : e);
   }
 }

@@ -6,6 +6,28 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-10 — **Vercel schedules at most 40 cron jobs per project; entries past
+  40 are silently never scheduled.** vercel.json hit 46 (Jun 30) and the tail —
+  procurement-exec, par-levels-recalc, request-invoices/receivings,
+  consumption-post, labour-variance — was dead ~10 days with zero errors.
+  Consolidated to 37 via dispatchers (`cron/procurement-loop`, `cron/ops-nudges`);
+  `apps/backoffice/src/vercel-crons.test.ts` fails CI past 38. **Never append a
+  41st cron — fold into a dispatcher.**
+- 2026-07-10 — Procurement loop has a watchdog (`lib/inventory/loop-watchdog.ts`,
+  runs in the procurement-loop cron): stale pars, undelivered cold prompts,
+  100%-failing send channels, stale proposals/drafts → owner WhatsApp digest,
+  fingerprint-deduped. Agent lessons (agent-lessons.ts) default ON since #895.
+- 2026-07-10 — The AP bank matcher is RECONCILE-ONLY on the 6-hourly loop
+  (Telegram POP is the primary payer); only the EOM `cron/ap-match-apply` may
+  mark open invoices paid (`markOpenPaid:true`). Bank narrations quoting a
+  different invoice number veto the match (312/1049 historical matches settled
+  the wrong same-amount invoice; ~113 double-count risks still need a manual
+  reconciliation pass — unfixed data).
+- 2026-07-10 — PDF cold-send path (PROCUREMENT_PO_DOC_TEMPLATE) is hard-disabled
+  in code: the Meta template never matched (16/16 sends failed #132000). Cold
+  sends ride prompt→reply→block, with 24h re-prompt + give-up note. Re-enable in
+  procurement-po-send.ts once the template truly has a DOCUMENT header + {{1}}/{{2}}.
+
 - 2026-07-04 — `apps/pos-native` and `apps/pickup-native` sit **outside** the npm
   workspace (own `package-lock.json` each); root `npm ci` does not install them.
 - 2026-07-04 — Two migration directories exist: `packages/db/prisma/migrations/`
@@ -76,8 +98,9 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   DESIGN** (SUNMI tills write via the anon key). Do NOT lint-fix — needs a
   data-layer plan (rls-strategy.md Path A). 4 `security_definer_view` +
   ~12 `function_search_path_mutable` remain as low-risk hardening.
-- 2026-07-05 — 13 of 14 Vercel crons still have no heartbeat monitoring
-  (`reconcile-pending` wired 2026-07-05; the rest fail silently).
+- 2026-07-05 — Most Vercel crons still have no heartbeat monitoring
+  (`reconcile-pending` wired 2026-07-05; procurement family covered by the
+  loop watchdog since 2026-07-10; HR/finance/ads crons still fail silently).
 - 2026-07-05 — Pickup dashboard **inventory tab reads tables that don't
   exist** (`ingredients`, `stock_levels`, `ingredient_outlet_settings` —
   absent from BOTH Supabase projects); it has been silently empty. Either
@@ -115,8 +138,8 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
-- 2026-07-10 — **Backoffice nav UX rework** (branch
-  `claude/backoffice-tabs-ux-bhtaxq`, draft PR). Owner said the tabs were
+- 2026-07-10 — **Backoffice nav UX rework** (PR #894, merged on owner's
+  approval after a clickable preview artifact). Owner said the tabs were
   "haywire". Nav config extracted from `(admin)/layout.tsx` into
   `src/lib/nav.tsx` (single registry shared by sidebar + ⌘K palette + route
   gate). Behavior fixes: section headers now expand/collapse WITHOUT
@@ -136,8 +159,25 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   347 vitest, next build. Round 2 (owner: "sub tabs need arranging too"):
   Sales/Ops/Finance flat lists → subgroups (Overview/Daily/Reports,
   Overview/Daily/Setup, Books/Reference/Legacy), Catalog reordered
-  products→BOM→cards→packaging→posters. Preview artifact shared (clickable
-  sidebar replica); owner reviewing before marking PR ready.
+  products→BOM→cards→packaging→posters. NOTE: GitHub Actions dropped the
+  `synchronize` CI runs for the round-2 pushes (only the first commit got a
+  PR run); verified locally (tsc/eslint/vitest) and via the on-merge main
+  CI run instead.
+
+- 2026-07-10 — **Procurement loop QA round 2 + "fix all"** (PRs #883 #885 #891
+  #895 merged; earlier same-arc: #714 par ABC value-cap, #806 cold-send fixes,
+  #835/#836 invoice-capture approve flow). Root findings: the cron cap (see
+  facts), invoice/receiving tail leaks (revisions dropped, PARTIALLY_RECEIVED
+  chase black hole, Cancel deleting the GRNI payable, chaser suppressed by
+  placeholders, EOM matcher paying DRAFTs) — all fixed; ASSIST fidelity (wrong-PO
+  target, multi-item proposals lossy, ETAs dropped, untruthful resend, double
+  replies) — all fixed. Pars recalced in prod for all 3 POS outlets via SQL
+  mirroring par-calc.ts (fresh 2026-07-10, ABC classes; weekly cron takes over
+  Sundays). **Still open:** webhook runs 3 sequential LLM calls before Meta's
+  200 (throttling risk — needs its own PR); ~113 historical wrong-invoice bank
+  matches need a finance-approved re-pointing pass; invoice_request template
+  still needs one OWNER visit to /api/ops/workspace/templates?action=create to
+  submit to Meta.
 
 - 2026-07-06 — **Checklist auto-assign: data-driven FOH/BOH station** (PR #824,
   branch `claude/auto-assign-checklist-hqqzfd`, draft — NOT yet merged). Root

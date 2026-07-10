@@ -111,3 +111,8 @@ function fmt(s: string): string {
     year: "numeric",
   });
 }
+
+// Route-level boundary: a throw in this screen degrades to an inline retry
+// card instead of unmounting the whole HR stack (see the Who's Working
+// incident, docs in components/RouteErrorBoundary.tsx).
+export { RouteErrorFallback as ErrorBoundary } from "../../../components/RouteErrorBoundary";

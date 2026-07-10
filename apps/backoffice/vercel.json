@@ -125,30 +125,6 @@
       "schedule": "0 1 * * 1"
     },
     {
-      "path": "/api/cron/ops-nudge-clockin",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/ops-nudge-stockcount",
-      "schedule": "0 10 * * *"
-    },
-    {
-      "path": "/api/cron/ops-nudge-audit",
-      "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/cron/ops-nudge-review",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/ops-nudge-checklist",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/ops-nudge-store",
-      "schedule": "*/15 * * * *"
-    },
-    {
       "path": "/api/cron/ops-review-penalty-eom",
       "schedule": "0 1 27 * *"
     },
@@ -169,28 +145,16 @@
       "schedule": "0 6 * * *"
     },
     {
-      "path": "/api/cron/request-invoices",
-      "schedule": "0 */4 * * *"
-    },
-    {
-      "path": "/api/cron/consumption-post",
-      "schedule": "25 19 * * *"
-    },
-    {
-      "path": "/api/cron/request-receivings",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/cron/procurement-exec",
-      "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/cron/par-levels-recalc",
-      "schedule": "7 19 * * 0"
-    },
-    {
       "path": "/api/cron/labour-variance",
       "schedule": "30 1 * * 1"
+    },
+    {
+      "path": "/api/cron/procurement-loop",
+      "schedule": "0 1,7,13,19 * * *"
+    },
+    {
+      "path": "/api/cron/ops-nudges",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

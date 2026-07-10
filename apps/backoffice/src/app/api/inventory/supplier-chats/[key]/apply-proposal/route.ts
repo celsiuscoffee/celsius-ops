@@ -101,65 +101,112 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ key
     return NextResponse.json({ ok: true, action, invoiceId: invoice.id, applied: data });
   }
 
-  // Apply path: needs the order + line, and only the two low-risk edits.
-  if (!orderId || !poItemId) {
-    return NextResponse.json({ error: "orderId and poItemId are required to apply" }, { status: 400 });
-  }
-  if (action !== "remove_item" && action !== "reduce_qty") {
+  // ── Apply the STAMPED PO actions ──────────────────────────────────────────
+  // Everything applied comes from the agent-stamped proposal on THIS message —
+  // never the request body. (The body used to be authoritative: any unresolved
+  // messageId authorized editing arbitrary lines of any open order.) The body's
+  // `action` is only the mode selector; legacy callers passing a specific
+  // action/poItemId get exactly that stamped action, new callers pass
+  // action:"apply" and get every stamped line — a multi-item shortfall used to
+  // apply line 1 and silently drop lines 2..n.
+  const proposal = (raw.proposal ?? {}) as Record<string, unknown>;
+  const stampedOrderId = typeof proposal.orderId === "string" ? proposal.orderId : null;
+  type StampedAction = { type?: string; poItemId?: string | null; itemName?: string | null; newQuantity?: number | null };
+  const stamped: StampedAction[] = Array.isArray(proposal.poActions)
+    ? (proposal.poActions as StampedAction[])
+    : proposal.poAction
+      ? [proposal.poAction as StampedAction]
+      : [];
+  // Only the two low-risk internal edits are appliable from chat.
+  let toApply = stamped.filter((a) => a.type === "remove_item" || a.type === "reduce_qty");
+  if (action === "remove_item" || action === "reduce_qty") {
+    // Legacy single-action call: apply just the stamped action it names.
+    toApply = toApply.filter((a) => a.type === action && (!poItemId || a.poItemId === poItemId));
+  } else if (action !== "apply") {
     return NextResponse.json(
       { error: "Only remove_item and reduce_qty can be applied from chat. Open the PO for other changes." },
       { status: 400 },
     );
   }
-
-  // The line must belong to THIS order, and the order must be open.
-  const item = await prisma.orderItem.findFirst({
-    where: { id: poItemId, orderId },
-    select: { id: true, unitPrice: true, quantity: true, order: { select: { status: true, orderNumber: true } } },
-  });
-  if (!item) return NextResponse.json({ error: "PO line not found on this order" }, { status: 404 });
-  if (item.order.status === "COMPLETED" || item.order.status === "CANCELLED") {
-    return NextResponse.json({ error: `PO ${item.order.orderNumber} is ${item.order.status.toLowerCase()} — can't edit.` }, { status: 400 });
+  if (!stampedOrderId || (orderId && orderId !== stampedOrderId)) {
+    return NextResponse.json({ error: "Proposal has no matching order" }, { status: 400 });
+  }
+  if (toApply.length === 0) {
+    return NextResponse.json({ error: "No appliable PO action on this proposal." }, { status: 400 });
   }
 
-  if (action === "reduce_qty") {
-    if (typeof newQuantity !== "number" || newQuantity <= 0) {
-      return NextResponse.json({ error: "reduce_qty needs a positive newQuantity" }, { status: 400 });
+  const results: Array<{ item: string; action: string; ok: boolean; error?: string }> = [];
+  for (const a of toApply) {
+    const label = a.itemName ?? a.poItemId ?? "?";
+    if (!a.poItemId) {
+      results.push({ item: label, action: a.type!, ok: false, error: "no PO line id" });
+      continue;
     }
-    // A reduce must LOWER the line. Escalated proposals can carry a model misread
-    // (e.g. "ada 50 je" read as qty 50 on a 5-unit line) — the agent refused to
-    // auto-apply it for exactly this reason, so the approval path must not apply
-    // it blind either. Also covers the line having been edited since the proposal.
-    if (newQuantity >= Number(item.quantity)) {
-      return NextResponse.json(
-        {
-          error: `Proposed quantity ${newQuantity} doesn't reduce the line (current ${Number(item.quantity)}) — likely a misread. Edit the PO manually if the increase is intended.`,
-        },
-        { status: 400 },
-      );
-    }
-    await prisma.orderItem.update({
-      where: { id: item.id },
-      data: { quantity: newQuantity, totalPrice: Number(item.unitPrice) * newQuantity },
+    const item = await prisma.orderItem.findFirst({
+      where: { id: a.poItemId, orderId: stampedOrderId },
+      select: { id: true, unitPrice: true, quantity: true, order: { select: { status: true, orderNumber: true } } },
     });
-  } else {
-    await prisma.orderItem.delete({ where: { id: item.id } });
+    if (!item) {
+      results.push({ item: label, action: a.type!, ok: false, error: "PO line not found (already edited?)" });
+      continue;
+    }
+    if (item.order.status === "COMPLETED" || item.order.status === "CANCELLED") {
+      results.push({ item: label, action: a.type!, ok: false, error: `PO is ${item.order.status.toLowerCase()}` });
+      continue;
+    }
+    if (a.type === "reduce_qty") {
+      const newQty = typeof a.newQuantity === "number" ? a.newQuantity : (newQuantity as number | undefined);
+      if (typeof newQty !== "number" || newQty <= 0) {
+        results.push({ item: label, action: a.type, ok: false, error: "no valid new quantity" });
+        continue;
+      }
+      // A reduce must LOWER the line — an escalated proposal can carry a model
+      // misread ("ada 50 je" read as qty 50 on a 5-unit line); never apply blind.
+      if (newQty >= Number(item.quantity)) {
+        results.push({ item: label, action: a.type, ok: false, error: `qty ${newQty} doesn't reduce current ${Number(item.quantity)} — misread?` });
+        continue;
+      }
+      await prisma.orderItem.update({
+        where: { id: item.id },
+        data: { quantity: newQty, totalPrice: Number(item.unitPrice) * newQty },
+      });
+      results.push({ item: label, action: a.type, ok: true });
+    } else {
+      await prisma.orderItem.delete({ where: { id: item.id } });
+      results.push({ item: label, action: a.type!, ok: true });
+    }
+  }
+
+  const appliedCount = results.filter((r) => r.ok).length;
+  if (appliedCount === 0) {
+    return NextResponse.json(
+      { error: `Nothing applied: ${results.map((r) => `${r.item} — ${r.error}`).join("; ")}` },
+      { status: 400 },
+    );
   }
 
   // Recompute the order total from the remaining lines (+ keep delivery charge).
   const [remaining, order] = await Promise.all([
-    prisma.orderItem.findMany({ where: { orderId }, select: { totalPrice: true } }),
-    prisma.order.findUnique({ where: { id: orderId }, select: { deliveryCharge: true } }),
+    prisma.orderItem.findMany({ where: { orderId: stampedOrderId }, select: { totalPrice: true } }),
+    prisma.order.findUnique({ where: { id: stampedOrderId }, select: { deliveryCharge: true } }),
   ]);
   const itemsTotal = remaining.reduce((s, i) => s + Number(i.totalPrice), 0);
   const dc = order?.deliveryCharge ? Number(order.deliveryCharge) : 0;
-  await prisma.order.update({ where: { id: orderId }, data: { totalAmount: itemsTotal + dc } });
+  await prisma.order.update({ where: { id: stampedOrderId }, data: { totalAmount: itemsTotal + dc } });
 
   // Stamp the proposal resolved so the banner clears and it can't re-apply.
   await prisma.whatsAppMessage.update({
     where: { id: message.id },
-    data: { raw: { ...raw, proposalResolved: true, resolvedById: caller.id, resolvedAt: new Date().toISOString() } },
+    data: {
+      raw: {
+        ...raw,
+        proposalResolved: true,
+        resolvedById: caller.id,
+        resolvedAt: new Date().toISOString(),
+        applyResults: results,
+      },
+    },
   });
 
-  return NextResponse.json({ ok: true, action, orderId });
+  return NextResponse.json({ ok: true, orderId: stampedOrderId, applied: appliedCount, results });
 }

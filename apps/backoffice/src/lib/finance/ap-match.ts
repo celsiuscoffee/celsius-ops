@@ -108,7 +108,11 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
   // match against those would be a genuine double-payment, not a settlement.
   const [invoicesRaw, linkedRows] = await Promise.all([
     prisma.invoice.findMany({
-      where: { issueDate: { gte: since } },
+      // DRAFT excluded: an AI-captured invoice carries an UNVERIFIED amount and
+      // must be human-approved (DRAFT → PENDING) before any payment can touch
+      // it — the EOM markOpenPaid pass would otherwise settle drafts straight
+      // from the bank feed, bypassing the invoices/[id] verify guard.
+      where: { issueDate: { gte: since }, status: { not: "DRAFT" } },
       select: {
         id: true, invoiceNumber: true, amount: true, amountPaid: true, status: true,
         issueDate: true, outletId: true,

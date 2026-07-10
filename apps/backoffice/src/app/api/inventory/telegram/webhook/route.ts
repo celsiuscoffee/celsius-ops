@@ -1136,9 +1136,17 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
   // since order.totalAmount is the line-item subtotal. Loosened tolerance to
   // ±RM 2 to absorb rounding when Claude splits delivery out.
   const subtotalForMatch = amount != null ? amount - deliveryCharge : null;
+  // Includes PARTIALLY_RECEIVED and recently-COMPLETED POs: credit-term
+  // invoices routinely arrive AFTER (partial) delivery closed or shrank the
+  // PO — post-delivery is exactly when the real invoice photo gets posted.
+  // Mirrors the 45-day completed lookback the WhatsApp capture path uses.
+  const COMPLETED_LOOKBACK = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000);
   const orderWhere: Record<string, unknown> = {
     orderType: "PURCHASE_ORDER",
-    status: { in: ["SENT", "AWAITING_DELIVERY", "CONFIRMED"] },
+    OR: [
+      { status: { in: ["SENT", "AWAITING_DELIVERY", "CONFIRMED", "PARTIALLY_RECEIVED"] } },
+      { status: "COMPLETED", updatedAt: { gte: COMPLETED_LOOKBACK } },
+    ],
   };
   if (supplier) orderWhere.supplierId = supplier.id;
   if (subtotalForMatch != null) orderWhere.totalAmount = { gte: subtotalForMatch - 2, lte: subtotalForMatch + 2 };
