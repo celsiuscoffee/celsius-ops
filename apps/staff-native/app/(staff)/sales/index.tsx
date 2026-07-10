@@ -188,7 +188,12 @@ export default function SalesScreen() {
       <ScrollView
         contentContainerClassName="px-4 pb-16"
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A2492C" colors={["#A2492C"]} progressBackgroundColor="#2a1508" />}
+        // Sales is the app's one DARK (espresso #160800) screen, so the shared
+        // terracotta spinner is invisible here (~1.8:1 contrast, the "pull to
+        // refresh does nothing" report). iOS draws the bare spinner on the page
+        // background → cream; Android draws it on its own card → terracotta on
+        // a cream card, visible AND on-brand.
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F5F3F0" colors={["#A2492C"]} progressBackgroundColor="#F5F1EA" />}
       >
         {isLoading ? (
           <View className="items-center justify-center py-24"><ActivityIndicator color="#FBBF24" /></View>
