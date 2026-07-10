@@ -58,7 +58,11 @@ export interface PoForSend {
   }>;
 }
 
-export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
+// opts.force skips the delivered/prompted dedupes — used by the "Resend to
+// WhatsApp" action, where the whole point is sending again (supplier says they
+// never got it / lost the thread). Everything else (OFF lane, window logic,
+// PDF→prompt fallback) still applies.
+export async function sendPurchaseOrder(order: PoForSend, opts: { force?: boolean } = {}): Promise<void> {
   try {
     if (!enabled()) return;
     const supplier = order.supplier;
@@ -89,16 +93,19 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
     // Dedupe on SUCCESSFUL sends only — same rule as the prompt path below. A
     // failed block send (token hiccup, Meta 4xx) must not mark the PO delivered
     // forever; the next trigger (status re-save or supplier inbound) retries it.
-    const already = await prisma.whatsAppMessage.findFirst({
-      where: {
-        direction: "outbound",
-        AND: [
-          { raw: { path: ["poSentFor"], equals: order.id } },
-          { raw: { path: ["ok"], equals: true } },
-        ],
-      },
-      select: { id: true },
-    });
+    // force = resend: skip the dedupe entirely.
+    const already = opts.force
+      ? null
+      : await prisma.whatsAppMessage.findFirst({
+          where: {
+            direction: "outbound",
+            AND: [
+              { raw: { path: ["poSentFor"], equals: order.id } },
+              { raw: { path: ["ok"], equals: true } },
+            ],
+          },
+          select: { id: true },
+        });
     if (already) return;
 
     // 24h window? (supplier messaged us within the last 24h)
@@ -114,7 +121,7 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
       // supplier gets the whole order in one message, no "reply for details" round-trip. Returns
       // true only when the PDF was DELIVERED; false (PDF/upload error, or Meta rejected the
       // template send) falls through to the prompt flow so the PO still goes out.
-      if (PO_DOC_TEMPLATE && (await sendPoAsDocument(order, supplier, dest))) return;
+      if (PO_DOC_TEMPLATE && (await sendPoAsDocument(order, supplier, dest, opts.force ?? false))) return;
       // Fallback cold path: WhatsApp blocks free text, so ping with the approved prompt template
       // (if configured) so the supplier replies and opens the window; the full PO block then
       // follows in-window. Deduped via poPromptFor. No template set → skip + log as before.
@@ -124,17 +131,19 @@ export async function sendPurchaseOrder(order: PoForSend): Promise<void> {
       }
       // Dedupe on SUCCESSFUL prompts only — a failed send (e.g. the template still
       // pending Meta approval) must not block re-prompting forever, or the PO stays
-      // silently undelivered even after the template clears.
-      const alreadyPrompted = await prisma.whatsAppMessage.findFirst({
-        where: {
-          direction: "outbound",
-          AND: [
-            { raw: { path: ["poPromptFor"], equals: order.id } },
-            { raw: { path: ["ok"], equals: true } },
-          ],
-        },
-        select: { id: true },
-      });
+      // silently undelivered even after the template clears. force = resend/re-prompt.
+      const alreadyPrompted = opts.force
+        ? null
+        : await prisma.whatsAppMessage.findFirst({
+            where: {
+              direction: "outbound",
+              AND: [
+                { raw: { path: ["poPromptFor"], equals: order.id } },
+                { raw: { path: ["ok"], equals: true } },
+              ],
+            },
+            select: { id: true },
+          });
       if (alreadyPrompted) return;
       const ref = await prisma.whatsAppMessage.findFirst({
         where: { supplierId: supplier.id },
@@ -241,20 +250,23 @@ async function sendPoAsDocument(
   order: PoForSend,
   supplier: NonNullable<PoForSend["supplier"]>,
   dest: string,
+  force = false,
 ): Promise<boolean> {
   try {
     // Successful deliveries only — a failed PDF template send must retry on the
-    // next trigger instead of counting as delivered forever.
-    const already = await prisma.whatsAppMessage.findFirst({
-      where: {
-        direction: "outbound",
-        AND: [
-          { raw: { path: ["poSentFor"], equals: order.id } },
-          { raw: { path: ["ok"], equals: true } },
-        ],
-      },
-      select: { id: true },
-    });
+    // next trigger instead of counting as delivered forever. force = resend.
+    const already = force
+      ? null
+      : await prisma.whatsAppMessage.findFirst({
+          where: {
+            direction: "outbound",
+            AND: [
+              { raw: { path: ["poSentFor"], equals: order.id } },
+              { raw: { path: ["ok"], equals: true } },
+            ],
+          },
+          select: { id: true },
+        });
     if (already) return true; // already delivered — don't prompt
 
     const pdf = await generatePoPdf({
@@ -449,5 +461,138 @@ export async function sendPendingPurchaseOrders(fromNumber: string): Promise<voi
     }
   } catch (err) {
     console.error("[po-send] pending-send error:", err instanceof Error ? err.message : err);
+  }
+}
+
+const REPROMPT_AFTER_MS = 24 * 60 * 60 * 1000;
+const MAX_PROMPTS = 2;
+
+/**
+ * Re-prompt cold POs the supplier never answered — the prompt dead-air fix.
+ *
+ * The cold flow depends on the supplier REPLYING to the prompt template (the
+ * reply opens the 24h window, sendPendingPurchaseOrders delivers the block).
+ * A supplier who ignores the prompt used to leave the PO marked SENT but
+ * undelivered forever (observed live: 2 Collective Project POs, 4 days).
+ *
+ * Called from the procurement-loop cron. For each open PO whose newest
+ * successful prompt is >24h old with no successful delivery:
+ *   - fewer than MAX_PROMPTS prompts so far → send ONE more prompt
+ *   - already at MAX_PROMPTS → stop nudging the supplier; leave an internal
+ *     thread note flagged sendFailed so the thread hits "needs attention" and
+ *     a human sends via the manual lane (the watchdog names it too).
+ * Never throws.
+ */
+export async function repromptStaleColdPos(): Promise<{ reprompted: number; flagged: number }> {
+  const out = { reprompted: 0, flagged: 0 };
+  try {
+    if (!enabled()) return out;
+    const since = new Date(Date.now() - PENDING_LOOKBACK_MS);
+    const [prompts, delivered] = await Promise.all([
+      prisma.whatsAppMessage.findMany({
+        where: {
+          direction: "outbound",
+          timestamp: { gte: since },
+          AND: [{ raw: { path: ["poPromptFor"], not: Prisma.DbNull } }, { raw: { path: ["ok"], equals: true } }],
+        },
+        select: { raw: true, timestamp: true },
+      }),
+      prisma.whatsAppMessage.findMany({
+        where: {
+          direction: "outbound",
+          timestamp: { gte: since },
+          AND: [{ raw: { path: ["poSentFor"], not: Prisma.DbNull } }, { raw: { path: ["ok"], equals: true } }],
+        },
+        select: { raw: true },
+      }),
+    ]);
+    const sentIds = new Set(delivered.map((m) => String((m.raw as Record<string, unknown>)?.poSentFor ?? "")));
+    // Per-PO: prompt count + newest prompt time.
+    const byPo = new Map<string, { count: number; newest: Date }>();
+    for (const m of prompts) {
+      const id = String((m.raw as Record<string, unknown>)?.poPromptFor ?? "");
+      if (!id || sentIds.has(id)) continue;
+      const cur = byPo.get(id);
+      if (cur) {
+        cur.count++;
+        if (m.timestamp > cur.newest) cur.newest = m.timestamp;
+      } else {
+        byPo.set(id, { count: 1, newest: m.timestamp });
+      }
+    }
+    const staleIds = [...byPo.entries()]
+      .filter(([, v]) => Date.now() - +v.newest > REPROMPT_AFTER_MS)
+      .map(([id]) => id);
+    if (staleIds.length === 0) return out;
+
+    const orders = await prisma.order.findMany({
+      where: { id: { in: staleIds }, status: { in: ["APPROVED", "SENT", "CONFIRMED", "AWAITING_DELIVERY"] } },
+      select: {
+        id: true,
+        orderNumber: true,
+        deliveryDate: true,
+        outlet: { select: { name: true, address: true } },
+        supplier: { select: { id: true, name: true, phone: true, automationMode: true } },
+        items: {
+          select: {
+            quantity: true,
+            product: { select: { name: true, baseUom: true } },
+            productPackage: { select: { packageLabel: true } },
+          },
+        },
+      },
+    });
+    for (const order of orders) {
+      const info = byPo.get(order.id)!;
+      if (info.count >= MAX_PROMPTS) {
+        // Give up on the bot lane for this PO — flag it for a human. The note's
+        // sendFailed marker puts the thread in the inbox "needs attention" tab.
+        await recordPoRepromptGiveUp(order);
+        out.flagged++;
+        continue;
+      }
+      // One more prompt (force bypasses the ok:true prompt dedupe). The window
+      // is still closed (no inbound), so sendPurchaseOrder takes the cold path.
+      await sendPurchaseOrder(order, { force: true });
+      out.reprompted++;
+    }
+    if (out.reprompted || out.flagged) {
+      console.log(`[po-send] re-prompted ${out.reprompted} stale cold PO(s), flagged ${out.flagged} for the manual lane`);
+    }
+  } catch (err) {
+    console.error("[po-send] reprompt error:", err instanceof Error ? err.message : err);
+  }
+  return out;
+}
+
+// Internal note for a PO whose cold prompts went unanswered twice — marks the
+// thread needs-attention (raw.sendFailed) and tells the human what to do.
+// Deduped per PO via raw.poRepromptGiveUp.
+async function recordPoRepromptGiveUp(order: PoForSend): Promise<void> {
+  try {
+    const supplier = order.supplier;
+    if (!supplier?.phone) return;
+    const already = await prisma.whatsAppMessage.findFirst({
+      where: { direction: "outbound", raw: { path: ["poRepromptGiveUp"], equals: order.id } },
+      select: { id: true },
+    });
+    if (already) return;
+    await recordOutboundMessage({
+      waMessageId: undefined,
+      fromNumber: "",
+      toNumber: digits(supplier.phone),
+      type: "text",
+      body: `⚠️ PO ${order.orderNumber}: supplier hasn't replied to ${MAX_PROMPTS} new-order prompts — the order details were never delivered. Send it manually (wa.me / call). (Internal note.)`,
+      supplierId: supplier.id,
+      status: "note",
+      raw: {
+        agent: PO_SEND_VERSION,
+        poRepromptGiveUp: order.id,
+        poNumber: order.orderNumber,
+        sendFailed: true,
+      },
+    });
+  } catch (e) {
+    console.warn("[po-send] give-up note failed:", e instanceof Error ? e.message : e);
   }
 }
