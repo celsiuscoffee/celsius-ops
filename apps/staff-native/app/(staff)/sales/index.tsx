@@ -193,14 +193,31 @@ export default function SalesScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            // Standard pattern (see checklists/index.tsx), tint only. Sales is
-            // the one dark espresso screen, so it uses the screen's gold accent
-            // instead of the terracotta the cream tabs use; Android ignores
-            // tintColor and draws its default spinner card, visible everywhere.
-            tintColor="#FBBF24"
+            // Standard pattern (see checklists/index.tsx), tint only. Honored
+            // on Android/older iOS; iOS 26's redesigned spinner largely
+            // ignores tintColor, which is why the cream well below exists.
+            tintColor="#A2492C"
           />
         }
       >
+        {/* Cream pull-well: painted into the TOP overscroll area only, so the
+            pull gesture reveals a light backing behind whatever spinner the OS
+            draws. iOS 26 ignores RefreshControl tintColor (user report:
+            "cursor works, cannot see because of the colour"), so on this dark
+            espresso screen contrast must come from the backdrop, not the tint.
+            Matches the checklist look (spinner on cream); never visible while
+            scrolled; RN exposes no iOS backgroundColor prop for this. */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: -300,
+            height: 300,
+            left: -16,
+            right: -16,
+            backgroundColor: "#F5F1EA",
+          }}
+        />
         {isLoading ? (
           <View className="items-center justify-center py-24"><ActivityIndicator color="#FBBF24" /></View>
         ) : error ? (
