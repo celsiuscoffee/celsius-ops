@@ -110,21 +110,37 @@ export type NavSection = {
 const ICON_SIZE = "h-4 w-4";
 
 export const NAV_SECTIONS: NavSection[] = [
-  // Sales — one tab for everything sales/POS, ordered by how often each page
-  // is opened: period analytics → live order queue → customers → the rest.
-  // Customers points at /loyalty/members (the consolidated customer page).
+  // Sales — one tab for everything sales/POS. Subgroups by cadence: the
+  // analytics you check first, the surfaces worked during service, then the
+  // period-close reports. Customers points at /loyalty/members (the
+  // consolidated customer page).
   {
     label: "Sales",
     icon: <BarChart3 className={ICON_SIZE} />,
     dividerBefore: true,
-    items: [
-      { label: "Dashboard",           href: "/sales/dashboard",         icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "sales:dashboard" },
-      { label: "Orders",              href: "/pickup/orders",           icon: <ClipboardList className={ICON_SIZE} />,   moduleKey: "pickup:orders" },
-      { label: "Customers",           href: "/loyalty/members",         icon: <Users className={ICON_SIZE} />,           moduleKey: "loyalty:members" },
-      { label: "Compare",             href: "/sales/compare",           icon: <Scale className={ICON_SIZE} />,           moduleKey: "sales:dashboard" },
-      { label: "Reports",             href: "/pos/reports",             icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "sales:reports" },
-      { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,           moduleKey: "sales:reports" },
-      { label: "Store / Menu Status", href: "/pos/store-menu-status",   icon: <Power className={ICON_SIZE} />,           moduleKey: "pickup:settings" },
+    subgroups: [
+      {
+        label: "Overview",
+        items: [
+          { label: "Dashboard", href: "/sales/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "sales:dashboard" },
+          { label: "Compare",   href: "/sales/compare",   icon: <Scale className={ICON_SIZE} />,           moduleKey: "sales:dashboard" },
+        ],
+      },
+      {
+        label: "Daily",
+        items: [
+          { label: "Orders",              href: "/pickup/orders",         icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
+          { label: "Customers",           href: "/loyalty/members",       icon: <Users className={ICON_SIZE} />,         moduleKey: "loyalty:members" },
+          { label: "Store / Menu Status", href: "/pos/store-menu-status", icon: <Power className={ICON_SIZE} />,         moduleKey: "pickup:settings" },
+        ],
+      },
+      {
+        label: "Reports",
+        items: [
+          { label: "Reports",             href: "/pos/reports",             icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "sales:reports" },
+          { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,     moduleKey: "sales:reports" },
+        ],
+      },
     ],
   },
   // Procurement — subgroups ordered by daily flow: check the dashboard,
@@ -181,16 +197,33 @@ export const NAV_SECTIONS: NavSection[] = [
       },
     ],
   },
+  // Ops — Overview (how the shops are doing), Daily (the surfaces worked
+  // through the day), Setup (the SOP/category definitions behind them).
   {
     label: "Ops",
     icon: <ClipboardCheck className={ICON_SIZE} />,
-    items: [
-      { label: "Dashboard",        href: "/ops/dashboard",   icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ops:performance" },
-      { label: "Performance",      href: "/ops/performance", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ops:performance" },
-      { label: "Audits",           href: "/ops/audit",       icon: <ClipboardCheck className={ICON_SIZE} />,  moduleKey: "ops:audit" },
-      { label: "SOPs & Templates", href: "/ops/sops",        icon: <BookOpen className={ICON_SIZE} />,        moduleKey: "ops:sops" },
-      { label: "Categories",       href: "/ops/categories",  icon: <Tags className={ICON_SIZE} />,            moduleKey: "ops:categories" },
-      { label: "Ops Workspace",    href: "/ops/chat-inbox",  icon: <MessageSquare className={ICON_SIZE} />,   moduleKey: "ops:chat-inbox" },
+    subgroups: [
+      {
+        label: "Overview",
+        items: [
+          { label: "Dashboard",   href: "/ops/dashboard",   icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ops:performance" },
+          { label: "Performance", href: "/ops/performance", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ops:performance" },
+        ],
+      },
+      {
+        label: "Daily",
+        items: [
+          { label: "Ops Workspace", href: "/ops/chat-inbox", icon: <MessageSquare className={ICON_SIZE} />,  moduleKey: "ops:chat-inbox" },
+          { label: "Audits",        href: "/ops/audit",      icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "ops:audit" },
+        ],
+      },
+      {
+        label: "Setup",
+        items: [
+          { label: "SOPs & Templates", href: "/ops/sops",       icon: <BookOpen className={ICON_SIZE} />, moduleKey: "ops:sops" },
+          { label: "Categories",       href: "/ops/categories", icon: <Tags className={ICON_SIZE} />,     moduleKey: "ops:categories" },
+        ],
+      },
     ],
   },
   {
@@ -253,21 +286,37 @@ export const NAV_SECTIONS: NavSection[] = [
       },
     ],
   },
+  // Finance — moduleKeys start with "finance:", which canAccess hard-restricts
+  // to OWNER/ADMIN regardless of moduleAccess, so the section won't render in
+  // the rail for managers/staff.
   {
     label: "Finance",
     icon: <Banknote className={ICON_SIZE} />,
-    items: [
-      // moduleKey starts with "finance:" — canAccess hard-restricts these to
-      // OWNER/ADMIN regardless of moduleAccess, so the section won't render
-      // in the rail for managers/staff.
-      { label: "Ledger",            href: "/finance/transactions", icon: <FileText className={ICON_SIZE} />,   moduleKey: "finance:transactions" },
-      { label: "Reports",           href: "/finance/reports",      icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "finance:reports" },
-      { label: "Reconciliation",    href: "/finance/recon",        icon: <Scale className={ICON_SIZE} />,      moduleKey: "finance:reports" },
-      { label: "Chart of Accounts", href: "/finance/coa",          icon: <BookOpen className={ICON_SIZE} />,   moduleKey: "finance:reports" },
-      { label: "Fixed Assets",      href: "/finance/fixed-assets", icon: <Landmark className={ICON_SIZE} />,   moduleKey: "finance:reports" },
-      // Legacy (pre-agentic) views — kept until the new module reaches parity.
-      { label: "Cashflow",      href: "/finance/cashflow",      icon: <LineChart className={ICON_SIZE} />,       moduleKey: "finance:cashflow" },
-      { label: "Cash Tracking", href: "/finance/cash-tracking", icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
+    subgroups: [
+      {
+        label: "Books",
+        items: [
+          { label: "Ledger",         href: "/finance/transactions", icon: <FileText className={ICON_SIZE} />,   moduleKey: "finance:transactions" },
+          { label: "Reports",        href: "/finance/reports",      icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "finance:reports" },
+          { label: "Reconciliation", href: "/finance/recon",        icon: <Scale className={ICON_SIZE} />,      moduleKey: "finance:reports" },
+        ],
+      },
+      {
+        label: "Reference",
+        items: [
+          { label: "Chart of Accounts", href: "/finance/coa",          icon: <BookOpen className={ICON_SIZE} />, moduleKey: "finance:reports" },
+          { label: "Fixed Assets",      href: "/finance/fixed-assets", icon: <Landmark className={ICON_SIZE} />, moduleKey: "finance:reports" },
+        ],
+      },
+      {
+        // Pre-agentic views — kept until the new module reaches parity, and
+        // labelled as such so nobody mistakes them for the system of record.
+        label: "Legacy",
+        items: [
+          { label: "Cashflow",      href: "/finance/cashflow",      icon: <LineChart className={ICON_SIZE} />,       moduleKey: "finance:cashflow" },
+          { label: "Cash Tracking", href: "/finance/cash-tracking", icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
+        ],
+      },
       // Hidden from the rail (Home/Compliance/Bank Statements/Payouts/Recurring
       // Expenses) — pages still exist, just dropped from nav per owner. Re-add a
       // line here to restore any of them.
@@ -366,9 +415,11 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Catalog",
     icon: <UtensilsCrossed className={ICON_SIZE} />,
     dividerBefore: true,
+    // Ordered by how central each is to the menu definition: the product
+    // list, then what makes up each product (BOM → printable cards →
+    // packaging rules), and app presentation (splash posters) last.
     items: [
-      { label: "Products",       href: "/pickup/menu",           icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
-      { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />,       moduleKey: "pickup:menu" },
+      { label: "Products", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
       // Menu & BOM (recipe/BOM editor) lives with the catalog/menu definition,
       // not under Procurement. Gate stays inventory:menus so access is unchanged.
       { label: "Menu & BOM",   href: "/inventory/menus",       icon: <BookOpen className={ICON_SIZE} />, moduleKey: "inventory:menus" },
@@ -377,7 +428,8 @@ export const NAV_SECTIONS: NavSection[] = [
       // Packaging rules attach cups/lids/straws to menu items & channels —
       // part of the menu definition. Single nav home (dropped the duplicate
       // Procurement → Master Data entry). Gate stays inventory:packaging.
-      { label: "Packaging", href: "/inventory/packaging", icon: <PackageOpen className={ICON_SIZE} />, moduleKey: "inventory:packaging" },
+      { label: "Packaging",      href: "/inventory/packaging",   icon: <PackageOpen className={ICON_SIZE} />, moduleKey: "inventory:packaging" },
+      { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />,   moduleKey: "pickup:menu" },
     ],
   },
   // ── Settings (consolidated). Every configurable surface across the

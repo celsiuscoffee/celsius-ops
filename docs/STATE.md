@@ -133,7 +133,11 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   HR icon Bot→Users. ⌘K palette now searches nav pages (RBAC-filtered) above
   employees. **No URL or moduleKey changes** — perms dev-guard still covers
   every grantable key. All verified: tsc, eslint (3 pre-existing warn-level),
-  347 vitest, next build.
+  347 vitest, next build. Round 2 (owner: "sub tabs need arranging too"):
+  Sales/Ops/Finance flat lists → subgroups (Overview/Daily/Reports,
+  Overview/Daily/Setup, Books/Reference/Legacy), Catalog reordered
+  products→BOM→cards→packaging→posters. Preview artifact shared (clickable
+  sidebar replica); owner reviewing before marking PR ready.
 
 - 2026-07-06 — **Checklist auto-assign: data-driven FOH/BOH station** (PR #824,
   branch `claude/auto-assign-checklist-hqqzfd`, draft — NOT yet merged). Root
