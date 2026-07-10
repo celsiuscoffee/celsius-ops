@@ -6,11 +6,12 @@ import { sendPurchaseOrder, type PoForSend } from "@/lib/inventory/procurement-p
 export const dynamic = "force-dynamic";
 
 // POST /api/inventory/orders/[id]/resend-po
-// Re-fire the WhatsApp PO send for a purchase order that's marked sent but was never
-// delivered (e.g. it was blocked by the old allowlist gate, or a cold-window prompt needs
-// re-sending). Owner/admin only. Re-runs sendPurchaseOrder (which keeps all its own gates:
-// automationMode, 24h window / prompt template, and the poSentFor dedup so an
-// already-delivered PO is a no-op), then reports what actually happened.
+// Re-fire the WhatsApp PO send for a purchase order — the "supplier says they
+// never got it" button. Runs sendPurchaseOrder with force:true, which skips the
+// delivered/prompted dedupes (the whole point is sending AGAIN) while keeping
+// every other gate: automationMode, 24h window, PDF → prompt fallback. The
+// outcome is read from the row THIS call recorded (ok:true only — a failed
+// send used to be reported as "sent to the supplier").
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,24 +36,37 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: `PO is ${order.status.toLowerCase()} — not in a sendable state.` }, { status: 400 });
   }
 
-  await sendPurchaseOrder(order as unknown as PoForSend);
+  const startedAt = new Date();
+  await sendPurchaseOrder(order as unknown as PoForSend, { force: true });
 
-  // Report the outcome by reading the row sendPurchaseOrder just recorded for this PO.
+  // Report the outcome by reading the row THIS call recorded (timestamp >=
+  // startedAt) — never an older row, and only ok:true counts as delivered. A
+  // failed PDF-template row also stamps poSentFor, which the old query read
+  // back as "PO block sent to the supplier" while the supplier got nothing.
   const [sent, prompted] = await Promise.all([
     prisma.whatsAppMessage.findFirst({
-      where: { direction: "outbound", raw: { path: ["poSentFor"], equals: id } },
+      where: {
+        direction: "outbound",
+        timestamp: { gte: startedAt },
+        AND: [{ raw: { path: ["poSentFor"], equals: id } }, { raw: { path: ["ok"], equals: true } }],
+      },
       orderBy: { timestamp: "desc" },
-      select: { status: true },
+      select: { raw: true },
     }),
     prisma.whatsAppMessage.findFirst({
-      where: { direction: "outbound", raw: { path: ["poPromptFor"], equals: id } },
+      where: { direction: "outbound", timestamp: { gte: startedAt }, raw: { path: ["poPromptFor"], equals: id } },
       orderBy: { timestamp: "desc" },
       select: { status: true, raw: true },
     }),
   ]);
 
   if (sent) {
-    return NextResponse.json({ ok: true, via: "po-block", message: "PO block sent to the supplier." });
+    const via = String((sent.raw as Record<string, unknown>)?.via ?? "po-block");
+    return NextResponse.json({
+      ok: true,
+      via,
+      message: via === "pdf-template" ? "PO re-sent as a PDF to the supplier." : "PO block re-sent to the supplier.",
+    });
   }
   if (prompted) {
     const raw = (prompted.raw ?? {}) as Record<string, unknown>;
@@ -67,6 +81,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ok: false,
       via: "prompt",
       message: `Cold prompt failed — most likely the "procurement_new_order" template isn't approved on Meta yet.${raw.error ? ` (${String(raw.error)})` : ""}`,
+    });
+  }
+  // A failed in-window/PDF send records a poSentFor row with ok:false — read it
+  // for the error so the human isn't told "nothing happened" when Meta rejected.
+  const failed = await prisma.whatsAppMessage.findFirst({
+    where: { direction: "outbound", timestamp: { gte: startedAt }, raw: { path: ["poSentFor"], equals: id } },
+    orderBy: { timestamp: "desc" },
+    select: { raw: true },
+  });
+  if (failed) {
+    const raw = (failed.raw ?? {}) as Record<string, unknown>;
+    return NextResponse.json({
+      ok: false,
+      message: `Send failed${raw.error ? `: ${String(raw.error)}` : " — check the WhatsApp configuration."}`,
     });
   }
   return NextResponse.json({

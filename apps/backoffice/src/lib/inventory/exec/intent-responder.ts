@@ -26,7 +26,7 @@ import { outletConfirmEnabled, readOutletDeliveryState, askOutletIfArrived } fro
 
 const DAY = 24 * 60 * 60 * 1000;
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
-const AWAITING_STATUSES: OrderStatus[] = ["SENT", "CONFIRMED", "AWAITING_DELIVERY"];
+const AWAITING_STATUSES: OrderStatus[] = ["SENT", "CONFIRMED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"]; // partials stay chased until the balance lands or a human closes short
 
 function todayMyt(): string {
   return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);

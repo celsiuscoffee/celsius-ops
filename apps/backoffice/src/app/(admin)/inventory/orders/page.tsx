@@ -107,7 +107,13 @@ const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof
   APPROVED: [],
   SENT: [],
   AWAITING_DELIVERY: [],
-  PARTIALLY_RECEIVED: [],
+  // A short-delivered PO stays open (chased) until the balance arrives; when
+  // the supplier won't deliver the rest, closing SHORT is the correct exit —
+  // the total already reflects what arrived, so the payable stays right.
+  // (Cancel is blocked once goods are received: it would delete the payable.)
+  PARTIALLY_RECEIVED: [
+    { status: "COMPLETED", label: "Close short (no more coming)", icon: CheckCircle2, color: "bg-gray-600 hover:bg-gray-700" },
+  ],
   COMPLETED: [],
   CANCELLED: [],
 };

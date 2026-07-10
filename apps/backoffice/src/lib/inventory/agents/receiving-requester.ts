@@ -23,9 +23,9 @@ export const RECEIVING_REQUESTER_VERSION = "receiving-requester-v1";
 
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
 
-// "Supplier has it / due" but not yet (fully) received. PARTIALLY_RECEIVED already
-// has a Receiving, so the `receivings none` filter excludes it anyway.
-const DUE_STATUSES: OrderStatus[] = ["SENT", "CONFIRMED", "AWAITING_DELIVERY"];
+// "Supplier has it / due" but not yet (fully) received — including partials,
+// whose balance is still outstanding until it lands or a human closes short.
+const DUE_STATUSES: OrderStatus[] = ["SENT", "CONFIRMED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
 
 function enabled(): boolean {
   return process.env.PROCUREMENT_AGENT_ENABLED === "true";
@@ -49,13 +49,19 @@ export async function runReceivingRequests(): Promise<ReceivingRequestSummary> {
     where: {
       orderType: "PURCHASE_ORDER",
       status: { in: DUE_STATUSES },
-      receivings: { none: {} },
+      // Never received at all, OR partially received (has a Receiving but the
+      // balance is outstanding) — a short delivery must not stop the chase.
+      AND: [
+        { OR: [{ receivings: { none: {} } }, { status: "PARTIALLY_RECEIVED" }] },
+        {
+          OR: [
+            { deliveryDate: { lt: now } },
+            { deliveryDate: null, sentAt: { lt: staleSentBefore } },
+          ],
+        },
+      ],
       // Per-supplier dial: OFF = the agent stays hands-off for this supplier's POs.
       supplier: { phone: { not: null }, status: "ACTIVE", automationMode: { not: "OFF" } },
-      OR: [
-        { deliveryDate: { lt: now } },
-        { deliveryDate: null, sentAt: { lt: staleSentBefore } },
-      ],
     },
     orderBy: { createdAt: "asc" },
     take: 100,
@@ -94,9 +100,16 @@ type DueOrder = {
 
 async function chaseOne(o: DueOrder): Promise<boolean> {
   try {
-    // Dedupe: already chased this PO?
+    // Dedupe on SUCCESSFUL chases only — a failed send must not suppress the
+    // chase for this PO forever (same rule as every other sender here).
     const already = await prisma.whatsAppMessage.findFirst({
-      where: { direction: "outbound", raw: { path: ["receivingChaseFor"], equals: o.id } },
+      where: {
+        direction: "outbound",
+        AND: [
+          { raw: { path: ["receivingChaseFor"], equals: o.id } },
+          { raw: { path: ["ok"], equals: true } },
+        ],
+      },
       select: { id: true },
     });
     if (already) return false;
@@ -145,6 +158,7 @@ async function chaseOne(o: DueOrder): Promise<boolean> {
         poNumber: o.orderNumber,
         ok: res.ok,
         error: res.error ?? null,
+        ...(res.ok ? {} : { sendFailed: true }),
       },
     });
     console.log(`[receiving-requester] po=${o.orderNumber} staff=${name} sent=${res.ok}`);

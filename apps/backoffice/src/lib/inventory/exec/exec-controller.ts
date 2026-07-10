@@ -43,7 +43,7 @@ const RESOURCE_NOTE_PREFIX = "Auto re-source by supplier-chat agent";
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
 const DAY = 24 * 60 * 60 * 1000;
 
-const AWAITING_STATUSES: OrderStatus[] = ["SENT", "CONFIRMED", "AWAITING_DELIVERY"];
+const AWAITING_STATUSES: OrderStatus[] = ["SENT", "CONFIRMED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"]; // partials stay chased until the balance lands or a human closes short
 const OPEN_ORDER_STATUSES: OrderStatus[] = [
   "DRAFT",
   "PENDING_APPROVAL",
@@ -144,7 +144,10 @@ export async function runProcurementExec(): Promise<ExecRunSummary> {
         orderType: "PURCHASE_ORDER",
         status: { in: AWAITING_STATUSES },
         deliveryDate: { lt: now },
-        receivings: { none: {} },
+        // No receiving at all, OR a partial one — a short-delivered PO has
+        // receivings but its balance is still outstanding and must stay on
+        // the overdue list until it lands or a human closes the PO short.
+        OR: [{ receivings: { none: {} } }, { status: "PARTIALLY_RECEIVED" }],
       },
       orderBy: { deliveryDate: "asc" },
       take: 50,

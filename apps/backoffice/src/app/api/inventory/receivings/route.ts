@@ -6,22 +6,47 @@ import { getUserFromHeaders } from "@/lib/auth";
 import { computeDepositAmount } from "@/lib/inventory/deposit";
 
 export async function GET(req: NextRequest) {
-  // Auto-reconcile: fix PO statuses where receivings exist but order is still "awaiting"
+  // Auto-reconcile: fix PO statuses where receivings exist but the order is
+  // still "awaiting" (stale rows from before the POST set status itself).
+  // Judged PER LINE against the ORIGINAL ordered qty snapshotted on receiving
+  // items — OrderItem.quantity is overwritten by the POST reconcile, so the
+  // old aggregate compare (sum received vs current quantity) always read
+  // "complete" for short POs, and over-receipt on one line could mask a
+  // shortage on another.
   try {
     const staleOrders = await prisma.order.findMany({
       where: { status: { in: ["SENT", "APPROVED", "AWAITING_DELIVERY"] } },
-      select: { id: true, items: { select: { quantity: true } } },
+      select: { id: true },
     });
     for (const order of staleOrders) {
       const receivings = await prisma.receiving.findMany({
         where: { orderId: order.id },
-        select: { items: { select: { receivedQty: true } } },
+        select: { items: { select: { productId: true, productPackageId: true, receivedQty: true, orderedQty: true } } },
       });
       if (receivings.length === 0) continue;
-      const totalOrdered = order.items.reduce((s, i) => s + Number(i.quantity), 0);
-      const totalReceived = receivings.flatMap((r) => r.items).reduce((s, i) => s + Number(i.receivedQty), 0);
-      const newStatus = totalReceived >= totalOrdered ? "COMPLETED" : "PARTIALLY_RECEIVED";
-      await prisma.order.update({ where: { id: order.id }, data: { status: newStatus } });
+      const cumulative = new Map<string, number>();
+      const originalOrdered = new Map<string, number>();
+      for (const r of receivings) {
+        for (const it of r.items) {
+          const key = `${it.productId}::${it.productPackageId ?? ""}`;
+          cumulative.set(key, (cumulative.get(key) ?? 0) + Number(it.receivedQty));
+          if (it.orderedQty != null) {
+            originalOrdered.set(key, Math.max(originalOrdered.get(key) ?? 0, Number(it.orderedQty)));
+          }
+        }
+      }
+      let stillShort = false;
+      for (const [key, cum] of cumulative) {
+        const ordered = originalOrdered.get(key);
+        if (ordered !== undefined && cum < ordered) {
+          stillShort = true;
+          break;
+        }
+      }
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: stillShort ? "PARTIALLY_RECEIVED" : "COMPLETED" },
+      });
     }
   } catch (err) {
     console.error("[receivings] Auto-reconcile failed:", err);
@@ -121,13 +146,29 @@ export async function POST(req: NextRequest) {
   // of what was ordered, because the PO-line reconcile below overwrites
   // OrderItem.quantity with the received total. Keyed by product+package.
   const orderedQtyMap = new Map<string, number>();
+  // PO package per product — a client that omits productPackageId still books
+  // stock in base UOM via the PO line's package (mirrors the staff app route).
+  const poPkgMap = new Map<string, string | null>();
   if (orderId) {
+    // Receivable from SENT onwards, same guard as the staff route — without it
+    // a stale client could "receive" a COMPLETED/CANCELLED PO, overwriting its
+    // line quantities/total and flipping its status back.
+    const order = await prisma.order.findUnique({ where: { id: orderId }, select: { status: true } });
+    const RECEIVABLE = ["SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
+    if (order && !RECEIVABLE.includes(order.status)) {
+      const msg =
+        order.status === "COMPLETED" ? "Order already fully received." :
+        order.status === "CANCELLED" ? "Order was cancelled and cannot be received." :
+        "PO must be Sent to the supplier before goods can be received.";
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
     const poItems = await prisma.orderItem.findMany({
       where: { orderId },
       select: { productId: true, productPackageId: true, quantity: true },
     });
     for (const oi of poItems) {
       orderedQtyMap.set(`${oi.productId}::${oi.productPackageId ?? ""}`, Number(oi.quantity));
+      if (!poPkgMap.has(oi.productId)) poPkgMap.set(oi.productId, oi.productPackageId ?? null);
     }
   }
   const resolveOrderedQty = (i: { productId: string; productPackageId?: string; orderedQty?: number }): number | null => {
@@ -174,8 +215,8 @@ export async function POST(req: NextRequest) {
   // (productPackageId = null), matching stock counts and the staff app.
   const recvPkgIds = [
     ...new Set(
-      (items as Array<{ productPackageId?: string }>)
-        .map((i) => i.productPackageId)
+      (items as Array<{ productId: string; productPackageId?: string }>)
+        .map((i) => i.productPackageId ?? poPkgMap.get(i.productId) ?? null)
         .filter((id): id is string => id != null),
     ),
   ];
@@ -188,11 +229,17 @@ export async function POST(req: NextRequest) {
     for (const p of pkgs) cfMap.set(p.id, Number(p.conversionFactor));
   }
   const baseTotals = baseQtyByProduct(
-    (items as Array<{ productId: string; productPackageId?: string; receivedQty: number }>).map((i) => ({
-      productId: i.productId,
-      countedQty: i.receivedQty,
-      conversionFactor: i.productPackageId ? cfMap.get(i.productPackageId) ?? 1 : 1,
-    })),
+    (items as Array<{ productId: string; productPackageId?: string; receivedQty: number }>).map((i) => {
+      // Fall back to the PO line's package: goods are counted in package units
+      // even when the client omits the package id (staff-route parity — factor
+      // 1 here used to book "3 cartons" as 3 base units).
+      const pkgId = i.productPackageId ?? poPkgMap.get(i.productId) ?? null;
+      return {
+        productId: i.productId,
+        countedQty: i.receivedQty,
+        conversionFactor: pkgId ? cfMap.get(pkgId) ?? 1 : 1,
+      };
+    }),
   );
   await Promise.all(
     [...baseTotals].map(([productId, baseQty]) =>
