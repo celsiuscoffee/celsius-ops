@@ -101,3 +101,8 @@ function AttendanceCard({ item }: { item: AttendanceItem }) {
 function fmtTime(d: Date): string {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+
+// Route-level boundary: a throw in this screen degrades to an inline retry
+// card instead of unmounting the whole HR stack (see the Who's Working
+// incident, docs in components/RouteErrorBoundary.tsx).
+export { RouteErrorFallback as ErrorBoundary } from "../../../components/RouteErrorBoundary";
