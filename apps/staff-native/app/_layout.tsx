@@ -25,13 +25,19 @@ import {
   saveSession,
   type StaffSession,
 } from "../lib/session";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE_URL } from "../lib/env";
 import { useStaff } from "../lib/store";
 import { registerForPush } from "../lib/push";
+import { fetchWithTimeout } from "../lib/api";
 import { useOtaAutoUpdate } from "../lib/use-ota-auto-update";
 import { queryClient } from "../lib/queryClient";
 import { useColorScheme } from "nativewind";
 import { themes, loadColorSchemePref } from "../lib/theme";
+
+// Last notification tap we already routed for (survives OTA JS reloads, which
+// is exactly when getLastNotificationResponseAsync would otherwise replay it).
+const HANDLED_NOTIF_KEY = "celsius_staff_last_handled_notification_v1";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 initSentry();
@@ -108,9 +114,15 @@ function RootLayout() {
     loadSession()
       .then(async (cached) => {
         setSession(cached);
+        // Hydrate NOW, from disk: the /me refresh below is a background
+        // concern. Gating hydration on it meant the first render blocked on a
+        // network round-trip, and a stalled connection (captive portal) held
+        // the splash screen forever. The .finally() below stays as a no-op
+        // safety net for the no-cache path.
+        setSessionHydrated(true);
         if (!cached?.token) return;
         try {
-          const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          const res = await fetchWithTimeout(`${API_BASE_URL}/api/auth/me`, {
             headers: { Authorization: `Bearer ${cached.token}` },
           });
           if (res.status === 401) {
@@ -208,12 +220,30 @@ function RootLayout() {
           return;
       }
     }
-    const sub = Notifications.addNotificationResponseReceivedListener(
-      routeFromNotification,
-    );
+    const sub = Notifications.addNotificationResponseReceivedListener((res) => {
+      // Remember live taps too, so the cold-start replay guard below can't
+      // re-fire them after the next JS reload.
+      AsyncStorage.setItem(
+        HANDLED_NOTIF_KEY,
+        res.notification.request.identifier,
+      ).catch(() => {});
+      routeFromNotification(res);
+    });
+    // Cold-start / reload path. The OS keeps the LAST tapped notification for
+    // the whole native process lifetime, but an OTA reload restarts only JS,
+    // so without a persisted guard this replayed the same old tap (usually a
+    // geofence prompt) and yanked the user to /clock after EVERY update.
+    // Dedupe on the notification identifier, persisted across JS reloads.
     Notifications.getLastNotificationResponseAsync()
-      .then((res) => {
-        if (res) routeFromNotification(res);
+      .then(async (res) => {
+        if (!res) return;
+        const id = res.notification.request.identifier;
+        const lastHandled = await AsyncStorage.getItem(HANDLED_NOTIF_KEY).catch(
+          () => null,
+        );
+        if (id && id === lastHandled) return;
+        await AsyncStorage.setItem(HANDLED_NOTIF_KEY, id).catch(() => {});
+        routeFromNotification(res);
       })
       .catch(() => {});
     return () => sub.remove();

@@ -28,13 +28,22 @@ export class ErrorBoundary extends Component<Props, State> {
         extra: { componentStack: info?.componentStack ?? null },
         tags: { boundary: "root" },
       });
+      // Start draining the envelope immediately: if the user taps "Reload app"
+      // (or the OTA hook reloads) before the upload finishes, the JS context is
+      // torn down and the crash report is silently lost.
+      void Sentry.flush().catch(() => {});
     } catch {
       // never let the reporter itself crash the fallback
     }
   }
 
   private reload = () => {
-    Updates.reloadAsync().catch(() => this.setState({ error: null }));
+    // Flush before the reload tears down the JS context, so the crash the user
+    // is recovering from actually reaches Sentry.
+    Sentry.flush()
+      .catch(() => {})
+      .then(() => Updates.reloadAsync())
+      .catch(() => this.setState({ error: null }));
   };
 
   render() {

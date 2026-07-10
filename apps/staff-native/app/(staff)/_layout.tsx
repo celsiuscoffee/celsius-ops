@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { View } from "react-native";
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import {
   ClipboardCheck,
   ClipboardList,
@@ -42,6 +42,14 @@ export default function StaffLayout() {
 
   const allowed = (key: string) =>
     hasAccess(session?.role, session?.moduleAccess, key);
+
+  // Session died (12h JWT expiry / 401 wipe in lib/api.ts / remote logout):
+  // route to login instead of stranding the user on a dead screen with no
+  // tabs. The root layout gates rendering on sessionHydrated, so by the time
+  // this runs a null session is authoritative, not a not-yet-loaded one.
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   return (
     <Tabs

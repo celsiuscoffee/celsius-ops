@@ -74,15 +74,26 @@ export async function deregisterPush(): Promise<void> {
     if (cached) token = cached.split("::")[0] ?? null;
   } catch {}
 
+  // Only forget the local fingerprint once the server actually deactivated the
+  // token. Clearing it on a failed call (offline logout) left the token active
+  // server-side with the client convinced it was gone, so the logged-out
+  // device kept receiving the previous user's pushes indefinitely. Keeping the
+  // fingerprint means the next launch's registerForPush re-syncs ownership
+  // (the register route reassigns tokens by onConflict), and the next
+  // successful deregister still cleans up.
+  let serverOk = !token; // nothing registered → nothing to keep
   if (token) {
     try {
-      await fetch(`${API_BASE_URL}/api/staff/push/deregister`, {
+      const res = await fetch(`${API_BASE_URL}/api/staff/push/deregister`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),
       });
+      serverOk = res.ok;
     } catch {}
   }
 
-  await AsyncStorage.removeItem(STORED_TOKEN_KEY).catch(() => {});
+  if (serverOk) {
+    await AsyncStorage.removeItem(STORED_TOKEN_KEY).catch(() => {});
+  }
 }

@@ -19,12 +19,16 @@ export async function refreshSession(): Promise<StaffSession | null> {
   if (!current) return null;
   try {
     const me = await api<MeResponse>("/api/auth/me");
+    // Merge rule (mirrors app/_layout.tsx): a null outletId/outletName from
+    // /api/auth/me is MEANINGFUL, it says the outlet assignment was removed.
+    // Only fall back to the cached value when the field is absent entirely,
+    // never nullish-coalesce, or a revoked outlet silently survives refresh.
     const next: StaffSession = {
       ...current,
       name: me.name ?? current.name,
       role: me.role ?? current.role,
-      outletId: me.outletId ?? current.outletId,
-      outletName: me.outletName ?? current.outletName,
+      ...(me.outletId !== undefined ? { outletId: me.outletId } : {}),
+      ...(me.outletName !== undefined ? { outletName: me.outletName } : {}),
       moduleAccess: me.moduleAccess ?? {},
     };
     await saveSession(next);
