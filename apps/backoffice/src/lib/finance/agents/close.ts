@@ -1,17 +1,18 @@
 // Close Agent — month-end close runner. Posts depreciation for active fixed
-// assets, snapshots P&L/BS/CF for the period, and (when explicitly told)
-// flips the period to status='closed' which the DB trigger uses to block
-// further posts.
+// assets, accrues the management fee shortfall owed to HQ (6.8% of the
+// month's revenue less what was already paid — see close-prep.ts), snapshots
+// P&L/BS for the period, and (when explicitly told) flips the period to
+// status='closed' which the DB trigger uses to block further posts.
 //
 // Reopens require fin_periods.status = 'open' + a reason; the API route
 // handles that and feeds back into the audit log via fin_set_actor.
 
-import { randomUUID } from "crypto";
 import { getFinanceClient } from "../supabase";
 import { postJournal } from "../ledger";
 import type { JournalLineInput } from "../types";
+import { mgmtFeeAccrual, MGMT_FEE_EXPENSE_CODE, DUE_TO_HQ_CODE } from "../close-prep";
 
-export const CLOSE_AGENT_VERSION = "close-v1";
+export const CLOSE_AGENT_VERSION = "close-v2";
 
 export type RunCloseInput = {
   companyId: string;          // legal entity being closed
@@ -24,6 +25,7 @@ export type RunCloseResult = {
   companyId: string;
   period: string;
   depreciation: { posted: number; transactionIds: string[] };
+  mgmtFee: { accrued: number; transactionId: string | null; skipped: string | null };
   snapshot: { pnl: PnlSnapshot; bs: BsSnapshot };
   locked: boolean;
 };
@@ -264,6 +266,56 @@ async function buildBs(companyId: string, period: string): Promise<BsSnapshot> {
   };
 }
 
+// Accrue the management fee shortfall for the period: DR 6511-06 Management
+// fees / CR 3600-02 Due to HQ. Idempotent — one accrual per (company, period),
+// keyed by txn_type + txn_date on the period's last day. HQ itself never
+// accrues (it is the fee's recipient; its income side stays on the sourced
+// P&L's cash-recognised REV-MGMT line to avoid double-counting).
+async function postMgmtFeeShortfall(
+  companyId: string,
+  period: string,
+): Promise<RunCloseResult["mgmtFee"]> {
+  const fee = await mgmtFeeAccrual(companyId, period);
+  if (!fee.applicable) return { accrued: 0, transactionId: null, skipped: "not applicable (HQ)" };
+  if (fee.shortfall <= 0) {
+    return { accrued: 0, transactionId: null, skipped: `fee settled in cash (paid RM ${fee.paid})` };
+  }
+
+  const [year, month] = period.split("-").map(Number);
+  const txnDate = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+
+  // Idempotency: skip when this period already carries an accrual.
+  const client = getFinanceClient();
+  const { data: existing } = await client
+    .from("fin_transactions")
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("txn_type", "mgmt_fee_accrual")
+    .eq("txn_date", txnDate)
+    .limit(1);
+  if (existing && existing.length > 0) {
+    return { accrued: 0, transactionId: existing[0].id as string, skipped: "already accrued" };
+  }
+
+  const lines: JournalLineInput[] = [
+    { accountCode: MGMT_FEE_EXPENSE_CODE, outletId: null, debit: fee.shortfall, memo: `Mgmt fee accrual ${period} (6.8% of RM ${fee.revenue} less RM ${fee.paid} paid)` },
+    { accountCode: DUE_TO_HQ_CODE, outletId: null, credit: fee.shortfall, memo: `Due to HQ — mgmt fee ${period}` },
+  ];
+  const result = await postJournal({
+    companyId,
+    txnDate,
+    description: `Management fee accrual ${period}`,
+    txnType: "mgmt_fee_accrual",
+    outletId: null,
+    sourceDocId: null,
+    agent: "close",
+    agentVersion: CLOSE_AGENT_VERSION,
+    confidence: 1.0,
+    lines,
+  });
+  return { accrued: fee.shortfall, transactionId: result.transactionId, skipped: null };
+}
+
 export async function runClose(input: RunCloseInput): Promise<RunCloseResult> {
   if (!/^\d{4}-\d{2}$/.test(input.period)) {
     throw new Error(`Invalid period format: ${input.period}`);
@@ -293,7 +345,11 @@ export async function runClose(input: RunCloseInput): Promise<RunCloseResult> {
   // 1. Depreciation
   const depreciation = await postDepreciation(input.companyId, input.period, input.actor);
 
-  // 2. Snapshot
+  // 2. Management fee accrual (shortfall owed to HQ) — before the snapshot so
+  //    the period's P&L and Due-to-HQ balance include it.
+  const mgmtFee = await postMgmtFeeShortfall(input.companyId, input.period);
+
+  // 3. Snapshot
   const pnl = await buildPnl(input.companyId, input.period);
   const bs = await buildBs(input.companyId, input.period);
 
@@ -317,6 +373,7 @@ export async function runClose(input: RunCloseInput): Promise<RunCloseResult> {
     companyId: input.companyId,
     period: input.period,
     depreciation,
+    mgmtFee,
     snapshot: { pnl, bs },
     locked: !!input.lock,
   };
