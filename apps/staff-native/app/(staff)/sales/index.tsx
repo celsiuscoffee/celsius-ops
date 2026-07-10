@@ -175,13 +175,10 @@ export default function SalesScreen() {
           })}
         </View>
 
-        {/* Refresh indicator: any revalidation of an already-loaded screen,
-            INCLUDING pull-to-refresh. It used to be hidden while `refreshing`
-            (deferring to the RefreshControl spinner), but on this dark screen
-            the platform spinner is subtle enough that pulls read as "nothing
-            happened". This row is the guaranteed-visible feedback; first load
-            still shows the full-page spinner below instead. */}
-        {isFetching && !isLoading ? (
+        {/* Background-refresh indicator (cached tab being revalidated). Pull-
+            to-refresh feedback is the RefreshControl spinner, same as every
+            other tab; first load shows the full-page spinner below instead. */}
+        {isFetching && !isLoading && !refreshing ? (
           <View className="mb-3 -mt-1 flex-row items-center justify-center gap-1.5">
             <ActivityIndicator size="small" color="#FBBF24" />
             <Text className="font-body text-[11px] text-[#F5F3F08a]">Updating…</Text>
@@ -192,12 +189,17 @@ export default function SalesScreen() {
       <ScrollView
         contentContainerClassName="px-4 pb-16"
         showsVerticalScrollIndicator={false}
-        // Sales is the app's one DARK (espresso #160800) screen, so the shared
-        // terracotta spinner is invisible here (~1.8:1 contrast, the "pull to
-        // refresh does nothing" report). iOS draws the bare spinner on the page
-        // background → cream; Android draws it on its own card → terracotta on
-        // a cream card, visible AND on-brand.
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F5F3F0" colors={["#A2492C"]} progressBackgroundColor="#F5F1EA" />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            // Standard pattern (see checklists/index.tsx), tint only. Sales is
+            // the one dark espresso screen, so it uses the screen's gold accent
+            // instead of the terracotta the cream tabs use; Android ignores
+            // tintColor and draws its default spinner card, visible everywhere.
+            tintColor="#FBBF24"
+          />
+        }
       >
         {isLoading ? (
           <View className="items-center justify-center py-24"><ActivityIndicator color="#FBBF24" /></View>
