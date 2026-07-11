@@ -142,9 +142,10 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   approval after a clickable preview artifact). Owner said the tabs were
   "haywire". Nav config extracted from `(admin)/layout.tsx` into
   `src/lib/nav.tsx` (single registry shared by sidebar + ⌘K palette + route
-  gate). Behavior fixes: section headers now expand/collapse WITHOUT
-  navigating (icon-collapsed rail still navigates — submenu can't render
-  there), section highlight stays on while open, mobile sheet closes on page
+  gate). Behavior: section headers open AND jump to the section's first page
+  (expand-only shipped briefly in #894; owner reverted it next day — clicking
+  a tab must navigate; keep it), clicking the open active section collapses
+  it, section highlight stays on while open, mobile sheet closes on page
   pick. Structure: rail reordered into clusters (Sales/Procurement/Ops ·
   HR/Finance · Rewards/Marketing · Catalog/Settings, with rail dividers —
   `dividerBefore` was previously dead config, now rendered); duplicate
