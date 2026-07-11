@@ -158,14 +158,15 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        // "Supplier Chats" is where POs are raised (the WhatsApp ordering
-        // agent); "Purchase Orders" is the resulting PO list. The old labels
-        // had these reversed-ish ("Purchase Orders" → chats, "PO Lists" →
-        // orders), which read as two names for the same thing.
+        // Owner-preferred labels (restored 2026-07-11 after the #894 rename
+        // didn't stick): "Purchase Orders" = the WhatsApp supplier-chat
+        // surface where POs are raised; "PO List" = the resulting list at
+        // /inventory/orders. This is the team's established vocabulary —
+        // don't "fix" it again.
         label: "Ordering",
         items: [
-          { label: "Supplier Chats",   href: "/inventory/supplier-chats", icon: <MessageCircle className={ICON_SIZE} />,  moduleKey: "inventory:orders" },
-          { label: "Purchase Orders",  href: "/inventory/orders",         icon: <FileText className={ICON_SIZE} />,       moduleKey: "inventory:orders" },
+          { label: "Purchase Orders", href: "/inventory/supplier-chats", icon: <MessageCircle className={ICON_SIZE} />,  moduleKey: "inventory:orders" },
+          { label: "PO List",         href: "/inventory/orders",         icon: <FileText className={ICON_SIZE} />,       moduleKey: "inventory:orders" },
           // Agent QA runs in the background (the verifier grades every decision
           // regardless); the viewer stays at /inventory/agent-qa, off the nav by choice.
           { label: "Receivings",       href: "/inventory/receivings",     icon: <Receipt className={ICON_SIZE} />,        moduleKey: "inventory:receivings" },
