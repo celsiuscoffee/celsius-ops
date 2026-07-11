@@ -175,10 +175,13 @@ export default function SalesScreen() {
           })}
         </View>
 
-        {/* Background-refresh indicator (cached tab being revalidated). Pull-
-            to-refresh feedback is the RefreshControl spinner, same as every
-            other tab; first load shows the full-page spinner below instead. */}
-        {isFetching && !isLoading && !refreshing ? (
+        {/* Refresh indicator: background revalidation AND pull-to-refresh.
+            This row is the only reliable refresh feedback on this dark screen —
+            iOS 26's redesigned spinner ignores RefreshControl tintColor, so the
+            native spinner can't be made visible on espresso (the "pull to
+            refresh does nothing" report). First load shows the full-page
+            spinner below instead. */}
+        {(isFetching && !isLoading) || refreshing ? (
           <View className="mb-3 -mt-1 flex-row items-center justify-center gap-1.5">
             <ActivityIndicator size="small" color="#FBBF24" />
             <Text className="font-body text-[11px] text-[#F5F3F08a]">Updating…</Text>
@@ -193,31 +196,19 @@ export default function SalesScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            // Standard pattern (see checklists/index.tsx), tint only. Honored
-            // on Android/older iOS; iOS 26's redesigned spinner largely
-            // ignores tintColor, which is why the cream well below exists.
-            tintColor="#A2492C"
+            // Cream tint/card: visible on the espresso background wherever the
+            // platform honours these props (Android, older iOS). iOS 26's
+            // spinner ignores tintColor, so its feedback is the "Updating…"
+            // row in the header above — do NOT paint the overscroll area from
+            // inside the content instead (the 50e161f cream pull-well): content
+            // layers ABOVE the native spinner, so it covers the spinner and
+            // shows as a bare cream slab under the tabs while refreshing.
+            tintColor="#F5F3F0"
+            colors={["#A2492C"]}
+            progressBackgroundColor="#F5F1EA"
           />
         }
       >
-        {/* Cream pull-well: painted into the TOP overscroll area only, so the
-            pull gesture reveals a light backing behind whatever spinner the OS
-            draws. iOS 26 ignores RefreshControl tintColor (user report:
-            "cursor works, cannot see because of the colour"), so on this dark
-            espresso screen contrast must come from the backdrop, not the tint.
-            Matches the checklist look (spinner on cream); never visible while
-            scrolled; RN exposes no iOS backgroundColor prop for this. */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            top: -300,
-            height: 300,
-            left: -16,
-            right: -16,
-            backgroundColor: "#F5F1EA",
-          }}
-        />
         {isLoading ? (
           <View className="items-center justify-center py-24"><ActivityIndicator color="#FBBF24" /></View>
         ) : error ? (

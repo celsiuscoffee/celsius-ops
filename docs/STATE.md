@@ -126,6 +126,16 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Lessons learned
 
+- 2026-07-11 — **Sales pull-to-refresh saga (staff-native), attempt 4:** the
+  50e161f "cream pull-well" (absolute View at top:-300 inside the ScrollView)
+  made it worse — ScrollView content layers ABOVE the native RefreshControl,
+  so the well *covered* the spinner and showed as a bare cream slab under the
+  period tabs while refreshing (owner screenshot). iOS 26's spinner ignores
+  `tintColor`, so on the dark espresso Sales screen the native spinner cannot
+  be made visible at all; do not retry tint/backdrop tricks. Fix: rely on the
+  screen's own gold "Updating…" header row during `refreshing` too, cream tint
+  kept only for platforms that honour it (older iOS, Android's cream card).
+
 - 2026-07-04 — `eas update` shells out to `expo export`, whose interactive
   prompts ignore `--non-interactive`; set `CI=1` in the environment instead.
   Pass commit messages via env var, not inline in the shell command (backticks/
