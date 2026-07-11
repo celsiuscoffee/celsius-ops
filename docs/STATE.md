@@ -145,6 +145,14 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   be made visible at all; do not retry tint/backdrop tricks. Fix: rely on the
   screen's own gold "Updating…" header row during `refreshing` too, cream tint
   kept only for platforms that honour it (older iOS, Android's cream card).
+  Round 2 (owner, same day): holding `refreshing={true}` on the control kept
+  iOS's tall overscroll inset open for the whole fetch — a big empty gap that
+  "looks like lag" — and the spinner+"Updating…" text row read off-centre.
+  Final shape: RefreshControl is TRIGGER-ONLY (`refreshing={false}` constantly;
+  RN force-syncs native state after onRefresh so the control retracts on
+  release, no stuck spinner) + a bare centered 20pt gold ActivityIndicator row
+  under the tabs as the sole in-flight indicator, matching the checklist
+  spinner size.
 
 - 2026-07-04 — `eas update` shells out to `expo export`, whose interactive
   prompts ignore `--non-interactive`; set `CI=1` in the environment instead.
