@@ -175,16 +175,16 @@ export default function SalesScreen() {
           })}
         </View>
 
-        {/* Refresh indicator: background revalidation AND pull-to-refresh.
-            This row is the only reliable refresh feedback on this dark screen —
-            iOS 26's redesigned spinner ignores RefreshControl tintColor, so the
-            native spinner can't be made visible on espresso (the "pull to
-            refresh does nothing" report). First load shows the full-page
-            spinner below instead. */}
+        {/* Refresh indicator: pull-to-refresh AND background revalidation.
+            A bare centered spinner, same 20pt size as the checklist page's
+            native one (owner: "same size as the checklist, position in the
+            middle"), gold for contrast on espresso. This row is the only
+            reliable refresh feedback on this dark screen — iOS 26's redesigned
+            spinner ignores RefreshControl tintColor. First load shows the
+            full-page spinner below instead. */}
         {(isFetching && !isLoading) || refreshing ? (
-          <View className="mb-3 -mt-1 flex-row items-center justify-center gap-1.5">
+          <View className="mb-3 -mt-1 items-center">
             <ActivityIndicator size="small" color="#FBBF24" />
-            <Text className="font-body text-[11px] text-[#F5F3F08a]">Updating…</Text>
           </View>
         ) : null}
       </View>
@@ -194,7 +194,16 @@ export default function SalesScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
+            // Trigger-only: never report `refreshing` back to the control, so
+            // iOS doesn't hold the tall overscroll inset open for the whole
+            // fetch (owner: "reduce the gap" — the held gap read as lag). The
+            // control retracts as soon as the pull is released and the
+            // centered spinner row above is the sole in-flight indicator.
+            // RN's RefreshControl force-syncs native state after onRefresh, so
+            // a constant false ends the native spin immediately — no stuck
+            // spinner. iOS 26 still draws its own faint spinner during the
+            // drag itself; that's fine, it's the gesture affordance.
+            refreshing={false}
             onRefresh={onRefresh}
             // Cream tint/card: visible on the espresso background wherever the
             // platform honours these props (Android, older iOS). iOS 26's
