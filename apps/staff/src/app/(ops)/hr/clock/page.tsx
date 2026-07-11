@@ -32,6 +32,10 @@ export default function ClockPage() {
   const [gpsLoading, setGpsLoading] = useState(true);
   const [result, setResult] = useState<{ success: boolean; message: string; withinGeofence?: boolean } | null>(null);
   const [elapsed, setElapsed] = useState("");
+  // Clock-OUT is a two-step, selfie-gated action: the first tap arms the camera,
+  // and the deliberate selfie capture (shutter) is what actually clocks out — so a
+  // reflexive double-tap can't close a shift. Clock-IN stays one tap (frictionless).
+  const [clockOutArmed, setClockOutArmed] = useState(false);
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -164,6 +168,11 @@ export default function ClockPage() {
     return () => clearInterval(interval);
   }, [status?.activeLog]);
 
+  // Once the shift is closed (no longer clocked in), disarm the clock-out camera.
+  useEffect(() => {
+    if (!isClockedIn) setClockOutArmed(false);
+  }, [isClockedIn]);
+
   const handleClock = useCallback(async () => {
     // Capture photo first
     const photo = capturePhoto();
@@ -205,6 +214,15 @@ export default function ClockPage() {
   }, [isClockedIn, gps, mutate, capturePhoto]);
 
   const retakePhoto = () => setCapturedPhoto(null);
+
+  // Clock-IN is a single tap. Clock-OUT is selfie-gated: the first tap only arms
+  // the camera; the shutter tap (which captures the selfie) is what submits — so a
+  // reflexive double-tap opens the camera but can't close the shift.
+  const primaryAction = useCallback(() => {
+    if (!isClockedIn) { handleClock(); return; }            // clock-in
+    if (!clockOutArmed) { setClockOutArmed(true); return; } // clock-out step 1: arm camera
+    handleClock();                                          // clock-out step 2: selfie = clock out
+  }, [isClockedIn, clockOutArmed, handleClock]);
 
   // Distance to geofence
   let distanceInfo = "";
@@ -321,7 +339,7 @@ export default function ClockPage() {
           through and the server tags them for review. Clock-out still needs GPS
           to satisfy the same-outlet gate; if it's missing the server explains why. */}
       <button
-        onClick={handleClock}
+        onClick={primaryAction}
         disabled={
           loading ||
           gpsLoading ||
@@ -336,6 +354,11 @@ export default function ClockPage() {
       >
         {loading ? (
           <Loader2 className="h-8 w-8 animate-spin" />
+        ) : isClockedIn && clockOutArmed ? (
+          <>
+            <Camera className="mb-1 h-8 w-8" />
+            <span className="text-sm font-bold">Take selfie</span>
+          </>
         ) : isClockedIn ? (
           <>
             <LogOut className="mb-1 h-8 w-8" />
@@ -348,6 +371,22 @@ export default function ClockPage() {
           </>
         )}
       </button>
+
+      {/* Selfie-gated clock-out: once armed, the shutter above is the only way to
+          clock out. Prompt the deliberate selfie, and offer a way to back out. */}
+      {isClockedIn && clockOutArmed && !loading && (
+        <>
+          <p className="mt-3 text-center text-xs font-medium text-gray-600">
+            Frame your face and tap <span className="font-bold">Take selfie</span> to clock out.
+          </p>
+          <button
+            onClick={() => setClockOutArmed(false)}
+            className="mt-1 text-xs font-medium text-gray-400 underline active:text-gray-600"
+          >
+            Cancel
+          </button>
+        </>
+      )}
 
       {/* GPS warning — soft for clock-in, required for clock-out (server gate) */}
       {gpsError && (

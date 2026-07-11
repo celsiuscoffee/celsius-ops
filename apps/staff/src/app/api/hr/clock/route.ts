@@ -220,6 +220,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Already clocked in" }, { status: 400 });
     }
 
+    // Guard against an ACCIDENTAL immediate RE-clock-in. The clock button flips
+    // "Clock Out" → "Clock In" the instant you clock out, so a reflexive double-tap
+    // at end-of-shift re-opened a phantom session seconds later (26 seen historically,
+    // 13 of them 0h junk). Reject a clock-in within 30s of this user's last clock-out.
+    // 30s: every observed double-tap was ≤20s apart; deliberate re-clock-ins are 30s+.
+    // Mirror of the MIN_SHIFT_MINUTES clock-out guard below.
+    const { data: lastOut } = await supabase
+      .from("hr_attendance_logs")
+      .select("clock_out")
+      .eq("user_id", session.id)
+      .not("clock_out", "is", null)
+      .order("clock_out", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const RECLOCK_COOLDOWN_SECONDS = 30;
+    if (lastOut?.clock_out) {
+      const secsSinceOut = (Date.now() - new Date(lastOut.clock_out).getTime()) / 1000;
+      if (secsSinceOut >= 0 && secsSinceOut < RECLOCK_COOLDOWN_SECONDS) {
+        return NextResponse.json({
+          error: "You just clocked out — you're all set. (If you meant to clock back in, wait a moment and tap again.)",
+          justClockedOut: true,
+        }, { status: 400 });
+      }
+    }
+
     const photoUrl = photo ? await uploadPhoto(photo, "in") : null;
     const clockInAt = new Date();
     const roster = await findRosterShift(session.id, clockInAt);
