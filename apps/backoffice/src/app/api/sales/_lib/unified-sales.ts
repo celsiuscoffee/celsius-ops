@@ -22,6 +22,16 @@ export type UnifiedSale = {
   channelLabel: string; // raw channel/order_type for the channelBreakdown report
 };
 
+// Money-received statuses for the pickup/QR `orders` table. Payment is
+// confirmed at the pending → paid/preparing transition (markRmOrderPaid /
+// confirm-stripe in apps/order), so a paid order still being brewed is already
+// revenue — recognise it at payment, not when staff mark it collected.
+// `pending` = unpaid checkout, `failed` = never paid; both excluded. The hourly
+// sweep-stale-orders cron advances every paid order to `completed` within ~3h,
+// so days in the past are unchanged — this only stops "today" lagging behind
+// the till by the fulfilment time.
+export const PICKUP_PAID_STATUSES = ["paid", "preparing", "ready", "collected", "completed"];
+
 export type OutletSource = {
   outletId: string; // Celsius Outlet.id → storehub_sales.outlet_id
   storehubStoreId: string | null; // Outlet.storehubId → live StoreHub pull for today
@@ -219,8 +229,10 @@ export async function getUnifiedSalesForOutlet(
 
   // ── Pickup app (orders table) — the customer ordering app + QR-table scan-&-
   // order. Real-time (local DB). A DISTINCT stream from the till (pos_orders) and
-  // StoreHub — pickup orders never land in either, so no double-count. Only paid
-  // (status='completed'); all count toward Pickup & Delivery. ──
+  // StoreHub — pickup orders never land in either, so no double-count. Counts
+  // once payment is done (PICKUP_PAID_STATUSES — not just 'completed', which
+  // lagged revenue behind the money until staff marked the order collected);
+  // all count toward Pickup & Delivery. ──
   if (!opts.storehubOnly && outlet.pickupStoreId) {
     const pickupRows = await prisma.$queryRaw<
       Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null }>
@@ -228,7 +240,7 @@ export async function getUnifiedSalesForOutlet(
       SELECT created_at AS ts, total, source, order_type
       FROM orders
       WHERE store_id = ${outlet.pickupStoreId}
-        AND status = 'completed'
+        AND status IN (${Prisma.join(PICKUP_PAID_STATUSES)})
         AND created_at >= ${from}
         AND created_at <= ${to}
     `;

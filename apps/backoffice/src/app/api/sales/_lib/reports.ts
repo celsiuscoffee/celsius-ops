@@ -23,8 +23,9 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
-import { getUnifiedSalesForOutlet } from "./unified-sales";
+import { getUnifiedSalesForOutlet, PICKUP_PAID_STATUSES } from "./unified-sales";
 import {
   CHANNEL_LABELS,
   normalizePayment,
@@ -501,7 +502,7 @@ async function gatherItems(outlets: OutletPick[], from: string, to: string): Pro
               FROM order_items i
               JOIN orders o ON o.id = i.order_id
               WHERE o.store_id = ${o.pickupStoreId}
-                AND o.status = 'completed'
+                AND o.status IN (${Prisma.join(PICKUP_PAID_STATUSES)})
                 AND o.created_at >= ${fromD}
                 AND o.created_at <= ${toD}`
           : empty,
@@ -769,7 +770,7 @@ export async function buildByPayment(outlets: OutletPick[], from: string, to: st
               SELECT payment_method, total
               FROM orders
               WHERE store_id = ${o.pickupStoreId}
-                AND status = 'completed'
+                AND status IN (${Prisma.join(PICKUP_PAID_STATUSES)})
                 AND created_at >= ${fromD}
                 AND created_at <= ${toD}`
           : empty,
@@ -860,7 +861,7 @@ export async function buildByPromotion(outlets: OutletPick[], from: string, to: 
               SELECT promo_name, voucher_code, promo_discount, reward_name, reward_discount_amount, customer_phone
               FROM orders
               WHERE store_id = ${o.pickupStoreId}
-                AND status = 'completed'
+                AND status IN (${Prisma.join(PICKUP_PAID_STATUSES)})
                 AND created_at >= ${fromD}
                 AND created_at <= ${toD}`
           : empty,
