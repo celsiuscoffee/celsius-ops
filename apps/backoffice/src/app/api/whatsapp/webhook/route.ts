@@ -23,6 +23,7 @@ import { handleInboundAck } from "@/lib/ops-pulse/inbound";
 import { handleReminderAck } from "@/lib/ops-reminders";
 import { handleInstructionAck } from "@/lib/ops-instructions";
 import { handleOutletDeliveryReply } from "@/lib/inventory/exec/outlet-delivery-check";
+import { handleInternalInbound } from "@/lib/ops-intake";
 import { handleSupplierMessage } from "@/lib/inventory/agents/supplier-chat-agent";
 import { sendPendingPurchaseOrders } from "@/lib/inventory/procurement-po-send";
 import { captureSupplierDocument } from "@/lib/inventory/agents/invoice-capture";
@@ -107,6 +108,7 @@ export async function POST(request: NextRequest) {
         // and best-effort; one staff reply can clear all three batches (the
         // digest-batch model). Never let this break the webhook — Meta needs a
         // fast 200.
+        let consumedByAck = false;
         try {
           const reply = msg.text?.body ?? "";
           const [alertAck, reminderAck, instructionAck, outletReply] = await Promise.all([
@@ -130,12 +132,31 @@ export async function POST(request: NextRequest) {
             }),
           ]);
           if (alertAck?.resolved || reminderAck?.completed || instructionAck?.acked || outletReply) {
+            consumedByAck = true;
             console.log(
               `[ops-workspace] ack from=${msg.from} alerts=${alertAck?.resolved ?? 0} reminders=${reminderAck?.completed ?? 0} instructions=${instructionAck?.acked ?? 0}${outletReply ? ` outletDelivery=${outletReply.result}` : ""}`,
             );
           }
         } catch (err) {
           console.error("[ops-workspace] inbound ack failed:", err);
+        }
+        // 2b) Internal bug/problem intake: a message from an owner/admin/manager
+        // phone files a SystemReport (text + screenshots), acks the reporter, and
+        // pings the owner — and MUST NOT fall through to the supplier flows below
+        // (the agent would reply to a manager; a manager's screenshot would be
+        // vision-read as a supplier invoice). Non-internal senders pass straight
+        // through. Internally guarded, never throws.
+        let fromInternal = false;
+        if (isNewInbound) {
+          const intake = await handleInternalInbound({
+            fromNumber: msg.from,
+            text: body,
+            mediaUrl,
+            waMessageId: msg.id,
+            type: msg.type,
+            consumedByAck,
+          });
+          fromInternal = intake.internal;
         }
         // 3) Supplier-chat AI agent (full-auto, flag-gated + allow-listed). Reads
         // the message in PO context, auto-replies in the supplier's language, and
@@ -148,7 +169,7 @@ export async function POST(request: NextRequest) {
         // re-deliveries could both pass the agent's own check and double-apply a PO edit +
         // double-reply. The @unique wamid makes the first inbound store the atomic claim.
         let agentCapturedInvoice = false;
-        if (isNewInbound && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
+        if (isNewInbound && !fromInternal && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
           const agentRes = await handleSupplierMessage({
             fromNumber: msg.from,
             toNumber: businessNumber,
@@ -164,7 +185,7 @@ export async function POST(request: NextRequest) {
         // completed, ad-hoc bills) still gets vision-read and filed as a DRAFT
         // invoice for human review. Internal only — never replies. Trusts the
         // parser's docType, so PoP/DO/SOA photos are left for their own flows.
-        if (isNewInbound && (msg.type === "document" || msg.type === "image") && !agentCapturedInvoice) {
+        if (isNewInbound && !fromInternal && (msg.type === "document" || msg.type === "image") && !agentCapturedInvoice) {
           await captureSupplierDocument({
             fromNumber: msg.from,
             type: msg.type,
@@ -175,7 +196,7 @@ export async function POST(request: NextRequest) {
         // window — deliver any PO blocks waiting behind a cold-send template
         // prompt (raw.poPromptFor with no raw.poSentFor). Best-effort, internally
         // deduped, never throws.
-        if (isNewInbound) {
+        if (isNewInbound && !fromInternal) {
           await sendPendingPurchaseOrders(msg.from);
         }
       }
