@@ -124,13 +124,17 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `JWT_SECRET` to the celsius-pickup-app Vercel project with the SAME value
   as backoffice's, redeploy. — blocking Maybank-QR release.
 - 2026-07-11 — **`ANTHROPIC_API_KEY` is missing from the staff app's Vercel
-  env** — confirmed live: `GET /api/audits/staff/<id>/coach` 500s with
+  env** — confirmed live: `GET /api/audits/staff/<id>/coach` 500ed with
   "Could not resolve authentication method" (the 21-event "New" Sentry
   issue); boot check also flags `BACKOFFICE_INTERNAL_URL` (recommended)
-  missing. **Human action:** add `ANTHROPIC_API_KEY` (and ideally
-  `BACKOFFICE_INTERNAL_URL`) to the staff Vercel project. Optional code
-  hardening later: skills-coach/insights routes could 503 gracefully when
-  the key is absent instead of 500.
+  missing. Owner chose to REMOVE the staff AI coach instead of wiring the
+  key (done in the sentry-loop PR: coach route + agent + My Skills card
+  deleted; unused /api/audits/insights dropped too; staff-native untouched
+  — its coach card already hides on fetch failure, remove the dead helpers
+  on the next staff-native touch). **Key is STILL needed:** the claims
+  receipt-extraction route (`/api/claims/extract`, used by staff web +
+  staff-native claims) also runs on ANTHROPIC_API_KEY and is equally
+  broken until the var is added to the staff Vercel project.
 - 2026-07-05 — **`pos_*` + `orders`: 14 `USING(true)` policies are BY
   DESIGN** (SUNMI tills write via the anon key). Do NOT lint-fix — needs a
   data-layer plan (rls-strategy.md Path A). 4 `security_definer_view` +
