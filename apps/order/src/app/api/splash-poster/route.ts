@@ -37,6 +37,12 @@ export async function GET(request: NextRequest) {
       .eq("active", true)
       // Splash surface only — home posters stay on the home carousel.
       .eq("placement", "splash")
+      // sort_order first — the ranking the poster autopilot writes (and the
+      // operator can hand-set). The old updated_at-desc pick meant "most
+      // recently touched wins", and since ANY row update bumps updated_at
+      // (touch trigger), bulk active/sort flips made the winner arbitrary.
+      // updated_at stays as the tiebreak for legacy rows without a sort.
+      .order("sort_order", { ascending: true, nullsFirst: false })
       .order("updated_at", { ascending: false });
 
     if (error) {

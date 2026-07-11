@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { suggestPairs } from "@celsius/shared";
+import { suggestPairs, logPairImpressions } from "@celsius/shared";
 
 /**
  * POST /api/pos/loyalty/suggest-pairs
@@ -46,6 +46,16 @@ export async function POST(req: NextRequest) {
       outletId,
       channel: "pos",
     });
+    // Attach-rate denominator: log the suggestions we just SHOWED. Server-side
+    // so both POS surfaces are covered without a native-app update; clients
+    // that identify themselves pass source:'display', the rest default to the
+    // register (the dominant caller today). Fire-and-forget.
+    if (pairs.length) {
+      void logPairImpressions(supabase, pairs, {
+        outletId: loyaltyOutletId,
+        source: body?.source === "display" ? "display" : "register",
+      });
+    }
     return NextResponse.json({ pairs, round });
   } catch (err) {
     console.error("[pos/loyalty/suggest-pairs] error:", err);

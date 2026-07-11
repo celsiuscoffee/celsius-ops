@@ -10,6 +10,8 @@ import {
 import { router } from "expo-router";
 import * as Haptics from "@/lib/haptics";
 import type { HomePoster } from "../lib/posters";
+import { logPosterEvent } from "../lib/poster-events";
+import { useApp } from "../lib/store";
 
 type Props = {
   posters: HomePoster[];
@@ -25,6 +27,18 @@ export function PosterCarousel({ posters, aspect = 4 / 3 }: Props) {
   // Track active index in a ref too so the auto-advance timer can read
   // the latest value without re-creating the timer on every change.
   const activeRef = useRef(0);
+  const loyaltyId = useApp((s) => s.loyaltyId);
+
+  // Impression telemetry: one event per poster per mount (deduped across
+  // refetches by id) — the CTR denominator for the autopilot's home signal.
+  const seenRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const p of posters) {
+      if (seenRef.current.has(p.id)) continue;
+      seenRef.current.add(p.id);
+      logPosterEvent({ posterId: p.id, placement: "home", eventType: "impression", deeplink: p.deeplink, loyaltyId });
+    }
+  }, [posters, loyaltyId]);
 
   const slideW = screenW;
   const slideH = slideW / aspect;
@@ -51,6 +65,9 @@ export function PosterCarousel({ posters, aspect = 4 / 3 }: Props) {
   const onPosterTap = (p: HomePoster) => {
     if (!p.deeplink) return;
     Haptics.selectionAsync();
+    // The autopilot's learning signal: without this, native taps were
+    // invisible and only the web carousel fed pos_poster_app_perf.
+    logPosterEvent({ posterId: p.id, placement: "home", eventType: "tap", deeplink: p.deeplink, loyaltyId });
     // Internal route (starts with '/') vs external URL.
     if (p.deeplink.startsWith("/")) {
       router.push(p.deeplink as never);

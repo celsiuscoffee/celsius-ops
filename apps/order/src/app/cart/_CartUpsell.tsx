@@ -48,10 +48,21 @@ export function CartUpsell({ productIds, loyaltyId, outletId }: { productIds: st
         className="flex gap-3 px-4 overflow-x-auto pb-1"
         style={{ scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}
       >
-        {pairs.map((p) => (
+        {pairs.map((p, i) => (
           <Link
             key={p.id}
             href={`/product/${p.id}`}
+            onClick={() => {
+              // Tap-through telemetry (event_type='tap') — pairs with the
+              // server-logged impressions to give this rail a real CTR.
+              // Best-effort; navigation never waits on it.
+              void fetch("/api/pair-tap", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ productId: p.id, productName: p.name, reason: p.reason, rank: i + 1, outletId }),
+                keepalive: true,
+              }).catch(() => {});
+            }}
             className="flex-shrink-0 bg-white overflow-hidden active:opacity-70"
             style={{ width: 150, borderRadius: 16, border: "1px solid rgba(26,2,0,0.10)", boxShadow: "0 3px 8px rgba(0,0,0,0.06)", scrollSnapAlign: "start" }}
           >

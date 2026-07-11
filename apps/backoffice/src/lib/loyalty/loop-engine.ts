@@ -649,7 +649,7 @@ export async function measureRound(roundId: string) {
 
   const { data: rows } = await supabaseAdmin
     .from("loop_assignments")
-    .select("id, phone, arm, issued_reward_id, assigned_at")
+    .select("id, phone, arm, issued_reward_id, assigned_at, sms_status")
     .eq("round_id", roundId);
 
   const windowMs = (round.attribution_window_days as number) * 86400000;
@@ -701,12 +701,23 @@ export async function measureRound(roundId: string) {
     }
   }
   let holdoutExcluded = 0;
+  const unsentByArm: Record<string, number> = {};
 
   type Acc = { n: number; converted: number; redeemed: number; revenueRm: number };
   const byArm: Record<string, Acc> = {};
 
-  for (const r of (rows ?? []) as Array<{ id: string; phone: string; arm: string; issued_reward_id: string | null; assigned_at: string }>) {
+  for (const r of (rows ?? []) as Array<{ id: string; phone: string; arm: string; issued_reward_id: string | null; assigned_at: string; sms_status: string | null }>) {
     if (r.arm === "holdout" && contaminated.has(r.phone)) { holdoutExcluded++; continue; }
+    // SYMMETRIC HONESTY for sending loops: a treatment member whose message
+    // never went out (weekly-capped, gateway-failed, or round interrupted
+    // pre-send) was never actually treated — counting them dilutes the arm
+    // toward the holdout and understates lift, worst when sibling loops have
+    // consumed the weekly cap first. Grant rounds keep every row: nothing is
+    // sent, so there is no delivery to condition on.
+    if (r.arm !== "holdout" && !isGrantRound && r.sms_status !== "sent") {
+      unsentByArm[r.arm] = (unsentByArm[r.arm] ?? 0) + 1;
+      continue;
+    }
     const acc = (byArm[r.arm] ??= { n: 0, converted: 0, redeemed: 0, revenueRm: 0 });
     acc.n++;
 
@@ -763,6 +774,9 @@ export async function measureRound(roundId: string) {
       // Audit trail: how many holdouts were dropped as contaminated (treated by
       // a sibling loop inside this window). Only ever set on the holdout row.
       ...(arm === "holdout" && holdoutExcluded > 0 ? { excluded_contaminated: holdoutExcluded } : {}),
+      // Audit trail: treatment rows dropped because their message never went
+      // out (capped/failed) — they were never treated, so they don't dilute.
+      ...(arm !== "holdout" && (unsentByArm[arm] ?? 0) > 0 ? { excluded_unsent: unsentByArm[arm] } : {}),
     };
   });
 
@@ -1448,10 +1462,17 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
     }
     const convRate = acc.sent ? (converted / acc.sent) * 100 : 0;
     const revPer = acc.sent ? revenue / acc.sent : 0;
-    const liftPp = convRate - base.convRate;
+    // NO CONTROL, NO INCREMENTAL CLAIM: a loop with zero pooled holdouts
+    // (birthday runs holdoutPct 0 by design) has no baseline — subtracting a
+    // zero baseline would book EVERY attributed order/ringgit as incremental
+    // and inflate the programme totals. Report 0 lift/incremental instead;
+    // holdout_n = 0 tells the dashboard to render it as "uncontrolled".
+    // (Redemptions/sent stay — those are directly observed, not modelled.)
+    const controlled = base.n > 0;
+    const liftPp = controlled ? convRate - base.convRate : 0;
     acc.liftW = liftPp * acc.sent; // keep weighted form so totals pool correctly
-    acc.incrOrders = acc.sent * liftPp / 100;
-    acc.incrMargin = (revPer - base.revPerRecipient) * acc.sent * GP;
+    acc.incrOrders = controlled ? acc.sent * liftPp / 100 : 0;
+    acc.incrMargin = controlled ? (revPer - base.revPerRecipient) * acc.sent * GP : 0;
     byLoop.set(loopKey, acc);
   }
 

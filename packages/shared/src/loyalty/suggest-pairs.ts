@@ -6,8 +6,10 @@ import { isPromoLiveNow } from "./promo-eligibility";
  * "Pair with a Bite" (channel:"pos", customer display + register) and the
  * customer app's in-cart upsell (channel:"pickup"). Given what's in the cart,
  * it scores every other available product and returns the best `limit` to
- * suggest. One source of truth → the two surfaces never drift, and the nightly
- * weight tuner (app_settings.pair_weights) moves both at once.
+ * suggest. One source of truth → the two surfaces never drift, and retuning
+ * the weights (app_settings.pair_weights — hand-set today; an automatic tuner
+ * needs the impression data from logPairImpressions to accrue first) moves
+ * both at once.
  *
  * Scoring blends every signal, weighted:
  *   - combo/promo  → does adding it COMPLETE an active combo (real saving + AOV)
@@ -246,4 +248,39 @@ export async function suggestPairs(opts: {
   }));
 
   return { pairs, round };
+}
+
+/**
+ * Log one 'impression' row per suggestion shown — the attach-rate denominator
+ * the AOV loop was missing (adds were logged, "shown" never was; see
+ * docs/design/aov-at-pos-loop.md premise 2). Called server-side by both
+ * suggest-pairs routes when they return a non-empty set, so every surface
+ * (register, customer display, pickup cart) is covered without client changes.
+ *
+ * Known approximation, on purpose: a route response isn't a guaranteed render,
+ * and carts refetch as items change — so impressions over-count views of the
+ * same suggestion within one session. That biases attach-rate DOWN (never up),
+ * which is the safe direction; dedupe by order/cart-session when the tuner
+ * needs sharper numbers. Best-effort: failures never break the suggestion.
+ */
+export async function logPairImpressions(
+  supabase: Db,
+  pairs: SuggestedPair[],
+  opts: { outletId?: string | null; source: "register" | "display" | "pickup" },
+): Promise<void> {
+  if (!pairs.length) return;
+  try {
+    await supabase.from("pos_pair_events").insert(
+      pairs.map((p, i) => ({
+        outlet_id: opts.outletId ?? null,
+        round: currentRoundKey(),
+        product_id: p.product_id,
+        product_name: p.name,
+        reason: p.reason,
+        rank: i + 1,
+        source: opts.source,
+        event_type: "impression",
+      })),
+    );
+  } catch { /* attach-rate telemetry must never break the surface */ }
 }

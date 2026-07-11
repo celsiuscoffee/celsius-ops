@@ -3,6 +3,8 @@ import { Animated, View, Pressable, Text, useWindowDimensions } from "react-nati
 import { router } from "expo-router";
 import { X } from "lucide-react-native";
 import { getSplashPoster, type SplashPoster as Poster } from "../lib/splash";
+import { logPosterEvent } from "../lib/poster-events";
+import { useApp } from "../lib/store";
 
 type Props = { onDone: () => void };
 
@@ -17,6 +19,9 @@ export function SplashPoster({ onDone }: Props) {
   const [secondsLeft, setSecondsLeft] = useState<number>(0);
   const { width: w, height: h } = useWindowDimensions();
   const imageOpacity = useRef(new Animated.Value(0)).current;
+  // May still be null this early on a cold launch (store hydrating) —
+  // anonymous events still count toward the poster's impression/CTR totals.
+  const loyaltyId = useApp((s) => s.loyaltyId);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,6 +38,10 @@ export function SplashPoster({ onDone }: Props) {
         return;
       }
       setPoster(p);
+      // The splash surface logged NOTHING until now — no impressions, no
+      // taps — so splash posters were unmeasurable. One impression per
+      // launch-with-poster is the CTR denominator.
+      logPosterEvent({ posterId: p.id, placement: "splash", eventType: "impression", deeplink: p.deeplink, loyaltyId });
       // Countdown + auto-dismiss start as soon as we have a poster URL,
       // not after the image decodes, so a slow image never extends the
       // intended display window.
@@ -54,6 +63,9 @@ export function SplashPoster({ onDone }: Props) {
   const handleTap = () => {
     if (!poster) return;
     if (poster.deeplink) {
+      // Tap → 24h last-touch order attribution (attributeOrderToPoster),
+      // the same learning signal the home carousel feeds the autopilot.
+      logPosterEvent({ posterId: poster.id, placement: "splash", eventType: "tap", deeplink: poster.deeplink, loyaltyId });
       onDone();
       setTimeout(() => router.push(poster.deeplink as any), 50);
     }

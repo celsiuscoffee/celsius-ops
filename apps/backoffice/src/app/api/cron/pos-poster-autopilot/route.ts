@@ -77,22 +77,37 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 2. Record yesterday's realised per-round AOV, tagged with yesterday's mode.
+  // 2. Record yesterday's realised per-round AOV — tagged with the mode that
+  //    was ACTUALLY live (the last_run marker step 3 wrote when it applied),
+  //    not day-parity. Parity lies whenever the pipeline has a gap: cron
+  //    failed, or the flag was off (run skipped above, posters unrotated) —
+  //    the first re-enabled run would backfill a disabled day as if the
+  //    switchback ran, salting the A/B. No marker for yesterday → don't label.
   const yest = mytShift(now - 24 * 3600 * 1000);
   const yStr = isoDate(yest);
-  const yMode = modeFor(yest);
+  const { data: lastRunRow } = await supabase
+    .from("app_settings").select("value").eq("key", "pos_poster_autopilot_last_run").maybeSingle();
+  const lastRun = (lastRunRow?.value ?? null) as { date?: string; mode?: string } | null;
   let logged = 0;
-  const { data: perf } = await supabase.rpc("pos_round_aov_for_date", { p_date: yStr });
-  for (const row of (perf ?? []) as { round: string; orders: number; aov_rm: number }[]) {
-    if (!row.round || row.round === "other") continue;
-    const { error } = await supabase
-      .from("pos_poster_perf")
-      .upsert(
-        { perf_date: yStr, round: row.round, mode: yMode, aov_rm: row.aov_rm, orders: row.orders } as Record<string, unknown>,
-        { onConflict: "perf_date,round" },
-      );
-    if (!error) logged++;
+  if (lastRun?.date === yStr && (lastRun.mode === "autopilot" || lastRun.mode === "control")) {
+    const { data: perf } = await supabase.rpc("pos_round_aov_for_date", { p_date: yStr });
+    for (const row of (perf ?? []) as { round: string; orders: number; aov_rm: number }[]) {
+      if (!row.round || row.round === "other") continue;
+      const { error } = await supabase
+        .from("pos_poster_perf")
+        .upsert(
+          { perf_date: yStr, round: row.round, mode: lastRun.mode, aov_rm: row.aov_rm, orders: row.orders } as Record<string, unknown>,
+          { onConflict: "perf_date,round" },
+        );
+      if (!error) logged++;
+    }
   }
+
+  // 3. Mark today's applied mode — tomorrow's run reads this to label today.
+  await supabase.from("app_settings").upsert(
+    { key: "pos_poster_autopilot_last_run", value: { date: isoDate(today), mode }, updated_at: new Date().toISOString() } as Record<string, unknown>,
+    { onConflict: "key" },
+  );
 
   console.warn(`[cron/pos-poster-autopilot] mode=${mode} applied=${applied} perf_logged=${logged}`);
   return NextResponse.json({ ok: true, mode, applied, perfLogged: logged, activeByPlacement });
