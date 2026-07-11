@@ -21,6 +21,7 @@
 // Enabled when ANTHROPIC_API_KEY is set; kill switch INTERNAL_ASSISTANT=off.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -236,6 +237,142 @@ async function openSystemReports() {
   };
 }
 
+async function salesHistory(outletIds: string[] | null, days: number, by: "day" | "product") {
+  const d = Math.max(1, Math.min(31, Math.round(days || 7)));
+  if (by === "product") {
+    const rows = await prisma.salesTransaction.groupBy({
+      by: ["menuName"],
+      where: {
+        transactedAt: { gte: new Date(Date.now() - d * 86_400_000) },
+        ...(outletIds ? { outletId: { in: outletIds } } : {}),
+      },
+      _sum: { grossAmount: true, quantity: true },
+      orderBy: { _sum: { grossAmount: "desc" } },
+      take: 15,
+    });
+    return {
+      days: d,
+      topProducts: rows.map((r) => ({
+        product: r.menuName,
+        gross: rm(Number(r._sum.grossAmount ?? 0)),
+        qty: Number(r._sum.quantity ?? 0),
+      })),
+    };
+  }
+  const outletFilter = outletIds
+    ? Prisma.sql`AND "outletId" IN (${Prisma.join(outletIds)})`
+    : Prisma.empty;
+  const rows = await prisma.$queryRaw<Array<{ day: string; gross: number; txns: bigint }>>`
+    SELECT (("transactedAt" AT TIME ZONE 'Asia/Kuala_Lumpur')::date)::text AS day,
+           COALESCE(sum("grossAmount"), 0)::float AS gross, count(*) AS txns
+    FROM "SalesTransaction"
+    WHERE "transactedAt" >= now() - (${d} || ' days')::interval ${outletFilter}
+    GROUP BY 1 ORDER BY 1 DESC
+  `;
+  return { days: d, perDay: rows.map((r) => ({ day: r.day, gross: rm(r.gross), transactions: Number(r.txns) })) };
+}
+
+async function wastageSummary(outletIds: string[] | null, days: number) {
+  const d = Math.max(1, Math.min(31, Math.round(days || 7)));
+  const rows = await prisma.stockAdjustment.findMany({
+    where: {
+      createdAt: { gte: new Date(Date.now() - d * 86_400_000) },
+      adjustmentType: { in: ["WASTAGE", "BREAKAGE", "EXPIRED", "SPILLAGE"] },
+      ...(outletIds ? { outletId: { in: outletIds } } : {}),
+    },
+    select: {
+      adjustmentType: true,
+      quantity: true,
+      costAmount: true,
+      product: { select: { name: true, baseUom: true } },
+      outlet: { select: { name: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  const totalCost = rows.reduce((s, r) => s + Number(r.costAmount ?? 0), 0);
+  const byProduct = new Map<string, { qty: number; cost: number; uom: string }>();
+  for (const r of rows) {
+    const key = r.product.name;
+    const e = byProduct.get(key) ?? { qty: 0, cost: 0, uom: r.product.baseUom ?? "" };
+    e.qty += Number(r.quantity);
+    e.cost += Number(r.costAmount ?? 0);
+    byProduct.set(key, e);
+  }
+  const top = [...byProduct.entries()]
+    .sort((a, b) => b[1].cost - a[1].cost)
+    .slice(0, 15)
+    .map(([product, v]) => ({ product, qty: v.qty, uom: v.uom, cost: rm(v.cost) }));
+  return { days: d, events: rows.length, estCost: rm(totalCost), topProducts: top };
+}
+
+// ── Owner-only "real intelligence": guarded schema exploration + SELECT-only SQL ──
+// The model can explore the ACTUAL database when the canned tools don't cover a
+// question. Every guard is enforced in code:
+//   - public schema only; credential-ish columns denied by keyword
+//   - single statement, comments stripped, write/DDL keywords rejected
+//   - the query is wrapped as SELECT * FROM ( <sql> ) q LIMIT 200 — anything
+//     that isn't a SELECT fails to parse inside FROM, and rows are capped
+//   - 8s statement timeout inside a transaction; output capped at ~12k chars
+const SQL_DENY =
+  /\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|copy|vacuum|execute|call|do|listen|notify|reset|begin|commit|rollback|lock|reindex|cluster|comment|prepare|deallocate|pg_sleep|pg_read|pg_write|pg_terminate_backend|pg_cancel_backend|dblink|lo_import|lo_export)\b/i;
+const SQL_SENSITIVE = /passwordhash|"pin"|\botp\b|secret|apikey|api_key|refresh_token|access_token/i;
+
+function stripSqlComments(sql: string): string {
+  return sql.replace(/--[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ");
+}
+
+async function queryDatabase(rawSql: string) {
+  const sql = stripSqlComments(String(rawSql ?? "")).trim().replace(/;+\s*$/, "");
+  if (!sql) return { error: "empty query" };
+  if (sql.includes(";")) return { error: "one statement only" };
+  if (!/^\s*(select|with)\b/i.test(sql)) return { error: "SELECT/WITH queries only" };
+  if (SQL_DENY.test(sql)) return { error: "write/DDL keywords are not allowed" };
+  if (SQL_SENSITIVE.test(sql)) return { error: "credential columns are off-limits" };
+  if (/\b(auth|storage|pg_catalog|information_schema)\s*\./i.test(sql))
+    return { error: "public schema only" };
+
+  const wrapped = `SELECT * FROM ( ${sql} ) q LIMIT 200`;
+  const rows = await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
+    await tx.$executeRawUnsafe("SET LOCAL statement_timeout = 8000");
+    return tx.$queryRawUnsafe<unknown[]>(wrapped);
+  });
+  // BigInt-safe serialize; cap the payload so a fat result can't blow the prompt.
+  const json = JSON.stringify(rows, (_k, v) => (typeof v === "bigint" ? Number(v) : v));
+  if (json.length > 12_000) {
+    return {
+      rowCount: Array.isArray(rows) ? rows.length : 0,
+      truncated: true,
+      note: "result truncated at 12k chars — narrow the query (fewer columns, tighter WHERE, aggregate)",
+      rowsJson: json.slice(0, 12_000),
+    };
+  }
+  return { rowCount: Array.isArray(rows) ? rows.length : 0, rows };
+}
+
+async function listTables() {
+  const rows = await prisma.$queryRaw<Array<{ table_name: string; approx_rows: number }>>`
+    SELECT c.relname AS table_name, GREATEST(c.reltuples, 0)::float AS approx_rows
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+    ORDER BY c.relname
+  `;
+  return { tables: rows.map((r) => ({ name: r.table_name, approxRows: Math.round(r.approx_rows) })) };
+}
+
+async function describeTable(table: string) {
+  const rows = await prisma.$queryRaw<Array<{ column_name: string; data_type: string; is_nullable: string }>>`
+    SELECT column_name, data_type, is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = ${String(table ?? "")}
+    ORDER BY ordinal_position
+  `;
+  if (rows.length === 0) return { error: `no public table named ${table}` };
+  const cols = rows.filter((c) => !SQL_SENSITIVE.test(c.column_name));
+  return { table, columns: cols.map((c) => ({ name: c.column_name, type: c.data_type, nullable: c.is_nullable === "YES" })) };
+}
+
 // OWNER/ADMIN only
 async function unpaidInvoices() {
   const rows = await prisma.invoice.findMany({
@@ -335,6 +472,67 @@ const TOOLS: ToolSpec[] = [
   },
   {
     def: {
+      name: "sales_history",
+      description: "Sales over the last N days — per-day totals, or top products by revenue (by='product').",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          days: { type: "number", description: "Days back (default 7, max 31)" },
+          by: { type: "string", enum: ["day", "product"], description: "Group by day (default) or product" },
+        },
+      },
+    },
+    run: (a, scope) => salesHistory(scope, Number(a.days ?? 7), a.by === "product" ? "product" : "day"),
+  },
+  {
+    def: {
+      name: "wastage_summary",
+      description: "Wastage/breakage/expiry over the last N days: event count, estimated cost, top products.",
+      input_schema: {
+        type: "object" as const,
+        properties: { days: { type: "number", description: "Days back (default 7, max 31)" } },
+      },
+    },
+    run: (a, scope) => wastageSummary(scope, Number(a.days ?? 7)),
+  },
+  {
+    def: {
+      name: "list_tables",
+      description: "List all tables in the business database with approximate row counts. Use before writing SQL.",
+      input_schema: { type: "object" as const, properties: {} },
+    },
+    ownerOnly: true,
+    run: () => listTables(),
+  },
+  {
+    def: {
+      name: "describe_table",
+      description: "Column names and types for one table. Use before querying it.",
+      input_schema: {
+        type: "object" as const,
+        properties: { table: { type: "string", description: "Exact table name from list_tables" } },
+        required: ["table"],
+      },
+    },
+    ownerOnly: true,
+    run: (a) => describeTable(String(a.table ?? "")),
+  },
+  {
+    def: {
+      name: "query_database",
+      description:
+        "Run a read-only SQL SELECT against the business database when no other tool covers the question. Single statement, public schema, auto-capped at 200 rows. Table names are PascalCase and must be double-quoted (e.g. \"SalesTransaction\"). Timestamps are UTC — business day is MYT (UTC+8), so convert with AT TIME ZONE 'Asia/Kuala_Lumpur'. Always aggregate rather than pulling raw rows when possible.",
+      input_schema: {
+        type: "object" as const,
+        properties: { sql: { type: "string", description: "The SELECT (or WITH…SELECT) statement" } },
+        required: ["sql"],
+      },
+    },
+    ownerOnly: true,
+    run: (a) => queryDatabase(String(a.sql ?? "")),
+  },
+  {
+    def: {
       name: "unpaid_invoices",
       description: "Supplier invoices not yet fully paid, with amounts and due dates. Finance data.",
       input_schema: { type: "object" as const, properties: {} },
@@ -370,13 +568,16 @@ const TOOLS: ToolSpec[] = [
 const SYSTEM = `You are the internal operations assistant for Celsius Coffee (Malaysian specialty coffee chain, outlets: Putrajaya, Shah Alam, Tamarind/IOI, Nilai). You chat with the OWNER and OUTLET MANAGERS over WhatsApp.
 
 Rules:
-- Answer questions using the tools. Never invent numbers — if a tool doesn't cover it, say so plainly and suggest they check BackOffice.
+- Answer questions using the tools. Prefer the purpose-built tools; when none covers the question AND you have the database tools (owner/admin), explore: list_tables → describe_table → query_database. Never invent numbers — if you truly can't get it, say so plainly.
 - If the message reports a system problem/bug (something broken or behaving wrongly), call file_bug_report instead of answering.
-- Reply in the sender's language (Malay, English, or their mix). Keep it SHORT and WhatsApp-friendly: a few lines, *bold* for key numbers, no markdown headers, no tables.
+- Reply in the sender's language (Malay, English, or their mix). Keep it SHORT and chat-friendly: a few lines, *bold* for key numbers, no markdown headers, no tables. Lead with the answer, then 1-2 lines of context. Mention it when a number is an estimate.
 - Data is scoped server-side: managers only ever see their own outlet's data. Never mention other outlets' numbers to a manager.
 - Be direct and useful, like a sharp ops colleague. No corporate filler.`;
 
+// Managers get the canned tools (4 rounds is plenty); owner/admin may need
+// list → describe → query → refine, so they get more exploration room.
 const MAX_ROUNDS = 4;
+const MAX_ROUNDS_OWNER = 7;
 
 export async function runInternalAssistant(params: {
   reporter: AssistantReporter;
@@ -397,8 +598,9 @@ export async function runInternalAssistant(params: {
     const intro = `Sender: ${params.reporter.name} (${params.reporter.role}, scope: ${scope.label}). Today (MYT): ${mytYmd()}.${historyLines ? `\n\nRecent conversation:\n${historyLines}` : ""}\n\nNew message:\n${params.text}`;
 
     const messages: Anthropic.MessageParam[] = [{ role: "user", content: intro }];
+    const maxRounds = params.reporter.role === "MANAGER" ? MAX_ROUNDS : MAX_ROUNDS_OWNER;
 
-    for (let round = 0; round < MAX_ROUNDS; round++) {
+    for (let round = 0; round < maxRounds; round++) {
       const res = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 700,

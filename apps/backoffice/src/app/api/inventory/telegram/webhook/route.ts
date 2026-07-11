@@ -9,6 +9,8 @@ import { detectPaymentFlags, appendInvoiceFlags } from "@/lib/inventory/flag-det
 import { computeDepositAmount } from "@/lib/inventory/deposit";
 import { sendProofOfPayment } from "@/lib/inventory/procurement-whatsapp";
 import { rescueNoMatch, judgeDuplicate } from "@/lib/inventory/agents/pop-verifier-run";
+import { runInternalAssistant, assistantEnabled } from "@/lib/ops-intake/assistant";
+import { resolveOwner } from "@/lib/ops-pulse/router";
 import {
   sendMessage,
   sendPhoto,
@@ -74,6 +76,27 @@ export async function POST(request: NextRequest) {
   const hasPhoto = message.photo && message.photo.length > 0;
   const hasDoc = message.document && /\.(pdf|jpg|jpeg|png|webp)$/i.test(message.document.file_name ?? "");
 
+  // Plain text from the OWNER's chat → the internal assistant (same brain as
+  // the WhatsApp channel, owner scope + database tools). Telegram is the richer
+  // owner pipe: no 24h window, no per-message cost, long replies render fine.
+  // Text from any other chat stays ignored (historic behavior — this webhook is
+  // otherwise the POP inbox).
+  const text = (message.text ?? "").trim();
+  if (text && !hasPhoto && !hasDoc) {
+    const ownerChat = (process.env.TELEGRAM_OWNER_CHAT_ID ?? "").trim();
+    if (ownerChat && String(message.chat.id) === ownerChat) {
+      after(async () => {
+        try {
+          await handleOwnerTelegramText(message.chat.id, message.message_id, text);
+        } catch (err) {
+          console.error("[telegram webhook] assistant error:", err);
+          await sendMessage(message.chat.id, "⚠️ Assistant hit an error — try again.", message.message_id);
+        }
+      });
+    }
+    return NextResponse.json({ ok: true });
+  }
+
   if (!hasPhoto && !hasDoc) {
     return NextResponse.json({ ok: true });
   }
@@ -90,6 +113,61 @@ export async function POST(request: NextRequest) {
   });
 
   return NextResponse.json({ ok: true });
+}
+
+// ─── Owner assistant (text messages) ────────────────────────
+// Same brain as the WhatsApp internal assistant, owner scope (all outlets +
+// finance + database tools). Stateless per message for now — Telegram thread
+// history isn't persisted. A problem report files a SystemReport exactly like
+// the WhatsApp path (source "telegram"); no owner digest — the owner IS the
+// reporter here.
+async function handleOwnerTelegramText(chatId: number, msgId: number, text: string) {
+  if (!assistantEnabled()) {
+    await sendMessage(chatId, "Assistant is off (INTERNAL_ASSISTANT=off or no API key).", msgId);
+    return;
+  }
+  const owner = await resolveOwner();
+  if (!owner) {
+    await sendMessage(chatId, "No active OWNER user found in BackOffice.", msgId);
+    return;
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: owner.userId },
+    select: { outletId: true, outletIds: true },
+  });
+  const outcome = await runInternalAssistant({
+    reporter: {
+      id: owner.userId,
+      name: owner.name,
+      role: "OWNER",
+      outletId: user?.outletId ?? null,
+      outletIds: user?.outletIds ?? [],
+    },
+    text,
+    history: [],
+  });
+  if (outcome.kind === "reply") {
+    // Telegram caps a message at 4096 chars — chunk long replies.
+    for (let i = 0; i < outcome.text.length; i += 3900) {
+      await sendMessage(chatId, outcome.text.slice(i, i + 3900), i === 0 ? msgId : undefined);
+    }
+    return;
+  }
+  if (outcome.kind === "report") {
+    const report = await prisma.systemReport.create({
+      data: {
+        reporterUserId: owner.userId,
+        reporterName: owner.name,
+        reporterPhone: owner.phone ?? `telegram:${chatId}`,
+        body: text,
+        source: "telegram",
+      },
+      select: { id: true },
+    });
+    await sendMessage(chatId, `🐞 Logged as a system report (ref ${report.id.slice(0, 8)}).`, msgId);
+    return;
+  }
+  await sendMessage(chatId, "Couldn't work that one out — try rephrasing, or check BackOffice.", msgId);
 }
 
 // ─── Message Processing ─────────────────────────────────────

@@ -228,6 +228,13 @@ export async function notifyResolvedReports(): Promise<{ notified: number; faile
   });
   for (const r of due) {
     try {
+      // Telegram-filed reports may carry a "telegram:<chatId>" pseudo-phone —
+      // nothing to WhatsApp; stamp it so it doesn't retry forever (the owner
+      // sees resolutions in the queue anyway).
+      if (digits(r.reporterPhone).length < 8) {
+        await prisma.systemReport.update({ where: { id: r.id }, data: { reporterNotifiedAt: new Date() } });
+        continue;
+      }
       const first = (r.reporterName || "there").trim().split(/\s+/)[0];
       const ref = r.id.slice(0, 8);
       const text = `✅ ${first}, your report (ref ${ref}) is fixed${r.resolution ? ` — ${r.resolution}` : ""}. Thanks for flagging it 🙏`;
