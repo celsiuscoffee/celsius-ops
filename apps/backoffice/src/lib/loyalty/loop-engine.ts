@@ -567,10 +567,12 @@ export async function sendRound(roundId: string) {
     .map((r) => r.member_id).filter((x): x is string => !!x);
   const tokensByMember = await pushTokensByMember(treatmentMemberIds);
 
-  // GLOBAL frequency cap across ALL loops: skip any member who already hit the
-  // weekly cap (any loop) so winback + round-gap + reward-expiring etc. can't
-  // stack into spam in one week. Per-loop cooldowns don't see each other; this
-  // does. Tunable: app_settings.marketing_weekly_cap (default 2 per 7 days).
+  // GLOBAL frequency cap across ALL marketing sends: skip any member who
+  // already hit the weekly cap so winback + round-gap + reward-expiring etc.
+  // can't stack into spam in one week. Per-loop cooldowns don't see each
+  // other; this does — and since migration 068 the RPC also counts
+  // campaigns-auto / manual-blast sends (sms_logs), which previously slipped
+  // past the cap. Tunable: app_settings.marketing_weekly_cap (default 2/7d).
   const cappedPhones = new Set<string>();
   {
     let cap = 2;
