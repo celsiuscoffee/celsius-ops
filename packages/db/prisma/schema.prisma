@@ -645,6 +645,7 @@ model SystemReport {
   source         String?   @default("whatsapp")
   resolution     String?
   resolvedAt     DateTime?
+  reporterNotifiedAt DateTime? // notify cron stamps this after WhatsApping the reporter the resolution
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @default(now()) @updatedAt
 
