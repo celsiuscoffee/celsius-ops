@@ -298,3 +298,25 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   PITR decision (§4). SMS attribution holdout (loop #1) still needs the
   two owner decisions: exact reward + success bar
   (`docs/design/sms-loop-engineering.md`).
+
+- 2026-07-11 — **Checklist/SOP pipeline audit + fixes** (this session). Verified
+  facts: (1) `generate`'s Source-1 existence check filtered `assignedToId:
+  null`, but the assign cron SETS assignedToId → every assign→tab-open cycle
+  minted a duplicate (32 dup groups/30d, 16 phantom-PENDING beside a completed
+  sibling — dragged owners' completion % and the RM80 checklist lever). Fixed:
+  any (sop,outlet,date,slot) row now blocks re-creation; generation extracted
+  to `apps/staff/src/lib/checklists/generate.ts`. (2) Generation ran ONLY on
+  tab-open — Nilai had ZERO checklists Jul 6–9; most outlets generated ~15:00
+  MYT so morning tasks were born past the nudge window. Fixed: daily cron
+  `staff /api/cron/generate-checklists` at 00:15 MYT (16:15 UTC). (3) JIT
+  nudge pass treated a phoneless clocked-in owner as absent and re-assigned
+  their task; phone now gates the DM only. Prod cleanup applied: 44 phantom
+  checklists + 151 items deleted (kept all COMPLETED/IN_PROGRESS; 6 groups
+  where BOTH copies were completed kept as history). **Open (owner call):**
+  F3 cross-station "anyone" fallback (BOH tasks land on baristas when no
+  kitchen crew rostered — flag in-app vs stop-at-lead+manager-alert); F8
+  SopOutlet mapping vs `appliesToAllOutlets=true` (Nilai gets 7/14 tasks —
+  confirm fixture reality); shared-checklist Option A accountability still
+  parked. Dormant traps documented in the audit: `expectedDueMinutes=0`
+  coerced to 60; SHIFT-recurrence rows get shift=OPENING + dueAt=null;
+  `reset-checklists` cron is a near-no-op.
