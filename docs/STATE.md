@@ -63,6 +63,16 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   writes `fin_matches`. Only `ap`/`categorization` exceptions have a
   resolver; other exception types noop on resolve.
 
+- 2026-07-11 — **Sales revenue is recognised at PAYMENT, not fulfilment.**
+  Pickup/QR `orders` payment is confirmed at the pending→paid/preparing
+  transition (markRmOrderPaid / confirm-stripe), so the sales dashboard's old
+  `status='completed'`-only filter hid paid orders still being brewed (a paid
+  RM 77.30 QR order sat invisible all morning). Canonical set is
+  `PICKUP_PAID_STATUSES` in `unified-sales.ts` (paid/preparing/ready/collected/
+  completed) — used by dashboard, reports, staff app, labour gate. `pos_orders`
+  stays `completed`-only: the till writes completed at ring-up (= paid) and
+  Grab settles at collection. Historical days are unaffected — the hourly
+  sweep-stale-orders cron forces every paid order terminal within ~3h.
 - 2026-07-05 — **Revenue is split across 3 tables** and reconciles to the
   manpower workbook to the ringgit: `storehub_sales` (per-outlet retirement
   Jun 15–17), `pos_orders` (in-house POS from Jun 8/15/18, GrabFood

@@ -76,7 +76,7 @@ async function revenueBetween(
       COALESCE((
         SELECT sum(total) / 100.0 FROM orders
         WHERE store_id = ${storeId}
-          AND status IN ('completed','ready','collected','paid')
+          AND status IN ('completed','ready','collected','paid','preparing')
           AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
               BETWEEN ${fromDate}::date AND ${toDate}::date
       ), 0)
