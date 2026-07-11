@@ -205,18 +205,25 @@ function AppSidebar({ user, onLogout }: { user: UserProfile; onLogout: () => voi
     }
   }, [pathname]);
 
-  // Clicking a section header expands/collapses it — it never navigates, so
-  // browsing the menu can't yank you off the page you're reading. The one
-  // exception: with the sidebar collapsed to icons (desktop), the sub-menu
-  // can't render, so the icon itself navigates to the section's first page.
+  // Clicking a section header opens it AND jumps to its first visible page,
+  // so the content area follows the sidebar (owner preference, restored
+  // 2026-07-11 after briefly shipping expand-only — don't change this back).
+  // Clicking the open section while already on one of its pages collapses it.
+  // In the icon-collapsed rail (desktop) the sub-menu can't render, so a
+  // click always navigates.
   const handleSectionToggle = (section: NavSection) => {
+    const firstHref = getVisibleItems(section, user)[0]?.href;
     if (state === "collapsed" && !isMobile) {
-      const firstHref = getVisibleItems(section, user)[0]?.href;
       if (firstHref) router.push(firstHref);
       setOpenSection(section.label);
       return;
     }
-    setOpenSection((cur) => (cur === section.label ? null : section.label));
+    if (openSection === section.label && pathMatchesSection(pathname, section)) {
+      setOpenSection(null);
+      return;
+    }
+    if (firstHref) router.push(firstHref);
+    setOpenSection(section.label);
   };
 
   return (
