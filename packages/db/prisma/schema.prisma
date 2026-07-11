@@ -627,6 +627,32 @@ model PendingPop {
   @@index([token])
 }
 
+/// Internal bug/problem report filed over WhatsApp by an owner/admin/manager (the
+/// internal-intake branch of the webhook). Multi-message reports from the same
+/// reporter within a short window append to one OPEN row (body + media) instead of
+/// creating duplicates. Worked as a queue from Claude Code ("work the bug queue");
+/// no UI in v1. FKs loose (no Prisma relations) — append-only intake log.
+model SystemReport {
+  id             String    @id @default(uuid())
+  reporterUserId String
+  reporterName   String
+  reporterPhone  String
+  outletId       String? // reporter's home outlet, when known
+  body           String    @default("")
+  mediaUrls      String[]  @default([])
+  waMessageIds   String[]  @default([])
+  status         String    @default("OPEN") // OPEN | IN_PROGRESS | RESOLVED | DISMISSED
+  source         String?   @default("whatsapp")
+  resolution     String?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  @@index([status])
+  @@index([reporterUserId, createdAt])
+  @@index([createdAt])
+}
+
 enum InvoiceStatus {
   DRAFT
   INITIATED
