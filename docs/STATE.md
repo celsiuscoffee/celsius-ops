@@ -112,6 +112,25 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `*.sentry.io`) in the environment's network settings; verify with
   `find_organizations`. Until then the self-fixing loop cannot run. —
   blocking.
+- 2026-07-11 — **`JWT_SECRET` is missing from the order app's Vercel env**
+  (project `celsius-pickup-app`) — every request logs `[env] order: MISSING
+  (required): JWT_SECRET` in BOTH serverless and edge runtimes (verified via
+  Vercel runtime logs); this is the 3.6k-event "Ongoing" Sentry issue from
+  the weekly report. Not just noise: `@celsius/auth getJwtSecret()` THROWS
+  without it, so `POST /api/orders/[orderId]/confirm-maybank-qr` (backoffice
+  "Mark paid & release" for Maybank QR) 500s whenever used. Customer/staff
+  JWT paths survive on the `CUSTOMER_JWT_SECRET`/`STAFF_JWT_SECRET`
+  fallbacks. **Human action (payments-adjacent, hard rule 6):** add
+  `JWT_SECRET` to the celsius-pickup-app Vercel project with the SAME value
+  as backoffice's, redeploy. — blocking Maybank-QR release.
+- 2026-07-11 — **`ANTHROPIC_API_KEY` is missing from the staff app's Vercel
+  env** — confirmed live: `GET /api/audits/staff/<id>/coach` 500s with
+  "Could not resolve authentication method" (the 21-event "New" Sentry
+  issue); boot check also flags `BACKOFFICE_INTERNAL_URL` (recommended)
+  missing. **Human action:** add `ANTHROPIC_API_KEY` (and ideally
+  `BACKOFFICE_INTERNAL_URL`) to the staff Vercel project. Optional code
+  hardening later: skills-coach/insights routes could 503 gracefully when
+  the key is absent instead of 500.
 - 2026-07-05 — **`pos_*` + `orders`: 14 `USING(true)` policies are BY
   DESIGN** (SUNMI tills write via the anon key). Do NOT lint-fix — needs a
   data-layer plan (rls-strategy.md Path A). 4 `security_definer_view` +
@@ -185,11 +204,13 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   (`trig_01NZbJV3A36TeXRKpBkFjxWx`, 05:00 MYT) picks the new procedure up
   automatically once merged — its prompt defers to the skill file. **Blocked
   on the sentry.io egress allowlist fix (see Open failures)**; after the
-  owner fixes that, the first live run should start with the week's top
-  issues from the 2026-07-11 weekly email: `[env] order: environment
-  problems detected` (3.6k events, Ongoing), `Could not resolve
-  authentication method` (21, New), `TypeError: Cannot read property
-  'toFixed' of undefined` (5, New).
+  owner fixes that, note: 2 of the week's top 3 issues were already
+  root-caused WITHOUT Sentry via Vercel runtime logs (see the two
+  2026-07-11 Open failures — both are missing Vercel env vars, human
+  actions). Remaining for the first live run: `TypeError: Cannot read
+  property 'toFixed' of undefined` (5 events, New — needs the Sentry stack
+  trace to localise), then verify the two env fixes landed (issues go
+  quiet → resolve them in Sentry per the skill).
 
 - 2026-07-10 — **Backoffice nav UX rework** (PR #894, merged on owner's
   approval after a clickable preview artifact). Owner said the tabs were
