@@ -104,6 +104,14 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Open failures
 
+- 2026-07-11 — **`sentry.io` is NOT in the CCR environment's egress
+  allowlist** — live Sentry MCP call returned `403 Host not in allowlist:
+  sentry.io` — so the nightly Sentry-triage routine (05:00 MYT) has no-oped
+  at its guard step every run since 2026-07-04; the weekly email digest was
+  the only error visibility. **Human action:** add `sentry.io` (+
+  `*.sentry.io`) in the environment's network settings; verify with
+  `find_organizations`. Until then the self-fixing loop cannot run. —
+  blocking.
 - 2026-07-05 — **`pos_*` + `orders`: 14 `USING(true)` policies are BY
   DESIGN** (SUNMI tills write via the anon key). Do NOT lint-fix — needs a
   data-layer plan (rls-strategy.md Path A). 4 `security_definer_view` +
@@ -165,6 +173,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-07-11 — **Sentry self-fixing loop** (branch
+  `claude/sentry-self-fixing-loop-5tdrxm`): `sentry-triage` skill upgraded
+  from one-way triage to a closed loop — per-issue draft-PR fixes (branch
+  convention `claude/sentry-fix-<shortid>`, ≤3/run), next-run verification
+  of merged fixes against live Sentry (quiet → resolve issue w/ PR link;
+  still erroring → one `-r2` retry; then escalate here), state reconstructed
+  from GitHub PR search + Sentry status (no repo ledger). Design:
+  `docs/design/sentry-self-fix-loop.md`. The existing nightly routine
+  (`trig_01NZbJV3A36TeXRKpBkFjxWx`, 05:00 MYT) picks the new procedure up
+  automatically once merged — its prompt defers to the skill file. **Blocked
+  on the sentry.io egress allowlist fix (see Open failures)**; after the
+  owner fixes that, the first live run should start with the week's top
+  issues from the 2026-07-11 weekly email: `[env] order: environment
+  problems detected` (3.6k events, Ongoing), `Could not resolve
+  authentication method` (21, New), `TypeError: Cannot read property
+  'toFixed' of undefined` (5, New).
 
 - 2026-07-10 — **Backoffice nav UX rework** (PR #894, merged on owner's
   approval after a clickable preview artifact). Owner said the tabs were
