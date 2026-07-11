@@ -148,9 +148,11 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   pick. Structure: rail reordered into clusters (Sales/Procurement/Ops ·
   HR/Finance · Rewards/Marketing · Catalog/Settings, with rail dividers —
   `dividerBefore` was previously dead config, now rendered); duplicate
-  Packaging entry removed (single home: Catalog); supplier-chats renamed
-  "Supplier Chats" and /inventory/orders is now "Purchase Orders" (labels
-  were reversed-ish); GrabFood folded into Marketing → Advertising;
+  Packaging entry removed (single home: Catalog); GrabFood folded into
+  Marketing → Advertising; ordering labels were briefly swapped to
+  "Supplier Chats"/"Purchase Orders" but the owner reverted them next day —
+  the team's vocabulary is **"Purchase Orders" = supplier-chats page,
+  "PO List" = /inventory/orders**; keep it;
   single-item subgroups merged (HR Leave→Time & Leave, Rewards Manual
   Grant→Channels, Settings People→Business, Procurement Analytics→Overview);
   HR icon Bot→Users. ⌘K palette now searches nav pages (RBAC-filtered) above
