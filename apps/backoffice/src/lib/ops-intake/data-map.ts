@@ -17,8 +17,10 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
 - Table names are PascalCase and must be double-quoted in SQL ("SalesTransaction"); fin_*/hr_* tables are snake_case.
 
 ## Sales & revenue
-- "SalesTransaction" = authoritative sales (StoreHub-sourced): transactedAt (UTC), grossAmount, quantity, menuName, outletId.
-- storehub_sales / storehub_sale_items = raw sync staging — do NOT sum these for revenue.
+- unified_sales (VIEW) = the ONLY authoritative sales source: merges own-POS (source='pos_native', live), StoreHub history and consignment. Columns: biz_date (business date, pre-computed — no timezone math needed), outlet_id, outlet_name, gross, discount, sst, nett, tender, channel, status, is_refund.
+- Revenue convention: sum(nett) WHERE NOT is_refund AND (status IS NULL OR status <> 'paymentCancelled').
+- unified_sale_items (VIEW) = product-level: biz_date, outlet_id, product_name, variant, quantity, unit_price, line_total.
+- TRAPS: "SalesTransaction" is a DEAD sync (no rows after 2026-04-11); storehub_sales / hubbo_sales / pos_orders are raw per-source tables already merged into unified_sales — never sum them directly.
 - Pickup/QR revenue is recognised at PAYMENT time, not fulfilment.
 
 ## Cash & banking (the trap zone)
