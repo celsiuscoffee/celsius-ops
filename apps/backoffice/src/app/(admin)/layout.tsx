@@ -83,7 +83,7 @@ function SectionLinks({
   };
 
   if (section.items) {
-    const vis = section.items.filter((item) => canAccess(user, item.moduleKey));
+    const vis = section.items.filter((item) => !item.hidden && canAccess(user, item.moduleKey));
     const hrefs = vis.map((i) => i.href);
     return (
       <>
@@ -104,7 +104,7 @@ function SectionLinks({
     return (
       <>
         {section.subgroups.map((sg) => {
-          const vis = sg.items.filter((item) => canAccess(user, item.moduleKey));
+          const vis = sg.items.filter((item) => !item.hidden && canAccess(user, item.moduleKey));
           if (vis.length === 0) return null;
           const hrefs = vis.map((i) => i.href);
           return (

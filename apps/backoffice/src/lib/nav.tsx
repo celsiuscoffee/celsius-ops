@@ -91,6 +91,12 @@ export type NavItem = {
   href: string;
   icon: React.ReactNode;
   moduleKey?: string;
+  // Hidden items stay in the registry — findable via ⌘K, gated by the route
+  // guard, counted by the perms dev-guard — but don't render in the sidebar.
+  // Use for pages reachable from a sibling page (in-page tabs/links) or
+  // rarely-visited config, so the sidebar stays short without orphaning URLs
+  // or fine-grained grants.
+  hidden?: boolean;
 };
 
 export type NavSubgroup = {
@@ -198,93 +204,50 @@ export const NAV_SECTIONS: NavSection[] = [
       },
     ],
   },
-  // Ops — Overview (how the shops are doing), Daily (the surfaces worked
-  // through the day), Setup (the SOP/category definitions behind them).
+  // Ops — housekeeping 2026-07-11: flat again after pruning. /ops/dashboard
+  // and /ops/performance render the SAME /api/ops/performance data;
+  // Performance is the superset (filters, trend, drill-downs), so it's the
+  // section landing and the tile-only Dashboard is hidden. SOP Categories
+  // (pure taxonomy setup) moved to Settings → System.
   {
     label: "Ops",
     icon: <ClipboardCheck className={ICON_SIZE} />,
-    subgroups: [
-      {
-        label: "Overview",
-        items: [
-          { label: "Dashboard",   href: "/ops/dashboard",   icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ops:performance" },
-          { label: "Performance", href: "/ops/performance", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ops:performance" },
-        ],
-      },
-      {
-        label: "Daily",
-        items: [
-          { label: "Ops Workspace", href: "/ops/chat-inbox", icon: <MessageSquare className={ICON_SIZE} />,  moduleKey: "ops:chat-inbox" },
-          { label: "Audits",        href: "/ops/audit",      icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "ops:audit" },
-        ],
-      },
-      {
-        label: "Setup",
-        items: [
-          { label: "SOPs & Templates", href: "/ops/sops",       icon: <BookOpen className={ICON_SIZE} />, moduleKey: "ops:sops" },
-          { label: "Categories",       href: "/ops/categories", icon: <Tags className={ICON_SIZE} />,     moduleKey: "ops:categories" },
-        ],
-      },
+    items: [
+      { label: "Performance",      href: "/ops/performance", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ops:performance" },
+      { label: "Dashboard",        href: "/ops/dashboard",   icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ops:performance", hidden: true },
+      { label: "Ops Workspace",    href: "/ops/chat-inbox",  icon: <MessageSquare className={ICON_SIZE} />,   moduleKey: "ops:chat-inbox" },
+      { label: "Audits",           href: "/ops/audit",       icon: <ClipboardCheck className={ICON_SIZE} />,  moduleKey: "ops:audit" },
+      { label: "SOPs & Templates", href: "/ops/sops",        icon: <BookOpen className={ICON_SIZE} />,        moduleKey: "ops:sops" },
     ],
   },
   {
     label: "HR",
     icon: <Users className={ICON_SIZE} />,
     dividerBefore: true,
-    // BrioHR-style module IA: the sidebar picks a module, the in-module tab
-    // strip (components/hr/module-tabs.tsx) switches between its sibling
-    // pages. Sub-pages of a module deliberately do NOT get their own sidebar
-    // entry. URLs are unchanged; orphan pages (analytics, compliance,
-    // certifications, shift-swaps) reuse their parent module's key so the
-    // access registry needs no new grants.
-    subgroups: [
-      {
-        label: "Overview",
-        items: [
-          { label: "Dashboard", href: "/hr",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "hr:dashboard" },
-          { label: "Analytics", href: "/hr/analytics", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "hr:dashboard" },
-        ],
-      },
-      {
-        label: "People",
-        items: [
-          { label: "Employees",      href: "/hr/employees",      icon: <UserCog className={ICON_SIZE} />,     moduleKey: "hr:employees" },
-          { label: "Certifications", href: "/hr/certifications", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "hr:employees" },
-          { label: "Memos",          href: "/hr/memos",          icon: <FileText className={ICON_SIZE} />,    moduleKey: "hr:memos" },
-        ],
-      },
-      {
-        label: "Time & Leave",
-        items: [
-          { label: "Attendance",     href: "/hr/attendance",  icon: <Clock className={ICON_SIZE} />,          moduleKey: "hr:attendance" },
-          { label: "Overtime",       href: "/hr/overtime",    icon: <Clock className={ICON_SIZE} />,          moduleKey: "hr:overtime" },
-          { label: "Leave Requests", href: "/hr/leave",       icon: <CalendarOff className={ICON_SIZE} />,    moduleKey: "hr:leave" },
-          { label: "Shift Swaps",    href: "/hr/shift-swaps", icon: <ArrowLeftRight className={ICON_SIZE} />, moduleKey: "hr:schedules" },
-        ],
-      },
-      {
-        label: "Scheduling",
-        items: [
-          { label: "Schedules",      href: "/hr/schedules",    icon: <CalendarDays className={ICON_SIZE} />, moduleKey: "hr:schedules" },
-          { label: "Availability",   href: "/hr/availability", icon: <Clock className={ICON_SIZE} />,        moduleKey: "hr:schedules" },
-          { label: "Coverage Rules", href: "/hr/coverage",     icon: <Flame className={ICON_SIZE} />,        moduleKey: "hr:schedules" },
-        ],
-      },
-      {
-        label: "Payroll",
-        items: [
-          { label: "Payroll Runs",       href: "/hr/payroll",    icon: <Banknote className={ICON_SIZE} />,      moduleKey: "hr:payroll" },
-          { label: "Allowances",         href: "/hr/allowances", icon: <Banknote className={ICON_SIZE} />,      moduleKey: "hr:allowances" },
-          { label: "Statutory Calendar", href: "/hr/compliance", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "hr:payroll" },
-        ],
-      },
-      {
-        label: "Performance",
-        items: [
-          { label: "Monthly Scores",   href: "/hr/performance",      icon: <TrendingUp className={ICON_SIZE} />,    moduleKey: "hr:performance" },
-          { label: "Review Penalties", href: "/hr/review-penalties", icon: <AlertTriangle className={ICON_SIZE} />, moduleKey: "hr:review-penalties" },
-        ],
-      },
+    // BrioHR-style module IA, taken to its conclusion in the 2026-07-11
+    // housekeeping: the sidebar lists ONE entry per module; the in-module tab
+    // strip (components/hr/module-tabs.tsx — verified to render regardless of
+    // moduleAccess, payroll role-gate aside) reaches every sibling page, so
+    // those siblings are `hidden` here (⌘K + route gate + grants intact).
+    // Analytics is linked from the HR dashboard hub. URLs unchanged.
+    items: [
+      { label: "Dashboard",   href: "/hr",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "hr:dashboard" },
+      { label: "Analytics",   href: "/hr/analytics", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "hr:dashboard", hidden: true },
+      { label: "Employees",   href: "/hr/employees", icon: <UserCog className={ICON_SIZE} />,         moduleKey: "hr:employees" },
+      { label: "Certifications", href: "/hr/certifications", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "hr:employees", hidden: true },
+      { label: "Memos",       href: "/hr/memos",     icon: <FileText className={ICON_SIZE} />,        moduleKey: "hr:memos", hidden: true },
+      { label: "Attendance",  href: "/hr/attendance", icon: <Clock className={ICON_SIZE} />,          moduleKey: "hr:attendance" },
+      { label: "Overtime",    href: "/hr/overtime",   icon: <Clock className={ICON_SIZE} />,          moduleKey: "hr:overtime", hidden: true },
+      { label: "Shift Swaps", href: "/hr/shift-swaps", icon: <ArrowLeftRight className={ICON_SIZE} />, moduleKey: "hr:schedules", hidden: true },
+      { label: "Leave",       href: "/hr/leave",     icon: <CalendarOff className={ICON_SIZE} />,     moduleKey: "hr:leave" },
+      { label: "Schedules",   href: "/hr/schedules", icon: <CalendarDays className={ICON_SIZE} />,    moduleKey: "hr:schedules" },
+      { label: "Availability",   href: "/hr/availability", icon: <Clock className={ICON_SIZE} />,     moduleKey: "hr:schedules", hidden: true },
+      { label: "Coverage Rules", href: "/hr/coverage",     icon: <Flame className={ICON_SIZE} />,     moduleKey: "hr:schedules", hidden: true },
+      { label: "Payroll",     href: "/hr/payroll",   icon: <Banknote className={ICON_SIZE} />,        moduleKey: "hr:payroll" },
+      { label: "Allowances",  href: "/hr/allowances", icon: <Banknote className={ICON_SIZE} />,       moduleKey: "hr:allowances", hidden: true },
+      { label: "Statutory Calendar", href: "/hr/compliance", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "hr:payroll", hidden: true },
+      { label: "Performance", href: "/hr/performance", icon: <TrendingUp className={ICON_SIZE} />,    moduleKey: "hr:performance" },
+      { label: "Review Penalties", href: "/hr/review-penalties", icon: <AlertTriangle className={ICON_SIZE} />, moduleKey: "hr:review-penalties", hidden: true },
     ],
   },
   // Finance — moduleKeys start with "finance:", which canAccess hard-restricts
@@ -310,9 +273,11 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        // Pre-agentic views — kept until the new module reaches parity, and
-        // labelled as such so nobody mistakes them for the system of record.
-        label: "Legacy",
+        // NOT legacy (mislabelled that way briefly): these are the cash-basis
+        // lens, actively maintained — Cashflow is the daily bank-balance /
+        // cash-generated / projection view, Cash Tracking its per-outlet ×
+        // category matrix child. Books above is the accrual GL lens.
+        label: "Cash",
         items: [
           { label: "Cashflow",      href: "/finance/cashflow",      icon: <LineChart className={ICON_SIZE} />,       moduleKey: "finance:cashflow" },
           { label: "Cash Tracking", href: "/finance/cash-tracking", icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
@@ -372,11 +337,13 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       {
         // History = read-only audit trails of what was issued + redeemed.
+        // Points Log (the raw per-transaction points ledger) is hidden —
+        // audit-grade reference reached via ⌘K, not a daily surface.
         label: "History",
         items: [
           { label: "Vouchers Issued",    href: "/loyalty/vouchers",    icon: <TicketPercent className={ICON_SIZE} />, moduleKey: "loyalty:redemptions" },
           { label: "Points Redemptions", href: "/loyalty/redemptions", icon: <Receipt className={ICON_SIZE} />,       moduleKey: "loyalty:redemptions" },
-          { label: "Points Log",         href: "/loyalty/points-log",  icon: <Coins className={ICON_SIZE} />,         moduleKey: "loyalty:redemptions" },
+          { label: "Points Log",         href: "/loyalty/points-log",  icon: <Coins className={ICON_SIZE} />,         moduleKey: "loyalty:redemptions", hidden: true },
         ],
       },
     ],
@@ -424,8 +391,9 @@ export const NAV_SECTIONS: NavSection[] = [
       // Menu & BOM (recipe/BOM editor) lives with the catalog/menu definition,
       // not under Procurement. Gate stays inventory:menus so access is unchanged.
       { label: "Menu & BOM",   href: "/inventory/menus",       icon: <BookOpen className={ICON_SIZE} />, moduleKey: "inventory:menus" },
-      // Printable per-item BOM. Sub-route of Menu & BOM, same module gate.
-      { label: "Recipe Cards", href: "/inventory/menus/cards", icon: <Printer className={ICON_SIZE} />,  moduleKey: "inventory:menus" },
+      // Printable per-item BOM — linked from the Menu & BOM page
+      // (inventory/menus/page.tsx), so hidden from the sidebar.
+      { label: "Recipe Cards", href: "/inventory/menus/cards", icon: <Printer className={ICON_SIZE} />,  moduleKey: "inventory:menus", hidden: true },
       // Packaging rules attach cups/lids/straws to menu items & channels —
       // part of the menu definition. Single nav home (dropped the duplicate
       // Procurement → Master Data entry). Gate stays inventory:packaging.
@@ -444,7 +412,9 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         label: "Business",
         items: [
-          { label: "Hub",            href: "/settings",         icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "settings:outlets" },
+          // The Hub tile page duplicates this Settings section link-for-link —
+          // hidden so there's one way in (still deep-linkable + ⌘K).
+          { label: "Hub",            href: "/settings",         icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "settings:outlets", hidden: true },
           { label: "Outlets",        href: "/settings/outlets", icon: <Building2 className={ICON_SIZE} />,       moduleKey: "settings:outlets" },
           { label: "Staff & Access", href: "/settings/staff",   icon: <UserCog className={ICON_SIZE} />,         moduleKey: "settings:staff" },
           { label: "Approval Rules", href: "/settings/rules",   icon: <ShieldCheck className={ICON_SIZE} />,     moduleKey: "settings:rules" },
@@ -469,7 +439,9 @@ export const NAV_SECTIONS: NavSection[] = [
           { label: "Tiers",           href: "/loyalty/tiers",        icon: <Crown className={ICON_SIZE} />,  moduleKey: "loyalty:rewards" },
           { label: "Discount Engine", href: "/loyalty/promotions",   icon: <Tag className={ICON_SIZE} />,    moduleKey: "loyalty:rewards" },
           { label: "All Rewards",     href: "/loyalty/all-rewards",  icon: <Ticket className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
-          { label: "Outcome Types",   href: "/loyalty/reward-kinds", icon: <Layers className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
+          // Outcome Types: code-bound reward shapes; only labels/visuals are
+          // editable and rarely — hidden, reachable via ⌘K.
+          { label: "Outcome Types",   href: "/loyalty/reward-kinds", icon: <Layers className={ICON_SIZE} />, moduleKey: "loyalty:rewards", hidden: true },
           { label: "Birthday Treats", href: "/loyalty/birthday",     icon: <Cake className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
           { label: "Earn Rate",       href: "/loyalty/settings",     icon: <Coins className={ICON_SIZE} />,  moduleKey: "loyalty:rewards" },
         ],
@@ -485,6 +457,9 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "System",
         items: [
           { label: "Stock Count",  href: "/settings/stock-count",  icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
+          // SOP taxonomy CRUD — setup-grade, so it lives with the other
+          // configuration (moved out of the Ops section, 2026-07-11).
+          { label: "SOP Categories", href: "/ops/categories",      icon: <Tags className={ICON_SIZE} />,           moduleKey: "ops:categories" },
           { label: "Integrations", href: "/settings/integrations", icon: <Plug className={ICON_SIZE} />,           moduleKey: "settings:integrations" },
           { label: "System",       href: "/settings/system",       icon: <Wrench className={ICON_SIZE} />,         moduleKey: "settings:system" },
         ],
@@ -559,9 +534,11 @@ export function getSectionHrefs(section: NavSection): string[] {
   return [];
 }
 
+// Items the sidebar actually renders for this user: accessible AND not hidden.
 export function getVisibleItems(section: NavSection, user: UserProfile | undefined): NavItem[] {
-  if (section.items) return section.items.filter((item) => canAccess(user, item.moduleKey));
-  if (section.subgroups) return section.subgroups.flatMap((sg) => sg.items.filter((item) => canAccess(user, item.moduleKey)));
+  const show = (item: NavItem) => !item.hidden && canAccess(user, item.moduleKey);
+  if (section.items) return section.items.filter(show);
+  if (section.subgroups) return section.subgroups.flatMap((sg) => sg.items.filter(show));
   return [];
 }
 
@@ -613,14 +590,19 @@ export const DASHBOARD_HOME_MODULE = "sales:dashboard";
 // also can't see. Returns undefined only when the user has NO accessible page —
 // callers then keep them on /dashboard as the ultimate harbour (never a loop).
 export function firstAccessibleHref(user: UserProfile): string | undefined {
+  // Prefer a sidebar-visible destination; fall back to hidden entries so a
+  // user whose only grants map to hidden pages still lands somewhere useful.
+  let hiddenFallback: string | undefined;
   for (const section of NAV_SECTIONS) {
     const items = [
       ...(section.items ?? []),
       ...(section.subgroups?.flatMap((sg) => sg.items) ?? []),
     ];
     for (const item of items) {
-      if (canAccess(user, item.moduleKey)) return item.href;
+      if (!canAccess(user, item.moduleKey)) continue;
+      if (!item.hidden) return item.href;
+      hiddenFallback ??= item.href;
     }
   }
-  return undefined;
+  return hiddenFallback;
 }

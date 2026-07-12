@@ -197,6 +197,20 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-11 — **Backoffice nav housekeeping (round 4)** — nav registry gains
+  `hidden` items (in ⌘K/route-gate/grants, out of the sidebar; see
+  `lib/nav.tsx` NavItem doc). Evidence-based prune (every hide verified
+  reachable via in-page link or HR tab strip, or is audit/config-grade):
+  HR 17→7 sidebar entries (one per module — strips reach siblings, verified
+  unfiltered by moduleAccess), Ops Dashboard hidden (same API as Performance,
+  which is the superset + new section landing), SOP Categories moved to
+  Settings→System, Recipe Cards/Points Log/Outcome Types/Settings Hub hidden.
+  Finance "Legacy" group renamed **Cash** — cashflow + cash-tracking are the
+  actively-maintained cash-basis lens, NOT deprecated (verified in code; do
+  not prune them). Kept after verification (distinct tools, sidebar-only
+  reach): Compare, Cashier Performance, Inventory Reconciliation, Rank
+  Scoreboard, Ads Optimizer.
+
 - 2026-07-11 — **Sentry self-fixing loop** (branch
   `claude/sentry-self-fixing-loop-5tdrxm`): `sentry-triage` skill upgraded
   from one-way triage to a closed loop — per-issue draft-PR fixes (branch
