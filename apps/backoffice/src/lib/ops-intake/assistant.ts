@@ -405,7 +405,7 @@ async function cashPosition() {
   return {
     accounts: accounts.map((a) => ({ account: a.account, asOf: a.as_of, closing: rm(a.closing) })),
     totalCash: rm(totalCash),
-    coverageCaveat: "Only accounts with uploaded statements — confirm this is every company account before treating as total cash.",
+    coverageCaveat: "Balances come from the Bukku bank feed (all 3 company accounts, owner-confirmed complete) — quote the as-of dates, the feed can lag hours.",
     staleWarning: staleDays != null && staleDays > 7 ? `Oldest account statement is ${staleDays} days old — position may be outdated.` : undefined,
     monthlyPayroll: pay
       ? { period: pay.period, salary: rm(pay.salary), employerStatutory: rm(pay.stat), total: rm(pay.salary + pay.stat), headcount: pay.heads }
