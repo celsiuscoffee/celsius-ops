@@ -104,6 +104,37 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Open failures
 
+- 2026-07-11 — **`sentry.io` is NOT in the CCR environment's egress
+  allowlist** — live Sentry MCP call returned `403 Host not in allowlist:
+  sentry.io` — so the nightly Sentry-triage routine (05:00 MYT) has no-oped
+  at its guard step every run since 2026-07-04; the weekly email digest was
+  the only error visibility. **Human action:** add `sentry.io` (+
+  `*.sentry.io`) in the environment's network settings; verify with
+  `find_organizations`. Until then the self-fixing loop cannot run. —
+  blocking.
+- 2026-07-11 — **`JWT_SECRET` is missing from the order app's Vercel env**
+  (project `celsius-pickup-app`) — every request logs `[env] order: MISSING
+  (required): JWT_SECRET` in BOTH serverless and edge runtimes (verified via
+  Vercel runtime logs); this is the 3.6k-event "Ongoing" Sentry issue from
+  the weekly report. Not just noise: `@celsius/auth getJwtSecret()` THROWS
+  without it, so `POST /api/orders/[orderId]/confirm-maybank-qr` (backoffice
+  "Mark paid & release" for Maybank QR) 500s whenever used. Customer/staff
+  JWT paths survive on the `CUSTOMER_JWT_SECRET`/`STAFF_JWT_SECRET`
+  fallbacks. **Human action (payments-adjacent, hard rule 6):** add
+  `JWT_SECRET` to the celsius-pickup-app Vercel project with the SAME value
+  as backoffice's, redeploy. — blocking Maybank-QR release.
+- 2026-07-11 — **`ANTHROPIC_API_KEY` is missing from the staff app's Vercel
+  env** — confirmed live: `GET /api/audits/staff/<id>/coach` 500ed with
+  "Could not resolve authentication method" (the 21-event "New" Sentry
+  issue); boot check also flags `BACKOFFICE_INTERNAL_URL` (recommended)
+  missing. Owner chose to REMOVE the staff AI coach instead of wiring the
+  key (done in the sentry-loop PR: coach route + agent + My Skills card
+  deleted; unused /api/audits/insights dropped too; staff-native untouched
+  — its coach card already hides on fetch failure, remove the dead helpers
+  on the next staff-native touch). **Key is STILL needed:** the claims
+  receipt-extraction route (`/api/claims/extract`, used by staff web +
+  staff-native claims) also runs on ANTHROPIC_API_KEY and is equally
+  broken until the var is added to the staff Vercel project.
 - 2026-07-05 — **`pos_*` + `orders`: 14 `USING(true)` policies are BY
   DESIGN** (SUNMI tills write via the anon key). Do NOT lint-fix — needs a
   data-layer plan (rls-strategy.md Path A). 4 `security_definer_view` +
@@ -165,6 +196,25 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-07-11 — **Sentry self-fixing loop** (branch
+  `claude/sentry-self-fixing-loop-5tdrxm`): `sentry-triage` skill upgraded
+  from one-way triage to a closed loop — per-issue draft-PR fixes (branch
+  convention `claude/sentry-fix-<shortid>`, ≤3/run), next-run verification
+  of merged fixes against live Sentry (quiet → resolve issue w/ PR link;
+  still erroring → one `-r2` retry; then escalate here), state reconstructed
+  from GitHub PR search + Sentry status (no repo ledger). Design:
+  `docs/design/sentry-self-fix-loop.md`. The existing nightly routine
+  (`trig_01NZbJV3A36TeXRKpBkFjxWx`, 05:00 MYT) picks the new procedure up
+  automatically once merged — its prompt defers to the skill file. **Blocked
+  on the sentry.io egress allowlist fix (see Open failures)**; after the
+  owner fixes that, note: 2 of the week's top 3 issues were already
+  root-caused WITHOUT Sentry via Vercel runtime logs (see the two
+  2026-07-11 Open failures — both are missing Vercel env vars, human
+  actions). Remaining for the first live run: `TypeError: Cannot read
+  property 'toFixed' of undefined` (5 events, New — needs the Sentry stack
+  trace to localise), then verify the two env fixes landed (issues go
+  quiet → resolve them in Sentry per the skill).
 
 - 2026-07-10 — **Backoffice nav UX rework** (PR #894, merged on owner's
   approval after a clickable preview artifact). Owner said the tabs were
