@@ -135,6 +135,31 @@ async function handleOwnerTelegramText(chatId: number, msgId: number, text: stri
     where: { id: owner.userId },
     select: { outletId: true, outletIds: true },
   });
+  // Conversation memory: telegram exchanges are stored in the WhatsAppMessage
+  // store under a `tg:<chatId>` pseudo-number (written directly — NOT via the
+  // record helpers, whose digit-stripping could collide a chat id with a real
+  // phone). The unique waMessageId makes Telegram redeliveries idempotent.
+  const tgNumber = `tg:${chatId}`;
+  const history = await prisma.whatsAppMessage.findMany({
+    where: { OR: [{ fromNumber: tgNumber }, { toNumber: tgNumber }] },
+    orderBy: { timestamp: "desc" },
+    take: 12,
+    select: { direction: true, body: true },
+  });
+  await prisma.whatsAppMessage
+    .create({
+      data: {
+        waMessageId: `tg:${chatId}:${msgId}`,
+        direction: "inbound",
+        fromNumber: tgNumber,
+        toNumber: "assistant",
+        type: "text",
+        body: text,
+        timestamp: new Date(),
+        raw: { telegram: true },
+      },
+    })
+    .catch(() => {}); // duplicate wamid on redelivery — fine
   const outcome = await runInternalAssistant({
     reporter: {
       id: owner.userId,
@@ -144,9 +169,22 @@ async function handleOwnerTelegramText(chatId: number, msgId: number, text: stri
       outletIds: user?.outletIds ?? [],
     },
     text,
-    history: [],
+    history: history.reverse(),
   });
   if (outcome.kind === "reply") {
+    await prisma.whatsAppMessage
+      .create({
+        data: {
+          direction: "outbound",
+          fromNumber: "assistant",
+          toNumber: tgNumber,
+          type: "text",
+          body: outcome.text,
+          timestamp: new Date(),
+          raw: { telegram: true, agent: "ops-intake-v1" },
+        },
+      })
+      .catch(() => {});
     // Telegram caps a message at 4096 chars — chunk long replies.
     for (let i = 0; i < outcome.text.length; i += 3900) {
       await sendMessage(chatId, outcome.text.slice(i, i + 3900), i === 0 ? msgId : undefined);

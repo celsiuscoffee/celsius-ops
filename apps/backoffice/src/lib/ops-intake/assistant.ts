@@ -23,6 +23,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { DATA_MAP } from "./data-map";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -373,6 +374,64 @@ async function describeTable(table: string) {
   return { table, columns: cols.map((c) => ({ name: c.column_name, type: c.data_type, nullable: c.is_nullable === "YES" })) };
 }
 
+// OWNER/ADMIN only — the canonical cash-for-salary projection, encoded once so
+// the answer is deterministic instead of re-derived by exploration each time.
+// Sources per the data map: BankStatement.closingBalance (NOT the empty
+// fin_bank_transactions), fin_payroll_actuals, Invoice, BankStatementLine flows.
+async function cashPosition() {
+  const [accounts, payroll, flows, unpaidAgg] = await Promise.all([
+    prisma.$queryRaw<Array<{ account: string; as_of: string; closing: number }>>`
+      SELECT DISTINCT ON ("accountName") "accountName" AS account,
+             "statementDate"::date::text AS as_of, "closingBalance"::float AS closing
+      FROM "BankStatement" ORDER BY "accountName", "statementDate" DESC
+    `,
+    prisma.$queryRaw<Array<{ period: string; salary: number; stat: number; heads: number }>>`
+      SELECT period::text, sum(salary)::float AS salary, sum(employer_stat)::float AS stat, sum(headcount)::int AS heads
+      FROM fin_payroll_actuals GROUP BY 1 ORDER BY 1 DESC LIMIT 1
+    `,
+    prisma.$queryRaw<Array<{ direction: string; total: number }>>`
+      SELECT direction, sum(amount)::float AS total FROM "BankStatementLine"
+      WHERE "txnDate" >= now() - interval '28 days' AND "isInterCo" = false
+      GROUP BY 1
+    `,
+    prisma.invoice.aggregate({
+      _sum: { amount: true },
+      _count: { _all: true },
+      where: { status: { in: ["PENDING", "INITIATED", "OVERDUE", "PARTIALLY_PAID", "DEPOSIT_PAID"] } },
+    }),
+  ]);
+
+  const totalCash = accounts.reduce((s, a) => s + a.closing, 0);
+  const oldestAsOf = accounts.reduce((min, a) => (a.as_of < min ? a.as_of : min), accounts[0]?.as_of ?? "");
+  const staleDays = oldestAsOf ? Math.floor((Date.now() - +new Date(`${oldestAsOf}T00:00:00+08:00`)) / 86_400_000) : null;
+  const inflow28 = flows.find((f) => f.direction === "CR")?.total ?? 0;
+  const outflow28 = flows.find((f) => f.direction === "DR")?.total ?? 0;
+  const pay = payroll[0];
+
+  return {
+    accounts: accounts.map((a) => ({ account: a.account, asOf: a.as_of, closing: rm(a.closing) })),
+    totalCash: rm(totalCash),
+    coverageCaveat: "Only accounts with uploaded statements — confirm this is every company account before treating as total cash.",
+    staleWarning: staleDays != null && staleDays > 7 ? `Oldest account statement is ${staleDays} days old — position may be outdated.` : undefined,
+    monthlyPayroll: pay
+      ? { period: pay.period, salary: rm(pay.salary), employerStatutory: rm(pay.stat), total: rm(pay.salary + pay.stat), headcount: pay.heads }
+      : null,
+    unpaidSupplierInvoices: {
+      count: unpaidAgg._count._all,
+      total: rm(Number(unpaidAgg._sum.amount ?? 0)),
+      note: "PARTIALLY_PAID invoices count at full amount (remaining balance not tracked).",
+    },
+    flows28d: {
+      inflows: rm(inflow28),
+      outflows: rm(outflow28),
+      net: rm(inflow28 - outflow28),
+      dailyAvgInflow: rm(inflow28 / 28),
+      dailyAvgOutflow: rm(outflow28 / 28),
+      note: "Excludes inter-company transfers.",
+    },
+  };
+}
+
 // OWNER/ADMIN only
 async function unpaidInvoices() {
   const rows = await prisma.invoice.findMany({
@@ -497,6 +556,16 @@ const TOOLS: ToolSpec[] = [
   },
   {
     def: {
+      name: "cash_position",
+      description:
+        "The canonical cash picture: latest bank balance per company account (with as-of dates), last month's payroll (salary + employer statutory), unpaid supplier invoices, and 28-day cash in/out run rates. Use for 'do we have enough cash for X' questions.",
+      input_schema: { type: "object" as const, properties: {} },
+    },
+    ownerOnly: true,
+    run: () => cashPosition(),
+  },
+  {
+    def: {
       name: "list_tables",
       description: "List all tables in the business database with approximate row counts. Use before writing SQL.",
       input_schema: { type: "object" as const, properties: {} },
@@ -575,9 +644,10 @@ Rules:
 - Be direct and useful, like a sharp ops colleague. No corporate filler.`;
 
 // Managers get the canned tools (4 rounds is plenty); owner/admin may need
-// list → describe → query → refine, so they get more exploration room.
+// list → describe → query → refine across several angles, so they get real
+// exploration room.
 const MAX_ROUNDS = 4;
-const MAX_ROUNDS_OWNER = 7;
+const MAX_ROUNDS_OWNER = 10;
 
 export async function runInternalAssistant(params: {
   reporter: AssistantReporter;
@@ -603,8 +673,12 @@ export async function runInternalAssistant(params: {
     for (let round = 0; round < maxRounds; round++) {
       const res = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 700,
-        system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+        max_tokens: 1000,
+        // The data map is identical every call — cache it with the role prompt.
+        system: [
+          { type: "text", text: SYSTEM },
+          { type: "text", text: DATA_MAP, cache_control: { type: "ephemeral" } },
+        ],
         tools: tools.map((t) => t.def),
         messages,
       });
