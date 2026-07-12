@@ -1219,10 +1219,100 @@ async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: Lo
 }
 
 // Cron entrypoint: fire every triggered loop (skip batch/manual ones).
+// ── CLOSE THE LOOP: pause what doesn't work ──────────────────────────────────
+// app_settings.loops_paused (jsonb object) — key is a loop key ("beans_idle")
+// or a round-gap arm ("round_gap:rg_import"); value records when/why. Paused
+// entries are skipped by the daily auto-run until an operator clears the key
+// from the setting. autoPauseUnderperformers() adds entries itself once pooled
+// evidence says a loop/arm isn't lifting — probe → measure → kill, automated.
+export type PausedEntry = { at: string; reason: string; auto?: boolean };
+
+export async function getPausedLoops(): Promise<Record<string, PausedEntry>> {
+  try {
+    const { data } = await supabaseAdmin.from("app_settings").select("value").eq("key", "loops_paused").maybeSingle();
+    const v = data?.value;
+    if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, PausedEntry>;
+  } catch { /* missing/invalid → nothing paused */ }
+  return {};
+}
+
+export async function pauseLoop(key: string, reason: string, auto = false): Promise<void> {
+  const cur = await getPausedLoops();
+  if (cur[key]) return; // already paused — keep the original entry
+  cur[key] = { at: new Date().toISOString(), reason, ...(auto ? { auto: true } : {}) };
+  await supabaseAdmin.from("app_settings").upsert({ key: "loops_paused", value: cur }, { onConflict: "key" });
+}
+
+// Evidence floors: enough sends that a dead read isn't noise, but low enough
+// that a loser doesn't drain money for months. A paused entry is never
+// un-paused automatically — resuming is an operator decision.
+const AUTO_PAUSE_MIN_TREATED = 300;   // pooled sends before a verdict counts
+const AUTO_PAUSE_MIN_HOLDOUT = 30;    // pooled control behind the lift read
+const AUTO_PAUSE_LIFT_FLOOR_PP = 0.5; // lift at/below this after the floors = not working
+const AUTO_PAUSE_ARM_CONV_FLOOR = 1;  // round-gap arm % conversion floor (arms share one holdout)
+
+export async function autoPauseUnderperformers(): Promise<Array<{ key: string; reason: string }>> {
+  const paused = await getPausedLoops();
+  const killed: Array<{ key: string; reason: string }> = [];
+
+  const { data: rounds } = await supabaseAdmin
+    .from("loop_rounds").select("loop_key, stats").eq("status", "measured");
+  const byLoop = new Map<string, Array<StoredStat[]>>();
+  for (const r of (rounds ?? []) as Array<{ loop_key: string; stats: StoredStat[] | null }>) {
+    if (!r.stats) continue;
+    const l = byLoop.get(r.loop_key) ?? []; l.push(r.stats); byLoop.set(r.loop_key, l);
+  }
+
+  // Triggered loops with a control: judge on pooled lift vs pooled holdout —
+  // the same honest read the scorecard uses. No control (birthday) → never auto-kill.
+  for (const def of Object.values(LOOPS)) {
+    if (!def.trigger || !def.trigger.holdoutPct) continue;
+    if (paused[def.key]) continue;
+    const statsList = byLoop.get(def.key);
+    if (!statsList) continue;
+    const base = pooledHoldoutBaseline(statsList);
+    let n = 0, converted = 0;
+    for (const stats of statsList) for (const s of stats) {
+      if (s.arm === "holdout") continue;
+      n += s.n; converted += s.n * (s.conversion_rate ?? 0) / 100;
+    }
+    if (n < AUTO_PAUSE_MIN_TREATED || base.n < AUTO_PAUSE_MIN_HOLDOUT) continue;
+    const liftPp = (n ? (converted / n) * 100 : 0) - base.convRate;
+    if (liftPp <= AUTO_PAUSE_LIFT_FLOOR_PP) {
+      const reason = `auto: ${liftPp >= 0 ? "+" : ""}${liftPp.toFixed(1)}pp lift after ${n} sends (holdout ${base.n}) - below ${AUTO_PAUSE_LIFT_FLOOR_PP}pp floor`;
+      await pauseLoop(def.key, reason, true);
+      killed.push({ key: def.key, reason });
+    }
+  }
+
+  // Round-gap arms share one unlabelled holdout, so arms are judged on an
+  // absolute conversion floor instead of lift.
+  const armAgg = new Map<string, { n: number; converted: number }>();
+  for (const stats of byLoop.get("round_gap") ?? []) for (const s of stats) {
+    if (s.arm === "holdout") continue;
+    const a = armAgg.get(s.arm) ?? { n: 0, converted: 0 };
+    a.n += s.n; a.converted += s.n * (s.conversion_rate ?? 0) / 100;
+    armAgg.set(s.arm, a);
+  }
+  for (const [arm, a] of armAgg) {
+    const key = `round_gap:${arm}`;
+    if (paused[key] || a.n < AUTO_PAUSE_MIN_TREATED) continue;
+    const conv = (a.converted / a.n) * 100;
+    if (conv < AUTO_PAUSE_ARM_CONV_FLOOR) {
+      const reason = `auto: ${conv.toFixed(2)}% conversion after ${a.n} sends - below ${AUTO_PAUSE_ARM_CONV_FLOOR}% floor`;
+      await pauseLoop(key, reason, true);
+      killed.push({ key, reason });
+    }
+  }
+  return killed;
+}
+
 export async function runTriggeredLoops(opts?: { force?: boolean }): Promise<Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string; skipped?: boolean }>> {
   const out: Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string; skipped?: boolean }> = [];
+  const paused = await getPausedLoops();
   for (const def of Object.values(LOOPS)) {
     if (!def.trigger) continue;
+    if (paused[def.key]) { out.push({ loop: def.key, qualified: 0, skipped: true, error: `paused: ${paused[def.key].reason}` }); continue; }
     try { out.push(await runTriggeredLoop(def, opts?.force)); }
     catch (e) { out.push({ loop: def.key, qualified: 0, error: e instanceof Error ? e.message : "trigger failed" }); }
   }
@@ -1308,8 +1398,13 @@ export async function runRoundGapDaily(opts?: { force?: boolean }): Promise<Arra
   } catch { /* missing setting → default enabled */ }
 
   const sinceIso = new Date(Date.now() - 20 * 3600 * 1000).toISOString();
+  const paused = await getPausedLoops();
   for (const [key, cfg] of Object.entries(ROUND_GAP_CAMPAIGNS)) {
     try {
+      // An arm paused (manually or by autoPauseUnderperformers) stops being
+      // prepared/sent; the other arm keeps running. All arms paused → campaign idles.
+      const arms = cfg.arms.filter((a) => !paused[`round_gap:${a.key}`]);
+      if (!arms.length) { out.push({ campaign: key, skipped: true, error: "all arms paused" }); continue; }
       if (!opts?.force) {
         const { data: recent } = await supabaseAdmin
           .from("loop_rounds").select("id")
@@ -1319,7 +1414,7 @@ export async function runRoundGapDaily(opts?: { force?: boolean }): Promise<Arra
       }
       const { data, error } = await supabaseAdmin.rpc("loyalty_round_gap_prepare", {
         p_outlet: cfg.outlet, p_round_start: cfg.round_start, p_round_end: cfg.round_end,
-        p_round_name: cfg.name, p_arms: cfg.arms, p_holdout_pct: 10, p_window_days: 7, p_limit: cfg.daily_limit,
+        p_round_name: cfg.name, p_arms: arms, p_holdout_pct: 10, p_window_days: 7, p_limit: cfg.daily_limit,
       });
       if (error) throw new Error(error.message);
       const row = Array.isArray(data) ? data[0] : data;

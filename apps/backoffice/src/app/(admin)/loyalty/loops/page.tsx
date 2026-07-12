@@ -52,7 +52,7 @@ type LeaderboardEntry = {
   rounds: number; recipients: number; avg_lift_pp: number;
   incr_margin_per_recipient_rm: number; cum_incr_margin_rm: number;
 };
-type LoopMeta = { key: string; label: string; objective: string; defaultHoldoutPct: number; defaultWindowDays: number; triggered?: boolean };
+type LoopMeta = { key: string; label: string; objective: string; defaultHoldoutPct: number; defaultWindowDays: number; triggered?: boolean; paused?: string | null; pausedArms?: Record<string, string> };
 type SendTimeEntry = { send_window: string; rounds: number; recipients: number; avg_lift_pp: number; avg_order_rate: number };
 type Optimizer = {
   loop_key: string; leaderboard: LeaderboardEntry[]; proposal: { arms: ProposalArm[] };
@@ -495,7 +495,7 @@ function EvaluationPanel({ data, days, onDays, loops }: { data: Evaluation; days
 }
 
 function CampaignBoard({ meta, live, meas }: {
-  meta: { key: string; label: string; objective: string; triggered?: boolean };
+  meta: { key: string; label: string; objective: string; triggered?: boolean; paused?: string | null; pausedArms?: Record<string, string> };
   live: LiveLoop | null; meas: LoopEval | null;
 }) {
   const sent = live?.sent ?? 0;
@@ -503,7 +503,10 @@ function CampaignBoard({ meta, live, meas }: {
   const hasResults = !!meas && meas.rounds > 0;
   const next = live?.next_results_at ? new Date(live.next_results_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" }) : null;
   const ret = live && live.sms_cost_rm > 0 ? `${(live.revenue_rm / live.sms_cost_rm).toFixed(1)}×` : "—";
-  const status = measuring ? { t: "Measuring", c: "bg-blue-100 text-blue-800" }
+  const pausedArmKeys = Object.keys(meta.pausedArms ?? {});
+  const status = meta.paused ? { t: "Paused", c: "bg-amber-100 text-amber-800" }
+    : pausedArmKeys.length ? { t: "Partly paused", c: "bg-amber-100 text-amber-800" }
+    : measuring ? { t: "Measuring", c: "bg-blue-100 text-blue-800" }
     : hasResults ? { t: "Measured", c: "bg-green-100 text-green-800" }
     : sent > 0 ? { t: "Sent", c: "bg-gray-100 text-gray-600" }
     : { t: "Idle", c: "bg-gray-100 text-gray-400" };
@@ -516,6 +519,11 @@ function CampaignBoard({ meta, live, meas }: {
         </div>
         <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", status.c)}>{status.t}</span>
       </div>
+      {meta.paused ? (
+        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">Not sending — {meta.paused}</p>
+      ) : pausedArmKeys.length ? (
+        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">{pausedArmKeys.map((k) => `${k} arm paused — ${meta.pausedArms![k]}`).join(" · ")}</p>
+      ) : null}
       {sent === 0 ? (
         <p className="mt-3 text-sm text-gray-400">{meta.triggered ? "Runs automatically — fires when customers qualify." : "No sends yet."}</p>
       ) : (
