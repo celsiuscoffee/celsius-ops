@@ -134,12 +134,25 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `6500-03`. June per outlet: Con 5,103 / SA 9,168 / Tam 6,078 / Nilai
   3,892. Outlet venue prefixes exist in descriptions since June; classifier
   fixed + 266 rows backfilled (migration 071).
-- 2026-07-05 — All six 2026 monthly payroll runs are status `draft` (no
-  OT/allowances finalised) — FT actuals read ~RM3k/outlet flattering vs the
-  workbook until closed.
-- 2026-07-05 — 4 scheduled staff have no `hr_employee_profiles` row
-  (Hidayat, Irfan, a 2nd Haziq — Putrajaya; Fatin — Tamarind). The labour
-  gate blocks publishes that include them until profiles+rates exist.
+- 2026-07-12 — **Payroll runs are now 6 `paid` + 1 `draft`** (the 07-05
+  "all six draft" note is obsolete) — set out-of-band: the monthly payroll
+  API has no mark_paid action (only weekly does). `hr_payslips` has 0 rows
+  ever — payslip persistence/Cloudinary/viewed_at was never built; PDFs are
+  generated on-demand from `hr_payroll_items`, and the staff payslip pages
+  are feature-flagged off (`PAYROLL_UI_ENABLED`).
+- 2026-07-12 — **HR module QA round 1** (`docs/design/hr-qa-2026-07-12.md`,
+  skill `.claude/skills/hr-module-qa/`). Attendance AI processing dead
+  since 2026-04-19 (manual-button-only, no cron; base pay unaffected — hours
+  are computed at clock-out and the monthly filter is NULL-safe — but OT
+  approval isn't); 141 pending `hr_overtime_requests` (81 Apr + 60 Jul) →
+  **all ~160 July OT hours currently fail `isOtApproved` and would pay
+  RM 0**. PCB under-withholds for salaries > ~RM3,030/mo: `calculators.ts`
+  caps EPF relief at the combined EPF+life 7000 instead of 4000 (rule-6
+  fix, proposed not shipped). HR route auth came back clean (no wrong
+  getSession, payroll OWNER/ADMIN-only, manager scoping correct).
+- 2026-07-12 — Orphan scheduled staff down to **1 (Fatin — Tamarind)**;
+  Hidayat/Irfan/2nd-Haziq now have `hr_employee_profiles` rows. The labour
+  gate blocks publishes that include her until profile+rate exist.
 - 2026-07-05 — Shift templates of record are the `hr_shift_templates` DB
   rows (Opening / Middle 1–3 / Closing per outlet); `lib/hr/shift-templates.ts`
   is only the fallback when the table is empty.
@@ -246,6 +259,20 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-07-12 — **HR module QA round 1** (branch
+  `claude/hr-module-qa-flow-8iv8fl`): findings doc
+  `docs/design/hr-qa-2026-07-12.md`, repeatable flow in
+  `.claude/skills/hr-module-qa/`. Shipped 2 mechanical fixes in the PR:
+  `schedules/assign` delete-then-insert → non-destructive replace (mirrors
+  `cell`), weekly payroll confirm/mark_paid status preconditions (mirrors
+  monthly). **Proposed, awaiting owner (rule 6):** EPF_CAP 7000→4000 PCB
+  fix; arming attendance processing on a cron tick; working/bulk-closing
+  the 141-pending OT queue. Loop candidates ranked in findings §4 — top:
+  monthly payroll close loop, OT-approval chase, weekly PT payroll loop,
+  roster generate-and-gate; all should carry a procurement-style watchdog
+  (no HR cron has a heartbeat). Next session: pick a loop with the owner
+  and build it, or fix the open `employees` POST mass-assignment finding.
 
 - 2026-07-11 — **Backoffice nav housekeeping (round 4)** — nav registry gains
   `hidden` items (in ⌘K/route-gate/grants, out of the sidebar; see

@@ -98,14 +98,9 @@ export async function POST(req: NextRequest) {
     schedule = newSched;
   }
 
-  // Replace any existing cell for this (user, date), then insert the shift.
-  await hrSupabaseAdmin
-    .from("hr_schedule_shifts")
-    .delete()
-    .eq("schedule_id", schedule.id)
-    .eq("user_id", user_id)
-    .eq("shift_date", shift_date);
-
+  // NON-DESTRUCTIVE REPLACE, same ordering as the grid's cell route: insert
+  // the new shift FIRST so the existing one survives if the insert fails,
+  // then remove any prior shift for this same (user, date) cell.
   const { data: shift, error: shiftErr } = await hrSupabaseAdmin
     .from("hr_schedule_shifts")
     .insert({
@@ -122,6 +117,17 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
   if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
+
+  const { error: delErr } = await hrSupabaseAdmin
+    .from("hr_schedule_shifts")
+    .delete()
+    .eq("schedule_id", schedule.id)
+    .eq("user_id", user_id)
+    .eq("shift_date", shift_date)
+    .neq("id", shift.id);
+  // A failed cleanup leaves a harmless duplicate (grid keys by user:date),
+  // never data loss — not fatal, but surface it so it doesn't hide.
+  if (delErr) console.error("[schedules/assign] replace-cleanup failed:", delErr.message);
 
   // Tell the staffer they're on a new shift (best-effort, same push channel as
   // the ops workspace; tap routes to My Shifts). Only when the schedule is
