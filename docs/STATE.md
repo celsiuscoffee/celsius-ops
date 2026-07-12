@@ -6,6 +6,24 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-12 — **Data-consolidation audit for the internal assistant (all
+  SQL-verified against kqdc).** Connectivity clean: 0 orphans across
+  unified_sales/roster/checklist/invoice/bank-line joins. unified_sales VIEW is
+  the ONLY sales truth (merges pos_native live + storehub ≤6/17 + hubbo ≤1/20 +
+  consignment; cutover verified per-outlet exclusive, no double-count).
+  Dead/empty tables (never query): SalesTransaction (ends 4/11),
+  fin_bank_transactions, fin_invoices, fin_bills. TWO revenue lenses: till-rung
+  (unified_sales nett, Jun ~RM284k) vs banked GL income (Card+Cash/QR+Grabfood+
+  GastroHub, Jun ~RM406k, settlement-lagged, SST-incl) — Grab delivery revenue
+  exists ONLY in the GL/bank lens. NILAI = consignment outlet (no till; sales
+  are periodic consignment settlements, latest 6/28; 0 ParLevel rows; its
+  "ownerless checklist" alerts are likely SOP misconfig for that model).
+  "orders" (lowercase, customer pickup) ≠ "Order" (procurement PO). All other
+  domains fresh as of audit day (attendance, stock counts, reviews, loyalty,
+  bank feed via Bukku 6h sync — 3 accounts = complete set per owner). Encoded
+  in `apps/backoffice/src/lib/ops-intake/data-map.ts` (the assistant's
+  intelligence layer) — keep that file updated when semantics change.
+
 - 2026-07-12 — **April-era "Celsius QA" Telegram monitor decommissioned (cron
   side).** It was two systems, both built ~Apr 5–7 against the pre-monorepo app
   layout (standalone inventory/loyalty apps, retired since):
