@@ -45,10 +45,6 @@ export type AssistantOutcome =
   | { kind: "none" }; // failed / empty → caller falls back to filing
 
 const MYT_OFFSET_MS = 8 * 3_600_000;
-function mytDayStart(): Date {
-  const ymd = new Date(Date.now() + MYT_OFFSET_MS).toISOString().slice(0, 10);
-  return new Date(`${ymd}T00:00:00+08:00`);
-}
 function mytYmd(): string {
   return new Date(Date.now() + MYT_OFFSET_MS).toISOString().slice(0, 10);
 }
