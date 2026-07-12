@@ -45,10 +45,6 @@ export type AssistantOutcome =
   | { kind: "none" }; // failed / empty → caller falls back to filing
 
 const MYT_OFFSET_MS = 8 * 3_600_000;
-function mytDayStart(): Date {
-  const ymd = new Date(Date.now() + MYT_OFFSET_MS).toISOString().slice(0, 10);
-  return new Date(`${ymd}T00:00:00+08:00`);
-}
 function mytYmd(): string {
   return new Date(Date.now() + MYT_OFFSET_MS).toISOString().slice(0, 10);
 }
@@ -66,25 +62,28 @@ async function scopeOutlets(reporter: AssistantReporter): Promise<{ ids: string[
 
 // ── Tools (each returns a compact JSON-able object) ───────────────────────────
 
+// Sales come from the unified_sales VIEW (own-POS live + StoreHub history +
+// consignment) — NOT the stale SalesTransaction sync. Revenue convention:
+// nett, excluding refunds and paymentCancelled.
+const salesOutletFilter = (outletIds: string[] | null) =>
+  outletIds ? Prisma.sql`AND outlet_id IN (${Prisma.join(outletIds)})` : Prisma.empty;
+const SALES_VALID = Prisma.sql`NOT is_refund AND (status IS NULL OR status <> 'paymentCancelled')`;
+
 async function todaySales(outletIds: string[] | null) {
-  const rows = await prisma.salesTransaction.groupBy({
-    by: ["outletId"],
-    where: { transactedAt: { gte: mytDayStart() }, ...(outletIds ? { outletId: { in: outletIds } } : {}) },
-    _sum: { grossAmount: true },
-    _count: { _all: true },
-  });
-  const outlets = await prisma.outlet.findMany({
-    where: { id: { in: rows.map((r) => r.outletId).filter((x): x is string => !!x) } },
-    select: { id: true, name: true },
-  });
-  const nameById = new Map(outlets.map((o) => [o.id, o.name]));
-  const perOutlet = rows.map((r) => ({
-    outlet: nameById.get(r.outletId ?? "") ?? "?",
-    gross: rm(Number(r._sum.grossAmount ?? 0)),
-    transactions: r._count._all,
-  }));
-  const total = rows.reduce((s, r) => s + Number(r._sum.grossAmount ?? 0), 0);
-  return { date: mytYmd(), perOutlet, total: rm(total) };
+  const rows = await prisma.$queryRaw<Array<{ outlet: string; nett: number; txns: bigint }>>`
+    SELECT outlet_name AS outlet, COALESCE(sum(nett), 0)::float AS nett, count(*) AS txns
+    FROM unified_sales
+    WHERE biz_date = (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+      AND ${SALES_VALID} ${salesOutletFilter(outletIds)}
+    GROUP BY 1 ORDER BY 2 DESC
+  `;
+  const total = rows.reduce((s, r) => s + r.nett, 0);
+  return {
+    date: mytYmd(),
+    perOutlet: rows.map((r) => ({ outlet: r.outlet, nett: rm(r.nett), transactions: Number(r.txns) })),
+    total: rm(total),
+    note: "nett (after discount/SST), refunds & cancelled excluded",
+  };
 }
 
 async function checklistStatus(outletIds: string[] | null) {
@@ -238,39 +237,34 @@ async function openSystemReports() {
   };
 }
 
-async function salesHistory(outletIds: string[] | null, days: number, by: "day" | "product") {
-  const d = Math.max(1, Math.min(31, Math.round(days || 7)));
+async function salesHistory(outletIds: string[] | null, days: number, by: "day" | "outlet" | "product") {
+  const d = Math.max(1, Math.min(93, Math.round(days || 7)));
   if (by === "product") {
-    const rows = await prisma.salesTransaction.groupBy({
-      by: ["menuName"],
-      where: {
-        transactedAt: { gte: new Date(Date.now() - d * 86_400_000) },
-        ...(outletIds ? { outletId: { in: outletIds } } : {}),
-      },
-      _sum: { grossAmount: true, quantity: true },
-      orderBy: { _sum: { grossAmount: "desc" } },
-      take: 15,
-    });
-    return {
-      days: d,
-      topProducts: rows.map((r) => ({
-        product: r.menuName,
-        gross: rm(Number(r._sum.grossAmount ?? 0)),
-        qty: Number(r._sum.quantity ?? 0),
-      })),
-    };
+    const rows = await prisma.$queryRaw<Array<{ product: string; revenue: number; qty: number }>>`
+      SELECT product_name AS product, COALESCE(sum(line_total), 0)::float AS revenue,
+             COALESCE(sum(quantity), 0)::float AS qty
+      FROM unified_sale_items
+      WHERE biz_date >= current_date - ${d} ${salesOutletFilter(outletIds)}
+      GROUP BY 1 ORDER BY 2 DESC LIMIT 15
+    `;
+    return { days: d, topProducts: rows.map((r) => ({ product: r.product, revenue: rm(r.revenue), qty: r.qty })) };
   }
-  const outletFilter = outletIds
-    ? Prisma.sql`AND "outletId" IN (${Prisma.join(outletIds)})`
-    : Prisma.empty;
-  const rows = await prisma.$queryRaw<Array<{ day: string; gross: number; txns: bigint }>>`
-    SELECT (("transactedAt" AT TIME ZONE 'Asia/Kuala_Lumpur')::date)::text AS day,
-           COALESCE(sum("grossAmount"), 0)::float AS gross, count(*) AS txns
-    FROM "SalesTransaction"
-    WHERE "transactedAt" >= now() - (${d} || ' days')::interval ${outletFilter}
+  if (by === "outlet") {
+    const rows = await prisma.$queryRaw<Array<{ outlet: string; nett: number; txns: bigint }>>`
+      SELECT outlet_name AS outlet, COALESCE(sum(nett), 0)::float AS nett, count(*) AS txns
+      FROM unified_sales
+      WHERE biz_date >= current_date - ${d} AND ${SALES_VALID} ${salesOutletFilter(outletIds)}
+      GROUP BY 1 ORDER BY 2 DESC
+    `;
+    return { days: d, perOutlet: rows.map((r) => ({ outlet: r.outlet, nett: rm(r.nett), transactions: Number(r.txns) })) };
+  }
+  const rows = await prisma.$queryRaw<Array<{ day: string; nett: number; txns: bigint }>>`
+    SELECT biz_date::text AS day, COALESCE(sum(nett), 0)::float AS nett, count(*) AS txns
+    FROM unified_sales
+    WHERE biz_date >= current_date - ${d} AND ${SALES_VALID} ${salesOutletFilter(outletIds)}
     GROUP BY 1 ORDER BY 1 DESC
   `;
-  return { days: d, perDay: rows.map((r) => ({ day: r.day, gross: rm(r.gross), transactions: Number(r.txns) })) };
+  return { days: d, perDay: rows.map((r) => ({ day: r.day, nett: rm(r.nett), transactions: Number(r.txns) })) };
 }
 
 async function wastageSummary(outletIds: string[] | null, days: number) {
@@ -532,16 +526,18 @@ const TOOLS: ToolSpec[] = [
   {
     def: {
       name: "sales_history",
-      description: "Sales over the last N days — per-day totals, or top products by revenue (by='product').",
+      description:
+        "Sales over the last N days — per-day totals (by='day'), per-outlet totals (by='outlet'), or top products by revenue (by='product').",
       input_schema: {
         type: "object" as const,
         properties: {
-          days: { type: "number", description: "Days back (default 7, max 31)" },
-          by: { type: "string", enum: ["day", "product"], description: "Group by day (default) or product" },
+          days: { type: "number", description: "Days back (default 7, max 93)" },
+          by: { type: "string", enum: ["day", "outlet", "product"], description: "Group by day (default), outlet, or product" },
         },
       },
     },
-    run: (a, scope) => salesHistory(scope, Number(a.days ?? 7), a.by === "product" ? "product" : "day"),
+    run: (a, scope) =>
+      salesHistory(scope, Number(a.days ?? 7), a.by === "product" ? "product" : a.by === "outlet" ? "outlet" : "day"),
   },
   {
     def: {
@@ -684,6 +680,11 @@ export async function runInternalAssistant(params: {
       });
 
       const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+      if (process.env.ASSISTANT_DEBUG) {
+        console.log(
+          `[assistant:debug] round=${round} stop=${res.stop_reason} tools=${toolUses.map((t) => `${t.name}(${JSON.stringify(t.input).slice(0, 120)})`).join(" | ") || "none"}`,
+        );
+      }
       if (toolUses.some((t) => t.name === "file_bug_report")) return { kind: "report" };
 
       if (res.stop_reason !== "tool_use" || toolUses.length === 0) {
@@ -705,11 +706,24 @@ export async function runInternalAssistant(params: {
         } catch (err) {
           payload = { error: err instanceof Error ? err.message : "tool failed" };
         }
-        results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(payload) });
+        // BigInt-safe: Postgres count()/sum() over raw SQL surfaces as BigInt,
+        // which plain JSON.stringify rejects — serialize defensively for EVERY
+        // tool so one unmapped column can't kill the whole answer.
+        let content: string;
+        try {
+          content = JSON.stringify(payload, (_k, v) => (typeof v === "bigint" ? Number(v) : v));
+        } catch (err) {
+          content = JSON.stringify({ error: `unserializable tool result: ${err instanceof Error ? err.message : "?"}` });
+        }
+        if (process.env.ASSISTANT_DEBUG) {
+          console.log(`[assistant:debug]   ${tu.name} → ${content.slice(0, 200)}`);
+        }
+        results.push({ type: "tool_result", tool_use_id: tu.id, content });
       }
       messages.push({ role: "user", content: results });
     }
-    return { kind: "none" }; // ran out of rounds
+    console.warn(`[ops-intake:assistant] ran out of rounds (${maxRounds}) without a final answer`);
+    return { kind: "none" };
   } catch (err) {
     console.error("[ops-intake:assistant] failed:", err instanceof Error ? err.message : err);
     return { kind: "none" };
