@@ -23,8 +23,11 @@ import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { sendOpsDigest } from "@/lib/ops-pulse/sender";
 import { resolveOwner } from "@/lib/ops-pulse/router";
 import { samePhone, ACK_SOFT } from "@/lib/ops-pulse/inbound";
+import { runInternalAssistant, assistantEnabled } from "./assistant";
 
 export const OPS_INTAKE_VERSION = "ops-intake-v1";
+
+const digits = (s: string) => s.replace(/[^0-9]/g, "");
 
 // Who may file: the internal tier. STAFF deliberately excluded in v1 — their
 // path stays "tell your manager" until intake noise is understood.
@@ -45,6 +48,7 @@ export interface InternalInboundInput {
 export interface InternalInboundResult {
   internal: boolean; // sender is owner/admin/manager → skip supplier flows
   filed: boolean; // a SystemReport was created or appended
+  answered?: boolean; // the Q&A assistant replied instead of filing
   reportId?: string;
 }
 
@@ -60,11 +64,13 @@ export async function handleInternalInbound(input: InternalInboundInput): Promis
   // through as NOT internal (so a real supplier still reaches the agent),
   // whereas a failure AFTER a match must stay internal (so the supplier agent
   // never replies to a manager).
-  let reporter: { id: string; name: string; phone: string | null; role: string; outletId: string | null } | undefined;
+  let reporter:
+    | { id: string; name: string; phone: string | null; role: string; outletId: string | null; outletIds: string[] }
+    | undefined;
   try {
     const users = await prisma.user.findMany({
       where: { role: { in: [...INTAKE_ROLES] }, status: "ACTIVE", phone: { not: null } },
-      select: { id: true, name: true, phone: true, role: true, outletId: true },
+      select: { id: true, name: true, phone: true, role: true, outletId: true, outletIds: true },
     });
     reporter = users.find((u) => u.phone && samePhone(input.fromNumber, u.phone));
   } catch (err) {
@@ -114,6 +120,47 @@ export async function handleInternalInbound(input: InternalInboundInput): Promis
       return { internal: true, filed: true, reportId: recent.id };
     }
 
+    // Q&A assistant (Approach B): a bare text message may be a QUESTION, not a
+    // report — let the assistant answer it from the read-only toolset. It calls
+    // file_bug_report (→ "report") when it judges the message a problem report,
+    // and any failure falls through to filing, so a broken assistant can never
+    // swallow a bug report. Media messages skip straight to filing — a
+    // screenshot is a report.
+    if (!input.mediaUrl && assistantEnabled()) {
+      const history = await prisma.whatsAppMessage.findMany({
+        where: { OR: [{ fromNumber: digits(input.fromNumber) }, { toNumber: digits(input.fromNumber) }] },
+        orderBy: { timestamp: "desc" },
+        take: 12,
+        select: { direction: true, body: true },
+      });
+      const outcome = await runInternalAssistant({
+        reporter: {
+          id: reporter.id,
+          name: reporter.name,
+          role: reporter.role,
+          outletId: reporter.outletId,
+          outletIds: reporter.outletIds,
+        },
+        text: body,
+        history: history.reverse(),
+      });
+      if (outcome.kind === "reply") {
+        const sent = await sendWhatsAppText(input.fromNumber, outcome.text);
+        await recordOutboundMessage({
+          waMessageId: sent.messageId,
+          fromNumber: "",
+          toNumber: input.fromNumber,
+          type: "text",
+          body: outcome.text,
+          status: sent.ok ? "sent" : "failed",
+          raw: { agent: OPS_INTAKE_VERSION, assistant: true, ok: sent.ok, error: sent.error ?? null },
+        });
+        console.log(`[ops-intake] answered question from=${reporter.name} sent=${sent.ok}`);
+        return { internal: true, filed: false, answered: true };
+      }
+      // "report" or "none" → file it below.
+    }
+
     const report = await prisma.systemReport.create({
       data: {
         reporterUserId: reporter.id,
@@ -161,4 +208,65 @@ export async function handleInternalInbound(input: InternalInboundInput): Promis
     // supplier agent reply to a manager's number.
     return { internal: true, filed: false };
   }
+}
+
+// ── Close the loop: tell the reporter when their report is fixed ──────────────
+// Reports are worked from Claude Code, which flips status → RESOLVED (+
+// resolution) straight in the DB — it has no way to send WhatsApp from a dev
+// session. This cron-driven pass notices unnotified resolutions and messages
+// the reporter: free in-window text first, ops template as the cold fallback.
+// Stamps reporterNotifiedAt only on a successful send, so failures retry next
+// run (the template path makes permanent failure effectively unreachable).
+export async function notifyResolvedReports(): Promise<{ notified: number; failed: number }> {
+  let notified = 0;
+  let failed = 0;
+  const due = await prisma.systemReport.findMany({
+    where: { status: "RESOLVED", reporterNotifiedAt: null },
+    orderBy: { resolvedAt: "asc" },
+    take: 20,
+    select: { id: true, reporterName: true, reporterPhone: true, resolution: true },
+  });
+  for (const r of due) {
+    try {
+      // Telegram-filed reports may carry a "telegram:<chatId>" pseudo-phone —
+      // nothing to WhatsApp; stamp it so it doesn't retry forever (the owner
+      // sees resolutions in the queue anyway).
+      if (digits(r.reporterPhone).length < 8) {
+        await prisma.systemReport.update({ where: { id: r.id }, data: { reporterNotifiedAt: new Date() } });
+        continue;
+      }
+      const first = (r.reporterName || "there").trim().split(/\s+/)[0];
+      const ref = r.id.slice(0, 8);
+      const text = `✅ ${first}, your report (ref ${ref}) is fixed${r.resolution ? ` — ${r.resolution}` : ""}. Thanks for flagging it 🙏`;
+      let ok = false;
+      const free = await sendWhatsAppText(r.reporterPhone, text);
+      if (free.ok) {
+        ok = true;
+        await recordOutboundMessage({
+          waMessageId: free.messageId,
+          fromNumber: "",
+          toNumber: r.reporterPhone,
+          type: "text",
+          body: text,
+          status: "sent",
+          raw: { agent: OPS_INTAKE_VERSION, resolutionNotifyFor: r.id },
+        });
+      } else {
+        // 24h window closed → template path (sender records its own row).
+        const tpl = await sendOpsDigest(r.reporterPhone, "✅ Your system report is fixed", [text]);
+        ok = tpl.ok;
+      }
+      if (ok) {
+        await prisma.systemReport.update({ where: { id: r.id }, data: { reporterNotifiedAt: new Date() } });
+        notified += 1;
+      } else {
+        failed += 1;
+      }
+    } catch (err) {
+      failed += 1;
+      console.error(`[ops-intake] resolution notify failed for ${r.id}:`, err instanceof Error ? err.message : err);
+    }
+  }
+  if (due.length) console.log(`[ops-intake] resolution notify: ${notified} sent, ${failed} failed`);
+  return { notified, failed };
 }

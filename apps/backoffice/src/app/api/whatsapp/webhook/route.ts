@@ -17,6 +17,11 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp";
+
+// The internal assistant can run several tool rounds (DB reads + model calls)
+// before the reply — don't let the platform default cut the function mid-loop.
+// Meta re-deliveries are already tolerated via the atomic wamid dedupe.
+export const maxDuration = 60;
 import { storeWhatsAppMedia } from "@/lib/whatsapp-media";
 import { recordInboundMessage } from "@/lib/whatsapp-store";
 import { handleInboundAck } from "@/lib/ops-pulse/inbound";
