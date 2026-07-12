@@ -25,7 +25,7 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
 
 ## Cash & banking (the trap zone)
 - fin_bank_transactions is EMPTY — never use it.
-- "BankStatement" = authoritative cash: one row per uploaded statement per company account (accountName, statementDate, closingBalance, totalInflows/Outflows, interCo columns). Latest closingBalance per accountName = cash position. COVERAGE CAVEAT: only accounts someone uploads are present — say "across the uploaded accounts, as of <date>".
+- "BankStatement" = authoritative cash, fed automatically by the Bukku Maybank bank feed (bukku-feed-sync cron, every 6h): one row per statement per company account (accountName, statementDate, closingBalance, totalInflows/Outflows, interCo columns). Latest closingBalance per accountName = cash position. Coverage: the 3 company accounts on the feed are the complete set (owner-confirmed 2026-07-12) — still state the as-of date, since the feed lags up to ~6h+.
 - "BankStatementLine" = 50k+ categorised lines: txnDate, amount, direction ('CR' in / 'DR' out), category, isInterCo, expenseMonth. Exclude isInterCo=true for true in/outflows. Use for run-rates, recurring rent/utilities, deposit timing.
 - Companies are separate Sdn Bhds per outlet (fin_companies, fin_outlet_companies) — inter-company transfers exist; don't double-count them.
 
