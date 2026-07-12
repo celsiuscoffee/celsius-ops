@@ -22,6 +22,12 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
 - unified_sale_items (VIEW) = product-level: biz_date, outlet_id, product_name, variant, quantity, unit_price, line_total.
 - TRAPS: "SalesTransaction" is a DEAD sync (no rows after 2026-04-11); storehub_sales / hubbo_sales / pos_orders are raw per-source tables already merged into unified_sales — never sum them directly.
 - Pickup/QR revenue is recognised at PAYMENT time, not fulfilment.
+- TWO REVENUE LENSES (audited 2026-07-12, both correct, different meanings — never mix):
+  1. TILL-RUNG sales = unified_sales nett. What the outlets rang up. June 2026: ~RM284k.
+  2. BANKED revenue = GL income accounts (fin_journal_lines × fin_accounts type income/revenue): Card + Cash/QR deposits + Grabfood payouts + GastroHub vendor income. Settlement-lagged, SST-inclusive. June 2026: ~RM406k.
+  GRAB DELIVERY REVENUE IS NOT IN unified_sales — it only appears in GL/bank (Grabfood account) and the grab_* tables. "Total revenue" questions should say which lens (and mention Grab if using the till lens).
+- NILAI IS A CONSIGNMENT OUTLET — no till; its unified_sales rows are all source='consignment' (periodic settlements, latest can lag weeks). Daily-sales questions for Nilai are a category error; it also has 0 ParLevel rows (reorder engine doesn't cover it).
+- "orders"/"order_items" (lowercase) = CUSTOMER online orders (pickup app, live). "Order"/"OrderItem" (PascalCase) = procurement purchase orders. Same word, different worlds — pick by context.
 
 ## Cash & banking (the trap zone)
 - fin_bank_transactions is EMPTY — never use it.
@@ -36,7 +42,8 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
 
 ## Procurement & spend
 - "Order" with orderType='PURCHASE_ORDER': statuses DRAFT→PENDING_APPROVAL→APPROVED→SENT→CONFIRMED→AWAITING_DELIVERY→PARTIALLY_RECEIVED→COMPLETED (or CANCELLED). Open/committed spend = statuses before COMPLETED.
-- "Invoice" = supplier invoices; unpaid = status IN ('PENDING','INITIATED','OVERDUE','PARTIALLY_PAID','DEPOSIT_PAID'). amount is the FULL invoice amount even when PARTIALLY_PAID — remaining balance is not a column.
+- "Invoice" (PascalCase) = the LIVE supplier-invoice table; unpaid = status IN ('PENDING','INITIATED','OVERDUE','PARTIALLY_PAID','DEPOSIT_PAID'). amount is the FULL invoice amount even when PARTIALLY_PAID — remaining balance is not a column.
+- TRAPS: fin_invoices and fin_bills are EMPTY (built, never populated) — like fin_bank_transactions, never use them.
 - "Supplier".automationMode (OFF|ASSIST|AUTO) = per-supplier agent dial.
 - "StockAdjustment" adjustmentType IN ('WASTAGE','BREAKAGE','EXPIRED','SPILLAGE') = wastage; costAmount is estimated cost.
 
