@@ -634,7 +634,7 @@ export default function EmployeeDetailPage() {
                     <span className="font-semibold">RM {allowance.performanceEarned} / {allowance.pool}</span>
                   </div>
                   <ul className="space-y-1.5">
-                    {allowance.levers.filter((l) => l.applicable).map((l) => (
+                    {(allowance.levers ?? []).filter((l) => l.applicable).map((l) => (
                       <li key={l.key} className="flex items-center justify-between gap-2 text-xs">
                         <span
                           className={`h-2 w-2 shrink-0 rounded-full ${
@@ -657,26 +657,26 @@ export default function EmployeeDetailPage() {
                       <Clock className="h-4 w-4 text-blue-600" />
                       <span className="font-medium">Attendance</span>
                     </div>
-                    <span className={`font-semibold ${allowance.attendance.total > 0 ? "text-red-600" : ""}`}>
-                      {allowance.attendance.total > 0 ? `−RM ${allowance.attendance.total}` : "No deductions"}
+                    <span className={`font-semibold ${(allowance.attendance?.total ?? 0) > 0 ? "text-red-600" : ""}`}>
+                      {(allowance.attendance?.total ?? 0) > 0 ? `−RM ${allowance.attendance?.total}` : "No deductions"}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-3 text-[11px] text-gray-600">
-                    <span>Late {allowance.attendance.lateCount}</span>
-                    <span>No-show {allowance.attendance.absentCount}</span>
+                    <span>Late {allowance.attendance?.lateCount ?? 0}</span>
+                    <span>No-show {allowance.attendance?.absentCount ?? 0}</span>
                   </div>
-                  {allowance.attendance.deductions.length > 0 && (
+                  {(allowance.attendance?.deductions ?? []).length > 0 && (
                     <details className="mt-2 text-xs">
                       <summary className="cursor-pointer text-gray-600 hover:text-gray-800">
-                        {allowance.attendance.deductions.length} deduction{allowance.attendance.deductions.length === 1 ? "" : "s"} — tap to view
+                        {(allowance.attendance?.deductions ?? []).length} deduction{(allowance.attendance?.deductions ?? []).length === 1 ? "" : "s"} — tap to view
                       </summary>
                       <ul className="mt-1 space-y-0.5 text-gray-600">
-                        {allowance.attendance.deductions.slice(0, 10).map((d, i) => (
+                        {(allowance.attendance?.deductions ?? []).slice(0, 10).map((d, i) => (
                           <li key={i}>
                             {d.date ? <span className="font-mono text-[10px]">{d.date}</span> : null} · {d.label} (−RM {d.amount})
                           </li>
                         ))}
-                        {allowance.attendance.deductions.length > 10 && <li>… and {allowance.attendance.deductions.length - 10} more</li>}
+                        {(allowance.attendance?.deductions ?? []).length > 10 && <li>… and {(allowance.attendance?.deductions ?? []).length - 10} more</li>}
                       </ul>
                     </details>
                   )}
@@ -684,17 +684,17 @@ export default function EmployeeDetailPage() {
               </div>
 
               {/* Review penalty */}
-              {allowance.reviewPenalty.total > 0 && (
+              {(allowance.reviewPenalty?.total ?? 0) > 0 && (
                 <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <div className="flex items-center gap-1.5">
                       <AlertTriangle className="h-4 w-4 text-red-600" />
                       <span className="font-medium text-red-700">Review penalty</span>
                     </div>
-                    <span className="font-semibold text-red-700">−RM {allowance.reviewPenalty.total}</span>
+                    <span className="font-semibold text-red-700">−RM {allowance.reviewPenalty?.total}</span>
                   </div>
                   <ul className="space-y-0.5 text-xs text-red-700">
-                    {allowance.reviewPenalty.entries.map((e) => (
+                    {(allowance.reviewPenalty?.entries ?? []).map((e) => (
                       <li key={e.id} className="flex items-start gap-1.5">
                         <span className="flex shrink-0 items-center">
                           {Array.from({ length: 5 }).map((_, i) => (

@@ -214,7 +214,7 @@ export default function HRHomePage() {
             <>
               {/* Earn levers — each scored on its own KPI */}
               <div className="mb-3 space-y-2">
-                {allowance.levers.filter((l) => l.applicable).map((l) => {
+                {(allowance.levers ?? []).filter((l) => l.applicable).map((l) => {
                   const barColor = l.tier === "perform" ? "bg-green-500" : l.tier === "ok" ? "bg-amber-500" : "bg-red-500";
                   const pct = l.slice > 0 ? Math.round((l.earned / l.slice) * 100) : 0;
                   return (
@@ -230,28 +230,28 @@ export default function HRHomePage() {
                     </div>
                   );
                 })}
-                {allowance.levers.some((l) => !l.applicable) && (
+                {(allowance.levers ?? []).some((l) => !l.applicable) && (
                   <p className="px-1 text-[11px] text-gray-400">
-                    Not counted for you: {allowance.levers.filter((l) => !l.applicable).map((l) => l.label).join(", ")} (shared across your other areas).
+                    Not counted for you: {(allowance.levers ?? []).filter((l) => !l.applicable).map((l) => l.label).join(", ")} (shared across your other areas).
                   </p>
                 )}
               </div>
 
               {/* Deductions */}
-              {(allowance.attendance.total > 0 || allowance.reviewPenalty.total > 0) && (
+              {((allowance.attendance?.total ?? 0) > 0 || (allowance.reviewPenalty?.total ?? 0) > 0) && (
                 <div className="rounded-xl bg-red-50 p-3">
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <div className="flex items-center gap-1.5">
                       <AlertTriangle className="h-4 w-4 text-red-600" />
                       <span className="font-medium text-red-700">Deductions</span>
                     </div>
-                    <span className="font-semibold text-red-700">−RM {allowance.attendance.total + allowance.reviewPenalty.total}</span>
+                    <span className="font-semibold text-red-700">−RM {(allowance.attendance?.total ?? 0) + (allowance.reviewPenalty?.total ?? 0)}</span>
                   </div>
                   <p className="text-xs text-red-600">
                     {[
-                      allowance.attendance.lateCount > 0 ? `${allowance.attendance.lateCount} late` : null,
-                      allowance.attendance.absentCount > 0 ? `${allowance.attendance.absentCount} absence` : null,
-                      allowance.reviewPenalty.total > 0 ? `${allowance.reviewPenalty.entries.length} review penalty` : null,
+                      (allowance.attendance?.lateCount ?? 0) > 0 ? `${allowance.attendance?.lateCount} late` : null,
+                      (allowance.attendance?.absentCount ?? 0) > 0 ? `${allowance.attendance?.absentCount} absence` : null,
+                      (allowance.reviewPenalty?.total ?? 0) > 0 ? `${(allowance.reviewPenalty?.entries ?? []).length} review penalty` : null,
                     ].filter(Boolean).join(", ")} this month.
                   </p>
                 </div>
