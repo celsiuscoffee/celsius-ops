@@ -24,12 +24,20 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
      been failing since April (4,200 consecutive failures; `qa_alerts` grew to
      ~10k rows since Apr 7) and each failure re-triggered `qa-autofix` — which
      can **redeploy retired Vercel projects** (loyalty/inventory/pos project
-     IDs are hardcoded in it). **Dead rows disabled 2026-07-12**; the
-     backoffice page check stays enabled, so the 30-min cron now only watches
-     backoffice. Full decommission (drop the cron + both functions +
-     `qa_alerts`/`qa_health_checks`/`qa_fix_rules` tables) awaits owner
-     decision — BetterUptime (ops-hardening checklist §3) is the intended
-     replacement.
+     IDs are hardcoded in it).
+
+  **Fully cleared 2026-07-12 on owner's go-ahead:** the main project's 30-min
+  cron unscheduled; `qa_alerts`/`qa_fix_rules`/`qa_health_checks` dropped
+  (migration 080 — note: they were in `prevent_drop_critical_tables()`'s
+  hardcoded protected list, which the migration amends to remove ONLY those
+  three); all 3 edge functions (`qa-health`, `qa-autofix`, `qa-health-check`)
+  overwritten with secret-free 410 tombstones + `verify_jwt` on (MCP cannot
+  delete functions — delete from the dashboard at leisure). Nothing monitors
+  the live apps now — BetterUptime (ops-hardening checklist §3) is the
+  intended replacement. **Human actions remaining:** rotate the Telegram QA
+  bot token (old versions of `qa-health-check` embed it in source), delete
+  the 3 tombstoned functions, and decide whether the idle `celsius-inventory`
+  Supabase project (`akkwdrllvcpnkzgmclkk`) can be paused/deleted entirely.
 - 2026-07-10 — **Vercel schedules at most 40 cron jobs per project; entries past
   40 are silently never scheduled.** vercel.json hit 46 (Jun 30) and the tail —
   procurement-exec, par-levels-recalc, request-invoices/receivings,
