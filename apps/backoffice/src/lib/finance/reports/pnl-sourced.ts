@@ -409,15 +409,19 @@ function evaluateCount(
 }
 
 // Value inventory at a period boundary from the finalized (REVIEWED/SUBMITTED)
-// stock count nearest the boundary per outlet. Returns null (→ caller falls
-// back to the purchases proxy) when no usable count sits near the boundary, so
-// a wrong COGS is never printed. coverage exposes how complete the count was.
+// stock count nearest the boundary, PER OUTLET. Returns the per-outlet map so
+// the caller can require the SAME outlet set at both boundaries — summing
+// whatever outlets happened to count at each boundary would let one outlet's
+// entire stock value appear on one side of the roll-forward and not the other,
+// silently swinging COGS by that amount.
+type BoundaryValuation = { date: Date; value: number; items: number; costed: number; dropped: number; gap: number };
 async function valueInventoryAt(
   outletIds: string[],
   boundary: Date,
   cost: CostMaps,
-): Promise<{ value: number; dates: string[]; coverage: string } | null> {
-  if (!outletIds.length) return null;
+): Promise<Map<string, BoundaryValuation>> {
+  const used = new Map<string, BoundaryValuation>();
+  if (!outletIds.length) return used;
   const since = new Date(boundary.getTime() - COUNT_LOOKBACK_DAYS * 86400_000);
   const until = new Date(boundary.getTime() + COUNT_LOOKAHEAD_DAYS * 86400_000);
   const counts = await prisma.stockCount.findMany({
@@ -426,7 +430,6 @@ async function valueInventoryAt(
   });
   // Per outlet, the usable count CLOSEST to the boundary wins (a count on the
   // 2nd represents the 1st better than one from three weeks earlier).
-  const used = new Map<string, { date: Date; value: number; items: number; costed: number; dropped: number; gap: number }>();
   for (const c of counts) {
     const ok = evaluateCount(c.items, cost);
     if (!ok) continue;
@@ -434,11 +437,22 @@ async function valueInventoryAt(
     const prev = used.get(c.outletId);
     if (!prev || gap < prev.gap) used.set(c.outletId, { date: c.countDate, ...ok, gap });
   }
-  if (used.size === 0) return null;
+  return used;
+}
 
+// Sum a boundary valuation over a fixed outlet set (the outlets usable at
+// BOTH boundaries) into the display shape the COGS lines carry.
+function sumBoundary(
+  map: Map<string, BoundaryValuation>,
+  outlets: string[],
+): { value: number; dates: string[]; coverage: string } {
   let value = 0, tot = 0, costed = 0, dropped = 0;
   const dates: string[] = [];
-  for (const u of used.values()) { value += u.value; tot += u.items; costed += u.costed; dropped += u.dropped; dates.push(ymd(u.date)); }
+  for (const o of outlets) {
+    const u = map.get(o);
+    if (!u) continue;
+    value += u.value; tot += u.items; costed += u.costed; dropped += u.dropped; dates.push(ymd(u.date));
+  }
   const note = dropped ? `${costed}/${tot} items, ${dropped} typo dropped` : `${costed}/${tot} items`;
   return { value: round2(value), dates: [...new Set(dates)].sort(), coverage: note };
 }
@@ -569,20 +583,29 @@ export async function buildSourcedPnl(input: {
   const purchases = round2(Number(invAgg._sum?.amount ?? 0));
 
   // True COGS = Opening inventory + Purchases − Closing inventory, valuing the
-  // bounding stock counts at supplier cost. Falls back to purchases-only when
-  // either boundary lacks a usable count (so it's never a wrong number — just
-  // a flagged proxy).
+  // bounding stock counts at supplier cost. Only outlets with a usable count
+  // at BOTH boundaries enter the roll-forward — an outlet counted at one
+  // boundary only would put its whole stock value on one side and swing COGS
+  // by that amount. Falls back to purchases-only when no outlet covers both
+  // boundaries (so it's never a wrong number — just a flagged proxy).
   const costMap = await costPerBaseUnit();
-  const [opening, closing] = await Promise.all([
+  const [openMap, closeMap] = await Promise.all([
     valueInventoryAt(outletIds, dStart(start), costMap),
     valueInventoryAt(outletIds, dEnd(end), costMap),
   ]);
+  const bothBounded = [...openMap.keys()].filter((o) => closeMap.has(o));
   let cogsTotal: number;
   let cogsLines: PnlLine[];
-  if (opening && closing) {
+  if (bothBounded.length > 0) {
+    const opening = sumBoundary(openMap, bothBounded);
+    const closing = sumBoundary(closeMap, bothBounded);
+    // Outlets with no usable pair of counts contribute purchases only — say so
+    // on the line instead of implying the roll-forward covered everything.
+    const unbounded = outletIds.filter((o) => !bothBounded.includes(o)).length;
+    const scopeNote = unbounded ? ` · ${bothBounded.length}/${outletIds.length} outlets counted, rest purchases-only` : "";
     cogsTotal = round2(opening.value + purchases - closing.value);
     cogsLines = [
-      { code: "INV-OPEN", name: `Opening inventory (count ${opening.dates.join(", ")} · ${opening.coverage})`, amount: opening.value, parentCode: null },
+      { code: "INV-OPEN", name: `Opening inventory (count ${opening.dates.join(", ")} · ${opening.coverage}${scopeNote})`, amount: opening.value, parentCode: null },
       { code: "PROC", name: "Add: Purchases (procurement)", amount: purchases, parentCode: null },
       { code: "INV-CLOSE", name: `Less: Closing inventory (count ${closing.dates.join(", ")} · ${closing.coverage})`, amount: -closing.value, parentCode: null },
     ];
