@@ -22,6 +22,7 @@ import { getDefaultCompanyId } from "../companies";
 import { depreciationTotal } from "../fixed-assets";
 import type { PnlReport, PnlLine } from "./pnl";
 import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
+import { buildByCategory, type OutletPick } from "@/app/api/sales/_lib/reports";
 import {
   peopleCostForScope,
   PEOPLE_SALARY_CODE,
@@ -519,7 +520,7 @@ export async function buildSourcedPnl(input: {
   const outletRows = outletIds.length
     ? await prisma.outlet.findMany({
         where: { id: { in: outletIds } },
-        select: { id: true, loyaltyOutletId: true, pickupStoreId: true, posNativeCutoverAt: true },
+        select: { id: true, name: true, storehubId: true, loyaltyOutletId: true, pickupStoreId: true, posNativeCutoverAt: true },
       })
     : [];
   const rev = { instore: 0, online: 0, grab: 0, foodpanda: 0 };
@@ -613,13 +614,62 @@ export async function buildSourcedPnl(input: {
   });
   const purchases = round2(Number(invAgg._sum?.amount ?? 0));
 
+  const costMap = await costPerBaseUnit();
+
+  // Inter-outlet stock transfers. Stock is bought by one outlet (its invoices
+  // carry the cost) and shipped to another, so without netting, the sender's
+  // COGS is overstated by everything it forwarded and the receiver consumes
+  // for free. Transfers crossing the scope boundary adjust purchases: sent
+  // stock out (−), received stock in (+). Transfers wholly inside the scope
+  // (outlet-to-outlet within one company view) cancel and are skipped. Valued
+  // like everything else here: package price when the line names a package
+  // (transfer quantities are PACKAGE units when productPackageId is set),
+  // base cost otherwise. Timing follows the variance report: outbound by
+  // createdAt, inbound by receivedAt.
+  let transfersOut = 0;
+  let transfersIn = 0;
+  {
+    const inScope = new Set(outletIds.length ? outletIds : ["__none__"]);
+    const items = await prisma.stockTransferItem.findMany({
+      where: {
+        transfer: {
+          status: { in: ["RECEIVED", "COMPLETED"] },
+          OR: [
+            { toOutletId: { in: [...inScope] }, receivedAt: invDate },
+            { fromOutletId: { in: [...inScope] }, createdAt: invDate },
+          ],
+        },
+      },
+      select: {
+        productId: true, productPackageId: true, quantity: true,
+        transfer: { select: { fromOutletId: true, toOutletId: true } },
+      },
+    });
+    for (const ti of items) {
+      const fromIn = inScope.has(ti.transfer.fromOutletId);
+      const toIn = inScope.has(ti.transfer.toOutletId);
+      if (fromIn === toIn) continue; // internal to the scope — cancels
+      const unit = ti.productPackageId ? costMap.byPackage.get(ti.productPackageId) : costMap.byBase.get(ti.productId);
+      if (unit == null) continue;
+      const v = Number(ti.quantity) * unit;
+      if (fromIn) transfersOut += v;
+      else transfersIn += v;
+    }
+    transfersOut = round2(transfersOut);
+    transfersIn = round2(transfersIn);
+  }
+  const netPurchases = round2(purchases - transfersOut + transfersIn);
+  const transferLines: PnlLine[] = [
+    ...(transfersOut ? [{ code: "XFER-OUT", name: "Less: Stock transferred to other outlets (at supplier cost)", amount: -transfersOut, parentCode: null }] : []),
+    ...(transfersIn ? [{ code: "XFER-IN", name: "Add: Stock received from other outlets (at supplier cost)", amount: transfersIn, parentCode: null }] : []),
+  ];
+
   // True COGS = Opening inventory + Purchases − Closing inventory, valuing the
   // bounding stock counts at supplier cost. Only outlets with a usable count
   // at BOTH boundaries enter the roll-forward — an outlet counted at one
   // boundary only would put its whole stock value on one side and swing COGS
   // by that amount. Falls back to purchases-only when no outlet covers both
   // boundaries (so it's never a wrong number — just a flagged proxy).
-  const costMap = await costPerBaseUnit();
   const [openMap, closeMap] = await Promise.all([
     valueInventoryAt(outletIds, dStart(start), costMap),
     valueInventoryAt(outletIds, dEnd(end), costMap),
@@ -634,17 +684,44 @@ export async function buildSourcedPnl(input: {
     // on the line instead of implying the roll-forward covered everything.
     const unbounded = outletIds.filter((o) => !bothBounded.includes(o)).length;
     const scopeNote = unbounded ? ` · ${bothBounded.length}/${outletIds.length} outlets counted, rest purchases-only` : "";
-    cogsTotal = round2(opening.value + purchases - closing.value);
+    cogsTotal = round2(opening.value + netPurchases - closing.value);
     cogsLines = [
       { code: "INV-OPEN", name: `Opening inventory (count ${opening.dates.join(", ")} · ${opening.coverage}${scopeNote})`, amount: opening.value, parentCode: null },
       { code: "PROC", name: "Add: Purchases (procurement)", amount: purchases, parentCode: null },
+      ...transferLines,
       { code: "INV-CLOSE", name: `Less: Closing inventory (count ${closing.dates.join(", ")} · ${closing.coverage})`, amount: -closing.value, parentCode: null },
     ];
   } else {
-    cogsTotal = purchases;
-    cogsLines = purchases
-      ? [{ code: "PROC", name: "Purchases (procurement, COGS = purchases, no usable stock count)", amount: purchases, parentCode: null }]
-      : [];
+    // No usable count pair: COGS stays at net purchases (prudent — expensing
+    // the lot absorbs waste instead of asserting unverified stock), but the
+    // section SHOWS the split: theoretical consumption (sales × recipes ×
+    // supplier cost — the same engine as the COGS report and dashboard) and
+    // the purchases-above-consumption remainder (stock build or unrecorded
+    // waste; only a full closing count can tell which.)
+    cogsTotal = netPurchases;
+    let theoretical = 0;
+    if (netPurchases > 0 && outletRows.length) {
+      try {
+        const cat = await buildByCategory(outletRows as OutletPick[], start, end);
+        theoretical = round2(Number(cat.total?.cogs) || 0);
+      } catch {
+        theoretical = 0; // theoretical engine unavailable — single-line fallback
+      }
+    }
+    if (theoretical > 0 && Math.abs(netPurchases - theoretical) >= 1) {
+      const variance = round2(netPurchases - theoretical);
+      cogsLines = [
+        { code: "COGS-CONS", name: "Ingredient consumption (theoretical: sales × recipes at supplier cost)", amount: theoretical, parentCode: null },
+        { code: "COGS-VAR", name: variance >= 0 ? "Purchases above consumption (stock build or unrecorded waste, no usable closing count)" : "Purchases below consumption (stock drawdown, no usable closing count)", amount: variance, parentCode: null },
+      ];
+    } else {
+      cogsLines = netPurchases || purchases
+        ? [
+            { code: "PROC", name: "Purchases (procurement, COGS = purchases, no usable stock count)", amount: purchases, parentCode: null },
+            ...transferLines,
+          ]
+        : [];
+    }
   }
 
   // ─── EXPENSES: marketing (ads + bank) + other opex (bank) ────────────────
