@@ -804,6 +804,9 @@ export async function buildSourcedPnl(input: {
   const bothBounded = [...openMap.keys()].filter((o) => closeMap.has(o));
   let cogsTotal: number;
   let cogsLines: PnlLine[];
+  // Purchases above theoretical consumption when no count bounds the period —
+  // expensed below gross profit as STOCK-VAR (see the fallback branch).
+  let stockVariance = 0;
   if (bothBounded.length > 0) {
     const opening = sumBoundary(openMap, bothBounded);
     const closing = sumBoundary(closeMap, bothBounded);
@@ -819,12 +822,17 @@ export async function buildSourcedPnl(input: {
       { code: "INV-CLOSE", name: `Less: Closing inventory (count ${closing.dates.join(", ")} · ${closing.coverage})`, amount: -closing.value, parentCode: null },
     ];
   } else {
-    // No usable count pair: COGS stays at net purchases (prudent — expensing
-    // the lot absorbs waste instead of asserting unverified stock), but the
-    // section SHOWS the split: theoretical consumption (sales × recipes ×
-    // supplier cost — the same engine as the COGS report and dashboard) and
-    // the purchases-above-consumption remainder (stock build or unrecorded
-    // waste; only a full closing count can tell which.)
+    // No usable count pair. COGS is the THEORETICAL consumption (sales ×
+    // recipes at supplier cost, the same engine as the COGS report and the
+    // dashboard) so gross profit reflects real recipe economics. The
+    // purchases-above-consumption remainder is unverifiable (stock build or
+    // waste, only a closing count can tell which), so it is neither COGS nor
+    // an asset: it lands below gross profit as its own expense line
+    // (STOCK-VAR), still fully expensed, net income identical to expensing
+    // the purchases directly. A stock DRAWDOWN (purchases below consumption)
+    // stays inside COGS as split lines, since the extra consumption came out
+    // of prior-period stock and belongs in cost of sales; charging more than
+    // was purchased would double-expense what earlier periods already bore.
     cogsTotal = netPurchases;
     let theoretical = 0;
     if (netPurchases > 0 && outletRows.length) {
@@ -835,11 +843,16 @@ export async function buildSourcedPnl(input: {
         theoretical = 0; // theoretical engine unavailable — single-line fallback
       }
     }
-    if (theoretical > 0 && Math.abs(netPurchases - theoretical) >= 1) {
-      const variance = round2(netPurchases - theoretical);
+    if (theoretical > 0 && netPurchases - theoretical >= 1) {
+      stockVariance = round2(netPurchases - theoretical);
+      cogsTotal = theoretical;
       cogsLines = [
         { code: "COGS-CONS", name: "Ingredient consumption (theoretical: sales × recipes at supplier cost)", amount: theoretical, parentCode: null },
-        { code: "COGS-VAR", name: variance >= 0 ? "Purchases above consumption (stock build or unrecorded waste, no usable closing count)" : "Purchases below consumption (stock drawdown, no usable closing count)", amount: variance, parentCode: null },
+      ];
+    } else if (theoretical > 0 && theoretical - netPurchases >= 1) {
+      cogsLines = [
+        { code: "COGS-CONS", name: "Ingredient consumption (theoretical: sales × recipes at supplier cost)", amount: theoretical, parentCode: null },
+        { code: "COGS-VAR", name: "Purchases below consumption (stock drawdown, no usable closing count)", amount: round2(netPurchases - theoretical), parentCode: null },
       ];
     } else {
       cogsLines = netPurchases || purchases
@@ -854,6 +867,19 @@ export async function buildSourcedPnl(input: {
   // ─── EXPENSES: marketing (ads + bank) + other opex (bank) ────────────────
   const expenseLines: PnlLine[] = [];
   let totalExpenses = 0;
+
+  // Unverified inventory variance from the COGS fallback: not cost of goods
+  // actually sold, not a provable asset, so it sits here, visible, fully
+  // expensed, resolved to real inventory movement once counts exist.
+  if (stockVariance > 0) {
+    expenseLines.push({
+      code: "STOCK-VAR",
+      name: "Inventory variance: purchases above consumption (stock build or waste, pending closing count)",
+      amount: stockVariance,
+      parentCode: null,
+    });
+    totalExpenses += stockVariance;
+  }
 
   // Marketing — Google Ads attributed PER OUTLET via the campaign's outletId
   // (set in the ads module). A campaign tagged to an outlet lands in that

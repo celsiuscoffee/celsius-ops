@@ -23,7 +23,7 @@ const RM = (n: number | null | undefined) => {
 // marketing, fees) instead of a flat list. Codes come from pnl-sourced.ts:
 // PEOPLE-* (payroll accrual), MKT-* (ads/Grab), BANK:<CATEGORY> (bank lines),
 // DEP (depreciation). Unknown codes land in Other, never dropped.
-const EXPENSE_GROUP_ORDER = ["People", "Occupancy & infrastructure", "Marketing & channel", "Fees & compliance", "Other"] as const;
+const EXPENSE_GROUP_ORDER = ["People", "Occupancy & infrastructure", "Marketing & channel", "Fees & compliance", "Inventory variance", "Other"] as const;
 type ExpenseGroupLabel = (typeof EXPENSE_GROUP_ORDER)[number];
 function expenseGroup(code: string): ExpenseGroupLabel {
   if (
@@ -40,6 +40,7 @@ function expenseGroup(code: string): ExpenseGroupLabel {
   if (
     ["BANK:MANAGEMENT_FEE", "BANK:ROYALTY_FEE", "BANK:LICENSING_FEE", "BANK:BANK_FEE", "BANK:TAX", "BANK:COMPLIANCE", "BANK:CFS_FEE"].includes(code)
   ) return "Fees & compliance";
+  if (code === "STOCK-VAR") return "Inventory variance";
   return "Other";
 }
 
