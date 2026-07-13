@@ -37,6 +37,38 @@ export const PEOPLE_STAT_NAME =
 export const PEOPLE_UNASSIGNED_SALARY_NAME = "HQ and management payroll";
 export const PEOPLE_UNASSIGNED_STAT_NAME = "HQ and management statutory";
 
+// ─── Shared staff (rovers) ───────────────────────────────────────────────
+// Employees who serve multiple outlets: their payroll cost fans out across
+// outlets by weight instead of landing on preferred_outlet_id (or the HQ
+// pool). Mirrors the labour-gate's rover treatment (ROVER_SHARE_WEEKLY in
+// lib/hr/labour-gate-lib.ts) so scheduling and the P&L tell the same story.
+// Keyed by User.id; weights should sum to 1.
+export const SHARED_STAFF_ALLOCATIONS: Record<string, { outletId: string; weight: number }[]> = {
+  // Syafiq Kaberi — rover barista lead across the three revenue outlets
+  // (owner instruction 2026-07-11: divide by three).
+  "272efe5a-0930-4ab1-96a5-d9c22150c9bb": [
+    { outletId: "b3b6299e-09dc-4f4a-80ef-bbc04316d324", weight: 1 / 3 }, // Shah Alam
+    { outletId: "89b19c9f-b1e0-42fe-a404-6d1a472e34c5", weight: 1 / 3 }, // Putrajaya (Conezion)
+    { outletId: "5d1f2731-1985-4e54-a6df-3990e7d5c159", weight: 1 / 3 }, // Tamarind
+  ],
+};
+
+// Split an amount by allocation weights, rounding each share to cents with the
+// last share absorbing the remainder so the parts always sum exactly.
+function splitByAllocation(
+  amount: number,
+  alloc: { outletId: string; weight: number }[],
+): { outletId: string; amount: number }[] {
+  const out: { outletId: string; amount: number }[] = [];
+  let allocated = 0;
+  for (let i = 0; i < alloc.length; i++) {
+    const share = i === alloc.length - 1 ? round2(amount - allocated) : round2(amount * alloc[i].weight);
+    allocated = round2(allocated + share);
+    out.push({ outletId: alloc[i].outletId, amount: share });
+  }
+  return out;
+}
+
 // The [start, end] window as an inclusive list of (year, month).
 function monthsInWindow(start: string, end: string): { year: number; month: number }[] {
   const [sy, sm] = start.slice(0, 7).split("-").map(Number);
@@ -51,6 +83,15 @@ function monthsInWindow(start: string, end: string): { year: number; month: numb
     if (m > 12) { m = 1; y++; }
   }
   return out;
+}
+
+// Outlet → company mapping (fin_outlet_companies), needed wherever a shared
+// staff's split shares are re-attributed to outlets in other companies.
+async function outletCompanyMap(): Promise<Map<string, string>> {
+  const rows = await prisma.$queryRaw<{ outlet_id: string; company_id: string }[]>(Prisma.sql`
+    SELECT outlet_id, company_id FROM fin_outlet_companies
+  `);
+  return new Map(rows.map((r) => [r.outlet_id, r.company_id]));
 }
 
 // The months (YYYY-MM) that have a fin_payroll_actuals row, so the window can be
@@ -134,19 +175,40 @@ export async function peopleCostForScope(scope: PeopleCostScope): Promise<People
 
   // Draft monthly runs for the uncovered tail (per-employee, attributed via the
   // employee's assigned outlet). No outlet -> HQ pool via the default company.
+  // Shared staff (SHARED_STAFF_ALLOCATIONS) fan out across their outlets by
+  // weight instead, so a rover's cost lands where they actually serve.
   if (draftMos.length) {
-    const rows = await prisma.$queryRaw<Row[]>(Prisma.sql`
-      SELECT p.preferred_outlet_id AS outlet_id,
-             fc.company_id AS company_id,
+    const perUser = await prisma.$queryRaw<{ user_id: string; outlet_id: string | null; salary: number; statutory: number }[]>(Prisma.sql`
+      SELECT i.user_id,
+             p.preferred_outlet_id AS outlet_id,
              COALESCE(SUM(i.total_gross), 0)::float AS salary,
              COALESCE(SUM(i.epf_employer + i.socso_employer + i.eis_employer), 0)::float AS statutory
       FROM hr_payroll_items i
       JOIN hr_payroll_runs r ON r.id = i.payroll_run_id AND r.cycle_type = 'monthly'
       LEFT JOIN hr_employee_profiles p ON p.user_id = i.user_id
-      LEFT JOIN fin_outlet_companies fc ON fc.outlet_id = p.preferred_outlet_id
       WHERE ${monthListPredicate(draftMos)}
-      GROUP BY p.preferred_outlet_id, fc.company_id
+      GROUP BY i.user_id, p.preferred_outlet_id
     `);
+    const companyByOutlet = await outletCompanyMap();
+    const rows: Row[] = [];
+    for (const u of perUser) {
+      const alloc = SHARED_STAFF_ALLOCATIONS[u.user_id];
+      if (alloc) {
+        for (const s of splitByAllocation(Number(u.salary), alloc)) {
+          rows.push({ outlet_id: s.outletId, company_id: companyByOutlet.get(s.outletId) ?? null, salary: s.amount, statutory: 0 });
+        }
+        for (const s of splitByAllocation(Number(u.statutory), alloc)) {
+          rows.push({ outlet_id: s.outletId, company_id: companyByOutlet.get(s.outletId) ?? null, salary: 0, statutory: s.amount });
+        }
+      } else {
+        rows.push({
+          outlet_id: u.outlet_id,
+          company_id: u.outlet_id ? companyByOutlet.get(u.outlet_id) ?? null : null,
+          salary: Number(u.salary),
+          statutory: Number(u.statutory),
+        });
+      }
+    }
     add(rows);
   }
 
@@ -185,6 +247,55 @@ export async function peopleCostForScope(scope: PeopleCostScope): Promise<People
     unassignedSalary: round2(unassignedSalary),
     unassignedStatutory: round2(unassignedStatutory),
   };
+}
+
+// Widen a drill SQL scope filter so shared staff are always fetched — their
+// preferred outlet (usually NULL) says nothing about where their cost lands,
+// so their shares are re-scoped in JS after expansion.
+function withSharedStaff(filter: Prisma.Sql): Prisma.Sql {
+  const ids = Object.keys(SHARED_STAFF_ALLOCATIONS);
+  if (!ids.length) return filter;
+  return Prisma.sql`(${filter}) OR i.user_id IN (${Prisma.join(ids)})`;
+}
+
+type RawItemRow = { user_id: string; name: string | null; outlet_id: string | null; year: number; month: number; amount: number };
+
+// Expand shared staff into weighted per-outlet share rows, then keep only the
+// rows inside the requested scope. Regular staff pass through unchanged.
+function expandAndScopeItems(
+  rows: RawItemRow[],
+  scopeKind: "company" | "outlet" | "consolidated" | "unassigned",
+  companyId: string,
+  outletIds: string[],
+  companyByOutlet: Map<string, string>,
+): PeopleDrillRow[] {
+  const out: PeopleDrillRow[] = [];
+  for (const r of rows) {
+    const alloc = SHARED_STAFF_ALLOCATIONS[r.user_id];
+    const expanded: PeopleDrillRow[] = alloc
+      ? splitByAllocation(round2(Number(r.amount)), alloc).map((s) => ({
+          userId: `${r.user_id}:${s.outletId}`,
+          name: `${r.name ?? r.user_id} (1/${alloc.length} share)`,
+          outletId: s.outletId,
+          year: Number(r.year),
+          month: Number(r.month),
+          amount: s.amount,
+        }))
+      : [{ userId: r.user_id, name: r.name, outletId: r.outlet_id, year: Number(r.year), month: Number(r.month), amount: round2(Number(r.amount)) }];
+    for (const e of expanded) {
+      if (scopeKind === "unassigned") {
+        if (e.outletId != null) continue;
+      } else if (scopeKind === "outlet") {
+        if (!e.outletId || !outletIds.includes(e.outletId)) continue;
+      } else if (scopeKind === "consolidated") {
+        if (!e.outletId || !companyByOutlet.has(e.outletId)) continue;
+      } else if (!e.outletId || companyByOutlet.get(e.outletId) !== companyId) {
+        continue;
+      }
+      out.push(e);
+    }
+  }
+  return out;
 }
 
 // Per-line rows for the people-cost drill.
@@ -248,7 +359,7 @@ export async function peopleCostDrill(args: {
     } else if (scopeKind === "consolidated") itemScope = Prisma.sql`p.preferred_outlet_id IS NOT NULL AND fc.company_id IS NOT NULL`;
     else itemScope = Prisma.sql`fc.company_id = ${companyId} AND p.preferred_outlet_id IS NOT NULL`;
 
-    const itemRows = await prisma.$queryRaw<{ user_id: string; name: string | null; outlet_id: string | null; year: number; month: number; amount: number }[]>(Prisma.sql`
+    const itemRows = await prisma.$queryRaw<RawItemRow[]>(Prisma.sql`
       SELECT i.user_id, u.name AS name, p.preferred_outlet_id AS outlet_id,
              r.period_year AS year, r.period_month AS month, ${amountExpr}::float AS amount
       FROM hr_payroll_items i
@@ -256,9 +367,10 @@ export async function peopleCostDrill(args: {
       LEFT JOIN hr_employee_profiles p ON p.user_id = i.user_id
       LEFT JOIN fin_outlet_companies fc ON fc.outlet_id = p.preferred_outlet_id
       LEFT JOIN "User" u ON u.id = i.user_id
-      WHERE ${monthListPredicate(actualMos)} AND (${itemScope})
+      WHERE ${monthListPredicate(actualMos)} AND (${withSharedStaff(itemScope)})
       ORDER BY r.period_year ASC, r.period_month ASC, u.name ASC
     `);
+    const scoped = expandAndScopeItems(itemRows, scopeKind, companyId, outletIds, await outletCompanyMap());
 
     const cellKey = (outletId: string | null, year: number, month: number) =>
       `${outletId ?? "NULL"}|${ymKey(year, month)}`;
@@ -266,14 +378,13 @@ export async function peopleCostDrill(args: {
       aggRows.map((r) => cellKey(r.outlet_id, r.period.getUTCFullYear(), r.period.getUTCMonth() + 1)),
     );
     const itemSumByCell = new Map<string, number>();
-    for (const r of itemRows) {
-      const key = cellKey(r.outlet_id, Number(r.year), Number(r.month));
+    for (const r of scoped) {
+      const key = cellKey(r.outletId, r.year, r.month);
       // Employees outside the ledger's cells are not part of the P&L line —
       // showing them would break the tie to the statement.
       if (!coveredCells.has(key)) continue;
-      const amount = round2(Number(r.amount));
-      itemSumByCell.set(key, round2((itemSumByCell.get(key) ?? 0) + amount));
-      out.push({ userId: r.user_id, name: r.name, outletId: r.outlet_id, year: Number(r.year), month: Number(r.month), amount });
+      itemSumByCell.set(key, round2((itemSumByCell.get(key) ?? 0) + r.amount));
+      out.push(r);
     }
 
     for (const r of aggRows) {
@@ -307,7 +418,7 @@ export async function peopleCostDrill(args: {
     } else if (scopeKind === "consolidated") scopeFilter = Prisma.sql`p.preferred_outlet_id IS NOT NULL AND fc.company_id IS NOT NULL`;
     else scopeFilter = Prisma.sql`fc.company_id = ${companyId}`;
 
-    const rows = await prisma.$queryRaw<{ user_id: string; name: string | null; outlet_id: string | null; year: number; month: number; amount: number }[]>(Prisma.sql`
+    const rows = await prisma.$queryRaw<RawItemRow[]>(Prisma.sql`
       SELECT i.user_id, u.name AS name, p.preferred_outlet_id AS outlet_id,
              r.period_year AS year, r.period_month AS month, ${amountExpr}::float AS amount
       FROM hr_payroll_items i
@@ -315,12 +426,10 @@ export async function peopleCostDrill(args: {
       LEFT JOIN hr_employee_profiles p ON p.user_id = i.user_id
       LEFT JOIN fin_outlet_companies fc ON fc.outlet_id = p.preferred_outlet_id
       LEFT JOIN "User" u ON u.id = i.user_id
-      WHERE ${monthListPredicate(draftMos)} AND (${scopeFilter})
+      WHERE ${monthListPredicate(draftMos)} AND (${withSharedStaff(scopeFilter)})
       ORDER BY r.period_year ASC, r.period_month ASC, u.name ASC
     `);
-    for (const r of rows) {
-      out.push({ userId: r.user_id, name: r.name, outletId: r.outlet_id, year: Number(r.year), month: Number(r.month), amount: round2(Number(r.amount)) });
-    }
+    out.push(...expandAndScopeItems(rows, scopeKind, companyId, outletIds, await outletCompanyMap()));
   }
 
   return out.filter((r) => r.amount !== 0);
