@@ -18,7 +18,7 @@ import { Prisma, type CashCategory } from "@prisma/client";
 import { getFinanceClient } from "../supabase";
 import { getDefaultCompanyId } from "../companies";
 import { depreciationByAsset } from "../fixed-assets";
-import { effectiveGrabRate, fetchRecognisedBankLines } from "./pnl-sourced";
+import { grabMarketingForOutlets, grabCommissionRecon, fetchRecognisedBankLines } from "./pnl-sourced";
 import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
 import {
   peopleCostDrill,
@@ -463,25 +463,30 @@ export async function sourcedPnlDrillDown(args: {
   // their accrual-recognised P&L lines.
   if (code.startsWith("BANK:")) return drillBankRecognised(code.slice(5), companyId, start, end, outletId);
   if (code === "MKT-GRAB-COMM") {
-    // A derived line, not transactions — the drawer explains the calculation.
-    const [rev, gr] = await Promise.all([
+    // A derived line, not transactions — the drawer explains the same
+    // period-actual bank reconciliation the P&L line uses.
+    const outletIds = await companyOutlets(companyId, outletId);
+    const [rev, mkt] = await Promise.all([
       drillRevenue("REV-GRAB", companyId, start, end, outletId),
-      effectiveGrabRate(end),
+      grabMarketingForOutlets(outletIds, start, end),
     ]);
     const gross = round2(rev.reduce((s, r) => s + r.amount, 0));
-    const est = round2(gross * gr.rate);
-    // Grab's payout nets off commission AND marketing (promos, GrabAds); the
-    // marketing part is booked on its own P&L lines, so the commission rate
-    // excludes it — else the marketing spend would double-count.
-    const basis = gr.source === "recon"
-      ? `Effective commission ${Math.round(gr.rate * 100)}% from the payout reconciliation: over the trailing window, gross Grab sales RM${gr.windowGross.toFixed(2)} less payouts RM${gr.windowPayouts.toFixed(2)}, merchant promos RM${gr.windowPromos.toFixed(2)} and GrabAds RM${gr.windowAds.toFixed(2)} (both booked as their own marketing lines) leaves the commission portion.`
-      : `Fallback rate ${Math.round(gr.rate * 100)}% (payout window too thin to derive the effective rate).`;
+    const gc = await grabCommissionRecon({
+      companyId, start, end,
+      grabGross: gross,
+      promos: mkt.promos,
+      ads: mkt.ads,
+      outletScoped: !!outletId,
+    });
+    const basis = gc.source === "bank_recon"
+      ? `Reconciled with the bank statement for this period: gross Grab sales RM${gc.gross.toFixed(2)} less RM${gc.payouts.toFixed(2)} payouts actually received${gc.poolShare < 1 ? ` (this company's ${Math.round(gc.poolShare * 100)}% share of the pooled HQ settlement account, allocated by booked Grab gross)` : ""}, less merchant promos RM${gc.promos.toFixed(2)} and GrabAds RM${gc.ads.toFixed(2)} (both on their own marketing lines). The balance is Grab commission plus any marketing netted off that is not separately captured, ${gc.rate}% of gross.`
+      : `No settlements banked in this period yet (in-progress month or outlet view), so this is the trailing-window estimate at ${gc.rate}%; it becomes bank-reconciled once payouts land.`;
     return [{
-      transactionId: "grab-comm-estimate",
+      transactionId: "grab-comm-recon",
       txnDate: end,
-      description: `Commission on RM${gross.toFixed(2)} gross GrabFood sales this period. ${basis} Exact per-order commission lives in the Grab settlement report.`,
-      amount: est,
-      debit: est,
+      description: `Commission on RM${gross.toFixed(2)} gross GrabFood sales this period. ${basis}`,
+      amount: gc.commission,
+      debit: gc.commission,
       credit: 0,
     }];
   }

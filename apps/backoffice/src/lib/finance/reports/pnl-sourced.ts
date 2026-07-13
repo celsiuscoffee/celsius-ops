@@ -253,6 +253,133 @@ export type GrabRate = {
   windowAds: number;
 };
 
+// Merchant-funded Grab marketing for a set of outlets in a period: promos
+// netted per completed order + manually entered GrabAds spend. Shared by the
+// P&L builder and the commission drill so both use identical figures.
+export async function grabMarketingForOutlets(
+  outletIds: string[],
+  start: string,
+  end: string,
+): Promise<{ promos: number; ads: number; loyaltyIds: string[] }> {
+  if (!outletIds.length) return { promos: 0, ads: 0, loyaltyIds: [] };
+  const loyaltyRows = await prisma.$queryRaw<{ loyalty_id: string }[]>(Prisma.sql`
+    SELECT "loyaltyOutletId" AS loyalty_id FROM "Outlet"
+    WHERE id IN (${Prisma.join(outletIds)}) AND "loyaltyOutletId" IS NOT NULL
+  `);
+  const loyaltyIds = loyaltyRows.map((r) => r.loyalty_id);
+  if (!loyaltyIds.length) return { promos: 0, ads: 0, loyaltyIds };
+  const [promoAgg, adAgg] = await Promise.all([
+    prisma.$queryRaw<{ promo_sen: bigint }[]>(Prisma.sql`
+      SELECT COALESCE(SUM(grab_merchant_promo), 0) AS promo_sen
+      FROM pos_orders
+      WHERE source = 'grabfood' AND status = 'completed'
+        AND outlet_id IN (${Prisma.join(loyaltyIds)})
+        AND created_at::date BETWEEN ${start}::date AND ${end}::date
+    `),
+    prisma.$queryRaw<{ ad_sen: bigint }[]>(Prisma.sql`
+      SELECT COALESCE(SUM(amount_sen), 0) AS ad_sen
+      FROM grab_ads_spend
+      WHERE outlet_id IN (${Prisma.join(loyaltyIds)})
+        AND period_start BETWEEN ${start}::date AND ${end}::date
+    `),
+  ]);
+  return {
+    promos: round2(Number(promoAgg[0]?.promo_sen ?? 0) / 100),
+    ads: round2(Number(adAgg[0]?.ad_sen ?? 0) / 100),
+    loyaltyIds,
+  };
+}
+
+// Bank Grab payouts (GPAY settlements) received into the given accounts in the
+// period.
+async function grabPayoutsBanked(suffixes: string[], start: string, end: string): Promise<number> {
+  const agg = await prisma.bankStatementLine.aggregate({
+    _sum: { amount: true },
+    where: {
+      direction: "CR",
+      category: { in: ["GRAB", "GRAB_PUTRAJAYA"] },
+      txnDate: { gte: dStart(start), lte: dEnd(end) },
+      statement: { OR: suffixes.map((x) => ({ accountName: { contains: `(${x})` } })) },
+    },
+  });
+  return round2(Number(agg._sum?.amount ?? 0));
+}
+
+export type GrabCommissionRecon = {
+  commission: number;   // the P&L line: gross − payouts − promos − ads, floored at 0
+  gross: number;        // scope Grab gross for the period
+  payouts: number;      // bank payouts attributed to the scope
+  promos: number;       // merchant-funded promos (own P&L line)
+  ads: number;          // GrabAds (own P&L line)
+  poolShare: number;    // share of the pooled HQ account allocated (1 = exact bank)
+  source: "bank_recon" | "rate_fallback";
+  rate: number;         // implied effective commission %, for the line label
+};
+
+// Period-ACTUAL Grab commission: reconciled against the bank statement for the
+// same period, never a capped trailing-window rate. The balance of gross less
+// what Grab actually paid out is commission + Grab marketing; separately
+// captured promos and GrabAds stay on their own lines, and the remainder is
+// commission plus any marketing Grab netted off that we could not capture
+// per order (the line name says so).
+// Tamarind settles into its own account (exact). Shah Alam/Nilai and Conezion
+// settle into the pooled HQ account as anonymous GPAY credits, so the pool is
+// allocated by each company's booked Grab gross (GL 1005 EOD accruals). Falls
+// back to the trailing-window rate only when the period has no settlements
+// yet (an in-progress month) or for outlet-scoped views (no bank tie exists
+// below company grain).
+export async function grabCommissionRecon(args: {
+  companyId: string;
+  start: string;
+  end: string;
+  grabGross: number;
+  promos: number;
+  ads: number;
+  outletScoped: boolean;
+}): Promise<GrabCommissionRecon> {
+  const { companyId, start, end, grabGross, promos, ads, outletScoped } = args;
+  const mk = (commission: number, payouts: number, poolShare: number, source: GrabCommissionRecon["source"]): GrabCommissionRecon => {
+    const c = round2(Math.max(0, commission));
+    return {
+      commission: c, gross: grabGross, payouts, promos, ads, poolShare, source,
+      rate: grabGross > 0 ? Math.round((c / grabGross) * 1000) / 10 : 0,
+    };
+  };
+  const fallback = async () => {
+    const gr = await effectiveGrabRate(end);
+    return mk(grabGross * gr.rate, 0, 0, "rate_fallback");
+  };
+  if (outletScoped) return fallback();
+
+  if (companyId === "celsiustamarind") {
+    const payouts = await grabPayoutsBanked(["9345"], start, end);
+    if (payouts <= 0) return fallback();
+    return mk(grabGross - payouts - promos - ads, payouts, 1, "bank_recon");
+  }
+
+  // celsius + celsiusconezion share the HQ pool (4384; 2644 included in case
+  // Grab ever settles Conezion directly).
+  const pool = await grabPayoutsBanked(["4384", "2644"], start, end);
+  if (pool <= 0) return fallback();
+  const glRows = await prisma.$queryRaw<{ company_id: string; g: number }[]>(Prisma.sql`
+    SELECT t.company_id, COALESCE(SUM(l.debit), 0)::float AS g
+    FROM fin_journal_lines l
+    JOIN fin_transactions t ON t.id = l.transaction_id
+    WHERE t.status = 'posted' AND t.txn_type <> 'grab_clearing' AND l.account_code = '1005'
+      AND t.company_id IN ('celsius', 'celsiusconezion')
+      AND t.txn_date >= ${start}::date AND t.txn_date <= ${end}::date
+    GROUP BY 1
+  `);
+  const gCel = Number(glRows.find((r) => r.company_id === "celsius")?.g ?? 0);
+  const gCon = Number(glRows.find((r) => r.company_id === "celsiusconezion")?.g ?? 0);
+  const total = gCel + gCon;
+  if (total <= 0) return fallback();
+  const share = companyId === "celsius" ? gCel / total : gCon / total;
+  const payouts = round2(pool * share);
+  if (payouts <= 0) return fallback();
+  return mk(grabGross - payouts - promos - ads, payouts, round2(share * 100) / 100, "bank_recon");
+}
+
 export async function effectiveGrabRate(end: string): Promise<GrabRate> {
   const winEnd = dEnd(end);
   const winStart = new Date(winEnd.getTime() - GRAB_RATE_WINDOW_DAYS * 86400_000);
@@ -656,33 +783,20 @@ export async function buildSourcedPnl(input: {
   // fin_outlet_companies/invoices key outlets by the Outlet UUID, but
   // pos_orders/grab_ads_spend use the loyalty outlet id (e.g. "outlet-sa") —
   // bridge UUID → loyaltyOutletId before querying the Grab tables.
+  let grabPromoTotal = 0;
+  let grabAdsTotal = 0;
   if (outletIds.length) {
-    const loyaltyRows = await prisma.$queryRaw<{ loyalty_id: string }[]>(Prisma.sql`
-      SELECT "loyaltyOutletId" AS loyalty_id FROM "Outlet"
-      WHERE id IN (${Prisma.join(outletIds)}) AND "loyaltyOutletId" IS NOT NULL
-    `);
-    const loyaltyIds = loyaltyRows.map((r) => r.loyalty_id);
-    if (loyaltyIds.length) {
-      const promoAgg = await prisma.$queryRaw<{ promo_sen: bigint }[]>(Prisma.sql`
-        SELECT COALESCE(SUM(grab_merchant_promo), 0) AS promo_sen
-        FROM pos_orders
-        WHERE source = 'grabfood' AND status = 'completed'
-          AND outlet_id IN (${Prisma.join(loyaltyIds)})
-          AND created_at::date BETWEEN ${start}::date AND ${end}::date
-      `);
-      const grabPromo = round2(Number(promoAgg[0]?.promo_sen ?? 0) / 100);
+    const mkt = await grabMarketingForOutlets(outletIds, start, end);
+    if (mkt.loyaltyIds.length) {
+      const grabPromo = mkt.promos;
+      grabPromoTotal = grabPromo;
       if (grabPromo) {
         expenseLines.push({ code: "MKT-GRAB-PROMO", name: "GrabFood promos (merchant-funded)", amount: grabPromo, parentCode: null });
         totalExpenses += grabPromo;
       }
 
-      const adAgg = await prisma.$queryRaw<{ ad_sen: bigint }[]>(Prisma.sql`
-        SELECT COALESCE(SUM(amount_sen), 0) AS ad_sen
-        FROM grab_ads_spend
-        WHERE outlet_id IN (${Prisma.join(loyaltyIds)})
-          AND period_start BETWEEN ${start}::date AND ${end}::date
-      `);
-      const grabAds = round2(Number(adAgg[0]?.ad_sen ?? 0) / 100);
+      const grabAds = mkt.ads;
+      grabAdsTotal = grabAds;
       if (grabAds) {
         expenseLines.push({ code: "MKT-GRAB-ADS", name: "GrabAds", amount: grabAds, parentCode: null });
         totalExpenses += grabAds;
@@ -695,15 +809,24 @@ export async function buildSourcedPnl(input: {
   // feed). The rate comes from the payout reconciliation, not a hardcoded
   // guess — see effectiveGrabRate.
   if (grabGrossRevenue > 0) {
-    const gr = await effectiveGrabRate(end);
-    const grabComm = round2(grabGrossRevenue * gr.rate);
-    expenseLines.push({
-      code: "MKT-GRAB-COMM",
-      name: `GrabFood commission (${Math.round(gr.rate * 100)}% ${gr.source === "recon" ? "effective, from payout recon" : "estimated"})`,
-      amount: grabComm,
-      parentCode: null,
+    const gc = await grabCommissionRecon({
+      companyId, start, end,
+      grabGross: grabGrossRevenue,
+      promos: grabPromoTotal,
+      ads: grabAdsTotal,
+      outletScoped: !!outletId,
     });
-    totalExpenses += grabComm;
+    if (gc.commission > 0) {
+      expenseLines.push({
+        code: "MKT-GRAB-COMM",
+        name: gc.source === "bank_recon"
+          ? `GrabFood commission + marketing (bank-reconciled, ${gc.rate}% of gross)`
+          : `GrabFood commission + marketing (estimated ${gc.rate}%, payouts not yet settled)`,
+        amount: gc.commission,
+        parentCode: null,
+      });
+      totalExpenses += gc.commission;
+    }
   }
 
   // Bank-classified outflows for this company's account, each line recognised
