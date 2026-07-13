@@ -408,13 +408,17 @@ function evaluateCount(
   return { value: round2(value), items: kept, costed, dropped };
 }
 
-// Value inventory at a period boundary from the finalized (REVIEWED/SUBMITTED)
-// stock count nearest the boundary, PER OUTLET. Returns the per-outlet map so
-// the caller can require the SAME outlet set at both boundaries — summing
-// whatever outlets happened to count at each boundary would let one outlet's
-// entire stock value appear on one side of the roll-forward and not the other,
-// silently swinging COGS by that amount.
-type BoundaryValuation = { date: Date; value: number; items: number; costed: number; dropped: number; gap: number };
+// Value inventory at a period boundary, PER OUTLET, from two candidate
+// sources: the finalized (REVIEWED/SUBMITTED) stock count nearest the
+// boundary, and any manual valuation in fin_inventory_valuations (external
+// known-good figures, e.g. the Bukku Q1 closing inventory anchoring Q2's
+// opening at the cutover). Per outlet the candidate CLOSEST to the boundary
+// wins. Returns the per-outlet map so the caller can require the SAME outlet
+// set at both boundaries — summing whatever outlets happened to have a
+// valuation at each boundary would let one outlet's entire stock value appear
+// on one side of the roll-forward and not the other, silently swinging COGS
+// by that amount.
+type BoundaryValuation = { date: Date; value: number; items: number; costed: number; dropped: number; gap: number; manual?: string };
 async function valueInventoryAt(
   outletIds: string[],
   boundary: Date,
@@ -437,6 +441,27 @@ async function valueInventoryAt(
     const prev = used.get(c.outletId);
     if (!prev || gap < prev.gap) used.set(c.outletId, { date: c.countDate, ...ok, gap });
   }
+
+  // Manual valuations compete on the same closest-to-boundary rule. Guarded:
+  // the table is SQL-managed and may not exist yet in an environment — the
+  // count-based path must never break because of it.
+  try {
+    const manual = await prisma.$queryRaw<{ outlet_id: string; as_of: Date; value: number; source: string }[]>(Prisma.sql`
+      SELECT outlet_id, as_of, value::float AS value, source
+      FROM fin_inventory_valuations
+      WHERE outlet_id IN (${Prisma.join(outletIds)})
+        AND as_of >= ${since}::date AND as_of <= ${until}::date
+    `);
+    for (const m of manual) {
+      const gap = Math.abs(m.as_of.getTime() - boundary.getTime());
+      const prev = used.get(m.outlet_id);
+      if (!prev || gap < prev.gap) {
+        used.set(m.outlet_id, { date: m.as_of, value: round2(Number(m.value)), items: 0, costed: 0, dropped: 0, gap, manual: m.source });
+      }
+    }
+  } catch {
+    // Table absent — counts-only behaviour.
+  }
   return used;
 }
 
@@ -448,12 +473,18 @@ function sumBoundary(
 ): { value: number; dates: string[]; coverage: string } {
   let value = 0, tot = 0, costed = 0, dropped = 0;
   const dates: string[] = [];
+  const manualSources = new Set<string>();
   for (const o of outlets) {
     const u = map.get(o);
     if (!u) continue;
     value += u.value; tot += u.items; costed += u.costed; dropped += u.dropped; dates.push(ymd(u.date));
+    if (u.manual) manualSources.add(u.manual);
   }
-  const note = dropped ? `${costed}/${tot} items, ${dropped} typo dropped` : `${costed}/${tot} items`;
+  let note = dropped ? `${costed}/${tot} items, ${dropped} typo dropped` : `${costed}/${tot} items`;
+  if (manualSources.size) {
+    const manualNote = `manual: ${[...manualSources].sort().join(", ")}`;
+    note = tot > 0 ? `${note} + ${manualNote}` : manualNote;
+  }
   return { value: round2(value), dates: [...new Set(dates)].sort(), coverage: note };
 }
 
