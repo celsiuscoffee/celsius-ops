@@ -18,6 +18,31 @@ const RM = (n: number | null | undefined) => {
   return n < 0 ? `(${f})` : f;
 };
 
+// Functional expense grouping for the P&L: every expense line code maps to
+// one of these buckets so the statement reads by cost driver (people, infra,
+// marketing, fees) instead of a flat list. Codes come from pnl-sourced.ts:
+// PEOPLE-* (payroll accrual), MKT-* (ads/Grab), BANK:<CATEGORY> (bank lines),
+// DEP (depreciation). Unknown codes land in Other, never dropped.
+const EXPENSE_GROUP_ORDER = ["People", "Occupancy & infrastructure", "Marketing & channel", "Fees & compliance", "Other"] as const;
+type ExpenseGroupLabel = (typeof EXPENSE_GROUP_ORDER)[number];
+function expenseGroup(code: string): ExpenseGroupLabel {
+  if (
+    code.startsWith("PEOPLE") ||
+    ["BANK:PARTIMER", "BANK:STAFF_CLAIM", "BANK:PETTY_CASH", "BANK:EMPLOYEE_SALARY", "BANK:STATUTORY_PAYMENT"].includes(code)
+  ) return "People";
+  if (["BANK:RENT", "BANK:UTILITIES", "BANK:MAINTENANCE", "BANK:SOFTWARE", "BANK:EQUIPMENTS", "DEP"].includes(code)) {
+    return "Occupancy & infrastructure";
+  }
+  if (
+    code.startsWith("MKT-") ||
+    ["BANK:DIGITAL_ADS", "BANK:KOL", "BANK:OTHER_MARKETING", "BANK:MARKETPLACE_FEE"].includes(code)
+  ) return "Marketing & channel";
+  if (
+    ["BANK:MANAGEMENT_FEE", "BANK:ROYALTY_FEE", "BANK:LICENSING_FEE", "BANK:BANK_FEE", "BANK:TAX", "BANK:COMPLIANCE", "BANK:CFS_FEE"].includes(code)
+  ) return "Fees & compliance";
+  return "Other";
+}
+
 function csvEscape(v: string | number): string {
   const s = String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -563,6 +588,27 @@ function PnlTab() {
     };
     return { income: build("income"), cogs: build("cogs"), expenses: build("expenses") };
   }, [report, byMonth, months, amtByMonth]);
+  // Expense lines bucketed by cost driver, with per-group subtotals for the
+  // amount, each month column, and the comparison column, so the section reads
+  // People / Occupancy / Marketing / Fees instead of a flat list.
+  const expenseGroups = useMemo(() => {
+    const byGroup = new Map<ExpenseGroupLabel, PnlLine[]>();
+    for (const l of secLines.expenses) {
+      const g = expenseGroup(l.code);
+      if (!byGroup.has(g)) byGroup.set(g, []);
+      byGroup.get(g)!.push(l);
+    }
+    return EXPENSE_GROUP_ORDER.filter((g) => byGroup.has(g)).map((g) => {
+      const lines = byGroup.get(g)!;
+      const amount = round2(lines.reduce((s, l) => s + l.amount, 0));
+      const cmpAmount = round2(lines.reduce((s, l) => s + (cmpByCode.get(l.code) ?? 0), 0));
+      const monthAmounts = byMonth
+        ? amtByMonth.map((m) => round2(lines.reduce((s, l) => s + (m.get(l.code) ?? 0), 0)))
+        : undefined;
+      return { label: g, lines, amount, cmpAmount, monthAmounts };
+    });
+  }, [secLines.expenses, cmpByCode, byMonth, amtByMonth]);
+
   const monthSum = (f: (r: PnlReport) => number) => round2(months.reduce((s, m) => s + f(m.report), 0));
   // Displayed totals: month sums in by-month mode (so columns add up), the
   // official full-period figures otherwise.
@@ -761,7 +807,28 @@ function PnlTab() {
               <TotalRow label="Gross Profit" amount={totals.grossProfit} totalIncome={totals.income} compareAmount={cmp?.grossProfit} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.grossProfit)} />
 
               <SectionHeader label="Expenses" cols={cols} collapsed={!!collapsed.expenses} onToggle={() => toggleSection("expenses")} />
-              {!collapsed.expenses && secLines.expenses.map(renderLine)}
+              {!collapsed.expenses && expenseGroups.map((g) => (
+                <Fragment key={g.label}>
+                  <tr>
+                    <td colSpan={cols} className="px-3 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                      {g.label}
+                    </td>
+                  </tr>
+                  {g.lines.map(renderLine)}
+                  {g.lines.length > 1 && (
+                    <TotalRow
+                      label={`Total ${g.label.toLowerCase()}`}
+                      amount={g.amount}
+                      totalIncome={totals.income}
+                      bold={false}
+                      compareAmount={showCompareCols ? g.cmpAmount : undefined}
+                      showCompare={showCompareCols}
+                      showPct={showPct}
+                      monthAmounts={g.monthAmounts}
+                    />
+                  )}
+                </Fragment>
+              ))}
               <TotalRow label="Total Expenses" amount={totals.expenses} totalIncome={totals.income} compareAmount={cmp?.expenses.total} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.expenses.total)} />
 
               <TotalRow label="Net Income" amount={totals.netIncome} totalIncome={totals.income} compareAmount={cmp?.netIncome} showCompare={showCompareCols} showPct={showPct} monthAmounts={totMonths((x) => x.netIncome)} signed />
