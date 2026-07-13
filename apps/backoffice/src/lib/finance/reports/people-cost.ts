@@ -209,7 +209,14 @@ export async function peopleCostDrill(args: {
   const { actualMos, draftMos } = splitWindow(start, end, await actualMonths());
   const out: PeopleDrillRow[] = [];
 
-  // Actuals: one row per (outlet, month) from the ledger.
+  // Actuals months: per-EMPLOYEE rows from the payroll items, reconciled to
+  // the ledger. The P&L line is the fin_payroll_actuals aggregate (the BrioHR
+  // ledger), but the ledger is outlet-grain, so the staff detail comes from
+  // hr_payroll_items. Items are only shown under (outlet, month) cells the
+  // ledger actually covers, and any difference between the ledger figure and
+  // the items' sum is emitted as one "BrioHR ledger adjustment" row per cell,
+  // so the drill total always ties to the line. Cells with no items at all
+  // fall back to the single outlet-label row (previous behaviour).
   if (actualMos.length) {
     const periods = actualMos.map((mo) => ymFirst(mo.year, mo.month));
     const amountCol = metric === "salary" ? Prisma.sql`salary` : Prisma.sql`employer_stat`;
@@ -221,22 +228,69 @@ export async function peopleCostDrill(args: {
     } else if (scopeKind === "consolidated") filter = Prisma.sql`outlet_id IS NOT NULL`;
     else filter = Prisma.sql`company_id = ${companyId} AND outlet_id IS NOT NULL`;
 
-    const rows = await prisma.$queryRaw<{ outlet_id: string | null; label: string | null; period: Date; amount: number }[]>(Prisma.sql`
+    const aggRows = await prisma.$queryRaw<{ outlet_id: string | null; label: string | null; period: Date; amount: number }[]>(Prisma.sql`
       SELECT outlet_id, outlet_label AS label, period, ${amountCol}::float AS amount
       FROM fin_payroll_actuals
       WHERE period IN (${Prisma.join(periods.map((p) => Prisma.sql`${p}::date`))}) AND (${filter})
       ORDER BY period ASC, outlet_label ASC
     `);
-    for (const r of rows) {
-      const d = r.period;
-      out.push({
-        userId: r.outlet_id ?? "HQ",
-        name: r.label,
-        outletId: r.outlet_id,
-        year: d.getUTCFullYear(),
-        month: d.getUTCMonth() + 1,
-        amount: round2(Number(r.amount)),
-      });
+
+    // Per-employee items for the same months, same scope shape as the draft
+    // branch (attribution via the employee's assigned outlet).
+    const amountExpr = metric === "salary"
+      ? Prisma.sql`i.total_gross`
+      : Prisma.sql`(i.epf_employer + i.socso_employer + i.eis_employer)`;
+    let itemScope: Prisma.Sql;
+    if (scopeKind === "unassigned") itemScope = Prisma.sql`p.preferred_outlet_id IS NULL`;
+    else if (scopeKind === "outlet") {
+      if (!outletIds.length) itemScope = Prisma.sql`FALSE`;
+      else itemScope = Prisma.sql`p.preferred_outlet_id IN (${Prisma.join(outletIds)})`;
+    } else if (scopeKind === "consolidated") itemScope = Prisma.sql`p.preferred_outlet_id IS NOT NULL AND fc.company_id IS NOT NULL`;
+    else itemScope = Prisma.sql`fc.company_id = ${companyId} AND p.preferred_outlet_id IS NOT NULL`;
+
+    const itemRows = await prisma.$queryRaw<{ user_id: string; name: string | null; outlet_id: string | null; year: number; month: number; amount: number }[]>(Prisma.sql`
+      SELECT i.user_id, u.name AS name, p.preferred_outlet_id AS outlet_id,
+             r.period_year AS year, r.period_month AS month, ${amountExpr}::float AS amount
+      FROM hr_payroll_items i
+      JOIN hr_payroll_runs r ON r.id = i.payroll_run_id AND r.cycle_type = 'monthly'
+      LEFT JOIN hr_employee_profiles p ON p.user_id = i.user_id
+      LEFT JOIN fin_outlet_companies fc ON fc.outlet_id = p.preferred_outlet_id
+      LEFT JOIN "User" u ON u.id = i.user_id
+      WHERE ${monthListPredicate(actualMos)} AND (${itemScope})
+      ORDER BY r.period_year ASC, r.period_month ASC, u.name ASC
+    `);
+
+    const cellKey = (outletId: string | null, year: number, month: number) =>
+      `${outletId ?? "NULL"}|${ymKey(year, month)}`;
+    const coveredCells = new Set(
+      aggRows.map((r) => cellKey(r.outlet_id, r.period.getUTCFullYear(), r.period.getUTCMonth() + 1)),
+    );
+    const itemSumByCell = new Map<string, number>();
+    for (const r of itemRows) {
+      const key = cellKey(r.outlet_id, Number(r.year), Number(r.month));
+      // Employees outside the ledger's cells are not part of the P&L line —
+      // showing them would break the tie to the statement.
+      if (!coveredCells.has(key)) continue;
+      const amount = round2(Number(r.amount));
+      itemSumByCell.set(key, round2((itemSumByCell.get(key) ?? 0) + amount));
+      out.push({ userId: r.user_id, name: r.name, outletId: r.outlet_id, year: Number(r.year), month: Number(r.month), amount });
+    }
+
+    for (const r of aggRows) {
+      const year = r.period.getUTCFullYear();
+      const month = r.period.getUTCMonth() + 1;
+      const key = cellKey(r.outlet_id, year, month);
+      const ledger = round2(Number(r.amount));
+      const itemsSum = itemSumByCell.get(key);
+      if (itemsSum == null) {
+        // No staff detail for this cell — keep the outlet-lump row.
+        out.push({ userId: r.outlet_id ?? "HQ", name: r.label, outletId: r.outlet_id, year, month, amount: ledger });
+        continue;
+      }
+      const delta = round2(ledger - itemsSum);
+      if (Math.abs(delta) >= 0.01) {
+        out.push({ userId: `adj-${key}`, name: "BrioHR ledger adjustment", outletId: r.outlet_id, year, month, amount: delta });
+      }
     }
   }
 
