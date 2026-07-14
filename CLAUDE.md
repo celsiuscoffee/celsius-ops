@@ -35,9 +35,6 @@ npm workspaces + Turborepo. Workspace members: `apps/{backoffice,order,pickup,st
 For `pos-native` / `pickup-native`, run `npm ci` *inside the app directory* —
 the root install does not cover them.
 
-Note: `.claude/launch.json` has stale entries (`inventory`, `loyalty`, `pos` point
-at apps that no longer exist); trust the table above.
-
 ## Commands
 
 ```bash
