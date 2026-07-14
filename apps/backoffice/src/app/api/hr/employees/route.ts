@@ -41,7 +41,7 @@ export async function GET() {
     },
     select: {
       id: true, name: true, fullName: true, role: true, phone: true, email: true,
-      outletId: true, outlet: { select: { name: true } },
+      outletId: true, outletIds: true, outlet: { select: { name: true } },
       username: true, appAccess: true, moduleAccess: true, status: true,
       pin: true, passwordHash: true, lastLoginAt: true,
       ...(canSeePayrollPII ? { bankName: true, bankAccountNumber: true, bankAccountName: true } : {}),

@@ -32,6 +32,7 @@ type Employee = {
   phone: string;
   email: string | null;
   outletId: string | null;
+  outletIds?: string[];
   outlet: { name: string } | null;
   hrProfile: EmployeeProfile | null;
   username?: string | null;
@@ -308,6 +309,7 @@ export default function EmployeeDetailPage() {
     email: "",
     status: "ACTIVE",
     outletId: "",
+    outletIds: [] as string[],
     hrAccess: false,
     appAccessSet: new Set<string>(),
     pin: "",
@@ -333,6 +335,7 @@ export default function EmployeeDetailPage() {
         email: employee.email || "",
         status: employee.status || "ACTIVE",
         outletId: employee.outletId || "",
+        outletIds: employee.outletIds || [],
         hrAccess: hrList.length > 0 || employee.role === "OWNER" || employee.role === "ADMIN",
         appAccessSet: new Set(employee.appAccess || []),
         pin: "",
@@ -402,6 +405,10 @@ export default function EmployeeDetailPage() {
         email: access.email || null,
         status: access.status,
         outletId: access.outletId || null,
+        // Additional (rotation) outlets — never duplicate the primary here; the
+        // scheduling pool matches `outletId OR outletIds has`, so primary is
+        // already covered. Keeps the two lists disjoint like Settings → Staff.
+        outletIds: access.outletIds.filter((oid) => oid !== access.outletId),
         appAccess: Array.from(access.appAccessSet),
         moduleAccess: nextModuleAccess,
       };
@@ -1238,12 +1245,53 @@ export default function EmployeeDetailPage() {
                   <option value="DEACTIVATED">Deactivated</option>
                 </select>
               </Field>
-              <Field label="Outlet">
-                <select value={access.outletId} onChange={(e) => setAccess((a) => ({ ...a, outletId: e.target.value }))} className="input">
+              <Field label="Primary Outlet">
+                <select
+                  value={access.outletId}
+                  onChange={(e) =>
+                    setAccess((a) => ({
+                      ...a,
+                      outletId: e.target.value,
+                      // Keep the additional list disjoint from the new primary.
+                      outletIds: a.outletIds.filter((oid) => oid !== e.target.value),
+                    }))
+                  }
+                  className="input"
+                >
                   <option value="">HQ / No outlet</option>
                   {outlets?.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
               </Field>
+              {access.outletId && (outlets?.length ?? 0) > 1 && (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Also works at (rotation)</label>
+                  <div className="space-y-1 rounded-md border border-gray-200 p-2">
+                    {outlets
+                      ?.filter((o) => o.id !== access.outletId)
+                      .map((o) => (
+                        <label key={o.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={access.outletIds.includes(o.id)}
+                            onChange={() =>
+                              setAccess((a) => ({
+                                ...a,
+                                outletIds: a.outletIds.includes(o.id)
+                                  ? a.outletIds.filter((id) => id !== o.id)
+                                  : [...a.outletIds, o.id],
+                              }))
+                            }
+                          />
+                          {o.name}
+                        </label>
+                      ))}
+                  </div>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Tick every outlet this staffer rotates to. They&apos;ll appear in the schedule
+                    grid, AI Fill pool, and shift-assist candidates for each — with weekly hours summed across all of them.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Credentials */}
