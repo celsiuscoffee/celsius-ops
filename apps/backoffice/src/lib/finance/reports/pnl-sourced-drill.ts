@@ -100,7 +100,7 @@ function companyForAccount(accountName: string | null): string {
   return accountName ?? "—";
 }
 export function isSourcedPnlCode(code: string): boolean {
-  return /^(REV-|PROC$|INV-|MKT-|BANK:|DEP$|PEOPLE-|STOCK-VAR$)/.test(code);
+  return /^(REV-|PROC$|INV-|MKT-|BANK:|DEP$|PEOPLE-)/.test(code);
 }
 
 async function companyOutlets(companyId: string, outletId?: string | null): Promise<string[]> {
@@ -487,16 +487,6 @@ export async function sourcedPnlDrillDown(args: {
       description: `Commission on RM${gross.toFixed(2)} gross GrabFood sales this period. ${basis}`,
       amount: gc.commission,
       debit: gc.commission,
-      credit: 0,
-    }];
-  }
-  if (code === "STOCK-VAR") {
-    return [{
-      transactionId: "stock-var",
-      txnDate: end,
-      description: "Purchases for the period exceeded theoretical ingredient consumption (sales × recipes at supplier cost). Without a usable closing stock count it cannot be split into stock still on the shelf versus waste, so the whole amount is expensed here rather than inflating COGS or being claimed as inventory. A full closing count at the outlet resolves this line into real inventory movement. Purchases detail is on the COGS drill; the theoretical consumption engine is the same one behind the COGS report.",
-      amount: 0,
-      debit: 0,
       credit: 0,
     }];
   }
