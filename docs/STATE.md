@@ -143,6 +143,17 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 - 2026-07-05 — Shift templates of record are the `hr_shift_templates` DB
   rows (Opening / Middle 1–3 / Closing per outlet); `lib/hr/shift-templates.ts`
   is only the fallback when the table is empty.
+- 2026-07-09 — Onboarded **Haziq Bin Nazarrudin** (PT Barista/Kitchen, Shah
+  Alam) by MERGING onto his existing access-only login "Haziq PT"
+  (`User` `b848feb9-d9d6-4479-9b31-f1b21213550a`, matched on phone
+  +601110023104) — did NOT create a new User (would have collided on the
+  unique phone and split his schedule/access history). Pattern for HR-only
+  records that already have a staff-app access id: `UPDATE "User"` (fullName/
+  email/bank) + `INSERT hr_employee_profiles` + starter `hr_salary_history`/
+  `hr_job_history` rows, mirroring `/api/hr/employees/create`. PT baristas =
+  `part_time` + `hourly_rate` (RM9/hr is the house default; basic_salary 0)
+  + `statutory_applicable=false`; Shah Alam PTs run `payroll_cadence=WEEKLY`
+  (bank-transfer wages, not payroll runs — see the Apr+ PT-wage fact above).
 
 ## General rules
 
