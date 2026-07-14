@@ -256,8 +256,13 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   backlog: stale launch.json, root package.json dead scripts
   (`typecheck:apps`→apps/loyalty, `db:push` footgun), staff-native coach
   helpers (ride-along), STATE compaction; propose-only: pickup inventory
-  tab. **Next:** merge, then trigger the first run on demand; schedule
-  the weekly routine (Sun AM MYT) only after run 1 proves useful.
+  tab. Round 2 (owner): added the **utility audit** — a monthly zombie
+  sweep (working-but-unused / purpose-defeating: shadow limbo, producers
+  without consumers, half-built loops, noop resolvers) judged on
+  usage/outcome evidence, propose-only, verdicts arm/kill/park-with-
+  expiry/keep, seeded zombie register in the skill. **Next:** merge,
+  then trigger the first run on demand; schedule the weekly routine
+  (Sun AM MYT) only after run 1 proves useful.
 
 - 2026-07-11 — **Backoffice nav housekeeping (round 4)** — nav registry gains
   `hidden` items (in ⌘K/route-gate/grants, out of the sidebar; see

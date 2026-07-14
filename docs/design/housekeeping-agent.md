@@ -55,6 +55,41 @@ infra, payments/payroll, product-behaviour changes) are propose-only or
 human-only regardless of evidence. Deletion is cheap to re-propose next
 run; an outage is not.
 
+## Second lens: the utility audit (zombies)
+
+Reference-evidence only finds *dead* things. A distinct failure class —
+raised by the owner on review — is **working but useless**: referenced,
+green in CI, running on schedule, and delivering nothing or actively
+defeating its objective. The April QA monitor is the canonical case
+(healthy hourly cron, months of harm); softer cases are everywhere:
+shadow modes past their arm date, crons writing tables nothing reads,
+half-built loops that collect data for a consumer that was never built,
+UI that promises actions which noop.
+
+These need a different loop, so the skill defines one:
+
+- **Evidence is usage/outcome, not references** — consumer analysis
+  (who reads the output: code, cron, or a named human ritual),
+  last-write vs last-read, execution logs, and the STATE.md paper trail
+  separating *consciously parked* from *forgotten*.
+- **Verdicts are richer than delete/keep**: arm/finish (often the right
+  answer — the thing is useless only because it was never switched on),
+  kill (decommission the whole system in one PR — code, cron, flags,
+  docs), park-with-expiry (legitimate waits get an owner and a revisit
+  date, and get re-surfaced every sweep so limbo can't become
+  permanent), keep (recorded, never re-flagged).
+- **Everything is propose-only.** Zombies still run; whether their
+  promise should be kept or killed is a product/owner call. The agent's
+  job is the evidence dossier — a monthly decision memo, not PRs.
+- **Cadence: every 4th weekly run (~monthly), or on demand.** Usage
+  evidence is slow-moving and the memo demands owner attention; weekly
+  would train the owner to ignore it.
+
+The skill seeds a **zombie register** from STATE.md (consumption-engine
+shadow, labour-variance shadow, draft payroll runs, noop exception
+resolvers, stalled SMS holdout, hidden nav pages) including a KEEP
+entry (the Finance "Cash" group) so settled questions stay settled.
+
 ## Blast-radius controls
 
 - Draft PRs only; the loop never merges its own work.

@@ -1,6 +1,6 @@
 ---
 name: housekeeping
-description: Repo housekeeping loop — find and remove unnecessary things (dead code, stale config, docs drift, repo clutter) with evidence, via small draft PRs. Use when asked to tidy/clean up the repo, when the scheduled housekeeping routine fires, or after a decommission leaves debris behind. Never deletes anything it cannot prove dead.
+description: Repo housekeeping loop — find and remove unnecessary things (dead code, stale config, docs drift, repo clutter) with evidence, via small draft PRs; plus a monthly utility audit for zombies (working-but-unused / purpose-defeating features) that produces owner decision memos. Use when asked to tidy/clean up the repo, run the utility audit, when the scheduled housekeeping routine fires, or after a decommission leaves debris behind. Never deletes anything it cannot prove dead.
 ---
 
 # Housekeeping loop
@@ -54,6 +54,91 @@ record why in *Lessons* and never re-propose.
    (grep `"ratchet: reduce, never add"`). Opportunistic: only in files a
    PR already touches, or as a dedicated small PR when a marker's fix is
    mechanical.
+8. **Zombies (utility audit)** — working but unused, or defeating the
+   objective they were built for. Different evidence, different verdicts,
+   different cadence — see its own section below.
+
+## Utility audit — working but unused
+
+Grep-evidence finds *dead* things; it cannot find **zombies**: code that
+is referenced, runs green, and delivers nothing — or actively works
+against the objective. The April QA monitor was the archetype: a healthy
+cron with 4,200 consecutive runs of pure harm (redeploying retired
+Vercel projects). Zombies are found with **usage/outcome evidence**, and
+because they still run, every verdict here is **propose-only** — the
+output of this sweep is a decision memo, never a deletion PR.
+
+Zombie shapes to hunt (each has a live precedent in this repo):
+
+- **Producer without a consumer** — a cron/agent computes or writes
+  something no code reads and no human acts on. Detect: for each
+  vercel.json cron and agent output table, find the reader (code path or
+  documented human ritual). Writes continuing + zero readers = zombie.
+- **Shadow/disabled limbo** — flags and hard-disabled paths past their
+  decision date: shadow modes never armed, features "temporarily" off.
+  Limbo has all the maintenance cost and none of the benefit; each item
+  is *arm or kill*, never "leave it". Detect: grep for shadow/disabled/
+  `MODE=`/hard-disabled markers + the dated notes in STATE.md.
+- **Half-built loop** — data faithfully collected for a consumer that
+  was never built (spec'd agents that don't exist, resolvers that noop).
+  The collection cost is real; the promised value is zero.
+- **Purpose-defeaters** — things whose behaviour contradicts the
+  objective or a hard rule: UI that promises an action which noops
+  (finance exception types without resolvers), metrics that mislead
+  (draft payroll runs flattering FT actuals), duplicate lenses where one
+  is a strict superset (the Ops Dashboard/Performance precedent).
+
+**Evidence bar (usage, not references):** who/what consumes the output —
+code reader, downstream cron, or a named human ritual; last-write vs
+last-read; execution logs (Vercel/cron) confirming it actually runs;
+and the STATE.md/docs paper trail — distinguish **consciously parked**
+(a pending human decision, with owner and date) from **forgotten**.
+If consumption can't be established either way, say so in the memo —
+"unknown consumer" is a finding, not a license to kill.
+
+**Verdicts** (owner picks; the agent executes only after the pick):
+
+- **Arm/finish** — turn it on or build the missing consumer; often the
+  right call and the opposite of deletion.
+- **Kill** — decommission fully: code + cron + flags + docs in one PR,
+  so no new debris (the QA monitor lesson: retire *systems*, not files).
+- **Park with expiry** — legitimate wait on a human/external step gets
+  an owner and a revisit date in the memo; it is re-surfaced every
+  sweep until armed or killed, so limbo can't become permanent.
+- **Keep** — recorded with the reason in the zombie register below so
+  it is never re-flagged (the "Cash ≠ Legacy" lesson).
+
+**Cadence:** heavier than the code sweep — run as every **4th** weekly
+run (~monthly) or on demand ("run the utility audit"). Deliverable is
+one decision memo (issue or summary comment), not PRs.
+
+## Zombie register
+
+_Known zombies + past verdicts. Seeded from STATE.md 2026-07-14; the
+utility audit maintains this list._
+
+- Consumption engine **shadow-only** (reorder ignores sales); arming
+  needs unit normalisation + recipe import. Parked since 2026-07-04 —
+  needs owner + expiry. **Shadow limbo.**
+- `LABOUR_VARIANCE_MODE=shadow` — "flip after one sane Monday"
+  (2026-07-05); several Mondays have passed. **Shadow limbo, likely
+  ready to arm.**
+- PDF cold-send hard-disabled + `invoice_request` template never
+  submitted to Meta (one owner visit). **Parked on human; nag.**
+- Six 2026 payroll runs stuck in `draft` — flattering FT actuals until
+  closed. **Purpose-defeater; human-only (hard rule 6).**
+- Finance exception types other than `ap`/`categorization` **noop on
+  resolve**; Anomaly agent from the spec never built, nothing writes
+  `fin_matches`. **Half-built loop:** build the resolvers or stop
+  offering resolve on those types.
+- SMS attribution holdout: loop built, stalled since 2026-07-05 on two
+  owner decisions (reward + success bar). **Parked on human; nag.**
+- Nav items `hidden` in round 4 (Recipe Cards, Points Log, Outcome
+  Types, Settings Hub, Ops Dashboard): hidden-but-maintained; next
+  audit proposes kill vs keep per page with reachability/usage
+  evidence. **Candidate zombies.**
+- KEEP (do not re-flag): Finance "Cash" group (ex-"Legacy") — verified
+  actively-maintained cash-basis lens, 2026-07-11.
 
 ## Evidence bar for deletion
 
@@ -97,7 +182,9 @@ A deletion PR must show, in its body:
    on-merge main CI run passed; if it broke, fixing that IS this run.
    Closed unmerged → record the rejection in Lessons, drop the idea.
 2. **Sweep** the categories above. Start from the backlog; add fresh
-   finds from detectors + STATE.md decommission notes.
+   finds from detectors + STATE.md decommission notes. Every 4th run
+   (or on request) run the **utility audit** instead — its deliverable
+   is the decision memo, not PRs.
 3. **Verify** every candidate against the evidence bar.
 4. **Ship** up to 3 draft PRs off latest `origin/main`, branch
    `claude/housekeep-<slug>`, title `chore(<area>): <what> [housekeep]`.
