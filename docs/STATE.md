@@ -230,6 +230,13 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Lessons learned
 
+- 2026-07-14 — **Every upload control must accept drag & drop** (owner
+  directive: "this should be the standard"). Backoffice audit found the
+  standard mostly hand-rolled per page and four click-only gaps (invoice Edit
+  photos, Mark Paid receipt, recon attachments, Maybank QR) — all fixed. For
+  NEW upload UI use `components/ui/file-dropzone.tsx` (shared, drag-aware,
+  accept-filtered) instead of another bespoke label+hidden-input.
+
 - 2026-07-14 — **Always check the date format** (owner directive). Malaysian
   supplier documents are DAY-FIRST (06/07/2026 = 6 July); the doc extractor
   stamped due date 14/06/2026 on two KLFC invoices *issued* 06/07/2026, which

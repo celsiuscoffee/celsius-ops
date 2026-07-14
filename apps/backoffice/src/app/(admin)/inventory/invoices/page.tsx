@@ -196,6 +196,7 @@ export default function InvoicesPage() {
     if (payingInvoice === null) cancelAutoSubmit();
   }, [payingInvoice, cancelAutoSubmit]);
   const [payUploading, setPayUploading] = useState(false);
+  const [payDragging, setPayDragging] = useState(false);
 
   // Send POP shortlink — opens a small dialog with two options:
   //   - Direct: wa.me/<supplierPhone>?text=...
@@ -296,6 +297,7 @@ export default function InvoicesPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editDeleting, setEditDeleting] = useState(false);
   const [editUploading, setEditUploading] = useState(false);
+  const [editDragging, setEditDragging] = useState(false);
 
   // Attach Invoice dialog (GRNI placeholder → real supplier invoice)
   const [attachingInvoice, setAttachingInvoice] = useState<Invoice | null>(null);
@@ -447,8 +449,12 @@ export default function InvoicesPage() {
   };
 
   const handlePayReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files?.length) return;
+    await processPayReceiptFiles(e.target.files);
+    e.target.value = "";
+  };
+
+  const processPayReceiptFiles = async (files: FileList | File[] | null) => {
+    if (!files || !("length" in files) || files.length === 0) return;
     setPayUploading(true);
     const newlyUploaded: string[] = [];
     try {
@@ -543,7 +549,6 @@ export default function InvoicesPage() {
       }
     } catch { /* ignore */ }
     setPayUploading(false);
-    e.target.value = "";
   };
 
   const submitPayment = async () => {
@@ -660,8 +665,12 @@ export default function InvoicesPage() {
   };
 
   const handleEditPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files?.length) return;
+    await processEditPhotoFiles(e.target.files);
+    e.target.value = "";
+  };
+
+  const processEditPhotoFiles = async (files: FileList | File[] | null) => {
+    if (!files || !("length" in files) || files.length === 0) return;
     setEditUploading(true);
     try {
       for (const file of Array.from(files)) {
@@ -676,7 +685,6 @@ export default function InvoicesPage() {
       }
     } catch { /* ignore */ }
     setEditUploading(false);
-    e.target.value = "";
   };
 
   const saveEdit = async () => {
@@ -2004,11 +2012,29 @@ export default function InvoicesPage() {
                     ))}
                   </div>
                 )}
-                <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 py-3 text-sm transition-colors hover:border-blue-400 hover:bg-blue-50/30 ${editUploading ? "opacity-50 pointer-events-none" : ""}`}>
+                <label
+                  onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setEditDragging(true); }}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setEditDragging(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setEditDragging(false); }}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setEditDragging(false);
+                    if (editUploading) return;
+                    if (e.dataTransfer.files?.length) await processEditPhotoFiles(e.dataTransfer.files);
+                  }}
+                  className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-3 text-sm transition-colors ${
+                    editUploading ? "opacity-50 pointer-events-none border-gray-300" :
+                    editDragging ? "border-blue-500 bg-blue-50" :
+                    "border-gray-300 hover:border-blue-400 hover:bg-blue-50/30"
+                  }`}
+                >
                   {editUploading ? (
                     <><Loader2 className="h-4 w-4 animate-spin text-blue-500" /> Uploading...</>
+                  ) : editDragging ? (
+                    <><Upload className="h-4 w-4 text-blue-600" /> <span className="font-medium text-blue-700">Drop to upload</span></>
                   ) : (
-                    <><Upload className="h-4 w-4 text-gray-400" /> <span className="text-gray-500">Upload photos</span></>
+                    <><Upload className="h-4 w-4 text-gray-400" /> <span className="text-gray-500">Upload photos — or drag &amp; drop</span></>
                   )}
                   <input type="file" accept="image/*,.pdf" multiple className="hidden" onChange={handleEditPhotoUpload} />
                 </label>
@@ -2609,11 +2635,29 @@ export default function InvoicesPage() {
                   ))}
                 </div>
               )}
-              <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 py-2.5 text-sm transition-colors hover:border-blue-400 hover:bg-blue-50/30 ${payUploading ? "opacity-50 pointer-events-none" : ""}`}>
+              <label
+                onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setPayDragging(true); }}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setPayDragging(true); }}
+                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setPayDragging(false); }}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setPayDragging(false);
+                  if (payUploading) return;
+                  if (e.dataTransfer.files?.length) await processPayReceiptFiles(e.dataTransfer.files);
+                }}
+                className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-2.5 text-sm transition-colors ${
+                  payUploading ? "opacity-50 pointer-events-none border-gray-300" :
+                  payDragging ? "border-blue-500 bg-blue-50" :
+                  "border-gray-300 hover:border-blue-400 hover:bg-blue-50/30"
+                }`}
+              >
                 {payUploading ? (
                   <><Loader2 className="h-4 w-4 animate-spin text-blue-500" /> Uploading...</>
+                ) : payDragging ? (
+                  <><Upload className="h-4 w-4 text-blue-600" /> <span className="font-medium text-blue-700">Drop to upload</span></>
                 ) : (
-                  <><Upload className="h-4 w-4 text-gray-400" /> <span className="text-gray-500">Upload receipt (image or PDF)</span></>
+                  <><Upload className="h-4 w-4 text-gray-400" /> <span className="text-gray-500">Upload receipt (image or PDF) — or drag &amp; drop</span></>
                 )}
                 <input type="file" accept="image/*,.pdf,application/pdf" multiple className="hidden" onChange={handlePayReceiptUpload} />
               </label>
