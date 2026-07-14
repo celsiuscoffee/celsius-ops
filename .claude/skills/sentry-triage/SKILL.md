@@ -108,9 +108,15 @@ treat as top priority.
   no-ops at step 1.
 - `SENTRY_ACCESS_TOKEN` must be set in the environment (consumed by
   `.mcp.json`).
-- After the first successful connect, record the org slug and project slugs
-  here (unknown as of 2026-07-11; discover via `find_organizations` /
-  `find_projects`).
+- Org slug: `celsius-coffee-sdn-bhd` (region `https://us.sentry.io`).
+  Projects: `celsius-ops` (all web apps AND staff-native — native events are
+  tagged `app:staff-native` + `dist:staff-native`), `celsius-pickup-native`
+  (KDS), `mujtamaos` (separate product, NOT this repo — leave its issues
+  alone). Recorded 2026-07-12, first live connect.
+- Interactive sessions can also reach Sentry via the claude.ai Sentry
+  connector (`mcp__Sentry__*`, OAuth) even when egress is blocked — but
+  routine-fired fresh sessions only get `.mcp.json`, so the egress
+  allowlist is still required for the nightly loop.
 
 ## Lessons
 
