@@ -230,20 +230,24 @@ A deletion PR must show, in its body:
 _Verified candidates, in priority order. Prune entries when their PR
 merges; add dated entries as sweeps find more._
 
-- 2026-07-14 — `.claude/launch.json`: `inventory`, `loyalty`, `pos`
-  entries point at apps that no longer exist (documented as stale in
-  CLAUDE.md since 07-04). Fix the file, then delete the stale-entry
-  notes from CLAUDE.md and STATE.md in the same PR. **Safe.**
-- 2026-07-14 — root `package.json`: `typecheck:apps` references dead
-  `apps/loyalty` (script fails as written); `db:push` / packages/db
-  `push` script is a loaded footgun given hard rule 1 — remove the
-  scripts, note the removal in the PR body for owner veto. **Safe.**
+- 2026-07-14 — `.claude/launch.json` stale entries + root
+  `typecheck:apps` → dead `apps/loyalty`: **shipped in PR #931**
+  (`claude/housekeep-stale-config`); prune this entry when it merges.
+  Run-1 correction: `db:push` → packages/db `push` is NOT a footgun —
+  it is a deliberate guard (warns + `exit 1`, per
+  `docs/architecture-restructure-plan.md`). KEEP.
+- 2026-07-14 — STATE.md compaction round 1: **shipped in PR #932**
+  (`claude/housekeep-state-compaction`, merge #931 first); prune this
+  entry when it merges.
+- 2026-07-14 — ~50+ `claude/*` branches on origin, most from merged
+  PRs (first `list_branches` page is already full of them). Propose:
+  owner enables GitHub "Automatically delete head branches" + a
+  one-time bulk delete of merged branches. **Propose-only** (the loop
+  never deletes branches).
 - 2026-07-14 — staff-native dead AI-coach helpers (coach card hides on
   fetch failure; server side deleted in the sentry-loop PR). STATE.md
   says "remove on the next staff-native touch" — bundle with the next
   staff-native PR rather than a standalone OTA. **Safe, ride-along.**
-- 2026-07-14 — STATE.md compaction: 2026-07-04/05 entries whose facts
-  are now in CLAUDE.md or skills; resolved-failure paragraphs. **Safe.**
 - 2026-07-14 — pickup dashboard inventory tab reads tables that exist in
   neither Supabase project (silently empty since ever). Remove vs rewire
   is a product call. **Propose-only.**
@@ -257,3 +261,12 @@ merges; add dated entries as sweeps find more._
 _Append dated entries when this skill misses something, and every
 rejected (closed-unmerged) housekeeping PR with the why. Promote stable
 ones into the sections above._
+
+- 2026-07-14 (run 1) — a seeded backlog entry was wrong: `db:push` was
+  listed as a footgun but is a deliberate guard script. Backlog entries
+  are LEADS — re-verify each against current code at execution time,
+  even the ones this skill wrote itself.
+- 2026-07-14 (run 1) — fresh CCR containers: root `npm ci` fails on
+  sharp's binary download (403 via the agent proxy). For the test gate
+  use `npm ci --ignore-scripts` then `npm run db:generate`; vitest
+  (350 tests) runs fine after that.
