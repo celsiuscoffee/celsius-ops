@@ -294,6 +294,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   then trigger the first run on demand; schedule the weekly routine
   (Sun AM MYT) only after run 1 proves useful.
 
+- 2026-07-14 — **Paid-no-POP audit → 6 payment-record corrections applied to prod**
+  (owner-approved in chat; SQL via Supabase MCP, audit notes stamped on every
+  touched row, re-pointed bank lines set `classifiedBy='manual'` so the matcher
+  won't re-touch them). Verified against the bank feed (current through Jul 12):
+  KLFC **00653452** RM768 reverted PAID→PENDING (phantom bank-ap-match — paid
+  stamp Jun 16 predates the Jun 19 issue date; that debit narrates 00652052);
+  KLFC **00655541** RM768 stalled INITIATED→PENDING (initiated but never
+  confirmed; no debit names it, zero unmatched RM768 since Jun 1); Blancoz
+  **26-0677** RM148 reverted PAID→PENDING (the Jul 8 debit narrates 26-0676);
+  bank lines re-pointed/linked by narration: Jul 5→26-0644, Jul 8→26-0676,
+  Jul 10→26-0675 (and 26-0675 paidAt corrected Jul 5→Jul 10). Net: RM1,684 back
+  in payables (KLFC 1,536 — cross-check their SOA before paying — + Blancoz 148).
+  These 6 are the first slice of the ~113 historical wrong-invoice matches; the
+  bulk re-pointing pass still needs its own finance-approved run.
+
 - 2026-07-11 — **Backoffice nav housekeeping (round 4)** — nav registry gains
   `hidden` items (in ⌘K/route-gate/grants, out of the sidebar; see
   `lib/nav.tsx` NavItem doc). Evidence-based prune (every hide verified
