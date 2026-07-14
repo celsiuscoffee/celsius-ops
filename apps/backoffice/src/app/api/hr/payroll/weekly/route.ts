@@ -127,6 +127,9 @@ export async function POST(req: NextRequest) {
   if (action === "confirm") {
     if (!run_id) return NextResponse.json({ error: "run_id required" }, { status: 400 });
 
+    // Status filter makes this atomic, same as the monthly route: confirming
+    // an already-paid run would silently DOWNGRADE it back to "confirmed" and
+    // desync the bank file already generated from it.
     const { data, error } = await hrSupabaseAdmin
       .from("hr_payroll_runs")
       .update({
@@ -135,23 +138,51 @@ export async function POST(req: NextRequest) {
         confirmed_at: new Date().toISOString(),
       })
       .eq("id", run_id)
+      .in("status", ["ai_computed", "draft"])
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) {
+      const { data: cur } = await hrSupabaseAdmin
+        .from("hr_payroll_runs")
+        .select("status")
+        .eq("id", run_id)
+        .maybeSingle();
+      if (!cur) return NextResponse.json({ error: "Payroll run not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: `Payroll run is already ${cur.status}; only a computed or draft run can be confirmed.` },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ run: data });
   }
 
   // Mark the run as paid (after bank transfer is done)
   if (action === "mark_paid") {
     if (!run_id) return NextResponse.json({ error: "run_id required" }, { status: 400 });
+    // Only a confirmed run can be paid — paying a draft would skip the
+    // confirm (human sign-off) step; re-paying a paid run is a no-op.
     const { data, error } = await hrSupabaseAdmin
       .from("hr_payroll_runs")
       .update({ status: "paid", ai_notes: `Paid by ${session.id} at ${new Date().toISOString()}` })
       .eq("id", run_id)
+      .eq("status", "confirmed")
       .select()
-      .single();
+      .maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) {
+      const { data: cur } = await hrSupabaseAdmin
+        .from("hr_payroll_runs")
+        .select("status")
+        .eq("id", run_id)
+        .maybeSingle();
+      if (!cur) return NextResponse.json({ error: "Payroll run not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: `Payroll run is ${cur.status}; only a confirmed run can be marked paid.` },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ run: data });
   }
 
