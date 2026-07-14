@@ -2,12 +2,6 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "inventory",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "-p", "3002"],
-      "port": 3002
-    },
-    {
       "name": "backoffice",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["next", "dev", "--port", "3003"],
@@ -15,25 +9,18 @@
       "port": 3003
     },
     {
+      "name": "pickup",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "--port", "3005"],
+      "cwd": "apps/pickup",
+      "port": 3005
+    },
+    {
       "name": "staff",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["next", "dev", "--port", "3006"],
       "cwd": "apps/staff",
       "port": 3006
-    },
-    {
-      "name": "loyalty",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["next", "dev", "--port", "3004"],
-      "cwd": "apps/loyalty",
-      "port": 3004
-    },
-    {
-      "name": "pos",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["next", "dev", "--port", "3005"],
-      "cwd": "apps/pos",
-      "port": 3005
     },
     {
       "name": "order",
