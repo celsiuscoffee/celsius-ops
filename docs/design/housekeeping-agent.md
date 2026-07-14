@@ -99,6 +99,23 @@ entry (the Finance "Cash" group) so settled questions stay settled.
   additionally requires human sign-off (hard rule 6).
 - Closed-unmerged PR = permanent rejection, recorded in Lessons.
 
+## Prevention (follow-up work, not this PR)
+
+Cleanup has a treadmill problem: without guards at the entry points the
+loop re-finds the same classes forever. The repo already knows the
+answer — ratchets in CI (`migration-guard`, the 38-cron cap test, the
+lint-`any` ratchet). Candidate next ratchets, each its own small PR:
+
+- **Unused-export ratchet:** `knip` count per app recorded in a fixture;
+  CI fails if it grows. Turns category-2 findings from a monthly sweep
+  into a merge-time nudge.
+- **Flag-expiry convention:** any shadow/disabled/`MODE=` flag must
+  carry a dated `decide-by` comment; a grep test fails CI on expired
+  dates. Makes shadow-limbo self-reporting instead of audit-discovered.
+- **Decommission checklist as PR discipline:** the skill's protocol
+  section, referenced from CLAUDE.md, so partial retirements stop
+  creating next quarter's zombies.
+
 ## Cadence & rollout
 
 1. Merge this PR (skill + doc).

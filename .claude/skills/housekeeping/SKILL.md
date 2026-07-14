@@ -57,6 +57,36 @@ record why in *Lessons* and never re-propose.
 8. **Zombies (utility audit)** — working but unused, or defeating the
    objective they were built for. Different evidence, different verdicts,
    different cadence — see its own section below.
+9. **Off-repo surfaces** — clutter lives on the platforms too, and it's
+   the most dangerous kind (the retired loyalty/inventory/pos Vercel
+   projects still *existing* is what let `qa-autofix` redeploy them for
+   months). Sweep via MCP, **propose-only** (infra): Vercel projects +
+   their env vars vs what the code actually reads; Supabase edge
+   functions (3 tombstones pending dashboard delete) + `cron.job` rows
+   + the idle `celsius-inventory` project; scheduled routines/triggers
+   vs the skills they defer to; Meta WhatsApp templates vs senders in
+   code; stale `claude/*` branches and long-idle draft PRs.
+
+## Decommission protocol
+
+Most clutter in this repo is the residue of *partial* retirement — the
+April QA monitor survived three months because the apps were retired
+but their monitor, crons, edge functions, Vercel projects, and bot
+token were not. **Retire systems, not files.** When this loop (or any
+session) decommissions something, one PR/change-set must cover, or
+explicitly hand to a human, every layer:
+
+- [ ] code + config/env references (all apps, incl. out-of-workspace)
+- [ ] crons: `vercel.json` AND `pg_cron` on both Supabase projects
+- [ ] edge functions / webhooks / external registrations (Meta
+      templates, Telegram bots, GBP wiring)
+- [ ] platform projects & env vars (Vercel, Supabase) — propose
+- [ ] secrets the thing held — rotation goes on the human list
+- [ ] monitoring, alerts, scheduled routines watching it
+- [ ] docs banner + STATE.md + this skill's backlog/register
+
+The code sweep audits *recent* decommissions (STATE.md is the log)
+against this checklist and files the leftovers as backlog items.
 
 ## Utility audit — working but unused
 
