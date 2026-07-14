@@ -247,6 +247,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-14 — **Housekeeping agent designed** (branch
+  `claude/housekeeping-agent-design-p3ux4g`): new `housekeeping` skill —
+  evidence-gated cleanup loop on the sentry-triage pattern (fresh session
+  per run, state in GitHub via `claude/housekeep-*` draft PRs, ≤3/run,
+  propose-only for DB/infra/product-behaviour, human-only for
+  payments/secrets). Design: `docs/design/housekeeping-agent.md`. Seeded
+  backlog: stale launch.json, root package.json dead scripts
+  (`typecheck:apps`→apps/loyalty, `db:push` footgun), staff-native coach
+  helpers (ride-along), STATE compaction; propose-only: pickup inventory
+  tab. Round 2 (owner): added the **utility audit** — a monthly zombie
+  sweep (working-but-unused / purpose-defeating: shadow limbo, producers
+  without consumers, half-built loops, noop resolvers) judged on
+  usage/outcome evidence, propose-only, verdicts arm/kill/park-with-
+  expiry/keep, seeded zombie register in the skill. **Next:** merge,
+  then trigger the first run on demand; schedule the weekly routine
+  (Sun AM MYT) only after run 1 proves useful.
+
 - 2026-07-11 — **Backoffice nav housekeeping (round 4)** — nav registry gains
   `hidden` items (in ⌘K/route-gate/grants, out of the sidebar; see
   `lib/nav.tsx` NavItem doc). Evidence-based prune (every hide verified
