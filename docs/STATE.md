@@ -220,6 +220,27 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-15 -- **Agent substrate SHIPPED end-to-end.** Fleet review found the
+  non-compounding pattern (every domain reinvented flags/queues/telemetry;
+  shadow builds never armed; marketing loop has no outcome memory). Built the
+  shared rails: migrations `080_agent_substrate.sql` (agent_registry +
+  agent_actions ledger + campaign_outcomes) and `081_agent_registry_seed.sql`
+  -- both **APPLIED to prod 2026-07-15** (29 agents: 17 armed / 8 shadow /
+  4 off; advisor shows only the intended RLS-no-policies deny-all note). Lib
+  `apps/backoffice/src/lib/agents/substrate.ts` (getAgentMode fail-safe off
+  for NEW agents, getAgentModeOrDefault fail-open for pre-existing live
+  loops, logAgentAction never throws); `/agents` control panel (Settings >
+  System > AI Agents, OWNER/ADMIN; API refuses mode=armed while
+  arming_criteria is NULL). Exemplar wiring: celsius-overview +
+  reviews-auto-reply log to the ledger; ap-match-apply + gl-post gained
+  their first kill switch (registry mode, fail-open armed). NOTE: main's nav
+  moved to `apps/backoffice/src/lib/nav.tsx` -- the AI Agents entry lives
+  there, NOT in layout.tsx. Compounding build contract now gates new agent
+  ideas via the office-hours skill (Phase 1.5) + design-doc "Compounding
+  Contract" section. Branch `agents-substrate`. Human owes: arming criteria
+  for the 8 shadow agents. Next: wire round_gap_loop + sms_lifecycle_loops
+  to campaign_outcomes; migrate legacy env-flag readers to getAgentMode.
+
 - 2026-07-14 — **Housekeeping agent designed** (branch
   `claude/housekeeping-agent-design-p3ux4g`): new `housekeeping` skill —
   evidence-gated cleanup loop on the sentry-triage pattern (fresh session

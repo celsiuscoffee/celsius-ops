@@ -12,6 +12,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { sendMessage } from "@/lib/telegram";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
+import { logAgentAction, touchAgentRun } from "@/lib/agents/substrate";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -524,10 +525,21 @@ export type RunOptions = {
 
 export async function runCelsiusOverviewAgent(opts: RunOptions = {}): Promise<AgentResult> {
   const { sendTelegram = true, persist = true } = opts;
+  await touchAgentRun("celsius_overview");
   const snapshot = await buildSnapshot();
   const recommendations = await analyse(snapshot);
   const delivered = sendTelegram ? await deliver(recommendations) : null;
   const generatedAt = new Date().toISOString();
+
+  if (delivered && delivered.messages > 0) {
+    await logAgentAction({
+      agentKey: "celsius_overview",
+      kind: "briefing_sent",
+      summary: `${recommendations.length} recommendation${recommendations.length === 1 ? "" : "s"} to owner Telegram: ${recommendations.map((r) => r.title).join("; ")}`,
+      model: "claude-sonnet-4-6",
+      meta: { areas: recommendations.map((r) => r.area), priorities: recommendations.map((r) => r.priority) },
+    });
+  }
 
   const result: AgentResult = {
     generatedAt,
