@@ -78,14 +78,6 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   sends ride prompt→reply→block, with 24h re-prompt + give-up note. Re-enable in
   procurement-po-send.ts once the template truly has a DOCUMENT header + {{1}}/{{2}}.
 
-- 2026-07-04 — `apps/pos-native` and `apps/pickup-native` sit **outside** the npm
-  workspace (own `package-lock.json` each); root `npm ci` does not install them.
-- 2026-07-04 — Two migration directories exist: `packages/db/prisma/migrations/`
-  (the audit trail CI's migration-guard checks — files are saved, never executed)
-  and `supabase/migrations/` (018–070, applied history). Schema of record is
-  `packages/db/prisma/schema.prisma`.
-- 2026-07-04 — `.claude/launch.json` is partially stale: `inventory`, `loyalty`,
-  and `pos` entries point at `apps/` directories that no longer exist.
 - 2026-07-04 — Procurement loop: automated PO-send to suppliers over WhatsApp
   (`purchase_order` / `po_approval` buttons) was designed but **never shipped**;
   sending the order block is still manual. Agent only needs an open PO to exist.
@@ -198,21 +190,6 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   wire it to the real procurement stock tables (`StockBalance` etc.) or
   remove the tab.
 
-_Resolved 2026-07-05 evening (see Lessons + access-map correction): the
-"loyalty tables anon-writable" finding was already fixed in production —
-live DB had drifted ahead of repo migration files. Actual live exposure
-was the `outlets` view (anon DML, RLS bypass); revoked same day
-(supabase/migrations/073, applied via Supabase MCP, verified). Full
-get_advisors sweep then closed ALL remaining anon-reachable tables:
-10 backup snapshots (074) + 14 server-only tables incl. PendingPop/grab_*
-(075). Verified: rls_disabled_in_public 24→0, sensitive_columns_exposed
-2→0, security ERRORs 30→4 (the 4 left are SECURITY DEFINER views)._
-
-_Fixed 2026-07-05 (see Lessons): categorizer correction mis-attribution +
-never-set `applied` flag — `related_id` now populated at decision time,
-corrections join decisionId → document → supplier, `applied` set on
-auto-post and inbox approve._
-
 _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <blocking?>`_
 
 ## Lessons learned
@@ -234,10 +211,6 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   release, no stuck spinner) + a bare centered 20pt gold ActivityIndicator row
   under the tabs as the sole in-flight indicator, matching the checklist
   spinner size.
-
-- 2026-07-04 — `eas update` shells out to `expo export`, whose interactive
-  prompts ignore `--non-interactive`; set `CI=1` in the environment instead.
-  Pass commit messages via env var, not inline in the shell command (backticks/
 
 - 2026-07-05 — The AI Fill week-wipe (60 shifts) was the old generator's
   DELETE-then-INSERT persist with no transaction; `hr_schedule_shift_audit`

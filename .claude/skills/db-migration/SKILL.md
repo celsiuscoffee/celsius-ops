@@ -40,7 +40,10 @@ and committed for audit.
 
 - New tables that end-users reach need an RLS decision — see `docs/rls-strategy.md`.
 - If the change supports a hot POS path, check existing index conventions in
-  `supabase/migrations/` (POS order hot-path indexes live there).
+  `supabase/migrations/` — that directory is the applied-history trail
+  (018 onward; POS order hot-path indexes live there), distinct from
+  `packages/db/prisma/migrations/`, the never-executed audit trail that
+  CI's migration-guard checks.
 
 ## Lessons
 
