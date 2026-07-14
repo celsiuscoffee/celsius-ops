@@ -954,8 +954,8 @@ export async function buildSourcedPnl(input: {
       expenseLines.push({
         code: "MKT-GRAB-COMM",
         name: gc.source === "bank_recon"
-          ? "GrabFood commission + marketing (bank-reconciled)"
-          : "GrabFood commission + marketing (estimated, payouts not yet settled)",
+          ? "GrabFood commission (bank-reconciled)"
+          : "GrabFood commission (estimated, payouts not yet settled)",
         amount: gc.commission,
         parentCode: null,
       });
