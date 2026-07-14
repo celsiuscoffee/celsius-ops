@@ -135,6 +135,25 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 - 2026-07-05 — Shift templates of record are the `hr_shift_templates` DB
   rows (Opening / Middle 1–3 / Closing per outlet); `lib/hr/shift-templates.ts`
   is only the fallback when the table is empty.
+- 2026-07-14 — **Multi-outlet staff rotation (code-verified).** Membership is
+  `User.outletId` (primary) + `User.outletIds[]` (additional) — editable ONLY
+  in Settings → Staff (outlet checkboxes; the HR employee page edits primary
+  only). Every scheduling surface pools `outletId OR outletIds has`: grid,
+  AI Fill, assist candidates. Assist candidates (`schedules/candidates`)
+  count weekly hours ACROSS outlets (query is user-scoped, not
+  outlet-scoped) and flag `double_booked`/`over_cap` cross-outlet; they also
+  score a `home` signal (primary 1 / outletIds 0.8 / other 0.5). Clock-in
+  (`staff /api/hr/clock`) picks the nearest assigned outlet by GPS, so
+  attendance logs the outlet actually visited. Leadership rotation = the
+  rover path (Manager/Area Manager/Barista Lead, 2 days/outlet, HQ-costed,
+  cross-outlet busy check). **Gap:** AI Fill's cross-outlet busy check
+  covers rovers ONLY — a regular FT/PT in two outlet pools is generated
+  independently at each (FT: 6 days at BOTH; PT: 24h/5d caps applied per
+  outlet run → up to 48h), and the manual `cell`/`assign` writes have no
+  hard cross-outlet overlap guard (the warning is advisory in the ranking
+  UI only). Fix shape: extend the rover `busy` set to all pooled staff in
+  the generator, seed `ptWeek` from other-outlet shifts, add an overlap 409
+  in cell/assign.
 
 ## General rules
 
