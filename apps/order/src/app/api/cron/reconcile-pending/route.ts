@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import Stripe from "stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
@@ -46,6 +46,14 @@ export async function GET(request: NextRequest) {
   // Cron Monitor on first check-in and alerts on missed windows or thrown
   // errors — config errors below throw (instead of returning 500 directly)
   // so they register as failed runs, not healthy ones.
+  //
+  // The closing ok/error check-in is captured just before the response
+  // returns, and on Vercel the function can freeze before the transport
+  // sends it — Sentry then reports the run as timed out even though it
+  // returned 200 (~7% of runs; CELSIUS-OPS-18). after() keeps the function
+  // alive past the response so the check-in envelope actually leaves.
+  after(() => Sentry.flush(2000));
+
   try {
     return await Sentry.withMonitor("reconcile-pending", () => runReconcile(), {
       schedule: { type: "crontab", value: "* * * * *" },
