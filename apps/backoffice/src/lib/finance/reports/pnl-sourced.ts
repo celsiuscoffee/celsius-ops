@@ -804,9 +804,6 @@ export async function buildSourcedPnl(input: {
   const bothBounded = [...openMap.keys()].filter((o) => closeMap.has(o));
   let cogsTotal: number;
   let cogsLines: PnlLine[];
-  // Purchases above theoretical consumption when no count bounds the period —
-  // expensed below gross profit as STOCK-VAR (see the fallback branch).
-  let stockVariance = 0;
   if (bothBounded.length > 0) {
     const opening = sumBoundary(openMap, bothBounded);
     const closing = sumBoundary(closeMap, bothBounded);
@@ -824,15 +821,11 @@ export async function buildSourcedPnl(input: {
   } else {
     // No usable count pair. COGS is the THEORETICAL consumption (sales ×
     // recipes at supplier cost, the same engine as the COGS report and the
-    // dashboard) so gross profit reflects real recipe economics. The
-    // purchases-above-consumption remainder is unverifiable (stock build or
-    // waste, only a closing count can tell which), so it is neither COGS nor
-    // an asset: it lands below gross profit as its own expense line
-    // (STOCK-VAR), still fully expensed, net income identical to expensing
-    // the purchases directly. A stock DRAWDOWN (purchases below consumption)
-    // stays inside COGS as split lines, since the extra consumption came out
-    // of prior-period stock and belongs in cost of sales; charging more than
-    // was purchased would double-expense what earlier periods already bore.
+    // dashboard) so gross profit reflects real recipe economics. Purchases
+    // beyond consumption do NOT hit this P&L (owner decision: they are
+    // unverifiable stock build or waste; purchase cash lives in Cash Flow
+    // and procurement reports). Falls back to the purchases proxy only when
+    // the theoretical engine returns nothing.
     cogsTotal = netPurchases;
     let theoretical = 0;
     if (netPurchases > 0 && outletRows.length) {
@@ -843,16 +836,13 @@ export async function buildSourcedPnl(input: {
         theoretical = 0; // theoretical engine unavailable — single-line fallback
       }
     }
-    if (theoretical > 0 && netPurchases - theoretical >= 1) {
-      stockVariance = round2(netPurchases - theoretical);
+    if (theoretical > 0) {
+      // Consumption basis (owner decision 2026-07-14): the P&L charges what
+      // the sales consumed per the recipes; purchase timing lives in Cash
+      // Flow and procurement, not here.
       cogsTotal = theoretical;
       cogsLines = [
         { code: "COGS-CONS", name: "Ingredient consumption (theoretical: sales × recipes at supplier cost)", amount: theoretical, parentCode: null },
-      ];
-    } else if (theoretical > 0 && theoretical - netPurchases >= 1) {
-      cogsLines = [
-        { code: "COGS-CONS", name: "Ingredient consumption (theoretical: sales × recipes at supplier cost)", amount: theoretical, parentCode: null },
-        { code: "COGS-VAR", name: "Purchases below consumption (stock drawdown, no usable closing count)", amount: round2(netPurchases - theoretical), parentCode: null },
       ];
     } else {
       cogsLines = netPurchases || purchases
@@ -867,19 +857,6 @@ export async function buildSourcedPnl(input: {
   // ─── EXPENSES: marketing (ads + bank) + other opex (bank) ────────────────
   const expenseLines: PnlLine[] = [];
   let totalExpenses = 0;
-
-  // Unverified inventory variance from the COGS fallback: not cost of goods
-  // actually sold, not a provable asset, so it sits here, visible, fully
-  // expensed, resolved to real inventory movement once counts exist.
-  if (stockVariance > 0) {
-    expenseLines.push({
-      code: "STOCK-VAR",
-      name: "Inventory variance: purchases above consumption (stock build or waste, pending closing count)",
-      amount: stockVariance,
-      parentCode: null,
-    });
-    totalExpenses += stockVariance;
-  }
 
   // Marketing — Google Ads attributed PER OUTLET via the campaign's outletId
   // (set in the ads module). A campaign tagged to an outlet lands in that
