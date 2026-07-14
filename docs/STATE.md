@@ -230,6 +230,16 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Lessons learned
 
+- 2026-07-14 — **Always check the date format** (owner directive). Malaysian
+  supplier documents are DAY-FIRST (06/07/2026 = 6 July); the doc extractor
+  stamped due date 14/06/2026 on two KLFC invoices *issued* 06/07/2026, which
+  flipped an unpaid invoice to OVERDUE off a date that predated its own issue.
+  Whenever reading or writing dates (invoices, bank narrations, screenshots,
+  SQL), confirm DD/MM vs MM/DD from context and sanity-check orderings
+  (due ≥ issue, paid ≥ issue). Systemic guard now in
+  `finance/parsers/supplier-doc.ts` (`sanitizeBillDates` + day-first prompt
+  rule); both KLFC due dates corrected in prod (7-day terms → 2026-07-13).
+
 - 2026-07-11 — **Sales pull-to-refresh saga (staff-native), attempt 4:** the
   50e161f "cream pull-well" (absolute View at top:-300 inside the ScrollView)
   made it worse — ScrollView content layers ABOVE the native RefreshControl,

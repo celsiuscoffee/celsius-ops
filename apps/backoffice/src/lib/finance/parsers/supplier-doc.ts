@@ -64,7 +64,8 @@ const PARSE_PROMPT = `Extract this supplier bill into the JSON schema below. Bil
 
 # Rules
 - doc_type: "invoice" for a bill/tax invoice/cash bill; "statement" for a statement of account (SOA); "payment_proof" for a bank-transfer / DuitNow / payment slip or screenshot; "delivery_order" for a DO / delivery note (no prices or marked D.O.); otherwise "other".
-- bill_date / due_date: convert any format (DD/MM/YYYY, "5 May 2026", "5 Mei 2026") to YYYY-MM-DD. If only month+year, use the 1st.
+- bill_date / due_date: convert any format ("5 May 2026", "5 Mei 2026") to YYYY-MM-DD. Malaysian documents are DAY-FIRST: a numeric date like 06/07/2026 is DD/MM/YYYY (6 July), NEVER month-first. If only month+year, use the 1st.
+- due_date: use the printed due date if shown. If the bill shows credit TERMS instead (e.g. "TERMS: 7 DAYS", "30 days credit"), compute due_date = bill_date + that many days; C.O.D. / cash bill → due_date = bill_date. A due date is never before the bill date — if what you read comes out earlier, you misread the format: set due_date null and add a raw_warning.
 - supplier_tax_id: only if labelled "SST", "GST", "Tax No", "ROC", or similar — not a generic registration number.
 - subtotal + sst should sum to total; if they don't, leave subtotal/sst null and set total only.
 - If no SST line is shown, leave sst as null (not 0).
@@ -145,13 +146,17 @@ export async function parseSupplierDoc(opts: {
     ? (raw.doc_type as ParsedBill["docType"])
     : "invoice"; // older prompt outputs / missing field — preserve previous behaviour
 
+  const rawWarnings = Array.isArray(raw.raw_warnings) ? (raw.raw_warnings as string[]) : [];
+  const dates = sanitizeBillDates(strOrNull(raw.bill_date), strOrNull(raw.due_date));
+  if (dates.warning) rawWarnings.push(dates.warning);
+
   return {
     docType,
     supplierName: strOrNull(raw.supplier_name),
     supplierTaxId: strOrNull(raw.supplier_tax_id),
     billNumber: strOrNull(raw.bill_number),
-    billDate: strOrNull(raw.bill_date),
-    dueDate: strOrNull(raw.due_date),
+    billDate: dates.billDate,
+    dueDate: dates.dueDate,
     outletHint: strOrNull(raw.outlet_hint),
     lineItems,
     subtotal: numOrNull(raw.subtotal),
@@ -160,8 +165,31 @@ export async function parseSupplierDoc(opts: {
     currency: typeof raw.currency === "string" ? raw.currency : "MYR",
     notes: strOrNull(raw.notes),
     parseConfidence: clamp01(Number(raw.parse_confidence) || 0),
-    rawWarnings: Array.isArray(raw.raw_warnings) ? (raw.raw_warnings as string[]) : [],
+    rawWarnings,
   };
+}
+
+/**
+ * Deterministic backstop for the day-first rule in the prompt: a due date
+ * BEFORE the bill date is physically impossible on a supplier bill, so it can
+ * only be a misread (day/month swap or a stray date picked off the page).
+ * Real case: KLFC 00655541/00655567, issued 06/07/2026, both stamped due
+ * 14/06/2026 — the bogus date flipped an unpaid invoice to OVERDUE. Drop the
+ * due date and warn rather than let an impossible date drive payables state.
+ * YYYY-MM-DD strings compare correctly lexicographically.
+ */
+export function sanitizeBillDates(
+  billDate: string | null,
+  dueDate: string | null,
+): { billDate: string | null; dueDate: string | null; warning: string | null } {
+  if (billDate && dueDate && dueDate < billDate) {
+    return {
+      billDate,
+      dueDate: null,
+      warning: `due date ${dueDate} is before bill date ${billDate} — dropped as a misread (dates are DD/MM in Malaysia)`,
+    };
+  }
+  return { billDate, dueDate, warning: null };
 }
 
 function strOrNull(v: unknown): string | null {
