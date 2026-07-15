@@ -47,6 +47,7 @@ import {
   DEFAULT_BLENDED_RATE,
   type DailyManHours,
 } from "../man-hours";
+import { computePtPerformance } from "../pt-performance";
 
 const MODEL = "claude-sonnet-4-6";
 const PT_MAX_HOURS_PER_WEEK = 24;
@@ -865,6 +866,12 @@ export async function generateSchedule(
     if (h > 0) recentHours.set(r.user_id, (recentHours.get(r.user_id) ?? 0) + h);
   }
 
+  // Performance input: each PT's reliability over the last 60 days — on-time rate
+  // (clock-in vs scheduled) blended with checklist-completion rate. Between two
+  // equally under-worked part-timers the more reliable one is suggested first;
+  // it never hard-blocks anyone (thin/no history sits at a neutral prior).
+  const perfById = await computePtPerformance(partTimers.map((p) => p.id), weekStart);
+
   // ── Stage 3: agentic PT proposal, validated in code ──────────────────
   type Proposal = { user_id: string; date: string; slot: string; reason?: string };
   let proposals: Proposal[] = [];
@@ -872,6 +879,16 @@ export async function generateSchedule(
   const eligiblePt = partTimers.filter((p) => p.hourly_rate && p.hourly_rate > 0);
   const skippedPt = partTimers.length - eligiblePt.length;
   if (skippedPt > 0) notes.push(`⚠ ${skippedPt} PT skipped — no hourly rate on profile`);
+  if (eligiblePt.length > 0) {
+    const ranked = [...eligiblePt]
+      .map((p) => ({ p, perf: perfById.get(p.id) }))
+      .sort((a, b) => (b.perf?.score ?? 0) - (a.perf?.score ?? 0))
+      .map(({ p, perf }) => {
+        const sample = (perf?.attendanceSample ?? 0) + (perf?.checklistSample ?? 0);
+        return `${p.name} ${Math.round((perf?.score ?? 0.7) * 100)}%${sample === 0 ? " (no history)" : ` (on-time ${Math.round((perf?.onTimeRate ?? 0) * 100)}%, checklist ${Math.round((perf?.checklistRate ?? 0) * 100)}%)`}`;
+      });
+    notes.push(`PT performance (60d, weighted into suggestions): ${ranked.join("; ")}`);
+  }
 
   if (eligiblePt.length > 0 && ptBudget > 0 && gaps.length > 0 && process.env.ANTHROPIC_API_KEY) {
     try {
@@ -879,13 +896,19 @@ export async function generateSchedule(
         outletName: outlet.name,
         ptBudget,
         gaps: gaps.slice(0, 20),
-        partTimers: eligiblePt.map((p) => ({
-          user_id: p.id,
-          name: p.name,
-          hourly_rate: p.hourly_rate!,
-          recent_4wk_hours: Math.round(recentHours.get(p.id) ?? 0),
-          leave_dates: dates.filter((d) => onLeave.has(`${p.id}:${d}`)),
-        })),
+        partTimers: eligiblePt.map((p) => {
+          const perf = perfById.get(p.id);
+          return {
+            user_id: p.id,
+            name: p.name,
+            hourly_rate: p.hourly_rate!,
+            recent_4wk_hours: Math.round(recentHours.get(p.id) ?? 0),
+            on_time_pct: perf ? Math.round(perf.onTimeRate * 100) : null,
+            checklist_pct: perf ? Math.round(perf.checklistRate * 100) : null,
+            reliability: perf ? Math.round(perf.score * 100) / 100 : null,
+            leave_dates: dates.filter((d) => onLeave.has(`${p.id}:${d}`)),
+          };
+        }),
         slots: Object.fromEntries(
           candidates.map(([slot, t]) => [slot, `${t.label} ${t.start_time}-${t.end_time} (${workingHours(t)}h)`]),
         ),
@@ -896,14 +919,32 @@ export async function generateSchedule(
     }
   }
   if (proposals.length === 0 && eligiblePt.length > 0 && ptBudget > 0) {
-    // Greedy fallback: biggest gap first, least-used cheapest PT first.
-    const byFairness = [...eligiblePt].sort(
-      (a, b) => (recentHours.get(a.id) ?? 0) - (recentHours.get(b.id) ?? 0) || a.hourly_rate! - b.hourly_rate!,
-    );
-    let i = 0;
+    // Greedy fallback: fill the biggest gaps first, and for each gap pick the PT
+    // with the best blend of PERFORMANCE (reliability), FAIRNESS (fewest hours so
+    // far) and COST (cheaper first). Fairness updates live as we propose — a PT's
+    // fairness drops with every shift we hand them this run — so the load still
+    // spreads instead of piling every gap onto the single top performer.
+    const maxRate = Math.max(1, ...eligiblePt.map((p) => p.hourly_rate!));
+    const fairCap = 4 * PT_MAX_HOURS_PER_WEEK; // 4-week horizon of the recentHours signal
+    const proposedH = new Map<string, number>(); // hours proposed to each PT this run
+    const W_PERF = 0.5, W_FAIR = 0.35, W_COST = 0.15;
+    const priority = (p: Staff) => {
+      const worked = (recentHours.get(p.id) ?? 0) + (proposedH.get(p.id) ?? 0) * 4; // this-week hours weighted onto the 4-week scale
+      const fairnessNorm = 1 - Math.min(1, worked / fairCap);
+      const costNorm = p.hourly_rate! / maxRate;
+      const perf = perfById.get(p.id)?.score ?? 0.7;
+      return W_PERF * perf + W_FAIR * fairnessNorm - W_COST * costNorm;
+    };
+    const proposedByDay = new Map<string, Set<string>>(); // date → PTs already proposed that day
     for (const g of gaps) {
-      proposals.push({ user_id: byFairness[i % byFairness.length].id, date: g.date, slot: g.slot, reason: `gap ${g.gapHours}h` });
-      i++;
+      const day = proposedByDay.get(g.date) ?? proposedByDay.set(g.date, new Set()).get(g.date)!;
+      const pick = eligiblePt
+        .filter((p) => !day.has(p.id) && !bookedElsewhere.get(p.id)?.has(g.date) && !onLeave.has(`${p.id}:${g.date}`))
+        .sort((a, b) => priority(b) - priority(a))[0];
+      if (!pick) continue;
+      day.add(pick.id);
+      proposedH.set(pick.id, (proposedH.get(pick.id) ?? 0) + workingHours(g.template));
+      proposals.push({ user_id: pick.id, date: g.date, slot: g.slot, reason: `gap ${g.gapHours}h` });
     }
   }
 
@@ -1038,7 +1079,11 @@ async function proposePtWithModel(input: {
   outletName: string;
   ptBudget: number;
   gaps: Array<{ date: string; slot: string; gapHours: number }>;
-  partTimers: Array<{ user_id: string; name: string; hourly_rate: number; recent_4wk_hours: number; leave_dates: string[] }>;
+  partTimers: Array<{
+    user_id: string; name: string; hourly_rate: number; recent_4wk_hours: number;
+    on_time_pct: number | null; checklist_pct: number | null; reliability: number | null;
+    leave_dates: string[];
+  }>;
   slots: Record<string, string>;
 }): Promise<Array<{ user_id: string; date: string; slot: string; reason?: string }>> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -1055,11 +1100,12 @@ async function proposePtWithModel(input: {
           `Shift slots: ${JSON.stringify(input.slots)}`,
           `Demand gaps, biggest first (gapHours = staff-hours short of the sales-derived need):`,
           JSON.stringify(input.gaps),
-          `Part-timers (recent_4wk_hours = hours they got in the last 4 weeks; spread work fairly — favour whoever has fewer recent hours when rates are similar, and never assign on their leave_dates):`,
+          `Part-timers. Fields: recent_4wk_hours = hours in the last 4 weeks (spread work fairly — favour whoever has fewer recent hours); on_time_pct / checklist_pct / reliability = performance over the last 60 days (0-100 / 0-1; higher = clocks in on time and finishes checklists); never assign on their leave_dates.`,
           JSON.stringify(input.partTimers),
           ``,
           `Reply with ONLY a JSON array, no prose: [{"user_id": "...", "date": "YYYY-MM-DD", "slot": "<one of the slot keys above>", "reason": "few words"}]`,
           `Cover the biggest gaps first, stay under budget, at most one shift per person per day.`,
+          `When two part-timers are similarly under-worked, prefer the more RELIABLE one — but still spread hours; don't starve a weaker performer of every shift.`,
         ].join("\n"),
       },
     ],

@@ -65,6 +65,25 @@ days), the PT top-up target (`required − FT base`, weekends first), and the
 man-hours / peak-heads notes. FT fairness + anti-fatigue rules (no close→open,
 rotated anchors, rotated weekend rest) sit on top.
 
+## Which PT fills a gap — demand, then fairness + performance
+
+The demand model decides *how many* PT hours a day needs; a separate ranking
+decides *who* gets suggested for each gap. Three signals blend (both the LLM
+pass and the greedy fallback use them; `lib/hr/pt-performance.ts`):
+
+- **Fairness** — trailing 4-week rostered hours; fewer → higher priority. Updates
+  live as the run proposes, so hours spread instead of piling on one person.
+- **Performance** — a 60-day reliability score: on-time rate (clock-in vs
+  scheduled, `hr_attendance_logs`) blended 60/40 with checklist-completion rate
+  (`Checklist`). Between two equally under-worked PTs the more reliable one is
+  preferred. Bayesian-shrunk (prior 0.7–0.8, K 3) so a thin/no history sits at a
+  neutral prior and is never hard-blocked — it's a nudge, not a gate.
+- **Cost** — cheaper hourly rate breaks remaining ties, inside the RM envelope.
+
+Every suggestion is still validated against the hard caps (24h / 5-day combined
+across outlets, one shift/day, budget) and confirmed by the manager. The per-PT
+scores are surfaced in `ai_notes`.
+
 ## Staffing mode — Tight / Mid / Safe
 
 AI Fill takes a `mode` (default `tight`). The demand **sizing** is identical in
