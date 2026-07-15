@@ -2,11 +2,16 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { CalendarOff, CheckCircle2, XCircle, Loader2, Bot } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Bot, Paperclip, AlertTriangle } from "lucide-react";
 import { HrPageHeader } from "@/components/hr/page-header";
 import type { LeaveRequest } from "@/lib/hr/types";
 
-type EnrichedLeaveRequest = LeaveRequest & { user_name?: string | null; outlet_name?: string | null };
+type EnrichedLeaveRequest = LeaveRequest & {
+  user_name?: string | null;
+  outlet_name?: string | null;
+  attachment_signed_url?: string | null;
+  attachment_required?: boolean;
+};
 
 export default function LeaveReviewPage() {
   const [filter, setFilter] = useState("all");
@@ -89,6 +94,21 @@ export default function LeaveReviewPage() {
                       <Bot className="h-3 w-3" /> {req.ai_reason}
                     </p>
                   )}
+                  {/* Supporting document (e.g. MC). Signed 1h URL from the API. */}
+                  {req.attachment_signed_url ? (
+                    <a
+                      href={req.attachment_signed_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                    >
+                      <Paperclip className="h-3 w-3" /> View document
+                    </a>
+                  ) : req.attachment_required ? (
+                    <p className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                      <AlertTriangle className="h-3 w-3" /> Document required — none attached
+                    </p>
+                  ) : null}
                 </div>
               </div>
               {(req.status === "ai_escalated" || req.status === "pending") && (

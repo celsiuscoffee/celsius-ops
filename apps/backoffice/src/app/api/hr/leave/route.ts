@@ -43,14 +43,39 @@ export async function GET(req: NextRequest) {
     : [];
   const userMap = new Map(users.map((u) => [u.id, u]));
 
-  const requests = (data || []).map((r: { user_id: string; [k: string]: unknown }) => {
-    const u = userMap.get(r.user_id);
-    return {
-      ...r,
-      user_name: u?.fullName || u?.name || null,
-      outlet_name: u?.outlet?.name || null,
-    };
-  });
+  // Which leave types require a supporting document, so the reviewer can spot a
+  // missing MC at a glance.
+  const { data: policies } = await hrSupabaseAdmin
+    .from("hr_leave_policies")
+    .select("leave_type, mandatory_attachment")
+    .eq("is_active", true);
+  const requiresDoc = new Map(
+    (policies || []).map((p: { leave_type: string; mandatory_attachment: boolean }) => [
+      p.leave_type,
+      !!p.mandatory_attachment,
+    ]),
+  );
+
+  const requests = await Promise.all(
+    (data || []).map(async (r: { user_id: string; leave_type: string; attachment_url: string | null; [k: string]: unknown }) => {
+      const u = userMap.get(r.user_id);
+      // attachment_url holds a PRIVATE-bucket object path — sign it for viewing.
+      let attachment_signed_url: string | null = null;
+      if (r.attachment_url) {
+        const { data: signed } = await hrSupabaseAdmin.storage
+          .from("hr-documents")
+          .createSignedUrl(r.attachment_url, 3600);
+        attachment_signed_url = signed?.signedUrl ?? null;
+      }
+      return {
+        ...r,
+        user_name: u?.fullName || u?.name || null,
+        outlet_name: u?.outlet?.name || null,
+        attachment_signed_url,
+        attachment_required: requiresDoc.get(r.leave_type) ?? false,
+      };
+    }),
+  );
 
   return NextResponse.json({ requests });
 }

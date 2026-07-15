@@ -31,6 +31,23 @@ export async function processLeaveRequest(requestId: string): Promise<LeaveDecis
 
   const { user_id, leave_type, start_date, end_date, total_days } = request;
 
+  // 1b. Document check — if this leave type mandates a supporting document
+  // (e.g. MC for sick leave) and none is attached, never auto-approve: a human
+  // must see the request and chase the slip. The staff POST already escalates
+  // this case; this is defence-in-depth for any other caller.
+  const { data: docPolicy } = await hrSupabaseAdmin
+    .from("hr_leave_policies")
+    .select("mandatory_attachment")
+    .eq("leave_type", leave_type)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (docPolicy?.mandatory_attachment && !request.attachment_url) {
+    return {
+      decision: "escalate",
+      reason: `${leave_type} leave requires a supporting document (e.g. MC) — none attached.`,
+    };
+  }
+
   // 2. Balance check
   const currentYear = new Date().getFullYear();
   const { data: balance } = await hrSupabaseAdmin

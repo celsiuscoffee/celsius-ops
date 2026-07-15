@@ -1,14 +1,21 @@
 "use client";
 
 import { useFetch } from "@/lib/use-fetch";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarOff, CheckCircle2, XCircle, Clock, Loader2, Bot, Plus, ArrowLeft } from "lucide-react";
+import { CalendarOff, CheckCircle2, XCircle, Clock, Loader2, Bot, Plus, ArrowLeft, Paperclip, X } from "lucide-react";
 import type { LeaveBalance, LeaveRequest } from "@/lib/hr/types";
 import { LEAVE_TYPES } from "@/lib/hr/constants";
 
+type LeavePolicyLite = { leave_type: string; display_name: string; mandatory_attachment: boolean };
+type LeaveRequestRow = LeaveRequest & { attachment_signed_url?: string | null };
+
 export default function LeavePage() {
-  const { data, mutate } = useFetch<{ balances: LeaveBalance[]; requests: LeaveRequest[] }>("/api/hr/leave");
+  const { data, mutate } = useFetch<{
+    balances: LeaveBalance[];
+    requests: LeaveRequestRow[];
+    policies: LeavePolicyLite[];
+  }>("/api/hr/leave");
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -19,9 +26,16 @@ export default function LeavePage() {
     end_date: "",
     reason: "",
   });
+  const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const balances = data?.balances || [];
   const requests = data?.requests || [];
+  const policies = data?.policies || [];
+
+  // Does the selected leave type require a supporting document (e.g. MC)?
+  const attachmentRequired =
+    policies.find((p) => p.leave_type === form.leave_type)?.mandatory_attachment ?? false;
 
   const dateRangeInvalid = form.start_date !== "" && form.end_date !== "" && form.end_date < form.start_date;
   const totalDays = form.start_date && form.end_date && !dateRangeInvalid
@@ -30,13 +44,33 @@ export default function LeavePage() {
 
   const handleSubmit = async () => {
     if (!form.start_date || !form.end_date || dateRangeInvalid) return;
+    if (attachmentRequired && !file) {
+      setResult({ success: false, message: "This leave type needs a supporting document (e.g. MC)." });
+      return;
+    }
     setSubmitting(true);
     setResult(null);
     try {
+      // Upload the supporting document first (if any), then submit the request
+      // with the returned private-bucket path as attachment_url.
+      let attachment_url: string | null = null;
+      if (file) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const upRes = await fetch("/api/hr/leave/attachment", { method: "POST", body: fd });
+        const upData = await upRes.json();
+        if (!upRes.ok) {
+          setResult({ success: false, message: upData.error || "Document upload failed" });
+          setSubmitting(false);
+          return;
+        }
+        attachment_url = upData.path;
+      }
+
       const res = await fetch("/api/hr/leave", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, total_days: totalDays }),
+        body: JSON.stringify({ ...form, total_days: totalDays, attachment_url }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -49,6 +83,8 @@ export default function LeavePage() {
         });
         setShowForm(false);
         setForm({ leave_type: "annual", start_date: "", end_date: "", reason: "" });
+        setFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
         mutate();
       } else {
         setResult({ success: false, message: data.error || "Failed" });
@@ -146,9 +182,60 @@ export default function LeavePage() {
                 placeholder="Why are you taking leave?"
               />
             </label>
+
+            {/* Supporting document (e.g. MC). Required for some leave types. */}
+            <div>
+              <span className="mb-1 block text-xs font-medium text-gray-500">
+                Supporting document {attachmentRequired
+                  ? <span className="text-red-600">(required — e.g. MC)</span>
+                  : <span className="text-gray-400">(optional)</span>}
+              </span>
+              {file ? (
+                <div className="flex items-center gap-2 rounded-lg border bg-gray-50 px-3 py-2 text-sm">
+                  <Paperclip className="h-4 w-4 shrink-0 text-gray-400" />
+                  <span className="flex-1 truncate">{file.name}</span>
+                  <button
+                    type="button"
+                    aria-label="Remove file"
+                    onClick={() => {
+                      setFile(null);
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                    }}
+                    className="rounded-full p-1 text-gray-400 active:bg-gray-200"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`flex w-full items-center justify-center gap-2 rounded-lg border border-dashed py-2.5 text-sm font-medium ${
+                    attachmentRequired ? "border-red-300 text-red-600" : "border-gray-300 text-gray-500"
+                  }`}
+                >
+                  <Paperclip className="h-4 w-4" /> Attach photo or PDF
+                </button>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] || null;
+                  if (f && f.size > 10 * 1024 * 1024) {
+                    setResult({ success: false, message: "File too large (max 10MB)." });
+                    return;
+                  }
+                  setFile(f);
+                }}
+              />
+            </div>
+
             <button
               onClick={handleSubmit}
-              disabled={submitting || !form.start_date || !form.end_date || dateRangeInvalid}
+              disabled={submitting || !form.start_date || !form.end_date || dateRangeInvalid || (attachmentRequired && !file)}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-terracotta py-2.5 text-sm font-medium text-white disabled:opacity-50"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -198,6 +285,16 @@ export default function LeavePage() {
                   <p className="text-xs text-gray-400">
                     {req.start_date} → {req.end_date} · {req.total_days}d
                   </p>
+                  {req.attachment_signed_url && (
+                    <a
+                      href={req.attachment_signed_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-blue-600"
+                    >
+                      <Paperclip className="h-3 w-3" /> Document
+                    </a>
+                  )}
                 </div>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                   req.status.includes("approved") ? "bg-green-50 text-green-600" :
