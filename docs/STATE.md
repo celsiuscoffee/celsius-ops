@@ -140,6 +140,19 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   ever — payslip persistence/Cloudinary/viewed_at was never built; PDFs are
   generated on-demand from `hr_payroll_items`, and the staff payslip pages
   are feature-flagged off (`PAYROLL_UI_ENABLED`).
+- 2026-07-12 — **Leave-request document uploads wired** (same PR/branch as
+  QA round 1). `hr_leave_requests.attachment_url` + policy
+  `mandatory_attachment` existed but were dead (0 attachments ever;
+  sick/hospitalization/maternity flagged mandatory, unenforced). Now
+  end-to-end: staff web `POST /api/hr/leave/attachment` uploads photo/PDF to
+  the **private `hr-documents` bucket under a `_leave/` prefix** (health PII,
+  never public), stores the object path in `attachment_url`, served via 1h
+  signed URLs on both staff history + backoffice review. Enforcement is
+  **escalate-not-reject**: a mandatory-doc leave with no attachment routes to
+  a manager (never auto-approves) — keeps the shared POST non-breaking for
+  **staff-native, which has NO picker yet (deferred to avoid an OTA deploy;
+  build it next native touch)**. Defence-in-depth guard added to both
+  leave-manager agent copies. No migration (columns + bucket pre-existed).
 - 2026-07-12 — **HR module QA round 1** (`docs/design/hr-qa-2026-07-12.md`,
   skill `.claude/skills/hr-module-qa/`). Attendance AI processing dead
   since 2026-04-19 (manual-button-only, no cron; base pay unaffected — hours
