@@ -3,7 +3,7 @@ import { checkCronAuth } from "@celsius/shared";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews, replyToReview } from "@/lib/reviews/gbp";
-import { generateReply, extractImprovement, POSITIVE_THRESHOLD } from "@/lib/reviews/auto-reply";
+import { generateReplyWithUsage, extractImprovement, POSITIVE_THRESHOLD } from "@/lib/reviews/auto-reply";
 import { logAgentAction, touchAgentRun } from "@/lib/agents/substrate";
 
 export const dynamic = "force-dynamic";
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
       for (const review of candidates) {
         if (posted >= MAX_PER_OUTLET || totalPosted + posted >= MAX_TOTAL) break;
         try {
-          const reply = await generateReply({
+          const { reply, usage } = await generateReplyWithUsage({
             rating: review.rating,
             reviewer: review.reviewer.name,
             comment: review.comment,
@@ -114,6 +114,7 @@ export async function GET(req: NextRequest) {
             refId: review.id,
             outletId: outlet.id,
             model: "claude-sonnet-4-6",
+            usage,
           });
 
           // Happy-but-fixable: read the praise for a concrete point and flag it
