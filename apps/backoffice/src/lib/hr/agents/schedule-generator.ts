@@ -379,42 +379,83 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     );
   }
 
-  // Weekday busyness (sales-need hours per day-of-week) — used to place the
-  // unavoidable rest-day doubles on the quietest days.
-  const dowLoad = new Map<number, number>();
-  for (const [key, n] of demand) {
-    const dw = Number(key.split(":")[0]);
-    dowLoad.set(dw, (dowLoad.get(dw) ?? 0) + n);
+  const sortedFT = [...fullTimers].sort((a, b) => a.name.localeCompare(b.name));
+
+  // ── Demand-aware rest days ──────────────────────────────────────────
+  // Each FT works 6 days and rests 1 (Employment Act). WHICH day they rest is
+  // decided from the outlet's OWN demand data — items sold per weekday — not a
+  // fixed rule: more people rest on the QUIETEST days so working heads track
+  // demand (the busy weekend keeps a full crew; quiet midweek sheds a few).
+  // This costs nothing — every FT still works 6 days — it only rebalances
+  // coverage across the week, fixing the old flat/inverted spread.
+  const openDaysList = [0, 1, 2, 3, 4, 5, 6].filter((d) => daysOpen.has(d));
+  const D = openDaysList.length || 1;
+  const N = sortedFT.length;
+  const dayItems = (d: number) => Math.max(itemsByDow.get(d) ?? 0, 0);
+  const maxItems = openDaysList.length ? Math.max(...openDaysList.map(dayItems)) : 0;
+  const restCap = Math.max(0, N - SERVICE_FLOOR); // never rest a day below the service floor
+
+  // Target rest-count per open day.
+  const restTarget = new Map<number, number>(openDaysList.map((d) => [d, 0]));
+  const spread = openDaysList.reduce((s, d) => s + (maxItems - dayItems(d)), 0);
+  if (spread <= 0 || N === 0) {
+    // No usable demand signal → even round-robin (prior behaviour).
+    openDaysList.forEach((d, i) => restTarget.set(d, Math.floor(N / D) + (i < N % D ? 1 : 0)));
+  } else {
+    // Rest weight ∝ how far BELOW the busiest day each day sits, plus a small
+    // smoothing so even a peak day can take the odd rest.
+    const smooth = maxItems * 0.1;
+    const weight = (d: number) => maxItems - dayItems(d) + smooth;
+    const wsum = openDaysList.reduce((s, d) => s + weight(d), 0);
+    const share = openDaysList.map((d) => ({ d, v: (N * weight(d)) / wsum }));
+    let placed = 0;
+    for (const x of share) {
+      const r = Math.min(restCap, Math.floor(x.v));
+      restTarget.set(x.d, r);
+      placed += r;
+    }
+    // Largest-remainder: hand out the leftover rests, quietest day first.
+    share.sort((a, b) => b.v - Math.floor(b.v) - (a.v - Math.floor(a.v)) || dayItems(a.d) - dayItems(b.d));
+    let leftover = N - placed;
+    for (let pass = 0; pass < 3 && leftover > 0; pass++) {
+      for (const x of share) {
+        if (leftover <= 0) break;
+        if ((restTarget.get(x.d) ?? 0) < restCap) {
+          restTarget.set(x.d, (restTarget.get(x.d) ?? 0) + 1);
+          leftover--;
+        }
+      }
+    }
   }
 
-  const sortedFT = [...fullTimers].sort((a, b) => a.name.localeCompare(b.name));
-  // Rest days: profile value wins. Everyone else spreads across Mon–Thu so no
-  // day loses more than its share of crew — one rest per day first, and when
-  // there are more FT than rest slots, the doubles land on the quietest
-  // weekdays instead of stacking on Monday/Tuesday.
-  // Spread across ALL open days (not just Mon–Thu): one rest per day before
-  // any day takes a second, extras landing quietest-day-first — so a large
-  // crew no longer stacks 3–4 rests onto the early week, and the busiest
-  // day (usually Saturday) is the last to lose anyone.
-  const restSlots = [0, 1, 2, 3, 4, 5, 6]
-    .filter((d) => daysOpen.has(d))
-    .sort((a, b) => (dowLoad.get(a) ?? 0) - (dowLoad.get(b) ?? 0));
-  const restCount = new Map<number, number>(restSlots.map((d) => [d, 0]));
+  // Assign each FT a rest day. Profile rest_day is a hard constraint
+  // (contract/availability) — honour it; everyone else fills the days still
+  // short of their rest target, quietest first, so working heads track demand.
+  const restRemaining = new Map(restTarget);
   const restDayOf = new Map<string, number>();
   for (const s of sortedFT) {
-    if (s.rest_day != null) {
+    if (s.rest_day != null && daysOpen.has(s.rest_day)) {
       restDayOf.set(s.id, s.rest_day);
-      if (restCount.has(s.rest_day)) restCount.set(s.rest_day, (restCount.get(s.rest_day) ?? 0) + 1);
+      restRemaining.set(s.rest_day, (restRemaining.get(s.rest_day) ?? 0) - 1);
     }
   }
   for (const s of sortedFT) {
     if (restDayOf.has(s.id)) continue;
-    const day = restSlots.length
-      ? [...restSlots].sort((a, b) => (restCount.get(a) ?? 0) - (restCount.get(b) ?? 0))[0]
-      : 1;
+    const day =
+      [...openDaysList].sort(
+        (a, b) => (restRemaining.get(b) ?? 0) - (restRemaining.get(a) ?? 0) || dayItems(a) - dayItems(b),
+      )[0] ?? openDaysList[0] ?? 1;
     restDayOf.set(s.id, day);
-    restCount.set(day, (restCount.get(day) ?? 0) + 1);
+    restRemaining.set(day, (restRemaining.get(day) ?? 0) - 1);
   }
+  // Surface the resulting FT working-heads-per-day vs demand for QA.
+  const DOW_LABEL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  notes.push(
+    "FT working heads/day (demand-balanced): " +
+      openDaysList
+        .map((d) => `${DOW_LABEL[d]} ${N - (restTarget.get(d) ?? 0)}h-crew/${Math.round(dayItems(d))}it`)
+        .join(", "),
+  );
 
   const ftHours = new Map<string, number>();
   for (const date of dates) {
@@ -488,9 +529,11 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     notes.push(`⚠ under 45h/wk (leave or closed days): ${under45.map((s) => `${s.name} ${Math.round(ftHours.get(s.id) ?? 0)}h`).join(", ")}`);
   }
 
-  // Rover placement: 2 days each at this outlet, on the days with the
-  // thinnest FT crew, skipping days they're already rostered at another
-  // outlet this week (their full week is 2 days × 3 outlets).
+  // Rover placement: 2 days each at this outlet, on the BUSIEST days (highest
+  // item demand) so the extra hands land where the load is — skipping days
+  // they're already rostered at another outlet this week (their full week is
+  // 2 days × 3 outlets). Previously they filled the thinnest-FT-crew days,
+  // which pushed them onto quiet midweek and starved the weekend.
   if (roverUsers.length > 0) {
     const { data: elsewhere } = await hrSupabaseAdmin
       .from("hr_schedule_shifts")
@@ -502,11 +545,10 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         .filter((s) => s.schedule_id !== existing?.id)
         .map((s) => `${s.user_id}:${s.shift_date}`),
     );
-    const ftHeads = (date: string) => rows.filter((r) => r.shift_date === date && r.notes !== "rest_day").length;
     for (const rover of roverUsers) {
       const days = dates
         .filter((d) => daysOpen.has(dow(d)) && !busy.has(`${rover.id}:${d}`) && !onLeave.has(`${rover.id}:${d}`))
-        .sort((a, b) => ftHeads(a) - ftHeads(b))
+        .sort((a, b) => dayItems(dow(b)) - dayItems(dow(a))) // busiest day first
         .slice(0, 2);
       for (const date of days) {
         // Lead joins whichever anchor shift is thinner that day.
