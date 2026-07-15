@@ -128,7 +128,15 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   fixed + 266 rows backfilled (migration 071).
 - 2026-07-05 — All six 2026 monthly payroll runs are status `draft` (no
   OT/allowances finalised) — FT actuals read ~RM3k/outlet flattering vs the
-  workbook until closed.
+  workbook until closed. **Update 2026-07-12:** June 2026 monthly run is now
+  `paid` (25 items); no July run exists yet.
+- 2026-07-12 — **Zarif (Tamarind Kitchen Crew) converted FT→PT effective
+  2026-07-08** (owner-approved, applied via Supabase MCP): profile
+  `employment_type='part_time'`, RM 9.00/hr (standard PT rate), basic_salary 0,
+  `resigned_at`/`end_date` CLEARED so the deactivate-resigned cron doesn't kill
+  his still-ACTIVE login; salary/job history rows closed (monthly RM 2,000 ends
+  2026-07-07) and new hourly rows opened. FT→PT conversions must clear the
+  resign fields or the 00:05 cron re-deactivates the user nightly.
 - 2026-07-05 — 4 scheduled staff have no `hr_employee_profiles` row
   (Hidayat, Irfan, a 2nd Haziq — Putrajaya; Fatin — Tamarind). The labour
   gate blocks publishes that include them until profiles+rates exist.
@@ -145,6 +153,15 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   skill — not just in the chat.
 
 ## Open failures
+
+- 2026-07-12 — **July 2026 monthly payroll needs a MANUAL prorated item for
+  Zarif** (user `1730b84d-74d5-4002-836f-d0f35eeec4ac`, Tamarind): he worked
+  FT Jul 1–7 but is now `part_time`, so the monthly calculator will skip him
+  ("not full-time") and his final FT week (RM 2,000 × 7/31 ≈ RM 451.61 basic +
+  any OT/allowances, statutory deductions as usual) will never be
+  auto-computed. Owner chose manual-item-in-July-run over a weekly-transfer
+  payout. Also noted in his hr_employee_profiles.notes. — pending human at
+  July payroll close.
 
 - 2026-07-11 — **`sentry.io` is NOT in the CCR environment's egress
   allowlist** — live Sentry MCP call returned `403 Host not in allowlist:
