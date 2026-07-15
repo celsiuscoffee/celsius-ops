@@ -402,6 +402,18 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />,   moduleKey: "pickup:menu" },
     ],
   },
+  // ── AI Agents: the fleet control panel. Its own top-level rail item (not
+  // buried under Settings): every autonomous actor, its mode/kill switch,
+  // action ledger, and cost. Clicking the section navigates straight to
+  // /agents. OWNER/ADMIN, gated on settings:system.
+  {
+    label: "AI Agents",
+    icon: <Bot className={ICON_SIZE} />,
+    dividerBefore: true,
+    items: [
+      { label: "Control Panel", href: "/agents", icon: <Bot className={ICON_SIZE} />, moduleKey: "settings:system" },
+    ],
+  },
   // ── Settings (consolidated). Every configurable surface across the
   // platform lives here, grouped by domain. Page URLs are unchanged (deep
   // links + the /settings hub tiles still work). RBAC is per-item, and empty
@@ -457,7 +469,6 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         label: "System",
         items: [
-          { label: "AI Agents",    href: "/agents",                icon: <Bot className={ICON_SIZE} />,            moduleKey: "settings:system" },
           { label: "Stock Count",  href: "/settings/stock-count",  icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
           // SOP taxonomy CRUD — setup-grade, so it lives with the other
           // configuration (moved out of the Ops section, 2026-07-11).
