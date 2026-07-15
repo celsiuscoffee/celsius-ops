@@ -57,9 +57,13 @@ const PT_MAX_DAYS_PER_WEEK = 5;
 
 // Serve-time-calibrated station throughput: items one head can make + serve per
 // hour while holding a 15-minute serve target (30-min hard ceiling). Barista =
-// drinks + counter pastries; kitchen = cooked food only. These rates size the
-// hourly demand curve to the 3–4 heads the outlets actually run — see the HOO
-// staffing report / docs/design/staffing-model.md. Calibratable.
+// drinks + counter pastries; kitchen = cooked food only.
+//   Grounded in prep times: a drink/pastry is ~3 min (≈20/hr raw), but the same
+//   head also takes orders, cashiers, serves and cleans and must keep queue
+//   headroom to hold 15-min serve → ~8/hr sustainable. Cooked food is ~10 min:
+//   against a 15-min target there's almost no headroom (one item every ~10 min),
+//   so ~6/hr — which is exactly why a 2nd kitchen hand is needed as food volume
+//   rises (weekend brunch). See docs/design/staffing-model.md. Calibratable.
 const BARISTA_ITEMS_PER_HR = 8;
 const KITCHEN_ITEMS_PER_HR = 6;
 // Cooked-food menu categories → kitchen station; everything else (drinks +
