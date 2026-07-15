@@ -77,6 +77,8 @@ type GridData = {
 type LabourGateInfo = {
   forecastRevenue: number;
   rosterCost: number;
+  ftFixedCost: number;
+  ptCost: number;
   rosterHours: number;
   pct: number | null;
   targetPct: number;
@@ -84,7 +86,10 @@ type LabourGateInfo = {
   verdict: "green" | "amber" | "red" | "unknown";
   blockers: string[];
   warnings: string[];
-  coverage?: Array<{ date: string; neededHours: number; scheduledHours: number; shortHours: number }>;
+  coverage?: Array<{
+    date: string; neededHours: number; scheduledHours: number; shortHours: number;
+    forecast?: number; pct?: number | null; isWeekend?: boolean; isHoliday?: boolean; holidayName?: string;
+  }>;
 };
 
 type SwapRequest = {
@@ -172,6 +177,7 @@ export default function SchedulesPage() {
   const [view, setView] = useState<"week" | "day">("week");
   const [dayIdx, setDayIdx] = useState(0);
   const [generating, setGenerating] = useState(false);
+  const [fillMode, setFillMode] = useState<"tight" | "mid" | "safe">("tight");
   const [clearing, setClearing] = useState(false);
   const [swapAction, setSwapAction] = useState<string | null>(null);
 
@@ -523,7 +529,7 @@ export default function SchedulesPage() {
       await fetch("/api/hr/schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "generate", outlet_id: selectedOutlet, week_start: weekStart }),
+        body: JSON.stringify({ action: "generate", outlet_id: selectedOutlet, week_start: weekStart, mode: fillMode }),
       });
       mutate();
     } finally {
@@ -574,14 +580,27 @@ export default function SchedulesPage() {
               {clearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               Clear Week
             </button>
-            <button
-              onClick={handleAIFill}
-              disabled={generating || !selectedOutlet || isPublished}
-              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
-            >
-              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-              AI Fill
-            </button>
+            <div className="flex items-center rounded-lg border">
+              <select
+                value={fillMode}
+                onChange={(e) => setFillMode(e.target.value as "tight" | "mid" | "safe")}
+                disabled={generating || isPublished}
+                className="rounded-l-lg border-r bg-background px-2 py-2 text-sm font-medium disabled:opacity-50"
+                title="Coverage buffer: Tight = exactly to demand; Mid = +1 at the peak block; Safe = +1 all day (break/no-show cover)"
+              >
+                <option value="tight">Tight</option>
+                <option value="mid">Mid</option>
+                <option value="safe">Safe</option>
+              </select>
+              <button
+                onClick={handleAIFill}
+                disabled={generating || !selectedOutlet || isPublished}
+                className="flex items-center gap-2 rounded-r-lg px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
+              >
+                {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+                AI Fill
+              </button>
+            </div>
             <button
               onClick={handlePublish}
               disabled={publishing || !grid?.schedule}
@@ -657,6 +676,13 @@ export default function SchedulesPage() {
             }`}
             title={[
               `Roster RM${gate.rosterCost.toLocaleString()} vs forecast RM${gate.forecastRevenue.toLocaleString()}`,
+              gate.forecastRevenue > 0
+                ? `  • FT floor RM${gate.ftFixedCost.toLocaleString()} (fixed/sunk) = ${((gate.ftFixedCost / gate.forecastRevenue) * 100).toFixed(1)}%`
+                : `  • FT floor RM${gate.ftFixedCost.toLocaleString()} (fixed/sunk)`,
+              gate.forecastRevenue > 0
+                ? `  • PT RM${gate.ptCost.toLocaleString()} (discretionary) = ${((gate.ptCost / gate.forecastRevenue) * 100).toFixed(1)}%`
+                : `  • PT RM${gate.ptCost.toLocaleString()} (discretionary)`,
+              `Only PT + revenue move the %; benching FT is fixed cost, so it saves nothing.`,
               `Budget ${(gate.targetPct * 100).toFixed(0)}% target / ${(gate.ceilingPct * 100).toFixed(0)}% ceiling`,
               ...gate.blockers,
               ...gate.warnings,
@@ -779,6 +805,26 @@ export default function SchedulesPage() {
                       <div className="text-base">{formatDay(d)}</div>
                       {hol && <div className="text-[9px] text-red-600 truncate" title={hol.name}>PH: {hol.name}</div>}
                       <div className="mt-1 text-[10px] font-semibold tabular-nums text-gray-600">{dayLabel} total</div>
+                      {(() => {
+                        const g = gate;
+                        const cov = g?.coverage?.find((c) => c.date === d);
+                        if (!g || !cov || cov.forecast == null) return null;
+                        const fc = cov.forecast;
+                        const rm = fc >= 1000 ? `RM${(fc / 1000).toFixed(1)}k` : `RM${fc}`;
+                        const pctColor =
+                          cov.pct == null ? "text-gray-400"
+                            : cov.pct <= g.targetPct ? "text-green-600"
+                              : cov.pct <= g.ceilingPct ? "text-amber-600"
+                                : "text-red-600";
+                        return (
+                          <div
+                            className={`text-[9px] font-medium tabular-nums ${pctColor}`}
+                            title={`Forecast ${rm}${cov.isWeekend ? " · weekend" : " · weekday"}${cov.isHoliday ? ` · ${cov.holidayName ?? "public holiday"}` : ""} — indicative daily labour % (day hours × blended rate ÷ forecast). FT salary is a weekly fixed cost, so treat this as a weekday-vs-weekend coverage lens, not the billed weekly figure.`}
+                          >
+                            {rm}{cov.pct == null ? "" : ` · ${(cov.pct * 100).toFixed(0)}%`}
+                          </div>
+                        );
+                      })()}
                     </th>
                   );
                 })}
@@ -1228,6 +1274,22 @@ function DayView({
           >
             Coverage {cov.scheduledHours}/{cov.neededHours} staff-hours
             {cov.shortHours > 0 ? ` — ${cov.shortHours}h short` : " ✓"}
+          </span>
+        )}
+        {cov?.forecast != null && (
+          <span
+            className={`${cov.neededHours > 0 ? "" : "ml-auto "}rounded-lg border px-3 py-1.5 text-sm font-medium ${
+              cov.pct == null ? "border-gray-200 bg-gray-50 text-gray-600"
+                : gate && cov.pct <= gate.targetPct ? "border-green-200 bg-green-50 text-green-700"
+                  : gate && cov.pct <= gate.ceilingPct ? "border-amber-300 bg-amber-50 text-amber-700"
+                    : "border-red-300 bg-red-50 text-red-700"
+            }`}
+            title="Indicative daily labour %: day hours × blended rate ÷ day forecast. FT salary is a weekly fixed cost, so this is a weekday-vs-weekend coverage lens, not the billed weekly figure."
+          >
+            {cov.isWeekend ? "Weekend" : "Weekday"}
+            {cov.isHoliday ? ` · ${cov.holidayName ?? "PH"}` : ""} · forecast RM
+            {cov.forecast >= 1000 ? `${(cov.forecast / 1000).toFixed(1)}k` : cov.forecast}
+            {cov.pct == null ? "" : ` · ${(cov.pct * 100).toFixed(0)}%`}
           </span>
         )}
       </div>

@@ -40,13 +40,14 @@ import {
   DEFAULT_BUDGET,
   ROVER_SHARE_WEEKLY,
 } from "../labour-gate-lib";
-import { forecastWeekRevenue } from "../labour-gate";
+import { forecastWeek } from "../labour-gate";
 import {
   computeDailyManHours,
   itemsPerManHourFor,
   DEFAULT_BLENDED_RATE,
   type DailyManHours,
 } from "../man-hours";
+import { computePtPerformance } from "../pt-performance";
 
 const MODEL = "claude-sonnet-4-6";
 const PT_MAX_HOURS_PER_WEEK = 24;
@@ -71,6 +72,21 @@ const KITCHEN_ITEMS_PER_HR = 6;
 const KITCHEN_CATEGORIES = ["Roti Bakar", "Nasi Lemak", "Pasta", "Sandwiches", "Fries", "Noodle"];
 
 const ROVER_POSITIONS = new Set(["manager", "area manager", "head of department", "barista lead"]);
+
+// Staffing mode — a coverage buffer laid ON TOP of the demand-sized heads. The
+// sizing (barista/kitchen throughput → heads/hr, floored) is identical in all
+// three modes; the mode only decides how much slack to add for breaks/no-shows.
+//   tight — no buffer. Staff exactly to the sized heads: serve ~15 min at peak,
+//           labour ~target%. No cover for a break or a no-show.
+//   mid   — +1 head across the day's PEAK BLOCK (the hours at that day's peak
+//           demand). Relief at the busy window; labour ~1 point higher.
+//   safe  — +1 head across the ENTIRE open window: break cover all day plus one
+//           no-show of slack. Serve <12 min at peak; labour a few points higher.
+// The buffer flows through one place (the hourly head count), so required
+// man-hours, the peak note, the PT demand gaps and the PT top-up target all move
+// together. tight returns 0 everywhere → byte-for-byte the prior behaviour.
+export type StaffingMode = "tight" | "mid" | "safe";
+export const STAFFING_MODES: StaffingMode[] = ["tight", "mid", "safe"];
 
 type Staff = {
   id: string;
@@ -98,6 +114,7 @@ type ShiftRow = {
 
 type GenerateResult = {
   scheduleId: string;
+  mode: StaffingMode;
   shifts: number;
   ptSuggestions: number;
   totalHours: number;
@@ -173,7 +190,11 @@ async function loadTemplates(
 
 // ─── generator ───────────────────────────────────────────────────────
 
-export async function generateSchedule(outletId: string, weekStart: string): Promise<GenerateResult> {
+export async function generateSchedule(
+  outletId: string,
+  weekStart: string,
+  mode: StaffingMode = "tight",
+): Promise<GenerateResult> {
   const notes: string[] = [];
   const dates = weekDates(weekStart);
   const weekEnd = dates[6];
@@ -355,19 +376,35 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     if (!prev || heads > prev.heads) peakByDow.set(h.dw, { heads, hr: h.hr, bar: barHeads, kit: kitHeads });
   }
 
-  // Per-day-of-week revenue (separate query — joining items to orders would
-  // multiply order totals by line count). Feeds the "affordable man-hours" side.
-  const revRows = await prisma.$queryRaw<Array<{ dw: number; rev: number }>>`
-    SELECT EXTRACT(DOW FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
-           (sum(total) / 100.0 / 4)::float AS rev
-    FROM pos_orders
-    WHERE outlet_id = ${outlet.loyaltyOutletId ?? ""}
-      AND status = 'completed' AND refund_of_order_id IS NULL
-      AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-    GROUP BY 1
-  `;
-  const revByDow = new Map<number, number>(revRows.map((r) => [r.dw, r.rev]));
+  // Staffing-mode buffer (heads added on top of the sized demand for this hour).
+  //   tight → 0; safe → +1 every open hour; mid → +1 across the day's peak block
+  //   (hours at that day's peak head count). Consumed by required man-hours, the
+  //   peak note, the PT demand gaps and the PT top-up target — one lever, applied
+  //   uniformly. Only called inside the open-hours loops, so "every open hour"
+  //   stays bounded to trading hours.
+  const bufferHeads = (dwN: number, hr: number): number => {
+    if (mode === "tight") return 0;
+    if (mode === "safe") return 1;
+    const peak = peakByDow.get(dwN)?.heads;
+    if (peak == null) return 0; // no sales that day → nothing to buffer
+    const heads = demand.get(`${dwN}:${hr}`) ?? SERVICE_FLOOR;
+    return heads >= peak ? 1 : 0; // mid: buffer the peak block only
+  };
+  notes.push(
+    mode === "tight"
+      ? "Mode: TIGHT — staffed exactly to sized demand (no break/no-show slack)"
+      : mode === "mid"
+        ? "Mode: MID — +1 head across each day's peak block (break relief at the busy window)"
+        : "Mode: SAFE — +1 head across the whole open window (break cover all day + one no-show of slack)",
+  );
+
+  // Per-DAY revenue forecast (recency-weighted per weekday, holidays excluded
+  // from the baseline and applied to any holiday in this week). Feeds both the
+  // "affordable man-hours" side (per date) and the PT budget envelope (weekly),
+  // so coverage sizing and the cost target come from ONE forecast.
+  const weekForecast = await forecastWeek(outlet, weekStart);
+  const revByDate = new Map<string, number>(weekForecast.byDate.map((d) => [d.date, d.forecast]));
+  if (weekForecast.holidayNote) notes.push(`Holiday-aware forecast: ${weekForecast.holidayNote}`);
 
   // Man-hours per open day: what the volume REQUIRES (throughput, floored at the
   // service minimum) vs what target-% revenue can AFFORD. A positive gap flags a
@@ -382,7 +419,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   for (const d of dates) {
     if (!daysOpen.has(dow(d))) continue;
     let req = 0;
-    for (let h = openH; h < closeH; h++) req += demand.get(`${dow(d)}:${h}`) ?? SERVICE_FLOOR;
+    for (let h = openH; h < closeH; h++) req += (demand.get(`${dow(d)}:${h}`) ?? SERVICE_FLOOR) + bufferHeads(dow(d), h);
     requiredByDate.set(d, req);
   }
   const manHours: DailyManHours[] = dates
@@ -391,7 +428,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       const base = computeDailyManHours({
         date: d,
         forecastItems: itemsByDow.get(dow(d)) ?? 0,
-        forecastRevenue: revByDow.get(dow(d)) ?? 0,
+        forecastRevenue: revByDate.get(d) ?? 0,
         itemsPerManHour: itemsPerManHourFor(outlet.code),
         serviceMinHeads: SERVICE_FLOOR,
         openHours,
@@ -421,7 +458,9 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     .map((d) => {
       const p = peakByDow.get(dow(d));
       if (!p) return null;
-      return `${d} ${p.heads}${p.heads > SERVICE_FLOOR ? ` (${p.bar}bar+${p.kit}kit @${p.hr}:00)` : ""}`;
+      const heads = p.heads + bufferHeads(dow(d), p.hr); // include the mode buffer at the peak hour
+      const buf = heads - p.heads;
+      return `${d} ${heads}${p.heads > SERVICE_FLOOR ? ` (${p.bar}bar+${p.kit}kit @${p.hr}:00${buf ? `, +${buf} buffer` : ""})` : buf ? ` (+${buf} buffer)` : ""}`;
     })
     .filter(Boolean);
   if (peakLines.length) notes.push(`Peak heads/day (serve-time model): ${peakLines.join(", ")}`);
@@ -728,7 +767,8 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   }
 
   // ── Stage 2: PT budget envelope — the only spend that moves labour % ─
-  const forecast = Math.round(await forecastWeekRevenue(outlet, weekStart));
+  // Same forecast the man-hours side used (recency-weighted, holiday-aware).
+  const forecast = Math.round(weekForecast.weekly);
   // FT salaries are sunk — the envelope charges every schedulable FT their
   // full weekly share whether the roster fills them to 45h or not.
   const ftCost = Math.round(
@@ -739,6 +779,17 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     `Budget: forecast RM${forecast.toLocaleString()} × ${(budget.target * 100).toFixed(0)}% = RM${Math.round(budget.target * forecast).toLocaleString()}; ` +
       `FT (fixed) RM${ftCost.toLocaleString()} + rover RM${ROVER_SHARE_WEEKLY} → PT envelope RM${ptBudget.toLocaleString()}`,
   );
+  // Sunk-FT reality: when the fixed FT floor alone is already at/over target, the
+  // week is revenue-constrained — no amount of rostering fixes it, and benching
+  // FT saves nothing (their salary is booked either way). Flag it so the % isn't
+  // "corrected" by cutting FT hours.
+  const ftFloorPct = forecast > 0 ? (ftCost + ROVER_SHARE_WEEKLY) / forecast : null;
+  if (ptBudget === 0 && ftFloorPct != null) {
+    notes.push(
+      `⚠ FT floor alone is ${(ftFloorPct * 100).toFixed(1)}% of forecast (≥ ${(budget.target * 100).toFixed(0)}% target) — revenue-constrained week. ` +
+        `FT salary is sunk, so schedule them FULLY (benching cuts coverage, not cost); the levers are revenue or lending an FT to a busier outlet.`,
+    );
+  }
 
   // PT top-up target per day: after the FT + rover base is laid, how many
   // man-hours each open day is still SHORT of its required coverage. Weekends
@@ -791,7 +842,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       const endH = Number(t.end_time.slice(0, 2));
       let gapHours = 0;
       for (let h = startH; h < endH; h++) {
-        const need = demand.get(`${dow(date)}:${h}`) ?? 0;
+        const need = (demand.get(`${dow(date)}:${h}`) ?? 0) + bufferHeads(dow(date), h);
         const have = rows.filter(
           (r) => r.shift_date === date && r.notes !== "rest_day" &&
             Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
@@ -821,6 +872,12 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     if (h > 0) recentHours.set(r.user_id, (recentHours.get(r.user_id) ?? 0) + h);
   }
 
+  // Performance input: each PT's reliability over the last 60 days — on-time rate
+  // (clock-in vs scheduled) blended with checklist-completion rate. Between two
+  // equally under-worked part-timers the more reliable one is suggested first;
+  // it never hard-blocks anyone (thin/no history sits at a neutral prior).
+  const perfById = await computePtPerformance(partTimers.map((p) => p.id), weekStart);
+
   // ── Stage 3: agentic PT proposal, validated in code ──────────────────
   type Proposal = { user_id: string; date: string; slot: string; reason?: string };
   let proposals: Proposal[] = [];
@@ -828,6 +885,16 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   const eligiblePt = partTimers.filter((p) => p.hourly_rate && p.hourly_rate > 0);
   const skippedPt = partTimers.length - eligiblePt.length;
   if (skippedPt > 0) notes.push(`⚠ ${skippedPt} PT skipped — no hourly rate on profile`);
+  if (eligiblePt.length > 0) {
+    const ranked = [...eligiblePt]
+      .map((p) => ({ p, perf: perfById.get(p.id) }))
+      .sort((a, b) => (b.perf?.score ?? 0) - (a.perf?.score ?? 0))
+      .map(({ p, perf }) => {
+        const sample = (perf?.attendanceSample ?? 0) + (perf?.checklistSample ?? 0);
+        return `${p.name} ${Math.round((perf?.score ?? 0.7) * 100)}%${sample === 0 ? " (no history)" : ` (on-time ${Math.round((perf?.onTimeRate ?? 0) * 100)}%, checklist ${Math.round((perf?.checklistRate ?? 0) * 100)}%)`}`;
+      });
+    notes.push(`PT performance (60d, weighted into suggestions): ${ranked.join("; ")}`);
+  }
 
   if (eligiblePt.length > 0 && ptBudget > 0 && gaps.length > 0 && process.env.ANTHROPIC_API_KEY) {
     try {
@@ -835,13 +902,19 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         outletName: outlet.name,
         ptBudget,
         gaps: gaps.slice(0, 20),
-        partTimers: eligiblePt.map((p) => ({
-          user_id: p.id,
-          name: p.name,
-          hourly_rate: p.hourly_rate!,
-          recent_4wk_hours: Math.round(recentHours.get(p.id) ?? 0),
-          leave_dates: dates.filter((d) => onLeave.has(`${p.id}:${d}`)),
-        })),
+        partTimers: eligiblePt.map((p) => {
+          const perf = perfById.get(p.id);
+          return {
+            user_id: p.id,
+            name: p.name,
+            hourly_rate: p.hourly_rate!,
+            recent_4wk_hours: Math.round(recentHours.get(p.id) ?? 0),
+            on_time_pct: perf ? Math.round(perf.onTimeRate * 100) : null,
+            checklist_pct: perf ? Math.round(perf.checklistRate * 100) : null,
+            reliability: perf ? Math.round(perf.score * 100) / 100 : null,
+            leave_dates: dates.filter((d) => onLeave.has(`${p.id}:${d}`)),
+          };
+        }),
         slots: Object.fromEntries(
           candidates.map(([slot, t]) => [slot, `${t.label} ${t.start_time}-${t.end_time} (${workingHours(t)}h)`]),
         ),
@@ -852,14 +925,32 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     }
   }
   if (proposals.length === 0 && eligiblePt.length > 0 && ptBudget > 0) {
-    // Greedy fallback: biggest gap first, least-used cheapest PT first.
-    const byFairness = [...eligiblePt].sort(
-      (a, b) => (recentHours.get(a.id) ?? 0) - (recentHours.get(b.id) ?? 0) || a.hourly_rate! - b.hourly_rate!,
-    );
-    let i = 0;
+    // Greedy fallback: fill the biggest gaps first, and for each gap pick the PT
+    // with the best blend of PERFORMANCE (reliability), FAIRNESS (fewest hours so
+    // far) and COST (cheaper first). Fairness updates live as we propose — a PT's
+    // fairness drops with every shift we hand them this run — so the load still
+    // spreads instead of piling every gap onto the single top performer.
+    const maxRate = Math.max(1, ...eligiblePt.map((p) => p.hourly_rate!));
+    const fairCap = 4 * PT_MAX_HOURS_PER_WEEK; // 4-week horizon of the recentHours signal
+    const proposedH = new Map<string, number>(); // hours proposed to each PT this run
+    const W_PERF = 0.5, W_FAIR = 0.35, W_COST = 0.15;
+    const priority = (p: Staff) => {
+      const worked = (recentHours.get(p.id) ?? 0) + (proposedH.get(p.id) ?? 0) * 4; // this-week hours weighted onto the 4-week scale
+      const fairnessNorm = 1 - Math.min(1, worked / fairCap);
+      const costNorm = p.hourly_rate! / maxRate;
+      const perf = perfById.get(p.id)?.score ?? 0.7;
+      return W_PERF * perf + W_FAIR * fairnessNorm - W_COST * costNorm;
+    };
+    const proposedByDay = new Map<string, Set<string>>(); // date → PTs already proposed that day
     for (const g of gaps) {
-      proposals.push({ user_id: byFairness[i % byFairness.length].id, date: g.date, slot: g.slot, reason: `gap ${g.gapHours}h` });
-      i++;
+      const day = proposedByDay.get(g.date) ?? proposedByDay.set(g.date, new Set()).get(g.date)!;
+      const pick = eligiblePt
+        .filter((p) => !day.has(p.id) && !bookedElsewhere.get(p.id)?.has(g.date) && !onLeave.has(`${p.id}:${g.date}`))
+        .sort((a, b) => priority(b) - priority(a))[0];
+      if (!pick) continue;
+      day.add(pick.id);
+      proposedH.set(pick.id, (proposedH.get(pick.id) ?? 0) + workingHours(g.template));
+      proposals.push({ user_id: pick.id, date: g.date, slot: g.slot, reason: `gap ${g.gapHours}h` });
     }
   }
 
@@ -972,6 +1063,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
 
   return {
     scheduleId: scheduleId!,
+    mode,
     shifts: allRows.filter((r) => r.notes !== "rest_day").length,
     ptSuggestions: ptRows.length,
     totalHours,
@@ -993,7 +1085,11 @@ async function proposePtWithModel(input: {
   outletName: string;
   ptBudget: number;
   gaps: Array<{ date: string; slot: string; gapHours: number }>;
-  partTimers: Array<{ user_id: string; name: string; hourly_rate: number; recent_4wk_hours: number; leave_dates: string[] }>;
+  partTimers: Array<{
+    user_id: string; name: string; hourly_rate: number; recent_4wk_hours: number;
+    on_time_pct: number | null; checklist_pct: number | null; reliability: number | null;
+    leave_dates: string[];
+  }>;
   slots: Record<string, string>;
 }): Promise<Array<{ user_id: string; date: string; slot: string; reason?: string }>> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -1010,11 +1106,12 @@ async function proposePtWithModel(input: {
           `Shift slots: ${JSON.stringify(input.slots)}`,
           `Demand gaps, biggest first (gapHours = staff-hours short of the sales-derived need):`,
           JSON.stringify(input.gaps),
-          `Part-timers (recent_4wk_hours = hours they got in the last 4 weeks; spread work fairly — favour whoever has fewer recent hours when rates are similar, and never assign on their leave_dates):`,
+          `Part-timers. Fields: recent_4wk_hours = hours in the last 4 weeks (spread work fairly — favour whoever has fewer recent hours); on_time_pct / checklist_pct / reliability = performance over the last 60 days (0-100 / 0-1; higher = clocks in on time and finishes checklists); never assign on their leave_dates.`,
           JSON.stringify(input.partTimers),
           ``,
           `Reply with ONLY a JSON array, no prose: [{"user_id": "...", "date": "YYYY-MM-DD", "slot": "<one of the slot keys above>", "reason": "few words"}]`,
           `Cover the biggest gaps first, stay under budget, at most one shift per person per day.`,
+          `When two part-timers are similarly under-worked, prefer the more RELIABLE one — but still spread hours; don't starve a weaker performer of every shift.`,
         ].join("\n"),
       },
     ],

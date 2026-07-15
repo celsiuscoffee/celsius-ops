@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
-import { generateSchedule } from "@/lib/hr/agents/schedule-generator";
+import { generateSchedule, STAFFING_MODES, type StaffingMode } from "@/lib/hr/agents/schedule-generator";
 import { linkChecklistsToSchedule } from "@/lib/hr/agents/checklist-linker";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds, canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
@@ -74,6 +74,8 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { action, outlet_id, week_start, schedule_id } = body;
+  // Staffing mode for AI Fill (tight | mid | safe); default tight if absent/invalid.
+  const mode: StaffingMode = STAFFING_MODES.includes(body.mode) ? body.mode : "tight";
 
   // MANAGER can only act on outlets they're assigned to (outletId + outletIds[])
   if (session.role === "MANAGER" && outlet_id) {
@@ -96,13 +98,13 @@ export async function POST(req: NextRequest) {
         triggered_by: "manual",
         triggered_by_user_id: session.id,
         status: "running",
-        input_summary: { outlet_id, week_start },
+        input_summary: { outlet_id, week_start, mode },
       })
       .select()
       .single();
 
     try {
-      const result = await generateSchedule(outlet_id, week_start);
+      const result = await generateSchedule(outlet_id, week_start, mode);
 
       if (run) {
         await hrSupabaseAdmin

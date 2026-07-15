@@ -273,6 +273,45 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-15 -- **Staff-scheduling round 2 (branch
+  `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the
+  merged #934 (multi-outlet rotation + demand-sized AI Fill + fairness). Two
+  additions: (1) **Tight/Mid/Safe staffing-mode toggle** — a coverage buffer on
+  top of the demand-sized heads via one lever `bufferHeads(dow,hr)` in
+  `schedule-generator.ts` (tight=0 → byte-for-byte prior behaviour; mid=+1 across
+  the day's peak block; safe=+1 all open hours). Chosen in the Schedules toolbar
+  dropdown beside AI Fill; validated in `api/hr/schedules/route.ts`; recorded in
+  `ai_notes` + returned on the result. (2) **Performance-aware PT suggestions** —
+  new `lib/hr/pt-performance.ts` computes a 60-day reliability score (on-time from
+  `hr_attendance_logs` 60/40 checklist-completion from `Checklist`, Bayesian
+  prior 0.7-0.8/K3, never a hard gate); folded into both the greedy fallback
+  (blend perf 0.5 + live-fairness 0.35 - cost 0.15) and the LLM prompt. Docs:
+  `docs/design/staffing-model.md` updated. No schema change (break *times*
+  deliberately out of scope — placed case by case). All 354 tests + tsc + lint
+  green. **Next:** await CI on #938, then a live test-generate of one week per
+  mode to eyeball the labour% deltas before marking ready.
+  **Round 2b — revenue forecast rebuilt.** Diagnosed why AI wk 7/20 read 20.5%
+  at fewer hours than published wk 7/13 at 18.2%: labour% = cost ÷ forecast, FT
+  salary is a fixed sunk cost (RM4,616 + rover 309 = RM4,925, unmoved by hours),
+  and wk 7/20's forecast was ~16% lower (RM23,814 vs ~RM28,500) because the flat
+  trailing-28d÷4 forecast lagged a falling trend → PT envelope computed to RM0
+  (no PT suggested). Fix: new `lib/hr/revenue-forecast.ts` (pure, 6 tests) —
+  per-weekday, recency-weighted (½-life 2w), holidays excluded from baseline +
+  applied to target week via the outlet's own holiday ratio. Wired into
+  `labour-gate.ts` (`dailyRevenueSeries` + `forecastWeek`; gate `coverage[]` now
+  carries per-day forecast/pct/weekend/holiday) and the generator (per-DATE
+  affordable man-hours + holiday note; one forecast feeds both sizing and the
+  envelope). UI: per-day forecast + indicative % in the week-grid day headers and
+  the DayView badge. Verified new query reproduces the old flat forecast to the
+  ringgit (flat-weight == 28d÷4). All 360 tests + tsc + lint green.
+  **Round 2c — FT sunk cost made explicit.** Because FT salary is booked whether
+  or not they're rostered, benching an FT to cut the % saves nothing. Gate now
+  splits rosterCost into `ftFixedCost` (FT+rover, sunk) + `ptCost` (discretionary),
+  the labour-chip tooltip shows FT-floor% vs PT%, and it warns when a primary FT
+  is scheduled ≥2 days below their 6-day capacity (net of leave). Generator flags
+  a revenue-constrained week (FT floor alone ≥ target, PT envelope RM0). Cross-
+  outlet FT lending noted as the larger follow-up (not built). **PR #938 merged
+  to main 2026-07-15** (squash) → Vercel backoffice deploy.
 - 2026-07-15 — **Stock-count coverage guard (short-count guardrail).** Root: the
   staff submit/finalize endpoints trust the client's item list; the only
   completeness check was per-item (`countedQty` null), which can't catch products
