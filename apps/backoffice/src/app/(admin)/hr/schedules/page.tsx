@@ -172,6 +172,7 @@ export default function SchedulesPage() {
   const [view, setView] = useState<"week" | "day">("week");
   const [dayIdx, setDayIdx] = useState(0);
   const [generating, setGenerating] = useState(false);
+  const [fillMode, setFillMode] = useState<"tight" | "mid" | "safe">("tight");
   const [clearing, setClearing] = useState(false);
   const [swapAction, setSwapAction] = useState<string | null>(null);
 
@@ -523,7 +524,7 @@ export default function SchedulesPage() {
       await fetch("/api/hr/schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "generate", outlet_id: selectedOutlet, week_start: weekStart }),
+        body: JSON.stringify({ action: "generate", outlet_id: selectedOutlet, week_start: weekStart, mode: fillMode }),
       });
       mutate();
     } finally {
@@ -574,14 +575,27 @@ export default function SchedulesPage() {
               {clearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               Clear Week
             </button>
-            <button
-              onClick={handleAIFill}
-              disabled={generating || !selectedOutlet || isPublished}
-              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
-            >
-              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-              AI Fill
-            </button>
+            <div className="flex items-center rounded-lg border">
+              <select
+                value={fillMode}
+                onChange={(e) => setFillMode(e.target.value as "tight" | "mid" | "safe")}
+                disabled={generating || isPublished}
+                className="rounded-l-lg border-r bg-background px-2 py-2 text-sm font-medium disabled:opacity-50"
+                title="Coverage buffer: Tight = exactly to demand; Mid = +1 at the peak block; Safe = +1 all day (break/no-show cover)"
+              >
+                <option value="tight">Tight</option>
+                <option value="mid">Mid</option>
+                <option value="safe">Safe</option>
+              </select>
+              <button
+                onClick={handleAIFill}
+                disabled={generating || !selectedOutlet || isPublished}
+                className="flex items-center gap-2 rounded-r-lg px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
+              >
+                {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+                AI Fill
+              </button>
+            </div>
             <button
               onClick={handlePublish}
               disabled={publishing || !grid?.schedule}

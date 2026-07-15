@@ -72,6 +72,21 @@ const KITCHEN_CATEGORIES = ["Roti Bakar", "Nasi Lemak", "Pasta", "Sandwiches", "
 
 const ROVER_POSITIONS = new Set(["manager", "area manager", "head of department", "barista lead"]);
 
+// Staffing mode — a coverage buffer laid ON TOP of the demand-sized heads. The
+// sizing (barista/kitchen throughput → heads/hr, floored) is identical in all
+// three modes; the mode only decides how much slack to add for breaks/no-shows.
+//   tight — no buffer. Staff exactly to the sized heads: serve ~15 min at peak,
+//           labour ~target%. No cover for a break or a no-show.
+//   mid   — +1 head across the day's PEAK BLOCK (the hours at that day's peak
+//           demand). Relief at the busy window; labour ~1 point higher.
+//   safe  — +1 head across the ENTIRE open window: break cover all day plus one
+//           no-show of slack. Serve <12 min at peak; labour a few points higher.
+// The buffer flows through one place (the hourly head count), so required
+// man-hours, the peak note, the PT demand gaps and the PT top-up target all move
+// together. tight returns 0 everywhere → byte-for-byte the prior behaviour.
+export type StaffingMode = "tight" | "mid" | "safe";
+export const STAFFING_MODES: StaffingMode[] = ["tight", "mid", "safe"];
+
 type Staff = {
   id: string;
   name: string;
@@ -98,6 +113,7 @@ type ShiftRow = {
 
 type GenerateResult = {
   scheduleId: string;
+  mode: StaffingMode;
   shifts: number;
   ptSuggestions: number;
   totalHours: number;
@@ -173,7 +189,11 @@ async function loadTemplates(
 
 // ─── generator ───────────────────────────────────────────────────────
 
-export async function generateSchedule(outletId: string, weekStart: string): Promise<GenerateResult> {
+export async function generateSchedule(
+  outletId: string,
+  weekStart: string,
+  mode: StaffingMode = "tight",
+): Promise<GenerateResult> {
   const notes: string[] = [];
   const dates = weekDates(weekStart);
   const weekEnd = dates[6];
@@ -355,6 +375,28 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     if (!prev || heads > prev.heads) peakByDow.set(h.dw, { heads, hr: h.hr, bar: barHeads, kit: kitHeads });
   }
 
+  // Staffing-mode buffer (heads added on top of the sized demand for this hour).
+  //   tight → 0; safe → +1 every open hour; mid → +1 across the day's peak block
+  //   (hours at that day's peak head count). Consumed by required man-hours, the
+  //   peak note, the PT demand gaps and the PT top-up target — one lever, applied
+  //   uniformly. Only called inside the open-hours loops, so "every open hour"
+  //   stays bounded to trading hours.
+  const bufferHeads = (dwN: number, hr: number): number => {
+    if (mode === "tight") return 0;
+    if (mode === "safe") return 1;
+    const peak = peakByDow.get(dwN)?.heads;
+    if (peak == null) return 0; // no sales that day → nothing to buffer
+    const heads = demand.get(`${dwN}:${hr}`) ?? SERVICE_FLOOR;
+    return heads >= peak ? 1 : 0; // mid: buffer the peak block only
+  };
+  notes.push(
+    mode === "tight"
+      ? "Mode: TIGHT — staffed exactly to sized demand (no break/no-show slack)"
+      : mode === "mid"
+        ? "Mode: MID — +1 head across each day's peak block (break relief at the busy window)"
+        : "Mode: SAFE — +1 head across the whole open window (break cover all day + one no-show of slack)",
+  );
+
   // Per-day-of-week revenue (separate query — joining items to orders would
   // multiply order totals by line count). Feeds the "affordable man-hours" side.
   const revRows = await prisma.$queryRaw<Array<{ dw: number; rev: number }>>`
@@ -382,7 +424,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   for (const d of dates) {
     if (!daysOpen.has(dow(d))) continue;
     let req = 0;
-    for (let h = openH; h < closeH; h++) req += demand.get(`${dow(d)}:${h}`) ?? SERVICE_FLOOR;
+    for (let h = openH; h < closeH; h++) req += (demand.get(`${dow(d)}:${h}`) ?? SERVICE_FLOOR) + bufferHeads(dow(d), h);
     requiredByDate.set(d, req);
   }
   const manHours: DailyManHours[] = dates
@@ -421,7 +463,9 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     .map((d) => {
       const p = peakByDow.get(dow(d));
       if (!p) return null;
-      return `${d} ${p.heads}${p.heads > SERVICE_FLOOR ? ` (${p.bar}bar+${p.kit}kit @${p.hr}:00)` : ""}`;
+      const heads = p.heads + bufferHeads(dow(d), p.hr); // include the mode buffer at the peak hour
+      const buf = heads - p.heads;
+      return `${d} ${heads}${p.heads > SERVICE_FLOOR ? ` (${p.bar}bar+${p.kit}kit @${p.hr}:00${buf ? `, +${buf} buffer` : ""})` : buf ? ` (+${buf} buffer)` : ""}`;
     })
     .filter(Boolean);
   if (peakLines.length) notes.push(`Peak heads/day (serve-time model): ${peakLines.join(", ")}`);
@@ -791,7 +835,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       const endH = Number(t.end_time.slice(0, 2));
       let gapHours = 0;
       for (let h = startH; h < endH; h++) {
-        const need = demand.get(`${dow(date)}:${h}`) ?? 0;
+        const need = (demand.get(`${dow(date)}:${h}`) ?? 0) + bufferHeads(dow(date), h);
         const have = rows.filter(
           (r) => r.shift_date === date && r.notes !== "rest_day" &&
             Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
@@ -972,6 +1016,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
 
   return {
     scheduleId: scheduleId!,
+    mode,
     shifts: allRows.filter((r) => r.notes !== "rest_day").length,
     ptSuggestions: ptRows.length,
     totalHours,

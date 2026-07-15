@@ -65,18 +65,31 @@ days), the PT top-up target (`required − FT base`, weekends first), and the
 man-hours / peak-heads notes. FT fairness + anti-fatigue rules (no close→open,
 rotated anchors, rotated weekend rest) sit on top.
 
-## Tight vs Safe (report framing)
+## Staffing mode — Tight / Mid / Safe
 
-- **Tight** — staff exactly to the sized heads; serve time ~15 min at peak,
-  labour ~18%. No slack for a no-show.
-- **Safe** — one extra hand across the peak block + break cover; serve time
-  <12 min, labour a few points higher.
+AI Fill takes a `mode` (default `tight`). The demand **sizing** is identical in
+all three; the mode only sets a coverage buffer laid on top of the sized heads,
+applied through a single lever (`bufferHeads(dow, hour)` in the generator) so
+required man-hours, the peak note, the PT demand gaps and the PT top-up target
+all move together:
 
-The generator currently produces the Tight-style floor + demand-shaped PT
-top-up. A `mode: 'safe'` buffer (extra peak head + explicit break-time
-placement) is the next increment — break *times* need a shift column
-(`hr_schedule_shifts.break_start`, migration TBD); today AI Fill emits suggested
-break lulls in `ai_notes` only.
+- **Tight** — no buffer. Staff exactly to the sized heads; serve time ~15 min at
+  peak, labour ~target%. No slack for a break or a no-show. (Buffer 0 → identical
+  to the pre-toggle behaviour.)
+- **Mid** — **+1 head across the day's peak block** (the hours at that day's peak
+  demand). Relief at the busy window; labour ~1 point higher.
+- **Safe** — **+1 head across the whole open window**: break cover all day plus
+  one no-show of slack. Serve time <12 min at peak; labour a few points higher.
+
+The buffer only produces a PT suggestion where a genuine gap exists (buffered
+need > heads already on the floor); the RM envelope and the 24h/5-day PT caps
+still bound it, so Safe can't blow the budget. The mode is chosen in the
+Schedules toolbar (dropdown beside **AI Fill**), recorded in `ai_notes`, and
+returned on the generate result.
+
+Break *times* are still surfaced as suggested lulls in `ai_notes` only (placed
+case by case in the grid) — persisting an explicit break column
+(`hr_schedule_shifts.break_start`) is deliberately out of scope.
 
 ## Lessons
 
