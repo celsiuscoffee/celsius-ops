@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { isCleanCount, baseQtyByProduct } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { setStockBalance } from "@/lib/stock";
+import { checkCountCoverage } from "@/lib/stock-coverage";
 import { getSession } from "@/lib/auth";
 
 /**
@@ -19,12 +20,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params;
 
+  // Optional override for a deliberately partial monthly count (spot check,
+  // discontinued lines). Body is optional — parse defensively.
+  const body = await req.json().catch(() => ({}));
+  const partialReason: string | null =
+    typeof body?.partialReason === "string" && body.partialReason.trim()
+      ? body.partialReason.trim().slice(0, 300)
+      : null;
+
   const count = await prisma.stockCount.findUnique({
     where: { id },
     select: {
       id: true,
       status: true,
       outletId: true,
+      frequency: true,
+      notes: true,
       items: {
         select: {
           productId: true,
@@ -66,12 +77,45 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
+  // Coverage guard — did this count cover the outlet's expected universe for its
+  // frequency? Catches short counts (products never loaded onto the sheet), which
+  // the per-item completeness check above cannot see. MONTHLY below the floor is
+  // blocked unless an explicit partialReason is supplied; DAILY/WEEKLY only warn.
+  const coverage = await checkCountCoverage({
+    outletId: count.outletId,
+    frequency: count.frequency,
+    countedItems: count.items,
+    excludeStockCountId: count.id,
+  });
+  if (coverage.block && !partialReason) {
+    return NextResponse.json(
+      {
+        error: `Only ${coverage.counted} of ${coverage.expected} expected products counted (${Math.round(
+          coverage.coverage * 100,
+        )}%). Finish the count, or submit a partial count with a reason.`,
+        code: "COVERAGE_TOO_LOW",
+        expected: coverage.expected,
+        counted: coverage.counted,
+        missing: coverage.missing,
+        missingProductIds: coverage.missingProductIds.slice(0, 100),
+      },
+      { status: 400 },
+    );
+  }
+
   const now = new Date();
 
-  // Zero-variance counts auto-approve: there's nothing for a manager to action,
-  // so skip the review queue and stamp them REVIEWED on the spot. Only counts
-  // with a real discrepancy stay SUBMITTED (pending review).
-  const autoApprove = isCleanCount(count.items);
+  // A short count (below floor, or a monthly submitted with an explicit partial
+  // reason) must never auto-approve — it goes to the manager's review queue with
+  // a note, so the gap is seen. Otherwise, zero-variance counts auto-approve.
+  const isShort = coverage.belowFloor;
+  const autoApprove = !isShort && isCleanCount(count.items);
+  const noteAddition = isShort
+    ? `${coverage.shortNote}${partialReason ? ` reason: ${partialReason}` : ""}`
+    : null;
+  const mergedNotes = noteAddition
+    ? [count.notes, noteAddition].filter(Boolean).join(" ")
+    : undefined;
 
   // Flip status first so any concurrent finalize attempt sees the new state.
   const updated = await prisma.stockCount.updateMany({
@@ -82,6 +126,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       finalizedById: session.id,
       finalizedAt: now,
       ...(autoApprove ? { reviewedAt: now } : {}),
+      ...(mergedNotes !== undefined ? { notes: mergedNotes } : {}),
     },
   });
   if (updated.count === 0) {

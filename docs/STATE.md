@@ -273,6 +273,24 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-15 — **Stock-count coverage guard (short-count guardrail).** Root: the
+  staff submit/finalize endpoints trust the client's item list; the only
+  completeness check was per-item (`countedQty` null), which can't catch products
+  never loaded onto the sheet — how Putrajaya's monthly landed at 49 of ~212
+  (an abandoned 7-minute DRAFT; its Apr 30 monthly had 212, May/June monthlies
+  skipped entirely). New pure `evaluateCountCoverage` in `packages/db/stock-count.ts`
+  compares counted vs the outlet's expected universe for that frequency; interim
+  baseline = the fullest recent REVIEWED count of the same frequency
+  (`apps/staff/src/lib/stock-coverage.ts`). Owner call (block vs warn): **MONTHLY
+  below 85% coverage → BLOCK** (unless an explicit `partialReason`, which routes it
+  to review with a note); **DAILY/WEEKLY → WARN** (allow but force SUBMITTED +
+  short-count note, never auto-approve). Wired into both entry points
+  (`api/stock-checks` POST + `.../[id]/finalize`). 14 unit tests green, staff tsc
+  clean. **Follow-ups (not built):** backfill `OutletProduct` (has per-product
+  `countFrequency` — the real source of truth vs the interim baseline) and seed
+  counts from it; an ops-pulse detector to ping on any submitted short count; UI
+  progress vs the expected universe ("49 / 212") + a "Submit partial count" action.
+
 - 2026-07-15 -- **Agent substrate SHIPPED end-to-end.** Fleet review found the
   non-compounding pattern (every domain reinvented flags/queues/telemetry;
   shadow builds never armed; marketing loop has no outcome memory). Built the
