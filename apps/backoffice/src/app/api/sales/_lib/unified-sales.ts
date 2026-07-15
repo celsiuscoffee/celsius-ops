@@ -256,5 +256,33 @@ export async function getUnifiedSalesForOutlet(
     }
   }
 
+  // ── Consignment — Gyro Gastro (Nilai) & Kiddytopia (IOI Mall) weekly payment
+  // advices, digitised from the "Finance GH x Celsius" WhatsApp archive into
+  // consignment_sales (daily grain, gross = pre-commission retail). These two
+  // outlets have NO till of their own — no StoreHub, no pos_orders, no pickup —
+  // so this is their ONLY sales source and can never double-count. Keyed on the
+  // Celsius Outlet.id (= consignment_sales.outlet_id), same id used above for
+  // the StoreHub archive. `channel` is cafe|buttercream|moreh|bazaar|event|promo
+  // — all in-store counter sales, so they map to dine_in. ──
+  if (!opts.storehubOnly) {
+    const consRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; channel: string }>>`
+      SELECT ts, gross AS total, channel FROM (
+        SELECT (biz_date + time '12:00') AT TIME ZONE 'Asia/Kuala_Lumpur' AS ts, gross, channel
+        FROM consignment_sales
+        WHERE outlet_id = ${outlet.outletId}
+      ) c
+      WHERE ts >= ${from} AND ts <= ${to}
+    `;
+    for (const r of consRows) {
+      sales.push({
+        ts: toISO(r.ts),
+        total: Number(r.total) || 0, // consignment_sales.gross is already RM
+        channel: "dine_in",
+        isDeliveryQR: false,
+        channelLabel: r.channel === "cafe" ? "consignment" : r.channel,
+      });
+    }
+  }
+
   return sales;
 }
