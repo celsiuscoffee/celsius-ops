@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { ingestEodForDate } from "@/lib/finance/ingestors/pos-native-eod";
+import { runAndNotify as runCashInRecon } from "@/lib/finance/cash-in-recon-agent";
 import { checkCronAuth } from "@celsius/shared";
 import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 
@@ -19,6 +20,13 @@ function yesterdayMyt(): string {
   const myt = new Date(now.getTime() + 8 * 60 * 60 * 1000);
   myt.setUTCDate(myt.getUTCDate() - 1);
   return myt.toISOString().slice(0, 10);
+}
+
+// MYT weekday, 1 = Monday. The cash-in recon watchdog is weekly (settlements
+// take days to complete), folded here to avoid a new Vercel cron slot.
+function mytWeekday(): number {
+  const myt = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return myt.getUTCDay();
 }
 
 export async function GET(req: NextRequest) {
@@ -45,5 +53,17 @@ export async function GET(req: NextRequest) {
     meta: summary,
   });
 
-  return NextResponse.json({ summary, results });
+  // Weekly cash-in reconciliation (Mondays MYT): flag any channel where the
+  // cash banked falls short of what was rung, per entity. Best-effort — a
+  // failure here must not fail the EOD ingestion.
+  let cashInRecon: unknown = null;
+  if (mytWeekday() === 1) {
+    try {
+      cashInRecon = await runCashInRecon();
+    } catch (e) {
+      cashInRecon = { error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  return NextResponse.json({ summary, cashInRecon, results });
 }
