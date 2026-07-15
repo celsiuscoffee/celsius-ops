@@ -55,6 +55,17 @@ const PT_MAX_HOURS_PER_WEEK = 24;
 const SERVICE_FLOOR = 3;
 const PT_MAX_DAYS_PER_WEEK = 5;
 
+// Serve-time-calibrated station throughput: items one head can make + serve per
+// hour while holding a 15-minute serve target (30-min hard ceiling). Barista =
+// drinks + counter pastries; kitchen = cooked food only. These rates size the
+// hourly demand curve to the 3–4 heads the outlets actually run — see the HOO
+// staffing report / docs/design/staffing-model.md. Calibratable.
+const BARISTA_ITEMS_PER_HR = 8;
+const KITCHEN_ITEMS_PER_HR = 6;
+// Cooked-food menu categories → kitchen station; everything else (drinks +
+// cakes/cookies/croissants + uncategorised) is barista/counter.
+const KITCHEN_CATEGORIES = ["Roti Bakar", "Nasi Lemak", "Pasta", "Sandwiches", "Fries", "Noodle"];
+
 const ROVER_POSITIONS = new Set(["manager", "area manager", "head of department", "barista lead"]);
 
 type Staff = {
@@ -303,31 +314,41 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   const rows: ShiftRow[] = [];
   // Rest days: profile value wins; otherwise stagger Mon(1)–Thu(4) so the
   // full crew is on Fri–Sun. Sorted by name for a stable rotation.
-  // Demand is sized by THROUGHPUT (items/drinks made), not ringgit — making the
-  // drinks is the labour, so a low-ticket high-volume morning needs more hands
-  // than its revenue implies. Trailing 28 days of item counts per (dow, hour),
-  // averaged over the 4 weeks, ÷ the outlet's items-per-man-hour → heads needed.
-  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; items: number }>>`
+  // Demand is sized by THROUGHPUT (items made), not ringgit, and SPLIT BY STATION
+  // — a barista makes drinks, a kitchen hand makes food, and they peak at
+  // different times. Trailing 28 days of item counts per (dow, hour), averaged
+  // over the 4 weeks, split barista vs kitchen. Heads/hour = ceil(barista ÷ 8) +
+  // ceil(kitchen ÷ 6), floored at the service minimum — sized to hold the
+  // 15-minute serve target. (Same model as the HOO staffing report.)
+  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; barista: number; kitchen: number }>>`
     SELECT EXTRACT(DOW FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
            EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
-           (sum(i.quantity)::float / 4) AS items
+           (sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float / 4) AS kitchen,
+           (sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float / 4) AS barista
     FROM pos_order_items i
     JOIN pos_orders o ON o.id = i.order_id
+    LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
     WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
       AND o.status = 'completed' AND o.refund_of_order_id IS NULL
       AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
           BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
     GROUP BY 1, 2
   `;
-  const itemsPerManHour = itemsPerManHourFor(outlet.code);
-  const demand = new Map<string, number>(); // "dw:hr" → staff needed
-  const itemsByDow = new Map<number, number>(); // dw → avg items/day (for man-hours)
-  // Throughput-derived need, floored at the service minimum while trading — a
-  // quiet Tuesday close still needs 3 on the floor.
+  const demand = new Map<string, number>(); // "dw:hr" → heads needed (barista + kitchen)
+  const itemsByDow = new Map<number, number>(); // dw → avg total items/day (for man-hours)
+  // Peak heads + its station split per day-of-week, for the QA note.
+  const peakByDow = new Map<number, { heads: number; hr: number; bar: number; kit: number }>();
   for (const h of hourly) {
-    if (h.items <= 0) continue;
-    demand.set(`${h.dw}:${h.hr}`, Math.max(Math.ceil(h.items / itemsPerManHour), SERVICE_FLOOR));
-    itemsByDow.set(h.dw, (itemsByDow.get(h.dw) ?? 0) + h.items);
+    const bar = Number(h.barista) || 0;
+    const kit = Number(h.kitchen) || 0;
+    if (bar + kit <= 0) continue;
+    const barHeads = Math.ceil(bar / BARISTA_ITEMS_PER_HR);
+    const kitHeads = Math.ceil(kit / KITCHEN_ITEMS_PER_HR);
+    const heads = Math.max(SERVICE_FLOOR, barHeads + kitHeads);
+    demand.set(`${h.dw}:${h.hr}`, heads);
+    itemsByDow.set(h.dw, (itemsByDow.get(h.dw) ?? 0) + bar + kit);
+    const prev = peakByDow.get(h.dw);
+    if (!prev || heads > prev.heads) peakByDow.set(h.dw, { heads, hr: h.hr, bar: barHeads, kit: kitHeads });
   }
 
   // Per-day-of-week revenue (separate query — joining items to orders would
@@ -351,33 +372,55 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   const openH = outlet.openTime ? Number(outlet.openTime.slice(0, 2)) : 8;
   const closeH = outlet.closeTime ? Number(outlet.closeTime.slice(0, 2)) : 22;
   const openHours = Math.max(1, closeH - openH);
+  // Required man-hours per day = SUM of the hourly station-head demand across the
+  // open window (captures peaks, not a daily average) — the report's number.
+  const requiredByDate = new Map<string, number>();
+  for (const d of dates) {
+    if (!daysOpen.has(dow(d))) continue;
+    let req = 0;
+    for (let h = openH; h < closeH; h++) req += demand.get(`${dow(d)}:${h}`) ?? SERVICE_FLOOR;
+    requiredByDate.set(d, req);
+  }
   const manHours: DailyManHours[] = dates
     .filter((d) => daysOpen.has(dow(d)))
-    .map((d) =>
-      computeDailyManHours({
+    .map((d) => {
+      const base = computeDailyManHours({
         date: d,
         forecastItems: itemsByDow.get(dow(d)) ?? 0,
         forecastRevenue: revByDow.get(dow(d)) ?? 0,
-        itemsPerManHour,
+        itemsPerManHour: itemsPerManHourFor(outlet.code),
         serviceMinHeads: SERVICE_FLOOR,
         openHours,
         targetPct: budget.target,
         blendedRate: DEFAULT_BLENDED_RATE,
-      }),
-    );
+      });
+      const requiredHours = requiredByDate.get(d) ?? base.requiredHours;
+      return { ...base, requiredHours, gapHours: Math.round((requiredHours - base.affordableHours) * 10) / 10 };
+    });
   const overBudgetDays = manHours.filter((m) => m.gapHours > 0);
   if (manHours.length > 0) {
     const totReq = Math.round(manHours.reduce((s, m) => s + m.requiredHours, 0));
     const totAff = Math.round(manHours.reduce((s, m) => s + m.affordableHours, 0));
     notes.push(
-      `Man-hours/wk: required ${totReq}h vs affordable ${totAff}h ` +
-        `(${itemsPerManHour} items/man-hr, ${SERVICE_FLOOR}-head floor × ${openHours}h)` +
+      `Man-hours/wk: required ${totReq}h (station-sized, 15-min serve target) vs affordable ${totAff}h ` +
+        `(barista ${BARISTA_ITEMS_PER_HR}/hr, kitchen ${KITCHEN_ITEMS_PER_HR}/hr, ${SERVICE_FLOOR}-head floor)` +
         (overBudgetDays.length
           ? ` — ${overBudgetDays.length} day(s) over target to cover: ` +
-            overBudgetDays.map((m) => `${m.date}${m.floorBound ? " (floor)" : ""} +${Math.round(m.gapHours)}h`).join(", ")
+            overBudgetDays.map((m) => `${m.date} +${Math.round(m.gapHours)}h`).join(", ")
           : " — every open day covers within target"),
     );
   }
+  // Peak-hour headcount + station split per open day — the "when you need a 4th,
+  // it's barista-vs-kitchen" picture the report explains.
+  const peakLines = dates
+    .filter((d) => daysOpen.has(dow(d)))
+    .map((d) => {
+      const p = peakByDow.get(dow(d));
+      if (!p) return null;
+      return `${d} ${p.heads}${p.heads > SERVICE_FLOOR ? ` (${p.bar}bar+${p.kit}kit @${p.hr}:00)` : ""}`;
+    })
+    .filter(Boolean);
+  if (peakLines.length) notes.push(`Peak heads/day (serve-time model): ${peakLines.join(", ")}`);
 
   const sortedFT = [...fullTimers].sort((a, b) => a.name.localeCompare(b.name));
 
