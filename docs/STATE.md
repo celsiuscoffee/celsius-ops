@@ -256,6 +256,24 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-15 -- **Staff-scheduling round 2 (branch
+  `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the
+  merged #934 (multi-outlet rotation + demand-sized AI Fill + fairness). Two
+  additions: (1) **Tight/Mid/Safe staffing-mode toggle** — a coverage buffer on
+  top of the demand-sized heads via one lever `bufferHeads(dow,hr)` in
+  `schedule-generator.ts` (tight=0 → byte-for-byte prior behaviour; mid=+1 across
+  the day's peak block; safe=+1 all open hours). Chosen in the Schedules toolbar
+  dropdown beside AI Fill; validated in `api/hr/schedules/route.ts`; recorded in
+  `ai_notes` + returned on the result. (2) **Performance-aware PT suggestions** —
+  new `lib/hr/pt-performance.ts` computes a 60-day reliability score (on-time from
+  `hr_attendance_logs` 60/40 checklist-completion from `Checklist`, Bayesian
+  prior 0.7-0.8/K3, never a hard gate); folded into both the greedy fallback
+  (blend perf 0.5 + live-fairness 0.35 - cost 0.15) and the LLM prompt. Docs:
+  `docs/design/staffing-model.md` updated. No schema change (break *times*
+  deliberately out of scope — placed case by case). All 354 tests + tsc + lint
+  green. **Next:** await CI on #938, then a live test-generate of one week per
+  mode to eyeball the labour% deltas before marking ready.
+
 - 2026-07-15 -- **Agent substrate SHIPPED end-to-end.** Fleet review found the
   non-compounding pattern (every domain reinvented flags/queues/telemetry;
   shadow builds never armed; marketing loop has no outcome memory). Built the
