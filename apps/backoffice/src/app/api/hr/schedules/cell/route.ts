@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { getTemplate, REST_DAY_ID } from "@/lib/hr/shift-templates";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
+import { findCrossOutletOverlap } from "@/lib/hr/cross-outlet";
 
 export const dynamic = "force-dynamic";
 
@@ -143,6 +144,22 @@ export async function POST(req: NextRequest) {
       start_time, end_time, role_type, break_minutes,
       is_ai_assigned: false, notes: template_id,
     };
+  }
+
+  // Cross-outlet double-book guard: a shared staffer can be rostered at several
+  // outlets, but not two overlapping shifts on the same day. Rest-day markers
+  // (00:00) are exempt. The same-outlet cell is handled by the replace below.
+  if (newShift.start_time !== "00:00") {
+    const conflict = await findCrossOutletOverlap(user_id, shift_date, outlet_id, newShift.start_time, newShift.end_time);
+    if (conflict) {
+      return NextResponse.json(
+        {
+          error: `Already rostered at ${conflict.outletName} (${conflict.start_time}–${conflict.end_time}) that day — a staffer can't work two outlets at once.`,
+          conflict,
+        },
+        { status: 409 },
+      );
+    }
   }
 
   // NON-DESTRUCTIVE REPLACE. Insert the new shift FIRST so the existing one

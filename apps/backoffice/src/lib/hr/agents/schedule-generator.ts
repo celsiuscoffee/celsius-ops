@@ -35,6 +35,7 @@ import { hrSupabaseAdmin } from "../supabase";
 import { templatesForOutlet, workingHours, type ShiftTemplate } from "../shift-templates";
 import {
   weeklySalaryShare,
+  shiftHours,
   OUTLET_BUDGETS,
   DEFAULT_BUDGET,
   ROVER_SHARE_WEEKLY,
@@ -61,6 +62,10 @@ type Staff = {
   basic_salary: number;
   hourly_rate: number | null;
   rest_day: number | null; // 0=Sun … 6=Sat
+  // "Primary outlet wins": a shared staffer is auto-rostered (FT floor / PT
+  // suggestions) only where this is their primary outlet. Elsewhere they must
+  // be borrowed manually. True when User.outletId === the outlet being built.
+  isPrimaryHere: boolean;
 };
 
 type ShiftRow = {
@@ -182,7 +187,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       OR: [{ outletId }, { outletIds: { has: outletId } }],
       role: { in: ["STAFF", "MANAGER"] },
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, outletId: true },
   });
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
@@ -207,6 +212,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         basic_salary: Number(p?.basic_salary) || 0,
         hourly_rate: p?.hourly_rate == null ? null : Number(p.hourly_rate),
         rest_day: p?.rest_day ?? null,
+        isPrimaryHere: u.outletId === outletId,
       };
     })
     // Rovers are placed separately below (2 days/outlet-week); HoD stays HQ.
@@ -226,12 +232,23 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     : [];
   const roverPositionOf = new Map(((roverProfiles ?? []) as { user_id: string; position: string }[]).map((p) => [p.user_id, p.position]));
 
-  const fullTimers = staff.filter((s) => s.employment_type === "full_time" || s.employment_type === "contract");
+  // "Primary outlet wins": a full-timer carries their 6-day floor only at their
+  // primary outlet. A shared FT whose primary is elsewhere is NOT auto-rostered
+  // here (their committed hours live at home) — borrow them manually via the
+  // grid if needed; the cell/assign routes block a cross-outlet double-book.
+  const isFt = (s: Staff) => s.employment_type === "full_time" || s.employment_type === "contract";
+  const fullTimers = staff.filter((s) => isFt(s) && s.isPrimaryHere);
+  const sharedFtElsewhere = staff.filter((s) => isFt(s) && !s.isPrimaryHere);
+  // Part-timers rotate by design — a shared PT stays an eligible suggestion at
+  // every outlet they're assigned to, bounded below by cross-outlet caps.
   const partTimers = staff.filter((s) => s.employment_type === "part_time" || s.employment_type === "intern");
   if (fullTimers.length === 0 && partTimers.length === 0) {
     throw new Error(`No schedulable staff at ${outlet.name}`);
   }
   notes.push(`${fullTimers.length} FT + ${partTimers.length} PT schedulable (rovers excluded)`);
+  if (sharedFtElsewhere.length > 0) {
+    notes.push(`${sharedFtElsewhere.length} shared FT rostered at their primary outlet, not here: ${sharedFtElsewhere.map((s) => s.name).join(", ")}`);
+  }
 
   // Approved leave
   const { data: leaves } = await hrSupabaseAdmin
@@ -243,6 +260,39 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   const onLeave = new Set<string>();
   for (const l of (leaves ?? []) as { user_id: string; start_date: string; end_date: string }[]) {
     for (const d of dates) if (d >= l.start_date && d <= l.end_date) onLeave.add(`${l.user_id}:${d}`);
+  }
+
+  // Cross-outlet bookings this week (rotation): every real shift these staff
+  // already hold on ANOTHER outlet's schedule for this same week. Used to
+  //   (a) never double-book a shared staffer on a day, and
+  //   (b) seed their weekly PT caps so a two-outlet PT can't exceed the
+  //       24h / 5-day limit COMBINED across outlets.
+  // Rest-day markers (00:00) are skipped; the current outlet's own draft is
+  // excluded (it's being rebuilt below).
+  const poolIds = users.map((u) => u.id);
+  const { data: crossShifts } = poolIds.length
+    ? await hrSupabaseAdmin
+        .from("hr_schedule_shifts")
+        .select("user_id, shift_date, start_time, end_time, break_minutes, schedule_id, hr_schedules!inner(outlet_id, week_start)")
+        .in("user_id", poolIds)
+        .eq("hr_schedules.week_start", weekStart)
+        .neq("start_time", "00:00")
+    : { data: [] as unknown[] };
+  type CrossRow = {
+    user_id: string; shift_date: string; start_time: string; end_time: string;
+    break_minutes: number | null; schedule_id: string;
+    hr_schedules: { outlet_id: string } | { outlet_id: string }[];
+  };
+  const bookedElsewhere = new Map<string, Set<string>>();   // user → dates already worked at another outlet
+  const hoursElsewhere = new Map<string, number>();          // user → PT hours already committed elsewhere
+  for (const r of ((crossShifts ?? []) as unknown as CrossRow[])) {
+    const sched = Array.isArray(r.hr_schedules) ? r.hr_schedules[0] : r.hr_schedules;
+    const otherOutlet = sched?.outlet_id;
+    if (!otherOutlet || otherOutlet === outletId) continue;   // only OTHER outlets
+    if (r.schedule_id === existing?.id) continue;             // not this outlet's own draft
+    (bookedElsewhere.get(r.user_id) ?? bookedElsewhere.set(r.user_id, new Set()).get(r.user_id)!).add(r.shift_date);
+    const h = shiftHours(hhmmss(r.start_time.slice(0, 5)), hhmmss(r.end_time.slice(0, 5))) - (r.break_minutes ?? 0) / 60;
+    if (h > 0) hoursElsewhere.set(r.user_id, (hoursElsewhere.get(r.user_id) ?? 0) + h);
   }
 
   // ── Stage 1: FT skeleton — templates, 45h, rest days ────────────────
@@ -308,7 +358,9 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   const ftHours = new Map<string, number>();
   for (const date of dates) {
     if (!daysOpen.has(dow(date))) continue;
-    const working = sortedFT.filter((s) => restDayOf.get(s.id) !== dow(date) && !onLeave.has(`${s.id}:${date}`));
+    const working = sortedFT.filter(
+      (s) => restDayOf.get(s.id) !== dow(date) && !onLeave.has(`${s.id}:${date}`) && !bookedElsewhere.get(s.id)?.has(date),
+    );
     const resting = sortedFT.filter((s) => restDayOf.get(s.id) === dow(date) && !onLeave.has(`${s.id}:${date}`));
 
     // Split the day's crew: kitchen (BOH) spread first so both anchor shifts
@@ -522,12 +574,22 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   const ptRows: ShiftRow[] = [];
   const ptSpend = { rm: 0 };
   const ptWeek = new Map<string, { hours: number; days: Set<string> }>();
+  // Seed each PT's weekly tally from the hours/days they already hold at OTHER
+  // outlets this week, so the 24h / 5-day caps below bind on the COMBINED total
+  // — a two-outlet PT can't be suggested to 48h.
+  for (const person of eligiblePt) {
+    const daysElsewhere = bookedElsewhere.get(person.id);
+    if (daysElsewhere?.size || hoursElsewhere.get(person.id)) {
+      ptWeek.set(person.id, { hours: hoursElsewhere.get(person.id) ?? 0, days: new Set(daysElsewhere ?? []) });
+    }
+  }
   const suggestionLines: string[] = [];
   for (const p of proposals) {
     const person = eligiblePt.find((x) => x.id === p.user_id);
     const t = slotByName.get(p.slot);
     if (!person || !t || !dates.includes(p.date)) continue;
     if (onLeave.has(`${person.id}:${p.date}`)) continue;
+    if (bookedElsewhere.get(person.id)?.has(p.date)) continue; // already working another outlet that day
     if (ptRows.some((r) => r.user_id === person.id && r.shift_date === p.date)) continue; // one shift/day
     const h = workingHours(t);
     const cost = h * person.hourly_rate!;

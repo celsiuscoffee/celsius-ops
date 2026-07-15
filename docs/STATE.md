@@ -154,6 +154,23 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   UI only). Fix shape: extend the rover `busy` set to all pooled staff in
   the generator, seed `ptWeek` from other-outlet shifts, add an overlap 409
   in cell/assign.
+- 2026-07-14 — **Multi-outlet double-booking fixed** (branch
+  `claude/staff-rotation-outlets-kmobpa`, PR #934). Owner rule chosen:
+  **primary outlet wins**. AI Fill (`schedule-generator.ts`) now: (1) loads
+  every pooled staffer's shifts at OTHER outlets for the week
+  (`bookedElsewhere`) and never places anyone on a day they're already
+  working elsewhere; (2) floors a full-timer's 6-day week ONLY at their
+  primary outlet (`isPrimaryHere = User.outletId === outletId`) — a shared FT
+  is listed in `ai_notes` as "rostered at their primary, not here" and must be
+  borrowed manually at secondary outlets; (3) seeds each PT's `ptWeek`
+  hours/days from other-outlet shifts so the 24h/5-day caps bind on the
+  COMBINED total. Manual writes: `cell` + `assign` routes call
+  `findCrossOutletOverlap` (new `lib/hr/cross-outlet.ts`) and 409 on a
+  same-day cross-outlet time overlap. **Residual (best-effort, documented):**
+  generation is per-outlet on-demand, so "primary wins" for a same-day PT
+  conflict relies on generating home outlets first — no destructive
+  cross-outlet steal. The assist-candidate ranking was already
+  cross-outlet-aware (user-scoped hours, `double_booked`/`over_cap`).
 
 ## General rules
 
