@@ -1,10 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getAgentClient, logAgentAction, type AgentMode } from "@/lib/agents/substrate";
+import { estimateCostUsd } from "@/lib/agents/pricing";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/agents/registry — the fleet, with 7-day action counts.
+// Expected cost per run + per 30-day month from the token estimates on the
+// registry row. Non-LLM agents (no model / no token estimate) cost 0.
+function expectedCost(r: {
+  model: string | null;
+  uses_llm: boolean;
+  est_input_tokens: number | null;
+  est_output_tokens: number | null;
+  est_cache_read_tokens: number | null;
+  est_runs_per_day: number | null;
+}): { perRun: number; perMonth: number } {
+  if (!r.uses_llm || r.est_input_tokens == null) return { perRun: 0, perMonth: 0 };
+  const perRun = estimateCostUsd(r.model, {
+    inputTokens: r.est_input_tokens ?? 0,
+    outputTokens: r.est_output_tokens ?? 0,
+    cacheReadTokens: r.est_cache_read_tokens ?? 0,
+  });
+  return { perRun, perMonth: perRun * (r.est_runs_per_day ?? 0) * 30 };
+}
+
+// GET /api/agents/registry — the fleet, with 7-day action counts, expected
+// cost, and 30-day actual spend from the ledger.
 export async function GET() {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -13,27 +34,41 @@ export async function GET() {
   }
 
   const client = getAgentClient();
-  const [registryRes, actionsRes] = await Promise.all([
+  const [registryRes, weekRes, monthRes] = await Promise.all([
     client.from("agent_registry").select("*").order("domain").order("name"),
     client
       .from("agent_actions")
       .select("agent_key, autonomous, human_override")
       .gte("at", new Date(Date.now() - 7 * 24 * 3600_000).toISOString()),
+    client
+      .from("agent_actions")
+      .select("agent_key, cost_usd")
+      .gte("at", new Date(Date.now() - 30 * 24 * 3600_000).toISOString()),
   ]);
   if (registryRes.error) {
     return NextResponse.json({ error: registryRes.error.message }, { status: 500 });
   }
 
   const counts: Record<string, { total: number; autonomous: number; overridden: number }> = {};
-  for (const a of actionsRes.data ?? []) {
+  for (const a of weekRes.data ?? []) {
     const c = (counts[a.agent_key] ??= { total: 0, autonomous: 0, overridden: 0 });
     c.total += 1;
     if (a.autonomous) c.autonomous += 1;
     if (a.human_override) c.overridden += 1;
   }
 
+  const actual30d: Record<string, number> = {};
+  for (const a of monthRes.data ?? []) {
+    if (a.cost_usd != null) actual30d[a.agent_key] = (actual30d[a.agent_key] ?? 0) + Number(a.cost_usd);
+  }
+
   return NextResponse.json({
-    agents: (registryRes.data ?? []).map((r) => ({ ...r, week: counts[r.key] ?? { total: 0, autonomous: 0, overridden: 0 } })),
+    agents: (registryRes.data ?? []).map((r) => ({
+      ...r,
+      week: counts[r.key] ?? { total: 0, autonomous: 0, overridden: 0 },
+      estCost: expectedCost(r),
+      actualCost30d: actual30d[r.key] ?? 0,
+    })),
   });
 }
 

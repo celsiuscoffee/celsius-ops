@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { costFromUsage } from "./pricing";
 
 // Shared substrate for every autonomous actor (see migration 080). New agents
 // MUST go through this module instead of inventing their own flag/queue/log:
@@ -23,6 +24,15 @@ export interface AgentActionInput {
   inputTokens?: number;
   outputTokens?: number;
   costUsd?: number;
+  // Pass the raw Anthropic response.usage and the substrate fills in
+  // inputTokens/outputTokens/costUsd from lib/agents/pricing.ts. Ignored if
+  // costUsd is already set explicitly.
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number | null;
+    cache_creation_input_tokens?: number | null;
+  } | null;
   meta?: Record<string, unknown>;
 }
 
@@ -105,6 +115,12 @@ export async function touchAgentRun(agentKey: string): Promise<void> {
 export async function logAgentAction(input: AgentActionInput): Promise<void> {
   try {
     const client = getAgentClient();
+    // Derive tokens + cost from raw usage when the caller passed it and didn't
+    // already compute them, so every LLM agent gets costed the same way.
+    const derived =
+      input.usage && input.model && input.costUsd == null
+        ? costFromUsage(input.model, input.usage)
+        : null;
     const { error } = await client.from("agent_actions").insert({
       agent_key: input.agentKey,
       kind: input.kind,
@@ -115,9 +131,9 @@ export async function logAgentAction(input: AgentActionInput): Promise<void> {
       confidence: input.confidence ?? null,
       autonomous: input.autonomous ?? true,
       model: input.model ?? null,
-      input_tokens: input.inputTokens ?? null,
-      output_tokens: input.outputTokens ?? null,
-      cost_usd: input.costUsd ?? null,
+      input_tokens: input.inputTokens ?? derived?.inputTokens ?? null,
+      output_tokens: input.outputTokens ?? derived?.outputTokens ?? null,
+      cost_usd: input.costUsd ?? derived?.costUsd ?? null,
       meta: input.meta ?? {},
     });
     if (error) throw error;
