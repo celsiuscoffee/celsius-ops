@@ -41,11 +41,14 @@ import {
   ROVER_SHARE_WEEKLY,
 } from "../labour-gate-lib";
 import { forecastWeekRevenue } from "../labour-gate";
+import {
+  computeDailyManHours,
+  itemsPerManHourFor,
+  DEFAULT_BLENDED_RATE,
+  type DailyManHours,
+} from "../man-hours";
 
 const MODEL = "claude-sonnet-4-6";
-// One labour-hour must earn this much revenue to sit at ~18% labour — the
-// manpower workbook's staffing heuristic, used to size demand.
-const REVENUE_PER_LABOUR_HOUR = 69;
 const PT_MAX_HOURS_PER_WEEK = 24;
 // Minimum concurrent heads while the outlet is open — the workbook's service
 // floor (Tamarind explicitly 3/shift; the shift plans floor every outlet at 3).
@@ -85,6 +88,7 @@ type GenerateResult = {
   totalHours: number;
   estimatedCost: number;
   notes: string[];
+  manHours: DailyManHours[];
 };
 
 // ─── helpers ─────────────────────────────────────────────────────────
@@ -162,7 +166,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   // Outlet + budget
   const outlet = await prisma.outlet.findUnique({
     where: { id: outletId },
-    select: { id: true, code: true, name: true, loyaltyOutletId: true, daysOpen: true },
+    select: { id: true, code: true, name: true, loyaltyOutletId: true, daysOpen: true, openTime: true, closeTime: true },
   });
   if (!outlet) throw new Error("Outlet not found");
   const budget = OUTLET_BUDGETS[outlet.code ?? ""] ?? DEFAULT_BUDGET;
@@ -299,23 +303,80 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   const rows: ShiftRow[] = [];
   // Rest days: profile value wins; otherwise stagger Mon(1)–Thu(4) so the
   // full crew is on Fri–Sun. Sorted by name for a stable rotation.
-  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; rev: number }>>`
+  // Demand is sized by THROUGHPUT (items/drinks made), not ringgit — making the
+  // drinks is the labour, so a low-ticket high-volume morning needs more hands
+  // than its revenue implies. Trailing 28 days of item counts per (dow, hour),
+  // averaged over the 4 weeks, ÷ the outlet's items-per-man-hour → heads needed.
+  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; items: number }>>`
+    SELECT EXTRACT(DOW FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
+           EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
+           (sum(i.quantity)::float / 4) AS items
+    FROM pos_order_items i
+    JOIN pos_orders o ON o.id = i.order_id
+    WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
+      AND o.status = 'completed' AND o.refund_of_order_id IS NULL
+      AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+    GROUP BY 1, 2
+  `;
+  const itemsPerManHour = itemsPerManHourFor(outlet.code);
+  const demand = new Map<string, number>(); // "dw:hr" → staff needed
+  const itemsByDow = new Map<number, number>(); // dw → avg items/day (for man-hours)
+  // Throughput-derived need, floored at the service minimum while trading — a
+  // quiet Tuesday close still needs 3 on the floor.
+  for (const h of hourly) {
+    if (h.items <= 0) continue;
+    demand.set(`${h.dw}:${h.hr}`, Math.max(Math.ceil(h.items / itemsPerManHour), SERVICE_FLOOR));
+    itemsByDow.set(h.dw, (itemsByDow.get(h.dw) ?? 0) + h.items);
+  }
+
+  // Per-day-of-week revenue (separate query — joining items to orders would
+  // multiply order totals by line count). Feeds the "affordable man-hours" side.
+  const revRows = await prisma.$queryRaw<Array<{ dw: number; rev: number }>>`
     SELECT EXTRACT(DOW FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
-           EXTRACT(HOUR FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
            (sum(total) / 100.0 / 4)::float AS rev
     FROM pos_orders
     WHERE outlet_id = ${outlet.loyaltyOutletId ?? ""}
       AND status = 'completed' AND refund_of_order_id IS NULL
       AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
           BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-    GROUP BY 1, 2
+    GROUP BY 1
   `;
-  const demand = new Map<string, number>(); // "dw:hr" → staff needed
-  // Sales-derived need, floored at the service minimum while trading — a
-  // quiet Tuesday close still needs 3 on the floor.
-  for (const h of hourly) {
-    if (h.rev <= 0) continue;
-    demand.set(`${h.dw}:${h.hr}`, Math.max(Math.ceil(h.rev / REVENUE_PER_LABOUR_HOUR), SERVICE_FLOOR));
+  const revByDow = new Map<number, number>(revRows.map((r) => [r.dw, r.rev]));
+
+  // Man-hours per open day: what the volume REQUIRES (throughput, floored at the
+  // service minimum) vs what target-% revenue can AFFORD. A positive gap flags a
+  // day where coverage and the cost target can't both be met — floor-bound days
+  // are a revenue problem, demand-bound gaps a low-average-ticket one.
+  const openH = outlet.openTime ? Number(outlet.openTime.slice(0, 2)) : 8;
+  const closeH = outlet.closeTime ? Number(outlet.closeTime.slice(0, 2)) : 22;
+  const openHours = Math.max(1, closeH - openH);
+  const manHours: DailyManHours[] = dates
+    .filter((d) => daysOpen.has(dow(d)))
+    .map((d) =>
+      computeDailyManHours({
+        date: d,
+        forecastItems: itemsByDow.get(dow(d)) ?? 0,
+        forecastRevenue: revByDow.get(dow(d)) ?? 0,
+        itemsPerManHour,
+        serviceMinHeads: SERVICE_FLOOR,
+        openHours,
+        targetPct: budget.target,
+        blendedRate: DEFAULT_BLENDED_RATE,
+      }),
+    );
+  const overBudgetDays = manHours.filter((m) => m.gapHours > 0);
+  if (manHours.length > 0) {
+    const totReq = Math.round(manHours.reduce((s, m) => s + m.requiredHours, 0));
+    const totAff = Math.round(manHours.reduce((s, m) => s + m.affordableHours, 0));
+    notes.push(
+      `Man-hours/wk: required ${totReq}h vs affordable ${totAff}h ` +
+        `(${itemsPerManHour} items/man-hr, ${SERVICE_FLOOR}-head floor × ${openHours}h)` +
+        (overBudgetDays.length
+          ? ` — ${overBudgetDays.length} day(s) over target to cover: ` +
+            overBudgetDays.map((m) => `${m.date}${m.floorBound ? " (floor)" : ""} +${Math.round(m.gapHours)}h`).join(", ")
+          : " — every open day covers within target"),
+    );
   }
 
   // Weekday busyness (sales-need hours per day-of-week) — used to place the
@@ -481,6 +542,36 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       `FT (fixed) RM${ftCost.toLocaleString()} + rover RM${ROVER_SHARE_WEEKLY} → PT envelope RM${ptBudget.toLocaleString()}`,
   );
 
+  // PT top-up target per day: after the FT + rover base is laid, how many
+  // man-hours each open day is still SHORT of its required coverage. Weekends
+  // carry the biggest shortfall (more items → higher required), so they draw
+  // the most PT suggestions. Bounded below by the RM envelope + PT caps, so it
+  // serves coverage without breaking the cost target.
+  const reqByDate = new Map(manHours.map((m) => [m.date, m.requiredHours]));
+  const baseHoursByDate = new Map<string, number>();
+  for (const r of rows) {
+    if (r.notes === "rest_day") continue;
+    const mins =
+      Number(r.end_time.slice(0, 2)) * 60 + Number(r.end_time.slice(3, 5)) -
+      Number(r.start_time.slice(0, 2)) * 60 - Number(r.start_time.slice(3, 5)) - r.break_minutes;
+    if (mins > 0) baseHoursByDate.set(r.shift_date, (baseHoursByDate.get(r.shift_date) ?? 0) + mins / 60);
+  }
+  const ptTargetByDate = new Map<string, number>();
+  for (const d of dates) {
+    if (!daysOpen.has(dow(d))) continue;
+    ptTargetByDate.set(d, Math.max(0, (reqByDate.get(d) ?? 0) - (baseHoursByDate.get(d) ?? 0)));
+  }
+  const ptTargetTotal = Math.round([...ptTargetByDate.values()].reduce((s, v) => s + v, 0));
+  if (ptTargetTotal > 0) {
+    const weekendShort = dates
+      .filter((d) => [0, 6].includes(dow(d)) && (ptTargetByDate.get(d) ?? 0) > 0)
+      .map((d) => `${d} +${Math.round(ptTargetByDate.get(d) ?? 0)}h`);
+    notes.push(
+      `PT top-up target: ${ptTargetTotal}h across the week to reach required coverage after FT` +
+        (weekendShort.length ? ` (weekend: ${weekendShort.join(", ")})` : ""),
+    );
+  }
+
   // Demand gaps: hourly sales (trailing 28 days, per day-of-week) → staff
   // needed per hour vs FT heads on the floor. Positive gap-hours ranked.
   // (hourly demand computed above, before the FT skeleton)
@@ -512,7 +603,12 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       if (gapHours > 0) gaps.push({ date, template: t, slot, gapHours });
     }
   }
-  gaps.sort((a, b) => b.gapHours - a.gapHours);
+  // Days furthest below their man-hour target fill first (weekends float up),
+  // then by hourly gap size within a day.
+  gaps.sort(
+    (a, b) =>
+      (ptTargetByDate.get(b.date) ?? 0) - (ptTargetByDate.get(a.date) ?? 0) || b.gapHours - a.gapHours,
+  );
 
   // Fairness input: confirmed PT hours over the last 4 weeks.
   const { data: recentPt } = await hrSupabaseAdmin
@@ -574,6 +670,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   const ptRows: ShiftRow[] = [];
   const ptSpend = { rm: 0 };
   const ptWeek = new Map<string, { hours: number; days: Set<string> }>();
+  const ptHoursByDate = new Map<string, number>(); // PT man-hours suggested per day so far
   // Seed each PT's weekly tally from the hours/days they already hold at OTHER
   // outlets this week, so the 24h / 5-day caps below bind on the COMBINED total
   // — a two-outlet PT can't be suggested to 48h.
@@ -591,6 +688,9 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     if (onLeave.has(`${person.id}:${p.date}`)) continue;
     if (bookedElsewhere.get(person.id)?.has(p.date)) continue; // already working another outlet that day
     if (ptRows.some((r) => r.user_id === person.id && r.shift_date === p.date)) continue; // one shift/day
+    // Man-hour cap: stop once the day reaches its PT top-up target. Days the FT
+    // base already covers (target 0) get no PT — coverage sized, not padded.
+    if ((ptHoursByDate.get(p.date) ?? 0) >= (ptTargetByDate.get(p.date) ?? 0)) continue;
     const h = workingHours(t);
     const cost = h * person.hourly_rate!;
     if (ptSpend.rm + cost > ptBudget) continue;
@@ -600,6 +700,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     wk.days.add(p.date);
     ptWeek.set(person.id, wk);
     ptSpend.rm += cost;
+    ptHoursByDate.set(p.date, (ptHoursByDate.get(p.date) ?? 0) + h);
     ptRows.push({
       user_id: person.id,
       shift_date: p.date,
@@ -678,6 +779,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     totalHours,
     estimatedCost,
     notes,
+    manHours,
   };
 }
 
