@@ -136,6 +136,23 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   rows (Opening / Middle 1–3 / Closing per outlet); `lib/hr/shift-templates.ts`
   is only the fallback when the table is empty.
 
+- 2026-07-15 — **Tamarind geofence pin was misplaced ~107m** (root cause of the
+  Celsius Manager clock-in/out notification spam). Active zone
+  `ec57ba4a-6014-46d5-865d-99a2b1ef068b` (outlet `5d1f2731…`) center was
+  2.9196975/101.6370896; real staff work-location centroid (SQL-verified, 364
+  ping+clock-in samples, median 5.9m tight cluster) is
+  **2.9200867/101.6362066**. With 150m radius, staff stood at the circle's edge
+  → GPS jitter flapped Enter/Exit endlessly. **Pin corrected in prod 2026-07-15**
+  (owner-approved). Coverage audit of the other 3 active zones: Putrajaya 5.6m /
+  Nilai 1.4m offset (fine), **Shah Alam 41m off but not flapping** (loose 31.5m
+  cluster stays inside 150m) — left as-is, optional future nudge to
+  3.0900010/101.5451225. Method to re-audit any outlet: compare
+  `hr_geofence_zones` center vs the avg of `in_zone` `hr_attendance_pings` +
+  `clock_in_lat/lng`. Symptom mitigation (notification debounce) shipped in
+  PR #935 (`apps/staff-native/lib/hr/tasks.ts`, 30-min per-outlet/direction
+  cooldown in AsyncStorage) — keep it; it also guards against future pin drift
+  and near-boundary outlets.
+
 ## General rules
 
 - Typecheck before pushing — every time. CI enforces it, but catch it locally.
