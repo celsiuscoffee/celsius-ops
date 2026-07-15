@@ -24,8 +24,9 @@ import { prisma } from "@/lib/prisma";
 import { getFinanceClient } from "@/lib/finance/supabase";
 import { buildByCategory, type OutletPick } from "@/app/api/sales/_lib/reports";
 import { sendMessage } from "@/lib/telegram";
+import { allOutletsOnHandValue, TARGET_DAYS_COVER } from "@/lib/inventory/on-hand-value";
 
-export const PURCHASING_MANAGER_VERSION = "purchasing-mgr-v1";
+export const PURCHASING_MANAGER_VERSION = "purchasing-mgr-v2";
 
 // Tunables. Changing these is a product decision; keep them here, not inline.
 const PRICE_CHANGE_PCT = 10;    // flag a supplier price move of >= this %
@@ -36,7 +37,7 @@ const SHORT_DELIVERY_MIN_RM = 50;
 const DUP_INVOICE_DAYS = 14;
 const LOOKBACK_DAYS = 8;        // detection window for price/receiving/invoice
 
-export type FindingKind = "price_change" | "over_purchase" | "duplicate_invoice" | "short_delivery";
+export type FindingKind = "price_change" | "over_purchase" | "duplicate_invoice" | "short_delivery" | "inventory_value" | "count_needed";
 export type Severity = "info" | "warn" | "high";
 
 export type Finding = {
@@ -223,6 +224,47 @@ export async function detectOverBuy(): Promise<Finding[]> {
   return out;
 }
 
+// ─── inventory_value (goal 1) ─────────────────────────────────────────────
+// Count-anchored on-hand value per outlet (see on-hand-value.ts) against the
+// suggested ceiling (TARGET_DAYS_COVER of COGS). Flags outlets holding too much
+// cash as stock; separately flags outlets with no usable count to value at all.
+const INVENTORY_OVER_MULT = 1.3;   // flag when days-of-cover > target x this
+export async function detectInventoryValue(): Promise<Finding[]> {
+  const rows = await allOutletsOnHandValue();
+  const out: Finding[] = [];
+  for (const r of rows) {
+    if (r.onHandValue == null) {
+      // Only worth flagging when the outlet actually consumes (real store with
+      // no count), not a consignment site with no recipe sales.
+      if (r.dailyConsumption > 5) {
+        out.push({
+          kind: "count_needed",
+          severity: "warn",
+          title: `${r.outletName}: no usable count to value inventory`,
+          detail: `${r.outletName} has no full stock count to anchor on-hand value. Run a full count so inventory value, days-of-cover and the over-buy guardrail become real here.`,
+          outletId: r.outletId, supplierId: null, productId: null,
+          data: { dailyConsumption: r.dailyConsumption },
+        });
+      }
+      continue;
+    }
+    if (r.daysCover != null && r.daysCover > TARGET_DAYS_COVER * INVENTORY_OVER_MULT) {
+      const overRm = rmRound(r.onHandValue - r.suggestedCeiling);
+      const stale = r.anchorAgeDays != null && r.anchorAgeDays > 40;
+      out.push({
+        kind: "inventory_value",
+        severity: r.daysCover > TARGET_DAYS_COVER * 1.8 ? "high" : "warn",
+        title: `${r.outletName} inventory ${Math.round(r.daysCover)} days of stock`,
+        detail: `${r.outletName}: on-hand ${rm(r.onHandValue)} = ${Math.round(r.daysCover)} days of COGS vs a ${TARGET_DAYS_COVER}-day target (${rm(r.suggestedCeiling)}), ${rm(overRm)} of cash over the ceiling.${stale ? ` Estimate is wide (anchor count ${r.anchorAgeDays} days old, count to confirm).` : ""}`,
+        outletId: r.outletId, supplierId: null, productId: null,
+        data: { onHandValue: r.onHandValue, daysCover: r.daysCover, suggestedCeiling: r.suggestedCeiling, anchorDate: r.anchorDate, anchorAgeDays: r.anchorAgeDays },
+      });
+    }
+  }
+  return out;
+}
+const rmRound = (n: number) => Math.round(n * 100) / 100;
+
 // Persist every finding to the shared agent-decision ledger (advisory:
 // applied=false, confidence 1.0 — deterministic detectors).
 async function logFindings(findings: Finding[]): Promise<number> {
@@ -246,12 +288,13 @@ async function logFindings(findings: Finding[]): Promise<number> {
 
 export async function runPurchasingManager(): Promise<{ findings: Finding[]; logged: number }> {
   const groups = await Promise.all([
-    detectPriceChanges(),
+    detectInventoryValue(),
     detectOverBuy(),
     detectDuplicateInvoices(),
+    detectPriceChanges(),
     detectShortDeliveries(),
   ]);
-  const order: FindingKind[] = ["over_purchase", "duplicate_invoice", "price_change", "short_delivery"];
+  const order: FindingKind[] = ["inventory_value", "over_purchase", "count_needed", "duplicate_invoice", "price_change", "short_delivery"];
   const sev: Record<Severity, number> = { high: 0, warn: 1, info: 2 };
   const findings = groups.flat().sort((a, b) => sev[a.severity] - sev[b.severity] || order.indexOf(a.kind) - order.indexOf(b.kind));
   const logged = await logFindings(findings);
@@ -284,7 +327,8 @@ export function formatDigest(findings: Finding[]): string {
   const lines: string[] = [`<b>Purchasing Manager</b> — ${findings.length} flag${findings.length > 1 ? "s" : ""}`];
   const icon: Record<Severity, string> = { high: "🔴", warn: "🟠", info: "⚪" };
   const heading: Record<FindingKind, string> = {
-    over_purchase: "Over-buying", duplicate_invoice: "Duplicate invoices",
+    inventory_value: "Inventory value", over_purchase: "Over-buying",
+    count_needed: "Counts needed", duplicate_invoice: "Duplicate invoices",
     price_change: "Price changes", short_delivery: "Short deliveries",
   };
   let lastKind: FindingKind | null = null;

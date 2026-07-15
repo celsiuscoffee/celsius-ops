@@ -462,8 +462,8 @@ function addMonths(s: string, n: number): string {
 //               the bug: it divided every packaged line by its conversion
 //               factor (24000x, 1000x) down to pennies, so whole counts read
 //               RM40 and got rejected, forcing the purchases proxy.
-type CostMaps = { byBase: Map<string, number>; byPackage: Map<string, number> };
-async function costPerBaseUnit(): Promise<CostMaps> {
+export type CostMaps = { byBase: Map<string, number>; byPackage: Map<string, number> };
+export async function costPerBaseUnit(): Promise<CostMaps> {
   const sps = await prisma.supplierProduct.findMany({
     where: { isActive: true, price: { gt: 0 } },
     select: { productId: true, productPackageId: true, price: true, productPackage: { select: { conversionFactor: true } }, supplier: { select: { supplierCode: true } } },
@@ -514,7 +514,7 @@ const MAX_TYPO_LINE_SHARE = 0.1;
 // per-line typos, and decide whether the cleaned count is a usable full
 // inventory. Returns null when it is partial (too few real items), too
 // corrupted (too many typo lines), or values outside the plausible band.
-function evaluateCount(
+export function evaluateCount(
   items: { productId: string; productPackageId: string | null; countedQty: unknown }[],
   cost: CostMaps,
 ): { value: number; items: number; costed: number; dropped: number } | null {
