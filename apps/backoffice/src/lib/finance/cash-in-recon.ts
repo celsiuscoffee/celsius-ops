@@ -30,8 +30,8 @@ const ACCOUNT_SUFFIX: Record<string, string> = {
 // Expected deduction per channel (fee/commission), used only to judge whether
 // the gap is explained. Not a posting.
 const EXPECTED_PCT: Record<string, number> = {
-  card: 1.0,        // Maybank / NTT MDR
-  qr: 0.25,         // DuitNow
+  card: 1.0,        // Maybank / NTT MDR (Maybank date-matched, measured ~0.5-1%)
+  qr: 0,            // DuitNow QR is real-time and free — should tie to ~0
   online: 2.0,      // Revenue Monster gateway (measured ~2.0-2.6%)
   grab: 45,         // 33% commission + SST + ~12% GrabAds (both netted at settlement)
   consignment: 30,  // GastroHub commission
@@ -119,7 +119,7 @@ export async function cashInReconByChannel(from: string, to: string): Promise<Ca
     FROM "BankStatementLine" l
     JOIN "BankStatement" s ON s.id = l."statementId"
     WHERE l.direction='CR' AND l."isInterCo"=false
-      AND l.category::text IN ('CARD','QR','GRAB','GRAB_PUTRAJAYA','GASTROHUB')
+      AND l.category::text IN ('QR','GRAB','GRAB_PUTRAJAYA','GASTROHUB')
       AND l."txnDate" >= ${start} AND l."txnDate" <= ${end}
     GROUP BY 1,2
   `);
@@ -127,6 +127,21 @@ export async function cashInReconByChannel(from: string, to: string): Promise<Ca
     const suffix = ACCOUNT_SUFFIX[company];
     return round2(bank.filter((b) => b.suffix === suffix && cats.includes(b.category)).reduce((s, b) => s + Number(b.rm), 0));
   };
+
+  // ── Cash in: card, matched by the SALES date it settles ──
+  // Maybank settles card per sales day and the line carries that date
+  // ("CR/CARD SALES MN ... DATED 03072026"), so we date-match card exactly as
+  // RM below. Acquirers that carry no date (NTT/GHL for Shah Alam, small
+  // e-wallet credits) fall back to cash received in the window (bulk). Pull a
+  // week past `to` to catch the last days' dated settlements.
+  const cardSettleEnd = new Date(end.getTime() + 7 * 86_400_000);
+  const cardRows = await prisma.$queryRaw<{ suffix: string; txnDate: Date; description: string; rm: number }[]>(Prisma.sql`
+    SELECT substring(s."accountName" from '\\((\\d{4})\\)') AS suffix, l."txnDate", l.description, l.amount::float AS rm
+    FROM "BankStatementLine" l
+    JOIN "BankStatement" s ON s.id = l."statementId"
+    WHERE l.direction='CR' AND l."isInterCo"=false AND l.category::text='CARD'
+      AND l."txnDate" >= ${start} AND l."txnDate" <= ${cardSettleEnd}
+  `);
 
   // ── Cash in: Revenue Monster, matched by the SALES date it settles ──
   // RM pays out one credit per sales day at ~T+2, and the bank line description
@@ -156,6 +171,21 @@ export async function cashInReconByChannel(from: string, to: string): Promise<Ca
   }
   const onlineBanked = (company: string) => round2(onlineBankedBy[company] ?? 0);
 
+  // Bucket card credits: dated Maybank lines by their embedded sales date (kept
+  // when that date is in [from,to]); undated lines (NTT/GHL, e-wallets) by the
+  // day they landed (bulk, kept when in [from,to]).
+  const toDay = (d: Date) => new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
+  const cardBankedBy: Record<string, number> = {};
+  for (const cr of cardRows) {
+    const company = SUFFIX_COMPANY[cr.suffix ?? ""];
+    if (!company) continue;
+    const m = cr.description.match(/DATED\s+(\d{2})(\d{2})(\d{4})/); // DDMMYYYY
+    const day = m ? `${m[3]}-${m[2]}-${m[1]}` : toDay(cr.txnDate);
+    if (day < from || day > to) continue;
+    cardBankedBy[company] = (cardBankedBy[company] ?? 0) + Number(cr.rm);
+  }
+  const cardBanked = (company: string) => round2(cardBankedBy[company] ?? 0);
+
   const companies = Object.keys(ACCOUNT_SUFFIX);
   const rev = (arr: { company_id: string; rm: number }[], c: string) => round2(Number(arr.find((r) => r.company_id === c)?.rm ?? 0));
   const tenderRev = (c: string, m: string) => round2(Number(tender.find((t) => t.company_id === c && t.method === m)?.rm ?? 0));
@@ -180,6 +210,17 @@ export async function cashInReconByChannel(from: string, to: string): Promise<Ca
       note = overExpected
         ? `Matched by settlement date; residual ${gapPct}% exceeds the ~${expectedPct}% gateway fee, part of the money rung has not arrived.`
         : `Matched by settlement date; residual ${gapPct}% is the ~${expectedPct}% gateway fee.`;
+    } else if (channel === "card") {
+      // Maybank card is matched by the sales date on the line; NTT/GHL (Shah
+      // Alam) carries no date and reconciles on cash received in the window.
+      note = overExpected
+        ? `Residual ${gapPct}% exceeds the ~${expectedPct}% MDR; the NTT batch carries no sales date, so this is received-in-window and part may not have settled yet.`
+        : `Matched by settlement date (Maybank); residual ${gapPct}% is the card MDR.`;
+    } else if (channel === "qr") {
+      // DuitNow QR is real-time and free — any residual is window-edge timing.
+      note = overExpected
+        ? `QR is real-time and free, so ${gapPct}% is unexpected — a late-posting day at the window edge or a QR credit filed elsewhere.`
+        : `Real-time, full value; residual ${gapPct}% is window-edge timing.`;
     } else if (negative) {
       note = `Banked more than rung up, likely a settlement-timing spill or a misclassified credit.`;
     } else if (overExpected) {
@@ -191,7 +232,7 @@ export async function cashInReconByChannel(from: string, to: string): Promise<Ca
   };
 
   for (const c of companies) {
-    push(c, "card", tenderRev(c, "card"), bankBy(c, ["CARD"]));
+    push(c, "card", tenderRev(c, "card"), cardBanked(c));
     push(c, "qr", tenderRev(c, "qr"), bankBy(c, ["QR"]));
     push(c, "online", rev(online, c), onlineBanked(c));
     push(c, "consignment", rev(consignGross, c), bankBy(c, ["GASTROHUB"]));
