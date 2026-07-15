@@ -135,6 +135,42 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 - 2026-07-05 — Shift templates of record are the `hr_shift_templates` DB
   rows (Opening / Middle 1–3 / Closing per outlet); `lib/hr/shift-templates.ts`
   is only the fallback when the table is empty.
+- 2026-07-14 — **Multi-outlet staff rotation (code-verified).** Membership is
+  `User.outletId` (primary) + `User.outletIds[]` (additional) — editable ONLY
+  in Settings → Staff (outlet checkboxes; the HR employee page edits primary
+  only). Every scheduling surface pools `outletId OR outletIds has`: grid,
+  AI Fill, assist candidates. Assist candidates (`schedules/candidates`)
+  count weekly hours ACROSS outlets (query is user-scoped, not
+  outlet-scoped) and flag `double_booked`/`over_cap` cross-outlet; they also
+  score a `home` signal (primary 1 / outletIds 0.8 / other 0.5). Clock-in
+  (`staff /api/hr/clock`) picks the nearest assigned outlet by GPS, so
+  attendance logs the outlet actually visited. Leadership rotation = the
+  rover path (Manager/Area Manager/Barista Lead, 2 days/outlet, HQ-costed,
+  cross-outlet busy check). **Gap:** AI Fill's cross-outlet busy check
+  covers rovers ONLY — a regular FT/PT in two outlet pools is generated
+  independently at each (FT: 6 days at BOTH; PT: 24h/5d caps applied per
+  outlet run → up to 48h), and the manual `cell`/`assign` writes have no
+  hard cross-outlet overlap guard (the warning is advisory in the ranking
+  UI only). Fix shape: extend the rover `busy` set to all pooled staff in
+  the generator, seed `ptWeek` from other-outlet shifts, add an overlap 409
+  in cell/assign.
+- 2026-07-14 — **Multi-outlet double-booking fixed** (branch
+  `claude/staff-rotation-outlets-kmobpa`, PR #934). Owner rule chosen:
+  **primary outlet wins**. AI Fill (`schedule-generator.ts`) now: (1) loads
+  every pooled staffer's shifts at OTHER outlets for the week
+  (`bookedElsewhere`) and never places anyone on a day they're already
+  working elsewhere; (2) floors a full-timer's 6-day week ONLY at their
+  primary outlet (`isPrimaryHere = User.outletId === outletId`) — a shared FT
+  is listed in `ai_notes` as "rostered at their primary, not here" and must be
+  borrowed manually at secondary outlets; (3) seeds each PT's `ptWeek`
+  hours/days from other-outlet shifts so the 24h/5-day caps bind on the
+  COMBINED total. Manual writes: `cell` + `assign` routes call
+  `findCrossOutletOverlap` (new `lib/hr/cross-outlet.ts`) and 409 on a
+  same-day cross-outlet time overlap. **Residual (best-effort, documented):**
+  generation is per-outlet on-demand, so "primary wins" for a same-day PT
+  conflict relies on generating home outlets first — no destructive
+  cross-outlet steal. The assist-candidate ranking was already
+  cross-outlet-aware (user-scoped hours, `double_booked`/`over_cap`).
 
 ## General rules
 

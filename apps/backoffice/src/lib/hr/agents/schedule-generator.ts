@@ -35,21 +35,40 @@ import { hrSupabaseAdmin } from "../supabase";
 import { templatesForOutlet, workingHours, type ShiftTemplate } from "../shift-templates";
 import {
   weeklySalaryShare,
+  shiftHours,
   OUTLET_BUDGETS,
   DEFAULT_BUDGET,
   ROVER_SHARE_WEEKLY,
 } from "../labour-gate-lib";
 import { forecastWeekRevenue } from "../labour-gate";
+import {
+  computeDailyManHours,
+  itemsPerManHourFor,
+  DEFAULT_BLENDED_RATE,
+  type DailyManHours,
+} from "../man-hours";
 
 const MODEL = "claude-sonnet-4-6";
-// One labour-hour must earn this much revenue to sit at ~18% labour — the
-// manpower workbook's staffing heuristic, used to size demand.
-const REVENUE_PER_LABOUR_HOUR = 69;
 const PT_MAX_HOURS_PER_WEEK = 24;
 // Minimum concurrent heads while the outlet is open — the workbook's service
 // floor (Tamarind explicitly 3/shift; the shift plans floor every outlet at 3).
 const SERVICE_FLOOR = 3;
 const PT_MAX_DAYS_PER_WEEK = 5;
+
+// Serve-time-calibrated station throughput: items one head can make + serve per
+// hour while holding a 15-minute serve target (30-min hard ceiling). Barista =
+// drinks + counter pastries; kitchen = cooked food only.
+//   Grounded in prep times: a drink/pastry is ~3 min (≈20/hr raw), but the same
+//   head also takes orders, cashiers, serves and cleans and must keep queue
+//   headroom to hold 15-min serve → ~8/hr sustainable. Cooked food is ~10 min:
+//   against a 15-min target there's almost no headroom (one item every ~10 min),
+//   so ~6/hr — which is exactly why a 2nd kitchen hand is needed as food volume
+//   rises (weekend brunch). See docs/design/staffing-model.md. Calibratable.
+const BARISTA_ITEMS_PER_HR = 8;
+const KITCHEN_ITEMS_PER_HR = 6;
+// Cooked-food menu categories → kitchen station; everything else (drinks +
+// cakes/cookies/croissants + uncategorised) is barista/counter.
+const KITCHEN_CATEGORIES = ["Roti Bakar", "Nasi Lemak", "Pasta", "Sandwiches", "Fries", "Noodle"];
 
 const ROVER_POSITIONS = new Set(["manager", "area manager", "head of department", "barista lead"]);
 
@@ -61,6 +80,10 @@ type Staff = {
   basic_salary: number;
   hourly_rate: number | null;
   rest_day: number | null; // 0=Sun … 6=Sat
+  // "Primary outlet wins": a shared staffer is auto-rostered (FT floor / PT
+  // suggestions) only where this is their primary outlet. Elsewhere they must
+  // be borrowed manually. True when User.outletId === the outlet being built.
+  isPrimaryHere: boolean;
 };
 
 type ShiftRow = {
@@ -80,6 +103,7 @@ type GenerateResult = {
   totalHours: number;
   estimatedCost: number;
   notes: string[];
+  manHours: DailyManHours[];
 };
 
 // ─── helpers ─────────────────────────────────────────────────────────
@@ -157,7 +181,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   // Outlet + budget
   const outlet = await prisma.outlet.findUnique({
     where: { id: outletId },
-    select: { id: true, code: true, name: true, loyaltyOutletId: true, daysOpen: true },
+    select: { id: true, code: true, name: true, loyaltyOutletId: true, daysOpen: true, openTime: true, closeTime: true },
   });
   if (!outlet) throw new Error("Outlet not found");
   const budget = OUTLET_BUDGETS[outlet.code ?? ""] ?? DEFAULT_BUDGET;
@@ -182,7 +206,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       OR: [{ outletId }, { outletIds: { has: outletId } }],
       role: { in: ["STAFF", "MANAGER"] },
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, outletId: true },
   });
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
@@ -207,6 +231,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         basic_salary: Number(p?.basic_salary) || 0,
         hourly_rate: p?.hourly_rate == null ? null : Number(p.hourly_rate),
         rest_day: p?.rest_day ?? null,
+        isPrimaryHere: u.outletId === outletId,
       };
     })
     // Rovers are placed separately below (2 days/outlet-week); HoD stays HQ.
@@ -226,12 +251,23 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     : [];
   const roverPositionOf = new Map(((roverProfiles ?? []) as { user_id: string; position: string }[]).map((p) => [p.user_id, p.position]));
 
-  const fullTimers = staff.filter((s) => s.employment_type === "full_time" || s.employment_type === "contract");
+  // "Primary outlet wins": a full-timer carries their 6-day floor only at their
+  // primary outlet. A shared FT whose primary is elsewhere is NOT auto-rostered
+  // here (their committed hours live at home) — borrow them manually via the
+  // grid if needed; the cell/assign routes block a cross-outlet double-book.
+  const isFt = (s: Staff) => s.employment_type === "full_time" || s.employment_type === "contract";
+  const fullTimers = staff.filter((s) => isFt(s) && s.isPrimaryHere);
+  const sharedFtElsewhere = staff.filter((s) => isFt(s) && !s.isPrimaryHere);
+  // Part-timers rotate by design — a shared PT stays an eligible suggestion at
+  // every outlet they're assigned to, bounded below by cross-outlet caps.
   const partTimers = staff.filter((s) => s.employment_type === "part_time" || s.employment_type === "intern");
   if (fullTimers.length === 0 && partTimers.length === 0) {
     throw new Error(`No schedulable staff at ${outlet.name}`);
   }
   notes.push(`${fullTimers.length} FT + ${partTimers.length} PT schedulable (rovers excluded)`);
+  if (sharedFtElsewhere.length > 0) {
+    notes.push(`${sharedFtElsewhere.length} shared FT rostered at their primary outlet, not here: ${sharedFtElsewhere.map((s) => s.name).join(", ")}`);
+  }
 
   // Approved leave
   const { data: leaves } = await hrSupabaseAdmin
@@ -245,97 +281,370 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     for (const d of dates) if (d >= l.start_date && d <= l.end_date) onLeave.add(`${l.user_id}:${d}`);
   }
 
+  // Cross-outlet bookings this week (rotation): every real shift these staff
+  // already hold on ANOTHER outlet's schedule for this same week. Used to
+  //   (a) never double-book a shared staffer on a day, and
+  //   (b) seed their weekly PT caps so a two-outlet PT can't exceed the
+  //       24h / 5-day limit COMBINED across outlets.
+  // Rest-day markers (00:00) are skipped; the current outlet's own draft is
+  // excluded (it's being rebuilt below).
+  const poolIds = users.map((u) => u.id);
+  const { data: crossShifts } = poolIds.length
+    ? await hrSupabaseAdmin
+        .from("hr_schedule_shifts")
+        .select("user_id, shift_date, start_time, end_time, break_minutes, schedule_id, hr_schedules!inner(outlet_id, week_start)")
+        .in("user_id", poolIds)
+        .eq("hr_schedules.week_start", weekStart)
+        .neq("start_time", "00:00")
+    : { data: [] as unknown[] };
+  type CrossRow = {
+    user_id: string; shift_date: string; start_time: string; end_time: string;
+    break_minutes: number | null; schedule_id: string;
+    hr_schedules: { outlet_id: string } | { outlet_id: string }[];
+  };
+  const bookedElsewhere = new Map<string, Set<string>>();   // user → dates already worked at another outlet
+  const hoursElsewhere = new Map<string, number>();          // user → PT hours already committed elsewhere
+  for (const r of ((crossShifts ?? []) as unknown as CrossRow[])) {
+    const sched = Array.isArray(r.hr_schedules) ? r.hr_schedules[0] : r.hr_schedules;
+    const otherOutlet = sched?.outlet_id;
+    if (!otherOutlet || otherOutlet === outletId) continue;   // only OTHER outlets
+    if (r.schedule_id === existing?.id) continue;             // not this outlet's own draft
+    (bookedElsewhere.get(r.user_id) ?? bookedElsewhere.set(r.user_id, new Set()).get(r.user_id)!).add(r.shift_date);
+    const h = shiftHours(hhmmss(r.start_time.slice(0, 5)), hhmmss(r.end_time.slice(0, 5))) - (r.break_minutes ?? 0) / 60;
+    if (h > 0) hoursElsewhere.set(r.user_id, (hoursElsewhere.get(r.user_id) ?? 0) + h);
+  }
+
   // ── Stage 1: FT skeleton — templates, 45h, rest days ────────────────
   const rows: ShiftRow[] = [];
   // Rest days: profile value wins; otherwise stagger Mon(1)–Thu(4) so the
   // full crew is on Fri–Sun. Sorted by name for a stable rotation.
-  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; rev: number }>>`
+  // Demand is sized by THROUGHPUT (items made), not ringgit, and SPLIT BY STATION
+  // — a barista makes drinks, a kitchen hand makes food, and they peak at
+  // different times. Trailing 28 days of item counts per (dow, hour), averaged
+  // over the 4 weeks, split barista vs kitchen. Heads/hour = ceil(barista ÷ 8) +
+  // ceil(kitchen ÷ 6), floored at the service minimum — sized to hold the
+  // 15-minute serve target. (Same model as the HOO staffing report.)
+  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; barista: number; kitchen: number }>>`
+    SELECT EXTRACT(DOW FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
+           EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
+           (sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float / 4) AS kitchen,
+           (sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float / 4) AS barista
+    FROM pos_order_items i
+    JOIN pos_orders o ON o.id = i.order_id
+    LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
+    WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
+      AND o.status = 'completed' AND o.refund_of_order_id IS NULL
+      AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+    GROUP BY 1, 2
+  `;
+  const demand = new Map<string, number>(); // "dw:hr" → heads needed (barista + kitchen)
+  const itemsByDow = new Map<number, number>(); // dw → avg total items/day (for man-hours)
+  // Peak heads + its station split per day-of-week, for the QA note.
+  const peakByDow = new Map<number, { heads: number; hr: number; bar: number; kit: number }>();
+  for (const h of hourly) {
+    const bar = Number(h.barista) || 0;
+    const kit = Number(h.kitchen) || 0;
+    if (bar + kit <= 0) continue;
+    const barHeads = Math.ceil(bar / BARISTA_ITEMS_PER_HR);
+    const kitHeads = Math.ceil(kit / KITCHEN_ITEMS_PER_HR);
+    const heads = Math.max(SERVICE_FLOOR, barHeads + kitHeads);
+    demand.set(`${h.dw}:${h.hr}`, heads);
+    itemsByDow.set(h.dw, (itemsByDow.get(h.dw) ?? 0) + bar + kit);
+    const prev = peakByDow.get(h.dw);
+    if (!prev || heads > prev.heads) peakByDow.set(h.dw, { heads, hr: h.hr, bar: barHeads, kit: kitHeads });
+  }
+
+  // Per-day-of-week revenue (separate query — joining items to orders would
+  // multiply order totals by line count). Feeds the "affordable man-hours" side.
+  const revRows = await prisma.$queryRaw<Array<{ dw: number; rev: number }>>`
     SELECT EXTRACT(DOW FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
-           EXTRACT(HOUR FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
            (sum(total) / 100.0 / 4)::float AS rev
     FROM pos_orders
     WHERE outlet_id = ${outlet.loyaltyOutletId ?? ""}
       AND status = 'completed' AND refund_of_order_id IS NULL
       AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
           BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-    GROUP BY 1, 2
+    GROUP BY 1
   `;
-  const demand = new Map<string, number>(); // "dw:hr" → staff needed
-  // Sales-derived need, floored at the service minimum while trading — a
-  // quiet Tuesday close still needs 3 on the floor.
-  for (const h of hourly) {
-    if (h.rev <= 0) continue;
-    demand.set(`${h.dw}:${h.hr}`, Math.max(Math.ceil(h.rev / REVENUE_PER_LABOUR_HOUR), SERVICE_FLOOR));
-  }
+  const revByDow = new Map<number, number>(revRows.map((r) => [r.dw, r.rev]));
 
-  // Weekday busyness (sales-need hours per day-of-week) — used to place the
-  // unavoidable rest-day doubles on the quietest days.
-  const dowLoad = new Map<number, number>();
-  for (const [key, n] of demand) {
-    const dw = Number(key.split(":")[0]);
-    dowLoad.set(dw, (dowLoad.get(dw) ?? 0) + n);
+  // Man-hours per open day: what the volume REQUIRES (throughput, floored at the
+  // service minimum) vs what target-% revenue can AFFORD. A positive gap flags a
+  // day where coverage and the cost target can't both be met — floor-bound days
+  // are a revenue problem, demand-bound gaps a low-average-ticket one.
+  const openH = outlet.openTime ? Number(outlet.openTime.slice(0, 2)) : 8;
+  const closeH = outlet.closeTime ? Number(outlet.closeTime.slice(0, 2)) : 22;
+  const openHours = Math.max(1, closeH - openH);
+  // Required man-hours per day = SUM of the hourly station-head demand across the
+  // open window (captures peaks, not a daily average) — the report's number.
+  const requiredByDate = new Map<string, number>();
+  for (const d of dates) {
+    if (!daysOpen.has(dow(d))) continue;
+    let req = 0;
+    for (let h = openH; h < closeH; h++) req += demand.get(`${dow(d)}:${h}`) ?? SERVICE_FLOOR;
+    requiredByDate.set(d, req);
   }
+  const manHours: DailyManHours[] = dates
+    .filter((d) => daysOpen.has(dow(d)))
+    .map((d) => {
+      const base = computeDailyManHours({
+        date: d,
+        forecastItems: itemsByDow.get(dow(d)) ?? 0,
+        forecastRevenue: revByDow.get(dow(d)) ?? 0,
+        itemsPerManHour: itemsPerManHourFor(outlet.code),
+        serviceMinHeads: SERVICE_FLOOR,
+        openHours,
+        targetPct: budget.target,
+        blendedRate: DEFAULT_BLENDED_RATE,
+      });
+      const requiredHours = requiredByDate.get(d) ?? base.requiredHours;
+      return { ...base, requiredHours, gapHours: Math.round((requiredHours - base.affordableHours) * 10) / 10 };
+    });
+  const overBudgetDays = manHours.filter((m) => m.gapHours > 0);
+  if (manHours.length > 0) {
+    const totReq = Math.round(manHours.reduce((s, m) => s + m.requiredHours, 0));
+    const totAff = Math.round(manHours.reduce((s, m) => s + m.affordableHours, 0));
+    notes.push(
+      `Man-hours/wk: required ${totReq}h (station-sized, 15-min serve target) vs affordable ${totAff}h ` +
+        `(barista ${BARISTA_ITEMS_PER_HR}/hr, kitchen ${KITCHEN_ITEMS_PER_HR}/hr, ${SERVICE_FLOOR}-head floor)` +
+        (overBudgetDays.length
+          ? ` — ${overBudgetDays.length} day(s) over target to cover: ` +
+            overBudgetDays.map((m) => `${m.date} +${Math.round(m.gapHours)}h`).join(", ")
+          : " — every open day covers within target"),
+    );
+  }
+  // Peak-hour headcount + station split per open day — the "when you need a 4th,
+  // it's barista-vs-kitchen" picture the report explains.
+  const peakLines = dates
+    .filter((d) => daysOpen.has(dow(d)))
+    .map((d) => {
+      const p = peakByDow.get(dow(d));
+      if (!p) return null;
+      return `${d} ${p.heads}${p.heads > SERVICE_FLOOR ? ` (${p.bar}bar+${p.kit}kit @${p.hr}:00)` : ""}`;
+    })
+    .filter(Boolean);
+  if (peakLines.length) notes.push(`Peak heads/day (serve-time model): ${peakLines.join(", ")}`);
 
   const sortedFT = [...fullTimers].sort((a, b) => a.name.localeCompare(b.name));
-  // Rest days: profile value wins. Everyone else spreads across Mon–Thu so no
-  // day loses more than its share of crew — one rest per day first, and when
-  // there are more FT than rest slots, the doubles land on the quietest
-  // weekdays instead of stacking on Monday/Tuesday.
-  // Spread across ALL open days (not just Mon–Thu): one rest per day before
-  // any day takes a second, extras landing quietest-day-first — so a large
-  // crew no longer stacks 3–4 rests onto the early week, and the busiest
-  // day (usually Saturday) is the last to lose anyone.
-  const restSlots = [0, 1, 2, 3, 4, 5, 6]
-    .filter((d) => daysOpen.has(d))
-    .sort((a, b) => (dowLoad.get(a) ?? 0) - (dowLoad.get(b) ?? 0));
-  const restCount = new Map<number, number>(restSlots.map((d) => [d, 0]));
-  const restDayOf = new Map<string, number>();
-  for (const s of sortedFT) {
-    if (s.rest_day != null) {
-      restDayOf.set(s.id, s.rest_day);
-      if (restCount.has(s.rest_day)) restCount.set(s.rest_day, (restCount.get(s.rest_day) ?? 0) + 1);
+
+  // ── Demand-aware rest days ──────────────────────────────────────────
+  // Each FT works 6 days and rests 1 (Employment Act). WHICH day they rest is
+  // decided from the outlet's OWN demand data — items sold per weekday — not a
+  // fixed rule: more people rest on the QUIETEST days so working heads track
+  // demand (the busy weekend keeps a full crew; quiet midweek sheds a few).
+  // This costs nothing — every FT still works 6 days — it only rebalances
+  // coverage across the week, fixing the old flat/inverted spread.
+  const openDaysList = [0, 1, 2, 3, 4, 5, 6].filter((d) => daysOpen.has(d));
+  const D = openDaysList.length || 1;
+  const N = sortedFT.length;
+  const dayItems = (d: number) => Math.max(itemsByDow.get(d) ?? 0, 0);
+  const maxItems = openDaysList.length ? Math.max(...openDaysList.map(dayItems)) : 0;
+  const restCap = Math.max(0, N - SERVICE_FLOOR); // never rest a day below the service floor
+
+  // ── Fairness memory: each FT's recent history (last 4 weeks) ─────────
+  // Drives long-run fairness so it isn't reset every week: openings & closings
+  // continue balancing from how much each person has recently carried; weekend
+  // rests rotate to whoever's had the fewest; rest days avoid repeating last
+  // week's day; and a Sunday close seeds Monday's clopening guard.
+  const ftIds = sortedFT.map((s) => s.id);
+  const sundayBefore = addDaysStr(weekStart, -1);
+  const { data: histShifts } = ftIds.length
+    ? await hrSupabaseAdmin
+        .from("hr_schedule_shifts")
+        .select("user_id, shift_date, role_type, notes, hr_schedules!inner(week_start)")
+        .in("user_id", ftIds)
+        .gte("hr_schedules.week_start", addDaysStr(weekStart, -28))
+        .lt("hr_schedules.week_start", weekStart)
+    : { data: [] as unknown[] };
+  type HistRow = { user_id: string; shift_date: string; role_type: string | null; notes: string | null; hr_schedules: { week_start: string } | { week_start: string }[] };
+  const recentClose = new Map<string, number>();
+  const recentOpen = new Map<string, number>();
+  const weekendRestCount = new Map<string, number>();
+  const lastRestByUser = new Map<string, { week: string; dow: number }>();
+  const prevShiftSeed = new Map<string, "open" | "close" | "mid" | "off">();
+  for (const h of (histShifts ?? []) as unknown as HistRow[]) {
+    const role = (h.role_type ?? "").toLowerCase();
+    const wd = new Date(h.shift_date + "T00:00:00Z").getUTCDay();
+    const wk = Array.isArray(h.hr_schedules) ? h.hr_schedules[0]?.week_start : h.hr_schedules?.week_start;
+    if (h.notes === "rest_day" || role.includes("rest")) {
+      if (wd === 0 || wd === 6) weekendRestCount.set(h.user_id, (weekendRestCount.get(h.user_id) ?? 0) + 1);
+      const prev = lastRestByUser.get(h.user_id);
+      if (wk && (!prev || wk > prev.week)) lastRestByUser.set(h.user_id, { week: wk, dow: wd });
+    } else if (role.includes("clos")) {
+      recentClose.set(h.user_id, (recentClose.get(h.user_id) ?? 0) + 1);
+      if (h.shift_date === sundayBefore) prevShiftSeed.set(h.user_id, "close");
+    } else if (role.includes("open")) {
+      recentOpen.set(h.user_id, (recentOpen.get(h.user_id) ?? 0) + 1);
+      if (h.shift_date === sundayBefore) prevShiftSeed.set(h.user_id, "open");
     }
   }
-  for (const s of sortedFT) {
-    if (restDayOf.has(s.id)) continue;
-    const day = restSlots.length
-      ? [...restSlots].sort((a, b) => (restCount.get(a) ?? 0) - (restCount.get(b) ?? 0))[0]
-      : 1;
-    restDayOf.set(s.id, day);
-    restCount.set(day, (restCount.get(day) ?? 0) + 1);
+
+  // Target rest-count per open day.
+  const restTarget = new Map<number, number>(openDaysList.map((d) => [d, 0]));
+  const spread = openDaysList.reduce((s, d) => s + (maxItems - dayItems(d)), 0);
+  if (spread <= 0 || N === 0) {
+    // No usable demand signal → even round-robin (prior behaviour).
+    openDaysList.forEach((d, i) => restTarget.set(d, Math.floor(N / D) + (i < N % D ? 1 : 0)));
+  } else {
+    // Rest weight ∝ how far BELOW the busiest day each day sits, plus a small
+    // smoothing so even a peak day can take the odd rest.
+    const smooth = maxItems * 0.1;
+    const weight = (d: number) => maxItems - dayItems(d) + smooth;
+    const wsum = openDaysList.reduce((s, d) => s + weight(d), 0);
+    const share = openDaysList.map((d) => ({ d, v: (N * weight(d)) / wsum }));
+    let placed = 0;
+    for (const x of share) {
+      const r = Math.min(restCap, Math.floor(x.v));
+      restTarget.set(x.d, r);
+      placed += r;
+    }
+    // Largest-remainder: hand out the leftover rests, quietest day first.
+    share.sort((a, b) => b.v - Math.floor(b.v) - (a.v - Math.floor(a.v)) || dayItems(a.d) - dayItems(b.d));
+    let leftover = N - placed;
+    for (let pass = 0; pass < 3 && leftover > 0; pass++) {
+      for (const x of share) {
+        if (leftover <= 0) break;
+        if ((restTarget.get(x.d) ?? 0) < restCap) {
+          restTarget.set(x.d, (restTarget.get(x.d) ?? 0) + 1);
+          leftover--;
+        }
+      }
+    }
   }
 
+  // Fairness guarantee: if anyone hasn't had a weekend rest in the last 4 weeks,
+  // make sure a weekend rest slot exists to rotate to them — shift one rest from
+  // the busiest weekday onto the quieter weekend day, as long as the weekend
+  // still holds the service floor. Keeps "everyone gets a weekend off sometimes"
+  // true without gutting weekend coverage.
+  const weekendDays = openDaysList.filter((d) => d === 0 || d === 6);
+  const weekdayDays = openDaysList.filter((d) => d !== 0 && d !== 6);
+  const someoneOwedWeekend = sortedFT.some((s) => s.rest_day == null && (weekendRestCount.get(s.id) ?? 0) === 0);
+  const weekendHasSlot = weekendDays.some((d) => (restTarget.get(d) ?? 0) > 0);
+  if (someoneOwedWeekend && !weekendHasSlot && weekendDays.length && weekdayDays.length) {
+    const wknd = [...weekendDays].sort((a, b) => dayItems(a) - dayItems(b))[0];
+    const donor = [...weekdayDays].filter((d) => (restTarget.get(d) ?? 0) > 0).sort((a, b) => dayItems(b) - dayItems(a))[0];
+    if (wknd != null && donor != null && N - ((restTarget.get(wknd) ?? 0) + 1) >= SERVICE_FLOOR) {
+      restTarget.set(wknd, (restTarget.get(wknd) ?? 0) + 1);
+      restTarget.set(donor, (restTarget.get(donor) ?? 0) - 1);
+    }
+  }
+
+  // Assign each FT a rest day. Profile rest_day is a hard constraint — honour it.
+  const restRemaining = new Map(restTarget);
+  const restDayOf = new Map<string, number>();
+  for (const s of sortedFT) {
+    if (s.rest_day != null && daysOpen.has(s.rest_day)) {
+      restDayOf.set(s.id, s.rest_day);
+      restRemaining.set(s.rest_day, (restRemaining.get(s.rest_day) ?? 0) - 1);
+    }
+  }
+  // Weekend rest slots go FIRST to whoever's had the fewest weekend rests
+  // recently — so no one is stuck working every Saturday and Sunday.
+  const wkndByDebt = sortedFT
+    .filter((s) => !restDayOf.has(s.id))
+    .sort((a, b) => (weekendRestCount.get(a.id) ?? 0) - (weekendRestCount.get(b.id) ?? 0));
+  for (const d of [...weekendDays].sort((a, b) => (restRemaining.get(b) ?? 0) - (restRemaining.get(a) ?? 0))) {
+    while ((restRemaining.get(d) ?? 0) > 0) {
+      const person = wkndByDebt.find((s) => !restDayOf.has(s.id));
+      if (!person) break;
+      restDayOf.set(person.id, d);
+      weekendRestCount.set(person.id, (weekendRestCount.get(person.id) ?? 0) + 1);
+      restRemaining.set(d, (restRemaining.get(d) ?? 0) - 1);
+    }
+  }
+  // Everyone else fills the remaining slots, preferring a day they did NOT rest
+  // on last week (variety), then the neediest/quietest day so heads track demand.
+  for (const s of sortedFT) {
+    if (restDayOf.has(s.id)) continue;
+    const lastDow = lastRestByUser.get(s.id)?.dow;
+    const day =
+      openDaysList
+        .filter((d) => (restRemaining.get(d) ?? 0) > 0)
+        .sort(
+          (a, b) =>
+            (a === lastDow ? 1 : 0) - (b === lastDow ? 1 : 0) ||
+            (restRemaining.get(b) ?? 0) - (restRemaining.get(a) ?? 0) ||
+            dayItems(a) - dayItems(b),
+        )[0] ??
+      openDaysList[0] ??
+      1;
+    restDayOf.set(s.id, day);
+    restRemaining.set(day, (restRemaining.get(day) ?? 0) - 1);
+  }
+  // Surface the resulting FT working-heads-per-day vs demand for QA.
+  const DOW_LABEL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  notes.push(
+    "FT working heads/day (demand-balanced): " +
+      openDaysList
+        .map((d) => `${DOW_LABEL[d]} ${N - (restTarget.get(d) ?? 0)}h-crew/${Math.round(dayItems(d))}it`)
+        .join(", "),
+  );
+
+  // Fatigue + shift-fairness memory across the week. weekOpen/weekClose balance
+  // the unsociable anchors evenly WITHIN the week; recentOpen/recentClose break
+  // ties by long-run load; prevDayShift enforces no close→open (clopening),
+  // seeded from last Sunday's shift so the week boundary is covered too.
   const ftHours = new Map<string, number>();
+  const weekOpen = new Map<string, number>();
+  const weekClose = new Map<string, number>();
+  const prevDayShift = new Map<string, "open" | "close" | "mid" | "off">(prevShiftSeed);
+  const closeKey = (s: Staff) => (weekClose.get(s.id) ?? 0) * 1000 + (recentClose.get(s.id) ?? 0);
+  const openKey = (s: Staff) => (weekOpen.get(s.id) ?? 0) * 1000 + (recentOpen.get(s.id) ?? 0);
+  const closedYesterday = (s: Staff) => prevDayShift.get(s.id) === "close";
   for (const date of dates) {
     if (!daysOpen.has(dow(date))) continue;
-    const working = sortedFT.filter((s) => restDayOf.get(s.id) !== dow(date) && !onLeave.has(`${s.id}:${date}`));
+    const working = sortedFT.filter(
+      (s) => restDayOf.get(s.id) !== dow(date) && !onLeave.has(`${s.id}:${date}`) && !bookedElsewhere.get(s.id)?.has(date),
+    );
     const resting = sortedFT.filter((s) => restDayOf.get(s.id) === dow(date) && !onLeave.has(`${s.id}:${date}`));
 
-    // Split the day's crew: kitchen (BOH) spread first so both anchor shifts
-    // keep a kitchen hand, then FOH balances the count. Ties go to CLOSING —
-    // the close needs the supervision/cash-up head, and an extra opener does
-    // nothing for the evening floor. Once both anchors hold the service
-    // floor (3+3), any surplus works a MIDDLE instead of overstaffing the
-    // open — the workbook's mid-shift pattern.
+    // Split the day's crew into opening / closing / middle with two rules layered
+    // on the workbook pattern (kitchen on both anchors, surplus to middles):
+    //  • FATIGUE: never OPEN someone who CLOSED the night before (clopening).
+    //  • FAIRNESS: the unsociable anchors rotate — the person who has CLOSED
+    //    least (this week, then long-run) takes the close; likewise for opening
+    //    — so late nights and early starts are shared, not dumped on the same few.
     const boh = working.filter((s) => isBOH(s.position));
-    const foh = working.filter((s) => !isBOH(s.position));
     const opening: Staff[] = [];
     const closing: Staff[] = [];
     const middleCrew: Staff[] = [];
-    boh.forEach((s, i) => (i % 2 === 0 ? closing : opening).push(s));
-    for (const s of foh) {
-      if (
-        tpl.middles.length > 0 &&
-        opening.length >= SERVICE_FLOOR &&
-        closing.length >= SERVICE_FLOOR
-      ) {
-        middleCrew.push(s);
-      } else if (closing.length <= opening.length) {
-        closing.push(s);
-      } else {
-        opening.push(s);
-      }
+    const claimed = new Set<string>();
+    const take = (arr: Staff[], s: Staff) => { arr.push(s); claimed.add(s.id); };
+
+    // Kitchen must staff both anchors: least-recent closer closes; least-recent
+    // opener (that didn't close last night) opens.
+    const bohClose = [...boh].sort((a, b) => closeKey(a) - closeKey(b))[0];
+    if (bohClose) take(closing, bohClose);
+    const bohOpen =
+      [...boh].filter((s) => !claimed.has(s.id) && !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))[0] ??
+      [...boh].filter((s) => !claimed.has(s.id)).sort((a, b) => openKey(a) - openKey(b))[0];
+    if (bohOpen) take(opening, bohOpen);
+
+    // Bring CLOSING to the service floor: fewest closings first.
+    for (const s of [...working].filter((s) => !claimed.has(s.id)).sort((a, b) => closeKey(a) - closeKey(b))) {
+      if (closing.length >= SERVICE_FLOOR) break;
+      take(closing, s);
     }
+    // Bring OPENING to the service floor: exclude clopeners, fewest openings first.
+    for (const s of [...working].filter((s) => !claimed.has(s.id) && !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))) {
+      if (opening.length >= SERVICE_FLOOR) break;
+      take(opening, s);
+    }
+    // Remainder → a MIDDLE if the outlet has them and both anchors hold the
+    // floor; otherwise balance the thinner anchor (a clopener always closes).
+    for (const s of working) {
+      if (claimed.has(s.id)) continue;
+      if (tpl.middles.length > 0 && opening.length >= SERVICE_FLOOR && closing.length >= SERVICE_FLOOR) take(middleCrew, s);
+      else if (closing.length <= opening.length || closedYesterday(s)) take(closing, s);
+      else take(opening, s);
+    }
+
+    // Record the day's assignments into the fatigue/fairness memory.
+    for (const s of opening) { weekOpen.set(s.id, (weekOpen.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "open"); }
+    for (const s of closing) { weekClose.set(s.id, (weekClose.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "close"); }
+    for (const s of middleCrew) prevDayShift.set(s.id, "mid");
 
     const dayGroups: Array<[Staff[], ShiftTemplate]> = [
       [opening, tpl.opening],
@@ -368,6 +677,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         break_minutes: 0,
         notes: "rest_day",
       });
+      prevDayShift.set(s.id, "off"); // a rest day clears the clopening guard
     }
   }
   const under45 = sortedFT.filter((s) => (ftHours.get(s.id) ?? 0) < 40);
@@ -375,9 +685,11 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     notes.push(`⚠ under 45h/wk (leave or closed days): ${under45.map((s) => `${s.name} ${Math.round(ftHours.get(s.id) ?? 0)}h`).join(", ")}`);
   }
 
-  // Rover placement: 2 days each at this outlet, on the days with the
-  // thinnest FT crew, skipping days they're already rostered at another
-  // outlet this week (their full week is 2 days × 3 outlets).
+  // Rover placement: 2 days each at this outlet, on the BUSIEST days (highest
+  // item demand) so the extra hands land where the load is — skipping days
+  // they're already rostered at another outlet this week (their full week is
+  // 2 days × 3 outlets). Previously they filled the thinnest-FT-crew days,
+  // which pushed them onto quiet midweek and starved the weekend.
   if (roverUsers.length > 0) {
     const { data: elsewhere } = await hrSupabaseAdmin
       .from("hr_schedule_shifts")
@@ -389,11 +701,10 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         .filter((s) => s.schedule_id !== existing?.id)
         .map((s) => `${s.user_id}:${s.shift_date}`),
     );
-    const ftHeads = (date: string) => rows.filter((r) => r.shift_date === date && r.notes !== "rest_day").length;
     for (const rover of roverUsers) {
       const days = dates
         .filter((d) => daysOpen.has(dow(d)) && !busy.has(`${rover.id}:${d}`) && !onLeave.has(`${rover.id}:${d}`))
-        .sort((a, b) => ftHeads(a) - ftHeads(b))
+        .sort((a, b) => dayItems(dow(b)) - dayItems(dow(a))) // busiest day first
         .slice(0, 2);
       for (const date of days) {
         // Lead joins whichever anchor shift is thinner that day.
@@ -429,6 +740,36 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       `FT (fixed) RM${ftCost.toLocaleString()} + rover RM${ROVER_SHARE_WEEKLY} → PT envelope RM${ptBudget.toLocaleString()}`,
   );
 
+  // PT top-up target per day: after the FT + rover base is laid, how many
+  // man-hours each open day is still SHORT of its required coverage. Weekends
+  // carry the biggest shortfall (more items → higher required), so they draw
+  // the most PT suggestions. Bounded below by the RM envelope + PT caps, so it
+  // serves coverage without breaking the cost target.
+  const reqByDate = new Map(manHours.map((m) => [m.date, m.requiredHours]));
+  const baseHoursByDate = new Map<string, number>();
+  for (const r of rows) {
+    if (r.notes === "rest_day") continue;
+    const mins =
+      Number(r.end_time.slice(0, 2)) * 60 + Number(r.end_time.slice(3, 5)) -
+      Number(r.start_time.slice(0, 2)) * 60 - Number(r.start_time.slice(3, 5)) - r.break_minutes;
+    if (mins > 0) baseHoursByDate.set(r.shift_date, (baseHoursByDate.get(r.shift_date) ?? 0) + mins / 60);
+  }
+  const ptTargetByDate = new Map<string, number>();
+  for (const d of dates) {
+    if (!daysOpen.has(dow(d))) continue;
+    ptTargetByDate.set(d, Math.max(0, (reqByDate.get(d) ?? 0) - (baseHoursByDate.get(d) ?? 0)));
+  }
+  const ptTargetTotal = Math.round([...ptTargetByDate.values()].reduce((s, v) => s + v, 0));
+  if (ptTargetTotal > 0) {
+    const weekendShort = dates
+      .filter((d) => [0, 6].includes(dow(d)) && (ptTargetByDate.get(d) ?? 0) > 0)
+      .map((d) => `${d} +${Math.round(ptTargetByDate.get(d) ?? 0)}h`);
+    notes.push(
+      `PT top-up target: ${ptTargetTotal}h across the week to reach required coverage after FT` +
+        (weekendShort.length ? ` (weekend: ${weekendShort.join(", ")})` : ""),
+    );
+  }
+
   // Demand gaps: hourly sales (trailing 28 days, per day-of-week) → staff
   // needed per hour vs FT heads on the floor. Positive gap-hours ranked.
   // (hourly demand computed above, before the FT skeleton)
@@ -460,7 +801,12 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       if (gapHours > 0) gaps.push({ date, template: t, slot, gapHours });
     }
   }
-  gaps.sort((a, b) => b.gapHours - a.gapHours);
+  // Days furthest below their man-hour target fill first (weekends float up),
+  // then by hourly gap size within a day.
+  gaps.sort(
+    (a, b) =>
+      (ptTargetByDate.get(b.date) ?? 0) - (ptTargetByDate.get(a.date) ?? 0) || b.gapHours - a.gapHours,
+  );
 
   // Fairness input: confirmed PT hours over the last 4 weeks.
   const { data: recentPt } = await hrSupabaseAdmin
@@ -522,13 +868,27 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   const ptRows: ShiftRow[] = [];
   const ptSpend = { rm: 0 };
   const ptWeek = new Map<string, { hours: number; days: Set<string> }>();
+  const ptHoursByDate = new Map<string, number>(); // PT man-hours suggested per day so far
+  // Seed each PT's weekly tally from the hours/days they already hold at OTHER
+  // outlets this week, so the 24h / 5-day caps below bind on the COMBINED total
+  // — a two-outlet PT can't be suggested to 48h.
+  for (const person of eligiblePt) {
+    const daysElsewhere = bookedElsewhere.get(person.id);
+    if (daysElsewhere?.size || hoursElsewhere.get(person.id)) {
+      ptWeek.set(person.id, { hours: hoursElsewhere.get(person.id) ?? 0, days: new Set(daysElsewhere ?? []) });
+    }
+  }
   const suggestionLines: string[] = [];
   for (const p of proposals) {
     const person = eligiblePt.find((x) => x.id === p.user_id);
     const t = slotByName.get(p.slot);
     if (!person || !t || !dates.includes(p.date)) continue;
     if (onLeave.has(`${person.id}:${p.date}`)) continue;
+    if (bookedElsewhere.get(person.id)?.has(p.date)) continue; // already working another outlet that day
     if (ptRows.some((r) => r.user_id === person.id && r.shift_date === p.date)) continue; // one shift/day
+    // Man-hour cap: stop once the day reaches its PT top-up target. Days the FT
+    // base already covers (target 0) get no PT — coverage sized, not padded.
+    if ((ptHoursByDate.get(p.date) ?? 0) >= (ptTargetByDate.get(p.date) ?? 0)) continue;
     const h = workingHours(t);
     const cost = h * person.hourly_rate!;
     if (ptSpend.rm + cost > ptBudget) continue;
@@ -538,6 +898,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     wk.days.add(p.date);
     ptWeek.set(person.id, wk);
     ptSpend.rm += cost;
+    ptHoursByDate.set(p.date, (ptHoursByDate.get(p.date) ?? 0) + h);
     ptRows.push({
       user_id: person.id,
       shift_date: p.date,
@@ -616,6 +977,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     totalHours,
     estimatedCost,
     notes,
+    manHours,
   };
 }
 
