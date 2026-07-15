@@ -4,6 +4,7 @@ import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews, replyToReview } from "@/lib/reviews/gbp";
 import { generateReply, extractImprovement, POSITIVE_THRESHOLD } from "@/lib/reviews/auto-reply";
+import { logAgentAction, touchAgentRun } from "@/lib/agents/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -47,6 +48,8 @@ export async function GET(req: NextRequest) {
     const user = await getUserFromHeaders(req.headers);
     if (!user) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
   }
+
+  await touchAgentRun("reviews_auto_reply");
 
   const outlets = await prisma.outlet.findMany({
     where: { status: "ACTIVE" },
@@ -103,6 +106,15 @@ export async function GET(req: NextRequest) {
             reply,
           );
           posted++;
+          await logAgentAction({
+            agentKey: "reviews_auto_reply",
+            kind: "reply_posted",
+            summary: `Replied to ${review.rating}-star review by ${review.reviewer.name} at ${outlet.name}`,
+            refTable: "gbp_review",
+            refId: review.id,
+            outletId: outlet.id,
+            model: "claude-sonnet-4-6",
+          });
 
           // Happy-but-fixable: read the praise for a concrete point and flag it
           // for the ops review-nudge. Isolated — a classifier slip never fails

@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { postBankLinesToGl } from "@/lib/finance/gl-posting";
 import { checkCronAuth } from "@celsius/shared";
+import { getAgentModeOrDefault, touchAgentRun } from "@/lib/agents/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -16,6 +17,14 @@ const PER_RUN_LINE_CAP = 4000; // oldest-first; keeps one run well inside maxDur
 export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
+
+  // Registry kill switch (/agents). Fail-open to armed — only an explicit
+  // mode=off stops posting; a missing row or DB blip never does.
+  await touchAgentRun("finance_gl_post");
+  const mode = await getAgentModeOrDefault("finance_gl_post", "armed");
+  if (mode === "off") {
+    return NextResponse.json({ skipped: true, reason: "agent_registry mode=off" });
+  }
   try {
     const res = await postBankLinesToGl({ commit: true, limit: PER_RUN_LINE_CAP });
     return NextResponse.json({

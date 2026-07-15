@@ -12,6 +12,7 @@
 
 import {
   ShoppingBag,
+  Bot,
   Box,
   Boxes,
   Gift,
@@ -456,6 +457,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         label: "System",
         items: [
+          { label: "AI Agents",    href: "/agents",                icon: <Bot className={ICON_SIZE} />,            moduleKey: "settings:system" },
           { label: "Stock Count",  href: "/settings/stock-count",  icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
           // SOP taxonomy CRUD — setup-grade, so it lives with the other
           // configuration (moved out of the Ops section, 2026-07-11).
