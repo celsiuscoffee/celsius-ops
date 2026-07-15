@@ -67,6 +67,11 @@ export type LabourGateResult = {
   weekStart: string;
   forecastRevenue: number;
   rosterCost: number;
+  // Cost split — FT salaries + rover are SUNK (fixed regardless of the grid);
+  // PT is the only spend the roster actually moves. Benching FT never lowers
+  // ftFixedCost, so it can't lower the %: the discretionary lever is PT + revenue.
+  ftFixedCost: number;
+  ptCost: number;
   rosterHours: number;
   pct: number | null; // null when forecast is 0
   targetPct: number;

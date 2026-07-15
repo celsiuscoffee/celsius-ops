@@ -77,6 +77,8 @@ type GridData = {
 type LabourGateInfo = {
   forecastRevenue: number;
   rosterCost: number;
+  ftFixedCost: number;
+  ptCost: number;
   rosterHours: number;
   pct: number | null;
   targetPct: number;
@@ -674,6 +676,13 @@ export default function SchedulesPage() {
             }`}
             title={[
               `Roster RM${gate.rosterCost.toLocaleString()} vs forecast RM${gate.forecastRevenue.toLocaleString()}`,
+              gate.forecastRevenue > 0
+                ? `  • FT floor RM${gate.ftFixedCost.toLocaleString()} (fixed/sunk) = ${((gate.ftFixedCost / gate.forecastRevenue) * 100).toFixed(1)}%`
+                : `  • FT floor RM${gate.ftFixedCost.toLocaleString()} (fixed/sunk)`,
+              gate.forecastRevenue > 0
+                ? `  • PT RM${gate.ptCost.toLocaleString()} (discretionary) = ${((gate.ptCost / gate.forecastRevenue) * 100).toFixed(1)}%`
+                : `  • PT RM${gate.ptCost.toLocaleString()} (discretionary)`,
+              `Only PT + revenue move the %; benching FT is fixed cost, so it saves nothing.`,
               `Budget ${(gate.targetPct * 100).toFixed(0)}% target / ${(gate.ceilingPct * 100).toFixed(0)}% ceiling`,
               ...gate.blockers,
               ...gate.warnings,

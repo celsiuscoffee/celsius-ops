@@ -72,6 +72,22 @@ Both the labour-gate % and the man-hours "affordable" side read one forecast
   weekday-vs-weekend split. It's a coverage lens, not the billed figure — FT
   salary is a weekly fixed cost, so only the weekly % is the real number.
 
+## FT is sunk — schedule them fully, never bench to cut cost
+
+Labour % = roster cost ÷ forecast, and roster cost splits into a **fixed** part
+(FT salaries + rover — booked whether or not they're on the grid) and a
+**discretionary** part (PT hours, the only spend the roster moves). Consequences
+the tool now makes explicit:
+
+- The gate returns `ftFixedCost` + `ptCost`; the labour chip tooltip shows the
+  split (`FT floor X% fixed + PT Y%`), so it's clear that **benching an FT saves
+  nothing** — it only loses coverage. It flags a **warning** when a primary FT is
+  scheduled well below their 6-day capacity (net of leave): idle paid capacity.
+- When the FT floor alone is already ≥ target (PT envelope = RM0), the generator
+  notes the week is **revenue-constrained** — a revenue/FT-deployment problem,
+  not a rostering one; the fix is more revenue or lending an idle FT to a busier
+  outlet, never trimming FT hours.
+
 ## Required man-hours
 
 `required man-hours/day = Σ heads over the open hours` (captures peaks, not a

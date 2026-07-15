@@ -161,7 +161,7 @@ export async function dailyRevenueSeries(
 export async function gateSchedule(outletId: string, weekStart: string): Promise<LabourGateResult> {
   const outlet = await prisma.outlet.findUnique({
     where: { id: outletId },
-    select: { id: true, code: true, name: true, loyaltyOutletId: true },
+    select: { id: true, code: true, name: true, loyaltyOutletId: true, daysOpen: true },
   });
   if (!outlet) throw new Error(`Outlet ${outletId} not found`);
 
@@ -254,7 +254,52 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     if (!r.hourly_rate || r.hourly_rate <= 0) return sum;
     return sum + shiftHours(r.start_time, r.end_time) * r.hourly_rate;
   }, 0);
-  const rosterCost = Math.round(ftWeekly + ptCost + ROVER_SHARE_WEEKLY);
+  const ftFixedCost = Math.round(ftWeekly + ROVER_SHARE_WEEKLY);
+  const rosterCost = Math.round(ftFixedCost + ptCost);
+
+  // Idle sunk-FT capacity: a primary FT is paid their full week regardless of the
+  // roster, so an under-scheduled FT is wasted cost, not a saving — benching them
+  // never lowers ftFixedCost. Flag any primary FT scheduled well below their
+  // 6-day capacity (net of approved leave) so "cut FT hours to hit the %" is seen
+  // for the false economy it is.
+  const openDayCount = outlet.daysOpen?.length ? new Set(outlet.daysOpen.map((d) => d % 7)).size : 7;
+  const expectedDays = Math.min(6, openDayCount);
+  if (outletFtIds.size > 0) {
+    const ftDays = new Map<string, Set<string>>();
+    for (const r of rows) {
+      if (!outletFtIds.has(r.user_id) || shiftHours(r.start_time, r.end_time) <= 0) continue;
+      (ftDays.get(r.user_id) ?? ftDays.set(r.user_id, new Set()).get(r.user_id)!).add(r.shift_date);
+    }
+    const weekEnd = addDays(weekStart, 6);
+    const [{ data: ftLeaveRows }, ftUsers] = await Promise.all([
+      hrSupabaseAdmin
+        .from("hr_leave_requests")
+        .select("user_id, start_date, end_date")
+        .in("status", ["approved", "ai_approved"])
+        .in("user_id", [...outletFtIds])
+        .lte("start_date", weekEnd)
+        .gte("end_date", weekStart),
+      prisma.user.findMany({ where: { id: { in: [...outletFtIds] } }, select: { id: true, name: true } }),
+    ]);
+    const leaveDays = new Map<string, number>();
+    for (const l of (ftLeaveRows ?? []) as Array<{ user_id: string; start_date: string; end_date: string }>) {
+      let n = 0;
+      for (let i = 0; i < 7; i++) { const d = addDays(weekStart, i); if (d >= l.start_date && d <= l.end_date) n++; }
+      if (n > 0) leaveDays.set(l.user_id, Math.max(leaveDays.get(l.user_id) ?? 0, n));
+    }
+    const ftName = new Map(ftUsers.map((u) => [u.id, u.name]));
+    for (const uid of outletFtIds) {
+      const worked = ftDays.get(uid)?.size ?? 0;
+      const target = Math.max(0, expectedDays - (leaveDays.get(uid) ?? 0));
+      const idle = target - worked;
+      if (idle >= 2) {
+        warnings.push(
+          `Idle FT capacity: ${ftName.get(uid) ?? uid.slice(0, 8)} scheduled ${worked}/${target} days — ${idle} paid days unused. FT salary is fixed; benching doesn't cut cost, only wastes coverage.`,
+        );
+      }
+    }
+  }
+
   const weekForecast = await forecastWeek(outlet, weekStart);
   const forecastRevenue = Math.round(weekForecast.weekly);
   const pct = forecastRevenue > 0 ? rosterCost / forecastRevenue : null;
@@ -318,6 +363,8 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     weekStart,
     forecastRevenue,
     rosterCost,
+    ftFixedCost,
+    ptCost: Math.round(ptCost),
     rosterHours: Math.round(hours),
     pct,
     targetPct: budget.target,

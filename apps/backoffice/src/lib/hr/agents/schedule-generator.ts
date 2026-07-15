@@ -779,6 +779,17 @@ export async function generateSchedule(
     `Budget: forecast RM${forecast.toLocaleString()} × ${(budget.target * 100).toFixed(0)}% = RM${Math.round(budget.target * forecast).toLocaleString()}; ` +
       `FT (fixed) RM${ftCost.toLocaleString()} + rover RM${ROVER_SHARE_WEEKLY} → PT envelope RM${ptBudget.toLocaleString()}`,
   );
+  // Sunk-FT reality: when the fixed FT floor alone is already at/over target, the
+  // week is revenue-constrained — no amount of rostering fixes it, and benching
+  // FT saves nothing (their salary is booked either way). Flag it so the % isn't
+  // "corrected" by cutting FT hours.
+  const ftFloorPct = forecast > 0 ? (ftCost + ROVER_SHARE_WEEKLY) / forecast : null;
+  if (ptBudget === 0 && ftFloorPct != null) {
+    notes.push(
+      `⚠ FT floor alone is ${(ftFloorPct * 100).toFixed(1)}% of forecast (≥ ${(budget.target * 100).toFixed(0)}% target) — revenue-constrained week. ` +
+        `FT salary is sunk, so schedule them FULLY (benching cuts coverage, not cost); the levers are revenue or lending an FT to a busier outlet.`,
+    );
+  }
 
   // PT top-up target per day: after the FT + rover base is laid, how many
   // man-hours each open day is still SHORT of its required coverage. Weekends
