@@ -395,6 +395,44 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
   const maxItems = openDaysList.length ? Math.max(...openDaysList.map(dayItems)) : 0;
   const restCap = Math.max(0, N - SERVICE_FLOOR); // never rest a day below the service floor
 
+  // ── Fairness memory: each FT's recent history (last 4 weeks) ─────────
+  // Drives long-run fairness so it isn't reset every week: openings & closings
+  // continue balancing from how much each person has recently carried; weekend
+  // rests rotate to whoever's had the fewest; rest days avoid repeating last
+  // week's day; and a Sunday close seeds Monday's clopening guard.
+  const ftIds = sortedFT.map((s) => s.id);
+  const sundayBefore = addDaysStr(weekStart, -1);
+  const { data: histShifts } = ftIds.length
+    ? await hrSupabaseAdmin
+        .from("hr_schedule_shifts")
+        .select("user_id, shift_date, role_type, notes, hr_schedules!inner(week_start)")
+        .in("user_id", ftIds)
+        .gte("hr_schedules.week_start", addDaysStr(weekStart, -28))
+        .lt("hr_schedules.week_start", weekStart)
+    : { data: [] as unknown[] };
+  type HistRow = { user_id: string; shift_date: string; role_type: string | null; notes: string | null; hr_schedules: { week_start: string } | { week_start: string }[] };
+  const recentClose = new Map<string, number>();
+  const recentOpen = new Map<string, number>();
+  const weekendRestCount = new Map<string, number>();
+  const lastRestByUser = new Map<string, { week: string; dow: number }>();
+  const prevShiftSeed = new Map<string, "open" | "close" | "mid" | "off">();
+  for (const h of (histShifts ?? []) as unknown as HistRow[]) {
+    const role = (h.role_type ?? "").toLowerCase();
+    const wd = new Date(h.shift_date + "T00:00:00Z").getUTCDay();
+    const wk = Array.isArray(h.hr_schedules) ? h.hr_schedules[0]?.week_start : h.hr_schedules?.week_start;
+    if (h.notes === "rest_day" || role.includes("rest")) {
+      if (wd === 0 || wd === 6) weekendRestCount.set(h.user_id, (weekendRestCount.get(h.user_id) ?? 0) + 1);
+      const prev = lastRestByUser.get(h.user_id);
+      if (wk && (!prev || wk > prev.week)) lastRestByUser.set(h.user_id, { week: wk, dow: wd });
+    } else if (role.includes("clos")) {
+      recentClose.set(h.user_id, (recentClose.get(h.user_id) ?? 0) + 1);
+      if (h.shift_date === sundayBefore) prevShiftSeed.set(h.user_id, "close");
+    } else if (role.includes("open")) {
+      recentOpen.set(h.user_id, (recentOpen.get(h.user_id) ?? 0) + 1);
+      if (h.shift_date === sundayBefore) prevShiftSeed.set(h.user_id, "open");
+    }
+  }
+
   // Target rest-count per open day.
   const restTarget = new Map<number, number>(openDaysList.map((d) => [d, 0]));
   const spread = openDaysList.reduce((s, d) => s + (maxItems - dayItems(d)), 0);
@@ -428,9 +466,25 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     }
   }
 
-  // Assign each FT a rest day. Profile rest_day is a hard constraint
-  // (contract/availability) — honour it; everyone else fills the days still
-  // short of their rest target, quietest first, so working heads track demand.
+  // Fairness guarantee: if anyone hasn't had a weekend rest in the last 4 weeks,
+  // make sure a weekend rest slot exists to rotate to them — shift one rest from
+  // the busiest weekday onto the quieter weekend day, as long as the weekend
+  // still holds the service floor. Keeps "everyone gets a weekend off sometimes"
+  // true without gutting weekend coverage.
+  const weekendDays = openDaysList.filter((d) => d === 0 || d === 6);
+  const weekdayDays = openDaysList.filter((d) => d !== 0 && d !== 6);
+  const someoneOwedWeekend = sortedFT.some((s) => s.rest_day == null && (weekendRestCount.get(s.id) ?? 0) === 0);
+  const weekendHasSlot = weekendDays.some((d) => (restTarget.get(d) ?? 0) > 0);
+  if (someoneOwedWeekend && !weekendHasSlot && weekendDays.length && weekdayDays.length) {
+    const wknd = [...weekendDays].sort((a, b) => dayItems(a) - dayItems(b))[0];
+    const donor = [...weekdayDays].filter((d) => (restTarget.get(d) ?? 0) > 0).sort((a, b) => dayItems(b) - dayItems(a))[0];
+    if (wknd != null && donor != null && N - ((restTarget.get(wknd) ?? 0) + 1) >= SERVICE_FLOOR) {
+      restTarget.set(wknd, (restTarget.get(wknd) ?? 0) + 1);
+      restTarget.set(donor, (restTarget.get(donor) ?? 0) - 1);
+    }
+  }
+
+  // Assign each FT a rest day. Profile rest_day is a hard constraint — honour it.
   const restRemaining = new Map(restTarget);
   const restDayOf = new Map<string, number>();
   for (const s of sortedFT) {
@@ -439,12 +493,36 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
       restRemaining.set(s.rest_day, (restRemaining.get(s.rest_day) ?? 0) - 1);
     }
   }
+  // Weekend rest slots go FIRST to whoever's had the fewest weekend rests
+  // recently — so no one is stuck working every Saturday and Sunday.
+  const wkndByDebt = sortedFT
+    .filter((s) => !restDayOf.has(s.id))
+    .sort((a, b) => (weekendRestCount.get(a.id) ?? 0) - (weekendRestCount.get(b.id) ?? 0));
+  for (const d of [...weekendDays].sort((a, b) => (restRemaining.get(b) ?? 0) - (restRemaining.get(a) ?? 0))) {
+    while ((restRemaining.get(d) ?? 0) > 0) {
+      const person = wkndByDebt.find((s) => !restDayOf.has(s.id));
+      if (!person) break;
+      restDayOf.set(person.id, d);
+      weekendRestCount.set(person.id, (weekendRestCount.get(person.id) ?? 0) + 1);
+      restRemaining.set(d, (restRemaining.get(d) ?? 0) - 1);
+    }
+  }
+  // Everyone else fills the remaining slots, preferring a day they did NOT rest
+  // on last week (variety), then the neediest/quietest day so heads track demand.
   for (const s of sortedFT) {
     if (restDayOf.has(s.id)) continue;
+    const lastDow = lastRestByUser.get(s.id)?.dow;
     const day =
-      [...openDaysList].sort(
-        (a, b) => (restRemaining.get(b) ?? 0) - (restRemaining.get(a) ?? 0) || dayItems(a) - dayItems(b),
-      )[0] ?? openDaysList[0] ?? 1;
+      openDaysList
+        .filter((d) => (restRemaining.get(d) ?? 0) > 0)
+        .sort(
+          (a, b) =>
+            (a === lastDow ? 1 : 0) - (b === lastDow ? 1 : 0) ||
+            (restRemaining.get(b) ?? 0) - (restRemaining.get(a) ?? 0) ||
+            dayItems(a) - dayItems(b),
+        )[0] ??
+      openDaysList[0] ??
+      1;
     restDayOf.set(s.id, day);
     restRemaining.set(day, (restRemaining.get(day) ?? 0) - 1);
   }
@@ -457,7 +535,17 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         .join(", "),
   );
 
+  // Fatigue + shift-fairness memory across the week. weekOpen/weekClose balance
+  // the unsociable anchors evenly WITHIN the week; recentOpen/recentClose break
+  // ties by long-run load; prevDayShift enforces no close→open (clopening),
+  // seeded from last Sunday's shift so the week boundary is covered too.
   const ftHours = new Map<string, number>();
+  const weekOpen = new Map<string, number>();
+  const weekClose = new Map<string, number>();
+  const prevDayShift = new Map<string, "open" | "close" | "mid" | "off">(prevShiftSeed);
+  const closeKey = (s: Staff) => (weekClose.get(s.id) ?? 0) * 1000 + (recentClose.get(s.id) ?? 0);
+  const openKey = (s: Staff) => (weekOpen.get(s.id) ?? 0) * 1000 + (recentOpen.get(s.id) ?? 0);
+  const closedYesterday = (s: Staff) => prevDayShift.get(s.id) === "close";
   for (const date of dates) {
     if (!daysOpen.has(dow(date))) continue;
     const working = sortedFT.filter(
@@ -465,31 +553,51 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
     );
     const resting = sortedFT.filter((s) => restDayOf.get(s.id) === dow(date) && !onLeave.has(`${s.id}:${date}`));
 
-    // Split the day's crew: kitchen (BOH) spread first so both anchor shifts
-    // keep a kitchen hand, then FOH balances the count. Ties go to CLOSING —
-    // the close needs the supervision/cash-up head, and an extra opener does
-    // nothing for the evening floor. Once both anchors hold the service
-    // floor (3+3), any surplus works a MIDDLE instead of overstaffing the
-    // open — the workbook's mid-shift pattern.
+    // Split the day's crew into opening / closing / middle with two rules layered
+    // on the workbook pattern (kitchen on both anchors, surplus to middles):
+    //  • FATIGUE: never OPEN someone who CLOSED the night before (clopening).
+    //  • FAIRNESS: the unsociable anchors rotate — the person who has CLOSED
+    //    least (this week, then long-run) takes the close; likewise for opening
+    //    — so late nights and early starts are shared, not dumped on the same few.
     const boh = working.filter((s) => isBOH(s.position));
-    const foh = working.filter((s) => !isBOH(s.position));
     const opening: Staff[] = [];
     const closing: Staff[] = [];
     const middleCrew: Staff[] = [];
-    boh.forEach((s, i) => (i % 2 === 0 ? closing : opening).push(s));
-    for (const s of foh) {
-      if (
-        tpl.middles.length > 0 &&
-        opening.length >= SERVICE_FLOOR &&
-        closing.length >= SERVICE_FLOOR
-      ) {
-        middleCrew.push(s);
-      } else if (closing.length <= opening.length) {
-        closing.push(s);
-      } else {
-        opening.push(s);
-      }
+    const claimed = new Set<string>();
+    const take = (arr: Staff[], s: Staff) => { arr.push(s); claimed.add(s.id); };
+
+    // Kitchen must staff both anchors: least-recent closer closes; least-recent
+    // opener (that didn't close last night) opens.
+    const bohClose = [...boh].sort((a, b) => closeKey(a) - closeKey(b))[0];
+    if (bohClose) take(closing, bohClose);
+    const bohOpen =
+      [...boh].filter((s) => !claimed.has(s.id) && !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))[0] ??
+      [...boh].filter((s) => !claimed.has(s.id)).sort((a, b) => openKey(a) - openKey(b))[0];
+    if (bohOpen) take(opening, bohOpen);
+
+    // Bring CLOSING to the service floor: fewest closings first.
+    for (const s of [...working].filter((s) => !claimed.has(s.id)).sort((a, b) => closeKey(a) - closeKey(b))) {
+      if (closing.length >= SERVICE_FLOOR) break;
+      take(closing, s);
     }
+    // Bring OPENING to the service floor: exclude clopeners, fewest openings first.
+    for (const s of [...working].filter((s) => !claimed.has(s.id) && !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))) {
+      if (opening.length >= SERVICE_FLOOR) break;
+      take(opening, s);
+    }
+    // Remainder → a MIDDLE if the outlet has them and both anchors hold the
+    // floor; otherwise balance the thinner anchor (a clopener always closes).
+    for (const s of working) {
+      if (claimed.has(s.id)) continue;
+      if (tpl.middles.length > 0 && opening.length >= SERVICE_FLOOR && closing.length >= SERVICE_FLOOR) take(middleCrew, s);
+      else if (closing.length <= opening.length || closedYesterday(s)) take(closing, s);
+      else take(opening, s);
+    }
+
+    // Record the day's assignments into the fatigue/fairness memory.
+    for (const s of opening) { weekOpen.set(s.id, (weekOpen.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "open"); }
+    for (const s of closing) { weekClose.set(s.id, (weekClose.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "close"); }
+    for (const s of middleCrew) prevDayShift.set(s.id, "mid");
 
     const dayGroups: Array<[Staff[], ShiftTemplate]> = [
       [opening, tpl.opening],
@@ -522,6 +630,7 @@ export async function generateSchedule(outletId: string, weekStart: string): Pro
         break_minutes: 0,
         notes: "rest_day",
       });
+      prevDayShift.set(s.id, "off"); // a rest day clears the clopening guard
     }
   }
   const under45 = sortedFT.filter((s) => (ftHours.get(s.id) ?? 0) < 40);
