@@ -2533,7 +2533,7 @@ function CashInByChannelSection({ start, end }: { start: string; end: string }) 
           </tr></tfoot>
         </table>
       </div>
-      <p className="text-[11px] text-muted-foreground">Revenue is what the till/app rang; banked is the classified bank credit for that channel. The gap is the expected fee/commission plus settlement timing (card ~1%, QR ~0.25%, online ~1.5%, Grab ~45% incl. GrabAds, consignment ~30%). Rows flagged <span className="font-medium">Review</span> exceed that band, meaning money rung has not fully arrived (usually a settlement-timing tail on a part-month, worth confirming). Grab is group-level because Conezion and Shah Alam Grab both settle into HQ's account.</p>
+      <p className="text-[11px] text-muted-foreground">Revenue is what the till/app rang; banked is the classified bank credit for that channel. The gap is the expected fee/commission plus settlement timing (card ~1%, QR ~0.25%, online ~2%, Grab ~45% incl. GrabAds, consignment ~30%). Online (Revenue Monster) is matched to the credit by the sales date it settles — the bank line carries that date — so its residual is the true gateway fee, not a timing tail. Rows flagged <span className="font-medium">Review</span> exceed the band, meaning money rung has not fully arrived (worth confirming). Grab is group-level because Conezion and Shah Alam Grab both settle into HQ's account.</p>
     </div>
   );
 }

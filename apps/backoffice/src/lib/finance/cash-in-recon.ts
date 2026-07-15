@@ -32,7 +32,7 @@ const ACCOUNT_SUFFIX: Record<string, string> = {
 const EXPECTED_PCT: Record<string, number> = {
   card: 1.0,        // Maybank / NTT MDR
   qr: 0.25,         // DuitNow
-  online: 1.5,      // Revenue Monster gateway
+  online: 2.0,      // Revenue Monster gateway (measured ~2.0-2.6%)
   grab: 45,         // 33% commission + SST + ~12% GrabAds (both netted at settlement)
   consignment: 30,  // GastroHub commission
 };
@@ -109,6 +109,9 @@ export async function cashInReconByChannel(from: string, to: string): Promise<Ca
   `);
 
   // ── Cash in: classified bank credits per account (→ company) per channel ──
+  // Card/QR/Grab/consignment carry no sales date on the line, so they reconcile
+  // on cash received in the window (bulk) — the gap absorbs a little settlement
+  // timing, hence the buffer below.
   const bank = await prisma.$queryRaw<{ suffix: string; category: string; rm: number }[]>(Prisma.sql`
     SELECT substring(s."accountName" from '\\((\\d{4})\\)') AS suffix,
            l.category::text AS category,
@@ -116,7 +119,7 @@ export async function cashInReconByChannel(from: string, to: string): Promise<Ca
     FROM "BankStatementLine" l
     JOIN "BankStatement" s ON s.id = l."statementId"
     WHERE l.direction='CR' AND l."isInterCo"=false
-      AND l.category::text IN ('CARD','QR','REVENUE_MONSTER','GRAB','GRAB_PUTRAJAYA','GASTROHUB')
+      AND l.category::text IN ('CARD','QR','GRAB','GRAB_PUTRAJAYA','GASTROHUB')
       AND l."txnDate" >= ${start} AND l."txnDate" <= ${end}
     GROUP BY 1,2
   `);
@@ -124,6 +127,34 @@ export async function cashInReconByChannel(from: string, to: string): Promise<Ca
     const suffix = ACCOUNT_SUFFIX[company];
     return round2(bank.filter((b) => b.suffix === suffix && cats.includes(b.category)).reduce((s, b) => s + Number(b.rm), 0));
   };
+
+  // ── Cash in: Revenue Monster, matched by the SALES date it settles ──
+  // RM pays out one credit per sales day at ~T+2, and the bank line description
+  // carries that sales date ("290626 SETTLEMENT REVENUE MONSTER SDN..."). We
+  // bucket each credit to its embedded sales date instead of the day it landed,
+  // so the banked side aligns to the same sales-date window as revenue and the
+  // residual is the true ~2% gateway fee rather than a window-boundary tail.
+  // Pull a week past `to` to catch the last days' T+2 settlements.
+  const rmSettleEnd = new Date(end.getTime() + 7 * 86_400_000);
+  const rmCredits = await prisma.$queryRaw<{ suffix: string; description: string; rm: number }[]>(Prisma.sql`
+    SELECT substring(s."accountName" from '\\((\\d{4})\\)') AS suffix, l.description, l.amount::float AS rm
+    FROM "BankStatementLine" l
+    JOIN "BankStatement" s ON s.id = l."statementId"
+    WHERE l.direction='CR' AND l."isInterCo"=false AND l.category::text='REVENUE_MONSTER'
+      AND l."txnDate" >= ${start} AND l."txnDate" <= ${rmSettleEnd}
+  `);
+  const SUFFIX_COMPANY: Record<string, string> = Object.fromEntries(Object.entries(ACCOUNT_SUFFIX).map(([c, s]) => [s, c]));
+  const onlineBankedBy: Record<string, number> = {};
+  for (const cr of rmCredits) {
+    const m = cr.description.match(/^(\d{2})(\d{2})(\d{2})\s+SETTLEMENT/);
+    if (!m) continue;
+    const salesDate = `20${m[3]}-${m[2]}-${m[1]}`; // DDMMYY → YYYY-MM-DD
+    if (salesDate < from || salesDate > to) continue;
+    const company = SUFFIX_COMPANY[cr.suffix ?? ""];
+    if (!company) continue;
+    onlineBankedBy[company] = (onlineBankedBy[company] ?? 0) + Number(cr.rm);
+  }
+  const onlineBanked = (company: string) => round2(onlineBankedBy[company] ?? 0);
 
   const companies = Object.keys(ACCOUNT_SUFFIX);
   const rev = (arr: { company_id: string; rm: number }[], c: string) => round2(Number(arr.find((r) => r.company_id === c)?.rm ?? 0));
@@ -143,6 +174,12 @@ export async function cashInReconByChannel(from: string, to: string): Promise<Ca
     let note: string;
     if (channel === "grab" || channel === "consignment") {
       note = `Gross ${revenue}, net banked ${banked} (${gapPct}% taken at source vs ~${expectedPct}% commission).`;
+    } else if (channel === "online") {
+      // RM is matched to the credit by the sales date it settles, so the gap is
+      // the gateway fee, not timing.
+      note = overExpected
+        ? `Matched by settlement date; residual ${gapPct}% exceeds the ~${expectedPct}% gateway fee, part of the money rung has not arrived.`
+        : `Matched by settlement date; residual ${gapPct}% is the ~${expectedPct}% gateway fee.`;
     } else if (negative) {
       note = `Banked more than rung up, likely a settlement-timing spill or a misclassified credit.`;
     } else if (overExpected) {
@@ -156,7 +193,7 @@ export async function cashInReconByChannel(from: string, to: string): Promise<Ca
   for (const c of companies) {
     push(c, "card", tenderRev(c, "card"), bankBy(c, ["CARD"]));
     push(c, "qr", tenderRev(c, "qr"), bankBy(c, ["QR"]));
-    push(c, "online", rev(online, c), bankBy(c, ["REVENUE_MONSTER"]));
+    push(c, "online", rev(online, c), onlineBanked(c));
     push(c, "consignment", rev(consignGross, c), bankBy(c, ["GASTROHUB"]));
   }
   // Grab is GROUP-level: Conezion and Shah Alam Grab both settle into HQ's
