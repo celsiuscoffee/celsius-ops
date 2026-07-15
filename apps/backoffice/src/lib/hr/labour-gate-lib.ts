@@ -76,7 +76,13 @@ export type LabourGateResult = {
   warnings: string[]; // quota breaches etc. — publish allowed, logged
   // Per-day demand coverage: staff-hours needed (hourly sales / RM69) vs
   // staff-hours rostered; shortHours > 0 means the day is under-covered.
-  coverage: Array<{ date: string; neededHours: number; scheduledHours: number; shortHours: number }>;
+  // forecast/pct/isWeekend/isHoliday surface the weekday-vs-weekend labour split
+  // (pct is INDICATIVE: day hours × blended rate ÷ day forecast — FT salary is a
+  // weekly fixed cost, so daily % is a coverage lens, not the billed figure).
+  coverage: Array<{
+    date: string; neededHours: number; scheduledHours: number; shortHours: number;
+    forecast?: number; pct?: number | null; isWeekend?: boolean; isHoliday?: boolean; holidayName?: string;
+  }>;
 };
 
 export function shiftHours(start: string, end: string): number {

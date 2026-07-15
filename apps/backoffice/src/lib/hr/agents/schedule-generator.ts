@@ -40,7 +40,7 @@ import {
   DEFAULT_BUDGET,
   ROVER_SHARE_WEEKLY,
 } from "../labour-gate-lib";
-import { forecastWeekRevenue } from "../labour-gate";
+import { forecastWeek } from "../labour-gate";
 import {
   computeDailyManHours,
   itemsPerManHourFor,
@@ -398,19 +398,13 @@ export async function generateSchedule(
         : "Mode: SAFE — +1 head across the whole open window (break cover all day + one no-show of slack)",
   );
 
-  // Per-day-of-week revenue (separate query — joining items to orders would
-  // multiply order totals by line count). Feeds the "affordable man-hours" side.
-  const revRows = await prisma.$queryRaw<Array<{ dw: number; rev: number }>>`
-    SELECT EXTRACT(DOW FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
-           (sum(total) / 100.0 / 4)::float AS rev
-    FROM pos_orders
-    WHERE outlet_id = ${outlet.loyaltyOutletId ?? ""}
-      AND status = 'completed' AND refund_of_order_id IS NULL
-      AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-    GROUP BY 1
-  `;
-  const revByDow = new Map<number, number>(revRows.map((r) => [r.dw, r.rev]));
+  // Per-DAY revenue forecast (recency-weighted per weekday, holidays excluded
+  // from the baseline and applied to any holiday in this week). Feeds both the
+  // "affordable man-hours" side (per date) and the PT budget envelope (weekly),
+  // so coverage sizing and the cost target come from ONE forecast.
+  const weekForecast = await forecastWeek(outlet, weekStart);
+  const revByDate = new Map<string, number>(weekForecast.byDate.map((d) => [d.date, d.forecast]));
+  if (weekForecast.holidayNote) notes.push(`Holiday-aware forecast: ${weekForecast.holidayNote}`);
 
   // Man-hours per open day: what the volume REQUIRES (throughput, floored at the
   // service minimum) vs what target-% revenue can AFFORD. A positive gap flags a
@@ -434,7 +428,7 @@ export async function generateSchedule(
       const base = computeDailyManHours({
         date: d,
         forecastItems: itemsByDow.get(dow(d)) ?? 0,
-        forecastRevenue: revByDow.get(dow(d)) ?? 0,
+        forecastRevenue: revByDate.get(d) ?? 0,
         itemsPerManHour: itemsPerManHourFor(outlet.code),
         serviceMinHeads: SERVICE_FLOOR,
         openHours,
@@ -773,7 +767,8 @@ export async function generateSchedule(
   }
 
   // ── Stage 2: PT budget envelope — the only spend that moves labour % ─
-  const forecast = Math.round(await forecastWeekRevenue(outlet, weekStart));
+  // Same forecast the man-hours side used (recency-weighted, holiday-aware).
+  const forecast = Math.round(weekForecast.weekly);
   // FT salaries are sunk — the envelope charges every schedulable FT their
   // full weekly share whether the roster fills them to 45h or not.
   const ftCost = Math.round(

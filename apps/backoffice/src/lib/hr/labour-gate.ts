@@ -14,6 +14,8 @@ import {
   type LabourGateResult,
   type ShiftCostRow,
 } from "@/lib/hr/labour-gate-lib";
+import { buildWeekForecast, FORECAST_WEEKS, type WeekForecast } from "@/lib/hr/revenue-forecast";
+import { DEFAULT_BLENDED_RATE } from "@/lib/hr/man-hours";
 
 export * from "@/lib/hr/labour-gate-lib";
 
@@ -25,17 +27,42 @@ const PICKUP_STORE_BY_LOYALTY: Record<string, string> = {
   "outlet-nilai": "nilai",
 };
 
-// Forecast the week's revenue as (last 28 days of actual revenue) / 4 —
-// arithmetically identical to summing trailing-4-week same-weekday averages
-// when history is complete, and one query instead of seven. Sources are the
-// in-house POS (`pos_orders`, GrabFood included) + the pickup app (`orders`);
-// StoreHub retired 2026-06-17, so post-cutover weeks are fully covered.
+// Forecast the coming week's revenue from trailing daily history, per weekday,
+// recency-weighted and holiday-adjusted (see revenue-forecast.ts). Returns the
+// full per-day breakdown; `forecastWeekRevenue` is the weekly-total convenience
+// wrapper the budget envelope uses. Sources are the in-house POS (`pos_orders`,
+// GrabFood included) + the pickup app (`orders`) + StoreHub (retired
+// 2026-06-17; zero after, keeps trailing windows honest during the cutover).
+export async function forecastWeek(
+  outlet: { id: string; loyaltyOutletId: string | null },
+  weekStart: string,
+): Promise<WeekForecast> {
+  const weekDates: string[] = [];
+  for (let i = 0; i < 7; i++) weekDates.push(addDays(weekStart, i));
+  const histStart = addDays(weekStart, -FORECAST_WEEKS * 7);
+  const histEnd = addDays(weekStart, -1);
+
+  const series = await dailyRevenueSeries(outlet, histStart, histEnd);
+  // Fill EVERY day in the window (0 when no sales) so a closed/dead day counts
+  // as a real 0 in its weekday's average rather than silently raising it.
+  const history: Array<{ date: string; revenue: number }> = [];
+  for (let d = histStart; d <= histEnd; d = addDays(d, 1)) history.push({ date: d, revenue: series.get(d) ?? 0 });
+
+  const { data: hols } = await hrSupabaseAdmin
+    .from("hr_public_holidays")
+    .select("date, name")
+    .gte("date", histStart)
+    .lte("date", weekDates[6]);
+  const holidays = ((hols ?? []) as Array<{ date: string; name: string }>).map((h) => ({ date: h.date, name: h.name }));
+
+  return buildWeekForecast({ weekDates, history, holidays });
+}
+
 export async function forecastWeekRevenue(
   outlet: { id: string; loyaltyOutletId: string | null },
   weekStart: string,
 ): Promise<number> {
-  const monthRevenue = await revenueBetween(outlet, addDays(weekStart, -28), addDays(weekStart, -1));
-  return monthRevenue / 4;
+  return (await forecastWeek(outlet, weekStart)).weekly;
 }
 
 // Actual revenue for a completed week — same sources, actual dates.
@@ -91,6 +118,42 @@ async function revenueBetween(
     )::float AS revenue
   `;
   return rows[0]?.revenue ?? 0;
+}
+
+// Per-MYT-date revenue across the same sources, for the forecaster's per-weekday
+// history. One grouped query; days with no sales are simply absent (the caller
+// fills them with 0).
+export async function dailyRevenueSeries(
+  outlet: { id: string; loyaltyOutletId: string | null },
+  fromDate: string,
+  toDate: string,
+): Promise<Map<string, number>> {
+  const lid = outlet.loyaltyOutletId ?? "";
+  const storeId = PICKUP_STORE_BY_LOYALTY[lid] ?? "";
+  const rows = await prisma.$queryRaw<Array<{ d: string; revenue: number | null }>>`
+    SELECT d::text AS d, sum(rev)::float AS revenue FROM (
+      SELECT (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date AS d, sum(total) / 100.0 AS rev
+        FROM pos_orders
+        WHERE outlet_id = ${lid} AND status = 'completed' AND refund_of_order_id IS NULL
+          AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date BETWEEN ${fromDate}::date AND ${toDate}::date
+        GROUP BY 1
+      UNION ALL
+      SELECT (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date, sum(total) / 100.0
+        FROM orders
+        WHERE store_id = ${storeId} AND status IN ('completed','ready','collected','paid','preparing')
+          AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date BETWEEN ${fromDate}::date AND ${toDate}::date
+        GROUP BY 1
+      UNION ALL
+      SELECT (transaction_time AT TIME ZONE 'Asia/Kuala_Lumpur')::date, sum(total)
+        FROM storehub_sales
+        WHERE outlet_id = ${outlet.id} AND transaction_type = 'Sale' AND COALESCE(is_cancelled, false) = false
+          AND (transaction_time AT TIME ZONE 'Asia/Kuala_Lumpur')::date BETWEEN ${fromDate}::date AND ${toDate}::date
+        GROUP BY 1
+    ) s GROUP BY d
+  `;
+  const out = new Map<string, number>();
+  for (const r of rows) out.set(r.d, Number(r.revenue) || 0);
+  return out;
 }
 
 // Price one outlet-week's roster and gate it. Reads the schedule's shifts
@@ -192,8 +255,16 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     return sum + shiftHours(r.start_time, r.end_time) * r.hourly_rate;
   }, 0);
   const rosterCost = Math.round(ftWeekly + ptCost + ROVER_SHARE_WEEKLY);
-  const forecastRevenue = Math.round(await forecastWeekRevenue(outlet, weekStart));
+  const weekForecast = await forecastWeek(outlet, weekStart);
+  const forecastRevenue = Math.round(weekForecast.weekly);
   const pct = forecastRevenue > 0 ? rosterCost / forecastRevenue : null;
+  const dayForecast = new Map(weekForecast.byDate.map((d) => [d.date, d]));
+  // Per-day rostered hours (net of breaks) for the indicative daily %.
+  const dayHours = new Map<string, number>();
+  for (const r of rows) {
+    const h = shiftHours(r.start_time, r.end_time);
+    if (h > 0) dayHours.set(r.shift_date, (dayHours.get(r.shift_date) ?? 0) + h);
+  }
 
   // Per-day coverage: sales-derived staff need (hourly revenue / RM69, the
   // workbook's labour-hour heuristic) vs heads rostered in each hour.
@@ -228,7 +299,16 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
       scheduledHours += Math.min(have, n);
       if (n > have) shortHours += n - have;
     }
-    coverage.push({ date, neededHours, scheduledHours, shortHours });
+    // Per-day forecast + INDICATIVE labour % (day hours × blended rate ÷ day
+    // forecast). FT salary is a weekly fixed cost, so this is a coverage lens for
+    // spotting weekday/weekend imbalance, not the billed weekly figure.
+    const df = dayForecast.get(date);
+    const fc = df ? Math.round(df.forecast) : undefined;
+    const dayPct = fc && fc > 0 ? ((dayHours.get(date) ?? 0) * DEFAULT_BLENDED_RATE) / fc : null;
+    coverage.push({
+      date, neededHours, scheduledHours, shortHours,
+      forecast: fc, pct: dayPct, isWeekend: df?.isWeekend, isHoliday: df?.isHoliday, holidayName: df?.holidayName,
+    });
   }
 
   return {

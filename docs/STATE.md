@@ -273,6 +273,20 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   deliberately out of scope — placed case by case). All 354 tests + tsc + lint
   green. **Next:** await CI on #938, then a live test-generate of one week per
   mode to eyeball the labour% deltas before marking ready.
+  **Round 2b — revenue forecast rebuilt.** Diagnosed why AI wk 7/20 read 20.5%
+  at fewer hours than published wk 7/13 at 18.2%: labour% = cost ÷ forecast, FT
+  salary is a fixed sunk cost (RM4,616 + rover 309 = RM4,925, unmoved by hours),
+  and wk 7/20's forecast was ~16% lower (RM23,814 vs ~RM28,500) because the flat
+  trailing-28d÷4 forecast lagged a falling trend → PT envelope computed to RM0
+  (no PT suggested). Fix: new `lib/hr/revenue-forecast.ts` (pure, 6 tests) —
+  per-weekday, recency-weighted (½-life 2w), holidays excluded from baseline +
+  applied to target week via the outlet's own holiday ratio. Wired into
+  `labour-gate.ts` (`dailyRevenueSeries` + `forecastWeek`; gate `coverage[]` now
+  carries per-day forecast/pct/weekend/holiday) and the generator (per-DATE
+  affordable man-hours + holiday note; one forecast feeds both sizing and the
+  envelope). UI: per-day forecast + indicative % in the week-grid day headers and
+  the DayView badge. Verified new query reproduces the old flat forecast to the
+  ringgit (flat-weight == 28d÷4). All 360 tests + tsc + lint green.
 
 - 2026-07-15 -- **Agent substrate SHIPPED end-to-end.** Fleet review found the
   non-compounding pattern (every domain reinvented flags/queues/telemetry;

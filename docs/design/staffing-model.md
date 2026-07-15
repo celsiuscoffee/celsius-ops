@@ -50,6 +50,28 @@ read **4**. The 4th head is a **kitchen** hand on weekend mornings (brunch food
 peak) and a **barista** in the afternoons (drink peak) — same headcount,
 different station.
 
+## Revenue forecast (the % denominator + affordable man-hours)
+
+Both the labour-gate % and the man-hours "affordable" side read one forecast
+(`lib/hr/revenue-forecast.ts`, fetched by `labour-gate.ts`):
+
+- **Per weekday, recency-weighted.** Trailing `FORECAST_WEEKS` (4) of daily
+  revenue, averaged per day-of-week with a geometric recency weight (½-life 2
+  weeks) so the forecast *follows* a rising/falling trend instead of averaging
+  it away. With equal weights it is arithmetically identical to the old
+  trailing-28-days ÷ 4 (verified: reproduces RM23,814 for Putrajaya wk 2026-07-20
+  to the ringgit), so weekend/weekday mix was always captured — recency is the
+  new part.
+- **Holiday-aware.** Public holidays (`hr_public_holidays`) are *excluded* from
+  the weekday baseline (a Raya spike or a closure no longer distorts a normal
+  Tuesday), and a holiday *in the target week* is scaled by the outlet's own
+  historical holiday-vs-normal ratio — falling back to "same as a normal day,
+  flagged" when there's no holiday history to learn from.
+- **Per day, surfaced.** The gate returns each day's forecast + an *indicative*
+  daily labour % (day hours × blended rate ÷ day forecast) so the grid shows the
+  weekday-vs-weekend split. It's a coverage lens, not the billed figure — FT
+  salary is a weekly fixed cost, so only the weekly % is the real number.
+
 ## Required man-hours
 
 `required man-hours/day = Σ heads over the open hours` (captures peaks, not a

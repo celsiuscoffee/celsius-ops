@@ -84,7 +84,10 @@ type LabourGateInfo = {
   verdict: "green" | "amber" | "red" | "unknown";
   blockers: string[];
   warnings: string[];
-  coverage?: Array<{ date: string; neededHours: number; scheduledHours: number; shortHours: number }>;
+  coverage?: Array<{
+    date: string; neededHours: number; scheduledHours: number; shortHours: number;
+    forecast?: number; pct?: number | null; isWeekend?: boolean; isHoliday?: boolean; holidayName?: string;
+  }>;
 };
 
 type SwapRequest = {
@@ -793,6 +796,26 @@ export default function SchedulesPage() {
                       <div className="text-base">{formatDay(d)}</div>
                       {hol && <div className="text-[9px] text-red-600 truncate" title={hol.name}>PH: {hol.name}</div>}
                       <div className="mt-1 text-[10px] font-semibold tabular-nums text-gray-600">{dayLabel} total</div>
+                      {(() => {
+                        const g = gate;
+                        const cov = g?.coverage?.find((c) => c.date === d);
+                        if (!g || !cov || cov.forecast == null) return null;
+                        const fc = cov.forecast;
+                        const rm = fc >= 1000 ? `RM${(fc / 1000).toFixed(1)}k` : `RM${fc}`;
+                        const pctColor =
+                          cov.pct == null ? "text-gray-400"
+                            : cov.pct <= g.targetPct ? "text-green-600"
+                              : cov.pct <= g.ceilingPct ? "text-amber-600"
+                                : "text-red-600";
+                        return (
+                          <div
+                            className={`text-[9px] font-medium tabular-nums ${pctColor}`}
+                            title={`Forecast ${rm}${cov.isWeekend ? " · weekend" : " · weekday"}${cov.isHoliday ? ` · ${cov.holidayName ?? "public holiday"}` : ""} — indicative daily labour % (day hours × blended rate ÷ forecast). FT salary is a weekly fixed cost, so treat this as a weekday-vs-weekend coverage lens, not the billed weekly figure.`}
+                          >
+                            {rm}{cov.pct == null ? "" : ` · ${(cov.pct * 100).toFixed(0)}%`}
+                          </div>
+                        );
+                      })()}
                     </th>
                   );
                 })}
@@ -1242,6 +1265,22 @@ function DayView({
           >
             Coverage {cov.scheduledHours}/{cov.neededHours} staff-hours
             {cov.shortHours > 0 ? ` — ${cov.shortHours}h short` : " ✓"}
+          </span>
+        )}
+        {cov?.forecast != null && (
+          <span
+            className={`${cov.neededHours > 0 ? "" : "ml-auto "}rounded-lg border px-3 py-1.5 text-sm font-medium ${
+              cov.pct == null ? "border-gray-200 bg-gray-50 text-gray-600"
+                : gate && cov.pct <= gate.targetPct ? "border-green-200 bg-green-50 text-green-700"
+                  : gate && cov.pct <= gate.ceilingPct ? "border-amber-300 bg-amber-50 text-amber-700"
+                    : "border-red-300 bg-red-50 text-red-700"
+            }`}
+            title="Indicative daily labour %: day hours × blended rate ÷ day forecast. FT salary is a weekly fixed cost, so this is a weekday-vs-weekend coverage lens, not the billed weekly figure."
+          >
+            {cov.isWeekend ? "Weekend" : "Weekday"}
+            {cov.isHoliday ? ` · ${cov.holidayName ?? "PH"}` : ""} · forecast RM
+            {cov.forecast >= 1000 ? `${(cov.forecast / 1000).toFixed(1)}k` : cov.forecast}
+            {cov.pct == null ? "" : ` · ${(cov.pct * 100).toFixed(0)}%`}
           </span>
         )}
       </div>
