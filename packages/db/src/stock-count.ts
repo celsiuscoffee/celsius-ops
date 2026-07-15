@@ -45,6 +45,91 @@ export function isCleanCount(items: VarianceItem[]): boolean {
   return countDiscrepancies(items) === 0;
 }
 
+// ─── Count coverage (guard against short / partial submissions) ──────────────
+//
+// The submit/finalize endpoints trust the client's item list, and the only
+// completeness check is "every loaded item has a countedQty". That cannot catch
+// a count where products were never loaded onto the sheet at all — e.g. a
+// "monthly" that counts 49 of the outlet's ~212 products and submits clean.
+//
+// evaluateCountCoverage compares what was counted against the outlet's expected
+// universe for that frequency (its most recent completed count of the same
+// frequency is the baseline). Per the owner's call (2026-07-15):
+//   - MONTHLY below the floor → BLOCK (hard stop; a deliberate partial needs an
+//     explicit reason at the call site).
+//   - DAILY / WEEKLY below the floor → WARN (allow, but the caller routes it to
+//     manager review instead of auto-approving). Those are intentionally small
+//     and their size varies, so blocking would be noise.
+// A first-ever count (no baseline) can't be judged and always passes.
+
+export type CountFrequencyLike = "DAILY" | "WEEKLY" | "MONTHLY";
+
+/** Default minimum share of the expected universe a count must cover. Monthly
+ *  counts are historically very consistent (e.g. 254/254/255), so 0.85 leaves
+ *  ample room for a few discontinued lines without letting a 23%-complete
+ *  count (49/212) through. */
+export const DEFAULT_MIN_COVERAGE = 0.85;
+
+export interface CoverageInput {
+  frequency: CountFrequencyLike;
+  /** Products the outlet is expected to count at this frequency (baseline). */
+  expectedProductIds: string[];
+  /** Products actually counted in this submission (countedQty present). */
+  countedProductIds: string[];
+  /** Minimum fraction of the expected universe that must be counted. */
+  minCoverage?: number;
+}
+
+export interface CoverageResult {
+  expected: number; // size of the baseline universe (0 = nothing to judge against)
+  counted: number; // expected products that were actually counted
+  missing: number;
+  coverage: number; // counted / expected, in [0,1]; 1 when there's no baseline
+  missingProductIds: string[];
+  belowFloor: boolean; // coverage under the floor AND a baseline existed
+  block: boolean; // MONTHLY below floor → refuse unless an explicit override is given
+  warn: boolean; // DAILY/WEEKLY below floor → allow but flag for review
+}
+
+export function evaluateCountCoverage(input: CoverageInput): CoverageResult {
+  const min = input.minCoverage ?? DEFAULT_MIN_COVERAGE;
+  const expectedSet = new Set(input.expectedProductIds);
+  const countedSet = new Set(input.countedProductIds);
+  const expected = expectedSet.size;
+
+  // No baseline — first count of this frequency, or none reviewed yet. We have
+  // nothing to measure against, so it passes (can't manufacture an expectation).
+  if (expected === 0) {
+    return {
+      expected: 0,
+      counted: countedSet.size,
+      missing: 0,
+      coverage: 1,
+      missingProductIds: [],
+      belowFloor: false,
+      block: false,
+      warn: false,
+    };
+  }
+
+  const missingProductIds: string[] = [];
+  for (const id of expectedSet) if (!countedSet.has(id)) missingProductIds.push(id);
+  const counted = expected - missingProductIds.length;
+  const coverage = counted / expected;
+  const belowFloor = coverage < min;
+
+  return {
+    expected,
+    counted,
+    missing: missingProductIds.length,
+    coverage,
+    missingProductIds,
+    belowFloor,
+    block: belowFloor && input.frequency === "MONTHLY",
+    warn: belowFloor && input.frequency !== "MONTHLY",
+  };
+}
+
 export interface CountedLine {
   productId: string;
   /** Quantity as physically counted — in the *package's* units, not base UOM. */

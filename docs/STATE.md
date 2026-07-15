@@ -230,6 +230,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Lessons learned
 
+- 2026-07-14 — **Every upload control must accept drag & drop** (owner
+  directive: "this should be the standard"). Backoffice audit found the
+  standard mostly hand-rolled per page and four click-only gaps (invoice Edit
+  photos, Mark Paid receipt, recon attachments, Maybank QR) — all fixed. For
+  NEW upload UI use `components/ui/file-dropzone.tsx` (shared, drag-aware,
+  accept-filtered) instead of another bespoke label+hidden-input.
+
+- 2026-07-14 — **Always check the date format** (owner directive). Malaysian
+  supplier documents are DAY-FIRST (06/07/2026 = 6 July); the doc extractor
+  stamped due date 14/06/2026 on two KLFC invoices *issued* 06/07/2026, which
+  flipped an unpaid invoice to OVERDUE off a date that predated its own issue.
+  Whenever reading or writing dates (invoices, bank narrations, screenshots,
+  SQL), confirm DD/MM vs MM/DD from context and sanity-check orderings
+  (due ≥ issue, paid ≥ issue). Systemic guard now in
+  `finance/parsers/supplier-doc.ts` (`sanitizeBillDates` + day-first prompt
+  rule); both KLFC due dates corrected in prod (7-day terms → 2026-07-13).
+
 - 2026-07-11 — **Sales pull-to-refresh saga (staff-native), attempt 4:** the
   50e161f "cream pull-well" (absolute View at top:-300 inside the ScrollView)
   made it worse — ScrollView content layers ABOVE the native RefreshControl,
@@ -287,6 +304,31 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   envelope). UI: per-day forecast + indicative % in the week-grid day headers and
   the DayView badge. Verified new query reproduces the old flat forecast to the
   ringgit (flat-weight == 28d÷4). All 360 tests + tsc + lint green.
+  **Round 2c — FT sunk cost made explicit.** Because FT salary is booked whether
+  or not they're rostered, benching an FT to cut the % saves nothing. Gate now
+  splits rosterCost into `ftFixedCost` (FT+rover, sunk) + `ptCost` (discretionary),
+  the labour-chip tooltip shows FT-floor% vs PT%, and it warns when a primary FT
+  is scheduled ≥2 days below their 6-day capacity (net of leave). Generator flags
+  a revenue-constrained week (FT floor alone ≥ target, PT envelope RM0). Cross-
+  outlet FT lending noted as the larger follow-up (not built). **PR #938 merged
+  to main 2026-07-15** (squash) → Vercel backoffice deploy.
+- 2026-07-15 — **Stock-count coverage guard (short-count guardrail).** Root: the
+  staff submit/finalize endpoints trust the client's item list; the only
+  completeness check was per-item (`countedQty` null), which can't catch products
+  never loaded onto the sheet — how Putrajaya's monthly landed at 49 of ~212
+  (an abandoned 7-minute DRAFT; its Apr 30 monthly had 212, May/June monthlies
+  skipped entirely). New pure `evaluateCountCoverage` in `packages/db/stock-count.ts`
+  compares counted vs the outlet's expected universe for that frequency; interim
+  baseline = the fullest recent REVIEWED count of the same frequency
+  (`apps/staff/src/lib/stock-coverage.ts`). Owner call (block vs warn): **MONTHLY
+  below 85% coverage → BLOCK** (unless an explicit `partialReason`, which routes it
+  to review with a note); **DAILY/WEEKLY → WARN** (allow but force SUBMITTED +
+  short-count note, never auto-approve). Wired into both entry points
+  (`api/stock-checks` POST + `.../[id]/finalize`). 14 unit tests green, staff tsc
+  clean. **Follow-ups (not built):** backfill `OutletProduct` (has per-product
+  `countFrequency` — the real source of truth vs the interim baseline) and seed
+  counts from it; an ops-pulse detector to ping on any submitted short count; UI
+  progress vs the expected universe ("49 / 212") + a "Submit partial count" action.
 
 - 2026-07-15 -- **Agent substrate SHIPPED end-to-end.** Fleet review found the
   non-compounding pattern (every domain reinvented flags/queues/telemetry;
@@ -325,6 +367,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   expiry/keep, seeded zombie register in the skill. **Next:** merge,
   then trigger the first run on demand; schedule the weekly routine
   (Sun AM MYT) only after run 1 proves useful.
+
+- 2026-07-14 — **Paid-no-POP audit → 6 payment-record corrections applied to prod**
+  (owner-approved in chat; SQL via Supabase MCP, audit notes stamped on every
+  touched row, re-pointed bank lines set `classifiedBy='manual'` so the matcher
+  won't re-touch them). Verified against the bank feed (current through Jul 12):
+  KLFC **00653452** RM768 reverted PAID→PENDING (phantom bank-ap-match — paid
+  stamp Jun 16 predates the Jun 19 issue date; that debit narrates 00652052);
+  KLFC **00655541** RM768 stalled INITIATED→PENDING (initiated but never
+  confirmed; no debit names it, zero unmatched RM768 since Jun 1); Blancoz
+  **26-0677** RM148 reverted PAID→PENDING (the Jul 8 debit narrates 26-0676);
+  bank lines re-pointed/linked by narration: Jul 5→26-0644, Jul 8→26-0676,
+  Jul 10→26-0675 (and 26-0675 paidAt corrected Jul 5→Jul 10). Net: RM1,684 back
+  in payables (KLFC 1,536 — cross-check their SOA before paying — + Blancoz 148).
+  These 6 are the first slice of the ~113 historical wrong-invoice matches; the
+  bulk re-pointing pass still needs its own finance-approved run.
 
 - 2026-07-11 — **Backoffice nav housekeeping (round 4)** — nav registry gains
   `hidden` items (in ⌘K/route-gate/grants, out of the sidebar; see

@@ -36,6 +36,8 @@ interface AgentRow {
   last_run_at: string | null;
   last_action_at: string | null;
   week: { total: number; autonomous: number; overridden: number };
+  estCost: { perRun: number; perMonth: number };
+  actualCost30d: number;
 }
 
 interface ActionRow {
@@ -67,6 +69,13 @@ const DOMAIN_LABELS: Record<string, string> = {
   ops: "Operations",
   pos: "POS & Merchandising",
 };
+
+function usd(n: number): string {
+  if (n === 0) return "$0";
+  if (n < 0.01) return "<$0.01";
+  if (n < 10) return `$${n.toFixed(2)}`;
+  return `$${n.toFixed(0)}`;
+}
 
 function timeAgo(iso: string | null): string {
   if (!iso) return "never";
@@ -147,6 +156,11 @@ export default function AgentsPage() {
   const armed = agents.filter((a) => a.mode === "armed").length;
   const shadow = agents.filter((a) => a.mode === "shadow").length;
   const noCriteria = agents.filter((a) => a.mode !== "off" && !a.arming_criteria).length;
+  // Only armed/shadow agents actually run, so only they carry a live cost.
+  const estMonthly = agents
+    .filter((a) => a.mode !== "off")
+    .reduce((sum, a) => sum + (a.estCost?.perMonth ?? 0), 0);
+  const actual30d = agents.reduce((sum, a) => sum + (a.actualCost30d ?? 0), 0);
 
   return (
     <div className="p-3 sm:p-6">
@@ -167,11 +181,15 @@ export default function AgentsPage() {
         </button>
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Total agents" value={agents.length} />
         <Stat label="Armed" value={armed} accent="text-emerald-700" />
         <Stat label="Shadow" value={shadow} accent="text-amber-700" />
         <Stat label="Active w/o arming criteria" value={noCriteria} accent={noCriteria ? "text-red-600" : undefined} />
+      </div>
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <TextStat label="Est. API cost / month" value={usd(estMonthly)} sub="running agents, at current token estimates" />
+        <TextStat label="Actual API cost / 30d" value={usd(actual30d)} sub="from the action ledger" accent="text-gray-900" />
       </div>
 
       {error && (
@@ -200,8 +218,10 @@ export default function AgentsPage() {
                   <th className="px-4 py-2.5 font-medium">Trigger</th>
                   <th className="px-4 py-2.5 font-medium">LLM</th>
                   <th className="px-4 py-2.5 font-medium">Last run</th>
-                  <th className="px-4 py-2.5 font-medium">Last action</th>
                   <th className="px-4 py-2.5 font-medium">7-day actions</th>
+                  <th className="px-4 py-2.5 font-medium">Est / run</th>
+                  <th className="px-4 py-2.5 font-medium">Est / month</th>
+                  <th className="px-4 py-2.5 font-medium">Actual 30d</th>
                 </tr>
               </thead>
               <tbody>
@@ -230,6 +250,16 @@ function Stat({ label, value, accent }: { label: string; value: number; accent?:
     <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
       <div className={`text-2xl font-semibold ${accent ?? "text-gray-900"}`}>{value}</div>
       <div className="mt-0.5 text-xs text-gray-500">{label}</div>
+    </div>
+  );
+}
+
+function TextStat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className={`mt-0.5 text-2xl font-semibold ${accent ?? "text-gray-900"}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-[11px] text-gray-400">{sub}</div>}
     </div>
   );
 }
@@ -303,17 +333,25 @@ function AgentRowView({
           )}
         </td>
         <td className="px-4 py-3 text-xs text-gray-500">{timeAgo(agent.last_run_at)}</td>
-        <td className="px-4 py-3 text-xs text-gray-500">{timeAgo(agent.last_action_at)}</td>
         <td className="px-4 py-3 text-xs text-gray-600">
           {agent.week.total}
           {agent.week.overridden > 0 && (
             <span className="ml-1.5 text-red-600">({agent.week.overridden} overridden)</span>
           )}
         </td>
+        <td className="px-4 py-3 text-xs text-gray-600">
+          {agent.uses_llm && agent.estCost.perRun > 0 ? usd(agent.estCost.perRun) : <span className="text-gray-300">-</span>}
+        </td>
+        <td className="px-4 py-3 text-xs text-gray-600">
+          {agent.mode !== "off" && agent.estCost.perMonth > 0 ? usd(agent.estCost.perMonth) : <span className="text-gray-300">-</span>}
+        </td>
+        <td className="px-4 py-3 text-xs text-gray-700">
+          {agent.actualCost30d > 0 ? usd(agent.actualCost30d) : <span className="text-gray-300">-</span>}
+        </td>
       </tr>
       {expanded && (
         <tr className="border-b border-gray-50 bg-gray-50/40 last:border-0">
-          <td colSpan={7} className="px-4 py-4 sm:px-11">
+          <td colSpan={9} className="px-4 py-4 sm:px-11">
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3 text-sm">
                 <p className="text-gray-700">{agent.description || "No description."}</p>
@@ -329,6 +367,11 @@ function AgentRowView({
                     <span className="text-red-600">Not set — this agent cannot be armed until it is.</span>
                   )}
                 </Detail>
+                {agent.uses_llm && agent.estCost.perRun > 0 && (
+                  <Detail label="Expected cost">
+                    {usd(agent.estCost.perRun)}/run, {usd(agent.estCost.perMonth)}/month at current token estimates ({agent.model}). Actual last 30 days: {usd(agent.actualCost30d)}.
+                  </Detail>
+                )}
                 {agent.kill_switch_note && (
                   <Detail label="Legacy kill switch">{agent.kill_switch_note}</Detail>
                 )}

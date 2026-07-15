@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { isCleanCount, baseQtyByProduct } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { setStockBalance } from "@/lib/stock";
+import { checkCountCoverage } from "@/lib/stock-coverage";
 import { getSession } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
@@ -60,6 +61,10 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { outletId, frequency, notes, items } = body;
+  const partialReason: string | null =
+    typeof body?.partialReason === "string" && body.partialReason.trim()
+      ? body.partialReason.trim().slice(0, 300)
+      : null;
 
   // Server-set: never trust client-supplied countedById, and require the
   // outlet matches the user's session unless they are OWNER/ADMIN.
@@ -68,15 +73,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cannot submit stock count for another outlet" }, { status: 403 });
   }
 
-  // Zero-variance counts auto-approve straight to REVIEWED; only counts with a
-  // real discrepancy land in the manager's review queue (SUBMITTED).
+  // Coverage guard — this path submits a whole count at once, so guard it the
+  // same way as finalize: block a short MONTHLY census (unless an explicit
+  // partial reason is given); warn (route to review) on short DAILY/WEEKLY.
+  const coverage = await checkCountCoverage({
+    outletId,
+    frequency: frequency as "DAILY" | "WEEKLY" | "MONTHLY",
+    countedItems: items as Array<{ productId: string; countedQty: unknown }>,
+  });
+  if (coverage.block && !partialReason) {
+    return NextResponse.json(
+      {
+        error: `Only ${coverage.counted} of ${coverage.expected} expected products counted (${Math.round(
+          coverage.coverage * 100,
+        )}%). Finish the count, or submit a partial count with a reason.`,
+        code: "COVERAGE_TOO_LOW",
+        expected: coverage.expected,
+        counted: coverage.counted,
+        missing: coverage.missing,
+        missingProductIds: coverage.missingProductIds.slice(0, 100),
+      },
+      { status: 400 },
+    );
+  }
+
+  // A short count never auto-approves — it goes to review with a note. Otherwise
+  // zero-variance counts auto-approve straight to REVIEWED.
   const now = new Date();
-  const autoApprove = isCleanCount(
-    (items as Array<{ expectedQty?: number | null; countedQty?: number | null }>).map((i) => ({
-      expectedQty: i.expectedQty ?? null,
-      countedQty: i.countedQty ?? null,
-    })),
-  );
+  const isShort = coverage.belowFloor;
+  const autoApprove =
+    !isShort &&
+    isCleanCount(
+      (items as Array<{ expectedQty?: number | null; countedQty?: number | null }>).map((i) => ({
+        expectedQty: i.expectedQty ?? null,
+        countedQty: i.countedQty ?? null,
+      })),
+    );
+  const mergedNotes = isShort
+    ? [notes, `${coverage.shortNote}${partialReason ? ` reason: ${partialReason}` : ""}`]
+        .filter(Boolean)
+        .join(" ")
+    : notes || null;
 
   const stockCount = await prisma.stockCount.create({
     data: {
@@ -86,7 +123,7 @@ export async function POST(req: NextRequest) {
       status: autoApprove ? "REVIEWED" : "SUBMITTED",
       submittedAt: now,
       ...(autoApprove ? { reviewedAt: now } : {}),
-      notes: notes || null,
+      notes: mergedNotes,
       items: {
         create: items.map((i: { productId: string; productPackageId?: string; expectedQty?: number; countedQty?: number; isConfirmed?: boolean; varianceReason?: string }) => ({
           productId: i.productId,
