@@ -153,6 +153,26 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   cooldown in AsyncStorage) — keep it; it also guards against future pin drift
   and near-boundary outlets.
 
+- 2026-07-15 — **staff-native clock-out hard-blocked by a stale cached GPS
+  fix.** A barista inside Tamarind saw "You're 1583m away (zone 150m)" at
+  clock-out. Root cause: `getCurrentPositionAsync({accuracy: Balanced})` on
+  Android can return a stale cached fused location — user `d93ca6ff`'s device
+  served an *exact-repeating* phantom coord `2.9081827/101.6283900` (~1583m off)
+  in ~10% of pings while otherwise reading 6–12m from the pin. A pinpoint-
+  identical lat/lng to 7 dp = cached fix, not live GPS (real GPS jitters).
+  **Two actions:** (1) manually clocked him out via SQL (owner-approved,
+  log `cdde4acb…`): clock_out 15:59 MYT = his last confirmed in-zone ping (NOT
+  `now()`, which would overpay ~2.3h; rostered end was 15:30), method `manual`,
+  hours via the shared `deriveHours` engine (8.32 total / 7.32 regular / 0 OT,
+  full-time weekday), final_status approved + audit note. (2) Code fix in
+  PR #935: `getReliableFix()` in `apps/staff-native/app/(staff)/clock.tsx` —
+  forces HIGH accuracy (real GNSS, not the cached fallback), samples 3 fixes,
+  and for the clock action prefers the sample nearest the outlet (a present
+  phone always yields ≥1 in-zone fix; a truly remote one never does → admits
+  present, still blocks remote). Manual clock-out recipe for next time: mirror
+  the `clock/route.ts` clock-out write + `deriveHours`; set method `manual`,
+  clock_out = last in-zone ping time, guard `where clock_out is null`.
+
 ## General rules
 
 - Typecheck before pushing — every time. CI enforces it, but catch it locally.
