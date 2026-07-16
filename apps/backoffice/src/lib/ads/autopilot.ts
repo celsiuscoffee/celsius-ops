@@ -30,13 +30,30 @@
  *               is the cash optimum. Hold SETTLE_HOLD_DAYS, then re-enter
  *               DESCEND (demand shifts; the optimum is re-searched slowly).
  *
+ *   PAUSE PROBE — the descent's step sizes (8–15% of a ~RM100/day budget) move
+ *               the till by well under 1% — individually unreadable at
+ *               ~RM2.5-3k/day outlets. The only experiment the till can read
+ *               is a FULL pause (~5-6% expected effect if the spend is merely
+ *               break-even). Owner-approved 2026-07-16: the autopilot pauses
+ *               ONE clearly-inefficient campaign (cost/conv >1.3× fleet-best,
+ *               never probed before, one at a time fleet-wide) for
+ *               PAUSE_PROBE_DAYS, the others keep running as controls, then
+ *               auto-restores with a verdict: till dropped → ads generate
+ *               cash, resume at the prior budget and let the descent find the
+ *               floor; no detectable drop → the campaign is below break-even
+ *               wholesale, restore at the hard floor and redeploy the cash.
  *   GUARD     — per outlet: last 14 full days of actual till revenue ÷ the
  *               same-window forecast (per-weekday, recency-weighted,
  *               holiday-aware — the labour gate's forecaster, built from
  *               history PRECEDING the window, so it is a clean
  *               counterfactual), then divided by the median of the OTHER ads
  *               outlets' indexes so a fleet-wide shock (weather, festive dip)
- *               doesn't read as an ad effect. No guard signal → never act.
+ *               doesn't read as an ad effect. Additionally ANCHORED against
+ *               the outlet's share of fleet revenue in the 28 days before the
+ *               descent began — the trailing forecast alone normalizes slow
+ *               cumulative damage (boiling frog); the fixed anchor makes
+ *               drift detectable even when no single step is. No guard
+ *               signal → never act.
  *   EXCLUDE   — auto-apply negative keyword themes for clearly-useless terms
  *               (own brand + non-café food intent; see term-rules.ts) so the
  *               remaining budget buys better clicks before the next step
@@ -57,6 +74,7 @@ import { dailyRevenueSeries } from "@/lib/hr/labour-gate";
 import { getAgentMode, logAgentAction, touchAgentRun, type AgentMode } from "@/lib/agents/substrate";
 import { buildAdsOptimizerReport, ENABLED_STATUSES } from "./optimizer";
 import { applyBudgetChange } from "./set-budget";
+import { pauseCampaign, enableCampaign } from "./pause-campaign";
 import { applyTermExclusion } from "./exclude-term";
 import { selectAutoExclusions, type ExclusionCandidate } from "./term-rules";
 import { microsToMYR } from "./client";
@@ -86,19 +104,34 @@ export const SETTLE_HOLD_DAYS = 90;      // proven optimum: re-search only quart
 // Gross margin used to state each move's break-even in the reason strings.
 export const GROSS_MARGIN = Number(process.env.ADS_GROSS_MARGIN || 0.6);
 
+// Pause probe — the only till-readable experiment at this spend:revenue ratio.
+export const PAUSE_PROBE_DAYS = 28;      // full pause length before auto-restore
+// Fixed-anchor drift guard: current share of fleet revenue ÷ the share in the
+// 28 days before the first ledgered budget change. Slightly looser than the
+// per-step thresholds because shares are noisier than forecasts.
+export const ANCHOR_WINDOW_DAYS = 28;
+export const ANCHOR_MIN = 0.93;
+
 const DAY_MS = 86400000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // ── Pure guard math ─────────────────────────────────────────────────────────
 
 export type GuardSignal = {
-  rawIndex: number | null; // actual ÷ forecast over the observation window
-  adjIndex: number | null; // rawIndex ÷ median(other outlets' rawIndex)
+  rawIndex: number | null;    // actual ÷ forecast over the observation window
+  adjIndex: number | null;    // rawIndex ÷ median(other outlets' rawIndex)
+  anchorIndex: number | null; // current share of fleet revenue ÷ pre-descent share (cumulative-drift detector)
   breach: boolean;
 };
 
-export function guardFromIndexes(rawIndex: number | null, otherIndexes: number[]): GuardSignal {
-  if (rawIndex == null || !Number.isFinite(rawIndex)) return { rawIndex: null, adjIndex: null, breach: false };
+export function guardFromIndexes(
+  rawIndex: number | null,
+  otherIndexes: number[],
+  anchorIndex: number | null = null,
+): GuardSignal {
+  if (rawIndex == null || !Number.isFinite(rawIndex)) {
+    return { rawIndex: null, adjIndex: null, anchorIndex: null, breach: false };
+  }
   const others = otherIndexes.filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
   let adjIndex: number | null = null;
   if (others.length) {
@@ -106,8 +139,12 @@ export function guardFromIndexes(rawIndex: number | null, otherIndexes: number[]
     const median = others.length % 2 ? others[mid] : (others[mid - 1] + others[mid]) / 2;
     if (median > 0) adjIndex = rawIndex / median;
   }
-  const breach = rawIndex < GUARD_RAW_MIN || (adjIndex != null && adjIndex < GUARD_ADJ_MIN);
-  return { rawIndex: round2(rawIndex), adjIndex: adjIndex != null ? round2(adjIndex) : null, breach };
+  const anchor = anchorIndex != null && Number.isFinite(anchorIndex) ? round2(anchorIndex) : null;
+  const breach =
+    rawIndex < GUARD_RAW_MIN ||
+    (adjIndex != null && adjIndex < GUARD_ADJ_MIN) ||
+    (anchor != null && anchor < ANCHOR_MIN);
+  return { rawIndex: round2(rawIndex), adjIndex: adjIndex != null ? round2(adjIndex) : null, anchorIndex: anchor, breach };
 }
 
 // ── Pure per-campaign decision ──────────────────────────────────────────────
@@ -127,18 +164,23 @@ export type CampaignState = {
   baselineDailyMyr: number; // highest budget ever ledgered (pre-descent level) — the raise cap anchor
   efficiencyRatio: number | null; // cost/conv ÷ fleet-best (1 = best)
   lastApplied: LastAppliedChange | null;
+  isPaused: boolean;
+  hasBeenPauseProbed: boolean; // any 'autopilot pause' row ever — each campaign is probed at most once
+  // Till index over the pause window so far (forecast built from PRE-pause
+  // history) — only set while a probe is running; drives the restore verdict.
+  pauseProbe?: { index: number | null; adjIndex: number | null };
 };
 
 export type AutopilotDecision = {
   campaignId: string;
   campaignName: string;
-  action: "cut" | "rollback" | "raise" | "revert" | "hold";
+  action: "cut" | "rollback" | "raise" | "revert" | "pause" | "restore" | "hold";
   newDailyMyr?: number;
   reason: string;
 };
 
 // The ledger reason's prefix IS the state machine's memory — no new tables.
-type LastKind = "step-down" | "rollback" | "raise" | "revert" | "other" | null;
+type LastKind = "step-down" | "rollback" | "raise" | "revert" | "pause" | "restore" | "other" | null;
 function lastKind(c: LastAppliedChange | null): LastKind {
   if (!c) return null;
   const r = c.reason ?? "";
@@ -146,6 +188,8 @@ function lastKind(c: LastAppliedChange | null): LastKind {
   if (r.startsWith("autopilot raise")) return "raise";
   if (r.startsWith("autopilot revert")) return "revert";
   if (r.startsWith("autopilot step-down")) return "step-down";
+  if (r.startsWith("autopilot pause")) return "pause";
+  if (r.startsWith("autopilot restore")) return "restore";
   return "other"; // human/manual change — observe it like a step, never auto-revert it
 }
 
@@ -162,7 +206,34 @@ export function decideCampaign(c: CampaignState, guard: GuardSignal, now: Date):
   const la = c.lastApplied;
   const kind = lastKind(la);
   const daysSince = la ? (now.getTime() - la.decidedAt.getTime()) / DAY_MS : Infinity;
-  const guardDetail = `till-revenue index ${guard.rawIndex}${guard.adjIndex != null ? ` (fleet-adj ${guard.adjIndex})` : ""} over last ${OBSERVE_DAYS}d`;
+  const guardDetail = `till-revenue index ${guard.rawIndex}${guard.adjIndex != null ? ` (fleet-adj ${guard.adjIndex})` : ""}${guard.anchorIndex != null ? `, anchor ${guard.anchorIndex}` : ""} over last ${OBSERVE_DAYS}d`;
+
+  // ── Paused campaign: either our probe (restore on schedule) or human's ───
+  if (c.isPaused) {
+    if (kind !== "pause") {
+      return { ...base, action: "hold", reason: "campaign is paused but not by the autopilot — leaving it alone" };
+    }
+    if (daysSince < PAUSE_PROBE_DAYS) {
+      return { ...base, action: "hold", reason: `pause probe running (${Math.round(daysSince)}d/${PAUSE_PROBE_DAYS}d, pause-window till index ${c.pauseProbe?.index ?? "n/a"})` };
+    }
+    const p = c.pauseProbe;
+    const dropDetected =
+      p?.index != null && (p.index < GUARD_RAW_MIN || (p.adjIndex != null && p.adjIndex < GUARD_ADJ_MIN));
+    if (dropDetected) {
+      return {
+        ...base,
+        action: "restore",
+        newDailyMyr: round2(c.dailyBudgetMyr),
+        reason: `autopilot restore: pause probe VERDICT — ads generate cash (pause-window till index ${p!.index}${p!.adjIndex != null ? `, fleet-adj ${p!.adjIndex}` : ""}); resuming at RM${round2(c.dailyBudgetMyr)}/day, gradual descent will find the floor`,
+      };
+    }
+    return {
+      ...base,
+      action: "restore",
+      newDailyMyr: FLOOR_DAILY_MYR,
+      reason: `autopilot restore: pause probe VERDICT — no detectable till effect (pause-window index ${p?.index ?? "n/a"}${p?.adjIndex != null ? `, fleet-adj ${p.adjIndex}` : ""}); campaign is below break-even wholesale — restoring at the floor RM${FLOOR_DAILY_MYR}/day (~RM${monthly(c.dailyBudgetMyr - FLOOR_DAILY_MYR)}/mo freed)`,
+    };
+  }
 
   // ── Raise under evaluation: burden of proof is on the spend ──────────────
   if (kind === "raise") {
@@ -263,6 +334,42 @@ export function capCuts(decisions: AutopilotDecision[], states: CampaignState[],
   );
 }
 
+/**
+ * Pure: start a pause probe when warranted — ONE campaign fleet-wide at a
+ * time, only a clearly-inefficient one (cost/conv > INEFFICIENT_RATIO ×
+ * fleet-best), never re-probed, never started into a weak till. The chosen
+ * campaign's decision is replaced with a pause; every other campaign keeps
+ * its decision (the gradual descent elsewhere doubles as the probe's
+ * control group).
+ */
+export function selectPauseProbe(
+  decisions: AutopilotDecision[],
+  states: CampaignState[],
+  guards: Record<string, GuardSignal>,
+): AutopilotDecision[] {
+  if (states.some((s) => s.isPaused)) return decisions; // one probe at a time
+  const candidates = states
+    .filter((s) => !s.hasBeenPauseProbed)
+    .filter((s) => s.efficiencyRatio != null && s.efficiencyRatio > INEFFICIENT_RATIO)
+    .filter((s) => {
+      const g = s.outletId ? guards[s.outletId] : undefined;
+      return !!g && g.rawIndex != null && !g.breach;
+    })
+    .sort((a, b) => (b.efficiencyRatio ?? 0) - (a.efficiencyRatio ?? 0));
+  const target = candidates[0];
+  if (!target) return decisions;
+  return decisions.map((d) =>
+    d.campaignId === target.campaignId
+      ? {
+          campaignId: d.campaignId,
+          campaignName: d.campaignName,
+          action: "pause" as const,
+          reason: `autopilot pause: probe start — cost/conv ${target.efficiencyRatio}× fleet-best; RM${round2(target.dailyBudgetMyr)}/day off for ${PAUSE_PROBE_DAYS}d (till should drop ~5-6% if this spend is break-even, more if profitable); other outlets keep descending as controls; auto-restores with a verdict`,
+        }
+      : d,
+  );
+}
+
 // ── IO: build state, decide, act ────────────────────────────────────────────
 
 const addDays = (ymd: string, days: number): string => {
@@ -270,35 +377,49 @@ const addDays = (ymd: string, days: number): string => {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 };
-const mytToday = (now: Date): string => new Date(now.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
+const mytDate = (d: Date): string => new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
 
-/** Actual ÷ forecast till-revenue index for one outlet over the trailing window. */
-async function outletRevenueIndex(
+/**
+ * Actual till revenue + counterfactual forecast for one outlet over an
+ * arbitrary window. The forecast is built ONLY from history preceding the
+ * window, so mid-window budget changes cannot contaminate their own baseline.
+ */
+async function windowActualForecast(
   outlet: { id: string; loyaltyOutletId: string | null },
-  now: Date,
-): Promise<number | null> {
-  const windowEnd = addDays(mytToday(now), -1); // last FULL day (MYT)
-  const windowStart = addDays(windowEnd, -(OBSERVE_DAYS - 1));
-  const histStart = addDays(windowStart, -FORECAST_WEEKS * 7);
-  const histEnd = addDays(windowStart, -1);
+  startYmd: string,
+  endYmd: string,
+): Promise<{ actual: number; forecast: number }> {
+  const histStart = addDays(startYmd, -FORECAST_WEEKS * 7);
+  const histEnd = addDays(startYmd, -1);
 
-  const series = await dailyRevenueSeries(outlet, histStart, windowEnd);
+  const series = await dailyRevenueSeries(outlet, histStart, endYmd);
   const history: Array<{ date: string; revenue: number }> = [];
   for (let d = histStart; d <= histEnd; d = addDays(d, 1)) history.push({ date: d, revenue: series.get(d) ?? 0 });
   const windowDates: string[] = [];
-  for (let d = windowStart; d <= windowEnd; d = addDays(d, 1)) windowDates.push(d);
+  for (let d = startYmd; d <= endYmd; d = addDays(d, 1)) windowDates.push(d);
 
   const { data: hols } = await hrSupabaseAdmin
     .from("hr_public_holidays")
     .select("date, name")
     .gte("date", histStart)
-    .lte("date", windowEnd);
+    .lte("date", endYmd);
   const holidays = ((hols ?? []) as Array<{ date: string; name: string }>).map((h) => ({ date: h.date, name: h.name }));
 
   const fc = buildWeekForecast({ weekDates: windowDates, history, holidays });
-  if (!(fc.weekly > 0)) return null;
   const actual = windowDates.reduce((s, d) => s + (series.get(d) ?? 0), 0);
-  return actual / fc.weekly;
+  return { actual, forecast: fc.weekly };
+}
+
+/** Plain actual till revenue over a window (for the anchor's share-of-fleet math). */
+async function windowActual(
+  outlet: { id: string; loyaltyOutletId: string | null },
+  startYmd: string,
+  endYmd: string,
+): Promise<number> {
+  const series = await dailyRevenueSeries(outlet, startYmd, endYmd);
+  let sum = 0;
+  for (const v of series.values()) sum += v;
+  return sum;
 }
 
 export type AutopilotRunResult = {
@@ -315,8 +436,10 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
 
   const [campaigns, report, changes] = await Promise.all([
     prisma.adsCampaign.findMany({
-      where: { status: { in: ENABLED_STATUSES }, account: { isManager: false } },
-      select: { id: true, name: true, outletId: true, dailyBudgetMicros: true },
+      // Paused campaigns stay in scope — a running pause probe must be seen so
+      // it can be restored on schedule.
+      where: { status: { in: [...ENABLED_STATUSES, "3", "PAUSED"] }, account: { isManager: false } },
+      select: { id: true, name: true, outletId: true, dailyBudgetMicros: true, status: true },
     }),
     buildAdsOptimizerReport(30),
     prisma.adsBudgetChange.findMany({
@@ -328,6 +451,8 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
   const effByCampaign = new Map(report.campaigns.map((c) => [c.campaignId, c.efficiencyRatio]));
   const lastByCampaign = new Map<string, LastAppliedChange>();
   const maxLevelByCampaign = new Map<string, number>(); // highest budget ever ledgered
+  const pauseProbedCampaigns = new Set<string>();       // any 'autopilot pause' row ever
+  let firstChangeAt: Date | null = null;                // descent start — the anchor's fixed reference
   for (const ch of changes) {
     if (!lastByCampaign.has(ch.campaignId)) {
       lastByCampaign.set(ch.campaignId, {
@@ -342,6 +467,8 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
       microsToMYR(ch.newDailyMicros),
     );
     maxLevelByCampaign.set(ch.campaignId, Math.max(maxLevelByCampaign.get(ch.campaignId) ?? 0, seen));
+    if (ch.reason?.startsWith("autopilot pause")) pauseProbedCampaigns.add(ch.campaignId);
+    if (!firstChangeAt || ch.decidedAt < firstChangeAt) firstChangeAt = ch.decidedAt;
   }
 
   // Revenue guard per distinct outlet behind a campaign.
@@ -350,19 +477,47 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     where: { id: { in: outletIds } },
     select: { id: true, loyaltyOutletId: true },
   });
+  const yesterday = addDays(mytDate(now), -1); // last FULL day (MYT)
+  const guardStart = addDays(yesterday, -(OBSERVE_DAYS - 1));
+
   const rawIndexByOutlet = new Map<string, number | null>();
+  const actualNowByOutlet = new Map<string, number>();
   for (const o of outlets) {
-    rawIndexByOutlet.set(o.id, await outletRevenueIndex(o, now).catch(() => null));
+    const w = await windowActualForecast(o, guardStart, yesterday).catch(() => null);
+    rawIndexByOutlet.set(o.id, w && w.forecast > 0 ? w.actual / w.forecast : null);
+    actualNowByOutlet.set(o.id, w?.actual ?? 0);
   }
+
+  // Fixed-anchor drift check: this outlet's share of fleet revenue now vs the
+  // 28 days before the first ledgered budget change (pre-descent). Catches
+  // slow cumulative damage the trailing forecast normalizes away.
+  const anchorIndexByOutlet = new Map<string, number | null>();
+  if (firstChangeAt && outlets.length > 1) {
+    const aEnd = addDays(mytDate(firstChangeAt), -1);
+    const aStart = addDays(aEnd, -(ANCHOR_WINDOW_DAYS - 1));
+    const anchorActual = new Map<string, number>();
+    for (const o of outlets) {
+      anchorActual.set(o.id, await windowActual(o, aStart, aEnd).catch(() => 0));
+    }
+    const anchorTotal = [...anchorActual.values()].reduce((s, v) => s + v, 0);
+    const nowTotal = [...actualNowByOutlet.values()].reduce((s, v) => s + v, 0);
+    for (const o of outlets) {
+      const aShare = anchorTotal > 0 ? (anchorActual.get(o.id) ?? 0) / anchorTotal : 0;
+      const nShare = nowTotal > 0 ? (actualNowByOutlet.get(o.id) ?? 0) / nowTotal : 0;
+      anchorIndexByOutlet.set(o.id, aShare > 0 ? nShare / aShare : null);
+    }
+  }
+
   const guards: Record<string, GuardSignal> = {};
   for (const [oid, raw] of rawIndexByOutlet) {
     const others = [...rawIndexByOutlet.entries()]
       .filter(([k, v]) => k !== oid && v != null)
       .map(([, v]) => v as number);
-    guards[oid] = guardFromIndexes(raw, others);
+    guards[oid] = guardFromIndexes(raw, others, anchorIndexByOutlet.get(oid) ?? null);
   }
-  const noGuard: GuardSignal = { rawIndex: null, adjIndex: null, breach: false };
+  const noGuard: GuardSignal = { rawIndex: null, adjIndex: null, anchorIndex: null, breach: false };
 
+  const isPausedStatus = (s: string) => !ENABLED_STATUSES.includes(s);
   const states: CampaignState[] = campaigns.map((c) => {
     const current = microsToMYR(c.dailyBudgetMicros ?? BigInt(0));
     return {
@@ -373,12 +528,39 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
       baselineDailyMyr: Math.max(current, maxLevelByCampaign.get(c.id) ?? 0),
       efficiencyRatio: effByCampaign.get(c.id) ?? null,
       lastApplied: lastByCampaign.get(c.id) ?? null,
+      isPaused: isPausedStatus(c.status),
+      hasBeenPauseProbed: pauseProbedCampaigns.has(c.id),
     };
   });
 
-  const decisions: AutopilotRunResult["decisions"] = capCuts(
-    states.map((s) => decideCampaign(s, s.outletId ? guards[s.outletId] ?? noGuard : noGuard, now)),
+  // A running pause probe gets its own measurement window (pause start →
+  // yesterday) with the forecast built from PRE-pause history, plus the other
+  // outlets' index over the SAME window as the control.
+  for (const s of states) {
+    if (!s.isPaused || lastKind(s.lastApplied) !== "pause" || !s.outletId) continue;
+    const outlet = outlets.find((o) => o.id === s.outletId);
+    if (!outlet) continue;
+    const pStart = addDays(mytDate(s.lastApplied!.decidedAt), 1); // first fully-paused day
+    if (pStart > yesterday) continue;
+    const w = await windowActualForecast(outlet, pStart, yesterday).catch(() => null);
+    const index = w && w.forecast > 0 ? w.actual / w.forecast : null;
+    const others: number[] = [];
+    for (const o of outlets) {
+      if (o.id === s.outletId) continue;
+      const ow = await windowActualForecast(o, pStart, yesterday).catch(() => null);
+      if (ow && ow.forecast > 0) others.push(ow.actual / ow.forecast);
+    }
+    const sig = guardFromIndexes(index, others);
+    s.pauseProbe = { index: sig.rawIndex, adjIndex: sig.adjIndex };
+  }
+
+  const decisions: AutopilotRunResult["decisions"] = selectPauseProbe(
+    capCuts(
+      states.map((s) => decideCampaign(s, s.outletId ? guards[s.outletId] ?? noGuard : noGuard, now)),
+      states,
+    ),
     states,
+    guards,
   );
 
   // Auto-exclusions from the last 30 days of term spend.
@@ -403,7 +585,29 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
 
   if (mode === "armed") {
     for (const d of decisions) {
-      if (d.action === "hold" || d.newDailyMyr == null) continue;
+      if (d.action === "hold") continue;
+      if (d.action === "pause") {
+        const res = await pauseCampaign(d.campaignId, d.reason, "ads-autopilot");
+        Object.assign(d, res.ok ? { applied: true } : { applied: false, error: res.error });
+        continue;
+      }
+      if (d.action === "restore") {
+        const res = await enableCampaign(d.campaignId, d.reason, "ads-autopilot");
+        Object.assign(d, res.ok ? { applied: true } : { applied: false, error: res.error });
+        // "No detectable effect" verdict also drops the budget to the floor.
+        const st = states.find((s) => s.campaignId === d.campaignId);
+        if (res.ok && d.newDailyMyr != null && st && d.newDailyMyr < st.dailyBudgetMyr) {
+          const bres = await applyBudgetChange({
+            campaignId: d.campaignId,
+            newDailyMyr: d.newDailyMyr,
+            decidedBy: "ads-autopilot",
+            reason: d.reason,
+          });
+          if (!bres.ok) Object.assign(d, { applied: false, error: bres.error });
+        }
+        continue;
+      }
+      if (d.newDailyMyr == null) continue;
       const res = await applyBudgetChange({
         campaignId: d.campaignId,
         newDailyMyr: d.newDailyMyr,
@@ -429,7 +633,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     agentKey: AGENT_KEY,
     kind: mode === "armed" ? "budget_change" : "proposal",
     summary:
-      `${mode}: ${acted.length ? acted.map((d) => `${d.campaignName} ${d.action}→RM${d.newDailyMyr}/day`).join("; ") : "all campaigns hold"}; ` +
+      `${mode}: ${acted.length ? acted.map((d) => `${d.campaignName} ${d.action}${d.newDailyMyr != null ? `→RM${d.newDailyMyr}/day` : ""}`).join("; ") : "all campaigns hold"}; ` +
       `${exclusions.length} term exclusion(s)`,
     refTable: "ads_budget_change",
     meta: { decisions, exclusions: exclusions.slice(0, 30), guards },

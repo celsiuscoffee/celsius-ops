@@ -340,6 +340,24 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   raise's break-even in the reason) — kept only on detectable lift (fleet-adj
   ≥1.02 AND raw ≥1.0, or immediate revert on breach), else REVERT → SETTLE 90d
   at the proven optimum before re-searching.
+  **Round 2 (owner-approved after the step-size math):** gradual steps
+  (8–15% of ~RM100/day) move a ~RM2.5-3k/day outlet's till by <1% — per-step
+  unreadable; a FULL pause is the only readable experiment (~5-6% if
+  break-even). So: **PAUSE PROBE** — one clearly-inefficient campaign at a
+  time (cost/conv >1.3× fleet-best, never re-probed, never started into a
+  weak till) is PAUSED for 28d (`pause-campaign.ts`, ledger reasons `autopilot
+  pause`/`autopilot restore`), the others keep descending as controls
+  (Putrajaya + Shah Alam stay gradual per owner), then auto-restored with a
+  verdict measured against a forecast built from PRE-pause history: till
+  dropped (raw <0.95 / adj <0.97 over the pause window) → ads generate cash,
+  resume prior budget + descend; no detectable effect → below break-even
+  wholesale, restore at floor RM20/day (~RM1.9k/mo freed at Tamarind). First
+  probe will select **Tamarind** (ratio ~1.5; PJ 1.24 is under the 1.3 bar).
+  **Boiling-frog fix:** the guard now also carries a fixed ANCHOR — outlet's
+  share of fleet till revenue in the 28d before the first ledgered budget
+  change vs its share now; anchor <0.93 = breach → rollback. This catches
+  cumulative slow damage that the trailing 4-week forecast would otherwise
+  normalize into the baseline. 31 autopilot tests / 400 total green.
   **Revenue guard:** last-14-full-days actual till revenue ÷ same-window
   forecast (labour-gate `dailyRevenueSeries` + `buildWeekForecast`, history
   precedes the window = clean counterfactual), divided by the median of the

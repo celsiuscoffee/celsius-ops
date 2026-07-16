@@ -3,12 +3,14 @@ import {
   decideCampaign,
   guardFromIndexes,
   capCuts,
+  selectPauseProbe,
   FLOOR_DAILY_MYR,
   OBSERVE_DAYS,
   ROLLBACK_HOLD_DAYS,
   PROBE_OBSERVE_DAYS,
   SETTLE_HOLD_DAYS,
   RAISE_CAP_OF_BASELINE,
+  PAUSE_PROBE_DAYS,
   type CampaignState,
   type GuardSignal,
 } from "./autopilot";
@@ -17,8 +19,8 @@ import { classifyTermIntent, selectAutoExclusions, shouldAutoExclude } from "./t
 const NOW = new Date("2026-07-20T00:00:00Z");
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86400000);
 
-const healthy: GuardSignal = { rawIndex: 1.01, adjIndex: 1.0, breach: false };
-const breached: GuardSignal = { rawIndex: 0.91, adjIndex: 0.93, breach: true };
+const healthy: GuardSignal = { rawIndex: 1.01, adjIndex: 1.0, anchorIndex: 1.0, breach: false };
+const breached: GuardSignal = { rawIndex: 0.91, adjIndex: 0.93, anchorIndex: 0.94, breach: true };
 
 const campaign = (over: Partial<CampaignState> = {}): CampaignState => ({
   campaignId: "c1",
@@ -28,6 +30,8 @@ const campaign = (over: Partial<CampaignState> = {}): CampaignState => ({
   baselineDailyMyr: 100,
   efficiencyRatio: 1.0,
   lastApplied: null,
+  isPaused: false,
+  hasBeenPauseProbed: false,
   ...over,
 });
 
@@ -48,7 +52,16 @@ describe("guardFromIndexes", () => {
     expect(g.breach).toBe(true);
   });
   it("null when no forecast", () => {
-    expect(guardFromIndexes(null, [1, 1])).toEqual({ rawIndex: null, adjIndex: null, breach: false });
+    expect(guardFromIndexes(null, [1, 1])).toEqual({ rawIndex: null, adjIndex: null, anchorIndex: null, breach: false });
+  });
+
+  it("breaches on cumulative anchor drift even when the trailing forecast looks fine (boiling frog)", () => {
+    // Trailing index 1.0 (baseline has absorbed the slow damage), fleet fine —
+    // but the outlet now takes only 90% of its pre-descent share of fleet revenue.
+    const g = guardFromIndexes(1.0, [1.0, 1.0], 0.9);
+    expect(g.breach).toBe(true);
+    const ok = guardFromIndexes(1.0, [1.0, 1.0], 0.97);
+    expect(ok.breach).toBe(false);
   });
 });
 
@@ -177,7 +190,7 @@ describe("decideCampaign — probe-up phase (spend must prove itself)", () => {
   });
 
   it("keeps a raise with proven lift and probes further, up to the baseline cap", () => {
-    const lift: GuardSignal = { rawIndex: 1.06, adjIndex: 1.05, breach: false };
+    const lift: GuardSignal = { rawIndex: 1.06, adjIndex: 1.05, anchorIndex: 1.04, breach: false };
     const d = decideCampaign(raised(), lift, NOW);
     expect(d.action).toBe("raise");
     expect(d.newDailyMyr).toBe(100 * RAISE_CAP_OF_BASELINE); // 132.25 capped to 125
@@ -197,6 +210,96 @@ describe("decideCampaign — probe-up phase (spend must prove itself)", () => {
       lastApplied: { decidedAt: daysAgo(SETTLE_HOLD_DAYS + 1), prevDailyMyr: 115, newDailyMyr: 100, reason: "autopilot revert: no lift" },
     });
     expect(decideCampaign(reSearch, healthy, NOW).action).toBe("cut");
+  });
+});
+
+describe("pause probe", () => {
+  const guards = { o1: healthy, o2: healthy, o3: healthy };
+
+  it("selectPauseProbe pauses only the worst clearly-inefficient never-probed campaign", () => {
+    const states = [
+      campaign({ campaignId: "sa", outletId: "o1", efficiencyRatio: 1.0 }),
+      campaign({ campaignId: "pj", outletId: "o2", efficiencyRatio: 1.24 }),
+      campaign({ campaignId: "tam", outletId: "o3", efficiencyRatio: 1.54 }),
+    ];
+    const decisions = states.map((s) => decideCampaign(s, guards[s.outletId as keyof typeof guards], NOW));
+    const out = selectPauseProbe(decisions, states, guards);
+    expect(out.find((d) => d.campaignId === "tam")?.action).toBe("pause");
+    // Putrajaya (1.24 < 1.3) and Shah Alam stay on the gradual descent.
+    expect(out.find((d) => d.campaignId === "pj")?.action).toBe("cut");
+    expect(out.find((d) => d.campaignId === "sa")?.action).toBe("cut");
+  });
+
+  it("never starts a second probe while one is running, never re-probes, never probes into weakness", () => {
+    const states = [
+      campaign({ campaignId: "tam", outletId: "o3", efficiencyRatio: 1.54 }),
+      campaign({ campaignId: "pj", outletId: "o2", efficiencyRatio: 1.4 }),
+    ];
+    const decisions = states.map((s) => decideCampaign(s, healthy, NOW));
+    // one already paused
+    expect(
+      selectPauseProbe(decisions, [{ ...states[0], isPaused: true }, states[1]], guards).every((d) => d.action !== "pause"),
+    ).toBe(true);
+    // already probed before
+    expect(
+      selectPauseProbe(decisions, states.map((s) => ({ ...s, hasBeenPauseProbed: true })), guards).every((d) => d.action !== "pause"),
+    ).toBe(true);
+    // guard breached at every outlet
+    expect(
+      selectPauseProbe(decisions, states, { o2: breached, o3: breached }).every((d) => d.action !== "pause"),
+    ).toBe(true);
+  });
+
+  it("holds a paused campaign until the probe window completes", () => {
+    const d = decideCampaign(
+      campaign({
+        isPaused: true,
+        lastApplied: { decidedAt: daysAgo(10), prevDailyMyr: 85, newDailyMyr: 85, reason: "autopilot pause: probe start" },
+        pauseProbe: { index: 0.97, adjIndex: 0.98 },
+      }),
+      healthy,
+      NOW,
+    );
+    expect(d.action).toBe("hold");
+    expect(d.reason).toMatch(/pause probe running/);
+  });
+
+  it("restores at the prior budget when the pause dented the till (ads generate cash)", () => {
+    const d = decideCampaign(
+      campaign({
+        dailyBudgetMyr: 85,
+        isPaused: true,
+        lastApplied: { decidedAt: daysAgo(PAUSE_PROBE_DAYS + 1), prevDailyMyr: 85, newDailyMyr: 85, reason: "autopilot pause: probe start" },
+        pauseProbe: { index: 0.92, adjIndex: 0.93 },
+      }),
+      healthy,
+      NOW,
+    );
+    expect(d.action).toBe("restore");
+    expect(d.newDailyMyr).toBe(85);
+    expect(d.reason).toMatch(/ads generate cash/);
+  });
+
+  it("restores at the floor when the pause showed no detectable till effect", () => {
+    const d = decideCampaign(
+      campaign({
+        dailyBudgetMyr: 85,
+        isPaused: true,
+        lastApplied: { decidedAt: daysAgo(PAUSE_PROBE_DAYS + 1), prevDailyMyr: 85, newDailyMyr: 85, reason: "autopilot pause: probe start" },
+        pauseProbe: { index: 1.0, adjIndex: 1.0 },
+      }),
+      healthy,
+      NOW,
+    );
+    expect(d.action).toBe("restore");
+    expect(d.newDailyMyr).toBe(FLOOR_DAILY_MYR);
+    expect(d.reason).toMatch(/no detectable till effect/);
+  });
+
+  it("leaves a human-paused campaign alone", () => {
+    const d = decideCampaign(campaign({ isPaused: true, lastApplied: null }), healthy, NOW);
+    expect(d.action).toBe("hold");
+    expect(d.reason).toMatch(/not by the autopilot/);
   });
 });
 
