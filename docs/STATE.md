@@ -273,6 +273,29 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-16 — **GrabAds pause holdout in flight — READ ON/AFTER 2026-07-23
+  (solid: 07-30).** GrabAds paused: Shah Alam + Tamarind 2026-07-15, Putrajaya
+  2026-07-16 (con's first clean day = 07-17). Goal: measure the real incremental
+  Grab sales decrement to convert Grab's *attributed* ROAS (Putrajaya 3.33× per
+  the GrabMerchant dashboard, but 47% repeat customers) into a *true* incremental
+  ROAS + cash number. Full method, locked pre-pause weekday baseline, cost
+  structure, and the read SQL: `docs/design/grabads-holdout-2026-07.md`. Verified
+  facts established this session: (a) **`unified_sales` now INCLUDES a `grabfood`
+  channel** (SA/Tam/con), so the data-map line "Grab delivery revenue is NOT in
+  unified_sales" is STALE — till lens = `channel='pos'`, Grab = `channel='grabfood'`
+  (= `pos_orders` source='grabfood', gross). (b) BOM food cost on the Grab mix is
+  **~23–24%** (cheapest-supplier `MenuIngredient`×`SupplierProduct`÷package factor,
+  modifiers/packaging excluded → floor); NYC cookie/pastry range is **cash-negative
+  on Grab** all-in (commission+ads+food). (c) On Grab, commission (30%) + ads
+  (~23% of gross at Putrajaya) ≈ 53% "to Grab"; channel keeps ~24%. (d) Putrajaya
+  POS Grab data starts 2026-06-17 (cutover) — earlier "ad=50% of gross" was a
+  half-month artifact; true Grab run-rate ~RM11.4k/mo. Projection: pausing all
+  three adds ~RM1,700/mo (~RM20k/yr) central; SA+Tam confident, Putrajaya the
+  swing. **Next:** run the read query on/after 07-23, compute decrement + true
+  incremental ROAS + revised cash, decide keep/close per outlet. Also owed:
+  Google Ads conversion VALUE is a placeholder (=count, not RM) so Google ROAS is
+  unmeasurable until real order revenue is wired into conversions.
+
 - 2026-07-15 -- **Staff-scheduling round 2 (branch
   `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the
   merged #934 (multi-outlet rotation + demand-sized AI Fill + fairness). Two
