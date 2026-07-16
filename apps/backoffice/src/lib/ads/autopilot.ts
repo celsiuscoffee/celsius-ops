@@ -10,8 +10,11 @@
  * asymmetric in cash's favor: a CUT stands unless the till proves it hurt;
  * a RAISE reverts unless the till proves it helped.
  *
- * Per-campaign state machine (weekly, inside ads-daily on Mondays), with all
- * state derived from the ads_budget_change ledger — no new tables:
+ * Per-campaign state machine (nightly, inside ads-daily; actions self-paced —
+ * per-campaign observation windows + a fleet-wide FLEET_SPACING_DAYS stagger
+ * for new disturbances, while safety actions fire the first night the till
+ * says so), with all state derived from the ads_budget_change ledger — no new
+ * tables:
  *
  *   DESCEND   — step the budget down 8% (12% when cost/conv >1.3× fleet-best)
  *               every ≥14 observed days, max MAX_CUTS_PER_RUN campaigns per
@@ -106,6 +109,10 @@ export const GROSS_MARGIN = Number(process.env.ADS_GROSS_MARGIN || 0.6);
 
 // Pause probe — the only till-readable experiment at this spend:revenue ratio.
 export const PAUSE_PROBE_DAYS = 28;      // full pause length before auto-restore
+// The cron runs nightly; this fleet-wide gap staggers NEW disturbances
+// (cut/raise/pause) so the loop keeps its ~weekly rhythm without waiting for
+// a fixed weekday. Safety actions (rollback/revert/restore) are never spaced.
+export const FLEET_SPACING_DAYS = 6;
 // Fixed-anchor drift guard: current share of fleet revenue ÷ the share in the
 // 28 days before the first ledgered budget change. Slightly looser than the
 // per-step thresholds because shares are noisier than forecasts.
@@ -335,6 +342,33 @@ export function capCuts(decisions: AutopilotDecision[], states: CampaignState[],
 }
 
 /**
+ * Pure: nightly-cadence stagger. If any autopilot disturbance (step-down,
+ * raise, pause) was applied fleet-wide within FLEET_SPACING_DAYS, defer new
+ * disturbances to keep the loop's ~weekly rhythm; same-run batches (all
+ * decided before any is applied) pass together. Safety actions and holds are
+ * untouched — a rollback must never wait for spacing.
+ */
+export function spaceDisturbances(
+  decisions: AutopilotDecision[],
+  lastDisturbanceAt: Date | null,
+  now: Date,
+): AutopilotDecision[] {
+  if (!lastDisturbanceAt) return decisions;
+  const days = (now.getTime() - lastDisturbanceAt.getTime()) / DAY_MS;
+  if (days >= FLEET_SPACING_DAYS) return decisions;
+  return decisions.map((d) =>
+    d.action === "cut" || d.action === "raise" || d.action === "pause"
+      ? {
+          campaignId: d.campaignId,
+          campaignName: d.campaignName,
+          action: "hold" as const,
+          reason: `ready to ${d.action} but fleet changed ${Math.round(days)}d ago — spacing ${FLEET_SPACING_DAYS}d between disturbances`,
+        }
+      : d,
+  );
+}
+
+/**
  * Pure: start a pause probe when warranted — ONE campaign fleet-wide at a
  * time, only a clearly-inefficient one (cost/conv > INEFFICIENT_RATIO ×
  * fleet-best), never re-probed, never started into a weak till. The chosen
@@ -453,6 +487,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
   const maxLevelByCampaign = new Map<string, number>(); // highest budget ever ledgered
   const pauseProbedCampaigns = new Set<string>();       // any 'autopilot pause' row ever
   let firstChangeAt: Date | null = null;                // descent start — the anchor's fixed reference
+  let lastDisturbanceAt: Date | null = null;            // newest autopilot cut/raise/pause (fleet spacing)
   for (const ch of changes) {
     if (!lastByCampaign.has(ch.campaignId)) {
       lastByCampaign.set(ch.campaignId, {
@@ -469,6 +504,14 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     maxLevelByCampaign.set(ch.campaignId, Math.max(maxLevelByCampaign.get(ch.campaignId) ?? 0, seen));
     if (ch.reason?.startsWith("autopilot pause")) pauseProbedCampaigns.add(ch.campaignId);
     if (!firstChangeAt || ch.decidedAt < firstChangeAt) firstChangeAt = ch.decidedAt;
+    if (
+      (ch.reason?.startsWith("autopilot step-down") ||
+        ch.reason?.startsWith("autopilot raise") ||
+        ch.reason?.startsWith("autopilot pause")) &&
+      (!lastDisturbanceAt || ch.decidedAt > lastDisturbanceAt)
+    ) {
+      lastDisturbanceAt = ch.decidedAt;
+    }
   }
 
   // Revenue guard per distinct outlet behind a campaign.
@@ -554,13 +597,17 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     s.pauseProbe = { index: sig.rawIndex, adjIndex: sig.adjIndex };
   }
 
-  const decisions: AutopilotRunResult["decisions"] = selectPauseProbe(
-    capCuts(
-      states.map((s) => decideCampaign(s, s.outletId ? guards[s.outletId] ?? noGuard : noGuard, now)),
+  const decisions: AutopilotRunResult["decisions"] = spaceDisturbances(
+    selectPauseProbe(
+      capCuts(
+        states.map((s) => decideCampaign(s, s.outletId ? guards[s.outletId] ?? noGuard : noGuard, now)),
+        states,
+      ),
       states,
+      guards,
     ),
-    states,
-    guards,
+    lastDisturbanceAt,
+    now,
   );
 
   // Auto-exclusions from the last 30 days of term spend.

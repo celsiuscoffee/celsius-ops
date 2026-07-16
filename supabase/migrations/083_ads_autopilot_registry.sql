@@ -23,7 +23,10 @@ values
 -- PAUSE PROBE (28d full pause of one clearly-inefficient campaign at a time,
 -- auto-restore + verdict) and the pre-descent share-of-fleet ANCHOR guard
 -- (<0.93 = breach) — see autopilot.ts header for the full state machine.
-   'armed', 'cron', 'inside cron/ads-daily, Mondays (UTC)', false, null,
+-- 2026-07-16 (round 3): trigger_detail updated in prod — runs NIGHTLY inside
+-- ads-daily (actions self-paced: observation windows + 6d fleet stagger;
+-- safety actions immediate), no longer Monday-gated.
+   'armed', 'cron', 'inside cron/ads-daily, nightly 3am MYT; actions self-paced (per-campaign observation windows + 6d fleet stagger; safety actions immediate)', false, null,
    'Owner directives 2026-07-16: maximize cash (till lift x margin - spend), trim first, then search upward; no per-change approval. Armed with: per-campaign revenue guard (raw <0.95 or fleet-adj <0.97 = breach -> rollback), raises kept only on lift (fleet-adj >=1.02 and raw >=1.0), no action without a guard signal, step caps 12%/15%, floor RM20/day, raise cap 1.25x baseline, exclusion caps (RM2 min spend, 15/campaign/run), human "rejected" ledger rows permanently respected.',
    'Registry mode is the only switch (fail-safe: missing row = off). Floor via ADS_AUTOPILOT_FLOOR_MYR, margin via ADS_GROSS_MARGIN (default 0.6).',
    'apps/backoffice/src/lib/ads/autopilot.ts')

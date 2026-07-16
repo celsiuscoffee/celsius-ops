@@ -4,6 +4,8 @@ import {
   guardFromIndexes,
   capCuts,
   selectPauseProbe,
+  spaceDisturbances,
+  FLEET_SPACING_DAYS,
   FLOOR_DAILY_MYR,
   OBSERVE_DAYS,
   ROLLBACK_HOLD_DAYS,
@@ -300,6 +302,23 @@ describe("pause probe", () => {
     const d = decideCampaign(campaign({ isPaused: true, lastApplied: null }), healthy, NOW);
     expect(d.action).toBe("hold");
     expect(d.reason).toMatch(/not by the autopilot/);
+  });
+});
+
+describe("spaceDisturbances (nightly cadence)", () => {
+  it("defers new disturbances inside the spacing window but never delays safety actions", () => {
+    const decisions = [
+      { campaignId: "a", campaignName: "A", action: "cut" as const, newDailyMyr: 92, reason: "autopilot step-down" },
+      { campaignId: "b", campaignName: "B", action: "rollback" as const, newDailyMyr: 100, reason: "autopilot rollback" },
+      { campaignId: "c", campaignName: "C", action: "pause" as const, reason: "autopilot pause" },
+    ];
+    const spaced = spaceDisturbances(decisions, daysAgo(2), NOW);
+    expect(spaced.find((d) => d.campaignId === "a")?.action).toBe("hold");
+    expect(spaced.find((d) => d.campaignId === "c")?.action).toBe("hold");
+    expect(spaced.find((d) => d.campaignId === "b")?.action).toBe("rollback");
+    // outside the window (or no history) everything passes
+    expect(spaceDisturbances(decisions, daysAgo(FLEET_SPACING_DAYS + 1), NOW)).toEqual(decisions);
+    expect(spaceDisturbances(decisions, null, NOW)).toEqual(decisions);
   });
 });
 

@@ -71,18 +71,20 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Weekly (Monday, after the fresh sync above) autopilot pass — no new Vercel
-  // cron slot needed. Registry key `ads_autopilot` is the switch: off = no-op,
-  // shadow = full decision pass logged with zero mutations, armed = budget
-  // step-downs/rollbacks + term auto-exclusions applied to Google Ads
-  // (ledgered in ads_budget_change / ads_term_exclusion as before).
+  // Autopilot pass — every night, right after the fresh sync (no new Vercel
+  // cron slot needed). Cadence lives in the autopilot itself, not the cron
+  // day: per-campaign observation windows pace cuts/raises/pauses, a
+  // fleet-wide spacing gap staggers disturbances, and safety actions
+  // (rollback / revert / restore) fire the first night the till says so
+  // instead of waiting for a weekly slot. Registry key `ads_autopilot` is the
+  // switch: off = no-op, shadow = full decision pass logged with zero
+  // mutations, armed = changes applied to Google Ads (ledgered in
+  // ads_budget_change / ads_term_exclusion as before).
   let optimizer: Record<string, unknown> | null = null;
-  if (new Date().getUTCDay() === 1) {
-    try {
-      optimizer = { ...(await runAdsAutopilot()) };
-    } catch (e) {
-      optimizer = { error: (e as Error).message };
-    }
+  try {
+    optimizer = { ...(await runAdsAutopilot()) };
+  } catch (e) {
+    optimizer = { error: (e as Error).message };
   }
 
   return NextResponse.json({

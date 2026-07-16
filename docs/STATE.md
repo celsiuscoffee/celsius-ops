@@ -327,7 +327,10 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   till is the source of truth... trimming is just the first step, next is to
   find the best way to increase cash"). New
   `apps/backoffice/src/lib/ads/autopilot.ts`, runs inside `cron/ads-daily`
-  Mondays (UTC), replacing the response-only shadow report. **Objective =
+  NIGHTLY (owner: no reason to wait for a weekday — actions are self-paced by
+  the ledger: per-campaign observation windows + a 6-day fleet-wide stagger
+  for new disturbances, while rollback/revert/restore fire the first night
+  the till says so), replacing the response-only shadow report. **Objective =
   cash: till lift × margin − spend; bidirectional extremum-seeker, burden of
   proof asymmetric (cuts stand unless the till proves harm; raises revert
   unless the till proves lift).** State machine per campaign, memory = the
