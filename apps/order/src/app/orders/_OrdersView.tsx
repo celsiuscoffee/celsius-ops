@@ -101,7 +101,17 @@ export function OrdersView() {
     })
       .then((r) => r.json())
       .then((data) => {
-        setOrders((data?.orders ?? data ?? []) as Order[]);
+        // The API can return an error object ({error: "..."}), e.g. on an
+        // expired session token under STRICT_CUSTOMER_AUTH — storing that as
+        // "orders" crashed the filter below (Sentry CELSIUS-OPS-B). Only
+        // accept arrays; anything else is an error response.
+        const list = Array.isArray(data?.orders) ? data.orders : Array.isArray(data) ? data : null;
+        if (list) {
+          setOrders(list as Order[]);
+        } else {
+          setOrders([]);
+          setError(typeof data?.error === "string" ? data.error : "Could not load your orders.");
+        }
       })
       .catch((err) => setError(String(err)));
   }, []);
