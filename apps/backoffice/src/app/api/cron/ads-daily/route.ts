@@ -5,7 +5,7 @@ import { syncCampaigns } from "@/lib/ads/sync-campaigns";
 import { syncMetrics } from "@/lib/ads/sync-metrics";
 import { syncSearchTerms } from "@/lib/ads/sync-search-terms";
 import { runSync } from "@/lib/ads/run-sync";
-import { buildAdsOptimizerReport } from "@/lib/ads/optimizer";
+import { runAdsAutopilot } from "@/lib/ads/autopilot";
 import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
@@ -71,15 +71,15 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Weekly (Monday, after the fresh sync above) shadow pass of the budget-cut
-  // optimizer — no new Vercel cron slot needed, and it deliberately mutates
-  // nothing: cutting a budget is approval-gated on /ads/optimizer. This just
-  // records the week's reclaimable total so the recommendation is auditable.
+  // Weekly (Monday, after the fresh sync above) autopilot pass — no new Vercel
+  // cron slot needed. Registry key `ads_autopilot` is the switch: off = no-op,
+  // shadow = full decision pass logged with zero mutations, armed = budget
+  // step-downs/rollbacks + term auto-exclusions applied to Google Ads
+  // (ledgered in ads_budget_change / ads_term_exclusion as before).
   let optimizer: Record<string, unknown> | null = null;
   if (new Date().getUTCDay() === 1) {
     try {
-      const report = await buildAdsOptimizerReport(30);
-      optimizer = { mode: "shadow", summary: report.summary };
+      optimizer = { ...(await runAdsAutopilot()) };
     } catch (e) {
       optimizer = { error: (e as Error).message };
     }

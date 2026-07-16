@@ -313,13 +313,43 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   the failed scan coverage.
   **Next:** (1) fix geogrid scan economics — don't count failed scans against
   the cap, throttle within a run, and prune the 86-keyword set to fit the
-  budget (or raise the cap knowingly: ~81 Places calls/scan); (2) persist the
-  Monday shadow-optimizer summary somewhere a human sees it; (3) batch the
-  search-terms upserts + mark the sync-log row OK; (4) owner decision: wire the
-  value-based Pickup Order conversion (Approach A) or accept
-  directions-clicks as the metric; (5) register these loops in
-  `agent_registry`; (6) re-propose GBP category adds once Tamarind has a real
-  catchment scan.
+  budget (or raise the cap knowingly: ~81 Places calls/scan); (2) owner
+  decision: wire the value-based Pickup Order conversion (Approach A) or
+  accept directions-clicks as the metric; (3) re-propose GBP category adds
+  once Tamarind has a real catchment scan. (Items on the optimizer shadow
+  report, search-term batching, and registry registration were superseded the
+  same day by the ads autopilot — next entry.)
+
+- 2026-07-16 — **Ads spend AUTOPILOT built + armed** (same branch/PR #947,
+  owner directive in chat: "no need human approve... cut the spending lowest
+  possible without reducing the till revenue", descend from 100% — no pause
+  test). New `apps/backoffice/src/lib/ads/autopilot.ts`, runs inside
+  `cron/ads-daily` Mondays (UTC), replacing the response-only shadow report.
+  Controller: per-campaign budget step-down 8% (12% when cost/conv >1.3×
+  fleet-best), ≥14d observation between changes, max 2 cuts/run
+  (least-efficient first), hard floor RM20/day (ADS_AUTOPILOT_FLOOR_MYR).
+  **Revenue guard:** last-14-full-days actual till revenue ÷ same-window
+  forecast (labour-gate `dailyRevenueSeries` + `buildWeekForecast`, history
+  precedes the window = clean counterfactual), divided by the median of the
+  other ads outlets' indexes to cancel fleet-wide shocks; breach = raw <0.95
+  OR fleet-adj <0.97 → roll the last recent cut back one step + 56d hold on
+  that campaign ("descent floor found"); breach with no recent cut → hold
+  (never cut into weakness); no guard signal → never act. **Term
+  auto-exclusions** (`term-rules.ts`): own-brand + non-café food intent only,
+  ≥RM2/30d, ≤15/campaign/run; competitor coffee brands + dessert/ambiguous
+  NEVER auto-excluded (strategy calls); human `rejected` ledger rows are a
+  standing no. All actions land in the existing `ads_budget_change` /
+  `ads_term_exclusion` ledgers as `decided_by='ads-autopilot'` (undo paths
+  unchanged) + a summary row in `agent_actions`. **Kill switch:**
+  `agent_registry` key `ads_autopilot`, fail-safe off — row seeded ARMED in
+  prod 2026-07-16 (migration 083, applied via MCP; inert until this code
+  deploys). Also FIXED the search-terms sync: batched unnest upserts (500/chunk)
+  replace the per-row upsert loop that exhausted the pool after the first
+  account — Shah Alam + Tamarind term data starts landing on the next nightly
+  run (their history begins ~Jul 17; exclusion candidates there build up over
+  the following weeks). First armed pass: Monday Jul 20 19:00 UTC — expect
+  cuts at Tamarind + Putrajaya (Jul 5 changes will be 15d old), SA deferred to
+  the following week, plus ~Putrajaya-only exclusions. 387 tests + tsc green.
 
 - 2026-07-15 -- **Staff-scheduling round 2 (branch
   `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the
