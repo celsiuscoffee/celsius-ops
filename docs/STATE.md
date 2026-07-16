@@ -273,6 +273,54 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-16 — **Ads optimizer + local-rank status check (all DB-verified,
+  follow-up to the 2026-07-05 entry).**
+  **Optimizer:** the two Jul 5 owner-approved cuts (Tamarind RM100.20→84.96/day,
+  Putrajaya RM100→98.42/day, ~RM504/mo freed) applied clean and are sticking —
+  per-day cost/conv Jul 5–14 vs the prior 2 weeks: Tam RM13.4→9.4, PJ RM9.4→7.6,
+  SA (uncut) RM6.2→6.1, with conversions/day flat-to-up at all three. No further
+  budget changes; 0 search-term exclusions ever used. July spend to date
+  RM7,296 (3 campaigns ≈RM100/day each). **BUT the conversion signal is still
+  wrong:** `ads_conversion_daily` confirms the tracked actions are *Local
+  actions – Directions* + *Clicks to call* (and that per-action sync is stale —
+  no rows after 2026-04-19). The value-based "Pickup Order" tag
+  (`docs/design/ads-conversion-loop.md` Approach A) was never wired, so the
+  optimizer's efficiency lens = cost per directions-click, not cost per order.
+  **ads-daily sync** healthy nightly (metrics through Jul 14) EXCEPT the
+  search-terms step: its sync-log rows are stuck `RUNNING` every night (finish
+  update never lands) and Jul 12 threw a hard Prisma connection-pool timeout;
+  data still arrives (10.5k rows / 4.9k terms, Jun 29→Jul 13) — likely serial
+  upserts racing maxDuration/pool. Owner's search-term **backfill curl never
+  ran** (history starts Jun 29). The Monday shadow-optimizer report exists only
+  in the cron's JSON response — persisted nowhere, read by no one.
+  **Geogrid:** the first true-10km auto-scan (Mon Jul 6) burned the ENTIRE
+  monthly cap in one run — 40 scans: 13 complete / 7 partial / 20 failed with
+  0/81 points (later scans in the run all failed → Places quota/rate
+  exhaustion; failed scans still persist rows and count against
+  `GEOGRID_MONTHLY_SCAN_CAP`). The Jul 13 Monday run was a capped no-op;
+  **nothing scans again until Aug 1.** Structural mismatch: 86 active
+  keyword×outlet combos on a ~weekly due-cadence vs a 40/month cap — the loop
+  as configured can never complete a sweep. Tamarind got ZERO usable catchment
+  baselines. Usable Jul 6 baselines: SA "breakfast shah alam" avg 3.9 / 33%
+  top-3 / green 11.2km; PJ "cafe" 5.3 / 12% / 5.0km; Nilai "nilai cafe" avg
+  17.2 / 0% top-3 (invisible in its own town).
+  **Reviews (the rank lever):** snapshots current through Jul 16. 30-day
+  velocity: Tam 49 (the GBP relink fix is vindicated), PJ 29, SA 13, **Nilai 3
+  — still the binding constraint** (111 reviews vs top local competitor 160).
+  **Substrate gap:** none of ads-daily / optimizer / geogrid are in
+  `agent_registry` (only the `reviews_*` agents) — no kill switch, no ledger.
+  **GBP category adds** (the Jul 5 "next") were never proposed — blocked on
+  the failed scan coverage.
+  **Next:** (1) fix geogrid scan economics — don't count failed scans against
+  the cap, throttle within a run, and prune the 86-keyword set to fit the
+  budget (or raise the cap knowingly: ~81 Places calls/scan); (2) persist the
+  Monday shadow-optimizer summary somewhere a human sees it; (3) batch the
+  search-terms upserts + mark the sync-log row OK; (4) owner decision: wire the
+  value-based Pickup Order conversion (Approach A) or accept
+  directions-clicks as the metric; (5) register these loops in
+  `agent_registry`; (6) re-propose GBP category adds once Tamarind has a real
+  catchment scan.
+
 - 2026-07-15 -- **Staff-scheduling round 2 (branch
   `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the
   merged #934 (multi-outlet rotation + demand-sized AI Fill + fairness). Two
@@ -514,9 +562,8 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   categories = strongest rank lever; review velocity ≈20% and the binding
   constraint (Nilai 2/30d, SA ~11, Tam ~17, Putrajaya 34); GBP description is
   NOT a rank factor — stop treating geo-in-description as a rank play.
-  **Next:** after the first true-10km scan (Mon Jul 6, 1pm MYT) read fresh
-  baselines and propose per-outlet GBP category adds; owner still owes the ads
-  search-term backfill curl (CRON_SECRET) and the review-velocity ops push.
+  Status refreshed 2026-07-16 — see that entry below for where the loop
+  actually stands (scan cap exhausted, conversion signal still wrong).
 
 - 2026-07-05 — **People-cost gating loop shipped** (PRs #765/#780/#785 all
   merged): labour gate + publish enforcement (green/amber/red, per-outlet
