@@ -112,8 +112,11 @@ Run each as read-only SQL. Failure conditions in brackets.
 
 ## Initial backlog (from the 2026-07-16 baseline — see design doc)
 
-- F1 eval dataset empty (7 rows, wrong agent) — root-cause `logDecision()`
-  on live paths; highest leverage.
+- F1 eval dataset empty — root-caused 2026-07-16: categorizer sits on the
+  dormant `/api/finance/bills/upload` pipeline; live AP flow never calls it.
+  ap-verifier verdict logging + silent-error fixes shipped in the founding
+  PR. Remaining: log invoice-capture extraction decisions + wire draft-
+  invoice edits to `recordCorrection` (needs a correction-shape design).
 - F2 no period ever closed — build the close pack, get 2026-07 closed.
 - F3 88 stale drafts — list for the owner, propose disposition.
 - F4 depreciation descriptions contaminated with bank narrations — propose

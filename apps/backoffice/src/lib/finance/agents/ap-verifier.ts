@@ -10,9 +10,14 @@
 // Model: claude-haiku-4-5 (fast + cheap; same tier the categorizer uses).
 
 import Anthropic from "@anthropic-ai/sdk";
+import { randomUUID } from "crypto";
 import { proposeApMatches, writeApMatch, type ApMatch } from "../ap-match";
+import { getFinanceClient } from "../supabase";
+import { markDecisionApplied } from "./categorizer";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+export const AP_VERIFIER_VERSION = "ap-verifier-v1";
 
 export type ApVerdict = {
   bankLineId: string;
@@ -20,6 +25,7 @@ export type ApVerdict = {
   verdict: "confirm" | "reject" | "uncertain";
   confidence: number; // 0..1
   reason: string;
+  decisionId?: string | null; // fin_agent_decisions row logged for this verdict
 };
 
 const SYSTEM = `You verify whether a bank payment settles a specific vendor invoice for a coffee chain. The invoice may be for raw materials, packaging, distribution, services, rent, or equipment — any supplier or service vendor (note: vendor names often contain words like "Marketing" or "Distribution" but are goods suppliers, not advertising spend). Be strict: a matching amount alone is NOT enough — Malaysian bank lines for salaries, part-timer wages ("PT Week"), statutory payments (EPF/SOCSO), owner draws, and unrelated companies frequently collide on amount. Confirm ONLY if the bank line's payee/reference clearly corresponds to the invoice's vendor (e.g. invoice "Unique Paper" matches bank "UNIQUE PAPER SDN"). Reject if the bank line is plainly a different kind of payment (payroll/PT-week, statutory, an internal transfer, or a different company). Use "uncertain" when you genuinely cannot tell. Output ONLY JSON: {"verdict":"confirm|reject|uncertain","confidence":0.0,"reason":"one short line"}.`;
@@ -64,7 +70,43 @@ export async function verifyApMatch(m: ApMatch): Promise<ApVerdict> {
     messages: [{ role: "user", content: buildPrompt(m) }],
   });
   const text = res.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
-  return parse(text, m);
+  const verdict = parse(text, m);
+  const decisionId = await logVerdict(m, verdict);
+  return { ...verdict, decisionId };
+}
+
+// Every verdict is eval data: inbox/EOM corrections against these matches are
+// the ground truth for the wrong-invoice-match problem (~113 historical).
+// Same table + shape convention as the categorizer's logDecision.
+async function logVerdict(m: ApMatch, v: ApVerdict): Promise<string | null> {
+  const client = getFinanceClient();
+  const id = randomUUID();
+  const { error } = await client.from("fin_agent_decisions").insert({
+    id,
+    agent: "ap-verifier",
+    agent_version: AP_VERIFIER_VERSION,
+    input: {
+      payee: m.payee,
+      invoice_number: m.invoiceNumber ?? null,
+      invoice_id: m.invoiceId,
+      amount: m.amount,
+      issue_date: m.issueDate,
+      bank_desc: m.bankDesc,
+      bank_date: m.bankDate,
+      bank_category: m.bankCategory ?? null,
+      link_only: m.linkOnly ?? false,
+    },
+    output: { verdict: v.verdict, reason: v.reason },
+    confidence: v.confidence,
+    related_type: "bank_line",
+    related_id: m.bankLineId,
+    applied: false, // set true when applyVerifiedReview commits this match
+  });
+  if (error) {
+    console.error("[ap-verifier] fin_agent_decisions insert failed:", error.message);
+    return null;
+  }
+  return id;
 }
 
 // Verify a batch of REVIEW-tier matches concurrently (bounded). Returns the
@@ -107,7 +149,10 @@ export async function applyVerifiedReview(opts: { commit?: boolean; sinceDays?: 
     if (v?.verdict === "reject") { rejected++; continue; }
     if (v?.verdict === "confirm" && v.confidence >= minConfidence) {
       if (!m.linkOnly && !markOpenPaid) { uncertain++; continue; }
-      if (commit) await writeApMatch(m);
+      if (commit) {
+        await writeApMatch(m);
+        if (v.decisionId) await markDecisionApplied(v.decisionId);
+      }
       confirmedApplied++;
     } else {
       uncertain++;

@@ -232,10 +232,12 @@ export async function categorize(input: CategorizationInput): Promise<Categoriza
 async function logDecision(
   input: CategorizationInput,
   result: CategorizationResult
-): Promise<string> {
+): Promise<string | null> {
   const client = getFinanceClient();
   const id = randomUUID();
-  await client.from("fin_agent_decisions").insert({
+  // supabase-js does not throw — a swallowed error here silently starves the
+  // eval dataset (fin_agent_decisions is the retraining ground truth).
+  const { error } = await client.from("fin_agent_decisions").insert({
     id,
     agent: "categorizer",
     agent_version: CATEGORIZER_VERSION,
@@ -256,6 +258,10 @@ async function logDecision(
     related_id: input.related?.id ?? null,
     applied: false,  // set true by markDecisionApplied when the proposal is used as-is
   });
+  if (error) {
+    console.error("[categorizer] fin_agent_decisions insert failed:", error.message);
+    return null;
+  }
   return id;
 }
 
@@ -264,8 +270,11 @@ async function logDecision(
 // applied; corrected=true covers them (see recordCorrection in inbox.ts).
 export async function markDecisionApplied(decisionId: string): Promise<void> {
   const client = getFinanceClient();
-  await client
+  const { error } = await client
     .from("fin_agent_decisions")
     .update({ applied: true })
     .eq("id", decisionId);
+  if (error) {
+    console.error("[categorizer] markDecisionApplied failed:", error.message);
+  }
 }

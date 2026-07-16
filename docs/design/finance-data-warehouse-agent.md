@@ -84,10 +84,22 @@ is a dead sync still holding 21,880 stale rows.
   `fin_agent_decisions` holds **7 rows total, all agent='purchasing-manager'**
   (latest Jul 16). The spec and the finance-module skill both state every
   categorizer/AP/AR call writes a decision row and inbox corrections update it
-  — that training signal effectively does not exist in prod. Either
-  `logDecision()` is not on the live paths (AP agent, ap-match verifier,
-  finance-eod are all armed), or writes fail silently. Until fixed, the eval
-  replay loop the finance-module skill describes has no data.
+  — that training signal effectively does not exist in prod.
+  **Root cause (code-verified 2026-07-16):** the only `categorize()` caller is
+  `ingestSupplierDoc` (`lib/finance/agents/ap.ts`), whose sole entry point is
+  the manual `/api/finance/bills/upload` route — and `fin_documents`/
+  `fin_bills` are empty, i.e. that pipeline has never been used. The LIVE AP
+  flow is procurement invoice-capture (WhatsApp/Telegram → `Invoice`), which
+  never calls the categorizer; and the live gray-zone decision-maker, the
+  ap-match LLM verifier, logged nothing. Two silent-failure bugs compounded
+  it: `logDecision()`/`markDecisionApplied()` ignored the supabase-js error
+  return.
+  **Fixed in this PR:** error-swallowing removed; `ap-verifier` now logs
+  every verdict to `fin_agent_decisions` (agent='ap-verifier',
+  related_id=bank line, `applied=true` when the EOM apply commits it).
+  **Remaining:** log the invoice-capture doc-extraction decisions and wire
+  draft-invoice human edits to `recordCorrection` — needs a design pass on
+  what "correction" means for extraction (field-level vs whole-parse).
 - **F2: no period has ever been closed.** All 19 `fin_periods` rows
   (2025-01 → 2026-07, per company) are `open`. The close agent /
   `fin_period_locks` invariant is inert; the books are permanently re-writable.

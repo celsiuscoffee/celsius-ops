@@ -298,10 +298,18 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   inventory, backlog F1–F7, 8 candidate goals — recommended starting set:
   freshness SLOs, lens bridge, restore eval dataset, month-end close) +
   migration 083 seeding `finance_warehouse` into agent_registry (shadow,
-  **NOT applied** — human applies). **Next:** owner picks goals + applies
-  083, then trigger run 1 on demand; schedule weekly only after run 1
-  proves useful. Highest-leverage finding to chase first: F1
-  (fin_agent_decisions not accumulating — blocks the finance eval loop).
+  **NOT applied** — human applies). **F1 root-caused + partially fixed in
+  the same PR:** categorizer sits on the dormant `/api/finance/bills/upload`
+  pipeline (fin_documents/fin_bills empty — never used; the live AP flow is
+  procurement invoice-capture, which never calls it), and
+  `logDecision`/`markDecisionApplied` swallowed supabase-js errors. Shipped:
+  error handling fixed; ap-verifier (the live 6-hourly/EOM gray-zone judge)
+  now logs every verdict to fin_agent_decisions (agent='ap-verifier',
+  related_id=bank line, applied=true on committed EOM applies). Remaining
+  F1 work: log invoice-capture extraction decisions + wire draft-invoice
+  edits to recordCorrection (correction-shape design needed). **Next:**
+  owner picks goals + applies 083, then trigger run 1 on demand; schedule
+  weekly only after run 1 proves useful.
 
 - 2026-07-15 -- **Staff-scheduling round 2 (branch
   `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the
