@@ -321,13 +321,25 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   same day by the ads autopilot — next entry.)
 
 - 2026-07-16 — **Ads spend AUTOPILOT built + armed** (same branch/PR #947,
-  owner directive in chat: "no need human approve... cut the spending lowest
+  owner directives in chat: "no need human approve... cut the spending lowest
   possible without reducing the till revenue", descend from 100% — no pause
-  test). New `apps/backoffice/src/lib/ads/autopilot.ts`, runs inside
-  `cron/ads-daily` Mondays (UTC), replacing the response-only shadow report.
-  Controller: per-campaign budget step-down 8% (12% when cost/conv >1.3×
-  fleet-best), ≥14d observation between changes, max 2 cuts/run
-  (least-efficient first), hard floor RM20/day (ADS_AUTOPILOT_FLOOR_MYR).
+  test; then widened same day: "ads spend should be generating cash... the
+  till is the source of truth... trimming is just the first step, next is to
+  find the best way to increase cash"). New
+  `apps/backoffice/src/lib/ads/autopilot.ts`, runs inside `cron/ads-daily`
+  Mondays (UTC), replacing the response-only shadow report. **Objective =
+  cash: till lift × margin − spend; bidirectional extremum-seeker, burden of
+  proof asymmetric (cuts stand unless the till proves harm; raises revert
+  unless the till proves lift).** State machine per campaign, memory = the
+  `ads_budget_change` ledger reason prefixes (no new tables): DESCEND →
+  step-down 8% (12% when cost/conv >1.3× fleet-best), ≥14d observation, max
+  2 cuts/run (least-efficient first), hard floor RM20/day
+  (ADS_AUTOPILOT_FLOOR_MYR); guard breach after a recent cut → ROLLBACK one
+  step + 56d hold (= proof of response); then PROBE UP +15% (28d observation,
+  cap 1.25× the highest ledgered baseline, ADS_GROSS_MARGIN=0.6 states each
+  raise's break-even in the reason) — kept only on detectable lift (fleet-adj
+  ≥1.02 AND raw ≥1.0, or immediate revert on breach), else REVERT → SETTLE 90d
+  at the proven optimum before re-searching.
   **Revenue guard:** last-14-full-days actual till revenue ÷ same-window
   forecast (labour-gate `dailyRevenueSeries` + `buildWeekForecast`, history
   precedes the window = clean counterfactual), divided by the median of the

@@ -1,25 +1,46 @@
 /**
- * Ads spend autopilot — descend each Smart campaign's daily budget from its
- * current level toward the lowest spend that does NOT reduce till revenue.
+ * Ads spend autopilot — drive each Smart campaign's daily budget toward the
+ * level that maximizes CASH: incremental till revenue × gross margin − spend.
+ * The till (unified sales sources) is the only source of truth; Google's own
+ * conversion counts are never trusted as an objective.
  *
- * Owner directive 2026-07-16: no per-change human approval. The control loop
- * (weekly, inside ads-daily on Mondays) is:
+ * Owner directive 2026-07-16: no per-change human approval; trim first, then
+ * find the spend that actually increases cash. Descend from today's budgets
+ * (100% → lowest), never from a pause upward. The burden of proof is
+ * asymmetric in cash's favor: a CUT stands unless the till proves it hurt;
+ * a RAISE reverts unless the till proves it helped.
  *
- *   1. GUARD  — per outlet, compare the last 14 full days of actual till
- *      revenue against the same-window forecast (per-weekday, recency-weighted,
- *      holiday-aware — the labour gate's forecaster, built from history that
- *      PRECEDES the window, so it is a clean counterfactual). The raw index is
- *      then divided by the median of the OTHER ads outlets' indexes so a
- *      fleet-wide shock (weather, festive dip) doesn't read as an ad effect.
- *   2. ROLLBACK — if the guard breaches after a recent cut, restore the
- *      previous budget (one step back up) and hold that campaign for 8 weeks.
- *      The descent found its floor.
- *   3. STEP DOWN — otherwise, if the last change is ≥14 days old, cut 8%
- *      (12% when the campaign's cost/conv is >1.3× fleet-best), never below
- *      the hard floor, at most MAX_CUTS_PER_RUN campaigns per run.
- *   4. EXCLUDE — auto-apply negative keyword themes for clearly-useless terms
- *      (own brand + non-café food intent; see term-rules.ts) so the remaining
- *      budget buys better clicks before the next step measures it.
+ * Per-campaign state machine (weekly, inside ads-daily on Mondays), with all
+ * state derived from the ads_budget_change ledger — no new tables:
+ *
+ *   DESCEND   — step the budget down 8% (12% when cost/conv >1.3× fleet-best)
+ *               every ≥14 observed days, max MAX_CUTS_PER_RUN campaigns per
+ *               run, never below the floor.
+ *   ROLLBACK  — if the guard breaches after a recent cut, restore the previous
+ *               budget and hold ROLLBACK_HOLD_DAYS. The breach is evidence the
+ *               marginal spend WAS generating till revenue.
+ *   PROBE UP  — after that hold, the campaign has proven response, so test the
+ *               other direction: raise PROBE_UP_PCT above the restored level
+ *               (capped at RAISE_CAP_OF_BASELINE × the pre-descent baseline)
+ *               and observe PROBE_OBSERVE_DAYS.
+ *   EVALUATE  — keep the raise only on detectable till lift (fleet-adjusted
+ *               index ≥ RAISE_KEEP_ADJ_MIN and raw ≥ 1); then it may probe up
+ *               again. No lift → revert to the pre-raise level and SETTLE.
+ *   SETTLE    — cutting below hurt, raising above bought nothing: that budget
+ *               is the cash optimum. Hold SETTLE_HOLD_DAYS, then re-enter
+ *               DESCEND (demand shifts; the optimum is re-searched slowly).
+ *
+ *   GUARD     — per outlet: last 14 full days of actual till revenue ÷ the
+ *               same-window forecast (per-weekday, recency-weighted,
+ *               holiday-aware — the labour gate's forecaster, built from
+ *               history PRECEDING the window, so it is a clean
+ *               counterfactual), then divided by the median of the OTHER ads
+ *               outlets' indexes so a fleet-wide shock (weather, festive dip)
+ *               doesn't read as an ad effect. No guard signal → never act.
+ *   EXCLUDE   — auto-apply negative keyword themes for clearly-useless terms
+ *               (own brand + non-café food intent; see term-rules.ts) so the
+ *               remaining budget buys better clicks before the next step
+ *               measures it.
  *
  * Kill switch: agent_registry key `ads_autopilot` (fail-safe off — a missing
  * row means the autopilot does nothing). shadow = full decision pass, logged,
@@ -53,6 +74,17 @@ export const ROLLBACK_HOLD_DAYS = 56;    // after a rollback, hold 8 weeks
 export const ROLLBACK_MAX_AGE_DAYS = 45; // only blame (and undo) a reasonably recent cut
 export const MAX_CUTS_PER_RUN = 2;       // stagger: worst campaigns first, rest next Monday
 export const FLOOR_DAILY_MYR = Number(process.env.ADS_AUTOPILOT_FLOOR_MYR || 20);
+
+// Probe-up phase (the "increase cash" search — only ever entered after a
+// rollback PROVED the outlet's till responds to this campaign's spend):
+export const PROBE_UP_PCT = 0.15;        // raise size; big enough to have a chance of showing at the till
+export const PROBE_OBSERVE_DAYS = 28;    // raises get twice the observation of cuts
+export const RAISE_KEEP_ADJ_MIN = 1.02;  // keep a raise only on detectable fleet-adjusted lift…
+export const RAISE_KEEP_RAW_MIN = 1.0;   // …with raw actual ≥ forecast too
+export const RAISE_CAP_OF_BASELINE = 1.25; // never exceed 1.25× the highest budget ever ledgered
+export const SETTLE_HOLD_DAYS = 90;      // proven optimum: re-search only quarterly
+// Gross margin used to state each move's break-even in the reason strings.
+export const GROSS_MARGIN = Number(process.env.ADS_GROSS_MARGIN || 0.6);
 
 const DAY_MS = 86400000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -92,6 +124,7 @@ export type CampaignState = {
   campaignName: string;
   outletId: string | null;
   dailyBudgetMyr: number;
+  baselineDailyMyr: number; // highest budget ever ledgered (pre-descent level) — the raise cap anchor
   efficiencyRatio: number | null; // cost/conv ÷ fleet-best (1 = best)
   lastApplied: LastAppliedChange | null;
 };
@@ -99,32 +132,77 @@ export type CampaignState = {
 export type AutopilotDecision = {
   campaignId: string;
   campaignName: string;
-  action: "cut" | "rollback" | "hold";
+  action: "cut" | "rollback" | "raise" | "revert" | "hold";
   newDailyMyr?: number;
   reason: string;
 };
 
-const isAutopilotRollback = (c: LastAppliedChange | null) =>
-  !!c?.reason?.startsWith("autopilot rollback");
+// The ledger reason's prefix IS the state machine's memory — no new tables.
+type LastKind = "step-down" | "rollback" | "raise" | "revert" | "other" | null;
+function lastKind(c: LastAppliedChange | null): LastKind {
+  if (!c) return null;
+  const r = c.reason ?? "";
+  if (r.startsWith("autopilot rollback")) return "rollback";
+  if (r.startsWith("autopilot raise")) return "raise";
+  if (r.startsWith("autopilot revert")) return "revert";
+  if (r.startsWith("autopilot step-down")) return "step-down";
+  return "other"; // human/manual change — observe it like a step, never auto-revert it
+}
+
+// Monthly cash framing for reason strings: a cut banks its delta; a raise must
+// earn delta ÷ margin at the till to pay for itself.
+const monthly = (deltaDaily: number) => round2(Math.abs(deltaDaily) * 30);
 
 export function decideCampaign(c: CampaignState, guard: GuardSignal, now: Date): AutopilotDecision {
   const base = { campaignId: c.campaignId, campaignName: c.campaignName };
   if (!c.outletId || guard.rawIndex == null) {
-    return { ...base, action: "hold", reason: "no revenue guard for this campaign (missing outlet mapping or forecast) — never cut blind" };
+    return { ...base, action: "hold", reason: "no revenue guard for this campaign (missing outlet mapping or forecast) — never act blind" };
   }
 
-  const daysSince = c.lastApplied ? (now.getTime() - c.lastApplied.decidedAt.getTime()) / DAY_MS : Infinity;
-
-  if (isAutopilotRollback(c.lastApplied) && daysSince < ROLLBACK_HOLD_DAYS) {
-    return { ...base, action: "hold", reason: `post-rollback hold (${Math.ceil(ROLLBACK_HOLD_DAYS - daysSince)}d left)` };
-  }
-
+  const la = c.lastApplied;
+  const kind = lastKind(la);
+  const daysSince = la ? (now.getTime() - la.decidedAt.getTime()) / DAY_MS : Infinity;
   const guardDetail = `till-revenue index ${guard.rawIndex}${guard.adjIndex != null ? ` (fleet-adj ${guard.adjIndex})` : ""} over last ${OBSERVE_DAYS}d`;
 
+  // ── Raise under evaluation: burden of proof is on the spend ──────────────
+  if (kind === "raise") {
+    if (guard.breach || (daysSince >= PROBE_OBSERVE_DAYS &&
+        !((guard.adjIndex ?? guard.rawIndex) >= RAISE_KEEP_ADJ_MIN && guard.rawIndex >= RAISE_KEEP_RAW_MIN))) {
+      const back = round2(la!.prevDailyMyr ?? c.dailyBudgetMyr);
+      return {
+        ...base,
+        action: "revert",
+        newDailyMyr: back,
+        reason: `autopilot revert: raise to RM${round2(la!.newDailyMyr)}/day showed no till lift (${guardDetail}) — back to RM${back}/day; this level is the cash optimum, settling ${SETTLE_HOLD_DAYS}d`,
+      };
+    }
+    if (daysSince < PROBE_OBSERVE_DAYS) {
+      return { ...base, action: "hold", reason: `observing raise (${Math.round(daysSince)}d/${PROBE_OBSERVE_DAYS}d, ${guardDetail})` };
+    }
+    // Lift proven — keep the raise and probe one step further (cap permitting).
+    return probeUp(c, guard, `raise to RM${round2(la!.newDailyMyr)}/day PAID: ${guardDetail}`);
+  }
+
+  // ── Settled at a proven optimum: re-search only slowly ───────────────────
+  if (kind === "revert" && daysSince < SETTLE_HOLD_DAYS) {
+    return { ...base, action: "hold", reason: `settled at cash optimum RM${round2(c.dailyBudgetMyr)}/day (${Math.ceil(SETTLE_HOLD_DAYS - daysSince)}d before re-search)` };
+  }
+
+  // ── Post-rollback: hold, then search UPWARD (response is proven) ─────────
+  if (kind === "rollback") {
+    if (daysSince < ROLLBACK_HOLD_DAYS) {
+      return { ...base, action: "hold", reason: `post-rollback hold (${Math.ceil(ROLLBACK_HOLD_DAYS - daysSince)}d left)` };
+    }
+    if (guard.breach) {
+      return { ...base, action: "hold", reason: `revenue still below forecast (${guardDetail}) — not raising into weakness` };
+    }
+    return probeUp(c, guard, `descent floor proved this campaign moves the till`);
+  }
+
+  // ── Descent (default): cuts stand unless the till proves they hurt ───────
   if (guard.breach) {
-    const la = c.lastApplied;
     const wasCut = la?.prevDailyMyr != null && la.prevDailyMyr > la.newDailyMyr;
-    if (la && wasCut && !isAutopilotRollback(la) && daysSince <= ROLLBACK_MAX_AGE_DAYS) {
+    if (la && wasCut && daysSince <= ROLLBACK_MAX_AGE_DAYS) {
       return {
         ...base,
         action: "rollback",
@@ -150,7 +228,24 @@ export function decideCampaign(c: CampaignState, guard: GuardSignal, now: Date):
     ...base,
     action: "cut",
     newDailyMyr: newDaily,
-    reason: `autopilot step-down ${Math.round(step * 100)}% (RM${round2(c.dailyBudgetMyr)}→RM${newDaily}/day): ${guardDetail} healthy${inefficient ? `, cost/conv ${c.efficiencyRatio}× fleet-best` : ""}`,
+    reason: `autopilot step-down ${Math.round(step * 100)}% (RM${round2(c.dailyBudgetMyr)}→RM${newDaily}/day, banks ~RM${monthly(c.dailyBudgetMyr - newDaily)}/mo): ${guardDetail} healthy${inefficient ? `, cost/conv ${c.efficiencyRatio}× fleet-best` : ""}`,
+  };
+}
+
+function probeUp(c: CampaignState, guard: GuardSignal, why: string): AutopilotDecision {
+  const base = { campaignId: c.campaignId, campaignName: c.campaignName };
+  const cap = round2(c.baselineDailyMyr * RAISE_CAP_OF_BASELINE);
+  const target = round2(Math.min(cap, c.dailyBudgetMyr * (1 + PROBE_UP_PCT)));
+  if (target <= c.dailyBudgetMyr) {
+    return { ...base, action: "hold", reason: `at raise cap (RM${cap}/day = ${RAISE_CAP_OF_BASELINE}× baseline) — holding proven level RM${round2(c.dailyBudgetMyr)}/day` };
+  }
+  const extraMonthly = monthly(target - c.dailyBudgetMyr);
+  const breakEven = round2(extraMonthly / GROSS_MARGIN);
+  return {
+    ...base,
+    action: "raise",
+    newDailyMyr: target,
+    reason: `autopilot raise: ${why} — probing RM${round2(c.dailyBudgetMyr)}→RM${target}/day (+RM${extraMonthly}/mo spend; needs ≥RM${breakEven}/mo till lift to pay at ${Math.round(GROSS_MARGIN * 100)}% margin; reverts after ${PROBE_OBSERVE_DAYS}d without evidence)`,
   };
 }
 
@@ -232,6 +327,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
   ]);
   const effByCampaign = new Map(report.campaigns.map((c) => [c.campaignId, c.efficiencyRatio]));
   const lastByCampaign = new Map<string, LastAppliedChange>();
+  const maxLevelByCampaign = new Map<string, number>(); // highest budget ever ledgered
   for (const ch of changes) {
     if (!lastByCampaign.has(ch.campaignId)) {
       lastByCampaign.set(ch.campaignId, {
@@ -241,6 +337,11 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
         reason: ch.reason,
       });
     }
+    const seen = Math.max(
+      ch.prevDailyMicros != null ? microsToMYR(ch.prevDailyMicros) : 0,
+      microsToMYR(ch.newDailyMicros),
+    );
+    maxLevelByCampaign.set(ch.campaignId, Math.max(maxLevelByCampaign.get(ch.campaignId) ?? 0, seen));
   }
 
   // Revenue guard per distinct outlet behind a campaign.
@@ -262,14 +363,18 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
   }
   const noGuard: GuardSignal = { rawIndex: null, adjIndex: null, breach: false };
 
-  const states: CampaignState[] = campaigns.map((c) => ({
-    campaignId: c.id,
-    campaignName: c.name,
-    outletId: c.outletId,
-    dailyBudgetMyr: microsToMYR(c.dailyBudgetMicros ?? BigInt(0)),
-    efficiencyRatio: effByCampaign.get(c.id) ?? null,
-    lastApplied: lastByCampaign.get(c.id) ?? null,
-  }));
+  const states: CampaignState[] = campaigns.map((c) => {
+    const current = microsToMYR(c.dailyBudgetMicros ?? BigInt(0));
+    return {
+      campaignId: c.id,
+      campaignName: c.name,
+      outletId: c.outletId,
+      dailyBudgetMyr: current,
+      baselineDailyMyr: Math.max(current, maxLevelByCampaign.get(c.id) ?? 0),
+      efficiencyRatio: effByCampaign.get(c.id) ?? null,
+      lastApplied: lastByCampaign.get(c.id) ?? null,
+    };
+  });
 
   const decisions: AutopilotRunResult["decisions"] = capCuts(
     states.map((s) => decideCampaign(s, s.outletId ? guards[s.outletId] ?? noGuard : noGuard, now)),

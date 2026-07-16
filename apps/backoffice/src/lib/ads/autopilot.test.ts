@@ -6,6 +6,9 @@ import {
   FLOOR_DAILY_MYR,
   OBSERVE_DAYS,
   ROLLBACK_HOLD_DAYS,
+  PROBE_OBSERVE_DAYS,
+  SETTLE_HOLD_DAYS,
+  RAISE_CAP_OF_BASELINE,
   type CampaignState,
   type GuardSignal,
 } from "./autopilot";
@@ -22,6 +25,7 @@ const campaign = (over: Partial<CampaignState> = {}): CampaignState => ({
   campaignName: "Celsius Test",
   outletId: "o1",
   dailyBudgetMyr: 100,
+  baselineDailyMyr: 100,
   efficiencyRatio: 1.0,
   lastApplied: null,
   ...over,
@@ -100,7 +104,7 @@ describe("decideCampaign", () => {
     expect(d.reason).toMatch(/not cutting into weakness/);
   });
 
-  it("holds after a rollback for the hold period, then resumes", () => {
+  it("holds after a rollback, then probes UP (response proven), never re-cuts the proven level", () => {
     const rolledBack = campaign({
       dailyBudgetMyr: 100,
       lastApplied: { decidedAt: daysAgo(ROLLBACK_HOLD_DAYS - 10), prevDailyMyr: 92, newDailyMyr: 100, reason: "autopilot rollback: guard breach" },
@@ -108,9 +112,13 @@ describe("decideCampaign", () => {
     expect(decideCampaign(rolledBack, healthy, NOW).action).toBe("hold");
     const holdOver = campaign({
       dailyBudgetMyr: 100,
+      baselineDailyMyr: 100,
       lastApplied: { decidedAt: daysAgo(ROLLBACK_HOLD_DAYS + 1), prevDailyMyr: 92, newDailyMyr: 100, reason: "autopilot rollback: guard breach" },
     });
-    expect(decideCampaign(holdOver, healthy, NOW).action).toBe("cut");
+    const d = decideCampaign(holdOver, healthy, NOW);
+    expect(d.action).toBe("raise");
+    expect(d.newDailyMyr).toBe(115);
+    expect(d.reason).toMatch(/^autopilot raise/);
   });
 
   it("does not re-rollback: a breach right after a rollback holds instead", () => {
@@ -120,6 +128,75 @@ describe("decideCampaign", () => {
       NOW,
     );
     expect(d.action).toBe("hold");
+  });
+
+  it("does not probe up into a weak till even after the hold", () => {
+    const d = decideCampaign(
+      campaign({ lastApplied: { decidedAt: daysAgo(ROLLBACK_HOLD_DAYS + 1), prevDailyMyr: 92, newDailyMyr: 100, reason: "autopilot rollback: guard breach" } }),
+      breached,
+      NOW,
+    );
+    expect(d.action).toBe("hold");
+  });
+});
+
+describe("decideCampaign — probe-up phase (spend must prove itself)", () => {
+  const raised = (over: Partial<CampaignState> = {}) =>
+    campaign({
+      dailyBudgetMyr: 115,
+      baselineDailyMyr: 100,
+      lastApplied: { decidedAt: daysAgo(PROBE_OBSERVE_DAYS + 1), prevDailyMyr: 100, newDailyMyr: 115, reason: "autopilot raise: probing" },
+      ...over,
+    });
+
+  it("holds while a raise is under observation", () => {
+    const d = decideCampaign(
+      raised({ lastApplied: { decidedAt: daysAgo(10), prevDailyMyr: 100, newDailyMyr: 115, reason: "autopilot raise: probing" } }),
+      healthy,
+      NOW,
+    );
+    expect(d.action).toBe("hold");
+  });
+
+  it("reverts a raise that showed no till lift and settles", () => {
+    // healthy-but-flat (1.01/1.00) is NOT lift — the raise must pay, not just not-hurt
+    const d = decideCampaign(raised(), healthy, NOW);
+    expect(d.action).toBe("revert");
+    expect(d.newDailyMyr).toBe(100);
+    expect(d.reason).toMatch(/^autopilot revert/);
+  });
+
+  it("reverts immediately on a guard breach during a raise", () => {
+    const d = decideCampaign(
+      raised({ lastApplied: { decidedAt: daysAgo(7), prevDailyMyr: 100, newDailyMyr: 115, reason: "autopilot raise: probing" } }),
+      breached,
+      NOW,
+    );
+    expect(d.action).toBe("revert");
+    expect(d.newDailyMyr).toBe(100);
+  });
+
+  it("keeps a raise with proven lift and probes further, up to the baseline cap", () => {
+    const lift: GuardSignal = { rawIndex: 1.06, adjIndex: 1.05, breach: false };
+    const d = decideCampaign(raised(), lift, NOW);
+    expect(d.action).toBe("raise");
+    expect(d.newDailyMyr).toBe(100 * RAISE_CAP_OF_BASELINE); // 132.25 capped to 125
+    const atCap = decideCampaign(raised({ dailyBudgetMyr: 125 }), lift, NOW);
+    expect(atCap.action).toBe("hold");
+    expect(atCap.reason).toMatch(/raise cap/);
+  });
+
+  it("settles after a revert, then re-enters descent", () => {
+    const settled = campaign({
+      dailyBudgetMyr: 100,
+      lastApplied: { decidedAt: daysAgo(SETTLE_HOLD_DAYS - 5), prevDailyMyr: 115, newDailyMyr: 100, reason: "autopilot revert: no lift" },
+    });
+    expect(decideCampaign(settled, healthy, NOW).action).toBe("hold");
+    const reSearch = campaign({
+      dailyBudgetMyr: 100,
+      lastApplied: { decidedAt: daysAgo(SETTLE_HOLD_DAYS + 1), prevDailyMyr: 115, newDailyMyr: 100, reason: "autopilot revert: no lift" },
+    });
+    expect(decideCampaign(reSearch, healthy, NOW).action).toBe("cut");
   });
 });
 
