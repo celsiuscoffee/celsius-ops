@@ -437,11 +437,13 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
     SELECT DISTINCT user_id FROM hr_attendance_logs WHERE clock_in >= ${dayStart} AND clock_in < ${dayEnd}
   `;
   const clockedIn = new Set(clockRows.map((r) => r.user_id));
-  type Present = { outlet_id: string; position: string; stations: string[]; user_id: string; name: string; phone: string; start_time: string | null; end_time: string | null };
-  const present = [
-    ...new Map(
-      roster.filter((r): r is Present => !!r.phone && clockedIn.has(r.user_id)).map((r) => [r.user_id, r]),
-    ).values(),
+  type Present = { outlet_id: string; position: string; stations: string[]; user_id: string; name: string; phone: string | null; start_time: string | null; end_time: string | null };
+  // Eligibility = rostered + clocked in. A missing phone number must NOT
+  // change ownership (it used to: a phoneless clocked-in owner was invisible
+  // here, so their task was silently re-assigned to someone else) — the phone
+  // only gates whether we can DM them, checked at send time below.
+  const present: Present[] = [
+    ...new Map(roster.filter((r) => clockedIn.has(r.user_id)).map((r) => [r.user_id, r])).values(),
   ];
   const presentByOutlet = new Map<string, Present[]>();
   for (const p of present) (presentByOutlet.get(p.outlet_id) ?? presentByOutlet.set(p.outlet_id, []).get(p.outlet_id)!).push(p);
@@ -489,15 +491,20 @@ export async function runChecklistNudges(now = new Date()): Promise<NudgeRunResu
       if (pool.length === 0) pool = crew; // last resort: anyone on shift
       owner = lightest(pool);
     }
-    if (owner?.phone) {
+    if (owner) {
       load.set(owner.user_id, (load.get(owner.user_id) ?? 0) + 1); // keep balancing within this run
-      const o = byOwner.get(owner.user_id) ?? { name: owner.name, phone: owner.phone, items: [] };
-      o.items.push(item);
-      byOwner.set(owner.user_id, o);
       // Persist the fair assignment (armed) so the app shows the owner + completion
       // attributes to them — assignment, not just a reminder.
       if (mode === "armed" && c.assignedToId !== owner.user_id) {
         await prisma.checklist.update({ where: { id: c.id }, data: { assignedToId: owner.user_id } }).catch(() => {});
+      }
+      // DM only with a phone on file; ownership stands either way.
+      if (owner.phone) {
+        const o = byOwner.get(owner.user_id) ?? { name: owner.name, phone: owner.phone, items: [] };
+        o.items.push(item);
+        byOwner.set(owner.user_id, o);
+      } else {
+        console.warn(`[ops-nudge:checklist] no phone on file for ${owner.name} — assigned, not DM'd`);
       }
     } else {
       const u = unowned.get(c.outletId) ?? { name: c.outlet!.name, items: [] };
