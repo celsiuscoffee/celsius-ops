@@ -6,6 +6,23 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-16 — **Finance warehouse baseline (SQL-verified against kqdc).**
+  Fresh: unified_sales pos_native →7/16, consignment →7/12 (Nilai settles
+  later than older notes claim — re-verify live, don't trust dated notes);
+  BankStatement 3 accounts →7/15; BankStatementLine 56,429 rows, 0
+  uncategorised (rule 55,119 / ap-match 1,134 / user 169 / manual 7); GL
+  4,621 posted txns / 10,446 lines / COA 116 active; June payroll actuals
+  booked RM77,259.50; unpaid AP 72 PENDING RM45,060 + 16 INITIATED RM7,780
+  + 9 DEPOSIT_PAID RM20,988. **Findings:** `fin_agent_decisions` has only
+  7 rows, ALL agent='purchasing-manager' — the finance agents' documented
+  decision-log/eval dataset is NOT accumulating (logDecision not on live
+  paths or failing silently); ALL 19 fin_periods 2025-01→2026-07 are open
+  (no close ever approved); 88 draft fin_transactions linger (latest 6/30);
+  37 future-dated posted rows are month-end depreciation (legit convention,
+  but descriptions contaminated with bank narrations); July MTD lens gap:
+  till RM133,241.75 vs GL income RM163,976.74. Full inventory + backlog:
+  `docs/design/finance-data-warehouse-agent.md`.
+
 - 2026-07-12 — **Data-consolidation audit for the internal assistant (all
   SQL-verified against kqdc).** Connectivity clean: 0 orphans across
   unified_sales/roster/checklist/invoice/bank-line joins. unified_sales VIEW is
@@ -272,6 +289,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-07-16 -- **Finance data-warehouse agent designed** (branch
+  `claude/celsius-finance-warehouse-agent-8j1uk6`): new `finance-warehouse`
+  skill (custodian runbook: data contract w/ SLOs, 12-check suite, drift
+  scan, close pack, `claude/finwh-` draft-PR findings loop) +
+  `docs/design/finance-data-warehouse-agent.md` (verified 2026-07-16
+  inventory, backlog F1–F7, 8 candidate goals — recommended starting set:
+  freshness SLOs, lens bridge, restore eval dataset, month-end close) +
+  migration 083 seeding `finance_warehouse` into agent_registry (shadow,
+  **NOT applied** — human applies). **Next:** owner picks goals + applies
+  083, then trigger run 1 on demand; schedule weekly only after run 1
+  proves useful. Highest-leverage finding to chase first: F1
+  (fin_agent_decisions not accumulating — blocks the finance eval loop).
 
 - 2026-07-15 -- **Staff-scheduling round 2 (branch
   `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the
