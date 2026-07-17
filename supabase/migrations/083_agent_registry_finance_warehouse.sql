@@ -1,5 +1,6 @@
--- NOT YET APPLIED — propose-only, human applies per CLAUDE.md hard rule 6
--- and docs/database-migrations.md. Safe to re-run (on conflict do nothing).
+-- Applied 2026-07-17 via Supabase MCP (apply_migration:
+-- agent_registry_finance_warehouse) on the owner's explicit instruction in
+-- session (hard rule 6 satisfied). Safe to re-run (on conflict do nothing).
 --
 -- Registers the finance data-warehouse custodian (design:
 -- docs/design/finance-data-warehouse-agent.md, runbook:

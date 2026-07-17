@@ -307,9 +307,28 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   now logs every verdict to fin_agent_decisions (agent='ap-verifier',
   related_id=bank line, applied=true on committed EOM applies). Remaining
   F1 work: log invoice-capture extraction decisions + wire draft-invoice
-  edits to recordCorrection (correction-shape design needed). **Next:**
-  owner picks goals + applies 083, then trigger run 1 on demand; schedule
-  weekly only after run 1 proves useful.
+  edits to recordCorrection (correction-shape design needed).
+  **Run 1 executed 2026-07-17 (owner-triggered; migration 083 APPLIED to
+  prod same session on owner instruction — finance_warehouse registered,
+  shadow).** 9/12 checks green (ledger balanced, no orphan COA codes,
+  cutover exclusivity exact, traps empty, 0 uncategorised bank lines).
+  Findings: (W1) the wrong-invoice bank-match backlog is precisely **133**
+  lines (check 11b query now canonical; was "~113"); (W2) 6 invoices
+  paidVia='bank-ap-match' have NO linked bank line (inconsistent state,
+  incl INV-1012 RM768 paid 6/16) + 95 Maybank-Transfer PAID (RM58k)
+  awaiting EOM reconcile — 564 other unlinked are benign
+  historical/backfill; (W3) **unified_sales.sst is dead — all-zero for all
+  time** (data-map corrected; never compute SST from the till lens);
+  (W4) drift: 082 fin_inventory_valuations was missing from the
+  contract/data-map (added) and the table is EMPTY — Bukku Q1-close
+  anchors never entered (owner/accountant action if the sourced P&L needs
+  them). June lens bridge formalised: till 285,363.17 vs GL 353,851.53 =
+  gap 68,488.36 → Grabfood 41,838.89 + GastroHub 12,441.54 + residual
+  14,207.93 (~5%) ≈ card settlement lag — quantify next run (per-day card
+  tender vs 5000-02). All findings logged to agent_actions. **Next:**
+  merge PR #948; quantify settlement lag + prepare the 133-line
+  re-pointing batch (finance-approved) on run 2; schedule the weekly
+  routine once the owner deems run 1 useful.
 
 - 2026-07-15 -- **Staff-scheduling round 2 (branch
   `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the

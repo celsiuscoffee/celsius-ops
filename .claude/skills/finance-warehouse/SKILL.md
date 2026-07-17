@@ -88,8 +88,10 @@ Run each as read-only SQL. Failure conditions in brackets.
 4. **Uncategorised bank lines:** count where category is null. [> 0]
 5. **Lens bridge (MTD + prior month):** till lens (unified_sales nett,
    excl refunds/cancelled) vs GL income (posted, income/revenue accounts).
-   Decompose the gap: Grabfood account income, SST portion, settlement-lag
-   estimate, consignment timing. [unexplained residual > max(RM500, 0.5%)]
+   Decompose the gap: Grabfood (5000-04) + GastroHub (5000-09) + other
+   GL-only channels (e.g. 5000-10 events), then card settlement lag.
+   Do NOT use unified_sales.sst — that column is dead (all-zero).
+   [unexplained residual > max(RM500, 0.5%)]
 6. **Ledger integrity:** posted transactions where Σdebit ≠ Σcredit (trigger
    should make this impossible — [any row] means trigger bypassed);
    journal lines referencing inactive/missing COA codes.
@@ -139,3 +141,21 @@ stable ones into the sections above._
   text 'YYYY-MM' + `company_id`); `fin_accounts` uses `is_active`;
   `SalesTransaction` has no `transactionDate`. Check column names via
   information_schema before authoring new checks.
+- 2026-07-17 (run 1) — **BankStatement freshness SLO refined:** the feed
+  delivers day D's statement during D+1, so "latest = day-before-yesterday"
+  in the morning is NORMAL; alarm only if day D's statement is still absent
+  at end of D+1 MYT.
+- 2026-07-17 (run 1) — Check 11b's canonical query (non-manual linked lines
+  whose description contains a different invoice's number ≥5 chars and not
+  the linked one's) counts **133** — the precise size of the "~113"
+  wrong-invoice backlog. Bank-line link columns: `apInvoiceId`/`apMatchedAt`/
+  `glTransactionId`. Also: `paidVia='bank-ap-match'` with no linked line is
+  an inconsistent state worth listing every run.
+- 2026-07-17 (run 1) — `unified_sales.sst` is dead (all-zero across all
+  sources/time). The June bridge decomposes as Grabfood + GastroHub + ~5%
+  residual ≈ card settlement lag (SST is NOT a bridge item — nett is
+  as-rung). Quantifying settlement lag needs per-day card tender vs
+  5000-02 postings.
+- 2026-07-17 (run 1) — In batched check SQL, parenthesise every UNION
+  branch that uses GROUP BY/HAVING/LIMIT, and cast Invoice amounts
+  (`round(amount,2)`) — raw numerics print with 30 decimal places.
