@@ -158,14 +158,26 @@ problem, not a rostering one). Surfaced in `ai_notes`.
 ## Where it flows
 
 The hourly `demand` map drives: FT rest-day weighting (rest on the quietest
-days), the PT top-up target (`required − FT base`, weekends first), and the
-man-hours / peak-heads notes. FT fairness + anti-fatigue rules (no close→open,
-rotated anchors, rotated weekend rest) sit on top.
+days), the PT top-up target, and the man-hours / peak-heads notes. FT fairness
++ anti-fatigue rules (no close→open, rotated anchors, rotated weekend rest)
+sit on top.
 
 ## Which PT fills a gap — demand, then fairness + performance
 
-The demand model decides *how many* PT hours a day needs; a separate ranking
-decides *who* gets suggested for each gap. Three signals blend (both the LLM
+PT gaps and per-day top-up targets come from **the same station-split demand
+model as the day split and the grid's "short Xh" chips** — per hour, per
+station: heads needed (kitchen from the cooked curve; barista carrying the
+service floor + mode buffer) minus heads rostered. NOT the old
+items-per-man-hour formula, which called quiet weekdays "covered" while the
+chips showed hours below the 3-head floor, so Mon–Wed never drew PT (Shah
+Alam QA, 2026-07-17). Gaps are **station-tagged**: a kitchen hole is only
+offered to kitchen-capable PT (a hybrid "Barista/Kitchen" fits both), and the
+structural anchor rule generates opening/closing gaps (2 per station) that the
+item curve alone wouldn't — e.g. a PT kitchen closer when only one kitchen FT
+can close.
+
+The demand model decides *how many* PT hours a day needs and *which station*;
+a separate ranking decides *who* gets suggested for each gap. Three signals blend (both the LLM
 pass and the greedy fallback use them; `lib/hr/pt-performance.ts`):
 
 - **Fairness** — trailing 4-week rostered hours; fewer → higher priority. Updates

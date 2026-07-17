@@ -50,7 +50,7 @@ import {
 } from "../man-hours";
 import { computePtPerformance } from "../pt-performance";
 import { planFlexPlacement, type FlexPerson } from "../flex-placement";
-import { allocateStationCounts } from "../shift-allocation";
+import { allocateStationCounts, STATION_ANCHOR_TARGET } from "../shift-allocation";
 // Station demand + serve-time calibration live in the SHARED demand model
 // (lib/hr/demand.ts) — same computation feeds the grid's per-day shortfall.
 import { computeWeekDemand, SERVICE_FLOOR } from "../demand";
@@ -136,6 +136,14 @@ function hhmmss(t: string): string {
 function isBOH(position: string | null): boolean {
   const p = (position ?? "").toLowerCase();
   return p.includes("kitchen") || p.includes("chef") || p.includes("boh");
+}
+
+// Which station a PT can cover: a kitchen gap needs a kitchen-capable
+// position; a barista/counter gap takes anyone who isn't kitchen-only (a
+// hybrid "PT Barista/Kitchen" fits both stations).
+function fitsStation(position: string | null, station: "kitchen" | "barista"): boolean {
+  const p = (position ?? "").toLowerCase();
+  return station === "kitchen" ? isBOH(position) : !isBOH(position) || p.includes("barista");
 }
 
 // Load the outlet's working templates — the SAME list the grid's shift
@@ -925,41 +933,33 @@ export async function generateSchedule(
     );
   }
 
-  // PT top-up target per day: after the FT + rover base is laid, how many
-  // man-hours each open day is still SHORT of its required coverage. Weekends
-  // carry the biggest shortfall (more items → higher required), so they draw
-  // the most PT suggestions. Bounded below by the RM envelope + PT caps, so it
-  // serves coverage without breaking the cost target.
-  const reqByDate = new Map(manHours.map((m) => [m.date, m.requiredHours]));
-  const baseHoursByDate = new Map<string, number>();
-  for (const r of rows) {
-    if (r.notes === "rest_day") continue;
-    const mins =
-      Number(r.end_time.slice(0, 2)) * 60 + Number(r.end_time.slice(3, 5)) -
-      Number(r.start_time.slice(0, 2)) * 60 - Number(r.start_time.slice(3, 5)) - r.break_minutes;
-    if (mins > 0) baseHoursByDate.set(r.shift_date, (baseHoursByDate.get(r.shift_date) ?? 0) + mins / 60);
-  }
-  const ptTargetByDate = new Map<string, number>();
-  for (const d of dates) {
-    if (!daysOpen.has(dow(d))) continue;
-    ptTargetByDate.set(d, Math.max(0, (reqByDate.get(d) ?? 0) - (baseHoursByDate.get(d) ?? 0)));
-  }
-  const ptTargetTotal = Math.round([...ptTargetByDate.values()].reduce((s, v) => s + v, 0));
-  if (ptTargetTotal > 0) {
-    const weekendShort = dates
-      .filter((d) => [0, 6].includes(dow(d)) && (ptTargetByDate.get(d) ?? 0) > 0)
-      .map((d) => `${d} +${Math.round(ptTargetByDate.get(d) ?? 0)}h`);
-    notes.push(
-      `PT top-up target: ${ptTargetTotal}h across the week to reach required coverage after FT` +
-        (weekendShort.length ? ` (weekend: ${weekendShort.join(", ")})` : ""),
+  // PT gaps + per-day top-up targets — from THE demand model (the same
+  // station-split heads the day-split and the grid's "short Xh" chips use),
+  // NOT the old items-per-man-hour formula. That formula called quiet weekdays
+  // "covered" by the FT base while the coverage chips showed hours below the
+  // 3-head service floor, so Mon–Wed never drew a PT suggestion (Shah Alam QA,
+  // 2026-07-17). Gaps are STATION-TAGGED so a kitchen hole is only offered to
+  // kitchen-capable PT, and the structural anchor rule (each station wants 2
+  // at opening AND 2 at closing — prep/cleaning the item curve can't see)
+  // generates anchor gaps the curve alone wouldn't.
+  const posById = new Map<string, string | null>(staff.map((s) => [s.id, s.position]));
+  for (const [id, pos] of roverPositionOf) if (!posById.has(id)) posById.set(id, pos);
+  const kitNeedAt = (d: string, h: number) => weekDemand.kitHeadsByHour.get(`${dow(d)}:${h}`) ?? 0;
+  const barNeedAt = (d: string, h: number) => {
+    const kit = kitNeedAt(d, h);
+    return (
+      Math.max(weekDemand.barHeadsByHour.get(`${dow(d)}:${h}`) ?? SERVICE_FLOOR, SERVICE_FLOOR - kit) +
+      bufferHeads(dow(d), h)
     );
-  }
+  };
+  const staffedAt = (d: string, h: number, station: "kitchen" | "barista") =>
+    rows.filter((r) => {
+      if (r.shift_date !== d || r.notes === "rest_day") return false;
+      if (Number(r.start_time.slice(0, 2)) > h || Number(r.end_time.slice(0, 2)) <= h) return false;
+      return station === "kitchen" ? isBOH(posById.get(r.user_id) ?? null) : !isBOH(posById.get(r.user_id) ?? null);
+    }).length;
 
-  // Demand gaps: hourly sales (trailing 28 days, per day-of-week) → staff
-  // needed per hour vs FT heads on the floor. Positive gap-hours ranked.
-  // (hourly demand computed above, before the FT skeleton)
-
-  type Gap = { date: string; template: ShiftTemplate; slot: string; gapHours: number };
+  type Gap = { date: string; template: ShiftTemplate; slot: string; gapHours: number; station: "kitchen" | "barista" };
   const gaps: Gap[] = [];
   // Every picker template is a candidate PT slot, keyed by template id —
   // middles first, since a mid shift bridging lunch is usually the cheapest
@@ -969,25 +969,55 @@ export async function generateSchedule(
     [tpl.opening.id, tpl.opening],
     [tpl.closing.id, tpl.closing],
   ];
+  const anchorIds = new Set([tpl.opening.id, tpl.closing.id]);
+  const ptTargetByDate = new Map<string, number>();
   for (const date of dates) {
     if (!daysOpen.has(dow(date))) continue;
+    let anchorShort = 0;
     for (const [slot, t] of candidates) {
       const startH = Number(t.start_time.slice(0, 2));
       const endH = Number(t.end_time.slice(0, 2));
-      let gapHours = 0;
-      for (let h = startH; h < endH; h++) {
-        const need = (demand.get(`${dow(date)}:${h}`) ?? 0) + bufferHeads(dow(date), h);
-        const have = rows.filter(
-          (r) => r.shift_date === date && r.notes !== "rest_day" &&
-            Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
-        ).length;
-        if (need > have) gapHours += need - have;
+      for (const station of ["kitchen", "barista"] as const) {
+        let gapHours = 0;
+        let minStaffed = Infinity;
+        let anyNeed = false;
+        for (let h = startH; h < endH; h++) {
+          const need = station === "kitchen" ? kitNeedAt(date, h) : barNeedAt(date, h);
+          if (need > 0) anyNeed = true;
+          const have = staffedAt(date, h, station);
+          minStaffed = Math.min(minStaffed, have);
+          if (need > have) gapHours += need - have;
+        }
+        // Structural anchors: opening/closing want STATION_ANCHOR_TARGET of
+        // each station across the whole window (when the station trades at
+        // all), regardless of what the item curve says.
+        if (anchorIds.has(t.id) && anyNeed && Number.isFinite(minStaffed) && minStaffed < STATION_ANCHOR_TARGET) {
+          const structural = (STATION_ANCHOR_TARGET - minStaffed) * (endH - startH);
+          anchorShort += structural;
+          gapHours = Math.max(gapHours, structural);
+        }
+        if (gapHours > 0) gaps.push({ date, template: t, slot, gapHours, station });
       }
-      if (gapHours > 0) gaps.push({ date, template: t, slot, gapHours });
     }
+    // Day target = station-split head-hours short of demand after the FT
+    // skeleton, or the structural anchor shortfall when that binds harder.
+    let hourlyShort = 0;
+    for (let h = openH; h < closeH; h++) {
+      hourlyShort +=
+        Math.max(0, kitNeedAt(date, h) - staffedAt(date, h, "kitchen")) +
+        Math.max(0, barNeedAt(date, h) - staffedAt(date, h, "barista"));
+    }
+    ptTargetByDate.set(date, Math.max(hourlyShort, anchorShort));
   }
-  // Days furthest below their man-hour target fill first (weekends float up),
-  // then by hourly gap size within a day.
+  const ptTargetTotal = Math.round([...ptTargetByDate.values()].reduce((s, v) => s + v, 0));
+  if (ptTargetTotal > 0) {
+    const perDay = dates
+      .filter((d) => (ptTargetByDate.get(d) ?? 0) > 0)
+      .map((d) => `${d} +${Math.round(ptTargetByDate.get(d) ?? 0)}h`);
+    notes.push(`PT top-up target (demand-model shortfall after FT): ${ptTargetTotal}h — ${perDay.join(", ")}`);
+  }
+  // Days furthest below their coverage target fill first, then by hourly gap
+  // size within a day.
   gaps.sort(
     (a, b) =>
       (ptTargetByDate.get(b.date) ?? 0) - (ptTargetByDate.get(a.date) ?? 0) || b.gapHours - a.gapHours,
@@ -1035,12 +1065,13 @@ export async function generateSchedule(
       proposals = await proposePtWithModel({
         outletName: outlet.name,
         ptBudget,
-        gaps: gaps.slice(0, 20),
+        gaps: gaps.slice(0, 30).map((g) => ({ date: g.date, slot: g.slot, station: g.station, gapHours: Math.round(g.gapHours * 10) / 10 })),
         partTimers: eligiblePt.map((p) => {
           const perf = perfById.get(p.id);
           return {
             user_id: p.id,
             name: p.name,
+            position: p.position,
             hourly_rate: p.hourly_rate!,
             recent_4wk_hours: Math.round(recentHours.get(p.id) ?? 0),
             on_time_pct: perf ? Math.round(perf.onTimeRate * 100) : null,
@@ -1079,17 +1110,30 @@ export async function generateSchedule(
     for (const g of gaps) {
       const day = proposedByDay.get(g.date) ?? proposedByDay.set(g.date, new Set()).get(g.date)!;
       const pick = eligiblePt
-        .filter((p) => !day.has(p.id) && !bookedElsewhere.get(p.id)?.has(g.date) && !onLeave.has(`${p.id}:${g.date}`))
+        .filter(
+          (p) =>
+            fitsStation(p.position, g.station) &&
+            !day.has(p.id) && !bookedElsewhere.get(p.id)?.has(g.date) && !onLeave.has(`${p.id}:${g.date}`),
+        )
         .sort((a, b) => priority(b) - priority(a))[0];
       if (!pick) continue;
       day.add(pick.id);
       proposedH.set(pick.id, (proposedH.get(pick.id) ?? 0) + workingHours(g.template));
-      proposals.push({ user_id: pick.id, date: g.date, slot: g.slot, reason: `gap ${g.gapHours}h` });
+      proposals.push({ user_id: pick.id, date: g.date, slot: g.slot, reason: `${g.station} gap ${g.gapHours}h` });
     }
   }
 
   // Validate every proposal against the hard constraints; violations drop.
   const slotByName = new Map<string, ShiftTemplate>(candidates.map(([slot, t]) => [slot, t]));
+  // Station guard: if a (date, slot) has known gaps, the person must fit at
+  // least one of the short stations — a pure barista can't cover a kitchen
+  // hole the model happened to pick them for. Slots with no recorded gap pass
+  // (budget + day-target caps still bind).
+  const gapStationsBySlot = new Map<string, Set<Gap["station"]>>();
+  for (const g of gaps) {
+    const key = `${g.date}:${g.slot}`;
+    (gapStationsBySlot.get(key) ?? gapStationsBySlot.set(key, new Set()).get(key)!).add(g.station);
+  }
   const ptRows: ShiftRow[] = [];
   const ptSpend = { rm: 0 };
   const ptWeek = new Map<string, { hours: number; days: Set<string> }>();
@@ -1111,6 +1155,8 @@ export async function generateSchedule(
     if (onLeave.has(`${person.id}:${p.date}`)) continue;
     if (bookedElsewhere.get(person.id)?.has(p.date)) continue; // already working another outlet that day
     if (ptRows.some((r) => r.user_id === person.id && r.shift_date === p.date)) continue; // one shift/day
+    const shortStations = gapStationsBySlot.get(`${p.date}:${p.slot}`);
+    if (shortStations && ![...shortStations].some((st) => fitsStation(person.position, st))) continue;
     // Man-hour cap: stop once the day reaches its PT top-up target. Days the FT
     // base already covers (target 0) get no PT — coverage sized, not padded.
     if ((ptHoursByDate.get(p.date) ?? 0) >= (ptTargetByDate.get(p.date) ?? 0)) continue;
@@ -1218,9 +1264,9 @@ function addDaysStr(ymd: string, days: number): string {
 async function proposePtWithModel(input: {
   outletName: string;
   ptBudget: number;
-  gaps: Array<{ date: string; slot: string; gapHours: number }>;
+  gaps: Array<{ date: string; slot: string; station: string; gapHours: number }>;
   partTimers: Array<{
-    user_id: string; name: string; hourly_rate: number; recent_4wk_hours: number;
+    user_id: string; name: string; position: string | null; hourly_rate: number; recent_4wk_hours: number;
     on_time_pct: number | null; checklist_pct: number | null; reliability: number | null;
     leave_dates: string[];
   }>;
@@ -1238,7 +1284,7 @@ async function proposePtWithModel(input: {
           `Full-timers are already rostered (salaried, fixed cost). Part-timers are the only spend that moves labour % — total PT cost this week must stay under RM${input.ptBudget}.`,
           ``,
           `Shift slots: ${JSON.stringify(input.slots)}`,
-          `Demand gaps, biggest first (gapHours = staff-hours short of the sales-derived need):`,
+          `Demand gaps, biggest first (gapHours = staff-hours short of the sales-derived need; station = which side of the floor is short — "kitchen" gaps need a kitchen-capable position, "barista" gaps a barista/counter one; hybrids like "Barista/Kitchen" fit both):`,
           JSON.stringify(input.gaps),
           `Part-timers. Fields: recent_4wk_hours = hours in the last 4 weeks (spread work fairly — favour whoever has fewer recent hours); on_time_pct / checklist_pct / reliability = performance over the last 60 days (0-100 / 0-1; higher = clocks in on time and finishes checklists); never assign on their leave_dates.`,
           JSON.stringify(input.partTimers),
