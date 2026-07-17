@@ -273,6 +273,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-17 (round 6, IN PROGRESS) — **PT loop build started
+  (docs/design/pt-loop.md).** Merged this round already: #960 (PT gaps +
+  targets from the demand model, station-tagged, structural anchor gaps)
+  and #961 (demand model counts pickup-app `orders` — SA was missing 65
+  items/day incl. +70% cooked workload; joins Menu via storehubId).
+  Owner-driven PT-loop requirements: availability has NO write UI today
+  (hr_staff_weekly_availability verified 0 rows), reserve empty spots as
+  claimable open shifts, roster acknowledgment mandatory — over WhatsApp
+  (Cloud API infra already wired: lib/whatsapp.ts + webhook) AND staff-app
+  parity. Bilingual PT SOP memo drafted (sent to owner, start date TBC).
+  Migration 084_pt_loop_ack_open_shifts.sql written (ack columns,
+  hr_open_shifts, hr_wa_prompts; RLS enabled no policies per house rule) —
+  NOT applied to prod yet, awaiting owner approval. Build order in
+  pt-loop.md; next: WhatsApp flows PR, then generator open-shift emit,
+  staff-app screens, weekly cron. Meta template approval needed for
+  outside-24h pings — submit early.
+
 - 2026-07-17 (latest) — **Round 5: forecast clamp (merged #959) + PT
   allocation unified with the demand model (this branch).**
   (a) #959: forecast history window now ends at YESTERDAY (MYT) — forecasting
