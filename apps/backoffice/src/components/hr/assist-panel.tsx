@@ -11,7 +11,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { Users, Sparkles, AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
 
 type Template = { id: string; label: string; start_time: string; end_time: string; break_minutes: number };
-type CoverageSlot = { slot_start: string; slot_end: string; min_staff: number; concurrent: number; gap: number };
+type CoverageSlot = { label?: string; slot_start: string; slot_end: string; min_staff: number; concurrent: number; gap: number };
 type Signals = { reliability: number; availability: number; fairness: number; skill: number; home: number };
 export type AssistCandidate = {
   user_id: string;
@@ -33,6 +33,7 @@ type Resp = {
   coverage: CoverageSlot[];
   assigned_headcount: number;
   has_coverage_rule: boolean;
+  demand_note?: string;
   templates: Template[];
   weights: Weights;
   slot?: { start: string; end: string; role: string | null; hours: number };
@@ -183,20 +184,20 @@ export function AssistPanel({
           <h2 className="text-sm font-semibold">Coverage · {new Date(date + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "2-digit", month: "short" })}</h2>
           <span className="text-xs text-muted-foreground">{data?.assigned_headcount ?? 0} rostered</span>
         </div>
-        {!data?.has_coverage_rule ? (
-          <p className="text-sm text-muted-foreground">No coverage rule set for this day. Assign against your own judgement, or set targets under Coverage Rules.</p>
-        ) : coverage.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No coverage slots for this weekday.</p>
+        {coverage.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No demand history for this day yet — pick a shift template below and assign against your own judgement.</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" title={data?.demand_note || undefined}>
             {coverage.map((c, i) => (
               <button
                 key={i}
                 onClick={() => setSlot({ start: c.slot_start, end: c.slot_end })}
                 className={`rounded-lg border px-3 py-2 text-left text-xs ${c.gap > 0 ? "border-red-200 bg-red-50 hover:border-red-300" : "border-green-200 bg-green-50 hover:border-green-300"}`}
-                title="Rank candidates for this window"
+                title={`Rank candidates for this window${data?.demand_note ? ` — ${data.demand_note}` : ""}`}
               >
-                <div className="font-medium tabular-nums">{c.slot_start}–{c.slot_end}</div>
+                <div className="font-medium">
+                  {c.label ? `${c.label} ` : ""}<span className="tabular-nums opacity-80">{c.slot_start}–{c.slot_end}</span>
+                </div>
                 <div className={c.gap > 0 ? "text-red-700" : "text-green-700"}>
                   {c.concurrent}/{c.min_staff} staff{c.gap > 0 ? ` · short ${c.gap}` : " · covered"}
                 </div>

@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { computeLateMinutes, mytDateString } from "@/lib/hr/hours";
 import { GRACE_PERIOD_MINUTES } from "@/lib/hr/constants";
-import { minConcurrentInSlot } from "@/lib/hr/coverage";
+import { computeWeekDemand, SERVICE_FLOOR } from "@/lib/hr/demand";
+import { allocateShiftCounts, type ShiftWindow } from "@/lib/hr/shift-allocation";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,11 @@ export const dynamic = "force-dynamic";
 // and stored in each assist-log snapshot so they can later be re-learned from
 // manager overrides. Keep them summing sensibly; cost is a *penalty*.
 export const FIT_WEIGHTS = { reliability: 0.3, availability: 0.25, fairness: 0.2, skill: 0.15, home: 0.1, cost: 0.1 };
+
+// Managers/HQ are never suggested by Assist — same rule as AI Fill (owner,
+// 2026-07-16: "for managers, dont auto schedule"). Barista Lead stays in the
+// pool: the rover IS deliberately rostered (2 days/outlet).
+const NEVER_SUGGEST_POSITIONS = new Set(["manager", "area manager", "head of department"]);
 
 const toMin = (t: string) => {
   const [h, m] = t.split(":").map(Number);
@@ -53,18 +59,10 @@ export async function GET(req: NextRequest) {
   const weekEnd = new Date(dateMs + (6 - daysSinceMonday) * 86400000).toISOString().slice(0, 10);
 
   // Outlet + open window (fallback to 08:00–22:00).
-  const outlet = await prisma.outlet.findUnique({ where: { id: outletId }, select: { id: true, name: true, openTime: true, closeTime: true } });
+  const outlet = await prisma.outlet.findUnique({ where: { id: outletId }, select: { id: true, name: true, openTime: true, closeTime: true, loyaltyOutletId: true } });
   if (!outlet) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
   const openT = (outlet.openTime || "08:00").slice(0, 5);
   const closeT = (outlet.closeTime || "22:00").slice(0, 5);
-
-  // Coverage target for this weekday (daily concurrency requirement).
-  const { data: covRules } = await hrSupabaseAdmin
-    .from("hr_outlet_coverage_rules")
-    .select("day_of_week, slot_start, slot_end, min_staff")
-    .eq("outlet_id", outletId)
-    .eq("day_of_week", weekday);
-  const dayRules = (covRules || []) as { slot_start: string; slot_end: string; min_staff: number }[];
 
   // Shift templates for the window picker.
   const { data: tpls } = await hrSupabaseAdmin
@@ -90,7 +88,11 @@ export async function GET(req: NextRequest) {
     : { data: [] as ProfileRow[] };
   type ProfileRow = { user_id: string; position: string | null; employment_type: string | null; rest_day: number | null; schedule_required: boolean | null; basic_salary: number | null; hourly_rate: number | null };
   const profileMap = new Map<string, ProfileRow>((profiles || []).map((p: ProfileRow) => [p.user_id, p]));
-  const pool = users.filter((u) => profileMap.get(u.id)?.schedule_required !== false);
+  const pool = users.filter((u) => {
+    const p = profileMap.get(u.id);
+    if (p?.schedule_required === false) return false;
+    return !NEVER_SUGGEST_POSITIONS.has((p?.position ?? "").trim().toLowerCase());
+  });
   const poolIds = pool.map((u) => u.id);
 
   // This week's shifts (weekly hours + same-day double-book).
@@ -151,6 +153,11 @@ export async function GET(req: NextRequest) {
   const capH = Number(settings?.max_regular_hours_per_week ?? 45);
 
   // ---- Coverage picture (always returned) ----
+  // Same logic as AI Fill's day split: THE demand model gives heads-needed per
+  // hour, allocateShiftCounts turns that into per-template head counts (the
+  // smallest crew that clears every hour's shortfall). Gap = that count minus
+  // who's actually rostered on the window — so what Assist says is short is
+  // exactly what the generator would have staffed.
   const { data: sched } = await hrSupabaseAdmin.from("hr_schedules").select("id").eq("outlet_id", outletId).eq("week_start", weekStart).maybeSingle();
   let daysShifts: { user_id: string; start_time: string; end_time: string }[] = [];
   if (sched) {
@@ -158,16 +165,63 @@ export async function GET(req: NextRequest) {
     daysShifts = (data || []).filter((s: { start_time: string }) => s.start_time !== "00:00");
   }
   const assignedHeadcount = new Set(daysShifts.map((s) => s.user_id)).size;
-  const coverage = dayRules.map((r) => {
-    const concurrent = minConcurrentInSlot(daysShifts.map((s) => ({ start_time: s.start_time, end_time: s.end_time })), r.slot_start.slice(0, 5), r.slot_end.slice(0, 5));
-    return { slot_start: r.slot_start.slice(0, 5), slot_end: r.slot_end.slice(0, 5), min_staff: r.min_staff, concurrent, gap: Math.max(0, r.min_staff - concurrent) };
-  });
+
+  const weekDemand = await computeWeekDemand(outlet, weekStart);
+  const openH = Number(openT.slice(0, 2));
+  const closeH = Number(closeT.slice(0, 2));
+  const demandToday: Record<number, number> = {};
+  for (let h = openH; h < closeH; h++) demandToday[h] = weekDemand.demand.get(`${weekday}:${h}`) ?? SERVICE_FLOOR;
+
+  const windows: ShiftWindow[] = templates
+    .map((t) => ({ key: t.id, startH: Number(t.start_time.slice(0, 2)), endH: Number(t.end_time.slice(0, 2)) }))
+    .sort((a, b) => a.startH - b.startH || a.endH - b.endH);
+  // Smallest crew whose allocation clears every hour: grow until shortfall = 0.
+  const shortfallOf = (counts: Map<string, number>): number => {
+    const cov: Record<number, number> = {};
+    for (const w of windows) {
+      const c = counts.get(w.key) ?? 0;
+      for (let h = w.startH; h < w.endH; h++) cov[h] = (cov[h] ?? 0) + c;
+    }
+    let s = 0;
+    for (let h = openH; h < closeH; h++) s += Math.max(0, (demandToday[h] ?? 0) - (cov[h] ?? 0));
+    return s;
+  };
+  let neededCounts = new Map<string, number>();
+  for (let n = 1; n <= 30 && windows.length > 0; n++) {
+    neededCounts = allocateShiftCounts({ heads: n, windows, demandByHour: demandToday });
+    if (shortfallOf(neededCounts) === 0) break;
+  }
+
+  // Each rostered shift counts toward the template it matches (exact times), or
+  // failing that the window it overlaps most — manual/custom shifts still count.
+  const assignedPerWindow = new Map<string, number>();
+  for (const s of daysShifts) {
+    const st = s.start_time.slice(0, 5), en = s.end_time.slice(0, 5);
+    let win = templates.find((t) => t.start_time === st && t.end_time === en)?.id;
+    if (!win && windows.length > 0) {
+      let best = windows[0], bestOv = -Infinity;
+      for (const w of windows) {
+        const ov = Math.min(toMin(en) / 60, w.endH) - Math.max(toMin(st) / 60, w.startH);
+        if (ov > bestOv) { bestOv = ov; best = w; }
+      }
+      win = best.key;
+    }
+    if (win) assignedPerWindow.set(win, (assignedPerWindow.get(win) ?? 0) + 1);
+  }
+  const coverage = templates
+    .map((t) => {
+      const need = neededCounts.get(t.id) ?? 0;
+      const got = assignedPerWindow.get(t.id) ?? 0;
+      return { template_id: t.id, label: t.label, slot_start: t.start_time, slot_end: t.end_time, min_staff: need, concurrent: got, gap: Math.max(0, need - got) };
+    })
+    .filter((c) => c.min_staff > 0 || c.concurrent > 0);
 
   const base = {
     outlet: { id: outlet.id, name: outlet.name, open: openT, close: closeT },
     date, weekday, week_start: weekStart,
     coverage, assigned_headcount: assignedHeadcount,
-    has_coverage_rule: dayRules.length > 0,
+    has_coverage_rule: coverage.length > 0,
+    demand_note: weekDemand.calibrationNote,
     templates,
     weights: FIT_WEIGHTS,
   };
