@@ -43,9 +43,13 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   payroll readers (attendance-processor, staff clock, attendance-auto-close,
   manual attendance edit) now filter `declared=true`; forecast readers
   (labour-gate, ads autopilot, schedule grid) read all; holidays admin page
-  has the toggle + badges. **Apply 084 BEFORE merging** (old code + new
-  column is safe; new code + old column fails PostgREST quietly → holiday
-  OT flags missed until applied). NOT yet applied — hard rule 6. No ops cause found for the weak July Saturdays
+  has the toggle + badges. **084 APPLIED to prod 2026-07-17** (owner
+  confirmed existing rows = the declared set) — PR #958 safe to merge.
+  2026 calendar now: 11 declared + Wesak/Awal Muharram calendar-only.
+  Flagged to owner, undecided: "Ramadan Begins" (2026-02-18) sits as a
+  DECLARED PH (pays OT) but Feb 18 is actually CNY day 2 — likely a
+  mislabel; and Maulidur Rasul (2026-08-26) is absent entirely (add as
+  calendar-only if not taken, before it skews the Aug forecast). No ops cause found for the weak July Saturdays
   (123/127 vs 189 May peak): hours unchanged (~08:00–22:30), no stockout
   signal (menu mix stable on weak vs strong Saturdays), reviews velocity
   healthy, ads untouched until the trivial Jul 5 trim; the two weak
