@@ -10,22 +10,19 @@ import {
   weeklySalaryShare,
   OUTLET_BUDGETS,
   DEFAULT_BUDGET,
-  ROVER_SHARE_WEEKLY,
+  borrowedFtCharge,
+  lentFtCredit,
   type LabourGateResult,
   type ShiftCostRow,
 } from "@/lib/hr/labour-gate-lib";
 import { buildWeekForecast, FORECAST_WEEKS, type WeekForecast } from "@/lib/hr/revenue-forecast";
-import { DEFAULT_BLENDED_RATE } from "@/lib/hr/man-hours";
+import { computeWeekDemand, PICKUP_STORE_BY_LOYALTY } from "@/lib/hr/demand";
+import { mytDateString } from "@/lib/hr/hours";
 
 export * from "@/lib/hr/labour-gate-lib";
 
-// pickup-app `orders.store_id` per loyalty outlet id (`pos_orders.outlet_id`).
-const PICKUP_STORE_BY_LOYALTY: Record<string, string> = {
-  "outlet-con": "conezion",
-  "outlet-sa": "shah-alam",
-  "outlet-tam": "tamarind",
-  "outlet-nilai": "nilai",
-};
+// pickup-app `orders.store_id` map lives with THE demand model (demand.ts) —
+// workload and revenue must see the same order streams.
 
 // Forecast the coming week's revenue from trailing daily history, per weekday,
 // recency-weighted and holiday-adjusted (see revenue-forecast.ts). Returns the
@@ -40,11 +37,19 @@ export async function forecastWeek(
   const weekDates: string[] = [];
   for (let i = 0; i < 7; i++) weekDates.push(addDays(weekStart, i));
   const histStart = addDays(weekStart, -FORECAST_WEEKS * 7);
-  const histEnd = addDays(weekStart, -1);
+  // The window nominally ends the day before the forecast week, but never
+  // later than YESTERDAY (MYT): forecasting next week mid-week must not pull
+  // in today's partial day or days that haven't happened — those zero-fill at
+  // the highest recency weight and crater the not-yet-traded weekdays
+  // (observed: next week's Saturday forecast ~RM3.0k vs a real ~RM4.9k
+  // baseline when generated on a Thursday).
+  const yesterday = addDays(mytDateString(new Date()), -1);
+  const histEnd = addDays(weekStart, -1) < yesterday ? addDays(weekStart, -1) : yesterday;
 
   const series = await dailyRevenueSeries(outlet, histStart, histEnd);
-  // Fill EVERY day in the window (0 when no sales) so a closed/dead day counts
-  // as a real 0 in its weekday's average rather than silently raising it.
+  // Fill EVERY day in the (completed) window (0 when no sales) so a closed/dead
+  // day counts as a real 0 in its weekday's average rather than silently
+  // raising it.
   const history: Array<{ date: string; revenue: number }> = [];
   for (let d = histStart; d <= histEnd; d = addDays(d, 1)) history.push({ date: d, revenue: series.get(d) ?? 0 });
 
@@ -175,6 +180,9 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     .maybeSingle();
 
   let rows: ShiftCostRow[] = [];
+  // Primary outlet per rostered user — a rostered FT whose primary is elsewhere
+  // is a BORROWED head, charged here pro-rata by hours (rotation-cost rule).
+  const primaryOutletOf = new Map<string, string | null>();
   if (schedule) {
     const { data: shifts } = await hrSupabaseAdmin
       .from("hr_schedule_shifts")
@@ -187,8 +195,9 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
         .from("hr_employee_profiles")
         .select("user_id, position, employment_type, hourly_rate, basic_salary, epf_employer_rate")
         .in("user_id", userIds.length ? userIds : ["-"]),
-      prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }),
+      prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, outletId: true } }),
     ]);
+    for (const u of users) primaryOutletOf.set(u.id, u.outletId);
     type ProfileRow = {
       user_id: string;
       position: string | null;
@@ -246,15 +255,73 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
       })
     : [];
   const outletFtIds = new Set(outletFtUsers.map((u) => u.id));
-  const ftWeekly = ftCandidates
-    .filter((p) => outletFtIds.has(p.user_id))
-    .reduce((sum, p) => sum + weeklySalaryShare(Number(p.basic_salary) || 0, p.epf_employer_rate == null ? null : Number(p.epf_employer_rate)), 0);
+  const shareOf = new Map(
+    ftCandidates.map((p) => [
+      p.user_id,
+      weeklySalaryShare(Number(p.basic_salary) || 0, p.epf_employer_rate == null ? null : Number(p.epf_employer_rate)),
+    ]),
+  );
+
+  // Rotation-cost split (owner rule): cost follows the HOURS.
+  //  • primary FT here: full weekly share MINUS the pro-rata slice for hours
+  //    they work at OTHER outlets this week (charged there instead);
+  //  • borrowed FT (primary elsewhere, rostered here): pro-rata charge for the
+  //    hours they work HERE.
+  // Manager / Area Manager / rover cost is HQ overhead — RM0 to any outlet.
+  const { data: lentShifts } = outletFtIds.size
+    ? await hrSupabaseAdmin
+        .from("hr_schedule_shifts")
+        .select("user_id, shift_date, start_time, end_time, break_minutes, hr_schedules!inner(outlet_id, week_start)")
+        .in("user_id", [...outletFtIds])
+        .eq("hr_schedules.week_start", weekStart)
+        .neq("hr_schedules.outlet_id", outletId)
+        .neq("start_time", "00:00")
+    : { data: [] as unknown[] };
+  const hoursElsewhere = new Map<string, number>();
+  const daysElsewhere = new Map<string, Set<string>>();
+  for (const s of ((lentShifts ?? []) as unknown as Array<{ user_id: string; shift_date: string; start_time: string; end_time: string; break_minutes: number | null }>)) {
+    const h = shiftHours(s.start_time, s.end_time) - (s.break_minutes ?? 0) / 60;
+    if (h > 0) hoursElsewhere.set(s.user_id, (hoursElsewhere.get(s.user_id) ?? 0) + h);
+    (daysElsewhere.get(s.user_id) ?? daysElsewhere.set(s.user_id, new Set()).get(s.user_id)!).add(s.shift_date);
+  }
+  const primaryFtWeekly = [...outletFtIds].reduce((sum, uid) => {
+    const share = shareOf.get(uid) ?? 0;
+    return sum + share - lentFtCredit(share, hoursElsewhere.get(uid) ?? 0);
+  }, 0);
+  const borrowedHours = new Map<string, number>();
+  for (const r of rows) {
+    if (r.employment_type !== "full_time" && r.employment_type !== "contract") continue;
+    if (!shareOf.has(r.user_id)) continue; // rovers/managers filtered out of ftCandidates
+    if (outletFtIds.has(r.user_id)) continue; // primary here, not borrowed
+    if ((primaryOutletOf.get(r.user_id) ?? outletId) === outletId) continue;
+    const h = shiftHours(r.start_time, r.end_time);
+    if (h > 0) borrowedHours.set(r.user_id, (borrowedHours.get(r.user_id) ?? 0) + h);
+  }
+  const borrowedFtWeekly = [...borrowedHours.entries()].reduce(
+    (sum, [uid, h]) => sum + borrowedFtCharge(shareOf.get(uid) ?? 0, h),
+    0,
+  );
+  // Rover lead (Barista Lead) is a WORKING rover: their cost follows their hours
+  // here, same pro-rata rule. Managers / Area Managers / HoD stay RM0 (HQ).
+  const roverLeadHours = new Map<string, { hours: number; share: number }>();
+  for (const r of rows) {
+    if ((r.position ?? "").trim().toLowerCase() !== "barista lead") continue;
+    const h = shiftHours(r.start_time, r.end_time);
+    if (h <= 0) continue;
+    const cur = roverLeadHours.get(r.user_id) ?? {
+      hours: 0,
+      share: weeklySalaryShare(Number(r.basic_salary) || 0, r.epf_employer_rate == null ? null : Number(r.epf_employer_rate)),
+    };
+    cur.hours += h;
+    roverLeadHours.set(r.user_id, cur);
+  }
+  const roverLeadWeekly = [...roverLeadHours.values()].reduce((sum, v) => sum + borrowedFtCharge(v.share, v.hours), 0);
   const ptCost = rows.reduce((sum, r) => {
     if (r.employment_type !== "part_time" && r.employment_type !== "intern") return sum;
     if (!r.hourly_rate || r.hourly_rate <= 0) return sum;
     return sum + shiftHours(r.start_time, r.end_time) * r.hourly_rate;
   }, 0);
-  const ftFixedCost = Math.round(ftWeekly + ROVER_SHARE_WEEKLY);
+  const ftFixedCost = Math.round(primaryFtWeekly + borrowedFtWeekly + roverLeadWeekly);
   const rosterCost = Math.round(ftFixedCost + ptCost);
 
   // Idle sunk-FT capacity: a primary FT is paid their full week regardless of the
@@ -289,12 +356,13 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     }
     const ftName = new Map(ftUsers.map((u) => [u.id, u.name]));
     for (const uid of outletFtIds) {
-      const worked = ftDays.get(uid)?.size ?? 0;
+      // Days lent to other outlets count as worked — a fully-lent FT isn't idle.
+      const worked = (ftDays.get(uid)?.size ?? 0) + (daysElsewhere.get(uid)?.size ?? 0);
       const target = Math.max(0, expectedDays - (leaveDays.get(uid) ?? 0));
       const idle = target - worked;
       if (idle >= 2) {
         warnings.push(
-          `Idle FT capacity: ${ftName.get(uid) ?? uid.slice(0, 8)} scheduled ${worked}/${target} days — ${idle} paid days unused. FT salary is fixed; benching doesn't cut cost, only wastes coverage.`,
+          `Idle FT capacity: ${ftName.get(uid) ?? uid.slice(0, 8)} scheduled ${worked}/${target} days (incl. days lent to other outlets) — ${idle} paid days unused. FT salary is fixed; benching doesn't cut cost, only wastes coverage.`,
         );
       }
     }
@@ -311,21 +379,13 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     if (h > 0) dayHours.set(r.shift_date, (dayHours.get(r.shift_date) ?? 0) + h);
   }
 
-  // Per-day coverage: sales-derived staff need (hourly revenue / RM69, the
-  // workbook's labour-hour heuristic) vs heads rostered in each hour.
-  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; rev: number }>>`
-    SELECT EXTRACT(DOW FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
-           EXTRACT(HOUR FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
-           (sum(total) / 100.0 / 4)::float AS rev
-    FROM pos_orders
-    WHERE outlet_id = ${outlet.loyaltyOutletId ?? ""}
-      AND status = 'completed' AND refund_of_order_id IS NULL
-      AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-    GROUP BY 1, 2
-  `;
-  const need = new Map<string, number>();
-  for (const h of hourly) need.set(`${h.dw}:${h.hr}`, Math.ceil(h.rev / 69));
+  // Per-day coverage from THE demand model (lib/hr/demand.ts) — the same
+  // items-per-hour × serve-calibrated station rates AI Fill staffs to, so the
+  // grid's "short Xh" is exactly the man-hours the generator would add. (This
+  // replaces the old hourly-revenue ÷ RM69 heuristic, which disagreed with the
+  // roster model and made the day gaps unusable for PT allocation.)
+  const weekDemand = await computeWeekDemand(outlet, weekStart);
+  const need = weekDemand.demand;
   const coverage: LabourGateResult["coverage"] = [];
   for (let i = 0; i < 7; i++) {
     const date = addDays(weekStart, i);
@@ -344,14 +404,20 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
       scheduledHours += Math.min(have, n);
       if (n > have) shortHours += n - have;
     }
-    // Per-day forecast + INDICATIVE labour % (day hours × blended rate ÷ day
-    // forecast). FT salary is a weekly fixed cost, so this is a coverage lens for
-    // spotting weekday/weekend imbalance, not the billed weekly figure.
+    // Per-day forecast + daily labour %: the day's PRO-RATA SHARE of the week's
+    // ACTUAL roster cost (by hours) ÷ the day's forecast. Day costs sum exactly
+    // to rosterCost, so the forecast-weighted average of the daily %s equals the
+    // weekly chip — the two scales agree. (The old version priced days at a flat
+    // RM12/h planning rate while the week used real salaries ≈ RM10/h effective,
+    // so every daily % read ~20% too high vs the total.)
     const df = dayForecast.get(date);
     const fc = df ? Math.round(df.forecast) : undefined;
-    const dayPct = fc && fc > 0 ? ((dayHours.get(date) ?? 0) * DEFAULT_BLENDED_RATE) / fc : null;
+    const totalWeekHours = [...dayHours.values()].reduce((s, v) => s + v, 0);
+    const dayCost = totalWeekHours > 0 ? ((dayHours.get(date) ?? 0) / totalWeekHours) * rosterCost : 0;
+    const dayPct = fc && fc > 0 && dayCost > 0 ? dayCost / fc : null;
     coverage.push({
       date, neededHours, scheduledHours, shortHours,
+      items: Math.round(weekDemand.itemsByDow.get(dw) ?? 0),
       forecast: fc, pct: dayPct, isWeekend: df?.isWeekend, isHoliday: df?.isHoliday, holidayName: df?.holidayName,
     });
   }

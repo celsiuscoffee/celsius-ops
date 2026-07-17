@@ -6,9 +6,10 @@ import { Fragment, useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   Bot, CalendarDays, Send, Loader2, ArrowLeftRight,
-  ChevronLeft, ChevronRight, RotateCcw, Trash2,
+  ChevronLeft, ChevronRight, RotateCcw, Trash2, Sparkles, X,
 } from "lucide-react";
 import { HrPageHeader } from "@/components/hr/page-header";
+import { AssistPanel } from "@/components/hr/assist-panel";
 
 type ShiftTemplate = {
   id: string;
@@ -88,6 +89,7 @@ type LabourGateInfo = {
   warnings: string[];
   coverage?: Array<{
     date: string; neededHours: number; scheduledHours: number; shortHours: number;
+    items?: number;
     forecast?: number; pct?: number | null; isWeekend?: boolean; isHoliday?: boolean; holidayName?: string;
   }>;
 };
@@ -178,11 +180,37 @@ export default function SchedulesPage() {
   const [dayIdx, setDayIdx] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [fillMode, setFillMode] = useState<"tight" | "mid" | "safe">("tight");
+  const [assistDate, setAssistDate] = useState<string | null>(null); // per-day Assist modal
+  // Per-day demand coverage (same model as AI Fill / Assist) so the cell "+ Add"
+  // picker can lead with the shift the day is actually short on — filtered to
+  // the clicked person's station (a kitchen hand sees kitchen gaps, a barista
+  // sees counter gaps). Lazily fetched per date when a picker opens; cleared on
+  // any save so gaps stay live.
+  const [dayCov, setDayCov] = useState<Record<string, Array<{
+    template_id?: string; label?: string; slot_start: string; slot_end: string;
+    min_staff: number; concurrent: number; gap: number;
+    kitchen_gap?: number; barista_gap?: number;
+  }>>>({});
   const [clearing, setClearing] = useState(false);
   const [swapAction, setSwapAction] = useState<string | null>(null);
 
   // Get outlets list from the old endpoint (for dropdown)
   const { data: scheduleList } = useFetch<{ outlets: { id: string; name: string }[] }>("/api/hr/schedules");
+
+  // When a cell picker opens, fetch that day's demand coverage (once per date)
+  // so the picker can suggest the short window directly on "+ Add".
+  useEffect(() => {
+    const dt = pickerOpen?.date;
+    if (!dt || !selectedOutlet || dayCov[dt]) return;
+    let stale = false;
+    fetch(`/api/hr/schedules/candidates?outlet_id=${selectedOutlet}&date=${dt}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!stale && j) setDayCov((prev) => ({ ...prev, [dt]: j.coverage || [] }));
+      })
+      .catch(() => {});
+    return () => { stale = true; };
+  }, [pickerOpen, selectedOutlet, dayCov]);
 
   useEffect(() => {
     if (scheduleList?.outlets && outlets.length === 0) {
@@ -280,6 +308,22 @@ export default function SchedulesPage() {
       return aPT - bPT;
     });
   }, [grid]);
+
+  // Station grouping for easier scheduling: BOH (kitchen) vs FOH (barista /
+  // service). Same position classification the AI Fill generator uses to keep
+  // kitchen on both anchors, so the grid sections match how shifts are sized.
+  const userGroups = useMemo(() => {
+    const isBOHPos = (p: string | null | undefined) => {
+      const s = (p ?? "").toLowerCase();
+      return s.includes("kitchen") || s.includes("chef") || s.includes("boh");
+    };
+    const boh = sortedUsers.filter((u) => isBOHPos(u.profile?.position));
+    const foh = sortedUsers.filter((u) => !isBOHPos(u.profile?.position));
+    return [
+      { key: "foh", label: "Front of House · Barista / Service", users: foh },
+      { key: "boh", label: "Back of House · Kitchen", users: boh },
+    ].filter((g) => g.users.length > 0);
+  }, [sortedUsers]);
 
   // Total net working hours per user for the week (gross - break).
   // Rest-day markers don't count.
@@ -421,6 +465,7 @@ export default function SchedulesPage() {
         return;
       }
       mutate();
+      setDayCov({}); // coverage gaps changed — refetch on next picker open
       setPickerOpen(null);
       setPendingCheck(null);
     } finally {
@@ -456,6 +501,7 @@ export default function SchedulesPage() {
         return;
       }
       mutate();
+      setDayCov({});
       setPickerOpen(null);
     } finally {
       setSaving(false);
@@ -677,8 +723,8 @@ export default function SchedulesPage() {
             title={[
               `Roster RM${gate.rosterCost.toLocaleString()} vs forecast RM${gate.forecastRevenue.toLocaleString()}`,
               gate.forecastRevenue > 0
-                ? `  • FT floor RM${gate.ftFixedCost.toLocaleString()} (fixed/sunk) = ${((gate.ftFixedCost / gate.forecastRevenue) * 100).toFixed(1)}%`
-                : `  • FT floor RM${gate.ftFixedCost.toLocaleString()} (fixed/sunk)`,
+                ? `  • FT RM${gate.ftFixedCost.toLocaleString()} (fixed; rotated FT split by hours worked here, manager/rover cost = HQ) = ${((gate.ftFixedCost / gate.forecastRevenue) * 100).toFixed(1)}%`
+                : `  • FT RM${gate.ftFixedCost.toLocaleString()} (fixed; rotated FT split by hours, manager/rover = HQ)`,
               gate.forecastRevenue > 0
                 ? `  • PT RM${gate.ptCost.toLocaleString()} (discretionary) = ${((gate.ptCost / gate.forecastRevenue) * 100).toFixed(1)}%`
                 : `  • PT RM${gate.ptCost.toLocaleString()} (discretionary)`,
@@ -819,19 +865,52 @@ export default function SchedulesPage() {
                         return (
                           <div
                             className={`text-[9px] font-medium tabular-nums ${pctColor}`}
-                            title={`Forecast ${rm}${cov.isWeekend ? " · weekend" : " · weekday"}${cov.isHoliday ? ` · ${cov.holidayName ?? "public holiday"}` : ""} — indicative daily labour % (day hours × blended rate ÷ forecast). FT salary is a weekly fixed cost, so treat this as a weekday-vs-weekend coverage lens, not the billed weekly figure.`}
+                            title={`Forecast ${rm}${cov.isWeekend ? " · weekend" : " · weekday"}${cov.isHoliday ? ` · ${cov.holidayName ?? "public holiday"}` : ""} — daily labour %: this day's share of the week's actual roster cost (pro-rata by hours) ÷ this day's forecast. Day costs sum to the weekly total, so these average back to the Labour chip.`}
                           >
                             {rm}{cov.pct == null ? "" : ` · ${(cov.pct * 100).toFixed(0)}%`}
+                            {cov.items != null && cov.items > 0 && ` · ${cov.items}it`}
                           </div>
                         );
                       })()}
+                      {(() => {
+                        // Insufficient man-hours vs THE demand model (items ×
+                        // serve-calibrated rates) — the exact hours PT should
+                        // fill. Same model AI Fill staffs to.
+                        const cov = gate?.coverage?.find((c) => c.date === d);
+                        if (!cov || cov.shortHours <= 0) return null;
+                        return (
+                          <div
+                            className="mt-0.5 inline-block rounded bg-red-100 px-1 py-0.5 text-[9px] font-bold tabular-nums text-red-700"
+                            title={`${cov.scheduledHours}/${cov.neededHours} demand man-hours covered — short ${cov.shortHours}h. Fill with PT via ✨ Assist (same demand model as AI Fill: items ÷ serve-calibrated station rates).`}
+                          >
+                            short {cov.shortHours}h
+                          </div>
+                        );
+                      })()}
+                      {!isPublished && (
+                        <button
+                          onClick={() => setAssistDate(d)}
+                          className="mt-1 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                          title="Assist: rank who fits best for this day's gaps (reliability · availability · fairness · cost)"
+                        >
+                          <Sparkles className="h-2.5 w-2.5" /> Assist
+                        </button>
+                      )}
                     </th>
                   );
                 })}
               </tr>
             </thead>
             <tbody>
-              {sortedUsers.map((u) => {
+              {userGroups.map((g) => (
+                <Fragment key={g.key}>
+                  <tr className="border-b bg-muted/60">
+                    <td className="sticky left-0 z-10 bg-muted/60 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {g.label} ({g.users.length})
+                    </td>
+                    <td colSpan={grid.days.length} className="bg-muted/60" />
+                  </tr>
+                  {g.users.map((u) => {
                 const position = u.profile?.position || (u.role === "MANAGER" ? "Manager" : "Barista");
                 const isPartTime = u.profile?.employment_type === "part_time";
                 const empType = isPartTime ? "PT" : "FT";
@@ -945,6 +1024,43 @@ export default function SchedulesPage() {
                                 className="fixed z-50 w-56 rounded-lg border bg-white p-1 shadow-lg max-h-[70vh] overflow-y-auto"
                                 style={{ top: pickerOpen!.top, left: pickerOpen!.left }}
                               >
+                                {/* Demand suggestion — the windows this day is short on
+                                    for THIS person's station (same model as AI Fill /
+                                    Assist), so "+ Add" leads with what the day needs. */}
+                                {(() => {
+                                  const pos = (u.profile?.position ?? "").toLowerCase();
+                                  const isBohUser = pos.includes("kitchen") || pos.includes("chef") || pos.includes("boh");
+                                  const gaps = (dayCov[d] || []).filter(
+                                    (c) => c.template_id && (isBohUser ? (c.kitchen_gap ?? 0) > 0 : (c.barista_gap ?? 0) > 0),
+                                  );
+                                  if (gaps.length === 0) return null;
+                                  return (
+                                    <>
+                                      <div className="px-3 pb-0.5 pt-1.5 text-[9px] font-semibold uppercase tracking-wider text-amber-700">
+                                        ✨ Suggested — {isBohUser ? "kitchen" : "barista"} short
+                                      </div>
+                                      {gaps.map((c) => (
+                                        <button
+                                          key={c.template_id}
+                                          onClick={() => setCell(u.id, d, c.template_id!)}
+                                          disabled={saving}
+                                          className="w-full rounded bg-amber-50 px-3 py-2 text-left text-xs hover:bg-amber-100"
+                                        >
+                                          <div className="flex items-center justify-between gap-1">
+                                            <span className="font-medium">{c.label || "Shift"}</span>
+                                            <span className="shrink-0 rounded bg-red-100 px-1 text-[9px] font-bold tabular-nums text-red-700">
+                                              short {isBohUser ? c.kitchen_gap : c.barista_gap}
+                                            </span>
+                                          </div>
+                                          <div className="text-[10px] text-muted-foreground tabular-nums">
+                                            {c.slot_start} - {c.slot_end} · {c.concurrent}/{c.min_staff} staffed
+                                          </div>
+                                        </button>
+                                      ))}
+                                      <div className="my-1 border-t" />
+                                    </>
+                                  );
+                                })()}
                                 <button
                                   onClick={() => setCell(u.id, d, "rest_day")}
                                   disabled={saving}
@@ -1068,6 +1184,8 @@ export default function SchedulesPage() {
                   </tr>
                 );
               })}
+                </Fragment>
+              ))}
             </tbody>
             <tfoot className="border-t-2 border-gray-200">
               {/* Coverage gap footer — for each day shows how each coverage rule is satisfied */}
@@ -1179,6 +1297,26 @@ export default function SchedulesPage() {
           </div>
         </div>
       )}
+
+      {/* Per-day Assist modal — the fit-ranking flow embedded in the grid, so
+          assist happens during scheduling. Prefills the day's first coverage
+          gap; each assign refreshes the grid + labour gate behind it. */}
+      {assistDate && selectedOutlet && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" onClick={() => setAssistDate(null)}>
+          <div className="w-full max-w-3xl rounded-2xl bg-background p-4 shadow-xl sm:p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <Sparkles className="h-4 w-4 text-terracotta" />
+                Assist · {new Date(assistDate + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "2-digit", month: "short" })}
+              </h2>
+              <button onClick={() => setAssistDate(null)} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Close assist">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <AssistPanel outletId={selectedOutlet} date={assistDate} autoPickGap onAssigned={() => mutate()} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1284,7 +1422,7 @@ function DayView({
                   : gate && cov.pct <= gate.ceilingPct ? "border-amber-300 bg-amber-50 text-amber-700"
                     : "border-red-300 bg-red-50 text-red-700"
             }`}
-            title="Indicative daily labour %: day hours × blended rate ÷ day forecast. FT salary is a weekly fixed cost, so this is a weekday-vs-weekend coverage lens, not the billed weekly figure."
+            title="Daily labour %: this day's share of the week's actual roster cost (pro-rata by hours) ÷ this day's forecast. Day costs sum to the weekly total, so these average back to the Labour chip."
           >
             {cov.isWeekend ? "Weekend" : "Weekday"}
             {cov.isHoliday ? ` · ${cov.holidayName ?? "PH"}` : ""} · forecast RM

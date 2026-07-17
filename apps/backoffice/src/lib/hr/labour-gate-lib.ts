@@ -86,6 +86,7 @@ export type LabourGateResult = {
   // weekly fixed cost, so daily % is a coverage lens, not the billed figure).
   coverage: Array<{
     date: string; neededHours: number; scheduledHours: number; shortHours: number;
+    items?: number; // avg items that weekday (28d) — why the day needs its hours
     forecast?: number; pct?: number | null; isWeekend?: boolean; isHoliday?: boolean; holidayName?: string;
   }>;
 };
@@ -171,6 +172,25 @@ export function weeklySalaryShare(basicSalary: number, epfEmployerRate: number |
   const stat = normalizeRate(epfEmployerRate);
   const load = stat != null && stat > 0 ? stat + 0.0175 + 0.002 : DEFAULT_EMPLOYER_STATUTORY;
   return (basicSalary * (1 + load) * 12) / 52;
+}
+
+// ── Cross-outlet FT cost split (owner rule: "for FT that rotate, divide the
+// cost accordingly") ─────────────────────────────────────────────────────
+// A rotating full-timer's weekly salary share follows their HOURS: the outlet
+// they actually work pays pro-rata, the home outlet is credited the same
+// amount. Unworked hours stay with the home outlet (sunk). Fractions clamp to
+// [0,1] so data glitches can't over-credit.
+export const FT_WEEK_HOURS = 45; // Employment Act full week (6 × 7.5h)
+
+// What a BORROWING outlet pays for a shared FT: share × (hours here ÷ 45).
+export function borrowedFtCharge(weeklyShare: number, hoursHere: number): number {
+  return weeklyShare * Math.min(1, Math.max(0, hoursHere) / FT_WEEK_HOURS);
+}
+
+// What the HOME outlet deducts for a primary FT lent out: share × (hours
+// elsewhere ÷ 45). Home pays the remainder — including any idle hours.
+export function lentFtCredit(weeklyShare: number, hoursElsewhere: number): number {
+  return weeklyShare * Math.min(1, Math.max(0, hoursElsewhere) / FT_WEEK_HOURS);
 }
 
 export function verdictFor(

@@ -344,6 +344,232 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   approve tier-1 re-point batch, June double-count unwind plan, whether to
   add pickup channel into the unified_sales view; schedule the weekly
   routine.
+- 2026-07-17 (round 6, IN PROGRESS) — **PT loop build started
+  (docs/design/pt-loop.md).** Merged this round already: #960 (PT gaps +
+  targets from the demand model, station-tagged, structural anchor gaps)
+  and #961 (demand model counts pickup-app `orders` — SA was missing 65
+  items/day incl. +70% cooked workload; joins Menu via storehubId).
+  Owner-driven PT-loop requirements: availability has NO write UI today
+  (hr_staff_weekly_availability verified 0 rows), reserve empty spots as
+  claimable open shifts, roster acknowledgment mandatory — over WhatsApp
+  (Cloud API infra already wired: lib/whatsapp.ts + webhook) AND staff-app
+  parity. Bilingual PT SOP memo drafted (sent to owner, start date TBC).
+  Migration 084_pt_loop_ack_open_shifts.sql written (ack columns,
+  hr_open_shifts, hr_wa_prompts; RLS enabled no policies per house rule) —
+  NOT applied to prod yet, awaiting owner approval. Build order in
+  pt-loop.md; next: WhatsApp flows PR, then generator open-shift emit,
+  staff-app screens, weekly cron. Meta template approval needed for
+  outside-24h pings — submit early.
+
+- 2026-07-17 (latest) — **Round 5: forecast clamp (merged #959) + PT
+  allocation unified with the demand model (this branch).**
+  (a) #959: forecast history window now ends at YESTERDAY (MYT) — forecasting
+  next week mid-week had been zero-filling the not-yet-traded tail of the
+  current week at the highest recency weight, cratering Sat/Sun forecasts
+  (SA/PJ Saturday showed ~RM3.0k vs real ~RM4.9k baseline). Surfaced by the
+  owner asking how the weekend forecast works.
+  (b) Shah Alam full-week QA (draft 2026-07-20) validated BOH: kitchen at
+  open+close all 7 days, zero kitchen middles, no clopening, 45h caps, rover
+  2 days, manager never rostered. But Mon–Wed FOH sat below the 3-head floor
+  with NO PT suggested: `ptTargetByDate` still used the old
+  items-per-man-hour "required" formula that disagreed with the coverage
+  chips. Fixed: PT gaps + day targets now come from THE demand model
+  (station-split heads incl. floor + mode buffer), gaps are station-tagged
+  (kitchen holes only offered to kitchen-capable PT; hybrid "PT
+  Barista/Kitchen" fits both), and structural anchor gaps (2/station on
+  opening & closing) let PT complete the 2/2 kitchen anchors when only 3
+  kitchen FT exist (Haziq → kitchen Closing instead of a random Middle).
+  Greedy fallback, model-proposal validation, and the PT model prompt all
+  enforce/see the station. Next: autopilot phase 2 (weekly cron
+  generate→validate→shadow-publish) awaits owner "continue".
+
+- 2026-07-17 (later) — **Scheduler round 4: per-station allocation + Assist
+  rebuilt (PR #957, branch `claude/staff-rotation-outlets-kmobpa`).** One
+  demand model (`lib/hr/demand.ts`, extracted from the generator) now feeds
+  generator + labour-gate coverage + grid "short Xh" chips + Assist. Owner
+  directives closed this round: (1) BOH middles were surplus artifacts —
+  day-split now runs `allocateShiftCounts` **once per station** (kitchen crew
+  on the kitchen item curve, FOH on the barista curve + service floor + mode
+  buffer; pastries/croissants/cakes/cookies are barista — verified against
+  live Menu categories, only the 6 cooked categories are kitchen). Owner
+  refinement: anchors are STRUCTURAL for both stations — open carries
+  prep/setup, close carries cleaning + dishwashing — so each station seeds
+  up to 2 opening AND 2 closing (`allocateStationCounts`,
+  STATION_ANCHOR_TARGET=2; 1 head opens, 2→1/1, 3→2/1, 4→2/2) before its
+  item curve places anyone; only heads beyond 4 follow the curve
+  (regression-tested in shift-allocation.test.ts). (2) Assist QA'd — it was NOT following the same
+  logic: it ranked the Manager as Top pick (pool now excludes
+  Manager/AM/HoD; Barista Lead stays), its coverage chips read
+  hr_outlet_coverage_rules with a min-concurrent-over-16h bug ("0/4 short 4"
+  with 11 rostered) — chips are now per-template needs from the demand model
+  with per-station gaps ("short 1 kitchen + 1 barista"), and clicking a
+  single-station gap auto-fills the role so skill-weighting favours that
+  station. (3) UX: grid cell "+ Add" now leads with "✨ Suggested" — the
+  short templates for that person's station, one click to assign (lazy
+  per-date fetch of /api/hr/schedules/candidates, cache cleared on save).
+  Remember the deploy-lag gotcha before believing "it didn't work".
+  Still open: two deep-QA review agents from round 3 never reported back;
+  autopilot phases 2–4 (cron generate→validate→publish shadow-first,
+  WhatsApp exception digest, PT auto-commit) designed but not built.
+
+- 2026-07-17 — **Scheduler QA round 3 (owner-driven), all merged to main.**
+  #953 (squash `9544c2f`): day-split rebuilt — shift COUNTS from the hourly
+  items curve via `lib/hr/shift-allocation.ts` (marginal-shortfall greedy;
+  killed the clopening cascade that starved opening at 2 / stacked closing
+  at 6); all FT filled in every mode (shared FT to 6-day combined cap, rover
+  2 days); Managers/Area Managers never auto-scheduled; rotation cost follows
+  hours (`borrowedFtCharge`/`lentFtCredit` — borrowed FT charged here,
+  credited at home; Barista Lead pro-rata; manager cost = HQ RM0, flat RM309
+  rover share dropped); generator uses real per-profile EPF rates; daily grid
+  % = day's hours-share of ACTUAL roster cost (reconciles to the weekly chip).
+  Verified live: all FT/PT salary data individually populated; Afique
+  RM1,900 → RM438/wk charged where he works. **Gotcha that bit twice:** owner
+  regenerates immediately after merge, but Vercel prod deploy lags ~3-6 min —
+  check `ai_notes` for the current marker line (now "rotation cost follows
+  hours") before diagnosing "the fix didn't work". Follow-up branch adds
+  FOH/BOH section grouping in the week grid. Two deep-QA review agents were
+  still in flight at last update — triage their reports on return.
+
+- 2026-07-16 — **Ads optimizer + local-rank status check (all DB-verified,
+  follow-up to the 2026-07-05 entry).**
+  **Optimizer:** the two Jul 5 owner-approved cuts (Tamarind RM100.20→84.96/day,
+  Putrajaya RM100→98.42/day, ~RM504/mo freed) applied clean and are sticking —
+  per-day cost/conv Jul 5–14 vs the prior 2 weeks: Tam RM13.4→9.4, PJ RM9.4→7.6,
+  SA (uncut) RM6.2→6.1, with conversions/day flat-to-up at all three. No further
+  budget changes; 0 search-term exclusions ever used. July spend to date
+  RM7,296 (3 campaigns ≈RM100/day each). **BUT the conversion signal is still
+  wrong:** `ads_conversion_daily` confirms the tracked actions are *Local
+  actions – Directions* + *Clicks to call* (and that per-action sync is stale —
+  no rows after 2026-04-19). The value-based "Pickup Order" tag
+  (`docs/design/ads-conversion-loop.md` Approach A) was never wired, so the
+  optimizer's efficiency lens = cost per directions-click, not cost per order.
+  **ads-daily sync** healthy nightly (metrics through Jul 14) EXCEPT the
+  search-terms step: its sync-log rows are stuck `RUNNING` every night (finish
+  update never lands) and Jul 12 threw a hard Prisma connection-pool timeout;
+  data still arrives (10.5k rows / 4.9k terms, Jun 29→Jul 13) — likely serial
+  upserts racing maxDuration/pool. Owner's search-term **backfill curl never
+  ran** (history starts Jun 29). The Monday shadow-optimizer report exists only
+  in the cron's JSON response — persisted nowhere, read by no one.
+  **Geogrid:** the first true-10km auto-scan (Mon Jul 6) burned the ENTIRE
+  monthly cap in one run — 40 scans: 13 complete / 7 partial / 20 failed with
+  0/81 points (later scans in the run all failed → Places quota/rate
+  exhaustion; failed scans still persist rows and count against
+  `GEOGRID_MONTHLY_SCAN_CAP`). The Jul 13 Monday run was a capped no-op;
+  **nothing scans again until Aug 1.** Structural mismatch: 86 active
+  keyword×outlet combos on a ~weekly due-cadence vs a 40/month cap — the loop
+  as configured can never complete a sweep. Tamarind got ZERO usable catchment
+  baselines. Usable Jul 6 baselines: SA "breakfast shah alam" avg 3.9 / 33%
+  top-3 / green 11.2km; PJ "cafe" 5.3 / 12% / 5.0km; Nilai "nilai cafe" avg
+  17.2 / 0% top-3 (invisible in its own town).
+  **Reviews (the rank lever):** snapshots current through Jul 16. 30-day
+  velocity: Tam 49 (the GBP relink fix is vindicated), PJ 29, SA 13, **Nilai 3
+  — still the binding constraint** (111 reviews vs top local competitor 160).
+  **Substrate gap:** none of ads-daily / optimizer / geogrid are in
+  `agent_registry` (only the `reviews_*` agents) — no kill switch, no ledger.
+  **GBP category adds** (the Jul 5 "next") were never proposed — blocked on
+  the failed scan coverage.
+  **Next:** (1) fix geogrid scan economics — don't count failed scans against
+  the cap, throttle within a run, and prune the 86-keyword set to fit the
+  budget (or raise the cap knowingly: ~81 Places calls/scan); (2) owner
+  decision: wire the value-based Pickup Order conversion (Approach A) or
+  accept directions-clicks as the metric; (3) re-propose GBP category adds
+  once Tamarind has a real catchment scan. (Items on the optimizer shadow
+  report, search-term batching, and registry registration were superseded the
+  same day by the ads autopilot — next entry.)
+
+- 2026-07-16 — **Ads spend AUTOPILOT built + armed** (same branch/PR #947,
+  owner directives in chat: "no need human approve... cut the spending lowest
+  possible without reducing the till revenue", descend from 100% — no pause
+  test; then widened same day: "ads spend should be generating cash... the
+  till is the source of truth... trimming is just the first step, next is to
+  find the best way to increase cash"). New
+  `apps/backoffice/src/lib/ads/autopilot.ts`, runs inside `cron/ads-daily`
+  NIGHTLY (owner: no reason to wait for a weekday — actions are self-paced by
+  the ledger: per-campaign observation windows + a 6-day fleet-wide stagger
+  for new disturbances, while rollback/revert/restore fire the first night
+  the till says so), replacing the response-only shadow report. **Objective =
+  cash: till lift × margin − spend; bidirectional extremum-seeker, burden of
+  proof asymmetric (cuts stand unless the till proves harm; raises revert
+  unless the till proves lift).** State machine per campaign, memory = the
+  `ads_budget_change` ledger reason prefixes (no new tables): DESCEND →
+  step-down 8% (12% when cost/conv >1.3× fleet-best), ≥14d observation, max
+  2 cuts/run (least-efficient first), hard floor RM20/day
+  (ADS_AUTOPILOT_FLOOR_MYR); guard breach after a recent cut → ROLLBACK one
+  step + 56d hold (= proof of response); then PROBE UP +15% (28d observation,
+  cap 1.25× the highest ledgered baseline, ADS_GROSS_MARGIN=0.6 states each
+  raise's break-even in the reason) — kept only on detectable lift (fleet-adj
+  ≥1.02 AND raw ≥1.0, or immediate revert on breach), else REVERT → SETTLE 90d
+  at the proven optimum before re-searching.
+  **Round 2 (owner-approved after the step-size math):** gradual steps
+  (8–15% of ~RM100/day) move a ~RM2.5-3k/day outlet's till by <1% — per-step
+  unreadable; a FULL pause is the only readable experiment (~5-6% if
+  break-even). So: **PAUSE PROBE** — one clearly-inefficient campaign at a
+  time (cost/conv >1.3× fleet-best, never re-probed, never started into a
+  weak till) is PAUSED for 28d (`pause-campaign.ts`, ledger reasons `autopilot
+  pause`/`autopilot restore`), the others keep descending as controls
+  (Putrajaya + Shah Alam stay gradual per owner), then auto-restored with a
+  verdict measured against a forecast built from PRE-pause history: till
+  dropped (raw <0.95 / adj <0.97 over the pause window) → ads generate cash,
+  resume prior budget + descend; no detectable effect → below break-even
+  wholesale, restore at floor RM20/day (~RM1.9k/mo freed at Tamarind). First
+  probe will select **Tamarind** (ratio ~1.5; PJ 1.24 is under the 1.3 bar).
+  **Boiling-frog fix:** the guard now also carries a fixed ANCHOR — outlet's
+  share of fleet till revenue in the 28d before the first ledgered budget
+  change vs its share now; anchor <0.93 = breach → rollback. This catches
+  cumulative slow damage that the trailing 4-week forecast would otherwise
+  normalize into the baseline. **PR #947 MERGED to main 2026-07-16** (squash
+  a113464) → autopilot live from the next nightly ads-daily run.
+  **Round 4 — waste-matched cuts (owner: "remove the keywords that are not
+  worth, and reduce the budget based on the keywords removed... so at the
+  starting point we do things right").** Descent priority reordered: while a
+  campaign carries excluded-term spend not yet taken out of its budget
+  (exclusion ledger rows with `appliedAt` after the campaign's last budget
+  change, sized from `est_monthly_saving_myr`), the next cut removes exactly
+  that daily amount (min RM0.5/day, cap 20%/cut) — café-intent funding is
+  untouched by construction; the blind 8/12% step only resumes once no unpaid
+  waste remains. Round 4b (owner: "why can't we cut it now rather than
+  wait?"): waste-matched cuts are PAIRED BOOKKEEPING, not experiments — they
+  run in the SAME run as the exclusions (exclusions now apply before budget
+  decisions; only successfully-applied ones count toward the cut) and are
+  exempt from the observation window, the 6d fleet stagger, and the
+  2-cuts/run cap. Still gated by: the revenue guard (never cut into a weak
+  till), the floor, and rollback coverage. Net effect: the night this
+  merges, Putrajaya gets exclusions + the matched ~RM13/day cut together —
+  no 5-day wait. PR #952 MERGED 2026-07-17 (squash a3c3015).
+  **Round 5 — seeded exclusions (owner: "shah alam, do junk-term as well").**
+  Junk intent is fleet-wide: any term actually excluded from measured spend
+  at one campaign transfers as a negative to every other enabled campaign
+  (`selectSeedExclusions`; evidence-based only, never invented terms; paused
+  campaigns skipped; cost recorded NULL so seeds never size a waste-matched
+  cut — SA's budget cut waits for its own term data or blind descent).
+  **DEPLOY-TIMING LESSON:** the Jul 16 19:00 UTC cron ran the PRE-#947 code —
+  the prod deploy of a113464 only went READY at Jul 17 00:13 UTC (~6h after
+  merge; queue lag), so the autopilot's real first pass is the night of
+  Jul 17 (3am MYT Jul 18): Tamarind pause + Putrajaya exclusions + matched
+  cut + SA seeds all together. When a merge must beat a cron, VERIFY the
+  Vercel prod deployment is READY — merging is not deploying.
+  **Revenue guard:** last-14-full-days actual till revenue ÷ same-window
+  forecast (labour-gate `dailyRevenueSeries` + `buildWeekForecast`, history
+  precedes the window = clean counterfactual), divided by the median of the
+  other ads outlets' indexes to cancel fleet-wide shocks; breach = raw <0.95
+  OR fleet-adj <0.97 → roll the last recent cut back one step + 56d hold on
+  that campaign ("descent floor found"); breach with no recent cut → hold
+  (never cut into weakness); no guard signal → never act. **Term
+  auto-exclusions** (`term-rules.ts`): own-brand + non-café food intent only,
+  ≥RM2/30d, ≤15/campaign/run; competitor coffee brands + dessert/ambiguous
+  NEVER auto-excluded (strategy calls); human `rejected` ledger rows are a
+  standing no. All actions land in the existing `ads_budget_change` /
+  `ads_term_exclusion` ledgers as `decided_by='ads-autopilot'` (undo paths
+  unchanged) + a summary row in `agent_actions`. **Kill switch:**
+  `agent_registry` key `ads_autopilot`, fail-safe off — row seeded ARMED in
+  prod 2026-07-16 (migration 083, applied via MCP; inert until this code
+  deploys). Also FIXED the search-terms sync: batched unnest upserts (500/chunk)
+  replace the per-row upsert loop that exhausted the pool after the first
+  account — Shah Alam + Tamarind term data starts landing on the next nightly
+  run (their history begins ~Jul 17; exclusion candidates there build up over
+  the following weeks). First armed pass: Monday Jul 20 19:00 UTC — expect
+  cuts at Tamarind + Putrajaya (Jul 5 changes will be 15d old), SA deferred to
+  the following week, plus ~Putrajaya-only exclusions. 387 tests + tsc green.
 
 - 2026-07-15 -- **Staff-scheduling round 2 (branch
   `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the
@@ -586,9 +812,8 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   categories = strongest rank lever; review velocity ≈20% and the binding
   constraint (Nilai 2/30d, SA ~11, Tam ~17, Putrajaya 34); GBP description is
   NOT a rank factor — stop treating geo-in-description as a rank play.
-  **Next:** after the first true-10km scan (Mon Jul 6, 1pm MYT) read fresh
-  baselines and propose per-outlet GBP category adds; owner still owes the ads
-  search-term backfill curl (CRON_SECRET) and the review-velocity ops push.
+  Status refreshed 2026-07-16 — see that entry below for where the loop
+  actually stands (scan cap exhausted, conversion signal still wrong).
 
 - 2026-07-05 — **People-cost gating loop shipped** (PRs #765/#780/#785 all
   merged): labour gate + publish enforcement (green/amber/red, per-outlet

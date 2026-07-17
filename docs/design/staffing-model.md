@@ -17,12 +17,57 @@ split by station:
 Heads needed that hour:
 
 ```
-heads = max(SERVICE_FLOOR, ceil(barista_items / 8) + ceil(kitchen_items / 6))
+heads = max(SERVICE_FLOOR, ceil(barista_items / barista_rate) + ceil(kitchen_items / kitchen_rate))
 ```
 
-- `8` = `BARISTA_ITEMS_PER_HR`, `6` = `KITCHEN_ITEMS_PER_HR` — items one head can
-  make **and** serve per hour while holding a **15-minute serve target**
-  (30-minute hard ceiling). Change the constants to recalibrate.
+- Base rates: `8` = `BARISTA_ITEMS_PER_HR`, `6` = `KITCHEN_ITEMS_PER_HR` — items
+  one head can make **and** serve per hour. The owner's service standard
+  (2026-07-17): **kitchen food served ≤ 15 min, beverage/pastry ≤ 10 min.**
+
+### Per-station shift allocation (owner rules 2026-07-17)
+
+Day-split window counts run **once per station**, not on the pooled total:
+kitchen (BOH) crew counts come from the kitchen item curve, barista/FOH counts
+from the barista curve. The barista side additionally carries the service floor
+(the store never trades below `SERVICE_FLOOR` total heads) and the
+tight/mid/safe buffer — the cushion is counter/service, not the kitchen.
+
+**Structural anchors** (`allocateStationCounts`, `STATION_ANCHOR_TARGET = 2`):
+anchors carry work the item curve can't see — prep/setup at open, cleaning +
+dishwashing at close — for BOTH stations. So each station seeds up to
+**2 at opening AND 2 at closing before its curve places anyone else**; small
+crews degrade gracefully (1 head opens; 2 split 1/1; 3 → 2 open / 1 close;
+4 → 2/2). Only heads beyond 4 follow the demand curve.
+
+Why per-station curves: kitchen items at a coffee outlet are morning-heavy
+(Putrajaya 28d: ~6–7.5 cooked items/hr at 8:00–10:00, ~2–3/hr evenings), so a
+**station Middle exists only when that station's items still need one** after
+the anchors are covered. Before this rule, window counts were station-blind
+beyond a 1-head anchor guarantee, so kitchen crew landed on Middles as surplus
+artifacts.
+
+The same per-station split powers the Assist coverage chips and the grid's
+"+ Add" suggestions (`kitchen short 1` vs `barista short 1`) — a kitchen gap is
+never reported as covered by a barista body.
+
+### Serve-time self-calibration (no human judges "enough staff")
+
+The base rates are only starting points. Every generation measures the outlet's
+ACTUAL p90 serve time over the same trailing 28 days
+(`pos_orders.created_at → served_at`, ~90% populated), split by station: an
+order containing any cooked-food item is a **kitchen order** (15-min standard),
+drinks/pastry-only orders are **barista orders** (10-min standard). Then
+(`lib/hr/serve-time.ts`, pure + tested):
+
+- **Breach** (p90 > target) → rate scales down by `target ÷ p90` (clamped ≥0.6)
+  → the demand model asks for more heads at the loaded hours.
+- **Comfortable** (p90 ≤ 70% of target) → rate nudges up 10% (leaner).
+- **Deadband** in between → unchanged, so rates never flap week to week.
+- Thin sample (<50 orders) → base rate stands.
+
+Memoryless proportional control, computed fresh each run — no stored state, and
+the calibration line lands in `ai_notes` so the reasoning is auditable. Staffing
+changes feed the next window's serve times, closing the loop.
 
 ### Where the rates come from (prep times → serve target)
 
@@ -72,6 +117,20 @@ Both the labour-gate % and the man-hours "affordable" side read one forecast
   weekday-vs-weekend split. It's a coverage lens, not the billed figure — FT
   salary is a weekly fixed cost, so only the weekly % is the real number.
 
+## Rotation cost split — cost follows the hours
+
+A rotating FT's weekly salary share is charged to the outlet where the hours
+actually land (`borrowedFtCharge` / `lentFtCredit` in `labour-gate-lib.ts`,
+pro-rata over the 45h week, clamped so borrower charge + home remainder = one
+share exactly). A shared FT working 6 days at a secondary outlet costs THAT
+outlet their full share and their home outlet RM0 — no more flattering the
+borrower while the home outlet pays for labour it never sees. The **Barista
+Lead rover** follows the same rule: a working rover, costed pro-rata to each
+outlet by the hours rotated there (replacing the old flat RM309
+`ROVER_SHARE_WEEKLY`). Only **Manager / Area Manager / HoD** cost is HQ
+overhead (RM0 to outlets), and they are never auto-scheduled — only the
+Barista Lead rover auto-rotates (2 days/outlet-week).
+
 ## FT is sunk — schedule them fully, never bench to cut cost
 
 Labour % = roster cost ÷ forecast, and roster cost splits into a **fixed** part
@@ -99,14 +158,26 @@ problem, not a rostering one). Surfaced in `ai_notes`.
 ## Where it flows
 
 The hourly `demand` map drives: FT rest-day weighting (rest on the quietest
-days), the PT top-up target (`required − FT base`, weekends first), and the
-man-hours / peak-heads notes. FT fairness + anti-fatigue rules (no close→open,
-rotated anchors, rotated weekend rest) sit on top.
+days), the PT top-up target, and the man-hours / peak-heads notes. FT fairness
++ anti-fatigue rules (no close→open, rotated anchors, rotated weekend rest)
+sit on top.
 
 ## Which PT fills a gap — demand, then fairness + performance
 
-The demand model decides *how many* PT hours a day needs; a separate ranking
-decides *who* gets suggested for each gap. Three signals blend (both the LLM
+PT gaps and per-day top-up targets come from **the same station-split demand
+model as the day split and the grid's "short Xh" chips** — per hour, per
+station: heads needed (kitchen from the cooked curve; barista carrying the
+service floor + mode buffer) minus heads rostered. NOT the old
+items-per-man-hour formula, which called quiet weekdays "covered" while the
+chips showed hours below the 3-head floor, so Mon–Wed never drew PT (Shah
+Alam QA, 2026-07-17). Gaps are **station-tagged**: a kitchen hole is only
+offered to kitchen-capable PT (a hybrid "Barista/Kitchen" fits both), and the
+structural anchor rule generates opening/closing gaps (2 per station) that the
+item curve alone wouldn't — e.g. a PT kitchen closer when only one kitchen FT
+can close.
+
+The demand model decides *how many* PT hours a day needs and *which station*;
+a separate ranking decides *who* gets suggested for each gap. Three signals blend (both the LLM
 pass and the greedy fallback use them; `lib/hr/pt-performance.ts`):
 
 - **Fairness** — trailing 4-week rostered hours; fewer → higher priority. Updates

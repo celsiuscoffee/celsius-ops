@@ -38,7 +38,8 @@ import {
   shiftHours,
   OUTLET_BUDGETS,
   DEFAULT_BUDGET,
-  ROVER_SHARE_WEEKLY,
+  borrowedFtCharge,
+  lentFtCredit,
 } from "../labour-gate-lib";
 import { forecastWeek } from "../labour-gate";
 import {
@@ -48,28 +49,15 @@ import {
   type DailyManHours,
 } from "../man-hours";
 import { computePtPerformance } from "../pt-performance";
+import { planFlexPlacement, type FlexPerson } from "../flex-placement";
+import { allocateStationCounts, STATION_ANCHOR_TARGET } from "../shift-allocation";
+// Station demand + serve-time calibration live in the SHARED demand model
+// (lib/hr/demand.ts) — same computation feeds the grid's per-day shortfall.
+import { computeWeekDemand, SERVICE_FLOOR } from "../demand";
 
 const MODEL = "claude-sonnet-4-6";
 const PT_MAX_HOURS_PER_WEEK = 24;
-// Minimum concurrent heads while the outlet is open — the workbook's service
-// floor (Tamarind explicitly 3/shift; the shift plans floor every outlet at 3).
-const SERVICE_FLOOR = 3;
 const PT_MAX_DAYS_PER_WEEK = 5;
-
-// Serve-time-calibrated station throughput: items one head can make + serve per
-// hour while holding a 15-minute serve target (30-min hard ceiling). Barista =
-// drinks + counter pastries; kitchen = cooked food only.
-//   Grounded in prep times: a drink/pastry is ~3 min (≈20/hr raw), but the same
-//   head also takes orders, cashiers, serves and cleans and must keep queue
-//   headroom to hold 15-min serve → ~8/hr sustainable. Cooked food is ~10 min:
-//   against a 15-min target there's almost no headroom (one item every ~10 min),
-//   so ~6/hr — which is exactly why a 2nd kitchen hand is needed as food volume
-//   rises (weekend brunch). See docs/design/staffing-model.md. Calibratable.
-const BARISTA_ITEMS_PER_HR = 8;
-const KITCHEN_ITEMS_PER_HR = 6;
-// Cooked-food menu categories → kitchen station; everything else (drinks +
-// cakes/cookies/croissants + uncategorised) is barista/counter.
-const KITCHEN_CATEGORIES = ["Roti Bakar", "Nasi Lemak", "Pasta", "Sandwiches", "Fries", "Noodle"];
 
 const ROVER_POSITIONS = new Set(["manager", "area manager", "head of department", "barista lead"]);
 
@@ -94,6 +82,7 @@ type Staff = {
   position: string | null;
   employment_type: string;
   basic_salary: number;
+  epf_employer_rate: number | null; // employer EPF from the profile (real rate, not the default)
   hourly_rate: number | null;
   rest_day: number | null; // 0=Sun … 6=Sat
   // "Primary outlet wins": a shared staffer is auto-rostered (FT floor / PT
@@ -147,6 +136,14 @@ function hhmmss(t: string): string {
 function isBOH(position: string | null): boolean {
   const p = (position ?? "").toLowerCase();
   return p.includes("kitchen") || p.includes("chef") || p.includes("boh");
+}
+
+// Which station a PT can cover: a kitchen gap needs a kitchen-capable
+// position; a barista/counter gap takes anyone who isn't kitchen-only (a
+// hybrid "PT Barista/Kitchen" fits both stations).
+function fitsStation(position: string | null, station: "kitchen" | "barista"): boolean {
+  const p = (position ?? "").toLowerCase();
+  return station === "kitchen" ? isBOH(position) : !isBOH(position) || p.includes("barista");
 }
 
 // Load the outlet's working templates — the SAME list the grid's shift
@@ -231,11 +228,12 @@ export async function generateSchedule(
   });
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, basic_salary, hourly_rate, schedule_required, rest_day")
+    .select("user_id, position, employment_type, basic_salary, hourly_rate, epf_employer_rate, schedule_required, rest_day")
     .in("user_id", users.length ? users.map((u) => u.id) : ["-"]);
   type ProfileRow = {
     user_id: string; position: string | null; employment_type: string;
     basic_salary: number | null; hourly_rate: number | null;
+    epf_employer_rate: number | null;
     schedule_required: boolean | null; rest_day: number | null;
   };
   const profileMap = new Map<string, ProfileRow>(((profiles ?? []) as ProfileRow[]).map((p) => [p.user_id, p]));
@@ -250,6 +248,7 @@ export async function generateSchedule(
         position: p?.position ?? null,
         employment_type: p?.employment_type ?? "full_time",
         basic_salary: Number(p?.basic_salary) || 0,
+        epf_employer_rate: p?.epf_employer_rate == null ? null : Number(p.epf_employer_rate),
         hourly_rate: p?.hourly_rate == null ? null : Number(p.hourly_rate),
         rest_day: p?.rest_day ?? null,
         isPrimaryHere: u.outletId === outletId,
@@ -258,19 +257,24 @@ export async function generateSchedule(
     // Rovers are placed separately below (2 days/outlet-week); HoD stays HQ.
     .filter((s) => !ROVER_POSITIONS.has((s.position ?? "").trim().toLowerCase()));
 
-  // Rovers — the Area Manager and the rover lead rotate 2 days/week at each
-  // outlet (workbook Rover Coverage). They are HQ-costed: RM0 to the outlet
-  // in the labour gate, capped at the 2-shift rover quota. HoD excluded.
+  // Rovers — ONLY the rover lead (Barista Lead) auto-rotates 2 days/week at
+  // each outlet. Managers / Area Managers are NEVER auto-scheduled (owner rule
+  // 2026-07-17): they plan their own floor days and are added manually in the
+  // grid. All rover/manager cost is HQ overhead — RM0 to the outlet.
   const { data: roverProfiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position")
-    .in("position", ["Manager", "Area Manager", "Barista Lead"])
+    .select("user_id, position, basic_salary, epf_employer_rate")
+    .in("position", ["Barista Lead"])
     .is("end_date", null);
-  const roverIds = ((roverProfiles ?? []) as { user_id: string; position: string }[]).map((p) => p.user_id);
+  type RoverProfile = { user_id: string; position: string; basic_salary: number | null; epf_employer_rate: number | null };
+  const roverIds = ((roverProfiles ?? []) as RoverProfile[]).map((p) => p.user_id);
   const roverUsers = roverIds.length
     ? await prisma.user.findMany({ where: { id: { in: roverIds }, status: "ACTIVE" }, select: { id: true, name: true } })
     : [];
-  const roverPositionOf = new Map(((roverProfiles ?? []) as { user_id: string; position: string }[]).map((p) => [p.user_id, p.position]));
+  const roverPositionOf = new Map(((roverProfiles ?? []) as RoverProfile[]).map((p) => [p.user_id, p.position]));
+  // Rover lead cost follows their hours too (same rotation-cost rule as shared
+  // FT): each outlet pays share × (hours here ÷ 45). Managers stay RM0/HQ.
+  const roverShareOf = new Map(((roverProfiles ?? []) as RoverProfile[]).map((p) => [p.user_id, weeklySalaryShare(Number(p.basic_salary) || 0, p.epf_employer_rate == null ? null : Number(p.epf_employer_rate))]));
 
   // "Primary outlet wins": a full-timer carries their 6-day floor only at their
   // primary outlet. A shared FT whose primary is elsewhere is NOT auto-rostered
@@ -287,7 +291,7 @@ export async function generateSchedule(
   }
   notes.push(`${fullTimers.length} FT + ${partTimers.length} PT schedulable (rovers excluded)`);
   if (sharedFtElsewhere.length > 0) {
-    notes.push(`${sharedFtElsewhere.length} shared FT rostered at their primary outlet, not here: ${sharedFtElsewhere.map((s) => s.name).join(", ")}`);
+    notes.push(`${sharedFtElsewhere.length} shared FT (primary elsewhere) available to fill here as free coverage: ${sharedFtElsewhere.map((s) => s.name).join(", ")}`);
   }
 
   // Approved leave
@@ -345,36 +349,12 @@ export async function generateSchedule(
   // over the 4 weeks, split barista vs kitchen. Heads/hour = ceil(barista ÷ 8) +
   // ceil(kitchen ÷ 6), floored at the service minimum — sized to hold the
   // 15-minute serve target. (Same model as the HOO staffing report.)
-  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; barista: number; kitchen: number }>>`
-    SELECT EXTRACT(DOW FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
-           EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
-           (sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float / 4) AS kitchen,
-           (sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float / 4) AS barista
-    FROM pos_order_items i
-    JOIN pos_orders o ON o.id = i.order_id
-    LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
-    WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
-      AND o.status = 'completed' AND o.refund_of_order_id IS NULL
-      AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-    GROUP BY 1, 2
-  `;
-  const demand = new Map<string, number>(); // "dw:hr" → heads needed (barista + kitchen)
-  const itemsByDow = new Map<number, number>(); // dw → avg total items/day (for man-hours)
-  // Peak heads + its station split per day-of-week, for the QA note.
-  const peakByDow = new Map<number, { heads: number; hr: number; bar: number; kit: number }>();
-  for (const h of hourly) {
-    const bar = Number(h.barista) || 0;
-    const kit = Number(h.kitchen) || 0;
-    if (bar + kit <= 0) continue;
-    const barHeads = Math.ceil(bar / BARISTA_ITEMS_PER_HR);
-    const kitHeads = Math.ceil(kit / KITCHEN_ITEMS_PER_HR);
-    const heads = Math.max(SERVICE_FLOOR, barHeads + kitHeads);
-    demand.set(`${h.dw}:${h.hr}`, heads);
-    itemsByDow.set(h.dw, (itemsByDow.get(h.dw) ?? 0) + bar + kit);
-    const prev = peakByDow.get(h.dw);
-    if (!prev || heads > prev.heads) peakByDow.set(h.dw, { heads, hr: h.hr, bar: barHeads, kit: kitHeads });
-  }
+  // Shared demand model (lib/hr/demand.ts) — the SAME computation the labour
+  // gate uses for the grid's per-day shortfall, so "what the grid says is
+  // short" and "what AI Fill staffs to" can never drift apart.
+  const weekDemand = await computeWeekDemand(outlet, weekStart);
+  const { demand, itemsByDow, peakByDow, baristaRate, kitchenRate } = weekDemand;
+  notes.push(weekDemand.calibrationNote);
 
   // Staffing-mode buffer (heads added on top of the sized demand for this hour).
   //   tight → 0; safe → +1 every open hour; mid → +1 across the day's peak block
@@ -444,7 +424,7 @@ export async function generateSchedule(
     const totAff = Math.round(manHours.reduce((s, m) => s + m.affordableHours, 0));
     notes.push(
       `Man-hours/wk: required ${totReq}h (station-sized, 15-min serve target) vs affordable ${totAff}h ` +
-        `(barista ${BARISTA_ITEMS_PER_HR}/hr, kitchen ${KITCHEN_ITEMS_PER_HR}/hr, ${SERVICE_FLOOR}-head floor)` +
+        `(barista ${baristaRate}/hr, kitchen ${kitchenRate}/hr serve-calibrated, ${SERVICE_FLOOR}-head floor)` +
         (overBudgetDays.length
           ? ` — ${overBudgetDays.length} day(s) over target to cover: ` +
             overBudgetDays.map((m) => `${m.date} +${Math.round(m.gapHours)}h`).join(", ")
@@ -479,7 +459,11 @@ export async function generateSchedule(
   const N = sortedFT.length;
   const dayItems = (d: number) => Math.max(itemsByDow.get(d) ?? 0, 0);
   const maxItems = openDaysList.length ? Math.max(...openDaysList.map(dayItems)) : 0;
-  const restCap = Math.max(0, N - SERVICE_FLOOR); // never rest a day below the service floor
+  // Max rests on any one day: don't dip the crew below the service floor — but
+  // never below 1, or a small crew (N ≤ floor, e.g. a 3-FT outlet) has NO legal
+  // rest slot anywhere and the fallback would pile every rest onto the same day.
+  // Every FT must rest once; on a floor-sized crew that day simply runs short.
+  const restCap = Math.max(1, N - SERVICE_FLOOR);
 
   // ── Fairness memory: each FT's recent history (last 4 weeks) ─────────
   // Drives long-run fairness so it isn't reset every week: openings & closings
@@ -639,56 +623,111 @@ export async function generateSchedule(
     );
     const resting = sortedFT.filter((s) => restDayOf.get(s.id) === dow(date) && !onLeave.has(`${s.id}:${date}`));
 
-    // Split the day's crew into opening / closing / middle with two rules layered
-    // on the workbook pattern (kitchen on both anchors, surplus to middles):
-    //  • FATIGUE: never OPEN someone who CLOSED the night before (clopening).
-    //  • FAIRNESS: the unsociable anchors rotate — the person who has CLOSED
-    //    least (this week, then long-run) takes the close; likewise for opening
-    //    — so late nights and early starts are shared, not dumped on the same few.
+    // Two-step day split — COUNTS from demand, then PEOPLE by fairness — run
+    // PER STATION (owner rule 2026-07-17: "run based on item per station"):
+    //  1. HOW MANY: kitchen crew counts come from the KITCHEN item curve
+    //     (cooked food peaks mid-morning/lunch → BOH front-loads onto opening
+    //     and early middles), barista/FOH counts from the barista curve plus
+    //     the service floor and the mode buffer (the cushion is counter/
+    //     service, not the kitchen). A BOH middle now exists only when cooked
+    //     items actually need one — it's no longer a surplus artifact.
+    //  2. Anchors are STRUCTURAL (owner rule): open carries prep/setup and
+    //     close carries cleaning + dishwashing that items can't see, so each
+    //     station seeds up to 2 at opening AND 2 at closing before its curve
+    //     places anyone else (1 head opens; 2 split 1/1; 3 → 2 open/1 close).
+    //  3. WHO fills each slot keeps the fatigue/fairness rules within each
+    //     station: never open someone who closed last night (clopening) unless
+    //     there's literally no one else, and the unsociable anchors rotate to
+    //     whoever has carried them least.
     const boh = working.filter((s) => isBOH(s.position));
+    const foh = working.filter((s) => !isBOH(s.position));
+    const kitToday: Record<number, number> = {};
+    const barToday: Record<number, number> = {};
+    for (let h = openH; h < closeH; h++) {
+      const kit = weekDemand.kitHeadsByHour.get(`${dow(date)}:${h}`) ?? 0;
+      // Barista/counter carries the service floor (the store never trades below
+      // SERVICE_FLOOR total heads) and the tight/mid/safe buffer.
+      kitToday[h] = kit;
+      barToday[h] =
+        Math.max(weekDemand.barHeadsByHour.get(`${dow(date)}:${h}`) ?? SERVICE_FLOOR, SERVICE_FLOOR - kit) +
+        bufferHeads(dow(date), h);
+    }
+    const winOf = (key: string, t: ShiftTemplate) => ({ key, startH: Number(t.start_time.slice(0, 2)), endH: Number(t.end_time.slice(0, 2)) });
+    const windows = [
+      winOf("open", tpl.opening),
+      ...tpl.middles.map((m, i) => winOf(`mid${i}`, m)),
+      winOf("close", tpl.closing),
+    ];
+    const kitCounts = allocateStationCounts({ heads: boh.length, windows, demandByHour: kitToday });
+    const fohCounts = allocateStationCounts({ heads: foh.length, windows, demandByHour: barToday });
+
     const opening: Staff[] = [];
     const closing: Staff[] = [];
-    const middleCrew: Staff[] = [];
+    const midCrews: Staff[][] = tpl.middles.map(() => []);
     const claimed = new Set<string>();
     const take = (arr: Staff[], s: Staff) => { arr.push(s); claimed.add(s.id); };
 
-    // Kitchen must staff both anchors: least-recent closer closes; least-recent
-    // opener (that didn't close last night) opens.
-    const bohClose = [...boh].sort((a, b) => closeKey(a) - closeKey(b))[0];
-    if (bohClose) take(closing, bohClose);
-    const bohOpen =
-      [...boh].filter((s) => !claimed.has(s.id) && !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))[0] ??
-      [...boh].filter((s) => !claimed.has(s.id)).sort((a, b) => openKey(a) - openKey(b))[0];
-    if (bohOpen) take(opening, bohOpen);
-
-    // Bring CLOSING to the service floor: fewest closings first.
-    for (const s of [...working].filter((s) => !claimed.has(s.id)).sort((a, b) => closeKey(a) - closeKey(b))) {
-      if (closing.length >= SERVICE_FLOOR) break;
-      take(closing, s);
-    }
-    // Bring OPENING to the service floor: exclude clopeners, fewest openings first.
-    for (const s of [...working].filter((s) => !claimed.has(s.id) && !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))) {
-      if (opening.length >= SERVICE_FLOOR) break;
-      take(opening, s);
-    }
-    // Remainder → a MIDDLE if the outlet has them and both anchors hold the
-    // floor; otherwise balance the thinner anchor (a clopener always closes).
-    for (const s of working) {
-      if (claimed.has(s.id)) continue;
-      if (tpl.middles.length > 0 && opening.length >= SERVICE_FLOOR && closing.length >= SERVICE_FLOOR) take(middleCrew, s);
-      else if (closing.length <= opening.length || closedYesterday(s)) take(closing, s);
-      else take(opening, s);
-    }
+    // Place one station's crew into the day's windows per that station's counts.
+    const fillStation = (group: Staff[], counts: Map<string, number>) => {
+      const unclaimed = () => group.filter((s) => !claimed.has(s.id));
+      const openTarget = counts.get("open") ?? 0;
+      const closeTarget = counts.get("close") ?? 0;
+      // OPENING first (non-clopeners are the scarce resource), fewest openings
+      // first; clopeners only as a last resort to reach the demanded count.
+      let took = 0;
+      for (const s of unclaimed().filter((s) => !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))) {
+        if (took >= openTarget) break;
+        take(opening, s);
+        took++;
+      }
+      for (const s of unclaimed().sort((a, b) => openKey(a) - openKey(b))) {
+        if (took >= openTarget) break;
+        take(opening, s);
+        took++;
+      }
+      // CLOSING: fewest closings first.
+      took = 0;
+      for (const s of unclaimed().sort((a, b) => closeKey(a) - closeKey(b))) {
+        if (took >= closeTarget) break;
+        take(closing, s);
+        took++;
+      }
+      // MIDDLES: the remainder, per this station's window counts (round-robin
+      // any excess so no one is left unassigned even if counts drift).
+      const midTargets = tpl.middles.map((_, i) => counts.get(`mid${i}`) ?? 0);
+      const midTaken = tpl.middles.map(() => 0);
+      let mi = 0;
+      for (const s of unclaimed()) {
+        if (tpl.middles.length === 0) {
+          // No middles at this outlet → balance the thinner anchor; a clopener
+          // always closes.
+          if (closedYesterday(s) || closing.length <= opening.length) take(closing, s);
+          else take(opening, s);
+          continue;
+        }
+        for (let tries = 0; tries < tpl.middles.length; tries++) {
+          const idx = (mi + tries) % tpl.middles.length;
+          if (midTaken[idx] < midTargets[idx] || tries === tpl.middles.length - 1) {
+            take(midCrews[idx], s);
+            midTaken[idx]++;
+            mi = idx + 1;
+            break;
+          }
+        }
+      }
+    };
+    fillStation(boh, kitCounts);
+    fillStation(foh, fohCounts);
 
     // Record the day's assignments into the fatigue/fairness memory.
     for (const s of opening) { weekOpen.set(s.id, (weekOpen.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "open"); }
     for (const s of closing) { weekClose.set(s.id, (weekClose.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "close"); }
-    for (const s of middleCrew) prevDayShift.set(s.id, "mid");
+    for (const crew of midCrews) for (const s of crew) prevDayShift.set(s.id, "mid");
 
     const dayGroups: Array<[Staff[], ShiftTemplate]> = [
       [opening, tpl.opening],
       [closing, tpl.closing],
-      ...middleCrew.map((s, i): [Staff[], ShiftTemplate] => [[s], tpl.middles[i % tpl.middles.length]]),
+      ...midCrews.map((crew, i): [Staff[], ShiftTemplate] => [crew, tpl.middles[i]]),
     ];
     for (const [group, t] of dayGroups) {
       for (const s of group) {
@@ -724,34 +763,101 @@ export async function generateSchedule(
     notes.push(`⚠ under 45h/wk (leave or closed days): ${under45.map((s) => `${s.name} ${Math.round(ftHours.get(s.id) ?? 0)}h`).join(", ")}`);
   }
 
-  // Rover placement: 2 days each at this outlet, on the BUSIEST days (highest
-  // item demand) so the extra hands land where the load is — skipping days
-  // they're already rostered at another outlet this week (their full week is
-  // 2 days × 3 outlets). Previously they filled the thinnest-FT-crew days,
-  // which pushed them onto quiet midweek and starved the weekend.
-  if (roverUsers.length > 0) {
-    const { data: elsewhere } = await hrSupabaseAdmin
-      .from("hr_schedule_shifts")
-      .select("user_id, shift_date, schedule_id, hr_schedules!inner(week_start)")
-      .in("user_id", roverUsers.map((r) => r.id))
-      .eq("hr_schedules.week_start", weekStart);
-    const busy = new Set(
-      ((elsewhere ?? []) as Array<{ user_id: string; shift_date: string; schedule_id: string }>)
-        .filter((s) => s.schedule_id !== existing?.id)
-        .map((s) => `${s.user_id}:${s.shift_date}`),
-    );
-    for (const rover of roverUsers) {
-      const days = dates
-        .filter((d) => daysOpen.has(dow(d)) && !busy.has(`${rover.id}:${d}`) && !onLeave.has(`${rover.id}:${d}`))
-        .sort((a, b) => dayItems(dow(b)) - dayItems(dow(a))) // busiest day first
-        .slice(0, 2);
-      for (const date of days) {
-        // Lead joins whichever anchor shift is thinner that day.
+  // ── Flex heads: the outlet's FREE sunk/HQ capacity beyond the primary-FT
+  // skeleton — rovers (managers/leads who float across outlets) + SHARED FT
+  // whose primary is another outlet. Both cost RM0 to this outlet (rover is
+  // HQ-costed; a shared FT's salary is booked at their home outlet), so they are
+  // pure added coverage. Two fixes over the old per-rover pass:
+  //   1. They're placed by ONE demand-spread pass (`planFlexPlacement`) — the
+  //      day with the highest demand-per-head fills first and each placement
+  //      lowers that day's priority — so heads spread across distinct days
+  //      instead of two rovers stacking onto the same busy Thursday.
+  //   2. Shared FT are actually rostered here now (they used to sit idle), up to
+  //      the 6-day combined weekly cap.
+  // Owner rule: FT salaries are sunk — FILL UP ALL THE FT, in every mode. So
+  // shared FT are always rostered to their full free capacity (6-day combined
+  // cap) and rovers always get their workbook 2 days/outlet-week. The staffing
+  // MODE does not gate people; it only scales the demand buffer (sizing) and PT.
+  const openDatesList = dates.filter((d) => daysOpen.has(dow(d)));
+  const roverIdSet = new Set(roverUsers.map((r) => r.id));
+  // Hours each BORROWED shared FT / rover lead is placed here — drives the
+  // pro-rata cost charge below (cost follows work, per the rotation-cost rule).
+  const borrowedFtHours = new Map<string, number>();
+  const roverHours = new Map<string, number>();
+  if (roverUsers.length > 0 || sharedFtElsewhere.length > 0) {
+    // Days each flex person already works at ANOTHER outlet this week (+ leave).
+    const flexIds = [...new Set([...roverUsers.map((r) => r.id), ...sharedFtElsewhere.map((s) => s.id)])];
+    const { data: elsewhere } = flexIds.length
+      ? await hrSupabaseAdmin
+          .from("hr_schedule_shifts")
+          .select("user_id, shift_date, schedule_id, hr_schedules!inner(week_start)")
+          .in("user_id", flexIds)
+          .eq("hr_schedules.week_start", weekStart)
+          .neq("start_time", "00:00")
+      : { data: [] as Array<{ user_id: string; shift_date: string; schedule_id: string }> };
+    const busyDays = new Map<string, Set<string>>();
+    for (const s of (elsewhere ?? []) as Array<{ user_id: string; shift_date: string; schedule_id: string }>) {
+      if (s.schedule_id === existing?.id) continue; // this outlet's own draft
+      (busyDays.get(s.user_id) ?? busyDays.set(s.user_id, new Set()).get(s.user_id)!).add(s.shift_date);
+    }
+
+    const demandByDate: Record<string, number> = {};
+    const baseHeadsByDate: Record<string, number> = {};
+    for (const d of openDatesList) {
+      demandByDate[d] = Math.max(dayItems(dow(d)), 1);
+      baseHeadsByDate[d] = rows.filter((r) => r.shift_date === d && r.notes !== "rest_day").length;
+    }
+
+    const flex: FlexPerson[] = [];
+    const flexMeta = new Map<string, { name: string; rover: boolean }>();
+    for (const r of roverUsers) {
+      const bd = busyDays.get(r.id) ?? new Set();
+      const free = openDatesList.filter((d) => !bd.has(d) && !onLeave.has(`${r.id}:${d}`));
+      flex.push({ id: r.id, freeDays: free, budget: 2 }); // workbook: 2 days/outlet-week
+      flexMeta.set(r.id, { name: r.name, rover: true });
+    }
+    for (const s of sharedFtElsewhere) {
+      const bd = busyDays.get(s.id) ?? new Set();
+      const budget = Math.max(0, 6 - bd.size); // fill to the 6-day combined weekly cap
+      const free = openDatesList.filter((d) => !bd.has(d) && !onLeave.has(`${s.id}:${d}`));
+      flex.push({ id: s.id, freeDays: free, budget });
+      flexMeta.set(s.id, { name: s.name, rover: false });
+    }
+
+    const placement = planFlexPlacement({ flex, demandByDate, baseHeadsByDate });
+    const flexDays = new Map<string, string[]>();
+    borrowedFtHours.clear();
+    roverHours.clear();
+    // Deterministic emit order: by date, then rovers before shared FT.
+    for (const date of Object.keys(placement).sort()) {
+      const ids = [...placement[date]].sort((a, b) => Number(!roverIdSet.has(a)) - Number(!roverIdSet.has(b)));
+      for (const id of ids) {
+        // Join the anchor with the larger remaining DEMAND shortfall — not the
+        // one with fewer heads, which would fight the demand-shaped counts (a
+        // morning-peaked day legitimately carries more openers; the flex head
+        // should reinforce the morning, not "balance" it away to closing).
+        const shortfall = (t: ShiftTemplate): number => {
+          const startH = Number(t.start_time.slice(0, 2));
+          const endH = Number(t.end_time.slice(0, 2));
+          let s = 0;
+          for (let h = startH; h < endH; h++) {
+            const need = (demand.get(`${dow(date)}:${h}`) ?? SERVICE_FLOOR) + bufferHeads(dow(date), h);
+            const have = rows.filter(
+              (r) => r.shift_date === date && r.notes !== "rest_day" &&
+                Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
+            ).length;
+            s += Math.max(0, need - have);
+          }
+          return s;
+        };
+        const openShort = shortfall(tpl.opening);
+        const closeShort = shortfall(tpl.closing);
         const openHeads = rows.filter((r) => r.shift_date === date && r.notes !== "rest_day" && r.start_time === hhmmss(tpl.opening.start_time)).length;
         const closeHeads = rows.filter((r) => r.shift_date === date && r.notes !== "rest_day" && r.start_time === hhmmss(tpl.closing.start_time)).length;
-        const t = openHeads <= closeHeads ? tpl.opening : tpl.closing;
+        // Tie on shortfall (usually both 0 on surplus days) → thinner anchor.
+        const t = openShort > closeShort || (openShort === closeShort && openHeads <= closeHeads) ? tpl.opening : tpl.closing;
         rows.push({
-          user_id: rover.id,
+          user_id: id,
           shift_date: date,
           start_time: hhmmss(t.start_time),
           end_time: hhmmss(t.end_time),
@@ -759,31 +865,67 @@ export async function generateSchedule(
           break_minutes: t.break_minutes,
           notes: t.id,
         });
+        if (flexMeta.get(id)?.rover) {
+          roverHours.set(id, (roverHours.get(id) ?? 0) + workingHours(t));
+        } else {
+          ftHours.set(id, (ftHours.get(id) ?? 0) + workingHours(t));
+          borrowedFtHours.set(id, (borrowedFtHours.get(id) ?? 0) + workingHours(t));
+        }
+        (flexDays.get(id) ?? flexDays.set(id, []).get(id)!).push(date);
       }
-      if (days.length > 0) {
-        notes.push(`Rover ${rover.name} (${roverPositionOf.get(rover.id)}): ${days.join(", ")} — RM0 to outlet, HQ-costed`);
-      }
+    }
+    for (const [id, days] of flexDays) {
+      const meta = flexMeta.get(id)!;
+      days.sort();
+      notes.push(
+        meta.rover
+          ? `Rover ${meta.name} (${roverPositionOf.get(id)}): ${days.join(", ")} — costed here pro-rata by hours (rotation-cost rule)`
+          : `Shared FT ${meta.name} filled here: ${days.join(", ")} — primary elsewhere; their cost for these hours is charged HERE, credited at home (rotation-cost rule)`,
+      );
+    }
+    const unfilledShared = sharedFtElsewhere.filter((s) => !flexDays.has(s.id));
+    if (unfilledShared.length > 0) {
+      notes.push(
+        `${unfilledShared.length} shared FT not rostered here (fully booked at their other outlet(s) or on leave): ${unfilledShared.map((s) => s.name).join(", ")}`,
+      );
     }
   }
 
   // ── Stage 2: PT budget envelope — the only spend that moves labour % ─
   // Same forecast the man-hours side used (recency-weighted, holiday-aware).
   const forecast = Math.round(weekForecast.weekly);
-  // FT salaries are sunk — the envelope charges every schedulable FT their
-  // full weekly share whether the roster fills them to 45h or not.
-  const ftCost = Math.round(
-    fullTimers.reduce((sum, s) => sum + weeklySalaryShare(s.basic_salary, null), 0),
+  // FT cost, split by WHERE the hours land (owner's rotation-cost rule):
+  //   • primary FT: full weekly share MINUS the pro-rata slice for hours they
+  //     work at other outlets this week (that slice is charged there instead);
+  //   • borrowed shared FT: pro-rata share for the hours placed HERE.
+  // Manager / Area Manager / rover cost is HQ overhead — RM0 to the outlet.
+  const primaryFtCost = fullTimers.reduce((sum, s) => {
+    const share = weeklySalaryShare(s.basic_salary, s.epf_employer_rate);
+    return sum + share - lentFtCredit(share, hoursElsewhere.get(s.id) ?? 0);
+  }, 0);
+  const borrowedFtCost = sharedFtElsewhere.reduce(
+    (sum, s) => sum + borrowedFtCharge(weeklySalaryShare(s.basic_salary, s.epf_employer_rate), borrowedFtHours.get(s.id) ?? 0),
+    0,
   );
-  const ptBudget = Math.max(0, Math.round(budget.target * forecast - ftCost - ROVER_SHARE_WEEKLY));
+  // Rover lead (Barista Lead) hours here, same pro-rata rule. Managers = HQ, RM0.
+  const roverCost = [...roverHours.entries()].reduce(
+    (sum, [id, h]) => sum + borrowedFtCharge(roverShareOf.get(id) ?? 0, h),
+    0,
+  );
+  const ftCost = Math.round(primaryFtCost + borrowedFtCost + roverCost);
+  const ptBudget = Math.max(0, Math.round(budget.target * forecast - ftCost));
   notes.push(
     `Budget: forecast RM${forecast.toLocaleString()} × ${(budget.target * 100).toFixed(0)}% = RM${Math.round(budget.target * forecast).toLocaleString()}; ` +
-      `FT (fixed) RM${ftCost.toLocaleString()} + rover RM${ROVER_SHARE_WEEKLY} → PT envelope RM${ptBudget.toLocaleString()}`,
+      `FT RM${ftCost.toLocaleString()} (primary RM${Math.round(primaryFtCost).toLocaleString()}` +
+      (borrowedFtCost > 0 ? ` + borrowed-hours RM${Math.round(borrowedFtCost).toLocaleString()}` : "") +
+      (roverCost > 0 ? ` + rover-hours RM${Math.round(roverCost).toLocaleString()}` : "") +
+      `; rotation cost follows hours, manager cost = HQ) → PT envelope RM${ptBudget.toLocaleString()}`,
   );
   // Sunk-FT reality: when the fixed FT floor alone is already at/over target, the
   // week is revenue-constrained — no amount of rostering fixes it, and benching
   // FT saves nothing (their salary is booked either way). Flag it so the % isn't
   // "corrected" by cutting FT hours.
-  const ftFloorPct = forecast > 0 ? (ftCost + ROVER_SHARE_WEEKLY) / forecast : null;
+  const ftFloorPct = forecast > 0 ? ftCost / forecast : null;
   if (ptBudget === 0 && ftFloorPct != null) {
     notes.push(
       `⚠ FT floor alone is ${(ftFloorPct * 100).toFixed(1)}% of forecast (≥ ${(budget.target * 100).toFixed(0)}% target) — revenue-constrained week. ` +
@@ -791,41 +933,33 @@ export async function generateSchedule(
     );
   }
 
-  // PT top-up target per day: after the FT + rover base is laid, how many
-  // man-hours each open day is still SHORT of its required coverage. Weekends
-  // carry the biggest shortfall (more items → higher required), so they draw
-  // the most PT suggestions. Bounded below by the RM envelope + PT caps, so it
-  // serves coverage without breaking the cost target.
-  const reqByDate = new Map(manHours.map((m) => [m.date, m.requiredHours]));
-  const baseHoursByDate = new Map<string, number>();
-  for (const r of rows) {
-    if (r.notes === "rest_day") continue;
-    const mins =
-      Number(r.end_time.slice(0, 2)) * 60 + Number(r.end_time.slice(3, 5)) -
-      Number(r.start_time.slice(0, 2)) * 60 - Number(r.start_time.slice(3, 5)) - r.break_minutes;
-    if (mins > 0) baseHoursByDate.set(r.shift_date, (baseHoursByDate.get(r.shift_date) ?? 0) + mins / 60);
-  }
-  const ptTargetByDate = new Map<string, number>();
-  for (const d of dates) {
-    if (!daysOpen.has(dow(d))) continue;
-    ptTargetByDate.set(d, Math.max(0, (reqByDate.get(d) ?? 0) - (baseHoursByDate.get(d) ?? 0)));
-  }
-  const ptTargetTotal = Math.round([...ptTargetByDate.values()].reduce((s, v) => s + v, 0));
-  if (ptTargetTotal > 0) {
-    const weekendShort = dates
-      .filter((d) => [0, 6].includes(dow(d)) && (ptTargetByDate.get(d) ?? 0) > 0)
-      .map((d) => `${d} +${Math.round(ptTargetByDate.get(d) ?? 0)}h`);
-    notes.push(
-      `PT top-up target: ${ptTargetTotal}h across the week to reach required coverage after FT` +
-        (weekendShort.length ? ` (weekend: ${weekendShort.join(", ")})` : ""),
+  // PT gaps + per-day top-up targets — from THE demand model (the same
+  // station-split heads the day-split and the grid's "short Xh" chips use),
+  // NOT the old items-per-man-hour formula. That formula called quiet weekdays
+  // "covered" by the FT base while the coverage chips showed hours below the
+  // 3-head service floor, so Mon–Wed never drew a PT suggestion (Shah Alam QA,
+  // 2026-07-17). Gaps are STATION-TAGGED so a kitchen hole is only offered to
+  // kitchen-capable PT, and the structural anchor rule (each station wants 2
+  // at opening AND 2 at closing — prep/cleaning the item curve can't see)
+  // generates anchor gaps the curve alone wouldn't.
+  const posById = new Map<string, string | null>(staff.map((s) => [s.id, s.position]));
+  for (const [id, pos] of roverPositionOf) if (!posById.has(id)) posById.set(id, pos);
+  const kitNeedAt = (d: string, h: number) => weekDemand.kitHeadsByHour.get(`${dow(d)}:${h}`) ?? 0;
+  const barNeedAt = (d: string, h: number) => {
+    const kit = kitNeedAt(d, h);
+    return (
+      Math.max(weekDemand.barHeadsByHour.get(`${dow(d)}:${h}`) ?? SERVICE_FLOOR, SERVICE_FLOOR - kit) +
+      bufferHeads(dow(d), h)
     );
-  }
+  };
+  const staffedAt = (d: string, h: number, station: "kitchen" | "barista") =>
+    rows.filter((r) => {
+      if (r.shift_date !== d || r.notes === "rest_day") return false;
+      if (Number(r.start_time.slice(0, 2)) > h || Number(r.end_time.slice(0, 2)) <= h) return false;
+      return station === "kitchen" ? isBOH(posById.get(r.user_id) ?? null) : !isBOH(posById.get(r.user_id) ?? null);
+    }).length;
 
-  // Demand gaps: hourly sales (trailing 28 days, per day-of-week) → staff
-  // needed per hour vs FT heads on the floor. Positive gap-hours ranked.
-  // (hourly demand computed above, before the FT skeleton)
-
-  type Gap = { date: string; template: ShiftTemplate; slot: string; gapHours: number };
+  type Gap = { date: string; template: ShiftTemplate; slot: string; gapHours: number; station: "kitchen" | "barista" };
   const gaps: Gap[] = [];
   // Every picker template is a candidate PT slot, keyed by template id —
   // middles first, since a mid shift bridging lunch is usually the cheapest
@@ -835,25 +969,55 @@ export async function generateSchedule(
     [tpl.opening.id, tpl.opening],
     [tpl.closing.id, tpl.closing],
   ];
+  const anchorIds = new Set([tpl.opening.id, tpl.closing.id]);
+  const ptTargetByDate = new Map<string, number>();
   for (const date of dates) {
     if (!daysOpen.has(dow(date))) continue;
+    let anchorShort = 0;
     for (const [slot, t] of candidates) {
       const startH = Number(t.start_time.slice(0, 2));
       const endH = Number(t.end_time.slice(0, 2));
-      let gapHours = 0;
-      for (let h = startH; h < endH; h++) {
-        const need = (demand.get(`${dow(date)}:${h}`) ?? 0) + bufferHeads(dow(date), h);
-        const have = rows.filter(
-          (r) => r.shift_date === date && r.notes !== "rest_day" &&
-            Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
-        ).length;
-        if (need > have) gapHours += need - have;
+      for (const station of ["kitchen", "barista"] as const) {
+        let gapHours = 0;
+        let minStaffed = Infinity;
+        let anyNeed = false;
+        for (let h = startH; h < endH; h++) {
+          const need = station === "kitchen" ? kitNeedAt(date, h) : barNeedAt(date, h);
+          if (need > 0) anyNeed = true;
+          const have = staffedAt(date, h, station);
+          minStaffed = Math.min(minStaffed, have);
+          if (need > have) gapHours += need - have;
+        }
+        // Structural anchors: opening/closing want STATION_ANCHOR_TARGET of
+        // each station across the whole window (when the station trades at
+        // all), regardless of what the item curve says.
+        if (anchorIds.has(t.id) && anyNeed && Number.isFinite(minStaffed) && minStaffed < STATION_ANCHOR_TARGET) {
+          const structural = (STATION_ANCHOR_TARGET - minStaffed) * (endH - startH);
+          anchorShort += structural;
+          gapHours = Math.max(gapHours, structural);
+        }
+        if (gapHours > 0) gaps.push({ date, template: t, slot, gapHours, station });
       }
-      if (gapHours > 0) gaps.push({ date, template: t, slot, gapHours });
     }
+    // Day target = station-split head-hours short of demand after the FT
+    // skeleton, or the structural anchor shortfall when that binds harder.
+    let hourlyShort = 0;
+    for (let h = openH; h < closeH; h++) {
+      hourlyShort +=
+        Math.max(0, kitNeedAt(date, h) - staffedAt(date, h, "kitchen")) +
+        Math.max(0, barNeedAt(date, h) - staffedAt(date, h, "barista"));
+    }
+    ptTargetByDate.set(date, Math.max(hourlyShort, anchorShort));
   }
-  // Days furthest below their man-hour target fill first (weekends float up),
-  // then by hourly gap size within a day.
+  const ptTargetTotal = Math.round([...ptTargetByDate.values()].reduce((s, v) => s + v, 0));
+  if (ptTargetTotal > 0) {
+    const perDay = dates
+      .filter((d) => (ptTargetByDate.get(d) ?? 0) > 0)
+      .map((d) => `${d} +${Math.round(ptTargetByDate.get(d) ?? 0)}h`);
+    notes.push(`PT top-up target (demand-model shortfall after FT): ${ptTargetTotal}h — ${perDay.join(", ")}`);
+  }
+  // Days furthest below their coverage target fill first, then by hourly gap
+  // size within a day.
   gaps.sort(
     (a, b) =>
       (ptTargetByDate.get(b.date) ?? 0) - (ptTargetByDate.get(a.date) ?? 0) || b.gapHours - a.gapHours,
@@ -901,12 +1065,13 @@ export async function generateSchedule(
       proposals = await proposePtWithModel({
         outletName: outlet.name,
         ptBudget,
-        gaps: gaps.slice(0, 20),
+        gaps: gaps.slice(0, 30).map((g) => ({ date: g.date, slot: g.slot, station: g.station, gapHours: Math.round(g.gapHours * 10) / 10 })),
         partTimers: eligiblePt.map((p) => {
           const perf = perfById.get(p.id);
           return {
             user_id: p.id,
             name: p.name,
+            position: p.position,
             hourly_rate: p.hourly_rate!,
             recent_4wk_hours: Math.round(recentHours.get(p.id) ?? 0),
             on_time_pct: perf ? Math.round(perf.onTimeRate * 100) : null,
@@ -945,17 +1110,30 @@ export async function generateSchedule(
     for (const g of gaps) {
       const day = proposedByDay.get(g.date) ?? proposedByDay.set(g.date, new Set()).get(g.date)!;
       const pick = eligiblePt
-        .filter((p) => !day.has(p.id) && !bookedElsewhere.get(p.id)?.has(g.date) && !onLeave.has(`${p.id}:${g.date}`))
+        .filter(
+          (p) =>
+            fitsStation(p.position, g.station) &&
+            !day.has(p.id) && !bookedElsewhere.get(p.id)?.has(g.date) && !onLeave.has(`${p.id}:${g.date}`),
+        )
         .sort((a, b) => priority(b) - priority(a))[0];
       if (!pick) continue;
       day.add(pick.id);
       proposedH.set(pick.id, (proposedH.get(pick.id) ?? 0) + workingHours(g.template));
-      proposals.push({ user_id: pick.id, date: g.date, slot: g.slot, reason: `gap ${g.gapHours}h` });
+      proposals.push({ user_id: pick.id, date: g.date, slot: g.slot, reason: `${g.station} gap ${g.gapHours}h` });
     }
   }
 
   // Validate every proposal against the hard constraints; violations drop.
   const slotByName = new Map<string, ShiftTemplate>(candidates.map(([slot, t]) => [slot, t]));
+  // Station guard: if a (date, slot) has known gaps, the person must fit at
+  // least one of the short stations — a pure barista can't cover a kitchen
+  // hole the model happened to pick them for. Slots with no recorded gap pass
+  // (budget + day-target caps still bind).
+  const gapStationsBySlot = new Map<string, Set<Gap["station"]>>();
+  for (const g of gaps) {
+    const key = `${g.date}:${g.slot}`;
+    (gapStationsBySlot.get(key) ?? gapStationsBySlot.set(key, new Set()).get(key)!).add(g.station);
+  }
   const ptRows: ShiftRow[] = [];
   const ptSpend = { rm: 0 };
   const ptWeek = new Map<string, { hours: number; days: Set<string> }>();
@@ -977,6 +1155,8 @@ export async function generateSchedule(
     if (onLeave.has(`${person.id}:${p.date}`)) continue;
     if (bookedElsewhere.get(person.id)?.has(p.date)) continue; // already working another outlet that day
     if (ptRows.some((r) => r.user_id === person.id && r.shift_date === p.date)) continue; // one shift/day
+    const shortStations = gapStationsBySlot.get(`${p.date}:${p.slot}`);
+    if (shortStations && ![...shortStations].some((st) => fitsStation(person.position, st))) continue;
     // Man-hour cap: stop once the day reaches its PT top-up target. Days the FT
     // base already covers (target 0) get no PT — coverage sized, not padded.
     if ((ptHoursByDate.get(p.date) ?? 0) >= (ptTargetByDate.get(p.date) ?? 0)) continue;
@@ -1016,7 +1196,7 @@ export async function generateSchedule(
       return sum + mins / 60;
     }, 0),
   );
-  const estimatedCost = ftCost + Math.round(ptSpend.rm) + ROVER_SHARE_WEEKLY;
+  const estimatedCost = ftCost + Math.round(ptSpend.rm); // ftCost incl. borrowed + rover hours; manager = HQ RM0
 
   let scheduleId = existing?.id as string | undefined;
   if (!scheduleId) {
@@ -1084,9 +1264,9 @@ function addDaysStr(ymd: string, days: number): string {
 async function proposePtWithModel(input: {
   outletName: string;
   ptBudget: number;
-  gaps: Array<{ date: string; slot: string; gapHours: number }>;
+  gaps: Array<{ date: string; slot: string; station: string; gapHours: number }>;
   partTimers: Array<{
-    user_id: string; name: string; hourly_rate: number; recent_4wk_hours: number;
+    user_id: string; name: string; position: string | null; hourly_rate: number; recent_4wk_hours: number;
     on_time_pct: number | null; checklist_pct: number | null; reliability: number | null;
     leave_dates: string[];
   }>;
@@ -1104,7 +1284,7 @@ async function proposePtWithModel(input: {
           `Full-timers are already rostered (salaried, fixed cost). Part-timers are the only spend that moves labour % — total PT cost this week must stay under RM${input.ptBudget}.`,
           ``,
           `Shift slots: ${JSON.stringify(input.slots)}`,
-          `Demand gaps, biggest first (gapHours = staff-hours short of the sales-derived need):`,
+          `Demand gaps, biggest first (gapHours = staff-hours short of the sales-derived need; station = which side of the floor is short — "kitchen" gaps need a kitchen-capable position, "barista" gaps a barista/counter one; hybrids like "Barista/Kitchen" fit both):`,
           JSON.stringify(input.gaps),
           `Part-timers. Fields: recent_4wk_hours = hours in the last 4 weeks (spread work fairly — favour whoever has fewer recent hours); on_time_pct / checklist_pct / reliability = performance over the last 60 days (0-100 / 0-1; higher = clocks in on time and finishes checklists); never assign on their leave_dates.`,
           JSON.stringify(input.partTimers),
