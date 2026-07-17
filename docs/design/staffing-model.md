@@ -17,12 +17,31 @@ split by station:
 Heads needed that hour:
 
 ```
-heads = max(SERVICE_FLOOR, ceil(barista_items / 8) + ceil(kitchen_items / 6))
+heads = max(SERVICE_FLOOR, ceil(barista_items / barista_rate) + ceil(kitchen_items / kitchen_rate))
 ```
 
-- `8` = `BARISTA_ITEMS_PER_HR`, `6` = `KITCHEN_ITEMS_PER_HR` — items one head can
-  make **and** serve per hour while holding a **15-minute serve target**
-  (30-minute hard ceiling). Change the constants to recalibrate.
+- Base rates: `8` = `BARISTA_ITEMS_PER_HR`, `6` = `KITCHEN_ITEMS_PER_HR` — items
+  one head can make **and** serve per hour. The owner's service standard
+  (2026-07-17): **kitchen food served ≤ 15 min, beverage/pastry ≤ 10 min.**
+
+### Serve-time self-calibration (no human judges "enough staff")
+
+The base rates are only starting points. Every generation measures the outlet's
+ACTUAL p90 serve time over the same trailing 28 days
+(`pos_orders.created_at → served_at`, ~90% populated), split by station: an
+order containing any cooked-food item is a **kitchen order** (15-min standard),
+drinks/pastry-only orders are **barista orders** (10-min standard). Then
+(`lib/hr/serve-time.ts`, pure + tested):
+
+- **Breach** (p90 > target) → rate scales down by `target ÷ p90` (clamped ≥0.6)
+  → the demand model asks for more heads at the loaded hours.
+- **Comfortable** (p90 ≤ 70% of target) → rate nudges up 10% (leaner).
+- **Deadband** in between → unchanged, so rates never flap week to week.
+- Thin sample (<50 orders) → base rate stands.
+
+Memoryless proportional control, computed fresh each run — no stored state, and
+the calibration line lands in `ai_notes` so the reasoning is auditable. Staffing
+changes feed the next window's serve times, closing the loop.
 
 ### Where the rates come from (prep times → serve target)
 
