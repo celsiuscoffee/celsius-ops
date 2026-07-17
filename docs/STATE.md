@@ -290,6 +290,29 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 — **Finance warehouse session 2 (owner-approved actions
+  executed).** PR #948 merged; weekly routine scheduled
+  (`trig_012njzLdT5jtaUQVG2JSrNgz`, Sun 21:00 MYT) + month-end close pack
+  (`trig_017RGBQXACCqkRpQWknETpwW`, day 1 08:00 MYT) — both fresh-session;
+  NOTE they carry no MCP connectors (created via meta tool) — if the first
+  run can't reach Supabase, recreate from the claude.ai Routines UI.
+  Executed on owner approval: (1) **tier-1 re-point batch: 92 bank lines
+  re-pointed** (RM30,470.60, audit-stamped, classifiedBy='manual'); check
+  11b residual now exactly 41 (tier-2, needs SOAs); the orphaned
+  `paidVia='bank-ap-match'`-no-line phantom-paid review list (incl
+  INV-1012 RM768, 26-0634/260634 RM148 pairs) awaits finance disposition.
+  (2) **Pickup channel added to unified_sales** (migration 085 APPLIED;
+  July: 1,347 rows RM41,649.74; view now pos+grabfood+pickup+consignment;
+  data-map + skill updated; `unified_sale_items` still lacks pickup lines
+  — follow-up; backoffice dashboard lib reads raw tables, unaffected).
+  (3) **June unwind NOT applied — blanket reversal would be WRONG:**
+  day-level reconstruction shows over-counting (Tamarind Jun 6–17, SdnBhd
+  Jun 6–14: EOD posted full StoreHub days while bank-fed income ran) AND
+  under-counting (Conezion Jun 8–17, SdnBhd Jun 15–17: EOD captured only
+  pickup ~RM400/day, till ~RM3k/day went nowhere). Net error much smaller
+  than the RM81k upper bound. Owner delegated ("make sure it is right") —
+  per-company-day correcting entries are the weekly run's top item.
+
 - 2026-07-16 -- **Finance data-warehouse agent designed** (branch
   `claude/celsius-finance-warehouse-agent-8j1uk6`): new `finance-warehouse`
   skill (custodian runbook: data contract w/ SLOs, 12-check suite, drift

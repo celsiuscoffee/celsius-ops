@@ -35,7 +35,7 @@ Full semantics + traps: `data-map.ts` (keep the two in lockstep).
 
 | Question class | Canonical source | Freshness SLO |
 | --- | --- | --- |
-| Till-rung sales / product mix | `unified_sales` / `unified_sale_items` VIEWs | pos_native ≤ 1d; consignment ≤ 35d; storehub/hubbo frozen history |
+| Sales / product mix | `unified_sales` VIEW (since 2026-07-17 includes pickup — pos + grabfood + pickup + consignment; never add `orders` on top) / `unified_sale_items` (no pickup lines yet) | pos_native+pickup ≤ 1d; consignment ≤ 35d; storehub/hubbo frozen history |
 | Banked revenue (GL lens) | posted `fin_transactions` + `fin_journal_lines` × `fin_accounts` income | posting lag ≤ 2d behind bank lines |
 | Cash position | `BankStatement` latest closingBalance per account (3 accounts = complete) | ≤ 12h behind feed |
 | Cash flows / run-rates | `BankStatementLine` (exclude isInterCo) | ≤ 12h; 0 uncategorised |
@@ -176,3 +176,18 @@ stable ones into the sections above._
   exact-amount narration matches (RM30,470.60) with gated SQL; tier 2 = 41
   manual (RM21,251.98). After any run, re-run check 11b expecting the
   tier-2 residual only.
+- 2026-07-17 (session 2, owner-approved actions) — **Tier-1 batch EXECUTED**
+  (92 rows, check 11b residual now 41; the orphaned
+  `paidVia='bank-ap-match'`-no-line review list grew accordingly — finance
+  must disposition it). **Pickup channel ADDED to unified_sales** (migration
+  085, applied; July: 1,347 rows / RM41,649.74; `unified_sale_items` still
+  lacks pickup lines — follow-up). **June unwind REVISED — do NOT apply a
+  blanket reversal:** day-level reconstruction shows Tamarind double
+  Jun 6–17 and SdnBhd Jun 6–14 (EOD posted full StoreHub days while
+  bank-fed income ran), but Conezion Jun 8–17 and SdnBhd Jun 15–17 are
+  UNDER-counted (EOD posted only pickup ~RM400/day while the new till rang
+  ~RM3k/day and settlements went to 1005). Net June error is a mix of
+  over/under; the correcting entries must be per company-day: reverse
+  bank-fed income for sales-days covered by a full EOD, ADD income for
+  pos-era days EOD missed. This reconstruction is the weekly run's top
+  backlog item.
