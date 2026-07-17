@@ -16,7 +16,6 @@ import {
   type ShiftCostRow,
 } from "@/lib/hr/labour-gate-lib";
 import { buildWeekForecast, FORECAST_WEEKS, type WeekForecast } from "@/lib/hr/revenue-forecast";
-import { DEFAULT_BLENDED_RATE } from "@/lib/hr/man-hours";
 
 export * from "@/lib/hr/labour-gate-lib";
 
@@ -408,12 +407,17 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
       scheduledHours += Math.min(have, n);
       if (n > have) shortHours += n - have;
     }
-    // Per-day forecast + INDICATIVE labour % (day hours × blended rate ÷ day
-    // forecast). FT salary is a weekly fixed cost, so this is a coverage lens for
-    // spotting weekday/weekend imbalance, not the billed weekly figure.
+    // Per-day forecast + daily labour %: the day's PRO-RATA SHARE of the week's
+    // ACTUAL roster cost (by hours) ÷ the day's forecast. Day costs sum exactly
+    // to rosterCost, so the forecast-weighted average of the daily %s equals the
+    // weekly chip — the two scales agree. (The old version priced days at a flat
+    // RM12/h planning rate while the week used real salaries ≈ RM10/h effective,
+    // so every daily % read ~20% too high vs the total.)
     const df = dayForecast.get(date);
     const fc = df ? Math.round(df.forecast) : undefined;
-    const dayPct = fc && fc > 0 ? ((dayHours.get(date) ?? 0) * DEFAULT_BLENDED_RATE) / fc : null;
+    const totalWeekHours = [...dayHours.values()].reduce((s, v) => s + v, 0);
+    const dayCost = totalWeekHours > 0 ? ((dayHours.get(date) ?? 0) / totalWeekHours) * rosterCost : 0;
+    const dayPct = fc && fc > 0 && dayCost > 0 ? dayCost / fc : null;
     coverage.push({
       date, neededHours, scheduledHours, shortHours,
       forecast: fc, pct: dayPct, isWeekend: df?.isWeekend, isHoliday: df?.isHoliday, holidayName: df?.holidayName,

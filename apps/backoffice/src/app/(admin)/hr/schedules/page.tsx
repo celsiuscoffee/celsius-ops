@@ -819,7 +819,7 @@ export default function SchedulesPage() {
                         return (
                           <div
                             className={`text-[9px] font-medium tabular-nums ${pctColor}`}
-                            title={`Forecast ${rm}${cov.isWeekend ? " · weekend" : " · weekday"}${cov.isHoliday ? ` · ${cov.holidayName ?? "public holiday"}` : ""} — indicative daily labour % (day hours × blended rate ÷ forecast). FT salary is a weekly fixed cost, so treat this as a weekday-vs-weekend coverage lens, not the billed weekly figure.`}
+                            title={`Forecast ${rm}${cov.isWeekend ? " · weekend" : " · weekday"}${cov.isHoliday ? ` · ${cov.holidayName ?? "public holiday"}` : ""} — daily labour %: this day's share of the week's actual roster cost (pro-rata by hours) ÷ this day's forecast. Day costs sum to the weekly total, so these average back to the Labour chip.`}
                           >
                             {rm}{cov.pct == null ? "" : ` · ${(cov.pct * 100).toFixed(0)}%`}
                           </div>
@@ -1284,7 +1284,7 @@ function DayView({
                   : gate && cov.pct <= gate.ceilingPct ? "border-amber-300 bg-amber-50 text-amber-700"
                     : "border-red-300 bg-red-50 text-red-700"
             }`}
-            title="Indicative daily labour %: day hours × blended rate ÷ day forecast. FT salary is a weekly fixed cost, so this is a weekday-vs-weekend coverage lens, not the billed weekly figure."
+            title="Daily labour %: this day's share of the week's actual roster cost (pro-rata by hours) ÷ this day's forecast. Day costs sum to the weekly total, so these average back to the Labour chip."
           >
             {cov.isWeekend ? "Weekend" : "Weekday"}
             {cov.isHoliday ? ` · ${cov.holidayName ?? "PH"}` : ""} · forecast RM
