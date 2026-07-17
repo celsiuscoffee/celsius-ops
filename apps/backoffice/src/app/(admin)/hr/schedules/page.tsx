@@ -89,6 +89,7 @@ type LabourGateInfo = {
   warnings: string[];
   coverage?: Array<{
     date: string; neededHours: number; scheduledHours: number; shortHours: number;
+    items?: number;
     forecast?: number; pct?: number | null; isWeekend?: boolean; isHoliday?: boolean; holidayName?: string;
   }>;
 };
@@ -840,6 +841,22 @@ export default function SchedulesPage() {
                             title={`Forecast ${rm}${cov.isWeekend ? " · weekend" : " · weekday"}${cov.isHoliday ? ` · ${cov.holidayName ?? "public holiday"}` : ""} — daily labour %: this day's share of the week's actual roster cost (pro-rata by hours) ÷ this day's forecast. Day costs sum to the weekly total, so these average back to the Labour chip.`}
                           >
                             {rm}{cov.pct == null ? "" : ` · ${(cov.pct * 100).toFixed(0)}%`}
+                            {cov.items != null && cov.items > 0 && ` · ${cov.items}it`}
+                          </div>
+                        );
+                      })()}
+                      {(() => {
+                        // Insufficient man-hours vs THE demand model (items ×
+                        // serve-calibrated rates) — the exact hours PT should
+                        // fill. Same model AI Fill staffs to.
+                        const cov = gate?.coverage?.find((c) => c.date === d);
+                        if (!cov || cov.shortHours <= 0) return null;
+                        return (
+                          <div
+                            className="mt-0.5 inline-block rounded bg-red-100 px-1 py-0.5 text-[9px] font-bold tabular-nums text-red-700"
+                            title={`${cov.scheduledHours}/${cov.neededHours} demand man-hours covered — short ${cov.shortHours}h. Fill with PT via ✨ Assist (same demand model as AI Fill: items ÷ serve-calibrated station rates).`}
+                          >
+                            short {cov.shortHours}h
                           </div>
                         );
                       })()}

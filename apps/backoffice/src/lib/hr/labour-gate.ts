@@ -16,6 +16,7 @@ import {
   type ShiftCostRow,
 } from "@/lib/hr/labour-gate-lib";
 import { buildWeekForecast, FORECAST_WEEKS, type WeekForecast } from "@/lib/hr/revenue-forecast";
+import { computeWeekDemand } from "@/lib/hr/demand";
 
 export * from "@/lib/hr/labour-gate-lib";
 
@@ -374,21 +375,13 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     if (h > 0) dayHours.set(r.shift_date, (dayHours.get(r.shift_date) ?? 0) + h);
   }
 
-  // Per-day coverage: sales-derived staff need (hourly revenue / RM69, the
-  // workbook's labour-hour heuristic) vs heads rostered in each hour.
-  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; rev: number }>>`
-    SELECT EXTRACT(DOW FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
-           EXTRACT(HOUR FROM (created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
-           (sum(total) / 100.0 / 4)::float AS rev
-    FROM pos_orders
-    WHERE outlet_id = ${outlet.loyaltyOutletId ?? ""}
-      AND status = 'completed' AND refund_of_order_id IS NULL
-      AND (created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-    GROUP BY 1, 2
-  `;
-  const need = new Map<string, number>();
-  for (const h of hourly) need.set(`${h.dw}:${h.hr}`, Math.ceil(h.rev / 69));
+  // Per-day coverage from THE demand model (lib/hr/demand.ts) — the same
+  // items-per-hour × serve-calibrated station rates AI Fill staffs to, so the
+  // grid's "short Xh" is exactly the man-hours the generator would add. (This
+  // replaces the old hourly-revenue ÷ RM69 heuristic, which disagreed with the
+  // roster model and made the day gaps unusable for PT allocation.)
+  const weekDemand = await computeWeekDemand(outlet, weekStart);
+  const need = weekDemand.demand;
   const coverage: LabourGateResult["coverage"] = [];
   for (let i = 0; i < 7; i++) {
     const date = addDays(weekStart, i);
@@ -420,6 +413,7 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     const dayPct = fc && fc > 0 && dayCost > 0 ? dayCost / fc : null;
     coverage.push({
       date, neededHours, scheduledHours, shortHours,
+      items: Math.round(weekDemand.itemsByDow.get(dw) ?? 0),
       forecast: fc, pct: dayPct, isWeekend: df?.isWeekend, isHoliday: df?.isHoliday, holidayName: df?.holidayName,
     });
   }
