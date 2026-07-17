@@ -29,6 +29,7 @@ import { handleReminderAck } from "@/lib/ops-reminders";
 import { handleInstructionAck } from "@/lib/ops-instructions";
 import { handleOutletDeliveryReply } from "@/lib/inventory/exec/outlet-delivery-check";
 import { handleInternalInbound } from "@/lib/ops-intake";
+import { handleStaffLoopReply } from "@/lib/hr/pt-loop/inbound";
 import { handleSupplierMessage } from "@/lib/inventory/agents/supplier-chat-agent";
 import { sendPendingPurchaseOrders } from "@/lib/inventory/procurement-po-send";
 import { captureSupplierDocument } from "@/lib/inventory/agents/invoice-capture";
@@ -163,6 +164,20 @@ export async function POST(request: NextRequest) {
           });
           fromInternal = intake.internal;
         }
+        // 2c) PT scheduling loop: roster acks ("OK"/"CANNOT Sat"), open-shift
+        // claims ("TAKE 4f2a"), and availability replies from staff phones
+        // (docs/design/pt-loop.md). Gated inside on the sender matching an
+        // ACTIVE staff phone with an outstanding prompt (or a TAKE code), so
+        // customer/supplier numbers pass straight through. Consuming here
+        // stops the supplier agent from answering a staffer. Never throws.
+        let consumedByLoop = false;
+        if (isNewInbound && !fromInternal && msg.type === "text") {
+          try {
+            consumedByLoop = await handleStaffLoopReply(msg.from, body);
+          } catch (err) {
+            console.error("[pt-loop] inbound failed:", err);
+          }
+        }
         // 3) Supplier-chat AI agent (full-auto, flag-gated + allow-listed). Reads
         // the message in PO context, auto-replies in the supplier's language, and
         // edits the PO for clear low-risk cases; substitutions / cancellations /
@@ -174,7 +189,7 @@ export async function POST(request: NextRequest) {
         // re-deliveries could both pass the agent's own check and double-apply a PO edit +
         // double-reply. The @unique wamid makes the first inbound store the atomic claim.
         let agentCapturedInvoice = false;
-        if (isNewInbound && !fromInternal && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
+        if (isNewInbound && !fromInternal && !consumedByLoop && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
           const agentRes = await handleSupplierMessage({
             fromNumber: msg.from,
             toNumber: businessNumber,
