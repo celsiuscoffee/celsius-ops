@@ -16,7 +16,7 @@ import {
   type CampaignState,
   type GuardSignal,
 } from "./autopilot";
-import { classifyTermIntent, selectAutoExclusions, shouldAutoExclude } from "./term-rules";
+import { classifyTermIntent, selectAutoExclusions, selectSeedExclusions, shouldAutoExclude } from "./term-rules";
 
 const NOW = new Date("2026-07-20T00:00:00Z");
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86400000);
@@ -407,6 +407,21 @@ describe("term intent rules", () => {
     expect(shouldAutoExclude("dessert_bakery")).toBe(false);
     expect(shouldAutoExclude("cafe_intent")).toBe(false);
     expect(shouldAutoExclude("other")).toBe(false);
+  });
+
+  it("selectSeedExclusions transfers fleet-proven junk, respects decisions/caps, costs 0", () => {
+    const fleetJunk = ["restaurants near me", "kedai makan near me", "cafe near me", "zus near me", "celsius coffee"];
+    const decided = new Set(["sa restaurants near me"]); // SA already decided this one
+    const seeds = selectSeedExclusions(["sa", "pj"], fleetJunk, decided);
+    const sa = seeds.filter((s) => s.campaignId === "sa").map((s) => s.searchTerm);
+    // cafe intent + competitor brand never seed, decided rows skipped
+    expect(sa).toEqual(["kedai makan near me", "celsius coffee"]);
+    const pj = seeds.filter((s) => s.campaignId === "pj").map((s) => s.searchTerm);
+    expect(pj).toEqual(["restaurants near me", "kedai makan near me", "celsius coffee"]);
+    expect(seeds.every((s) => s.costMyr === 0 && s.seeded)).toBe(true);
+    // cap
+    const many = Array.from({ length: 30 }, (_, i) => `nasi kandar shop ${i}`);
+    expect(selectSeedExclusions(["x"], many, new Set(), 15)).toHaveLength(15);
   });
 
   it("selectAutoExclusions respects min cost, prior decisions, and the per-campaign cap", () => {
