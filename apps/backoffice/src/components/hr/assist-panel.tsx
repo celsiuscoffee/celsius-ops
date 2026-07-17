@@ -11,7 +11,12 @@ import { useFetch } from "@/lib/use-fetch";
 import { Users, Sparkles, AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
 
 type Template = { id: string; label: string; start_time: string; end_time: string; break_minutes: number };
-type CoverageSlot = { label?: string; slot_start: string; slot_end: string; min_staff: number; concurrent: number; gap: number };
+type CoverageSlot = {
+  label?: string; slot_start: string; slot_end: string;
+  min_staff: number; concurrent: number; gap: number;
+  kitchen_need?: number; kitchen_got?: number; kitchen_gap?: number;
+  barista_need?: number; barista_got?: number; barista_gap?: number;
+};
 type Signals = { reliability: number; availability: number; fairness: number; skill: number; home: number };
 export type AssistCandidate = {
   user_id: string;
@@ -91,11 +96,19 @@ export function AssistPanel({
   const coverage = data?.coverage || [];
   const totalGap = coverage.reduce((a, c) => a + c.gap, 0);
 
+  // Picking a gap chip also pre-fills the role when the gap is one station's —
+  // a kitchen hole should rank kitchen crew first (skill weight keys off role).
+  const pickGap = (c: CoverageSlot) => {
+    setSlot({ start: c.slot_start, end: c.slot_end });
+    if ((c.kitchen_gap ?? 0) > 0 && (c.barista_gap ?? 0) === 0) setRole("kitchen");
+    else if ((c.barista_gap ?? 0) > 0 && (c.kitchen_gap ?? 0) === 0) setRole("barista");
+  };
+
   // Grid-embedded flow: jump straight to the first under-covered window.
   useEffect(() => {
     if (!autoPickGap || gapPicked || slot || !data) return;
     const gap = coverage.find((c) => c.gap > 0);
-    if (gap) setSlot({ start: gap.slot_start, end: gap.slot_end });
+    if (gap) pickGap(gap);
     setGapPicked(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoPickGap, gapPicked, slot, data]);
@@ -191,7 +204,7 @@ export function AssistPanel({
             {coverage.map((c, i) => (
               <button
                 key={i}
-                onClick={() => setSlot({ start: c.slot_start, end: c.slot_end })}
+                onClick={() => pickGap(c)}
                 className={`rounded-lg border px-3 py-2 text-left text-xs ${c.gap > 0 ? "border-red-200 bg-red-50 hover:border-red-300" : "border-green-200 bg-green-50 hover:border-green-300"}`}
                 title={`Rank candidates for this window${data?.demand_note ? ` — ${data.demand_note}` : ""}`}
               >
@@ -199,7 +212,13 @@ export function AssistPanel({
                   {c.label ? `${c.label} ` : ""}<span className="tabular-nums opacity-80">{c.slot_start}–{c.slot_end}</span>
                 </div>
                 <div className={c.gap > 0 ? "text-red-700" : "text-green-700"}>
-                  {c.concurrent}/{c.min_staff} staff{c.gap > 0 ? ` · short ${c.gap}` : " · covered"}
+                  {c.concurrent}/{c.min_staff} staff
+                  {c.gap > 0
+                    ? ` · short ${[
+                        (c.kitchen_gap ?? 0) > 0 ? `${c.kitchen_gap} kitchen` : "",
+                        (c.barista_gap ?? 0) > 0 ? `${c.barista_gap} barista` : "",
+                      ].filter(Boolean).join(" + ") || c.gap}`
+                    : " · covered"}
                 </div>
               </button>
             ))}

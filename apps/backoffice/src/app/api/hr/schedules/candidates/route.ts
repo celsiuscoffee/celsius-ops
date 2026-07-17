@@ -169,32 +169,54 @@ export async function GET(req: NextRequest) {
   const weekDemand = await computeWeekDemand(outlet, weekStart);
   const openH = Number(openT.slice(0, 2));
   const closeH = Number(closeT.slice(0, 2));
-  const demandToday: Record<number, number> = {};
-  for (let h = openH; h < closeH; h++) demandToday[h] = weekDemand.demand.get(`${weekday}:${h}`) ?? SERVICE_FLOOR;
+  // Per-station hourly need, same split as the generator's day allocation:
+  // kitchen from the cooked-food curve; barista/counter carries the floor.
+  const kitToday: Record<number, number> = {};
+  const barToday: Record<number, number> = {};
+  for (let h = openH; h < closeH; h++) {
+    const kit = weekDemand.kitHeadsByHour.get(`${weekday}:${h}`) ?? 0;
+    kitToday[h] = kit;
+    barToday[h] = Math.max(weekDemand.barHeadsByHour.get(`${weekday}:${h}`) ?? SERVICE_FLOOR, SERVICE_FLOOR - kit);
+  }
 
   const windows: ShiftWindow[] = templates
     .map((t) => ({ key: t.id, startH: Number(t.start_time.slice(0, 2)), endH: Number(t.end_time.slice(0, 2)) }))
     .sort((a, b) => a.startH - b.startH || a.endH - b.endH);
-  // Smallest crew whose allocation clears every hour: grow until shortfall = 0.
-  const shortfallOf = (counts: Map<string, number>): number => {
-    const cov: Record<number, number> = {};
-    for (const w of windows) {
-      const c = counts.get(w.key) ?? 0;
-      for (let h = w.startH; h < w.endH; h++) cov[h] = (cov[h] ?? 0) + c;
+  // Smallest crew whose allocation clears every hour of a station's demand:
+  // grow until shortfall = 0. Zero-demand stations need zero heads.
+  const neededFor = (demandByHour: Record<number, number>): Map<string, number> => {
+    let total = 0;
+    for (let h = openH; h < closeH; h++) total += demandByHour[h] ?? 0;
+    if (total === 0 || windows.length === 0) return new Map();
+    const shortfallOf = (counts: Map<string, number>): number => {
+      const cov: Record<number, number> = {};
+      for (const w of windows) {
+        const c = counts.get(w.key) ?? 0;
+        for (let h = w.startH; h < w.endH; h++) cov[h] = (cov[h] ?? 0) + c;
+      }
+      let s = 0;
+      for (let h = openH; h < closeH; h++) s += Math.max(0, (demandByHour[h] ?? 0) - (cov[h] ?? 0));
+      return s;
+    };
+    let counts = new Map<string, number>();
+    for (let n = 1; n <= 30; n++) {
+      counts = allocateShiftCounts({ heads: n, windows, demandByHour });
+      if (shortfallOf(counts) === 0) break;
     }
-    let s = 0;
-    for (let h = openH; h < closeH; h++) s += Math.max(0, (demandToday[h] ?? 0) - (cov[h] ?? 0));
-    return s;
+    return counts;
   };
-  let neededCounts = new Map<string, number>();
-  for (let n = 1; n <= 30 && windows.length > 0; n++) {
-    neededCounts = allocateShiftCounts({ heads: n, windows, demandByHour: demandToday });
-    if (shortfallOf(neededCounts) === 0) break;
-  }
+  const kitNeed = neededFor(kitToday);
+  const barNeed = neededFor(barToday);
 
   // Each rostered shift counts toward the template it matches (exact times), or
   // failing that the window it overlaps most — manual/custom shifts still count.
-  const assignedPerWindow = new Map<string, number>();
+  // Split by the worker's station so a kitchen gap isn't "covered" by a barista.
+  const isBOHPosition = (p: string | null | undefined) => {
+    const s = (p ?? "").toLowerCase();
+    return s.includes("kitchen") || s.includes("chef") || s.includes("boh");
+  };
+  const kitGot = new Map<string, number>();
+  const barGot = new Map<string, number>();
   for (const s of daysShifts) {
     const st = s.start_time.slice(0, 5), en = s.end_time.slice(0, 5);
     let win = templates.find((t) => t.start_time === st && t.end_time === en)?.id;
@@ -206,13 +228,21 @@ export async function GET(req: NextRequest) {
       }
       win = best.key;
     }
-    if (win) assignedPerWindow.set(win, (assignedPerWindow.get(win) ?? 0) + 1);
+    if (!win) continue;
+    const target = isBOHPosition(profileMap.get(s.user_id)?.position) ? kitGot : barGot;
+    target.set(win, (target.get(win) ?? 0) + 1);
   }
   const coverage = templates
     .map((t) => {
-      const need = neededCounts.get(t.id) ?? 0;
-      const got = assignedPerWindow.get(t.id) ?? 0;
-      return { template_id: t.id, label: t.label, slot_start: t.start_time, slot_end: t.end_time, min_staff: need, concurrent: got, gap: Math.max(0, need - got) };
+      const kNeed = kitNeed.get(t.id) ?? 0, bNeed = barNeed.get(t.id) ?? 0;
+      const kGot = kitGot.get(t.id) ?? 0, bGot = barGot.get(t.id) ?? 0;
+      return {
+        template_id: t.id, label: t.label, slot_start: t.start_time, slot_end: t.end_time,
+        min_staff: kNeed + bNeed, concurrent: kGot + bGot,
+        gap: Math.max(0, kNeed - kGot) + Math.max(0, bNeed - bGot),
+        kitchen_need: kNeed, kitchen_got: kGot, kitchen_gap: Math.max(0, kNeed - kGot),
+        barista_need: bNeed, barista_got: bGot, barista_gap: Math.max(0, bNeed - bGot),
+      };
     })
     .filter((c) => c.min_staff > 0 || c.concurrent > 0);
 

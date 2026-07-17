@@ -65,3 +65,35 @@ describe("allocateShiftCounts", () => {
     expect(total(zero)).toBe(0);
   });
 });
+
+// Per-station allocation (owner rule 2026-07-17: "run based on item per
+// station"): the generator now calls this allocator once per station. The
+// kitchen curve at a coffee outlet is morning-heavy (cooked breakfast/brunch),
+// so BOH heads must front-load onto opening — a kitchen middle exists only
+// when cooked items still need one, never as a surplus artifact.
+describe("per-station allocation on the kitchen curve", () => {
+  // Real Putrajaya shape (28d): kit heads 8:00→1, 9:00→2, 10:00–14:00→1, evening→1.
+  const KIT: Record<number, number> = {
+    7: 0, 8: 1, 9: 2, 10: 1, 11: 1, 12: 1, 13: 1, 14: 1,
+    15: 1, 16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 0,
+  };
+
+  it("3 kitchen crew → 2 open the morning peak, 1 closes, no middle", () => {
+    const counts = allocateShiftCounts({ heads: 3, windows: ALL, demandByHour: KIT });
+    expect(counts.get("opening")).toBe(2);
+    expect(counts.get("closing")).toBe(1);
+    expect(counts.get("mid1")).toBe(0);
+    expect(counts.get("mid2")).toBe(0);
+  });
+
+  it("2 kitchen crew → exactly one cook at open and one at close", () => {
+    const counts = allocateShiftCounts({ heads: 2, windows: ALL, demandByHour: KIT });
+    expect(counts.get("opening")).toBe(1);
+    expect(counts.get("closing")).toBe(1);
+  });
+
+  it("1 kitchen crew and a morning-heavy curve → the cook opens", () => {
+    const counts = allocateShiftCounts({ heads: 1, windows: ALL, demandByHour: KIT });
+    expect(counts.get("opening")).toBe(1);
+  });
+});

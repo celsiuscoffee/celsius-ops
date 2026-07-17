@@ -182,9 +182,15 @@ export default function SchedulesPage() {
   const [fillMode, setFillMode] = useState<"tight" | "mid" | "safe">("tight");
   const [assistDate, setAssistDate] = useState<string | null>(null); // per-day Assist modal
   // Per-day demand coverage (same model as AI Fill / Assist) so the cell "+ Add"
-  // picker can lead with the shift the day is actually short on. Lazily fetched
-  // per date when a picker opens; cleared on any save so gaps stay live.
-  const [dayCov, setDayCov] = useState<Record<string, Array<{ template_id?: string; label?: string; slot_start: string; slot_end: string; min_staff: number; concurrent: number; gap: number }>>>({});
+  // picker can lead with the shift the day is actually short on — filtered to
+  // the clicked person's station (a kitchen hand sees kitchen gaps, a barista
+  // sees counter gaps). Lazily fetched per date when a picker opens; cleared on
+  // any save so gaps stay live.
+  const [dayCov, setDayCov] = useState<Record<string, Array<{
+    template_id?: string; label?: string; slot_start: string; slot_end: string;
+    min_staff: number; concurrent: number; gap: number;
+    kitchen_gap?: number; barista_gap?: number;
+  }>>>({});
   const [clearing, setClearing] = useState(false);
   const [swapAction, setSwapAction] = useState<string | null>(null);
 
@@ -1019,15 +1025,19 @@ export default function SchedulesPage() {
                                 style={{ top: pickerOpen!.top, left: pickerOpen!.left }}
                               >
                                 {/* Demand suggestion — the windows this day is short on
-                                    (same model as AI Fill / Assist), so "+ Add" leads
-                                    with what the day actually needs. */}
+                                    for THIS person's station (same model as AI Fill /
+                                    Assist), so "+ Add" leads with what the day needs. */}
                                 {(() => {
-                                  const gaps = (dayCov[d] || []).filter((c) => c.gap > 0 && c.template_id);
+                                  const pos = (u.profile?.position ?? "").toLowerCase();
+                                  const isBohUser = pos.includes("kitchen") || pos.includes("chef") || pos.includes("boh");
+                                  const gaps = (dayCov[d] || []).filter(
+                                    (c) => c.template_id && (isBohUser ? (c.kitchen_gap ?? 0) > 0 : (c.barista_gap ?? 0) > 0),
+                                  );
                                   if (gaps.length === 0) return null;
                                   return (
                                     <>
                                       <div className="px-3 pb-0.5 pt-1.5 text-[9px] font-semibold uppercase tracking-wider text-amber-700">
-                                        ✨ Suggested — day is short
+                                        ✨ Suggested — {isBohUser ? "kitchen" : "barista"} short
                                       </div>
                                       {gaps.map((c) => (
                                         <button
@@ -1039,7 +1049,7 @@ export default function SchedulesPage() {
                                           <div className="flex items-center justify-between gap-1">
                                             <span className="font-medium">{c.label || "Shift"}</span>
                                             <span className="shrink-0 rounded bg-red-100 px-1 text-[9px] font-bold tabular-nums text-red-700">
-                                              short {c.gap}
+                                              short {isBohUser ? c.kitchen_gap : c.barista_gap}
                                             </span>
                                           </div>
                                           <div className="text-[10px] text-muted-foreground tabular-nums">

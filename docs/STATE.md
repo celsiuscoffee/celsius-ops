@@ -273,6 +273,32 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-17 (later) — **Scheduler round 4: per-station allocation + Assist
+  rebuilt (PR #957, branch `claude/staff-rotation-outlets-kmobpa`).** One
+  demand model (`lib/hr/demand.ts`, extracted from the generator) now feeds
+  generator + labour-gate coverage + grid "short Xh" chips + Assist. Owner
+  directives closed this round: (1) BOH middles were surplus artifacts —
+  day-split now runs `allocateShiftCounts` **once per station** (kitchen crew
+  on the kitchen item curve, FOH on the barista curve + service floor + mode
+  buffer; pastries/croissants/cakes/cookies are barista — verified against
+  live Menu categories, only the 6 cooked categories are kitchen). Putrajaya
+  kitchen curve is morning-heavy (~6–7.5 items/hr 8–10am vs ~2–3 evenings) →
+  3 BOH allocate 2×Opening/1×Closing/0×Middle (regression-tested in
+  shift-allocation.test.ts). (2) Assist QA'd — it was NOT following the same
+  logic: it ranked the Manager as Top pick (pool now excludes
+  Manager/AM/HoD; Barista Lead stays), its coverage chips read
+  hr_outlet_coverage_rules with a min-concurrent-over-16h bug ("0/4 short 4"
+  with 11 rostered) — chips are now per-template needs from the demand model
+  with per-station gaps ("short 1 kitchen + 1 barista"), and clicking a
+  single-station gap auto-fills the role so skill-weighting favours that
+  station. (3) UX: grid cell "+ Add" now leads with "✨ Suggested" — the
+  short templates for that person's station, one click to assign (lazy
+  per-date fetch of /api/hr/schedules/candidates, cache cleared on save).
+  Remember the deploy-lag gotcha before believing "it didn't work".
+  Still open: two deep-QA review agents from round 3 never reported back;
+  autopilot phases 2–4 (cron generate→validate→publish shadow-first,
+  WhatsApp exception digest, PT auto-commit) designed but not built.
+
 - 2026-07-17 — **Scheduler QA round 3 (owner-driven), all merged to main.**
   #953 (squash `9544c2f`): day-split rebuilt — shift COUNTS from the hourly
   items curve via `lib/hr/shift-allocation.ts` (marginal-shortfall greedy;

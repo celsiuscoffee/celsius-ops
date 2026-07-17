@@ -615,22 +615,31 @@ export async function generateSchedule(
     );
     const resting = sortedFT.filter((s) => restDayOf.get(s.id) === dow(date) && !onLeave.has(`${s.id}:${date}`));
 
-    // Two-step day split — COUNTS from demand, then PEOPLE by fairness:
-    //  1. HOW MANY heads each shift template gets comes from the day's hourly
-    //     demand curve (allocateShiftCounts): a morning-peaked day gets more
-    //     opening heads, an evening-peaked day more closing, middles absorb the
-    //     midday hump, and surplus spreads evenly. (The old splitter derived the
-    //     mix from structural rules — fill closing, fill opening from
-    //     non-clopeners, dump the remainder into closing — which cascaded: one
-    //     closing-heavy day barred most of the crew from opening the NEXT day,
-    //     so opening starved at 2 while closing stacked 6–7, all week.)
-    //  2. WHO fills each slot keeps the fatigue/fairness rules: kitchen on both
-    //     anchors, never open someone who closed last night (clopening) unless
+    // Two-step day split — COUNTS from demand, then PEOPLE by fairness — run
+    // PER STATION (owner rule 2026-07-17: "run based on item per station"):
+    //  1. HOW MANY: kitchen crew counts come from the KITCHEN item curve
+    //     (cooked food peaks mid-morning/lunch → BOH front-loads onto opening
+    //     and early middles), barista/FOH counts from the barista curve plus
+    //     the service floor and the mode buffer (the cushion is counter/
+    //     service, not the kitchen). A BOH middle now exists only when cooked
+    //     items actually need one — it's no longer a surplus artifact.
+    //  2. WHO fills each slot keeps the fatigue/fairness rules within each
+    //     station: never open someone who closed last night (clopening) unless
     //     there's literally no one else, and the unsociable anchors rotate to
-    //     whoever has carried them least.
-    const demandToday: Record<number, number> = {};
+    //     whoever has carried them least. With ≥2 kitchen crew the allocator's
+    //     anchor rule still guarantees a cook at open AND close.
+    const boh = working.filter((s) => isBOH(s.position));
+    const foh = working.filter((s) => !isBOH(s.position));
+    const kitToday: Record<number, number> = {};
+    const barToday: Record<number, number> = {};
     for (let h = openH; h < closeH; h++) {
-      demandToday[h] = (demand.get(`${dow(date)}:${h}`) ?? SERVICE_FLOOR) + bufferHeads(dow(date), h);
+      const kit = weekDemand.kitHeadsByHour.get(`${dow(date)}:${h}`) ?? 0;
+      // Barista/counter carries the service floor (the store never trades below
+      // SERVICE_FLOOR total heads) and the tight/mid/safe buffer.
+      kitToday[h] = kit;
+      barToday[h] =
+        Math.max(weekDemand.barHeadsByHour.get(`${dow(date)}:${h}`) ?? SERVICE_FLOOR, SERVICE_FLOOR - kit) +
+        bufferHeads(dow(date), h);
     }
     const winOf = (key: string, t: ShiftTemplate) => ({ key, startH: Number(t.start_time.slice(0, 2)), endH: Number(t.end_time.slice(0, 2)) });
     const windows = [
@@ -638,66 +647,66 @@ export async function generateSchedule(
       ...tpl.middles.map((m, i) => winOf(`mid${i}`, m)),
       winOf("close", tpl.closing),
     ];
-    const shiftCounts = allocateShiftCounts({ heads: working.length, windows, demandByHour: demandToday });
-    const openCount = shiftCounts.get("open") ?? 0;
-    const closeCount = shiftCounts.get("close") ?? 0;
+    const kitCounts = allocateShiftCounts({ heads: boh.length, windows, demandByHour: kitToday });
+    const fohCounts = allocateShiftCounts({ heads: foh.length, windows, demandByHour: barToday });
 
-    const boh = working.filter((s) => isBOH(s.position));
     const opening: Staff[] = [];
     const closing: Staff[] = [];
     const midCrews: Staff[][] = tpl.middles.map(() => []);
     const claimed = new Set<string>();
     const take = (arr: Staff[], s: Staff) => { arr.push(s); claimed.add(s.id); };
-    const unclaimed = () => working.filter((s) => !claimed.has(s.id));
 
-    // Kitchen must staff both anchors (within their allotted counts): least-recent
-    // opener that didn't close last night opens; least-recent closer closes.
-    if (openCount > 0) {
-      const bohOpen =
-        boh.filter((s) => !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))[0] ??
-        [...boh].sort((a, b) => openKey(a) - openKey(b))[0];
-      if (bohOpen) take(opening, bohOpen);
-    }
-    if (closeCount > 0) {
-      const bohClose = boh.filter((s) => !claimed.has(s.id)).sort((a, b) => closeKey(a) - closeKey(b))[0];
-      if (bohClose) take(closing, bohClose);
-    }
-
-    // OPENING first (non-clopeners are the scarce resource), fewest openings
-    // first; clopeners only as a last resort to reach the demanded count.
-    for (const s of unclaimed().filter((s) => !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))) {
-      if (opening.length >= openCount) break;
-      take(opening, s);
-    }
-    for (const s of unclaimed().sort((a, b) => openKey(a) - openKey(b))) {
-      if (opening.length >= openCount) break;
-      take(opening, s);
-    }
-    // CLOSING: fewest closings first.
-    for (const s of unclaimed().sort((a, b) => closeKey(a) - closeKey(b))) {
-      if (closing.length >= closeCount) break;
-      take(closing, s);
-    }
-    // MIDDLES: the remainder, per template count (round-robin any excess so no
-    // one is left unassigned even if counts drift).
-    let mi = 0;
-    for (const s of unclaimed()) {
-      if (tpl.middles.length === 0) {
-        // No middles at this outlet → balance the thinner anchor; a clopener
-        // always closes.
-        if (closedYesterday(s) || closing.length <= opening.length) take(closing, s);
-        else take(opening, s);
-        continue;
+    // Place one station's crew into the day's windows per that station's counts.
+    const fillStation = (group: Staff[], counts: Map<string, number>) => {
+      const unclaimed = () => group.filter((s) => !claimed.has(s.id));
+      const openTarget = counts.get("open") ?? 0;
+      const closeTarget = counts.get("close") ?? 0;
+      // OPENING first (non-clopeners are the scarce resource), fewest openings
+      // first; clopeners only as a last resort to reach the demanded count.
+      let took = 0;
+      for (const s of unclaimed().filter((s) => !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))) {
+        if (took >= openTarget) break;
+        take(opening, s);
+        took++;
       }
-      for (let tries = 0; tries < tpl.middles.length; tries++) {
-        const idx = (mi + tries) % tpl.middles.length;
-        if (midCrews[idx].length < (shiftCounts.get(`mid${idx}`) ?? 0) || tries === tpl.middles.length - 1) {
-          take(midCrews[idx], s);
-          mi = idx + 1;
-          break;
+      for (const s of unclaimed().sort((a, b) => openKey(a) - openKey(b))) {
+        if (took >= openTarget) break;
+        take(opening, s);
+        took++;
+      }
+      // CLOSING: fewest closings first.
+      took = 0;
+      for (const s of unclaimed().sort((a, b) => closeKey(a) - closeKey(b))) {
+        if (took >= closeTarget) break;
+        take(closing, s);
+        took++;
+      }
+      // MIDDLES: the remainder, per this station's window counts (round-robin
+      // any excess so no one is left unassigned even if counts drift).
+      const midTargets = tpl.middles.map((_, i) => counts.get(`mid${i}`) ?? 0);
+      const midTaken = tpl.middles.map(() => 0);
+      let mi = 0;
+      for (const s of unclaimed()) {
+        if (tpl.middles.length === 0) {
+          // No middles at this outlet → balance the thinner anchor; a clopener
+          // always closes.
+          if (closedYesterday(s) || closing.length <= opening.length) take(closing, s);
+          else take(opening, s);
+          continue;
+        }
+        for (let tries = 0; tries < tpl.middles.length; tries++) {
+          const idx = (mi + tries) % tpl.middles.length;
+          if (midTaken[idx] < midTargets[idx] || tries === tpl.middles.length - 1) {
+            take(midCrews[idx], s);
+            midTaken[idx]++;
+            mi = idx + 1;
+            break;
+          }
         }
       }
-    }
+    };
+    fillStation(boh, kitCounts);
+    fillStation(foh, fohCounts);
 
     // Record the day's assignments into the fatigue/fairness memory.
     for (const s of opening) { weekOpen.set(s.id, (weekOpen.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "open"); }

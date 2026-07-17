@@ -31,6 +31,12 @@ export const SERVICE_FLOOR = 3;
 
 export type WeekDemand = {
   demand: Map<string, number>; // "dw:hr" → heads needed (station-split, floored)
+  // Per-station heads per hour (raw ceil(items ÷ rate), NO floor — the service
+  // floor is a total-store concept the consumer applies). These drive
+  // per-station shift allocation: kitchen crew are placed on the KITCHEN item
+  // curve, baristas on the barista curve (owner rule 2026-07-17).
+  kitHeadsByHour: Map<string, number>; // "dw:hr" → kitchen heads
+  barHeadsByHour: Map<string, number>; // "dw:hr" → barista/counter heads
   itemsByDow: Map<number, number>; // dw → avg items/day
   peakByDow: Map<number, { heads: number; hr: number; bar: number; kit: number }>;
   baristaRate: number;
@@ -102,6 +108,8 @@ export async function computeWeekDemand(
     describeCalibration("kitchen", kitCal, kitServe?.p90 ?? null, KITCHEN_SERVE_TARGET_MIN, kitServe?.n ?? 0);
 
   const demand = new Map<string, number>();
+  const kitHeadsByHour = new Map<string, number>();
+  const barHeadsByHour = new Map<string, number>();
   const itemsByDow = new Map<number, number>();
   const peakByDow = new Map<number, { heads: number; hr: number; bar: number; kit: number }>();
   for (const h of hourly) {
@@ -112,10 +120,12 @@ export async function computeWeekDemand(
     const kitHeads = Math.ceil(kit / kitchenRate);
     const heads = Math.max(SERVICE_FLOOR, barHeads + kitHeads);
     demand.set(`${h.dw}:${h.hr}`, heads);
+    kitHeadsByHour.set(`${h.dw}:${h.hr}`, kitHeads);
+    barHeadsByHour.set(`${h.dw}:${h.hr}`, barHeads);
     itemsByDow.set(h.dw, (itemsByDow.get(h.dw) ?? 0) + bar + kit);
     const prev = peakByDow.get(h.dw);
     if (!prev || heads > prev.heads) peakByDow.set(h.dw, { heads, hr: h.hr, bar: barHeads, kit: kitHeads });
   }
 
-  return { demand, itemsByDow, peakByDow, baristaRate, kitchenRate, calibrationNote };
+  return { demand, kitHeadsByHour, barHeadsByHour, itemsByDow, peakByDow, baristaRate, kitchenRate, calibrationNote };
 }
