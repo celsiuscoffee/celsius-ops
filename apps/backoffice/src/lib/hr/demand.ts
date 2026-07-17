@@ -4,12 +4,14 @@
 // allocation), so what the grid says is short is exactly what the generator
 // would staff to. Extracted from the generator 2026-07-17.
 //
-// Model: trailing 28 days of items sold per (day-of-week, hour), split by
-// station — barista (drinks + counter pastries + uncategorised) vs kitchen
-// (cooked food) — divided by serve-time-CALIBRATED station rates (see
-// lib/hr/serve-time.ts: base 8/hr barista · 6/hr kitchen, adjusted by the
-// outlet's measured p90 serve vs the 10/15-minute standards), floored at the
-// service minimum.
+// Model: trailing 28 days of items sold per (day-of-week, hour) — POS orders
+// (GrabFood included) PLUS the pickup app's `orders` (a separate table that
+// never lands in pos_orders: ~23% of Shah Alam volume with a HEAVIER kitchen
+// mix, invisible to staffing until 2026-07-17) — split by station — barista
+// (drinks + counter pastries + uncategorised) vs kitchen (cooked food) —
+// divided by serve-time-CALIBRATED station rates (see lib/hr/serve-time.ts:
+// base 8/hr barista · 6/hr kitchen, adjusted by the measured p90 serve vs the
+// 10/15-minute standards), floored at the service minimum.
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -28,6 +30,18 @@ export const KITCHEN_ITEMS_PER_HR = 6;
 export const KITCHEN_CATEGORIES = ["Roti Bakar", "Nasi Lemak", "Pasta", "Sandwiches", "Fries", "Noodle"];
 // Minimum concurrent heads while trading (workbook service floor).
 export const SERVICE_FLOOR = 3;
+
+// pickup-app `orders.store_id` per loyalty outlet id (`pos_orders.outlet_id`).
+// The pickup app is a separate order stream — same staff make those items.
+export const PICKUP_STORE_BY_LOYALTY: Record<string, string> = {
+  "outlet-con": "conezion",
+  "outlet-sa": "shah-alam",
+  "outlet-tam": "tamarind",
+  "outlet-nilai": "nilai",
+};
+// Pickup statuses that represent real, made orders (mirrors the revenue query
+// in labour-gate.ts so workload and money see the same stream).
+const PICKUP_STATUSES = ["completed", "ready", "collected", "paid", "preparing"];
 
 export type WeekDemand = {
   demand: Map<string, number>; // "dw:hr" → heads needed (station-split, floored)
@@ -48,18 +62,35 @@ export async function computeWeekDemand(
   outlet: { loyaltyOutletId: string | null },
   weekStart: string,
 ): Promise<WeekDemand> {
+  const storeId = PICKUP_STORE_BY_LOYALTY[outlet.loyaltyOutletId ?? ""] ?? "";
   const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; barista: number; kitchen: number }>>`
-    SELECT EXTRACT(DOW FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
-           EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
-           (sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float / 4) AS kitchen,
-           (sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float / 4) AS barista
-    FROM pos_order_items i
-    JOIN pos_orders o ON o.id = i.order_id
-    LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
-    WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
-      AND o.status = 'completed' AND o.refund_of_order_id IS NULL
-      AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+    SELECT dw, hr, sum(kitchen)::float AS kitchen, sum(barista)::float AS barista FROM (
+      SELECT EXTRACT(DOW FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
+             EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
+             (sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float / 4) AS kitchen,
+             (sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float / 4) AS barista
+      FROM pos_order_items i
+      JOIN pos_orders o ON o.id = i.order_id
+      LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
+      WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
+        AND o.status = 'completed' AND o.refund_of_order_id IS NULL
+        AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+            BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+      GROUP BY 1, 2
+      UNION ALL
+      SELECT EXTRACT(DOW FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int,
+             EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int,
+             (sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float / 4),
+             (sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float / 4)
+      FROM order_items i
+      JOIN orders o ON o.id = i.order_id
+      LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
+      WHERE o.store_id = ${storeId}
+        AND o.status = ANY(${PICKUP_STATUSES})
+        AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+            BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+      GROUP BY 1, 2
+    ) u
     GROUP BY 1, 2
   `;
 
@@ -69,23 +100,41 @@ export async function computeWeekDemand(
   // BARISTA order (10-min standard). A breach lowers that station's rate → the
   // demand asks for more heads at the loaded hours. No human judges "enough".
   const serveRows = await prisma.$queryRaw<Array<{ is_kitchen: boolean; n: number; p90: number | null }>>`
-    SELECT EXISTS (
-             SELECT 1 FROM pos_order_items i
-             JOIN "Menu" m ON m."storehubId" = i.product_id
-             WHERE i.order_id = o.id AND m.category = ANY(${KITCHEN_CATEGORIES})
-           ) AS is_kitchen,
-           count(*)::int AS n,
-           (percentile_cont(0.9) WITHIN GROUP (
-             ORDER BY EXTRACT(EPOCH FROM (COALESCE(o.served_at, o.ready_at) - o.created_at)) / 60
-           ))::float AS p90
-    FROM pos_orders o
-    WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
-      AND o.status = 'completed' AND o.refund_of_order_id IS NULL
-      AND COALESCE(o.served_at, o.ready_at) IS NOT NULL
-      AND COALESCE(o.served_at, o.ready_at) > o.created_at
-      AND COALESCE(o.served_at, o.ready_at) < o.created_at + interval '2 hours'
-      AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+    SELECT is_kitchen, count(*)::int AS n,
+           (percentile_cont(0.9) WITHIN GROUP (ORDER BY mins))::float AS p90
+    FROM (
+      SELECT EXISTS (
+               SELECT 1 FROM pos_order_items i
+               JOIN "Menu" m ON m."storehubId" = i.product_id
+               WHERE i.order_id = o.id AND m.category = ANY(${KITCHEN_CATEGORIES})
+             ) AS is_kitchen,
+             EXTRACT(EPOCH FROM (COALESCE(o.served_at, o.ready_at) - o.created_at)) / 60 AS mins
+      FROM pos_orders o
+      WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
+        AND o.status = 'completed' AND o.refund_of_order_id IS NULL
+        AND COALESCE(o.served_at, o.ready_at) IS NOT NULL
+        AND COALESCE(o.served_at, o.ready_at) > o.created_at
+        AND COALESCE(o.served_at, o.ready_at) < o.created_at + interval '2 hours'
+        AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+            BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+      UNION ALL
+      -- Pickup app: order placed → marked ready is the customer-facing wait,
+      -- gated by the same station standard as walk-in orders.
+      SELECT EXISTS (
+               SELECT 1 FROM order_items i
+               JOIN "Menu" m ON m."storehubId" = i.product_id
+               WHERE i.order_id = o.id AND m.category = ANY(${KITCHEN_CATEGORIES})
+             ),
+             EXTRACT(EPOCH FROM (o.ready_at - o.created_at)) / 60
+      FROM orders o
+      WHERE o.store_id = ${storeId}
+        AND o.status = ANY(${PICKUP_STATUSES})
+        AND o.ready_at IS NOT NULL
+        AND o.ready_at > o.created_at
+        AND o.ready_at < o.created_at + interval '2 hours'
+        AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+            BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+    ) s
     GROUP BY 1
   `;
   const serveOf = (kitchen: boolean) => serveRows.find((r) => r.is_kitchen === kitchen);

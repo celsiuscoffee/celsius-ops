@@ -16,18 +16,13 @@ import {
   type ShiftCostRow,
 } from "@/lib/hr/labour-gate-lib";
 import { buildWeekForecast, FORECAST_WEEKS, type WeekForecast } from "@/lib/hr/revenue-forecast";
-import { computeWeekDemand } from "@/lib/hr/demand";
+import { computeWeekDemand, PICKUP_STORE_BY_LOYALTY } from "@/lib/hr/demand";
 import { mytDateString } from "@/lib/hr/hours";
 
 export * from "@/lib/hr/labour-gate-lib";
 
-// pickup-app `orders.store_id` per loyalty outlet id (`pos_orders.outlet_id`).
-const PICKUP_STORE_BY_LOYALTY: Record<string, string> = {
-  "outlet-con": "conezion",
-  "outlet-sa": "shah-alam",
-  "outlet-tam": "tamarind",
-  "outlet-nilai": "nilai",
-};
+// pickup-app `orders.store_id` map lives with THE demand model (demand.ts) —
+// workload and revenue must see the same order streams.
 
 // Forecast the coming week's revenue from trailing daily history, per weekday,
 // recency-weighted and holiday-adjusted (see revenue-forecast.ts). Returns the
