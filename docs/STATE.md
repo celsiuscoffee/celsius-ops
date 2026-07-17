@@ -6,6 +6,18 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-16 — **"Cyberjaya" = the Celsius Coffee Tamarind outlet.** It's the
+  informal/local name owners use on hiring paperwork; there is NO separate
+  Cyberjaya `Outlet` row. Staff listed under "Cyberjaya" belong to Tamarind
+  (`5d1f2731-1985-4e54-a6df-3990e7d5c159`). (The five real outlets: IOI Mall,
+  Nilai, Putrajaya, Shah Alam, Tamarind.) New-hire onboarding is done by
+  mirroring `/api/hr/employees/create` in one atomic SQL insert: `User`
+  (bank fields live here) + `hr_employee_profiles` + `hr_salary_history` +
+  `hr_job_history`. PT crew convention: `employment_type='part_time'`,
+  `hourly_rate` (RM9 standard), `basic_salary=0`, `statutory_applicable=false`,
+  `epf_category='A'`, `payroll_cadence='MONTHLY'`, `stations=['foh']` barista /
+  `['boh']` kitchen; staff-app access = the `barista`/`kitchen crew` crew preset
+  (`appAccess ['ops','inventory']`). DOB + gender are derivable from the IC.
 - 2026-07-12 — **Data-consolidation audit for the internal assistant (all
   SQL-verified against kqdc).** Connectivity clean: 0 orphans across
   unified_sales/roster/checklist/invoice/bank-line joins. unified_sales VIEW is
