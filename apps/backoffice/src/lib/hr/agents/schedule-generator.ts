@@ -48,6 +48,7 @@ import {
   type DailyManHours,
 } from "../man-hours";
 import { computePtPerformance } from "../pt-performance";
+import { planFlexPlacement, type FlexPerson } from "../flex-placement";
 
 const MODEL = "claude-sonnet-4-6";
 const PT_MAX_HOURS_PER_WEEK = 24;
@@ -287,7 +288,7 @@ export async function generateSchedule(
   }
   notes.push(`${fullTimers.length} FT + ${partTimers.length} PT schedulable (rovers excluded)`);
   if (sharedFtElsewhere.length > 0) {
-    notes.push(`${sharedFtElsewhere.length} shared FT rostered at their primary outlet, not here: ${sharedFtElsewhere.map((s) => s.name).join(", ")}`);
+    notes.push(`${sharedFtElsewhere.length} shared FT (primary elsewhere) available to fill here as free coverage: ${sharedFtElsewhere.map((s) => s.name).join(", ")}`);
   }
 
   // Approved leave
@@ -724,34 +725,78 @@ export async function generateSchedule(
     notes.push(`⚠ under 45h/wk (leave or closed days): ${under45.map((s) => `${s.name} ${Math.round(ftHours.get(s.id) ?? 0)}h`).join(", ")}`);
   }
 
-  // Rover placement: 2 days each at this outlet, on the BUSIEST days (highest
-  // item demand) so the extra hands land where the load is — skipping days
-  // they're already rostered at another outlet this week (their full week is
-  // 2 days × 3 outlets). Previously they filled the thinnest-FT-crew days,
-  // which pushed them onto quiet midweek and starved the weekend.
-  if (roverUsers.length > 0) {
-    const { data: elsewhere } = await hrSupabaseAdmin
-      .from("hr_schedule_shifts")
-      .select("user_id, shift_date, schedule_id, hr_schedules!inner(week_start)")
-      .in("user_id", roverUsers.map((r) => r.id))
-      .eq("hr_schedules.week_start", weekStart);
-    const busy = new Set(
-      ((elsewhere ?? []) as Array<{ user_id: string; shift_date: string; schedule_id: string }>)
-        .filter((s) => s.schedule_id !== existing?.id)
-        .map((s) => `${s.user_id}:${s.shift_date}`),
-    );
-    for (const rover of roverUsers) {
-      const days = dates
-        .filter((d) => daysOpen.has(dow(d)) && !busy.has(`${rover.id}:${d}`) && !onLeave.has(`${rover.id}:${d}`))
-        .sort((a, b) => dayItems(dow(b)) - dayItems(dow(a))) // busiest day first
-        .slice(0, 2);
-      for (const date of days) {
-        // Lead joins whichever anchor shift is thinner that day.
+  // ── Flex heads: the outlet's FREE sunk/HQ capacity beyond the primary-FT
+  // skeleton — rovers (managers/leads who float across outlets) + SHARED FT
+  // whose primary is another outlet. Both cost RM0 to this outlet (rover is
+  // HQ-costed; a shared FT's salary is booked at their home outlet), so they are
+  // pure added coverage. Two fixes over the old per-rover pass:
+  //   1. They're placed by ONE demand-spread pass (`planFlexPlacement`) — the
+  //      day with the highest demand-per-head fills first and each placement
+  //      lowers that day's priority — so heads spread across distinct days
+  //      instead of two rovers stacking onto the same busy Thursday.
+  //   2. Shared FT are actually rostered here now (they used to sit idle), up to
+  //      the 6-day combined weekly cap.
+  // Staffing MODE scales how much free capacity to pour in (this is what makes
+  // Tight/Mid/Safe differ at an FT-saturated / PT-zero outlet, where the FT floor
+  // already over-covers demand and no PT is affordable):
+  //   tight — rovers 1 day, shared FT 0 (lean: accept FT-only).
+  //   mid   — rovers 2 days, shared FT half their free capacity.
+  //   safe  — rovers 2 days, shared FT filled fully ("use every FT you pay for").
+  const openDatesList = dates.filter((d) => daysOpen.has(dow(d)));
+  const roverIdSet = new Set(roverUsers.map((r) => r.id));
+  if (roverUsers.length > 0 || sharedFtElsewhere.length > 0) {
+    // Days each flex person already works at ANOTHER outlet this week (+ leave).
+    const flexIds = [...new Set([...roverUsers.map((r) => r.id), ...sharedFtElsewhere.map((s) => s.id)])];
+    const { data: elsewhere } = flexIds.length
+      ? await hrSupabaseAdmin
+          .from("hr_schedule_shifts")
+          .select("user_id, shift_date, schedule_id, hr_schedules!inner(week_start)")
+          .in("user_id", flexIds)
+          .eq("hr_schedules.week_start", weekStart)
+          .neq("start_time", "00:00")
+      : { data: [] as Array<{ user_id: string; shift_date: string; schedule_id: string }> };
+    const busyDays = new Map<string, Set<string>>();
+    for (const s of (elsewhere ?? []) as Array<{ user_id: string; shift_date: string; schedule_id: string }>) {
+      if (s.schedule_id === existing?.id) continue; // this outlet's own draft
+      (busyDays.get(s.user_id) ?? busyDays.set(s.user_id, new Set()).get(s.user_id)!).add(s.shift_date);
+    }
+
+    const demandByDate: Record<string, number> = {};
+    const baseHeadsByDate: Record<string, number> = {};
+    for (const d of openDatesList) {
+      demandByDate[d] = Math.max(dayItems(dow(d)), 1);
+      baseHeadsByDate[d] = rows.filter((r) => r.shift_date === d && r.notes !== "rest_day").length;
+    }
+
+    const roverBudget = mode === "tight" ? 1 : 2;
+    const flex: FlexPerson[] = [];
+    const flexMeta = new Map<string, { name: string; rover: boolean }>();
+    for (const r of roverUsers) {
+      const bd = busyDays.get(r.id) ?? new Set();
+      const free = openDatesList.filter((d) => !bd.has(d) && !onLeave.has(`${r.id}:${d}`));
+      flex.push({ id: r.id, freeDays: free, budget: Math.min(roverBudget, 2) });
+      flexMeta.set(r.id, { name: r.name, rover: true });
+    }
+    for (const s of sharedFtElsewhere) {
+      const bd = busyDays.get(s.id) ?? new Set();
+      const cap = Math.max(0, 6 - bd.size); // 6-day combined weekly cap
+      const budget = mode === "tight" ? 0 : mode === "mid" ? Math.ceil(cap / 2) : cap;
+      const free = openDatesList.filter((d) => !bd.has(d) && !onLeave.has(`${s.id}:${d}`));
+      flex.push({ id: s.id, freeDays: free, budget });
+      flexMeta.set(s.id, { name: s.name, rover: false });
+    }
+
+    const placement = planFlexPlacement({ flex, demandByDate, baseHeadsByDate });
+    const flexDays = new Map<string, string[]>();
+    // Deterministic emit order: by date, then rovers before shared FT.
+    for (const date of Object.keys(placement).sort()) {
+      const ids = [...placement[date]].sort((a, b) => Number(!roverIdSet.has(a)) - Number(!roverIdSet.has(b)));
+      for (const id of ids) {
         const openHeads = rows.filter((r) => r.shift_date === date && r.notes !== "rest_day" && r.start_time === hhmmss(tpl.opening.start_time)).length;
         const closeHeads = rows.filter((r) => r.shift_date === date && r.notes !== "rest_day" && r.start_time === hhmmss(tpl.closing.start_time)).length;
         const t = openHeads <= closeHeads ? tpl.opening : tpl.closing;
         rows.push({
-          user_id: rover.id,
+          user_id: id,
           shift_date: date,
           start_time: hhmmss(t.start_time),
           end_time: hhmmss(t.end_time),
@@ -759,10 +804,24 @@ export async function generateSchedule(
           break_minutes: t.break_minutes,
           notes: t.id,
         });
+        if (!flexMeta.get(id)?.rover) ftHours.set(id, (ftHours.get(id) ?? 0) + workingHours(t));
+        (flexDays.get(id) ?? flexDays.set(id, []).get(id)!).push(date);
       }
-      if (days.length > 0) {
-        notes.push(`Rover ${rover.name} (${roverPositionOf.get(rover.id)}): ${days.join(", ")} — RM0 to outlet, HQ-costed`);
-      }
+    }
+    for (const [id, days] of flexDays) {
+      const meta = flexMeta.get(id)!;
+      days.sort();
+      notes.push(
+        meta.rover
+          ? `Rover ${meta.name} (${roverPositionOf.get(id)}): ${days.join(", ")} — RM0 to outlet, HQ-costed`
+          : `Shared FT ${meta.name} filled here: ${days.join(", ")} — primary elsewhere, RM0 to this outlet (sunk cost used, spread to busiest days)`,
+      );
+    }
+    const unfilledShared = sharedFtElsewhere.filter((s) => !flexDays.has(s.id));
+    if (unfilledShared.length > 0) {
+      notes.push(
+        `${unfilledShared.length} shared FT not rostered here${mode === "tight" ? " (Tight mode — switch to Mid/Safe to use them)" : ""}: ${unfilledShared.map((s) => s.name).join(", ")}`,
+      );
     }
   }
 
