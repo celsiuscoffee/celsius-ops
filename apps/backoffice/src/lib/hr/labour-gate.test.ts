@@ -5,6 +5,8 @@ import {
   verdictFor,
   OUTLET_BUDGETS,
   ROVER_SHARE_WEEKLY,
+  borrowedFtCharge,
+  lentFtCredit,
   type ShiftCostRow,
 } from "./labour-gate-lib";
 
@@ -103,5 +105,28 @@ describe("verdictFor", () => {
 describe("rover share constant", () => {
   it("is ⅓ of the workbook's RM4,022/mo rover cost, weekly", () => {
     expect(ROVER_SHARE_WEEKLY).toBe(Math.round(((4022 / 3) * 12) / 52));
+  });
+});
+
+describe("rotation cost split (cost follows hours)", () => {
+  const share = 520; // e.g. RM1,900 basic + statutory ≈ RM520/wk
+
+  it("borrowing outlet pays pro-rata for the hours worked there", () => {
+    expect(borrowedFtCharge(share, 45)).toBeCloseTo(share, 5); // full week borrowed → full share
+    expect(borrowedFtCharge(share, 22.5)).toBeCloseTo(share / 2, 5); // 3 of 6 days
+    expect(borrowedFtCharge(share, 0)).toBe(0);
+  });
+
+  it("home outlet is credited the same slice — never more than the share", () => {
+    expect(lentFtCredit(share, 45)).toBeCloseTo(share, 5); // fully lent → home pays 0
+    expect(lentFtCredit(share, 22.5)).toBeCloseTo(share / 2, 5);
+    expect(lentFtCredit(share, 90)).toBeCloseTo(share, 5); // data glitch clamps at 100%
+    expect(lentFtCredit(share, -5)).toBe(0);
+  });
+
+  it("charge + home remainder always equals exactly one share (no double count)", () => {
+    for (const h of [0, 7.5, 15, 22.5, 30, 45]) {
+      expect(borrowedFtCharge(share, h) + (share - lentFtCredit(share, h))).toBeCloseTo(share, 5);
+    }
   });
 });

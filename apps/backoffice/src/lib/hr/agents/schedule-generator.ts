@@ -38,7 +38,8 @@ import {
   shiftHours,
   OUTLET_BUDGETS,
   DEFAULT_BUDGET,
-  ROVER_SHARE_WEEKLY,
+  borrowedFtCharge,
+  lentFtCredit,
 } from "../labour-gate-lib";
 import { forecastWeek } from "../labour-gate";
 import {
@@ -49,6 +50,7 @@ import {
 } from "../man-hours";
 import { computePtPerformance } from "../pt-performance";
 import { planFlexPlacement, type FlexPerson } from "../flex-placement";
+import { allocateShiftCounts } from "../shift-allocation";
 
 const MODEL = "claude-sonnet-4-6";
 const PT_MAX_HOURS_PER_WEEK = 24;
@@ -95,6 +97,7 @@ type Staff = {
   position: string | null;
   employment_type: string;
   basic_salary: number;
+  epf_employer_rate: number | null; // employer EPF from the profile (real rate, not the default)
   hourly_rate: number | null;
   rest_day: number | null; // 0=Sun … 6=Sat
   // "Primary outlet wins": a shared staffer is auto-rostered (FT floor / PT
@@ -232,11 +235,12 @@ export async function generateSchedule(
   });
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, basic_salary, hourly_rate, schedule_required, rest_day")
+    .select("user_id, position, employment_type, basic_salary, hourly_rate, epf_employer_rate, schedule_required, rest_day")
     .in("user_id", users.length ? users.map((u) => u.id) : ["-"]);
   type ProfileRow = {
     user_id: string; position: string | null; employment_type: string;
     basic_salary: number | null; hourly_rate: number | null;
+    epf_employer_rate: number | null;
     schedule_required: boolean | null; rest_day: number | null;
   };
   const profileMap = new Map<string, ProfileRow>(((profiles ?? []) as ProfileRow[]).map((p) => [p.user_id, p]));
@@ -251,6 +255,7 @@ export async function generateSchedule(
         position: p?.position ?? null,
         employment_type: p?.employment_type ?? "full_time",
         basic_salary: Number(p?.basic_salary) || 0,
+        epf_employer_rate: p?.epf_employer_rate == null ? null : Number(p.epf_employer_rate),
         hourly_rate: p?.hourly_rate == null ? null : Number(p.hourly_rate),
         rest_day: p?.rest_day ?? null,
         isPrimaryHere: u.outletId === outletId,
@@ -259,19 +264,24 @@ export async function generateSchedule(
     // Rovers are placed separately below (2 days/outlet-week); HoD stays HQ.
     .filter((s) => !ROVER_POSITIONS.has((s.position ?? "").trim().toLowerCase()));
 
-  // Rovers — the Area Manager and the rover lead rotate 2 days/week at each
-  // outlet (workbook Rover Coverage). They are HQ-costed: RM0 to the outlet
-  // in the labour gate, capped at the 2-shift rover quota. HoD excluded.
+  // Rovers — ONLY the rover lead (Barista Lead) auto-rotates 2 days/week at
+  // each outlet. Managers / Area Managers are NEVER auto-scheduled (owner rule
+  // 2026-07-17): they plan their own floor days and are added manually in the
+  // grid. All rover/manager cost is HQ overhead — RM0 to the outlet.
   const { data: roverProfiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position")
-    .in("position", ["Manager", "Area Manager", "Barista Lead"])
+    .select("user_id, position, basic_salary, epf_employer_rate")
+    .in("position", ["Barista Lead"])
     .is("end_date", null);
-  const roverIds = ((roverProfiles ?? []) as { user_id: string; position: string }[]).map((p) => p.user_id);
+  type RoverProfile = { user_id: string; position: string; basic_salary: number | null; epf_employer_rate: number | null };
+  const roverIds = ((roverProfiles ?? []) as RoverProfile[]).map((p) => p.user_id);
   const roverUsers = roverIds.length
     ? await prisma.user.findMany({ where: { id: { in: roverIds }, status: "ACTIVE" }, select: { id: true, name: true } })
     : [];
-  const roverPositionOf = new Map(((roverProfiles ?? []) as { user_id: string; position: string }[]).map((p) => [p.user_id, p.position]));
+  const roverPositionOf = new Map(((roverProfiles ?? []) as RoverProfile[]).map((p) => [p.user_id, p.position]));
+  // Rover lead cost follows their hours too (same rotation-cost rule as shared
+  // FT): each outlet pays share × (hours here ÷ 45). Managers stay RM0/HQ.
+  const roverShareOf = new Map(((roverProfiles ?? []) as RoverProfile[]).map((p) => [p.user_id, weeklySalaryShare(Number(p.basic_salary) || 0, p.epf_employer_rate == null ? null : Number(p.epf_employer_rate))]));
 
   // "Primary outlet wins": a full-timer carries their 6-day floor only at their
   // primary outlet. A shared FT whose primary is elsewhere is NOT auto-rostered
@@ -480,7 +490,11 @@ export async function generateSchedule(
   const N = sortedFT.length;
   const dayItems = (d: number) => Math.max(itemsByDow.get(d) ?? 0, 0);
   const maxItems = openDaysList.length ? Math.max(...openDaysList.map(dayItems)) : 0;
-  const restCap = Math.max(0, N - SERVICE_FLOOR); // never rest a day below the service floor
+  // Max rests on any one day: don't dip the crew below the service floor — but
+  // never below 1, or a small crew (N ≤ floor, e.g. a 3-FT outlet) has NO legal
+  // rest slot anywhere and the fallback would pile every rest onto the same day.
+  // Every FT must rest once; on a floor-sized crew that day simply runs short.
+  const restCap = Math.max(1, N - SERVICE_FLOOR);
 
   // ── Fairness memory: each FT's recent history (last 4 weeks) ─────────
   // Drives long-run fairness so it isn't reset every week: openings & closings
@@ -640,56 +654,99 @@ export async function generateSchedule(
     );
     const resting = sortedFT.filter((s) => restDayOf.get(s.id) === dow(date) && !onLeave.has(`${s.id}:${date}`));
 
-    // Split the day's crew into opening / closing / middle with two rules layered
-    // on the workbook pattern (kitchen on both anchors, surplus to middles):
-    //  • FATIGUE: never OPEN someone who CLOSED the night before (clopening).
-    //  • FAIRNESS: the unsociable anchors rotate — the person who has CLOSED
-    //    least (this week, then long-run) takes the close; likewise for opening
-    //    — so late nights and early starts are shared, not dumped on the same few.
+    // Two-step day split — COUNTS from demand, then PEOPLE by fairness:
+    //  1. HOW MANY heads each shift template gets comes from the day's hourly
+    //     demand curve (allocateShiftCounts): a morning-peaked day gets more
+    //     opening heads, an evening-peaked day more closing, middles absorb the
+    //     midday hump, and surplus spreads evenly. (The old splitter derived the
+    //     mix from structural rules — fill closing, fill opening from
+    //     non-clopeners, dump the remainder into closing — which cascaded: one
+    //     closing-heavy day barred most of the crew from opening the NEXT day,
+    //     so opening starved at 2 while closing stacked 6–7, all week.)
+    //  2. WHO fills each slot keeps the fatigue/fairness rules: kitchen on both
+    //     anchors, never open someone who closed last night (clopening) unless
+    //     there's literally no one else, and the unsociable anchors rotate to
+    //     whoever has carried them least.
+    const demandToday: Record<number, number> = {};
+    for (let h = openH; h < closeH; h++) {
+      demandToday[h] = (demand.get(`${dow(date)}:${h}`) ?? SERVICE_FLOOR) + bufferHeads(dow(date), h);
+    }
+    const winOf = (key: string, t: ShiftTemplate) => ({ key, startH: Number(t.start_time.slice(0, 2)), endH: Number(t.end_time.slice(0, 2)) });
+    const windows = [
+      winOf("open", tpl.opening),
+      ...tpl.middles.map((m, i) => winOf(`mid${i}`, m)),
+      winOf("close", tpl.closing),
+    ];
+    const shiftCounts = allocateShiftCounts({ heads: working.length, windows, demandByHour: demandToday });
+    const openCount = shiftCounts.get("open") ?? 0;
+    const closeCount = shiftCounts.get("close") ?? 0;
+
     const boh = working.filter((s) => isBOH(s.position));
     const opening: Staff[] = [];
     const closing: Staff[] = [];
-    const middleCrew: Staff[] = [];
+    const midCrews: Staff[][] = tpl.middles.map(() => []);
     const claimed = new Set<string>();
     const take = (arr: Staff[], s: Staff) => { arr.push(s); claimed.add(s.id); };
+    const unclaimed = () => working.filter((s) => !claimed.has(s.id));
 
-    // Kitchen must staff both anchors: least-recent closer closes; least-recent
-    // opener (that didn't close last night) opens.
-    const bohClose = [...boh].sort((a, b) => closeKey(a) - closeKey(b))[0];
-    if (bohClose) take(closing, bohClose);
-    const bohOpen =
-      [...boh].filter((s) => !claimed.has(s.id) && !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))[0] ??
-      [...boh].filter((s) => !claimed.has(s.id)).sort((a, b) => openKey(a) - openKey(b))[0];
-    if (bohOpen) take(opening, bohOpen);
-
-    // Bring CLOSING to the service floor: fewest closings first.
-    for (const s of [...working].filter((s) => !claimed.has(s.id)).sort((a, b) => closeKey(a) - closeKey(b))) {
-      if (closing.length >= SERVICE_FLOOR) break;
-      take(closing, s);
+    // Kitchen must staff both anchors (within their allotted counts): least-recent
+    // opener that didn't close last night opens; least-recent closer closes.
+    if (openCount > 0) {
+      const bohOpen =
+        boh.filter((s) => !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))[0] ??
+        [...boh].sort((a, b) => openKey(a) - openKey(b))[0];
+      if (bohOpen) take(opening, bohOpen);
     }
-    // Bring OPENING to the service floor: exclude clopeners, fewest openings first.
-    for (const s of [...working].filter((s) => !claimed.has(s.id) && !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))) {
-      if (opening.length >= SERVICE_FLOOR) break;
+    if (closeCount > 0) {
+      const bohClose = boh.filter((s) => !claimed.has(s.id)).sort((a, b) => closeKey(a) - closeKey(b))[0];
+      if (bohClose) take(closing, bohClose);
+    }
+
+    // OPENING first (non-clopeners are the scarce resource), fewest openings
+    // first; clopeners only as a last resort to reach the demanded count.
+    for (const s of unclaimed().filter((s) => !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))) {
+      if (opening.length >= openCount) break;
       take(opening, s);
     }
-    // Remainder → a MIDDLE if the outlet has them and both anchors hold the
-    // floor; otherwise balance the thinner anchor (a clopener always closes).
-    for (const s of working) {
-      if (claimed.has(s.id)) continue;
-      if (tpl.middles.length > 0 && opening.length >= SERVICE_FLOOR && closing.length >= SERVICE_FLOOR) take(middleCrew, s);
-      else if (closing.length <= opening.length || closedYesterday(s)) take(closing, s);
-      else take(opening, s);
+    for (const s of unclaimed().sort((a, b) => openKey(a) - openKey(b))) {
+      if (opening.length >= openCount) break;
+      take(opening, s);
+    }
+    // CLOSING: fewest closings first.
+    for (const s of unclaimed().sort((a, b) => closeKey(a) - closeKey(b))) {
+      if (closing.length >= closeCount) break;
+      take(closing, s);
+    }
+    // MIDDLES: the remainder, per template count (round-robin any excess so no
+    // one is left unassigned even if counts drift).
+    let mi = 0;
+    for (const s of unclaimed()) {
+      if (tpl.middles.length === 0) {
+        // No middles at this outlet → balance the thinner anchor; a clopener
+        // always closes.
+        if (closedYesterday(s) || closing.length <= opening.length) take(closing, s);
+        else take(opening, s);
+        continue;
+      }
+      for (let tries = 0; tries < tpl.middles.length; tries++) {
+        const idx = (mi + tries) % tpl.middles.length;
+        if (midCrews[idx].length < (shiftCounts.get(`mid${idx}`) ?? 0) || tries === tpl.middles.length - 1) {
+          take(midCrews[idx], s);
+          mi = idx + 1;
+          break;
+        }
+      }
     }
 
     // Record the day's assignments into the fatigue/fairness memory.
     for (const s of opening) { weekOpen.set(s.id, (weekOpen.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "open"); }
     for (const s of closing) { weekClose.set(s.id, (weekClose.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "close"); }
-    for (const s of middleCrew) prevDayShift.set(s.id, "mid");
+    for (const crew of midCrews) for (const s of crew) prevDayShift.set(s.id, "mid");
 
     const dayGroups: Array<[Staff[], ShiftTemplate]> = [
       [opening, tpl.opening],
       [closing, tpl.closing],
-      ...middleCrew.map((s, i): [Staff[], ShiftTemplate] => [[s], tpl.middles[i % tpl.middles.length]]),
+      ...midCrews.map((crew, i): [Staff[], ShiftTemplate] => [crew, tpl.middles[i]]),
     ];
     for (const [group, t] of dayGroups) {
       for (const s of group) {
@@ -736,14 +793,16 @@ export async function generateSchedule(
   //      instead of two rovers stacking onto the same busy Thursday.
   //   2. Shared FT are actually rostered here now (they used to sit idle), up to
   //      the 6-day combined weekly cap.
-  // Staffing MODE scales how much free capacity to pour in (this is what makes
-  // Tight/Mid/Safe differ at an FT-saturated / PT-zero outlet, where the FT floor
-  // already over-covers demand and no PT is affordable):
-  //   tight — rovers 1 day, shared FT 0 (lean: accept FT-only).
-  //   mid   — rovers 2 days, shared FT half their free capacity.
-  //   safe  — rovers 2 days, shared FT filled fully ("use every FT you pay for").
+  // Owner rule: FT salaries are sunk — FILL UP ALL THE FT, in every mode. So
+  // shared FT are always rostered to their full free capacity (6-day combined
+  // cap) and rovers always get their workbook 2 days/outlet-week. The staffing
+  // MODE does not gate people; it only scales the demand buffer (sizing) and PT.
   const openDatesList = dates.filter((d) => daysOpen.has(dow(d)));
   const roverIdSet = new Set(roverUsers.map((r) => r.id));
+  // Hours each BORROWED shared FT / rover lead is placed here — drives the
+  // pro-rata cost charge below (cost follows work, per the rotation-cost rule).
+  const borrowedFtHours = new Map<string, number>();
+  const roverHours = new Map<string, number>();
   if (roverUsers.length > 0 || sharedFtElsewhere.length > 0) {
     // Days each flex person already works at ANOTHER outlet this week (+ leave).
     const flexIds = [...new Set([...roverUsers.map((r) => r.id), ...sharedFtElsewhere.map((s) => s.id)])];
@@ -768,19 +827,17 @@ export async function generateSchedule(
       baseHeadsByDate[d] = rows.filter((r) => r.shift_date === d && r.notes !== "rest_day").length;
     }
 
-    const roverBudget = mode === "tight" ? 1 : 2;
     const flex: FlexPerson[] = [];
     const flexMeta = new Map<string, { name: string; rover: boolean }>();
     for (const r of roverUsers) {
       const bd = busyDays.get(r.id) ?? new Set();
       const free = openDatesList.filter((d) => !bd.has(d) && !onLeave.has(`${r.id}:${d}`));
-      flex.push({ id: r.id, freeDays: free, budget: Math.min(roverBudget, 2) });
+      flex.push({ id: r.id, freeDays: free, budget: 2 }); // workbook: 2 days/outlet-week
       flexMeta.set(r.id, { name: r.name, rover: true });
     }
     for (const s of sharedFtElsewhere) {
       const bd = busyDays.get(s.id) ?? new Set();
-      const cap = Math.max(0, 6 - bd.size); // 6-day combined weekly cap
-      const budget = mode === "tight" ? 0 : mode === "mid" ? Math.ceil(cap / 2) : cap;
+      const budget = Math.max(0, 6 - bd.size); // fill to the 6-day combined weekly cap
       const free = openDatesList.filter((d) => !bd.has(d) && !onLeave.has(`${s.id}:${d}`));
       flex.push({ id: s.id, freeDays: free, budget });
       flexMeta.set(s.id, { name: s.name, rover: false });
@@ -788,13 +845,36 @@ export async function generateSchedule(
 
     const placement = planFlexPlacement({ flex, demandByDate, baseHeadsByDate });
     const flexDays = new Map<string, string[]>();
+    borrowedFtHours.clear();
+    roverHours.clear();
     // Deterministic emit order: by date, then rovers before shared FT.
     for (const date of Object.keys(placement).sort()) {
       const ids = [...placement[date]].sort((a, b) => Number(!roverIdSet.has(a)) - Number(!roverIdSet.has(b)));
       for (const id of ids) {
+        // Join the anchor with the larger remaining DEMAND shortfall — not the
+        // one with fewer heads, which would fight the demand-shaped counts (a
+        // morning-peaked day legitimately carries more openers; the flex head
+        // should reinforce the morning, not "balance" it away to closing).
+        const shortfall = (t: ShiftTemplate): number => {
+          const startH = Number(t.start_time.slice(0, 2));
+          const endH = Number(t.end_time.slice(0, 2));
+          let s = 0;
+          for (let h = startH; h < endH; h++) {
+            const need = (demand.get(`${dow(date)}:${h}`) ?? SERVICE_FLOOR) + bufferHeads(dow(date), h);
+            const have = rows.filter(
+              (r) => r.shift_date === date && r.notes !== "rest_day" &&
+                Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
+            ).length;
+            s += Math.max(0, need - have);
+          }
+          return s;
+        };
+        const openShort = shortfall(tpl.opening);
+        const closeShort = shortfall(tpl.closing);
         const openHeads = rows.filter((r) => r.shift_date === date && r.notes !== "rest_day" && r.start_time === hhmmss(tpl.opening.start_time)).length;
         const closeHeads = rows.filter((r) => r.shift_date === date && r.notes !== "rest_day" && r.start_time === hhmmss(tpl.closing.start_time)).length;
-        const t = openHeads <= closeHeads ? tpl.opening : tpl.closing;
+        // Tie on shortfall (usually both 0 on surplus days) → thinner anchor.
+        const t = openShort > closeShort || (openShort === closeShort && openHeads <= closeHeads) ? tpl.opening : tpl.closing;
         rows.push({
           user_id: id,
           shift_date: date,
@@ -804,7 +884,12 @@ export async function generateSchedule(
           break_minutes: t.break_minutes,
           notes: t.id,
         });
-        if (!flexMeta.get(id)?.rover) ftHours.set(id, (ftHours.get(id) ?? 0) + workingHours(t));
+        if (flexMeta.get(id)?.rover) {
+          roverHours.set(id, (roverHours.get(id) ?? 0) + workingHours(t));
+        } else {
+          ftHours.set(id, (ftHours.get(id) ?? 0) + workingHours(t));
+          borrowedFtHours.set(id, (borrowedFtHours.get(id) ?? 0) + workingHours(t));
+        }
         (flexDays.get(id) ?? flexDays.set(id, []).get(id)!).push(date);
       }
     }
@@ -813,14 +898,14 @@ export async function generateSchedule(
       days.sort();
       notes.push(
         meta.rover
-          ? `Rover ${meta.name} (${roverPositionOf.get(id)}): ${days.join(", ")} — RM0 to outlet, HQ-costed`
-          : `Shared FT ${meta.name} filled here: ${days.join(", ")} — primary elsewhere, RM0 to this outlet (sunk cost used, spread to busiest days)`,
+          ? `Rover ${meta.name} (${roverPositionOf.get(id)}): ${days.join(", ")} — costed here pro-rata by hours (rotation-cost rule)`
+          : `Shared FT ${meta.name} filled here: ${days.join(", ")} — primary elsewhere; their cost for these hours is charged HERE, credited at home (rotation-cost rule)`,
       );
     }
     const unfilledShared = sharedFtElsewhere.filter((s) => !flexDays.has(s.id));
     if (unfilledShared.length > 0) {
       notes.push(
-        `${unfilledShared.length} shared FT not rostered here${mode === "tight" ? " (Tight mode — switch to Mid/Safe to use them)" : ""}: ${unfilledShared.map((s) => s.name).join(", ")}`,
+        `${unfilledShared.length} shared FT not rostered here (fully booked at their other outlet(s) or on leave): ${unfilledShared.map((s) => s.name).join(", ")}`,
       );
     }
   }
@@ -828,21 +913,38 @@ export async function generateSchedule(
   // ── Stage 2: PT budget envelope — the only spend that moves labour % ─
   // Same forecast the man-hours side used (recency-weighted, holiday-aware).
   const forecast = Math.round(weekForecast.weekly);
-  // FT salaries are sunk — the envelope charges every schedulable FT their
-  // full weekly share whether the roster fills them to 45h or not.
-  const ftCost = Math.round(
-    fullTimers.reduce((sum, s) => sum + weeklySalaryShare(s.basic_salary, null), 0),
+  // FT cost, split by WHERE the hours land (owner's rotation-cost rule):
+  //   • primary FT: full weekly share MINUS the pro-rata slice for hours they
+  //     work at other outlets this week (that slice is charged there instead);
+  //   • borrowed shared FT: pro-rata share for the hours placed HERE.
+  // Manager / Area Manager / rover cost is HQ overhead — RM0 to the outlet.
+  const primaryFtCost = fullTimers.reduce((sum, s) => {
+    const share = weeklySalaryShare(s.basic_salary, s.epf_employer_rate);
+    return sum + share - lentFtCredit(share, hoursElsewhere.get(s.id) ?? 0);
+  }, 0);
+  const borrowedFtCost = sharedFtElsewhere.reduce(
+    (sum, s) => sum + borrowedFtCharge(weeklySalaryShare(s.basic_salary, s.epf_employer_rate), borrowedFtHours.get(s.id) ?? 0),
+    0,
   );
-  const ptBudget = Math.max(0, Math.round(budget.target * forecast - ftCost - ROVER_SHARE_WEEKLY));
+  // Rover lead (Barista Lead) hours here, same pro-rata rule. Managers = HQ, RM0.
+  const roverCost = [...roverHours.entries()].reduce(
+    (sum, [id, h]) => sum + borrowedFtCharge(roverShareOf.get(id) ?? 0, h),
+    0,
+  );
+  const ftCost = Math.round(primaryFtCost + borrowedFtCost + roverCost);
+  const ptBudget = Math.max(0, Math.round(budget.target * forecast - ftCost));
   notes.push(
     `Budget: forecast RM${forecast.toLocaleString()} × ${(budget.target * 100).toFixed(0)}% = RM${Math.round(budget.target * forecast).toLocaleString()}; ` +
-      `FT (fixed) RM${ftCost.toLocaleString()} + rover RM${ROVER_SHARE_WEEKLY} → PT envelope RM${ptBudget.toLocaleString()}`,
+      `FT RM${ftCost.toLocaleString()} (primary RM${Math.round(primaryFtCost).toLocaleString()}` +
+      (borrowedFtCost > 0 ? ` + borrowed-hours RM${Math.round(borrowedFtCost).toLocaleString()}` : "") +
+      (roverCost > 0 ? ` + rover-hours RM${Math.round(roverCost).toLocaleString()}` : "") +
+      `; rotation cost follows hours, manager cost = HQ) → PT envelope RM${ptBudget.toLocaleString()}`,
   );
   // Sunk-FT reality: when the fixed FT floor alone is already at/over target, the
   // week is revenue-constrained — no amount of rostering fixes it, and benching
   // FT saves nothing (their salary is booked either way). Flag it so the % isn't
   // "corrected" by cutting FT hours.
-  const ftFloorPct = forecast > 0 ? (ftCost + ROVER_SHARE_WEEKLY) / forecast : null;
+  const ftFloorPct = forecast > 0 ? ftCost / forecast : null;
   if (ptBudget === 0 && ftFloorPct != null) {
     notes.push(
       `⚠ FT floor alone is ${(ftFloorPct * 100).toFixed(1)}% of forecast (≥ ${(budget.target * 100).toFixed(0)}% target) — revenue-constrained week. ` +
@@ -1075,7 +1177,7 @@ export async function generateSchedule(
       return sum + mins / 60;
     }, 0),
   );
-  const estimatedCost = ftCost + Math.round(ptSpend.rm) + ROVER_SHARE_WEEKLY;
+  const estimatedCost = ftCost + Math.round(ptSpend.rm); // ftCost incl. borrowed + rover hours; manager = HQ RM0
 
   let scheduleId = existing?.id as string | undefined;
   if (!scheduleId) {
