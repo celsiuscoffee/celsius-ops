@@ -281,6 +281,22 @@ export default function SchedulesPage() {
     });
   }, [grid]);
 
+  // Station grouping for easier scheduling: BOH (kitchen) vs FOH (barista /
+  // service). Same position classification the AI Fill generator uses to keep
+  // kitchen on both anchors, so the grid sections match how shifts are sized.
+  const userGroups = useMemo(() => {
+    const isBOHPos = (p: string | null | undefined) => {
+      const s = (p ?? "").toLowerCase();
+      return s.includes("kitchen") || s.includes("chef") || s.includes("boh");
+    };
+    const boh = sortedUsers.filter((u) => isBOHPos(u.profile?.position));
+    const foh = sortedUsers.filter((u) => !isBOHPos(u.profile?.position));
+    return [
+      { key: "foh", label: "Front of House · Barista / Service", users: foh },
+      { key: "boh", label: "Back of House · Kitchen", users: boh },
+    ].filter((g) => g.users.length > 0);
+  }, [sortedUsers]);
+
   // Total net working hours per user for the week (gross - break).
   // Rest-day markers don't count.
   const hoursByUser = useMemo(() => {
@@ -831,7 +847,15 @@ export default function SchedulesPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedUsers.map((u) => {
+              {userGroups.map((g) => (
+                <Fragment key={g.key}>
+                  <tr className="border-b bg-muted/60">
+                    <td className="sticky left-0 z-10 bg-muted/60 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {g.label} ({g.users.length})
+                    </td>
+                    <td colSpan={grid.days.length} className="bg-muted/60" />
+                  </tr>
+                  {g.users.map((u) => {
                 const position = u.profile?.position || (u.role === "MANAGER" ? "Manager" : "Barista");
                 const isPartTime = u.profile?.employment_type === "part_time";
                 const empType = isPartTime ? "PT" : "FT";
@@ -1068,6 +1092,8 @@ export default function SchedulesPage() {
                   </tr>
                 );
               })}
+                </Fragment>
+              ))}
             </tbody>
             <tfoot className="border-t-2 border-gray-200">
               {/* Coverage gap footer — for each day shows how each coverage rule is satisfied */}

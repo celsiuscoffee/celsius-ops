@@ -273,6 +273,24 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-17 — **Scheduler QA round 3 (owner-driven), all merged to main.**
+  #953 (squash `9544c2f`): day-split rebuilt — shift COUNTS from the hourly
+  items curve via `lib/hr/shift-allocation.ts` (marginal-shortfall greedy;
+  killed the clopening cascade that starved opening at 2 / stacked closing
+  at 6); all FT filled in every mode (shared FT to 6-day combined cap, rover
+  2 days); Managers/Area Managers never auto-scheduled; rotation cost follows
+  hours (`borrowedFtCharge`/`lentFtCredit` — borrowed FT charged here,
+  credited at home; Barista Lead pro-rata; manager cost = HQ RM0, flat RM309
+  rover share dropped); generator uses real per-profile EPF rates; daily grid
+  % = day's hours-share of ACTUAL roster cost (reconciles to the weekly chip).
+  Verified live: all FT/PT salary data individually populated; Afique
+  RM1,900 → RM438/wk charged where he works. **Gotcha that bit twice:** owner
+  regenerates immediately after merge, but Vercel prod deploy lags ~3-6 min —
+  check `ai_notes` for the current marker line (now "rotation cost follows
+  hours") before diagnosing "the fix didn't work". Follow-up branch adds
+  FOH/BOH section grouping in the week grid. Two deep-QA review agents were
+  still in flight at last update — triage their reports on return.
+
 - 2026-07-16 — **Ads optimizer + local-rank status check (all DB-verified,
   follow-up to the 2026-07-05 entry).**
   **Optimizer:** the two Jul 5 owner-approved cuts (Tamarind RM100.20→84.96/day,
