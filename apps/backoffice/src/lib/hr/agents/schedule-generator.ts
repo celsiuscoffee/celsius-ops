@@ -50,32 +50,14 @@ import {
 } from "../man-hours";
 import { computePtPerformance } from "../pt-performance";
 import { planFlexPlacement, type FlexPerson } from "../flex-placement";
-import { allocateShiftCounts } from "../shift-allocation";
-import {
-  calibrateRate,
-  describeCalibration,
-  BARISTA_SERVE_TARGET_MIN,
-  KITCHEN_SERVE_TARGET_MIN,
-} from "../serve-time";
+import { allocateStationCounts } from "../shift-allocation";
+// Station demand + serve-time calibration live in the SHARED demand model
+// (lib/hr/demand.ts) — same computation feeds the grid's per-day shortfall.
+import { computeWeekDemand, SERVICE_FLOOR } from "../demand";
 
 const MODEL = "claude-sonnet-4-6";
 const PT_MAX_HOURS_PER_WEEK = 24;
-// Minimum concurrent heads while the outlet is open — the workbook's service
-// floor (Tamarind explicitly 3/shift; the shift plans floor every outlet at 3).
-const SERVICE_FLOOR = 3;
 const PT_MAX_DAYS_PER_WEEK = 5;
-
-// BASE station throughput: items one head can make + serve per hour. Barista =
-// drinks + counter pastries; kitchen = cooked food only. Grounded in prep times
-// (drink/pastry ~3 min, cooked ~10 min) — but these are only STARTING points:
-// every generation re-calibrates them from the outlet's own measured p90 serve
-// times against the owner's service standard (kitchen 15 min, beverage/pastry
-// 10 min — see lib/hr/serve-time.ts). A breach lowers the rate → more heads.
-const BARISTA_ITEMS_PER_HR = 8;
-const KITCHEN_ITEMS_PER_HR = 6;
-// Cooked-food menu categories → kitchen station; everything else (drinks +
-// cakes/cookies/croissants + uncategorised) is barista/counter.
-const KITCHEN_CATEGORIES = ["Roti Bakar", "Nasi Lemak", "Pasta", "Sandwiches", "Fries", "Noodle"];
 
 const ROVER_POSITIONS = new Set(["manager", "area manager", "head of department", "barista lead"]);
 
@@ -359,84 +341,12 @@ export async function generateSchedule(
   // over the 4 weeks, split barista vs kitchen. Heads/hour = ceil(barista ÷ 8) +
   // ceil(kitchen ÷ 6), floored at the service minimum — sized to hold the
   // 15-minute serve target. (Same model as the HOO staffing report.)
-  const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; barista: number; kitchen: number }>>`
-    SELECT EXTRACT(DOW FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
-           EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
-           (sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float / 4) AS kitchen,
-           (sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float / 4) AS barista
-    FROM pos_order_items i
-    JOIN pos_orders o ON o.id = i.order_id
-    LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
-    WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
-      AND o.status = 'completed' AND o.refund_of_order_id IS NULL
-      AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-    GROUP BY 1, 2
-  `;
-
-  // ── Serve-time self-calibration (the "enough manpower" feedback loop) ──
-  // Measure the outlet's ACTUAL p90 serve time over the same trailing window,
-  // split by station: an order containing any cooked-food item is gated by the
-  // KITCHEN (15-min standard); an order of only drinks/pastries is a BARISTA
-  // order (10-min standard). A breach scales that station's items/head/hour
-  // rate DOWN proportionally, so the demand model asks for more heads at the
-  // loaded hours — no human judging "is this enough staff", the serve times do.
-  const serveRows = await prisma.$queryRaw<Array<{ is_kitchen: boolean; n: number; p90: number | null }>>`
-    SELECT EXISTS (
-             SELECT 1 FROM pos_order_items i
-             JOIN "Menu" m ON m."storehubId" = i.product_id
-             WHERE i.order_id = o.id AND m.category = ANY(${KITCHEN_CATEGORIES})
-           ) AS is_kitchen,
-           count(*)::int AS n,
-           (percentile_cont(0.9) WITHIN GROUP (
-             ORDER BY EXTRACT(EPOCH FROM (COALESCE(o.served_at, o.ready_at) - o.created_at)) / 60
-           ))::float AS p90
-    FROM pos_orders o
-    WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
-      AND o.status = 'completed' AND o.refund_of_order_id IS NULL
-      AND COALESCE(o.served_at, o.ready_at) IS NOT NULL
-      AND COALESCE(o.served_at, o.ready_at) > o.created_at
-      AND COALESCE(o.served_at, o.ready_at) < o.created_at + interval '2 hours'
-      AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-    GROUP BY 1
-  `;
-  const serveOf = (kitchen: boolean) => serveRows.find((r) => r.is_kitchen === kitchen);
-  const barServe = serveOf(false);
-  const kitServe = serveOf(true);
-  const barCal = calibrateRate({
-    baseRate: BARISTA_ITEMS_PER_HR, p90ServeMin: barServe?.p90 ?? null,
-    targetMin: BARISTA_SERVE_TARGET_MIN, sample: barServe?.n ?? 0, floor: 4, cap: 14,
-  });
-  const kitCal = calibrateRate({
-    baseRate: KITCHEN_ITEMS_PER_HR, p90ServeMin: kitServe?.p90 ?? null,
-    targetMin: KITCHEN_SERVE_TARGET_MIN, sample: kitServe?.n ?? 0, floor: 3, cap: 8,
-  });
-  const baristaRate = barCal.rate;
-  const kitchenRate = kitCal.rate;
-  notes.push(
-    "Serve-time calibration (28d): " +
-      describeCalibration("barista/pastry", barCal, barServe?.p90 ?? null, BARISTA_SERVE_TARGET_MIN, barServe?.n ?? 0) +
-      "; " +
-      describeCalibration("kitchen", kitCal, kitServe?.p90 ?? null, KITCHEN_SERVE_TARGET_MIN, kitServe?.n ?? 0),
-  );
-
-  const demand = new Map<string, number>(); // "dw:hr" → heads needed (barista + kitchen)
-  const itemsByDow = new Map<number, number>(); // dw → avg total items/day (for man-hours)
-  // Peak heads + its station split per day-of-week, for the QA note.
-  const peakByDow = new Map<number, { heads: number; hr: number; bar: number; kit: number }>();
-  for (const h of hourly) {
-    const bar = Number(h.barista) || 0;
-    const kit = Number(h.kitchen) || 0;
-    if (bar + kit <= 0) continue;
-    const barHeads = Math.ceil(bar / baristaRate);
-    const kitHeads = Math.ceil(kit / kitchenRate);
-    const heads = Math.max(SERVICE_FLOOR, barHeads + kitHeads);
-    demand.set(`${h.dw}:${h.hr}`, heads);
-    itemsByDow.set(h.dw, (itemsByDow.get(h.dw) ?? 0) + bar + kit);
-    const prev = peakByDow.get(h.dw);
-    if (!prev || heads > prev.heads) peakByDow.set(h.dw, { heads, hr: h.hr, bar: barHeads, kit: kitHeads });
-  }
+  // Shared demand model (lib/hr/demand.ts) — the SAME computation the labour
+  // gate uses for the grid's per-day shortfall, so "what the grid says is
+  // short" and "what AI Fill staffs to" can never drift apart.
+  const weekDemand = await computeWeekDemand(outlet, weekStart);
+  const { demand, itemsByDow, peakByDow, baristaRate, kitchenRate } = weekDemand;
+  notes.push(weekDemand.calibrationNote);
 
   // Staffing-mode buffer (heads added on top of the sized demand for this hour).
   //   tight → 0; safe → +1 every open hour; mid → +1 across the day's peak block
@@ -705,22 +615,34 @@ export async function generateSchedule(
     );
     const resting = sortedFT.filter((s) => restDayOf.get(s.id) === dow(date) && !onLeave.has(`${s.id}:${date}`));
 
-    // Two-step day split — COUNTS from demand, then PEOPLE by fairness:
-    //  1. HOW MANY heads each shift template gets comes from the day's hourly
-    //     demand curve (allocateShiftCounts): a morning-peaked day gets more
-    //     opening heads, an evening-peaked day more closing, middles absorb the
-    //     midday hump, and surplus spreads evenly. (The old splitter derived the
-    //     mix from structural rules — fill closing, fill opening from
-    //     non-clopeners, dump the remainder into closing — which cascaded: one
-    //     closing-heavy day barred most of the crew from opening the NEXT day,
-    //     so opening starved at 2 while closing stacked 6–7, all week.)
-    //  2. WHO fills each slot keeps the fatigue/fairness rules: kitchen on both
-    //     anchors, never open someone who closed last night (clopening) unless
+    // Two-step day split — COUNTS from demand, then PEOPLE by fairness — run
+    // PER STATION (owner rule 2026-07-17: "run based on item per station"):
+    //  1. HOW MANY: kitchen crew counts come from the KITCHEN item curve
+    //     (cooked food peaks mid-morning/lunch → BOH front-loads onto opening
+    //     and early middles), barista/FOH counts from the barista curve plus
+    //     the service floor and the mode buffer (the cushion is counter/
+    //     service, not the kitchen). A BOH middle now exists only when cooked
+    //     items actually need one — it's no longer a surplus artifact.
+    //  2. Anchors are STRUCTURAL (owner rule): open carries prep/setup and
+    //     close carries cleaning + dishwashing that items can't see, so each
+    //     station seeds up to 2 at opening AND 2 at closing before its curve
+    //     places anyone else (1 head opens; 2 split 1/1; 3 → 2 open/1 close).
+    //  3. WHO fills each slot keeps the fatigue/fairness rules within each
+    //     station: never open someone who closed last night (clopening) unless
     //     there's literally no one else, and the unsociable anchors rotate to
     //     whoever has carried them least.
-    const demandToday: Record<number, number> = {};
+    const boh = working.filter((s) => isBOH(s.position));
+    const foh = working.filter((s) => !isBOH(s.position));
+    const kitToday: Record<number, number> = {};
+    const barToday: Record<number, number> = {};
     for (let h = openH; h < closeH; h++) {
-      demandToday[h] = (demand.get(`${dow(date)}:${h}`) ?? SERVICE_FLOOR) + bufferHeads(dow(date), h);
+      const kit = weekDemand.kitHeadsByHour.get(`${dow(date)}:${h}`) ?? 0;
+      // Barista/counter carries the service floor (the store never trades below
+      // SERVICE_FLOOR total heads) and the tight/mid/safe buffer.
+      kitToday[h] = kit;
+      barToday[h] =
+        Math.max(weekDemand.barHeadsByHour.get(`${dow(date)}:${h}`) ?? SERVICE_FLOOR, SERVICE_FLOOR - kit) +
+        bufferHeads(dow(date), h);
     }
     const winOf = (key: string, t: ShiftTemplate) => ({ key, startH: Number(t.start_time.slice(0, 2)), endH: Number(t.end_time.slice(0, 2)) });
     const windows = [
@@ -728,66 +650,66 @@ export async function generateSchedule(
       ...tpl.middles.map((m, i) => winOf(`mid${i}`, m)),
       winOf("close", tpl.closing),
     ];
-    const shiftCounts = allocateShiftCounts({ heads: working.length, windows, demandByHour: demandToday });
-    const openCount = shiftCounts.get("open") ?? 0;
-    const closeCount = shiftCounts.get("close") ?? 0;
+    const kitCounts = allocateStationCounts({ heads: boh.length, windows, demandByHour: kitToday });
+    const fohCounts = allocateStationCounts({ heads: foh.length, windows, demandByHour: barToday });
 
-    const boh = working.filter((s) => isBOH(s.position));
     const opening: Staff[] = [];
     const closing: Staff[] = [];
     const midCrews: Staff[][] = tpl.middles.map(() => []);
     const claimed = new Set<string>();
     const take = (arr: Staff[], s: Staff) => { arr.push(s); claimed.add(s.id); };
-    const unclaimed = () => working.filter((s) => !claimed.has(s.id));
 
-    // Kitchen must staff both anchors (within their allotted counts): least-recent
-    // opener that didn't close last night opens; least-recent closer closes.
-    if (openCount > 0) {
-      const bohOpen =
-        boh.filter((s) => !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))[0] ??
-        [...boh].sort((a, b) => openKey(a) - openKey(b))[0];
-      if (bohOpen) take(opening, bohOpen);
-    }
-    if (closeCount > 0) {
-      const bohClose = boh.filter((s) => !claimed.has(s.id)).sort((a, b) => closeKey(a) - closeKey(b))[0];
-      if (bohClose) take(closing, bohClose);
-    }
-
-    // OPENING first (non-clopeners are the scarce resource), fewest openings
-    // first; clopeners only as a last resort to reach the demanded count.
-    for (const s of unclaimed().filter((s) => !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))) {
-      if (opening.length >= openCount) break;
-      take(opening, s);
-    }
-    for (const s of unclaimed().sort((a, b) => openKey(a) - openKey(b))) {
-      if (opening.length >= openCount) break;
-      take(opening, s);
-    }
-    // CLOSING: fewest closings first.
-    for (const s of unclaimed().sort((a, b) => closeKey(a) - closeKey(b))) {
-      if (closing.length >= closeCount) break;
-      take(closing, s);
-    }
-    // MIDDLES: the remainder, per template count (round-robin any excess so no
-    // one is left unassigned even if counts drift).
-    let mi = 0;
-    for (const s of unclaimed()) {
-      if (tpl.middles.length === 0) {
-        // No middles at this outlet → balance the thinner anchor; a clopener
-        // always closes.
-        if (closedYesterday(s) || closing.length <= opening.length) take(closing, s);
-        else take(opening, s);
-        continue;
+    // Place one station's crew into the day's windows per that station's counts.
+    const fillStation = (group: Staff[], counts: Map<string, number>) => {
+      const unclaimed = () => group.filter((s) => !claimed.has(s.id));
+      const openTarget = counts.get("open") ?? 0;
+      const closeTarget = counts.get("close") ?? 0;
+      // OPENING first (non-clopeners are the scarce resource), fewest openings
+      // first; clopeners only as a last resort to reach the demanded count.
+      let took = 0;
+      for (const s of unclaimed().filter((s) => !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))) {
+        if (took >= openTarget) break;
+        take(opening, s);
+        took++;
       }
-      for (let tries = 0; tries < tpl.middles.length; tries++) {
-        const idx = (mi + tries) % tpl.middles.length;
-        if (midCrews[idx].length < (shiftCounts.get(`mid${idx}`) ?? 0) || tries === tpl.middles.length - 1) {
-          take(midCrews[idx], s);
-          mi = idx + 1;
-          break;
+      for (const s of unclaimed().sort((a, b) => openKey(a) - openKey(b))) {
+        if (took >= openTarget) break;
+        take(opening, s);
+        took++;
+      }
+      // CLOSING: fewest closings first.
+      took = 0;
+      for (const s of unclaimed().sort((a, b) => closeKey(a) - closeKey(b))) {
+        if (took >= closeTarget) break;
+        take(closing, s);
+        took++;
+      }
+      // MIDDLES: the remainder, per this station's window counts (round-robin
+      // any excess so no one is left unassigned even if counts drift).
+      const midTargets = tpl.middles.map((_, i) => counts.get(`mid${i}`) ?? 0);
+      const midTaken = tpl.middles.map(() => 0);
+      let mi = 0;
+      for (const s of unclaimed()) {
+        if (tpl.middles.length === 0) {
+          // No middles at this outlet → balance the thinner anchor; a clopener
+          // always closes.
+          if (closedYesterday(s) || closing.length <= opening.length) take(closing, s);
+          else take(opening, s);
+          continue;
+        }
+        for (let tries = 0; tries < tpl.middles.length; tries++) {
+          const idx = (mi + tries) % tpl.middles.length;
+          if (midTaken[idx] < midTargets[idx] || tries === tpl.middles.length - 1) {
+            take(midCrews[idx], s);
+            midTaken[idx]++;
+            mi = idx + 1;
+            break;
+          }
         }
       }
-    }
+    };
+    fillStation(boh, kitCounts);
+    fillStation(foh, fohCounts);
 
     // Record the day's assignments into the fatigue/fairness memory.
     for (const s of opening) { weekOpen.set(s.id, (weekOpen.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "open"); }
