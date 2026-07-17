@@ -343,7 +343,7 @@ export async function POST(req: NextRequest) {
     // clean clock-out pays immediately.
     const [profileResp, holidayResp] = await Promise.all([
       supabase.from("hr_employee_profiles").select("employment_type, rest_day").eq("user_id", session.id).maybeSingle(),
-      supabase.from("hr_public_holidays").select("date").eq("date", mytDateString(clockIn)).maybeSingle(),
+      supabase.from("hr_public_holidays").select("date").eq("date", mytDateString(clockIn)).eq("declared", true).maybeSingle(),
     ]);
     const restDay = profileResp.data?.rest_day == null ? 0 : Number(profileResp.data.rest_day);
     const derived = deriveHours({

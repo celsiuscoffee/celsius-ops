@@ -181,7 +181,7 @@ export async function PATCH(req: NextRequest) {
     const restDay = prof?.rest_day == null ? 0 : Number(prof.rest_day);
     const mytDate = mytDateString(ci);
     const { data: ph } = await hrSupabaseAdmin
-      .from("hr_public_holidays").select("date").eq("date", mytDate).maybeSingle();
+      .from("hr_public_holidays").select("date").eq("date", mytDate).eq("declared", true).maybeSingle();
     const derived = deriveHours({
       clockIn: ci,
       clockOut: co,

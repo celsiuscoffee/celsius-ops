@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { date, name, is_national, state } = body;
+  const { date, name, is_national, state, declared } = body;
 
   if (!date || !name) {
     return NextResponse.json({ error: "date and name required" }, { status: 400 });
@@ -49,6 +49,9 @@ export async function POST(req: NextRequest) {
       year,
       is_national: is_national !== false,
       state: state || null,
+      // declared=false: calendar holiday the company doesn't observe — feeds
+      // the sales forecast but never OT pay/attendance rules.
+      declared: declared !== false,
     })
     .select()
     .single();

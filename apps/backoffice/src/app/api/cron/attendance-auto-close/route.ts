@@ -81,7 +81,8 @@ export async function GET(req: NextRequest) {
   const { data: holidays } = await hrSupabaseAdmin
     .from("hr_public_holidays")
     .select("date")
-    .in("date", logMytDates);
+    .in("date", logMytDates)
+    .eq("declared", true);
   const publicHolidaySet = new Set((holidays || []).map((h: { date: string }) => h.date));
 
   let closed = 0;

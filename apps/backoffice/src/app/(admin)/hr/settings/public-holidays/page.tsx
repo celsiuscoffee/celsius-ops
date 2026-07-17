@@ -13,6 +13,7 @@ type Holiday = {
   year: number;
   is_national: boolean;
   state: string | null;
+  declared: boolean;
 };
 
 const STATES = [
@@ -33,6 +34,7 @@ export default function PublicHolidaysPage() {
   const [date, setDate] = useState(`${year}-01-01`);
   const [name, setName] = useState("");
   const [state, setState] = useState("");
+  const [declared, setDeclared] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -40,6 +42,7 @@ export default function PublicHolidaysPage() {
     setShowAdd(false);
     setName("");
     setState("");
+    setDeclared(true);
     setErr(null);
   };
 
@@ -58,6 +61,7 @@ export default function PublicHolidaysPage() {
           name,
           is_national: !state,
           state: state || null,
+          declared,
         }),
       });
       const body = await res.json();
@@ -120,10 +124,12 @@ export default function PublicHolidaysPage() {
         </div>
       </div>
       <p className="text-sm text-muted-foreground">
-        Public holidays drive OT pay (3x rate on PH), leave calc (PH falling on
-        weekday counts), and the schedule grid colouring. Add nationwide holidays
-        without a state; state-specific (e.g. Selangor&apos;s Sultan birthday) with the
-        state set.
+        <span className="font-medium text-foreground">Declared</span> holidays are the ones we announce and take — they drive
+        OT pay (3x rate on PH), leave calc, and attendance rules. <span className="font-medium text-foreground">Calendar-only</span>{" "}
+        holidays are gazetted PHs we stay open for and don&apos;t declare: they never affect
+        pay, but they&apos;re kept here because they move sales (the revenue forecast and
+        schedule grid use them). Add nationwide holidays without a state; state-specific
+        (e.g. Selangor&apos;s Sultan birthday) with the state set.
       </p>
 
       {showAdd && (
@@ -145,6 +151,21 @@ export default function PublicHolidaysPage() {
               </select>
             </label>
           </div>
+          <label className="mt-3 flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={declared}
+              onChange={(e) => setDeclared(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300"
+            />
+            <span className="text-sm">
+              Declared — we announce and take this holiday
+              <span className="block text-xs text-muted-foreground">
+                Ticked: OT pay + attendance rules apply. Unticked: calendar-only — used for
+                sales forecasting, staff work it as a normal day.
+              </span>
+            </span>
+          </label>
           {err && <p className="mt-3 text-xs text-red-600">{err}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50">Cancel</button>
@@ -181,6 +202,11 @@ export default function PublicHolidaysPage() {
                       <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">Nationwide</span>
                     ) : (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">{h.state}</span>
+                    )}
+                    {h.declared === false ? (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">Calendar-only</span>
+                    ) : (
+                      <span className="rounded-full bg-terracotta/10 px-2 py-0.5 text-[10px] font-medium text-terracotta">Declared · OT</span>
                     )}
                     <button
                       onClick={() => handleDelete(h.id)}

@@ -35,8 +35,17 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   strong (Wesak Sun + Agong Mon, best Monday RM7,186); Wed Jun 17 spike
   (154 vs ~115 typical) = Awal Muharram. **`hr_public_holidays` is missing
   Wesak (2026-05-31) and Awal Muharram (2026-06-17)** — it feeds
-  revenue-forecast + labour-gate baselines; insert proposed to owner (hard
-  rule 6, not applied). No ops cause found for the weak July Saturdays
+  revenue-forecast + labour-gate baselines. Owner clarified the domain: the
+  company observes only SOME gazetted PHs — declared ones drive OT pay;
+  undeclared ones still move sales. One flat table served BOTH lenses, so
+  adding a calendar PH would have paid OT for it. Built migration 084
+  (`declared boolean default true` + the 2 missing PHs as declared=false):
+  payroll readers (attendance-processor, staff clock, attendance-auto-close,
+  manual attendance edit) now filter `declared=true`; forecast readers
+  (labour-gate, ads autopilot, schedule grid) read all; holidays admin page
+  has the toggle + badges. **Apply 084 BEFORE merging** (old code + new
+  column is safe; new code + old column fails PostgREST quietly → holiday
+  OT flags missed until applied). NOT yet applied — hard rule 6. No ops cause found for the weak July Saturdays
   (123/127 vs 189 May peak): hours unchanged (~08:00–22:30), no stockout
   signal (menu mix stable on weak vs strong Saturdays), reviews velocity
   healthy, ads untouched until the trivial Jul 5 trim; the two weak

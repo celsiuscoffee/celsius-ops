@@ -73,7 +73,8 @@ export async function processAttendance(): Promise<ProcessResult> {
   const { data: holidays } = await hrSupabaseAdmin
     .from("hr_public_holidays")
     .select("date")
-    .in("date", logDates);
+    .in("date", logDates)
+    .eq("declared", true);
 
   const publicHolidaySet = new Set((holidays || []).map((h: { date: string }) => h.date));
 
