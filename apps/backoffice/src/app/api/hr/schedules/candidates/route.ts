@@ -6,7 +6,7 @@ import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { computeLateMinutes, mytDateString } from "@/lib/hr/hours";
 import { GRACE_PERIOD_MINUTES } from "@/lib/hr/constants";
 import { computeWeekDemand, SERVICE_FLOOR } from "@/lib/hr/demand";
-import { allocateShiftCounts, type ShiftWindow } from "@/lib/hr/shift-allocation";
+import { allocateStationCounts, STATION_ANCHOR_TARGET, type ShiftWindow } from "@/lib/hr/shift-allocation";
 
 export const dynamic = "force-dynamic";
 
@@ -182,8 +182,10 @@ export async function GET(req: NextRequest) {
   const windows: ShiftWindow[] = templates
     .map((t) => ({ key: t.id, startH: Number(t.start_time.slice(0, 2)), endH: Number(t.end_time.slice(0, 2)) }))
     .sort((a, b) => a.startH - b.startH || a.endH - b.endH);
-  // Smallest crew whose allocation clears every hour of a station's demand:
-  // grow until shortfall = 0. Zero-demand stations need zero heads.
+  // Smallest crew whose allocation clears every hour of a station's demand,
+  // arranged the way the generator would arrange it (structural anchors first:
+  // 2 at open + 2 at close carry prep/cleaning the item curve can't see, so a
+  // station with any demand needs at least 4). Zero-demand stations need zero.
   const neededFor = (demandByHour: Record<number, number>): Map<string, number> => {
     let total = 0;
     for (let h = openH; h < closeH; h++) total += demandByHour[h] ?? 0;
@@ -199,8 +201,8 @@ export async function GET(req: NextRequest) {
       return s;
     };
     let counts = new Map<string, number>();
-    for (let n = 1; n <= 30; n++) {
-      counts = allocateShiftCounts({ heads: n, windows, demandByHour });
+    for (let n = STATION_ANCHOR_TARGET * 2; n <= 30; n++) {
+      counts = allocateStationCounts({ heads: n, windows, demandByHour });
       if (shortfallOf(counts) === 0) break;
     }
     return counts;

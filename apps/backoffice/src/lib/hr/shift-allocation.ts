@@ -25,15 +25,21 @@ export type ShiftWindow = {
 
 // Returns key → head count. Σ counts = heads. With ≥2 heads and ≥2 windows, the
 // first (opening) and last (closing) windows each get at least 1 — someone must
-// unlock and lock the store regardless of demand shape.
+// unlock and lock the store regardless of demand shape. Pass
+// anchorFirstLast: false to skip that seeding (used when the caller has
+// already staffed the anchors, e.g. the kitchen structural rule below).
 export function allocateShiftCounts(input: {
   heads: number;
   windows: ShiftWindow[]; // ordered by start time: opening, middles…, closing
   demandByHour: Record<number, number>;
+  anchorFirstLast?: boolean; // default true
+  // Heads already placed before this call (e.g. structural anchor seeds) —
+  // counted in coverage, surplus-spreading, and the returned totals.
+  initialCounts?: Map<string, number>;
 }): Map<string, number> {
   const { heads, windows, demandByHour } = input;
   const counts = new Map<string, number>(windows.map((w) => [w.key, 0]));
-  if (heads <= 0 || windows.length === 0) return counts;
+  if (windows.length === 0) return counts;
 
   const hoursOf = (w: ShiftWindow): number[] => {
     const out: number[] = [];
@@ -45,6 +51,13 @@ export function allocateShiftCounts(input: {
     counts.set(w.key, (counts.get(w.key) ?? 0) + 1);
     for (const h of hoursOf(w)) coverage.set(h, (coverage.get(h) ?? 0) + 1);
   };
+  if (input.initialCounts) {
+    for (const w of windows) {
+      const pre = input.initialCounts.get(w.key) ?? 0;
+      for (let i = 0; i < pre; i++) place(w);
+    }
+  }
+  if (heads <= 0) return counts;
   // Remaining unmet demand over a window — SHORTFALL only (over-covered hours
   // count 0, they must not cancel out a genuine gap elsewhere in the window).
   const gain = (w: ShiftWindow): number => {
@@ -56,7 +69,7 @@ export function allocateShiftCounts(input: {
   let remaining = heads;
   // The store must open and close: anchor 1 head on the first + last windows
   // (when there are heads and distinct windows to give them to).
-  if (windows.length >= 2 && remaining >= 2) {
+  if (input.anchorFirstLast !== false && windows.length >= 2 && remaining >= 2) {
     place(windows[0]);
     place(windows[windows.length - 1]);
     remaining -= 2;
@@ -87,4 +100,40 @@ export function allocateShiftCounts(input: {
     remaining--;
   }
   return counts;
+}
+
+// ── Station allocation with structural anchors ──────────────────────────────
+// Owner rule 2026-07-17: anchors carry structural work the item curve can't
+// see — prep/setup at open, cleaning + dishwashing at close — for BOTH
+// stations (kitchen and FOH). So a station staffs up to 2 at opening AND 2 at
+// closing BEFORE its item curve places anyone else. Small crews degrade
+// gracefully: 1 head opens, 2 split 1/1, 3 → 2 open / 1 close, 4 → 2/2.
+// Heads beyond 4 follow the residual demand curve — a middle exists only when
+// that station's items still need one after the anchors are covered.
+export const STATION_ANCHOR_TARGET = 2;
+
+export function allocateStationCounts(input: {
+  heads: number;
+  windows: ShiftWindow[]; // ordered by start time: opening, middles…, closing
+  demandByHour: Record<number, number>;
+}): Map<string, number> {
+  const { heads, windows, demandByHour } = input;
+  const counts = new Map<string, number>(windows.map((w) => [w.key, 0]));
+  if (heads <= 0 || windows.length === 0) return counts;
+
+  const first = windows[0];
+  const last = windows[windows.length - 1];
+  const seedable = Math.min(heads, STATION_ANCHOR_TARGET * 2);
+  const seedOpen = Math.min(STATION_ANCHOR_TARGET, Math.ceil(seedable / 2));
+  const seedClose = Math.min(STATION_ANCHOR_TARGET, Math.floor(seedable / 2));
+  counts.set(first.key, (counts.get(first.key) ?? 0) + seedOpen);
+  counts.set(last.key, (counts.get(last.key) ?? 0) + seedClose);
+
+  const remaining = heads - seedOpen - seedClose;
+  if (remaining <= 0) return counts;
+
+  // Extra heads follow the station's demand curve, seeing the anchors' seeded
+  // coverage — so they land on genuine residual gaps (or spread evenly once
+  // demand is met) instead of re-stacking the anchors.
+  return allocateShiftCounts({ heads: remaining, windows, demandByHour, anchorFirstLast: false, initialCounts: counts });
 }

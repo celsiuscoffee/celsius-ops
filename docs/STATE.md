@@ -281,10 +281,13 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   day-split now runs `allocateShiftCounts` **once per station** (kitchen crew
   on the kitchen item curve, FOH on the barista curve + service floor + mode
   buffer; pastries/croissants/cakes/cookies are barista — verified against
-  live Menu categories, only the 6 cooked categories are kitchen). Putrajaya
-  kitchen curve is morning-heavy (~6–7.5 items/hr 8–10am vs ~2–3 evenings) →
-  3 BOH allocate 2×Opening/1×Closing/0×Middle (regression-tested in
-  shift-allocation.test.ts). (2) Assist QA'd — it was NOT following the same
+  live Menu categories, only the 6 cooked categories are kitchen). Owner
+  refinement: anchors are STRUCTURAL for both stations — open carries
+  prep/setup, close carries cleaning + dishwashing — so each station seeds
+  up to 2 opening AND 2 closing (`allocateStationCounts`,
+  STATION_ANCHOR_TARGET=2; 1 head opens, 2→1/1, 3→2/1, 4→2/2) before its
+  item curve places anyone; only heads beyond 4 follow the curve
+  (regression-tested in shift-allocation.test.ts). (2) Assist QA'd — it was NOT following the same
   logic: it ranked the Manager as Top pick (pool now excludes
   Manager/AM/HoD; Barista Lead stays), its coverage chips read
   hr_outlet_coverage_rules with a min-concurrent-over-16h bug ("0/4 short 4"

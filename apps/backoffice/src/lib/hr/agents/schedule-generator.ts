@@ -50,7 +50,7 @@ import {
 } from "../man-hours";
 import { computePtPerformance } from "../pt-performance";
 import { planFlexPlacement, type FlexPerson } from "../flex-placement";
-import { allocateShiftCounts } from "../shift-allocation";
+import { allocateStationCounts } from "../shift-allocation";
 // Station demand + serve-time calibration live in the SHARED demand model
 // (lib/hr/demand.ts) — same computation feeds the grid's per-day shortfall.
 import { computeWeekDemand, SERVICE_FLOOR } from "../demand";
@@ -623,11 +623,14 @@ export async function generateSchedule(
     //     the service floor and the mode buffer (the cushion is counter/
     //     service, not the kitchen). A BOH middle now exists only when cooked
     //     items actually need one — it's no longer a surplus artifact.
-    //  2. WHO fills each slot keeps the fatigue/fairness rules within each
+    //  2. Anchors are STRUCTURAL (owner rule): open carries prep/setup and
+    //     close carries cleaning + dishwashing that items can't see, so each
+    //     station seeds up to 2 at opening AND 2 at closing before its curve
+    //     places anyone else (1 head opens; 2 split 1/1; 3 → 2 open/1 close).
+    //  3. WHO fills each slot keeps the fatigue/fairness rules within each
     //     station: never open someone who closed last night (clopening) unless
     //     there's literally no one else, and the unsociable anchors rotate to
-    //     whoever has carried them least. With ≥2 kitchen crew the allocator's
-    //     anchor rule still guarantees a cook at open AND close.
+    //     whoever has carried them least.
     const boh = working.filter((s) => isBOH(s.position));
     const foh = working.filter((s) => !isBOH(s.position));
     const kitToday: Record<number, number> = {};
@@ -647,8 +650,8 @@ export async function generateSchedule(
       ...tpl.middles.map((m, i) => winOf(`mid${i}`, m)),
       winOf("close", tpl.closing),
     ];
-    const kitCounts = allocateShiftCounts({ heads: boh.length, windows, demandByHour: kitToday });
-    const fohCounts = allocateShiftCounts({ heads: foh.length, windows, demandByHour: barToday });
+    const kitCounts = allocateStationCounts({ heads: boh.length, windows, demandByHour: kitToday });
+    const fohCounts = allocateStationCounts({ heads: foh.length, windows, demandByHour: barToday });
 
     const opening: Staff[] = [];
     const closing: Staff[] = [];

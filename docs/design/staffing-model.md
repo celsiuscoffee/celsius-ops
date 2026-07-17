@@ -24,7 +24,7 @@ heads = max(SERVICE_FLOOR, ceil(barista_items / barista_rate) + ceil(kitchen_ite
   one head can make **and** serve per hour. The owner's service standard
   (2026-07-17): **kitchen food served ≤ 15 min, beverage/pastry ≤ 10 min.**
 
-### Per-station shift allocation (owner rule 2026-07-17)
+### Per-station shift allocation (owner rules 2026-07-17)
 
 Day-split window counts run **once per station**, not on the pooled total:
 kitchen (BOH) crew counts come from the kitchen item curve, barista/FOH counts
@@ -32,13 +32,19 @@ from the barista curve. The barista side additionally carries the service floor
 (the store never trades below `SERVICE_FLOOR` total heads) and the
 tight/mid/safe buffer — the cushion is counter/service, not the kitchen.
 
-Why: kitchen items at a coffee outlet are morning-heavy (Putrajaya 28d: ~6–7.5
-cooked items/hr at 8:00–10:00, ~2–3/hr evenings), so BOH front-loads onto
-opening; a **kitchen Middle exists only when cooked items still need one**.
-Before this rule, window counts were station-blind beyond the anchor guarantee,
-so kitchen crew landed on Middles as surplus artifacts. With ≥2 kitchen crew the
-allocator's anchor rule still guarantees a cook at open AND close; with 1, the
-cook follows the curve (morning-heavy → opens).
+**Structural anchors** (`allocateStationCounts`, `STATION_ANCHOR_TARGET = 2`):
+anchors carry work the item curve can't see — prep/setup at open, cleaning +
+dishwashing at close — for BOTH stations. So each station seeds up to
+**2 at opening AND 2 at closing before its curve places anyone else**; small
+crews degrade gracefully (1 head opens; 2 split 1/1; 3 → 2 open / 1 close;
+4 → 2/2). Only heads beyond 4 follow the demand curve.
+
+Why per-station curves: kitchen items at a coffee outlet are morning-heavy
+(Putrajaya 28d: ~6–7.5 cooked items/hr at 8:00–10:00, ~2–3/hr evenings), so a
+**station Middle exists only when that station's items still need one** after
+the anchors are covered. Before this rule, window counts were station-blind
+beyond a 1-head anchor guarantee, so kitchen crew landed on Middles as surplus
+artifacts.
 
 The same per-station split powers the Assist coverage chips and the grid's
 "+ Add" suggestions (`kitchen short 1` vs `barista short 1`) — a kitchen gap is

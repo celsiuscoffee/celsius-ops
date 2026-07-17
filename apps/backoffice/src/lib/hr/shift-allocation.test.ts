@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { allocateShiftCounts, type ShiftWindow } from "./shift-allocation";
+import { allocateShiftCounts, allocateStationCounts, type ShiftWindow } from "./shift-allocation";
 
 // Putrajaya-style windows: Opening 07:30–15:30, two middles, Closing 15:30–23:30.
 const OPENING: ShiftWindow = { key: "opening", startH: 7, endH: 15 };
@@ -66,34 +66,57 @@ describe("allocateShiftCounts", () => {
   });
 });
 
-// Per-station allocation (owner rule 2026-07-17: "run based on item per
-// station"): the generator now calls this allocator once per station. The
-// kitchen curve at a coffee outlet is morning-heavy (cooked breakfast/brunch),
-// so BOH heads must front-load onto opening — a kitchen middle exists only
-// when cooked items still need one, never as a surplus artifact.
-describe("per-station allocation on the kitchen curve", () => {
-  // Real Putrajaya shape (28d): kit heads 8:00→1, 9:00→2, 10:00–14:00→1, evening→1.
+// Per-station allocation (owner rules 2026-07-17): counts run once per
+// station, and anchors are STRUCTURAL — open carries prep/setup, close
+// carries cleaning + dishwashing that the item curve can't see — so each
+// station seeds up to 2 at opening AND 2 at closing before its curve places
+// anyone else. Applies to kitchen AND FOH.
+describe("allocateStationCounts (structural anchors + station curve)", () => {
+  // Real Putrajaya kitchen shape (28d): kit heads 8:00→1, 9:00→2, then ~1.
   const KIT: Record<number, number> = {
     7: 0, 8: 1, 9: 2, 10: 1, 11: 1, 12: 1, 13: 1, 14: 1,
     15: 1, 16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 0,
   };
 
-  it("3 kitchen crew → 2 open the morning peak, 1 closes, no middle", () => {
-    const counts = allocateShiftCounts({ heads: 3, windows: ALL, demandByHour: KIT });
+  it("4 crew → 2 opening + 2 closing, no middles", () => {
+    const counts = allocateStationCounts({ heads: 4, windows: ALL, demandByHour: KIT });
     expect(counts.get("opening")).toBe(2);
-    expect(counts.get("closing")).toBe(1);
+    expect(counts.get("closing")).toBe(2);
     expect(counts.get("mid1")).toBe(0);
     expect(counts.get("mid2")).toBe(0);
   });
 
-  it("2 kitchen crew → exactly one cook at open and one at close", () => {
-    const counts = allocateShiftCounts({ heads: 2, windows: ALL, demandByHour: KIT });
+  it("3 crew → 2 opening / 1 closing", () => {
+    const counts = allocateStationCounts({ heads: 3, windows: ALL, demandByHour: KIT });
+    expect(counts.get("opening")).toBe(2);
+    expect(counts.get("closing")).toBe(1);
+  });
+
+  it("2 crew → one anchor each", () => {
+    const counts = allocateStationCounts({ heads: 2, windows: ALL, demandByHour: KIT });
     expect(counts.get("opening")).toBe(1);
     expect(counts.get("closing")).toBe(1);
   });
 
-  it("1 kitchen crew and a morning-heavy curve → the cook opens", () => {
-    const counts = allocateShiftCounts({ heads: 1, windows: ALL, demandByHour: KIT });
+  it("1 crew → opens", () => {
+    const counts = allocateStationCounts({ heads: 1, windows: ALL, demandByHour: KIT });
     expect(counts.get("opening")).toBe(1);
+  });
+
+  it("beyond the anchors, extra heads follow the residual station curve", () => {
+    // Late-afternoon overload (16:00–17:00 needs 3) the 2 closers can't hold:
+    // the 5th head lands on the middle window that bridges those hours.
+    const spike = { ...KIT, 16: 3, 17: 3 };
+    const counts = allocateStationCounts({ heads: 5, windows: ALL, demandByHour: spike });
+    expect(counts.get("opening")).toBe(2);
+    expect(counts.get("closing")).toBe(2);
+    expect(counts.get("mid1")).toBe(1);
+  });
+
+  it("surplus with a satisfied curve spreads to middles, never stacks anchors", () => {
+    const counts = allocateStationCounts({ heads: 6, windows: ALL, demandByHour: KIT });
+    expect(counts.get("opening")).toBe(2);
+    expect(counts.get("closing")).toBe(2);
+    expect((counts.get("mid1") ?? 0) + (counts.get("mid2") ?? 0)).toBe(2);
   });
 });
