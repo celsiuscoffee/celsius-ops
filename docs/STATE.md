@@ -273,6 +273,28 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-17 (latest) — **Round 5: forecast clamp (merged #959) + PT
+  allocation unified with the demand model (this branch).**
+  (a) #959: forecast history window now ends at YESTERDAY (MYT) — forecasting
+  next week mid-week had been zero-filling the not-yet-traded tail of the
+  current week at the highest recency weight, cratering Sat/Sun forecasts
+  (SA/PJ Saturday showed ~RM3.0k vs real ~RM4.9k baseline). Surfaced by the
+  owner asking how the weekend forecast works.
+  (b) Shah Alam full-week QA (draft 2026-07-20) validated BOH: kitchen at
+  open+close all 7 days, zero kitchen middles, no clopening, 45h caps, rover
+  2 days, manager never rostered. But Mon–Wed FOH sat below the 3-head floor
+  with NO PT suggested: `ptTargetByDate` still used the old
+  items-per-man-hour "required" formula that disagreed with the coverage
+  chips. Fixed: PT gaps + day targets now come from THE demand model
+  (station-split heads incl. floor + mode buffer), gaps are station-tagged
+  (kitchen holes only offered to kitchen-capable PT; hybrid "PT
+  Barista/Kitchen" fits both), and structural anchor gaps (2/station on
+  opening & closing) let PT complete the 2/2 kitchen anchors when only 3
+  kitchen FT exist (Haziq → kitchen Closing instead of a random Middle).
+  Greedy fallback, model-proposal validation, and the PT model prompt all
+  enforce/see the station. Next: autopilot phase 2 (weekly cron
+  generate→validate→shadow-publish) awaits owner "continue".
+
 - 2026-07-17 (later) — **Scheduler round 4: per-station allocation + Assist
   rebuilt (PR #957, branch `claude/staff-rotation-outlets-kmobpa`).** One
   demand model (`lib/hr/demand.ts`, extracted from the generator) now feeds
