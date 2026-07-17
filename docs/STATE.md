@@ -6,6 +6,25 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-17 — **Sales-decline decomposition (SQL-verified on kqdc): the drop is
+  ORDER COUNT, not AOV — and till-only reads overstate it ~2×.** The
+  `unified_sales` VIEW does NOT include the pickup app's `orders` table
+  (view def = hubbo+storehub+pos_native+consignment only; pickup lives only in
+  the TS layer `unified-sales.ts`). Pickup launched ~Jun 8 and now does
+  ~550 orders / ~RM17k a week, so till-only weekly nett reads −33%
+  (RM87.6k wk 5/04 → RM58.9k wk 7/06) while TRUE combined demand
+  (3 POS outlets + pickup, ex-consignment) is orders 2,789→2,460 (−12%),
+  revenue RM83.1k→RM71.7k (−14%), AOV RM29.80→RM29.13 (−2%), items/order
+  2.12→2.28 (UP). ~85% of the real decline is order count. Not item
+  availability: baskets grew, and the one apparent outlet AOV drop
+  (SA RM32.6→28.5) coincides exactly with its Jun 15 StoreHub→pos_native
+  cutover (measurement/mix; SA pickup AOV RM35.7 offsets — SA total demand is
+  FLAT vs May). Real losses: Putrajaya −20% orders vs early May (worst on
+  weekends: weekend-morning till orders/day −35%, evenings −26%) and Tamarind
+  −15%; decline started early May, predating both the POS cutover and pickup
+  launch, so it is genuine traffic softness, not a data artifact. Wk 5/25 dip
+  = Raya Haji week. `orders.total` is in SEN (÷100 for RM).
+
 - 2026-07-12 — **Data-consolidation audit for the internal assistant (all
   SQL-verified against kqdc).** Connectivity clean: 0 orphans across
   unified_sales/roster/checklist/invoice/bank-line joins. unified_sales VIEW is
