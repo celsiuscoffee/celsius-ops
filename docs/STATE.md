@@ -325,10 +325,25 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   them). June lens bridge formalised: till 285,363.17 vs GL 353,851.53 =
   gap 68,488.36 → Grabfood 41,838.89 + GastroHub 12,441.54 + residual
   14,207.93 (~5%) ≈ card settlement lag — quantify next run (per-day card
-  tender vs 5000-02). All findings logged to agent_actions. **Next:**
-  merge PR #948; quantify settlement lag + prepare the 133-line
-  re-pointing batch (finance-approved) on run 2; schedule the weekly
-  routine once the owner deems run 1 useful.
+  tender vs 5000-02). All findings logged to agent_actions.
+  **Run 2 (same day, owner-triggered "continue"):** the lens bridge is now
+  SOLVED — the GL income lens changed semantics at the POS cutover:
+  5000-01/02/04 are EOD-journal-fed (accrual at ring-up) since ~Jun 6–18,
+  bank-fed before; verified Jul 1–14 EOD income = till(pos+grabfood) +
+  pickup-app − consignment with residual RM48; Grab delivery payouts now
+  post to 1005 transit (not income). **Two material findings:**
+  (1) JUNE GL income is mixed-regime — both bank-fed AND EOD posted income
+  Jun 6–17, up to RM81,270.74 double-counted; unwind needed while the
+  period is open (do not trust June GL revenue until then).
+  (2) unified_sales VIEW excludes the pickup app (~RM40k/mo; `orders`
+  money columns are in SEN) — "only sales truth" corrected in data-map.
+  Re-pointing batch prepared propose-only in
+  `docs/proposals/finwh-repoint-133-wrong-invoice-matches.md`: tier 1 = 92
+  exact-amount narration matches (RM30,470.60, gated SQL), tier 2 = 41
+  manual (RM21,251.98). **Next:** merge PR #948; owner/finance decisions:
+  approve tier-1 re-point batch, June double-count unwind plan, whether to
+  add pickup channel into the unified_sales view; schedule the weekly
+  routine.
 
 - 2026-07-15 -- **Staff-scheduling round 2 (branch
   `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the

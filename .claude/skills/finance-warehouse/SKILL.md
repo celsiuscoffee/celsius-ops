@@ -159,3 +159,20 @@ stable ones into the sections above._
 - 2026-07-17 (run 1) — In batched check SQL, parenthesise every UNION
   branch that uses GROUP BY/HAVING/LIMIT, and cast Invoice amounts
   (`round(amount,2)`) — raw numerics print with 30 decimal places.
+- 2026-07-17 (run 2) — **The GL income lens changed semantics at the POS
+  cutover**: 5000-01/02/04 are EOD-journal-fed (accrual at ring-up) since
+  ~Jun 6–18, bank-fed before. Verified Jul 1–14: EOD income = till(pos+
+  grabfood) + pickup-app orders − consignment, residual RM48. Grab delivery
+  payouts now post to 1005 transit. **June 2026 is mixed-regime — both fed
+  income Jun 6–17; up to RM81,270.74 double-count, unwind needed while the
+  period is still open.** Bridge check 5 must use the era-correct model.
+- 2026-07-17 (run 2) — **unified_sales does NOT include the pickup app**
+  (`orders`, ~RM40k/mo; money columns in SEN). Any "total revenue" from the
+  view alone undercounts. `tender` is null for the whole StoreHub era —
+  per-tender analysis valid only from the pos_native cutover; June has zero
+  'cash' tender rows (coverage gap, watch).
+- 2026-07-17 (run 2) — Re-pointing batch prepared (propose-only):
+  `docs/proposals/finwh-repoint-133-wrong-invoice-matches.md` — tier 1 = 92
+  exact-amount narration matches (RM30,470.60) with gated SQL; tier 2 = 41
+  manual (RM21,251.98). After any run, re-run check 11b expecting the
+  tier-2 residual only.
