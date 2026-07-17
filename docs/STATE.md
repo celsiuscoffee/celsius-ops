@@ -360,7 +360,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   share of fleet till revenue in the 28d before the first ledgered budget
   change vs its share now; anchor <0.93 = breach → rollback. This catches
   cumulative slow damage that the trailing 4-week forecast would otherwise
-  normalize into the baseline. 31 autopilot tests / 400 total green.
+  normalize into the baseline. **PR #947 MERGED to main 2026-07-16** (squash
+  a113464) → autopilot live from the next nightly ads-daily run.
+  **Round 4 — waste-matched cuts (owner: "remove the keywords that are not
+  worth, and reduce the budget based on the keywords removed... so at the
+  starting point we do things right").** Descent priority reordered: while a
+  campaign carries excluded-term spend not yet taken out of its budget
+  (exclusion ledger rows with `appliedAt` after the campaign's last budget
+  change, sized from `est_monthly_saving_myr`), the next cut removes exactly
+  that daily amount (min RM0.5/day, cap 20%/cut) — café-intent funding is
+  untouched by construction; the blind 8/12% step only resumes once no unpaid
+  waste remains. Ordering-robust: tonight's Putrajaya exclusions get "paid
+  for" by its first cut (~Jul 22, ~RM13/day matched instead of blind 8%).
+  Follow-up PR after the merge; branch restarted from main.
   **Revenue guard:** last-14-full-days actual till revenue ÷ same-window
   forecast (labour-gate `dailyRevenueSeries` + `buildWeekForecast`, history
   precedes the window = clean counterfactual), divided by the median of the

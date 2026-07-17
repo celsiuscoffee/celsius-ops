@@ -16,9 +16,13 @@
  * says so), with all state derived from the ads_budget_change ledger — no new
  * tables:
  *
- *   DESCEND   — step the budget down 8% (12% when cost/conv >1.3× fleet-best)
- *               every ≥14 observed days, max MAX_CUTS_PER_RUN campaigns per
- *               run, never below the floor.
+ *   DESCEND   — waste-matched first: while the campaign carries excluded-term
+ *               spend not yet taken out of the budget, each cut removes
+ *               exactly that measured amount (café-intent funding untouched);
+ *               only once no unpaid waste remains does the blind 8% step
+ *               (12% when cost/conv >1.3× fleet-best) resume. Every ≥14
+ *               observed days, max MAX_CUTS_PER_RUN campaigns per run, never
+ *               below the floor.
  *   ROLLBACK  — if the guard breaches after a recent cut, restore the previous
  *               budget and hold ROLLBACK_HOLD_DAYS. The breach is evidence the
  *               marginal spend WAS generating till revenue.
@@ -107,6 +111,16 @@ export const SETTLE_HOLD_DAYS = 90;      // proven optimum: re-search only quart
 // Gross margin used to state each move's break-even in the reason strings.
 export const GROSS_MARGIN = Number(process.env.ADS_GROSS_MARGIN || 0.6);
 
+// Waste-matched cuts (owner 2026-07-16: "remove the keywords that are not
+// worth, and reduce the budget based on the keywords removed... this way we
+// reduce the risk of reducing budget for keywords that potentially increase
+// sales"). When a campaign carries excluded-term spend not yet reflected in
+// its budget, the next cut removes exactly that measured amount instead of a
+// blind percentage — café-intent funding stays untouched. Blind percentage
+// descent only resumes once no unpaid waste remains.
+export const WASTE_MATCH_MIN_DAILY_MYR = 0.5; // below this, not worth a budget mutation
+export const WASTE_MATCH_MAX_PCT = 0.2;       // never remove more than 20% of the budget in one matched cut
+
 // Pause probe — the only till-readable experiment at this spend:revenue ratio.
 export const PAUSE_PROBE_DAYS = 28;      // full pause length before auto-restore
 // The cron runs nightly; this fleet-wide gap staggers NEW disturbances
@@ -173,6 +187,10 @@ export type CampaignState = {
   lastApplied: LastAppliedChange | null;
   isPaused: boolean;
   hasBeenPauseProbed: boolean; // any 'autopilot pause' row ever — each campaign is probed at most once
+  // Daily spend of terms excluded AFTER this campaign's last budget change —
+  // waste already removed from matching but not yet from the budget. Sized
+  // from the exclusion ledger's measured est_monthly_saving_myr.
+  pendingWasteDailyMyr: number;
   // Till index over the pause window so far (forecast built from PRE-pause
   // history) — only set while a probe is running; drives the restore verdict.
   pauseProbe?: { index: number | null; adjIndex: number | null };
@@ -297,6 +315,22 @@ export function decideCampaign(c: CampaignState, guard: GuardSignal, now: Date):
 
   if (c.dailyBudgetMyr <= FLOOR_DAILY_MYR) {
     return { ...base, action: "hold", reason: `at floor (RM${FLOOR_DAILY_MYR}/day)` };
+  }
+
+  // Waste-matched cut first: remove exactly the spend of terms already
+  // excluded but not yet taken out of the budget. Zero-risk to café-intent
+  // keywords by construction — their funding is untouched.
+  if (c.pendingWasteDailyMyr >= WASTE_MATCH_MIN_DAILY_MYR) {
+    const amount = Math.min(c.pendingWasteDailyMyr, c.dailyBudgetMyr * WASTE_MATCH_MAX_PCT);
+    const newDaily = round2(Math.max(FLOOR_DAILY_MYR, c.dailyBudgetMyr - amount));
+    if (newDaily < c.dailyBudgetMyr) {
+      return {
+        ...base,
+        action: "cut",
+        newDailyMyr: newDaily,
+        reason: `autopilot step-down (waste-matched): RM${round2(c.pendingWasteDailyMyr)}/day of excluded junk-term spend removed from the budget (RM${round2(c.dailyBudgetMyr)}→RM${newDaily}/day, banks ~RM${monthly(c.dailyBudgetMyr - newDaily)}/mo) — café-intent funding untouched; ${guardDetail} healthy`,
+      };
+    }
   }
 
   const inefficient = c.efficiencyRatio != null && c.efficiencyRatio > INEFFICIENT_RATIO;
@@ -560,6 +594,20 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
   }
   const noGuard: GuardSignal = { rawIndex: null, adjIndex: null, anchorIndex: null, breach: false };
 
+  // Waste applied to matching but not yet to the budget: sum the measured
+  // spend of exclusions applied AFTER each campaign's last budget change.
+  const appliedExclusions = await prisma.adsTermExclusion.findMany({
+    where: { status: "applied", appliedAt: { not: null } },
+    select: { campaignId: true, appliedAt: true, estMonthlySavingMyr: true },
+  });
+  const pendingWasteByCampaign = new Map<string, number>();
+  for (const x of appliedExclusions) {
+    const lastChange = lastByCampaign.get(x.campaignId)?.decidedAt;
+    if (lastChange && x.appliedAt! <= lastChange) continue; // already paid for by a cut
+    const daily = Number(x.estMonthlySavingMyr ?? 0) / 30;
+    pendingWasteByCampaign.set(x.campaignId, (pendingWasteByCampaign.get(x.campaignId) ?? 0) + daily);
+  }
+
   const isPausedStatus = (s: string) => !ENABLED_STATUSES.includes(s);
   const states: CampaignState[] = campaigns.map((c) => {
     const current = microsToMYR(c.dailyBudgetMicros ?? BigInt(0));
@@ -573,6 +621,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
       lastApplied: lastByCampaign.get(c.id) ?? null,
       isPaused: isPausedStatus(c.status),
       hasBeenPauseProbed: pauseProbedCampaigns.has(c.id),
+      pendingWasteDailyMyr: pendingWasteByCampaign.get(c.id) ?? 0,
     };
   });
 
