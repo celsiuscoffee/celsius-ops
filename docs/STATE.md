@@ -6,6 +6,23 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-16 — **Finance warehouse baseline (SQL-verified against kqdc).**
+  Fresh: unified_sales pos_native →7/16, consignment →7/12 (Nilai settles
+  later than older notes claim — re-verify live, don't trust dated notes);
+  BankStatement 3 accounts →7/15; BankStatementLine 56,429 rows, 0
+  uncategorised (rule 55,119 / ap-match 1,134 / user 169 / manual 7); GL
+  4,621 posted txns / 10,446 lines / COA 116 active; June payroll actuals
+  booked RM77,259.50; unpaid AP 72 PENDING RM45,060 + 16 INITIATED RM7,780
+  + 9 DEPOSIT_PAID RM20,988. **Findings:** `fin_agent_decisions` has only
+  7 rows, ALL agent='purchasing-manager' — the finance agents' documented
+  decision-log/eval dataset is NOT accumulating (logDecision not on live
+  paths or failing silently); ALL 19 fin_periods 2025-01→2026-07 are open
+  (no close ever approved); 88 draft fin_transactions linger (latest 6/30);
+  37 future-dated posted rows are month-end depreciation (legit convention,
+  but descriptions contaminated with bank narrations); July MTD lens gap:
+  till RM133,241.75 vs GL income RM163,976.74. Full inventory + backlog:
+  `docs/design/finance-data-warehouse-agent.md`.
+
 - 2026-07-12 — **Data-consolidation audit for the internal assistant (all
   SQL-verified against kqdc).** Connectivity clean: 0 orphans across
   unified_sales/roster/checklist/invoice/bank-line joins. unified_sales VIEW is
@@ -273,6 +290,60 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-16 -- **Finance data-warehouse agent designed** (branch
+  `claude/celsius-finance-warehouse-agent-8j1uk6`): new `finance-warehouse`
+  skill (custodian runbook: data contract w/ SLOs, 12-check suite, drift
+  scan, close pack, `claude/finwh-` draft-PR findings loop) +
+  `docs/design/finance-data-warehouse-agent.md` (verified 2026-07-16
+  inventory, backlog F1–F7, 8 candidate goals — recommended starting set:
+  freshness SLOs, lens bridge, restore eval dataset, month-end close) +
+  migration 083 seeding `finance_warehouse` into agent_registry (shadow,
+  **NOT applied** — human applies). **F1 root-caused + partially fixed in
+  the same PR:** categorizer sits on the dormant `/api/finance/bills/upload`
+  pipeline (fin_documents/fin_bills empty — never used; the live AP flow is
+  procurement invoice-capture, which never calls it), and
+  `logDecision`/`markDecisionApplied` swallowed supabase-js errors. Shipped:
+  error handling fixed; ap-verifier (the live 6-hourly/EOM gray-zone judge)
+  now logs every verdict to fin_agent_decisions (agent='ap-verifier',
+  related_id=bank line, applied=true on committed EOM applies). Remaining
+  F1 work: log invoice-capture extraction decisions + wire draft-invoice
+  edits to recordCorrection (correction-shape design needed).
+  **Run 1 executed 2026-07-17 (owner-triggered; migration 083 APPLIED to
+  prod same session on owner instruction — finance_warehouse registered,
+  shadow).** 9/12 checks green (ledger balanced, no orphan COA codes,
+  cutover exclusivity exact, traps empty, 0 uncategorised bank lines).
+  Findings: (W1) the wrong-invoice bank-match backlog is precisely **133**
+  lines (check 11b query now canonical; was "~113"); (W2) 6 invoices
+  paidVia='bank-ap-match' have NO linked bank line (inconsistent state,
+  incl INV-1012 RM768 paid 6/16) + 95 Maybank-Transfer PAID (RM58k)
+  awaiting EOM reconcile — 564 other unlinked are benign
+  historical/backfill; (W3) **unified_sales.sst is dead — all-zero for all
+  time** (data-map corrected; never compute SST from the till lens);
+  (W4) drift: 082 fin_inventory_valuations was missing from the
+  contract/data-map (added) and the table is EMPTY — Bukku Q1-close
+  anchors never entered (owner/accountant action if the sourced P&L needs
+  them). June lens bridge formalised: till 285,363.17 vs GL 353,851.53 =
+  gap 68,488.36 → Grabfood 41,838.89 + GastroHub 12,441.54 + residual
+  14,207.93 (~5%) ≈ card settlement lag — quantify next run (per-day card
+  tender vs 5000-02). All findings logged to agent_actions.
+  **Run 2 (same day, owner-triggered "continue"):** the lens bridge is now
+  SOLVED — the GL income lens changed semantics at the POS cutover:
+  5000-01/02/04 are EOD-journal-fed (accrual at ring-up) since ~Jun 6–18,
+  bank-fed before; verified Jul 1–14 EOD income = till(pos+grabfood) +
+  pickup-app − consignment with residual RM48; Grab delivery payouts now
+  post to 1005 transit (not income). **Two material findings:**
+  (1) JUNE GL income is mixed-regime — both bank-fed AND EOD posted income
+  Jun 6–17, up to RM81,270.74 double-counted; unwind needed while the
+  period is open (do not trust June GL revenue until then).
+  (2) unified_sales VIEW excludes the pickup app (~RM40k/mo; `orders`
+  money columns are in SEN) — "only sales truth" corrected in data-map.
+  Re-pointing batch prepared propose-only in
+  `docs/proposals/finwh-repoint-133-wrong-invoice-matches.md`: tier 1 = 92
+  exact-amount narration matches (RM30,470.60, gated SQL), tier 2 = 41
+  manual (RM21,251.98). **Next:** merge PR #948; owner/finance decisions:
+  approve tier-1 re-point batch, June double-count unwind plan, whether to
+  add pickup channel into the unified_sales view; schedule the weekly
+  routine.
 - 2026-07-17 (round 6, IN PROGRESS) — **PT loop build started
   (docs/design/pt-loop.md).** Merged this round already: #960 (PT gaps +
   targets from the demand model, station-tagged, structural anchor gaps)

@@ -19,21 +19,24 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
 ## Sales & revenue
 - unified_sales (VIEW) = the ONLY authoritative sales source: merges own-POS (source='pos_native', live), StoreHub history and consignment. Columns: biz_date (business date, pre-computed — no timezone math needed), outlet_id, outlet_name, gross, discount, sst, nett, tender, channel, status, is_refund.
 - Revenue convention: sum(nett) WHERE NOT is_refund AND (status IS NULL OR status <> 'paymentCancelled').
+- The sst column is DEAD — all-zero for every source since inception (verified 2026-07-17). nett is the amount as rung; never compute SST from unified_sales — SST lives only in the GL/filing side.
 - unified_sale_items (VIEW) = product-level: biz_date, outlet_id, product_name, variant, quantity, unit_price, line_total.
 - TRAPS: "SalesTransaction" is a DEAD sync (no rows after 2026-04-11); storehub_sales / hubbo_sales / pos_orders are raw per-source tables already merged into unified_sales — never sum them directly.
 - Pickup/QR revenue is recognised at PAYMENT time, not fulfilment.
-- TWO REVENUE LENSES (audited 2026-07-12, both correct, different meanings — never mix):
-  1. TILL-RUNG sales = unified_sales nett. What the outlets rang up. June 2026: ~RM284k.
-  2. BANKED revenue = GL income accounts (fin_journal_lines × fin_accounts type income/revenue): Card + Cash/QR deposits + Grabfood payouts + GastroHub vendor income. Settlement-lagged, SST-inclusive. June 2026: ~RM406k.
-  GRAB DELIVERY REVENUE IS NOT IN unified_sales — it only appears in GL/bank (Grabfood account) and the grab_* tables. "Total revenue" questions should say which lens (and mention Grab if using the till lens).
+- TWO REVENUE LENSES (re-verified 2026-07-17 — the GL lens CHANGED SEMANTICS at the POS cutover):
+  1. TILL-RUNG sales = unified_sales nett. What the outlets rang up. Does NOT include the pickup app (see "orders" below).
+  2. GL income (fin_journal_lines × fin_accounts type income/revenue). Since the pos_native cutover (fully from ~Jun 18) accounts 5000-01/02/04 are fed by DAILY EOD JOURNALS from the till — accrual at ring-up, NOT bank settlements. Verified Jul 1–14: GL EOD income = unified_sales(pos+grabfood) + pickup-app orders, to within RM48. Bank-fed income remains only for 5000-09 GastroHub / 5000-10 events. Grab DELIVERY payouts now post to 1005 (transit), not income.
+  So today: GL income ≈ till + pickup app + GastroHub/events − consignment. Pre-cutover months the GL lens was bank-settlement-fed (lagged, SST-inclusive); GRAB DELIVERY REVENUE only ever appeared in that bank lens / grab_* tables.
+  JUNE 2026 IS MIXED-REGIME AND SUSPECT: bank-fed income posted through Jun 17 WHILE EOD journals ran from Jun 6 — up to RM81k of June GL income may be double-counted (unwind pending; period still open). Do not quote June GL income without this caveat.
 - NILAI IS A CONSIGNMENT OUTLET — no till; its unified_sales rows are all source='consignment' (periodic settlements, latest can lag weeks). Daily-sales questions for Nilai are a category error; it also has 0 ParLevel rows (reorder engine doesn't cover it).
-- "orders"/"order_items" (lowercase) = CUSTOMER online orders (pickup app, live). "Order"/"OrderItem" (PascalCase) = procurement purchase orders. Same word, different worlds — pick by context.
+- "orders"/"order_items" (lowercase) = CUSTOMER online orders (pickup app, live). NOT in the unified_sales VIEW (~RM40k/month of revenue) — count it separately for total-revenue questions. Money columns are in SEN (divide by 100). Paid set: status IN ('paid','preparing','ready','collected','completed'). "Order"/"OrderItem" (PascalCase) = procurement purchase orders. Same word, different worlds — pick by context.
 
 ## Cash & banking (the trap zone)
 - fin_bank_transactions is EMPTY — never use it.
 - "BankStatement" = authoritative cash, fed automatically by the Bukku Maybank bank feed (bukku-feed-sync cron, every 6h): one row per statement per company account (accountName, statementDate, closingBalance, totalInflows/Outflows, interCo columns). Latest closingBalance per accountName = cash position. Coverage: the 3 company accounts on the feed are the complete set (owner-confirmed 2026-07-12) — still state the as-of date, since the feed lags up to ~6h+.
 - "BankStatementLine" = 50k+ categorised lines: txnDate, amount, direction ('CR' in / 'DR' out), category, isInterCo, expenseMonth. Exclude isInterCo=true for true in/outflows. Use for run-rates, recurring rent/utilities, deposit timing.
 - Companies are separate Sdn Bhds per outlet (fin_companies, fin_outlet_companies) — inter-company transfers exist; don't double-count them.
+- fin_inventory_valuations = manual COGS boundary anchors per outlet (e.g. Bukku Q1 close); the COGS engine prefers a row here over a stock count when it sits closer to the period boundary. Currently EMPTY (no anchors entered yet).
 
 ## Payroll & HR
 - fin_payroll_actuals = authoritative payroll: period (month date), salary, employer_stat (EPF/SOCSO/EIS), headcount, per outlet/company. ~RM77k/month total lately.
