@@ -34,6 +34,7 @@ const campaign = (over: Partial<CampaignState> = {}): CampaignState => ({
   lastApplied: null,
   isPaused: false,
   hasBeenPauseProbed: false,
+  pendingWasteDailyMyr: 0,
   ...over,
 });
 
@@ -77,6 +78,46 @@ describe("decideCampaign", () => {
     const d = decideCampaign(campaign(), healthy, NOW);
     expect(d.action).toBe("cut");
     expect(d.newDailyMyr).toBe(92);
+  });
+
+  it("waste-matched cut takes priority: removes exactly the excluded-term spend", () => {
+    // Putrajaya-shaped: RM12.9/day of junk terms excluded since the last change
+    const d = decideCampaign(campaign({ pendingWasteDailyMyr: 12.9 }), healthy, NOW);
+    expect(d.action).toBe("cut");
+    expect(d.newDailyMyr).toBe(87.1);
+    expect(d.reason).toMatch(/^autopilot step-down \(waste-matched\)/);
+  });
+
+  it("waste-matched cut is capped at 20% of the budget", () => {
+    const d = decideCampaign(campaign({ pendingWasteDailyMyr: 35 }), healthy, NOW);
+    expect(d.action).toBe("cut");
+    expect(d.newDailyMyr).toBe(80);
+  });
+
+  it("negligible pending waste falls back to the blind percentage step", () => {
+    const d = decideCampaign(campaign({ pendingWasteDailyMyr: 0.3 }), healthy, NOW);
+    expect(d.action).toBe("cut");
+    expect(d.newDailyMyr).toBe(92);
+    expect(d.reason).not.toMatch(/waste-matched/);
+  });
+
+  it("waste-matched cuts skip the observation window (paired with exclusions, not an experiment)", () => {
+    const d = decideCampaign(
+      campaign({
+        pendingWasteDailyMyr: 12.9,
+        lastApplied: { decidedAt: daysAgo(5), prevDailyMyr: 110, newDailyMyr: 100, reason: "autopilot step-down" },
+      }),
+      healthy,
+      NOW,
+    );
+    expect(d.action).toBe("cut");
+    expect(d.newDailyMyr).toBe(87.1);
+    expect(d.reason).toMatch(/waste-matched/);
+  });
+
+  it("waste-matched cuts never fire into a weak till", () => {
+    const d = decideCampaign(campaign({ pendingWasteDailyMyr: 12.9 }), breached, NOW);
+    expect(d.action).not.toBe("cut");
   });
 
   it("cuts 12% when cost/conv is far off fleet-best", () => {
@@ -316,6 +357,9 @@ describe("spaceDisturbances (nightly cadence)", () => {
     expect(spaced.find((d) => d.campaignId === "a")?.action).toBe("hold");
     expect(spaced.find((d) => d.campaignId === "c")?.action).toBe("hold");
     expect(spaced.find((d) => d.campaignId === "b")?.action).toBe("rollback");
+    // waste-matched cuts are paired bookkeeping — never spaced
+    const wm = [{ campaignId: "w", campaignName: "W", action: "cut" as const, newDailyMyr: 87.1, reason: "autopilot step-down (waste-matched): RM12.9/day" }];
+    expect(spaceDisturbances(wm, daysAgo(1), NOW)[0].action).toBe("cut");
     // outside the window (or no history) everything passes
     expect(spaceDisturbances(decisions, daysAgo(FLEET_SPACING_DAYS + 1), NOW)).toEqual(decisions);
     expect(spaceDisturbances(decisions, null, NOW)).toEqual(decisions);
