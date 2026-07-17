@@ -24,6 +24,24 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   −15%; decline started early May, predating both the POS cutover and pickup
   launch, so it is genuine traffic softness, not a data artifact. Wk 5/25 dip
   = Raya Haji week. `orders.total` is in SEN (÷100 for RM).
+  **Follow-up (same day, PJ weekend + holiday decomposition):** with pickup
+  included, PJ's real underlying decline is ~−10%, not −20% — the −20% read
+  compared against the holiday-flattered wk of May 4–10 (Labour Day Fri
+  May 1 + Mother's Day Sun May 10 = 195 orders, best day in the series);
+  clean weeks run ~1,030/wk (mid-May, early-Jun) vs ~920/wk in July.
+  Calendar effects verified in the daily series: wk May 25–29 weekday crash
+  (78–107 orders/day, ~−30%) = Raya Haji (Wed May 27) inside the Group B
+  mid-year school break (May 23–Jun 7 — Putrajaya empties); May 30–Jun 1
+  strong (Wesak Sun + Agong Mon, best Monday RM7,186); Wed Jun 17 spike
+  (154 vs ~115 typical) = Awal Muharram. **`hr_public_holidays` is missing
+  Wesak (2026-05-31) and Awal Muharram (2026-06-17)** — it feeds
+  revenue-forecast + labour-gate baselines; insert proposed to owner (hard
+  rule 6, not applied). No ops cause found for the weak July Saturdays
+  (123/127 vs 189 May peak): hours unchanged (~08:00–22:30), no stockout
+  signal (menu mix stable on weak vs strong Saturdays), reviews velocity
+  healthy, ads untouched until the trivial Jul 5 trim; the two weak
+  Saturdays dipped in DIFFERENT dayparts (Jul 4 morning, Jul 11 evening) —
+  pattern reads as weather/one-off events, not systematic.
 
 - 2026-07-12 — **Data-consolidation audit for the internal assistant (all
   SQL-verified against kqdc).** Connectivity clean: 0 orphans across
