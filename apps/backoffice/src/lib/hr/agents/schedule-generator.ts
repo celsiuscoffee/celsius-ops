@@ -97,6 +97,7 @@ type Staff = {
   position: string | null;
   employment_type: string;
   basic_salary: number;
+  epf_employer_rate: number | null; // employer EPF from the profile (real rate, not the default)
   hourly_rate: number | null;
   rest_day: number | null; // 0=Sun … 6=Sat
   // "Primary outlet wins": a shared staffer is auto-rostered (FT floor / PT
@@ -234,11 +235,12 @@ export async function generateSchedule(
   });
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, basic_salary, hourly_rate, schedule_required, rest_day")
+    .select("user_id, position, employment_type, basic_salary, hourly_rate, epf_employer_rate, schedule_required, rest_day")
     .in("user_id", users.length ? users.map((u) => u.id) : ["-"]);
   type ProfileRow = {
     user_id: string; position: string | null; employment_type: string;
     basic_salary: number | null; hourly_rate: number | null;
+    epf_employer_rate: number | null;
     schedule_required: boolean | null; rest_day: number | null;
   };
   const profileMap = new Map<string, ProfileRow>(((profiles ?? []) as ProfileRow[]).map((p) => [p.user_id, p]));
@@ -253,6 +255,7 @@ export async function generateSchedule(
         position: p?.position ?? null,
         employment_type: p?.employment_type ?? "full_time",
         basic_salary: Number(p?.basic_salary) || 0,
+        epf_employer_rate: p?.epf_employer_rate == null ? null : Number(p.epf_employer_rate),
         hourly_rate: p?.hourly_rate == null ? null : Number(p.hourly_rate),
         rest_day: p?.rest_day ?? null,
         isPrimaryHere: u.outletId === outletId,
@@ -267,10 +270,10 @@ export async function generateSchedule(
   // grid. All rover/manager cost is HQ overhead — RM0 to the outlet.
   const { data: roverProfiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, basic_salary")
+    .select("user_id, position, basic_salary, epf_employer_rate")
     .in("position", ["Barista Lead"])
     .is("end_date", null);
-  type RoverProfile = { user_id: string; position: string; basic_salary: number | null };
+  type RoverProfile = { user_id: string; position: string; basic_salary: number | null; epf_employer_rate: number | null };
   const roverIds = ((roverProfiles ?? []) as RoverProfile[]).map((p) => p.user_id);
   const roverUsers = roverIds.length
     ? await prisma.user.findMany({ where: { id: { in: roverIds }, status: "ACTIVE" }, select: { id: true, name: true } })
@@ -278,7 +281,7 @@ export async function generateSchedule(
   const roverPositionOf = new Map(((roverProfiles ?? []) as RoverProfile[]).map((p) => [p.user_id, p.position]));
   // Rover lead cost follows their hours too (same rotation-cost rule as shared
   // FT): each outlet pays share × (hours here ÷ 45). Managers stay RM0/HQ.
-  const roverSalaryOf = new Map(((roverProfiles ?? []) as RoverProfile[]).map((p) => [p.user_id, Number(p.basic_salary) || 0]));
+  const roverShareOf = new Map(((roverProfiles ?? []) as RoverProfile[]).map((p) => [p.user_id, weeklySalaryShare(Number(p.basic_salary) || 0, p.epf_employer_rate == null ? null : Number(p.epf_employer_rate))]));
 
   // "Primary outlet wins": a full-timer carries their 6-day floor only at their
   // primary outlet. A shared FT whose primary is elsewhere is NOT auto-rostered
@@ -916,16 +919,16 @@ export async function generateSchedule(
   //   • borrowed shared FT: pro-rata share for the hours placed HERE.
   // Manager / Area Manager / rover cost is HQ overhead — RM0 to the outlet.
   const primaryFtCost = fullTimers.reduce((sum, s) => {
-    const share = weeklySalaryShare(s.basic_salary, null);
+    const share = weeklySalaryShare(s.basic_salary, s.epf_employer_rate);
     return sum + share - lentFtCredit(share, hoursElsewhere.get(s.id) ?? 0);
   }, 0);
   const borrowedFtCost = sharedFtElsewhere.reduce(
-    (sum, s) => sum + borrowedFtCharge(weeklySalaryShare(s.basic_salary, null), borrowedFtHours.get(s.id) ?? 0),
+    (sum, s) => sum + borrowedFtCharge(weeklySalaryShare(s.basic_salary, s.epf_employer_rate), borrowedFtHours.get(s.id) ?? 0),
     0,
   );
   // Rover lead (Barista Lead) hours here, same pro-rata rule. Managers = HQ, RM0.
   const roverCost = [...roverHours.entries()].reduce(
-    (sum, [id, h]) => sum + borrowedFtCharge(weeklySalaryShare(roverSalaryOf.get(id) ?? 0, null), h),
+    (sum, [id, h]) => sum + borrowedFtCharge(roverShareOf.get(id) ?? 0, h),
     0,
   );
   const ftCost = Math.round(primaryFtCost + borrowedFtCost + roverCost);
