@@ -51,6 +51,12 @@ import {
 import { computePtPerformance } from "../pt-performance";
 import { planFlexPlacement, type FlexPerson } from "../flex-placement";
 import { allocateShiftCounts } from "../shift-allocation";
+import {
+  calibrateRate,
+  describeCalibration,
+  BARISTA_SERVE_TARGET_MIN,
+  KITCHEN_SERVE_TARGET_MIN,
+} from "../serve-time";
 
 const MODEL = "claude-sonnet-4-6";
 const PT_MAX_HOURS_PER_WEEK = 24;
@@ -59,15 +65,12 @@ const PT_MAX_HOURS_PER_WEEK = 24;
 const SERVICE_FLOOR = 3;
 const PT_MAX_DAYS_PER_WEEK = 5;
 
-// Serve-time-calibrated station throughput: items one head can make + serve per
-// hour while holding a 15-minute serve target (30-min hard ceiling). Barista =
-// drinks + counter pastries; kitchen = cooked food only.
-//   Grounded in prep times: a drink/pastry is ~3 min (≈20/hr raw), but the same
-//   head also takes orders, cashiers, serves and cleans and must keep queue
-//   headroom to hold 15-min serve → ~8/hr sustainable. Cooked food is ~10 min:
-//   against a 15-min target there's almost no headroom (one item every ~10 min),
-//   so ~6/hr — which is exactly why a 2nd kitchen hand is needed as food volume
-//   rises (weekend brunch). See docs/design/staffing-model.md. Calibratable.
+// BASE station throughput: items one head can make + serve per hour. Barista =
+// drinks + counter pastries; kitchen = cooked food only. Grounded in prep times
+// (drink/pastry ~3 min, cooked ~10 min) — but these are only STARTING points:
+// every generation re-calibrates them from the outlet's own measured p90 serve
+// times against the owner's service standard (kitchen 15 min, beverage/pastry
+// 10 min — see lib/hr/serve-time.ts). A breach lowers the rate → more heads.
 const BARISTA_ITEMS_PER_HR = 8;
 const KITCHEN_ITEMS_PER_HR = 6;
 // Cooked-food menu categories → kitchen station; everything else (drinks +
@@ -370,6 +373,54 @@ export async function generateSchedule(
           BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
     GROUP BY 1, 2
   `;
+
+  // ── Serve-time self-calibration (the "enough manpower" feedback loop) ──
+  // Measure the outlet's ACTUAL p90 serve time over the same trailing window,
+  // split by station: an order containing any cooked-food item is gated by the
+  // KITCHEN (15-min standard); an order of only drinks/pastries is a BARISTA
+  // order (10-min standard). A breach scales that station's items/head/hour
+  // rate DOWN proportionally, so the demand model asks for more heads at the
+  // loaded hours — no human judging "is this enough staff", the serve times do.
+  const serveRows = await prisma.$queryRaw<Array<{ is_kitchen: boolean; n: number; p90: number | null }>>`
+    SELECT EXISTS (
+             SELECT 1 FROM pos_order_items i
+             JOIN "Menu" m ON m."storehubId" = i.product_id
+             WHERE i.order_id = o.id AND m.category = ANY(${KITCHEN_CATEGORIES})
+           ) AS is_kitchen,
+           count(*)::int AS n,
+           (percentile_cont(0.9) WITHIN GROUP (
+             ORDER BY EXTRACT(EPOCH FROM (COALESCE(o.served_at, o.ready_at) - o.created_at)) / 60
+           ))::float AS p90
+    FROM pos_orders o
+    WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
+      AND o.status = 'completed' AND o.refund_of_order_id IS NULL
+      AND COALESCE(o.served_at, o.ready_at) IS NOT NULL
+      AND COALESCE(o.served_at, o.ready_at) > o.created_at
+      AND COALESCE(o.served_at, o.ready_at) < o.created_at + interval '2 hours'
+      AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+          BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+    GROUP BY 1
+  `;
+  const serveOf = (kitchen: boolean) => serveRows.find((r) => r.is_kitchen === kitchen);
+  const barServe = serveOf(false);
+  const kitServe = serveOf(true);
+  const barCal = calibrateRate({
+    baseRate: BARISTA_ITEMS_PER_HR, p90ServeMin: barServe?.p90 ?? null,
+    targetMin: BARISTA_SERVE_TARGET_MIN, sample: barServe?.n ?? 0, floor: 4, cap: 14,
+  });
+  const kitCal = calibrateRate({
+    baseRate: KITCHEN_ITEMS_PER_HR, p90ServeMin: kitServe?.p90 ?? null,
+    targetMin: KITCHEN_SERVE_TARGET_MIN, sample: kitServe?.n ?? 0, floor: 3, cap: 8,
+  });
+  const baristaRate = barCal.rate;
+  const kitchenRate = kitCal.rate;
+  notes.push(
+    "Serve-time calibration (28d): " +
+      describeCalibration("barista/pastry", barCal, barServe?.p90 ?? null, BARISTA_SERVE_TARGET_MIN, barServe?.n ?? 0) +
+      "; " +
+      describeCalibration("kitchen", kitCal, kitServe?.p90 ?? null, KITCHEN_SERVE_TARGET_MIN, kitServe?.n ?? 0),
+  );
+
   const demand = new Map<string, number>(); // "dw:hr" → heads needed (barista + kitchen)
   const itemsByDow = new Map<number, number>(); // dw → avg total items/day (for man-hours)
   // Peak heads + its station split per day-of-week, for the QA note.
@@ -378,8 +429,8 @@ export async function generateSchedule(
     const bar = Number(h.barista) || 0;
     const kit = Number(h.kitchen) || 0;
     if (bar + kit <= 0) continue;
-    const barHeads = Math.ceil(bar / BARISTA_ITEMS_PER_HR);
-    const kitHeads = Math.ceil(kit / KITCHEN_ITEMS_PER_HR);
+    const barHeads = Math.ceil(bar / baristaRate);
+    const kitHeads = Math.ceil(kit / kitchenRate);
     const heads = Math.max(SERVICE_FLOOR, barHeads + kitHeads);
     demand.set(`${h.dw}:${h.hr}`, heads);
     itemsByDow.set(h.dw, (itemsByDow.get(h.dw) ?? 0) + bar + kit);
@@ -455,7 +506,7 @@ export async function generateSchedule(
     const totAff = Math.round(manHours.reduce((s, m) => s + m.affordableHours, 0));
     notes.push(
       `Man-hours/wk: required ${totReq}h (station-sized, 15-min serve target) vs affordable ${totAff}h ` +
-        `(barista ${BARISTA_ITEMS_PER_HR}/hr, kitchen ${KITCHEN_ITEMS_PER_HR}/hr, ${SERVICE_FLOOR}-head floor)` +
+        `(barista ${baristaRate}/hr, kitchen ${kitchenRate}/hr serve-calibrated, ${SERVICE_FLOOR}-head floor)` +
         (overBudgetDays.length
           ? ` — ${overBudgetDays.length} day(s) over target to cover: ` +
             overBudgetDays.map((m) => `${m.date} +${Math.round(m.gapHours)}h`).join(", ")

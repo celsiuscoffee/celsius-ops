@@ -6,9 +6,10 @@ import { Fragment, useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   Bot, CalendarDays, Send, Loader2, ArrowLeftRight,
-  ChevronLeft, ChevronRight, RotateCcw, Trash2,
+  ChevronLeft, ChevronRight, RotateCcw, Trash2, Sparkles, X,
 } from "lucide-react";
 import { HrPageHeader } from "@/components/hr/page-header";
+import { AssistPanel } from "@/components/hr/assist-panel";
 
 type ShiftTemplate = {
   id: string;
@@ -178,6 +179,7 @@ export default function SchedulesPage() {
   const [dayIdx, setDayIdx] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [fillMode, setFillMode] = useState<"tight" | "mid" | "safe">("tight");
+  const [assistDate, setAssistDate] = useState<string | null>(null); // per-day Assist modal
   const [clearing, setClearing] = useState(false);
   const [swapAction, setSwapAction] = useState<string | null>(null);
 
@@ -841,6 +843,15 @@ export default function SchedulesPage() {
                           </div>
                         );
                       })()}
+                      {!isPublished && (
+                        <button
+                          onClick={() => setAssistDate(d)}
+                          className="mt-1 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                          title="Assist: rank who fits best for this day's gaps (reliability · availability · fairness · cost)"
+                        >
+                          <Sparkles className="h-2.5 w-2.5" /> Assist
+                        </button>
+                      )}
                     </th>
                   );
                 })}
@@ -1202,6 +1213,26 @@ export default function SchedulesPage() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Per-day Assist modal — the fit-ranking flow embedded in the grid, so
+          assist happens during scheduling. Prefills the day's first coverage
+          gap; each assign refreshes the grid + labour gate behind it. */}
+      {assistDate && selectedOutlet && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" onClick={() => setAssistDate(null)}>
+          <div className="w-full max-w-3xl rounded-2xl bg-background p-4 shadow-xl sm:p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <Sparkles className="h-4 w-4 text-terracotta" />
+                Assist · {new Date(assistDate + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "2-digit", month: "short" })}
+              </h2>
+              <button onClick={() => setAssistDate(null)} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Close assist">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <AssistPanel outletId={selectedOutlet} date={assistDate} autoPickGap onAssigned={() => mutate()} />
           </div>
         </div>
       )}
