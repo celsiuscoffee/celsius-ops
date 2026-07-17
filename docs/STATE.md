@@ -273,6 +273,117 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-16 — **Ads optimizer + local-rank status check (all DB-verified,
+  follow-up to the 2026-07-05 entry).**
+  **Optimizer:** the two Jul 5 owner-approved cuts (Tamarind RM100.20→84.96/day,
+  Putrajaya RM100→98.42/day, ~RM504/mo freed) applied clean and are sticking —
+  per-day cost/conv Jul 5–14 vs the prior 2 weeks: Tam RM13.4→9.4, PJ RM9.4→7.6,
+  SA (uncut) RM6.2→6.1, with conversions/day flat-to-up at all three. No further
+  budget changes; 0 search-term exclusions ever used. July spend to date
+  RM7,296 (3 campaigns ≈RM100/day each). **BUT the conversion signal is still
+  wrong:** `ads_conversion_daily` confirms the tracked actions are *Local
+  actions – Directions* + *Clicks to call* (and that per-action sync is stale —
+  no rows after 2026-04-19). The value-based "Pickup Order" tag
+  (`docs/design/ads-conversion-loop.md` Approach A) was never wired, so the
+  optimizer's efficiency lens = cost per directions-click, not cost per order.
+  **ads-daily sync** healthy nightly (metrics through Jul 14) EXCEPT the
+  search-terms step: its sync-log rows are stuck `RUNNING` every night (finish
+  update never lands) and Jul 12 threw a hard Prisma connection-pool timeout;
+  data still arrives (10.5k rows / 4.9k terms, Jun 29→Jul 13) — likely serial
+  upserts racing maxDuration/pool. Owner's search-term **backfill curl never
+  ran** (history starts Jun 29). The Monday shadow-optimizer report exists only
+  in the cron's JSON response — persisted nowhere, read by no one.
+  **Geogrid:** the first true-10km auto-scan (Mon Jul 6) burned the ENTIRE
+  monthly cap in one run — 40 scans: 13 complete / 7 partial / 20 failed with
+  0/81 points (later scans in the run all failed → Places quota/rate
+  exhaustion; failed scans still persist rows and count against
+  `GEOGRID_MONTHLY_SCAN_CAP`). The Jul 13 Monday run was a capped no-op;
+  **nothing scans again until Aug 1.** Structural mismatch: 86 active
+  keyword×outlet combos on a ~weekly due-cadence vs a 40/month cap — the loop
+  as configured can never complete a sweep. Tamarind got ZERO usable catchment
+  baselines. Usable Jul 6 baselines: SA "breakfast shah alam" avg 3.9 / 33%
+  top-3 / green 11.2km; PJ "cafe" 5.3 / 12% / 5.0km; Nilai "nilai cafe" avg
+  17.2 / 0% top-3 (invisible in its own town).
+  **Reviews (the rank lever):** snapshots current through Jul 16. 30-day
+  velocity: Tam 49 (the GBP relink fix is vindicated), PJ 29, SA 13, **Nilai 3
+  — still the binding constraint** (111 reviews vs top local competitor 160).
+  **Substrate gap:** none of ads-daily / optimizer / geogrid are in
+  `agent_registry` (only the `reviews_*` agents) — no kill switch, no ledger.
+  **GBP category adds** (the Jul 5 "next") were never proposed — blocked on
+  the failed scan coverage.
+  **Next:** (1) fix geogrid scan economics — don't count failed scans against
+  the cap, throttle within a run, and prune the 86-keyword set to fit the
+  budget (or raise the cap knowingly: ~81 Places calls/scan); (2) owner
+  decision: wire the value-based Pickup Order conversion (Approach A) or
+  accept directions-clicks as the metric; (3) re-propose GBP category adds
+  once Tamarind has a real catchment scan. (Items on the optimizer shadow
+  report, search-term batching, and registry registration were superseded the
+  same day by the ads autopilot — next entry.)
+
+- 2026-07-16 — **Ads spend AUTOPILOT built + armed** (same branch/PR #947,
+  owner directives in chat: "no need human approve... cut the spending lowest
+  possible without reducing the till revenue", descend from 100% — no pause
+  test; then widened same day: "ads spend should be generating cash... the
+  till is the source of truth... trimming is just the first step, next is to
+  find the best way to increase cash"). New
+  `apps/backoffice/src/lib/ads/autopilot.ts`, runs inside `cron/ads-daily`
+  NIGHTLY (owner: no reason to wait for a weekday — actions are self-paced by
+  the ledger: per-campaign observation windows + a 6-day fleet-wide stagger
+  for new disturbances, while rollback/revert/restore fire the first night
+  the till says so), replacing the response-only shadow report. **Objective =
+  cash: till lift × margin − spend; bidirectional extremum-seeker, burden of
+  proof asymmetric (cuts stand unless the till proves harm; raises revert
+  unless the till proves lift).** State machine per campaign, memory = the
+  `ads_budget_change` ledger reason prefixes (no new tables): DESCEND →
+  step-down 8% (12% when cost/conv >1.3× fleet-best), ≥14d observation, max
+  2 cuts/run (least-efficient first), hard floor RM20/day
+  (ADS_AUTOPILOT_FLOOR_MYR); guard breach after a recent cut → ROLLBACK one
+  step + 56d hold (= proof of response); then PROBE UP +15% (28d observation,
+  cap 1.25× the highest ledgered baseline, ADS_GROSS_MARGIN=0.6 states each
+  raise's break-even in the reason) — kept only on detectable lift (fleet-adj
+  ≥1.02 AND raw ≥1.0, or immediate revert on breach), else REVERT → SETTLE 90d
+  at the proven optimum before re-searching.
+  **Round 2 (owner-approved after the step-size math):** gradual steps
+  (8–15% of ~RM100/day) move a ~RM2.5-3k/day outlet's till by <1% — per-step
+  unreadable; a FULL pause is the only readable experiment (~5-6% if
+  break-even). So: **PAUSE PROBE** — one clearly-inefficient campaign at a
+  time (cost/conv >1.3× fleet-best, never re-probed, never started into a
+  weak till) is PAUSED for 28d (`pause-campaign.ts`, ledger reasons `autopilot
+  pause`/`autopilot restore`), the others keep descending as controls
+  (Putrajaya + Shah Alam stay gradual per owner), then auto-restored with a
+  verdict measured against a forecast built from PRE-pause history: till
+  dropped (raw <0.95 / adj <0.97 over the pause window) → ads generate cash,
+  resume prior budget + descend; no detectable effect → below break-even
+  wholesale, restore at floor RM20/day (~RM1.9k/mo freed at Tamarind). First
+  probe will select **Tamarind** (ratio ~1.5; PJ 1.24 is under the 1.3 bar).
+  **Boiling-frog fix:** the guard now also carries a fixed ANCHOR — outlet's
+  share of fleet till revenue in the 28d before the first ledgered budget
+  change vs its share now; anchor <0.93 = breach → rollback. This catches
+  cumulative slow damage that the trailing 4-week forecast would otherwise
+  normalize into the baseline. 31 autopilot tests / 400 total green.
+  **Revenue guard:** last-14-full-days actual till revenue ÷ same-window
+  forecast (labour-gate `dailyRevenueSeries` + `buildWeekForecast`, history
+  precedes the window = clean counterfactual), divided by the median of the
+  other ads outlets' indexes to cancel fleet-wide shocks; breach = raw <0.95
+  OR fleet-adj <0.97 → roll the last recent cut back one step + 56d hold on
+  that campaign ("descent floor found"); breach with no recent cut → hold
+  (never cut into weakness); no guard signal → never act. **Term
+  auto-exclusions** (`term-rules.ts`): own-brand + non-café food intent only,
+  ≥RM2/30d, ≤15/campaign/run; competitor coffee brands + dessert/ambiguous
+  NEVER auto-excluded (strategy calls); human `rejected` ledger rows are a
+  standing no. All actions land in the existing `ads_budget_change` /
+  `ads_term_exclusion` ledgers as `decided_by='ads-autopilot'` (undo paths
+  unchanged) + a summary row in `agent_actions`. **Kill switch:**
+  `agent_registry` key `ads_autopilot`, fail-safe off — row seeded ARMED in
+  prod 2026-07-16 (migration 083, applied via MCP; inert until this code
+  deploys). Also FIXED the search-terms sync: batched unnest upserts (500/chunk)
+  replace the per-row upsert loop that exhausted the pool after the first
+  account — Shah Alam + Tamarind term data starts landing on the next nightly
+  run (their history begins ~Jul 17; exclusion candidates there build up over
+  the following weeks). First armed pass: Monday Jul 20 19:00 UTC — expect
+  cuts at Tamarind + Putrajaya (Jul 5 changes will be 15d old), SA deferred to
+  the following week, plus ~Putrajaya-only exclusions. 387 tests + tsc green.
+
 - 2026-07-15 -- **Staff-scheduling round 2 (branch
   `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the
   merged #934 (multi-outlet rotation + demand-sized AI Fill + fairness). Two
@@ -514,9 +625,8 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   categories = strongest rank lever; review velocity ≈20% and the binding
   constraint (Nilai 2/30d, SA ~11, Tam ~17, Putrajaya 34); GBP description is
   NOT a rank factor — stop treating geo-in-description as a rank play.
-  **Next:** after the first true-10km scan (Mon Jul 6, 1pm MYT) read fresh
-  baselines and propose per-outlet GBP category adds; owner still owes the ads
-  search-term backfill curl (CRON_SECRET) and the review-velocity ops push.
+  Status refreshed 2026-07-16 — see that entry below for where the loop
+  actually stands (scan cap exhausted, conversion signal still wrong).
 
 - 2026-07-05 — **People-cost gating loop shipped** (PRs #765/#780/#785 all
   merged): labour gate + publish enforcement (green/amber/red, per-outlet
