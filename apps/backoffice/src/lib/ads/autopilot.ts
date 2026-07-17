@@ -309,18 +309,13 @@ export function decideCampaign(c: CampaignState, guard: GuardSignal, now: Date):
     return { ...base, action: "hold", reason: `revenue below forecast (${guardDetail}) but no recent cut to blame — not cutting into weakness` };
   }
 
-  if (daysSince < OBSERVE_DAYS) {
-    return { ...base, action: "hold", reason: `observing last change (${Math.round(daysSince)}d/${OBSERVE_DAYS}d)` };
-  }
-
-  if (c.dailyBudgetMyr <= FLOOR_DAILY_MYR) {
-    return { ...base, action: "hold", reason: `at floor (RM${FLOOR_DAILY_MYR}/day)` };
-  }
-
-  // Waste-matched cut first: remove exactly the spend of terms already
-  // excluded but not yet taken out of the budget. Zero-risk to café-intent
-  // keywords by construction — their funding is untouched.
-  if (c.pendingWasteDailyMyr >= WASTE_MATCH_MIN_DAILY_MYR) {
+  // Waste-matched cut: remove exactly the spend of terms already excluded but
+  // not yet taken out of the budget. Zero-risk to café-intent keywords by
+  // construction, so it is NOT an experiment — it skips the observation
+  // window (owner 2026-07-17: "why can't we cut it now rather than wait?")
+  // and pairs with the exclusions the same night. The guard above still
+  // blocks it when the till is weak, and rollback still covers it.
+  if (c.pendingWasteDailyMyr >= WASTE_MATCH_MIN_DAILY_MYR && c.dailyBudgetMyr > FLOOR_DAILY_MYR) {
     const amount = Math.min(c.pendingWasteDailyMyr, c.dailyBudgetMyr * WASTE_MATCH_MAX_PCT);
     const newDaily = round2(Math.max(FLOOR_DAILY_MYR, c.dailyBudgetMyr - amount));
     if (newDaily < c.dailyBudgetMyr) {
@@ -331,6 +326,14 @@ export function decideCampaign(c: CampaignState, guard: GuardSignal, now: Date):
         reason: `autopilot step-down (waste-matched): RM${round2(c.pendingWasteDailyMyr)}/day of excluded junk-term spend removed from the budget (RM${round2(c.dailyBudgetMyr)}→RM${newDaily}/day, banks ~RM${monthly(c.dailyBudgetMyr - newDaily)}/mo) — café-intent funding untouched; ${guardDetail} healthy`,
       };
     }
+  }
+
+  if (daysSince < OBSERVE_DAYS) {
+    return { ...base, action: "hold", reason: `observing last change (${Math.round(daysSince)}d/${OBSERVE_DAYS}d)` };
+  }
+
+  if (c.dailyBudgetMyr <= FLOOR_DAILY_MYR) {
+    return { ...base, action: "hold", reason: `at floor (RM${FLOOR_DAILY_MYR}/day)` };
   }
 
   const inefficient = c.efficiencyRatio != null && c.efficiencyRatio > INEFFICIENT_RATIO;
@@ -361,16 +364,21 @@ function probeUp(c: CampaignState, guard: GuardSignal, why: string): AutopilotDe
   };
 }
 
-/** Stagger the descent: keep at most `max` cuts, least-efficient campaigns first. */
+// Waste-matched cuts are paired bookkeeping (exclusion + matching budget
+// reduction), not experiments — they are exempt from the cut cap and the
+// fleet stagger.
+const isWasteMatched = (d: AutopilotDecision) => d.reason.startsWith("autopilot step-down (waste-matched)");
+
+/** Stagger the descent: keep at most `max` BLIND cuts, least-efficient campaigns first. */
 export function capCuts(decisions: AutopilotDecision[], states: CampaignState[], max = MAX_CUTS_PER_RUN): AutopilotDecision[] {
   const eff = new Map(states.map((s) => [s.campaignId, s.efficiencyRatio ?? 1]));
   const cuts = decisions
-    .filter((d) => d.action === "cut")
+    .filter((d) => d.action === "cut" && !isWasteMatched(d))
     .sort((a, b) => (eff.get(b.campaignId) ?? 1) - (eff.get(a.campaignId) ?? 1));
   const deferred = new Set(cuts.slice(max).map((d) => d.campaignId));
   return decisions.map((d) =>
     deferred.has(d.campaignId)
-      ? { ...d, action: "hold" as const, newDailyMyr: undefined, reason: `cut ready but deferred (max ${max} cuts/run) — next Monday` }
+      ? { ...d, action: "hold" as const, newDailyMyr: undefined, reason: `cut ready but deferred (max ${max} cuts/run) — next run` }
       : d,
   );
 }
@@ -391,7 +399,7 @@ export function spaceDisturbances(
   const days = (now.getTime() - lastDisturbanceAt.getTime()) / DAY_MS;
   if (days >= FLEET_SPACING_DAYS) return decisions;
   return decisions.map((d) =>
-    d.action === "cut" || d.action === "raise" || d.action === "pause"
+    (d.action === "cut" && !isWasteMatched(d)) || d.action === "raise" || d.action === "pause"
       ? {
           campaignId: d.campaignId,
           campaignName: d.campaignName,
@@ -608,6 +616,45 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     pendingWasteByCampaign.set(x.campaignId, (pendingWasteByCampaign.get(x.campaignId) ?? 0) + daily);
   }
 
+  // Exclusions run BEFORE budget decisions so tonight's exclusions and the
+  // matching budget cut land in the SAME run (exclude → cut, paired). In
+  // armed mode only successfully-applied exclusions count toward the cut.
+  const since = new Date(now.getTime() - 30 * DAY_MS);
+  const [termRows, decided] = await Promise.all([
+    prisma.adsSearchTermDaily.groupBy({
+      by: ["campaignId", "searchTerm"],
+      where: { date: { gte: since } },
+      _sum: { costMicros: true },
+    }),
+    prisma.adsTermExclusion.findMany({ select: { campaignId: true, searchTerm: true } }),
+  ]);
+  const alreadyDecided = new Set(decided.map((e) => `${e.campaignId} ${e.searchTerm.toLowerCase()}`));
+  const exclusions: AutopilotRunResult["exclusions"] = selectAutoExclusions(
+    termRows.map((r) => ({
+      campaignId: r.campaignId,
+      searchTerm: r.searchTerm,
+      costMyr: microsToMYR(r._sum.costMicros ?? BigInt(0)),
+    })),
+    alreadyDecided,
+  );
+  for (const x of exclusions) {
+    if (mode === "armed") {
+      const res = await applyTermExclusion({
+        campaignId: x.campaignId,
+        searchTerm: x.searchTerm,
+        decidedBy: "ads-autopilot",
+        estMonthlySavingMyr: round2(x.costMyr),
+        reason: `autopilot: ${x.intent} intent (RM${round2(x.costMyr)}/30d)`,
+      });
+      Object.assign(x, res.ok ? { applied: true } : { applied: false, error: res.error });
+      if (!res.ok) continue;
+    }
+    pendingWasteByCampaign.set(
+      x.campaignId,
+      (pendingWasteByCampaign.get(x.campaignId) ?? 0) + x.costMyr / 30,
+    );
+  }
+
   const isPausedStatus = (s: string) => !ENABLED_STATUSES.includes(s);
   const states: CampaignState[] = campaigns.map((c) => {
     const current = microsToMYR(c.dailyBudgetMicros ?? BigInt(0));
@@ -659,26 +706,6 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     now,
   );
 
-  // Auto-exclusions from the last 30 days of term spend.
-  const since = new Date(now.getTime() - 30 * DAY_MS);
-  const [termRows, decided] = await Promise.all([
-    prisma.adsSearchTermDaily.groupBy({
-      by: ["campaignId", "searchTerm"],
-      where: { date: { gte: since } },
-      _sum: { costMicros: true },
-    }),
-    prisma.adsTermExclusion.findMany({ select: { campaignId: true, searchTerm: true } }),
-  ]);
-  const alreadyDecided = new Set(decided.map((e) => `${e.campaignId} ${e.searchTerm.toLowerCase()}`));
-  const exclusions: AutopilotRunResult["exclusions"] = selectAutoExclusions(
-    termRows.map((r) => ({
-      campaignId: r.campaignId,
-      searchTerm: r.searchTerm,
-      costMyr: microsToMYR(r._sum.costMicros ?? BigInt(0)),
-    })),
-    alreadyDecided,
-  );
-
   if (mode === "armed") {
     for (const d of decisions) {
       if (d.action === "hold") continue;
@@ -712,16 +739,8 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
       });
       Object.assign(d, res.ok ? { applied: true } : { applied: false, error: res.error });
     }
-    for (const x of exclusions) {
-      const res = await applyTermExclusion({
-        campaignId: x.campaignId,
-        searchTerm: x.searchTerm,
-        decidedBy: "ads-autopilot",
-        estMonthlySavingMyr: round2(x.costMyr),
-        reason: `autopilot: ${x.intent} intent (RM${round2(x.costMyr)}/30d)`,
-      });
-      Object.assign(x, res.ok ? { applied: true } : { applied: false, error: res.error });
-    }
+    // Exclusions were already applied BEFORE the budget decisions (paired
+    // exclude → cut, same run) — see the block above the state build.
   }
 
   const acted = decisions.filter((d) => d.action !== "hold");

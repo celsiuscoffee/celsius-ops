@@ -101,7 +101,7 @@ describe("decideCampaign", () => {
     expect(d.reason).not.toMatch(/waste-matched/);
   });
 
-  it("waste-matched cuts still respect the observation window", () => {
+  it("waste-matched cuts skip the observation window (paired with exclusions, not an experiment)", () => {
     const d = decideCampaign(
       campaign({
         pendingWasteDailyMyr: 12.9,
@@ -110,7 +110,14 @@ describe("decideCampaign", () => {
       healthy,
       NOW,
     );
-    expect(d.action).toBe("hold");
+    expect(d.action).toBe("cut");
+    expect(d.newDailyMyr).toBe(87.1);
+    expect(d.reason).toMatch(/waste-matched/);
+  });
+
+  it("waste-matched cuts never fire into a weak till", () => {
+    const d = decideCampaign(campaign({ pendingWasteDailyMyr: 12.9 }), breached, NOW);
+    expect(d.action).not.toBe("cut");
   });
 
   it("cuts 12% when cost/conv is far off fleet-best", () => {
@@ -350,6 +357,9 @@ describe("spaceDisturbances (nightly cadence)", () => {
     expect(spaced.find((d) => d.campaignId === "a")?.action).toBe("hold");
     expect(spaced.find((d) => d.campaignId === "c")?.action).toBe("hold");
     expect(spaced.find((d) => d.campaignId === "b")?.action).toBe("rollback");
+    // waste-matched cuts are paired bookkeeping — never spaced
+    const wm = [{ campaignId: "w", campaignName: "W", action: "cut" as const, newDailyMyr: 87.1, reason: "autopilot step-down (waste-matched): RM12.9/day" }];
+    expect(spaceDisturbances(wm, daysAgo(1), NOW)[0].action).toBe("cut");
     // outside the window (or no history) everything passes
     expect(spaceDisturbances(decisions, daysAgo(FLEET_SPACING_DAYS + 1), NOW)).toEqual(decisions);
     expect(spaceDisturbances(decisions, null, NOW)).toEqual(decisions);

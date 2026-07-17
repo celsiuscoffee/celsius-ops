@@ -370,9 +370,15 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   change, sized from `est_monthly_saving_myr`), the next cut removes exactly
   that daily amount (min RM0.5/day, cap 20%/cut) — café-intent funding is
   untouched by construction; the blind 8/12% step only resumes once no unpaid
-  waste remains. Ordering-robust: tonight's Putrajaya exclusions get "paid
-  for" by its first cut (~Jul 22, ~RM13/day matched instead of blind 8%).
-  Follow-up PR after the merge; branch restarted from main.
+  waste remains. Round 4b (owner: "why can't we cut it now rather than
+  wait?"): waste-matched cuts are PAIRED BOOKKEEPING, not experiments — they
+  run in the SAME run as the exclusions (exclusions now apply before budget
+  decisions; only successfully-applied ones count toward the cut) and are
+  exempt from the observation window, the 6d fleet stagger, and the
+  2-cuts/run cap. Still gated by: the revenue guard (never cut into a weak
+  till), the floor, and rollback coverage. Net effect: the night this
+  merges, Putrajaya gets exclusions + the matched ~RM13/day cut together —
+  no 5-day wait. Follow-up PR #952; branch restarted from main.
   **Revenue guard:** last-14-full-days actual till revenue ÷ same-window
   forecast (labour-gate `dailyRevenueSeries` + `buildWeekForecast`, history
   precedes the window = clean counterfactual), divided by the median of the
