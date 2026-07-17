@@ -173,6 +173,25 @@ export function weeklySalaryShare(basicSalary: number, epfEmployerRate: number |
   return (basicSalary * (1 + load) * 12) / 52;
 }
 
+// ── Cross-outlet FT cost split (owner rule: "for FT that rotate, divide the
+// cost accordingly") ─────────────────────────────────────────────────────
+// A rotating full-timer's weekly salary share follows their HOURS: the outlet
+// they actually work pays pro-rata, the home outlet is credited the same
+// amount. Unworked hours stay with the home outlet (sunk). Fractions clamp to
+// [0,1] so data glitches can't over-credit.
+export const FT_WEEK_HOURS = 45; // Employment Act full week (6 × 7.5h)
+
+// What a BORROWING outlet pays for a shared FT: share × (hours here ÷ 45).
+export function borrowedFtCharge(weeklyShare: number, hoursHere: number): number {
+  return weeklyShare * Math.min(1, Math.max(0, hoursHere) / FT_WEEK_HOURS);
+}
+
+// What the HOME outlet deducts for a primary FT lent out: share × (hours
+// elsewhere ÷ 45). Home pays the remainder — including any idle hours.
+export function lentFtCredit(weeklyShare: number, hoursElsewhere: number): number {
+  return weeklyShare * Math.min(1, Math.max(0, hoursElsewhere) / FT_WEEK_HOURS);
+}
+
 export function verdictFor(
   pct: number | null,
   budget: { target: number; ceiling: number },

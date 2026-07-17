@@ -72,6 +72,18 @@ Both the labour-gate % and the man-hours "affordable" side read one forecast
   weekday-vs-weekend split. It's a coverage lens, not the billed figure — FT
   salary is a weekly fixed cost, so only the weekly % is the real number.
 
+## Rotation cost split — cost follows the hours
+
+A rotating FT's weekly salary share is charged to the outlet where the hours
+actually land (`borrowedFtCharge` / `lentFtCredit` in `labour-gate-lib.ts`,
+pro-rata over the 45h week, clamped so borrower charge + home remainder = one
+share exactly). A shared FT working 6 days at a secondary outlet costs THAT
+outlet their full share and their home outlet RM0 — no more flattering the
+borrower while the home outlet pays for labour it never sees. Manager / Area
+Manager / rover cost is HQ overhead: RM0 to every outlet (the old RM309
+`ROVER_SHARE_WEEKLY` charge is dropped), and Managers/Area Managers are never
+auto-scheduled — only the Barista Lead rover auto-rotates (2 days/outlet-week).
+
 ## FT is sunk — schedule them fully, never bench to cut cost
 
 Labour % = roster cost ÷ forecast, and roster cost splits into a **fixed** part

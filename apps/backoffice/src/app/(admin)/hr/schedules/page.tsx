@@ -677,8 +677,8 @@ export default function SchedulesPage() {
             title={[
               `Roster RM${gate.rosterCost.toLocaleString()} vs forecast RM${gate.forecastRevenue.toLocaleString()}`,
               gate.forecastRevenue > 0
-                ? `  • FT floor RM${gate.ftFixedCost.toLocaleString()} (fixed/sunk) = ${((gate.ftFixedCost / gate.forecastRevenue) * 100).toFixed(1)}%`
-                : `  • FT floor RM${gate.ftFixedCost.toLocaleString()} (fixed/sunk)`,
+                ? `  • FT RM${gate.ftFixedCost.toLocaleString()} (fixed; rotated FT split by hours worked here, manager/rover cost = HQ) = ${((gate.ftFixedCost / gate.forecastRevenue) * 100).toFixed(1)}%`
+                : `  • FT RM${gate.ftFixedCost.toLocaleString()} (fixed; rotated FT split by hours, manager/rover = HQ)`,
               gate.forecastRevenue > 0
                 ? `  • PT RM${gate.ptCost.toLocaleString()} (discretionary) = ${((gate.ptCost / gate.forecastRevenue) * 100).toFixed(1)}%`
                 : `  • PT RM${gate.ptCost.toLocaleString()} (discretionary)`,

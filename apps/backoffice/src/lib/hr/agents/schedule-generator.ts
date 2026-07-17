@@ -38,7 +38,8 @@ import {
   shiftHours,
   OUTLET_BUDGETS,
   DEFAULT_BUDGET,
-  ROVER_SHARE_WEEKLY,
+  borrowedFtCharge,
+  lentFtCredit,
 } from "../labour-gate-lib";
 import { forecastWeek } from "../labour-gate";
 import {
@@ -260,13 +261,14 @@ export async function generateSchedule(
     // Rovers are placed separately below (2 days/outlet-week); HoD stays HQ.
     .filter((s) => !ROVER_POSITIONS.has((s.position ?? "").trim().toLowerCase()));
 
-  // Rovers — the Area Manager and the rover lead rotate 2 days/week at each
-  // outlet (workbook Rover Coverage). They are HQ-costed: RM0 to the outlet
-  // in the labour gate, capped at the 2-shift rover quota. HoD excluded.
+  // Rovers — ONLY the rover lead (Barista Lead) auto-rotates 2 days/week at
+  // each outlet. Managers / Area Managers are NEVER auto-scheduled (owner rule
+  // 2026-07-17): they plan their own floor days and are added manually in the
+  // grid. All rover/manager cost is HQ overhead — RM0 to the outlet.
   const { data: roverProfiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
     .select("user_id, position")
-    .in("position", ["Manager", "Area Manager", "Barista Lead"])
+    .in("position", ["Barista Lead"])
     .is("end_date", null);
   const roverIds = ((roverProfiles ?? []) as { user_id: string; position: string }[]).map((p) => p.user_id);
   const roverUsers = roverIds.length
@@ -790,6 +792,9 @@ export async function generateSchedule(
   // MODE does not gate people; it only scales the demand buffer (sizing) and PT.
   const openDatesList = dates.filter((d) => daysOpen.has(dow(d)));
   const roverIdSet = new Set(roverUsers.map((r) => r.id));
+  // Hours each BORROWED shared FT is placed here — drives the pro-rata cost
+  // charge below (cost follows work, per the owner's rotation-cost rule).
+  const borrowedFtHours = new Map<string, number>();
   if (roverUsers.length > 0 || sharedFtElsewhere.length > 0) {
     // Days each flex person already works at ANOTHER outlet this week (+ leave).
     const flexIds = [...new Set([...roverUsers.map((r) => r.id), ...sharedFtElsewhere.map((s) => s.id)])];
@@ -832,6 +837,7 @@ export async function generateSchedule(
 
     const placement = planFlexPlacement({ flex, demandByDate, baseHeadsByDate });
     const flexDays = new Map<string, string[]>();
+    borrowedFtHours.clear();
     // Deterministic emit order: by date, then rovers before shared FT.
     for (const date of Object.keys(placement).sort()) {
       const ids = [...placement[date]].sort((a, b) => Number(!roverIdSet.has(a)) - Number(!roverIdSet.has(b)));
@@ -869,7 +875,10 @@ export async function generateSchedule(
           break_minutes: t.break_minutes,
           notes: t.id,
         });
-        if (!flexMeta.get(id)?.rover) ftHours.set(id, (ftHours.get(id) ?? 0) + workingHours(t));
+        if (!flexMeta.get(id)?.rover) {
+          ftHours.set(id, (ftHours.get(id) ?? 0) + workingHours(t));
+          borrowedFtHours.set(id, (borrowedFtHours.get(id) ?? 0) + workingHours(t));
+        }
         (flexDays.get(id) ?? flexDays.set(id, []).get(id)!).push(date);
       }
     }
@@ -893,21 +902,32 @@ export async function generateSchedule(
   // ── Stage 2: PT budget envelope — the only spend that moves labour % ─
   // Same forecast the man-hours side used (recency-weighted, holiday-aware).
   const forecast = Math.round(weekForecast.weekly);
-  // FT salaries are sunk — the envelope charges every schedulable FT their
-  // full weekly share whether the roster fills them to 45h or not.
-  const ftCost = Math.round(
-    fullTimers.reduce((sum, s) => sum + weeklySalaryShare(s.basic_salary, null), 0),
+  // FT cost, split by WHERE the hours land (owner's rotation-cost rule):
+  //   • primary FT: full weekly share MINUS the pro-rata slice for hours they
+  //     work at other outlets this week (that slice is charged there instead);
+  //   • borrowed shared FT: pro-rata share for the hours placed HERE.
+  // Manager / Area Manager / rover cost is HQ overhead — RM0 to the outlet.
+  const primaryFtCost = fullTimers.reduce((sum, s) => {
+    const share = weeklySalaryShare(s.basic_salary, null);
+    return sum + share - lentFtCredit(share, hoursElsewhere.get(s.id) ?? 0);
+  }, 0);
+  const borrowedFtCost = sharedFtElsewhere.reduce(
+    (sum, s) => sum + borrowedFtCharge(weeklySalaryShare(s.basic_salary, null), borrowedFtHours.get(s.id) ?? 0),
+    0,
   );
-  const ptBudget = Math.max(0, Math.round(budget.target * forecast - ftCost - ROVER_SHARE_WEEKLY));
+  const ftCost = Math.round(primaryFtCost + borrowedFtCost);
+  const ptBudget = Math.max(0, Math.round(budget.target * forecast - ftCost));
   notes.push(
     `Budget: forecast RM${forecast.toLocaleString()} × ${(budget.target * 100).toFixed(0)}% = RM${Math.round(budget.target * forecast).toLocaleString()}; ` +
-      `FT (fixed) RM${ftCost.toLocaleString()} + rover RM${ROVER_SHARE_WEEKLY} → PT envelope RM${ptBudget.toLocaleString()}`,
+      `FT RM${ftCost.toLocaleString()} (primary RM${Math.round(primaryFtCost).toLocaleString()}` +
+      (borrowedFtCost > 0 ? ` + borrowed-hours RM${Math.round(borrowedFtCost).toLocaleString()}` : "") +
+      `; rotated-FT cost split by hours, manager/rover cost = HQ) → PT envelope RM${ptBudget.toLocaleString()}`,
   );
   // Sunk-FT reality: when the fixed FT floor alone is already at/over target, the
   // week is revenue-constrained — no amount of rostering fixes it, and benching
   // FT saves nothing (their salary is booked either way). Flag it so the % isn't
   // "corrected" by cutting FT hours.
-  const ftFloorPct = forecast > 0 ? (ftCost + ROVER_SHARE_WEEKLY) / forecast : null;
+  const ftFloorPct = forecast > 0 ? ftCost / forecast : null;
   if (ptBudget === 0 && ftFloorPct != null) {
     notes.push(
       `⚠ FT floor alone is ${(ftFloorPct * 100).toFixed(1)}% of forecast (≥ ${(budget.target * 100).toFixed(0)}% target) — revenue-constrained week. ` +
@@ -1140,7 +1160,7 @@ export async function generateSchedule(
       return sum + mins / 60;
     }, 0),
   );
-  const estimatedCost = ftCost + Math.round(ptSpend.rm) + ROVER_SHARE_WEEKLY;
+  const estimatedCost = ftCost + Math.round(ptSpend.rm); // manager/rover = HQ, RM0 here
 
   let scheduleId = existing?.id as string | undefined;
   if (!scheduleId) {
