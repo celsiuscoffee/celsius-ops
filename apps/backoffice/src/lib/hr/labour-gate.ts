@@ -17,6 +17,7 @@ import {
 } from "@/lib/hr/labour-gate-lib";
 import { buildWeekForecast, FORECAST_WEEKS, type WeekForecast } from "@/lib/hr/revenue-forecast";
 import { computeWeekDemand } from "@/lib/hr/demand";
+import { mytDateString } from "@/lib/hr/hours";
 
 export * from "@/lib/hr/labour-gate-lib";
 
@@ -41,11 +42,19 @@ export async function forecastWeek(
   const weekDates: string[] = [];
   for (let i = 0; i < 7; i++) weekDates.push(addDays(weekStart, i));
   const histStart = addDays(weekStart, -FORECAST_WEEKS * 7);
-  const histEnd = addDays(weekStart, -1);
+  // The window nominally ends the day before the forecast week, but never
+  // later than YESTERDAY (MYT): forecasting next week mid-week must not pull
+  // in today's partial day or days that haven't happened — those zero-fill at
+  // the highest recency weight and crater the not-yet-traded weekdays
+  // (observed: next week's Saturday forecast ~RM3.0k vs a real ~RM4.9k
+  // baseline when generated on a Thursday).
+  const yesterday = addDays(mytDateString(new Date()), -1);
+  const histEnd = addDays(weekStart, -1) < yesterday ? addDays(weekStart, -1) : yesterday;
 
   const series = await dailyRevenueSeries(outlet, histStart, histEnd);
-  // Fill EVERY day in the window (0 when no sales) so a closed/dead day counts
-  // as a real 0 in its weekday's average rather than silently raising it.
+  // Fill EVERY day in the (completed) window (0 when no sales) so a closed/dead
+  // day counts as a real 0 in its weekday's average rather than silently
+  // raising it.
   const history: Array<{ date: string; revenue: number }> = [];
   for (let d = histStart; d <= histEnd; d = addDays(d, 1)) history.push({ date: d, revenue: series.get(d) ?? 0 });
 
