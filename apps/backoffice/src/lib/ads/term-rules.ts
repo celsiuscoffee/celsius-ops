@@ -66,7 +66,43 @@ export const AUTO_EXCLUDE_MIN_COST_MYR = 2;
 export const AUTO_EXCLUDE_MAX_PER_RUN = 15;
 
 export type TermSpend = { campaignId: string; searchTerm: string; costMyr: number };
-export type ExclusionCandidate = TermSpend & { intent: TermIntent };
+export type ExclusionCandidate = TermSpend & { intent: TermIntent; seeded?: boolean };
+
+/**
+ * Pure: seed campaigns with junk terms PROVEN at sibling campaigns (owner
+ * 2026-07-17: "shah alam, do junk-term as well"). Junk intent is not
+ * outlet-specific — "restaurants near me" is waste at every outlet — but a
+ * campaign with no search-term history yet (the sync only just started
+ * covering it) has nothing measured to exclude. So terms that were actually
+ * observed, classified auto-excludable, and excluded somewhere in the fleet
+ * transfer to every other campaign as negatives. Seeded exclusions carry NO
+ * measured cost (costMyr 0) — they improve spend quality immediately but
+ * never size a waste-matched budget cut.
+ */
+export function selectSeedExclusions(
+  campaignIds: string[],
+  fleetJunkTerms: string[],
+  alreadyDecided: Set<string>,
+  maxPerCampaign = AUTO_EXCLUDE_MAX_PER_RUN,
+): ExclusionCandidate[] {
+  const picked: ExclusionCandidate[] = [];
+  for (const campaignId of campaignIds) {
+    let used = 0;
+    const seen = new Set<string>();
+    for (const term of fleetJunkTerms) {
+      if (used >= maxPerCampaign) break;
+      const t = term.toLowerCase();
+      if (seen.has(t)) continue;
+      seen.add(t);
+      if (alreadyDecided.has(`${campaignId} ${t}`)) continue;
+      const intent = classifyTermIntent(t);
+      if (!shouldAutoExclude(intent)) continue;
+      picked.push({ campaignId, searchTerm: t, costMyr: 0, intent, seeded: true });
+      used++;
+    }
+  }
+  return picked;
+}
 
 /**
  * Pure: pick this run's auto-exclusions. `alreadyDecided` holds

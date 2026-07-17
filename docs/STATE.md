@@ -378,7 +378,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   2-cuts/run cap. Still gated by: the revenue guard (never cut into a weak
   till), the floor, and rollback coverage. Net effect: the night this
   merges, Putrajaya gets exclusions + the matched ~RM13/day cut together —
-  no 5-day wait. Follow-up PR #952; branch restarted from main.
+  no 5-day wait. PR #952 MERGED 2026-07-17 (squash a3c3015).
+  **Round 5 — seeded exclusions (owner: "shah alam, do junk-term as well").**
+  Junk intent is fleet-wide: any term actually excluded from measured spend
+  at one campaign transfers as a negative to every other enabled campaign
+  (`selectSeedExclusions`; evidence-based only, never invented terms; paused
+  campaigns skipped; cost recorded NULL so seeds never size a waste-matched
+  cut — SA's budget cut waits for its own term data or blind descent).
+  **DEPLOY-TIMING LESSON:** the Jul 16 19:00 UTC cron ran the PRE-#947 code —
+  the prod deploy of a113464 only went READY at Jul 17 00:13 UTC (~6h after
+  merge; queue lag), so the autopilot's real first pass is the night of
+  Jul 17 (3am MYT Jul 18): Tamarind pause + Putrajaya exclusions + matched
+  cut + SA seeds all together. When a merge must beat a cron, VERIFY the
+  Vercel prod deployment is READY — merging is not deploying.
   **Revenue guard:** last-14-full-days actual till revenue ÷ same-window
   forecast (labour-gate `dailyRevenueSeries` + `buildWeekForecast`, history
   precedes the window = clean counterfactual), divided by the median of the

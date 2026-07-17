@@ -83,7 +83,7 @@ import { buildAdsOptimizerReport, ENABLED_STATUSES } from "./optimizer";
 import { applyBudgetChange } from "./set-budget";
 import { pauseCampaign, enableCampaign } from "./pause-campaign";
 import { applyTermExclusion } from "./exclude-term";
-import { selectAutoExclusions, type ExclusionCandidate } from "./term-rules";
+import { selectAutoExclusions, selectSeedExclusions, type ExclusionCandidate } from "./term-rules";
 import { microsToMYR } from "./client";
 
 export const AGENT_KEY = "ads_autopilot";
@@ -626,7 +626,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
       where: { date: { gte: since } },
       _sum: { costMicros: true },
     }),
-    prisma.adsTermExclusion.findMany({ select: { campaignId: true, searchTerm: true } }),
+    prisma.adsTermExclusion.findMany({ select: { campaignId: true, searchTerm: true, status: true } }),
   ]);
   const alreadyDecided = new Set(decided.map((e) => `${e.campaignId} ${e.searchTerm.toLowerCase()}`));
   const exclusions: AutopilotRunResult["exclusions"] = selectAutoExclusions(
@@ -649,10 +649,40 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
       Object.assign(x, res.ok ? { applied: true } : { applied: false, error: res.error });
       if (!res.ok) continue;
     }
+    alreadyDecided.add(`${x.campaignId} ${x.searchTerm}`);
     pendingWasteByCampaign.set(
       x.campaignId,
       (pendingWasteByCampaign.get(x.campaignId) ?? 0) + x.costMyr / 30,
     );
+  }
+
+  // Seed fleet-proven junk to campaigns that lack their own term data yet
+  // (e.g. Shah Alam until its search-term history accumulates): every term
+  // actually excluded from measured spend anywhere in the fleet becomes a
+  // negative everywhere. Cost 0 — improves spend quality now, never sizes a
+  // waste-matched cut. Paused campaigns are skipped (probe in flight).
+  const fleetJunkTerms = [
+    ...exclusions.filter((x) => x.applied !== false).map((x) => x.searchTerm),
+    ...decided.filter((e) => e.status === "applied").map((e) => e.searchTerm),
+  ];
+  const isPausedCampaign = (s: string) => !ENABLED_STATUSES.includes(s);
+  const seeds = selectSeedExclusions(
+    campaigns.filter((c) => !isPausedCampaign(c.status)).map((c) => c.id),
+    fleetJunkTerms,
+    alreadyDecided,
+  );
+  for (const x of seeds) {
+    if (mode === "armed") {
+      const res = await applyTermExclusion({
+        campaignId: x.campaignId,
+        searchTerm: x.searchTerm,
+        decidedBy: "ads-autopilot",
+        estMonthlySavingMyr: null,
+        reason: `autopilot: seeded fleet-wide junk (${x.intent}; proven wasteful at a sibling campaign)`,
+      });
+      Object.assign(x, res.ok ? { applied: true } : { applied: false, error: res.error });
+    }
+    exclusions.push(x);
   }
 
   const isPausedStatus = (s: string) => !ENABLED_STATUSES.includes(s);
