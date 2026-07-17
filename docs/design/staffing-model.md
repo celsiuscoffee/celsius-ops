@@ -79,10 +79,12 @@ actually land (`borrowedFtCharge` / `lentFtCredit` in `labour-gate-lib.ts`,
 pro-rata over the 45h week, clamped so borrower charge + home remainder = one
 share exactly). A shared FT working 6 days at a secondary outlet costs THAT
 outlet their full share and their home outlet RM0 — no more flattering the
-borrower while the home outlet pays for labour it never sees. Manager / Area
-Manager / rover cost is HQ overhead: RM0 to every outlet (the old RM309
-`ROVER_SHARE_WEEKLY` charge is dropped), and Managers/Area Managers are never
-auto-scheduled — only the Barista Lead rover auto-rotates (2 days/outlet-week).
+borrower while the home outlet pays for labour it never sees. The **Barista
+Lead rover** follows the same rule: a working rover, costed pro-rata to each
+outlet by the hours rotated there (replacing the old flat RM309
+`ROVER_SHARE_WEEKLY`). Only **Manager / Area Manager / HoD** cost is HQ
+overhead (RM0 to outlets), and they are never auto-scheduled — only the
+Barista Lead rover auto-rotates (2 days/outlet-week).
 
 ## FT is sunk — schedule them fully, never bench to cut cost
 

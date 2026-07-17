@@ -267,14 +267,18 @@ export async function generateSchedule(
   // grid. All rover/manager cost is HQ overhead — RM0 to the outlet.
   const { data: roverProfiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position")
+    .select("user_id, position, basic_salary")
     .in("position", ["Barista Lead"])
     .is("end_date", null);
-  const roverIds = ((roverProfiles ?? []) as { user_id: string; position: string }[]).map((p) => p.user_id);
+  type RoverProfile = { user_id: string; position: string; basic_salary: number | null };
+  const roverIds = ((roverProfiles ?? []) as RoverProfile[]).map((p) => p.user_id);
   const roverUsers = roverIds.length
     ? await prisma.user.findMany({ where: { id: { in: roverIds }, status: "ACTIVE" }, select: { id: true, name: true } })
     : [];
-  const roverPositionOf = new Map(((roverProfiles ?? []) as { user_id: string; position: string }[]).map((p) => [p.user_id, p.position]));
+  const roverPositionOf = new Map(((roverProfiles ?? []) as RoverProfile[]).map((p) => [p.user_id, p.position]));
+  // Rover lead cost follows their hours too (same rotation-cost rule as shared
+  // FT): each outlet pays share × (hours here ÷ 45). Managers stay RM0/HQ.
+  const roverSalaryOf = new Map(((roverProfiles ?? []) as RoverProfile[]).map((p) => [p.user_id, Number(p.basic_salary) || 0]));
 
   // "Primary outlet wins": a full-timer carries their 6-day floor only at their
   // primary outlet. A shared FT whose primary is elsewhere is NOT auto-rostered
@@ -792,9 +796,10 @@ export async function generateSchedule(
   // MODE does not gate people; it only scales the demand buffer (sizing) and PT.
   const openDatesList = dates.filter((d) => daysOpen.has(dow(d)));
   const roverIdSet = new Set(roverUsers.map((r) => r.id));
-  // Hours each BORROWED shared FT is placed here — drives the pro-rata cost
-  // charge below (cost follows work, per the owner's rotation-cost rule).
+  // Hours each BORROWED shared FT / rover lead is placed here — drives the
+  // pro-rata cost charge below (cost follows work, per the rotation-cost rule).
   const borrowedFtHours = new Map<string, number>();
+  const roverHours = new Map<string, number>();
   if (roverUsers.length > 0 || sharedFtElsewhere.length > 0) {
     // Days each flex person already works at ANOTHER outlet this week (+ leave).
     const flexIds = [...new Set([...roverUsers.map((r) => r.id), ...sharedFtElsewhere.map((s) => s.id)])];
@@ -838,6 +843,7 @@ export async function generateSchedule(
     const placement = planFlexPlacement({ flex, demandByDate, baseHeadsByDate });
     const flexDays = new Map<string, string[]>();
     borrowedFtHours.clear();
+    roverHours.clear();
     // Deterministic emit order: by date, then rovers before shared FT.
     for (const date of Object.keys(placement).sort()) {
       const ids = [...placement[date]].sort((a, b) => Number(!roverIdSet.has(a)) - Number(!roverIdSet.has(b)));
@@ -875,7 +881,9 @@ export async function generateSchedule(
           break_minutes: t.break_minutes,
           notes: t.id,
         });
-        if (!flexMeta.get(id)?.rover) {
+        if (flexMeta.get(id)?.rover) {
+          roverHours.set(id, (roverHours.get(id) ?? 0) + workingHours(t));
+        } else {
           ftHours.set(id, (ftHours.get(id) ?? 0) + workingHours(t));
           borrowedFtHours.set(id, (borrowedFtHours.get(id) ?? 0) + workingHours(t));
         }
@@ -887,8 +895,8 @@ export async function generateSchedule(
       days.sort();
       notes.push(
         meta.rover
-          ? `Rover ${meta.name} (${roverPositionOf.get(id)}): ${days.join(", ")} — RM0 to outlet, HQ-costed`
-          : `Shared FT ${meta.name} filled here: ${days.join(", ")} — primary elsewhere, RM0 to this outlet (sunk cost used, spread to busiest days)`,
+          ? `Rover ${meta.name} (${roverPositionOf.get(id)}): ${days.join(", ")} — costed here pro-rata by hours (rotation-cost rule)`
+          : `Shared FT ${meta.name} filled here: ${days.join(", ")} — primary elsewhere; their cost for these hours is charged HERE, credited at home (rotation-cost rule)`,
       );
     }
     const unfilledShared = sharedFtElsewhere.filter((s) => !flexDays.has(s.id));
@@ -915,13 +923,19 @@ export async function generateSchedule(
     (sum, s) => sum + borrowedFtCharge(weeklySalaryShare(s.basic_salary, null), borrowedFtHours.get(s.id) ?? 0),
     0,
   );
-  const ftCost = Math.round(primaryFtCost + borrowedFtCost);
+  // Rover lead (Barista Lead) hours here, same pro-rata rule. Managers = HQ, RM0.
+  const roverCost = [...roverHours.entries()].reduce(
+    (sum, [id, h]) => sum + borrowedFtCharge(weeklySalaryShare(roverSalaryOf.get(id) ?? 0, null), h),
+    0,
+  );
+  const ftCost = Math.round(primaryFtCost + borrowedFtCost + roverCost);
   const ptBudget = Math.max(0, Math.round(budget.target * forecast - ftCost));
   notes.push(
     `Budget: forecast RM${forecast.toLocaleString()} × ${(budget.target * 100).toFixed(0)}% = RM${Math.round(budget.target * forecast).toLocaleString()}; ` +
       `FT RM${ftCost.toLocaleString()} (primary RM${Math.round(primaryFtCost).toLocaleString()}` +
       (borrowedFtCost > 0 ? ` + borrowed-hours RM${Math.round(borrowedFtCost).toLocaleString()}` : "") +
-      `; rotated-FT cost split by hours, manager/rover cost = HQ) → PT envelope RM${ptBudget.toLocaleString()}`,
+      (roverCost > 0 ? ` + rover-hours RM${Math.round(roverCost).toLocaleString()}` : "") +
+      `; rotation cost follows hours, manager cost = HQ) → PT envelope RM${ptBudget.toLocaleString()}`,
   );
   // Sunk-FT reality: when the fixed FT floor alone is already at/over target, the
   // week is revenue-constrained — no amount of rostering fixes it, and benching
@@ -1160,7 +1174,7 @@ export async function generateSchedule(
       return sum + mins / 60;
     }, 0),
   );
-  const estimatedCost = ftCost + Math.round(ptSpend.rm); // manager/rover = HQ, RM0 here
+  const estimatedCost = ftCost + Math.round(ptSpend.rm); // ftCost incl. borrowed + rover hours; manager = HQ RM0
 
   let scheduleId = existing?.id as string | undefined;
   if (!scheduleId) {

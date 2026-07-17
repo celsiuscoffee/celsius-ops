@@ -297,12 +297,27 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     (sum, [uid, h]) => sum + borrowedFtCharge(shareOf.get(uid) ?? 0, h),
     0,
   );
+  // Rover lead (Barista Lead) is a WORKING rover: their cost follows their hours
+  // here, same pro-rata rule. Managers / Area Managers / HoD stay RM0 (HQ).
+  const roverLeadHours = new Map<string, { hours: number; share: number }>();
+  for (const r of rows) {
+    if ((r.position ?? "").trim().toLowerCase() !== "barista lead") continue;
+    const h = shiftHours(r.start_time, r.end_time);
+    if (h <= 0) continue;
+    const cur = roverLeadHours.get(r.user_id) ?? {
+      hours: 0,
+      share: weeklySalaryShare(Number(r.basic_salary) || 0, r.epf_employer_rate == null ? null : Number(r.epf_employer_rate)),
+    };
+    cur.hours += h;
+    roverLeadHours.set(r.user_id, cur);
+  }
+  const roverLeadWeekly = [...roverLeadHours.values()].reduce((sum, v) => sum + borrowedFtCharge(v.share, v.hours), 0);
   const ptCost = rows.reduce((sum, r) => {
     if (r.employment_type !== "part_time" && r.employment_type !== "intern") return sum;
     if (!r.hourly_rate || r.hourly_rate <= 0) return sum;
     return sum + shiftHours(r.start_time, r.end_time) * r.hourly_rate;
   }, 0);
-  const ftFixedCost = Math.round(primaryFtWeekly + borrowedFtWeekly);
+  const ftFixedCost = Math.round(primaryFtWeekly + borrowedFtWeekly + roverLeadWeekly);
   const rosterCost = Math.round(ftFixedCost + ptCost);
 
   // Idle sunk-FT capacity: a primary FT is paid their full week regardless of the
