@@ -481,7 +481,11 @@ export async function generateSchedule(
   const N = sortedFT.length;
   const dayItems = (d: number) => Math.max(itemsByDow.get(d) ?? 0, 0);
   const maxItems = openDaysList.length ? Math.max(...openDaysList.map(dayItems)) : 0;
-  const restCap = Math.max(0, N - SERVICE_FLOOR); // never rest a day below the service floor
+  // Max rests on any one day: don't dip the crew below the service floor — but
+  // never below 1, or a small crew (N ≤ floor, e.g. a 3-FT outlet) has NO legal
+  // rest slot anywhere and the fallback would pile every rest onto the same day.
+  // Every FT must rest once; on a floor-sized crew that day simply runs short.
+  const restCap = Math.max(1, N - SERVICE_FLOOR);
 
   // ── Fairness memory: each FT's recent history (last 4 weeks) ─────────
   // Drives long-run fairness so it isn't reset every week: openings & closings
@@ -832,9 +836,30 @@ export async function generateSchedule(
     for (const date of Object.keys(placement).sort()) {
       const ids = [...placement[date]].sort((a, b) => Number(!roverIdSet.has(a)) - Number(!roverIdSet.has(b)));
       for (const id of ids) {
+        // Join the anchor with the larger remaining DEMAND shortfall — not the
+        // one with fewer heads, which would fight the demand-shaped counts (a
+        // morning-peaked day legitimately carries more openers; the flex head
+        // should reinforce the morning, not "balance" it away to closing).
+        const shortfall = (t: ShiftTemplate): number => {
+          const startH = Number(t.start_time.slice(0, 2));
+          const endH = Number(t.end_time.slice(0, 2));
+          let s = 0;
+          for (let h = startH; h < endH; h++) {
+            const need = (demand.get(`${dow(date)}:${h}`) ?? SERVICE_FLOOR) + bufferHeads(dow(date), h);
+            const have = rows.filter(
+              (r) => r.shift_date === date && r.notes !== "rest_day" &&
+                Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
+            ).length;
+            s += Math.max(0, need - have);
+          }
+          return s;
+        };
+        const openShort = shortfall(tpl.opening);
+        const closeShort = shortfall(tpl.closing);
         const openHeads = rows.filter((r) => r.shift_date === date && r.notes !== "rest_day" && r.start_time === hhmmss(tpl.opening.start_time)).length;
         const closeHeads = rows.filter((r) => r.shift_date === date && r.notes !== "rest_day" && r.start_time === hhmmss(tpl.closing.start_time)).length;
-        const t = openHeads <= closeHeads ? tpl.opening : tpl.closing;
+        // Tie on shortfall (usually both 0 on surplus days) → thinner anchor.
+        const t = openShort > closeShort || (openShort === closeShort && openHeads <= closeHeads) ? tpl.opening : tpl.closing;
         rows.push({
           user_id: id,
           shift_date: date,
