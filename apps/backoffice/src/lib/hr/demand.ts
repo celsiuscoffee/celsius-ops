@@ -55,6 +55,8 @@ export type WeekDemand = {
   kitHeadsByHour: Map<string, number>; // "dw:hr" → kitchen heads
   barHeadsByHour: Map<string, number>; // "dw:hr" → barista/counter heads
   itemsByDow: Map<number, number>; // dw → avg items/day
+  barItemsByDow: Map<number, number>; // dw → avg barista/counter items/day (FOH)
+  kitItemsByDow: Map<number, number>; // dw → avg cooked items/day (BOH)
   peakByDow: Map<number, { heads: number; hr: number; bar: number; kit: number }>;
   baristaRate: number;
   kitchenRate: number;
@@ -197,6 +199,8 @@ export async function computeWeekDemand(
   const kitHeadsByHour = new Map<string, number>();
   const barHeadsByHour = new Map<string, number>();
   const itemsByDow = new Map<number, number>();
+  const barItemsByDow = new Map<number, number>();
+  const kitItemsByDow = new Map<number, number>();
   const peakByDow = new Map<number, { heads: number; hr: number; bar: number; kit: number }>();
   for (const h of hourly) {
     const bar = Number(h.barista) || 0;
@@ -209,9 +213,11 @@ export async function computeWeekDemand(
     kitHeadsByHour.set(`${h.dw}:${h.hr}`, kitHeads);
     barHeadsByHour.set(`${h.dw}:${h.hr}`, barHeads);
     itemsByDow.set(h.dw, (itemsByDow.get(h.dw) ?? 0) + bar + kit);
+    barItemsByDow.set(h.dw, (barItemsByDow.get(h.dw) ?? 0) + bar);
+    kitItemsByDow.set(h.dw, (kitItemsByDow.get(h.dw) ?? 0) + kit);
     const prev = peakByDow.get(h.dw);
     if (!prev || heads > prev.heads) peakByDow.set(h.dw, { heads, hr: h.hr, bar: barHeads, kit: kitHeads });
   }
 
-  return { demand, kitHeadsByHour, barHeadsByHour, itemsByDow, peakByDow, baristaRate, kitchenRate, calibrationNote };
+  return { demand, kitHeadsByHour, barHeadsByHour, itemsByDow, barItemsByDow, kitItemsByDow, peakByDow, baristaRate, kitchenRate, calibrationNote };
 }

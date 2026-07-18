@@ -87,6 +87,8 @@ export type LabourGateResult = {
   coverage: Array<{
     date: string; neededHours: number; scheduledHours: number; shortHours: number;
     items?: number; // avg items that weekday (28d) — why the day needs its hours
+    barItems?: number; // FOH share (drinks + pastries + uncategorised)
+    kitItems?: number; // BOH share (cooked food)
     forecast?: number; pct?: number | null; isWeekend?: boolean; isHoliday?: boolean; holidayName?: string;
   }>;
 };
