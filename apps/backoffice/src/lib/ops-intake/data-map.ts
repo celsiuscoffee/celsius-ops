@@ -61,8 +61,10 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
 - "SystemReport" = internal bug/problem queue (OPEN|IN_PROGRESS|RESOLVED|DISMISSED).
 - "WhatsAppMessage": direction + type; type='template' outbound ≈ RM0.07 each (billable); free-form in-window is free.
 
-## Loyalty (Supabase-native tables, snake_case)
+## Loyalty & marketing sends (Supabase-native tables, snake_case)
 - member_brands (brand_id='brand-celsius'), redemptions — loyalty membership + redemption activity.
+- loop_assignments = the LIFECYCLE LOOPS' send ledger (channel sms/push, sms_status, converted, order_revenue). This is the SMS truth — ~100-200 sends/day via SMSNiaga (app_settings.sms_provider, switched 2026-06-21 after SMS123 began requiring content whitelisting).
+- TRAP: sms_logs is LEGACY (old campaigns-auto + tests only; both legacy campaigns inactive). Its silence since 2026-06-21 is normal — never conclude "SMS is dead" from sms_logs. sms_credits is SMS123-era balance history.
 
 ## Metric definitions (use these consistently)
 - Labour % = month payroll (salary + employer_stat) / month gross sales.

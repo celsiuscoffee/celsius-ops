@@ -290,6 +290,18 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 — **E3 "SMS dead" RESOLVED — false alarm from a wrong
+  canonical source.** Real story: SMS123 began enforcing content
+  whitelisting (BE00036) in May → 2,446 failures May–Jun; team tested and
+  switched `app_settings.sms_provider` to **smsniaga on Jun 21**; the
+  lifecycle loops have sent **100–200 SMS/day successfully ever since**,
+  logged in `loop_assignments` (channel/sms_status) — NOT `sms_logs`,
+  which is legacy (campaigns-auto + tests; both legacy campaigns
+  inactive, so its silence is normal). Check 17 + data-map corrected;
+  never diagnose SMS from sms_logs again. PR #970 merged (COGS W1–W4 +
+  enforcement + self-driving custodian). Still-real marketing residuals:
+  campaign_outcomes 0 rows; geogrid stalled since Jul 6.
+
 - 2026-07-18 — **Custodian made SELF-DRIVING (owner: "what I wanted is for
   this agent to do this by itself").** Skill gains an **Autonomy ladder**
   (rung 1: code fixes/additive prod derivations/docs — do it; rung 2:

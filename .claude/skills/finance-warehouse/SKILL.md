@@ -106,7 +106,7 @@ projection for sales/cash/payroll semantics.
 | HR / people | Roster: `hr_schedules` (published only) + `hr_schedule_shifts`. Attendance: `hr_attendance_logs` (adoption erratic — absence ≠ absent). Profiles: `hr_employee_profiles` (76) vs `User` ACTIVE (56; profiles include resigned). Payroll COST stays `fin_payroll_actuals` | next week published by Sun night; attendance same-day | `hr_payroll_runs` now has 6 paid runs (2026-07-18) but remains NON-canonical for cost. `hr_staff_weekly_availability` = 0 rows until PT-loop UI ships (round 6) |
 | Procurement / inventory | POs: `Order` orderType='PURCHASE_ORDER'. Receipts: `Receiving`. Stock: `StockBalance` (shadow — consumption engine off; reorder runs off receipts−wastage). Wastage: `StockAdjustment`. Pars: `ParLevel` (weekly recalc). Counts: `StockCount` (+coverage guard) | receiving ≤ 1d; pars recalced weekly Sun | Open-PO rot: 107 AWAITING_DELIVERY at baseline — age them every run. Counts stuck SUBMITTED (2 since Apr 30). Stock accuracy is SHADOW until unit normalisation + recipes |
 | Ops | `Checklist` (assignment semantics!), `OpsAlert` (ledger, RESOLVED can be bulk claim), `SystemReport`, `AuditReport` | checklists same-day | **935 open OpsAlerts at baseline** — the ledger is a swamp; track the number, propose a sweep policy |
-| Marketing / loyalty | Members: `member_brands` (23.0k). Redemptions: `redemptions`. SMS: `sms_logs` + `sms_credits`. Outcomes: `campaign_outcomes` (substrate) | redemptions live; sms same-day when loops fire | **sms_logs last row 2026-06-21 with SMS loops ARMED** — verify channel alive vs sends moved to push. `campaign_outcomes` = 0 rows (no loop writes outcomes yet — substrate gap). Loyalty RLS is `USING(true)` (PII anon-writable — standing critical, rls-access-map) |
+| Marketing / loyalty | Members: `member_brands` (23.0k). Redemptions: `redemptions`. **Loop sends: `loop_assignments`** (channel sms/push + sms_status — the lifecycle loops' ledger; provider SMSNiaga via app_settings.sms_provider since 2026-06-21). Legacy: `sms_logs` (campaigns-auto/tests only, quiet = normal) + `sms_credits` (SMS123-era). Outcomes: `campaign_outcomes` (substrate) | redemptions live; loop sends daily | RESOLVED 2026-07-18: the "SMS dead since Jun 21" red was a wrong-canonical-source error — loops send 100–200/day via SMSNiaga. Real residuals: `campaign_outcomes` = 0 rows (no loop writes outcomes — substrate gap). Loyalty RLS `USING(true)` (PII anon-writable — standing critical) |
 | Reviews / GBP / ads | `ReviewDailySnapshot` (nightly), `GeoGridScan`+`GeoRankSnapshot` (catchment-scale only), `ReviewReplyDraft`, `ads_campaign` (status enum is TEXT numbers — '2'=ENABLED), `ads_budget_change`, `grab_ads_spend` | snapshot daily; geogrid weekly | Geogrid last scan Jul 6 at baseline — stalled? Trust only complete catchment-scale scans |
 | Comms | `WhatsAppMessage` (direction/type; template ≈ RM0.07) | live | — |
 | Agent substrate | `agent_registry` (30 agents), `agent_actions` | every armed agent logs actions | Only 4/30 agents write agent_actions at baseline — telemetry adoption gap; nudge per-domain wiring |
@@ -116,7 +116,13 @@ projection for sales/cash/payroll semantics.
 14. Open-PO age: AWAITING_DELIVERY/SENT older than 14d — count + oldest; [growth vs baseline 107].
 15. StockCount rot: SUBMITTED > 7d or DRAFT > 7d. [any]
 16. OpsAlert swamp: open count [growth vs 935 baseline].
-17. SMS pulse: max(sms_logs.created_at) within 7d while any SMS loop armed. [stale = channel broken or loops mis-armed]
+17. SMS pulse: **canonical source is `loop_assignments`** (channel='sms',
+    sms_status by day — the lifecycle loops' send ledger), NOT `sms_logs`
+    (legacy: campaigns-auto + tests only; quiet since the 2026-06-21
+    SMSNiaga switch and that is CORRECT — both legacy campaigns inactive).
+    Healthy = sms/sent rows daily (~100–200/day baseline) with near-zero
+    failed. [failures spiking or zero sent-rows for 3+ days while loops
+    armed = channel problem]
 18. campaign_outcomes writers: row count > 0 once loops are wired. [still 0 after wiring = regression]
 19. Snapshot cadence: ReviewDailySnapshot within 2d; GeoGridScan within 10d.
 20. Substrate telemetry: distinct agent_key in agent_actions ÷ armed agents in registry [ratio should rise; baseline 4/30].
