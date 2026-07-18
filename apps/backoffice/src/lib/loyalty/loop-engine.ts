@@ -59,7 +59,8 @@ export type SegmentOpts = {
   outletId?: string; activeWithinDays?: number;     // round_gap / celebration
   expiringWithinDays?: number;                      // reward_expiring
   minBeans?: number; idleMinDays?: number; idleMaxDays?: number; // beans_idle / habit
-  minVisits?: number; maxVisits?: number;           // habit
+  minVisits?: number; maxVisits?: number;           // habit / aov_push
+  maxAvgTicket?: number;                            // aov_push
 };
 
 type MemberRow = { id: string; phone: string | null; name: string | null; sms_opt_out: boolean | null; birthday: string | null; preferred_outlet_id: string | null };
@@ -214,6 +215,30 @@ async function lapsedDeepSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; 
     if (batch.length < 1000) break;
   }
   return { rows: reachable(rows), label: `Deep-lapsed ${minD}-${maxD}d · real visitors` };
+}
+
+// ── Basket builder (AOV push): habitual visitors whose average ticket sits
+// far below the RM40 target (pool avg ~RM17). Frequency is fine — the play is
+// purely basket growth, so success shows as revenue/recipient vs holdout, NOT
+// conversion lift (they'd visit anyway). The margin-aware auto-pause keeps
+// this testable: it only kills when BOTH lift and margin are dead.
+async function aovPushSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
+  const activeDays = o.activeWithinDays ?? 30;
+  const minVisits = o.minVisits ?? 4;
+  const maxTicket = o.maxAvgTicket ?? 25;
+  const since = new Date(Date.now() - activeDays * 86400000).toISOString();
+  const raw: Array<{ member_id: string; total_spent: number | null; total_visits: number | null; members: MemberRow | null }> = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabaseAdmin.from("member_brands")
+      .select("member_id, total_spent, total_visits, members!inner(id, phone, name, sms_opt_out, birthday, preferred_outlet_id)")
+      .eq("brand_id", BRAND).gte("last_visit_at", since).gte("total_visits", minVisits).range(from, from + 999);
+    if (error) throw new Error(`aov_push segment: ${error.message}`);
+    const batch = (data ?? []) as unknown as Array<{ member_id: string; total_spent: number | null; total_visits: number | null; members: MemberRow | null }>;
+    raw.push(...batch);
+    if (batch.length < 1000) break;
+  }
+  const small = raw.filter((r) => (r.total_spent ?? 0) / Math.max(1, r.total_visits ?? 0) < maxTicket);
+  return { rows: reachable(small), label: `Regulars ≥${minVisits} visits · avg ticket <RM${maxTicket}` };
 }
 
 // ── Habit builder: the coffee habit forms around visit 3 — members at 2-3
@@ -948,7 +973,7 @@ export const OFFER_CANDIDATES: OfferCandidate[] = [
 // ── Loop registry: each campaign objective is a loop. Same machinery
 // (holdout → optimise offers → auto-issue voucher → measure lift), different
 // audience + candidate subset. Add a loop here and it inherits the whole engine.
-export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap" | "reward_expiring" | "beans_idle" | "celebration" | "lapsed_deep" | "habit";
+export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap" | "reward_expiring" | "beans_idle" | "celebration" | "lapsed_deep" | "habit" | "fresh_lapse" | "aov_push";
 export type LoopDef = {
   key: LoopKey;
   label: string;
@@ -967,7 +992,11 @@ export type LoopDef = {
    *  batch/manual (operator prepares + budgets + schedules a round). */
   /** dailyLimit drips a large backlog instead of blasting it on launch day —
    *  prepareRound takes a random N of qualifiers per day until it drains. */
-  trigger?: { holdoutPct: number; cooldownDays: number; segmentOpts: SegmentOpts; dailyLimit?: number };
+  /** exploreSendWindows alternates rounds between morning (immediate, ~9am
+   *  cron) and evening (scheduled 17:00 MYT, fired by loops-send) by day
+   *  parity, so the send-time leaderboard accumulates a real morning-vs-evening
+   *  comparison instead of everything sending at 9am. */
+  trigger?: { holdoutPct: number; cooldownDays: number; segmentOpts: SegmentOpts; dailyLimit?: number; exploreSendWindows?: boolean };
   /** REMINDER loop: the lure already exists in the member's wallet, so the
    *  round does NOT mint a voucher. prepareRound attributes the member's
    *  existing expiring voucher (carried on the segment row) instead. Arms are
@@ -980,7 +1009,7 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // Triggered (auto): reactivation fires when a member crosses ~30d inactive;
   // welcome ~1 day after the 1st visit; birthday on the day. round_gap stays
   // batch/manual (an operator-driven, budget-capped weekly push).
-  winback:   { key: "winback",   label: "Reactivation",      objective: "Win back lapsed customers",        defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct10_min25", "pct15_min40", "pct20_min40", "flat5_min25", "flat10_min30", "flat15_min50", "b1f1_drinks"], messageTemplate: "We miss you at Celsius! Come back and enjoy {offer} - just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minDaysLapsed: 30, maxDaysLapsed: 60 } }, segment: winbackSegment },
+  winback:   { key: "winback",   label: "Reactivation",      objective: "Win back lapsed customers",        defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct10_min25", "pct15_min40", "pct20_min40", "flat5_min25", "flat10_min30", "flat15_min50", "b1f1_drinks"], messageTemplate: "We miss you at Celsius! Come back and enjoy {offer} - just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minDaysLapsed: 30, maxDaysLapsed: 60 }, exploreSendWindows: true }, segment: winbackSegment },
   welcome:   { key: "welcome",   label: "Welcome",           objective: "Turn the 1st visit into a 2nd",    defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks", "free_drink_min25"], messageTemplate: "Welcome to Celsius! Enjoy {offer} on your next visit - just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 365, segmentOpts: { joinedWithinDays: 10 } }, segment: welcomeSegment },
   birthday:  { key: "birthday",  label: "Birthday",          objective: "Bring members in on their birthday", defaultHoldoutPct: 0,  defaultWindowDays: 14, candidateKeys: ["free_coffee", "free_drink"], messageTemplate: "Happy birthday from Celsius! Enjoy {offer} - just show your number at any outlet to redeem.", trigger: { holdoutPct: 0, cooldownDays: 300, segmentOpts: { birthdayWithinDays: 0 } }, segment: birthdaySegment },
   round_gap: { key: "round_gap", label: "Weekly round-gap",  objective: "Fill an underperforming day-part",  defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct15_min40", "flat10_min30", "b1f1_drinks"], messageTemplate: "Celsius misses you! Enjoy {offer} this week - just show your number at any outlet to redeem.", segment: roundGapSegment },
@@ -1012,6 +1041,17 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // the habit locks in around visit 3. Same mechanic, one rung up: members at
   // 2-3 visits gone quiet 5-14d. Welcome's champion offer leads the arms.
   habit: { key: "habit", label: "Habit builder", objective: "Turn the 2nd visit into a routine (3rd+)", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks"], messageTemplate: "You're becoming a regular at Celsius, {name}! Enjoy {offer} on your next visit - show your number at any outlet.", trigger: { holdoutPct: 10, cooldownDays: 45, segmentOpts: { minVisits: 2, maxVisits: 3, idleMinDays: 5, idleMaxDays: 14 }, dailyLimit: 80 }, segment: habitSegment },
+  // ── Hypothesis wave 3 (2026-07-19).
+  // Fresh lapse: the uncovered 14-30d band — a drifting regular is cheaper to
+  // catch at 2-4 weeks than at 30-60d (winback) or 60-180d (deep). Light
+  // offers only; the escalation ladder (fresh → winback → deep) upgrades the
+  // lure as the lapse deepens. Reuses lapsedDeepSegment (real visitors only).
+  fresh_lapse: { key: "fresh_lapse", label: "Fresh lapse", objective: "Catch drifting regulars at 2-4 weeks", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks"], messageTemplate: "It's been a couple of weeks! We miss you at Celsius - enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 45, segmentOpts: { minDaysLapsed: 14, maxDaysLapsed: 30 }, dailyLimit: 80 }, segment: lapsedDeepSegment },
+  // Basket builder: habitual small-ticket regulars (avg ~RM17 vs RM40 target).
+  // Success = revenue/recipient vs holdout (margin), NOT conversion lift —
+  // they'd visit anyway; the offer's job is to stretch the basket. min_order
+  // bars sit at RM30-50 so the discount only ever pays on an enlarged basket.
+  aov_push: { key: "aov_push", label: "Basket builder", objective: "Grow small baskets toward RM40", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct15_min40", "flat10_min30", "flat15_min50"], messageTemplate: "Hi {name}! Treat yourself a little extra at Celsius - {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 60, segmentOpts: { activeWithinDays: 30, minVisits: 4, maxAvgTicket: 25 }, dailyLimit: 80 }, segment: aovPushSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
@@ -1361,6 +1401,21 @@ async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: Lo
     createdBy: "cron:loops-trigger",
   });
   if (!preview.round_id || preview.total === 0) return { loop: def.key, qualified: 0 };
+  // SEND-WINDOW EXPERIMENT: on odd MYT days, hold this round for 17:00 MYT
+  // (loops-send fires it) instead of sending at the ~9am cron. Even days send
+  // immediately. The send-time leaderboard accumulates the morning-vs-evening
+  // lift comparison, and proposeSendWindow starts recommending once one window
+  // has champion-grade evidence. Guardrails (global cap, cooldowns) apply at
+  // send time either way.
+  if (trig.exploreSendWindows) {
+    const mytDay = Math.floor((Date.now() + 8 * 3600000) / 86400000);
+    const myt = new Date(Date.now() + 8 * 3600000);
+    const fivePmMyt = new Date(Date.UTC(myt.getUTCFullYear(), myt.getUTCMonth(), myt.getUTCDate(), 9, 0, 0)); // 17:00 MYT = 09:00 UTC
+    if (mytDay % 2 === 1 && fivePmMyt.getTime() > Date.now()) {
+      await scheduleRound(preview.round_id, fivePmMyt.toISOString());
+      return { loop: def.key, qualified: preview.total, sent: 0, round_id: preview.round_id, error: undefined, skipped: false };
+    }
+  }
   // Backstop: mark it due now so the loops-send cron finishes the send if this
   // request is interrupted mid-way (large batches can exceed the function limit).
   // sendRound is idempotent, so the cron only sends what didn't go out here.
@@ -1422,15 +1477,22 @@ export async function autoPauseUnderperformers(): Promise<Array<{ key: string; r
     const statsList = byLoop.get(def.key);
     if (!statsList) continue;
     const base = pooledHoldoutBaseline(statsList);
-    let n = 0, converted = 0;
+    let n = 0, converted = 0, revenue = 0, rewardCogs = 0;
     for (const stats of statsList) for (const s of stats) {
       if (s.arm === "holdout") continue;
       n += s.n; converted += s.n * (s.conversion_rate ?? 0) / 100;
+      revenue += s.revenue_rm ?? (s.revenue_per_recipient_rm ?? 0) * s.n;
+      rewardCogs += s.reward_cogs_rm ?? 0;
     }
     if (n < AUTO_PAUSE_MIN_TREATED || base.n < AUTO_PAUSE_MIN_HOLDOUT) continue;
     const liftPp = (n ? (converted / n) * 100 : 0) - base.convRate;
-    if (liftPp <= AUTO_PAUSE_LIFT_FLOOR_PP) {
-      const reason = `auto: ${liftPp >= 0 ? "+" : ""}${liftPp.toFixed(1)}pp lift after ${n} sends (holdout ${base.n}) - below ${AUTO_PAUSE_LIFT_FLOOR_PP}pp floor`;
+    // Margin-aware kill: some loops (aov_push) succeed with ZERO conversion
+    // lift — members were coming anyway, the offer grows the basket. So a loop
+    // dies only when BOTH reads are dead: no lift AND true margin per
+    // recipient that doesn't even cover its own SMS.
+    const marginPerRecipient = ((n ? revenue / n : 0) - base.revPerRecipient) * GP - (n ? rewardCogs / n : 0);
+    if (liftPp <= AUTO_PAUSE_LIFT_FLOOR_PP && marginPerRecipient <= SMS_COST_RM) {
+      const reason = `auto: ${liftPp >= 0 ? "+" : ""}${liftPp.toFixed(1)}pp lift, RM${marginPerRecipient.toFixed(2)}/recipient margin after ${n} sends (holdout ${base.n}) - can't cover its own SMS`;
       await pauseLoop(def.key, reason, true);
       killed.push({ key: def.key, reason });
     }
