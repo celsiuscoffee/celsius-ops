@@ -170,6 +170,48 @@ truth trustworthy; the eval dataset and close make it compound.
   money records (invoices, bank lines, journals), any drop. Human-only:
   applying migrations, payroll/payments corrections (hard rule 6).
 
+## Expansion to the whole data estate (2026-07-18)
+
+Owner directive: "this agent should be accountable for all the data." The
+custodian's mandate now covers every domain; the skill carries an estate
+contract table + checks 13–20. Baseline sweep (all SQL-verified 2026-07-18):
+
+**Healthy:** attendance → Jul 18; published rosters → week of Jul 13;
+receiving/stock/wastage → Jul 17–18; checklists flowing (404 last 7d);
+WhatsApp → Jul 18; redemptions → Jul 18 (23.0k members); review snapshots
+nightly → Jul 17; 3 enabled ad campaigns; payroll runs now 6× paid.
+
+**Estate findings (initial backlog E1–E7):**
+- **E1** 935 open `OpsAlert` rows — the alert ledger is a swamp; needs a
+  sweep/aging policy before "open alert" means anything.
+- **E2** 107 POs `AWAITING_DELIVERY` (+4 `SENT` stuck since Jul 8, 1 `DRAFT`
+  Jun 28) — age the open-PO book every run; propose closures.
+- **E3** `sms_logs` last row **Jun 21** while the SMS lifecycle/round-gap
+  loops are ARMED — either the SMS channel died quietly ~4 weeks ago or
+  sends moved to push without the map knowing. Highest-priority estate
+  check.
+- **E4** `campaign_outcomes` has **0 rows** — the substrate's outcome memory
+  has no writers yet (known gap since 080/081; loops must wire in).
+- **E5** Geogrid scans stalled — last `GeoGridScan` Jul 6 (weekly cadence
+  expected after the Jul 6 catchment-scale baseline).
+- **E6** Substrate telemetry adoption: only **4 of 30** registered agents
+  have ever written `agent_actions`.
+- **E7** `StockCount` rot: 2 SUBMITTED stuck since Apr 30; 5 DRAFTs.
+- Standing critical carried into the contract: loyalty tables' RLS is
+  `USING(true)` (member PII anon-readable AND writable).
+
+**Suggested estate goals (same style as the finance goals):**
+1. Every domain green on its freshness SLO each weekly run (checks 13–20).
+2. Open-work hygiene: open POs, stuck stock counts, and open OpsAlerts
+   trend DOWN monotonically from baseline (107 / 7 / 935) with an agreed
+   aging policy.
+3. Comms truth: SMS channel status resolved (fixed or formally retired in
+   the data map); every armed sending loop has a verifiable send log.
+4. Substrate compounding: campaign_outcomes receiving writes from every
+   armed marketing loop; agent_actions coverage rising toward 100% of
+   armed agents.
+5. Loyalty PII: RLS policy fix applied (docs/proposals — human).
+
 ## Compounding contract
 
 - Every incident/finding becomes a permanent check in the skill's check

@@ -290,6 +290,25 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 — **Data-warehouse custodian expanded to the WHOLE estate**
+  (owner: "this agent should be accountable for all the data"). Skill
+  (`finance-warehouse` — historical path, description now estate-wide)
+  gains domain contracts + checks 13–20 for HR, procurement/inventory,
+  ops, marketing/loyalty, reviews/ads, comms, agent substrate; design doc
+  gains the estate baseline + goals; migration 086 (APPLIED) broadens the
+  registry row (key unchanged — stable identifier). Baseline sweep
+  findings E1–E7: 935 open OpsAlerts; 107 POs AWAITING_DELIVERY (+4 SENT
+  stuck, 1 DRAFT Jun 28); **sms_logs last row Jun 21 while SMS loops are
+  ARMED** (channel dead or sends moved to push — top estate check);
+  campaign_outcomes 0 rows (no loop writes outcomes); geogrid scans
+  stalled since Jul 6; only 4/30 registry agents ever wrote
+  agent_actions; 2 StockCounts SUBMITTED since Apr 30. Also: payroll runs
+  now 6× paid (the 7/5 "all drafts" note is stale; fin_payroll_actuals
+  stays canonical for cost). Weekly/close-pack routines inherit the
+  estate scope automatically (prompts defer to the skill). **Next run
+  priorities:** E3 SMS pulse root-cause, June per-company-day GL
+  correction, E1/E2 aging policies.
+
 - 2026-07-18 (round 7) — **Measured station capacity v2 (this branch).**
   Owner corrections while auditing Sat Jul 18: (a) "short" units clarified
   (hourly = concurrent heads, day chip = man-hours); (b) serve p90 signal is
