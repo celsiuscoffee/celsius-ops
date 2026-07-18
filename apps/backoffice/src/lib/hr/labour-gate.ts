@@ -19,6 +19,7 @@ import {
 import { buildWeekForecast, FORECAST_WEEKS, type WeekForecast } from "@/lib/hr/revenue-forecast";
 import { computeWeekDemand, PICKUP_STORE_BY_LOYALTY } from "@/lib/hr/demand";
 import { mytDateString } from "@/lib/hr/hours";
+import { ptRateForDate } from "@/lib/hr/pt-rate";
 
 export * from "@/lib/hr/labour-gate-lib";
 
@@ -211,7 +212,7 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     const [{ data: profiles }, users] = await Promise.all([
       hrSupabaseAdmin
         .from("hr_employee_profiles")
-        .select("user_id, position, employment_type, hourly_rate, basic_salary, epf_employer_rate")
+        .select("user_id, position, employment_type, hourly_rate, hourly_rate_weekend, basic_salary, epf_employer_rate")
         .in("user_id", userIds.length ? userIds : ["-"]),
       prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, outletId: true } }),
     ]);
@@ -221,6 +222,7 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
       position: string | null;
       employment_type: string | null;
       hourly_rate: number | null;
+      hourly_rate_weekend: number | null;
       basic_salary: number | null;
       epf_employer_rate: number | null;
     };
@@ -238,18 +240,28 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
         position: p?.position ?? null,
         employment_type: p?.employment_type ?? null,
         hourly_rate: p?.hourly_rate == null ? null : Number(p.hourly_rate),
+        hourly_rate_weekend: p?.hourly_rate_weekend == null ? null : Number(p.hourly_rate_weekend),
         basic_salary: p?.basic_salary == null ? null : Number(p.basic_salary),
         epf_employer_rate: p?.epf_employer_rate == null ? null : Number(p.epf_employer_rate),
       };
     });
   }
 
+  // Public holidays this week — PT hours on those days price at 2× (owner
+  // rule 2026-07-18; same rule the weekly payroll calculator pays out).
+  const { data: weekHols } = await hrSupabaseAdmin
+    .from("hr_public_holidays")
+    .select("date")
+    .gte("date", weekStart)
+    .lte("date", addDays(weekStart, 6));
+  const holidaySet = new Set(((weekHols ?? []) as Array<{ date: string }>).map((h) => h.date));
+
   // costRoster still validates the roster (blockers, quota warnings,
   // hours), but the COST side splits: FT salaries are sunk, so every
   // schedulable FT assigned to this outlet is charged their full weekly
   // share whether the roster uses them for 30h or 45h. Only PT hours move
   // with the roster — the owner's rule: PT is the spend that moves %.
-  const { hours, blockers, warnings } = costRoster(rows);
+  const { hours, blockers, warnings } = costRoster(rows, holidaySet);
   const { data: ftProfiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
     .select("user_id, position, employment_type, basic_salary, epf_employer_rate, schedule_required")
@@ -337,7 +349,8 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
   const ptCost = rows.reduce((sum, r) => {
     if (r.employment_type !== "part_time" && r.employment_type !== "intern") return sum;
     if (!r.hourly_rate || r.hourly_rate <= 0) return sum;
-    return sum + shiftHours(r.start_time, r.end_time) * r.hourly_rate;
+    // Day-aware PT pricing: weekday base / weekend rate / 2× public holiday.
+    return sum + shiftHours(r.start_time, r.end_time) * ptRateForDate(r, r.shift_date, holidaySet.has(r.shift_date));
   }, 0);
   const ftFixedCost = Math.round(primaryFtWeekly + borrowedFtWeekly + roverLeadWeekly);
   const rosterCost = Math.round(ftFixedCost + ptCost);

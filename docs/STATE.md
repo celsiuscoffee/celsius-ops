@@ -311,6 +311,31 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 (round 10) — **PT weekday/weekend rates (owner: "diff
+  weekdays weekends... follow and fix the data" + the "Celsius - Part
+  Timer 2025/26" Google Sheet).** Sheet forensics (6,047 ledger rows):
+  history 2024–early-25 was a clean RM8 wd / RM9 we; current entries
+  inconsistent (mostly flat 9, three PTs flat 10, PH entries 18/20 =
+  2×). Adopted the one rule that resolves every inconsistency:
+  **RM9 weekday / RM10 weekend / 2× public holiday** — stated to owner
+  for veto. Shipped: migration 090 APPLIED (hr_employee_profiles.
+  hourly_rate_weekend, NULL→base fallback); `lib/hr/pt-rate.ts`
+  (ptRateForDate — single pricing fn); day-aware pricing wired into
+  weekly PT payroll calculator (per-clock-log rate + PH set from
+  hr_public_holidays, rate recorded per shift in computation_details),
+  labour-gate costRoster + ptCost, AI Fill PT suggestion costing
+  (holidays from weekForecast.byDate), employee page Compensation
+  section (weekend field, OWNER/ADMIN-gated, added to PII list).
+  Backfilled prod: 28 PT/intern profiles → 9/10 (was 26×9, 1×8, 1×10).
+  Earlier same day (rounds 8–9 follow-ups, all merged): #981 week-aware
+  Jumaat (Friday rests to prayer-goers, Thursday closing keeps women
+  clopening-eligible), #982 cap-cascade + breadth-first PT fill +
+  canonical outlet order (Putrajaya→SA→Tamarind→Nilai→IOI via
+  lib/outlet-order.ts at 8 endpoints) + Assist tab removed, #985
+  kitchen-gaps-first + ⚠ UNMANNED station warnings (Tamarind weekend
+  kitchen catch). Open owner decision: Tamarind kitchen supply 12 vs 14
+  anchor slots — raise PT cap / cross-train / accept flagged gaps.
+
 - 2026-07-18 — **POP matcher: found the never-armed QA loop, armed it (PR #986
   branch).** Owner asked "is the matching agent improving itself?" — answer was
   NO: the pop-verifier (LLM judge at matcher dead-ends, pop-verifier-run.ts) had

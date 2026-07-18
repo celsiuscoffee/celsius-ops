@@ -42,6 +42,7 @@ import {
   lentFtCredit,
   isManagementPosition,
 } from "../labour-gate-lib";
+import { ptRateForDate } from "../pt-rate";
 import { forecastWeek } from "../labour-gate";
 import {
   computeDailyManHours,
@@ -84,7 +85,8 @@ type Staff = {
   employment_type: string;
   basic_salary: number;
   epf_employer_rate: number | null; // employer EPF from the profile (real rate, not the default)
-  hourly_rate: number | null;
+  hourly_rate: number | null; // PT weekday base
+  hourly_rate_weekend: number | null; // PT Sat/Sun rate (null → base)
   rest_day: number | null; // 0=Sun … 6=Sat
   gender: string | null; // profile values: M/F (HR) or male/female (staff app)
   religion: string | null; // staff-app vocabulary: islam/buddhism/…/none
@@ -248,11 +250,11 @@ export async function generateSchedule(
   });
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, basic_salary, hourly_rate, epf_employer_rate, schedule_required, rest_day, gender, religion")
+    .select("user_id, position, employment_type, basic_salary, hourly_rate, hourly_rate_weekend, epf_employer_rate, schedule_required, rest_day, gender, religion")
     .in("user_id", users.length ? users.map((u) => u.id) : ["-"]);
   type ProfileRow = {
     user_id: string; position: string | null; employment_type: string;
-    basic_salary: number | null; hourly_rate: number | null;
+    basic_salary: number | null; hourly_rate: number | null; hourly_rate_weekend: number | null;
     epf_employer_rate: number | null;
     schedule_required: boolean | null; rest_day: number | null;
     gender: string | null; religion: string | null;
@@ -271,6 +273,7 @@ export async function generateSchedule(
         basic_salary: Number(p?.basic_salary) || 0,
         epf_employer_rate: p?.epf_employer_rate == null ? null : Number(p.epf_employer_rate),
         hourly_rate: p?.hourly_rate == null ? null : Number(p.hourly_rate),
+        hourly_rate_weekend: p?.hourly_rate_weekend == null ? null : Number(p.hourly_rate_weekend),
         rest_day: p?.rest_day ?? null,
         gender: p?.gender ?? null,
         religion: p?.religion ?? null,
@@ -408,6 +411,9 @@ export async function generateSchedule(
   const weekForecast = await forecastWeek(outlet, weekStart);
   const revByDate = new Map<string, number>(weekForecast.byDate.map((d) => [d.date, d.forecast]));
   if (weekForecast.holidayNote) notes.push(`Holiday-aware forecast: ${weekForecast.holidayNote}`);
+  // Public holidays this week — PT hours on those days cost 2× (owner rule
+  // 2026-07-18), same math the weekly payroll calculator pays out.
+  const holidayDates = new Set(weekForecast.byDate.filter((d) => d.isHoliday).map((d) => d.date));
 
   // Man-hours per open day: what the volume REQUIRES (throughput, floored at the
   // service minimum) vs what target-% revenue can AFFORD. A positive gap flags a
@@ -1315,7 +1321,9 @@ export async function generateSchedule(
     // base already covers (target 0) get no PT — coverage sized, not padded.
     if ((ptHoursByDate.get(p.date) ?? 0) >= (ptTargetByDate.get(p.date) ?? 0)) continue;
     const h = workingHours(t);
-    const cost = h * person.hourly_rate!;
+    // Day-aware PT pricing: weekday base / weekend rate / 2× public holiday —
+    // the suggestion's cost is exactly what the weekly payroll would pay.
+    const cost = h * ptRateForDate(person, p.date, holidayDates.has(p.date));
     if (ptSpend.rm + cost > ptBudget) continue;
     const wk = ptWeek.get(person.id) ?? { hours: 0, days: new Set<string>() };
     if (wk.hours + h > PT_MAX_HOURS_PER_WEEK || wk.days.size >= PT_MAX_DAYS_PER_WEEK) continue;
