@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { detectCreationFlags } from "@/lib/inventory/flag-detector";
 import { mytTodayRange } from "@/lib/inventory/myt-today";
+import { mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -416,8 +417,7 @@ export async function POST(req: NextRequest) {
     // Generate invoice number if not provided
     let invNumber = invoiceNumber;
     if (!invNumber) {
-      const invCount = await prisma.invoice.count();
-      invNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
+      invNumber = await mintPlaceholderNumber(prisma, outletId);
     }
 
     // Resolve deposit policy: invoice override wins, else supplier default.

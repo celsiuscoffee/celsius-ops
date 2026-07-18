@@ -224,15 +224,17 @@ export async function POST(req: NextRequest) {
   // Invoice number — use MAX(invoiceNumber) starting with INV- so concurrent
   // submits don't both compute the same N+1 from count(). Falls back to the
   // user-supplied invoice number when present.
+  // GRNI namespace: fabricated numbers must be visibly fake and never collide
+  // with a supplier's own numbering (see lib/inventory/placeholder-number.ts).
   const nextInvoiceNumber = async (tx: Tx, offset: number) => {
     const maxResult = await tx.invoice.aggregate({
-      where: { invoiceNumber: { startsWith: "INV-" } },
+      where: { invoiceNumber: { startsWith: "GRNI-" } },
       _max: { invoiceNumber: true },
     });
     const lastNum = maxResult._max.invoiceNumber
       ? parseInt(maxResult._max.invoiceNumber.split("-").pop() || "0", 10)
       : 0;
-    return `INV-${String(lastNum + 1 + offset).padStart(4, "0")}`;
+    return `GRNI-${String(lastNum + 1 + offset).padStart(4, "0")}`;
   };
   const isUniqueViolation = (e: unknown) =>
     e instanceof Error && e.message.includes("Unique constraint");
