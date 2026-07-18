@@ -290,6 +290,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 — **Custodian made SELF-DRIVING (owner: "what I wanted is for
+  this agent to do this by itself").** Skill gains an **Autonomy ladder**
+  (rung 1: code fixes/additive prod derivations/docs — do it; rung 2:
+  pre-approved patterns — tier-1 narration+exact-amount re-points, unambiguous
+  backfills, the delegated June GL correction once it reconciles to identity
+  <RM500/company; rung 3: propose-only; rung 4: human — payroll/payments,
+  arming, period close, merges) + procedure step 4b (each run BUILDS 1–3
+  backlog items end-to-end, not just reports). Routine changed weekly→**daily**
+  21:00 MYT (`trig_015cnJr3bfeXrjQ285nRjXNb`, fresh session; old weekly
+  trigger deleted — its prompt contradicted the ladder). **CAVEAT: routine
+  carries no MCP connectors (created via meta tool) — if tonight's run
+  can't reach Supabase, recreate it from the claude.ai Routines UI.** Close
+  pack (monthly) unchanged. Input-quality enforcement shipped same day:
+  receiving API persists resolved package (root cause of 71% null coverage),
+  accountant valuation pack (docs/proposals/inventory-valuation-anchors.md),
+  close-pack COGS trust gates + check 25.
+
 - 2026-07-18 — **Data-warehouse custodian expanded to the WHOLE estate**
   (owner: "this agent should be accountable for all the data"). Skill
   (`finance-warehouse` — historical path, description now estate-wide)
