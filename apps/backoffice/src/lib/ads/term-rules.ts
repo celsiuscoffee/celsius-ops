@@ -8,11 +8,10 @@
  *   own_brand        -> auto-exclude (paying for clicks the brand gets free)
  *   non_cafe_food    -> auto-exclude (a "nasi ayam near me" searcher wants
  *                       lunch, not specialty coffee)
- *   competitor_brand -> KEEP (conquesting a rival coffee brand's searchers is
- *                       real coffee demand — cutting it is a strategy call,
- *                       never automatic)
- *   dessert_bakery   -> KEEP (ambiguous: cafes sell cake; owner can exclude
- *                       from the Paid x Organic panel case by case)
+ *   competitor_brand -> auto-exclude (owner 2026-07-18, after reviewing the
+ *                       live term lists: "lots of unnecessary ones" — no
+ *                       conquesting; flip shouldAutoExclude to reverse)
+ *   dessert_bakery   -> auto-exclude (owner 2026-07-18, same review)
  *   cafe_intent      -> KEEP (the spend we want)
  *   other            -> KEEP (unknown ≠ useless)
  *
@@ -34,16 +33,16 @@ export type TermIntent =
 // Rival brands seen in the live search-term data that the geogrid competitor
 // list may not carry (it tracks map-pack rivals, not every chain we conquest).
 const EXTRA_COMPETITOR_BRANDS =
-  /\b(zus|kenangan|luckin|tealive|cbtl|coffee bean|starbucks|oriental kopi|nasken|mykori|kopi saigon|kopi satu|gigi coffee|bask bear|richiamo|secret recipe|iffat|chef kecik)\b/;
+  /\b(zus|kenangan|luckin|tealive|cbtl|coffee bean|starbucks|oriental kopi|nasken|mykori|kopi saigon|kopi satu|gigi coffee|bask bear|richiamo|secret recipe|iffat|chef kecik|hock kee|kopihut|cotti|vinyl cafe|qbistro|hainan kopitiam|temu coffee)\b/;
 
 const CAFE_INTENT =
   /\b(coffee|cafe|cafes|kafe|kopi|kopitiam|latte|matcha|espresso|americano|cappuccino|mocha|brew|breakfast|brunch|croissant|croffle|study|wifi)\b/;
 
 const NON_CAFE_FOOD =
-  /\b(restaurant|restaurants|kedai makan|food|foods|makan|makanan|lunch|dinner|nasi|ayam|mamak|burger|pizza|steak|seafood|sushi|ramen|noodle|noodles|mee|laksa|satay|tomyam|tom yam|catering|buffet|shawarma|kebab|briyani|biryani)\b/;
+  /\b(restaurant|restaurants|restoran|kedai makan|food|foods|food court|makan|makanan|warung|gerai|lunch|dinner|nasi|ayam|mamak|burger|pizza|steak|seafood|sushi|ramen|noodle|noodles|mee|laksa|satay|tomyam|tom yam|catering|buffet|shawarma|kebab|briyani|biryani)\b|美食/;
 
 const DESSERT_BAKERY =
-  /\b(cake|cakes|kek|dessert|desserts|waffle|waffles|donut|doughnut|bakery|pastry|pastries|ice cream|gelato|bingsu)\b/;
+  /\b(cake|cakes|kek|dessert|desserts|waffle|waffles|donut|doughnut|bakery|pastry|pastries|ice cream|gelato|bingsu|pudding|tart|tarts|brownie|brownies)\b/;
 
 export function classifyTermIntent(term: string): TermIntent {
   const t = term.toLowerCase();
@@ -56,7 +55,12 @@ export function classifyTermIntent(term: string): TermIntent {
 }
 
 export function shouldAutoExclude(intent: TermIntent): boolean {
-  return intent === "own_brand" || intent === "non_cafe_food";
+  return (
+    intent === "own_brand" ||
+    intent === "non_cafe_food" ||
+    intent === "competitor_brand" ||
+    intent === "dessert_bakery"
+  );
 }
 
 // Don't bother Google (or the ledger) with terms whose spend is noise.

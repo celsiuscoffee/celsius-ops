@@ -120,6 +120,10 @@ export const GROSS_MARGIN = Number(process.env.ADS_GROSS_MARGIN || 0.6);
 // descent only resumes once no unpaid waste remains.
 export const WASTE_MATCH_MIN_DAILY_MYR = 0.5; // below this, not worth a budget mutation
 export const WASTE_MATCH_MAX_PCT = 0.2;       // never remove more than 20% of the budget in one matched cut
+// Smart campaigns cap negative keyword themes (~25/campaign). Treat the slots
+// as a scarce budget: highest measured-cost junk gets them first, seeds only
+// fill what's left, and we stop before the API starts rejecting.
+export const MAX_NEGATIVES_PER_CAMPAIGN = 25;
 
 // Pause probe — the only till-readable experiment at this spend:revenue ratio.
 export const PAUSE_PROBE_DAYS = 28;      // full pause length before auto-restore
@@ -628,7 +632,17 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     }),
     prisma.adsTermExclusion.findMany({ select: { campaignId: true, searchTerm: true, status: true } }),
   ]);
-  const alreadyDecided = new Set(decided.map((e) => `${e.campaignId} ${e.searchTerm.toLowerCase()}`));
+  // 'failed' rows are retryable (a transient API error must not permanently
+  // burn a term); applied + human-rejected rows are standing decisions.
+  const alreadyDecided = new Set(
+    decided.filter((e) => e.status !== "failed").map((e) => `${e.campaignId} ${e.searchTerm.toLowerCase()}`),
+  );
+  // Negative-theme slots left per campaign (Smart campaign cap).
+  const slotsLeft = new Map<string, number>();
+  for (const c of campaigns) slotsLeft.set(c.id, MAX_NEGATIVES_PER_CAMPAIGN);
+  for (const e of decided) {
+    if (e.status === "applied") slotsLeft.set(e.campaignId, (slotsLeft.get(e.campaignId) ?? MAX_NEGATIVES_PER_CAMPAIGN) - 1);
+  }
   const exclusions: AutopilotRunResult["exclusions"] = selectAutoExclusions(
     termRows.map((r) => ({
       campaignId: r.campaignId,
@@ -636,7 +650,12 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
       costMyr: microsToMYR(r._sum.costMicros ?? BigInt(0)),
     })),
     alreadyDecided,
-  );
+  ).filter((x) => {
+    const left = slotsLeft.get(x.campaignId) ?? 0;
+    if (left <= 0) return false; // cost-sorted, so what's dropped is the cheapest junk
+    slotsLeft.set(x.campaignId, left - 1);
+    return true;
+  });
   for (const x of exclusions) {
     if (mode === "armed") {
       const res = await applyTermExclusion({
@@ -666,12 +685,13 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     ...decided.filter((e) => e.status === "applied").map((e) => e.searchTerm),
   ];
   const isPausedCampaign = (s: string) => !ENABLED_STATUSES.includes(s);
-  const seeds = selectSeedExclusions(
-    campaigns.filter((c) => !isPausedCampaign(c.status)).map((c) => c.id),
-    fleetJunkTerms,
-    alreadyDecided,
-  );
+  const seeds = campaigns
+    .filter((c) => !isPausedCampaign(c.status))
+    .flatMap((c) =>
+      selectSeedExclusions([c.id], fleetJunkTerms, alreadyDecided, Math.max(0, slotsLeft.get(c.id) ?? 0)),
+    );
   for (const x of seeds) {
+    slotsLeft.set(x.campaignId, (slotsLeft.get(x.campaignId) ?? 1) - 1);
     if (mode === "armed") {
       const res = await applyTermExclusion({
         campaignId: x.campaignId,

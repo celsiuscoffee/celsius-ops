@@ -400,13 +400,29 @@ describe("term intent rules", () => {
     expect(classifyTermIntent("coffee shop food court")).toBe("cafe_intent");
   });
 
-  it("only own-brand and non-cafe food auto-exclude", () => {
+  it("all junk classes auto-exclude; cafe intent and unknowns never do", () => {
     expect(shouldAutoExclude("own_brand")).toBe(true);
     expect(shouldAutoExclude("non_cafe_food")).toBe(true);
-    expect(shouldAutoExclude("competitor_brand")).toBe(false);
-    expect(shouldAutoExclude("dessert_bakery")).toBe(false);
+    expect(shouldAutoExclude("competitor_brand")).toBe(true); // owner 2026-07-18: no conquesting
+    expect(shouldAutoExclude("dessert_bakery")).toBe(true);   // owner 2026-07-18
     expect(shouldAutoExclude("cafe_intent")).toBe(false);
     expect(shouldAutoExclude("other")).toBe(false);
+  });
+
+  it("classifies the Malay/local and new-brand terms from the live lists", () => {
+    expect(classifyTermIntent("restoran 113 dengkil")).toBe("non_cafe_food");
+    expect(classifyTermIntent("food court near presint 9 putrajaya")).toBe("non_cafe_food");
+    expect(classifyTermIntent("dengkil 美食")).toBe("non_cafe_food");
+    expect(classifyTermIntent("hock kee kopitiam")).toBe("competitor_brand");
+    expect(classifyTermIntent("kopihut")).toBe("competitor_brand");
+    expect(classifyTermIntent("cotti coffee malaysia")).toBe("competitor_brand");
+    expect(classifyTermIntent("vinyl cafe")).toBe("competitor_brand");
+    expect(classifyTermIntent("qbistro putrajaya")).toBe("competitor_brand");
+    expect(classifyTermIntent("banana pudding cyberjaya")).toBe("dessert_bakery");
+    // still kept: our own café demand, whatever the language of the rest
+    expect(classifyTermIntent("kopitiam near me")).toBe("cafe_intent");
+    expect(classifyTermIntent("sarapan pagi near me")).toBe("other");
+    expect(classifyTermIntent("tempat best sambut birthday")).toBe("other");
   });
 
   it("selectSeedExclusions transfers fleet-proven junk, respects decisions/caps, costs 0", () => {
@@ -414,10 +430,10 @@ describe("term intent rules", () => {
     const decided = new Set(["sa restaurants near me"]); // SA already decided this one
     const seeds = selectSeedExclusions(["sa", "pj"], fleetJunk, decided);
     const sa = seeds.filter((s) => s.campaignId === "sa").map((s) => s.searchTerm);
-    // cafe intent + competitor brand never seed, decided rows skipped
-    expect(sa).toEqual(["kedai makan near me", "celsius coffee"]);
+    // cafe intent never seeds, decided rows skipped
+    expect(sa).toEqual(["kedai makan near me", "zus near me", "celsius coffee"]);
     const pj = seeds.filter((s) => s.campaignId === "pj").map((s) => s.searchTerm);
-    expect(pj).toEqual(["restaurants near me", "kedai makan near me", "celsius coffee"]);
+    expect(pj).toEqual(["restaurants near me", "kedai makan near me", "zus near me", "celsius coffee"]);
     expect(seeds.every((s) => s.costMyr === 0 && s.seeded)).toBe(true);
     // cap
     const many = Array.from({ length: 30 }, (_, i) => `nasi kandar shop ${i}`);
