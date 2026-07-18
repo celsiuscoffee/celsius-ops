@@ -68,32 +68,54 @@ export async function computeWeekDemand(
   weekStart: string,
 ): Promise<WeekDemand> {
   const storeId = PICKUP_STORE_BY_LOYALTY[outlet.loyaltyOutletId ?? ""] ?? "";
+  // History window: trailing 28 days, but never past YESTERDAY (MYT). Rosters
+  // are generated mid-week for the NEXT week, so `weekStart - 1` includes days
+  // that haven't happened (and today, which is partial). A hard ÷4 then diluted
+  // exactly those weekdays — Sunday read 25% low when generated on a Friday,
+  // which is why the weekend kept looking cheaper to the model than in reality
+  // (owner catch 2026-07-18). Each weekday now divides by the number of
+  // COMPLETE occurrences actually inside the window.
+  const addDays = (d: string, n: number) => {
+    const t = new Date(d + "T00:00:00Z");
+    t.setUTCDate(t.getUTCDate() + n);
+    return t.toISOString().slice(0, 10);
+  };
+  const mytYesterday = new Date(Date.now() + 8 * 3600_000 - 24 * 3600_000).toISOString().slice(0, 10);
+  const histStart = addDays(weekStart, -28);
+  const histEnd = addDays(weekStart, -1) < mytYesterday ? addDays(weekStart, -1) : mytYesterday;
+  const dowCount = new Map<number, number>();
+  for (let d = histStart; d <= histEnd; d = addDays(d, 1)) {
+    const dw = new Date(d + "T00:00:00Z").getUTCDay();
+    dowCount.set(dw, (dowCount.get(dw) ?? 0) + 1);
+  }
+  const perDow = (dw: number) => Math.max(1, dowCount.get(dw) ?? 0);
+
   const hourly = await prisma.$queryRaw<Array<{ dw: number; hr: number; barista: number; kitchen: number }>>`
     SELECT dw, hr, sum(kitchen)::float AS kitchen, sum(barista)::float AS barista FROM (
       SELECT EXTRACT(DOW FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS dw,
              EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
-             (sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float / 4) AS kitchen,
-             (sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float / 4) AS barista
+             sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float AS kitchen,
+             sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float AS barista
       FROM pos_order_items i
       JOIN pos_orders o ON o.id = i.order_id
       LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
       WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
         AND o.status = 'completed' AND o.refund_of_order_id IS NULL
         AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-            BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+            BETWEEN ${histStart}::date AND ${histEnd}::date
       GROUP BY 1, 2
       UNION ALL
       SELECT EXTRACT(DOW FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int,
              EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int,
-             (sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float / 4),
-             (sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float / 4)
+             sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float,
+             sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float
       FROM order_items i
       JOIN orders o ON o.id = i.order_id
       LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
       WHERE o.store_id = ${storeId}
         AND o.status = ANY(${PICKUP_STATUSES})
         AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-            BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+            BETWEEN ${histStart}::date AND ${histEnd}::date
       GROUP BY 1, 2
     ) u
     GROUP BY 1, 2
@@ -203,8 +225,10 @@ export async function computeWeekDemand(
   const kitItemsByDow = new Map<number, number>();
   const peakByDow = new Map<number, { heads: number; hr: number; bar: number; kit: number }>();
   for (const h of hourly) {
-    const bar = Number(h.barista) || 0;
-    const kit = Number(h.kitchen) || 0;
+    // Raw 28-day sums → per-occurrence averages (divide by how many of this
+    // weekday actually sit inside the clamped window — 3 or 4, never a flat 4).
+    const bar = (Number(h.barista) || 0) / perDow(h.dw);
+    const kit = (Number(h.kitchen) || 0) / perDow(h.dw);
     if (bar + kit <= 0) continue;
     const barHeads = Math.ceil(bar / baristaRate);
     const kitHeads = Math.ceil(kit / kitchenRate);

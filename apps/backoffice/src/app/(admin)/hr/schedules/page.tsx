@@ -271,22 +271,27 @@ export default function SchedulesPage() {
   // instead of looking arbitrary (owner, 2026-07-18: "the math does not make
   // sense"). FT hours are sunk; rover/PT are the visible add-ons.
   type DayComp = {
-    ftH: number; roverH: number; ptH: number; ptSuggestedH: number;
-    ftCount: number; resting: string[]; rovers: string[];
+    ftH: number; roverH: number; ptH: number; ptSuggestedH: number; mgrH: number;
+    ftCount: number; resting: string[]; rovers: string[]; mgrs: string[];
     pts: Array<{ name: string; suggested: boolean }>;
   };
   const dayComposition = useMemo(() => {
     const map = new Map<string, DayComp>();
     if (!grid) return map;
     const userOf = new Map(grid.users.map((u) => [u.id, u]));
-    const isRoverPos = (p: string | null | undefined) => {
+    // Management = presence, NOT man-hours (owner rule 2026-07-18); shown as a
+    // separate "MGR … cover" tag outside the additive total. The Barista Lead
+    // rover DOES work the bar, so their hours stay inside the total as RV.
+    const isMgmtPos = (p: string | null | undefined) => {
       const s = (p ?? "").trim().toLowerCase();
-      return s === "manager" || s === "area manager" || s === "head of department" || s === "barista lead";
+      return s === "manager" || s === "area manager" || s === "head of department";
     };
+    const isRoverPos = (p: string | null | undefined) =>
+      (p ?? "").trim().toLowerCase() === "barista lead";
     const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
     for (const s of grid.shifts) {
       const entry = map.get(s.shift_date) ?? {
-        ftH: 0, roverH: 0, ptH: 0, ptSuggestedH: 0, ftCount: 0, resting: [], rovers: [], pts: [],
+        ftH: 0, roverH: 0, ptH: 0, ptSuggestedH: 0, mgrH: 0, ftCount: 0, resting: [], rovers: [], mgrs: [], pts: [],
       };
       const u = userOf.get(s.user_id);
       const nm = u ? (u.fullName || u.name).split(" ")[0] : "?";
@@ -297,7 +302,10 @@ export default function SchedulesPage() {
       }
       const h = Math.max(0, (toMin(s.end_time) - toMin(s.start_time) - (s.break_minutes || 0)) / 60);
       const p = u?.profile;
-      if (isRoverPos(p?.position)) {
+      if (isMgmtPos(p?.position)) {
+        entry.mgrH += h;
+        entry.mgrs.push(nm);
+      } else if (isRoverPos(p?.position)) {
         entry.roverH += h;
         entry.rovers.push(nm);
       } else if (p?.employment_type === "part_time" || p?.employment_type === "intern") {
@@ -365,18 +373,26 @@ export default function SchedulesPage() {
   }, [grid]);
 
   // Station grouping for easier scheduling: BOH (kitchen) vs FOH (barista /
-  // service). Same position classification the AI Fill generator uses to keep
-  // kitchen on both anchors, so the grid sections match how shifts are sized.
+  // service), with MANAGEMENT in its own section (owner rule 2026-07-18) —
+  // manager shifts are presence, not man-hours, so they sit outside the two
+  // station groups whose counts must track the item curves.
   const userGroups = useMemo(() => {
     const isBOHPos = (p: string | null | undefined) => {
       const s = (p ?? "").toLowerCase();
       return s.includes("kitchen") || s.includes("chef") || s.includes("boh");
     };
-    const boh = sortedUsers.filter((u) => isBOHPos(u.profile?.position));
-    const foh = sortedUsers.filter((u) => !isBOHPos(u.profile?.position));
+    const isMgmtPos = (p: string | null | undefined) => {
+      const s = (p ?? "").trim().toLowerCase();
+      return s === "manager" || s === "area manager" || s === "head of department";
+    };
+    const mgmt = sortedUsers.filter((u) => isMgmtPos(u.profile?.position));
+    const rest = sortedUsers.filter((u) => !isMgmtPos(u.profile?.position));
+    const boh = rest.filter((u) => isBOHPos(u.profile?.position));
+    const foh = rest.filter((u) => !isBOHPos(u.profile?.position));
     return [
       { key: "foh", label: "Front of House · Barista / Service", users: foh },
       { key: "boh", label: "Back of House · Kitchen", users: boh },
+      { key: "mgmt", label: "Management · presence, not counted as man-hours", users: mgmt },
     ].filter((g) => g.users.length > 0);
   }, [sortedUsers]);
 
@@ -394,12 +410,22 @@ export default function SchedulesPage() {
     return m;
   }, [grid]);
 
-  // Total net working hours per date (all staff combined)
+  // Total net working hours per date. Management shifts are EXCLUDED (owner
+  // rule 2026-07-18: manager presence is not man-hours) — the header total
+  // must match the coverage math, which also ignores them.
   const hoursByDate = useMemo(() => {
     const m = new Map<string, number>();
+    const mgmtIds = new Set(
+      (grid?.users || [])
+        .filter((u) => {
+          const p = (u.profile?.position ?? "").trim().toLowerCase();
+          return p === "manager" || p === "area manager" || p === "head of department";
+        })
+        .map((u) => u.id),
+    );
     const toMin = (s: string) => { const [h, mm] = s.split(":").map(Number); return h * 60 + (mm || 0); };
     for (const sh of grid?.shifts || []) {
-      if (sh.notes === "rest_day") continue;
+      if (sh.notes === "rest_day" || mgmtIds.has(sh.user_id)) continue;
       const gross = toMin(sh.end_time) - toMin(sh.start_time);
       const net = Math.max(0, gross - (sh.break_minutes || 0));
       m.set(sh.shift_date, (m.get(sh.shift_date) ?? 0) + net / 60);
@@ -915,14 +941,15 @@ export default function SchedulesPage() {
                           c.roverH > 0 ? `RV${fmtH(c.roverH)}` : null,
                           c.ptH > 0 ? `PT${fmtH(c.ptH)}` : null,
                         ].filter(Boolean);
-                        if (parts.length === 0) return null;
+                        if (parts.length === 0 && c.mgrH === 0) return null;
                         return (
                           <button
                             onClick={() => setWhyDate(whyDate === d ? null : d)}
                             className="text-[9px] tabular-nums text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
-                            title="Why is this day staffed this way? Click for the breakdown."
+                            title="Why is this day staffed this way? Click for the breakdown. MGR hours are cover — not counted in the total."
                           >
                             {parts.join("+")}
+                            {c.mgrH > 0 ? `${parts.length ? " · " : ""}MGR${fmtH(c.mgrH)} cover` : ""}
                           </button>
                         );
                       })()}
@@ -950,6 +977,7 @@ export default function SchedulesPage() {
                                   {c?.resting.length ? ` · resting: ${c.resting.join(", ")}` : " · nobody resting"}
                                 </li>
                                 {c?.rovers.length ? <li>🔄 Rover {c.rovers.join(", ")} (+{fmtH(c.roverH)}h — fixed 2-day rotation)</li> : null}
+                                {c?.mgrs.length ? <li>👔 Manager {c.mgrs.join(", ")} ({fmtH(c.mgrH)}h cover — not counted as man-hours)</li> : null}
                                 {c?.pts.length ? (
                                   <li>
                                     🧩 PT {c.pts.map((p) => p.name + (p.suggested ? "?" : "")).join(", ")} (+{fmtH(c.ptH)}h
@@ -1154,16 +1182,28 @@ export default function SchedulesPage() {
                                     for THIS person's station (same model as AI Fill /
                                     Assist), so "+ Add" leads with what the day needs. */}
                                 {(() => {
-                                  const pos = (u.profile?.position ?? "").toLowerCase();
+                                  const pos = (u.profile?.position ?? "").trim().toLowerCase();
                                   const isBohUser = pos.includes("kitchen") || pos.includes("chef") || pos.includes("boh");
+                                  // Managers can be offered ANY short window as
+                                  // COVER — their shift won't count as man-hours,
+                                  // so the gap stays visible until line staff fill it.
+                                  const isMgmtUser = pos === "manager" || pos === "area manager" || pos === "head of department";
                                   const gaps = (dayCov[d] || []).filter(
-                                    (c) => c.template_id && (isBohUser ? (c.kitchen_gap ?? 0) > 0 : (c.barista_gap ?? 0) > 0),
+                                    (c) =>
+                                      c.template_id &&
+                                      (isMgmtUser
+                                        ? (c.kitchen_gap ?? 0) > 0 || (c.barista_gap ?? 0) > 0
+                                        : isBohUser
+                                          ? (c.kitchen_gap ?? 0) > 0
+                                          : (c.barista_gap ?? 0) > 0),
                                   );
                                   if (gaps.length === 0) return null;
                                   return (
                                     <>
                                       <div className="px-3 pb-0.5 pt-1.5 text-[9px] font-semibold uppercase tracking-wider text-amber-700">
-                                        ✨ Suggested — {isBohUser ? "kitchen" : "barista"} short
+                                        {isMgmtUser
+                                          ? "✨ Cover a short window (not man-hours)"
+                                          : `✨ Suggested — ${isBohUser ? "kitchen" : "barista"} short`}
                                       </div>
                                       {gaps.map((c) => (
                                         <button
@@ -1175,7 +1215,12 @@ export default function SchedulesPage() {
                                           <div className="flex items-center justify-between gap-1">
                                             <span className="font-medium">{c.label || "Shift"}</span>
                                             <span className="shrink-0 rounded bg-red-100 px-1 text-[9px] font-bold tabular-nums text-red-700">
-                                              short {isBohUser ? c.kitchen_gap : c.barista_gap}
+                                              short{" "}
+                                              {isMgmtUser
+                                                ? (c.kitchen_gap ?? 0) + (c.barista_gap ?? 0)
+                                                : isBohUser
+                                                  ? c.kitchen_gap
+                                                  : c.barista_gap}
                                             </span>
                                           </div>
                                           <div className="text-[10px] text-muted-foreground tabular-nums">
@@ -1497,8 +1542,15 @@ function DayView({
   const sorted = [...working].sort(
     (a, b) => a.start_time.localeCompare(b.start_time) || a.end_time.localeCompare(b.end_time),
   );
-  const fohRows = sorted.filter((s) => !isBOH(s.user_id));
-  const bohRows = sorted.filter((s) => isBOH(s.user_id));
+  // Management sits outside FOH/BOH — presence, not man-hours (owner rule
+  // 2026-07-18) — so the station "on shift" counts stay honest vs demand.
+  const isMgmt = (userId: string) => {
+    const p = (positionOf.get(userId) ?? "").trim().toLowerCase();
+    return p === "manager" || p === "area manager" || p === "head of department";
+  };
+  const mgmtRows = sorted.filter((s) => isMgmt(s.user_id));
+  const fohRows = sorted.filter((s) => !isMgmt(s.user_id) && !isBOH(s.user_id));
+  const bohRows = sorted.filter((s) => !isMgmt(s.user_id) && isBOH(s.user_id));
   let minH = 24;
   let maxH = 0;
   for (const s of working) {
@@ -1583,6 +1635,7 @@ function DayView({
               {[
                 { title: "Front of house", list: fohRows, fill: "bg-terracotta/80", count: "text-terracotta" },
                 { title: "Back of house", list: bohRows, fill: "bg-slate-500/80", count: "text-slate-600" },
+                { title: "Management (not man-hours)", list: mgmtRows, fill: "bg-violet-400/70", count: "text-violet-600" },
               ]
                 .filter((sec) => sec.list.length > 0)
                 .map((sec) => (

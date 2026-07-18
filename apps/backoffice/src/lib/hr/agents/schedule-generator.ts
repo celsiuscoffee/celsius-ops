@@ -40,6 +40,7 @@ import {
   DEFAULT_BUDGET,
   borrowedFtCharge,
   lentFtCredit,
+  isManagementPosition,
 } from "../labour-gate-lib";
 import { forecastWeek } from "../labour-gate";
 import {
@@ -457,11 +458,6 @@ export async function generateSchedule(
   const openDaysList = [0, 1, 2, 3, 4, 5, 6].filter((d) => daysOpen.has(d));
   const N = sortedFT.length;
   const dayItems = (d: number) => Math.max(itemsByDow.get(d) ?? 0, 0);
-  // Max rests on any one day: don't dip the crew below the service floor — but
-  // never below 1, or a small crew (N ≤ floor, e.g. a 3-FT outlet) has NO legal
-  // rest slot anywhere and the fallback would pile every rest onto the same day.
-  // Every FT must rest once; on a floor-sized crew that day simply runs short.
-  const restCap = Math.max(1, N - SERVICE_FLOOR);
 
   // ── Fairness memory: each FT's recent history (last 4 weeks) ─────────
   // Drives long-run fairness so it isn't reset every week: openings & closings
@@ -501,111 +497,131 @@ export async function generateSchedule(
     }
   }
 
-  // Target rest-count per open day — placed to MINIMIZE the holes PT would
-  // have to buy back. (Owner catch, 2026-07-18: the old items-share spread
-  // rested two people on the #4-busiest day and then spent the whole PT
-  // envelope refilling that SAME day while Saturday stayed short — resting a
-  // sunk FT and buying a part-timer for the identical hours is paying twice.)
-  // Greedy: each rest goes to the day with the most SURPLUS man-hours —
-  // (FT still working that day × 7.5h) minus the demand model's man-hours
-  // needed — so rests consume slack instead of creating PT demand. Ties break
-  // to the quieter-items day. Rest placement and PT filling now optimise the
-  // same objective, from the same demand model.
-  const restTarget = new Map<number, number>(openDaysList.map((d) => [d, 0]));
+  // Rest days — placed PER STATION against that station's own demand curve.
+  // Two owner catches shaped this (2026-07-18):
+  //   1. Items-share rests dug holes PT then bought back on the same day
+  //      (paying twice for the identical hours) → slack-greedy vs demand.
+  //   2. Day-level slack was STATION-BLIND: Sunday looked slack because its
+  //      barista side is the week's lightest, so two rests landed there — and
+  //      both went to KITCHEN crew on the #2 cooked-items day, leaving 2 cooks
+  //      for 86 kitchen items. Kitchen rests must be judged by the KITCHEN
+  //      curve, FOH rests by the barista curve.
+  // Each station's rests go greedily to that station's most-surplus day
+  // ((station FT still working × 7.5h) − station man-hours needed), capped so
+  // the station never drops below its structural minimum (2 cooks for the
+  // kitchen anchors; 3 FOH for the floor). Weekend-rest fairness and profile
+  // rest days are honoured within each station.
   const SHIFT_H = 7.5;
-  const needHoursOf = (dwN: number): number => {
+  const kitNeedHOf = (dwN: number): number => {
+    let s = 0;
+    for (let h = openH; h < closeH; h++) s += weekDemand.kitHeadsByHour.get(`${dwN}:${h}`) ?? 0;
+    return s;
+  };
+  const barNeedHOf = (dwN: number): number => {
     let s = 0;
     for (let h = openH; h < closeH; h++) {
       const kit = weekDemand.kitHeadsByHour.get(`${dwN}:${h}`) ?? 0;
-      const bar =
+      s +=
         Math.max(weekDemand.barHeadsByHour.get(`${dwN}:${h}`) ?? SERVICE_FLOOR, SERVICE_FLOOR - kit) +
         bufferHeads(dwN, h);
-      s += kit + bar;
     }
     return s;
   };
-  const needH = new Map<number, number>(openDaysList.map((d) => [d, needHoursOf(d)]));
-  {
-    const slack = (d: number) => (N - (restTarget.get(d) ?? 0)) * SHIFT_H - (needH.get(d) ?? 0);
-    for (let i = 0; i < N; i++) {
+  const weekendDays: number[] = openDaysList.filter((d) => d === 0 || d === 6);
+  const restTarget = new Map<number, number>(openDaysList.map((d) => [d, 0])); // combined, for notes/QA
+  const restDayOf = new Map<string, number>();
+
+  const placeStationRests = (group: Staff[], needOf: (d: number) => number, minOnDuty: number) => {
+    const Ng = group.length;
+    if (Ng === 0) return;
+    const capG = Math.max(1, Ng - minOnDuty);
+    const target = new Map<number, number>(openDaysList.map((d) => [d, 0]));
+    // Profile rest days are hard constraints.
+    const flexible: Staff[] = [];
+    for (const s of group) {
+      if (s.rest_day != null && daysOpen.has(s.rest_day)) {
+        restDayOf.set(s.id, s.rest_day);
+        target.set(s.rest_day, (target.get(s.rest_day) ?? 0) + 1);
+      } else {
+        flexible.push(s);
+      }
+    }
+    const slack = (d: number) => (Ng - (target.get(d) ?? 0)) * SHIFT_H - needOf(d);
+    for (let i = 0; i < flexible.length; i++) {
       let best: number | null = null;
       for (const d of openDaysList) {
-        if ((restTarget.get(d) ?? 0) >= restCap) continue;
+        if ((target.get(d) ?? 0) >= capG) continue;
         if (best == null || slack(d) > slack(best) || (slack(d) === slack(best) && dayItems(d) < dayItems(best))) {
           best = d;
         }
       }
       if (best == null) best = openDaysList[i % openDaysList.length]; // every day capped — overflow round-robin
-      restTarget.set(best, (restTarget.get(best) ?? 0) + 1);
+      target.set(best, (target.get(best) ?? 0) + 1);
     }
-  }
+    // Weekend fairness within the station: if someone here is owed a weekend
+    // rest and this station has no weekend slot, move one rest from the
+    // slackest weekday-loser to the slackest weekend day (cap respected).
+    const owed = flexible.some((s) => (weekendRestCount.get(s.id) ?? 0) === 0);
+    const hasWkndSlot = weekendDays.some((d) => (target.get(d) ?? 0) > 0);
+    if (owed && !hasWkndSlot && weekendDays.length) {
+      const wknd = [...weekendDays].filter((d) => (target.get(d) ?? 0) < capG).sort((a, b) => slack(b) - slack(a))[0];
+      const donor = [...openDaysList]
+        .filter((d) => !weekendDays.includes(d) && (target.get(d) ?? 0) > 0)
+        .sort((a, b) => slack(a) - slack(b))[0];
+      if (wknd != null && donor != null) {
+        target.set(wknd, (target.get(wknd) ?? 0) + 1);
+        target.set(donor, (target.get(donor) ?? 0) - 1);
+      }
+    }
+    // WHO rests when: weekend slots to the fewest-recent-weekend-rests first;
+    // everyone else avoids last week's day (variety), then the slackest day.
+    const remaining = new Map(target);
+    for (const s of group) {
+      if (restDayOf.has(s.id) && s.rest_day != null) {
+        remaining.set(s.rest_day, (remaining.get(s.rest_day) ?? 0) - 1);
+      }
+    }
+    const byWkndDebt = [...flexible].sort(
+      (a, b) => (weekendRestCount.get(a.id) ?? 0) - (weekendRestCount.get(b.id) ?? 0),
+    );
+    for (const d of [...weekendDays].sort((a, b) => (remaining.get(b) ?? 0) - (remaining.get(a) ?? 0))) {
+      while ((remaining.get(d) ?? 0) > 0) {
+        const person = byWkndDebt.find((s) => !restDayOf.has(s.id));
+        if (!person) break;
+        restDayOf.set(person.id, d);
+        weekendRestCount.set(person.id, (weekendRestCount.get(person.id) ?? 0) + 1);
+        remaining.set(d, (remaining.get(d) ?? 0) - 1);
+      }
+    }
+    for (const s of flexible) {
+      if (restDayOf.has(s.id)) continue;
+      const lastDow = lastRestByUser.get(s.id)?.dow;
+      const day =
+        openDaysList
+          .filter((d) => (remaining.get(d) ?? 0) > 0)
+          .sort((a, b) => (a === lastDow ? 1 : 0) - (b === lastDow ? 1 : 0) || slack(b) - slack(a))[0] ??
+        openDaysList[0] ??
+        1;
+      restDayOf.set(s.id, day);
+      remaining.set(day, (remaining.get(day) ?? 0) - 1);
+    }
+    for (const d of openDaysList) restTarget.set(d, (restTarget.get(d) ?? 0) + (target.get(d) ?? 0));
+  };
+
+  const bohFT = sortedFT.filter((s) => isBOH(s.position));
+  const fohFT = sortedFT.filter((s) => !isBOH(s.position));
+  placeStationRests(bohFT, kitNeedHOf, 2); // never below the 2 kitchen anchors
+  placeStationRests(fohFT, barNeedHOf, 3); // never below the FOH floor
   notes.push(
-    "Rest placement (slack-greedy vs demand): " +
+    "Rest placement (per-station slack vs demand): " +
       openDaysList
-        .map((d) => `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]} ${restTarget.get(d) ?? 0}r/${Math.round(needH.get(d) ?? 0)}h-need`)
+        .map((d) => {
+          const kitR = bohFT.filter((s) => restDayOf.get(s.id) === d).length;
+          const fohR = fohFT.filter((s) => restDayOf.get(s.id) === d).length;
+          return `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]} kit${kitR}/foh${fohR} (need ${Math.round(kitNeedHOf(d))}+${Math.round(barNeedHOf(d))}h)`;
+        })
         .join(", "),
   );
-
-  // Fairness guarantee: if anyone hasn't had a weekend rest in the last 4 weeks,
-  // make sure a weekend rest slot exists to rotate to them — shift one rest from
-  // the busiest weekday onto the quieter weekend day, as long as the weekend
-  // still holds the service floor. Keeps "everyone gets a weekend off sometimes"
-  // true without gutting weekend coverage.
-  const weekendDays = openDaysList.filter((d) => d === 0 || d === 6);
-  const weekdayDays = openDaysList.filter((d) => d !== 0 && d !== 6);
-  const someoneOwedWeekend = sortedFT.some((s) => s.rest_day == null && (weekendRestCount.get(s.id) ?? 0) === 0);
-  const weekendHasSlot = weekendDays.some((d) => (restTarget.get(d) ?? 0) > 0);
-  if (someoneOwedWeekend && !weekendHasSlot && weekendDays.length && weekdayDays.length) {
-    const wknd = [...weekendDays].sort((a, b) => dayItems(a) - dayItems(b))[0];
-    const donor = [...weekdayDays].filter((d) => (restTarget.get(d) ?? 0) > 0).sort((a, b) => dayItems(b) - dayItems(a))[0];
-    if (wknd != null && donor != null && N - ((restTarget.get(wknd) ?? 0) + 1) >= SERVICE_FLOOR) {
-      restTarget.set(wknd, (restTarget.get(wknd) ?? 0) + 1);
-      restTarget.set(donor, (restTarget.get(donor) ?? 0) - 1);
-    }
-  }
-
-  // Assign each FT a rest day. Profile rest_day is a hard constraint — honour it.
-  const restRemaining = new Map(restTarget);
-  const restDayOf = new Map<string, number>();
-  for (const s of sortedFT) {
-    if (s.rest_day != null && daysOpen.has(s.rest_day)) {
-      restDayOf.set(s.id, s.rest_day);
-      restRemaining.set(s.rest_day, (restRemaining.get(s.rest_day) ?? 0) - 1);
-    }
-  }
-  // Weekend rest slots go FIRST to whoever's had the fewest weekend rests
-  // recently — so no one is stuck working every Saturday and Sunday.
-  const wkndByDebt = sortedFT
-    .filter((s) => !restDayOf.has(s.id))
-    .sort((a, b) => (weekendRestCount.get(a.id) ?? 0) - (weekendRestCount.get(b.id) ?? 0));
-  for (const d of [...weekendDays].sort((a, b) => (restRemaining.get(b) ?? 0) - (restRemaining.get(a) ?? 0))) {
-    while ((restRemaining.get(d) ?? 0) > 0) {
-      const person = wkndByDebt.find((s) => !restDayOf.has(s.id));
-      if (!person) break;
-      restDayOf.set(person.id, d);
-      weekendRestCount.set(person.id, (weekendRestCount.get(person.id) ?? 0) + 1);
-      restRemaining.set(d, (restRemaining.get(d) ?? 0) - 1);
-    }
-  }
-  // Everyone else fills the remaining slots, preferring a day they did NOT rest
-  // on last week (variety), then the neediest/quietest day so heads track demand.
-  for (const s of sortedFT) {
-    if (restDayOf.has(s.id)) continue;
-    const lastDow = lastRestByUser.get(s.id)?.dow;
-    const day =
-      openDaysList
-        .filter((d) => (restRemaining.get(d) ?? 0) > 0)
-        .sort(
-          (a, b) =>
-            (a === lastDow ? 1 : 0) - (b === lastDow ? 1 : 0) ||
-            (restRemaining.get(b) ?? 0) - (restRemaining.get(a) ?? 0) ||
-            dayItems(a) - dayItems(b),
-        )[0] ??
-      openDaysList[0] ??
-      1;
-    restDayOf.set(s.id, day);
-    restRemaining.set(day, (restRemaining.get(day) ?? 0) - 1);
-  }
   // Surface the resulting FT working-heads-per-day vs demand for QA.
   const DOW_LABEL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   notes.push(
@@ -978,7 +994,11 @@ export async function generateSchedule(
     rows.filter((r) => {
       if (r.shift_date !== d || r.notes === "rest_day") return false;
       if (Number(r.start_time.slice(0, 2)) > h || Number(r.end_time.slice(0, 2)) <= h) return false;
-      return station === "kitchen" ? isBOH(posById.get(r.user_id) ?? null) : !isBOH(posById.get(r.user_id) ?? null);
+      const pos = posById.get(r.user_id) ?? null;
+      // Management shifts are not man-hours (owner rule 2026-07-18) — a rover
+      // manager on the grid must not hide a real PT gap.
+      if (isManagementPosition(pos)) return false;
+      return station === "kitchen" ? isBOH(pos) : !isBOH(pos);
     }).length;
 
   type Gap = { date: string; template: ShiftTemplate; slot: string; gapHours: number; station: "kitchen" | "barista" };

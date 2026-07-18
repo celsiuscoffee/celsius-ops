@@ -12,6 +12,7 @@ import {
   DEFAULT_BUDGET,
   borrowedFtCharge,
   lentFtCredit,
+  isManagementPosition,
   type LabourGateResult,
   type ShiftCostRow,
 } from "@/lib/hr/labour-gate-lib";
@@ -413,8 +414,10 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     for (let h = 0; h < 24; h++) {
       const n = need.get(`${dw}:${h}`) ?? 0;
       if (n === 0) continue;
+      // Management shifts are NOT man-hours (owner rule 2026-07-18): a manager
+      // on the floor supervises — the demand curve is cleared by line staff.
       const have = rows.filter(
-        (r) => r.shift_date === date &&
+        (r) => r.shift_date === date && !isManagementPosition(r.position) &&
           Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
       ).length;
       neededHours += n;
