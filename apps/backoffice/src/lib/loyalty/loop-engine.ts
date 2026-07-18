@@ -18,6 +18,10 @@ import { pushTokensByMember, sendPushToTokens } from "@/lib/loyalty/push";
 const BRAND = "brand-celsius";
 const SMS_COST_RM = 0.1; // SMS Niaga ~RM0.10/SMS
 const GP = 0.72; // gross-profit rate for incremental-margin read
+// COGS of one freed drink (BOM ~RM3): charged per actual redemption on
+// free-item/BOGO arms in measureRound so their measured margin is TRUE margin.
+// Discount arms need nothing — their cost is already in the reduced revenue.
+const FREE_ITEM_COGS_RM = 3;
 
 export type ArmDef = {
   key: string; // e.g. 'free_tea'
@@ -848,13 +852,27 @@ export async function measureRound(roundId: string) {
 
   const holdoutRate = byArm["holdout"] ? byArm["holdout"].converted / Math.max(1, byArm["holdout"].n) : 0;
 
+  // TRUE-MARGIN accounting for free-ITEM rewards: a discount's cost is already
+  // visible (the order rings up for less revenue), but a freed drink's COGS is
+  // invisible to revenue — the drink leaves the bar at RM0 while we still pay
+  // for it. Without this, free-item arms look more profitable than they are,
+  // and the more they're redeemed the bigger the flattery. Costed per actual
+  // redemption; discounts get 0 (their cost is already in net revenue).
+  const freeItemArms = new Set<string>();
+  for (const a of ((round.arms ?? []) as StoredArm[])) {
+    const cand = OFFER_CANDIDATES.find((c) => c.voucher_template_id === a.voucher_template_id);
+    if (cand && (cand.logic === "free item" || cand.logic === "BOGO")) freeItemArms.add(a.key);
+  }
+
   const stats = Object.entries(byArm).map(([arm, a]) => {
     const convRate = a.converted / Math.max(1, a.n);
     const redeemRate = a.redeemed / Math.max(1, a.n);
     const liftPp = arm === "holdout" ? 0 : +((convRate - holdoutRate) * 100).toFixed(1);
     const marginPerRecipientRm = +(a.revenueRm / Math.max(1, a.n)).toFixed(2); // gross; subtract COGS/SMS in dashboard
+    const rewardCogs = freeItemArms.has(arm) ? a.redeemed * FREE_ITEM_COGS_RM : 0;
     return {
       arm, n: a.n, conversion_rate: +(convRate * 100).toFixed(1), redemption_rate: +(redeemRate * 100).toFixed(1), lift_pp: liftPp, revenue_rm: +a.revenueRm.toFixed(2), revenue_per_recipient_rm: marginPerRecipientRm,
+      ...(rewardCogs > 0 ? { reward_cogs_rm: +rewardCogs.toFixed(2) } : {}),
       // Audit trail: how many holdouts were dropped as contaminated (treated by
       // a sibling loop inside this window). Only ever set on the holdout row.
       ...(arm === "holdout" && holdoutExcluded > 0 ? { excluded_contaminated: holdoutExcluded } : {}),
@@ -921,6 +939,10 @@ export const OFFER_CANDIDATES: OfferCandidate[] = [
   // covers classics; Free Drink covers any drink category.
   { key: "free_coffee", label: "Free Coffee", logic: "free item", voucher_template_id: "206b5fbf-c12a-44e5-ad30-85a9e8a81439", offer: "a free coffee, on us" },
   { key: "free_drink", label: "Free Drink", logic: "free item", voucher_template_id: "9cb1a485-4e68-46a9-a8f1-0dec4519c641", offer: "a free drink, on us" },
+  // Gated free drink: the naked freebie has no spend floor (walk in, take the
+  // drink, RM0 basket). This variant makes "free" always ride an RM25+ basket —
+  // the only form Welcome is allowed to test (birthday keeps the ungated gift).
+  { key: "free_drink_min25", label: "Free Drink (RM25+)", logic: "free item", voucher_template_id: "a0000025-0000-4000-8000-000000000025", offer: "a free drink when you spend RM25+" },
 ];
 
 // ── Loop registry: each campaign objective is a loop. Same machinery
@@ -959,7 +981,7 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // welcome ~1 day after the 1st visit; birthday on the day. round_gap stays
   // batch/manual (an operator-driven, budget-capped weekly push).
   winback:   { key: "winback",   label: "Reactivation",      objective: "Win back lapsed customers",        defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct10_min25", "pct15_min40", "pct20_min40", "flat5_min25", "flat10_min30", "flat15_min50", "b1f1_drinks"], messageTemplate: "We miss you at Celsius! Come back and enjoy {offer} - just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minDaysLapsed: 30, maxDaysLapsed: 60 } }, segment: winbackSegment },
-  welcome:   { key: "welcome",   label: "Welcome",           objective: "Turn the 1st visit into a 2nd",    defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks", "free_drink"], messageTemplate: "Welcome to Celsius! Enjoy {offer} on your next visit - just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 365, segmentOpts: { joinedWithinDays: 10 } }, segment: welcomeSegment },
+  welcome:   { key: "welcome",   label: "Welcome",           objective: "Turn the 1st visit into a 2nd",    defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks", "free_drink_min25"], messageTemplate: "Welcome to Celsius! Enjoy {offer} on your next visit - just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 365, segmentOpts: { joinedWithinDays: 10 } }, segment: welcomeSegment },
   birthday:  { key: "birthday",  label: "Birthday",          objective: "Bring members in on their birthday", defaultHoldoutPct: 0,  defaultWindowDays: 14, candidateKeys: ["free_coffee", "free_drink"], messageTemplate: "Happy birthday from Celsius! Enjoy {offer} - just show your number at any outlet to redeem.", trigger: { holdoutPct: 0, cooldownDays: 300, segmentOpts: { birthdayWithinDays: 0 } }, segment: birthdaySegment },
   round_gap: { key: "round_gap", label: "Weekly round-gap",  objective: "Fill an underperforming day-part",  defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct15_min40", "flat10_min30", "b1f1_drinks"], messageTemplate: "Celsius misses you! Enjoy {offer} this week - just show your number at any outlet to redeem.", segment: roundGapSegment },
   // Reminder loop (manual/operator-gated — no trigger): pull members back to
@@ -1006,6 +1028,7 @@ type StoredArm = { key: string; label: string; voucher_template_id: string; mess
 type StoredStat = {
   arm: string; n: number; lift_pp: number; revenue_per_recipient_rm: number;
   conversion_rate?: number; redemption_rate?: number; revenue_rm?: number;
+  reward_cogs_rm?: number; // actual COGS of redeemed free-item rewards (absent pre-2026-07-18 rounds → 0)
 };
 
 // ── POOLED HOLDOUT BASELINE ──────────────────────────────────────────────────
@@ -1055,7 +1078,7 @@ export async function getLeaderboard(loopKey: LoopKey = "winback"): Promise<Lead
   const roundList = (rounds ?? []) as Array<{ arms: StoredArm[] | null; stats: StoredStat[] | null }>;
   const base = pooledHoldoutBaseline(roundList.map((r) => r.stats));
 
-  type Agg = { label: string; key: string | null; logic: string | null; n: number; converted: number; revenue: number; rounds: number };
+  type Agg = { label: string; key: string | null; logic: string | null; n: number; converted: number; revenue: number; rewardCogs: number; rounds: number };
   const agg = new Map<string, Agg>();
 
   for (const r of roundList) {
@@ -1067,10 +1090,11 @@ export async function getLeaderboard(loopKey: LoopKey = "winback"): Promise<Lead
       if (!arm) continue;
       const tid = arm.voucher_template_id;
       const cand = OFFER_CANDIDATES.find((c) => c.voucher_template_id === tid);
-      const e = agg.get(tid) ?? { label: cand?.label ?? arm.label, key: cand?.key ?? null, logic: cand?.logic ?? null, n: 0, converted: 0, revenue: 0, rounds: 0 };
+      const e = agg.get(tid) ?? { label: cand?.label ?? arm.label, key: cand?.key ?? null, logic: cand?.logic ?? null, n: 0, converted: 0, revenue: 0, rewardCogs: 0, rounds: 0 };
       e.n += s.n;
       e.converted += s.n * (s.conversion_rate ?? 0) / 100;
       e.revenue += s.revenue_rm ?? (s.revenue_per_recipient_rm ?? 0) * s.n;
+      e.rewardCogs += s.reward_cogs_rm ?? 0;
       e.rounds += 1;
       agg.set(tid, e);
     }
@@ -1079,7 +1103,9 @@ export async function getLeaderboard(loopKey: LoopKey = "winback"): Promise<Lead
   const out: LeaderboardEntry[] = [...agg.entries()].map(([tid, e]) => {
     const convRate = e.n ? (e.converted / e.n) * 100 : 0;
     const revPer = e.n ? e.revenue / e.n : 0;
-    const incrMargin = (revPer - base.revPerRecipient) * e.n * GP;
+    // TRUE margin: redeemed free-item COGS subtracted, so "Free Drink" style
+    // offers compete on what they actually earn, not on flattered revenue.
+    const incrMargin = (revPer - base.revPerRecipient) * e.n * GP - e.rewardCogs;
     return {
       template_id: tid, key: e.key, label: e.label, logic: e.logic, rounds: e.rounds,
       recipients: e.n,
@@ -1573,7 +1599,7 @@ export async function cancelRound(roundId: string): Promise<{ vouchers: number; 
 // breakdown: SMS sent/cost, redemptions, incremental orders + margin vs the
 // holdout, and ROI. Answers "is the whole programme working?" at a glance.
 // ============================================================================
-type EvalStat = { arm: string; n: number; lift_pp: number; redemption_rate: number; revenue_per_recipient_rm: number; conversion_rate?: number; revenue_rm?: number };
+type EvalStat = { arm: string; n: number; lift_pp: number; redemption_rate: number; revenue_per_recipient_rm: number; conversion_rate?: number; revenue_rm?: number; reward_cogs_rm?: number };
 export type LoopEval = {
   loop_key: string; label: string; rounds: number; sent: number;
   redemptions: number; redemption_rate: number; avg_lift_pp: number;
@@ -1622,7 +1648,7 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
     const base = pooledHoldoutBaseline(statsList);
     const acc = blank();
     acc.holdoutN = base.n;
-    let converted = 0, revenue = 0;
+    let converted = 0, revenue = 0, rewardCogs = 0;
     for (const stats of statsList) {
       let counted = false;
       for (const s of stats) {
@@ -1632,6 +1658,7 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
         acc.redemptions += Math.round(s.n * (s.redemption_rate ?? 0) / 100);
         converted += s.n * (s.conversion_rate ?? 0) / 100;
         revenue += s.revenue_rm ?? (s.revenue_per_recipient_rm ?? 0) * s.n;
+        rewardCogs += s.reward_cogs_rm ?? 0;
       }
       if (counted) acc.rounds += 1;
     }
@@ -1640,7 +1667,8 @@ export async function getEvaluation(opts?: { sinceDays?: number }): Promise<Eval
     const liftPp = convRate - base.convRate;
     acc.liftW = liftPp * acc.sent; // keep weighted form so totals pool correctly
     acc.incrOrders = acc.sent * liftPp / 100;
-    acc.incrMargin = (revPer - base.revPerRecipient) * acc.sent * GP;
+    // TRUE margin: redeemed free-item COGS subtracted (see FREE_ITEM_COGS_RM).
+    acc.incrMargin = (revPer - base.revPerRecipient) * acc.sent * GP - rewardCogs;
     byLoop.set(loopKey, acc);
   }
 
