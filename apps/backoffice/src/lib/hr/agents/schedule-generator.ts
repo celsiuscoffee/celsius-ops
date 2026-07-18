@@ -913,23 +913,35 @@ export async function generateSchedule(
     0,
   );
   const ftCost = Math.round(primaryFtCost + borrowedFtCost + roverCost);
-  const ptBudget = Math.max(0, Math.round(budget.target * forecast - ftCost));
+  // PT money aims at the TARGET (18%). But when the sunk FT floor alone
+  // already consumes the target, the old behaviour (envelope RM0 → zero PT
+  // anywhere, weekends starved) protected a number that was already breached
+  // while costing coverage on the busiest days. The owner's band is
+  // target–ceiling (18–20%), so in that case the envelope opens up to the
+  // CEILING. The labour gate still prices the final roster: landing between
+  // target and ceiling reads AMBER at publish (typed reason), never silent.
+  const targetEnvelope = Math.round(budget.target * forecast - ftCost);
+  const ceilingEnvelope = Math.round(budget.ceiling * forecast - ftCost);
+  const ptBudget = targetEnvelope > 0 ? targetEnvelope : Math.max(0, ceilingEnvelope);
+  const usedCeiling = targetEnvelope <= 0 && ptBudget > 0;
   notes.push(
     `Budget: forecast RM${forecast.toLocaleString()} × ${(budget.target * 100).toFixed(0)}% = RM${Math.round(budget.target * forecast).toLocaleString()}; ` +
       `FT RM${ftCost.toLocaleString()} (primary RM${Math.round(primaryFtCost).toLocaleString()}` +
       (borrowedFtCost > 0 ? ` + borrowed-hours RM${Math.round(borrowedFtCost).toLocaleString()}` : "") +
       (roverCost > 0 ? ` + rover-hours RM${Math.round(roverCost).toLocaleString()}` : "") +
-      `; rotation cost follows hours, manager cost = HQ) → PT envelope RM${ptBudget.toLocaleString()}`,
+      `; rotation cost follows hours, manager cost = HQ) → PT envelope RM${ptBudget.toLocaleString()}` +
+      (usedCeiling ? ` (target consumed by FT floor — opened to the ${(budget.ceiling * 100).toFixed(0)}% ceiling, publish will read amber)` : ""),
   );
   // Sunk-FT reality: when the fixed FT floor alone is already at/over target, the
   // week is revenue-constrained — no amount of rostering fixes it, and benching
   // FT saves nothing (their salary is booked either way). Flag it so the % isn't
   // "corrected" by cutting FT hours.
   const ftFloorPct = forecast > 0 ? ftCost / forecast : null;
-  if (ptBudget === 0 && ftFloorPct != null) {
+  if (targetEnvelope <= 0 && ftFloorPct != null) {
     notes.push(
       `⚠ FT floor alone is ${(ftFloorPct * 100).toFixed(1)}% of forecast (≥ ${(budget.target * 100).toFixed(0)}% target) — revenue-constrained week. ` +
-        `FT salary is sunk, so schedule them FULLY (benching cuts coverage, not cost); the levers are revenue or lending an FT to a busier outlet.`,
+        `FT salary is sunk, so schedule them FULLY (benching cuts coverage, not cost); the levers are revenue or lending an FT to a busier outlet.` +
+        (ptBudget > 0 ? ` PT capped at the ${(budget.ceiling * 100).toFixed(0)}% ceiling envelope (RM${ptBudget.toLocaleString()}).` : ""),
     );
   }
 
