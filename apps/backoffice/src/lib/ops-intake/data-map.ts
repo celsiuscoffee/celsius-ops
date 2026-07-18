@@ -65,6 +65,7 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
 - member_brands (brand_id='brand-celsius'), redemptions — loyalty membership + redemption activity.
 - loop_assignments = the LIFECYCLE LOOPS' send ledger (channel sms/push, sms_status, converted, order_revenue). This is the SMS truth — ~100-200 sends/day via SMSNiaga (app_settings.sms_provider, switched 2026-06-21 after SMS123 began requiring content whitelisting).
 - TRAP: sms_logs is LEGACY (old campaigns-auto + tests only; both legacy campaigns inactive). Its silence since 2026-06-21 is normal — never conclude "SMS is dead" from sms_logs. sms_credits is SMS123-era balance history.
+- campaign_outcomes = the marketing OUTCOME ledger (since 2026-07-18): one row per measured loop round (campaign_key '<loop>-r<no>'), with baseline/result conversion %, uplift_pct in PERCENTAGE POINTS, and an evidence-gated verdict (win/neutral/loss/invalid — invalid = holdout <3 or treatment <10, common for small daily triggered rounds; use the pooled leaderboard for those). Use this for "did campaign X work" — not raw loop_rounds.stats.
 
 ## Metric definitions (use these consistently)
 - Labour % = month payroll (salary + employer_stat) / month gross sales.

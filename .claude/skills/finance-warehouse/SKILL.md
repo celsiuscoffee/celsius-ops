@@ -106,8 +106,8 @@ projection for sales/cash/payroll semantics.
 | HR / people | Roster: `hr_schedules` (published only) + `hr_schedule_shifts`. Attendance: `hr_attendance_logs` (adoption erratic — absence ≠ absent). Profiles: `hr_employee_profiles` (76) vs `User` ACTIVE (56; profiles include resigned). Payroll COST stays `fin_payroll_actuals` | next week published by Sun night; attendance same-day | `hr_payroll_runs` now has 6 paid runs (2026-07-18) but remains NON-canonical for cost. `hr_staff_weekly_availability` = 0 rows until PT-loop UI ships (round 6) |
 | Procurement / inventory | POs: `Order` orderType='PURCHASE_ORDER'. Receipts: `Receiving`. Stock: `StockBalance` (shadow — consumption engine off; reorder runs off receipts−wastage). Wastage: `StockAdjustment`. Pars: `ParLevel` (weekly recalc). Counts: `StockCount` (+coverage guard) | receiving ≤ 1d; pars recalced weekly Sun | Open-PO rot: 107 AWAITING_DELIVERY at baseline — age them every run. Counts stuck SUBMITTED (2 since Apr 30). Stock accuracy is SHADOW until unit normalisation + recipes |
 | Ops | `Checklist` (assignment semantics!), `OpsAlert` (ledger, RESOLVED can be bulk claim), `SystemReport`, `AuditReport` | checklists same-day | **935 open OpsAlerts at baseline** — the ledger is a swamp; track the number, propose a sweep policy |
-| Marketing / loyalty | Members: `member_brands` (23.0k). Redemptions: `redemptions`. **Loop sends: `loop_assignments`** (channel sms/push + sms_status — the lifecycle loops' ledger; provider SMSNiaga via app_settings.sms_provider since 2026-06-21). Legacy: `sms_logs` (campaigns-auto/tests only, quiet = normal) + `sms_credits` (SMS123-era). Outcomes: `campaign_outcomes` (substrate) | redemptions live; loop sends daily | RESOLVED 2026-07-18: the "SMS dead since Jun 21" red was a wrong-canonical-source error — loops send 100–200/day via SMSNiaga. Real residuals: `campaign_outcomes` = 0 rows (no loop writes outcomes — substrate gap). Loyalty RLS `USING(true)` (PII anon-writable — standing critical) |
-| Reviews / GBP / ads | `ReviewDailySnapshot` (nightly), `GeoGridScan`+`GeoRankSnapshot` (catchment-scale only), `ReviewReplyDraft`, `ads_campaign` (status enum is TEXT numbers — '2'=ENABLED), `ads_budget_change`, `grab_ads_spend` | snapshot daily; geogrid weekly | Geogrid last scan Jul 6 at baseline — stalled? Trust only complete catchment-scale scans |
+| Marketing / loyalty | Members: `member_brands` (23.0k). Redemptions: `redemptions`. **Loop sends: `loop_assignments`** (channel sms/push + sms_status — the lifecycle loops' ledger; provider SMSNiaga via app_settings.sms_provider since 2026-06-21). Legacy: `sms_logs` (campaigns-auto/tests only, quiet = normal) + `sms_credits` (SMS123-era). Outcomes: `campaign_outcomes` (substrate) | redemptions live; loop sends daily | RESOLVED 2026-07-18: the "SMS dead since Jun 21" red was a wrong-canonical-source error — loops send 100–200/day via SMSNiaga. Real residuals: RESOLVED 2026-07-18 — `campaign_outcomes` wired (measureRound writes it; 130 rounds backfilled; see check 18). Loyalty RLS `USING(true)` (PII anon-writable — standing critical) |
+| Reviews / GBP / ads | `ReviewDailySnapshot` (nightly), `GeoGridScan`+`GeoRankSnapshot` (catchment-scale only), `ReviewReplyDraft`, `ads_campaign` (status enum is TEXT numbers — '2'=ENABLED), `ads_budget_change`, `grab_ads_spend` | snapshot daily; geogrid weekly | Geogrid stall root-caused + fixed 2026-07-18 (failed scans ate the monthly budget — see check 19). Trust only complete catchment-scale scans |
 | Comms | `WhatsAppMessage` (direction/type; template ≈ RM0.07) | live | — |
 | Agent substrate | `agent_registry` (30 agents), `agent_actions` | every armed agent logs actions | Only 4/30 agents write agent_actions at baseline — telemetry adoption gap; nudge per-domain wiring |
 
@@ -123,8 +123,19 @@ projection for sales/cash/payroll semantics.
     Healthy = sms/sent rows daily (~100–200/day baseline) with near-zero
     failed. [failures spiking or zero sent-rows for 3+ days while loops
     armed = channel problem]
-18. campaign_outcomes writers: row count > 0 once loops are wired. [still 0 after wiring = regression]
+18. campaign_outcomes writers: WIRED 2026-07-18 — measureRound writes one
+    row per measured round (campaign_key '<loop>-r<no>', uplift_pct in pp,
+    evidence-gated verdict; 130 rounds backfilled). Healthy = new rows
+    within ~2d of any measured round; [rounds measured after 2026-07-18
+    with no matching campaign_outcomes row = the write broke — it is
+    try/caught in measureRound so it fails SILENTLY except for a console
+    error].
 19. Snapshot cadence: ReviewDailySnapshot within 2d; GeoGridScan within 10d.
+    [Geogrid stall root-caused 2026-07-18: failed scans used to eat the
+    40/mo budget (quota storm Jul-6 burned it in one run). Fixed: budget +
+    cadence exclude status='failed', scanGrid paces ~8 req/s with retries,
+    cron has per-run cap 15 + outage circuit breaker. Expect scans to
+    resume Mon Jul-20 after deploy; still none by Jul-22 = new problem.]
 20. Substrate telemetry: distinct agent_key in agent_actions ÷ armed agents in registry [ratio should rise; baseline 4/30].
 21. Package coverage: % ReceivingItem with productPackageId [70% after the
     2026-07-18 single-package backfill (was 29%); target ≥90%; ratchet —
@@ -165,11 +176,27 @@ projection for sales/cash/payroll semantics.
     up. Person-level reconciliation is BLOCKED on missing data: payments
     are outlet-level lump transfers — per-person weekly PT breakdown is a
     needs-register gap the managers' sheet must fill]
-    Statutory note (check 26 addendum): ALWAYS exclude `isInterCo` lines —
-    own-entity "Stat Pay" reimbursements were misflagged false (4 lines,
-    RM16.5k, corrected 2026-07-18); net-of-interco statutory outflow ≈
-    22–24k/mo vs runs' 17.6k due; residual ≈ PCB/EPF timing + entity
-    split — decompose monthly.
+    Statutory note (check 26 addendum, RESOLVED 2026-07-18): ALWAYS
+    exclude `isInterCo` lines — own-entity "Stat Pay" reimbursements were
+    misflagged false on BOTH legs (4 CR + 4 DR lines, corrected). The
+    residual is fully decomposed; the statutory payment map is:
+    - All statutory pays from central CELSIUS COFFEE SDN BHD (4384):
+      one EPF employer (023733927), one PERKESO code (B3902109148A) —
+      Conezion/Tamarind reimburse via the interco "Stat Pay" transfers.
+    - **PCB is NOT under STATUTORY_PAYMENT** — it lives in category TAX
+      as "LHDN - SEMENANJUNG 9609021908" M2UBIZ lines, and matches
+      prior-month `pcb_tax` due EXACTLY (Jun-15 1,054.15 = May due;
+      May-15 1,570.00 = Apr due). The recurring RM300/mo
+      "LHDN SEMENANJUNG 1125095480911xxx" lines are CP204 company-tax
+      installments — NOT payroll; never count them in the bridge.
+    - EPF pays lag-1 within ~RM1k (recurring +936 delta ≈ Poket Capital
+      shared staff, reimbursed ~RM540/mo "Shared statpay" — entity
+      outside fin_companies, owner confirmation pending).
+    - SOCSO+EIS pays lag-1 mid-month, ~1,590–1,650/mo (PERKESO + SIP
+      lines). Late precedent: April's PERKESO leg paid May-7.
+    - WATCH (open): June SOCSO due 2,164.25 (+43% vs May) but only
+      156.60 paid by Jul-15 deadline — if no catch-up PERKESO payment by
+      end-July, escalate (late-payment interest risk).
 
 ## Run procedure
 

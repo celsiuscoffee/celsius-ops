@@ -290,6 +290,33 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 — **Warehouse improvements round: statutory closed, geogrid
+  fixed, campaign_outcomes wired (this branch, extends PR #977).**
+  (1) Check 26 residual FULLY decomposed: PCB was never missing — it lives
+  under category TAX ("LHDN - SEMENANJUNG 9609021908") and matches
+  prior-month `pcb_tax` EXACTLY (lag-1); the RM300/mo "1125095480911xxx"
+  LHDN lines are CP204 company tax, NOT payroll; the 4 DR-side "Stat Pay"
+  interco legs (Conezion/Tamarind → central, RM16.5k Jun+Jul) marked
+  `isInterCo=true` (same owner directive as the CR side). All statutory
+  pays from central 4384 (EPF 023733927, PERKESO B3902109148A); EPF lag-1
+  within ~1k (+936 recurring ≈ Poket shared staff, ~540/mo reimbursed).
+  **OPEN WATCH: June SOCSO due 2,164.25 (+43% vs May) but only 156.60 paid
+  by the Jul-15 deadline — escalate if no catch-up PERKESO payment by
+  end-July** (April precedent: paid ~3 wks late). (2) Geogrid stall
+  root-caused: Jul-6 quota storm (81-pt scans, concurrency 8, no pacing)
+  produced 20 fully-failed scans that ATE the 40/mo budget → capped until
+  Aug 1. Fixed: budget+cadence exclude failed scans, scanGrid paces
+  ~8 req/s + per-point retries, cron per-run cap 15 + 2-strike outage
+  breaker; tests added; scans should resume Mon Jul-20 after deploy.
+  (3) campaign_outcomes WIRED: measureRound writes one row per measured
+  round (evidence-gated verdict, uplift in pp; `summarizeOutcome` pure +
+  tested); 130 measured rounds backfilled in prod (24 win / 27 neutral /
+  8 loss / 71 invalid-thin-evidence). Checks 18/19/26 + data-map updated.
+  Remaining backlog: PO-aging policy (51 >14d), OpsAlert sweep (938),
+  PT per-person capture design (owner answer pending), tier-2 41 re-points
+  (needs SOAs), June GL correction (delegated, apply only at <RM500
+  reconciliation), unified_sale_items pickup lines.
+
 - 2026-07-18 — **E3 "SMS dead" RESOLVED — false alarm from a wrong
   canonical source.** Real story: SMS123 began enforcing content
   whitelisting (BE00036) in May → 2,446 failures May–Jun; team tested and
