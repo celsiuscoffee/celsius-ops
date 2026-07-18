@@ -143,6 +143,17 @@ projection for sales/cash/payroll semantics.
     accountant owes the Bukku close values, see
     docs/proposals/inventory-valuation-anchors.md; sanity gate 0.3×–2× of
     trailing-30d purchases before insert].
+26. Payroll bridge (monthly): fin_payroll_actuals (gross+employer, accrual,
+    from BrioHR) vs GL cash lens (6500-02 net-paid + STATUTORY_PAYMENT
+    bank lines + 6500-03 PT). Known-good anchors 2026-06: actuals 77,261 /
+    run net 59,682 / GL 6500-02 64,128 / statutory 31,992 / PT 24,403.
+    [unexplained monthly gap > RM5k → decompose the 6500-02 lines. Exclude
+    the 'opening_balance' BrioHR-import run (draft, RM400,729 gross) from
+    ALL run aggregations — it is a stub, not a payment]
+27. Payroll-run hygiene: runs table has no delete audit — count runs each
+    check; a decreasing count = someone deleted a run (observed 8→7 on
+    2026-07-18, an aborted ai_computed run). [flag deletes; propose an
+    audit table if it recurs]
 
 ## Run procedure
 
