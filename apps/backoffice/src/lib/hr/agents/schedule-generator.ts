@@ -1235,8 +1235,16 @@ export async function generateSchedule(
     // Interleaving one gap per day per round means every day gets its deepest
     // hole plugged before any day gets its fourth top-up. Days keep their
     // target-desc order within each round; per-day targets still cap totals.
+    // KITCHEN GAPS FIRST within each day: kitchen-capable PTs are the scarce
+    // resource (often 2 people = 6 shifts/week), and an unmanned kitchen is a
+    // closed kitchen — Tamarind 2026-07-20: barista gaps in the early rounds
+    // consumed the kitchen PTs' caps on Mon–Fri and left SAT+SUN with zero
+    // kitchen staff after 15:30 (owner: "close the kitchen?").
     const gapsByDate = new Map<string, Gap[]>();
     for (const g of gaps) (gapsByDate.get(g.date) ?? gapsByDate.set(g.date, []).get(g.date)!).push(g);
+    for (const dayGaps of gapsByDate.values()) {
+      dayGaps.sort((a, b) => (a.station === "kitchen" ? 0 : 1) - (b.station === "kitchen" ? 0 : 1) || b.gapHours - a.gapHours);
+    }
     const interleaved: Gap[] = [];
     for (let round = 0, added = true; added; round++) {
       added = false;
@@ -1332,6 +1340,36 @@ export async function generateSchedule(
       ? `${ptRows.length} PT SUGGESTIONS (RM${Math.round(ptSpend.rm)} of RM${ptBudget} envelope, ${agentUsed ? "agent" : "greedy"}) — confirm in grid:\n  ${suggestionLines.join("\n  ")}`
       : `No PT suggested (envelope RM${ptBudget}, ${gaps.length} demand gaps, ${eligiblePt.length} eligible PT)`,
   );
+
+  // ── Unmanned-station QA: never CLOSE a station silently ─────────────
+  // After FT + suggested PT, any trading hour where a station with demand has
+  // ZERO people is a loud warning (Tamarind 2026-07-20: kitchen had nobody
+  // Sat+Sun after 15:30 — a closed kitchen on the busiest evenings, and the
+  // grid said nothing). These are supply holes (caps/envelope/headcount), so
+  // the roster can't fix them alone — the owner must decide: cross-cover,
+  // raise PT hours, or hire.
+  const ptStaffedAt = (d: string, h: number, station: "kitchen" | "barista") =>
+    ptRows.filter((r) => {
+      if (r.shift_date !== d) return false;
+      if (Number(r.start_time.slice(0, 2)) > h || Number(r.end_time.slice(0, 2)) <= h) return false;
+      const pos = posById.get(r.user_id) ?? null;
+      return station === "kitchen" ? isBOH(pos) : !isBOH(pos);
+    }).length;
+  for (const date of dates) {
+    if (!daysOpen.has(dow(date))) continue;
+    for (const station of ["kitchen", "barista"] as const) {
+      const holes: number[] = [];
+      for (let h = openH; h < closeH; h++) {
+        const need = station === "kitchen" ? kitNeedAt(date, h) : barNeedAt(date, h);
+        if (need > 0 && staffedAt(date, h, station) + ptStaffedAt(date, h, station) === 0) holes.push(h);
+      }
+      if (holes.length > 0) {
+        notes.push(
+          `⚠ ${station.toUpperCase()} UNMANNED ${date} ${holes[0]}:00–${holes[holes.length - 1] + 1}:00 — demand exists but no ${station}-capable staff left (weekly caps / envelope / headcount). Cross-cover, add PT hours, or the station is effectively closed.`,
+        );
+      }
+    }
+  }
 
   // ── Stage 4: atomic persist — never lose the old week on failure ─────
   const allRows = [...rows, ...ptRows];
