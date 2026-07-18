@@ -37,7 +37,10 @@ import * as Sentry from "@sentry/react-native";
 // in here or set EXPO_PUBLIC_SENTRY_DSN in the EAS build.
 const FALLBACK_SENTRY_DSN =
   "https://37f0a20903a2e28f4f7ec19b46ff5931@o4511247029043200.ingest.us.sentry.io/4511247091630080";
-const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? FALLBACK_SENTRY_DSN;
+// Dev / Expo Go must NOT fall back — red-box errors and 100%-sampled dev traces
+// would land in the shared production project. Dev only reports when a DSN is
+// deliberately provided via env.
+const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? (__DEV__ ? "" : FALLBACK_SENTRY_DSN);
 if (SENTRY_DSN) {
   Sentry.init({
     dsn:                SENTRY_DSN,

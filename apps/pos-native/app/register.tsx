@@ -301,11 +301,15 @@ export default function Register() {
   // Orders past the 15-min serving target → drives the alarm sound + the popup.
   const { overdue: overdueOrders, silence: silenceAlarm } = useServingAlarm(servingAlarmItems);
   const [overdueAck, setOverdueAck] = useState(false);
-  const prevOverdueCount = useRef(0);
+  // Track overdue IDS (not count) — if one order is served while another goes
+  // overdue in the same tick the count is unchanged, but the new order must
+  // still re-pop the popup (it also re-rings the alarm — keep them in step).
+  const prevOverdueIds = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (overdueOrders.length > prevOverdueCount.current) setOverdueAck(false); // a new order went overdue → re-pop
-    if (overdueOrders.length === 0) setOverdueAck(false);                      // all cleared → reset
-    prevOverdueCount.current = overdueOrders.length;
+    const hasNew = overdueOrders.some((o) => !prevOverdueIds.current.has(o.id));
+    if (hasNew) setOverdueAck(false);                     // a new order went overdue → re-pop
+    if (overdueOrders.length === 0) setOverdueAck(false); // all cleared → reset
+    prevOverdueIds.current = new Set(overdueOrders.map((o) => o.id));
   }, [overdueOrders]);
   // Only over the main register (not while the orders panel is already open).
   const showOverduePopup = overdueOrders.length > 0 && !overdueAck && hub === null;
