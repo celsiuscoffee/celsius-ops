@@ -1,5 +1,6 @@
 import { hrSupabaseAdmin } from "../supabase";
 import { breakHoursFor, mytDateString } from "../hours";
+import { ptRateForDate } from "../pt-rate";
 
 type WeeklyPayrollResult = {
   payrollRunId: string;
@@ -17,9 +18,11 @@ type WeeklyPayrollResult = {
  * excluded using the same rule the attendance engine applies (part-timer: 30 min
  * if the shift is over 4 hours), so pay reflects worked time, not gross clock time.
  *
- * Pay basis per PT for the Mon–Sun (MYT) week:
+ * Pay basis per PT for the Mon–Sun (MYT) week (owner rule 2026-07-18):
  *   workedHours(log) = totalHours(log) − break        (totalHours = clock_out − clock_in)
- *   gross           = Σ workedHours × hourly_rate
+ *   rate(log)        = weekday base Mon–Fri · hourly_rate_weekend Sat/Sun ·
+ *                      2× the day's rate on a gazetted public holiday
+ *   gross            = Σ workedHours(log) × rate(log)
  * Only CLOSED logs count (need a clock-out to have hours); REJECTED logs are
  * excluded (a manager marked them bogus). Open/still-clocked-in logs are skipped.
  *
@@ -48,8 +51,17 @@ export async function calculateWeeklyPayroll(
   // 1. Part-timer profiles.
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, hourly_rate, end_date, resigned_at")
+    .select("user_id, hourly_rate, hourly_rate_weekend, end_date, resigned_at")
     .eq("employment_type", "part_time");
+
+  // Public holidays inside the week — those days pay 2× (owner rule; the wage
+  // sheet's RM18/RM20 entries).
+  const { data: hols } = await hrSupabaseAdmin
+    .from("hr_public_holidays")
+    .select("date")
+    .gte("date", periodStartStr)
+    .lte("date", periodEndStr);
+  const holidaySet = new Set(((hols ?? []) as Array<{ date: string }>).map((h) => h.date));
 
   if (!profiles || profiles.length === 0) {
     throw new Error("No part-time employees found.");
@@ -124,8 +136,12 @@ export async function calculateWeeklyPayroll(
       continue;
     }
 
+    // Day-aware pay: each log is priced at ITS date's rate (weekday base /
+    // weekend rate / 2× on a public holiday), so a Sat shift and a Tue shift
+    // in the same week pay differently — exactly like the wage sheet.
     let workedHours = 0;
-    const logDetails: Array<{ date: string; hours: number; start: string; end: string }> = [];
+    let gross = 0;
+    const logDetails: Array<{ date: string; hours: number; rate: number; start: string; end: string }> = [];
     for (const l of userLogs) {
       const clockIn = new Date(l.clock_in);
       const clockOut = new Date(l.clock_out as string);
@@ -133,11 +149,14 @@ export async function calculateWeeklyPayroll(
         ? Number(l.total_hours)
         : Math.max(0, (clockOut.getTime() - clockIn.getTime()) / 3600000);
       const worked = Math.max(0, Math.round((totalH - breakHoursFor("part_time", totalH)) * 100) / 100);
+      const dateStr = mytDateString(l.clock_in);
+      const rate = ptRateForDate(profile, dateStr, holidaySet.has(dateStr));
       workedHours += worked;
-      logDetails.push({ date: mytDateString(l.clock_in), hours: worked, start: clockIn.toISOString(), end: clockOut.toISOString() });
+      gross += worked * rate;
+      logDetails.push({ date: dateStr, hours: worked, rate, start: clockIn.toISOString(), end: clockOut.toISOString() });
     }
     workedHours = Math.round(workedHours * 100) / 100;
-    const gross = Math.round(workedHours * hourlyRate * 100) / 100;
+    gross = Math.round(gross * 100) / 100;
     totalGross += gross;
 
     payrollItems.push({
@@ -164,9 +183,10 @@ export async function calculateWeeklyPayroll(
       eis_employer: 0,
       computation_details: {
         hourly_rate: hourlyRate,
+        hourly_rate_weekend: profile.hourly_rate_weekend != null ? Number(profile.hourly_rate_weekend) : null,
         employment_type: "part_time",
         cycle: "weekly",
-        basis: "clocked",
+        basis: "clocked, day-aware rate (weekday/weekend/PH 2x)",
         worked_hours: workedHours,
         attendance_records: logDetails.length,
         shifts: logDetails,

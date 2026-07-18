@@ -19,6 +19,7 @@ import {
   WORKING_DAYS_PER_MONTH,
   NORMAL_WORKING_HOURS_PER_DAY,
 } from "./constants";
+import { ptRateForDate } from "./pt-rate";
 
 // Per-outlet labour budgets (fraction of forecast revenue), keyed by
 // Outlet.code. Tamarind's interim budget is deliberately above the company
@@ -65,7 +66,8 @@ export type ShiftCostRow = {
   userName: string;
   position: string | null;
   employment_type: string | null; // null = no HR profile
-  hourly_rate: number | null;
+  hourly_rate: number | null; // PT weekday base
+  hourly_rate_weekend?: number | null; // PT Sat/Sun rate (null → base)
   basic_salary: number | null;
   epf_employer_rate: number | null;
 };
@@ -117,7 +119,9 @@ function normalizeRate(rate: number | null): number | null {
 }
 
 // Pure costing over pre-joined rows — unit-testable without IO.
-export function costRoster(rows: ShiftCostRow[]): {
+// `holidays` (YYYY-MM-DD set) doubles PT pay on public holidays; PT weekends
+// price at hourly_rate_weekend (owner rule 2026-07-18).
+export function costRoster(rows: ShiftCostRow[], holidays: Set<string> = new Set()): {
   cost: number;
   hours: number;
   blockers: string[];
@@ -152,7 +156,7 @@ export function costRoster(rows: ShiftCostRow[]): {
         blockers.push(`${r.userName}: part-timer with no hourly rate`);
         continue;
       }
-      cost += h * r.hourly_rate;
+      cost += h * ptRateForDate(r, r.shift_date, holidays.has(r.shift_date));
     } else {
       if (!r.basic_salary || r.basic_salary <= 0) {
         blockers.push(`${r.userName}: full-timer with no basic salary`);

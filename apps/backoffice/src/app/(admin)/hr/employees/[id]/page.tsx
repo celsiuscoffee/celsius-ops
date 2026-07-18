@@ -270,6 +270,7 @@ export default function EmployeeDetailPage() {
     manager_user_id: "",
     basic_salary: "",
     hourly_rate: "",
+    hourly_rate_weekend: "",
     ic_number: "",
     date_of_birth: "",
     gender: "",
@@ -453,6 +454,7 @@ export default function EmployeeDetailPage() {
         manager_user_id: profile.manager_user_id || "",
         basic_salary: profile.basic_salary?.toString() || "",
         hourly_rate: profile.hourly_rate?.toString() || "",
+        hourly_rate_weekend: profile.hourly_rate_weekend?.toString() || "",
         ic_number: profile.ic_number || "",
         date_of_birth: profile.date_of_birth?.slice(0, 10) || "",
         gender: profile.gender || "",
@@ -511,6 +513,7 @@ export default function EmployeeDetailPage() {
       if (canSeeSalary) {
         payload.basic_salary = form.basic_salary ? parseFloat(form.basic_salary) : 0;
         payload.hourly_rate = form.hourly_rate ? parseFloat(form.hourly_rate) : null;
+        payload.hourly_rate_weekend = form.hourly_rate_weekend ? parseFloat(form.hourly_rate_weekend) : null;
         // Allowance overrides: blank input → NULL (use global default)
         payload.attendance_allowance_amount = form.attendance_allowance_amount
           ? parseFloat(form.attendance_allowance_amount)
@@ -522,6 +525,7 @@ export default function EmployeeDetailPage() {
         // Remove stale empties from the spread above so they don't land on the server
         delete payload.basic_salary;
         delete payload.hourly_rate;
+        delete payload.hourly_rate_weekend;
         delete payload.attendance_allowance_amount;
         delete payload.performance_allowance_amount;
       }
@@ -808,8 +812,11 @@ export default function EmployeeDetailPage() {
               <Field label="Basic Salary (RM/month)">
                 <input type="number" value={form.basic_salary} onChange={(e) => update("basic_salary", e.target.value)} className="input" placeholder="0.00" />
               </Field>
-              <Field label="Hourly Rate (RM) — for part-timers">
+              <Field label="Hourly Rate (RM) — PT weekday (Mon–Fri)">
                 <input type="number" value={form.hourly_rate} onChange={(e) => update("hourly_rate", e.target.value)} className="input" placeholder="Optional" />
+              </Field>
+              <Field label="Weekend Rate (RM) — PT Sat/Sun (blank = weekday rate; public holidays pay 2×)">
+                <input type="number" value={form.hourly_rate_weekend} onChange={(e) => update("hourly_rate_weekend", e.target.value)} className="input" placeholder="Optional" />
               </Field>
               <div className="mt-2 border-t pt-3">
                 <p className="mb-2 text-xs font-medium text-muted-foreground">
