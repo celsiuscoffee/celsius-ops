@@ -20,6 +20,9 @@ export type UnifiedSale = {
   channel: "dine_in" | "takeaway" | "delivery";
   isDeliveryQR: boolean;
   channelLabel: string; // raw channel/order_type for the channelBreakdown report
+  units: number; // count this event contributes to "transactions": 1 per receipt
+  // (StoreHub/POS/pickup), or the day's item_count for consignment (daily grain,
+  // no receipt count — so AOV reads as avg price per item for those outlets).
 };
 
 // Money-received statuses for the pickup/QR `orders` table. Payment is
@@ -111,6 +114,7 @@ export async function getUnifiedSalesForOutlet(
       channel: classifyChannel(raw),
       isDeliveryQR: isDeliveryOrQR(raw),
       channelLabel: (raw?.channel ?? "(direct)") as string,
+      units: 1,
     });
   };
 
@@ -140,6 +144,7 @@ export async function getUnifiedSalesForOutlet(
       channel: r.channel_class,
       isDeliveryQR: r.is_delivery_qr ?? false,
       channelLabel: r.channel ?? "(direct)",
+      units: 1,
     });
   };
 
@@ -223,6 +228,7 @@ export async function getUnifiedSalesForOutlet(
         channel: posChannel(r.order_type, r.source),
         isDeliveryQR: posIsDeliveryQR(r.order_type, r.source),
         channelLabel: r.source && r.source !== "pos" ? r.source : (r.order_type ?? "pos"),
+        units: 1,
       });
     }
   }
@@ -252,6 +258,7 @@ export async function getUnifiedSalesForOutlet(
         channel: ot === "dine_in" ? "dine_in" : "takeaway",
         isDeliveryQR: true, // pickup-app / QR-table → Pickup & Delivery bucket
         channelLabel: r.source ?? "pickup",
+        units: 1,
       });
     }
   }
@@ -265,9 +272,9 @@ export async function getUnifiedSalesForOutlet(
   // the StoreHub archive. `channel` is cafe|buttercream|moreh|bazaar|event|promo
   // — all in-store counter sales, so they map to dine_in. ──
   if (!opts.storehubOnly) {
-    const consRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; channel: string }>>`
-      SELECT ts, gross AS total, channel FROM (
-        SELECT (biz_date + time '12:00') AT TIME ZONE 'Asia/Kuala_Lumpur' AS ts, gross, channel
+    const consRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; items: unknown; channel: string }>>`
+      SELECT ts, gross AS total, item_count AS items, channel FROM (
+        SELECT (biz_date + time '12:00') AT TIME ZONE 'Asia/Kuala_Lumpur' AS ts, gross, item_count, channel
         FROM consignment_sales
         WHERE outlet_id = ${outlet.outletId}
       ) c
@@ -280,6 +287,9 @@ export async function getUnifiedSalesForOutlet(
         channel: "dine_in",
         isDeliveryQR: false,
         channelLabel: r.channel === "cafe" ? "consignment" : r.channel,
+        // No receipt count in the weekly advice — use the day's items sold as the
+        // unit count, so "transactions" reflects items and AOV = avg item price.
+        units: Number(r.items) || 0,
       });
     }
   }

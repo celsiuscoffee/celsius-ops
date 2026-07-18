@@ -150,7 +150,7 @@ export async function buildOverTime(
         buckets.set(sortKey, b);
       }
       b.total += ev.total;
-      b.txns += 1;
+      b.txns += ev.units ?? 1;
       b.chan[ev.channel] += ev.total;
     }
   }
@@ -228,7 +228,7 @@ export async function buildByChannel(outlets: OutletPick[], from: string, to: st
       if (d < from || d > to) continue;
       const cur = agg.get(ev.channel) ?? { sales: 0, txns: 0 };
       cur.sales += ev.total;
-      cur.txns += 1;
+      cur.txns += ev.units ?? 1;
       agg.set(ev.channel, cur);
     }
   }
