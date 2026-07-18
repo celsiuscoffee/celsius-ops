@@ -170,6 +170,73 @@ truth trustworthy; the eval dataset and close make it compound.
   money records (invoices, bank lines, journals), any drop. Human-only:
   applying migrations, payroll/payments corrections (hard rule 6).
 
+## Expansion to the whole data estate (2026-07-18)
+
+Owner directive: "this agent should be accountable for all the data." The
+custodian's mandate now covers every domain; the skill carries an estate
+contract table + checks 13–20. Baseline sweep (all SQL-verified 2026-07-18):
+
+**Healthy:** attendance → Jul 18; published rosters → week of Jul 13;
+receiving/stock/wastage → Jul 17–18; checklists flowing (404 last 7d);
+WhatsApp → Jul 18; redemptions → Jul 18 (23.0k members); review snapshots
+nightly → Jul 17; 3 enabled ad campaigns; payroll runs now 6× paid.
+
+**Estate findings (initial backlog E1–E7):**
+- **E1** 935 open `OpsAlert` rows — the alert ledger is a swamp; needs a
+  sweep/aging policy before "open alert" means anything.
+- **E2** 107 POs `AWAITING_DELIVERY` (+4 `SENT` stuck since Jul 8, 1 `DRAFT`
+  Jun 28) — age the open-PO book every run; propose closures.
+- **E3** `sms_logs` last row **Jun 21** while the SMS lifecycle/round-gap
+  loops are ARMED — either the SMS channel died quietly ~4 weeks ago or
+  sends moved to push without the map knowing. Highest-priority estate
+  check.
+- **E4** `campaign_outcomes` has **0 rows** — the substrate's outcome memory
+  has no writers yet (known gap since 080/081; loops must wire in).
+- **E5** Geogrid scans stalled — last `GeoGridScan` Jul 6 (weekly cadence
+  expected after the Jul 6 catchment-scale baseline).
+- **E6** Substrate telemetry adoption: only **4 of 30** registered agents
+  have ever written `agent_actions`.
+- **E7** `StockCount` rot: 2 SUBMITTED stuck since Apr 30; 5 DRAFTs.
+- Standing critical carried into the contract: loyalty tables' RLS is
+  `USING(true)` (member PII anon-readable AND writable).
+
+**Suggested estate goals (same style as the finance goals):**
+1. Every domain green on its freshness SLO each weekly run (checks 13–20).
+2. Open-work hygiene: open POs, stuck stock counts, and open OpsAlerts
+   trend DOWN monotonically from baseline (107 / 7 / 935) with an agreed
+   aging policy.
+3. Comms truth: SMS channel status resolved (fixed or formally retired in
+   the data map); every armed sending loop has a verifiable send log.
+4. Substrate compounding: campaign_outcomes receiving writes from every
+   armed marketing loop; agent_actions coverage rising toward 100% of
+   armed agents.
+5. Loyalty PII: RLS policy fix applied (docs/proposals — human).
+
+## Data needs register (demand side, 2026-07-18)
+
+What the business NEEDS per decision area, vs what the estate supplies.
+Status: HAVE / PARTIAL / MISSING. Compliance facts verified same day
+(fin_einvoice_submissions = 0 rows ever; fin_sst_filings = 1 row;
+no recipe/BOM tables exist in the DB; unified_sale_items = pos_native only).
+
+| Decision area | Needs | Status & gap |
+| --- | --- | --- |
+| Profitability | revenue; item mix; TRUE COGS/item margin; labour; opex | revenue/labour/opex HAVE; item mix PARTIAL (no pickup lines); COGS PARTIAL — **recipes turn out to EXIST and be complete** (MenuIngredient, 92/92 menus — the earlier "no recipe tables" was a discovery miss); activation design in `docs/design/cogs-activation.md` (blockers: consumption engine reads dead SalesTransaction; only 29% of receipts carry package conversion; costs derivable from PO lines) |
+| Cash | balances; payables; committed POs; payroll calendar; forward view | all HAVE except the forward view — a 13-week cash forecast is derivable but not computed |
+| Pricing/menu | mix; item cost; promo lift memory; waste by item | item cost MISSING (recipes); lift memory MISSING (campaign_outcomes empty); waste PARTIAL (ingredient-level) |
+| Staffing | demand curve; availability; reliability; stations | availability MISSING (0 rows; PT-loop UI in build); rest HAVE |
+| Procurement | stock truth; SKU price history; supplier lead-time/reliability | stock PARTIAL (shadow); price history PARTIAL (derivable from ReceivingItem, never computed); supplier scorecards MISSING (derivable) |
+| Customers | identity; purchase linkage; attribution; feedback | identity HAVE (23k); linkage PARTIAL (pickup has loyalty_id; POS linkage to verify); attribution MISSING (outcomes empty + holdout decisions pending); NPS MISSING |
+| Compliance | SST-02 monthly; MyInvois e-invoice; statutory; audit trail | **MyInvois MISSING — 0 submissions ever (LHDN exposure, owner decision)**; SST-02 1 filing ever; statutory upstream BrioHR; audit trail HAVE |
+| Ops quality | checklists/audits; speed of service; alert truth | speed PARTIAL (round 7); alert truth degraded (935-open swamp) |
+
+**Recommended build order:** (1) recipes/BOM — unlocks COGS, item margin,
+stock accuracy, consumption arming (three areas blocked on one dataset);
+(2) MyInvois decision (compliance); (3) campaign_outcomes wiring;
+(4) pickup lines in unified_sale_items; (5) cash forecast + supplier
+scorecards (pure derivations). The custodian's needs-coverage goal: every
+MISSING cell either has an owner+plan or a dated park decision.
+
 ## Compounding contract
 
 - Every incident/finding becomes a permanent check in the skill's check

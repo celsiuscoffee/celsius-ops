@@ -290,6 +290,38 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 — **Data-warehouse custodian expanded to the WHOLE estate**
+  (owner: "this agent should be accountable for all the data"). Skill
+  (`finance-warehouse` — historical path, description now estate-wide)
+  gains domain contracts + checks 13–20 for HR, procurement/inventory,
+  ops, marketing/loyalty, reviews/ads, comms, agent substrate; design doc
+  gains the estate baseline + goals; migration 086 (APPLIED) broadens the
+  registry row (key unchanged — stable identifier). Baseline sweep
+  findings E1–E7: 935 open OpsAlerts; 107 POs AWAITING_DELIVERY (+4 SENT
+  stuck, 1 DRAFT Jun 28); **sms_logs last row Jun 21 while SMS loops are
+  ARMED** (channel dead or sends moved to push — top estate check);
+  campaign_outcomes 0 rows (no loop writes outcomes); geogrid scans
+  stalled since Jul 6; only 4/30 registry agents ever wrote
+  agent_actions; 2 StockCounts SUBMITTED since Apr 30. Also: payroll runs
+  now 6× paid (the 7/5 "all drafts" note is stale; fin_payroll_actuals
+  stays canonical for cost). Weekly/close-pack routines inherit the
+  estate scope automatically (prompts defer to the skill). **Next run
+  priorities:** E3 SMS pulse root-cause, June per-company-day GL
+  correction, E1/E2 aging policies.
+  **COGS activation designed ("design 1", same day):**
+  `docs/design/cogs-activation.md`. Discovery flipped the premise:
+  recipes EXIST and are complete (`MenuIngredient`, 92/92 menus, 512
+  lines, 138 ingredients, clean g/ml/pcs UOMs — earlier "no recipe
+  tables" was a name-pattern discovery miss); `ProductPackage.
+  conversionFactor` exists but only 29% of 2,070 ReceivingItems carry a
+  package link; **consumption-post.ts reads DEAD SalesTransaction** (the
+  shadow engine has multiplied recipes against zero sales since April);
+  ReceivingItem has no price — unit cost derives from PO OrderItem.
+  unitPrice ÷ conversionFactor. Workstreams W1–W5 (re-point sales →
+  package ratchet + product_costs → menu_margins view → variance loop →
+  pre-committed arming criteria for consumption_engine). Warehouse
+  checks 21–24 added. **Next:** owner OK → build W1 (small PR).
+
 - 2026-07-18 (round 7) — **Measured station capacity v2 (this branch).**
   Owner corrections while auditing Sat Jul 18: (a) "short" units clarified
   (hourly = concurrent heads, day chip = man-hours); (b) serve p90 signal is

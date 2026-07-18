@@ -1,9 +1,17 @@
 ---
 name: finance-warehouse
-description: Finance data-warehouse custodian — verify freshness/integrity of every canonical finance source, reconcile the two revenue lenses, catch data-map drift, file cleanup proposals. Use for the scheduled warehouse run, when asked "is the finance data right/fresh", before month-end close (close pack), or when a finance source changes semantics.
+description: Data-warehouse custodian for the WHOLE Celsius data estate (mandate expanded 2026-07-18; finance remains the deepest domain). Verify freshness/integrity of every canonical source across finance, HR, procurement/inventory, ops, marketing/loyalty, reviews/ads, comms and the agent substrate; reconcile the revenue lenses; catch data-map drift; file cleanup proposals. Use for the scheduled warehouse runs, when asked whether any business data is right/fresh/complete, before month-end close, or when any source changes semantics.
 ---
 
-# Finance warehouse — custodian runbook
+# Data warehouse — custodian runbook
+
+Mandate: the single source of truth for ALL Celsius data (owner directive
+2026-07-18: "this agent should be accountable for all the data"). Finance is
+the founding, deepest domain; the estate contracts below extend the same
+method — one canonical source per question, freshness SLOs, growing checks,
+propose-only cleanups. (Skill file keeps its historical `finance-warehouse`
+path/name so the scheduled routines' prompts stay valid; rename is cosmetic
+housekeeping for later.)
 
 Design + rationale: `docs/design/finance-data-warehouse-agent.md`. This file
 is the source of truth for procedure. Registry key: `finance_warehouse`
@@ -48,6 +56,36 @@ Full semantics + traps: `data-map.ts` (keep the two in lockstep).
 **Dead tables — must stay 0 rows, never query:** `fin_bank_transactions`,
 `fin_invoices`, `fin_bills`, `fin_matches`, plus stale `SalesTransaction`
 (21,880 frozen rows, ended 2026-04-11).
+
+## Estate domain contracts (baseline verified 2026-07-18)
+
+Same rules as finance: one canonical source per question class; if a
+question doesn't fit, extend the contract. `data-map.ts` stays the runtime
+projection for sales/cash/payroll semantics.
+
+| Domain | Canonical sources | SLO / conventions | Standing traps & watch items |
+| --- | --- | --- | --- |
+| HR / people | Roster: `hr_schedules` (published only) + `hr_schedule_shifts`. Attendance: `hr_attendance_logs` (adoption erratic — absence ≠ absent). Profiles: `hr_employee_profiles` (76) vs `User` ACTIVE (56; profiles include resigned). Payroll COST stays `fin_payroll_actuals` | next week published by Sun night; attendance same-day | `hr_payroll_runs` now has 6 paid runs (2026-07-18) but remains NON-canonical for cost. `hr_staff_weekly_availability` = 0 rows until PT-loop UI ships (round 6) |
+| Procurement / inventory | POs: `Order` orderType='PURCHASE_ORDER'. Receipts: `Receiving`. Stock: `StockBalance` (shadow — consumption engine off; reorder runs off receipts−wastage). Wastage: `StockAdjustment`. Pars: `ParLevel` (weekly recalc). Counts: `StockCount` (+coverage guard) | receiving ≤ 1d; pars recalced weekly Sun | Open-PO rot: 107 AWAITING_DELIVERY at baseline — age them every run. Counts stuck SUBMITTED (2 since Apr 30). Stock accuracy is SHADOW until unit normalisation + recipes |
+| Ops | `Checklist` (assignment semantics!), `OpsAlert` (ledger, RESOLVED can be bulk claim), `SystemReport`, `AuditReport` | checklists same-day | **935 open OpsAlerts at baseline** — the ledger is a swamp; track the number, propose a sweep policy |
+| Marketing / loyalty | Members: `member_brands` (23.0k). Redemptions: `redemptions`. SMS: `sms_logs` + `sms_credits`. Outcomes: `campaign_outcomes` (substrate) | redemptions live; sms same-day when loops fire | **sms_logs last row 2026-06-21 with SMS loops ARMED** — verify channel alive vs sends moved to push. `campaign_outcomes` = 0 rows (no loop writes outcomes yet — substrate gap). Loyalty RLS is `USING(true)` (PII anon-writable — standing critical, rls-access-map) |
+| Reviews / GBP / ads | `ReviewDailySnapshot` (nightly), `GeoGridScan`+`GeoRankSnapshot` (catchment-scale only), `ReviewReplyDraft`, `ads_campaign` (status enum is TEXT numbers — '2'=ENABLED), `ads_budget_change`, `grab_ads_spend` | snapshot daily; geogrid weekly | Geogrid last scan Jul 6 at baseline — stalled? Trust only complete catchment-scale scans |
+| Comms | `WhatsAppMessage` (direction/type; template ≈ RM0.07) | live | — |
+| Agent substrate | `agent_registry` (30 agents), `agent_actions` | every armed agent logs actions | Only 4/30 agents write agent_actions at baseline — telemetry adoption gap; nudge per-domain wiring |
+
+**Estate checks (13+ — same growth rule as the finance suite):**
+13. Roster-published SLO: max published week_start ≥ next Monday by Sun 22:00 MYT.
+14. Open-PO age: AWAITING_DELIVERY/SENT older than 14d — count + oldest; [growth vs baseline 107].
+15. StockCount rot: SUBMITTED > 7d or DRAFT > 7d. [any]
+16. OpsAlert swamp: open count [growth vs 935 baseline].
+17. SMS pulse: max(sms_logs.created_at) within 7d while any SMS loop armed. [stale = channel broken or loops mis-armed]
+18. campaign_outcomes writers: row count > 0 once loops are wired. [still 0 after wiring = regression]
+19. Snapshot cadence: ReviewDailySnapshot within 2d; GeoGridScan within 10d.
+20. Substrate telemetry: distinct agent_key in agent_actions ÷ armed agents in registry [ratio should rise; baseline 4/30].
+21. Package coverage: % ReceivingItem with productPackageId [baseline 29%; target ≥90%; ratchet — never regress].
+22. Recipe drift: menus without MenuIngredient rows [baseline 0/92; any new menu without a BOM].
+23. Cost coverage: % of recipe ingredients (138 baseline) with a usable product_costs row [once W3 of cogs-activation ships].
+24. Consumption source: no `prisma.salesTransaction` reads in live code [consumption-post.ts is the known offender until cogs-activation W1 lands].
 
 ## Run procedure
 
