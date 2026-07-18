@@ -328,9 +328,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   with no Menu mapping (live-verified Jul 17: 139–244 pos + 43–82 pickup
   items/outlet, only 3–8 unmapped per stream ≈ 4%). Engine stays SHADOW.
   Note: "Celsius Coffee Putrajaya" Outlet = the Conezion store (slug
-  outlet-con) — 3 active till outlets, all covered. **Next:** W3
-  product_costs + W2 package ratchet; first shadow run report after
-  tonight's cron.
+  outlet-con) — 3 active till outlets, all covered. **W2/W3/W4 BUILT same
+  session (owner: CONTINUE):** migration 087 APPLIED — `product_costs`
+  VIEW (cost per base unit from last-5 received PO lines ÷
+  ProductPackage.conversionFactor, override table
+  product_cost_overrides; no cron — stays clear of the 40-cron cap),
+  `menu_margins` VIEW (sellingPrice − channel-weighted recipe cost;
+  uncosted_ingredients flags overstated margins; packaging cost = v1
+  follow-up), and the W2 single-package backfill (848 ReceivingItems →
+  package coverage 29%→70%). Verified sane: pastas RM19.90–29.90 at
+  52–74% gross margin; 104/138 recipe ingredients costed (75%);
+  data-map "Unit economics" section added. **Remaining in
+  cogs-activation:** receiving-flow package default (code+UI), Catalog
+  BOM page margin surface, packaging cost in margins, W5 variance loop →
+  arming. **Next:** merge PR #970 (W1–W4); first shadow consumption
+  report after tonight's cron.
 
 - 2026-07-18 (round 7) — **Measured station capacity v2 (this branch).**
   Owner corrections while auditing Sat Jul 18: (a) "short" units clarified

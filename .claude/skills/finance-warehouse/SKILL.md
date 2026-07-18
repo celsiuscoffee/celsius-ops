@@ -82,10 +82,18 @@ projection for sales/cash/payroll semantics.
 18. campaign_outcomes writers: row count > 0 once loops are wired. [still 0 after wiring = regression]
 19. Snapshot cadence: ReviewDailySnapshot within 2d; GeoGridScan within 10d.
 20. Substrate telemetry: distinct agent_key in agent_actions ÷ armed agents in registry [ratio should rise; baseline 4/30].
-21. Package coverage: % ReceivingItem with productPackageId [baseline 29%; target ≥90%; ratchet — never regress].
-22. Recipe drift: menus without MenuIngredient rows [baseline 0/92; any new menu without a BOM].
-23. Cost coverage: % of recipe ingredients (138 baseline) with a usable product_costs row [once W3 of cogs-activation ships].
-24. Consumption source: no `prisma.salesTransaction` reads in live code [consumption-post.ts is the known offender until cogs-activation W1 lands].
+21. Package coverage: % ReceivingItem with productPackageId [70% after the
+    2026-07-18 single-package backfill (was 29%); target ≥90%; ratchet —
+    never regress].
+22. Recipe drift: menus without MenuIngredient rows [baseline 0/92; any
+    new menu without a BOM] + consumption cron summary itemsUnmapped
+    [~4%/outlet baseline; growth = catalog drift].
+23. Cost coverage: recipe ingredients with a usable product_costs row
+    [baseline 104/138 = 75% at W3 ship; rises with check 21; any
+    menu_margins row with uncosted_ingredients>0 is overstated — say so
+    when quoting margins].
+24. Consumption source: no `prisma.salesTransaction` reads in live code
+    [fixed in cogs-activation W1 (PR #970); guard against regression].
 
 ## Run procedure
 
