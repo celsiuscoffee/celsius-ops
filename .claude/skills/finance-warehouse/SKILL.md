@@ -94,6 +94,11 @@ projection for sales/cash/payroll semantics.
     when quoting margins].
 24. Consumption source: no `prisma.salesTransaction` reads in live code
     [fixed in cogs-activation W1 (PR #970); guard against regression].
+25. Valuation anchors: `fin_inventory_valuations` has an anchor per active
+    till outlet for the current COGS boundary [EMPTY at baseline —
+    accountant owes the Bukku close values, see
+    docs/proposals/inventory-valuation-anchors.md; sanity gate 0.3×–2× of
+    trailing-30d purchases before insert].
 
 ## Run procedure
 
@@ -117,6 +122,17 @@ projection for sales/cash/payroll semantics.
    through month end (checks 1–4 green for the closed month), lens bridge
    for the month, open drafts/exceptions count, unpaid AP snapshot — and
    hand to the human approver. Never close a period yourself.
+   **COGS trust gates (input-quality enforcement — the custodian is
+   accountable for humans' inputs being usable):** the pack marks actual
+   COGS as NOT TRUSTWORTHY, with named blockers and owners, when any of:
+   (a) an active outlet lacks a REVIEWED monthly StockCount (≥85%
+   coverage) for the closed month; (b) no `fin_inventory_valuations`
+   anchor chain covers the COGS boundary (accountant pack:
+   `docs/proposals/inventory-valuation-anchors.md`); (c) package coverage
+   (check 21) regressed during the month; (d) counts stuck
+   SUBMITTED/DRAFT >7d exist. Recipe-vs-actual variance (W5) is only
+   reported for months whose gates pass — never compare against untrusted
+   actuals.
 6. Update STATE.md (resume pointer + new verified facts) inside the PR.
 
 ## Check suite (v1 — grows monotonically; add, never remove)
