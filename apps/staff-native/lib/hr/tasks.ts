@@ -8,6 +8,41 @@ import { API_BASE_URL } from "../env";
 export const GEOFENCE_TASK = "celsius-staff-geofence-v1";
 
 const SESSION_KEY = "celsius_staff_session_v1";
+const GEOFENCE_THROTTLE_KEY = "celsius_staff_geofence_throttle_v1";
+
+// Collapse geofence "flapping". When a device sits near the ~100m outlet
+// boundary (or GPS accuracy is poor), the OS toggles Enter/Exit repeatedly and
+// each event used to fire its own notification — producing the clock-in /
+// clock-out prompt spam staff were seeing (dozens of alternating "You're at" /
+// "You left" banners minutes apart). We suppress a repeat prompt for the same
+// outlet + direction inside this window. 30 min matches the server's default
+// geofence_exit_grace_minutes (see the attendance ping route): a staff member
+// never needs to be re-prompted to clock in/out more than twice an hour, and a
+// real arrival/departure an hour later still gets through.
+const NOTIFY_COOLDOWN_MS = 30 * 60 * 1000;
+
+type ThrottleState = Record<string, { enter?: number; exit?: number }>;
+
+// Returns true if a notification for this outlet + direction should fire now,
+// recording the timestamp when it does. Storage failures fall back to notifying
+// so a genuine arrival is never silently swallowed (the pre-throttle behaviour).
+async function shouldNotify(
+  identifier: string,
+  direction: "enter" | "exit",
+  now: number,
+): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem(GEOFENCE_THROTTLE_KEY);
+    const state: ThrottleState = raw ? JSON.parse(raw) : {};
+    const last = state[identifier]?.[direction];
+    if (last != null && now - last < NOTIFY_COOLDOWN_MS) return false;
+    state[identifier] = { ...state[identifier], [direction]: now };
+    await AsyncStorage.setItem(GEOFENCE_THROTTLE_KEY, JSON.stringify(state));
+    return true;
+  } catch {
+    return true;
+  }
+}
 
 type SessionShape = { token?: string } | null;
 
@@ -79,18 +114,22 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
   const outletName = region.identifier.replace(/^outlet:/, "");
 
   if (eventType === Location.GeofencingEventType.Enter) {
-    await fireNotification(
-      `You're at ${outletName}`,
-      "Tap to clock in for today's shift.",
-      { kind: "geofence_enter", outletId: region.identifier, action: "clock_in" },
-    );
+    if (await shouldNotify(region.identifier, "enter", Date.now())) {
+      await fireNotification(
+        `You're at ${outletName}`,
+        "Tap to clock in for today's shift.",
+        { kind: "geofence_enter", outletId: region.identifier, action: "clock_in" },
+      );
+    }
     void backgroundPing("background", region.latitude, region.longitude);
   } else if (eventType === Location.GeofencingEventType.Exit) {
-    await fireNotification(
-      `You left ${outletName}`,
-      "Tap to clock out if your shift is done.",
-      { kind: "geofence_exit", outletId: region.identifier, action: "clock_out" },
-    );
+    if (await shouldNotify(region.identifier, "exit", Date.now())) {
+      await fireNotification(
+        `You left ${outletName}`,
+        "Tap to clock out if your shift is done.",
+        { kind: "geofence_exit", outletId: region.identifier, action: "clock_out" },
+      );
+    }
     void backgroundPing("background", region.latitude, region.longitude);
   }
 });

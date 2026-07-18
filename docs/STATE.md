@@ -189,6 +189,43 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   cross-outlet steal. The assist-candidate ranking was already
   cross-outlet-aware (user-scoped hours, `double_booked`/`over_cap`).
 
+- 2026-07-15 — **Tamarind geofence pin was misplaced ~107m** (root cause of the
+  Celsius Manager clock-in/out notification spam). Active zone
+  `ec57ba4a-6014-46d5-865d-99a2b1ef068b` (outlet `5d1f2731…`) center was
+  2.9196975/101.6370896; real staff work-location centroid (SQL-verified, 364
+  ping+clock-in samples, median 5.9m tight cluster) is
+  **2.9200867/101.6362066**. With 150m radius, staff stood at the circle's edge
+  → GPS jitter flapped Enter/Exit endlessly. **Pin corrected in prod 2026-07-15**
+  (owner-approved). Coverage audit of the other 3 active zones: Putrajaya 5.6m /
+  Nilai 1.4m offset (fine), **Shah Alam 41m off but not flapping** (loose 31.5m
+  cluster stays inside 150m) — left as-is, optional future nudge to
+  3.0900010/101.5451225. Method to re-audit any outlet: compare
+  `hr_geofence_zones` center vs the avg of `in_zone` `hr_attendance_pings` +
+  `clock_in_lat/lng`. Symptom mitigation (notification debounce) shipped in
+  PR #935 (`apps/staff-native/lib/hr/tasks.ts`, 30-min per-outlet/direction
+  cooldown in AsyncStorage) — keep it; it also guards against future pin drift
+  and near-boundary outlets.
+
+- 2026-07-15 — **staff-native clock-out hard-blocked by a stale cached GPS
+  fix.** A barista inside Tamarind saw "You're 1583m away (zone 150m)" at
+  clock-out. Root cause: `getCurrentPositionAsync({accuracy: Balanced})` on
+  Android can return a stale cached fused location — user `d93ca6ff`'s device
+  served an *exact-repeating* phantom coord `2.9081827/101.6283900` (~1583m off)
+  in ~10% of pings while otherwise reading 6–12m from the pin. A pinpoint-
+  identical lat/lng to 7 dp = cached fix, not live GPS (real GPS jitters).
+  **Two actions:** (1) manually clocked him out via SQL (owner-approved,
+  log `cdde4acb…`): clock_out 15:59 MYT = his last confirmed in-zone ping (NOT
+  `now()`, which would overpay ~2.3h; rostered end was 15:30), method `manual`,
+  hours via the shared `deriveHours` engine (8.32 total / 7.32 regular / 0 OT,
+  full-time weekday), final_status approved + audit note. (2) Code fix in
+  PR #935: `getReliableFix()` in `apps/staff-native/app/(staff)/clock.tsx` —
+  forces HIGH accuracy (real GNSS, not the cached fallback), samples 3 fixes,
+  and for the clock action prefers the sample nearest the outlet (a present
+  phone always yields ≥1 in-zone fix; a truly remote one never does → admits
+  present, still blocks remote). Manual clock-out recipe for next time: mirror
+  the `clock/route.ts` clock-out write + `deriveHours`; set method `manual`,
+  clock_out = last in-zone ping time, guard `where clock_out is null`.
+
 ## General rules
 
 - Typecheck before pushing — every time. CI enforces it, but catch it locally.

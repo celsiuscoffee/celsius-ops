@@ -71,13 +71,12 @@ export default function ClockScreen() {
     }
     setGps({ kind: "loading" });
     try {
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+      const fix = await getReliableFix();
+      if (!fix) throw new Error("Couldn't get a GPS fix");
       setGps({
         kind: "ok",
-        coords: { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
-        accuracy: loc.coords.accuracy ?? null,
+        coords: { latitude: fix.latitude, longitude: fix.longitude },
+        accuracy: fix.accuracy,
       });
     } catch (e) {
       setGps({
@@ -160,7 +159,20 @@ export default function ClockScreen() {
     setPendingAction(null);
     setBusy(true);
     try {
-      const coords = gps.kind === "ok" ? gps.coords : null;
+      // Take a fresh, sampled fix for the actual clock write rather than trusting
+      // the last displayed reading — a single stale cached GPS fix must not gate a
+      // present staffer out of clocking out (see getReliableFix). Prefer the
+      // sample nearest the outlet; fall back to the displayed coords if sampling
+      // fails entirely.
+      const zoneForFix = status?.geofence
+        ? {
+            latitude: Number(status.geofence.latitude),
+            longitude: Number(status.geofence.longitude),
+          }
+        : null;
+      const coords =
+        (await getReliableFix(zoneForFix)) ??
+        (gps.kind === "ok" ? gps.coords : null);
       await postClockAction(action, coords, photoBase64);
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
@@ -346,6 +358,57 @@ export default function ClockScreen() {
 function formatTime(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+// A fresh, sampled GPS fix for clock actions and the distance display.
+//
+// expo-location's getCurrentPositionAsync at Balanced accuracy can hand back a
+// stale cached fused location on Android — a fixed wifi/cell-derived point — with
+// a falsely-confident accuracy. One such reading (1583m off while a barista stood
+// inside the outlet) hard-blocked their clock-out. Force HIGH accuracy (a real
+// GNSS fix, not the cached fallback) and take the best of a few samples so a
+// single bad reading can't gate a present staffer. When the outlet is known,
+// prefer the sample nearest it: a genuinely-present phone always yields at least
+// one in-zone fix, whereas a truly remote one never does — so this admits the
+// present and still blocks the remote. Without a zone (plain distance display),
+// return the most accurate sample.
+async function getReliableFix(
+  zone?: { latitude: number; longitude: number } | null,
+): Promise<{ latitude: number; longitude: number; accuracy: number | null } | null> {
+  const samples: {
+    latitude: number;
+    longitude: number;
+    accuracy: number | null;
+  }[] = [];
+  for (let i = 0; i < 3; i++) {
+    try {
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      samples.push({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        accuracy: loc.coords.accuracy ?? null,
+      });
+    } catch {
+      // skip this sample; try the next
+    }
+  }
+  if (samples.length === 0) return null;
+  if (zone) {
+    return samples.reduce((best, s) =>
+      haversineDistance(s.latitude, s.longitude, zone.latitude, zone.longitude) <
+      haversineDistance(best.latitude, best.longitude, zone.latitude, zone.longitude)
+        ? s
+        : best,
+    );
+  }
+  return samples.reduce((best, s) =>
+    (s.accuracy ?? Number.POSITIVE_INFINITY) <
+    (best.accuracy ?? Number.POSITIVE_INFINITY)
+      ? s
+      : best,
+  );
 }
 
 function haversineDistance(
