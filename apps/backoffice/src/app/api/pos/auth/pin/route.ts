@@ -16,6 +16,10 @@ const MANAGER_ROLES = new Set(["OWNER", "ADMIN", "MANAGER"]);
 const PRE_GRACE_MIN = 30; // can open the store up to 30 min before shift start
 const POST_GRACE_MIN = 30; // and stay signed in 30 min past shift end to close up
 
+// Matches a bare Outlet UUID, so a till that sends its UUID directly (rather than
+// the "outlet-sa" slug) still resolves for the roster lookups below.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** "Now" in Malaysia (UTC+8, no DST): today's date + minutes-since-midnight. */
 function mytParts(now = new Date()): { date: string; minutes: number } {
   const f = new Intl.DateTimeFormat("en-CA", {
@@ -98,6 +102,39 @@ async function evaluateScheduleGate(userId: string, role: string, outletId: stri
     // Never let an HR-query hiccup lock staff out of the till.
     console.warn("[AUTH] schedule gate error (fail-open):", e);
     return { allowed: true, shiftEnd: null, reason: "gate-error" };
+  }
+}
+
+/** user_ids with a working shift at `outletUuid` today (across published
+ *  rosters). Lets a staffer rostered at an outlet OTHER than their home branch
+ *  land in that outlet's PIN candidate set, so a multi-outlet worker can sign in
+ *  wherever they're scheduled that day. Best-effort — returns [] on any error or
+ *  when no roster is published (the caller still matches home-outlet + null). */
+async function rosteredUserIdsToday(outletUuid: string | null): Promise<string[]> {
+  if (!outletUuid) return [];
+  try {
+    const { date } = mytParts();
+    const { data: scheds } = await hrSupabaseAdmin
+      .from("hr_schedules")
+      .select("id")
+      .eq("outlet_id", outletUuid)
+      .eq("status", "published")
+      .lte("week_start", date)
+      .gte("week_end", date);
+    const schedIds = (scheds ?? []).map((s: { id: string }) => s.id);
+    if (schedIds.length === 0) return [];
+    const { data: shifts } = await hrSupabaseAdmin
+      .from("hr_schedule_shifts")
+      .select("user_id")
+      .in("schedule_id", schedIds)
+      .eq("shift_date", date);
+    const ids = (shifts ?? [])
+      .map((s: { user_id: string | null }) => s.user_id)
+      .filter((v: string | null): v is string => !!v);
+    return [...new Set(ids)];
+  } catch (e) {
+    console.warn("[AUTH] rosteredUserIdsToday error:", e);
+    return [];
   }
 }
 
@@ -185,6 +222,10 @@ export async function POST(req: NextRequest) {
     // Scope to outlet if provided — prevents cross-outlet PIN collisions
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     let candidates: any[] = [];
+    // The Outlet UUID for the TILL (resolved from the "outlet-sa" slug the POS
+    // sends). Captured out here so the schedule gate below can judge the staffer
+    // against THIS till's roster rather than their home branch.
+    let tillOutletUuid: string | null = null;
     try {
       const { prisma } = await import("@/lib/prisma");
       // The POS sends a STRING outlet id ("outlet-sa"); staff are bound to the
@@ -194,10 +235,16 @@ export async function POST(req: NextRequest) {
       // Cross-outlet roles (outletId IS NULL) always match; the duplicate-PIN
       // guard below still catches collisions across the merged set.
       const outletUuid = await resolveOutletUuid(prisma, outletId);
+      tillOutletUuid = outletUuid ?? (outletId && UUID_RE.test(outletId) ? outletId : null);
+      // Staff ROSTERED at this till today — even if their home `outletId` is a
+      // different branch. Lets a multi-outlet staffer land in the candidate set
+      // wherever they're scheduled; the gate below then confirms the shift.
+      const rosteredHere = await rosteredUserIdsToday(tillOutletUuid);
       const where: Prisma.UserWhereInput = { pin: { not: null }, status: "ACTIVE" };
       if (outletId) {
         const or: Prisma.UserWhereInput[] = [{ outletId: null }, { outletId }];
         if (outletUuid) or.push({ outletId: outletUuid });
+        if (rosteredHere.length) or.push({ id: { in: rosteredHere } });
         where.OR = or;
       }
       candidates = await prisma.user.findMany({
@@ -250,7 +297,12 @@ export async function POST(req: NextRequest) {
     // Rostered staff can only sign in during their scheduled shift. When
     // scheduled, `shiftEnd` is returned so the till auto-logs-out at end of
     // shift. If blocked, a manager PIN (overridePin) can authorise an exception.
-    const gate = await evaluateScheduleGate(user.id, user.role, resolvedOutletId);
+    // Judge the staffer against the TILL's roster (where they're physically
+    // signing in), not their home outlet — so a multi-outlet staffer is allowed
+    // wherever they're scheduled that day. Fall back to the home outlet only if
+    // the till outlet couldn't be resolved.
+    const gateOutlet = tillOutletUuid ?? resolvedOutletId;
+    const gate = await evaluateScheduleGate(user.id, user.role, gateOutlet);
     let shiftEnd: string | null = null;
     let overrideBy: string | null = null;
     if (gate.allowed) {
@@ -262,7 +314,7 @@ export async function POST(req: NextRequest) {
           { status: 403 },
         );
       }
-      const mgr = await resolveManagerOverride(overridePin, resolvedOutletId);
+      const mgr = await resolveManagerOverride(overridePin, gateOutlet);
       if (!mgr || mgr.id === user.id) {
         return NextResponse.json(
           { error: "Manager PIN not recognised.", code: "OVERRIDE_FAILED" },
