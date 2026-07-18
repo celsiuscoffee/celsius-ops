@@ -212,6 +212,31 @@ nightly → Jul 17; 3 enabled ad campaigns; payroll runs now 6× paid.
    armed agents.
 5. Loyalty PII: RLS policy fix applied (docs/proposals — human).
 
+## Data needs register (demand side, 2026-07-18)
+
+What the business NEEDS per decision area, vs what the estate supplies.
+Status: HAVE / PARTIAL / MISSING. Compliance facts verified same day
+(fin_einvoice_submissions = 0 rows ever; fin_sst_filings = 1 row;
+no recipe/BOM tables exist in the DB; unified_sale_items = pos_native only).
+
+| Decision area | Needs | Status & gap |
+| --- | --- | --- |
+| Profitability | revenue; item mix; TRUE COGS/item margin; labour; opex | revenue/labour/opex HAVE; item mix PARTIAL (no pickup lines); **COGS MISSING — blocked on recipes/BOM + unit normalisation + inventory valuations (empty)** |
+| Cash | balances; payables; committed POs; payroll calendar; forward view | all HAVE except the forward view — a 13-week cash forecast is derivable but not computed |
+| Pricing/menu | mix; item cost; promo lift memory; waste by item | item cost MISSING (recipes); lift memory MISSING (campaign_outcomes empty); waste PARTIAL (ingredient-level) |
+| Staffing | demand curve; availability; reliability; stations | availability MISSING (0 rows; PT-loop UI in build); rest HAVE |
+| Procurement | stock truth; SKU price history; supplier lead-time/reliability | stock PARTIAL (shadow); price history PARTIAL (derivable from ReceivingItem, never computed); supplier scorecards MISSING (derivable) |
+| Customers | identity; purchase linkage; attribution; feedback | identity HAVE (23k); linkage PARTIAL (pickup has loyalty_id; POS linkage to verify); attribution MISSING (outcomes empty + holdout decisions pending); NPS MISSING |
+| Compliance | SST-02 monthly; MyInvois e-invoice; statutory; audit trail | **MyInvois MISSING — 0 submissions ever (LHDN exposure, owner decision)**; SST-02 1 filing ever; statutory upstream BrioHR; audit trail HAVE |
+| Ops quality | checklists/audits; speed of service; alert truth | speed PARTIAL (round 7); alert truth degraded (935-open swamp) |
+
+**Recommended build order:** (1) recipes/BOM — unlocks COGS, item margin,
+stock accuracy, consumption arming (three areas blocked on one dataset);
+(2) MyInvois decision (compliance); (3) campaign_outcomes wiring;
+(4) pickup lines in unified_sale_items; (5) cash forecast + supplier
+scorecards (pure derivations). The custodian's needs-coverage goal: every
+MISSING cell either has an owner+plan or a dated park decision.
+
 ## Compounding contract
 
 - Every incident/finding becomes a permanent check in the skill's check
