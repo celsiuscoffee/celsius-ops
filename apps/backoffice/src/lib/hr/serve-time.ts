@@ -1,86 +1,79 @@
-// Serve-time self-calibration — the feedback loop that replaces a human judging
-// "is the roster staffed enough?". The owner's service standard (2026-07-17):
+// Station capacity — MEASURED, not assumed. The owner's correction
+// (2026-07-17): the 10/15-minute serve standards are an ORDER-LATENCY promise,
+// not a per-item labour cost — staff work overlapping (a cook runs several
+// pans, a barista batches drinks), so per-head throughput while still hitting
+// the target is higher than per-item arithmetic suggests.
 //
 //   • kitchen food     : served within 15 minutes
 //   • beverage / pastry: served within 10 minutes
 //
-// The generator sizes heads from items ÷ station rate (barista 8/hr, kitchen
-// 6/hr as base). Those rates were estimates; this module corrects them from the
-// outlet's OWN measured serve times (pos_orders.created_at → served_at):
+// So instead of scaling an assumed rate by p90 serve (the old proportional
+// controller — retired because latency doesn't scale linearly when work
+// overlaps, and it over-punished dirty serve stamps), we measure what each
+// outlet's crews DEMONSTRABLY handle: for every historical (day, hour) take
+// items ÷ heads actually clocked in (per station), keep only hours where the
+// serve target was MET (median serve ≤ target), and use a high percentile of
+// that as demonstrated capacity. Planning rate = demonstrated capacity × a
+// headroom factor, so the roster never plans crews at 100% of their best hour.
+// The serve targets stop being a throughput knob and become the pass/fail line
+// deciding which hours count as capacity proven.
 //
-//   p90 serve BREACHES the target  → rate scales DOWN proportionally → the
-//                                    demand model asks for MORE heads at the
-//                                    hours that produced the breach.
-//   p90 comfortably UNDER target   → rate nudges up slightly (leaner), inside a
-//                                    deadband so it never flaps week to week.
-//
-// Deliberately a memoryless proportional controller computed fresh on every
-// generation from the trailing window — no stored state, no migration, fully
-// reproducible, and the reasoning lands in ai_notes. Staffing changes feed the
-// next window's measurement, closing the loop.
+// Stateless: recomputed fresh each generation from the trailing window; the
+// reasoning lands in ai_notes. Staffing changes feed the next window's
+// measurement, closing the loop with no human in it.
 
 export const BARISTA_SERVE_TARGET_MIN = 10; // beverage / pastry orders
 export const KITCHEN_SERVE_TARGET_MIN = 15; // orders containing cooked food
 
-// Minimum measured orders in the window before we trust the signal at all —
-// below this the base rate stands (a new outlet shouldn't calibrate on noise).
-export const MIN_SERVE_SAMPLE = 50;
+// Minimum qualifying hours (heads clocked in + real volume + target met)
+// before the measurement is trusted; below this the base rate stands.
+export const MIN_CAPACITY_SAMPLE_HOURS = 20;
+// Plan crews at this fraction of demonstrated capacity — the queue tips over
+// near 100% utilisation, so the roster keeps slack for surges within the hour.
+export const CAPACITY_HEADROOM = 0.85;
+// Hours only qualify for measurement with at least this many items — dead
+// hours prove nothing about capacity.
+export const CAPACITY_MIN_ITEMS = { barista: 8, kitchen: 4 } as const;
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
-export type RateCalibration = {
-  rate: number; // the rate to use this run
+export type PlanningRate = {
+  rate: number; // items/head/hour the roster plans with
   baseRate: number;
-  factor: number; // rate ÷ baseRate (1 = unchanged)
-  reason: "no-data" | "breach" | "comfortable" | "on-target";
+  measuredP80: number | null; // demonstrated capacity (p80 of on-target hours)
+  sampleHours: number;
+  basis: "measured" | "base";
 };
 
-// Calibrate one station's items/head/hour rate from its measured p90 serve time.
-//   breach   (p90 > target)        → factor = target ÷ p90 (proportional: a p90
-//                                    of 20 vs target 15 cuts the rate to 75%,
-//                                    asking ~⅓ more heads at loaded hours).
-//   comfort  (p90 ≤ 70% of target) → factor = 1.1, one gentle step leaner.
-//   deadband (between)             → unchanged.
-// Factor is clamped to [0.6, 1.15] and the result to [floor, cap] so a single
-// bad week can never halve the roster's throughput assumption or run it wild.
-export function calibrateRate(input: {
+// Turn a measured p80 capacity into the planning rate. Clamped to
+// [0.75×base, 2.5×base] so a thin or freak sample can never starve or
+// wildly lean the roster; falls back to the base rate on insufficient sample.
+export function planningRate(input: {
   baseRate: number;
-  p90ServeMin: number | null; // null = no measurement
-  targetMin: number;
-  sample: number;
-  floor: number;
-  cap: number;
-}): RateCalibration {
-  const { baseRate, p90ServeMin, targetMin, sample, floor, cap } = input;
-  if (p90ServeMin == null || !Number.isFinite(p90ServeMin) || p90ServeMin <= 0 || sample < MIN_SERVE_SAMPLE) {
-    return { rate: baseRate, baseRate, factor: 1, reason: "no-data" };
+  measuredP80: number | null; // items per clocked-in head per hour
+  sampleHours: number;
+}): PlanningRate {
+  const { baseRate, measuredP80, sampleHours } = input;
+  if (
+    measuredP80 == null ||
+    !Number.isFinite(measuredP80) ||
+    measuredP80 <= 0 ||
+    sampleHours < MIN_CAPACITY_SAMPLE_HOURS
+  ) {
+    return { rate: baseRate, baseRate, measuredP80: null, sampleHours, basis: "base" };
   }
-  let factor: number;
-  let reason: RateCalibration["reason"];
-  if (p90ServeMin > targetMin) {
-    factor = clamp(targetMin / p90ServeMin, 0.6, 1);
-    reason = "breach";
-  } else if (p90ServeMin <= targetMin * 0.7) {
-    factor = 1.1;
-    reason = "comfortable";
-  } else {
-    factor = 1;
-    reason = "on-target";
-  }
-  const rate = clamp(round1(baseRate * factor), floor, cap);
-  return { rate, baseRate, factor: Math.round(factor * 100) / 100, reason };
+  const rate = clamp(round1(measuredP80 * CAPACITY_HEADROOM), round1(baseRate * 0.75), round1(baseRate * 2.5));
+  return { rate, baseRate, measuredP80: round1(measuredP80), sampleHours, basis: "measured" };
 }
 
 // One-line explanation for ai_notes / digests.
-export function describeCalibration(station: string, c: RateCalibration, p90: number | null, targetMin: number, sample: number): string {
-  if (c.reason === "no-data") return `${station}: no serve-time signal (${sample} orders) — base rate ${c.baseRate}/hr`;
-  const p = p90 == null ? "?" : p90.toFixed(1);
-  if (c.reason === "breach") {
-    return `${station}: p90 serve ${p}min BREACHES ${targetMin}min target → rate ${c.baseRate}→${c.rate}/hr (more heads at loaded hours)`;
+export function describeCapacity(station: string, p: PlanningRate, targetMin: number): string {
+  if (p.basis === "base") {
+    return `${station}: capacity not yet proven (${p.sampleHours} on-target hours < ${MIN_CAPACITY_SAMPLE_HOURS}) — base rate ${p.baseRate}/hr`;
   }
-  if (c.reason === "comfortable") {
-    return `${station}: p90 serve ${p}min well under ${targetMin}min target → rate ${c.baseRate}→${c.rate}/hr (slightly leaner)`;
-  }
-  return `${station}: p90 serve ${p}min on target (${targetMin}min) — rate ${c.rate}/hr unchanged`;
+  return (
+    `${station}: measured ${p.measuredP80} items/head/hr over ${p.sampleHours} hours that met the ` +
+    `${targetMin}min serve target → plan at ${p.rate}/hr (${Math.round(CAPACITY_HEADROOM * 100)}% headroom)`
+  );
 }

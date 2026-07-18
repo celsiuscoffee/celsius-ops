@@ -290,6 +290,24 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 (round 7) — **Measured station capacity v2 (this branch).**
+  Owner corrections while auditing Sat Jul 18: (a) "short" units clarified
+  (hourly = concurrent heads, day chip = man-hours); (b) serve p90 signal is
+  DIRTY at PJ — p50/p90 flat across quiet and busy hours, worst p90 at the
+  dead 22:00 (44min) → docket hygiene, not load; (c) THE KEY ONE: staff work
+  OVERLAPPING — 10/15min are order-latency promises, not per-item labour
+  costs, so the p90 proportional controller (rates 8→4.8, 6→3.6) was
+  over-demanding heads. Replaced with measured capacity: per (day,hour)
+  items ÷ heads CLOCKED IN (hr_attendance_logs), hours qualifying only when
+  median serve met target, p80 = demonstrated capacity, plan at 85%
+  headroom, clamps [0.75×, 2.5×] base, base until ≥20 qualifying hours.
+  PJ live: barista 11.1/head/hr (85h) → plan 9.4; kitchen 8.0 (82h) → plan
+  6.8. Sat Jul 18 audit vs old roster: 12:00 double-middle sits on the
+  demand lull while the 9am food peak ran at half strength (owner spotted
+  it). Also this round: migration 084 APPLIED to prod; #963 (WhatsApp
+  PT-loop flows) MERGED. Pending: staff-app parity screens, weekly cron,
+  KDS "mark served at handover" briefing, Meta template submissions.
+
 - 2026-07-18 — **Finance warehouse session 2 (owner-approved actions
   executed).** PR #948 merged; weekly routine scheduled
   (`trig_012njzLdT5jtaUQVG2JSrNgz`, Sun 21:00 MYT) + month-end close pack

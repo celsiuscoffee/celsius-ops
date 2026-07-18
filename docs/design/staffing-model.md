@@ -50,7 +50,29 @@ The same per-station split powers the Assist coverage chips and the grid's
 "+ Add" suggestions (`kitchen short 1` vs `barista short 1`) — a kitchen gap is
 never reported as covered by a barista body.
 
-### Serve-time self-calibration (no human judges "enough staff")
+### Measured station capacity (v2 — replaces the p90 proportional controller)
+
+Owner correction (2026-07-17): **staff work overlapping** — a cook runs several
+pans, a barista batches drinks — so the 10/15-minute standards are ORDER-LATENCY
+promises, not per-item labour costs. The old controller scaled an assumed rate
+by p90 serve, which (a) over-punished dirty serve stamps (Putrajaya's serve
+times are flat across quiet AND busy hours — docket hygiene, not load) and
+(b) assumed latency scales linearly with load, which overlapping breaks.
+
+v2 measures what crews demonstrably do: for each trailing (day, hour), items
+handled ÷ heads actually **clocked in** per station (`hr_attendance_logs`);
+keep only hours with real volume whose **median serve met the target**; the p80
+of those = demonstrated capacity. Planning rate = capacity × 85% headroom,
+clamped to [0.75×, 2.5×] base, base rate until ≥20 qualifying hours. Measured
+live at Putrajaya: barista **11.1** items/head/hr (85 on-target hours) → plan
+9.4; kitchen **8.0** (82 hours) → plan 6.8 — crews proved MORE capable than the
+8/6 assumptions, and far more than the p90 controller's 4.8/3.6.
+
+The serve targets are now the pass/fail line deciding which hours count as
+capacity proven — and KDS discipline ("mark served at handover") is what keeps
+the signal honest.
+
+### ~~Serve-time self-calibration~~ (v1, retired 2026-07-17)
 
 The base rates are only starting points. Every generation measures the outlet's
 ACTUAL p90 serve time over the same trailing 28 days
