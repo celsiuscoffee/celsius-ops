@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { sortOutlets } from "@/lib/outlet-order";
 
 export async function GET() {
   const session = await getSession();
@@ -9,8 +10,7 @@ export async function GET() {
   const outlets = await prisma.outlet.findMany({
     where: { status: "ACTIVE" },
     select: { id: true, code: true, name: true, type: true },
-    orderBy: { name: "asc" },
   });
 
-  return NextResponse.json(outlets);
+  return NextResponse.json(sortOutlets(outlets));
 }

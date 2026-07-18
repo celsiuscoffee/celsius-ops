@@ -1,3 +1,4 @@
+import { sortOutlets } from "@/lib/outlet-order";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, verifyToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -38,14 +39,15 @@ export async function GET(req: NextRequest) {
   const scope = isAdmin ? (reqOutlet || "all") : user.outletId;
   if (!scope) return NextResponse.json({ error: "No outlet" }, { status: 400 });
 
-  const all = await prisma.outlet.findMany({
-    where: { status: "ACTIVE" },
-    select: {
-      id: true, name: true, storehubId: true,
-      loyaltyOutletId: true, pickupStoreId: true, posNativeCutoverAt: true,
-    },
-    orderBy: { name: "asc" },
-  });
+  const all = sortOutlets(
+    await prisma.outlet.findMany({
+      where: { status: "ACTIVE" },
+      select: {
+        id: true, name: true, storehubId: true,
+        loyaltyOutletId: true, pickupStoreId: true, posNativeCutoverAt: true,
+      },
+    }),
+  );
   const pick = scope === "all" ? all : all.filter((o) => o.id === scope);
   if (scope !== "all" && pick.length === 0) {
     return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
