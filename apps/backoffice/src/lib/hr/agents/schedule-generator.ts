@@ -86,6 +86,8 @@ type Staff = {
   epf_employer_rate: number | null; // employer EPF from the profile (real rate, not the default)
   hourly_rate: number | null;
   rest_day: number | null; // 0=Sun … 6=Sat
+  gender: string | null; // profile values: M/F (HR) or male/female (staff app)
+  religion: string | null; // staff-app vocabulary: islam/buddhism/…/none
   // "Primary outlet wins": a shared staffer is auto-rostered (FT floor / PT
   // suggestions) only where this is their primary outlet. Elsewhere they must
   // be borrowed manually. True when User.outletId === the outlet being built.
@@ -137,6 +139,23 @@ function hhmmss(t: string): string {
 function isBOH(position: string | null): boolean {
   const p = (position ?? "").toLowerCase();
   return p.includes("kitchen") || p.includes("chef") || p.includes("boh");
+}
+
+// Friday prayer (solat Jumaat, ~13:00–14:15): Muslim men leave the floor for
+// it, so Friday shifts that span the window are staffed women/non-Muslim
+// first (owner rule 2026-07-18). Unknown gender or religion counts as
+// ATTENDING — the safe planning assumption; the profile fixes it.
+export function attendsFridayPrayer(gender: string | null, religion: string | null): boolean {
+  const g = (gender ?? "").trim().toLowerCase();
+  const r = (religion ?? "").trim().toLowerCase();
+  const female = g.startsWith("f");
+  const muslim = r === "" || r === "islam" || r === "muslim";
+  return !female && muslim;
+}
+const FRIDAY = 5;
+// A window needs prayer-proofing when it spans the whole ~13:00–14:15 slot.
+function coversFridayPrayer(t: ShiftTemplate): boolean {
+  return Number(t.start_time.slice(0, 2)) <= 13 && Number(t.end_time.slice(0, 2)) >= 14;
 }
 
 // Which station a PT can cover: a kitchen gap needs a kitchen-capable
@@ -229,13 +248,14 @@ export async function generateSchedule(
   });
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, basic_salary, hourly_rate, epf_employer_rate, schedule_required, rest_day")
+    .select("user_id, position, employment_type, basic_salary, hourly_rate, epf_employer_rate, schedule_required, rest_day, gender, religion")
     .in("user_id", users.length ? users.map((u) => u.id) : ["-"]);
   type ProfileRow = {
     user_id: string; position: string | null; employment_type: string;
     basic_salary: number | null; hourly_rate: number | null;
     epf_employer_rate: number | null;
     schedule_required: boolean | null; rest_day: number | null;
+    gender: string | null; religion: string | null;
   };
   const profileMap = new Map<string, ProfileRow>(((profiles ?? []) as ProfileRow[]).map((p) => [p.user_id, p]));
 
@@ -252,6 +272,8 @@ export async function generateSchedule(
         epf_employer_rate: p?.epf_employer_rate == null ? null : Number(p.epf_employer_rate),
         hourly_rate: p?.hourly_rate == null ? null : Number(p.hourly_rate),
         rest_day: p?.rest_day ?? null,
+        gender: p?.gender ?? null,
+        religion: p?.religion ?? null,
         isPrimaryHere: u.outletId === outletId,
       };
     })
@@ -694,26 +716,42 @@ export async function generateSchedule(
     const take = (arr: Staff[], s: Staff) => { arr.push(s); claimed.add(s.id); };
 
     // Place one station's crew into the day's windows per that station's counts.
+    // FRIDAY (owner rule 2026-07-18): the opening shift spans Friday prayer
+    // (~13:00–14:15), which Muslim men leave the floor for — so Friday openings
+    // take women/non-Muslim staff FIRST, and the closing shift (which starts
+    // after prayer) absorbs the prayer-goers. If the crew mix still forces a
+    // prayer-goer onto a prayer-spanning shift, an ai_note flags who needs
+    // midday relief.
+    const isFriday = dow(date) === FRIDAY;
+    const prayerBound = (s: Staff) => (attendsFridayPrayer(s.gender, s.religion) ? 1 : 0);
     const fillStation = (group: Staff[], counts: Map<string, number>) => {
       const unclaimed = () => group.filter((s) => !claimed.has(s.id));
       const openTarget = counts.get("open") ?? 0;
       const closeTarget = counts.get("close") ?? 0;
+      const fridayOpenRule = isFriday && coversFridayPrayer(tpl.opening);
       // OPENING first (non-clopeners are the scarce resource), fewest openings
       // first; clopeners only as a last resort to reach the demanded count.
       let took = 0;
-      for (const s of unclaimed().filter((s) => !closedYesterday(s)).sort((a, b) => openKey(a) - openKey(b))) {
+      for (const s of unclaimed()
+        .filter((s) => !closedYesterday(s))
+        .sort((a, b) => (fridayOpenRule ? prayerBound(a) - prayerBound(b) : 0) || openKey(a) - openKey(b))) {
         if (took >= openTarget) break;
         take(opening, s);
         took++;
       }
-      for (const s of unclaimed().sort((a, b) => openKey(a) - openKey(b))) {
+      for (const s of unclaimed().sort(
+        (a, b) => (fridayOpenRule ? prayerBound(a) - prayerBound(b) : 0) || openKey(a) - openKey(b),
+      )) {
         if (took >= openTarget) break;
         take(opening, s);
         took++;
       }
-      // CLOSING: fewest closings first.
+      // CLOSING: fewest closings first; on Friday prayer-goers first — the
+      // closing window starts after Jumaat, so it's where they belong.
       took = 0;
-      for (const s of unclaimed().sort((a, b) => closeKey(a) - closeKey(b))) {
+      for (const s of unclaimed().sort(
+        (a, b) => (isFriday ? prayerBound(b) - prayerBound(a) : 0) || closeKey(a) - closeKey(b),
+      )) {
         if (took >= closeTarget) break;
         take(closing, s);
         took++;
@@ -749,6 +787,19 @@ export async function generateSchedule(
     for (const s of opening) { weekOpen.set(s.id, (weekOpen.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "open"); }
     for (const s of closing) { weekClose.set(s.id, (weekClose.get(s.id) ?? 0) + 1); prevDayShift.set(s.id, "close"); }
     for (const crew of midCrews) for (const s of crew) prevDayShift.set(s.id, "mid");
+
+    // Friday-prayer QA note: who's still rostered ACROSS the prayer window.
+    if (isFriday) {
+      const exposed = [
+        ...(coversFridayPrayer(tpl.opening) ? opening : []),
+        ...midCrews.flatMap((crew, i) => (coversFridayPrayer(tpl.middles[i]) ? crew : [])),
+      ].filter((s) => attendsFridayPrayer(s.gender, s.religion));
+      notes.push(
+        exposed.length
+          ? `Fri ${date}: ${exposed.map((s) => s.name.split(" ")[0]).join(", ")} rostered over Friday prayer (~13:00–14:15) — not enough women/non-Muslim crew to avoid it; arrange midday relief`
+          : `Fri ${date}: prayer-window shifts staffed by women/non-Muslim crew; Muslim men on closing (Jumaat rule)`,
+      );
+    }
 
     const dayGroups: Array<[Staff[], ShiftTemplate]> = [
       [opening, tpl.opening],

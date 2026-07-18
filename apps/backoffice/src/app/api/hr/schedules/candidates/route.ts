@@ -8,6 +8,7 @@ import { GRACE_PERIOD_MINUTES } from "@/lib/hr/constants";
 import { computeWeekDemand, SERVICE_FLOOR } from "@/lib/hr/demand";
 import { allocateStationCounts, STATION_ANCHOR_TARGET, type ShiftWindow } from "@/lib/hr/shift-allocation";
 import { isManagementPosition } from "@/lib/hr/labour-gate-lib";
+import { attendsFridayPrayer } from "@/lib/hr/agents/schedule-generator";
 
 export const dynamic = "force-dynamic";
 
@@ -86,9 +87,9 @@ export async function GET(req: NextRequest) {
   const userIds = users.map((u) => u.id);
 
   const { data: profiles } = userIds.length
-    ? await hrSupabaseAdmin.from("hr_employee_profiles").select("user_id, position, employment_type, rest_day, schedule_required, basic_salary, hourly_rate").in("user_id", userIds)
+    ? await hrSupabaseAdmin.from("hr_employee_profiles").select("user_id, position, employment_type, rest_day, schedule_required, basic_salary, hourly_rate, gender, religion").in("user_id", userIds)
     : { data: [] as ProfileRow[] };
-  type ProfileRow = { user_id: string; position: string | null; employment_type: string | null; rest_day: number | null; schedule_required: boolean | null; basic_salary: number | null; hourly_rate: number | null };
+  type ProfileRow = { user_id: string; position: string | null; employment_type: string | null; rest_day: number | null; schedule_required: boolean | null; basic_salary: number | null; hourly_rate: number | null; gender: string | null; religion: string | null };
   const profileMap = new Map<string, ProfileRow>((profiles || []).map((p: ProfileRow) => [p.user_id, p]));
   const pool = users.filter((u) => profileMap.get(u.id)?.schedule_required !== false);
   const poolIds = pool.map((u) => u.id);
@@ -262,12 +263,18 @@ export async function GET(req: NextRequest) {
   if (!start || !end) return NextResponse.json({ ...base, candidates: null });
 
   const slotH = Math.max(0, (toMin(end) - toMin(start)) / 60);
+  // Friday prayer (~13:00–14:15): a Muslim man on a Friday slot spanning it
+  // will leave the floor mid-shift — flag + rank women/non-Muslims first
+  // (owner rule 2026-07-18). Soft signal, not a block: sometimes there's
+  // nobody else, and the flag tells the manager to plan midday relief.
+  const slotSpansFridayPrayer = weekday === 5 && toMin(start) <= 13 * 60 && toMin(end) >= 14 * 60;
 
   const candidates = pool.map((u) => {
     const p = profileMap.get(u.id);
     const empType = p?.employment_type || "full_time";
     const isPT = empType === "part_time" || empType === "intern";
     const isMgr = isManagementPosition(p?.position);
+    const fridayPrayer = slotSpansFridayPrayer && attendsFridayPrayer(p?.gender ?? null, p?.religion ?? null);
     const weeklyH = (weeklyMin.get(u.id) || 0) / 60;
 
     // Hard blocks (candidate stays visible; blocked ones drop to the bottom).
@@ -310,7 +317,8 @@ export async function GET(req: NextRequest) {
       FIT_WEIGHTS.fairness * fairness +
       FIT_WEIGHTS.skill * skill +
       FIT_WEIGHTS.home * home -
-      FIT_WEIGHTS.cost * costNorm,
+      FIT_WEIGHTS.cost * costNorm -
+      (fridayPrayer ? 0.1 : 0), // ~10 fit points: prefer prayer-free on Friday midday slots
     );
 
     return {
@@ -319,6 +327,7 @@ export async function GET(req: NextRequest) {
       position: p?.position || null,
       employment_type: empType,
       manager_cover: isMgr || undefined, // suggested as COVER only — not man-hours
+      friday_prayer: fridayPrayer || undefined, // will leave the floor ~13:00–14:15 for Jumaat
       fit_score: Math.round(fit),
       weekly_hours: Math.round(weeklyH * 10) / 10,
       weekly_hours_after: Math.round((weeklyH + slotH) * 10) / 10,
