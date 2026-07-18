@@ -24,6 +24,7 @@ export type AssistCandidate = {
   position: string | null;
   employment_type: string;
   manager_cover?: boolean; // manager offered as COVER — shift won't count as man-hours
+  friday_prayer?: boolean; // leaves the floor ~13:00–14:15 for Friday prayer on this slot
   fit_score: number;
   weekly_hours: number;
   weekly_hours_after: number;
@@ -361,6 +362,14 @@ function CandidateRow({
               title="Manager covering — this shift is presence, not counted as man-hours"
             >
               cover · not man-hours
+            </span>
+          )}
+          {c.friday_prayer && (
+            <span
+              className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+              title="Attends Friday prayer — will be off the floor ~1:00–2:15pm on this shift; prefer women/non-Muslim staff or plan relief"
+            >
+              Friday prayer 1–2pm
             </span>
           )}
         </div>

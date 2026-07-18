@@ -290,6 +290,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 (round 9) — **Friday-prayer staffing rule (Jumaat).** Owner:
+  "put opening female on friday to run friday prayer. including non
+  muslim. currently only gulaf is non-muslim." `gender` and `religion`
+  columns ALREADY existed on hr_employee_profiles (religion is staff-app
+  self-service, HR read-only; gender HR-editable M/F) — no migration.
+  Backfilled prod: 61 profiles religion='islam', Guraf Lal Joshi
+  'other' (exact faith unknown; he can self-correct). Generator:
+  `attendsFridayPrayer(gender, religion)` (unknown gender/religion =
+  attends — safe default), Friday fillStation sorts prayer-free staff
+  into prayer-spanning openings and prayer-goers into closing; ai_note
+  per Friday either confirms the rule held or names who's exposed
+  (~13:00–14:15) and needs relief. Assist: `friday_prayer` flag + amber
+  chip + ~10-point fit penalty on Friday slots spanning 13:00–14:00.
+  Data gap: several profiles have blank GENDER (Hidayat, Ammar Roslizar,
+  Firdaus, Guraf, Farhan Ikhmal…) — they count as "attends" until HR
+  fills Male/Female on the employee page.
+
 - 2026-07-18 (round 8) — **Rest days are now PER-STATION (this branch).**
   Owner caught the two failure modes in one afternoon: (a) items-share rest
   placement dug holes PT then re-bought the same day ("hurm"/"fix this" —
