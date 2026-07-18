@@ -44,7 +44,10 @@ export async function GET(req: NextRequest) {
       : null;
     const live = flagLive && !!systemUser;
 
-    const outlets = await prisma.outlet.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } });
+    const outlets = await prisma.outlet.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true, name: true, loyaltyOutletId: true, pickupStoreId: true },
+    });
 
     const results: ConsumptionResult[] = [];
     for (const o of outlets) {
@@ -53,6 +56,8 @@ export async function GET(req: NextRequest) {
           await postOutletConsumption({
             outletId: o.id,
             outletName: o.name,
+            loyaltyOutletId: o.loyaltyOutletId,
+            pickupStoreId: o.pickupStoreId,
             date,
             dayStartUtc: startUtc,
             dayEndUtc: endUtc,
@@ -73,6 +78,7 @@ export async function GET(req: NextRequest) {
       alreadyPosted: results.filter((r) => r.alreadyPosted).length,
       totalProductsConsumed: results.reduce((s, r) => s + r.productsConsumed, 0),
       menusWithoutRecipe: results.reduce((s, r) => s + r.menusWithoutRecipe, 0),
+      itemsUnmapped: results.reduce((s, r) => s + r.itemsUnmapped, 0),
     };
     console.log(`[consumption-post] ${JSON.stringify(summary)}`);
     return NextResponse.json({ ok: true, summary, results });

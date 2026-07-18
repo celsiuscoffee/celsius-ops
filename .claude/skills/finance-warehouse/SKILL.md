@@ -21,6 +21,44 @@ The warehouse is **virtual**: prod Supabase (`kqdcdhpnyuwrxqhbuyfl`) is the
 only store. This agent maintains the *contract* over it (below), runs the
 check suite, and files findings. It creates no second copy of any data.
 
+## Autonomy ladder (owner directive 2026-07-18: "do this by itself")
+
+The custodian does not wait to be prompted per fix. Each run WORKS the
+backlog, not just reports it. What it may do at each rung — codified from
+the owner-approved precedents of 2026-07-17/18:
+
+**Rung 1 — fully autonomous (do it, record it):**
+- Read-only analysis/verification; docs, data-map, skill, STATE updates.
+- Code fixes with tests+typecheck shipped as draft PRs (W1 precedent:
+  dead-source re-points, telemetry wiring, server-side input defaults).
+- Additive derivations applied to prod: views, override tables, RLS-enabled
+  server-only tables (085/086/087 precedent). Never destructive DDL.
+- agent_actions telemetry; registry heartbeats.
+
+**Rung 2 — autonomous under a pre-approved pattern (apply + audit stamp):**
+- Tier-1-pattern bank-line re-points (narration names a different invoice
+  AND exact amount match) — pattern approved by the owner 2026-07-17;
+  future identical cases apply directly, audit-stamped, counts reported.
+- Unambiguous backfills (single-candidate joins, e.g. one-package
+  products) with row counts logged.
+- The June mixed-regime GL correction — owner delegated 2026-07-17 ("no
+  need my approval, just make sure it is right"): apply per-company-day
+  correcting journals ONLY once the reconstruction reconciles to identity
+  (residual < RM500/company); actor set; reversible journals; full
+  workings in the PR.
+
+**Rung 3 — propose-only (draft PR / doc, never executed):**
+- Any money-record mutation outside a pre-approved pattern; destructive
+  DDL/table drops; product-visible behaviour changes; threshold changes.
+
+**Rung 4 — human-only, always:** payroll/payments actions, arming any
+agent (incl. consumption engine), closing/reopening periods, merging PRs.
+
+Escalation: things needing a human land in the PR body under "Human
+actions" + STATE; genuinely urgent findings (money misstatement, channel
+dead) also go to agent_actions with kind='escalation'. Silent runs are
+normal when everything is green and the backlog is empty.
+
 ## Guardrails
 
 - **Read-only against prod by default.** Allowed writes without asking:
@@ -82,10 +120,23 @@ projection for sales/cash/payroll semantics.
 18. campaign_outcomes writers: row count > 0 once loops are wired. [still 0 after wiring = regression]
 19. Snapshot cadence: ReviewDailySnapshot within 2d; GeoGridScan within 10d.
 20. Substrate telemetry: distinct agent_key in agent_actions ÷ armed agents in registry [ratio should rise; baseline 4/30].
-21. Package coverage: % ReceivingItem with productPackageId [baseline 29%; target ≥90%; ratchet — never regress].
-22. Recipe drift: menus without MenuIngredient rows [baseline 0/92; any new menu without a BOM].
-23. Cost coverage: % of recipe ingredients (138 baseline) with a usable product_costs row [once W3 of cogs-activation ships].
-24. Consumption source: no `prisma.salesTransaction` reads in live code [consumption-post.ts is the known offender until cogs-activation W1 lands].
+21. Package coverage: % ReceivingItem with productPackageId [70% after the
+    2026-07-18 single-package backfill (was 29%); target ≥90%; ratchet —
+    never regress].
+22. Recipe drift: menus without MenuIngredient rows [baseline 0/92; any
+    new menu without a BOM] + consumption cron summary itemsUnmapped
+    [~4%/outlet baseline; growth = catalog drift].
+23. Cost coverage: recipe ingredients with a usable product_costs row
+    [baseline 104/138 = 75% at W3 ship; rises with check 21; any
+    menu_margins row with uncosted_ingredients>0 is overstated — say so
+    when quoting margins].
+24. Consumption source: no `prisma.salesTransaction` reads in live code
+    [fixed in cogs-activation W1 (PR #970); guard against regression].
+25. Valuation anchors: `fin_inventory_valuations` has an anchor per active
+    till outlet for the current COGS boundary [EMPTY at baseline —
+    accountant owes the Bukku close values, see
+    docs/proposals/inventory-valuation-anchors.md; sanity gate 0.3×–2× of
+    trailing-30d purchases before insert].
 
 ## Run procedure
 
@@ -105,10 +156,30 @@ projection for sales/cash/payroll semantics.
    doc/contract/data-map updates + a findings section; anything needing
    owner action goes in the PR body under "Human actions". Log each finding
    to `agent_actions` (kind `finding`) when the registry exists.
+4b. **BUILD (the self-driving part):** pick the top 1–3 backlog items
+   (failing checks first, then the backlog sections below, then
+   cogs-activation workstreams) and fix them END-TO-END within the
+   autonomy ladder — code + tests + typecheck in the same draft PR, or
+   rung-1/2 prod applies with audit trail. Do not stop at describing the
+   fix. An item blocked above rung 2 gets its proposal written and its
+   blocker named, then move to the next item. Record what was
+   built/applied in STATE and agent_actions so the next run continues
+   instead of rediscovering.
 5. **Close pack** (day-1 runs only): assemble per company — sources complete
    through month end (checks 1–4 green for the closed month), lens bridge
    for the month, open drafts/exceptions count, unpaid AP snapshot — and
    hand to the human approver. Never close a period yourself.
+   **COGS trust gates (input-quality enforcement — the custodian is
+   accountable for humans' inputs being usable):** the pack marks actual
+   COGS as NOT TRUSTWORTHY, with named blockers and owners, when any of:
+   (a) an active outlet lacks a REVIEWED monthly StockCount (≥85%
+   coverage) for the closed month; (b) no `fin_inventory_valuations`
+   anchor chain covers the COGS boundary (accountant pack:
+   `docs/proposals/inventory-valuation-anchors.md`); (c) package coverage
+   (check 21) regressed during the month; (d) counts stuck
+   SUBMITTED/DRAFT >7d exist. Recipe-vs-actual variance (W5) is only
+   reported for months whose gates pass — never compare against untrusted
+   actuals.
 6. Update STATE.md (resume pointer + new verified facts) inside the PR.
 
 ## Check suite (v1 — grows monotonically; add, never remove)

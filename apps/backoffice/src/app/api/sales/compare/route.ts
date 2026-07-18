@@ -1,3 +1,4 @@
+import { sortOutlets } from "@/lib/outlet-order";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, verifyToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -151,16 +152,16 @@ export async function GET(request: NextRequest) {
       };
     }));
 
-    // Outlets for filter dropdown — every active outlet, consignment-only included
+    // Outlets for filter dropdown — every active outlet, consignment-only
+    // included, in canonical business order
     const allOutlets = await prisma.outlet.findMany({
       where: { status: "ACTIVE" },
       select: { id: true, name: true },
-      orderBy: { name: "asc" },
     });
 
     return NextResponse.json({
       periods,
-      availableOutlets: allOutlets,
+      availableOutlets: sortOutlets(allOutlets),
       ...(warnings.length > 0 ? { warnings } : {}),
     });
   } catch (err) {

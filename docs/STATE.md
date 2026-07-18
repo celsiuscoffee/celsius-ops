@@ -311,6 +311,85 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 (round 9) — **Friday-prayer staffing rule (Jumaat).** Owner:
+  "put opening female on friday to run friday prayer. including non
+  muslim. currently only gulaf is non-muslim." `gender` and `religion`
+  columns ALREADY existed on hr_employee_profiles (religion is staff-app
+  self-service, HR read-only; gender HR-editable M/F) — no migration.
+  Backfilled prod: 61 profiles religion='islam', Guraf Lal Joshi
+  'other' (exact faith unknown; he can self-correct). Generator:
+  `attendsFridayPrayer(gender, religion)` (unknown gender/religion =
+  attends — safe default), Friday fillStation sorts prayer-free staff
+  into prayer-spanning openings and prayer-goers into closing; ai_note
+  per Friday either confirms the rule held or names who's exposed
+  (~13:00–14:15) and needs relief. Assist: `friday_prayer` flag + amber
+  chip + ~10-point fit penalty on Friday slots spanning 13:00–14:00.
+  Gender data now COMPLETE for all rostered staff (owner supplied: PJ 5
+  male; SA/Tam/Nilai 10 female + Emran male; only Anwar IOI + HQ Anis/
+  Hanis blank). Round-2 owner catch on the regenerated week: rule ran
+  but had nobody to prefer — the rest placer had RESTED Aliana on
+  Friday (gender-blind WHO) and Iffa CLOSED Thursday so the clopening
+  guard blocked her from Friday opening. Fix: Friday rest slots go to
+  prayer-goers first (resting a Muslim man on Friday dissolves his
+  conflict), prayer-free staff avoid Friday rests, and THURSDAY closing
+  prefers prayer-goers so women/non-Muslims stay eligible for the
+  Friday open. Lesson: a day-local rule isn't enough — the enablers
+  (rest day, previous night's close) must also be steered.
+
+- 2026-07-18 (round 8) — **Rest days are now PER-STATION (this branch).**
+  Owner caught the two failure modes in one afternoon: (a) items-share rest
+  placement dug holes PT then re-bought the same day ("hurm"/"fix this" —
+  Tue got 3 PT while Sat ran short) → #975 replaced it with slack-greedy vs
+  demand; (b) #975's day slack was STATION-BLIND: Sunday's barista side is
+  the week's lightest so Sunday looked slack, two rests landed there, and
+  person-assignment (weekend-debt order) gave BOTH to kitchen crew
+  (Amirul+Azmer) on the #2 cooked-items day — 2 BOH for 86 kitchen items
+  ("where is your logic?"). Fix: `placeStationRests(group, needOf,
+  minOnDuty)` in schedule-generator — BOH FT rests judged only against
+  `kitNeedHOf` (Σ kitHeadsByHour) with min 2 cooks/day (structural
+  anchors), FOH FT against `barNeedHOf` (bar curve + SERVICE_FLOOR +
+  buffer) with min 3; weekend fairness + variety + profile rest days now
+  honoured within each station. Also this round (merged #965 #966 #967
+  #975): PT ceiling envelope (FT floor ≥18% no longer starves weekends —
+  amber publish), consignment_sales into forecast + history clamped to
+  yesterday MYT (Nilai/IOI "no data" fixed), FOH/BOH item split in day
+  headers, composition line + "Why this staffing?" panel, forecast rank
+  explanations. Same PR, two more owner catches: (1) **demand window
+  counted days that hadn't happened** — trailing-28d ran to weekStart−1
+  with a hard ÷4, so generating on a Friday put tomorrow's (empty) Sunday
+  and today's partial Saturday inside the window: Sunday PJ read 86 kit
+  items when the true average of the 3 complete Sundays is 114 (−25%,
+  always hitting the weekend). Window now clamps to yesterday MYT and
+  divides each weekday by its ACTUAL occurrence count. (2) **Managers
+  moved outside FOH/BOH** (owner: "their schedule does not consider as
+  man hours, but can suggest shifts to cover if possible"):
+  `MANAGEMENT_POSITIONS` (manager/AM/HoD — NOT barista lead) in
+  labour-gate-lib; excluded from staffedAt (generator gaps), gate
+  coverage `have`, candidates kitGot/barGot, and grid day totals; own
+  grid section + timeline band + "MGR7.5 cover" tag; Assist now
+  INCLUDES managers as bottom-ranked `manager_cover` candidates and a
+  manager's + Add offers any short window as cover. Queue awaiting
+  owner word: staff-app PT-loop parity, weekly autopilot cron, KDS
+  handover briefing, Meta WA templates, demand v3 from timing
+  worksheets.
+
+- 2026-07-18 — **Custodian made SELF-DRIVING (owner: "what I wanted is for
+  this agent to do this by itself").** Skill gains an **Autonomy ladder**
+  (rung 1: code fixes/additive prod derivations/docs — do it; rung 2:
+  pre-approved patterns — tier-1 narration+exact-amount re-points, unambiguous
+  backfills, the delegated June GL correction once it reconciles to identity
+  <RM500/company; rung 3: propose-only; rung 4: human — payroll/payments,
+  arming, period close, merges) + procedure step 4b (each run BUILDS 1–3
+  backlog items end-to-end, not just reports). Routine changed weekly→**daily**
+  21:00 MYT (`trig_015cnJr3bfeXrjQ285nRjXNb`, fresh session; old weekly
+  trigger deleted — its prompt contradicted the ladder). **CAVEAT: routine
+  carries no MCP connectors (created via meta tool) — if tonight's run
+  can't reach Supabase, recreate it from the claude.ai Routines UI.** Close
+  pack (monthly) unchanged. Input-quality enforcement shipped same day:
+  receiving API persists resolved package (root cause of 71% null coverage),
+  accountant valuation pack (docs/proposals/inventory-valuation-anchors.md),
+  close-pack COGS trust gates + check 25.
+
 - 2026-07-18 — **Data-warehouse custodian expanded to the WHOLE estate**
   (owner: "this agent should be accountable for all the data"). Skill
   (`finance-warehouse` — historical path, description now estate-wide)
@@ -341,7 +420,29 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   unitPrice ÷ conversionFactor. Workstreams W1–W5 (re-point sales →
   package ratchet + product_costs → menu_margins view → variance loop →
   pre-committed arming criteria for consumption_engine). Warehouse
-  checks 21–24 added. **Next:** owner OK → build W1 (small PR).
+  checks 21–24 added. **W1 BUILT same day (owner: "merge and build"):**
+  consumption-post.ts now sources sales from pos_order_items (status
+  completed, non-refund) + pickup order_items (paid statuses), both
+  joined to Menu via storehubId (demand-model precedent); dead
+  SalesTransaction read gone; new `itemsUnmapped` field surfaces items
+  with no Menu mapping (live-verified Jul 17: 139–244 pos + 43–82 pickup
+  items/outlet, only 3–8 unmapped per stream ≈ 4%). Engine stays SHADOW.
+  Note: "Celsius Coffee Putrajaya" Outlet = the Conezion store (slug
+  outlet-con) — 3 active till outlets, all covered. **W2/W3/W4 BUILT same
+  session (owner: CONTINUE):** migration 087 APPLIED — `product_costs`
+  VIEW (cost per base unit from last-5 received PO lines ÷
+  ProductPackage.conversionFactor, override table
+  product_cost_overrides; no cron — stays clear of the 40-cron cap),
+  `menu_margins` VIEW (sellingPrice − channel-weighted recipe cost;
+  uncosted_ingredients flags overstated margins; packaging cost = v1
+  follow-up), and the W2 single-package backfill (848 ReceivingItems →
+  package coverage 29%→70%). Verified sane: pastas RM19.90–29.90 at
+  52–74% gross margin; 104/138 recipe ingredients costed (75%);
+  data-map "Unit economics" section added. **Remaining in
+  cogs-activation:** receiving-flow package default (code+UI), Catalog
+  BOM page margin surface, packaging cost in margins, W5 variance loop →
+  arming. **Next:** merge PR #970 (W1–W4); first shadow consumption
+  report after tonight's cron.
 
 - 2026-07-18 (round 7) — **Measured station capacity v2 (this branch).**
   Owner corrections while auditing Sat Jul 18: (a) "short" units clarified

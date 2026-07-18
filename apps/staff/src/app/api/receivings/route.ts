@@ -154,7 +154,13 @@ export async function POST(req: NextRequest) {
       items: {
         create: items.map((i: { productId: string; productPackageId?: string; orderedQty?: number; receivedQty: number; expiryDate?: string; discrepancyReason?: string }) => ({
           productId: i.productId,
-          productPackageId: i.productPackageId || null,
+          // Persist the RESOLVED package: the stock math below already falls
+          // back to the PO line's package (goods arrive in PO package units),
+          // but the row historically stored only the client's explicit value —
+          // which left 71% of ReceivingItems unconvertible for costing
+          // (finance-warehouse check 21). Ad-hoc receivings (no PO) stay null:
+          // their quantities are entered in base units.
+          productPackageId: i.productPackageId ?? poPkgMap.get(i.productId) ?? null,
           orderedQty: resolveOrderedQty(i),
           receivedQty: i.receivedQty,
           expiryDate: i.expiryDate ? new Date(i.expiryDate) : null,

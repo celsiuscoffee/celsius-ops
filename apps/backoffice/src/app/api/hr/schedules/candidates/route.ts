@@ -7,6 +7,8 @@ import { computeLateMinutes, mytDateString } from "@/lib/hr/hours";
 import { GRACE_PERIOD_MINUTES } from "@/lib/hr/constants";
 import { computeWeekDemand, SERVICE_FLOOR } from "@/lib/hr/demand";
 import { allocateStationCounts, STATION_ANCHOR_TARGET, type ShiftWindow } from "@/lib/hr/shift-allocation";
+import { isManagementPosition } from "@/lib/hr/labour-gate-lib";
+import { attendsFridayPrayer } from "@/lib/hr/agents/schedule-generator";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +17,11 @@ export const dynamic = "force-dynamic";
 // manager overrides. Keep them summing sensibly; cost is a *penalty*.
 export const FIT_WEIGHTS = { reliability: 0.3, availability: 0.25, fairness: 0.2, skill: 0.15, home: 0.1, cost: 0.1 };
 
-// Managers/HQ are never suggested by Assist — same rule as AI Fill (owner,
-// 2026-07-16: "for managers, dont auto schedule"). Barista Lead stays in the
-// pool: the rover IS deliberately rostered (2 days/outlet).
-const NEVER_SUGGEST_POSITIONS = new Set(["manager", "area manager", "head of department"]);
+// Managers/HQ (owner rule 2026-07-18): their shifts are never man-hours and
+// AI Fill never auto-schedules them, but Assist MAY offer them as a manual
+// cover option — ranked BELOW every eligible line-staff candidate and tagged
+// manager_cover so the UI labels them. Barista Lead is ordinary pool: the
+// rover lead works the bar.
 
 const toMin = (t: string) => {
   const [h, m] = t.split(":").map(Number);
@@ -84,15 +87,11 @@ export async function GET(req: NextRequest) {
   const userIds = users.map((u) => u.id);
 
   const { data: profiles } = userIds.length
-    ? await hrSupabaseAdmin.from("hr_employee_profiles").select("user_id, position, employment_type, rest_day, schedule_required, basic_salary, hourly_rate").in("user_id", userIds)
+    ? await hrSupabaseAdmin.from("hr_employee_profiles").select("user_id, position, employment_type, rest_day, schedule_required, basic_salary, hourly_rate, gender, religion").in("user_id", userIds)
     : { data: [] as ProfileRow[] };
-  type ProfileRow = { user_id: string; position: string | null; employment_type: string | null; rest_day: number | null; schedule_required: boolean | null; basic_salary: number | null; hourly_rate: number | null };
+  type ProfileRow = { user_id: string; position: string | null; employment_type: string | null; rest_day: number | null; schedule_required: boolean | null; basic_salary: number | null; hourly_rate: number | null; gender: string | null; religion: string | null };
   const profileMap = new Map<string, ProfileRow>((profiles || []).map((p: ProfileRow) => [p.user_id, p]));
-  const pool = users.filter((u) => {
-    const p = profileMap.get(u.id);
-    if (p?.schedule_required === false) return false;
-    return !NEVER_SUGGEST_POSITIONS.has((p?.position ?? "").trim().toLowerCase());
-  });
+  const pool = users.filter((u) => profileMap.get(u.id)?.schedule_required !== false);
   const poolIds = pool.map((u) => u.id);
 
   // This week's shifts (weekly hours + same-day double-book).
@@ -220,6 +219,8 @@ export async function GET(req: NextRequest) {
   const kitGot = new Map<string, number>();
   const barGot = new Map<string, number>();
   for (const s of daysShifts) {
+    // Management shifts don't count as man-hours toward the template coverage.
+    if (isManagementPosition(profileMap.get(s.user_id)?.position)) continue;
     const st = s.start_time.slice(0, 5), en = s.end_time.slice(0, 5);
     let win = templates.find((t) => t.start_time === st && t.end_time === en)?.id;
     if (!win && windows.length > 0) {
@@ -262,11 +263,18 @@ export async function GET(req: NextRequest) {
   if (!start || !end) return NextResponse.json({ ...base, candidates: null });
 
   const slotH = Math.max(0, (toMin(end) - toMin(start)) / 60);
+  // Friday prayer (~13:00–14:15): a Muslim man on a Friday slot spanning it
+  // will leave the floor mid-shift — flag + rank women/non-Muslims first
+  // (owner rule 2026-07-18). Soft signal, not a block: sometimes there's
+  // nobody else, and the flag tells the manager to plan midday relief.
+  const slotSpansFridayPrayer = weekday === 5 && toMin(start) <= 13 * 60 && toMin(end) >= 14 * 60;
 
   const candidates = pool.map((u) => {
     const p = profileMap.get(u.id);
     const empType = p?.employment_type || "full_time";
     const isPT = empType === "part_time" || empType === "intern";
+    const isMgr = isManagementPosition(p?.position);
+    const fridayPrayer = slotSpansFridayPrayer && attendsFridayPrayer(p?.gender ?? null, p?.religion ?? null);
     const weeklyH = (weeklyMin.get(u.id) || 0) / 60;
 
     // Hard blocks (candidate stays visible; blocked ones drop to the bottom).
@@ -298,7 +306,9 @@ export async function GET(req: NextRequest) {
       : 0.7;
     // Marginal-cost penalty: a salaried FT under the cap is nearly free at the
     // margin; a PT is pay-per-hour; anyone pushed into OT is the most expensive.
-    let costNorm = isPT ? 0.6 : 0.2;
+    // Managers cost the outlet RM0 (HQ overhead) — but they rank below line
+    // staff regardless (see sort): a manager shift is cover, not man-hours.
+    let costNorm = isMgr ? 0 : isPT ? 0.6 : 0.2;
     if (weeklyH + slotH > capH) costNorm = 1;
 
     const fit = 100 * clamp01(
@@ -307,7 +317,8 @@ export async function GET(req: NextRequest) {
       FIT_WEIGHTS.fairness * fairness +
       FIT_WEIGHTS.skill * skill +
       FIT_WEIGHTS.home * home -
-      FIT_WEIGHTS.cost * costNorm,
+      FIT_WEIGHTS.cost * costNorm -
+      (fridayPrayer ? 0.1 : 0), // ~10 fit points: prefer prayer-free on Friday midday slots
     );
 
     return {
@@ -315,6 +326,8 @@ export async function GET(req: NextRequest) {
       name: u.fullName || u.name || null,
       position: p?.position || null,
       employment_type: empType,
+      manager_cover: isMgr || undefined, // suggested as COVER only — not man-hours
+      friday_prayer: fridayPrayer || undefined, // will leave the floor ~13:00–14:15 for Jumaat
       fit_score: Math.round(fit),
       weekly_hours: Math.round(weeklyH * 10) / 10,
       weekly_hours_after: Math.round((weeklyH + slotH) * 10) / 10,
@@ -329,10 +342,12 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  // Eligible (no blocks) first, then by fit desc.
+  // Eligible (no blocks) first, line staff before manager-cover, then fit desc.
   candidates.sort((a, b) => {
     const aB = a.hard_blocks.length > 0, bB = b.hard_blocks.length > 0;
     if (aB !== bB) return aB ? 1 : -1;
+    const aM = a.manager_cover ? 1 : 0, bM = b.manager_cover ? 1 : 0;
+    if (aM !== bM) return aM - bM;
     return b.fit_score - a.fit_score;
   });
 
