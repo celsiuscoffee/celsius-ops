@@ -90,6 +90,8 @@ type LabourGateInfo = {
   coverage?: Array<{
     date: string; neededHours: number; scheduledHours: number; shortHours: number;
     items?: number;
+    barItems?: number;
+    kitItems?: number;
     forecast?: number; pct?: number | null; isWeekend?: boolean; isHoliday?: boolean; holidayName?: string;
   }>;
 };
