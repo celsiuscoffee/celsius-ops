@@ -23,6 +23,7 @@ export type AssistCandidate = {
   name: string | null;
   position: string | null;
   employment_type: string;
+  manager_cover?: boolean; // manager offered as COVER — shift won't count as man-hours
   fit_score: number;
   weekly_hours: number;
   weekly_hours_after: number;
@@ -354,6 +355,14 @@ function CandidateRow({
             </span>
           )}
           <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{EMP_LABEL[c.employment_type] || c.employment_type}</span>
+          {c.manager_cover && (
+            <span
+              className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"
+              title="Manager covering — this shift is presence, not counted as man-hours"
+            >
+              cover · not man-hours
+            </span>
+          )}
         </div>
         <div className="text-xs text-muted-foreground">
           {c.position || "—"} · {c.weekly_hours}h this week → {c.weekly_hours_after}h

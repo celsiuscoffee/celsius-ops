@@ -308,9 +308,24 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   amber publish), consignment_sales into forecast + history clamped to
   yesterday MYT (Nilai/IOI "no data" fixed), FOH/BOH item split in day
   headers, composition line + "Why this staffing?" panel, forecast rank
-  explanations. Queue awaiting owner word: staff-app PT-loop parity,
-  weekly autopilot cron, KDS handover briefing, Meta WA templates,
-  demand v3 from timing worksheets.
+  explanations. Same PR, two more owner catches: (1) **demand window
+  counted days that hadn't happened** — trailing-28d ran to weekStart−1
+  with a hard ÷4, so generating on a Friday put tomorrow's (empty) Sunday
+  and today's partial Saturday inside the window: Sunday PJ read 86 kit
+  items when the true average of the 3 complete Sundays is 114 (−25%,
+  always hitting the weekend). Window now clamps to yesterday MYT and
+  divides each weekday by its ACTUAL occurrence count. (2) **Managers
+  moved outside FOH/BOH** (owner: "their schedule does not consider as
+  man hours, but can suggest shifts to cover if possible"):
+  `MANAGEMENT_POSITIONS` (manager/AM/HoD — NOT barista lead) in
+  labour-gate-lib; excluded from staffedAt (generator gaps), gate
+  coverage `have`, candidates kitGot/barGot, and grid day totals; own
+  grid section + timeline band + "MGR7.5 cover" tag; Assist now
+  INCLUDES managers as bottom-ranked `manager_cover` candidates and a
+  manager's + Add offers any short window as cover. Queue awaiting
+  owner word: staff-app PT-loop parity, weekly autopilot cron, KDS
+  handover briefing, Meta WA templates, demand v3 from timing
+  worksheets.
 
 - 2026-07-18 — **Custodian made SELF-DRIVING (owner: "what I wanted is for
   this agent to do this by itself").** Skill gains an **Autonomy ladder**

@@ -40,6 +40,7 @@ import {
   DEFAULT_BUDGET,
   borrowedFtCharge,
   lentFtCredit,
+  isManagementPosition,
 } from "../labour-gate-lib";
 import { forecastWeek } from "../labour-gate";
 import {
@@ -993,7 +994,11 @@ export async function generateSchedule(
     rows.filter((r) => {
       if (r.shift_date !== d || r.notes === "rest_day") return false;
       if (Number(r.start_time.slice(0, 2)) > h || Number(r.end_time.slice(0, 2)) <= h) return false;
-      return station === "kitchen" ? isBOH(posById.get(r.user_id) ?? null) : !isBOH(posById.get(r.user_id) ?? null);
+      const pos = posById.get(r.user_id) ?? null;
+      // Management shifts are not man-hours (owner rule 2026-07-18) — a rover
+      // manager on the grid must not hide a real PT gap.
+      if (isManagementPosition(pos)) return false;
+      return station === "kitchen" ? isBOH(pos) : !isBOH(pos);
     }).length;
 
   type Gap = { date: string; template: ShiftTemplate; slot: string; gapHours: number; station: "kitchen" | "barista" };

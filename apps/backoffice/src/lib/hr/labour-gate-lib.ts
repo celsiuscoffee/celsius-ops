@@ -40,6 +40,16 @@ export const ROVER_SHARE_WEEKLY = Math.round(((4022 / 3) * 12) / 52); // ≈ RM3
 // HR positions treated as rovers/HQ: never costed per shift, but capped at
 // 2 shifts per outlet-week (the rover rotation).
 const ROVER_POSITIONS = new Set(["manager", "area manager", "head of department", "barista lead"]);
+
+// Management positions (owner rule 2026-07-18): shown OUTSIDE the FOH/BOH
+// sections in the grid, and their shifts never count as man-hours toward
+// demand coverage — but Assist may still suggest them to plug a gap when
+// nobody else fits. Barista Lead is deliberately NOT here: the rover lead
+// works the bar, so their shift is real coverage.
+export const MANAGEMENT_POSITIONS = new Set(["manager", "area manager", "head of department"]);
+export function isManagementPosition(position: string | null | undefined): boolean {
+  return MANAGEMENT_POSITIONS.has((position ?? "").trim().toLowerCase());
+}
 export const ROVER_WEEKLY_QUOTA = 2;
 
 // Employer statutory on top of FT gross when the profile doesn't carry an
