@@ -290,6 +290,80 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 — **JUNE GL CORRECTION EXECUTED — gate passed (delegated
+  rung-2; this branch, extends PR #977).** The "mixed-regime double-count"
+  was NOT bank-fed: pre-cutover pos_native "EOD Sales" journals were
+  MIRRORS of the StoreHub EOD journals (same day, near-identical amounts).
+  Applied in prod, actor=finance_warehouse, all posted+balanced,
+  period open: 23 duplicate mirrors reversed (posted reversal txns, pairs
+  net zero — RM79.6k double-count removed: SA Jun6-14, Con Jun6-7,
+  Tam Jun6-17); Conezion's EOD poster was BROKEN Jun8-17 (posted
+  RM0-654/day vs RM3.5-4.5k actual) and SA partial Jun15-17 → 13 top-up
+  journals derived from unified_sales identity with exact tender mapping
+  (card=tender'card', grab=channel'grabfood', cashqr=rest; verified to
+  the sen on Jun-20) +RM47.0k; StoreHub journals included cancelled
+  Online-method payments → 21 adjustments −RM3.4k; Tam Jun-30 draft EOD
+  posted. FINAL: GL till-income vs identity residual SA −97.90 /
+  Con −52.40 / Tam −58.40 (< RM500 gate; cutover-day boundary noise).
+  June income: Con 123,380.24 / SA 105,371.05 / Tam 79,590.37 — Conezion
+  was actually UNDERSTATED pre-fix. Data-map June caveat lifted. LATENT
+  BUG backlogged: ledger.ts reverseTransaction + posted-only reports =
+  double-remove (0 historical pairs; fix = keep original posted, key off
+  reversed_by_id; audit both callers).
+
+- 2026-07-18 — **Warehouse round 2: pickup item lines, zombie-PO proposal,
+  OpsAlert sweep (this branch, extends PR #977).**
+  (1) `unified_sale_items` now carries the pickup branch (migration 088,
+  applied — the follow-up promised in 085); order counts reconcile 1:1,
+  line_total is pre-discount (~4% above nett, same as all branches).
+  (2) PO aging: the 50 stale AWAITING_DELIVERY POs (RM35.6k) are ZOMBIES —
+  0 receivings, 44/50 superseded by newer completed POs from the same
+  supplier. Cancel-list proposal at `docs/proposals/po-aging-sweep.md`
+  (rung 3 — **owner approves the 44-PO cancel list**); check 29 added.
+  Root cause: standing-order receivings skip PO linkage.
+  (3) OpsAlert ledger: 782 stale alerts marked EXPIRED (day-bound >3d,
+  MENU_SNOOZED >14d) — 954→172 open; ongoing auto-expiry wired into the
+  ops-pulse cron (`expireStaleAlerts`, runs regardless of pulse mode,
+  never re-pages); check 30 added.
+
+- 2026-07-18 — **Warehouse improvements round: statutory closed, geogrid
+  fixed, campaign_outcomes wired (this branch, extends PR #977).**
+  (1) Check 26 residual FULLY decomposed: PCB was never missing — it lives
+  under category TAX ("LHDN - SEMENANJUNG 9609021908") and matches
+  prior-month `pcb_tax` EXACTLY (lag-1); the RM300/mo "1125095480911xxx"
+  LHDN lines are CP204 company tax, NOT payroll; the 4 DR-side "Stat Pay"
+  interco legs (Conezion/Tamarind → central, RM16.5k Jun+Jul) marked
+  `isInterCo=true` (same owner directive as the CR side). All statutory
+  pays from central 4384 (EPF 023733927, PERKESO B3902109148A); EPF lag-1
+  within ~1k (+936 recurring ≈ Poket shared staff, ~540/mo reimbursed).
+  **OPEN WATCH: June SOCSO due 2,164.25 (+43% vs May) but only 156.60 paid
+  by the Jul-15 deadline — escalate if no catch-up PERKESO payment by
+  end-July** (April precedent: paid ~3 wks late). (2) Geogrid stall
+  root-caused: Jul-6 quota storm (81-pt scans, concurrency 8, no pacing)
+  produced 20 fully-failed scans that ATE the 40/mo budget → capped until
+  Aug 1. Fixed: budget+cadence exclude failed scans, scanGrid paces
+  ~8 req/s + per-point retries, cron per-run cap 15 + 2-strike outage
+  breaker; tests added; scans should resume Mon Jul-20 after deploy.
+  (3) campaign_outcomes WIRED: measureRound writes one row per measured
+  round (evidence-gated verdict, uplift in pp; `summarizeOutcome` pure +
+  tested); 130 measured rounds backfilled in prod (24 win / 27 neutral /
+  8 loss / 71 invalid-thin-evidence). Checks 18/19/26 + data-map updated.
+  Remaining backlog: PO-aging policy (51 >14d), OpsAlert sweep (938),
+  PT per-person capture design (owner answer pending), tier-2 41 re-points
+  (needs SOAs), June GL correction (delegated, apply only at <RM500
+  reconciliation), unified_sale_items pickup lines.
+
+- 2026-07-18 — **E3 "SMS dead" RESOLVED — false alarm from a wrong
+  canonical source.** Real story: SMS123 began enforcing content
+  whitelisting (BE00036) in May → 2,446 failures May–Jun; team tested and
+  switched `app_settings.sms_provider` to **smsniaga on Jun 21**; the
+  lifecycle loops have sent **100–200 SMS/day successfully ever since**,
+  logged in `loop_assignments` (channel/sms_status) — NOT `sms_logs`,
+  which is legacy (campaigns-auto + tests; both legacy campaigns
+  inactive, so its silence is normal). Check 17 + data-map corrected;
+  never diagnose SMS from sms_logs again. PR #970 merged (COGS W1–W4 +
+  enforcement + self-driving custodian). Still-real marketing residuals:
+  campaign_outcomes 0 rows; geogrid stalled since Jul 6.
 - 2026-07-18 (round 9) — **Friday-prayer staffing rule (Jumaat).** Owner:
   "put opening female on friday to run friday prayer. including non
   muslim. currently only gulaf is non-muslim." `gender` and `religion`

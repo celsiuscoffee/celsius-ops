@@ -880,7 +880,102 @@ export async function measureRound(roundId: string) {
     }
   }
 
+  // Outcome ledger (campaign_outcomes, migration 080): one row per measured
+  // round so downstream readers (Friday brief, finance, /agents) get measured
+  // uplift + verdict without re-deriving loop_rounds.stats. Best-effort — a
+  // ledger write failure must never fail the measure itself.
+  try {
+    await recordRoundOutcome(roundId, round, stats);
+  } catch (err) {
+    console.error("[loops] campaign_outcomes write failed:", (err as Error).message);
+  }
+
   return { round_id: roundId, holdout_conversion_rate: +(holdoutRate * 100).toFixed(1), stats };
+}
+
+// ── OUTCOME LEDGER ───────────────────────────────────────────────────────────
+// campaign_outcomes is the cross-source marketing outcome ledger. Loop rounds
+// land as one row per measured round, keyed `${loop_key}-r${round_no}`, so
+// re-measuring a round updates its row in place instead of duplicating it.
+
+export type OutcomeSummary = {
+  baselinePct: number; // holdout conversion %
+  resultPct: number;   // pooled treatment conversion %
+  upliftPp: number;    // result − baseline, in percentage points
+  verdict: "win" | "neutral" | "loss" | "invalid";
+};
+
+// Evidence gates: a handful of holdouts or a tiny treatment can't support a
+// win/loss call (per-round holdouts run ~10% of already-small rounds — see the
+// pooled-baseline note below). The ±2pp band keeps noise out of the verdict.
+export function summarizeOutcome(stats: StoredStat[], minHoldout = 3, minTreatment = 10): OutcomeSummary {
+  const holdout = stats.find((s) => s.arm === "holdout");
+  const treatment = stats.filter((s) => s.arm !== "holdout");
+  const treatN = treatment.reduce((s, a) => s + a.n, 0);
+  const converted = treatment.reduce((s, a) => s + ((a.conversion_rate ?? 0) / 100) * a.n, 0);
+  const resultPct = treatN ? +((converted / treatN) * 100).toFixed(2) : 0;
+  const baselinePct = +(holdout?.conversion_rate ?? 0).toFixed(2);
+  const upliftPp = +(resultPct - baselinePct).toFixed(2);
+  const verdict =
+    !holdout || holdout.n < minHoldout || treatN < minTreatment
+      ? "invalid"
+      : upliftPp >= 2 ? "win" : upliftPp <= -2 ? "loss" : "neutral";
+  return { baselinePct, resultPct, upliftPp, verdict };
+}
+
+async function recordRoundOutcome(
+  roundId: string,
+  round: { loop_key: string; round_no: number; segment_label: string | null; holdout_pct: number | null; sent_at: string | null; meta?: unknown },
+  stats: StoredStat[],
+) {
+  const loopKey = round.loop_key as LoopKey;
+  const s = summarizeOutcome(stats);
+  const holdout = stats.find((x) => x.arm === "holdout");
+  const treatment = stats.filter((x) => x.arm !== "holdout");
+  const revenueRm = treatment.reduce((sum, a) => sum + (a.revenue_rm ?? 0), 0);
+
+  // sends = messages delivered (push + SMS); cost only accrues on the SMS leg.
+  const [{ count: sends }, { count: smsSends }] = await Promise.all([
+    supabaseAdmin.from("loop_assignments").select("id", { count: "exact", head: true }).eq("round_id", roundId).eq("sms_status", "sent"),
+    supabaseAdmin.from("loop_assignments").select("id", { count: "exact", head: true }).eq("round_id", roundId).eq("sms_status", "sent").eq("channel", "sms"),
+  ]);
+
+  const meta = (round.meta ?? {}) as { outlet?: string };
+  const contaminated = holdout?.excluded_contaminated;
+  const row = {
+    campaign_key: `${round.loop_key}-r${round.round_no}`,
+    source: round.loop_key === "round_gap" ? "round_gap" : "sms_loop",
+    outlet_id: meta.outlet ?? null,
+    segment: round.segment_label,
+    started_at: round.sent_at ?? new Date().toISOString(),
+    ended_at: new Date().toISOString(),
+    hypothesis: LOOPS[loopKey]
+      ? `${LOOPS[loopKey].objective} — arms: ${treatment.map((a) => a.arm).join(", ")}`
+      : round.loop_key,
+    target_metric: "orders",
+    control: `${round.holdout_pct ?? 0}% holdout (n=${holdout?.n ?? 0}${contaminated ? `, ${contaminated} contaminated excluded` : ""})`,
+    sends: sends ?? 0,
+    cost_rm: +((smsSends ?? 0) * SMS_COST_RM).toFixed(2),
+    baseline_value: s.baselinePct,
+    result_value: s.resultPct,
+    uplift_pct: s.upliftPp,
+    verdict: s.verdict,
+    notes:
+      `uplift_pct is conversion PERCENTAGE POINTS (pooled treatment vs holdout). ` +
+      `Treatment revenue RM${revenueRm.toFixed(2)}. ` +
+      treatment.map((a) => `${a.arm}: ${a.conversion_rate ?? 0}% conv (n=${a.n})`).join("; "),
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: existing } = await supabaseAdmin
+    .from("campaign_outcomes").select("id").eq("campaign_key", row.campaign_key).maybeSingle();
+  if (existing?.id) {
+    const { error } = await supabaseAdmin.from("campaign_outcomes").update(row).eq("id", existing.id);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await supabaseAdmin.from("campaign_outcomes").insert(row);
+    if (error) throw new Error(error.message);
+  }
 }
 
 // ============================================================================
@@ -1006,6 +1101,7 @@ type StoredArm = { key: string; label: string; voucher_template_id: string; mess
 type StoredStat = {
   arm: string; n: number; lift_pp: number; revenue_per_recipient_rm: number;
   conversion_rate?: number; redemption_rate?: number; revenue_rm?: number;
+  excluded_contaminated?: number;
 };
 
 // ── POOLED HOLDOUT BASELINE ──────────────────────────────────────────────────

@@ -275,6 +275,16 @@ export function computeMetrics(points: GridPoint[], centerLat: number, centerLng
   };
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// A 9×9 grid at concurrency 8 with no pacing peaks well above the Places API
+// per-minute quota when several scans run back-to-back (observed 2026-07-06:
+// mid-run quota exhaustion turned whole scans into instant 81-point failures).
+// Enforcing a minimum batch duration caps the steady rate at
+// concurrency/MIN_BATCH_MS ≈ 8 req/s, and quota errors get a paced retry.
+const MIN_BATCH_MS = 1000;
+const RETRIES_PER_POINT = 2;
+
 /** Run all grid points with limited concurrency, also tallying who out-ranks us. */
 export async function scanGrid(
   apiKey: string,
@@ -290,28 +300,44 @@ export async function scanGrid(
 
   for (let i = 0; i < points.length; i += concurrency) {
     const batch = points.slice(i, i + concurrency);
+    const batchStart = Date.now();
     await Promise.all(
       batch.map(async (p) => {
-        try {
-          const { rank, results } = await rankAtPoint(apiKey, keyword, p.lat, p.lng, radiusM, targetPlaceId, targetTitle);
-          p.rank = rank;
-          p.results = results;
-          results.forEach((r, i2) => {
-            if (r.isUs || !r.name) return;
-            const key = r.placeId || r.name.toLowerCase();
-            const t = tally.get(key) ?? { name: r.name, top3: 0, rankSum: 0, count: 0 };
-            t.count++;
-            t.rankSum += i2 + 1;
-            if (i2 < 3) t.top3++;
-            tally.set(key, t);
-          });
-        } catch (err) {
+        let lastErr: Error | null = null;
+        for (let attempt = 0; attempt <= RETRIES_PER_POINT; attempt++) {
+          try {
+            const { rank, results } = await rankAtPoint(apiKey, keyword, p.lat, p.lng, radiusM, targetPlaceId, targetTitle);
+            p.rank = rank;
+            p.results = results;
+            results.forEach((r, i2) => {
+              if (r.isUs || !r.name) return;
+              const key = r.placeId || r.name.toLowerCase();
+              const t = tally.get(key) ?? { name: r.name, top3: 0, rankSum: 0, count: 0 };
+              t.count++;
+              t.rankSum += i2 + 1;
+              if (i2 < 3) t.top3++;
+              tally.set(key, t);
+            });
+            lastErr = null;
+            break;
+          } catch (err) {
+            lastErr = err as Error;
+            if (attempt < RETRIES_PER_POINT) {
+              // Quota (429) refills on a per-minute window — wait longer for it.
+              const quota = /\b429\b|RESOURCE_EXHAUSTED/i.test(lastErr.message);
+              await sleep((attempt + 1) * (quota ? 5000 : 1000));
+            }
+          }
+        }
+        if (lastErr) {
           failures++;
-          console.error(`[geogrid] point ${p.row},${p.col} failed:`, (err as Error).message);
+          console.error(`[geogrid] point ${p.row},${p.col} failed:`, lastErr.message);
           p.rank = null;
         }
       }),
     );
+    const elapsed = Date.now() - batchStart;
+    if (i + concurrency < points.length && elapsed < MIN_BATCH_MS) await sleep(MIN_BATCH_MS - elapsed);
   }
 
   const competitors: Competitor[] = [...tally.values()]

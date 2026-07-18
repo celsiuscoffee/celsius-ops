@@ -27,7 +27,7 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
   1. SALES lens = unified_sales nett. Since 2026-07-17 the view INCLUDES the pickup app (source/channel='pickup', paid statuses baked in) — it is now genuinely complete: pos + grabfood + pickup + consignment.
   2. GL income (fin_journal_lines × fin_accounts type income/revenue). Since the pos_native cutover (fully from ~Jun 18) accounts 5000-01/02/04 are fed by DAILY EOD JOURNALS from the till — accrual at ring-up, NOT bank settlements. Verified Jul 1–14: GL EOD income = unified_sales(pos+grabfood) + pickup-app orders, to within RM48. Bank-fed income remains only for 5000-09 GastroHub / 5000-10 events. Grab DELIVERY payouts now post to 1005 (transit), not income.
   So today: GL income ≈ unified_sales(pos+grabfood+pickup channels) + GastroHub/events; consignment is in the view but NOT in EOD income. Pre-cutover months the GL lens was bank-settlement-fed (lagged, SST-inclusive); GRAB DELIVERY REVENUE only ever appeared in that bank lens / grab_* tables.
-  JUNE 2026 IS MIXED-REGIME AND SUSPECT: bank-fed income posted through Jun 17 WHILE EOD journals ran from Jun 6 — up to RM81k of June GL income may be double-counted (unwind pending; period still open). Do not quote June GL income without this caveat.
+  JUNE 2026: CORRECTED 2026-07-18 — the mixed-regime misstatement was fixed with posted reversals/top-ups/adjustments (duplicate pre-cutover EOD mirrors removed, Conezion's broken Jun 8-17 poster topped up, cancelled Online-method sales stripped). June GL till-income now reconciles to unified_sales within RM100/company (Con 123,380 / SA 105,371 / Tam 79,590). Safe to quote.
 - NILAI IS A CONSIGNMENT OUTLET — no till; its unified_sales rows are all source='consignment' (periodic settlements, latest can lag weeks). Daily-sales questions for Nilai are a category error; it also has 0 ParLevel rows (reorder engine doesn't cover it).
 - "orders"/"order_items" (lowercase) = CUSTOMER online orders (pickup app, live; ~RM40k/month). Paid rows are IN unified_sales since 2026-07-17 (source='pickup') — do NOT add orders on top of the view or you double-count. Raw money columns are in SEN (divide by 100); the view already converts. Paid set: status IN ('paid','preparing','ready','collected','completed'). unified_sale_items does NOT yet carry pickup item lines. "Order"/"OrderItem" (PascalCase) = procurement purchase orders. Same word, different worlds — pick by context.
 
@@ -61,8 +61,11 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
 - "SystemReport" = internal bug/problem queue (OPEN|IN_PROGRESS|RESOLVED|DISMISSED).
 - "WhatsAppMessage": direction + type; type='template' outbound ≈ RM0.07 each (billable); free-form in-window is free.
 
-## Loyalty (Supabase-native tables, snake_case)
+## Loyalty & marketing sends (Supabase-native tables, snake_case)
 - member_brands (brand_id='brand-celsius'), redemptions — loyalty membership + redemption activity.
+- loop_assignments = the LIFECYCLE LOOPS' send ledger (channel sms/push, sms_status, converted, order_revenue). This is the SMS truth — ~100-200 sends/day via SMSNiaga (app_settings.sms_provider, switched 2026-06-21 after SMS123 began requiring content whitelisting).
+- TRAP: sms_logs is LEGACY (old campaigns-auto + tests only; both legacy campaigns inactive). Its silence since 2026-06-21 is normal — never conclude "SMS is dead" from sms_logs. sms_credits is SMS123-era balance history.
+- campaign_outcomes = the marketing OUTCOME ledger (since 2026-07-18): one row per measured loop round (campaign_key '<loop>-r<no>'), with baseline/result conversion %, uplift_pct in PERCENTAGE POINTS, and an evidence-gated verdict (win/neutral/loss/invalid — invalid = holdout <3 or treatment <10, common for small daily triggered rounds; use the pooled leaderboard for those). Use this for "did campaign X work" — not raw loop_rounds.stats.
 
 ## Metric definitions (use these consistently)
 - Labour % = month payroll (salary + employer_stat) / month gross sales.

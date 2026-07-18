@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
 import { runOpsPulse } from "@/lib/ops-pulse";
+import { expireStaleAlerts } from "@/lib/ops-pulse/ledger";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -25,11 +26,16 @@ export async function GET(req: NextRequest) {
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   try {
+    // Ledger hygiene runs regardless of pulse mode — expiry closes alerts whose
+    // day/window has passed; it pages no one (shadow's "never message" holds).
+    const expired = await expireStaleAlerts();
+    if (expired > 0) console.log(`[cron/ops-pulse] expired ${expired} stale alerts`);
+
     const result = await runOpsPulse();
     if (result.breachCount > 0) {
       console.log(`[cron/ops-pulse] mode=${result.mode} breaches=${result.breachCount} sent=${result.sent}`);
     }
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({ ok: true, expired, ...result });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "ops-pulse failed";
     console.error("[cron/ops-pulse]", msg);
