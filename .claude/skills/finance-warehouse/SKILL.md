@@ -154,6 +154,22 @@ projection for sales/cash/payroll semantics.
     check; a decreasing count = someone deleted a run (observed 8→7 on
     2026-07-18, an aborted ai_computed run). [flag deletes; propose an
     audit table if it recurs]
+28. PT wage bridge (monthly, owner-directed 2026-07-18): computed =
+    published rostered hours (net of breaks) × `hourly_rate` (or shifts ×
+    `shift_flat_rate`) for `employment_type~part` profiles, vs paid =
+    partimer bank lines. **Baseline June: computed 18,187 vs paid 24,403
+    (+34%)**; attendance corroborates roster (July: 872 attended vs 867
+    rostered hrs — PT clock-in is good). Known gap components: Nilai
+    (~1.4k/mo, consignment, no roster), unrostered covers/swaps, PTs
+    missing profiles/rates, stale rates. [alarm if gap > 40% or trending
+    up. Person-level reconciliation is BLOCKED on missing data: payments
+    are outlet-level lump transfers — per-person weekly PT breakdown is a
+    needs-register gap the managers' sheet must fill]
+    Statutory note (check 26 addendum): ALWAYS exclude `isInterCo` lines —
+    own-entity "Stat Pay" reimbursements were misflagged false (4 lines,
+    RM16.5k, corrected 2026-07-18); net-of-interco statutory outflow ≈
+    22–24k/mo vs runs' 17.6k due; residual ≈ PCB/EPF timing + entity
+    split — decompose monthly.
 
 ## Run procedure
 
