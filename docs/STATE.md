@@ -550,134 +550,31 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   report, search-term batching, and registry registration were superseded the
   same day by the ads autopilot — next entry.)
 
-- 2026-07-16 — **Ads spend AUTOPILOT built + armed** (same branch/PR #947,
-  owner directives in chat: "no need human approve... cut the spending lowest
-  possible without reducing the till revenue", descend from 100% — no pause
-  test; then widened same day: "ads spend should be generating cash... the
-  till is the source of truth... trimming is just the first step, next is to
-  find the best way to increase cash"). New
-  `apps/backoffice/src/lib/ads/autopilot.ts`, runs inside `cron/ads-daily`
-  NIGHTLY (owner: no reason to wait for a weekday — actions are self-paced by
-  the ledger: per-campaign observation windows + a 6-day fleet-wide stagger
-  for new disturbances, while rollback/revert/restore fire the first night
-  the till says so), replacing the response-only shadow report. **Objective =
-  cash: till lift × margin − spend; bidirectional extremum-seeker, burden of
-  proof asymmetric (cuts stand unless the till proves harm; raises revert
-  unless the till proves lift).** State machine per campaign, memory = the
-  `ads_budget_change` ledger reason prefixes (no new tables): DESCEND →
-  step-down 8% (12% when cost/conv >1.3× fleet-best), ≥14d observation, max
-  2 cuts/run (least-efficient first), hard floor RM20/day
-  (ADS_AUTOPILOT_FLOOR_MYR); guard breach after a recent cut → ROLLBACK one
-  step + 56d hold (= proof of response); then PROBE UP +15% (28d observation,
-  cap 1.25× the highest ledgered baseline, ADS_GROSS_MARGIN=0.6 states each
-  raise's break-even in the reason) — kept only on detectable lift (fleet-adj
-  ≥1.02 AND raw ≥1.0, or immediate revert on breach), else REVERT → SETTLE 90d
-  at the proven optimum before re-searching.
-  **Round 2 (owner-approved after the step-size math):** gradual steps
-  (8–15% of ~RM100/day) move a ~RM2.5-3k/day outlet's till by <1% — per-step
-  unreadable; a FULL pause is the only readable experiment (~5-6% if
-  break-even). So: **PAUSE PROBE** — one clearly-inefficient campaign at a
-  time (cost/conv >1.3× fleet-best, never re-probed, never started into a
-  weak till) is PAUSED for 28d (`pause-campaign.ts`, ledger reasons `autopilot
-  pause`/`autopilot restore`), the others keep descending as controls
-  (Putrajaya + Shah Alam stay gradual per owner), then auto-restored with a
-  verdict measured against a forecast built from PRE-pause history: till
-  dropped (raw <0.95 / adj <0.97 over the pause window) → ads generate cash,
-  resume prior budget + descend; no detectable effect → below break-even
-  wholesale, restore at floor RM20/day (~RM1.9k/mo freed at Tamarind). First
-  probe will select **Tamarind** (ratio ~1.5; PJ 1.24 is under the 1.3 bar).
-  **Boiling-frog fix:** the guard now also carries a fixed ANCHOR — outlet's
-  share of fleet till revenue in the 28d before the first ledgered budget
-  change vs its share now; anchor <0.93 = breach → rollback. This catches
-  cumulative slow damage that the trailing 4-week forecast would otherwise
-  normalize into the baseline. **PR #947 MERGED to main 2026-07-16** (squash
-  a113464) → autopilot live from the next nightly ads-daily run.
-  **Round 4 — waste-matched cuts (owner: "remove the keywords that are not
-  worth, and reduce the budget based on the keywords removed... so at the
-  starting point we do things right").** Descent priority reordered: while a
-  campaign carries excluded-term spend not yet taken out of its budget
-  (exclusion ledger rows with `appliedAt` after the campaign's last budget
-  change, sized from `est_monthly_saving_myr`), the next cut removes exactly
-  that daily amount (min RM0.5/day, cap 20%/cut) — café-intent funding is
-  untouched by construction; the blind 8/12% step only resumes once no unpaid
-  waste remains. Round 4b (owner: "why can't we cut it now rather than
-  wait?"): waste-matched cuts are PAIRED BOOKKEEPING, not experiments — they
-  run in the SAME run as the exclusions (exclusions now apply before budget
-  decisions; only successfully-applied ones count toward the cut) and are
-  exempt from the observation window, the 6d fleet stagger, and the
-  2-cuts/run cap. Still gated by: the revenue guard (never cut into a weak
-  till), the floor, and rollback coverage. Net effect: the night this
-  merges, Putrajaya gets exclusions + the matched ~RM13/day cut together —
-  no 5-day wait. PR #952 MERGED 2026-07-17 (squash a3c3015).
-  **Round 5 — seeded exclusions (owner: "shah alam, do junk-term as well").**
-  Junk intent is fleet-wide: any term actually excluded from measured spend
-  at one campaign transfers as a negative to every other enabled campaign
-  (`selectSeedExclusions`; evidence-based only, never invented terms; paused
-  campaigns skipped; cost recorded NULL so seeds never size a waste-matched
-  cut — SA's budget cut waits for its own term data or blind descent).
-  **FIRST LIVE RUN (2026-07-17 19:02 UTC / 3am MYT Jul 18), all verified in
-  ledger:** Putrajaya waste-matched cut RM98.42→92.79 (RM5.63/day = the 15
-  exclusions actually applied; the rest of the junk tail follows nightly);
-  Shah Alam blind 8% RM100→92 (guard healthy 1.04, no prior change); 45
-  exclusions applied (15/campaign incl. seeds to SA+Tam). **Tamarind was NOT
-  paused — it ROLLED BACK to RM100.20**: its till read fleet-adj 0.94
-  (raw 0.96) → guard breach → blamed the Jul 5 cut (12d old), restored +56d
-  hold; the pause probe correctly refused to start into a weak till and will
-  fire automatically once Tamarind's guard reads healthy. CONFOUND WATCH: a
-  sibling session runs a GrabAds pause holdout at SA/Tamarind — if live, the
-  Tamarind dip may be Grab-caused (rollback then over-cautious but safe; the
-  pause probe disentangles). Fuzzy-theme note: Google negative THEMES match
-  related searches — "kopitiam near me" shows Excluded in the UI without
-  being in our ledger (caught by the kedai-makan/restaurants themes);
-  acceptable collateral, monitor café-intent impressions.
-  **Round 6 (owner reviewed live term lists: "lots of unnecessary ones"):**
-  competitor_brand + dessert_bakery now AUTO-EXCLUDE (no conquesting — flip
-  `shouldAutoExclude` to reverse); vocab expanded (restoran, food court,
-  makanan, warung, gerai, 美食, pudding/tart/brownie; brands: hock kee,
-  kopihut, cotti, vinyl cafe, qbistro, hainan kopitiam, temu coffee);
-  negative-slot budget MAX_NEGATIVES_PER_CAMPAIGN=25 (Smart campaign theme
-  cap) — cost-priority, seeds only fill leftover slots, 'failed' ledger rows
-  retryable (were permanently blocked before).
-  **Round 7 — Tamarind rollback was a FALSE POSITIVE (channel-decomposed:
-  till FLAT in absolute RM, 2,197→2,211/day incl. Grab flat; the breach was a
-  trend-extrapolating forecast + SA running hot).** Two fixes merged: (a)
-  #972 plausibility bound — rollback only when the ringgit gap ≤ cumulative
-  descent ÷ margin × 2 (GuardSignal gains forecastDailyMyr); implausible gaps
-  hold-and-flag "another cause"; (b) owner: "for tamarind, let's just switch
-  it off so we can have a baseline" → the pause-probe gate now blocks only on
-  ABSOLUTE weakness (own raw index < 0.95); a relative-only breach
-  (fleet-adj/anchor) no longer defers the probe. Tamarind (raw 0.96)
-  qualifies → probe pauses it at the next nightly run; auto-restore +
-  verdict ~28d later. Tamarind sits at RM100.20 meanwhile (not re-cut —
-  moot once paused).
-  **DEPLOY-TIMING LESSON:** the Jul 16 19:00 UTC cron ran the PRE-#947 code —
-  the prod deploy of a113464 only went READY at Jul 17 00:13 UTC (~6h after
-  merge; queue lag), so the autopilot's real first pass is the night of
-  Jul 17 (3am MYT Jul 18): Tamarind pause + Putrajaya exclusions + matched
-  cut + SA seeds all together. When a merge must beat a cron, VERIFY the
-  Vercel prod deployment is READY — merging is not deploying.
-  **Revenue guard:** last-14-full-days actual till revenue ÷ same-window
-  forecast (labour-gate `dailyRevenueSeries` + `buildWeekForecast`, history
-  precedes the window = clean counterfactual), divided by the median of the
-  other ads outlets' indexes to cancel fleet-wide shocks; breach = raw <0.95
-  OR fleet-adj <0.97 → roll the last recent cut back one step + 56d hold on
-  that campaign ("descent floor found"); breach with no recent cut → hold
-  (never cut into weakness); no guard signal → never act. **Term
-  auto-exclusions** (`term-rules.ts`): own-brand + non-café food intent only,
-  ≥RM2/30d, ≤15/campaign/run; competitor coffee brands + dessert/ambiguous
-  NEVER auto-excluded (strategy calls); human `rejected` ledger rows are a
-  standing no. All actions land in the existing `ads_budget_change` /
-  `ads_term_exclusion` ledgers as `decided_by='ads-autopilot'` (undo paths
-  unchanged) + a summary row in `agent_actions`. **Kill switch:**
-  `agent_registry` key `ads_autopilot`, fail-safe off — row seeded ARMED in
-  prod 2026-07-16 (migration 083, applied via MCP; inert until this code
-  deploys). Also FIXED the search-terms sync: batched unnest upserts (500/chunk)
-  replace the per-row upsert loop that exhausted the pool after the first
-  account — Shah Alam + Tamarind term data starts landing on the next nightly
-  run (their history begins ~Jul 17; exclusion candidates there build up over
-  the following weeks). First armed pass: Monday Jul 20 19:00 UTC — expect
-  cuts at Tamarind + Putrajaya (Jul 5 changes will be 15d old), SA deferred to
-  the following week, plus ~Putrajaya-only exclusions. 387 tests + tsc green.
+- 2026-07-18 — **Ads spend autopilot LIVE — full design + history promoted to
+  `docs/design/ads-autopilot.md`** (PRs #947/#952/#954/#971/#972/#973, all
+  merged; built 7/16-18 from owner directives: no per-change approval,
+  maximize cash with the till as sole truth, exclude junk then cut its cost,
+  full-pause Tamarind for a baseline). Nightly inside `cron/ads-daily`;
+  kill switch `agent_registry` key `ads_autopilot` (armed); every action in
+  `ads_budget_change`/`ads_term_exclusion` as decided_by='ads-autopilot'.
+  **Live state after the first run (Jul 18 3am MYT, ledger-verified):**
+  Putrajaya RM92.79/day (waste-matched cut paired with its 15 junk-term
+  exclusions), Shah Alam RM92 (first blind 8%), Tamarind RM100.20 (rollback
+  that channel-decomposition proved a FALSE POSITIVE — till flat in absolute
+  RM; led to the #972 plausibility bound). 45 negatives applied incl. fleet
+  seeds to SA/Tam. **Tonight's run: Tamarind PAUSES for the 28d baseline**
+  (probe gate now blocks only on absolute till weakness, #973) →
+  auto-restore + verdict ~Aug 15 (drop → ads generate cash, resume+descend;
+  none → restore at RM20/day floor, ~RM2.4k/mo freed). Competitor + dessert
+  junk classes armed (owner: no conquesting), Malay/local vocab added,
+  25-negative-slot budget per campaign. **Watch items:** Tamarind verdict
+  ~Aug 15; SA/Tam term data accumulating (waste-matched cuts follow);
+  fuzzy negative themes may catch café-intent terms (seen: "kopitiam near
+  me") — reject via /ads/optimizer panel to make it permanent; possible
+  GrabAds holdout at SA/Tam is a confound for till reads. **Still open
+  (owner):** value-based Pickup Order conversion tag (Approach A) — Google
+  still optimizes toward directions-clicks; geogrid scan-cap economics
+  (separate loop, idle until Aug 1).
 
 - 2026-07-15 -- **Staff-scheduling round 2 (branch
   `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the
