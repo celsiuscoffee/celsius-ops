@@ -5,6 +5,7 @@ import { generateSchedule, STAFFING_MODES, type StaffingMode } from "@/lib/hr/ag
 import { linkChecklistsToSchedule } from "@/lib/hr/agents/checklist-linker";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds, canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
+import { sortOutlets } from "@/lib/outlet-order";
 
 export const dynamic = "force-dynamic";
 
@@ -31,14 +32,15 @@ export async function GET(req: NextRequest) {
         ? requestedOutletId
         : allowedOutletIds[0] || null);
 
-  const outlets = await prisma.outlet.findMany({
-    where: {
-      status: "ACTIVE",
-      ...(allowedOutletIds !== null ? { id: { in: allowedOutletIds } } : {}),
-    },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
+  const outlets = sortOutlets(
+    await prisma.outlet.findMany({
+      where: {
+        status: "ACTIVE",
+        ...(allowedOutletIds !== null ? { id: { in: allowedOutletIds } } : {}),
+      },
+      select: { id: true, name: true },
+    }),
+  );
 
   if (session.role === "MANAGER" && !outletId) {
     return NextResponse.json({ schedules: [], outlets });

@@ -1,10 +1,11 @@
 "use client";
 
 // Schedule Assist panel — the fit-ranking flow (coverage picture → shift window
-// → ranked candidates → assign, with the override/training log). Extracted from
-// the standalone /schedule-assist page so the SAME panel embeds inside the
-// Schedules grid (per-day modal): assist happens DURING scheduling, not on a
-// separate tab. The standalone page now wraps this component too.
+// → ranked candidates → assign, with the override/training log). Lives ONLY
+// inside the Schedules grid (per-day ✨ Assist modal): assist happens DURING
+// scheduling. The old standalone /hr/schedule-assist tab was removed
+// 2026-07-18 (owner: "no need these as we already done it on the schedules
+// page").
 
 import { useEffect, useState } from "react";
 import { useFetch } from "@/lib/use-fetch";

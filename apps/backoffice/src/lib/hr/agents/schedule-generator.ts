@@ -1227,18 +1227,44 @@ export async function generateSchedule(
       return W_PERF * perf + W_FAIR * fairnessNorm - W_COST * costNorm;
     };
     const proposedByDay = new Map<string, Set<string>>(); // date → PTs already proposed that day
-    for (const g of gaps) {
+    const proposedDays = new Map<string, number>(); // PT → days proposed this run
+    // BREADTH-FIRST across days: when the envelope can't cover every gap, a
+    // waterfall fill (deepest day to 100%, then the next) starves the tail —
+    // Tamarind 2026-07-20 put 4-5 PT on each of four quiet-ish days and left
+    // SATURDAY (busiest, 245 items) with one shift and Friday with none.
+    // Interleaving one gap per day per round means every day gets its deepest
+    // hole plugged before any day gets its fourth top-up. Days keep their
+    // target-desc order within each round; per-day targets still cap totals.
+    const gapsByDate = new Map<string, Gap[]>();
+    for (const g of gaps) (gapsByDate.get(g.date) ?? gapsByDate.set(g.date, []).get(g.date)!).push(g);
+    const interleaved: Gap[] = [];
+    for (let round = 0, added = true; added; round++) {
+      added = false;
+      for (const dayGaps of gapsByDate.values()) {
+        if (dayGaps[round]) { interleaved.push(dayGaps[round]); added = true; }
+      }
+    }
+    // Cap-aware picking: a PT at the weekly hour/day cap is skipped HERE, so
+    // the pick cascades down the priority list instead of proposing capped
+    // people the validator silently drops. (Shah Alam catch 2026-07-18: the
+    // 5 reliable PTs maxed out on Sun/Sat/Tue, then Mon/Wed got NOTHING while
+    // RM373 of envelope sat unspent and 4 other PTs sat unused.)
+    for (const g of interleaved) {
       const day = proposedByDay.get(g.date) ?? proposedByDay.set(g.date, new Set()).get(g.date)!;
+      const gapH = workingHours(g.template);
       const pick = eligiblePt
         .filter(
           (p) =>
             fitsStation(p.position, g.station) &&
-            !day.has(p.id) && !bookedElsewhere.get(p.id)?.has(g.date) && !onLeave.has(`${p.id}:${g.date}`),
+            !day.has(p.id) && !bookedElsewhere.get(p.id)?.has(g.date) && !onLeave.has(`${p.id}:${g.date}`) &&
+            (hoursElsewhere.get(p.id) ?? 0) + (proposedH.get(p.id) ?? 0) + gapH <= PT_MAX_HOURS_PER_WEEK &&
+            (proposedDays.get(p.id) ?? 0) < PT_MAX_DAYS_PER_WEEK,
         )
         .sort((a, b) => priority(b) - priority(a))[0];
       if (!pick) continue;
       day.add(pick.id);
-      proposedH.set(pick.id, (proposedH.get(pick.id) ?? 0) + workingHours(g.template));
+      proposedH.set(pick.id, (proposedH.get(pick.id) ?? 0) + gapH);
+      proposedDays.set(pick.id, (proposedDays.get(pick.id) ?? 0) + 1);
       proposals.push({ user_id: pick.id, date: g.date, slot: g.slot, reason: `${g.station} gap ${g.gapHours}h` });
     }
   }
