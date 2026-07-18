@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { suggestPairs } from "@celsius/shared";
+import { suggestPairs, logPairImpressions } from "@celsius/shared";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { triedProductIds } from "@/lib/poster/select-home";
 
@@ -30,6 +30,11 @@ export async function POST(req: NextRequest) {
       outletId,
       channel: "pickup",
     });
+    // Attach-rate denominator for the pickup cart rail (_CartUpsell renders
+    // nothing when pairs is empty, so an impression here ≈ a render).
+    if (pairs.length) {
+      void logPairImpressions(supabase, pairs, { outletId, source: "pickup" });
+    }
 
     // Cart-ready shape for the rail (RM price, image, optional deal badge).
     return NextResponse.json({

@@ -16,10 +16,11 @@ type Poster = {
   deeplink: string | null;
 };
 
-// Best-effort tap log → /api/poster-tap so the home autopilot can attribute the
-// resulting order's AOV to this poster. keepalive lets it survive the
-// navigation the <Link> triggers; never blocks the tap.
-function logPosterTap(posterId: string, deeplink: string | null) {
+// Best-effort event log → /api/poster-tap so the home autopilot can attribute
+// the resulting order's AOV to this poster ('tap') and compute CTR
+// ('impression'). keepalive lets a tap survive the navigation the <Link>
+// triggers; never blocks the tap.
+function logPosterEvent(posterId: string, deeplink: string | null, eventType: "tap" | "impression") {
   try {
     let loyaltyId: string | null = null;
     const raw = localStorage.getItem("celsius-pickup");
@@ -27,11 +28,22 @@ function logPosterTap(posterId: string, deeplink: string | null) {
     void fetch("/api/poster-tap", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ posterId, placement: "home", deeplink, loyaltyId }),
+      body: JSON.stringify({ posterId, placement: "home", deeplink, loyaltyId, eventType }),
       keepalive: true,
     }).catch(() => {});
   } catch {
     /* never block navigation */
+  }
+}
+
+// One impression per poster per page view (deduped across the personalized
+// swap) — the CTR denominator for the autopilot's home learning signal.
+const seenPosters = new Set<string>();
+function logImpressions(list: Poster[]) {
+  for (const p of list) {
+    if (seenPosters.has(p.id)) continue;
+    seenPosters.add(p.id);
+    logPosterEvent(p.id, p.deeplink, "impression");
   }
 }
 
@@ -65,6 +77,10 @@ export function PosterCarousel({ posters }: { posters: Poster[] }) {
   }, []);
 
   useEffect(() => {
+    logImpressions(list);
+  }, [list]);
+
+  useEffect(() => {
     if (list.length <= 1) return;
     const id = window.setInterval(() => {
       setIdx((i) => (i + 1) % list.length);
@@ -82,7 +98,7 @@ export function PosterCarousel({ posters }: { posters: Poster[] }) {
         <Link
           key={p.id}
           href={p.deeplink || "/menu"}
-          onClick={() => logPosterTap(p.id, p.deeplink)}
+          onClick={() => logPosterEvent(p.id, p.deeplink, "tap")}
           className="absolute inset-0"
           style={{
             opacity: i === idx ? 1 : 0,

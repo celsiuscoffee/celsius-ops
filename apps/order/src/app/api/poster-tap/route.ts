@@ -35,8 +35,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as {
       posterId?: string; placement?: string; deeplink?: string; loyaltyId?: string; sessionId?: string;
+      eventType?: string;
     };
     if (!body?.posterId) return NextResponse.json({ ok: false }, { status: 200 });
+    // 'tap' (default, the historic meaning) or 'impression' (poster shown) —
+    // impressions give taps a denominator (poster CTR) and are logged by the
+    // carousels/splash on render, so attribution (tap → order) is unaffected.
+    const eventType = body.eventType === "impression" ? "impression" : "tap";
 
     const session = readCustomerSession(req);
     const loyaltyId =
@@ -51,7 +56,7 @@ export async function POST(req: NextRequest) {
       round: currentRound(),
       loyalty_id: loyaltyId,
       session_id: typeof body.sessionId === "string" ? body.sessionId : null,
-      event_type: "tap",
+      event_type: eventType,
     } as Record<string, unknown>);
 
     return NextResponse.json({ ok: true });
