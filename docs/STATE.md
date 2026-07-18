@@ -328,6 +328,59 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   never diagnose SMS from sms_logs again. PR #970 merged (COGS W1–W4 +
   enforcement + self-driving custodian). Still-real marketing residuals:
   campaign_outcomes 0 rows; geogrid stalled since Jul 6.
+- 2026-07-18 (round 9) — **Friday-prayer staffing rule (Jumaat).** Owner:
+  "put opening female on friday to run friday prayer. including non
+  muslim. currently only gulaf is non-muslim." `gender` and `religion`
+  columns ALREADY existed on hr_employee_profiles (religion is staff-app
+  self-service, HR read-only; gender HR-editable M/F) — no migration.
+  Backfilled prod: 61 profiles religion='islam', Guraf Lal Joshi
+  'other' (exact faith unknown; he can self-correct). Generator:
+  `attendsFridayPrayer(gender, religion)` (unknown gender/religion =
+  attends — safe default), Friday fillStation sorts prayer-free staff
+  into prayer-spanning openings and prayer-goers into closing; ai_note
+  per Friday either confirms the rule held or names who's exposed
+  (~13:00–14:15) and needs relief. Assist: `friday_prayer` flag + amber
+  chip + ~10-point fit penalty on Friday slots spanning 13:00–14:00.
+  Data gap: several profiles have blank GENDER (Hidayat, Ammar Roslizar,
+  Firdaus, Guraf, Farhan Ikhmal…) — they count as "attends" until HR
+  fills Male/Female on the employee page.
+
+- 2026-07-18 (round 8) — **Rest days are now PER-STATION (this branch).**
+  Owner caught the two failure modes in one afternoon: (a) items-share rest
+  placement dug holes PT then re-bought the same day ("hurm"/"fix this" —
+  Tue got 3 PT while Sat ran short) → #975 replaced it with slack-greedy vs
+  demand; (b) #975's day slack was STATION-BLIND: Sunday's barista side is
+  the week's lightest so Sunday looked slack, two rests landed there, and
+  person-assignment (weekend-debt order) gave BOTH to kitchen crew
+  (Amirul+Azmer) on the #2 cooked-items day — 2 BOH for 86 kitchen items
+  ("where is your logic?"). Fix: `placeStationRests(group, needOf,
+  minOnDuty)` in schedule-generator — BOH FT rests judged only against
+  `kitNeedHOf` (Σ kitHeadsByHour) with min 2 cooks/day (structural
+  anchors), FOH FT against `barNeedHOf` (bar curve + SERVICE_FLOOR +
+  buffer) with min 3; weekend fairness + variety + profile rest days now
+  honoured within each station. Also this round (merged #965 #966 #967
+  #975): PT ceiling envelope (FT floor ≥18% no longer starves weekends —
+  amber publish), consignment_sales into forecast + history clamped to
+  yesterday MYT (Nilai/IOI "no data" fixed), FOH/BOH item split in day
+  headers, composition line + "Why this staffing?" panel, forecast rank
+  explanations. Same PR, two more owner catches: (1) **demand window
+  counted days that hadn't happened** — trailing-28d ran to weekStart−1
+  with a hard ÷4, so generating on a Friday put tomorrow's (empty) Sunday
+  and today's partial Saturday inside the window: Sunday PJ read 86 kit
+  items when the true average of the 3 complete Sundays is 114 (−25%,
+  always hitting the weekend). Window now clamps to yesterday MYT and
+  divides each weekday by its ACTUAL occurrence count. (2) **Managers
+  moved outside FOH/BOH** (owner: "their schedule does not consider as
+  man hours, but can suggest shifts to cover if possible"):
+  `MANAGEMENT_POSITIONS` (manager/AM/HoD — NOT barista lead) in
+  labour-gate-lib; excluded from staffedAt (generator gaps), gate
+  coverage `have`, candidates kitGot/barGot, and grid day totals; own
+  grid section + timeline band + "MGR7.5 cover" tag; Assist now
+  INCLUDES managers as bottom-ranked `manager_cover` candidates and a
+  manager's + Add offers any short window as cover. Queue awaiting
+  owner word: staff-app PT-loop parity, weekly autopilot cron, KDS
+  handover briefing, Meta WA templates, demand v3 from timing
+  worksheets.
 
 - 2026-07-18 — **Custodian made SELF-DRIVING (owner: "what I wanted is for
   this agent to do this by itself").** Skill gains an **Autonomy ladder**
