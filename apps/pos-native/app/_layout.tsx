@@ -21,12 +21,23 @@ import {
 } from "@expo-google-fonts/space-grotesk";
 import * as Sentry from "@sentry/react-native";
 
-// Crash + error reporting for the till. Guarded on the DSN so it's a safe no-op
-// until EXPO_PUBLIC_SENTRY_DSN is set (Sentry project: celsius-pos-native) —
-// then crashes/errors from any outlet's register report to the dashboard with
-// the OTA channel tagged, so a regression from a specific update group is
-// traceable. Mirrors apps/pickup-native/app/_layout.tsx.
-const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? "";
+// Crash + error reporting for the till. Crashes/errors from any outlet's
+// register report to the dashboard with app + OTA channel tagged, so a
+// regression from a specific update group is traceable.
+//
+// DSN precedence: a build-time EXPO_PUBLIC_SENTRY_DSN wins; otherwise we fall
+// back to an embedded DSN so crash capture WORKS over OTA without depending on
+// an EAS secret (which had never been set — Sentry.init was a permanent no-op,
+// so the till reported nothing). Sentry DSNs are publishable — they ship in
+// every client bundle — so embedding one is safe.
+//
+// INTERIM: the fallback points at the shared `celsius-ops` project (events are
+// tagged app:pos-native below, so they filter cleanly). Creating a dedicated
+// `celsius-pos-native` project is org-owner-only; once it exists, swap its DSN
+// in here or set EXPO_PUBLIC_SENTRY_DSN in the EAS build.
+const FALLBACK_SENTRY_DSN =
+  "https://37f0a20903a2e28f4f7ec19b46ff5931@o4511247029043200.ingest.us.sentry.io/4511247091630080";
+const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? FALLBACK_SENTRY_DSN;
 if (SENTRY_DSN) {
   Sentry.init({
     dsn:                SENTRY_DSN,
