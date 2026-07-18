@@ -290,6 +290,28 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 (round 8) — **Rest days are now PER-STATION (this branch).**
+  Owner caught the two failure modes in one afternoon: (a) items-share rest
+  placement dug holes PT then re-bought the same day ("hurm"/"fix this" —
+  Tue got 3 PT while Sat ran short) → #975 replaced it with slack-greedy vs
+  demand; (b) #975's day slack was STATION-BLIND: Sunday's barista side is
+  the week's lightest so Sunday looked slack, two rests landed there, and
+  person-assignment (weekend-debt order) gave BOTH to kitchen crew
+  (Amirul+Azmer) on the #2 cooked-items day — 2 BOH for 86 kitchen items
+  ("where is your logic?"). Fix: `placeStationRests(group, needOf,
+  minOnDuty)` in schedule-generator — BOH FT rests judged only against
+  `kitNeedHOf` (Σ kitHeadsByHour) with min 2 cooks/day (structural
+  anchors), FOH FT against `barNeedHOf` (bar curve + SERVICE_FLOOR +
+  buffer) with min 3; weekend fairness + variety + profile rest days now
+  honoured within each station. Also this round (merged #965 #966 #967
+  #975): PT ceiling envelope (FT floor ≥18% no longer starves weekends —
+  amber publish), consignment_sales into forecast + history clamped to
+  yesterday MYT (Nilai/IOI "no data" fixed), FOH/BOH item split in day
+  headers, composition line + "Why this staffing?" panel, forecast rank
+  explanations. Queue awaiting owner word: staff-app PT-loop parity,
+  weekly autopilot cron, KDS handover briefing, Meta WA templates,
+  demand v3 from timing worksheets.
+
 - 2026-07-18 — **Custodian made SELF-DRIVING (owner: "what I wanted is for
   this agent to do this by itself").** Skill gains an **Autonomy ladder**
   (rung 1: code fixes/additive prod derivations/docs — do it; rung 2:
