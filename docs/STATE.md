@@ -615,6 +615,29 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   (`selectSeedExclusions`; evidence-based only, never invented terms; paused
   campaigns skipped; cost recorded NULL so seeds never size a waste-matched
   cut — SA's budget cut waits for its own term data or blind descent).
+  **FIRST LIVE RUN (2026-07-17 19:02 UTC / 3am MYT Jul 18), all verified in
+  ledger:** Putrajaya waste-matched cut RM98.42→92.79 (RM5.63/day = the 15
+  exclusions actually applied; the rest of the junk tail follows nightly);
+  Shah Alam blind 8% RM100→92 (guard healthy 1.04, no prior change); 45
+  exclusions applied (15/campaign incl. seeds to SA+Tam). **Tamarind was NOT
+  paused — it ROLLED BACK to RM100.20**: its till read fleet-adj 0.94
+  (raw 0.96) → guard breach → blamed the Jul 5 cut (12d old), restored +56d
+  hold; the pause probe correctly refused to start into a weak till and will
+  fire automatically once Tamarind's guard reads healthy. CONFOUND WATCH: a
+  sibling session runs a GrabAds pause holdout at SA/Tamarind — if live, the
+  Tamarind dip may be Grab-caused (rollback then over-cautious but safe; the
+  pause probe disentangles). Fuzzy-theme note: Google negative THEMES match
+  related searches — "kopitiam near me" shows Excluded in the UI without
+  being in our ledger (caught by the kedai-makan/restaurants themes);
+  acceptable collateral, monitor café-intent impressions.
+  **Round 6 (owner reviewed live term lists: "lots of unnecessary ones"):**
+  competitor_brand + dessert_bakery now AUTO-EXCLUDE (no conquesting — flip
+  `shouldAutoExclude` to reverse); vocab expanded (restoran, food court,
+  makanan, warung, gerai, 美食, pudding/tart/brownie; brands: hock kee,
+  kopihut, cotti, vinyl cafe, qbistro, hainan kopitiam, temu coffee);
+  negative-slot budget MAX_NEGATIVES_PER_CAMPAIGN=25 (Smart campaign theme
+  cap) — cost-priority, seeds only fill leftover slots, 'failed' ledger rows
+  retryable (were permanently blocked before).
   **DEPLOY-TIMING LESSON:** the Jul 16 19:00 UTC cron ran the PRE-#947 code —
   the prod deploy of a113464 only went READY at Jul 17 00:13 UTC (~6h after
   merge; queue lag), so the autopilot's real first pass is the night of
