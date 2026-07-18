@@ -445,7 +445,12 @@ export function spaceDisturbances(
 /**
  * Pure: start a pause probe when warranted — ONE campaign fleet-wide at a
  * time, only a clearly-inefficient one (cost/conv > INEFFICIENT_RATIO ×
- * fleet-best), never re-probed, never started into a weak till. The chosen
+ * fleet-best), never re-probed, never started into an ABSOLUTELY weak till
+ * (own raw index < GUARD_RAW_MIN). A merely RELATIVE breach (fleet-adjusted
+ * or anchor, with the outlet's own till at forecast) does NOT block the
+ * probe — owner 2026-07-18 ("for tamarind, let's just switch it off so we
+ * can have a baseline") after the fleet-adj gate wrongly deferred the probe
+ * at a flat-revenue outlet whose sibling was simply running hot. The chosen
  * campaign's decision is replaced with a pause; every other campaign keeps
  * its decision (the gradual descent elsewhere doubles as the probe's
  * control group).
@@ -461,7 +466,7 @@ export function selectPauseProbe(
     .filter((s) => s.efficiencyRatio != null && s.efficiencyRatio > INEFFICIENT_RATIO)
     .filter((s) => {
       const g = s.outletId ? guards[s.outletId] : undefined;
-      return !!g && g.rawIndex != null && !g.breach;
+      return !!g && g.rawIndex != null && g.rawIndex >= GUARD_RAW_MIN;
     })
     .sort((a, b) => (b.efficiencyRatio ?? 0) - (a.efficiencyRatio ?? 0));
   const target = candidates[0];

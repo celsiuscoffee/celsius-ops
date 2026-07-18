@@ -306,10 +306,28 @@ describe("pause probe", () => {
     expect(
       selectPauseProbe(decisions, states.map((s) => ({ ...s, hasBeenPauseProbed: true })), guards).every((d) => d.action !== "pause"),
     ).toBe(true);
-    // guard breached at every outlet
+    // absolute weakness (own raw index below forecast floor) at every outlet
     expect(
       selectPauseProbe(decisions, states, { o2: breached, o3: breached }).every((d) => d.action !== "pause"),
     ).toBe(true);
+  });
+
+  it("a RELATIVE-only breach does not block the probe (owner: switch Tamarind off for a baseline)", () => {
+    // Own till at forecast (raw 0.96) but fleet-adj breached because a sibling ran hot.
+    const relativeOnly: GuardSignal = { rawIndex: 0.96, adjIndex: 0.94, anchorIndex: 0.96, forecastDailyMyr: 2300, breach: true };
+    const states = [
+      campaign({
+        campaignId: "tam",
+        outletId: "o3",
+        dailyBudgetMyr: 100.2,
+        baselineDailyMyr: 100.2,
+        efficiencyRatio: 1.54,
+        lastApplied: { decidedAt: daysAgo(1), prevDailyMyr: 84.96, newDailyMyr: 100.2, reason: "autopilot rollback: guard breach" },
+      }),
+    ];
+    const decisions = states.map((s) => decideCampaign(s, relativeOnly, NOW));
+    const out = selectPauseProbe(decisions, states, { o3: relativeOnly });
+    expect(out[0].action).toBe("pause");
   });
 
   it("holds a paused campaign until the probe window completes", () => {
