@@ -64,7 +64,7 @@ type PeriodResult = {
     takeaway: { revenue: number; orders: number };
     delivery: { revenue: number; orders: number };
   };
-  // Sales-channel breakdown (till / QR table / pickup app / GrabFood / Beep /
+  // Sales-channel breakdown (till / QR table / pickup app / GrabFood /
   // consignment …). Optional so a stale client survives an older API.
   sources?: PeriodSource[];
   hourly: { hour: number; revenue: number; orders: number }[];

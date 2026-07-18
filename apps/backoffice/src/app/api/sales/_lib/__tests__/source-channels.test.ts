@@ -15,7 +15,8 @@ describe("storehubSource", () => {
   it("maps the three real StoreHub channels", () => {
     expect(storehubSource("OFFLINE_PAYMENTS")).toBe("till");
     expect(storehubSource("GRABFOOD")).toBe("grabfood");
-    expect(storehubSource("BEEP_ORDERS")).toBe("beep");
+    // Beep is retired with StoreHub — folded into Other Delivery (owner call)
+    expect(storehubSource("BEEP_ORDERS")).toBe("delivery_other");
   });
 
   it("null/unknown → till (the counter default)", () => {

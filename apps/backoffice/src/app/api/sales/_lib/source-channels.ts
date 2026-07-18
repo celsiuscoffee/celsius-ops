@@ -14,8 +14,7 @@
 export type SalesSourceKey =
   | "till" // in-store counter POS (hubbo → StoreHub → pos-native eras)
   | "grabfood"
-  | "beep" // StoreHub-era Beep online orders
-  | "delivery_other" // foodpanda / shopee / other aggregators
+  | "delivery_other" // Beep (retired StoreHub-era) / foodpanda / shopee / other aggregators
   | "qr_table" // scan-&-order at the table (orders.source = web_qr)
   | "pickup_app" // customer ordering app (iOS / Android / web)
   | "consignment"; // Gyro Gastro (Nilai) & Kiddytopia (IOI Mall) settlements
@@ -23,7 +22,6 @@ export type SalesSourceKey =
 export const SOURCE_LABELS: Record<SalesSourceKey, string> = {
   till: "In-store (Till)",
   grabfood: "GrabFood",
-  beep: "Beep",
   delivery_other: "Other Delivery",
   qr_table: "QR Table",
   pickup_app: "Pickup App",
@@ -36,17 +34,17 @@ export const SOURCE_ORDER: SalesSourceKey[] = [
   "qr_table",
   "pickup_app",
   "grabfood",
-  "beep",
   "delivery_other",
   "consignment",
 ];
 
-/** StoreHub archive / live rows — keyed off the raw `channel` column. */
+/** StoreHub archive / live rows — keyed off the raw `channel` column.
+ *  Beep (BEEP_ORDERS) is retired with StoreHub — owner folds it into
+ *  Other Delivery rather than carrying a dead channel row. */
 export function storehubSource(channel: string | null | undefined): SalesSourceKey {
   const c = (channel ?? "").toLowerCase();
   if (c.includes("grab")) return "grabfood";
-  if (c.includes("beep")) return "beep";
-  if (/panda|shopee|deliver/.test(c)) return "delivery_other";
+  if (/beep|panda|shopee|deliver/.test(c)) return "delivery_other";
   return "till";
 }
 
