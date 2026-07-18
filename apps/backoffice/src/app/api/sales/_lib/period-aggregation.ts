@@ -15,13 +15,31 @@ import {
   addToChannel,
   roundChannelData,
 } from "./storehub-helpers";
+import { SOURCE_LABELS, SOURCE_ORDER, type SalesSourceKey } from "./source-channels";
 
 export type CompareChannel = "dine_in" | "takeaway" | "delivery";
 
-/** One normalized sale event from the unified source (any channel). */
-export type CompareEvent = { ts: string; total: number; channel: CompareChannel };
+/** One normalized sale event from the unified source (any channel).
+ *  `source` is the sales channel (till/grabfood/qr_table/…); `units` is the
+ *  event's transaction count — 1 per receipt, or the day's item count for
+ *  consignment settlements (daily grain, no receipts). Both optional so
+ *  older callers / tests keep working: source defaults to "till", units to 1. */
+export type CompareEvent = {
+  ts: string;
+  total: number;
+  channel: CompareChannel;
+  source?: SalesSourceKey;
+  units?: number;
+};
 
-export type CompareTxn = { total: number; hour: number; dateStr: string; channel: CompareChannel };
+export type CompareTxn = {
+  total: number;
+  hour: number;
+  dateStr: string;
+  channel: CompareChannel;
+  source: SalesSourceKey;
+  units: number;
+};
 
 export type PeriodBucket = { from: string; to: string; txns: CompareTxn[] };
 
@@ -36,9 +54,17 @@ export function bucketEventsIntoPeriods(
   for (const ev of events) {
     const dateStr = getMYTDateStr(ev.ts);
     const hour = getMYTHour(ev.ts);
+    const units = Number.isFinite(ev.units) && (ev.units as number) > 0 ? (ev.units as number) : 1;
     for (const bucket of buckets) {
       if (dateStr >= bucket.from && dateStr <= bucket.to) {
-        bucket.txns.push({ total: ev.total, hour, dateStr, channel: ev.channel });
+        bucket.txns.push({
+          total: ev.total,
+          hour,
+          dateStr,
+          channel: ev.channel,
+          source: ev.source ?? "till",
+          units,
+        });
       }
     }
   }
@@ -56,6 +82,10 @@ export type PeriodAggregate = {
     channels: ChannelData;
   }[];
   channels: ChannelData;
+  /** Sales-channel breakdown (till/QR/pickup app/GrabFood/…). Always emits
+   *  every key so the client can align rows across periods; all-zero rows
+   *  are hidden client-side. */
+  sources: { key: SalesSourceKey; label: string; revenue: number; orders: number; aov: number }[];
   hourly: { hour: number; revenue: number; orders: number }[];
   dailyTotals: {
     date: string;
@@ -93,26 +123,33 @@ export function aggregatePeriod(bucket: PeriodBucket): PeriodAggregate {
 
   const channels = emptyChannelData();
 
+  const sourceData = {} as Record<SalesSourceKey, { revenue: number; orders: number }>;
+  for (const key of SOURCE_ORDER) sourceData[key] = { revenue: 0, orders: 0 };
+
   for (const txn of bucket.txns) {
     revenue += txn.total;
-    orders += 1;
+    orders += txn.units;
 
-    addToChannel(channels, txn.channel, txn.total);
+    addToChannel(channels, txn.channel, txn.total, txn.units);
+
+    const src = sourceData[txn.source] ?? sourceData.till;
+    src.revenue += txn.total;
+    src.orders += txn.units;
 
     if (dailyMap[txn.dateStr]) {
       dailyMap[txn.dateStr].revenue += txn.total;
-      dailyMap[txn.dateStr].orders += 1;
+      dailyMap[txn.dateStr].orders += txn.units;
     }
 
     const round = getRound(txn.hour);
     if (round && roundData[round]) {
       roundData[round].revenue += txn.total;
-      roundData[round].orders += 1;
-      addToChannel(roundData[round].channels, txn.channel, txn.total);
+      roundData[round].orders += txn.units;
+      addToChannel(roundData[round].channels, txn.channel, txn.total, txn.units);
 
       if (dailyRoundMap[txn.dateStr]?.[round]) {
         dailyRoundMap[txn.dateStr][round].revenue += txn.total;
-        dailyRoundMap[txn.dateStr][round].orders += 1;
+        dailyRoundMap[txn.dateStr][round].orders += txn.units;
       }
     }
   }
@@ -124,7 +161,7 @@ export function aggregatePeriod(bucket: PeriodBucket): PeriodAggregate {
   for (const txn of bucket.txns) {
     if (txn.hour >= 0 && txn.hour <= 23) {
       hourly[txn.hour].revenue += txn.total;
-      hourly[txn.hour].orders += 1;
+      hourly[txn.hour].orders += txn.units;
     }
   }
 
@@ -146,6 +183,16 @@ export function aggregatePeriod(bucket: PeriodBucket): PeriodAggregate {
       };
     }),
     channels: roundChannelData(channels),
+    sources: SOURCE_ORDER.map((key) => {
+      const s = sourceData[key];
+      return {
+        key,
+        label: SOURCE_LABELS[key],
+        revenue: Math.round(s.revenue * 100) / 100,
+        orders: s.orders,
+        aov: s.orders > 0 ? Math.round((s.revenue / s.orders) * 100) / 100 : 0,
+      };
+    }),
     hourly: hourly.map((b, h) => ({
       hour: h,
       revenue: Math.round(b.revenue * 100) / 100,

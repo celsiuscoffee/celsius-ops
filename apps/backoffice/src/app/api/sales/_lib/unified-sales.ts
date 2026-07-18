@@ -1,5 +1,8 @@
 // Unified sales source for the sales dashboard during/after the StoreHub →
 // POS-native migration. Per outlet, merges:
+//   • Hubbo: the pre-StoreHub till archive (hubbo_sales) — Putrajaya/Shah Alam
+//     history before their Jan 2026 StoreHub start. Strictly before the
+//     handover instant; StoreHub owns everything from it.
 //   • StoreHub: the local archive (storehub_sales) for HISTORY. Pre-cutover:
 //     every row. Post-cutover: ONLY external delivery (Grab/Beep) that was still
 //     on StoreHub during the brief window before it went native — the till
@@ -13,6 +16,12 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { getTransactions, type StoreHubTransaction } from "@/lib/storehub";
 import { classifyChannel, isDeliveryOrQR } from "./storehub-helpers";
+import {
+  type SalesSourceKey,
+  storehubSource,
+  posSource,
+  pickupSource,
+} from "./source-channels";
 
 export type UnifiedSale = {
   ts: string; // ISO timestamp (UTC, with Z) — consumed by getMYTHour/getMYTDateStr
@@ -20,6 +29,7 @@ export type UnifiedSale = {
   channel: "dine_in" | "takeaway" | "delivery";
   isDeliveryQR: boolean;
   channelLabel: string; // raw channel/order_type for the channelBreakdown report
+  source: SalesSourceKey; // normalized sales channel (till/grabfood/qr/pickup/…)
   units: number; // count this event contributes to "transactions": 1 per receipt
   // (StoreHub/POS/pickup), or the day's item_count for consignment (daily grain,
   // no receipt count — so AOV reads as avg price per item for those outlets).
@@ -44,6 +54,17 @@ export type OutletSource = {
 };
 
 // (cutover routing is applied per-row in getUnifiedSalesForOutlet, not in SQL)
+
+// Hubbo → StoreHub handover instants, per outlet. Hubbo was the till before
+// StoreHub; both archives briefly overlap around the switch (SA ran both for
+// ~a day), so each system owns an exclusive half: hubbo rows STRICTLY BEFORE
+// the instant, StoreHub rows AT/AFTER it. Constants mirror the canonical
+// unified_sales VIEW (migration 085) exactly — both systems are retired, so
+// these are frozen history, safe to hardcode.
+const HUBBO_HANDOVER_AT: Record<string, Date> = {
+  "89b19c9f-b1e0-42fe-a404-6d1a472e34c5": new Date("2026-01-02T16:00:00Z"), // Putrajaya (Conezion)
+  "b3b6299e-09dc-4f4a-80ef-bbc04316d324": new Date("2026-01-20T16:00:00Z"), // Shah Alam
+};
 
 /** Map a POS-native order_type/source to the dashboard's 3 channels. */
 function posChannel(orderType: string | null, source: string | null): "dine_in" | "takeaway" | "delivery" {
@@ -114,6 +135,7 @@ export async function getUnifiedSalesForOutlet(
       channel: classifyChannel(raw),
       isDeliveryQR: isDeliveryOrQR(raw),
       channelLabel: (raw?.channel ?? "(direct)") as string,
+      source: storehubSource(raw?.channel as string | null | undefined),
       units: 1,
     });
   };
@@ -144,14 +166,52 @@ export async function getUnifiedSalesForOutlet(
       channel: r.channel_class,
       isDeliveryQR: r.is_delivery_qr ?? false,
       channelLabel: r.channel ?? "(direct)",
+      source: storehubSource(r.channel),
       units: 1,
     });
   };
 
+  // ── Hubbo PAST — the till BEFORE StoreHub (Putrajaya/Shah Alam, 2025 →
+  // Jan 2026). Without this branch any comparison reaching before the outlet's
+  // StoreHub start silently read near-zero. Strictly before the handover
+  // instant; the StoreHub query below floors at the same instant, so the
+  // brief dual-running window is counted exactly once (same split as the
+  // canonical unified_sales view). ──
+  const hubboHandover = HUBBO_HANDOVER_AT[outlet.outletId];
+  if (hubboHandover && from.getTime() < hubboHandover.getTime()) {
+    const hubboRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown }>>`
+      SELECT transaction_time AS ts, nett AS total
+      FROM hubbo_sales
+      WHERE outlet_id = ${outlet.outletId}
+        AND NOT is_refund
+        AND transaction_time >= ${from}
+        AND transaction_time <= ${to}
+        AND transaction_time < ${hubboHandover}
+    `;
+    for (const r of hubboRows) {
+      sales.push({
+        ts: toISO(r.ts),
+        total: Number(r.total) || 0, // hubbo_sales.nett is RM
+        channel: "dine_in", // counter till — no order-type data in the archive
+        isDeliveryQR: false,
+        channelLabel: "counter",
+        source: "till",
+        units: 1,
+      });
+    }
+  }
+
   // ── StoreHub PAST — local archive up to today 00:00 MYT (today is the live
   // pull below). pushArchive applies the cutover rule per row: all rows
-  // pre-cutover, delivery-only post-cutover. ──
+  // pre-cutover, delivery-only post-cutover. `status <> 'paymentCancelled'`
+  // matches the canonical revenue convention — those rows are NOT flagged
+  // is_cancelled and were being counted as revenue (741 rows / RM24.4k,
+  // verified 2026-07-18). Floors at the hubbo handover so the dual-running
+  // switchover window isn't double-counted now that hubbo is included. ──
   const archiveTo = new Date(Math.min(to.getTime(), todayStartMyt.getTime() - 1));
+  const hubboFloor = hubboHandover
+    ? Prisma.sql`AND transaction_time >= ${hubboHandover}`
+    : Prisma.empty;
   // channel_class / is_delivery_qr are materialized at import (and
   // backfilled) so this no longer ships the heavy `raw` JSONB — only
   // rows that somehow missed classification fall back to it.
@@ -162,9 +222,11 @@ export async function getUnifiedSalesForOutlet(
       FROM storehub_sales
       WHERE outlet_id = ${outlet.outletId}
         AND NOT is_cancelled
+        AND (status IS NULL OR status <> 'paymentCancelled')
         AND transaction_time IS NOT NULL
         AND transaction_time >= ${from}
         AND transaction_time <= ${archiveTo}
+        ${hubboFloor}
     `;
     for (const r of shRows) pushArchive(r);
   }
@@ -193,6 +255,7 @@ export async function getUnifiedSalesForOutlet(
         FROM storehub_sales
         WHERE outlet_id = ${outlet.outletId}
           AND NOT is_cancelled
+          AND (status IS NULL OR status <> 'paymentCancelled')
           AND transaction_time IS NOT NULL
           AND transaction_time >= ${todayStartMyt}
           AND transaction_time <= ${to}
@@ -217,6 +280,7 @@ export async function getUnifiedSalesForOutlet(
       FROM pos_orders
       WHERE outlet_id = ${outlet.loyaltyOutletId}
         AND status = 'completed'
+        AND refund_of_order_id IS NULL
         AND created_at >= ${from}
         AND created_at <= ${to}
         ${cutoverFloor}
@@ -228,6 +292,7 @@ export async function getUnifiedSalesForOutlet(
         channel: posChannel(r.order_type, r.source),
         isDeliveryQR: posIsDeliveryQR(r.order_type, r.source),
         channelLabel: r.source && r.source !== "pos" ? r.source : (r.order_type ?? "pos"),
+        source: posSource(r.order_type, r.source),
         units: 1,
       });
     }
@@ -258,6 +323,7 @@ export async function getUnifiedSalesForOutlet(
         channel: ot === "dine_in" ? "dine_in" : "takeaway",
         isDeliveryQR: true, // pickup-app / QR-table → Pickup & Delivery bucket
         channelLabel: r.source ?? "pickup",
+        source: pickupSource(r.source),
         units: 1,
       });
     }
@@ -287,6 +353,7 @@ export async function getUnifiedSalesForOutlet(
         channel: "dine_in",
         isDeliveryQR: false,
         channelLabel: r.channel === "cafe" ? "consignment" : r.channel,
+        source: "consignment",
         // No receipt count in the weekly advice — use the day's items sold as the
         // unit count, so "transactions" reflects items and AOV = avg item price.
         units: Number(r.items) || 0,

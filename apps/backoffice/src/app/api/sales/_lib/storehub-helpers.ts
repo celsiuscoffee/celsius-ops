@@ -203,16 +203,21 @@ export function emptyChannelData(): ChannelData {
   };
 }
 
-export function addToChannel(data: ChannelData, channel: "dine_in" | "takeaway" | "delivery", revenue: number) {
+export function addToChannel(
+  data: ChannelData,
+  channel: "dine_in" | "takeaway" | "delivery",
+  revenue: number,
+  units = 1,
+) {
   if (channel === "dine_in") {
     data.dineIn.revenue += revenue;
-    data.dineIn.orders += 1;
+    data.dineIn.orders += units;
   } else if (channel === "takeaway") {
     data.takeaway.revenue += revenue;
-    data.takeaway.orders += 1;
+    data.takeaway.orders += units;
   } else {
     data.delivery.revenue += revenue;
-    data.delivery.orders += 1;
+    data.delivery.orders += units;
   }
 }
 
