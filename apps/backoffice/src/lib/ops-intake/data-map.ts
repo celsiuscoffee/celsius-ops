@@ -38,6 +38,11 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
 - Companies are separate Sdn Bhds per outlet (fin_companies, fin_outlet_companies) — inter-company transfers exist; don't double-count them.
 - fin_inventory_valuations = manual COGS boundary anchors per outlet (e.g. Bukku Q1 close); the COGS engine prefers a row here over a stock count when it sits closer to the period boundary. Currently EMPTY (no anchors entered yet).
 
+## Unit economics (views, since 2026-07-18)
+- product_costs (VIEW) = cost per BASE unit (g/ml/pcs) per ingredient: avg of last 5 received PO lines (OrderItem.unitPrice ÷ ProductPackage.conversionFactor), manual override via product_cost_overrides. costed_via IN ('derived','manual','uncosted').
+- menu_margins (VIEW) = margin per menu item: Menu.sellingPrice − channel-weighted recipe cost (MenuIngredient × product_costs). ALWAYS quote uncosted_ingredients — a margin with uncosted>0 is overstated. Packaging cost NOT included (v1).
+- Recipes: "MenuIngredient" (92/92 menus covered). Consumption engine (shadow) = sales × recipes; its cron summary carries itemsUnmapped.
+
 ## Payroll & HR
 - fin_payroll_actuals = authoritative payroll: period (month date), salary, employer_stat (EPF/SOCSO/EIS), headcount, per outlet/company. ~RM77k/month total lately.
 - hr_payroll_runs / hr_payslips are sparse — don't rely on them. BrioHR (external) is the upstream source.

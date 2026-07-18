@@ -15,9 +15,18 @@ import { aggregateConsumption, reasonMarker, type ConsumptionResult, type Recipe
  * `[dayStartUtc, dayEndUtc)` must bound that MYT day. Never throws on a single
  * outlet — caller aggregates results.
  */
+// Money-received statuses for the pickup `orders` table (mirrors
+// PICKUP_PAID_STATUSES in api/sales/_lib/unified-sales.ts): a paid order is
+// prepared, so its ingredients are consumed even if not yet collected.
+const PICKUP_STATUSES = ["paid", "preparing", "ready", "collected", "completed"];
+
 export async function postOutletConsumption(opts: {
   outletId: string;
   outletName: string;
+  // POS-native slug (pos_orders.outlet_id, e.g. "outlet-sa") — Outlet.loyaltyOutletId.
+  loyaltyOutletId?: string | null;
+  // Pickup app store id (orders.store_id) — Outlet.pickupStoreId.
+  pickupStoreId?: string | null;
   date: string;
   dayStartUtc: Date;
   dayEndUtc: Date;
@@ -30,12 +39,34 @@ export async function postOutletConsumption(opts: {
   // in shadow mode no matter the flag.
   const live = opts.live && !!opts.systemUserId;
 
-  const sales = await prisma.salesTransaction.findMany({
-    where: { outletId, menuId: { not: null }, transactedAt: { gte: dayStartUtc, lt: dayEndUtc } },
-    select: { menuId: true, quantity: true },
-  });
+  // Live sales for the MYT day: POS-native + pickup app, both mapped to Menu
+  // via Menu.storehubId = item.product_id (same join as the demand model,
+  // lib/hr/demand.ts). menu_id NULL = item sold that maps to no Menu row —
+  // surfaced as itemsUnmapped instead of silently dropped.
+  const sales = await prisma.$queryRaw<{ menu_id: string | null; qty: number }[]>`
+    SELECT u.menu_id, SUM(u.qty)::float AS qty FROM (
+      SELECT m.id AS menu_id, i.quantity::float AS qty
+      FROM pos_order_items i
+      JOIN pos_orders o ON o.id = i.order_id
+      LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
+      WHERE o.outlet_id = ${opts.loyaltyOutletId ?? ""}
+        AND o.status = 'completed' AND o.refund_of_order_id IS NULL
+        AND o.created_at >= ${dayStartUtc} AND o.created_at < ${dayEndUtc}
+      UNION ALL
+      SELECT m.id, i.quantity::float
+      FROM order_items i
+      JOIN orders o ON o.id = i.order_id
+      LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
+      WHERE o.store_id = ${opts.pickupStoreId ?? ""}
+        AND o.status = ANY(${PICKUP_STATUSES})
+        AND o.created_at >= ${dayStartUtc} AND o.created_at < ${dayEndUtc}
+    ) u GROUP BY u.menu_id`;
   const salesByMenu = new Map<string, number>();
-  for (const s of sales) if (s.menuId) salesByMenu.set(s.menuId, (salesByMenu.get(s.menuId) ?? 0) + s.quantity);
+  let itemsUnmapped = 0;
+  for (const s of sales) {
+    if (s.menu_id) salesByMenu.set(s.menu_id, (salesByMenu.get(s.menu_id) ?? 0) + Number(s.qty));
+    else itemsUnmapped += Number(s.qty);
+  }
 
   const recipes = salesByMenu.size
     ? await prisma.menuIngredient.findMany({
@@ -101,6 +132,7 @@ export async function postOutletConsumption(opts: {
     alreadyPosted,
     menusSold: salesByMenu.size,
     menusWithoutRecipe,
+    itemsUnmapped,
     productsConsumed: lines.length,
     lines,
   };

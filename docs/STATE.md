@@ -290,6 +290,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 — **Custodian made SELF-DRIVING (owner: "what I wanted is for
+  this agent to do this by itself").** Skill gains an **Autonomy ladder**
+  (rung 1: code fixes/additive prod derivations/docs — do it; rung 2:
+  pre-approved patterns — tier-1 narration+exact-amount re-points, unambiguous
+  backfills, the delegated June GL correction once it reconciles to identity
+  <RM500/company; rung 3: propose-only; rung 4: human — payroll/payments,
+  arming, period close, merges) + procedure step 4b (each run BUILDS 1–3
+  backlog items end-to-end, not just reports). Routine changed weekly→**daily**
+  21:00 MYT (`trig_015cnJr3bfeXrjQ285nRjXNb`, fresh session; old weekly
+  trigger deleted — its prompt contradicted the ladder). **CAVEAT: routine
+  carries no MCP connectors (created via meta tool) — if tonight's run
+  can't reach Supabase, recreate it from the claude.ai Routines UI.** Close
+  pack (monthly) unchanged. Input-quality enforcement shipped same day:
+  receiving API persists resolved package (root cause of 71% null coverage),
+  accountant valuation pack (docs/proposals/inventory-valuation-anchors.md),
+  close-pack COGS trust gates + check 25.
+
 - 2026-07-18 — **Data-warehouse custodian expanded to the WHOLE estate**
   (owner: "this agent should be accountable for all the data"). Skill
   (`finance-warehouse` — historical path, description now estate-wide)
@@ -320,7 +337,29 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   unitPrice ÷ conversionFactor. Workstreams W1–W5 (re-point sales →
   package ratchet + product_costs → menu_margins view → variance loop →
   pre-committed arming criteria for consumption_engine). Warehouse
-  checks 21–24 added. **Next:** owner OK → build W1 (small PR).
+  checks 21–24 added. **W1 BUILT same day (owner: "merge and build"):**
+  consumption-post.ts now sources sales from pos_order_items (status
+  completed, non-refund) + pickup order_items (paid statuses), both
+  joined to Menu via storehubId (demand-model precedent); dead
+  SalesTransaction read gone; new `itemsUnmapped` field surfaces items
+  with no Menu mapping (live-verified Jul 17: 139–244 pos + 43–82 pickup
+  items/outlet, only 3–8 unmapped per stream ≈ 4%). Engine stays SHADOW.
+  Note: "Celsius Coffee Putrajaya" Outlet = the Conezion store (slug
+  outlet-con) — 3 active till outlets, all covered. **W2/W3/W4 BUILT same
+  session (owner: CONTINUE):** migration 087 APPLIED — `product_costs`
+  VIEW (cost per base unit from last-5 received PO lines ÷
+  ProductPackage.conversionFactor, override table
+  product_cost_overrides; no cron — stays clear of the 40-cron cap),
+  `menu_margins` VIEW (sellingPrice − channel-weighted recipe cost;
+  uncosted_ingredients flags overstated margins; packaging cost = v1
+  follow-up), and the W2 single-package backfill (848 ReceivingItems →
+  package coverage 29%→70%). Verified sane: pastas RM19.90–29.90 at
+  52–74% gross margin; 104/138 recipe ingredients costed (75%);
+  data-map "Unit economics" section added. **Remaining in
+  cogs-activation:** receiving-flow package default (code+UI), Catalog
+  BOM page margin surface, packaging cost in margins, W5 variance loop →
+  arming. **Next:** merge PR #970 (W1–W4); first shadow consumption
+  report after tonight's cron.
 
 - 2026-07-18 (round 7) — **Measured station capacity v2 (this branch).**
   Owner corrections while auditing Sat Jul 18: (a) "short" units clarified
