@@ -290,6 +290,27 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 — **JUNE GL CORRECTION EXECUTED — gate passed (delegated
+  rung-2; this branch, extends PR #977).** The "mixed-regime double-count"
+  was NOT bank-fed: pre-cutover pos_native "EOD Sales" journals were
+  MIRRORS of the StoreHub EOD journals (same day, near-identical amounts).
+  Applied in prod, actor=finance_warehouse, all posted+balanced,
+  period open: 23 duplicate mirrors reversed (posted reversal txns, pairs
+  net zero — RM79.6k double-count removed: SA Jun6-14, Con Jun6-7,
+  Tam Jun6-17); Conezion's EOD poster was BROKEN Jun8-17 (posted
+  RM0-654/day vs RM3.5-4.5k actual) and SA partial Jun15-17 → 13 top-up
+  journals derived from unified_sales identity with exact tender mapping
+  (card=tender'card', grab=channel'grabfood', cashqr=rest; verified to
+  the sen on Jun-20) +RM47.0k; StoreHub journals included cancelled
+  Online-method payments → 21 adjustments −RM3.4k; Tam Jun-30 draft EOD
+  posted. FINAL: GL till-income vs identity residual SA −97.90 /
+  Con −52.40 / Tam −58.40 (< RM500 gate; cutover-day boundary noise).
+  June income: Con 123,380.24 / SA 105,371.05 / Tam 79,590.37 — Conezion
+  was actually UNDERSTATED pre-fix. Data-map June caveat lifted. LATENT
+  BUG backlogged: ledger.ts reverseTransaction + posted-only reports =
+  double-remove (0 historical pairs; fix = keep original posted, key off
+  reversed_by_id; audit both callers).
+
 - 2026-07-18 — **Warehouse round 2: pickup item lines, zombie-PO proposal,
   OpsAlert sweep (this branch, extends PR #977).**
   (1) `unified_sale_items` now carries the pickup branch (migration 088,

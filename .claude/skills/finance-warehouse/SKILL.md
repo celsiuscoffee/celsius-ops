@@ -41,11 +41,21 @@ the owner-approved precedents of 2026-07-17/18:
   future identical cases apply directly, audit-stamped, counts reported.
 - Unambiguous backfills (single-candidate joins, e.g. one-package
   products) with row counts logged.
-- The June mixed-regime GL correction — owner delegated 2026-07-17 ("no
-  need my approval, just make sure it is right"): apply per-company-day
-  correcting journals ONLY once the reconstruction reconciles to identity
-  (residual < RM500/company); actor set; reversible journals; full
-  workings in the PR.
+- The June mixed-regime GL correction — owner delegated 2026-07-17,
+  **EXECUTED 2026-07-18, gate passed** (residuals SA −97.90 / Con −52.40 /
+  Tam −58.40, all < RM500). What it actually was (NOT bank-fed): pre-cutover
+  pos_native "EOD Sales" journals were MIRRORS of StoreHub rings (23 posted
+  duplicates reversed, pairs net zero, RM79.6k); Conezion's EOD poster was
+  BROKEN Jun 8–17 and SA partial Jun 15–17 (13 identity-derived top-ups,
+  +RM47.0k; tender mapping card=tender'card', grab=channel'grabfood',
+  cashqr=rest — verified to the sen on Jun-20); StoreHub journals included
+  cancelled Online-method payments (21 adjustments, −RM3.4k); Tam Jun-30
+  EOD was stuck in draft (posted). June till-income: Con 123,380.24 /
+  SA 105,371.05 / Tam 79,590.37. LATENT BUG found while applying:
+  ledger.ts reverseTransaction marks originals status='reversed' AND posts
+  a negative reversal — posted-only reports would subtract TWICE (0
+  historical pairs, never fired; fix = keep original posted, key off
+  reversed_by_id; backlogged).
 
 **Rung 3 — propose-only (draft PR / doc, never executed):**
 - Any money-record mutation outside a pre-approved pattern; destructive
