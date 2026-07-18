@@ -303,9 +303,17 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   per Friday either confirms the rule held or names who's exposed
   (~13:00–14:15) and needs relief. Assist: `friday_prayer` flag + amber
   chip + ~10-point fit penalty on Friday slots spanning 13:00–14:00.
-  Data gap: several profiles have blank GENDER (Hidayat, Ammar Roslizar,
-  Firdaus, Guraf, Farhan Ikhmal…) — they count as "attends" until HR
-  fills Male/Female on the employee page.
+  Gender data now COMPLETE for all rostered staff (owner supplied: PJ 5
+  male; SA/Tam/Nilai 10 female + Emran male; only Anwar IOI + HQ Anis/
+  Hanis blank). Round-2 owner catch on the regenerated week: rule ran
+  but had nobody to prefer — the rest placer had RESTED Aliana on
+  Friday (gender-blind WHO) and Iffa CLOSED Thursday so the clopening
+  guard blocked her from Friday opening. Fix: Friday rest slots go to
+  prayer-goers first (resting a Muslim man on Friday dissolves his
+  conflict), prayer-free staff avoid Friday rests, and THURSDAY closing
+  prefers prayer-goers so women/non-Muslims stay eligible for the
+  Friday open. Lesson: a day-local rule isn't enough — the enablers
+  (rest day, previous night's close) must also be steered.
 
 - 2026-07-18 (round 8) — **Rest days are now PER-STATION (this branch).**
   Owner caught the two failure modes in one afternoon: (a) items-share rest

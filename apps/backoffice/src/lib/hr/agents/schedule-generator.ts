@@ -615,13 +615,31 @@ export async function generateSchedule(
         remaining.set(d, (remaining.get(d) ?? 0) - 1);
       }
     }
+    // FRIDAY rest slots go to prayer-goers first (owner rule 2026-07-18):
+    // resting a Muslim man on Friday dissolves his Jumaat conflict, and keeps
+    // women/non-Muslim staff available for the prayer-window shifts. (Caught
+    // live: the gender-blind assignment rested Aliana — one of two FOH women —
+    // on the exact day the prayer rule needed her.)
+    while ((remaining.get(FRIDAY) ?? 0) > 0) {
+      const goer = flexible.find((s) => !restDayOf.has(s.id) && attendsFridayPrayer(s.gender, s.religion));
+      if (!goer) break;
+      restDayOf.set(goer.id, FRIDAY);
+      remaining.set(FRIDAY, (remaining.get(FRIDAY) ?? 0) - 1);
+    }
     for (const s of flexible) {
       if (restDayOf.has(s.id)) continue;
+      // Prayer-free staff avoid a Friday rest when any other day has room.
+      const avoidFri = !attendsFridayPrayer(s.gender, s.religion);
       const lastDow = lastRestByUser.get(s.id)?.dow;
       const day =
         openDaysList
           .filter((d) => (remaining.get(d) ?? 0) > 0)
-          .sort((a, b) => (a === lastDow ? 1 : 0) - (b === lastDow ? 1 : 0) || slack(b) - slack(a))[0] ??
+          .sort(
+            (a, b) =>
+              (avoidFri ? (a === FRIDAY ? 1 : 0) - (b === FRIDAY ? 1 : 0) : 0) ||
+              (a === lastDow ? 1 : 0) - (b === lastDow ? 1 : 0) ||
+              slack(b) - slack(a),
+          )[0] ??
         openDaysList[0] ??
         1;
       restDayOf.set(s.id, day);
@@ -723,6 +741,13 @@ export async function generateSchedule(
     // prayer-goer onto a prayer-spanning shift, an ai_note flags who needs
     // midday relief.
     const isFriday = dow(date) === FRIDAY;
+    // THURSDAY closing also matters: whoever closes Thursday night is
+    // clopening-blocked from Friday's opening — which is exactly where the
+    // prayer-free staff are needed. So Thursday's closing prefers prayer-goers
+    // too, keeping women/non-Muslims eligible to open on Friday. (Caught live:
+    // Iffa closed Thu 23:30, the clopening guard rightly refused her the Fri
+    // 07:30 open, and the opening fell to Muslim men.)
+    const isThursday = dow(date) === FRIDAY - 1;
     const prayerBound = (s: Staff) => (attendsFridayPrayer(s.gender, s.religion) ? 1 : 0);
     const fillStation = (group: Staff[], counts: Map<string, number>) => {
       const unclaimed = () => group.filter((s) => !claimed.has(s.id));
@@ -746,11 +771,13 @@ export async function generateSchedule(
         take(opening, s);
         took++;
       }
-      // CLOSING: fewest closings first; on Friday prayer-goers first — the
-      // closing window starts after Jumaat, so it's where they belong.
+      // CLOSING: fewest closings first; on Friday prayer-goers first (the
+      // closing window starts after Jumaat, so it's where they belong) — and
+      // on THURSDAY too, so prayer-free staff aren't clopening-blocked from
+      // Friday's opening.
       took = 0;
       for (const s of unclaimed().sort(
-        (a, b) => (isFriday ? prayerBound(b) - prayerBound(a) : 0) || closeKey(a) - closeKey(b),
+        (a, b) => (isFriday || isThursday ? prayerBound(b) - prayerBound(a) : 0) || closeKey(a) - closeKey(b),
       )) {
         if (took >= closeTarget) break;
         take(closing, s);
