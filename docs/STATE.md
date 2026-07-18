@@ -638,6 +638,18 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   negative-slot budget MAX_NEGATIVES_PER_CAMPAIGN=25 (Smart campaign theme
   cap) — cost-priority, seeds only fill leftover slots, 'failed' ledger rows
   retryable (were permanently blocked before).
+  **Round 7 — Tamarind rollback was a FALSE POSITIVE (channel-decomposed:
+  till FLAT in absolute RM, 2,197→2,211/day incl. Grab flat; the breach was a
+  trend-extrapolating forecast + SA running hot).** Two fixes merged: (a)
+  #972 plausibility bound — rollback only when the ringgit gap ≤ cumulative
+  descent ÷ margin × 2 (GuardSignal gains forecastDailyMyr); implausible gaps
+  hold-and-flag "another cause"; (b) owner: "for tamarind, let's just switch
+  it off so we can have a baseline" → the pause-probe gate now blocks only on
+  ABSOLUTE weakness (own raw index < 0.95); a relative-only breach
+  (fleet-adj/anchor) no longer defers the probe. Tamarind (raw 0.96)
+  qualifies → probe pauses it at the next nightly run; auto-restore +
+  verdict ~28d later. Tamarind sits at RM100.20 meanwhile (not re-cut —
+  moot once paused).
   **DEPLOY-TIMING LESSON:** the Jul 16 19:00 UTC cron ran the PRE-#947 code —
   the prod deploy of a113464 only went READY at Jul 17 00:13 UTC (~6h after
   merge; queue lag), so the autopilot's real first pass is the night of
