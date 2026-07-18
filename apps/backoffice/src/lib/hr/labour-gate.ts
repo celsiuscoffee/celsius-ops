@@ -29,7 +29,9 @@ export * from "@/lib/hr/labour-gate-lib";
 // full per-day breakdown; `forecastWeekRevenue` is the weekly-total convenience
 // wrapper the budget envelope uses. Sources are the in-house POS (`pos_orders`,
 // GrabFood included) + the pickup app (`orders`) + StoreHub (retired
-// 2026-06-17; zero after, keeps trailing windows honest during the cutover).
+// 2026-06-17; zero after, keeps trailing windows honest during the cutover)
+// + `consignment_sales` (daily uploaded gross for Nilai / IOI Mall, whose
+// sales arrive by upload rather than a live till).
 export async function forecastWeek(
   outlet: { id: string; loyaltyOutletId: string | null },
   weekStart: string,
@@ -120,6 +122,12 @@ async function revenueBetween(
           AND (transaction_time AT TIME ZONE 'Asia/Kuala_Lumpur')::date
               BETWEEN ${fromDate}::date AND ${toDate}::date
       ), 0)
+      +
+      COALESCE((
+        SELECT sum(gross) FROM consignment_sales
+        WHERE outlet_id = ${outlet.id}
+          AND biz_date BETWEEN ${fromDate}::date AND ${toDate}::date
+      ), 0)
     )::float AS revenue
   `;
   return rows[0]?.revenue ?? 0;
@@ -153,6 +161,15 @@ export async function dailyRevenueSeries(
         FROM storehub_sales
         WHERE outlet_id = ${outlet.id} AND transaction_type = 'Sale' AND COALESCE(is_cancelled, false) = false
           AND (transaction_time AT TIME ZONE 'Asia/Kuala_Lumpur')::date BETWEEN ${fromDate}::date AND ${toDate}::date
+        GROUP BY 1
+      UNION ALL
+      -- Consignment/franchise outlets (Nilai, IOI Mall): daily uploaded sales
+      -- lines — gross RM per biz_date. Without these the gate said "no revenue
+      -- history" for outlets whose sales arrive by upload, not a live till.
+      SELECT biz_date, sum(gross)
+        FROM consignment_sales
+        WHERE outlet_id = ${outlet.id}
+          AND biz_date BETWEEN ${fromDate}::date AND ${toDate}::date
         GROUP BY 1
     ) s GROUP BY d
   `;
