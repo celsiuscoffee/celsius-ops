@@ -21,8 +21,10 @@ import { classifyTermIntent, selectAutoExclusions, selectSeedExclusions, shouldA
 const NOW = new Date("2026-07-20T00:00:00Z");
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86400000);
 
-const healthy: GuardSignal = { rawIndex: 1.01, adjIndex: 1.0, anchorIndex: 1.0, breach: false };
-const breached: GuardSignal = { rawIndex: 0.91, adjIndex: 0.93, anchorIndex: 0.94, breach: true };
+const healthy: GuardSignal = { rawIndex: 1.01, adjIndex: 1.0, anchorIndex: 1.0, forecastDailyMyr: 250, breach: false };
+// Gap ~9% of RM250/day ≈ RM22.5/day — within what an RM8/day cut could
+// plausibly cause (8 ÷ 0.6 × 2 ≈ RM26.7), so rollbacks still fire on it.
+const breached: GuardSignal = { rawIndex: 0.91, adjIndex: 0.93, anchorIndex: 0.94, forecastDailyMyr: 250, breach: true };
 
 const campaign = (over: Partial<CampaignState> = {}): CampaignState => ({
   campaignId: "c1",
@@ -55,7 +57,7 @@ describe("guardFromIndexes", () => {
     expect(g.breach).toBe(true);
   });
   it("null when no forecast", () => {
-    expect(guardFromIndexes(null, [1, 1])).toEqual({ rawIndex: null, adjIndex: null, anchorIndex: null, breach: false });
+    expect(guardFromIndexes(null, [1, 1])).toEqual({ rawIndex: null, adjIndex: null, anchorIndex: null, forecastDailyMyr: null, breach: false });
   });
 
   it("breaches on cumulative anchor drift even when the trailing forecast looks fine (boiling frog)", () => {
@@ -160,6 +162,23 @@ describe("decideCampaign", () => {
     expect(d.reason).toMatch(/not cutting into weakness/);
   });
 
+  it("plausibility bound: an implausibly large gap holds instead of rolling back (the Tamarind case)", () => {
+    // Flat-but-below-trend outlet: gap 6% of RM2,300/day ≈ RM138/day, while the
+    // RM15.24/day descent could cause at most ~RM51/day at margin — hold + flag.
+    const tamarindGuard: GuardSignal = { rawIndex: 0.96, adjIndex: 0.94, anchorIndex: 0.96, forecastDailyMyr: 2300, breach: true };
+    const d = decideCampaign(
+      campaign({
+        dailyBudgetMyr: 84.96,
+        baselineDailyMyr: 100.2,
+        lastApplied: { decidedAt: daysAgo(12), prevDailyMyr: 100.2, newDailyMyr: 84.96, reason: "budget cut" },
+      }),
+      tamarindGuard,
+      NOW,
+    );
+    expect(d.action).toBe("hold");
+    expect(d.reason).toMatch(/another cause/);
+  });
+
   it("holds after a rollback, then probes UP (response proven), never re-cuts the proven level", () => {
     const rolledBack = campaign({
       dailyBudgetMyr: 100,
@@ -233,7 +252,7 @@ describe("decideCampaign — probe-up phase (spend must prove itself)", () => {
   });
 
   it("keeps a raise with proven lift and probes further, up to the baseline cap", () => {
-    const lift: GuardSignal = { rawIndex: 1.06, adjIndex: 1.05, anchorIndex: 1.04, breach: false };
+    const lift: GuardSignal = { rawIndex: 1.06, adjIndex: 1.05, anchorIndex: 1.04, forecastDailyMyr: 250, breach: false };
     const d = decideCampaign(raised(), lift, NOW);
     expect(d.action).toBe("raise");
     expect(d.newDailyMyr).toBe(100 * RAISE_CAP_OF_BASELINE); // 132.25 capped to 125

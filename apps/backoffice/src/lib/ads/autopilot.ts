@@ -97,6 +97,12 @@ export const GUARD_RAW_MIN = 0.95;       // actual/forecast below this = breach
 export const GUARD_ADJ_MIN = 0.97;       // fleet-adjusted index below this = breach
 export const ROLLBACK_HOLD_DAYS = 56;    // after a rollback, hold 8 weeks
 export const ROLLBACK_MAX_AGE_DAYS = 45; // only blame (and undo) a reasonably recent cut
+// Plausibility bound (owner-approved 2026-07-18, after the Tamarind false
+// positive): only blame the descent for a revenue gap it could plausibly have
+// caused. The cumulative cut's break-even till effect is (cut ÷ margin);
+// beyond FACTOR× that, the gap has another cause — hold and flag instead of
+// rolling back. The fixed anchor still guards genuine cumulative drift.
+export const ROLLBACK_PLAUSIBILITY_FACTOR = 2;
 export const MAX_CUTS_PER_RUN = 2;       // stagger: worst campaigns first, rest next Monday
 export const FLOOR_DAILY_MYR = Number(process.env.ADS_AUTOPILOT_FLOOR_MYR || 20);
 
@@ -146,6 +152,7 @@ export type GuardSignal = {
   rawIndex: number | null;    // actual ÷ forecast over the observation window
   adjIndex: number | null;    // rawIndex ÷ median(other outlets' rawIndex)
   anchorIndex: number | null; // current share of fleet revenue ÷ pre-descent share (cumulative-drift detector)
+  forecastDailyMyr: number | null; // outlet's forecast till revenue per day (converts % gaps to ringgit)
   breach: boolean;
 };
 
@@ -153,9 +160,10 @@ export function guardFromIndexes(
   rawIndex: number | null,
   otherIndexes: number[],
   anchorIndex: number | null = null,
+  forecastDailyMyr: number | null = null,
 ): GuardSignal {
   if (rawIndex == null || !Number.isFinite(rawIndex)) {
-    return { rawIndex: null, adjIndex: null, anchorIndex: null, breach: false };
+    return { rawIndex: null, adjIndex: null, anchorIndex: null, forecastDailyMyr: null, breach: false };
   }
   const others = otherIndexes.filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
   let adjIndex: number | null = null;
@@ -169,7 +177,13 @@ export function guardFromIndexes(
     rawIndex < GUARD_RAW_MIN ||
     (adjIndex != null && adjIndex < GUARD_ADJ_MIN) ||
     (anchor != null && anchor < ANCHOR_MIN);
-  return { rawIndex: round2(rawIndex), adjIndex: adjIndex != null ? round2(adjIndex) : null, anchorIndex: anchor, breach };
+  return {
+    rawIndex: round2(rawIndex),
+    adjIndex: adjIndex != null ? round2(adjIndex) : null,
+    anchorIndex: anchor,
+    forecastDailyMyr: forecastDailyMyr != null && Number.isFinite(forecastDailyMyr) ? round2(forecastDailyMyr) : null,
+    breach,
+  };
 }
 
 // ── Pure per-campaign decision ──────────────────────────────────────────────
@@ -303,6 +317,20 @@ export function decideCampaign(c: CampaignState, guard: GuardSignal, now: Date):
   if (guard.breach) {
     const wasCut = la?.prevDailyMyr != null && la.prevDailyMyr > la.newDailyMyr;
     if (la && wasCut && daysSince <= ROLLBACK_MAX_AGE_DAYS) {
+      // Plausibility bound: could the descent even have caused a gap this
+      // big? Cumulative depth ÷ margin is the most revenue the cut spend
+      // could have been generating; a gap far beyond it has another cause.
+      const worstIndex = Math.min(guard.rawIndex, guard.adjIndex ?? guard.rawIndex, guard.anchorIndex ?? guard.rawIndex);
+      const gapDaily = guard.forecastDailyMyr != null ? (1 - worstIndex) * guard.forecastDailyMyr : null;
+      const cumulativeCutDaily = Math.max(0, c.baselineDailyMyr - c.dailyBudgetMyr);
+      const plausibleDaily = (cumulativeCutDaily / GROSS_MARGIN) * ROLLBACK_PLAUSIBILITY_FACTOR;
+      if (gapDaily != null && cumulativeCutDaily > 0 && gapDaily > plausibleDaily) {
+        return {
+          ...base,
+          action: "hold",
+          reason: `guard breach (${guardDetail}) but the ~RM${round2(gapDaily)}/day shortfall is far beyond what the RM${round2(cumulativeCutDaily)}/day descent could cause (≤RM${round2(plausibleDaily)}/day at ${Math.round(GROSS_MARGIN * 100)}% margin) — not blaming the cut; holding and flagging for another cause`,
+        };
+      }
       return {
         ...base,
         action: "rollback",
@@ -571,10 +599,12 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
 
   const rawIndexByOutlet = new Map<string, number | null>();
   const actualNowByOutlet = new Map<string, number>();
+  const forecastDailyByOutlet = new Map<string, number | null>();
   for (const o of outlets) {
     const w = await windowActualForecast(o, guardStart, yesterday).catch(() => null);
     rawIndexByOutlet.set(o.id, w && w.forecast > 0 ? w.actual / w.forecast : null);
     actualNowByOutlet.set(o.id, w?.actual ?? 0);
+    forecastDailyByOutlet.set(o.id, w && w.forecast > 0 ? w.forecast / OBSERVE_DAYS : null);
   }
 
   // Fixed-anchor drift check: this outlet's share of fleet revenue now vs the
@@ -602,9 +632,9 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     const others = [...rawIndexByOutlet.entries()]
       .filter(([k, v]) => k !== oid && v != null)
       .map(([, v]) => v as number);
-    guards[oid] = guardFromIndexes(raw, others, anchorIndexByOutlet.get(oid) ?? null);
+    guards[oid] = guardFromIndexes(raw, others, anchorIndexByOutlet.get(oid) ?? null, forecastDailyByOutlet.get(oid) ?? null);
   }
-  const noGuard: GuardSignal = { rawIndex: null, adjIndex: null, anchorIndex: null, breach: false };
+  const noGuard: GuardSignal = { rawIndex: null, adjIndex: null, anchorIndex: null, forecastDailyMyr: null, breach: false };
 
   // Waste applied to matching but not yet to the budget: sum the measured
   // spend of exclusions applied AFTER each campaign's last budget change.
