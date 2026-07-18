@@ -308,6 +308,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   estate scope automatically (prompts defer to the skill). **Next run
   priorities:** E3 SMS pulse root-cause, June per-company-day GL
   correction, E1/E2 aging policies.
+  **COGS activation designed ("design 1", same day):**
+  `docs/design/cogs-activation.md`. Discovery flipped the premise:
+  recipes EXIST and are complete (`MenuIngredient`, 92/92 menus, 512
+  lines, 138 ingredients, clean g/ml/pcs UOMs — earlier "no recipe
+  tables" was a name-pattern discovery miss); `ProductPackage.
+  conversionFactor` exists but only 29% of 2,070 ReceivingItems carry a
+  package link; **consumption-post.ts reads DEAD SalesTransaction** (the
+  shadow engine has multiplied recipes against zero sales since April);
+  ReceivingItem has no price — unit cost derives from PO OrderItem.
+  unitPrice ÷ conversionFactor. Workstreams W1–W5 (re-point sales →
+  package ratchet + product_costs → menu_margins view → variance loop →
+  pre-committed arming criteria for consumption_engine). Warehouse
+  checks 21–24 added. **Next:** owner OK → build W1 (small PR).
 
 - 2026-07-18 (round 7) — **Measured station capacity v2 (this branch).**
   Owner corrections while auditing Sat Jul 18: (a) "short" units clarified

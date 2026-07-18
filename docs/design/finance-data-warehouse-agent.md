@@ -221,7 +221,7 @@ no recipe/BOM tables exist in the DB; unified_sale_items = pos_native only).
 
 | Decision area | Needs | Status & gap |
 | --- | --- | --- |
-| Profitability | revenue; item mix; TRUE COGS/item margin; labour; opex | revenue/labour/opex HAVE; item mix PARTIAL (no pickup lines); **COGS MISSING — blocked on recipes/BOM + unit normalisation + inventory valuations (empty)** |
+| Profitability | revenue; item mix; TRUE COGS/item margin; labour; opex | revenue/labour/opex HAVE; item mix PARTIAL (no pickup lines); COGS PARTIAL — **recipes turn out to EXIST and be complete** (MenuIngredient, 92/92 menus — the earlier "no recipe tables" was a discovery miss); activation design in `docs/design/cogs-activation.md` (blockers: consumption engine reads dead SalesTransaction; only 29% of receipts carry package conversion; costs derivable from PO lines) |
 | Cash | balances; payables; committed POs; payroll calendar; forward view | all HAVE except the forward view — a 13-week cash forecast is derivable but not computed |
 | Pricing/menu | mix; item cost; promo lift memory; waste by item | item cost MISSING (recipes); lift memory MISSING (campaign_outcomes empty); waste PARTIAL (ingredient-level) |
 | Staffing | demand curve; availability; reliability; stations | availability MISSING (0 rows; PT-loop UI in build); rest HAVE |
