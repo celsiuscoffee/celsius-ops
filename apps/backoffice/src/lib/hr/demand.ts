@@ -9,16 +9,19 @@
 // never lands in pos_orders: ~23% of Shah Alam volume with a HEAVIER kitchen
 // mix, invisible to staffing until 2026-07-17) — split by station — barista
 // (drinks + counter pastries + uncategorised) vs kitchen (cooked food) —
-// divided by serve-time-CALIBRATED station rates (see lib/hr/serve-time.ts:
-// base 8/hr barista · 6/hr kitchen, adjusted by the measured p90 serve vs the
-// 10/15-minute standards), floored at the service minimum.
+// divided by MEASURED station capacity (see lib/hr/serve-time.ts: p80 of
+// items per clocked-in head over trailing hours whose median serve MET the
+// 10/15-minute standard, planned at 85% headroom; base 8/hr barista · 6/hr
+// kitchen until an outlet has proven a sample), floored at the service
+// minimum.
 
 import { prisma } from "@/lib/prisma";
 import {
-  calibrateRate,
-  describeCalibration,
+  planningRate,
+  describeCapacity,
   BARISTA_SERVE_TARGET_MIN,
   KITCHEN_SERVE_TARGET_MIN,
+  CAPACITY_MIN_ITEMS,
 } from "./serve-time";
 
 // BASE station throughput (items one head makes + serves per hour) — starting
@@ -59,7 +62,7 @@ export type WeekDemand = {
 };
 
 export async function computeWeekDemand(
-  outlet: { loyaltyOutletId: string | null },
+  outlet: { id?: string; loyaltyOutletId: string | null },
   weekStart: string,
 ): Promise<WeekDemand> {
   const storeId = PICKUP_STORE_BY_LOYALTY[outlet.loyaltyOutletId ?? ""] ?? "";
@@ -94,67 +97,101 @@ export async function computeWeekDemand(
     GROUP BY 1, 2
   `;
 
-  // Serve-time self-calibration (the "enough manpower" feedback loop): measure
-  // the ACTUAL p90 serve over the same window, split by station — an order with
-  // any cooked item is KITCHEN-gated (15-min standard), drinks/pastry-only is a
-  // BARISTA order (10-min standard). A breach lowers that station's rate → the
-  // demand asks for more heads at the loaded hours. No human judges "enough".
-  const serveRows = await prisma.$queryRaw<Array<{ is_kitchen: boolean; n: number; p90: number | null }>>`
-    SELECT is_kitchen, count(*)::int AS n,
-           (percentile_cont(0.9) WITHIN GROUP (ORDER BY mins))::float AS p90
-    FROM (
-      SELECT EXISTS (
-               SELECT 1 FROM pos_order_items i
-               JOIN "Menu" m ON m."storehubId" = i.product_id
-               WHERE i.order_id = o.id AND m.category = ANY(${KITCHEN_CATEGORIES})
-             ) AS is_kitchen,
-             EXTRACT(EPOCH FROM (COALESCE(o.served_at, o.ready_at) - o.created_at)) / 60 AS mins
+  // Measured station capacity (the "enough manpower" feedback loop, v2 —
+  // owner correction 2026-07-17: staff work OVERLAPPING, so the 10/15-minute
+  // standards are order-latency promises, not per-item labour costs). For each
+  // trailing (day, hour): items handled ÷ heads actually CLOCKED IN per
+  // station; keep only hours with real volume where the station's median serve
+  // met its target; p80 of those = demonstrated capacity. Plan at 85% of it.
+  const capRows = outlet.id
+    ? await prisma.$queryRaw<Array<{ bar_n: number; bar_p80: number | null; kit_n: number; kit_p80: number | null }>>`
+    WITH att AS (
+      SELECT (a.clock_in AT TIME ZONE 'Asia/Kuala_Lumpur') AS ci,
+             (a.clock_out AT TIME ZONE 'Asia/Kuala_Lumpur') AS co,
+             CASE WHEN lower(COALESCE(p.position, '')) ~ 'kitchen|chef|boh' THEN 'kitchen' ELSE 'barista' END AS station
+      FROM hr_attendance_logs a
+      LEFT JOIN hr_employee_profiles p ON p.user_id = a.user_id
+      WHERE a.outlet_id = ${outlet.id} AND a.clock_out IS NOT NULL
+        AND (a.clock_in AT TIME ZONE 'Asia/Kuala_Lumpur')::date
+            BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+    ), slots AS (
+      SELECT d::date AS day, h AS hr
+      FROM generate_series(${weekStart}::date - 28, ${weekStart}::date - 1, interval '1 day') d,
+           generate_series(6, 23) h
+    ), heads AS (
+      SELECT s.day, s.hr,
+        count(*) FILTER (WHERE a.station = 'barista' AND a.ci <= (s.day + (s.hr || ':30')::time) AND a.co >= (s.day + (s.hr || ':30')::time)) AS bar_heads,
+        count(*) FILTER (WHERE a.station = 'kitchen' AND a.ci <= (s.day + (s.hr || ':30')::time) AND a.co >= (s.day + (s.hr || ':30')::time)) AS kit_heads
+      FROM slots s LEFT JOIN att a ON true
+      GROUP BY 1, 2
+    ), itm AS (
+      SELECT day, hr, sum(bar) AS bar_items, sum(kit) AS kit_items FROM (
+        SELECT (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date AS day,
+               EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
+               sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float AS bar,
+               sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float AS kit
+        FROM pos_order_items i JOIN pos_orders o ON o.id = i.order_id
+        LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
+        WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""} AND o.status = 'completed' AND o.refund_of_order_id IS NULL
+          AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+        GROUP BY 1, 2
+        UNION ALL
+        SELECT (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date,
+               EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int,
+               sum(i.quantity) FILTER (WHERE m.category IS NULL OR NOT (m.category = ANY(${KITCHEN_CATEGORIES})))::float,
+               sum(i.quantity) FILTER (WHERE m.category = ANY(${KITCHEN_CATEGORIES}))::float
+        FROM order_items i JOIN orders o ON o.id = i.order_id
+        LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
+        WHERE o.store_id = ${storeId} AND o.status = ANY(${PICKUP_STATUSES})
+          AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+        GROUP BY 1, 2
+      ) u GROUP BY 1, 2
+    ), srv AS (
+      SELECT (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date AS day,
+             EXTRACT(HOUR FROM (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur'))::int AS hr,
+             percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (COALESCE(o.served_at, o.ready_at) - o.created_at)) / 60)
+               FILTER (WHERE NOT EXISTS (SELECT 1 FROM pos_order_items i JOIN "Menu" m ON m."storehubId" = i.product_id
+                                         WHERE i.order_id = o.id AND m.category = ANY(${KITCHEN_CATEGORIES}))) AS bar_p50,
+             percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (COALESCE(o.served_at, o.ready_at) - o.created_at)) / 60)
+               FILTER (WHERE EXISTS (SELECT 1 FROM pos_order_items i JOIN "Menu" m ON m."storehubId" = i.product_id
+                                     WHERE i.order_id = o.id AND m.category = ANY(${KITCHEN_CATEGORIES}))) AS kit_p50
       FROM pos_orders o
-      WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""}
-        AND o.status = 'completed' AND o.refund_of_order_id IS NULL
-        AND COALESCE(o.served_at, o.ready_at) IS NOT NULL
+      WHERE o.outlet_id = ${outlet.loyaltyOutletId ?? ""} AND o.status = 'completed' AND o.refund_of_order_id IS NULL
         AND COALESCE(o.served_at, o.ready_at) > o.created_at
         AND COALESCE(o.served_at, o.ready_at) < o.created_at + interval '2 hours'
-        AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-            BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-      UNION ALL
-      -- Pickup app: order placed → marked ready is the customer-facing wait,
-      -- gated by the same station standard as walk-in orders.
-      SELECT EXISTS (
-               SELECT 1 FROM order_items i
-               JOIN "Menu" m ON m."storehubId" = i.product_id
-               WHERE i.order_id = o.id AND m.category = ANY(${KITCHEN_CATEGORIES})
-             ),
-             EXTRACT(EPOCH FROM (o.ready_at - o.created_at)) / 60
-      FROM orders o
-      WHERE o.store_id = ${storeId}
-        AND o.status = ANY(${PICKUP_STATUSES})
-        AND o.ready_at IS NOT NULL
-        AND o.ready_at > o.created_at
-        AND o.ready_at < o.created_at + interval '2 hours'
-        AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-            BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
-    ) s
-    GROUP BY 1
-  `;
-  const serveOf = (kitchen: boolean) => serveRows.find((r) => r.is_kitchen === kitchen);
-  const barServe = serveOf(false);
-  const kitServe = serveOf(true);
-  const barCal = calibrateRate({
-    baseRate: BARISTA_ITEMS_PER_HR, p90ServeMin: barServe?.p90 ?? null,
-    targetMin: BARISTA_SERVE_TARGET_MIN, sample: barServe?.n ?? 0, floor: 4, cap: 14,
+        AND (o.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date BETWEEN ${weekStart}::date - 28 AND ${weekStart}::date - 1
+      GROUP BY 1, 2
+    )
+    SELECT
+      count(*) FILTER (WHERE h.bar_heads > 0 AND i.bar_items >= ${CAPACITY_MIN_ITEMS.barista} AND s.bar_p50 <= ${BARISTA_SERVE_TARGET_MIN})::int AS bar_n,
+      (percentile_cont(0.8) WITHIN GROUP (ORDER BY i.bar_items / h.bar_heads)
+        FILTER (WHERE h.bar_heads > 0 AND i.bar_items >= ${CAPACITY_MIN_ITEMS.barista} AND s.bar_p50 <= ${BARISTA_SERVE_TARGET_MIN}))::float AS bar_p80,
+      count(*) FILTER (WHERE h.kit_heads > 0 AND i.kit_items >= ${CAPACITY_MIN_ITEMS.kitchen} AND s.kit_p50 <= ${KITCHEN_SERVE_TARGET_MIN})::int AS kit_n,
+      (percentile_cont(0.8) WITHIN GROUP (ORDER BY i.kit_items / h.kit_heads)
+        FILTER (WHERE h.kit_heads > 0 AND i.kit_items >= ${CAPACITY_MIN_ITEMS.kitchen} AND s.kit_p50 <= ${KITCHEN_SERVE_TARGET_MIN}))::float AS kit_p80
+    FROM heads h
+    JOIN itm i ON i.day = h.day AND i.hr = h.hr
+    LEFT JOIN srv s ON s.day = h.day AND s.hr = h.hr
+  `
+    : [];
+  const cap = capRows[0];
+  const barPlan = planningRate({
+    baseRate: BARISTA_ITEMS_PER_HR,
+    measuredP80: cap?.bar_p80 ?? null,
+    sampleHours: cap?.bar_n ?? 0,
   });
-  const kitCal = calibrateRate({
-    baseRate: KITCHEN_ITEMS_PER_HR, p90ServeMin: kitServe?.p90 ?? null,
-    targetMin: KITCHEN_SERVE_TARGET_MIN, sample: kitServe?.n ?? 0, floor: 3, cap: 8,
+  const kitPlan = planningRate({
+    baseRate: KITCHEN_ITEMS_PER_HR,
+    measuredP80: cap?.kit_p80 ?? null,
+    sampleHours: cap?.kit_n ?? 0,
   });
-  const baristaRate = barCal.rate;
-  const kitchenRate = kitCal.rate;
+  const baristaRate = barPlan.rate;
+  const kitchenRate = kitPlan.rate;
   const calibrationNote =
-    "Serve-time calibration (28d): " +
-    describeCalibration("barista/pastry", barCal, barServe?.p90 ?? null, BARISTA_SERVE_TARGET_MIN, barServe?.n ?? 0) +
+    "Measured capacity (28d, clocked-in heads, on-target hours only): " +
+    describeCapacity("barista/pastry", barPlan, BARISTA_SERVE_TARGET_MIN) +
     "; " +
-    describeCalibration("kitchen", kitCal, kitServe?.p90 ?? null, KITCHEN_SERVE_TARGET_MIN, kitServe?.n ?? 0);
+    describeCapacity("kitchen", kitPlan, KITCHEN_SERVE_TARGET_MIN);
 
   const demand = new Map<string, number>();
   const kitHeadsByHour = new Map<string, number>();
