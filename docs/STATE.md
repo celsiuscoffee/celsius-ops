@@ -189,7 +189,28 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   cross-outlet steal. The assist-candidate ranking was already
   cross-outlet-aware (user-scoped hours, `double_booked`/`over_cap`).
 
-## General rules
+- 2026-07-18 — **Sales Compare robustness pass (branch
+  `claude/sales-compare-robustness-q5peil`).** Four verified gaps in the
+  backoffice unified-sales path (`api/sales/_lib/unified-sales.ts`), all
+  fixed there so every consumer (compare, dashboard, P&L-sourced, recon)
+  inherits: (1) 741 StoreHub rows with `status='paymentCancelled'` but
+  `is_cancelled=false` (RM24,398.90, Aug 2025–Jun 2026) were counted as
+  revenue — the raw path lacked the canonical convention's status filter;
+  (2) `hubbo_sales` (70,395 rows, the pre-StoreHub till for
+  Putrajaya/Shah Alam through Jan 2026) was missing entirely — any
+  comparison reaching before the outlet's StoreHub start read near-zero;
+  raw path now mirrors the view's exclusive handover split (hubbo <
+  handover instant ≤ storehub); (3) consignment-only outlets (Nilai, IOI
+  Mall — `storehubId` NULL) were excluded by compare's outlet filter, so
+  "All Outlets" silently omitted them; (4) `computeProjection` still read
+  DEAD SalesTransaction → server projection was always null (client 7d-MA
+  fallback masked it); re-pointed to the unified_sales view with the
+  canonical revenue convention. Also: sales-channel dimension
+  (till/qr_table/pickup_app/grabfood/beep/delivery_other/consignment,
+  `_lib/source-channels.ts`) now flows through compare (`sources` per
+  period + UI breakdown table), consignment daily rows carry
+  units=item_count into orders/AOV, and partial-vs-full comparisons show
+  an aligned "first K days" pace line in the summary cards.
 
 - Typecheck before pushing — every time. CI enforces it, but catch it locally.
 - Never test against the production database; the procurement runbook's seed SQL

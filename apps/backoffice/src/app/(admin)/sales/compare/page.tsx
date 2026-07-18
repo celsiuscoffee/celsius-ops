@@ -45,6 +45,14 @@ type PeriodRound = {
   };
 };
 
+type PeriodSource = {
+  key: string;
+  label: string;
+  revenue: number;
+  orders: number;
+  aov: number;
+};
+
 type PeriodResult = {
   from: string;
   to: string;
@@ -56,6 +64,9 @@ type PeriodResult = {
     takeaway: { revenue: number; orders: number };
     delivery: { revenue: number; orders: number };
   };
+  // Sales-channel breakdown (till / QR table / pickup app / GrabFood / Beep /
+  // consignment …). Optional so a stale client survives an older API.
+  sources?: PeriodSource[];
   hourly: { hour: number; revenue: number; orders: number }[];
   dailyTotals: { date: string; revenue: number; orders: number; rounds: { key: string; revenue: number; orders: number }[] }[];
   // Server-side DOW projection — only populated when today falls inside
@@ -205,6 +216,31 @@ function getProjection(p: PeriodResult): { projected: number; projectedOrders: n
     totalDays,
     method,
   };
+}
+
+/**
+ * Like-for-like pace when a PARTIAL period (contains today) is compared
+ * against a longer one — e.g. Jul 1-18 vs the whole of June. The headline
+ * delta ("-42.3%") compares 18 days against 30 and reads as a crash; this
+ * compares the first K completed days of each period instead.
+ * Returns null when the comparison period doesn't extend beyond K days
+ * (headline is already fair) or when there's nothing to compare yet.
+ */
+function getAlignedPace(
+  p: PeriodResult,
+  prev: PeriodResult,
+): { days: number; revenue: number; orders: number; prevRevenue: number; prevOrders: number } | null {
+  const today = getMYTToday();
+  if (today < p.from || today > p.to) return null; // p is complete — headline is fair
+  const completed = p.dailyTotals.filter((d) => d.date < today);
+  const k = Math.min(completed.length, prev.dailyTotals.length);
+  if (k < 1) return null;
+  if (prev.dailyTotals.length <= k) return null; // same span — nothing extra to say
+  const sum = (arr: { revenue: number; orders: number }[]) =>
+    arr.reduce((s, d) => ({ revenue: s.revenue + d.revenue, orders: s.orders + d.orders }), { revenue: 0, orders: 0 });
+  const cur = sum(completed.slice(0, k));
+  const prv = sum(prev.dailyTotals.slice(0, k));
+  return { days: k, revenue: cur.revenue, orders: cur.orders, prevRevenue: prv.revenue, prevOrders: prv.orders };
 }
 
 const DOW_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -396,6 +432,7 @@ export default function SalesComparePage() {
   const [metric, setMetric] = useState<"revenue" | "orders" | "aov">("revenue");
   const [showRounds, setShowRounds] = useState(true);
   const [showChannels, setShowChannels] = useState(true);
+  const [showSources, setShowSources] = useState(true);
   const [showDow, setShowDow] = useState(true);
   const [showDaily, setShowDaily] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -896,6 +933,25 @@ export default function SalesComparePage() {
                         })()}
                       </div>
                     )}
+                    {prev && (() => {
+                      const pace = getAlignedPace(p, prev);
+                      if (!pace) return null;
+                      const cur = metric === "revenue" ? pace.revenue : metric === "orders" ? pace.orders : pace.orders > 0 ? pace.revenue / pace.orders : 0;
+                      const base = metric === "revenue" ? pace.prevRevenue : metric === "orders" ? pace.prevOrders : pace.prevOrders > 0 ? pace.prevRevenue / pace.prevOrders : 0;
+                      const change = pctChange(cur, base);
+                      const fmt = (v: number) => (metric === "orders" ? Math.round(v).toLocaleString() : fmtRM(Math.round(v * 100) / 100));
+                      return (
+                        <div className="mt-1.5 pt-1.5 border-t border-gray-100">
+                          <div className="text-[10px] text-gray-400">
+                            Pace · first {pace.days}d vs {prev.label}
+                          </div>
+                          <div className="text-[11px] text-gray-600 tabular-nums">
+                            {fmt(cur)} vs {fmt(base)}{" "}
+                            <span className={`font-medium ${change.color}`}>{change.label}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {proj && projVal !== null && metric !== "aov" && (
                       <div className="mt-1.5 pt-1.5 border-t border-gray-100">
                         <div className="text-[10px] text-gray-400">
@@ -1043,13 +1099,94 @@ export default function SalesComparePage() {
             )}
           </div>
 
-          {/* Channel Mix */}
+          {/* Sales Channel Mix — which pipe the order arrived through */}
+          {data.periods.some((p) => p.sources && p.sources.length > 0) && (() => {
+            // Server emits every key for every period in a stable order —
+            // take the first period's order, hide rows that are zero everywhere.
+            const template = data.periods.find((p) => p.sources && p.sources.length > 0)!.sources!;
+            const activeKeys = template
+              .map((s) => s.key)
+              .filter((key) =>
+                data.periods.some((p) => {
+                  const src = p.sources?.find((s) => s.key === key);
+                  return src && (src.revenue > 0 || src.orders > 0);
+                }),
+              );
+            if (activeKeys.length === 0) return null;
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden">
+                <button
+                  onClick={() => setShowSources(!showSources)}
+                  className="flex items-center justify-between w-full mb-3"
+                >
+                  <div className="text-left">
+                    <h2 className="text-sm font-semibold text-gray-900">Sales Channel Breakdown</h2>
+                    <p className="text-[11px] text-gray-400">Till · QR table · pickup app · GrabFood · consignment</p>
+                  </div>
+                  {showSources ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                </button>
+                {showSources && (
+                  <div className="overflow-x-auto -mx-4 px-4">
+                    <table className="w-full text-xs" style={{ minWidth: Math.max(500, data.periods.length * 130 + 120) }}>
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          <th className="text-left py-2 pr-3 font-medium text-gray-500 sticky left-0 bg-white z-10 whitespace-nowrap">Channel</th>
+                          {data.periods.map((p, i) => (
+                            <th key={i} className="text-right py-2 px-2 font-medium whitespace-nowrap" style={{ color: PERIOD_COLORS[i % PERIOD_COLORS.length] }}>
+                              {p.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeKeys.map((key) => {
+                          const label = template.find((s) => s.key === key)?.label ?? key;
+                          return (
+                            <tr key={key} className="border-b border-gray-50">
+                              <td className="py-2 pr-3 font-medium text-gray-700 sticky left-0 bg-white z-10 whitespace-nowrap">{label}</td>
+                              {data.periods.map((p, pi) => {
+                                const src = p.sources?.find((s) => s.key === key);
+                                if (!src) return <td key={pi} className="text-right py-2 px-2 text-gray-300">—</td>;
+                                const val = metric === "revenue" ? src.revenue : metric === "orders" ? src.orders : src.aov;
+                                const totalForShare = metric === "orders" ? p.summary.orders : p.summary.revenue;
+                                const shareBase = metric === "orders" ? src.orders : src.revenue;
+                                const share = metric !== "aov" && totalForShare > 0 ? (shareBase / totalForShare) * 100 : null;
+                                // Δ vs the next (older) period, same channel
+                                const nextSrc = pi < data.periods.length - 1 ? data.periods[pi + 1].sources?.find((s) => s.key === key) : undefined;
+                                const nextVal = nextSrc ? (metric === "revenue" ? nextSrc.revenue : metric === "orders" ? nextSrc.orders : nextSrc.aov) : null;
+                                const change = nextVal !== null && nextVal !== undefined ? pctChange(val, nextVal) : null;
+                                return (
+                                  <td key={pi} className="text-right py-2 px-2 tabular-nums whitespace-nowrap">
+                                    <span className="text-gray-700">
+                                      {val === 0 ? <span className="text-gray-300">—</span> : metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
+                                    </span>
+                                    {(share !== null && val !== 0) || change ? (
+                                      <span className="ml-1.5 text-[10px]">
+                                        {share !== null && val !== 0 && <span className="text-gray-400">{share.toFixed(0)}%</span>}
+                                        {change && val !== 0 && <span className={`ml-1 ${change.color}`}>{change.label}</span>}
+                                      </span>
+                                    ) : null}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Order Type Mix (dine-in / takeaway / delivery) */}
           <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden">
             <button
               onClick={() => setShowChannels(!showChannels)}
               className="flex items-center justify-between w-full mb-3"
             >
-              <h2 className="text-sm font-semibold text-gray-900">Channel Breakdown</h2>
+              <h2 className="text-sm font-semibold text-gray-900">Order Type Breakdown</h2>
               {showChannels ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
             </button>
             {showChannels && (

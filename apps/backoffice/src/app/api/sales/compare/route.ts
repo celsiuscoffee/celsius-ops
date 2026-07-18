@@ -60,10 +60,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch outlets
+    // Fetch outlets. No storehubId requirement — consignment-only outlets
+    // (Nilai, IOI Mall) have no till at all and were previously invisible to
+    // Compare; their sales come from consignment_sales inside the unified source.
     const outletWhere = outletId && outletId !== "all"
-      ? { id: outletId, storehubId: { not: null } }
-      : { storehubId: { not: null }, status: "ACTIVE" as const };
+      ? { id: outletId }
+      : { status: "ACTIVE" as const };
 
     const outlets = await prisma.outlet.findMany({
       where: outletWhere,
@@ -71,7 +73,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (outlets.length === 0) {
-      return NextResponse.json({ error: "No outlets with StoreHub configured" }, { status: 404 });
+      return NextResponse.json({ error: "No matching outlets" }, { status: 404 });
     }
 
     // Compute the global min/max date across all periods for smart merging
@@ -85,7 +87,8 @@ export async function GET(request: NextRequest) {
     const warnings: string[] = [];
 
     // Fetch each outlet's sales once across the global span from the unified source
-    // (StoreHub archive + live-today, POS-native, pickup app), then bucket per period.
+    // (hubbo + StoreHub archives, POS-native, pickup app, consignment), then
+    // bucket per period.
     const globalFromDate = new Date(globalFrom + "T00:00:00+08:00");
     const globalToDate = new Date(globalTo + "T23:59:59+08:00");
 
@@ -127,10 +130,9 @@ export async function GET(request: NextRequest) {
     // Build response for each period (async because projection compute hits the DB)
     const periods = await Promise.all(periodBuckets.map(async (bucket) => {
       // Projection — only computed when today falls inside the period.
-      // Reads from local SalesTransaction (last 28 days + same-period
-      // last month) so it's a fast addition, not a StoreHub round-trip.
-      // Returns null for past/future periods; client falls back to
-      // hiding the projection card in that case.
+      // Reads from the local unified_sales view (all channels), so it's a
+      // fast local query. Returns null for past/future periods; client
+      // falls back to hiding the projection card in that case.
       const projection = await computeProjection({
         from: bucket.from,
         to: bucket.to,
@@ -149,9 +151,9 @@ export async function GET(request: NextRequest) {
       };
     }));
 
-    // Outlets for filter dropdown
+    // Outlets for filter dropdown — every active outlet, consignment-only included
     const allOutlets = await prisma.outlet.findMany({
-      where: { storehubId: { not: null }, status: "ACTIVE" },
+      where: { status: "ACTIVE" },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
