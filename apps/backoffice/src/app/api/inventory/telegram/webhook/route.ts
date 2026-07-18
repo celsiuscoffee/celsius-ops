@@ -668,7 +668,7 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
 
   // 1. Try matching by invoice reference (most direct — invoice number in payment description)
   if (pop.invoiceReference) {
-    const byInvoiceRef = await prisma.invoice.findMany({
+    let byInvoiceRef = await prisma.invoice.findMany({
       where: {
         invoiceNumber: { equals: pop.invoiceReference, mode: "insensitive" },
         status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
@@ -676,6 +676,49 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
       include: invoiceInclude,
       take: 5,
     });
+    // The same number can sit on rows for DIFFERENT suppliers/outlets: GRNI
+    // placeholders share one INV-<n> sequence across all suppliers, and capture
+    // mistakes have stamped one vendor's number onto another's invoice (real
+    // case: INV-1844 open on both Yow Seng RM1312.30 and Unique Paper RM260.47;
+    // IVCT-00012381 on both Milk n Moka RM432 and TMM RM509.76). The receipt
+    // carries more than the number — narrow by amount, payee, and outlet before
+    // ever asking a human to pick.
+    if (byInvoiceRef.length > 1) {
+      // (a) Amount — full or deposit leg within the usual ±RM0.50 tolerance.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      const byAmt = byInvoiceRef.filter((inv: any) => {
+        const full = Math.abs(Number(inv.amount) - amount) <= 0.5;
+        const dep = inv.depositAmount != null && Math.abs(Number(inv.depositAmount) - amount) <= 0.5;
+        return full || dep;
+      });
+      if (byAmt.length > 0) byInvoiceRef = byAmt;
+    }
+    if (byInvoiceRef.length > 1 && pop.recipientName) {
+      // (b) Payee — distinctive-token overlap between the transfer's recipient
+      // and the row's supplier/vendor/claimant ("MILK & MOKA MARKETIN" shares
+      // "moka" with "Milk n Moka" but nothing with "The Milk Ministry").
+      const GENERIC = new Set(["sdn", "bhd", "the", "enterprise", "trading", "resources", "marketing", "malaysia"]);
+      const tokens = (s: string) =>
+        s.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !GENERIC.has(t));
+      const payeeTokens = new Set(tokens(pop.recipientName));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      const byPayee = byInvoiceRef.filter((inv: any) => {
+        const name = inv.supplier?.name ?? inv.vendorName ?? inv.order?.claimedBy?.name;
+        return name ? tokens(name).some((t) => payeeTokens.has(t)) : false;
+      });
+      if (byPayee.length > 0 && byPayee.length < byInvoiceRef.length) byInvoiceRef = byPayee;
+    }
+    if (byInvoiceRef.length > 1 && pop.outletHint) {
+      // (c) Outlet — same rule as the amount-path narrowing below.
+      const hint = pop.outletHint.toLowerCase();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      const byOutlet = byInvoiceRef.filter((inv: any) => {
+        const code = inv.outlet?.code?.toLowerCase();
+        const name = inv.outlet?.name?.toLowerCase();
+        return (code && hint.includes(code)) || (name && hint.includes(name));
+      });
+      if (byOutlet.length > 0) byInvoiceRef = byOutlet;
+    }
     if (byInvoiceRef.length > 0) {
       return await resolvePop(chatId, msgId, photoUrl, pop, amount, byInvoiceRef);
     }

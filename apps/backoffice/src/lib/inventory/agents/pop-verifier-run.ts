@@ -25,6 +25,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { appendInvoiceFlags, type InvoiceFlag } from "@/lib/inventory/flag-detector";
 import { recentPopLessons } from "@/lib/inventory/agents/pop-lessons";
+import { getAgentModeOrDefault, logAgentAction, touchAgentRun, type AgentMode } from "@/lib/agents/substrate";
 import {
   POP_VERIFIER_SYSTEM,
   POP_VERIFIER_VERSION,
@@ -41,11 +42,22 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const AUTOPAY_CONFIDENCE = 0.9;
 const AUTOPAY_AMOUNT_TOL = 1.0; // RM — code re-check; bigger gaps fall to "propose", not auto-pay
 
-export function popVerifierEnabled(): boolean {
-  return process.env.PROCUREMENT_POP_VERIFIER_ENABLED === "true" && !!process.env.ANTHROPIC_API_KEY;
-}
-export function popVerifierAutoPay(): boolean {
-  return process.env.PROCUREMENT_POP_VERIFIER_AUTOPAY === "true" && popVerifierEnabled();
+export const POP_VERIFIER_AGENT_KEY = "procurement_pop_verifier";
+
+/**
+ * Mode now comes from the agent registry (the `/agents` panel), not env vars —
+ * the env gates left this judge dark for its whole life (0 verdicts ever
+ * stamped) while the code sat finished. Mapping:
+ *   off    → judge never runs (matcher keeps its original dead-end behaviour)
+ *   shadow → judge runs, proposes + flags — NEVER writes money
+ *   armed  → shadow + the auto-pay path opens (still code-gated: verdict="pay"
+ *            AND confidence ≥0.9 AND amount re-match AND payee corroboration)
+ * PROCUREMENT_POP_VERIFIER_ENABLED=false remains an emergency env kill switch.
+ */
+async function popVerifierMode(): Promise<AgentMode> {
+  if (process.env.PROCUREMENT_POP_VERIFIER_ENABLED === "false") return "off";
+  if (!process.env.ANTHROPIC_API_KEY) return "off";
+  return getAgentModeOrDefault(POP_VERIFIER_AGENT_KEY, "off");
 }
 
 // Same include the webhook uses, so a rescued invoice can be paid by the normal path unchanged.
@@ -206,8 +218,10 @@ function distinctMessage(inv: any, popAmount: number, v: PopVerifierVerdict): st
  * only when armed + confident + code-corroborated; otherwise proposes or no-ops.
  */
 export async function rescueNoMatch(pop: PopForVerify, popAmount: number): Promise<NoMatchOutcome> {
-  if (!popVerifierEnabled()) return { action: "none" };
+  const mode = await popVerifierMode();
+  if (mode === "off") return { action: "none" };
   try {
+    await touchAgentRun(POP_VERIFIER_AGENT_KEY);
     const open = await prisma.invoice.findMany({
       where: { status: { in: ["PENDING", "INITIATED", "OVERDUE"] } },
       orderBy: { createdAt: "desc" },
@@ -222,14 +236,35 @@ export async function rescueNoMatch(pop: PopForVerify, popAmount: number): Promi
 
     const chosen =
       verdict.targetRef != null && verdict.targetRef <= open.length ? (open[verdict.targetRef - 1] as any) : null;
-    if (!chosen || verdict.decision === "no_action") return { action: "none" };
+
+    if (!chosen || verdict.decision === "no_action") {
+      await logAgentAction({
+        agentKey: POP_VERIFIER_AGENT_KEY,
+        kind: "verdict",
+        summary: `no_match POP RM${popAmount.toFixed(2)} → no_action (${(verdict.confidence * 100).toFixed(0)}%)`,
+        confidence: verdict.confidence,
+        meta: { scenario: "no_match", decision: verdict.decision, mode },
+      });
+      return { action: "none" };
+    }
 
     const amt = amountMatch(chosen, popAmount);
     const corro = corroborates(chosen, pop);
     const canAuto =
-      popVerifierAutoPay() && verdict.decision === "pay" && verdict.confidence >= AUTOPAY_CONFIDENCE && amt.ok && corro;
+      mode === "armed" && verdict.decision === "pay" && verdict.confidence >= AUTOPAY_CONFIDENCE && amt.ok && corro;
 
     await recordAudit(chosen.id, { scenario: "no_match", verdict, payee: payeeName(chosen), autoPaid: canAuto, popAmount });
+    await logAgentAction({
+      agentKey: POP_VERIFIER_AGENT_KEY,
+      kind: canAuto ? "auto_pay" : "propose",
+      summary: `no_match POP RM${popAmount.toFixed(2)} → ${chosen.invoiceNumber} (${payeeName(chosen)}) ${
+        canAuto ? "auto-paid" : "proposed"
+      } (${(verdict.confidence * 100).toFixed(0)}%)`,
+      refTable: "Invoice",
+      refId: chosen.id,
+      confidence: verdict.confidence,
+      meta: { scenario: "no_match", decision: verdict.decision, amountOk: amt.ok, corroborated: corro, mode },
+    });
 
     if (canAuto) return { action: "pay", invoice: chosen };
     return { action: "notify", message: proposeMessage(chosen, popAmount, verdict, amt.isDepositMatch) };
@@ -250,8 +285,10 @@ export async function judgeDuplicate(args: {
   invoice: any;
   existingPaid: { invoiceNumber: string; amount: number; paidAt: string | null; paymentRef: string | null };
 }): Promise<DuplicateOutcome> {
-  if (!popVerifierEnabled()) return { action: "none" };
+  const mode = await popVerifierMode();
+  if (mode === "off") return { action: "none" };
   try {
+    await touchAgentRun(POP_VERIFIER_AGENT_KEY);
     const candidate = toCandidate(args.invoice);
     const verdict = await judge({
       pop: args.pop,
@@ -268,13 +305,22 @@ export async function judgeDuplicate(args: {
         autoPaid: false,
         popAmount: args.popAmount,
       });
+      await logAgentAction({
+        agentKey: POP_VERIFIER_AGENT_KEY,
+        kind: "verdict",
+        summary: `duplicate POP RM${args.popAmount.toFixed(2)} on ${args.invoice.invoiceNumber} → genuine re-send, block kept (${(verdict.confidence * 100).toFixed(0)}%)`,
+        refTable: "Invoice",
+        refId: args.invoice.id,
+        confidence: verdict.confidence,
+        meta: { scenario: "duplicate_blocked", decision: verdict.decision, isGenuineDuplicate: true, mode },
+      });
       return { action: "none" }; // genuinely the same payment — keep the block
     }
 
     const amt = amountMatch(args.invoice, args.popAmount);
     const corro = corroborates(args.invoice, args.pop);
     const canAuto =
-      popVerifierAutoPay() && verdict.decision === "pay" && verdict.confidence >= AUTOPAY_CONFIDENCE && amt.ok && corro;
+      mode === "armed" && verdict.decision === "pay" && verdict.confidence >= AUTOPAY_CONFIDENCE && amt.ok && corro;
 
     await recordAudit(args.invoice.id, {
       scenario: "duplicate_blocked",
@@ -282,6 +328,17 @@ export async function judgeDuplicate(args: {
       payee: payeeName(args.invoice),
       autoPaid: canAuto,
       popAmount: args.popAmount,
+    });
+    await logAgentAction({
+      agentKey: POP_VERIFIER_AGENT_KEY,
+      kind: canAuto ? "auto_pay" : "propose",
+      summary: `duplicate POP RM${args.popAmount.toFixed(2)} on ${args.invoice.invoiceNumber} → distinct payment, ${
+        canAuto ? "auto-paid" : "proposed"
+      } (${(verdict.confidence * 100).toFixed(0)}%)`,
+      refTable: "Invoice",
+      refId: args.invoice.id,
+      confidence: verdict.confidence,
+      meta: { scenario: "duplicate_blocked", decision: verdict.decision, amountOk: amt.ok, corroborated: corro, mode },
     });
 
     if (canAuto) return { action: "pay" };

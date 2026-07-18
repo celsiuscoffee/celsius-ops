@@ -160,6 +160,27 @@ export async function runLoopWatchdog(opts: { runFailures?: string[] } = {}): Pr
     console.warn("[loop-watchdog] drafts check failed:", e instanceof Error ? e.message : e);
   }
 
+  // 6. Ambiguous POPs nobody resolved >24h — a real bank transfer sits attached
+  // to NO invoice, so the invoice still reads unpaid (double-pay risk) and the
+  // matcher gets no ground truth to learn from. Tap-to-pick in Telegram or
+  // confirm in Invoices; either closes it. (Found live: 6/6 pickers untapped.)
+  try {
+    const stalePops = await prisma.pendingPop.findMany({
+      where: { resolvedInvoiceId: null, createdAt: { lt: new Date(now - DAY) } },
+      select: { amount: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (stalePops.length > 0) {
+      const total = stalePops.reduce((s, p) => s + Number(p.amount), 0);
+      const oldestDays = Math.floor((now - stalePops[0].createdAt.getTime()) / DAY);
+      findings.push(
+        `${stalePops.length} POP(s) (RM ${total.toFixed(2)}) awaiting a match pick >24h (oldest ${oldestDays}d) — tap the Telegram picker or confirm in Invoices, else double-pay risk`,
+      );
+    }
+  } catch (e) {
+    console.warn("[loop-watchdog] pending-pop check failed:", e instanceof Error ? e.message : e);
+  }
+
   if (findings.length === 0) return { findings, alerted: false, skipped: "no-findings" };
 
   // Dedupe: identical findings-set → at most one alert per 24h. A changed set
