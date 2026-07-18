@@ -40,28 +40,46 @@ function pickOverdue(items: ServingItem[], now: number): ServingItem[] {
 
 const idKey = (list: ServingItem[]) => list.map((o) => o.id).sort().join("|");
 
-/** Returns the orders currently past the serving target (for a popup) and
- *  sounds the alarm while any remain. */
-export function useServingAlarm(items: ServingItem[]): ServingItem[] {
+const keyOf = (ids: string[]) => [...ids].sort().join("|");
+
+/** Returns the orders currently past the serving target (for a popup), a
+ *  `silence()` to mute the alarm for the CURRENT overdue set, and sounds the
+ *  alarm while any remain. Staff can silence a warble they've acknowledged
+ *  (e.g. the order was just served but its "done" event hasn't landed yet); a
+ *  genuinely NEW overdue order changes the set and rings through the mute. */
+export function useServingAlarm(items: ServingItem[]): { overdue: ServingItem[]; silence: () => void } {
   // Always read the latest items inside the interval without re-arming it.
   const itemsRef = useRef<ServingItem[]>(items);
   itemsRef.current = items;
   const lastAlarmRef = useRef(0);
   const prevOverdueRef = useRef<Set<string>>(new Set());
+  // idKey of the overdue set staff have muted; cleared when the set changes.
+  const silencedKeyRef = useRef<string | null>(null);
   const [overdue, setOverdue] = useState<ServingItem[]>([]);
 
   const evaluate = useCallback(() => {
     const now = Date.now();
     const od = pickOverdue(itemsRef.current, now);
+    const key = keyOf(od.map((o) => o.id));
     // An order that wasn't overdue a moment ago → ring straight away (don't
     // wait out the repeat window). Otherwise re-ring only every REPEAT_MS.
     const hasNew = od.some((o) => !prevOverdueRef.current.has(o.id));
     prevOverdueRef.current = new Set(od.map((o) => o.id));
-    setOverdue((prev) => (idKey(prev) === idKey(od) ? prev : od)); // avoid no-op re-renders
-    if (od.length > 0 && (hasNew || now - lastAlarmRef.current >= REPEAT_MS)) {
+    setOverdue((prev) => (idKey(prev) === key ? prev : od)); // avoid no-op re-renders
+    // The overdue set changed → any prior silence no longer applies.
+    if (key !== silencedKeyRef.current) silencedKeyRef.current = null;
+    if (od.length === 0) return;
+    const muted = silencedKeyRef.current === key;
+    if (!muted && (hasNew || now - lastAlarmRef.current >= REPEAT_MS)) {
       lastAlarmRef.current = now;
       playAlarm();
     }
+  }, []);
+
+  // Mute re-sounding for whatever's overdue right now. A new overdue order
+  // changes the key (below) and rings through.
+  const silence = useCallback(() => {
+    silencedKeyRef.current = keyOf([...prevOverdueRef.current]);
   }, []);
 
   useEffect(() => {
@@ -75,5 +93,5 @@ export function useServingAlarm(items: ServingItem[]): ServingItem[] {
   // already-late order arrives → ring + popup now, no wait for the next tick).
   useEffect(() => { evaluate(); }, [items, evaluate]);
 
-  return overdue;
+  return { overdue, silence };
 }

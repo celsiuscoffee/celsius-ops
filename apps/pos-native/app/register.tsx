@@ -299,7 +299,7 @@ export default function Register() {
     return [...pickup, ...tables];
   }, [kdsOrders, tableSlots]);
   // Orders past the 15-min serving target → drives the alarm sound + the popup.
-  const overdueOrders = useServingAlarm(servingAlarmItems);
+  const { overdue: overdueOrders, silence: silenceAlarm } = useServingAlarm(servingAlarmItems);
   const [overdueAck, setOverdueAck] = useState(false);
   const prevOverdueCount = useRef(0);
   useEffect(() => {
@@ -2169,7 +2169,7 @@ export default function Register() {
           target (pickup not Ready / table not Done), paired with the alarm
           sound. Auto-clears as orders are actioned; "Open Live Orders" jumps
           to the panel to act on them. */}
-      <Modal visible={showOverduePopup} transparent animationType="fade" onRequestClose={() => setOverdueAck(true)}>
+      <Modal visible={showOverduePopup} transparent animationType="fade" onRequestClose={() => { setOverdueAck(true); silenceAlarm(); }}>
         <View style={{ flex: 1, backgroundColor: "rgba(22,8,0,0.92)" }} className="items-center justify-center px-12">
           <View className="w-full max-w-3xl rounded-3xl p-8" style={{ backgroundColor: "#2A1206", borderWidth: 2, borderColor: "#C2452D" }}>
             <View className="flex-row items-center gap-3 mb-1">
@@ -2198,8 +2198,8 @@ export default function Register() {
               })}
             </View>
             <View className="flex-row gap-3">
-              <Pressable onPress={() => { Haptics.selectionAsync(); setOverdueAck(true); }} className="flex-1 items-center justify-center rounded-2xl py-4 border border-cream/15 active:opacity-60">
-                <Text className="text-cream/70 text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Dismiss</Text>
+              <Pressable onPress={() => { Haptics.selectionAsync(); setOverdueAck(true); silenceAlarm(); }} className="flex-1 items-center justify-center rounded-2xl py-4 border border-cream/15 active:opacity-60">
+                <Text className="text-cream/70 text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Silence</Text>
               </Pressable>
               <Pressable onPress={() => { Haptics.selectionAsync(); openOverdueHub(); }} className="flex-1 items-center justify-center rounded-2xl py-4 active:opacity-80" style={{ backgroundColor: "#C2452D" }}>
                 <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Open Live Orders</Text>

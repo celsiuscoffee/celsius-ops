@@ -26,7 +26,11 @@ import { supabase } from "./supabase";
 // cashier still needs to act on. completed / cancelled / failed drop off.
 const PICKUP_LIVE = ["paid", "sent_to_kitchen", "preparing", "ready"];
 const GRAB_LIVE = ["sent_to_kitchen", "preparing", "ready"];
-const SAFETY_REFRESH_MS = 60 * 1000; // backstop refetch if a Realtime event is dropped
+// Backstop refetch if a Realtime event is dropped (flaky venue Wi-Fi). Kept
+// short: a dropped "order done" event leaves a finished order lingering in this
+// live list, which keeps the serving-time alarm blaring for an order that's
+// already been served — so we reconcile quickly rather than every 60s.
+const SAFETY_REFRESH_MS = 15 * 1000;
 
 export type KdsSource = "pickup" | "grab";
 
