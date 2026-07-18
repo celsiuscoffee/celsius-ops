@@ -418,6 +418,8 @@ export async function gateSchedule(outletId: string, weekStart: string): Promise
     coverage.push({
       date, neededHours, scheduledHours, shortHours,
       items: Math.round(weekDemand.itemsByDow.get(dw) ?? 0),
+      barItems: Math.round(weekDemand.barItemsByDow.get(dw) ?? 0),
+      kitItems: Math.round(weekDemand.kitItemsByDow.get(dw) ?? 0),
       forecast: fc, pct: dayPct, isWeekend: df?.isWeekend, isHoliday: df?.isHoliday, holidayName: df?.holidayName,
     });
   }

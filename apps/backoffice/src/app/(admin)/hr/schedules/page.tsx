@@ -868,7 +868,15 @@ export default function SchedulesPage() {
                             title={`Forecast ${rm}${cov.isWeekend ? " · weekend" : " · weekday"}${cov.isHoliday ? ` · ${cov.holidayName ?? "public holiday"}` : ""} — daily labour %: this day's share of the week's actual roster cost (pro-rata by hours) ÷ this day's forecast. Day costs sum to the weekly total, so these average back to the Labour chip.`}
                           >
                             {rm}{cov.pct == null ? "" : ` · ${(cov.pct * 100).toFixed(0)}%`}
-                            {cov.items != null && cov.items > 0 && ` · ${cov.items}it`}
+                            {cov.items != null && cov.items > 0 && (
+                              cov.barItems != null && cov.kitItems != null && cov.barItems + cov.kitItems > 0 ? (
+                                <span title={`${cov.barItems} FOH items (drinks/pastry) + ${cov.kitItems} BOH items (kitchen), 28-day avg for this weekday incl. pickup app`}>
+                                  {" · "}F{cov.barItems}·B{cov.kitItems}it
+                                </span>
+                              ) : (
+                                ` · ${cov.items}it`
+                              )
+                            )}
                           </div>
                         );
                       })()}
