@@ -290,6 +290,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 — **Warehouse round 2: pickup item lines, zombie-PO proposal,
+  OpsAlert sweep (this branch, extends PR #977).**
+  (1) `unified_sale_items` now carries the pickup branch (migration 088,
+  applied — the follow-up promised in 085); order counts reconcile 1:1,
+  line_total is pre-discount (~4% above nett, same as all branches).
+  (2) PO aging: the 50 stale AWAITING_DELIVERY POs (RM35.6k) are ZOMBIES —
+  0 receivings, 44/50 superseded by newer completed POs from the same
+  supplier. Cancel-list proposal at `docs/proposals/po-aging-sweep.md`
+  (rung 3 — **owner approves the 44-PO cancel list**); check 29 added.
+  Root cause: standing-order receivings skip PO linkage.
+  (3) OpsAlert ledger: 782 stale alerts marked EXPIRED (day-bound >3d,
+  MENU_SNOOZED >14d) — 954→172 open; ongoing auto-expiry wired into the
+  ops-pulse cron (`expireStaleAlerts`, runs regardless of pulse mode,
+  never re-pages); check 30 added.
+
 - 2026-07-18 — **Warehouse improvements round: statutory closed, geogrid
   fixed, campaign_outcomes wired (this branch, extends PR #977).**
   (1) Check 26 residual FULLY decomposed: PCB was never missing — it lives

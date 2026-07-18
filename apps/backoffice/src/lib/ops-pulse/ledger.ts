@@ -199,6 +199,39 @@ export async function markEscalated(id: string): Promise<void> {
   });
 }
 
+// ── Auto-expiry ──────────────────────────────────────────────────────────────
+// EXPIRED is the ledger's designed terminal state for alerts whose moment has
+// passed, but nothing ever set it — so day-bound alerts accumulated as OPEN
+// forever (953 open at the 2026-07-18 sweep, ~94% of them naturally dead).
+//
+// Day-bound signals describe ONE business day (an overdue checklist, a missed
+// clock-in, a till not opened): once that day is a few days gone, the alert is
+// historical fact, not a to-do. State-bound MENU_SNOOZED gets longer — the
+// snooze may persist — but a 2-week-old snooze alert is stale information
+// either way. Expiring never causes a re-page: recordBreach dedupes on the
+// dedupeKey row regardless of status, and day-bound keys carry the date.
+const DAY_BOUND_SIGNALS = ["CHECKLIST", "NO_CLOCK_IN", "POS_NOT_OPEN", "STOCK_COUNT", "RUNAWAY"];
+const DAY_BOUND_EXPIRY_DAYS = 3;
+const STATE_BOUND_SIGNALS = ["MENU_SNOOZED"];
+const STATE_BOUND_EXPIRY_DAYS = 14;
+
+export async function expireStaleAlerts(now: Date = new Date()): Promise<number> {
+  const dayCutoff = new Date(now.getTime() - DAY_BOUND_EXPIRY_DAYS * 86_400_000);
+  const stateCutoff = new Date(now.getTime() - STATE_BOUND_EXPIRY_DAYS * 86_400_000);
+  const live = ["OPEN", "ACKED", "ESCALATED"];
+  const [day, state] = await Promise.all([
+    prisma.opsAlert.updateMany({
+      where: { status: { in: live }, signal: { in: DAY_BOUND_SIGNALS }, createdAt: { lt: dayCutoff } },
+      data: { status: "EXPIRED" },
+    }),
+    prisma.opsAlert.updateMany({
+      where: { status: { in: live }, signal: { in: STATE_BOUND_SIGNALS }, createdAt: { lt: stateCutoff } },
+      data: { status: "EXPIRED" },
+    }),
+  ]);
+  return day.count + state.count;
+}
+
 // Resolve every still-open alert assigned to a user — called when they reply to
 // a digest (e.g. "DONE"). Returns how many were closed.
 export async function resolveOpenAlertsForUser(userId: string): Promise<number> {

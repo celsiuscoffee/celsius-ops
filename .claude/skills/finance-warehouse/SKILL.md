@@ -197,6 +197,23 @@ projection for sales/cash/payroll semantics.
     - WATCH (open): June SOCSO due 2,164.25 (+43% vs May) but only
       156.60 paid by Jul-15 deadline — if no catch-up PERKESO payment by
       end-July, escalate (late-payment interest risk).
+29. PO aging ratchet: open AWAITING_DELIVERY POs >14d [50 at baseline
+    2026-07-18, RM35.6k — ALL zombies (0 receivings; 44/50 superseded by
+    newer completed POs from the same supplier). Cancel-list proposal:
+    docs/proposals/po-aging-sweep.md (rung 3, owner approves). After the
+    sweep this should trend to ~0; a rebound = the receiving flow is
+    skipping PO linkage again (same family as the packageId bug)].
+30. OpsAlert hygiene: open (OPEN/ACKED/ESCALATED) alert count [954 → 172
+    after the 2026-07-18 EXPIRED sweep. Auto-expiry now runs in the
+    ops-pulse cron (ledger.expireStaleAlerts): day-bound signals
+    (CHECKLIST/NO_CLOCK_IN/POS_NOT_OPEN/STOCK_COUNT/RUNAWAY) expire >3d,
+    MENU_SNOOZED >14d. Expiring never re-pages (dedupeKey rows persist).
+    Open count creeping past ~300 = expiry broke or a new signal needs
+    classifying as day-bound vs state-bound].
+- unified_sale_items now includes the pickup branch (migration 088,
+  applied 2026-07-18): order counts reconcile 1:1 with unified_sales;
+  line_total is PRE-discount (sums ~4% above nett — same semantic as all
+  branches).
 
 ## Run procedure
 
