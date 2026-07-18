@@ -320,7 +320,17 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   unitPrice ÷ conversionFactor. Workstreams W1–W5 (re-point sales →
   package ratchet + product_costs → menu_margins view → variance loop →
   pre-committed arming criteria for consumption_engine). Warehouse
-  checks 21–24 added. **Next:** owner OK → build W1 (small PR).
+  checks 21–24 added. **W1 BUILT same day (owner: "merge and build"):**
+  consumption-post.ts now sources sales from pos_order_items (status
+  completed, non-refund) + pickup order_items (paid statuses), both
+  joined to Menu via storehubId (demand-model precedent); dead
+  SalesTransaction read gone; new `itemsUnmapped` field surfaces items
+  with no Menu mapping (live-verified Jul 17: 139–244 pos + 43–82 pickup
+  items/outlet, only 3–8 unmapped per stream ≈ 4%). Engine stays SHADOW.
+  Note: "Celsius Coffee Putrajaya" Outlet = the Conezion store (slug
+  outlet-con) — 3 active till outlets, all covered. **Next:** W3
+  product_costs + W2 package ratchet; first shadow run report after
+  tonight's cron.
 
 - 2026-07-18 (round 7) — **Measured station capacity v2 (this branch).**
   Owner corrections while auditing Sat Jul 18: (a) "short" units clarified
