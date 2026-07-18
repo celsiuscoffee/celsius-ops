@@ -455,10 +455,8 @@ export async function generateSchedule(
   // This costs nothing — every FT still works 6 days — it only rebalances
   // coverage across the week, fixing the old flat/inverted spread.
   const openDaysList = [0, 1, 2, 3, 4, 5, 6].filter((d) => daysOpen.has(d));
-  const D = openDaysList.length || 1;
   const N = sortedFT.length;
   const dayItems = (d: number) => Math.max(itemsByDow.get(d) ?? 0, 0);
-  const maxItems = openDaysList.length ? Math.max(...openDaysList.map(dayItems)) : 0;
   // Max rests on any one day: don't dip the crew below the service floor — but
   // never below 1, or a small crew (N ≤ floor, e.g. a 3-FT outlet) has NO legal
   // rest slot anywhere and the fallback would pile every rest onto the same day.
@@ -503,38 +501,50 @@ export async function generateSchedule(
     }
   }
 
-  // Target rest-count per open day.
+  // Target rest-count per open day — placed to MINIMIZE the holes PT would
+  // have to buy back. (Owner catch, 2026-07-18: the old items-share spread
+  // rested two people on the #4-busiest day and then spent the whole PT
+  // envelope refilling that SAME day while Saturday stayed short — resting a
+  // sunk FT and buying a part-timer for the identical hours is paying twice.)
+  // Greedy: each rest goes to the day with the most SURPLUS man-hours —
+  // (FT still working that day × 7.5h) minus the demand model's man-hours
+  // needed — so rests consume slack instead of creating PT demand. Ties break
+  // to the quieter-items day. Rest placement and PT filling now optimise the
+  // same objective, from the same demand model.
   const restTarget = new Map<number, number>(openDaysList.map((d) => [d, 0]));
-  const spread = openDaysList.reduce((s, d) => s + (maxItems - dayItems(d)), 0);
-  if (spread <= 0 || N === 0) {
-    // No usable demand signal → even round-robin (prior behaviour).
-    openDaysList.forEach((d, i) => restTarget.set(d, Math.floor(N / D) + (i < N % D ? 1 : 0)));
-  } else {
-    // Rest weight ∝ how far BELOW the busiest day each day sits, plus a small
-    // smoothing so even a peak day can take the odd rest.
-    const smooth = maxItems * 0.1;
-    const weight = (d: number) => maxItems - dayItems(d) + smooth;
-    const wsum = openDaysList.reduce((s, d) => s + weight(d), 0);
-    const share = openDaysList.map((d) => ({ d, v: (N * weight(d)) / wsum }));
-    let placed = 0;
-    for (const x of share) {
-      const r = Math.min(restCap, Math.floor(x.v));
-      restTarget.set(x.d, r);
-      placed += r;
+  const SHIFT_H = 7.5;
+  const needHoursOf = (dwN: number): number => {
+    let s = 0;
+    for (let h = openH; h < closeH; h++) {
+      const kit = weekDemand.kitHeadsByHour.get(`${dwN}:${h}`) ?? 0;
+      const bar =
+        Math.max(weekDemand.barHeadsByHour.get(`${dwN}:${h}`) ?? SERVICE_FLOOR, SERVICE_FLOOR - kit) +
+        bufferHeads(dwN, h);
+      s += kit + bar;
     }
-    // Largest-remainder: hand out the leftover rests, quietest day first.
-    share.sort((a, b) => b.v - Math.floor(b.v) - (a.v - Math.floor(a.v)) || dayItems(a.d) - dayItems(b.d));
-    let leftover = N - placed;
-    for (let pass = 0; pass < 3 && leftover > 0; pass++) {
-      for (const x of share) {
-        if (leftover <= 0) break;
-        if ((restTarget.get(x.d) ?? 0) < restCap) {
-          restTarget.set(x.d, (restTarget.get(x.d) ?? 0) + 1);
-          leftover--;
+    return s;
+  };
+  const needH = new Map<number, number>(openDaysList.map((d) => [d, needHoursOf(d)]));
+  {
+    const slack = (d: number) => (N - (restTarget.get(d) ?? 0)) * SHIFT_H - (needH.get(d) ?? 0);
+    for (let i = 0; i < N; i++) {
+      let best: number | null = null;
+      for (const d of openDaysList) {
+        if ((restTarget.get(d) ?? 0) >= restCap) continue;
+        if (best == null || slack(d) > slack(best) || (slack(d) === slack(best) && dayItems(d) < dayItems(best))) {
+          best = d;
         }
       }
+      if (best == null) best = openDaysList[i % openDaysList.length]; // every day capped — overflow round-robin
+      restTarget.set(best, (restTarget.get(best) ?? 0) + 1);
     }
   }
+  notes.push(
+    "Rest placement (slack-greedy vs demand): " +
+      openDaysList
+        .map((d) => `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]} ${restTarget.get(d) ?? 0}r/${Math.round(needH.get(d) ?? 0)}h-need`)
+        .join(", "),
+  );
 
   // Fairness guarantee: if anyone hasn't had a weekend rest in the last 4 weeks,
   // make sure a weekend rest slot exists to rotate to them — shift one rest from

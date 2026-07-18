@@ -136,6 +136,10 @@ function formatDay(date: string) {
   return String(d.getUTCDate());
 }
 
+function fmtH(h: number): string {
+  return h % 1 === 0 ? String(h) : h.toFixed(1);
+}
+
 export default function SchedulesPage() {
   const [outlets, setOutlets] = useState<{ id: string; name: string }[]>([]);
   const [selectedOutlet, setSelectedOutlet] = useState<string>("");
@@ -183,6 +187,7 @@ export default function SchedulesPage() {
   const [generating, setGenerating] = useState(false);
   const [fillMode, setFillMode] = useState<"tight" | "mid" | "safe">("tight");
   const [assistDate, setAssistDate] = useState<string | null>(null); // per-day Assist modal
+  const [whyDate, setWhyDate] = useState<string | null>(null); // per-day "why this staffing" popover
   // Per-day demand coverage (same model as AI Fill / Assist) so the cell "+ Add"
   // picker can lead with the shift the day is actually short on — filtered to
   // the clicked person's station (a kitchen hand sees kitchen gaps, a barista
@@ -259,6 +264,54 @@ export default function SchedulesPage() {
     const m = new Map<string, Shift>();
     (grid?.shifts || []).forEach((s) => m.set(`${s.user_id}:${s.shift_date}`, s));
     return m;
+  }, [grid]);
+
+  // Per-day staffing composition — decomposes the opaque "75h total" into
+  // FT + rover + PT (and who's resting), so the day headers explain themselves
+  // instead of looking arbitrary (owner, 2026-07-18: "the math does not make
+  // sense"). FT hours are sunk; rover/PT are the visible add-ons.
+  type DayComp = {
+    ftH: number; roverH: number; ptH: number; ptSuggestedH: number;
+    ftCount: number; resting: string[]; rovers: string[];
+    pts: Array<{ name: string; suggested: boolean }>;
+  };
+  const dayComposition = useMemo(() => {
+    const map = new Map<string, DayComp>();
+    if (!grid) return map;
+    const userOf = new Map(grid.users.map((u) => [u.id, u]));
+    const isRoverPos = (p: string | null | undefined) => {
+      const s = (p ?? "").trim().toLowerCase();
+      return s === "manager" || s === "area manager" || s === "head of department" || s === "barista lead";
+    };
+    const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+    for (const s of grid.shifts) {
+      const entry = map.get(s.shift_date) ?? {
+        ftH: 0, roverH: 0, ptH: 0, ptSuggestedH: 0, ftCount: 0, resting: [], rovers: [], pts: [],
+      };
+      const u = userOf.get(s.user_id);
+      const nm = u ? (u.fullName || u.name).split(" ")[0] : "?";
+      if (s.start_time.slice(0, 5) === "00:00") {
+        entry.resting.push(nm);
+        map.set(s.shift_date, entry);
+        continue;
+      }
+      const h = Math.max(0, (toMin(s.end_time) - toMin(s.start_time) - (s.break_minutes || 0)) / 60);
+      const p = u?.profile;
+      if (isRoverPos(p?.position)) {
+        entry.roverH += h;
+        entry.rovers.push(nm);
+      } else if (p?.employment_type === "part_time" || p?.employment_type === "intern") {
+        entry.ptH += h;
+        const suggested = s.notes === "pt_suggestion";
+        if (suggested) entry.ptSuggestedH += h;
+        entry.pts.push({ name: nm, suggested });
+      } else {
+        entry.ftH += h;
+        entry.ftCount += 1;
+      }
+      map.set(s.shift_date, entry);
+    }
+    return map;
   }, [grid]);
 
   // Index leaves by (user_id, date)
@@ -848,11 +901,74 @@ export default function SchedulesPage() {
                   const dayHours = hoursByDate.get(d) ?? 0;
                   const dayLabel = dayHours === 0 ? "—" : dayHours % 1 === 0 ? `${dayHours}h` : `${dayHours.toFixed(1)}h`;
                   return (
-                    <th key={d} className={`p-2 text-center font-medium min-w-[120px] ${hol ? "bg-red-50" : "bg-muted/50"}`}>
+                    <th key={d} className={`relative p-2 text-center font-medium min-w-[120px] ${hol ? "bg-red-50" : "bg-muted/50"}`}>
                       <div className="text-xs text-muted-foreground">{DAY_NAMES[i]}</div>
                       <div className="text-base">{formatDay(d)}</div>
                       {hol && <div className="text-[9px] text-red-600 truncate" title={hol.name}>PH: {hol.name}</div>}
                       <div className="mt-1 text-[10px] font-semibold tabular-nums text-gray-600">{dayLabel} total</div>
+                      {(() => {
+                        // Composition line: where the total comes from. Click → Why panel.
+                        const c = dayComposition.get(d);
+                        if (!c) return null;
+                        const parts = [
+                          c.ftH > 0 ? `FT${fmtH(c.ftH)}` : null,
+                          c.roverH > 0 ? `RV${fmtH(c.roverH)}` : null,
+                          c.ptH > 0 ? `PT${fmtH(c.ptH)}` : null,
+                        ].filter(Boolean);
+                        if (parts.length === 0) return null;
+                        return (
+                          <button
+                            onClick={() => setWhyDate(whyDate === d ? null : d)}
+                            className="text-[9px] tabular-nums text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
+                            title="Why is this day staffed this way? Click for the breakdown."
+                          >
+                            {parts.join("+")}
+                          </button>
+                        );
+                      })()}
+                      {whyDate === d && (() => {
+                        const c = dayComposition.get(d);
+                        const cov = gate?.coverage?.find((x) => x.date === d);
+                        const ranked = [...(gate?.coverage ?? [])]
+                          .filter((x) => (x.items ?? 0) > 0)
+                          .sort((a, b) => (b.items ?? 0) - (a.items ?? 0));
+                        const rank = ranked.findIndex((x) => x.date === d) + 1;
+                        return (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setWhyDate(null)} />
+                            <div className="absolute left-1/2 z-50 mt-1 w-72 -translate-x-1/2 rounded-lg border bg-white p-3 text-left text-[11px] font-normal shadow-lg">
+                              <div className="mb-1.5 font-semibold">Why this staffing?</div>
+                              <ul className="space-y-1 text-muted-foreground">
+                                {cov?.items ? (
+                                  <li>
+                                    📈 {cov.items} items{rank > 0 ? ` — #${rank} busiest day` : ""}
+                                    {cov.barItems != null && cov.kitItems != null ? ` (FOH ${cov.barItems} · BOH ${cov.kitItems})` : ""}
+                                  </li>
+                                ) : null}
+                                <li>
+                                  👥 {c?.ftCount ?? 0} FT working
+                                  {c?.resting.length ? ` · resting: ${c.resting.join(", ")}` : " · nobody resting"}
+                                </li>
+                                {c?.rovers.length ? <li>🔄 Rover {c.rovers.join(", ")} (+{fmtH(c.roverH)}h — fixed 2-day rotation)</li> : null}
+                                {c?.pts.length ? (
+                                  <li>
+                                    🧩 PT {c.pts.map((p) => p.name + (p.suggested ? "?" : "")).join(", ")} (+{fmtH(c.ptH)}h
+                                    {c.ptSuggestedH > 0 ? `, ${fmtH(c.ptSuggestedH)}h awaiting confirm` : ""})
+                                  </li>
+                                ) : null}
+                                {cov && cov.shortHours > 0 ? (
+                                  <li className="font-medium text-red-600">⚠ Short {cov.shortHours}h vs demand — fill via ✨ Assist or + Add</li>
+                                ) : (
+                                  <li className="text-green-600">✓ Demand covered</li>
+                                )}
+                                <li className="pt-1 text-[10px] leading-snug">
+                                  Rests sit on quiet days (FT is sunk — everyone works 6 days); the rover rotates 2 fixed days; PT patches the item-holes the rests leave, within the RM envelope. Daily hours track items only at the margin — shifts move in 7.5h blocks.
+                                </li>
+                              </ul>
+                            </div>
+                          </>
+                        );
+                      })()}
                       {(() => {
                         const g = gate;
                         const cov = g?.coverage?.find((c) => c.date === d);
