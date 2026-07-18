@@ -290,6 +290,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-18 — **POP matcher: found the never-armed QA loop, armed it (PR #986
+  branch).** Owner asked "is the matching agent improving itself?" — answer was
+  NO: the pop-verifier (LLM judge at matcher dead-ends, pop-verifier-run.ts) had
+  0 verdicts ever (env gate never set; registry `procurement_pop_verifier` mode
+  off), pop-lessons was behind a second never-set env, and the third dead-end
+  (ambiguous → Telegram picker) had no coverage at all — 6/6 PendingPops
+  untapped/rotting. Fixed: verifier mode now read from agent_registry
+  (shadow=propose+flag, armed=code-gated auto-pay; env =false stays as kill),
+  registry flipped off→shadow in prod, every verdict logged to agent_actions
+  (measurable improvement), pop-lessons default ON + learns from resolved
+  PendingPops (finance's picker choices), loop-watchdog check #6 pings owner on
+  PendingPops unresolved >24h. Same PR: number-match narrowing by
+  amount/payee/outlet (the "multiple matching invoices" root fix). Still open:
+  6 unresolved PendingPops need human picks; TMM/MnM cross-stamped invoice
+  numbers (IVCT-00012381 on a TMM row, 1-15150 on an MnM row) need photo-read
+  corrections; Tier-1 phantom reverts (~RM2,370) await owner sign-off.
+
 - 2026-07-18 (round 9) — **Friday-prayer staffing rule (Jumaat).** Owner:
   "put opening female on friday to run friday prayer. including non
   muslim. currently only gulaf is non-muslim." `gender` and `religion`
