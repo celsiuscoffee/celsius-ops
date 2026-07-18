@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
 import { runTriggeredLoops, autoMeasureDueRounds, runRoundGapDaily, autoPauseUnderperformers } from "@/lib/loyalty/loop-engine";
+import { runWeeklyReport } from "@/lib/loyalty/weekly-report";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -21,7 +22,13 @@ export async function GET(req: NextRequest) {
     const autoPaused = await autoPauseUnderperformers();
     const triggered = await runTriggeredLoops();
     const roundGap = await runRoundGapDaily(); // per-segment promo loop (its own mechanic)
-    return NextResponse.json({ triggered, roundGap, measured: measured.measured, autoPaused });
+    // Mondays (MYT): send the owner's weekly Telegram scorecard AFTER the
+    // day's measure/kill/send so it reads the freshest numbers. Rides this
+    // cron on purpose — the repo runs a hard Vercel cron budget
+    // (vercel-crons.test.ts), so the report doesn't get its own schedule.
+    const isMondayMyt = new Date(Date.now() + 8 * 3600000).getUTCDay() === 1;
+    const weeklyReport = isMondayMyt ? await runWeeklyReport().catch((e) => ({ ok: false, skipped: e instanceof Error ? e.message : "failed" })) : undefined;
+    return NextResponse.json({ triggered, roundGap, measured: measured.measured, autoPaused, ...(weeklyReport ? { weeklyReport } : {}) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "loops-trigger failed";
     return NextResponse.json({ error: msg }, { status: 500 });

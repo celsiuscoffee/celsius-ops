@@ -61,10 +61,6 @@
       "schedule": "0 1 * * *"
     },
     {
-      "path": "/api/cron/loops-weekly-report",
-      "schedule": "0 2 * * 1"
-    },
-    {
       "path": "/api/cron/finance-eod",
       "schedule": "0 20 * * *"
     },
