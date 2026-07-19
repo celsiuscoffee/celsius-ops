@@ -117,6 +117,46 @@ export const SETTLE_HOLD_DAYS = 90;      // proven optimum: re-search only quart
 // Gross margin used to state each move's break-even in the reason strings.
 export const GROSS_MARGIN = Number(process.env.ADS_GROSS_MARGIN || 0.6);
 
+// ── Cash target (owner 2026-07-19) ──────────────────────────────────────────
+// "increase 7k monthly cash (either budget cutting or increase sales, both
+// can contribute)". Scored every night and logged with the run:
+//   cuts side  = (pre-descent fleet budget − current fleet budget) × 30
+//   sales side = (recent fleet till/day − pre-descent anchor till/day)
+//                × margin × 30  — a NET drift measure, not attribution:
+//                seasonality and other loops (e.g. the Grab holdout) move it
+//                too, but net cash is exactly the owner's objective.
+export const CASH_TARGET_MONTHLY_MYR = Number(process.env.ADS_CASH_TARGET_MONTHLY_MYR || 7000);
+// Fleet daily budget before the descent began (Jul 5: Tam 100.20 + PJ 100 + SA 100).
+export const SPEND_BASELINE_DAILY_MYR = Number(process.env.ADS_SPEND_BASELINE_DAILY_MYR || 300.2);
+
+export type CashScoreboard = {
+  cutsMonthlyMyr: number;      // spend no longer leaving the account
+  salesMonthlyMyr: number | null; // margin on till drift vs the pre-descent anchor (null = no anchor yet)
+  netMonthlyMyr: number;
+  targetMonthlyMyr: number;
+  pctOfTarget: number;
+};
+
+export function cashScoreboard(
+  currentFleetDailyBudgetMyr: number,
+  anchorFleetDailyRevenueMyr: number | null,
+  recentFleetDailyRevenueMyr: number | null,
+): CashScoreboard {
+  const cuts = round2(Math.max(0, SPEND_BASELINE_DAILY_MYR - currentFleetDailyBudgetMyr) * 30);
+  const sales =
+    anchorFleetDailyRevenueMyr != null && anchorFleetDailyRevenueMyr > 0 && recentFleetDailyRevenueMyr != null
+      ? round2((recentFleetDailyRevenueMyr - anchorFleetDailyRevenueMyr) * GROSS_MARGIN * 30)
+      : null;
+  const net = round2(cuts + (sales ?? 0));
+  return {
+    cutsMonthlyMyr: cuts,
+    salesMonthlyMyr: sales,
+    netMonthlyMyr: net,
+    targetMonthlyMyr: CASH_TARGET_MONTHLY_MYR,
+    pctOfTarget: Math.round((net / CASH_TARGET_MONTHLY_MYR) * 100),
+  };
+}
+
 // Waste-matched cuts (owner 2026-07-16: "remove the keywords that are not
 // worth, and reduce the budget based on the keywords removed... this way we
 // reduce the risk of reducing budget for keywords that potentially increase
@@ -579,6 +619,7 @@ export type AutopilotRunResult = {
   decisions: Array<AutopilotDecision & { applied?: boolean; error?: string }>;
   exclusions: Array<ExclusionCandidate & { applied?: boolean; error?: string }>;
   guards: Record<string, GuardSignal>;
+  scoreboard?: CashScoreboard;
 };
 
 export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunResult> {
@@ -659,6 +700,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
   // 28 days before the first ledgered budget change (pre-descent). Catches
   // slow cumulative damage the trailing forecast normalizes away.
   const anchorIndexByOutlet = new Map<string, number | null>();
+  let anchorFleetDaily: number | null = null; // pre-descent fleet till/day (cash-scoreboard baseline)
   if (firstChangeAt && outlets.length > 1) {
     const aEnd = addDays(mytDate(firstChangeAt), -1);
     const aStart = addDays(aEnd, -(ANCHOR_WINDOW_DAYS - 1));
@@ -668,6 +710,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     }
     const anchorTotal = [...anchorActual.values()].reduce((s, v) => s + v, 0);
     const nowTotal = [...actualNowByOutlet.values()].reduce((s, v) => s + v, 0);
+    anchorFleetDaily = anchorTotal > 0 ? anchorTotal / ANCHOR_WINDOW_DAYS : null;
     for (const o of outlets) {
       const aShare = anchorTotal > 0 ? (anchorActual.get(o.id) ?? 0) / anchorTotal : 0;
       const nShare = nowTotal > 0 ? (actualNowByOutlet.get(o.id) ?? 0) / nowTotal : 0;
@@ -865,16 +908,31 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     // exclude → cut, same run) — see the block above the state build.
   }
 
+  // Cash scoreboard vs the owner's RM7k/mo target. Fleet budget AFTER this
+  // run's applied actions; a paused campaign spends RM0 whatever its budget.
+  const fleetDailyBudget = states.reduce((sum, s) => {
+    const d = decisions.find((x) => x.campaignId === s.campaignId);
+    const paused = s.isPaused ? d?.action !== "restore" : d?.action === "pause" && d?.applied !== false;
+    if (paused) return sum;
+    const level = d && d.applied !== false && d.newDailyMyr != null ? d.newDailyMyr : s.dailyBudgetMyr;
+    return sum + level;
+  }, 0);
+  const monitored = outlets.length; // only guard-mapped outlets feed the sales side
+  const recentFleetDaily =
+    monitored > 0 ? [...actualNowByOutlet.values()].reduce((s, v) => s + v, 0) / OBSERVE_DAYS : null;
+  const scoreboard = cashScoreboard(fleetDailyBudget, anchorFleetDaily, recentFleetDaily);
+
   const acted = decisions.filter((d) => d.action !== "hold");
   await logAgentAction({
     agentKey: AGENT_KEY,
     kind: mode === "armed" ? "budget_change" : "proposal",
     summary:
       `${mode}: ${acted.length ? acted.map((d) => `${d.campaignName} ${d.action}${d.newDailyMyr != null ? `→RM${d.newDailyMyr}/day` : ""}`).join("; ") : "all campaigns hold"}; ` +
-      `${exclusions.length} term exclusion(s)`,
+      `${exclusions.length} term exclusion(s) | cash vs RM${CASH_TARGET_MONTHLY_MYR} target: cuts RM${scoreboard.cutsMonthlyMyr}/mo` +
+      `${scoreboard.salesMonthlyMyr != null ? ` + till Δ RM${scoreboard.salesMonthlyMyr}/mo` : ""} = RM${scoreboard.netMonthlyMyr}/mo (${scoreboard.pctOfTarget}%)`,
     refTable: "ads_budget_change",
-    meta: { decisions, exclusions: exclusions.slice(0, 30), guards },
+    meta: { decisions, exclusions: exclusions.slice(0, 30), guards, scoreboard },
   });
 
-  return { mode, decisions, exclusions, guards };
+  return { mode, decisions, exclusions, guards, scoreboard };
 }
