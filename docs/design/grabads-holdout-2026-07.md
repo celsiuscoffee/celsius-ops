@@ -27,6 +27,44 @@ actual Grab item mix (`MenuIngredient` × `SupplierProduct` ÷ package factor),
 
 Pausing **adds cash** whenever the *true incremental* ROAS < break-even (~2.2×).
 
+## Cash framework — does pausing improve cash?
+
+The whole decision in one picture. Grab revenue is booked gross, but Grab takes
+commission + ads before you see it, then COGS eats more. Worked example (COGS
+~24% measured on the Grab mix):
+
+| | **Ads ON** | **Ads OFF** |
+|---|---|---|
+| Revenue | 10,000 | 6,000 |
+| − Grab commission 30% | −3,000 | −1,800 |
+| − Grab ads (~23% / 0) | −2,300 | 0 |
+| − COGS ~24% | −2,400 | −1,440 |
+| **= Cash** | **~2,300** | **~2,760** |
+
+**Ads OFF wins by ~RM460 even though revenue fell RM4,000.** If the ad load runs
+heavier (e.g. 30%+) or COGS is higher, ads-ON flips **negative** while ads-OFF
+stays positive — the gap only widens.
+
+Why: the extra RM4,000 of revenue the ad bought cost `1,200 commission + 960
+COGS + 2,300 ad = RM4,460` to earn RM4,000 → that incremental block **loses
+cash**. Cutting it keeps the money.
+
+**Break-even rule (one line):**
+
+> Cash improves whenever the ad's true ROAS < **1 ÷ (1 − commission − COGS) ≈ 2.2×**
+> (30% commission + 24% COGS → 46% contribution → break-even 2.17×).
+
+Equivalently: `net cash from pausing = ad spend − incremental revenue × contribution`,
+and `incremental revenue = ROAS × ad spend`, so it all reduces to the ROAS-vs-2.2×
+test. In the worked example the implied ROAS is `4,000 ÷ 2,300 = 1.74×` → below
+2.2× → pausing wins.
+
+**The holdout measures the one unknown:** how much revenue *actually* falls when
+ads go off (= how incremental the ad was, i.e. the "10k → 6k" drop). Below ~2.2×
+ROAS → pausing improves cash. Use **actual billed** ad spend (not the daily-budget
+cap) for the ad line — Grab only bills for ads it delivers (e.g. Shah Alam's RM50/day
+budget billed only ~RM30/day).
+
 ## Locked pre-pause baseline (Jun 17 – Jul 14, day-of-week matched)
 
 Avg Grab gross by weekday (RM):
