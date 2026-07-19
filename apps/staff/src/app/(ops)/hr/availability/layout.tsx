@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 
-// Availability module not yet opened to regular staff — only OWNER/ADMIN can preview.
+// Open to all logged-in staff — part-timers declare their weekly pattern and
+// blockout dates here; the AI scheduler fills strictly inside them.
 export default async function AvailabilityLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
-  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+  if (!session) {
     redirect("/hr");
   }
   return <>{children}</>;

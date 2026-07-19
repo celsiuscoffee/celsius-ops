@@ -1,9 +1,9 @@
 "use client";
 
 import { useFetch } from "@/lib/use-fetch";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarX, X, Loader2, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
+import { CalendarX, X, Loader2, ChevronLeft, ChevronRight, ArrowLeft, CalendarClock } from "lucide-react";
 
 type Availability = {
   id: string;
@@ -12,8 +12,189 @@ type Availability = {
   reason: string | null;
 };
 
+type WeeklyRow = {
+  id: string;
+  day_of_week: number;
+  available_from: string | null;
+  available_until: string | null;
+  max_shifts_per_week: number | null;
+};
+
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+// Mon-first display order for the weekly pattern (0=Sun … 6=Sat in the DB).
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+type DayMode = "off" | "any" | "custom";
+type DayState = { mode: DayMode; from: string; until: string };
+
+// Weekly recurring pattern editor. Semantics: never saved = flexible (AI can
+// propose any day); once saved, days set to Off are hard-off for the AI fill.
+function WeeklyPattern() {
+  const { data, mutate } = useFetch<{ weekly: WeeklyRow[] }>("/api/hr/availability/weekly");
+  const [days, setDays] = useState<Record<number, DayState> | null>(null);
+  const [maxShifts, setMaxShifts] = useState<number | "">("");
+  const [saving, setSaving] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Seed editor state from the server once (or "flexible" defaults when empty).
+  useEffect(() => {
+    if (!data || days !== null) return;
+    const next: Record<number, DayState> = {};
+    for (const dw of WEEK_ORDER) next[dw] = { mode: data.weekly.length === 0 ? "any" : "off", from: "09:00", until: "18:00" };
+    for (const r of data.weekly) {
+      const from = (r.available_from ?? "00:00").slice(0, 5);
+      const until = (r.available_until ?? "23:59").slice(0, 5);
+      const allDay = from === "00:00" && until >= "23:59"; // stored form of "any time"
+      next[r.day_of_week] = allDay
+        ? { mode: "any", from: "09:00", until: "18:00" }
+        : { mode: "custom", from, until };
+    }
+    const cap = data.weekly.find((r) => r.max_shifts_per_week != null)?.max_shifts_per_week;
+    setMaxShifts(cap ?? "");
+    setDays(next);
+  }, [data, days]);
+
+  const hasPattern = (data?.weekly.length ?? 0) > 0;
+
+  const save = async (clear = false) => {
+    if (!days) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = clear
+        ? { days: [] }
+        : {
+            days: WEEK_ORDER.filter((dw) => days[dw].mode !== "off").map((dw) => ({
+              day_of_week: dw,
+              available_from: days[dw].mode === "custom" ? days[dw].from : null,
+              available_until: days[dw].mode === "custom" ? days[dw].until : null,
+            })),
+            max_shifts_per_week: maxShifts === "" ? null : maxShifts,
+          };
+      const res = await fetch("/api/hr/availability/weekly", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        setError(j?.error ?? "Failed to save");
+        return;
+      }
+      if (clear) setDays(null); // reseed from server
+      mutate();
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!days) {
+    return (
+      <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4">
+        <Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-300" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4">
+      <div className="mb-1 flex items-center gap-2">
+        <CalendarClock className="h-4 w-4 text-terracotta" />
+        <h2 className="font-semibold">Weekly pattern</h2>
+      </div>
+      <p className="mb-3 text-xs text-gray-500">
+        {hasPattern
+          ? "The AI scheduler only offers you shifts inside this pattern."
+          : "No pattern saved — you're flexible, any day. Save one if you have fixed days (classes, another job)."}
+      </p>
+
+      <div className="space-y-1.5">
+        {WEEK_ORDER.map((dw) => {
+          const d = days[dw];
+          return (
+            <div key={dw} className="flex items-center gap-2">
+              <span className="w-9 shrink-0 text-xs font-bold uppercase text-gray-400">{DAY_NAMES[dw]}</span>
+              <div className="flex gap-1">
+                {(["off", "any", "custom"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setDays({ ...days, [dw]: { ...d, mode } })}
+                    className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                      d.mode === mode
+                        ? mode === "off"
+                          ? "bg-gray-700 text-white"
+                          : "bg-terracotta text-white"
+                        : "bg-gray-50 text-gray-500"
+                    }`}
+                  >
+                    {mode === "off" ? "Off" : mode === "any" ? "Any time" : "Hours"}
+                  </button>
+                ))}
+              </div>
+              {d.mode === "custom" && (
+                <div className="flex items-center gap-1 text-xs">
+                  <input
+                    type="time"
+                    value={d.from}
+                    onChange={(e) => setDays({ ...days, [dw]: { ...d, from: e.target.value } })}
+                    className="rounded-lg border border-gray-200 px-1.5 py-1"
+                  />
+                  <span className="text-gray-400">–</span>
+                  <input
+                    type="time"
+                    value={d.until}
+                    onChange={(e) => setDays({ ...days, [dw]: { ...d, until: e.target.value } })}
+                    className="rounded-lg border border-gray-200 px-1.5 py-1"
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <label className="text-xs text-gray-500">Max shifts/week</label>
+        <select
+          value={maxShifts}
+          onChange={(e) => setMaxShifts(e.target.value === "" ? "" : Number(e.target.value))}
+          className="rounded-lg border border-gray-200 px-2 py-1 text-sm"
+        >
+          <option value="">No limit</option>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+      </div>
+
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+
+      <div className="mt-3 flex gap-2">
+        <button
+          onClick={() => save(false)}
+          disabled={saving}
+          className="flex-1 rounded-lg bg-terracotta py-2 text-sm font-medium text-white disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : savedFlash ? "Saved ✓" : "Save pattern"}
+        </button>
+        {hasPattern && (
+          <button
+            onClick={() => save(true)}
+            disabled={saving}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600"
+          >
+            Clear — I&apos;m flexible
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function AvailabilityPage() {
   const [viewMonth, setViewMonth] = useState(() => {
@@ -106,8 +287,11 @@ export default function AvailabilityPage() {
         <h1 className="text-2xl font-bold">My Availability</h1>
       </div>
       <p className="mb-5 text-sm text-gray-500">
-        Tap a date to mark yourself <strong>unavailable</strong>. The AI scheduler won&apos;t assign shifts on these days.
+        Set your weekly pattern, then tap dates below to mark one-off <strong>blockouts</strong>. The AI scheduler won&apos;t assign shifts outside these.
       </p>
+
+      {/* Weekly recurring pattern */}
+      <WeeklyPattern />
 
       {/* Month nav */}
       <div className="mb-4 flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-3">
