@@ -273,7 +273,6 @@ async function recordCorrection(args: {
     detail: args.correctedTo.reasoning,
     refTable: "fin_agent_decisions",
     refId: targetId,
-    notify: false,
   });
 }
 
