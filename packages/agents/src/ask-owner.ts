@@ -22,6 +22,10 @@ export interface AskOwnerInput {
   refId?: string;
   outletId?: string;
   expiresInHours?: number;
+  // Opaque data the webhook needs to ACT on the answer (e.g. an action name +
+  // the record to mutate). The agents package never interprets it; the app's
+  // webhook dispatches on it. Keep it small and JSON-serializable.
+  payload?: Record<string, unknown>;
 }
 
 const DEFAULT_CONFIRM: PulseButton[] = [
@@ -50,6 +54,7 @@ export async function askOwner(input: AskOwnerInput): Promise<string | null> {
       ref_table: input.refTable ?? null,
       ref_id: input.refId ?? null,
       outlet_id: input.outletId ?? null,
+      payload: input.payload ?? null,
       status: "pending",
       expires_at: input.expiresInHours
         ? new Date(Date.now() + input.expiresInHours * 3600_000).toISOString()
@@ -92,32 +97,53 @@ export async function resolvePrompt(args: {
   promptId: string;
   answer: string;
   answeredBy: string;
-}): Promise<{ agent_key: string; prompt: string; telegram_message_id: number | null } | null> {
+}): Promise<{ agent_key: string; prompt: string; telegram_message_id: number | null; payload: Record<string, unknown> | null } | null> {
   const client = getAgentClient();
-  const { data: existing } = await client
-    .from("agent_prompts")
-    .select("agent_key, prompt, telegram_message_id, status")
-    .eq("id", args.promptId)
-    .maybeSingle();
-  if (!existing) return null;
-
-  await client
+  // Atomically claim the prompt: only the FIRST resolve of a pending prompt
+  // succeeds. This is the guard that stops a double-tap from acting twice on a
+  // money action (e.g. clearing an invoice) - the update returns 0 rows the
+  // second time and we bail.
+  const { data: claimed } = await client
     .from("agent_prompts")
     .update({ status: "answered", answer: args.answer, answered_by: args.answeredBy, answered_at: new Date().toISOString() })
-    .eq("id", args.promptId);
+    .eq("id", args.promptId)
+    .eq("status", "pending")
+    .select("agent_key, prompt, telegram_message_id, payload")
+    .maybeSingle();
+  if (!claimed) return null; // unknown prompt, or already answered
 
-  const msgId = existing.telegram_message_id as number | null;
+  const msgId = claimed.telegram_message_id as number | null;
   if (msgId) {
     const chatId = pulseChatId();
     if (chatId) {
       await editPulseMessage(
         chatId,
         msgId,
-        `✅ <b>${escapeHtml(agentLabel(existing.agent_key as string))}</b>\n${escapeHtml(existing.prompt as string)}\n\n<b>You answered:</b> ${escapeHtml(args.answer)}`,
+        `✅ <b>${escapeHtml(agentLabel(claimed.agent_key as string))}</b>\n${escapeHtml(claimed.prompt as string)}\n\n<b>You answered:</b> ${escapeHtml(args.answer)}`,
       );
     }
   }
-  return { agent_key: existing.agent_key as string, prompt: existing.prompt as string, telegram_message_id: msgId };
+  return {
+    agent_key: claimed.agent_key as string,
+    prompt: claimed.prompt as string,
+    telegram_message_id: msgId,
+    payload: (claimed.payload as Record<string, unknown> | null) ?? null,
+  };
+}
+
+// Is there already a pending (unanswered) prompt for this agent + record?
+// Callers that re-run on a schedule use this to avoid re-asking the owner the
+// same question every run until they act on it.
+export async function pendingPromptExists(agentKey: string, refId: string): Promise<boolean> {
+  const { data } = await getAgentClient()
+    .from("agent_prompts")
+    .select("id")
+    .eq("agent_key", agentKey)
+    .eq("ref_id", refId)
+    .eq("status", "pending")
+    .limit(1)
+    .maybeSingle();
+  return !!data;
 }
 
 // Match an owner reply (reply_to_message id) back to its open prompt.
