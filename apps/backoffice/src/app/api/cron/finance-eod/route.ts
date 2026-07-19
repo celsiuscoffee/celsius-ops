@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ingestEodForDate } from "@/lib/finance/ingestors/pos-native-eod";
 import { checkCronAuth } from "@celsius/shared";
+import { touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
+  await touchAgentRun("finance_eod");
   const date = yesterdayMyt();
   const results = await ingestEodForDate(date);
 
@@ -35,6 +37,13 @@ export async function GET(req: NextRequest) {
     errors: results.filter((r) => r.error).length,
     totalAmount: results.reduce((s, r) => s + (r.posted?.amount ?? 0), 0),
   };
+
+  await logAgentAction({
+    agentKey: "finance_eod",
+    kind: "eod_posted",
+    summary: `Posted EOD AR for ${summary.date}: ${summary.posted}/${summary.outlets} outlets, RM${summary.totalAmount.toFixed(2)}${summary.errors ? `, ${summary.errors} errors` : ""}`,
+    meta: summary,
+  });
 
   return NextResponse.json({ summary, results });
 }
