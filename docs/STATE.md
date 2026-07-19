@@ -315,6 +315,27 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-19 (round 14) — **Availability UX overhaul + backoffice open-slot
+  management (PR #1011, merged; round-13 base was PR #1010, merged — both
+  OTA'd to staff phones and live on Vercel).** Owner: "improve the ux on my
+  availability... easier to type numbers, font bigger" and "open slots in
+  backoffice logic is not managed yet." Availability screens (web+native):
+  typing eliminated — preset window chips (Morning 07:30–15:30 / Midday
+  12:00–20:00 / Evening 15:30–23:30) + 30-min pickers (chip strip native,
+  dropdowns web, end-times auto-restricted), one-tap Any day/Weekdays/
+  Weekends, ≥44px targets, fonts ~2 sizes up, live plain-words summary.
+  Backoffice: new /api/hr/open-shifts (GET week's slots + claimant names /
+  cancel-if-still-open / create manual slot source 'manual'; hr:schedules
+  gated, manager outlet-scoped) + schedules-grid panel (open slots
+  cancellable ✕, booked green with names, "+ Open slot" day×template×station
+  form). REMAINING E2E LEG (owner action): a PT saves a pattern → regenerate
+  a draft week (Jul 27 untouched) → ai_notes show "N PT with declared
+  availability" + "N OPEN SLOT(S) posted" → PT books from phone → shift on
+  grid. Fastest smoke test: post one manual slot from the grid and have a PT
+  book it. Availability table still empty — nothing changes until PTs
+  declare; owner should blast PTs to fill it (expect: Aiman weekends-only,
+  Batrisyia evenings; ask SA manager about Danish's 2-day week).
+
 - 2026-07-19 (round 13) — **Staff availability input + open-slot booking =
   the self-service PT fill loop (this branch).** Owner: "1. create an
   availability input in staff apps (native/webapp) 2. create a fill / book
