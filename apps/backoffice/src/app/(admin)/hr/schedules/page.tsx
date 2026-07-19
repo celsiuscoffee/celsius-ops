@@ -68,6 +68,8 @@ type GridData = {
   schedule: { id: string; status: string } | null;
   shifts: Shift[];
   leaves: LeaveRange[];
+  // Shifts this person holds at OTHER outlets this week — blocks the cell here.
+  elsewhere?: Array<{ user_id: string; shift_date: string; start_time: string; end_time: string; outlet_name: string; suggested: boolean }>;
   availability: Availability[];
   weeklyAvailability: WeeklyAvailability[];
   coverageRules: CoverageRule[];
@@ -336,6 +338,14 @@ export default function SchedulesPage() {
   }, [grid]);
 
   // Index availability blockouts
+  // Cross-outlet block: (user, date) → the shift they hold at ANOTHER outlet.
+  // One outlet per person per day — the cell renders blocked with the remark.
+  const elsewhereMap = useMemo(() => {
+    const m = new Map<string, { outlet_name: string; start_time: string; end_time: string; suggested: boolean }>();
+    for (const e of grid?.elsewhere || []) m.set(`${e.user_id}|${e.shift_date}`, e);
+    return m;
+  }, [grid]);
+
   const blockoutMap = useMemo(() => {
     const m = new Map<string, Availability>();
     (grid?.availability || []).forEach((a) => {
@@ -1155,6 +1165,19 @@ export default function SchedulesPage() {
                                     {shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)}
                                   </div>
                                 </button>
+                              );
+                            })()
+                          ) : elsewhereMap.get(`${u.id}|${d}`) ? (
+                            (() => {
+                              const ew = elsewhereMap.get(`${u.id}|${d}`)!;
+                              return (
+                                <div
+                                  className="w-full rounded-lg border border-violet-200 bg-violet-50/70 p-2 text-center"
+                                  title={`Scheduled at ${ew.outlet_name} ${ew.start_time}–${ew.end_time}${ew.suggested ? " (AI suggestion, unconfirmed)" : ""} — one outlet per day. Remove it there first to schedule here.`}
+                                >
+                                  <div className="text-[10px] font-semibold text-violet-700">@ {ew.outlet_name}{ew.suggested ? "?" : ""}</div>
+                                  <div className="text-[10px] tabular-nums text-violet-600">{ew.start_time} – {ew.end_time}</div>
+                                </div>
                               );
                             })()
                           ) : (

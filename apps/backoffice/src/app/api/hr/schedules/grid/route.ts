@@ -133,6 +133,37 @@ export async function GET(req: NextRequest) {
         .in("user_id", partTimerIds)
     : { data: [] as unknown[] };
 
+  // 9b. Shifts at OTHER outlets this week — a person already working
+  // elsewhere that day is BLOCKED here, and the cell says where they are
+  // (owner 2026-07-19: the rover/shared staff were double-bookable because
+  // each outlet's grid was blind to the others).
+  const { data: elsewhereRaw } = await hrSupabaseAdmin
+    .from("hr_schedule_shifts")
+    .select("user_id, shift_date, start_time, end_time, notes, hr_schedules!inner(outlet_id)")
+    .in("user_id", scheduledUsers.map((u) => u.id))
+    .gte("shift_date", weekStart)
+    .lte("shift_date", weekEnd)
+    .neq("hr_schedules.outlet_id", outletId)
+    .neq("start_time", "00:00:00");
+  type ElseRow = { user_id: string; shift_date: string; start_time: string; end_time: string; notes: string | null; hr_schedules: { outlet_id: string } | { outlet_id: string }[] };
+  const elseRows = ((elsewhereRaw ?? []) as unknown as ElseRow[]).filter((r) => r.notes !== "rest_day");
+  const elseOutletIds = [...new Set(elseRows.map((r) => (Array.isArray(r.hr_schedules) ? r.hr_schedules[0]?.outlet_id : r.hr_schedules?.outlet_id)).filter(Boolean))] as string[];
+  const elseOutlets = elseOutletIds.length
+    ? await prisma.outlet.findMany({ where: { id: { in: elseOutletIds } }, select: { id: true, name: true } })
+    : [];
+  const elseOutletName = new Map(elseOutlets.map((o) => [o.id, o.name.replace(/^Celsius Coffee\s*/i, "")]));
+  const elsewhere = elseRows.map((r) => {
+    const oid = Array.isArray(r.hr_schedules) ? r.hr_schedules[0]?.outlet_id : r.hr_schedules?.outlet_id;
+    return {
+      user_id: r.user_id,
+      shift_date: r.shift_date,
+      start_time: r.start_time.slice(0, 5),
+      end_time: r.end_time.slice(0, 5),
+      outlet_name: (oid && elseOutletName.get(oid)) || "another outlet",
+      suggested: r.notes === "pt_suggestion",
+    };
+  });
+
   // 10. Outlet coverage rules for this outlet
   const { data: coverageRules } = await hrSupabaseAdmin
     .from("hr_outlet_coverage_rules")
@@ -185,6 +216,7 @@ export async function GET(req: NextRequest) {
     schedule, // null if not yet created
     shifts,
     leaves: leaves || [],
+    elsewhere, // shifts at OTHER outlets this week — blocks the cell here
     availability: availability || [],        // per-date exceptions (existing)
     weeklyAvailability: weeklyAvailability || [],  // part-timer recurring (new)
     coverageRules: coverageRules || [],
