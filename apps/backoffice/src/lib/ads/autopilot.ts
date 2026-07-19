@@ -430,8 +430,11 @@ export function spaceDisturbances(
   if (!lastDisturbanceAt) return decisions;
   const days = (now.getTime() - lastDisturbanceAt.getTime()) / DAY_MS;
   if (days >= FLEET_SPACING_DAYS) return decisions;
+  // Pauses are not spaced: the probe is measured per-outlet against its own
+  // pre-pause forecast, the controls' small cuts move their tills <1%, and
+  // the owner ordered the baseline — only blind cuts and raises stagger.
   return decisions.map((d) =>
-    (d.action === "cut" && !isWasteMatched(d)) || d.action === "raise" || d.action === "pause"
+    (d.action === "cut" && !isWasteMatched(d)) || d.action === "raise"
       ? {
           campaignId: d.campaignId,
           campaignName: d.campaignName,
@@ -460,7 +463,10 @@ export function selectPauseProbe(
   states: CampaignState[],
   guards: Record<string, GuardSignal>,
 ): AutopilotDecision[] {
-  if (states.some((s) => s.isPaused)) return decisions; // one probe at a time
+  // One PROBE at a time — but only a probe (autopilot-paused) blocks the next
+  // one. A campaign a human paused long ago (e.g. Nilai) is not a running
+  // experiment and must never starve the queue.
+  if (states.some((s) => s.isPaused && lastKind(s.lastApplied) === "pause")) return decisions;
   const candidates = states
     .filter((s) => !s.hasBeenPauseProbed)
     .filter((s) => s.efficiencyRatio != null && s.efficiencyRatio > INEFFICIENT_RATIO)
@@ -583,8 +589,12 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     maxLevelByCampaign.set(ch.campaignId, Math.max(maxLevelByCampaign.get(ch.campaignId) ?? 0, seen));
     if (ch.reason?.startsWith("autopilot pause")) pauseProbedCampaigns.add(ch.campaignId);
     if (!firstChangeAt || ch.decidedAt < firstChangeAt) firstChangeAt = ch.decidedAt;
+    // Waste-matched cuts are spacing-EXEMPT, so they must not reset the
+    // spacing clock either — nightly waste sweeps would otherwise starve
+    // blind cuts and raises forever.
     if (
-      (ch.reason?.startsWith("autopilot step-down") ||
+      ((ch.reason?.startsWith("autopilot step-down") &&
+        !ch.reason.startsWith("autopilot step-down (waste-matched)")) ||
         ch.reason?.startsWith("autopilot raise") ||
         ch.reason?.startsWith("autopilot pause")) &&
       (!lastDisturbanceAt || ch.decidedAt > lastDisturbanceAt)

@@ -753,7 +753,13 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   exclusions), Shah Alam RM92 (first blind 8%), Tamarind RM100.20 (rollback
   that channel-decomposition proved a FALSE POSITIVE — till flat in absolute
   RM; led to the #972 plausibility bound). 45 negatives applied incl. fleet
-  seeds to SA/Tam. **Tonight's run: Tamarind PAUSES for the 28d baseline**
+  seeds to SA/Tam. **Tamarind pause was BLOCKED twice** (Jul 18: probe gate required a fully
+  healthy guard, fixed in #973; Jul 19: the human-paused NILAI campaign
+  tripped the one-probe-at-a-time check, and nightly waste-matched cuts
+  were resetting the fleet-spacing clock — starvation bugs). Fixed: the
+  one-probe check counts only autopilot-paused campaigns; waste-matched
+  cuts don't reset the spacing clock; pauses are never spaced. **Tamarind
+  pauses at the next nightly run for the 28d baseline**
   (probe gate now blocks only on absolute till weakness, #973) →
   auto-restore + verdict ~Aug 15 (drop → ads generate cash, resume+descend;
   none → restore at RM20/day floor, ~RM2.4k/mo freed). Competitor + dessert
