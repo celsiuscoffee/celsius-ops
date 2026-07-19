@@ -315,6 +315,59 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-19 (round 13) — **Staff availability input + open-slot booking =
+  the self-service PT fill loop (this branch).** Owner: "1. create an
+  availability input in staff apps (native/webapp) 2. create a fill / book
+  slot in staff apps 3. verify the flow to fill pt." Discovery first: the
+  substrate mostly existed — `hr_open_shifts` (migration 084) with a proven
+  WhatsApp claim flow (pt-loop inbound `handleClaim`, first-accept-wins),
+  `hr_staff_weekly_availability` (EMPTY — nobody could input it) and
+  `hr_staff_availability` (staff web page existed but was gated OWNER/ADMIN).
+  Shipped: (1) **generator now respects declared availability** — weekly
+  windows (whitelist semantics, same as Assist candidates: rows exist → only
+  those days/windows; no rows → flexible), per-date unavailable/off blocks,
+  and `max_shifts_per_week` tightening the 5-day cap; applied in BOTH greedy
+  filter and the validator (catches LLM proposals). (2) **Generator posts
+  unfilled gaps to `hr_open_shifts`** (source `generator`, idempotent per
+  outlet+week: still-open generator slots replaced on regen, claimed ones
+  untouched) + ai_note "N OPEN SLOT(S) posted". (3) **Staff web**: weekly
+  pattern editor on /hr/availability (gate opened to all staff) + new
+  /hr/open-shifts page; APIs /api/hr/availability/weekly (replace-wholesale)
+  and /api/hr/open-shifts (GET eligibility-annotated list; POST claim =
+  ported WhatsApp semantics PLUS 24h/5-day cross-outlet caps + one-outlet-
+  per-day, materializes the real shift row). (4) **staff-native**: My
+  Availability + Open Slots screens, lib/hr/api.ts fetchers, HR hub tiles
+  (NOTE: staff-native merge = OTA deploy — ota-release skill applies).
+  **Live-schema catch:** `hr_staff_weekly_availability.available_from/until
+  are NOT NULL in prod** (code comments claimed nullable) — "any time" is
+  stored as explicit 00:00–23:59; fixed the latent WhatsApp bug where a
+  null-window reply violated the constraint UNCHECKED after the delete,
+  silently wiping the PT's declared availability. Insert shapes verified
+  against prod inside a rolled-back transaction. E2E after deploy: PT sets
+  pattern → regenerate a draft week → open slots appear in staff apps →
+  book → shift lands on grid; payroll cap already counts claimed slots
+  (notes=template_id, not pt_suggestion).
+
+- 2026-07-19 (round 12) — **Published-roster audit vs the AI logic (owner:
+  "my staff already done and publish next week schedule... use our
+  scheduling logic against what they arrange", then "i found few
+  inconsistencies... can you find more?").** Confirmed owner's four (PJ Tue
+  7 FOH shifts = +11h over target with mornings still at 2 FOH; PJ Thu +4h;
+  PJ Sun FOH −10h on the busiest bar day + kitchen +9h same day; Tamarind
+  NO morning cook Tue–Fri and no evening cook Sun). Found more: SA kitchen
+  unmanned evening Tue / mornings Wed+Fri; Danish (FT kitchen) scheduled 2
+  days with NO leave record (root cause of SA holes; Zikry's 5-day week IS
+  leave-backed); PT cap breaches Emran 31h net, Naufal/Fatin/Qaisara 30h;
+  SA Mon/Sat/Sun whole-day 2-FOH; Tam Sun morning 1 FOH; 12 clopenings;
+  PJ kitchen over target all 7 days while FOH under on 5. Friday prayer OK
+  at PJ only. Then reverse-audited for staff logic the AI misses → 4 real
+  gaps: rover circuit allocation (Syafiq 1 outlet/day), fixed shift
+  identities (Haziq always opener, Aina 12–20), PT truths not in DB
+  (weekly-availability table was empty — round 13 builds the input), and
+  manager-as-cover placement (Adam parked on the thinnest days; open
+  question: should a PUBLISHED manager shift count as coverage?). Audit
+  data + engine in scratchpad (published-week-v2.json).
+
 - 2026-07-19 (round 11) — **Weekly PT payment flow: manager sign-off →
   gated per-person payment file.** Owner: "proceed with the payment
   file. also the managers also needs to confirm each PT hours first
