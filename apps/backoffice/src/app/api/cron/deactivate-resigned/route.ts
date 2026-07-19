@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { checkCronAuth } from "@celsius/shared";
+import { touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -35,10 +36,20 @@ export async function GET(req: NextRequest) {
     select: { id: true, name: true, fullName: true },
   });
 
+  await touchAgentRun("hr_deactivate_resigned");
   const deactivated: string[] = [];
   for (const u of activeUsers) {
     await prisma.user.update({ where: { id: u.id }, data: { status: "DEACTIVATED" } });
     deactivated.push(u.fullName || u.name);
+  }
+
+  if (deactivated.length > 0) {
+    await logAgentAction({
+      agentKey: "hr_deactivate_resigned",
+      kind: "access_revoked",
+      summary: `Deactivated ${deactivated.length} resigned staff (app access revoked): ${deactivated.join(", ")}`,
+      meta: { checked: today, count: deactivated.length },
+    });
   }
 
   return NextResponse.json({

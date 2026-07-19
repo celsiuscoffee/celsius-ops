@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { checkCronAuth } from "@celsius/shared";
+import { touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
 import { deriveHours, mytDateString, mytDayOfWeek, mytInstant } from "@/lib/hr/hours";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
+  await touchAgentRun("hr_attendance_auto_close");
 
   const now = new Date();
 
@@ -200,6 +202,15 @@ export async function GET(req: NextRequest) {
 
     closed++;
     actions.push({ logId: log.id, reason, closeAt: closeAt.toISOString() });
+  }
+
+  if (closed > 0) {
+    await logAgentAction({
+      agentKey: "hr_attendance_auto_close",
+      kind: "attendance_closed",
+      summary: `Auto-closed ${closed} open attendance log${closed === 1 ? "" : "s"} at rostered shift end (paid regular hours, OT=0)`,
+      meta: { processed: activeLogs.length, closed },
+    });
   }
 
   return NextResponse.json({

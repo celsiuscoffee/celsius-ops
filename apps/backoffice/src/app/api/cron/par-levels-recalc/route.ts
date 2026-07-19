@@ -3,6 +3,7 @@ import { checkCronAuth } from "@celsius/shared";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recalcOutletParLevels } from "@/lib/inventory/par-calc";
+import { touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
     }
   }
+  await touchAgentRun("par_levels_recalc");
   try {
     const outlets = await prisma.outlet.findMany({
       where: { loyaltyOutletId: { not: null } },
@@ -52,6 +54,13 @@ export async function GET(req: NextRequest) {
       );
     }
     const totalParValue = Math.round(results.reduce((s, r) => s + r.projectedParValue, 0) * 100) / 100;
+    const updated = results.reduce((s, r) => s + r.productsUpdated, 0);
+    await logAgentAction({
+      agentKey: "par_levels_recalc",
+      kind: "pars_recalced",
+      summary: `Recalculated reorder points for ${results.length} outlets from 30-day sales: ${updated} products updated, RM${totalParValue.toFixed(0)} projected par value`,
+      meta: { outlets: results.length, updated, totalParValue },
+    });
     return NextResponse.json({ ok: true, totalParValue, results });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "par-levels-recalc failed";

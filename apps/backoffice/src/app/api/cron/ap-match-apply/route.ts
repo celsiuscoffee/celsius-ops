@@ -10,7 +10,7 @@ import { applyApMatches } from "@/lib/finance/ap-match";
 import { applyVerifiedReview } from "@/lib/finance/agents/ap-verifier";
 import { createWagePaymentSlips } from "@/lib/finance/payment-slips";
 import { checkCronAuth } from "@celsius/shared";
-import { getAgentModeOrDefault, touchAgentRun } from "@/lib/agents/substrate";
+import { getAgentModeOrDefault, touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
@@ -36,6 +36,15 @@ export async function GET(req: NextRequest) {
     // 3) wages have no invoice — document them with auto payment slips so they
     //    leave the unmatched pile with a supporting doc instead of a match.
     const slips = await createWagePaymentSlips({ commit: true });
+    const cleared = auto.applied + review.confirmedApplied;
+    if (cleared > 0 || slips.created > 0) {
+      await logAgentAction({
+        agentKey: "finance_ap_match_apply",
+        kind: "ap_cleared",
+        summary: `Auto-cleared ${cleared} invoice payment${cleared === 1 ? "" : "s"} (${auto.applied} rules, ${review.confirmedApplied} verifier-confirmed) and created ${slips.created} wage payment slip${slips.created === 1 ? "" : "s"}`,
+        meta: { autoApplied: auto.applied, reviewConfirmedApplied: review.confirmedApplied, reviewRejected: review.rejected, paymentSlipsCreated: slips.created },
+      });
+    }
     return NextResponse.json({
       autoApplied: auto.applied,
       reviewConfirmedApplied: review.confirmedApplied,

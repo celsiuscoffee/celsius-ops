@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
 import { sendSMS, providerAutoPrependsSender, getActiveSmsProvider } from "@/lib/loyalty/sms";
 import { checkCronAuth } from "@celsius/shared";
+import { touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -173,6 +174,7 @@ async function findAlreadySentPhones(
 export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
+  await touchAgentRun("campaigns_auto");
 
   const nowIso = new Date().toISOString();
 
@@ -383,6 +385,15 @@ export async function GET(req: NextRequest) {
       sent,
       failed,
       skipped_balance: 0,
+    });
+  }
+
+  if (totalSent > 0) {
+    await logAgentAction({
+      agentKey: "campaigns_auto",
+      kind: "sms_sent",
+      summary: `Sent ${totalSent} AUTO-campaign SMS across ${activeAuto.length} active campaign${activeAuto.length === 1 ? "" : "s"}`,
+      meta: { campaigns_evaluated: activeAuto.length, total_sent: totalSent },
     });
   }
 

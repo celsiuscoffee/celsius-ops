@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { postBankLinesToGl } from "@/lib/finance/gl-posting";
 import { checkCronAuth } from "@celsius/shared";
-import { getAgentModeOrDefault, touchAgentRun } from "@/lib/agents/substrate";
+import { getAgentModeOrDefault, touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -27,6 +27,14 @@ export async function GET(req: NextRequest) {
   }
   try {
     const res = await postBankLinesToGl({ commit: true, limit: PER_RUN_LINE_CAP });
+    if (res.journals > 0) {
+      await logAgentAction({
+        agentKey: "finance_gl_post",
+        kind: "journals_posted",
+        summary: `Posted ${res.journals} GL journal${res.journals === 1 ? "" : "s"} from ${res.postedLines} bank lines${res.suspenseLines ? ` (${res.suspenseLines} to suspense)` : ""}`,
+        meta: { journals: res.journals, postedLines: res.postedLines, suspenseLines: res.suspenseLines, errors: res.errors.length },
+      });
+    }
     return NextResponse.json({
       committed: res.committed,
       scannedLines: res.scannedLines,

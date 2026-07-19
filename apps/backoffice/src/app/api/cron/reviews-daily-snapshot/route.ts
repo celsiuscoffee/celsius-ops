@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
+import { touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews } from "@/lib/reviews/gbp";
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
   }
 
+  await touchAgentRun("reviews_daily_snapshot");
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
@@ -120,6 +122,13 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error("[reviews-daily-snapshot] nudge failed", err);
   }
+
+  await logAgentAction({
+    agentKey: "reviews_daily_snapshot",
+    kind: "snapshot_posted",
+    summary: `Snapshotted Google review rank for ${results.length} outlets and posted to Telegram${nudged ? "; sent a review-velocity nudge" : ""}`,
+    meta: { outlets: results.length, nudged },
+  });
 
   return NextResponse.json({ snapshotDate: today.toISOString().slice(0, 10), relink, outlets: results, nudged });
 }
