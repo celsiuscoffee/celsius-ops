@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
         agentKey: "finance_ap_match_apply",
         kind: "ap_cleared",
         summary: `Auto-cleared ${cleared} invoice payment${cleared === 1 ? "" : "s"} (${auto.applied} rules, ${review.confirmedApplied} verifier-confirmed) and created ${slips.created} wage payment slip${slips.created === 1 ? "" : "s"}`,
-        meta: { autoApplied: auto.applied, reviewConfirmedApplied: review.confirmedApplied, reviewRejected: review.rejected, paymentSlipsCreated: slips.created },
+        meta: { autoApplied: auto.applied, reviewConfirmedApplied: review.confirmedApplied, reviewRejected: review.rejected, reviewPayAndClaim: review.payAndClaim, paymentSlipsCreated: slips.created },
       });
     }
     return NextResponse.json({
@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
       reviewConfirmedApplied: review.confirmedApplied,
       reviewRejected: review.rejected,
       reviewUncertain: review.uncertain,
+      reviewPayAndClaim: review.payAndClaim,
       paymentSlipsCreated: slips.created,
     });
   } catch (err) {
