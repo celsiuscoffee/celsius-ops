@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
+import { touchAgentRun } from "@celsius/agents/src/substrate";
 import { GET as runClockin } from "../ops-nudge-clockin/route";
 import { GET as runReview } from "../ops-nudge-review/route";
 import { GET as runChecklist } from "../ops-nudge-checklist/route";
@@ -49,6 +50,11 @@ export async function GET(req: NextRequest) {
   await step("store", minute % 15 < 5, () => runStore(req));
   await step("audit", hour === 1 && minute < 5, () => runAudit(req));
   await step("stockcount", hour === 10 && minute < 5, () => runStockcount(req));
+
+  // Heartbeat only. This dispatcher runs every 5 min, so posting a feed line
+  // per tick would be noise; the touch keeps /agents from showing the ops
+  // family as "never ran". Each sub-nudge still records its own sends.
+  await touchAgentRun("ops_nudges");
 
   return NextResponse.json({ ok: true, ...out });
 }
