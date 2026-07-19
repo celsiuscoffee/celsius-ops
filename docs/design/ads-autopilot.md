@@ -7,6 +7,19 @@ into `cron/ads-daily`. Kill switch: `agent_registry` key `ads_autopilot`
 (Settings → System → AI Agents; fail-safe off if the row is missing;
 shadow = decide + log, mutate nothing)._
 
+## Target (owner, 2026-07-19)
+
+**+RM7,000/month net cash**, from budget cuts and/or sales lift — both count.
+Scored EVERY night by `cashScoreboard()` and logged with the run (visible in
+the agent's last-action line and `agent_actions.meta.scoreboard`):
+cuts side = (RM300.20/day pre-descent fleet budget − current fleet budget) ×
+30; sales side = (recent 14d fleet till/day − pre-descent anchor till/day) ×
+60% margin × 30 — a NET drift measure (seasonality and other loops move it
+too), which is exactly the owner's objective: a till decline counts negative.
+Cuts alone max out ≈RM6.4k/mo (all campaigns at the RM20 floor), so hitting
+RM7k almost certainly requires the sales side — the value-based Pickup Order
+conversion tag is the biggest dormant lever.
+
 ## Objective (owner directives, 2026-07-16→18)
 
 Maximize **cash = incremental till revenue × gross margin − ad spend**, with

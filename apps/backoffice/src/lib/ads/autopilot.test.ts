@@ -6,6 +6,7 @@ import {
   selectPauseProbe,
   spaceDisturbances,
   ownerDirective,
+  cashScoreboard,
   FLEET_SPACING_DAYS,
   FLOOR_DAILY_MYR,
   OBSERVE_DAYS,
@@ -394,6 +395,31 @@ describe("pause probe", () => {
     const d = decideCampaign(campaign({ isPaused: true, lastApplied: null }), healthy, NOW);
     expect(d.action).toBe("hold");
     expect(d.reason).toMatch(/not by the autopilot/);
+  });
+});
+
+describe("cashScoreboard (RM7k/mo target)", () => {
+  it("scores cuts and margin on till drift against the target", () => {
+    // Fleet at RM265.86/day vs RM300.20 baseline → RM1,030/mo cuts.
+    // Till up RM100/day vs anchor → RM1,800/mo at 60% margin.
+    const s = cashScoreboard(265.86, 9000, 9100);
+    expect(s.cutsMonthlyMyr).toBeCloseTo(1030.2, 1);
+    expect(s.salesMonthlyMyr).toBeCloseTo(1800, 1);
+    expect(s.netMonthlyMyr).toBeCloseTo(2830.2, 1);
+    expect(s.targetMonthlyMyr).toBe(7000);
+    expect(s.pctOfTarget).toBe(40);
+  });
+
+  it("a till decline counts NEGATIVE — net cash is the objective, not gross savings", () => {
+    const s = cashScoreboard(265.86, 9000, 8800);
+    expect(s.salesMonthlyMyr).toBeCloseTo(-3600, 1);
+    expect(s.netMonthlyMyr).toBeLessThan(0);
+  });
+
+  it("no anchor yet → sales side null, cuts still scored", () => {
+    const s = cashScoreboard(280, null, 9000);
+    expect(s.salesMonthlyMyr).toBeNull();
+    expect(s.cutsMonthlyMyr).toBeCloseTo(606, 0);
   });
 });
 

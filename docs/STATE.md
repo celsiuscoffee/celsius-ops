@@ -741,6 +741,13 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   report, search-term batching, and registry registration were superseded the
   same day by the ads autopilot — next entry.)
 
+- 2026-07-19 — **Cash TARGET set (owner): +RM7,000/month net**, cuts and/or
+  sales lift both count. Nightly `cashScoreboard()` in the autopilot logs
+  progress (cuts vs RM300.20/day pre-descent baseline + margin on fleet till
+  drift vs the pre-descent anchor) in every run's summary + meta. Current:
+  ~RM1,030/mo banked from cuts (~15%). Cuts ceiling ≈RM6.4k/mo → the sales
+  side is required; biggest dormant lever = value-based Pickup Order
+  conversion tag (still unwired).
 - 2026-07-18 — **Ads spend autopilot LIVE — full design + history promoted to
   `docs/design/ads-autopilot.md`** (PRs #947/#952/#954/#971/#972/#973, all
   merged; built 7/16-18 from owner directives: no per-change approval,
