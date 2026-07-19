@@ -16,7 +16,7 @@ import { CheckCircle2, AlertTriangle, Loader2, ChevronLeft, ChevronRight } from 
 
 type PtLog = {
   id: string; date: string; clock_in: string; clock_out: string;
-  worked_hours: number; rate: number; pay: number;
+  worked_hours: number; paid_hours: number; capped: boolean; rate: number; pay: number;
   is_weekend_rate: boolean; is_holiday: boolean;
   state: "pending" | "flagged" | "confirmed" | "rejected";
   ai_flags: string[]; outlet_name: string | null;
@@ -128,7 +128,16 @@ export default function PtHoursPage() {
                 <tr key={l.id} className={`border-b last:border-0 ${l.state === "rejected" ? "opacity-50" : ""}`}>
                   <td className="px-4 py-2 whitespace-nowrap">{fmtDay(l.date)}</td>
                   <td className="px-2 py-2 tabular-nums whitespace-nowrap">{fmtTime(l.clock_in)} – {fmtTime(l.clock_out)}</td>
-                  <td className="px-2 py-2 tabular-nums">{l.worked_hours}h</td>
+                  <td className="px-2 py-2 tabular-nums whitespace-nowrap">
+                    {l.capped ? (
+                      <span title={`Clocked ${l.worked_hours}h but pay is capped at the rostered hours + approved OT. Approve an OT request to pay the difference.`}>
+                        {l.paid_hours}h
+                        <span className="ml-1 rounded bg-orange-100 px-1 text-[10px] font-semibold text-orange-700">capped ({l.worked_hours}h clocked)</span>
+                      </span>
+                    ) : (
+                      `${l.worked_hours}h`
+                    )}
+                  </td>
                   <td className="px-2 py-2 tabular-nums whitespace-nowrap">
                     RM{l.rate}/h
                     {l.is_holiday && <span className="ml-1 rounded bg-red-100 px-1 text-[10px] font-semibold text-red-700">PH 2×</span>}
