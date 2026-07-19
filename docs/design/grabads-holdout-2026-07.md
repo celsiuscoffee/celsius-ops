@@ -126,6 +126,59 @@ LESS incremental than first assumed):**
 ceiling RM4,732 (ads fully wasted, where Tamarind already sits). Firms up at the
 Jul 23 / 30 read.
 
+### 2026-07-20 — VERIFIED against GrabMerchant settlement reports + ad dashboards
+
+**Grab's true take** (weekly settlement .xlsx, Mar–Jul, all 3 outlets; Net Total
+reconciles to the Maybank transfers to the ringgit):
+
+| Outlet | Commission (incl SST) | Ads | Total take | Merchant keeps |
+|---|---|---|---|---|
+| Putrajaya (Con) | 30.8% | 21.8% | **52.7%** | 47.3% |
+| Tamarind | 31.1% | 9.1% | 40.2% | 59.8% |
+| Shah Alam | 31.3% | 5.0% | 36.3% | 63.7% |
+
+- **Commission is ~31% (30% + SST), not the 30% GL fallback** — GL account 5000-04
+  should use 31%. Break-even ROAS = 1 ÷ (1 − 31% − 24% BOM) ≈ **2.22×**.
+- Settlement ad totals reconcile **exactly** to `grab_ads_spend` (e.g. SA RM2,226) —
+  data pipe clean.
+- Ad load is per-outlet, NOT the flat ~23% used earlier: only Putrajaya is heavy
+  (22%); Tamarind 9%, Shah Alam 5%.
+
+**Marginal ad P&L — the decisive test (cash ROAS).** Grab's "Return on spend" is
+gross ÷ spend; it ignores the 31% commission AND the BOM on those sales. True test:
+`net = ad-gen sales × (1 − 0.31 − 0.24) − ad spend`.
+
+| Outlet (30d dashboard) | Spend | Ad-gen sales | Headline ROAS | Net on headline | Net ex-repeat | Cash ROAS |
+|---|---|---|---|---|---|---|
+| Shah Alam | RM741 | RM1,390 | 1.87× | **−RM126** | −RM377 | 0.83× → 0.47× |
+| Putrajaya | RM2,066 | RM6,451 | 3.11× | +RM843 | **−RM581** | 1.41× → 0.72× |
+
+- SA loses even on Grab's headline. Putrajaya *looks* profitable on the headline but
+  **flips to a loss once the 49% repeat customers (who order regardless) are excluded** —
+  it needs ≥71% of sales to be incremental (2.22÷3.11) but only 51% are non-repeat.
+- **Uncertainty is one-way:** incrementality can only push the headline DOWN, never up.
+
+**Putrajaya trend resolved the toss-up → closing IS cash-positive.** Post-pause Grab
+ran RM245–290/day vs RM355 pre-pause (−18 to −31%, inside its own −49%/+86% daily
+noise; Jul 18 was a 3-order fluke), while till stayed healthy (RM3,099 / 3,470). The
+ad stopped and Grab barely moved → the 3.11× was crediting orders that came anyway.
+Pausing nets **+RM580 to +1,190/mo**. Tamarind: sales stayed flat when paused → ad
+~0 incremental → nearly the whole spend was dead loss.
+
+**VERDICT: keep ALL THREE paused.** Refined projection (verified marginal P&L, down
+from the earlier looser RM3,500 as we moved from assumptions to measured cash ROAS):
+
+| Outlet | Net cash/mo from pausing |
+|---|---|
+| Tamarind | +RM1,000 – 1,244 |
+| Putrajaya | +RM580 – 1,190 (central ~800) |
+| Shah Alam | +RM126 – 392 (central ~250) |
+| **Total** | **~RM2,000 – 2,800/mo (~RM24–34k/yr)** |
+
+Full size confirmation at the **Jul 30** read. Open item: pull Putrajaya's own
+last-30-day dashboard was done (3.11×); no re-enable needed — all three are on the
+cash-positive side of the 2.22× break-even.
+
 ## How to read it (per outlet)
 1. `decrement/day = baseline(weekday) − actual Grab gross`.
 2. `incremental ROAS = (monthly decrement) ÷ (monthly GrabAds spend)`.
