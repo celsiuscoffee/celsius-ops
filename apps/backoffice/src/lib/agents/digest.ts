@@ -12,6 +12,7 @@ import { sendPulse } from "./pulse";
 // exposed via /api/cron/agent-comms-digest for manual/on-demand runs.
 
 const KIND_ORDER: { kind: string; heading: string }[] = [
+  { kind: "note", heading: "💬 Your notes to the agents" },
   { kind: "handoff", heading: "🔁 Handoffs (who passed work to whom)" },
   { kind: "correction", heading: "🛠 Corrections (a verifier taught an agent)" },
   { kind: "learning", heading: "🧠 Learnings" },
@@ -55,7 +56,7 @@ export async function runCommsDigest(): Promise<{ sent: boolean; messages: numbe
     }
   }
 
-  const sent = await sendPulse(lines.join("\n"));
+  const sent = (await sendPulse(lines.join("\n"))) !== null;
 
   // Mark this window's messages digested so they don't recur tomorrow.
   const ids = rows.map((r) => r.id);
