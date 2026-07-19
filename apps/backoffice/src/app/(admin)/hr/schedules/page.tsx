@@ -1238,10 +1238,14 @@ export default function SchedulesPage() {
                           .filter((x) => (x.items ?? 0) > 0)
                           .sort((a, b) => (b.items ?? 0) - (a.items ?? 0));
                         const rank = ranked.findIndex((x) => x.date === d) + 1;
+                        // Edge columns hug their edge — a centered popover on
+                        // Sat/Sun (or Mon) hangs past the scroll container and
+                        // gets clipped (owner screenshot 2026-07-19).
+                        const align = i >= 5 ? "right-0" : i <= 1 ? "left-0" : "left-1/2 -translate-x-1/2";
                         return (
                           <>
                             <div className="fixed inset-0 z-40" onClick={() => setWhyDate(null)} />
-                            <div className="absolute left-1/2 z-50 mt-1 w-72 -translate-x-1/2 rounded-lg border bg-white p-3 text-left text-[11px] font-normal shadow-lg">
+                            <div className={`absolute z-50 mt-1 w-72 ${align} rounded-lg border bg-white p-3 text-left text-[11px] font-normal shadow-lg`}>
                               <div className="mb-1.5 font-semibold">Why this staffing?</div>
                               <ul className="space-y-1 text-muted-foreground">
                                 {cov?.items ? (
