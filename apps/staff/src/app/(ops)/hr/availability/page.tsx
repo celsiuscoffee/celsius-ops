@@ -26,6 +26,16 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 // Mon-first display order for the weekly pattern (0=Sun … 6=Sat in the DB).
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
+// No typing: hours come from presets (mirroring the real shift templates) or
+// 30-min dropdowns.
+const PRESETS = [
+  { label: "Morning", from: "07:30", until: "15:30" },
+  { label: "Midday", from: "12:00", until: "20:00" },
+  { label: "Evening", from: "15:30", until: "23:30" },
+] as const;
+const TIME_OPTIONS: string[] = [];
+for (let h = 6; h <= 23; h++) for (const m of ["00", "30"]) TIME_OPTIONS.push(`${String(h).padStart(2, "0")}:${m}`);
+
 type DayMode = "off" | "any" | "custom";
 type DayState = { mode: DayMode; from: string; until: string };
 
@@ -43,13 +53,13 @@ function WeeklyPattern() {
   useEffect(() => {
     if (!data || days !== null) return;
     const next: Record<number, DayState> = {};
-    for (const dw of WEEK_ORDER) next[dw] = { mode: data.weekly.length === 0 ? "any" : "off", from: "09:00", until: "18:00" };
+    for (const dw of WEEK_ORDER) next[dw] = { mode: data.weekly.length === 0 ? "any" : "off", from: "07:30", until: "15:30" };
     for (const r of data.weekly) {
       const from = (r.available_from ?? "00:00").slice(0, 5);
       const until = (r.available_until ?? "23:59").slice(0, 5);
       const allDay = from === "00:00" && until >= "23:59"; // stored form of "any time"
       next[r.day_of_week] = allDay
-        ? { mode: "any", from: "09:00", until: "18:00" }
+        ? { mode: "any", from: "07:30", until: "15:30" }
         : { mode: "custom", from, until };
     }
     const cap = data.weekly.find((r) => r.max_shifts_per_week != null)?.max_shifts_per_week;
@@ -113,44 +123,94 @@ function WeeklyPattern() {
           : "No pattern saved — you're flexible, any day. Save one if you have fixed days (classes, another job)."}
       </p>
 
-      <div className="space-y-1.5">
+      {/* One-tap setups */}
+      <div className="mb-3 flex flex-wrap gap-2">
+        {([
+          ["Any day", WEEK_ORDER],
+          ["Weekdays only", [1, 2, 3, 4, 5]],
+          ["Weekends only", [6, 0]],
+        ] as const).map(([label, on]) => (
+          <button
+            key={label}
+            onClick={() => {
+              const next = { ...days };
+              for (const dw of WEEK_ORDER) next[dw] = { ...next[dw], mode: (on as readonly number[]).includes(dw) ? "any" : "off" };
+              setDays(next);
+            }}
+            className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 active:scale-95"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-2">
         {WEEK_ORDER.map((dw) => {
           const d = days[dw];
           return (
-            <div key={dw} className="flex items-center gap-2">
-              <span className="w-9 shrink-0 text-xs font-bold uppercase text-gray-400">{DAY_NAMES[dw]}</span>
-              <div className="flex gap-1">
-                {(["off", "any", "custom"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => setDays({ ...days, [dw]: { ...d, mode } })}
-                    className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                      d.mode === mode
-                        ? mode === "off"
-                          ? "bg-gray-700 text-white"
-                          : "bg-terracotta text-white"
-                        : "bg-gray-50 text-gray-500"
-                    }`}
-                  >
-                    {mode === "off" ? "Off" : mode === "any" ? "Any time" : "Hours"}
-                  </button>
-                ))}
+            <div key={dw} className={`rounded-xl ${d.mode === "custom" ? "bg-orange-50/60 p-2" : ""}`}>
+              <div className="flex items-center gap-2">
+                <span className="w-11 shrink-0 text-sm font-bold text-gray-600">{DAY_NAMES[dw]}</span>
+                <div className="grid flex-1 grid-cols-3 gap-1.5">
+                  {(["off", "any", "custom"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => setDays({ ...days, [dw]: { ...d, mode } })}
+                      className={`min-h-11 rounded-xl px-2 py-2.5 text-sm font-medium transition-colors ${
+                        d.mode === mode
+                          ? mode === "off"
+                            ? "bg-gray-700 text-white"
+                            : "bg-terracotta text-white"
+                          : "bg-gray-50 text-gray-500"
+                      }`}
+                    >
+                      {mode === "off" ? "Off" : mode === "any" ? "Any time" : d.mode === "custom" ? `${d.from}–${d.until}` : "Hours…"}
+                    </button>
+                  ))}
+                </div>
               </div>
               {d.mode === "custom" && (
-                <div className="flex items-center gap-1 text-xs">
-                  <input
-                    type="time"
-                    value={d.from}
-                    onChange={(e) => setDays({ ...days, [dw]: { ...d, from: e.target.value } })}
-                    className="rounded-lg border border-gray-200 px-1.5 py-1"
-                  />
-                  <span className="text-gray-400">–</span>
-                  <input
-                    type="time"
-                    value={d.until}
-                    onChange={(e) => setDays({ ...days, [dw]: { ...d, until: e.target.value } })}
-                    className="rounded-lg border border-gray-200 px-1.5 py-1"
-                  />
+                <div className="mt-2 space-y-2 pl-12">
+                  <div className="flex flex-wrap gap-1.5">
+                    {PRESETS.map((p) => {
+                      const active = d.from === p.from && d.until === p.until;
+                      return (
+                        <button
+                          key={p.label}
+                          onClick={() => setDays({ ...days, [dw]: { ...d, from: p.from, until: p.until } })}
+                          className={`rounded-xl px-3 py-2 text-sm font-medium ${
+                            active ? "bg-terracotta text-white" : "border border-gray-200 bg-white text-gray-700"
+                          }`}
+                        >
+                          {p.label} {p.from}–{p.until}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2 text-base">
+                    <select
+                      value={d.from}
+                      onChange={(e) => {
+                        const from = e.target.value;
+                        setDays({ ...days, [dw]: { ...d, from, until: d.until <= from ? (TIME_OPTIONS.find((t) => t > from) ?? "23:30") : d.until } });
+                      }}
+                      className="min-h-11 flex-1 rounded-xl border border-gray-200 px-3 py-2 text-base"
+                    >
+                      {TIME_OPTIONS.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <span className="text-gray-400">–</span>
+                    <select
+                      value={d.until}
+                      onChange={(e) => setDays({ ...days, [dw]: { ...d, until: e.target.value } })}
+                      className="min-h-11 flex-1 rounded-xl border border-gray-200 px-3 py-2 text-base"
+                    >
+                      {TIME_OPTIONS.filter((t) => t > d.from).map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
             </div>
@@ -158,19 +218,32 @@ function WeeklyPattern() {
         })}
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
-        <label className="text-xs text-gray-500">Max shifts/week</label>
-        <select
-          value={maxShifts}
-          onChange={(e) => setMaxShifts(e.target.value === "" ? "" : Number(e.target.value))}
-          className="rounded-lg border border-gray-200 px-2 py-1 text-sm"
-        >
-          <option value="">No limit</option>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <option key={n} value={n}>{n}</option>
+      <div className="mt-4">
+        <label className="text-sm font-semibold text-gray-600">Max shifts per week</label>
+        <div className="mt-1.5 grid grid-cols-6 gap-1.5">
+          {(["", 1, 2, 3, 4, 5] as const).map((n) => (
+            <button
+              key={String(n)}
+              onClick={() => setMaxShifts(n === "" ? "" : n)}
+              className={`min-h-11 rounded-xl py-2.5 text-base font-medium ${
+                maxShifts === n ? "bg-terracotta text-white" : "bg-gray-50 text-gray-500"
+              }`}
+            >
+              {n === "" ? "Any" : n}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
+
+      {/* Live summary of what will be saved */}
+      <p className="mt-3 text-sm text-gray-500">
+        {(() => {
+          const on = WEEK_ORDER.filter((dw) => days[dw].mode !== "off");
+          if (on.length === 0) return "No days selected — you won't be offered any shifts.";
+          if (on.length === 7 && on.every((dw) => days[dw].mode === "any")) return "Available any day, any time.";
+          return "Available: " + on.map((dw) => (days[dw].mode === "any" ? DAY_NAMES[dw] : `${DAY_NAMES[dw]} ${days[dw].from}–${days[dw].until}`)).join(", ") + (maxShifts !== "" ? ` · max ${maxShifts} shifts/week` : "");
+        })()}
+      </p>
 
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
@@ -178,15 +251,15 @@ function WeeklyPattern() {
         <button
           onClick={() => save(false)}
           disabled={saving}
-          className="flex-1 rounded-lg bg-terracotta py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="min-h-12 flex-1 rounded-xl bg-terracotta py-3 text-base font-semibold text-white disabled:opacity-50"
         >
-          {saving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : savedFlash ? "Saved ✓" : "Save pattern"}
+          {saving ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : savedFlash ? "Saved ✓" : "Save pattern"}
         </button>
         {hasPattern && (
           <button
             onClick={() => save(true)}
             disabled={saving}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600"
+            className="min-h-12 rounded-xl border border-gray-200 px-4 py-3 text-base font-medium text-gray-600"
           >
             Clear — I&apos;m flexible
           </button>

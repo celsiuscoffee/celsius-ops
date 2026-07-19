@@ -202,6 +202,8 @@ export default function SchedulesPage() {
   }>>>({});
   const [clearing, setClearing] = useState(false);
   const [swapAction, setSwapAction] = useState<string | null>(null);
+  const [slotBusy, setSlotBusy] = useState<string | null>(null);
+  const [postSlotForm, setPostSlotForm] = useState<{ date: string; templateId: string; station: "barista" | "kitchen" } | null>(null);
 
   // Get outlets list from the old endpoint (for dropdown)
   const { data: scheduleList } = useFetch<{ outlets: { id: string; name: string }[] }>("/api/hr/schedules");
@@ -235,6 +237,61 @@ export default function SchedulesPage() {
     : null;
 
   const { data: grid, mutate } = useFetch<GridData>(gridUrl);
+
+  // Open slots for this outlet+week — unfilled gaps the generator (or a
+  // manager, source 'manual') posted for staff to book in the staff apps.
+  type OpenSlot = {
+    id: string; shift_date: string; start_time: string; end_time: string;
+    break_minutes: number | null; station: string; role_type: string | null;
+    source: string; status: string; claimed_by: string | null; claimed_by_name: string | null;
+  };
+  const { data: openSlotsData, mutate: mutateOpenSlots } = useFetch<{ slots: OpenSlot[] }>(
+    selectedOutlet ? `/api/hr/open-shifts?outlet_id=${selectedOutlet}&week_start=${weekStart}` : null,
+  );
+  const openSlots = useMemo(() => openSlotsData?.slots ?? [], [openSlotsData]);
+
+  const cancelOpenSlot = async (id: string) => {
+    setSlotBusy(id);
+    try {
+      const res = await fetch("/api/hr/open-shifts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel", id }),
+      });
+      if (!res.ok) alert((await res.json().catch(() => null))?.error ?? "Cancel failed");
+      mutateOpenSlots();
+    } finally {
+      setSlotBusy(null);
+    }
+  };
+
+  const postOpenSlot = async () => {
+    if (!postSlotForm || !grid) return;
+    const t = (grid.templates || []).find((x) => x.id === postSlotForm.templateId);
+    if (!t) return;
+    setSlotBusy("post");
+    try {
+      const res = await fetch("/api/hr/open-shifts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          outlet_id: selectedOutlet,
+          shift_date: postSlotForm.date,
+          start_time: t.start_time,
+          end_time: t.end_time,
+          break_minutes: t.break_minutes,
+          station: postSlotForm.station,
+          role_type: t.label,
+        }),
+      });
+      if (!res.ok) alert((await res.json().catch(() => null))?.error ?? "Post failed");
+      else setPostSlotForm(null);
+      mutateOpenSlots();
+    } finally {
+      setSlotBusy(null);
+    }
+  };
 
   // Labour-cost gate preview — reprices the week whenever the roster changes
   // so the manager sees the projected labour % while still editing.
@@ -845,6 +902,16 @@ export default function SchedulesPage() {
           ) : null;
         })()}
 
+        {selectedOutlet && grid?.schedule && openSlots.length === 0 && !postSlotForm && (
+          <button
+            onClick={() => setPostSlotForm({ date: grid?.days?.[0] ?? weekStart, templateId: grid?.templates?.[0]?.id ?? "", station: "barista" })}
+            className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-100"
+            title="Post an extra shift for part-timers to book in the staff apps"
+          >
+            + Open slot
+          </button>
+        )}
+
         {gate?.coverage && gate.coverage.some((c) => c.neededHours > 0) && (
           <div className="flex items-center gap-1" title="Sales-derived coverage: staff-hours rostered vs needed per day">
             {gate.coverage.map((c) => {
@@ -882,6 +949,103 @@ export default function SchedulesPage() {
           )}
         </div>
       </div>
+
+      {/* Open slots — bookable in the staff apps, managed here */}
+      {selectedOutlet && (openSlots.length > 0 || postSlotForm) && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 font-semibold text-sky-800">
+              {openSlots.filter((s) => s.status === "open").length} open slot{openSlots.filter((s) => s.status === "open").length !== 1 ? "s" : ""} bookable in the staff apps
+              {openSlots.some((s) => s.status === "claimed") && (
+                <span className="text-sm font-normal text-sky-700">
+                  · {openSlots.filter((s) => s.status === "claimed").length} booked
+                </span>
+              )}
+            </h2>
+            {!postSlotForm && (
+              <button
+                onClick={() => setPostSlotForm({ date: grid?.days?.[0] ?? weekStart, templateId: grid?.templates?.[0]?.id ?? "", station: "barista" })}
+                className="rounded-lg border border-sky-300 bg-white px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100"
+              >
+                + Post slot
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {openSlots.map((s) => {
+              const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(s.shift_date + "T00:00:00Z").getUTCDay()];
+              const claimed = s.status === "claimed";
+              return (
+                <span
+                  key={s.id}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium ${
+                    claimed ? "border-green-300 bg-green-50 text-green-700" : "border-sky-300 bg-white text-sky-800"
+                  }`}
+                  title={`${s.shift_date} · ${s.station} · source ${s.source}${claimed ? ` · booked by ${s.claimed_by_name}` : " · waiting for a PT to book"}`}
+                >
+                  {day} {s.start_time}–{s.end_time} · {s.station === "kitchen" ? "Kitchen" : "Barista"}
+                  {claimed ? (
+                    <span className="font-semibold">✓ {s.claimed_by_name}</span>
+                  ) : (
+                    <button
+                      onClick={() => cancelOpenSlot(s.id)}
+                      disabled={slotBusy === s.id}
+                      className="ml-0.5 rounded px-1 text-sky-500 hover:bg-sky-100 hover:text-red-600"
+                      title="Cancel this open slot"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+          {postSlotForm && grid && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-white p-2 text-sm">
+              <select
+                value={postSlotForm.date}
+                onChange={(e) => setPostSlotForm({ ...postSlotForm, date: e.target.value })}
+                className="rounded-md border px-2 py-1"
+              >
+                {(grid.days || []).map((d) => (
+                  <option key={d} value={d}>
+                    {new Date(d + "T00:00:00Z").toLocaleDateString("en-MY", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={postSlotForm.templateId}
+                onChange={(e) => setPostSlotForm({ ...postSlotForm, templateId: e.target.value })}
+                className="rounded-md border px-2 py-1"
+              >
+                {(grid.templates || []).map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label} {t.start_time}–{t.end_time}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={postSlotForm.station}
+                onChange={(e) => setPostSlotForm({ ...postSlotForm, station: e.target.value as "barista" | "kitchen" })}
+                className="rounded-md border px-2 py-1"
+              >
+                <option value="barista">Barista</option>
+                <option value="kitchen">Kitchen</option>
+              </select>
+              <button
+                onClick={postOpenSlot}
+                disabled={slotBusy === "post" || !postSlotForm.templateId}
+                className="rounded-md bg-sky-600 px-3 py-1 font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+              >
+                Post
+              </button>
+              <button onClick={() => setPostSlotForm(null)} className="rounded-md border px-2 py-1 text-muted-foreground">
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Pending Swap Approvals */}
       {pendingSwaps.length > 0 && (
