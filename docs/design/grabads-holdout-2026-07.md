@@ -83,6 +83,49 @@ holds, the drop is ad-driven; if share holds, it's general demand.
 - First look **2026-07-23** (1 week), solid read **2026-07-30** (≥2 of each weekday).
 - **Ignore the first 1–2 days per outlet** — residual ad delivery + settlement lag.
 
+## Progress log
+
+### 2026-07-19 — early read (full days Jul 15–17; Jul 18 partial)
+Baseline switched to the **median** per weekday (the mean Wed was inflated by a
+Jul 8 outlier: RM890 / 23 orders). Grab vs median baseline, with till as the
+demand control:
+
+| Outlet | Jul 15 Wed | Jul 16 Thu | Jul 17 Fri | Till (control) | Signal |
+|---|---|---|---|---|---|
+| **Tamarind** | −26% | +18% | +27% | volatile, no dir. | flat/up → ad non-incremental |
+| **Putrajaya**\* | −27% | +86% | −14% | held | small drop (1 clean day) |
+| **Shah Alam** | −48% | −54% | −31% | held | down, but NOT ad-caused |
+
+\*Putrajaya paused Jul 16; Jul 15–16 still ran with ads on (Jul 16 = +86%), so
+Jul 17 is its only clean day. Jul 18 (Sat) is partial (order counts 3–6) — not
+readable.
+
+**Findings:**
+- **Tamarind** — Grab held/rose with ads off → the ad was doing ~nothing → near
+  the full-savings ceiling.
+- **Putrajaya** — one clean day −14% while till +6% → small real drop, still
+  strongly cash-positive.
+- **Shah Alam** — Grab down ~30–54% while **till held**, but the ad is only
+  RM30–50/day (billed ~RM30) and **cannot** drive a ~RM200/day drop (that's a
+  6–7× ROAS). So the drop is **Grab-channel softness, not the ad** — flag as an
+  operational check (store availability / rating / ranking), separate from the
+  ad decision. Earlier "−RM2,300 loss" call was an artifact of the outlier
+  baseline + over-attribution; **retracted**.
+
+**Refreshed projection (up from the initial ~RM1,700/mo, because the ads look
+LESS incremental than first assumed):**
+
+| Outlet | Ad saved/mo (billed) | Net cash/mo |
+|---|---|---|
+| Tamarind | RM1,244 | +RM1,000 – 1,244 |
+| Putrajaya | RM2,587 | +RM1,500 – 2,000 |
+| Shah Alam | RM901 | +RM500 – 900 |
+| **Total** | **RM4,732** | **≈ RM3,000 – 4,100/mo** |
+
+**Central ≈ RM3,500/mo (~RM42k/yr).** Floor ~RM2,500 (if ads had ~1.5× pull);
+ceiling RM4,732 (ads fully wasted, where Tamarind already sits). Firms up at the
+Jul 23 / 30 read.
+
 ## How to read it (per outlet)
 1. `decrement/day = baseline(weekday) − actual Grab gross`.
 2. `incremental ROAS = (monthly decrement) ÷ (monthly GrabAds spend)`.
