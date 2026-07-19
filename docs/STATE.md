@@ -758,11 +758,15 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   tripped the one-probe-at-a-time check, and nightly waste-matched cuts
   were resetting the fleet-spacing clock — starvation bugs). Fixed: the
   one-probe check counts only autopilot-paused campaigns; waste-matched
-  cuts don't reset the spacing clock; pauses are never spaced. **Tamarind
-  pauses at the next nightly run for the 28d baseline**
+  cuts don't reset the spacing clock; pauses are never spaced. **PLAN CHANGED (owner,
+  Jul 19): pause probe SHELVED — "let tamarind follow the others, start with
+  the prev cut (rm80+)". One-time owner directive in code cuts Tamarind
+  100.20→84.96 at the next nightly run (self-expiring: fires only while the
+  false-positive rollback is the last ledger row), then Tamarind runs the
+  same gradual descent as PJ/SA. Probe machinery kept, re-enable via
+  ADS_AUTOPILOT_PAUSE_PROBE=on.** (Superseded text: Tamarind 28d baseline
   (probe gate now blocks only on absolute till weakness, #973) →
-  auto-restore + verdict ~Aug 15 (drop → ads generate cash, resume+descend;
-  none → restore at RM20/day floor, ~RM2.4k/mo freed). Competitor + dessert
+  auto-restore + verdict ~Aug 15 — drop → ads generate cash; none → floor.) Competitor + dessert
   junk classes armed (owner: no conquesting), Malay/local vocab added,
   25-negative-slot budget per campaign. **Watch items:** Tamarind verdict
   ~Aug 15; SA/Tam term data accumulating (waste-matched cuts follow);

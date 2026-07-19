@@ -68,7 +68,9 @@ raise|revert|pause|restore`) — no extra tables.
   `forecastDailyMyr`) must be ≤ cumulative descent ÷ margin
   (`ADS_GROSS_MARGIN`=0.6) × 2. Implausibly large gaps hold-and-flag
   "another cause" instead. Rollback restores one step + 56d hold.
-- **PAUSE PROBE** (the till-readable experiment: steps of 8–15% of
+- **PAUSE PROBE** — SHELVED by owner 2026-07-19 ("let tamarind follow the
+  others"); machinery kept, re-enable via ADS_AUTOPILOT_PAUSE_PROBE=on.
+  (Design: the till-readable experiment: steps of 8–15% of
   ~RM100/day move a ~RM2.5-3k/day outlet by <1% — unreadable; a full pause
   ≈5-6% if break-even): one clearly-inefficient campaign at a time
   (cost/conv >1.3× fleet-best, never re-probed), paused 28d via the Ads API,
@@ -76,7 +78,7 @@ raise|revert|pause|restore`) — no extra tables.
   (own raw index <0.95); a relative-only breach (hot sibling) does not defer
   it (#973). Auto-restore with verdict vs a pre-pause forecast: till dropped
   → ads generate cash, resume prior budget + descend; no detectable effect →
-  below break-even wholesale, restore at the floor.
+  below break-even wholesale, restore at the floor.)
 - **PROBE UP** (the "increase cash" search, entered after a rollback proves
   response): +15%, 28d observation, cap 1.25× highest ledgered baseline;
   kept only on detectable lift (fleet-adj ≥1.02 AND raw ≥1.0), breach

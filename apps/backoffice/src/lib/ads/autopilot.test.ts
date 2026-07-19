@@ -5,6 +5,7 @@ import {
   capCuts,
   selectPauseProbe,
   spaceDisturbances,
+  ownerDirective,
   FLEET_SPACING_DAYS,
   FLOOR_DAILY_MYR,
   OBSERVE_DAYS,
@@ -393,6 +394,40 @@ describe("pause probe", () => {
     const d = decideCampaign(campaign({ isPaused: true, lastApplied: null }), healthy, NOW);
     expect(d.action).toBe("hold");
     expect(d.reason).toMatch(/not by the autopilot/);
+  });
+});
+
+describe("ownerDirective (Tamarind resumes descent at RM84.96)", () => {
+  const tamarind = (over: Partial<CampaignState> = {}) =>
+    campaign({
+      campaignId: "tam",
+      campaignName: "Celsius Coffee Tamarind Square",
+      dailyBudgetMyr: 100.2,
+      baselineDailyMyr: 100.2,
+      lastApplied: { decidedAt: daysAgo(2), prevDailyMyr: 84.96, newDailyMyr: 100.2, reason: "autopilot rollback: guard breach" },
+      ...over,
+    });
+
+  it("fires once while the false-positive rollback is still the last change", () => {
+    const d = ownerDirective(tamarind());
+    expect(d?.action).toBe("cut");
+    expect(d?.newDailyMyr).toBe(84.96);
+    expect(d?.reason).toMatch(/owner directive/);
+  });
+
+  it("never fires again after the step-down lands, and never for other campaigns", () => {
+    expect(
+      ownerDirective(
+        tamarind({ dailyBudgetMyr: 84.96, lastApplied: { decidedAt: daysAgo(1), prevDailyMyr: 100.2, newDailyMyr: 84.96, reason: "autopilot step-down (owner directive 2026-07-19)" } }),
+      ),
+    ).toBeNull();
+    expect(ownerDirective(campaign({ campaignName: "Celsius Putrajaya" }))).toBeNull();
+    expect(ownerDirective(tamarind({ isPaused: true }))).toBeNull();
+  });
+
+  it("owner-directive cuts are exempt from fleet spacing like waste-matched ones", () => {
+    const d = [{ campaignId: "tam", campaignName: "Tam", action: "cut" as const, newDailyMyr: 84.96, reason: "autopilot step-down (owner directive 2026-07-19): resume descent" }];
+    expect(spaceDisturbances(d, daysAgo(1), NOW)[0].action).toBe("cut");
   });
 });
 
