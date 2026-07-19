@@ -1,4 +1,4 @@
-import { createSign, createVerify } from "crypto";
+import { createSign, createVerify, createPublicKey, type KeyObject } from "crypto";
 
 // RM splits its API across two hostnames:
 //   - BASE_URL  hosts the v3 payment endpoints (/v3/payment/online, ...)
@@ -68,20 +68,41 @@ const SERVER_PUBLIC_KEY = (process.env.RM_SERVER_PUBLIC_KEY || "")
   .replace(/\\n/g, "\n")
   .trim();
 
+// RM's portal exports the server key as PKCS#1 ("-----BEGIN RSA PUBLIC
+// KEY-----"), but passing that PEM string straight to crypto verify() throws
+// ERR_OSSL_ASN1_WRONG_TAG (the string path only auto-parses SPKI "BEGIN
+// PUBLIC KEY"). That made EVERY webhook signature verification throw, so no
+// RM payment confirmation was ever applied directly — orders sat pending
+// until a poll/cron re-query, and when THOSE timed out customers saw
+// "paid at the bank but no order". Parse the PEM into a KeyObject once,
+// handling both PKCS#1 and SPKI, and verify against that instead.
+function loadRmServerKey(pem: string): KeyObject | null {
+  if (!pem) return null;
+  try {
+    // PEM path — Node infers pkcs1 vs spki from the armor header.
+    return createPublicKey({ key: pem, format: "pem" });
+  } catch {
+    /* fall through to explicit DER parsing */
+  }
+  const der = Buffer.from(pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, ""), "base64");
+  for (const type of ["pkcs1", "spki"] as const) {
+    try {
+      return createPublicKey({ key: der, format: "der", type });
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+const SERVER_KEY: KeyObject | null = loadRmServerKey(SERVER_PUBLIC_KEY);
+
 // One-time boot diagnostic — one short line per fact so Vercel's log
 // viewer (and our log-search MCP, which truncates each line) shows all
-// of them. Lets us confirm the key actually parsed as a PEM without
-// leaking the key body.
+// of them. Lets us confirm the key actually parsed without leaking it.
 if (SERVER_PUBLIC_KEY) {
-  const hasBegin    = SERVER_PUBLIC_KEY.includes("-----BEGIN");
-  const hasEnd      = SERVER_PUBLIC_KEY.includes("-----END");
-  const hasNewline  = SERVER_PUBLIC_KEY.includes("\n");
-  const firstLine   = SERVER_PUBLIC_KEY.split("\n")[0]?.slice(0, 40) ?? "";
-  console.log(`[rmkey] len=${SERVER_PUBLIC_KEY.length}`);
-  console.log(`[rmkey] hasBegin=${hasBegin}`);
-  console.log(`[rmkey] hasEnd=${hasEnd}`);
-  console.log(`[rmkey] hasNewline=${hasNewline}`);
-  console.log(`[rmkey] firstLine=${firstLine}`);
+  const firstLine = SERVER_PUBLIC_KEY.split("\n")[0]?.slice(0, 40) ?? "";
+  console.log(`[rmkey] len=${SERVER_PUBLIC_KEY.length} firstLine=${firstLine}`);
+  console.log(`[rmkey] parsed=${SERVER_KEY ? SERVER_KEY.asymmetricKeyType : "FAILED"}`);
 }
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
@@ -525,6 +546,12 @@ export function validateWebhookSignature(
     console.warn("RM_SERVER_PUBLIC_KEY unset — skipping webhook signature verify");
     return true;
   }
+  if (!SERVER_KEY) {
+    // Key present but unparseable in every known format — verification is
+    // impossible. Stay strict (callers fall back to re-querying RM by API).
+    console.warn("[rm] RM_SERVER_PUBLIC_KEY could not be parsed as PKCS#1 or SPKI");
+    return false;
+  }
 
   // Header value is "sha256 <base64sig>" — strip the "sha256 " prefix.
   const sigB64 = signature.startsWith("sha256 ") ? signature.slice(7) : signature;
@@ -546,7 +573,7 @@ export function validateWebhookSignature(
   verifier.update(signString);
   verifier.end();
   try {
-    const ok = verifier.verify(SERVER_PUBLIC_KEY, sigB64, "base64");
+    const ok = verifier.verify(SERVER_KEY, sigB64, "base64");
     if (!ok) {
       console.warn("[rm] webhook sig mismatch", debug);
     }
