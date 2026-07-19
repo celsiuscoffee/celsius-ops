@@ -16,6 +16,7 @@ import { proposeApMatches, writeApMatch, type ApMatch } from "../ap-match";
 import { getFinanceClient } from "../supabase";
 import { markDecisionApplied } from "./categorizer";
 import { logAgentMessage } from "@celsius/agents/src/messages";
+import { askOwner, pendingPromptExists } from "@celsius/agents/src/ask-owner";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -205,16 +206,41 @@ export async function applyVerifiedReview(opts: { commit?: boolean; sinceDays?: 
     // match" correction.
     if (v?.payAndClaim) {
       payAndClaim++;
-      await logAgentMessage({
-        fromAgent: "finance_ap_verifier",
-        toAgent: "owner",
-        kind: "handoff",
-        summary: `Staff pay-and-claim: the ${m.payee} invoice (RM${m.amount.toFixed(2)}) was paid by ${v.paidBy ?? "a staff member"} and reimbursed, so the bank line shows their name. It's a valid settlement - routed to your finance inbox to confirm against the claim, not cleared automatically.`,
-        detail: v.reason,
-        refTable: "fin_bank_lines",
-        refId: m.bankLineId,
-        notify: false,
-      });
+      // Ask the owner on Telegram to approve clearing it — one tap on ✅ Clear
+      // settles the invoice (dispatched by the pulse webhook). Dedup so the
+      // daily re-run doesn't re-ask about the same still-open bank line, and
+      // only ask on a committed run (not a dry run).
+      let asked = false;
+      if (commit && !(await pendingPromptExists("finance_ap_verifier", m.bankLineId))) {
+        const promptId = await askOwner({
+          agentKey: "finance_ap_verifier",
+          kind: "confirm",
+          prompt: `Staff pay-and-claim: the ${m.payee} invoice (RM${m.amount.toFixed(2)}) looks like it was paid by ${v.paidBy ?? "a staff member"} out of pocket and reimbursed. Clear it (mark the invoice settled)?`,
+          options: [
+            { label: "✅ Clear it", value: "clear" },
+            { label: "🛑 Not this", value: "reject" },
+          ],
+          refTable: "fin_bank_lines",
+          refId: m.bankLineId,
+          payload: { action: "clear_ap_match", approveValue: "clear", match: m },
+          expiresInHours: 72,
+        });
+        asked = !!promptId;
+      }
+      if (!asked) {
+        // Two-way not configured (or already asked / dry run): leave it in the
+        // finance inbox with a plain-English note, don't auto-clear.
+        await logAgentMessage({
+          fromAgent: "finance_ap_verifier",
+          toAgent: "owner",
+          kind: "handoff",
+          summary: `Staff pay-and-claim: the ${m.payee} invoice (RM${m.amount.toFixed(2)}) was paid by ${v.paidBy ?? "a staff member"} and reimbursed. Valid settlement - in your finance inbox to confirm, not cleared automatically.`,
+          detail: v.reason,
+          refTable: "fin_bank_lines",
+          refId: m.bankLineId,
+          notify: false,
+        });
+      }
       continue;
     }
     if (v?.verdict === "reject") {

@@ -3,9 +3,51 @@ import { getAgentClient } from "@celsius/agents/src/substrate";
 import { logAgentMessage } from "@celsius/agents/src/messages";
 import { answerPulseCallback, pulseChatId, sendPulse } from "@celsius/agents/src/pulse";
 import { resolvePrompt, findPromptByMessageId } from "@celsius/agents/src/ask-owner";
+import { writeApMatch, type ApMatch } from "@/lib/finance/ap-match";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
+
+// Owner-approved actions. When a prompt carries a payload.action, the owner's
+// answer authorizes a real mutation. Kept in the app (not the shared package)
+// because the actions are app/domain-specific. resolvePrompt is atomic, so this
+// runs at most once per prompt even on a double-tap.
+async function dispatchPromptAction(payload: Record<string, unknown> | null, value: string): Promise<void> {
+  if (!payload || typeof payload !== "object") return;
+  const action = payload.action;
+
+  if (action === "clear_ap_match") {
+    const approveValue = typeof payload.approveValue === "string" ? payload.approveValue : "approve";
+    const match = payload.match as ApMatch | undefined;
+    if (value !== approveValue) {
+      await logAgentMessage({
+        fromAgent: "owner",
+        toAgent: "finance_ap_agent",
+        kind: "note",
+        summary: "Declined the pay-and-claim clear — left in the finance inbox for manual review.",
+        notify: false,
+      });
+      return;
+    }
+    if (!match) return;
+    try {
+      await writeApMatch(match); // idempotent: no-op if already settled
+      await sendPulse(`✅ Cleared the ${escapeHtml(String(match.payee))} invoice (RM${Number(match.amount).toFixed(2)}) — settled as a staff pay-and-claim.`);
+      await logAgentMessage({
+        fromAgent: "owner",
+        toAgent: "finance_ap_agent",
+        kind: "note",
+        summary: `Approved and cleared the ${match.payee} pay-and-claim (RM${Number(match.amount).toFixed(2)}).`,
+        refTable: "fin_bank_lines",
+        refId: String(match.bankLineId),
+        notify: false,
+      });
+    } catch (e) {
+      console.error("[pulse-webhook] clear_ap_match failed:", e);
+      await sendPulse("⚠️ Couldn't clear that invoice automatically — please settle it in the finance inbox.");
+    }
+  }
+}
 
 // Inbound webhook for the dedicated pulse bot (@celsiuspulsebot). Lets the owner
 // talk back to the agents in real time:
@@ -80,6 +122,8 @@ export async function POST(req: NextRequest) {
             summary: `Answered "${resolved.prompt.slice(0, 120)}" with: ${value}`,
             notify: false,
           });
+          // Execute whatever the answer authorized (e.g. clear the AP match).
+          await dispatchPromptAction(resolved.payload, value);
         }
       } else {
         await answerPulseCallback(cb.id);
