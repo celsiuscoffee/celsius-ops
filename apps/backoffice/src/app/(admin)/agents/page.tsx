@@ -58,7 +58,7 @@ interface MessageRow {
   at: string;
   from_agent: string;
   to_agent: string | null;
-  kind: "handoff" | "learning" | "logic_change" | "report";
+  kind: "handoff" | "learning" | "logic_change" | "report" | "correction";
   summary: string;
   detail: string | null;
   outlet_id: string | null;
@@ -68,6 +68,7 @@ interface MessageRow {
 
 const KIND_META: Record<MessageRow["kind"], { label: string; emoji: string; classes: string }> = {
   handoff: { label: "Handoff", emoji: "🔁", classes: "bg-blue-50 text-blue-700" },
+  correction: { label: "Correction", emoji: "🛠", classes: "bg-rose-50 text-rose-700" },
   learning: { label: "Learned", emoji: "🧠", classes: "bg-violet-50 text-violet-700" },
   logic_change: { label: "Logic change", emoji: "⚙️", classes: "bg-amber-50 text-amber-700" },
   report: { label: "Report", emoji: "📣", classes: "bg-emerald-50 text-emerald-700" },
@@ -331,6 +332,7 @@ function Conversations({
   const FILTERS: { key: string; label: string }[] = [
     { key: "", label: "All" },
     { key: "handoff", label: "🔁 Handoffs" },
+    { key: "correction", label: "🛠 Corrections" },
     { key: "learning", label: "🧠 Learnings" },
     { key: "logic_change", label: "⚙️ Logic changes" },
     { key: "report", label: "📣 Reports" },

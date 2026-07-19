@@ -35,6 +35,7 @@ export const KIND_LABEL: Record<string, string> = {
   learning: "learned",
   logic_change: "changed logic",
   report: "reported to",
+  correction: "corrected",
 };
 
 const KIND_EMOJI: Record<string, string> = {
@@ -42,6 +43,7 @@ const KIND_EMOJI: Record<string, string> = {
   learning: "🧠",
   logic_change: "⚙️",
   report: "📣",
+  correction: "🛠",
 };
 
 // Renders one agent message as a readable Telegram line. Names both sides so a

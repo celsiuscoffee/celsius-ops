@@ -21,6 +21,7 @@ import {
   type VerifierDecision,
   type VerifierVerdict,
 } from "@/lib/inventory/agents/verifier";
+import { logAgentMessage } from "@/lib/agents/messages";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -105,6 +106,23 @@ export async function verifyMessage(messageId: string): Promise<VerifierVerdict 
       } as Prisma.InputJsonValue,
     },
   });
+
+  // When the verifier isn't happy (concern/fail), it tells the supplier chat
+  // agent what went wrong and what the right move is. This is the flagship
+  // "verifier finds a problem and teaches the agent" case the owner wants to
+  // see - recorded as a correction on the Conversations feed and pushed live.
+  if (verdict.rating !== "pass") {
+    await logAgentMessage({
+      fromAgent: "procurement_verifier",
+      toAgent: "procurement_supplier_chat",
+      kind: "correction",
+      summary: `Graded the reply to ${input.supplierName} as ${verdict.rating}: ${verdict.summary}${verdict.recommendedAction ? ` The right move: ${verdict.recommendedAction}.` : ""}`,
+      detail: verdict.issues.length ? verdict.issues.join("; ") : undefined,
+      refTable: "whatsapp_message",
+      refId: msg.id,
+    });
+  }
+
   return verdict;
 }
 

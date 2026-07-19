@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { getSession } from "@/lib/auth";
 import { runCelsiusOverviewAgent } from "@/lib/ai-agent/celsius-overview";
+import { runCommsDigest } from "@/lib/agents/digest";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -40,6 +41,19 @@ async function runHandler(req: NextRequest) {
 
   try {
     const result = await runCelsiusOverviewAgent({ sendTelegram: !skipTelegram });
+
+    // Fold the once-a-day agent-comms digest into this cron's 9pm MYT (13:00
+    // UTC) firing instead of spending a separate Vercel cron slot (project is
+    // near the 40-cron cap). Best-effort: a digest failure never fails the
+    // overview run.
+    if (isCron && new Date().getUTCHours() === 13) {
+      try {
+        await runCommsDigest();
+      } catch (digestErr) {
+        console.error("[ai-agent] folded comms-digest failed:", digestErr);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       generatedAt: result.generatedAt,

@@ -9,7 +9,7 @@ import { sendPulse, formatPulseMessage } from "./pulse";
 //
 // Never throws - a notification failure must not break the business action.
 
-export type AgentMessageKind = "handoff" | "learning" | "logic_change" | "report";
+export type AgentMessageKind = "handoff" | "learning" | "logic_change" | "report" | "correction";
 
 // Friendly display names so the feed reads in plain English instead of DB keys.
 // Falls back to the de-underscored key for anything not listed.
@@ -22,6 +22,7 @@ const AGENT_LABELS: Record<string, string> = {
   celsius_overview: "Owner briefing agent",
   finance_ap_agent: "Finance AP agent",
   finance_ap_match_apply: "Finance AP matcher",
+  finance_ap_verifier: "Finance verifier",
   finance_gl_post: "Finance ledger poster",
   finance_eod: "Finance EOD agent",
   procurement_supplier_chat: "Supplier chat agent",
