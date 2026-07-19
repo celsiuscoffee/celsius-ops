@@ -210,7 +210,11 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `_lib/source-channels.ts`) now flows through compare (`sources` per
   period + UI breakdown table), consignment daily rows carry
   units=item_count into orders/AOV, and partial-vs-full comparisons show
-  an aligned "first K days" pace line in the summary cards.
+  an aligned "first K days" pace line in the summary cards. MERGED as
+  #976. Round 2 (owner: "cannot pick multiple outlets"): outlet filter is
+  now multi-select — API takes `outletIds=a,b,c` (legacy `outletId` kept
+  for the staff bridge), UI is a checkbox popover; selecting every outlet
+  collapses to the all-outlets default.
 
 - Typecheck before pushing — every time. CI enforces it, but catch it locally.
 - Never test against the production database; the procurement runbook's seed SQL
