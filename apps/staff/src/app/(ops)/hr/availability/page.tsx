@@ -463,12 +463,15 @@ export default function AvailabilityPage() {
         </div>
       )}
 
-      {/* Reason modal */}
+      {/* Reason modal — CENTERED, not a bottom sheet: pinned-to-bottom put the
+          input under the keyboard and the buttons behind the bottom nav on
+          phones (owner report 2026-07-19: "staff apps cannot fill reason").
+          text-base (16px) also stops iOS Safari's focus-zoom jump. */}
       {showReason && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 pb-28">
           <div className="w-full max-w-md rounded-2xl bg-white p-5">
-            <h3 className="mb-1 font-semibold">Mark Unavailable</h3>
-            <p className="mb-3 text-sm text-gray-500">
+            <h3 className="mb-1 text-lg font-semibold">Mark Unavailable</h3>
+            <p className="mb-3 text-base text-gray-500">
               {new Date(showReason + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "numeric", month: "long" })}
             </p>
             <input
@@ -476,22 +479,22 @@ export default function AvailabilityPage() {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Reason (optional, e.g. family event)"
-              className="mb-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              className="mb-3 min-h-12 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base"
               autoFocus
             />
             <div className="flex gap-2">
               <button
                 onClick={() => { setShowReason(null); setReason(""); }}
-                className="flex-1 rounded-lg border border-gray-200 py-2 text-sm font-medium text-gray-700"
+                className="min-h-12 flex-1 rounded-xl border border-gray-200 py-2.5 text-base font-medium text-gray-700"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmBlockout}
                 disabled={saving !== null}
-                className="flex-1 rounded-lg bg-red-500 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="min-h-12 flex-1 rounded-xl bg-red-500 py-2.5 text-base font-medium text-white disabled:opacity-50"
               >
-                {saving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Confirm"}
+                {saving ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : "Confirm"}
               </button>
             </div>
           </div>
