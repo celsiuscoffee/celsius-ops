@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { mytDayWindow, type ConsumptionResult } from "@/lib/inventory/consumption";
 import { postOutletConsumption } from "@/lib/inventory/consumption-post";
+import { getAgentClient, touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
+import { logAgentMessage } from "@/lib/agents/messages";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -81,6 +83,57 @@ export async function GET(req: NextRequest) {
       itemsUnmapped: results.reduce((s, r) => s + r.itemsUnmapped, 0),
     };
     console.log(`[consumption-post] ${JSON.stringify(summary)}`);
+
+    // Persist the shadow computation (pure telemetry - never touches inventory)
+    // so it can be validated over time toward arming the engine. One row per
+    // outlet per day, idempotent on (date, outlet_id).
+    await touchAgentRun("consumption_engine");
+    try {
+      const client = getAgentClient();
+      const nowIso = new Date().toISOString();
+      const rows = results.map((r) => ({
+        date,
+        outlet_id: r.outletId,
+        outlet_name: r.outletName,
+        mode: summary.mode,
+        posted: r.posted,
+        menus_sold: r.menusSold,
+        menus_without_recipe: r.menusWithoutRecipe,
+        items_unmapped: r.itemsUnmapped,
+        products_consumed: r.productsConsumed,
+        lines: r.lines,
+        updated_at: nowIso,
+      }));
+      if (rows.length) {
+        await client.from("consumption_shadow_runs").upsert(rows, { onConflict: "date,outlet_id" });
+      }
+    } catch (persistErr) {
+      console.error("[consumption-post] shadow persist failed:", persistErr);
+    }
+
+    // Surface the daily shadow result on the Conversations feed so the owner can
+    // watch what the engine WOULD deplete (and how much recipe coverage is still
+    // missing) while it stays safely gated. Recorded on /agents + the daily
+    // digest; no real-time push (it's daily reference, not an alert).
+    await logAgentAction({
+      agentKey: "consumption_engine",
+      kind: summary.mode === "live" ? "consumption_posted" : "shadow_run",
+      summary: `${summary.mode}: ${summary.totalProductsConsumed} products depleted across ${summary.outlets} outlets for ${date}; ${summary.menusWithoutRecipe} menus without a recipe`,
+      meta: summary,
+    });
+    await logAgentMessage({
+      fromAgent: "consumption_engine",
+      toAgent: "owner",
+      kind: "report",
+      summary:
+        summary.mode === "live"
+          ? `Posted consumption for ${date}: depleted ${summary.totalProductsConsumed} products across ${summary.outlets} outlets.`
+          : `Computed (shadow, not written): for ${date}, sales would deplete ${summary.totalProductsConsumed} products across ${summary.outlets} outlets. ${summary.menusWithoutRecipe} menus still have no recipe so they're excluded - close that gap before arming.`,
+      detail: "The consumption -> reorder -> supplier chain stays gated until stock units are normalised to base UOM and recipes are imported.",
+      refTable: "consumption_shadow_runs",
+      notify: false,
+    });
+
     return NextResponse.json({ ok: true, summary, results });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "consumption-post failed";
