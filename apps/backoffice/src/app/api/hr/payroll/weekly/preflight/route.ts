@@ -65,6 +65,25 @@ export async function GET(req: NextRequest) {
         .not("clock_out", "is", null)
     : { data: [] as Log[] };
 
+  // 2b. ROSTERED shifts this week — "no clock-ins" is only a warning when the
+  // PT was actually scheduled (owner 2026-07-19: a PT who simply isn't on the
+  // roster this week is not a problem, just not working). Unconfirmed AI
+  // suggestions don't count as scheduled.
+  const { data: rostered } = userIds.length
+    ? await hrSupabaseAdmin
+        .from("hr_schedule_shifts")
+        .select("user_id, shift_date, start_time, notes")
+        .in("user_id", userIds)
+        .gte("shift_date", periodStart)
+        .lte("shift_date", periodEnd)
+    : { data: [] as Array<{ user_id: string; start_time: string; notes: string | null }> };
+  const scheduledCountByUser = new Map<string, number>();
+  for (const s of (rostered ?? []) as Array<{ user_id: string; start_time: string; notes: string | null }>) {
+    if (s.start_time?.slice(0, 5) === "00:00") continue; // rest-day marker
+    if (s.notes === "pt_suggestion") continue; // unconfirmed suggestion
+    scheduledCountByUser.set(s.user_id, (scheduledCountByUser.get(s.user_id) || 0) + 1);
+  }
+
   const shiftCountByUser = new Map<string, number>();
   const hoursByUser = new Map<string, number>();
   for (const l of (logs || []) as Log[]) {
@@ -121,12 +140,15 @@ export async function GET(req: NextRequest) {
     if (Number(p.hourly_rate || 0) <= 0) {
       issues.push({ code: "missing_hourly_rate", severity: "block", message: "No hourly rate set" });
     }
-    if (loggedShifts === 0) {
-      // No clock-ins this week — by design no payment line. Soft note.
+    const scheduledShifts = scheduledCountByUser.get(p.user_id) || 0;
+    if (loggedShifts === 0 && scheduledShifts > 0) {
+      // Rostered but never clocked — THAT'S the anomaly worth a warning
+      // (no-show, or the clock-in never happened / wasn't closed). A PT who
+      // simply isn't on this week's roster raises nothing.
       issues.push({
-        code: "no_clockins",
+        code: "scheduled_no_clockins",
         severity: "warn",
-        message: "No clock-ins this week — no payroll line will be created.",
+        message: `Scheduled ${scheduledShifts} shift${scheduledShifts > 1 ? "s" : ""} this week but has NO clock-ins — check before paying.`,
       });
     }
 
@@ -134,7 +156,7 @@ export async function GET(req: NextRequest) {
       issues.push({
         code: "missing_bank",
         severity: "warn",
-        message: "No bank account on file (Maybank file will skip)",
+        message: "No bank account on file — the payment file will BLOCK until it's added on the employee page.",
       });
     }
 

@@ -75,6 +75,38 @@ export async function GET(req: NextRequest) {
     .from("hr_public_holidays").select("date").gte("date", weekStart).lte("date", weekEndStr);
   const holidaySet = new Set(((hols ?? []) as Array<{ date: string }>).map((h) => h.date));
 
+  // Pay cap inputs — same rule the weekly payroll calculator applies:
+  // paid = min(clocked, rostered net hours that day + approved OT).
+  const { data: rosterRows } = await hrSupabaseAdmin
+    .from("hr_schedule_shifts")
+    .select("user_id, shift_date, start_time, end_time, break_minutes, notes")
+    .in("user_id", ptIds)
+    .gte("shift_date", weekStart)
+    .lte("shift_date", weekEndStr);
+  const schedByUserDay = new Map<string, number>();
+  for (const s of (rosterRows ?? []) as Array<{ user_id: string; shift_date: string; start_time: string; end_time: string; break_minutes: number | null; notes: string | null }>) {
+    if (s.start_time?.slice(0, 5) === "00:00") continue;
+    if (s.notes === "pt_suggestion") continue;
+    const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+    let mins = toMin(s.end_time) - toMin(s.start_time);
+    if (mins < 0) mins += 24 * 60;
+    const key = `${s.user_id}:${s.shift_date}`;
+    schedByUserDay.set(key, (schedByUserDay.get(key) ?? 0) + Math.max(0, mins / 60 - (s.break_minutes ?? 0) / 60));
+  }
+  const { data: otRows } = await hrSupabaseAdmin
+    .from("hr_overtime_requests")
+    .select("user_id, date, hours_approved")
+    .in("user_id", ptIds)
+    .gte("date", weekStart)
+    .lte("date", weekEndStr)
+    .in("status", ["approved", "partial"]);
+  const otByUserDay = new Map<string, number>();
+  for (const o of (otRows ?? []) as Array<{ user_id: string; date: string; hours_approved: number | null }>) {
+    const key = `${o.user_id}:${o.date}`;
+    otByUserDay.set(key, (otByUserDay.get(key) ?? 0) + (Number(o.hours_approved) || 0));
+  }
+  const capLeft = new Map<string, number>();
+
   const userIds = [...new Set(logs.map((l) => l.user_id))];
   const outletIds = [...new Set(logs.map((l) => l.outlet_id).filter(Boolean))] as string[];
   const [users, outlets] = await Promise.all([
@@ -92,6 +124,10 @@ export async function GET(req: NextRequest) {
       : Math.max(0, (new Date(l.clock_out as string).getTime() - new Date(l.clock_in).getTime()) / 3600000);
     const worked = Math.max(0, Math.round((totalH - breakHoursFor("part_time", totalH)) * 100) / 100);
     const dateStr = mytDateString(l.clock_in);
+    const dayKey = `${l.user_id}:${dateStr}`;
+    if (!capLeft.has(dayKey)) capLeft.set(dayKey, (schedByUserDay.get(dayKey) ?? 0) + (otByUserDay.get(dayKey) ?? 0));
+    const paid = Math.round(Math.min(worked, capLeft.get(dayKey)!) * 100) / 100;
+    capLeft.set(dayKey, Math.max(0, capLeft.get(dayKey)! - paid));
     const rate = ptRateForDate(prof, dateStr, holidaySet.has(dateStr));
     const confirmed = l.final_status === "approved" || l.final_status === "adjusted";
     const state = l.final_status === "rejected" ? "rejected"
@@ -100,7 +136,8 @@ export async function GET(req: NextRequest) {
     (byUser.get(l.user_id) ?? byUser.set(l.user_id, []).get(l.user_id)!).push({
       id: l.id, date: dateStr,
       clock_in: l.clock_in, clock_out: l.clock_out,
-      worked_hours: worked, rate, pay: Math.round(worked * rate * 100) / 100,
+      worked_hours: worked, paid_hours: paid, capped: paid < worked,
+      rate, pay: Math.round(paid * rate * 100) / 100,
       is_weekend_rate: rate !== (Number(prof.hourly_rate) || 0) && !holidaySet.has(dateStr),
       is_holiday: holidaySet.has(dateStr),
       state, ai_flags: l.ai_flags ?? [],
@@ -115,7 +152,7 @@ export async function GET(req: NextRequest) {
       user_id: uid,
       name: u?.fullName || u?.name || uid.slice(0, 8),
       logs: rows,
-      total_hours: Math.round(payable.reduce((s, r) => s + (r.worked_hours as number), 0) * 100) / 100,
+      total_hours: Math.round(payable.reduce((s, r) => s + (r.paid_hours as number), 0) * 100) / 100,
       total_pay: Math.round(payable.reduce((s, r) => s + (r.pay as number), 0) * 100) / 100,
       pending: rows.filter((r) => r.state === "pending" || r.state === "flagged").length,
     };
