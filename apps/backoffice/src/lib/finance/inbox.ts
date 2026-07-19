@@ -6,6 +6,7 @@ import { randomUUID } from "crypto";
 import { getFinanceClient } from "./supabase";
 import { postJournal } from "./ledger";
 import type { JournalLineInput } from "./types";
+import { logAgentMessage } from "@/lib/agents/messages";
 
 export type InboxAction =
   | { kind: "approve" }                                                    // accept agent's proposed action
@@ -259,6 +260,21 @@ async function recordCorrection(args: {
       corrected_at: new Date().toISOString(),
     })
     .eq("id", targetId);
+
+  // The correction is the agent learning: next time it sees a similar bill it
+  // has a human-verified example to categorize against. Record it on the
+  // Conversations feed as a plain-English learning (no real-time push - it's
+  // reference, not something the owner must act on now).
+  await logAgentMessage({
+    fromAgent: "finance_ap_agent",
+    toAgent: undefined,
+    kind: "learning",
+    summary: `A human corrected a categorization${args.originalCode ? ` from account ${args.originalCode}` : ""} to account ${args.correctedTo.accountCode}. The agent now has a verified example to code similar bills against.`,
+    detail: args.correctedTo.reasoning,
+    refTable: "fin_agent_decisions",
+    refId: targetId,
+    notify: false,
+  });
 }
 
 function round2(n: number): number {

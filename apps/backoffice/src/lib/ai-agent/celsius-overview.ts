@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { sendMessage } from "@/lib/telegram";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
 import { logAgentAction, touchAgentRun } from "@/lib/agents/substrate";
+import { logAgentMessage } from "@/lib/agents/messages";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -554,6 +555,20 @@ export async function runCelsiusOverviewAgent(opts: RunOptions = {}): Promise<Ag
     usage,
     meta: { areas: recommendations.map((r) => r.area), priorities: recommendations.map((r) => r.priority) },
   });
+
+  // Record the briefing as a report to the owner on the Conversations feed.
+  // Its own Telegram delivery already went to the owner chat, so don't double-
+  // notify the pulse channel in real time (notify:false); it still shows on
+  // /agents and rolls into the daily digest.
+  if (delivered && delivered.messages > 0) {
+    await logAgentMessage({
+      fromAgent: "celsius_overview",
+      toAgent: "owner",
+      kind: "report",
+      summary: `Reported ${recommendations.length} item${recommendations.length === 1 ? "" : "s"} worth the owner's attention: ${recommendations.map((r) => r.title).join("; ")}.`,
+      notify: false,
+    });
+  }
 
   const result: AgentResult = {
     generatedAt,

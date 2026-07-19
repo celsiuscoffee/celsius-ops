@@ -53,6 +53,26 @@ interface ActionRow {
   cost_usd: number | null;
 }
 
+interface MessageRow {
+  id: string;
+  at: string;
+  from_agent: string;
+  to_agent: string | null;
+  kind: "handoff" | "learning" | "logic_change" | "report";
+  summary: string;
+  detail: string | null;
+  outlet_id: string | null;
+  fromLabel: string;
+  toLabel: string | null;
+}
+
+const KIND_META: Record<MessageRow["kind"], { label: string; emoji: string; classes: string }> = {
+  handoff: { label: "Handoff", emoji: "🔁", classes: "bg-blue-50 text-blue-700" },
+  learning: { label: "Learned", emoji: "🧠", classes: "bg-violet-50 text-violet-700" },
+  logic_change: { label: "Logic change", emoji: "⚙️", classes: "bg-amber-50 text-amber-700" },
+  report: { label: "Report", emoji: "📣", classes: "bg-emerald-50 text-emerald-700" },
+};
+
 const MODE_META: Record<AgentMode, { label: string; classes: string; icon: React.ReactNode }> = {
   off: { label: "Off", classes: "bg-gray-100 text-gray-600", icon: <CircleOff className="h-3.5 w-3.5" /> },
   shadow: { label: "Shadow", classes: "bg-amber-50 text-amber-700", icon: <Eye className="h-3.5 w-3.5" /> },
@@ -94,6 +114,21 @@ export default function AgentsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [actions, setActions] = useState<Record<string, ActionRow[]>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  const [view, setView] = useState<"fleet" | "conversations">("fleet");
+  const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [msgKind, setMsgKind] = useState<string>("");
+  const [msgLoading, setMsgLoading] = useState(false);
+
+  const loadMessages = useCallback(async (kind: string) => {
+    setMsgLoading(true);
+    try {
+      const res = await fetch(`/api/agents/messages${kind ? `?kind=${kind}` : ""}`);
+      const json = await res.json();
+      if (res.ok) setMessages(json.messages);
+    } finally {
+      setMsgLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -170,17 +205,49 @@ export default function AgentsPage() {
             <Bot className="h-5 w-5 text-gray-500" /> AI Agents
           </h2>
           <p className="mt-0.5 text-sm text-gray-500">
-            Every autonomous actor, its mode, and its action ledger. Arming requires written arming criteria.
+            Every autonomous actor, its mode and cost, and the plain-English record of what they tell each other.
           </p>
         </div>
         <button
-          onClick={() => void load()}
+          onClick={() => (view === "fleet" ? void load() : void loadMessages(msgKind))}
           className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
         >
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </button>
       </div>
 
+      <div className="mb-5 inline-flex overflow-hidden rounded-lg border border-gray-200">
+        <button
+          onClick={() => setView("fleet")}
+          className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${view === "fleet" ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+        >
+          Fleet
+        </button>
+        <button
+          onClick={() => {
+            setView("conversations");
+            if (messages.length === 0) void loadMessages(msgKind);
+          }}
+          className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${view === "conversations" ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+        >
+          Conversations
+        </button>
+      </div>
+
+      {view === "conversations" && (
+        <Conversations
+          messages={messages}
+          loading={msgLoading}
+          activeKind={msgKind}
+          onKind={(k) => {
+            setMsgKind(k);
+            void loadMessages(k);
+          }}
+        />
+      )}
+
+      {view === "fleet" && (
+      <>
       <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Total agents" value={agents.length} />
         <Stat label="Armed" value={armed} accent="text-emerald-700" />
@@ -241,6 +308,84 @@ export default function AgentsPage() {
           </div>
         </div>
       ))}
+      </>
+      )}
+    </div>
+  );
+}
+
+// The Conversations feed: plain-English record of what agents tell each other,
+// what they learn, and when their logic changes. Same data the pulse Telegram
+// channel receives, always live here regardless of Telegram config.
+function Conversations({
+  messages,
+  loading,
+  activeKind,
+  onKind,
+}: {
+  messages: MessageRow[];
+  loading: boolean;
+  activeKind: string;
+  onKind: (k: string) => void;
+}) {
+  const FILTERS: { key: string; label: string }[] = [
+    { key: "", label: "All" },
+    { key: "handoff", label: "🔁 Handoffs" },
+    { key: "learning", label: "🧠 Learnings" },
+    { key: "logic_change", label: "⚙️ Logic changes" },
+    { key: "report", label: "📣 Reports" },
+  ];
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap gap-1.5">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            onClick={() => onKind(f.key)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              activeKind === f.key ? "bg-gray-900 text-white" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {loading && <div className="py-12 text-center text-sm text-gray-400">Loading conversations…</div>}
+      {!loading && messages.length === 0 && (
+        <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-sm text-gray-500">
+          No agent communications yet. They appear here (and on the pulse Telegram channel) as agents hand work
+          to each other, learn from corrections, or change mode.
+        </div>
+      )}
+      {!loading && messages.length > 0 && (
+        <ul className="space-y-2">
+          {messages.map((m) => {
+            const meta = KIND_META[m.kind];
+            return (
+              <li key={m.id} className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <span className="font-semibold text-gray-900">{m.fromLabel}</span>
+                    {m.toLabel && (
+                      <>
+                        <span className="text-gray-400">→</span>
+                        <span className="font-semibold text-gray-900">{m.toLabel}</span>
+                      </>
+                    )}
+                    <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.classes}`}>
+                      {meta.emoji} {meta.label}
+                    </span>
+                  </div>
+                  <span className="shrink-0 text-xs text-gray-400">{timeAgo(m.at)}</span>
+                </div>
+                <p className="mt-1 text-sm text-gray-700">{m.summary}</p>
+                {m.detail && <p className="mt-0.5 text-xs text-gray-400">{m.detail}</p>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
