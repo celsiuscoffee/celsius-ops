@@ -14,6 +14,7 @@ import { randomUUID } from "crypto";
 import { proposeApMatches, writeApMatch, type ApMatch } from "../ap-match";
 import { getFinanceClient } from "../supabase";
 import { markDecisionApplied } from "./categorizer";
+import { logAgentMessage } from "@/lib/agents/messages";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -146,7 +147,22 @@ export async function applyVerifiedReview(opts: { commit?: boolean; sinceDays?: 
   let confirmedApplied = 0, rejected = 0, uncertain = 0;
   for (const m of review) {
     const v = byLine.get(m.bankLineId);
-    if (v?.verdict === "reject") { rejected++; continue; }
+    if (v?.verdict === "reject") {
+      rejected++;
+      // The verifier caught a wrong match and is teaching the matcher not to
+      // clear it. This is the "verifier finds a problem and says what's right"
+      // moment the owner wants to see - recorded as a correction on the feed.
+      await logAgentMessage({
+        fromAgent: "finance_ap_verifier",
+        toAgent: "finance_ap_agent",
+        kind: "correction",
+        summary: `Stopped a wrong match: the bank payment to ${m.payee} (RM${m.amount.toFixed(2)}) is NOT settling that invoice, so it should not be cleared.`,
+        detail: v.reason,
+        refTable: "fin_bank_lines",
+        refId: m.bankLineId,
+      });
+      continue;
+    }
     if (v?.verdict === "confirm" && v.confidence >= minConfidence) {
       if (!m.linkOnly && !markOpenPaid) { uncertain++; continue; }
       if (commit) {

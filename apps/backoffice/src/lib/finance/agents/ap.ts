@@ -25,6 +25,7 @@ import { categorize } from "./categorizer";
 import { parseSupplierDoc, type ParsedBill } from "../parsers/supplier-doc";
 import { resolveCompanyFromOutlet, getDefaultCompanyId } from "../companies";
 import type { JournalLineInput } from "../types";
+import { logAgentMessage } from "@/lib/agents/messages";
 
 export const AP_AGENT_VERSION = "ap-v1";
 
@@ -185,7 +186,7 @@ export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestR
   }
 
   if (blockers.length > 0) {
-    return await raiseException({
+    const ex = await raiseException({
       companyId,
       docId,
       reason: blockers.join(" · "),
@@ -201,6 +202,20 @@ export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestR
       relatedType: "document",
       priority: parsed.parseConfidence < 0.5 ? "high" : "normal",
     });
+    // The AP agent wasn't confident enough to post this bill on its own, so it
+    // hands it to a human via the exception inbox. Surfaced in plain English on
+    // the pulse feed.
+    await logAgentMessage({
+      fromAgent: "finance_ap_agent",
+      toAgent: "human",
+      kind: "handoff",
+      summary: `Wasn't confident enough to auto-post ${supplier.name}'s bill${parsed.total ? ` (RM${round2(parsed.total).toFixed(2)})` : ""}, so it sent it to the finance exception inbox for a human to check.`,
+      detail: blockers.join(" · "),
+      refTable: "fin_exceptions",
+      refId: ex.exceptionId,
+      outletId: outletId ?? undefined,
+    });
+    return ex;
   }
 
   // 9. Auto-post: create fin_bills + journal in lockstep.

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getAgentClient, logAgentAction, type AgentMode } from "@/lib/agents/substrate";
 import { estimateCostUsd } from "@/lib/agents/pricing";
+import { logAgentMessage, agentLabel } from "@/lib/agents/messages";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +121,16 @@ export async function PATCH(req: NextRequest) {
     summary: `${existing.mode} -> ${mode} by ${user.name ?? user.id}`,
     autonomous: false,
     meta: { userId: user.id, from: existing.mode, to: mode },
+  });
+
+  // A mode flip changes what the agent is allowed to do, so record it as a
+  // logic change on the Conversations feed (and push it - the owner will want
+  // to know an agent was just armed or switched off).
+  const MODE_WORDS: Record<AgentMode, string> = { off: "switched off", shadow: "set to shadow (watch-only)", armed: "armed (acting on its own)" };
+  await logAgentMessage({
+    fromAgent: key,
+    kind: "logic_change",
+    summary: `${agentLabel(key)} was ${MODE_WORDS[mode]} by ${user.name ?? "an admin"} (was ${existing.mode}).`,
   });
 
   return NextResponse.json({ ok: true, key, mode });
