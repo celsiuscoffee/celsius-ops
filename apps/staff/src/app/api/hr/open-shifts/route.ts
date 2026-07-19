@@ -7,15 +7,16 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-// Open shifts ("slots") — unfilled demand gaps posted by the AI schedule
-// generator (source 'generator') or by decline/no-show recovery in the
-// WhatsApp PT loop. Any station-fit part-timer at the outlet can book one;
-// first accept wins (same optimistic-claim semantics as pt-loop inbound).
+// Open slots ("slots") — demand gaps posted by the AI schedule generator
+// (source 'generator') or a manager (source 'manual'). Flow is REQUEST →
+// ASSIGN (owner 2026-07-19: "they request, we assign"): any station-fit
+// part-timer can raise a hand here; the manager assigns ONE from the
+// backoffice grid, and only then does the real shift materialize. The
+// WhatsApp TAKE flow keeps instant claim for urgent decline/no-show backfill.
 //
 // Weekly caps mirror the generator: 24h / 5 days per PT per week ACROSS
-// outlets, one outlet per day (owner rules). A booked slot materializes a
-// real hr_schedule_shifts row immediately — no manager approval step, the
-// manager sees it on the grid and PT Hours confirmation still gates pay.
+// outlets, one outlet per day (owner rules). Checked here to fail fast with
+// a reason, and re-checked at assign time.
 
 const PT_MAX_HOURS_PER_WEEK = 24;
 const PT_MAX_DAYS_PER_WEEK = 5;
@@ -56,7 +57,7 @@ type OpenShift = {
 
 async function myWeekLoad(userId: string, weekStart: string) {
   // Hours + days the PT already holds THIS week across ALL outlets (published
-  // or draft — a booked slot must respect caps against everything rostered).
+  // or draft — a requested slot must respect caps against everything rostered).
   const { data } = await supabase
     .from("hr_schedule_shifts")
     .select("shift_date, start_time, end_time, break_minutes, notes")
@@ -76,7 +77,7 @@ async function myWeekLoad(userId: string, weekStart: string) {
   return { hours, days };
 }
 
-// GET: bookable open shifts at my outlet(s), with eligibility per slot
+// GET: requestable open slots at my outlet(s), with eligibility + my request state
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -86,7 +87,7 @@ export async function GET() {
     select: { outletId: true, outletIds: true },
   });
   const outletIds = [...new Set([user?.outletId, ...(user?.outletIds ?? [])].filter(Boolean))] as string[];
-  if (outletIds.length === 0) return NextResponse.json({ shifts: [], profile: null });
+  if (outletIds.length === 0) return NextResponse.json({ shifts: [], is_pt: false, week_hours: 0, week_days: 0 });
 
   const { data: profile } = await supabase
     .from("hr_employee_profiles")
@@ -114,6 +115,20 @@ export async function GET() {
     select: { id: true, name: true },
   });
   const outletName = new Map(outlets.map((o) => [o.id, o.name.replace(/^Celsius Coffee\s*/i, "")]));
+
+  // My pending/assigned requests + total pending hand-raises per slot.
+  const slotIds = shifts.map((s) => s.id);
+  const { data: reqs } = await supabase
+    .from("hr_open_shift_requests")
+    .select("open_shift_id, user_id, status")
+    .in("open_shift_id", slotIds)
+    .in("status", ["pending", "assigned"]);
+  const myReq = new Map<string, string>(); // slot id → my request status
+  const pendingCount = new Map<string, number>();
+  for (const r of reqs ?? []) {
+    if (r.user_id === session.id) myReq.set(r.open_shift_id, r.status);
+    if (r.status === "pending") pendingCount.set(r.open_shift_id, (pendingCount.get(r.open_shift_id) ?? 0) + 1);
+  }
 
   // My existing shifts over the covered weeks (cap + same-day checks).
   const weekStarts = [...new Set(shifts.map((s) => mondayOf(s.shift_date)))];
@@ -150,6 +165,8 @@ export async function GET() {
       station: s.station,
       role_type: s.role_type,
       blocked,
+      my_request: myReq.get(s.id) ?? null, // 'pending' | 'assigned' | null
+      pending_requests: pendingCount.get(s.id) ?? 0,
     };
   });
 
@@ -162,7 +179,7 @@ export async function GET() {
   });
 }
 
-// POST: book (claim) an open shift — first accept wins.
+// POST: raise a hand for an open slot (request — manager assigns later).
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -177,10 +194,9 @@ export async function POST(req: NextRequest) {
     .eq("status", "open")
     .maybeSingle();
   if (!target) {
-    return NextResponse.json({ error: "This slot is no longer available — it may already be taken." }, { status: 409 });
+    return NextResponse.json({ error: "This slot is no longer available." }, { status: 409 });
   }
 
-  // Eligibility — same rules the WhatsApp claim runs, plus weekly PT caps.
   const user = await prisma.user.findUnique({
     where: { id: session.id },
     select: { outletId: true, outletIds: true },
@@ -219,7 +235,7 @@ export async function POST(req: NextRequest) {
   const h = (toMin(target.end_time) - toMin(target.start_time) - (target.break_minutes || 0)) / 60;
   if (load.hours + h > PT_MAX_HOURS_PER_WEEK) {
     return NextResponse.json(
-      { error: `Booking this would take you past the ${PT_MAX_HOURS_PER_WEEK}h weekly cap (you have ${Math.round(load.hours * 10) / 10}h).` },
+      { error: `This would take you past the ${PT_MAX_HOURS_PER_WEEK}h weekly cap (you have ${Math.round(load.hours * 10) / 10}h).` },
       { status: 409 },
     );
   }
@@ -227,61 +243,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `You're already at ${PT_MAX_DAYS_PER_WEEK} working days that week.` }, { status: 409 });
   }
 
-  // Optimistic claim — only wins if the row is still open (first accept wins).
-  const { data: claimed } = await supabase
-    .from("hr_open_shifts")
-    .update({ status: "claimed", claimed_by: session.id, claimed_at: new Date().toISOString() })
-    .eq("id", target.id)
-    .eq("status", "open")
-    .select("id")
-    .maybeSingle();
-  if (!claimed) {
-    return NextResponse.json({ error: "Just missed it — someone booked this slot first." }, { status: 409 });
-  }
+  // Upsert my hand-raise; re-requesting after a withdraw flips it back to pending.
+  const { error: upErr } = await supabase
+    .from("hr_open_shift_requests")
+    .upsert(
+      { open_shift_id: target.id, user_id: session.id, status: "pending", decided_at: null, decided_by: null },
+      { onConflict: "open_shift_id,user_id" },
+    );
+  if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
 
-  const release = () =>
-    supabase.from("hr_open_shifts").update({ status: "open", claimed_by: null, claimed_at: null }).eq("id", target.id);
+  return NextResponse.json({ success: true, status: "pending" });
+}
 
-  // Materialize the real shift on that week's schedule.
-  const { data: sched } = await supabase
-    .from("hr_schedules")
-    .select("id")
-    .eq("outlet_id", target.outlet_id)
-    .eq("week_start", weekStart)
-    .maybeSingle();
-  if (!sched) {
-    await release();
-    return NextResponse.json({ error: "Something went wrong on our side — please try again in a minute." }, { status: 500 });
-  }
-  const { data: shiftRow, error: insErr } = await supabase
-    .from("hr_schedule_shifts")
-    .insert({
-      schedule_id: sched.id,
-      user_id: session.id,
-      shift_date: target.shift_date,
-      start_time: target.start_time,
-      end_time: target.end_time,
-      role_type: target.role_type ?? (target.station === "kitchen" ? "Kitchen Cover" : "Cover"),
-      break_minutes: target.break_minutes ?? 30,
-      notes: target.template_id,
-      ack_status: "acknowledged",
-      acknowledged_at: new Date().toISOString(),
-      is_ai_assigned: false,
-    })
-    .select("id")
-    .single();
-  if (insErr || !shiftRow) {
-    await release();
-    return NextResponse.json({ error: "Something went wrong on our side — please try again in a minute." }, { status: 500 });
-  }
-  await supabase.from("hr_open_shifts").update({ claimed_shift_id: shiftRow.id }).eq("id", target.id);
+// DELETE ?id= — withdraw my pending request.
+export async function DELETE(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  return NextResponse.json({
-    success: true,
-    shift: {
-      shift_date: target.shift_date,
-      start_time: target.start_time.slice(0, 5),
-      end_time: target.end_time.slice(0, 5),
-    },
-  });
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const { error } = await supabase
+    .from("hr_open_shift_requests")
+    .update({ status: "withdrawn", decided_at: new Date().toISOString(), decided_by: session.id })
+    .eq("open_shift_id", id)
+    .eq("user_id", session.id)
+    .eq("status", "pending");
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }

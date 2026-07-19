@@ -14,8 +14,9 @@ import { CalendarPlus, ChefHat, Coffee } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import {
-  bookOpenSlot,
   fetchOpenSlots,
+  requestOpenSlot,
+  withdrawOpenSlotRequest,
   type OpenSlot,
   type OpenSlotsResponse,
 } from "../../../lib/hr/api";
@@ -46,28 +47,28 @@ export default function OpenShiftsScreen() {
     }, [load]),
   );
 
-  const confirmBook = (slot: OpenSlot) => {
+  const confirmRequest = (slot: OpenSlot) => {
     const when = new Date(slot.shift_date + "T00:00:00").toLocaleDateString("en-MY", {
       weekday: "long",
       day: "numeric",
       month: "long",
     });
     Alert.alert(
-      "Book this shift?",
-      `${when}\n${slot.start_time}–${slot.end_time} · ${slot.outlet_name} · ${slot.station === "kitchen" ? "Kitchen" : "Barista"}\n\nBooking is instant and first-come-first-served.`,
+      "Request this shift?",
+      `${when}\n${slot.start_time}–${slot.end_time} · ${slot.outlet_name} · ${slot.station === "kitchen" ? "Kitchen" : "Barista"}\n\nYou're raising your hand — your manager picks who gets it.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Book it",
+          text: "Request it",
           onPress: async () => {
             setBookingId(slot.id);
             try {
-              await bookOpenSlot(slot.id);
+              await requestOpenSlot(slot.id);
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              Alert.alert("Booked ✓", `${when}, ${slot.start_time}–${slot.end_time} is yours. It's on your schedule now.`);
+              Alert.alert("Requested ✓", "Your manager will assign someone — it shows in My Shifts if it's you.");
               load();
             } catch (e) {
-              Alert.alert("Not booked", e instanceof Error ? e.message : "Please try again.");
+              Alert.alert("Not requested", e instanceof Error ? e.message : "Please try again.");
               load();
             } finally {
               setBookingId(null);
@@ -76,6 +77,19 @@ export default function OpenShiftsScreen() {
         },
       ],
     );
+  };
+
+  const withdraw = async (slot: OpenSlot) => {
+    setBookingId(slot.id);
+    try {
+      await withdrawOpenSlotRequest(slot.id);
+      Haptics.selectionAsync();
+      load();
+    } catch (e) {
+      Alert.alert("Couldn't withdraw", e instanceof Error ? e.message : "Please try again.");
+    } finally {
+      setBookingId(null);
+    }
   };
 
   const shifts = data?.shifts ?? [];
@@ -104,7 +118,7 @@ export default function OpenShiftsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text className="mt-4 text-sm font-body text-muted-fg">
-          Extra shifts that still need someone. First to book gets it.
+          Extra shifts that still need someone. Request one — your manager picks who gets it.
         </Text>
 
         {data?.is_pt ? (
@@ -148,10 +162,11 @@ export default function OpenShiftsScreen() {
                 {dayShifts.map((s) => {
                   const isKitchen = s.station === "kitchen";
                   const busy = bookingId === s.id;
+                  const requested = s.my_request === "pending";
                   return (
                     <View
                       key={s.id}
-                      className={`flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 ${s.blocked ? "opacity-60" : ""}`}
+                      className={`flex-row items-center gap-3 rounded-3xl border p-4 ${requested ? "border-warning/40 bg-warning/5" : s.blocked ? "border-border bg-surface opacity-60" : "border-border bg-surface"}`}
                     >
                       <View
                         className={`h-11 w-11 items-center justify-center rounded-2xl ${isKitchen ? "bg-warning/10" : "bg-primary-50"}`}
@@ -170,26 +185,43 @@ export default function OpenShiftsScreen() {
                         <Text className="text-xs font-body text-muted-fg" numberOfLines={1}>
                           {s.outlet_name} · {isKitchen ? "Kitchen" : "Barista"}
                           {s.role_type ? ` · ${s.role_type}` : ""}
+                          {s.pending_requests > 0 ? ` · ${s.pending_requests} asked` : ""}
                         </Text>
-                        {s.blocked ? (
+                        {requested ? (
+                          <Text className="mt-0.5 text-xs font-body-semi text-warning">Requested — waiting for your manager</Text>
+                        ) : s.blocked ? (
                           <Text className="mt-0.5 text-xs font-body text-danger">{s.blocked}</Text>
                         ) : null}
                       </View>
-                      <Pressable
-                        onPress={() => confirmBook(s)}
-                        disabled={!!s.blocked || busy}
-                        className={`rounded-2xl px-4 py-2.5 ${s.blocked ? "bg-border" : "bg-primary active:opacity-90"}`}
-                      >
-                        {busy ? (
-                          <ActivityIndicator color="#fff" size="small" />
-                        ) : (
-                          <Text
-                            className={`text-sm font-body-semi ${s.blocked ? "text-muted" : "text-white"}`}
-                          >
-                            Book
-                          </Text>
-                        )}
-                      </Pressable>
+                      {requested ? (
+                        <Pressable
+                          onPress={() => withdraw(s)}
+                          disabled={busy}
+                          className="rounded-2xl border border-border px-3.5 py-2.5 active:opacity-90"
+                        >
+                          {busy ? (
+                            <ActivityIndicator color="#A2492C" size="small" />
+                          ) : (
+                            <Text className="text-sm font-body-semi text-muted-fg">Withdraw</Text>
+                          )}
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          onPress={() => confirmRequest(s)}
+                          disabled={!!s.blocked || busy}
+                          className={`rounded-2xl px-4 py-2.5 ${s.blocked ? "bg-border" : "bg-primary active:opacity-90"}`}
+                        >
+                          {busy ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                          ) : (
+                            <Text
+                              className={`text-sm font-body-semi ${s.blocked ? "text-muted" : "text-white"}`}
+                            >
+                              Request
+                            </Text>
+                          )}
+                        </Pressable>
+                      )}
                     </View>
                   );
                 })}
