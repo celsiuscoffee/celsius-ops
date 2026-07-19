@@ -111,6 +111,7 @@ type GenerateResult = {
   mode: StaffingMode;
   shifts: number;
   ptSuggestions: number;
+  openSlots: number;
   totalHours: number;
   estimatedCost: number;
   notes: string[];
@@ -330,6 +331,57 @@ export async function generateSchedule(
   const onLeave = new Set<string>();
   for (const l of (leaves ?? []) as { user_id: string; start_date: string; end_date: string }[]) {
     for (const d of dates) if (d >= l.start_date && d <= l.end_date) onLeave.add(`${l.user_id}:${d}`);
+  }
+
+  // Declared PT availability — fed by the staff apps' "My Availability" input.
+  // Weekly rows are a whitelist: a PT WITH rows is only proposable on days that
+  // have a row whose window contains the whole shift (same semantics as the
+  // Assist candidates route). A PT with NO rows stays unconstrained — the
+  // historic default, so an empty table changes nothing. Per-date rows marked
+  // unavailable/off block that single date.
+  const ptIdsAvail = partTimers.length ? partTimers.map((p) => p.id) : ["-"];
+  const { data: wkAvailRows } = await hrSupabaseAdmin
+    .from("hr_staff_weekly_availability")
+    .select("user_id, day_of_week, available_from, available_until, max_shifts_per_week")
+    .in("user_id", ptIdsAvail);
+  type WkAvailRow = { user_id: string; day_of_week: number; available_from: string | null; available_until: string | null; max_shifts_per_week: number | null };
+  const wkAvailByUser = new Map<string, WkAvailRow[]>();
+  for (const a of (wkAvailRows ?? []) as WkAvailRow[]) {
+    (wkAvailByUser.get(a.user_id) ?? wkAvailByUser.set(a.user_id, []).get(a.user_id)!).push(a);
+  }
+  const { data: dateBlocks } = await hrSupabaseAdmin
+    .from("hr_staff_availability")
+    .select("user_id, date, availability")
+    .in("user_id", ptIdsAvail)
+    .gte("date", weekStart)
+    .lte("date", weekEnd);
+  const blockedDates = new Set(
+    ((dateBlocks ?? []) as { user_id: string; date: string; availability: string }[])
+      .filter((b) => b.availability === "unavailable" || b.availability === "off")
+      .map((b) => `${b.user_id}:${b.date}`),
+  );
+  const toMinHM = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  const ptAvailableFor = (userId: string, date: string, startHM: string, endHM: string): boolean => {
+    if (blockedDates.has(`${userId}:${date}`)) return false;
+    const availRows = wkAvailByUser.get(userId);
+    if (!availRows || availRows.length === 0) return true;
+    const dw = dow(date);
+    return availRows.some((r) => {
+      if (r.day_of_week !== dw) return false;
+      const from = r.available_from ? toMinHM(r.available_from) : 0;
+      const until = r.available_until ? toMinHM(r.available_until) : 24 * 60;
+      return from <= toMinHM(startHM) && until >= toMinHM(endHM);
+    });
+  };
+  // max_shifts_per_week (smallest declared) tightens the global 5-day cap.
+  const ptMaxDays = (userId: string): number => {
+    const caps = (wkAvailByUser.get(userId) ?? [])
+      .map((r) => r.max_shifts_per_week)
+      .filter((n): n is number => n != null && n > 0);
+    return caps.length ? Math.min(PT_MAX_DAYS_PER_WEEK, ...caps) : PT_MAX_DAYS_PER_WEEK;
+  };
+  if (wkAvailByUser.size > 0) {
+    notes.push(`${wkAvailByUser.size} PT with declared availability — fill restricted to their windows`);
   }
 
   // Cross-outlet bookings this week (rotation): every real shift these staff
@@ -1271,8 +1323,9 @@ export async function generateSchedule(
           (p) =>
             fitsStation(p.position, g.station) &&
             !day.has(p.id) && !bookedElsewhere.get(p.id)?.has(g.date) && !onLeave.has(`${p.id}:${g.date}`) &&
+            ptAvailableFor(p.id, g.date, g.template.start_time, g.template.end_time) &&
             (hoursElsewhere.get(p.id) ?? 0) + (proposedH.get(p.id) ?? 0) + gapH <= PT_MAX_HOURS_PER_WEEK &&
-            (proposedDays.get(p.id) ?? 0) < PT_MAX_DAYS_PER_WEEK,
+            (proposedDays.get(p.id) ?? 0) < ptMaxDays(p.id),
         )
         .sort((a, b) => priority(b) - priority(a))[0];
       if (!pick) continue;
@@ -1296,6 +1349,7 @@ export async function generateSchedule(
   }
   const ptRows: ShiftRow[] = [];
   const ptSpend = { rm: 0 };
+  const filledBySlot = new Map<string, number>(); // `${date}:${slot}` → accepted PT count (for open-slot posting)
   const ptWeek = new Map<string, { hours: number; days: Set<string> }>();
   const ptHoursByDate = new Map<string, number>(); // PT man-hours suggested per day so far
   // Seed each PT's weekly tally from the hours/days they already hold at OTHER
@@ -1314,6 +1368,7 @@ export async function generateSchedule(
     if (!person || !t || !dates.includes(p.date)) continue;
     if (onLeave.has(`${person.id}:${p.date}`)) continue;
     if (bookedElsewhere.get(person.id)?.has(p.date)) continue; // already working another outlet that day
+    if (!ptAvailableFor(person.id, p.date, t.start_time, t.end_time)) continue; // outside declared availability
     if (ptRows.some((r) => r.user_id === person.id && r.shift_date === p.date)) continue; // one shift/day
     const shortStations = gapStationsBySlot.get(`${p.date}:${p.slot}`);
     if (shortStations && ![...shortStations].some((st) => fitsStation(person.position, st))) continue;
@@ -1326,12 +1381,13 @@ export async function generateSchedule(
     const cost = h * ptRateForDate(person, p.date, holidayDates.has(p.date));
     if (ptSpend.rm + cost > ptBudget) continue;
     const wk = ptWeek.get(person.id) ?? { hours: 0, days: new Set<string>() };
-    if (wk.hours + h > PT_MAX_HOURS_PER_WEEK || wk.days.size >= PT_MAX_DAYS_PER_WEEK) continue;
+    if (wk.hours + h > PT_MAX_HOURS_PER_WEEK || wk.days.size >= ptMaxDays(person.id)) continue;
     wk.hours += h;
     wk.days.add(p.date);
     ptWeek.set(person.id, wk);
     ptSpend.rm += cost;
     ptHoursByDate.set(p.date, (ptHoursByDate.get(p.date) ?? 0) + h);
+    filledBySlot.set(`${p.date}:${p.slot}`, (filledBySlot.get(`${p.date}:${p.slot}`) ?? 0) + 1);
     ptRows.push({
       user_id: person.id,
       shift_date: p.date,
@@ -1421,6 +1477,55 @@ export async function generateSchedule(
     `,
   ]);
 
+  // ── Open slots: every demand gap the fill could NOT cover becomes a
+  // bookable hr_open_shifts row (source 'generator') — staff apps list them
+  // and any station-fit PT can claim, first accept wins (same table the
+  // WhatsApp PT loop already claims from). Regeneration is idempotent:
+  // still-open generator slots for this week are replaced; claimed ones are
+  // history and stay untouched.
+  const gapsBySlotKey = new Map<string, Gap[]>();
+  for (const g of gaps) {
+    const key = `${g.date}:${g.slot}`;
+    (gapsBySlotKey.get(key) ?? gapsBySlotKey.set(key, []).get(key)!).push(g);
+  }
+  const openSlotRows: Array<Record<string, unknown>> = [];
+  for (const [key, slotGaps] of gapsBySlotKey) {
+    for (const g of slotGaps.slice(filledBySlot.get(key) ?? 0)) {
+      openSlotRows.push({
+        outlet_id: outletId,
+        shift_date: g.date,
+        start_time: hhmmss(g.template.start_time),
+        end_time: hhmmss(g.template.end_time),
+        break_minutes: g.template.break_minutes,
+        station: g.station,
+        role_type: g.template.label,
+        template_id: g.template.id,
+        source: "generator",
+        status: "open",
+        expires_at: `${g.date}T${hhmmss(g.template.start_time)}+08:00`,
+      });
+    }
+  }
+  await hrSupabaseAdmin
+    .from("hr_open_shifts")
+    .delete()
+    .eq("outlet_id", outletId)
+    .eq("source", "generator")
+    .eq("status", "open")
+    .gte("shift_date", weekStart)
+    .lte("shift_date", weekEnd);
+  if (openSlotRows.length > 0) {
+    const { error: openErr } = await hrSupabaseAdmin.from("hr_open_shifts").insert(openSlotRows);
+    if (openErr) {
+      notes.push(`⚠ Failed to post open slots for staff booking: ${openErr.message}`);
+    } else {
+      const kitOpen = openSlotRows.filter((r) => r.station === "kitchen").length;
+      notes.push(
+        `${openSlotRows.length} OPEN SLOT(S) posted to the staff apps (${kitOpen} kitchen, ${openSlotRows.length - kitOpen} barista) — unfilled demand gaps any station-fit PT can book, first accept wins.`,
+      );
+    }
+  }
+
   await hrSupabaseAdmin
     .from("hr_schedules")
     .update({
@@ -1438,6 +1543,7 @@ export async function generateSchedule(
     mode,
     shifts: allRows.filter((r) => r.notes !== "rest_day").length,
     ptSuggestions: ptRows.length,
+    openSlots: openSlotRows.length,
     totalHours,
     estimatedCost,
     notes,

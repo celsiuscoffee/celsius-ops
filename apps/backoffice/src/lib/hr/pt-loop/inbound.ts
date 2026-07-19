@@ -372,16 +372,20 @@ async function handleAvailabilityReply(staff: StaffMatch, prompt: WaPrompt, body
     const windows = (json.windows ?? []).filter((w) => w.day_of_week >= 0 && w.day_of_week <= 6);
     if (windows.length === 0) throw new Error("no windows parsed");
 
-    // Declaration replaces the previous one wholesale.
+    // Declaration replaces the previous one wholesale. NOTE the live table has
+    // NOT NULL from/until — an all-day window is stored as 00:00–23:59 (null
+    // used to violate the constraint and, unchecked, silently wiped the PT's
+    // rows after the delete).
     await hrSupabaseAdmin.from("hr_staff_weekly_availability").delete().eq("user_id", staff.id);
-    await hrSupabaseAdmin.from("hr_staff_weekly_availability").insert(
+    const { error: availInsErr } = await hrSupabaseAdmin.from("hr_staff_weekly_availability").insert(
       windows.map((w) => ({
         user_id: staff.id,
         day_of_week: w.day_of_week,
-        available_from: w.from,
-        available_until: w.until,
+        available_from: w.from ?? "00:00",
+        available_until: w.until ?? "23:59",
       })),
     );
+    if (availInsErr) throw new Error(`availability insert failed: ${availInsErr.message}`);
     await markResponded(prompt.id, { text: body, parsed: true, windows });
 
     const summary = windows

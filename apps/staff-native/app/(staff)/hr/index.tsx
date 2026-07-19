@@ -10,6 +10,8 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import {
   Calendar,
+  CalendarClock,
+  CalendarPlus,
   CheckCircle2,
   ChevronRight,
   Clock,
@@ -59,6 +61,18 @@ const items = [
     title: "My Shifts",
     subtitle: "Today and upcoming",
     icon: Calendar,
+  },
+  {
+    href: "/(staff)/hr/open-shifts",
+    title: "Open Slots",
+    subtitle: "Book extra shifts — first come, first served",
+    icon: CalendarPlus,
+  },
+  {
+    href: "/(staff)/hr/availability",
+    title: "My Availability",
+    subtitle: "Weekly pattern & blockout dates",
+    icon: CalendarClock,
   },
   {
     href: "/(staff)/hr/whos-working",

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarDays, CalendarOff, ChevronRight, CheckCircle2, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star, Target } from "lucide-react";
+import { Clock, CalendarDays, CalendarOff, CalendarPlus, CalendarClock, ChevronRight, CheckCircle2, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star, Target } from "lucide-react";
 import { useLocationPing } from "@/lib/hr/use-location-ping";
 
 type HRStatus = {
@@ -76,6 +76,22 @@ export default function HRHomePage() {
       subtitle: "View upcoming schedule",
       color: "text-blue-600",
       bgColor: "bg-blue-50",
+    },
+    {
+      href: "/hr/open-shifts",
+      icon: CalendarPlus,
+      label: "Open Slots",
+      subtitle: "Book extra shifts — first come, first served",
+      color: "text-terracotta",
+      bgColor: "bg-orange-50",
+    },
+    {
+      href: "/hr/availability",
+      icon: CalendarClock,
+      label: "My Availability",
+      subtitle: "Weekly pattern & blockout dates",
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-50",
     },
     {
       href: "/hr/attendance",

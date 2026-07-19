@@ -285,3 +285,84 @@ export type AllowanceBreakdown = {
 export function fetchAllowances() {
   return api<{ breakdown: AllowanceBreakdown }>("/api/hr/allowances");
 }
+
+// ── Availability (weekly pattern + date blockouts) ───
+export type WeeklyAvailabilityRow = {
+  id: string;
+  day_of_week: number; // 0=Sun … 6=Sat
+  available_from: string | null; // "HH:MM(:SS)" | null = from open
+  available_until: string | null;
+  is_preferred: boolean;
+  max_shifts_per_week: number | null;
+};
+
+export type DateAvailability = {
+  id: string;
+  date: string;
+  availability: "unavailable" | "preferred" | "available";
+  reason: string | null;
+};
+
+export function fetchWeeklyAvailability() {
+  return api<{ weekly: WeeklyAvailabilityRow[] }>("/api/hr/availability/weekly");
+}
+
+// Replace the whole weekly pattern (empty days = back to flexible).
+export function saveWeeklyAvailability(req: {
+  days: { day_of_week: number; available_from: string | null; available_until: string | null }[];
+  max_shifts_per_week?: number | null;
+}) {
+  return api<{ success: boolean }>("/api/hr/availability/weekly", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export function fetchDateAvailability() {
+  return api<{ availability: DateAvailability[] }>("/api/hr/availability");
+}
+
+export function setDateUnavailable(date: string, reason?: string) {
+  return api<{ availability: DateAvailability }>("/api/hr/availability", {
+    method: "POST",
+    body: JSON.stringify({ date, availability: "unavailable", reason: reason || null }),
+  });
+}
+
+export function clearDateAvailability(date: string) {
+  return api<{ success: boolean }>(`/api/hr/availability?date=${encodeURIComponent(date)}`, {
+    method: "DELETE",
+  });
+}
+
+// ── Open slots (unfilled shifts any station-fit PT can book) ───
+export type OpenSlot = {
+  id: string;
+  outlet_id: string;
+  outlet_name: string;
+  shift_date: string;
+  start_time: string;
+  end_time: string;
+  hours: number;
+  station: string; // 'barista' | 'kitchen'
+  role_type: string | null;
+  blocked: string | null; // reason this user can't book it, null = bookable
+};
+
+export type OpenSlotsResponse = {
+  shifts: OpenSlot[];
+  is_pt: boolean;
+  week_hours: number;
+  week_days: number;
+};
+
+export function fetchOpenSlots() {
+  return api<OpenSlotsResponse>("/api/hr/open-shifts");
+}
+
+export function bookOpenSlot(id: string) {
+  return api<{ success: boolean; shift: { shift_date: string; start_time: string; end_time: string } }>(
+    "/api/hr/open-shifts",
+    { method: "POST", body: JSON.stringify({ id }) },
+  );
+}
