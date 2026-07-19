@@ -12,8 +12,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { sendMessage } from "@/lib/telegram";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
-import { logAgentAction, touchAgentRun } from "@/lib/agents/substrate";
-import { logAgentMessage } from "@/lib/agents/messages";
+import { logAgentAction, touchAgentRun } from "@celsius/agents/src/substrate";
+import { logAgentMessage } from "@celsius/agents/src/messages";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

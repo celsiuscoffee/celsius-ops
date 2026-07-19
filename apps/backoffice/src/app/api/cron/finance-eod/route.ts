@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ingestEodForDate } from "@/lib/finance/ingestors/pos-native-eod";
 import { checkCronAuth } from "@celsius/shared";
-import { touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
+import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;

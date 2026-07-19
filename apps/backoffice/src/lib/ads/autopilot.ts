@@ -78,7 +78,7 @@ import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { buildWeekForecast, FORECAST_WEEKS } from "@/lib/hr/revenue-forecast";
 import { dailyRevenueSeries } from "@/lib/hr/labour-gate";
-import { getAgentMode, logAgentAction, touchAgentRun, type AgentMode } from "@/lib/agents/substrate";
+import { getAgentMode, logAgentAction, touchAgentRun, type AgentMode } from "@celsius/agents/src/substrate";
 import { buildAdsOptimizerReport, ENABLED_STATUSES } from "./optimizer";
 import { applyBudgetChange } from "./set-budget";
 import { pauseCampaign, enableCampaign } from "./pause-campaign";

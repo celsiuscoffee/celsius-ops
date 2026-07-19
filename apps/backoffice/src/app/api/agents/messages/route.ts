@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getAgentClient } from "@/lib/agents/substrate";
-import { agentLabel } from "@/lib/agents/messages";
+import { getAgentClient } from "@celsius/agents/src/substrate";
+import { agentLabel } from "@celsius/agents/src/messages";
 
 export const dynamic = "force-dynamic";
 

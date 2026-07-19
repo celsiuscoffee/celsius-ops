@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
-import { runCommsDigest } from "@/lib/agents/digest";
+import { runCommsDigest } from "@celsius/agents/src/digest";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

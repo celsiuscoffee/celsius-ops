@@ -10,7 +10,7 @@ import { applyApMatches } from "@/lib/finance/ap-match";
 import { applyVerifiedReview } from "@/lib/finance/agents/ap-verifier";
 import { createWagePaymentSlips } from "@/lib/finance/payment-slips";
 import { checkCronAuth } from "@celsius/shared";
-import { getAgentModeOrDefault, touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
+import { getAgentModeOrDefault, touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;

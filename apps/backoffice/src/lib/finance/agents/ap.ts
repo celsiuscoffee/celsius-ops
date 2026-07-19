@@ -25,7 +25,7 @@ import { categorize } from "./categorizer";
 import { parseSupplierDoc, type ParsedBill } from "../parsers/supplier-doc";
 import { resolveCompanyFromOutlet, getDefaultCompanyId } from "../companies";
 import type { JournalLineInput } from "../types";
-import { logAgentMessage } from "@/lib/agents/messages";
+import { logAgentMessage } from "@celsius/agents/src/messages";
 
 export const AP_AGENT_VERSION = "ap-v1";
 

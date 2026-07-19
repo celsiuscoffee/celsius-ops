@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
 import { sendSMS, providerAutoPrependsSender, getActiveSmsProvider } from "@/lib/loyalty/sms";
 import { checkCronAuth } from "@celsius/shared";
-import { touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
+import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;

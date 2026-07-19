@@ -3,7 +3,7 @@ import { checkCronAuth } from "@celsius/shared";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recalcOutletParLevels } from "@/lib/inventory/par-calc";
-import { touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
+import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAgentClient } from "@/lib/agents/substrate";
-import { logAgentMessage } from "@/lib/agents/messages";
-import { answerPulseCallback, pulseChatId, sendPulse } from "@/lib/agents/pulse";
-import { resolvePrompt, findPromptByMessageId } from "@/lib/agents/ask-owner";
+import { getAgentClient } from "@celsius/agents/src/substrate";
+import { logAgentMessage } from "@celsius/agents/src/messages";
+import { answerPulseCallback, pulseChatId, sendPulse } from "@celsius/agents/src/pulse";
+import { resolvePrompt, findPromptByMessageId } from "@celsius/agents/src/ask-owner";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;

@@ -14,7 +14,7 @@ import { randomUUID } from "crypto";
 import { proposeApMatches, writeApMatch, type ApMatch } from "../ap-match";
 import { getFinanceClient } from "../supabase";
 import { markDecisionApplied } from "./categorizer";
-import { logAgentMessage } from "@/lib/agents/messages";
+import { logAgentMessage } from "@celsius/agents/src/messages";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
