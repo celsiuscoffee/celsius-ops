@@ -131,7 +131,6 @@ export async function GET(req: NextRequest) {
           : `Computed (shadow, not written): for ${date}, sales would deplete ${summary.totalProductsConsumed} products across ${summary.outlets} outlets. ${summary.menusWithoutRecipe} menus still have no recipe so they're excluded - close that gap before arming.`,
       detail: "The consumption -> reorder -> supplier chain stays gated until stock units are normalised to base UOM and recipes are imported.",
       refTable: "consumption_shadow_runs",
-      notify: false,
     });
 
     return NextResponse.json({ ok: true, summary, results });

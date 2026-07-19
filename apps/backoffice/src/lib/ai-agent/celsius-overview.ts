@@ -566,7 +566,6 @@ export async function runCelsiusOverviewAgent(opts: RunOptions = {}): Promise<Ag
       toAgent: "owner",
       kind: "report",
       summary: `Reported ${recommendations.length} item${recommendations.length === 1 ? "" : "s"} worth the owner's attention: ${recommendations.map((r) => r.title).join("; ")}.`,
-      notify: false,
     });
   }
 
