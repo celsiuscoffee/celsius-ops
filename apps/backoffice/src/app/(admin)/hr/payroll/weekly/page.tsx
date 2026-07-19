@@ -112,8 +112,30 @@ export default function WeeklyPayrollPage() {
     mutate();
   };
 
-  const handleBankFile = (runId: string) => {
-    window.open(`/api/hr/payroll/weekly/bank-file?run_id=${runId}`, "_blank");
+  // Download via fetch so a 409 (manager confirmation missing / bank details
+  // missing) shows WHO is blocking instead of dumping raw JSON in a new tab.
+  const [bankFileError, setBankFileError] = useState<string | null>(null);
+  const handleBankFile = async (runId: string) => {
+    setBankFileError(null);
+    const res = await fetch(`/api/hr/payroll/weekly/bank-file?run_id=${runId}`);
+    if (!res.ok) {
+      const p = await res.json().catch(() => ({}));
+      const detail = [
+        p.error || "Payment file blocked.",
+        ...(p.unconfirmed ? [`Unconfirmed: ${p.unconfirmed.join(", ")}`] : []),
+        ...(p.missing_bank ? [`No bank details: ${p.missing_bank.join(", ")}`] : []),
+        ...(p.hint ? [p.hint] : []),
+      ].join("\n");
+      setBankFileError(detail);
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1]) || "pt-payments.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Inline-edit state for per-item adjust
@@ -212,6 +234,12 @@ export default function WeeklyPayrollPage() {
         )}
       </div>
 
+      {bankFileError && (
+        <div className="whitespace-pre-line rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          {bankFileError}
+        </div>
+      )}
+
       {/* Runs */}
       <div className="space-y-3">
         {runs.map((run) => {
@@ -269,9 +297,10 @@ export default function WeeklyPayrollPage() {
                       <button
                         onClick={() => handleBankFile(run.id)}
                         className="flex items-center gap-1 rounded-lg border border-blue-600 px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                        title="Per-person bulk transfer CSV — requires every PT shift confirmed at HR → PT Hours"
                       >
                         <Download className="h-3 w-3" />
-                        Bank file
+                        Payment file
                       </button>
                       <button
                         onClick={() => handleMarkPaid(run.id)}

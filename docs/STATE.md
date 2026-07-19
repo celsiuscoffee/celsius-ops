@@ -311,6 +311,29 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-19 (round 11) — **Weekly PT payment flow: manager sign-off →
+  gated per-person payment file.** Owner: "proceed with the payment
+  file. also the managers also needs to confirm each PT hours first
+  before paying." No migration needed — hr_attendance_logs already had
+  final_status/reviewed_by; "confirmed" = final_status approved/
+  adjusted. Shipped: (1) **HR → PT Hours page** (manager-scoped, tab in
+  the Attendance group): per-PT weekly clock logs with day-aware
+  rate/pay preview (weekday/weekend/PH 2×), one-click "Confirm all
+  clean" (pending+unflagged), per-log confirm, flagged logs route to
+  the existing Attendance review queue; API GET/POST
+  /api/hr/payroll/weekly/pt-hours (bulk confirm never overwrites
+  adjusted/rejected, manager outlet-gated). (2) **bank-file endpoint
+  reworked** (kept URL): run must be finance-CONFIRMED, every closed
+  non-rejected log in the week must be manager-confirmed (409 names
+  who), missing bank details now BLOCK (the old version silently
+  dropped payees), per-person reference "PTW<ddmm> <name>" for
+  statement-line reconciliation (kills the outlet lump-sum blindspot
+  the finance warehouse flagged); pure builder lib/hr/payment-file.ts
+  (+3 tests). Weekly payroll page: fetch-based download with a
+  blocker banner (was window.open dumping raw 409 JSON). Flow: manager
+  confirms (PT Hours) → finance Compute → Confirm → Payment file →
+  bank portal approval → Mark paid.
+
 - 2026-07-18 (round 10) — **PT weekday/weekend rates (owner: "diff
   weekdays weekends... follow and fix the data" + the "Celsius - Part
   Timer 2025/26" Google Sheet).** Sheet forensics (6,047 ledger rows):
