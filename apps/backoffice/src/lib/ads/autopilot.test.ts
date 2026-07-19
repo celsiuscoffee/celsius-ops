@@ -406,8 +406,8 @@ describe("cashScoreboard (RM7k/mo target)", () => {
     expect(s.cutsMonthlyMyr).toBeCloseTo(1030.2, 1);
     expect(s.salesMonthlyMyr).toBeCloseTo(1800, 1);
     expect(s.netMonthlyMyr).toBeCloseTo(2830.2, 1);
-    expect(s.targetMonthlyMyr).toBe(7000);
-    expect(s.pctOfTarget).toBe(40);
+    expect(s.targetMonthlyMyr).toBe(5000);
+    expect(s.pctOfTarget).toBe(57);
   });
 
   it("a till decline counts NEGATIVE — net cash is the objective, not gross savings", () => {
