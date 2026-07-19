@@ -214,7 +214,19 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   #976. Round 2 (owner: "cannot pick multiple outlets"): outlet filter is
   now multi-select — API takes `outletIds=a,b,c` (legacy `outletId` kept
   for the staff bridge), UI is a checkbox popover; selecting every outlet
-  collapses to the all-outlets default.
+  collapses to the all-outlets default. MERGED as #992. Round 3 (owner:
+  "check all the ux ui, improve it"), page-only pass: presets are visible
+  chips (active highlighted); page auto-opens on This Month vs Last Month;
+  state persists in the URL (?p=&o=&m= — shareable links); refetches dim
+  the old results instead of blanking (full spinner only on first load);
+  fixed a REAL Tailwind bug (template-string `sm:grid-cols-${n}` is never
+  JIT-generated — summary cards always fell back to 2 cols; now a static
+  class map); Rounds table gains an "Other hours (11pm-8am)" row so Total
+  reconciles with its rows; Order Type table flipped to rows=type ×
+  cols=periods (consistent with all other tables) + share %; Month tab in
+  the Add Period picker (last 12 months); chart gains a dashed "now"
+  reference line + whole-K y-ticks ≥100k; summary deltas labelled
+  "vs {period}"; outlet-context caption beside the metric toggle.
 
 - Typecheck before pushing — every time. CI enforces it, but catch it locally.
 - Never test against the production database; the procurement runbook's seed SQL

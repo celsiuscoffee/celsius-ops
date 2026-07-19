@@ -21,6 +21,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
 
@@ -428,7 +429,7 @@ export default function SalesComparePage() {
   const [error, setError] = useState<string | null>(null);
   const [outlets, setOutlets] = useState<{ id: string; name: string }[]>([]);
   const [showPicker, setShowPicker] = useState(false);
-  const [pickerTab, setPickerTab] = useState<"day" | "week" | "range">("day");
+  const [pickerTab, setPickerTab] = useState<"day" | "week" | "month" | "range">("day");
   const [pickerDate, setPickerDate] = useState(getMYTToday());
   const [pickerFrom, setPickerFrom] = useState(getMYTToday());
   const [pickerTo, setPickerTo] = useState(getMYTToday());
@@ -438,6 +439,8 @@ export default function SalesComparePage() {
   const [showSources, setShowSources] = useState(true);
   const [showDow, setShowDow] = useState(true);
   const [showDaily, setShowDaily] = useState(false);
+  // Guards the URL-sync effect until the mount effect has restored state
+  const [booted, setBooted] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const outletPickerRef = useRef<HTMLDivElement>(null);
 
@@ -484,15 +487,46 @@ export default function SalesComparePage() {
     [],
   );
 
-  // Fetch outlets on mount
+  // On mount: restore state from the URL (?p=from:to,…&o=id,id&m=metric) so a
+  // view survives reload and can be shared as a link. With no URL state, open
+  // on This Month vs Last Month instead of an empty page.
   useEffect(() => {
-    fetch("/api/sales/compare?periods=" + getMYTToday() + ":" + getMYTToday(), { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.availableOutlets) setOutlets(d.availableOutlets);
+    const params = new URLSearchParams(window.location.search);
+    const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const urlSlots: ComparisonSlot[] = (params.get("p") ?? "")
+      .split(",")
+      .map((pair) => pair.trim())
+      .filter(Boolean)
+      .map((pair) => {
+        const [from, to] = pair.split(":");
+        return { id: uid(), from, to: to || from };
       })
-      .catch(() => {});
+      .filter((s) => isDate(s.from) && isDate(s.to))
+      .slice(0, MAX_SLOTS);
+    const urlOutlets = (params.get("o") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const m = params.get("m");
+    if (m === "orders" || m === "aov") setMetric(m);
+
+    const initialSlots = urlSlots.length > 0
+      ? urlSlots
+      : getPresets().find((p) => p.label === "This Month vs Last Month")?.slots ?? [];
+    setSlots(initialSlots);
+    setOutletIds(urlOutlets);
+    fetchData(initialSlots, urlOutlets);
+    setBooted(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the URL in sync (replace, not push — Back shouldn't walk every click)
+  useEffect(() => {
+    if (!booted) return;
+    const params = new URLSearchParams();
+    if (slots.length > 0) params.set("p", slots.map((s) => `${s.from}:${s.to}`).join(","));
+    if (outletIds.length > 0) params.set("o", outletIds.join(","));
+    if (metric !== "revenue") params.set("m", metric);
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [booted, slots, outletIds, metric]);
 
   const addSlot = (from: string, to: string) => {
     if (slots.length >= MAX_SLOTS) return;
@@ -543,6 +577,22 @@ export default function SalesComparePage() {
 
   const presets = getPresets();
 
+  // Signature = the period list; used to highlight the active preset chip
+  const slotsSignature = slots.map((s) => `${s.from}:${s.to}`).join(",");
+  const presetSignature = (p: { slots: ComparisonSlot[] }) =>
+    p.slots.map((s) => `${s.from}:${s.to}`).join(",");
+
+  // Which outlets the numbers cover — shown beside the results so a
+  // screenshot or shared link is self-explanatory
+  const outletContextLabel =
+    outletIds.length === 0
+      ? "All outlets"
+      : outletIds.length <= 2
+        ? outletIds
+            .map((id) => outlets.find((o) => o.id === id)?.name?.replace(/^Celsius Coffee\s+/i, "") ?? "?")
+            .join(" + ")
+        : `${outletIds.length} outlets`;
+
   // Generate week options for the week picker (last 12 weeks)
   const weekOptions = Array.from({ length: 12 }, (_, i) => {
     const mon = addDays(getMonday(getMYTToday()), -7 * i);
@@ -553,6 +603,18 @@ export default function SalesComparePage() {
   const dayOptions = Array.from({ length: 14 }, (_, i) => {
     const d = addDays(getMYTToday(), -i);
     return { date: d, label: getDayLabel(d) };
+  });
+
+  // Generate month options (last 12 months)
+  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthOptions = Array.from({ length: 12 }, (_, i) => {
+    const mStart = getMonthStart(subtractMonths(getMYTToday(), i));
+    const d = new Date(mStart + "T12:00:00+08:00");
+    return {
+      from: mStart,
+      to: getMonthEnd(mStart),
+      label: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
+    };
   });
 
   return (
@@ -568,20 +630,27 @@ export default function SalesComparePage() {
         </div>
       </div>
 
-      {/* Quick Presets Dropdown */}
-      <select
-        value=""
-        onChange={(e) => {
-          const preset = presets.find((p) => p.label === e.target.value);
-          if (preset) applyPreset(preset);
-        }}
-        className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 w-fit"
-      >
-        <option value="" disabled>Quick Presets</option>
-        {presets.map((p) => (
-          <option key={p.label} value={p.label}>{p.label}</option>
-        ))}
-      </select>
+      {/* Quick Presets — visible chips beat a blank dropdown; active one highlighted */}
+      <div className="overflow-x-auto scrollbar-thin -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex items-center gap-1.5 pb-1">
+          {presets.map((p) => {
+            const isActive = slotsSignature === presetSignature(p);
+            return (
+              <button
+                key={p.label}
+                onClick={() => applyPreset(p)}
+                className={`px-2.5 py-1.5 text-xs rounded-full border whitespace-nowrap shrink-0 transition-colors ${
+                  isActive
+                    ? "bg-[#C2452D] border-[#C2452D] text-white"
+                    : "bg-white border-gray-200 text-gray-600 hover:border-[#C2452D]/50 hover:text-[#C2452D]"
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Slot Bar + Controls */}
       <div className="space-y-3">
@@ -640,7 +709,8 @@ export default function SalesComparePage() {
                     {([
                       { key: "day" as const, label: "Day" },
                       { key: "week" as const, label: "Week" },
-                      { key: "range" as const, label: "Custom Range" },
+                      { key: "month" as const, label: "Month" },
+                      { key: "range" as const, label: "Custom" },
                     ]).map((tab) => (
                       <button
                         key={tab.key}
@@ -701,6 +771,21 @@ export default function SalesComparePage() {
                             className="px-2 py-2 text-xs rounded-md bg-gray-50 hover:bg-[#C2452D]/10 hover:text-[#C2452D] text-gray-700 transition-colors text-left truncate"
                           >
                             {w.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Month Tab */}
+                    {pickerTab === "month" && (
+                      <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto">
+                        {monthOptions.map((mo) => (
+                          <button
+                            key={mo.from}
+                            onClick={() => addSlot(mo.from, mo.to)}
+                            className="px-2 py-2 text-xs rounded-md bg-gray-50 hover:bg-[#C2452D]/10 hover:text-[#C2452D] text-gray-700 transition-colors text-left truncate"
+                          >
+                            {mo.label}
                           </button>
                         ))}
                       </div>
@@ -790,8 +875,9 @@ export default function SalesComparePage() {
         </div>
       </div>
 
-      {/* Loading */}
-      {loading && (
+      {/* Loading — full spinner only on first load; refetches keep the old
+          results visible (dimmed) so the page never blanks and flashes */}
+      {loading && !data && (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-6 h-6 animate-spin text-[#C2452D]" />
           <span className="ml-2 text-sm text-gray-500">Fetching sales data...</span>
@@ -806,7 +892,7 @@ export default function SalesComparePage() {
       )}
 
       {/* Empty State */}
-      {!loading && !error && slots.length === 0 && (
+      {!loading && !error && slots.length === 0 && booted && (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <Calendar className="w-10 h-10 mx-auto text-gray-300 mb-3" />
           <p className="text-gray-500 text-sm">Select a preset above or add periods to compare</p>
@@ -823,28 +909,34 @@ export default function SalesComparePage() {
       )}
 
       {/* Results */}
-      {data && data.periods.length > 0 && !loading && (
-        <>
-          {/* Metric Toggle */}
-          <div className="flex gap-1 bg-white rounded-lg border border-gray-200 p-1 w-fit">
-            {([
-              { key: "revenue" as const, label: "Revenue", icon: DollarSign },
-              { key: "orders" as const, label: "Orders", icon: ShoppingCart },
-              { key: "aov" as const, label: "AOV", icon: TrendingUp },
-            ]).map((m) => (
-              <button
-                key={m.key}
-                onClick={() => setMetric(m.key)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  metric === m.key
-                    ? "bg-[#C2452D] text-white"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                <m.icon className="w-3.5 h-3.5" />
-                {m.label}
-              </button>
-            ))}
+      {data && data.periods.length > 0 && (
+        <div className={`space-y-4 transition-opacity ${loading ? "opacity-40 pointer-events-none" : ""}`}>
+          {/* Metric Toggle + context (which outlets these numbers cover) */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex gap-1 bg-white rounded-lg border border-gray-200 p-1 w-fit">
+              {([
+                { key: "revenue" as const, label: "Revenue", icon: DollarSign },
+                { key: "orders" as const, label: "Orders", icon: ShoppingCart },
+                { key: "aov" as const, label: "AOV", icon: TrendingUp },
+              ]).map((m) => (
+                <button
+                  key={m.key}
+                  onClick={() => setMetric(m.key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    metric === m.key
+                      ? "bg-[#C2452D] text-white"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <m.icon className="w-3.5 h-3.5" />
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-gray-400">
+              {outletContextLabel}
+              {loading && <Loader2 className="inline w-3.5 h-3.5 ml-2 animate-spin text-[#C2452D]" />}
+            </span>
           </div>
 
           {/* Accumulative Overlay Chart — the hero comparison graph */}
@@ -857,6 +949,9 @@ export default function SalesComparePage() {
             const allSingleDay = data.periods.every((p) => p.from === p.to);
             let chartData: Record<string, number | string | null>[];
             let xMode: "hour" | "day";
+            // Where "now" sits on the x-axis — a dashed marker so it's obvious
+            // why the latest period's line stops where it does
+            let nowLabel: string | null = null;
             if (allSingleDay) {
               xMode = "hour";
               const cum = data.periods.map((p) => {
@@ -873,6 +968,9 @@ export default function SalesComparePage() {
                 data.periods.forEach((_, i) => { row[`p${i}`] = cum[i][hr]; });
                 return row;
               });
+              if (data.periods.some((p) => p.to === today)) {
+                nowLabel = `${String(nowHour).padStart(2, "0")}:00`;
+              }
             } else {
               xMode = "day";
               const cum = data.periods.map((p) => {
@@ -889,6 +987,11 @@ export default function SalesComparePage() {
                 data.periods.forEach((_, i) => { row[`p${i}`] = di < cum[i].length ? cum[i][di] : null; });
                 return row;
               });
+              const partial = data.periods.find((p) => p.from <= today && today <= p.to);
+              if (partial) {
+                const idx = partial.dailyTotals.findIndex((d) => d.date === today);
+                if (idx >= 0) nowLabel = `Day ${idx + 1}`;
+              }
             }
             return (
               <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -911,8 +1014,21 @@ export default function SalesComparePage() {
                       tickLine={false}
                       axisLine={false}
                       width={46}
-                      tickFormatter={(v) => (chartMetric === "revenue" ? (Number(v) >= 1000 ? `${(Number(v) / 1000).toFixed(1)}K` : `${v}`) : `${v}`)}
+                      tickFormatter={(v) => {
+                        const n = Number(v);
+                        if (chartMetric !== "revenue" || n < 1000) return `${v}`;
+                        // ≥100k → whole-K ("320K"); below → 1dp ("9.5K")
+                        return n >= 100000 ? `${Math.round(n / 1000)}K` : `${(n / 1000).toFixed(1)}K`;
+                      }}
                     />
+                    {nowLabel && (
+                      <ReferenceLine
+                        x={nowLabel}
+                        stroke="#9ca3af"
+                        strokeDasharray="4 3"
+                        label={{ value: "now", position: "top", fontSize: 10, fill: "#9ca3af" }}
+                      />
+                    )}
                     <Tooltip
                       formatter={(value, name) => [
                         value == null ? "—" : chartMetric === "revenue" ? fmtRM(value as number) : value,
@@ -939,9 +1055,19 @@ export default function SalesComparePage() {
             );
           })()}
 
-          {/* Summary Cards — scrollable on mobile */}
+          {/* Summary Cards — scrollable on mobile. NOTE: Tailwind can't JIT a
+              template-string class (`sm:grid-cols-${n}` never generated), so
+              the column count maps to static classes. */}
           <div className="overflow-x-auto scrollbar-thin -mx-4 px-4 sm:mx-0 sm:px-0">
-            <div className={`grid gap-3 ${data.periods.length <= 4 ? `grid-cols-2 sm:grid-cols-${Math.min(data.periods.length, 4)}` : "flex"}`} style={data.periods.length > 4 ? { display: "flex" } : undefined}>
+            <div
+              className={`gap-3 ${
+                data.periods.length > 4
+                  ? "flex"
+                  : `grid grid-cols-2 ${
+                      ["sm:grid-cols-1", "sm:grid-cols-2", "sm:grid-cols-3", "sm:grid-cols-4"][data.periods.length - 1] ?? "sm:grid-cols-4"
+                    }`
+              }`}
+            >
               {data.periods.map((p, i) => {
                 const ci = i % PERIOD_COLORS.length;
                 const val = metric === "revenue" ? p.summary.revenue : metric === "orders" ? p.summary.orders : p.summary.aov;
@@ -966,9 +1092,12 @@ export default function SalesComparePage() {
                       {metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500">
-                      <span>{p.summary.orders} orders</span>
-                      {change && (
-                        <span className={`font-medium ${change.color}`}>{change.label}</span>
+                      <span>{p.summary.orders.toLocaleString()} orders</span>
+                      {change && prev && (
+                        <span>
+                          <span className={`font-medium ${change.color}`}>{change.label}</span>
+                          <span className="text-[9px] text-gray-400 ml-1">vs {prev.label}</span>
+                        </span>
                       )}
                     </div>
                     {prev && prevVal !== null && (
@@ -1067,6 +1196,29 @@ export default function SalesComparePage() {
                         })}
                       </tr>
                     ))}
+    {/* Sales at 23:00–08:00 belong to no round — without this row the
+                        Total visibly doesn't match the rows above it */}
+                    {(() => {
+                      const others = data.periods.map((p) => {
+                        const rev = p.summary.revenue - p.rounds.reduce((s, r) => s + r.revenue, 0);
+                        const ord = p.summary.orders - p.rounds.reduce((s, r) => s + r.orders, 0);
+                        return { rev: Math.round(rev * 100) / 100, ord };
+                      });
+                      if (!others.some((o) => Math.abs(o.rev) >= 0.01 || o.ord !== 0)) return null;
+                      return (
+                        <tr className="border-b border-gray-50">
+                          <td className="py-2 pr-3 text-gray-400 sticky left-0 bg-white z-10 whitespace-nowrap">Other hours (11pm-8am)</td>
+                          {others.map((o, pi) => {
+                            const val = metric === "revenue" ? o.rev : metric === "orders" ? o.ord : o.ord > 0 ? Math.round((o.rev / o.ord) * 100) / 100 : 0;
+                            return (
+                              <td key={pi} className="text-right py-2 px-2 text-gray-400 tabular-nums whitespace-nowrap">
+                                {metric === "revenue" || metric === "aov" ? fmtRM(val) : val}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })()}
                     {/* Totals row */}
                     <tr className="border-t-2 border-gray-200 font-semibold">
                       <td className="py-2 pr-3 text-gray-900 sticky left-0 bg-white z-10">Total</td>
@@ -1251,39 +1403,60 @@ export default function SalesComparePage() {
             </button>
             {showChannels && (
               <div className="overflow-x-auto -mx-4 px-4">
-                <table className="w-full text-xs" style={{ minWidth: 450 }}>
+                {/* Same orientation as every other table: rows = dimension,
+                    columns = periods */}
+                <table className="w-full text-xs" style={{ minWidth: Math.max(450, data.periods.length * 130 + 120) }}>
                   <thead>
                     <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 pr-3 font-medium text-gray-500 sticky left-0 bg-white z-10 whitespace-nowrap">Period</th>
-                      <th className="text-right py-2 px-2 font-medium text-blue-600 whitespace-nowrap">Dine In</th>
-                      <th className="text-right py-2 px-2 font-medium text-amber-600 whitespace-nowrap">Takeaway</th>
-                      <th className="text-right py-2 px-2 font-medium text-purple-600 whitespace-nowrap">Delivery</th>
-                      <th className="text-right py-2 pl-2 font-medium text-gray-700 whitespace-nowrap">Total</th>
+                      <th className="text-left py-2 pr-3 font-medium text-gray-500 sticky left-0 bg-white z-10 whitespace-nowrap">Order Type</th>
+                      {data.periods.map((p, i) => (
+                        <th key={i} className="text-right py-2 px-2 font-medium whitespace-nowrap" style={{ color: PERIOD_COLORS[i % PERIOD_COLORS.length] }}>
+                          {p.label}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {data.periods.map((p, i) => {
-                      const ci = i % PERIOD_COLORS.length;
-                      const di = metric === "revenue" ? p.channels.dineIn.revenue : p.channels.dineIn.orders;
-                      const ta = metric === "revenue" ? p.channels.takeaway.revenue : p.channels.takeaway.orders;
-                      const del = metric === "revenue" ? p.channels.delivery.revenue : p.channels.delivery.orders;
-                      const total = metric === "revenue" ? p.summary.revenue : p.summary.orders;
-                      const fmt = (v: number) => metric === "revenue" ? fmtRM(v) : v.toString();
-                      return (
-                        <tr key={i} className="border-b border-gray-50">
-                          <td className="py-2 pr-3 sticky left-0 bg-white z-10">
-                            <div className="flex items-center gap-1.5">
-                              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: PERIOD_COLORS[ci] }} />
-                              <span className="font-medium text-gray-700 whitespace-nowrap">{p.label}</span>
-                            </div>
+                    {([
+                      { key: "dineIn" as const, label: "Dine In", cls: "text-blue-600" },
+                      { key: "takeaway" as const, label: "Takeaway", cls: "text-amber-600" },
+                      { key: "delivery" as const, label: "Delivery", cls: "text-purple-600" },
+                    ]).map((ch) => (
+                      <tr key={ch.key} className="border-b border-gray-50">
+                        <td className={`py-2 pr-3 font-medium sticky left-0 bg-white z-10 whitespace-nowrap ${ch.cls}`}>{ch.label}</td>
+                        {data.periods.map((p, pi) => {
+                          const c = p.channels[ch.key];
+                          const val = metric === "revenue" ? c.revenue : metric === "orders" ? c.orders : c.orders > 0 ? Math.round((c.revenue / c.orders) * 100) / 100 : 0;
+                          const totalForShare = metric === "orders" ? p.summary.orders : p.summary.revenue;
+                          const shareBase = metric === "orders" ? c.orders : c.revenue;
+                          const share = metric !== "aov" && totalForShare > 0 ? (shareBase / totalForShare) * 100 : null;
+                          return (
+                            <td key={pi} className="text-right py-2 px-2 text-gray-700 tabular-nums whitespace-nowrap">
+                              {val === 0 ? (
+                                <span className="text-gray-300">—</span>
+                              ) : (
+                                <>
+                                  {metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
+                                  {share !== null && <span className="ml-1.5 text-[10px] text-gray-400">{share.toFixed(0)}%</span>}
+                                </>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                    {/* Totals row */}
+                    <tr className="border-t-2 border-gray-200 font-semibold">
+                      <td className="py-2 pr-3 text-gray-900 sticky left-0 bg-white z-10">Total</td>
+                      {data.periods.map((p, pi) => {
+                        const val = metric === "revenue" ? p.summary.revenue : metric === "orders" ? p.summary.orders : p.summary.aov;
+                        return (
+                          <td key={pi} className="text-right py-2 px-2 text-gray-900 tabular-nums whitespace-nowrap">
+                            {metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
                           </td>
-                          <td className="text-right py-2 px-2 text-gray-700 tabular-nums whitespace-nowrap">{fmt(di)}</td>
-                          <td className="text-right py-2 px-2 text-gray-700 tabular-nums whitespace-nowrap">{fmt(ta)}</td>
-                          <td className="text-right py-2 px-2 text-gray-700 tabular-nums whitespace-nowrap">{fmt(del)}</td>
-                          <td className="text-right py-2 pl-2 font-medium text-gray-900 tabular-nums whitespace-nowrap">{fmt(total)}</td>
-                        </tr>
-                      );
-                    })}
+                        );
+                      })}
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -1368,7 +1541,7 @@ export default function SalesComparePage() {
               )}
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
