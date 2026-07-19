@@ -25,7 +25,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { appendInvoiceFlags, type InvoiceFlag } from "@/lib/inventory/flag-detector";
 import { recentPopLessons } from "@/lib/inventory/agents/pop-lessons";
-import { getAgentModeOrDefault, logAgentAction, touchAgentRun, type AgentMode } from "@/lib/agents/substrate";
+import { getAgentModeOrDefault, logAgentAction, touchAgentRun, type AgentMode } from "@celsius/agents/src/substrate";
 import {
   POP_VERIFIER_SYSTEM,
   POP_VERIFIER_VERSION,

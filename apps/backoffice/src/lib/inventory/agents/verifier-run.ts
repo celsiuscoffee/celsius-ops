@@ -21,7 +21,7 @@ import {
   type VerifierDecision,
   type VerifierVerdict,
 } from "@/lib/inventory/agents/verifier";
-import { logAgentMessage } from "@/lib/agents/messages";
+import { logAgentMessage } from "@celsius/agents/src/messages";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

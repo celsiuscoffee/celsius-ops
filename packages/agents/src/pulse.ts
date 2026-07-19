@@ -1,5 +1,3 @@
-import { sendMessage } from "@/lib/telegram";
-
 // Pulse channel: the human-readable feed of agent communications, learnings,
 // and logic changes. Two ways to route it, checked in order:
 //   1. A DEDICATED pulse bot: set CELSIUS_PULSE_BOT_TOKEN (@celsiuspulsebot's
@@ -60,11 +58,16 @@ export async function sendPulse(html: string, opts?: { buttons?: PulseButton[][]
     if (pulseToken) {
       return await sendViaPulseBot(pulseToken, chatId, html, opts?.buttons, opts?.promptId);
     }
-    // Fallback path uses the existing bot; sendMessage takes a numeric chat id.
+    // Fallback path uses the existing shared bot (TELEGRAM_BOT_TOKEN).
     // Buttons aren't supported on the fallback (no dedicated webhook to answer).
-    const numeric = parseInt(chatId, 10);
-    if (Number.isNaN(numeric)) throw new Error("CELSIUS_PULSE_CHAT_ID must be numeric for the fallback bot");
-    await sendMessage(numeric, html);
+    const sharedToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!sharedToken) throw new Error("no TELEGRAM_BOT_TOKEN for the fallback bot");
+    const res = await fetch(`https://api.telegram.org/bot${sharedToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text: html, parse_mode: "HTML", disable_web_page_preview: true }),
+    });
+    if (!res.ok) throw new Error(`telegram ${res.status}: ${await res.text().catch(() => "")}`);
     return 0; // sent, but message id not tracked on the fallback bot
   } catch (err) {
     console.error("[pulse] send failed:", err);

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { getSession } from "@/lib/auth";
 import { runCelsiusOverviewAgent } from "@/lib/ai-agent/celsius-overview";
-import { runCommsDigest } from "@/lib/agents/digest";
+import { runCommsDigest } from "@celsius/agents/src/digest";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

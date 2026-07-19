@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { postBankLinesToGl } from "@/lib/finance/gl-posting";
 import { checkCronAuth } from "@celsius/shared";
-import { getAgentModeOrDefault, touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
+import { getAgentModeOrDefault, touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;

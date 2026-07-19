@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { askOwner } from "@/lib/agents/ask-owner";
+import { askOwner } from "@celsius/agents/src/ask-owner";
 
 export const dynamic = "force-dynamic";
 

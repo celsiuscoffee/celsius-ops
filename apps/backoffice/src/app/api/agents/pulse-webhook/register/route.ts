@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { setPulseWebhook, pulseTwoWayEnabled } from "@/lib/agents/pulse";
+import { setPulseWebhook, pulseTwoWayEnabled } from "@celsius/agents/src/pulse";
 
 export const dynamic = "force-dynamic";
 

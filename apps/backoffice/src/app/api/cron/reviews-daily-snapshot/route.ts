@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
-import { touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
+import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews } from "@/lib/reviews/gbp";

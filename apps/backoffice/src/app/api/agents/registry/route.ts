@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getAgentClient, logAgentAction, type AgentMode } from "@/lib/agents/substrate";
-import { estimateCostUsd } from "@/lib/agents/pricing";
-import { logAgentMessage, agentLabel } from "@/lib/agents/messages";
+import { getAgentClient, logAgentAction, type AgentMode } from "@celsius/agents/src/substrate";
+import { estimateCostUsd } from "@celsius/agents/src/pricing";
+import { logAgentMessage, agentLabel } from "@celsius/agents/src/messages";
 
 export const dynamic = "force-dynamic";
 

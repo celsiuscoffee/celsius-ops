@@ -6,7 +6,7 @@ import { randomUUID } from "crypto";
 import { getFinanceClient } from "./supabase";
 import { postJournal } from "./ledger";
 import type { JournalLineInput } from "./types";
-import { logAgentMessage } from "@/lib/agents/messages";
+import { logAgentMessage } from "@celsius/agents/src/messages";
 
 export type InboxAction =
   | { kind: "approve" }                                                    // accept agent's proposed action

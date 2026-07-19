@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { checkCronAuth } from "@celsius/shared";
-import { touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
+import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 import { deriveHours, mytDateString, mytDayOfWeek, mytInstant } from "@/lib/hr/hours";
 
 export const dynamic = "force-dynamic";

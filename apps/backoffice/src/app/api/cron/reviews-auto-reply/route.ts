@@ -4,8 +4,8 @@ import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews, replyToReview } from "@/lib/reviews/gbp";
 import { generateReplyWithUsage, extractImprovement, POSITIVE_THRESHOLD } from "@/lib/reviews/auto-reply";
-import { logAgentAction, touchAgentRun } from "@/lib/agents/substrate";
-import { logAgentMessage } from "@/lib/agents/messages";
+import { logAgentAction, touchAgentRun } from "@celsius/agents/src/substrate";
+import { logAgentMessage } from "@celsius/agents/src/messages";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;

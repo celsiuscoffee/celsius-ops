@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { mytDayWindow, type ConsumptionResult } from "@/lib/inventory/consumption";
 import { postOutletConsumption } from "@/lib/inventory/consumption-post";
-import { getAgentClient, touchAgentRun, logAgentAction } from "@/lib/agents/substrate";
-import { logAgentMessage } from "@/lib/agents/messages";
+import { getAgentClient, touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
+import { logAgentMessage } from "@celsius/agents/src/messages";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
