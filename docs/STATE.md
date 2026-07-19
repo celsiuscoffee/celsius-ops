@@ -741,8 +741,10 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   report, search-term batching, and registry registration were superseded the
   same day by the ads autopilot — next entry.)
 
-- 2026-07-19 — **Cash TARGET set (owner): +RM7,000/month net**, cuts and/or
-  sales lift both count. Nightly `cashScoreboard()` in the autopilot logs
+- 2026-07-19 — **Cash TARGET (owner, revised): +RM5,000/month net from
+  GOOGLE ADS ONLY** (was RM7k any-source; SMS/loyalty loop proposed and
+  PARKED — 23k member phones sized, design in sms-loop-engineering.md,
+  awaiting owner's return to it). Nightly `cashScoreboard()` in the autopilot logs
   progress (cuts vs RM300.20/day pre-descent baseline + margin on fleet till
   drift vs the pre-descent anchor) in every run's summary + meta. Current:
   ~RM1,030/mo banked from cuts (~15%). Cuts ceiling ≈RM6.4k/mo → the sales

@@ -118,14 +118,16 @@ export const SETTLE_HOLD_DAYS = 90;      // proven optimum: re-search only quart
 export const GROSS_MARGIN = Number(process.env.ADS_GROSS_MARGIN || 0.6);
 
 // ── Cash target (owner 2026-07-19) ──────────────────────────────────────────
-// "increase 7k monthly cash (either budget cutting or increase sales, both
-// can contribute)". Scored every night and logged with the run:
+// Revised same day to RM5k/month, Google Ads ONLY (SMS/loyalty parked:
+// "i want the cash incremental only from gads first" → "lets do 5k then").
+// Reachable from the cuts side alone if the descent runs deep; sales lift
+// still counts via the till-drift term. Scored every night and logged:
 //   cuts side  = (pre-descent fleet budget − current fleet budget) × 30
 //   sales side = (recent fleet till/day − pre-descent anchor till/day)
 //                × margin × 30  — a NET drift measure, not attribution:
 //                seasonality and other loops (e.g. the Grab holdout) move it
 //                too, but net cash is exactly the owner's objective.
-export const CASH_TARGET_MONTHLY_MYR = Number(process.env.ADS_CASH_TARGET_MONTHLY_MYR || 7000);
+export const CASH_TARGET_MONTHLY_MYR = Number(process.env.ADS_CASH_TARGET_MONTHLY_MYR || 5000);
 // Fleet daily budget before the descent began (Jul 5: Tam 100.20 + PJ 100 + SA 100).
 export const SPEND_BASELINE_DAILY_MYR = Number(process.env.ADS_SPEND_BASELINE_DAILY_MYR || 300.2);
 
