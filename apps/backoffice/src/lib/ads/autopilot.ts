@@ -132,6 +132,11 @@ export const WASTE_MATCH_MAX_PCT = 0.2;       // never remove more than 20% of t
 export const MAX_NEGATIVES_PER_CAMPAIGN = 25;
 
 // Pause probe — the only till-readable experiment at this spend:revenue ratio.
+// SHELVED by owner 2026-07-19 ("let tamarind follow the others") after the
+// probe was starved two nights running — all outlets stay on the gradual
+// descent. The machinery is kept and can be re-enabled with
+// ADS_AUTOPILOT_PAUSE_PROBE=on if a causal baseline is wanted later.
+export const PAUSE_PROBE_ENABLED = process.env.ADS_AUTOPILOT_PAUSE_PROBE === "on";
 export const PAUSE_PROBE_DAYS = 28;      // full pause length before auto-restore
 // The cron runs nightly; this fleet-wide gap staggers NEW disturbances
 // (cut/raise/pause) so the loop keeps its ~weekly rhythm without waiting for
@@ -396,10 +401,38 @@ function probeUp(c: CampaignState, guard: GuardSignal, why: string): AutopilotDe
   };
 }
 
-// Waste-matched cuts are paired bookkeeping (exclusion + matching budget
-// reduction), not experiments — they are exempt from the cut cap and the
-// fleet stagger.
-const isWasteMatched = (d: AutopilotDecision) => d.reason.startsWith("autopilot step-down (waste-matched)");
+// Parenthesized step-downs — "(waste-matched)" and "(owner directive …)" —
+// are paired bookkeeping / explicit human calls, not experiments: exempt from
+// the cut cap and the fleet stagger, and they don't reset the spacing clock.
+// Blind steps ("autopilot step-down 8% …") carry no parenthesis.
+const isWasteMatched = (d: AutopilotDecision) => d.reason.startsWith("autopilot step-down (");
+
+/**
+ * One-time owner directives. 2026-07-19: "let tamarind follow the others.
+ * start with the prev cut (rm80+)" — the Jul 17 rollback was a proven false
+ * positive, so Tamarind resumes the fleet's gradual descent at its
+ * pre-rollback level. Self-expiring: fires only while the campaign's last
+ * applied change is still that rollback; once this step-down lands it can
+ * never fire again.
+ */
+export function ownerDirective(c: CampaignState): AutopilotDecision | null {
+  if (
+    c.campaignName.includes("Tamarind") &&
+    !c.isPaused &&
+    lastKind(c.lastApplied) === "rollback" &&
+    c.dailyBudgetMyr > 85
+  ) {
+    return {
+      campaignId: c.campaignId,
+      campaignName: c.campaignName,
+      action: "cut",
+      newDailyMyr: 84.96,
+      reason:
+        "autopilot step-down (owner directive 2026-07-19): the Jul 17 rollback was a false positive (till flat in absolute RM) — resume the gradual descent at the prior cut level RM84.96/day",
+    };
+  }
+  return null;
+}
 
 /** Stagger the descent: keep at most `max` BLIND cuts, least-efficient campaigns first. */
 export function capCuts(decisions: AutopilotDecision[], states: CampaignState[], max = MAX_CUTS_PER_RUN): AutopilotDecision[] {
@@ -589,12 +622,12 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     maxLevelByCampaign.set(ch.campaignId, Math.max(maxLevelByCampaign.get(ch.campaignId) ?? 0, seen));
     if (ch.reason?.startsWith("autopilot pause")) pauseProbedCampaigns.add(ch.campaignId);
     if (!firstChangeAt || ch.decidedAt < firstChangeAt) firstChangeAt = ch.decidedAt;
-    // Waste-matched cuts are spacing-EXEMPT, so they must not reset the
-    // spacing clock either — nightly waste sweeps would otherwise starve
-    // blind cuts and raises forever.
+    // Spacing-exempt actions (parenthesized step-downs: waste-matched, owner
+    // directives) must not reset the spacing clock either — nightly waste
+    // sweeps would otherwise starve blind cuts and raises forever.
     if (
       ((ch.reason?.startsWith("autopilot step-down") &&
-        !ch.reason.startsWith("autopilot step-down (waste-matched)")) ||
+        !ch.reason.startsWith("autopilot step-down (")) ||
         ch.reason?.startsWith("autopilot raise") ||
         ch.reason?.startsWith("autopilot pause")) &&
       (!lastDisturbanceAt || ch.decidedAt > lastDisturbanceAt)
@@ -788,18 +821,12 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     s.pauseProbe = { index: sig.rawIndex, adjIndex: sig.adjIndex };
   }
 
-  const decisions: AutopilotRunResult["decisions"] = spaceDisturbances(
-    selectPauseProbe(
-      capCuts(
-        states.map((s) => decideCampaign(s, s.outletId ? guards[s.outletId] ?? noGuard : noGuard, now)),
-        states,
-      ),
-      states,
-      guards,
-    ),
-    lastDisturbanceAt,
-    now,
-  );
+  const baseDecisions = states.map((s) => {
+    const directive = ownerDirective(s);
+    return directive ?? decideCampaign(s, s.outletId ? guards[s.outletId] ?? noGuard : noGuard, now);
+  });
+  const withProbe = PAUSE_PROBE_ENABLED ? selectPauseProbe(capCuts(baseDecisions, states), states, guards) : capCuts(baseDecisions, states);
+  const decisions: AutopilotRunResult["decisions"] = spaceDisturbances(withProbe, lastDisturbanceAt, now);
 
   if (mode === "armed") {
     for (const d of decisions) {
