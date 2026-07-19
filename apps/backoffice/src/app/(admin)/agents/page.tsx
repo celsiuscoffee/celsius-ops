@@ -10,6 +10,7 @@ import {
   Zap,
   AlertTriangle,
   RefreshCw,
+  Send,
 } from "lucide-react";
 
 // /agents — the fleet control panel. One row per autonomous actor from
@@ -120,6 +121,27 @@ export default function AgentsPage() {
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [msgKind, setMsgKind] = useState<string>("");
   const [msgLoading, setMsgLoading] = useState(false);
+  const [tgBusy, setTgBusy] = useState(false);
+  const [tgStatus, setTgStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function connectTelegram() {
+    setTgBusy(true);
+    setTgStatus(null);
+    try {
+      const res = await fetch("/api/agents/pulse-webhook/register", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) {
+        // The register route returns a plain-English reason when an env var is
+        // still missing (bot token / webhook secret / app url).
+        throw new Error(json.error || "Registration failed");
+      }
+      setTgStatus({ ok: true, text: "Connected. Replies and button taps now reach the agents." });
+    } catch (e) {
+      setTgStatus({ ok: false, text: e instanceof Error ? e.message : "Registration failed" });
+    } finally {
+      setTgBusy(false);
+    }
+  }
 
   const loadMessages = useCallback(async (kind: string) => {
     setMsgLoading(true);
@@ -210,12 +232,29 @@ export default function AgentsPage() {
             Every autonomous actor, its mode and cost, and the plain-English record of what they tell each other.
           </p>
         </div>
-        <button
-          onClick={() => (view === "fleet" ? void load() : void loadMessages(msgKind))}
-          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh
-        </button>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void connectTelegram()}
+              disabled={tgBusy}
+              title="Register the Telegram webhook so your replies and button taps reach the agents. Set CELSIUS_PULSE_WEBHOOK_SECRET first."
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <Send className="h-3.5 w-3.5" /> {tgBusy ? "Connecting..." : "Connect Telegram"}
+            </button>
+            <button
+              onClick={() => (view === "fleet" ? void load() : void loadMessages(msgKind))}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Refresh
+            </button>
+          </div>
+          {tgStatus && (
+            <p className={`max-w-xs text-right text-xs ${tgStatus.ok ? "text-green-600" : "text-amber-600"}`}>
+              {tgStatus.text}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="mb-5 inline-flex overflow-hidden rounded-lg border border-gray-200">

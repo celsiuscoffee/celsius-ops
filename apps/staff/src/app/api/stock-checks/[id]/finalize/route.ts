@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { setStockBalance } from "@/lib/stock";
 import { checkCountCoverage } from "@/lib/stock-coverage";
 import { getSession } from "@/lib/auth";
+import { touchAgentRun } from "@celsius/agents/src/substrate";
+import { logAgentMessage } from "@celsius/agents/src/messages";
 
 /**
  * POST /api/stock-checks/[id]/finalize
@@ -170,6 +172,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         setStockBalance(count.outletId, productId, baseTotals.get(productId)!, null),
       ),
     );
+  }
+
+  // Fleet visibility for the auto-approve agent (lives in the staff app, so it
+  // was invisible to /agents). Heartbeat on every finalize; post one feed line
+  // (notify:false = /agents + daily digest, no real-time ping) when a count
+  // clears without a human, so the owner can see the agent working and, if a
+  // clean count still looks wrong, reply to question it. Substrate helpers
+  // swallow their own errors - this never blocks the finalize.
+  await touchAgentRun("stock_count_auto_approve");
+  if (autoApprove) {
+    await logAgentMessage({
+      fromAgent: "stock_count_auto_approve",
+      toAgent: "owner",
+      kind: "report",
+      summary: `Auto-approved a zero-variance stock count (${productIds.length} products), no manager review needed.`,
+      refTable: "stock_counts",
+      refId: id,
+      outletId: count.outletId,
+      notify: false,
+    });
   }
 
   return NextResponse.json({ ok: true, finalizedAt: now, autoApproved: autoApprove }, { status: 200 });
