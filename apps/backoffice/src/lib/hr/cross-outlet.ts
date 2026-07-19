@@ -13,17 +13,19 @@ export type CrossOutletConflict = {
   end_time: string;
 };
 
-// A shared staffer may be rostered at several outlets, but never two shifts at
-// the same clock time on the same day. This finds an existing shift the person
-// already holds at ANOTHER outlet on `shiftDate` whose window overlaps
-// [start, end). Returns the first conflict (with outlet name for the message),
-// or null when the slot is free. Rest-day markers (00:00) are ignored.
+// A shared staffer works at most ONE outlet per day (owner rule 2026-07-19 —
+// was overlap-only, which allowed an unrealistic morning-here/evening-there
+// same-day split across outlets). This finds ANY working shift the person
+// already holds at ANOTHER outlet on `shiftDate`. Returns the first conflict
+// (with outlet name for the message), or null when the day is free here.
+// Rest-day markers (00:00) are ignored. `start`/`end` are kept for call-site
+// compatibility but no longer narrow the check.
 export async function findCrossOutletOverlap(
   userId: string,
   shiftDate: string,
   outletId: string,
-  start: string,
-  end: string,
+  _start?: string,
+  _end?: string,
 ): Promise<CrossOutletConflict | null> {
   const { data } = await hrSupabaseAdmin
     .from("hr_schedule_shifts")
@@ -32,23 +34,18 @@ export async function findCrossOutletOverlap(
     .eq("shift_date", shiftDate)
     .neq("start_time", "00:00");
 
-  const s = toMin(start);
-  const e = toMin(end);
   type Row = { start_time: string; end_time: string; hr_schedules: { outlet_id: string } | { outlet_id: string }[] };
   for (const row of ((data ?? []) as unknown as Row[])) {
     const sched = Array.isArray(row.hr_schedules) ? row.hr_schedules[0] : row.hr_schedules;
     if (!sched || sched.outlet_id === outletId) continue; // same outlet is handled by the cell replace
-    const rs = toMin(row.start_time);
-    const re = toMin(row.end_time);
-    if (s < re && rs < e) {
-      const outlet = await prisma.outlet.findUnique({ where: { id: sched.outlet_id }, select: { name: true } });
-      return {
-        outletId: sched.outlet_id,
-        outletName: outlet?.name ?? "another outlet",
-        start_time: row.start_time.slice(0, 5),
-        end_time: row.end_time.slice(0, 5),
-      };
-    }
+    if (toMin(row.start_time) === 0 && toMin(row.end_time) === 0) continue;
+    const outlet = await prisma.outlet.findUnique({ where: { id: sched.outlet_id }, select: { name: true } });
+    return {
+      outletId: sched.outlet_id,
+      outletName: outlet?.name ?? "another outlet",
+      start_time: row.start_time.slice(0, 5),
+      end_time: row.end_time.slice(0, 5),
+    };
   }
   return null;
 }
