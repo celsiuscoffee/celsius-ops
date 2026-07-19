@@ -298,9 +298,22 @@ describe("pause probe", () => {
       campaign({ campaignId: "pj", outletId: "o2", efficiencyRatio: 1.4 }),
     ];
     const decisions = states.map((s) => decideCampaign(s, healthy, NOW));
-    // one already paused
+    // a probe already running (autopilot-paused) blocks the next one…
     expect(
-      selectPauseProbe(decisions, [{ ...states[0], isPaused: true }, states[1]], guards).every((d) => d.action !== "pause"),
+      selectPauseProbe(
+        decisions,
+        [
+          { ...states[0], isPaused: true, lastApplied: { decidedAt: daysAgo(3), prevDailyMyr: 85, newDailyMyr: 85, reason: "autopilot pause: probe start" } },
+          states[1],
+        ],
+        guards,
+      ).every((d) => d.action !== "pause"),
+    ).toBe(true);
+    // …but a HUMAN-paused sibling (e.g. Nilai, paused long ago) must not
+    expect(
+      selectPauseProbe(decisions, [{ ...states[0], isPaused: true, lastApplied: null }, states[1]], guards).some(
+        (d) => d.action === "pause",
+      ),
     ).toBe(true);
     // already probed before
     expect(
@@ -392,7 +405,8 @@ describe("spaceDisturbances (nightly cadence)", () => {
     ];
     const spaced = spaceDisturbances(decisions, daysAgo(2), NOW);
     expect(spaced.find((d) => d.campaignId === "a")?.action).toBe("hold");
-    expect(spaced.find((d) => d.campaignId === "c")?.action).toBe("hold");
+    // pauses are per-outlet-measured probes — never spaced
+    expect(spaced.find((d) => d.campaignId === "c")?.action).toBe("pause");
     expect(spaced.find((d) => d.campaignId === "b")?.action).toBe("rollback");
     // waste-matched cuts are paired bookkeeping — never spaced
     const wm = [{ campaignId: "w", campaignName: "W", action: "cut" as const, newDailyMyr: 87.1, reason: "autopilot step-down (waste-matched): RM12.9/day" }];
