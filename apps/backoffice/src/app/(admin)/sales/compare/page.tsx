@@ -419,7 +419,10 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
 
 export default function SalesComparePage() {
   const [slots, setSlots] = useState<ComparisonSlot[]>([]);
-  const [outletId, setOutletId] = useState("all");
+  // Selected outlet ids; empty = all outlets. Any subset is allowed —
+  // e.g. Putrajaya + Shah Alam together without Tamarind.
+  const [outletIds, setOutletIds] = useState<string[]>([]);
+  const [showOutletPicker, setShowOutletPicker] = useState(false);
   const [data, setData] = useState<CompareResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -436,20 +439,24 @@ export default function SalesComparePage() {
   const [showDow, setShowDow] = useState(true);
   const [showDaily, setShowDaily] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const outletPickerRef = useRef<HTMLDivElement>(null);
 
-  // Close picker on outside click
+  // Close pickers on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
         setShowPicker(false);
       }
+      if (outletPickerRef.current && !outletPickerRef.current.contains(e.target as Node)) {
+        setShowOutletPicker(false);
+      }
     }
-    if (showPicker) document.addEventListener("mousedown", handleClick);
+    if (showPicker || showOutletPicker) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [showPicker]);
+  }, [showPicker, showOutletPicker]);
 
   const fetchData = useCallback(
-    async (currentSlots: ComparisonSlot[], outlet: string) => {
+    async (currentSlots: ComparisonSlot[], outletSel: string[]) => {
       if (currentSlots.length === 0) {
         setData(null);
         return;
@@ -459,7 +466,7 @@ export default function SalesComparePage() {
       try {
         const periodsStr = currentSlots.map((s) => `${s.from}:${s.to}`).join(",");
         let url = `/api/sales/compare?periods=${periodsStr}`;
-        if (outlet !== "all") url += `&outletId=${outlet}`;
+        if (outletSel.length > 0) url += `&outletIds=${outletSel.join(",")}`;
         const res = await fetch(url, { credentials: "include" });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -492,13 +499,13 @@ export default function SalesComparePage() {
     const next = [...slots, { id: uid(), from, to }];
     setSlots(next);
     setShowPicker(false);
-    fetchData(next, outletId);
+    fetchData(next, outletIds);
   };
 
   const removeSlot = (id: string) => {
     const next = slots.filter((s) => s.id !== id);
     setSlots(next);
-    fetchData(next, outletId);
+    fetchData(next, outletIds);
   };
 
   const clearAll = () => {
@@ -509,13 +516,30 @@ export default function SalesComparePage() {
   const applyPreset = (preset: { slots: ComparisonSlot[] }) => {
     const capped = preset.slots.slice(0, MAX_SLOTS);
     setSlots(capped);
-    fetchData(capped, outletId);
+    fetchData(capped, outletIds);
   };
 
-  const changeOutlet = (v: string) => {
-    setOutletId(v);
-    fetchData(slots, v);
+  const toggleOutlet = (id: string) => {
+    const next = outletIds.includes(id)
+      ? outletIds.filter((o) => o !== id)
+      : [...outletIds, id];
+    // Selecting every outlet is the same as "all" — collapse to the default
+    const normalized = next.length === outlets.length ? [] : next;
+    setOutletIds(normalized);
+    fetchData(slots, normalized);
   };
+
+  const selectAllOutlets = () => {
+    setOutletIds([]);
+    fetchData(slots, []);
+  };
+
+  const outletButtonLabel =
+    outletIds.length === 0
+      ? "All Outlets"
+      : outletIds.length === 1
+        ? (outlets.find((o) => o.id === outletIds[0])?.name ?? "1 outlet")
+        : `${outletIds.length} outlets`;
 
   const presets = getPresets();
 
@@ -714,19 +738,55 @@ export default function SalesComparePage() {
             </div>
           )}
 
-          {/* Outlet Filter */}
-          <select
-            value={outletId}
-            onChange={(e) => changeOutlet(e.target.value)}
-            className="ml-auto px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white text-gray-700"
-          >
-            <option value="all">All Outlets</option>
-            {outlets.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
+          {/* Outlet Filter — multi-select: any subset of outlets */}
+          <div className="relative ml-auto" ref={outletPickerRef}>
+            <button
+              onClick={() => setShowOutletPicker(!showOutletPicker)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border bg-white transition-colors ${
+                outletIds.length > 0 ? "border-[#C2452D] text-[#C2452D]" : "border-gray-200 text-gray-700"
+              }`}
+            >
+              {outletButtonLabel}
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+            {showOutletPicker && (
+              <div className="absolute top-full right-0 mt-2 z-50 bg-white rounded-xl shadow-xl border border-gray-200 w-60 p-2">
+                <button
+                  onClick={selectAllOutlets}
+                  className={`w-full text-left px-2.5 py-2 text-xs rounded-md transition-colors ${
+                    outletIds.length === 0
+                      ? "bg-[#C2452D]/10 text-[#C2452D] font-medium"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  All Outlets
+                </button>
+                <div className="my-1 border-t border-gray-100" />
+                {outlets.map((o) => {
+                  const checked = outletIds.includes(o.id);
+                  return (
+                    <label
+                      key={o.id}
+                      className="flex items-center gap-2 px-2.5 py-2 text-xs rounded-md text-gray-700 hover:bg-gray-50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleOutlet(o.id)}
+                        className="w-3.5 h-3.5 rounded border-gray-300 accent-[#C2452D]"
+                      />
+                      <span className={checked ? "font-medium text-gray-900" : ""}>{o.name}</span>
+                    </label>
+                  );
+                })}
+                {outletIds.length > 0 && (
+                  <p className="px-2.5 pt-1.5 pb-0.5 text-[10px] text-gray-400 border-t border-gray-100 mt-1">
+                    Comparing {outletIds.length === 1 ? "1 outlet" : `${outletIds.length} outlets combined`}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

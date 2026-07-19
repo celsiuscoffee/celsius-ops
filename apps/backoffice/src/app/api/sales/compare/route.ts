@@ -31,7 +31,14 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const outletId = searchParams.get("outletId") || null;
+    // Outlet filter: `outletIds=a,b,c` selects any subset; the legacy single
+    // `outletId=x` still works (the staff bridge uses it). Empty / "all" → all
+    // active outlets.
+    const outletIdsRaw = searchParams.get("outletIds") ?? searchParams.get("outletId") ?? "";
+    const requestedOutletIds = outletIdsRaw
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s && s !== "all");
     const periodsParam = searchParams.get("periods") || "";
     // The staff app's bridge passes source=storehub so it gets ONLY StoreHub sales
     // (it adds its own native pos+pickup). The backoffice graph omits it = unified.
@@ -64,8 +71,8 @@ export async function GET(request: NextRequest) {
     // Fetch outlets. No storehubId requirement — consignment-only outlets
     // (Nilai, IOI Mall) have no till at all and were previously invisible to
     // Compare; their sales come from consignment_sales inside the unified source.
-    const outletWhere = outletId && outletId !== "all"
-      ? { id: outletId }
+    const outletWhere = requestedOutletIds.length > 0
+      ? { id: { in: requestedOutletIds } }
       : { status: "ACTIVE" as const };
 
     const outlets = await prisma.outlet.findMany({
