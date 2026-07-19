@@ -9,7 +9,7 @@ import { sendPulse, formatPulseMessage } from "./pulse";
 //
 // Never throws - a notification failure must not break the business action.
 
-export type AgentMessageKind = "handoff" | "learning" | "logic_change" | "report" | "correction";
+export type AgentMessageKind = "handoff" | "learning" | "logic_change" | "report" | "correction" | "note";
 
 // Friendly display names so the feed reads in plain English instead of DB keys.
 // Falls back to the de-underscored key for anything not listed.
@@ -65,8 +65,9 @@ export async function logAgentMessage(input: AgentMessageInput): Promise<void> {
   const notify = input.notify ?? true;
 
   let notifiedAt: string | null = null;
+  let notifiedMessageId: number | null = null;
   if (notify) {
-    const ok = await sendPulse(
+    const messageId = await sendPulse(
       formatPulseMessage({
         from_agent: fromLabel,
         to_agent: toLabel,
@@ -75,7 +76,11 @@ export async function logAgentMessage(input: AgentMessageInput): Promise<void> {
         detail: input.detail ?? null,
       }),
     );
-    if (ok) notifiedAt = new Date().toISOString();
+    if (messageId !== null) {
+      notifiedAt = new Date().toISOString();
+      // 0 means "sent on the fallback bot, id not tracked"; only store real ids.
+      notifiedMessageId = messageId > 0 ? messageId : null;
+    }
   }
 
   try {
@@ -92,6 +97,7 @@ export async function logAgentMessage(input: AgentMessageInput): Promise<void> {
         outlet_id: input.outletId ?? null,
         meta: input.meta ?? {},
         notified_at: notifiedAt,
+        notified_message_id: notifiedMessageId,
       });
   } catch (err) {
     console.error(`[agent-messages] insert failed for ${input.fromAgent} -> ${input.toAgent}:`, err);

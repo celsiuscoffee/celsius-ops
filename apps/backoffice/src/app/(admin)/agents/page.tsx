@@ -58,7 +58,7 @@ interface MessageRow {
   at: string;
   from_agent: string;
   to_agent: string | null;
-  kind: "handoff" | "learning" | "logic_change" | "report" | "correction";
+  kind: "handoff" | "learning" | "logic_change" | "report" | "correction" | "note";
   summary: string;
   detail: string | null;
   outlet_id: string | null;
@@ -72,6 +72,7 @@ const KIND_META: Record<MessageRow["kind"], { label: string; emoji: string; clas
   learning: { label: "Learned", emoji: "🧠", classes: "bg-violet-50 text-violet-700" },
   logic_change: { label: "Logic change", emoji: "⚙️", classes: "bg-amber-50 text-amber-700" },
   report: { label: "Report", emoji: "📣", classes: "bg-emerald-50 text-emerald-700" },
+  note: { label: "Your note", emoji: "💬", classes: "bg-gray-100 text-gray-700" },
 };
 
 const MODE_META: Record<AgentMode, { label: string; classes: string; icon: React.ReactNode }> = {
@@ -336,6 +337,7 @@ function Conversations({
     { key: "learning", label: "🧠 Learnings" },
     { key: "logic_change", label: "⚙️ Logic changes" },
     { key: "report", label: "📣 Reports" },
+    { key: "note", label: "💬 Your notes" },
   ];
   return (
     <div>
