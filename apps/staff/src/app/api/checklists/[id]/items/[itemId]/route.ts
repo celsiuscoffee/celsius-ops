@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { isOutletAllowed } from "@/lib/working-outlet";
 
 type Params = { params: Promise<{ id: string; itemId: string }> };
 
@@ -11,6 +12,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id, itemId } = await params;
   const body = await req.json();
 
+  // Outlet scope check — done BEFORE the transaction so the external HR lookups
+  // in isOutletAllowed don't hold a DB transaction open. Staff may interact with
+  // checklists for any outlet they're working today: their home outlet, one
+  // they've clocked into, or one they're rostered at. OWNER/ADMIN bypass.
+  const isAdmin = session.role === "OWNER" || session.role === "ADMIN";
+  const scopeChecklist = await prisma.checklist.findUnique({
+    where: { id },
+    select: { outletId: true },
+  });
+  if (!scopeChecklist) return NextResponse.json({ error: "Item not found" }, { status: 404 });
+  if (!isAdmin && !(await isOutletAllowed(session.id, session.outletId, scopeChecklist.outletId))) {
+    return NextResponse.json({ error: "Checklist belongs to another outlet" }, { status: 403 });
+  }
+
   try {
   const result = await prisma.$transaction(async (tx) => {
     const item = await tx.checklistItem.findFirst({
@@ -18,17 +33,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
     if (!item) throw new Error("NOT_FOUND");
 
-    // Outlet scope check — staff may only interact with checklists for their
-    // own outlet. OWNER/ADMIN bypass.
     const checklist = await tx.checklist.findUnique({
       where: { id },
-      select: { assignedToId: true, outletId: true },
+      select: { assignedToId: true },
     });
     if (!checklist) throw new Error("NOT_FOUND");
-    const isAdmin = session.role === "OWNER" || session.role === "ADMIN";
-    if (!isAdmin && checklist.outletId !== session.outletId) {
-      throw new Error("WRONG_OUTLET");
-    }
 
     // Auto-claim: if checklist is unassigned, assign to current user on first interaction
     if (!checklist.assignedToId) {
