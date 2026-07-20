@@ -352,9 +352,9 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     // Total OT
     const totalOT = Math.round((ot1xAmount + ot15xAmount + ot2xAmount + ot3xAmount) * 100) / 100;
 
-    // Allowances (attendance + performance), review penalty deduction.
-    // Computed via the shared allowance engine — already net of attendance
-    // penalties (late/absent/early-out) and performance score tiering.
+    // Performance allowance (single RM200 pool, v2). There is NO separate
+    // attendance allowance — computed via the shared allowance engine, already
+    // net of lateness/absence and negative-review deductions and score tiering.
     const allowanceBreakdown = await computeAllowancesForUser(
       profile.user_id,
       year,
@@ -422,10 +422,9 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
 
     // Statutory deductions via hr_stat_* reference tables.
     // Malaysian convention (KWSP/PERKESO): EPF + SOCSO + EIS basis = basic +
-    // FIXED recurring allowances only. Attendance allowance is contractually
-    // fixed (capped); performance allowance is VARIABLE incentive pay and
-    // therefore excluded from the statutory basis. PCB still uses full gross
-    // annualized.
+    // FIXED recurring allowances only. The performance allowance is VARIABLE
+    // incentive pay and therefore excluded from the statutory basis. PCB still
+    // uses full gross annualized.
     const statutoryBasis = Math.max(0, basePay - unpaidDeduction + recurringStatBasis - recurringPreTaxDeduct);
     const ytd = ytdByUser.get(profile.user_id) || { gross: 0, pcb: 0 };
     const employeeReliefs = reliefsByUser.get(profile.user_id);

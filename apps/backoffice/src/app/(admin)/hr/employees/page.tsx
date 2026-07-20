@@ -78,7 +78,6 @@ export default function EmployeesPage() {
     join_date: new Date().toISOString().slice(0, 10),
     basic_salary: "",
     hourly_rate: "",
-    attendance_allowance_amount: "",
     performance_allowance_amount: "",
     ic_number: "",
     date_of_birth: "",
@@ -131,7 +130,6 @@ export default function EmployeesPage() {
         join_date: r.joinDate || f.join_date,
         basic_salary: f.basic_salary || (r.basicSalary != null ? String(r.basicSalary) : ""),
         hourly_rate: f.hourly_rate || (r.hourlyRate != null ? String(r.hourlyRate) : ""),
-        attendance_allowance_amount: f.attendance_allowance_amount || (r.attendanceAllowance != null ? String(r.attendanceAllowance) : ""),
         performance_allowance_amount: f.performance_allowance_amount || (r.performanceAllowance != null ? String(r.performanceAllowance) : ""),
         ic_number: f.ic_number || r.icNumber || "",
         outletId: f.outletId || resolveOutletId(r.outletName),
@@ -164,9 +162,6 @@ export default function EmployeesPage() {
         date_of_birth: newEmp.date_of_birth || null,
         gender: newEmp.gender || null,
         pin: wantsLogin ? (newEmp.pin || null) : null,
-        attendance_allowance_amount: newEmp.attendance_allowance_amount
-          ? parseFloat(newEmp.attendance_allowance_amount)
-          : null,
         performance_allowance_amount: newEmp.performance_allowance_amount
           ? parseFloat(newEmp.performance_allowance_amount)
           : null,
@@ -958,14 +953,6 @@ export default function EmployeesPage() {
               </div>
               {newEmp.employment_type === "full_time" && (
                 <div className="grid grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="text-xs font-medium text-muted-foreground">Attendance allowance (RM)</span>
-                    <input type="number" step="0.01" min={0}
-                      value={newEmp.attendance_allowance_amount}
-                      onChange={(e) => setNewEmp({ ...newEmp, attendance_allowance_amount: e.target.value })}
-                      className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-                      placeholder="Blank = global default" />
-                  </label>
                   <label className="block">
                     <span className="text-xs font-medium text-muted-foreground">Performance allowance (RM)</span>
                     <input type="number" step="0.01" min={0}
