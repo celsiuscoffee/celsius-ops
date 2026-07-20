@@ -37,6 +37,7 @@ import {
   type ChannelKey,
   type PayKey,
 } from "./native-sales-helpers";
+import { SOURCE_LABELS, SOURCE_ORDER, type SalesSourceKey } from "./source-channels";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -196,8 +197,13 @@ export async function buildOverTime(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// By channel (Dine-in / Takeaway / Grab) — same unified, cutover-routed source
-// as over-time, so totals and the per-channel split reconcile exactly.
+// By channel — the SALES CHANNEL each order arrived through (In-store Till /
+// QR Table / Pickup App / GrabFood / Beep / Consignment), one row per channel,
+// each order counted once. This is the `source` axis, NOT the dine-in/takeaway
+// order-type axis — those are orthogonal (a QR-table order is source=qr_table
+// AND order-type=dine-in), so they can't share a table without double-counting.
+// The dine-in/takeaway/delivery split lives in the "Sales over time" report.
+// Same unified, cutover-routed source as over-time, so totals reconcile exactly.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function buildByChannel(outlets: OutletPick[], from: string, to: string): Promise<ReportResult> {
   const fromD = dayStart(from);
@@ -220,29 +226,32 @@ export async function buildByChannel(outlets: OutletPick[], from: string, to: st
     ),
   );
 
-  const agg = new Map<ChannelKey, { sales: number; txns: number }>();
+  const agg = new Map<SalesSourceKey, { sales: number; txns: number }>();
   for (const r of settled) {
     if (r.status !== "fulfilled") continue;
     for (const ev of r.value) {
       const d = getMYTDateStr(ev.ts);
       if (d < from || d > to) continue;
-      const cur = agg.get(ev.channel) ?? { sales: 0, txns: 0 };
+      const cur = agg.get(ev.source) ?? { sales: 0, txns: 0 };
       cur.sales += ev.total;
       cur.txns += ev.units ?? 1;
-      agg.set(ev.channel, cur);
+      agg.set(ev.source, cur);
     }
   }
 
   const grand = [...agg.values()].reduce((s, v) => s + v.sales, 0) || 1;
-  const rows: Row[] = [...agg.entries()]
-    .map(([k, v]) => ({
-      channel: CHANNEL_LABELS[k],
+  // Stable canonical order (Till → QR Table → Pickup App → GrabFood → Beep →
+  // Consignment); channels with no sales in the range are dropped.
+  const rows: Row[] = SOURCE_ORDER.filter((k) => agg.has(k)).map((k) => {
+    const v = agg.get(k)!;
+    return {
+      channel: SOURCE_LABELS[k],
       transactions: v.txns,
       totalSales: round2(v.sales),
       aov: v.txns ? round2(v.sales / v.txns) : 0,
       sharePct: round2((v.sales / grand) * 100),
-    }))
-    .sort((a, b) => (b.totalSales as number) - (a.totalSales as number));
+    };
+  });
 
   const tSales = [...agg.values()].reduce((s, v) => s + v.sales, 0);
   const tTxns = [...agg.values()].reduce((s, v) => s + v.txns, 0);
@@ -266,6 +275,7 @@ export async function buildByChannel(outlets: OutletPick[], from: string, to: st
     rows,
     total,
     chart: rows.map((r) => ({ label: r.channel as string, value: r.totalSales as number })),
+    note: "Channel = how each order arrived (each order counted once). QR Table is scan-&-order at the table; Pickup App is the customer ordering app; Beep is the retired StoreHub online channel. For the dine-in vs takeaway split, see Sales over time.",
   };
 }
 

@@ -176,6 +176,28 @@ describe("aggregatePeriod", () => {
     expect(cons).toMatchObject({ revenue: 500, orders: 40, aov: 12.5 });
   });
 
+  it("payments: tendered sales bucket by gateway; sources without payment data stay out", () => {
+    const [b] = bucketEventsIntoPeriods(
+      [
+        { ...ev("2026-06-10T09:00:00+08:00", 20), tender: "card" },
+        { ...ev("2026-06-10T10:00:00+08:00", 30), tender: "duitnow_qr" },
+        { ...ev("2026-06-10T11:00:00+08:00", 10), tender: "CARD" }, // normalizer is case-insensitive
+        ev("2026-06-10T12:00:00+08:00", 99), // StoreHub-era event — no tender
+      ],
+      [{ from: "2026-06-10", to: "2026-06-10" }],
+    );
+    const a = aggregatePeriod(b);
+    const byKey = Object.fromEntries(a.payments.methods.map((m) => [m.key, m]));
+    expect(byKey.card).toMatchObject({ revenue: 30, orders: 2, aov: 15 });
+    expect(byKey.duitnow_qr).toMatchObject({ revenue: 30, orders: 1 });
+    // Coverage excludes the tenderless event; summary still counts it
+    expect(a.payments.coveredRevenue).toBe(60);
+    expect(a.payments.coveredOrders).toBe(3);
+    expect(a.summary.revenue).toBe(159);
+    // Unused gateways still emitted (zeroed) for cross-period row alignment
+    expect(byKey.cash).toMatchObject({ revenue: 0, orders: 0 });
+  });
+
   it("units: non-finite or non-positive values fall back to 1", () => {
     const [b] = bucketEventsIntoPeriods(
       [

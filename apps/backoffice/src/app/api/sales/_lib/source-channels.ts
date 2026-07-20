@@ -22,7 +22,10 @@ export type SalesSourceKey =
 export const SOURCE_LABELS: Record<SalesSourceKey, string> = {
   till: "In-store (Till)",
   grabfood: "GrabFood",
-  delivery_other: "Other Delivery",
+  // Owner-facing name: almost all of this bucket is the retired StoreHub
+  // Beep online-ordering channel (May 2026 and earlier); foodpanda/shopee
+  // would land here too but were never used.
+  delivery_other: "Beep / Other Delivery",
   qr_table: "QR Table",
   pickup_app: "Pickup App",
   consignment: "Consignment",

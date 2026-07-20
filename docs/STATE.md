@@ -214,7 +214,40 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   #976. Round 2 (owner: "cannot pick multiple outlets"): outlet filter is
   now multi-select — API takes `outletIds=a,b,c` (legacy `outletId` kept
   for the staff bridge), UI is a checkbox popover; selecting every outlet
-  collapses to the all-outlets default.
+  collapses to the all-outlets default. MERGED as #992. Round 3 (owner:
+  "check all the ux ui, improve it"), page-only pass: presets are visible
+  chips (active highlighted); page auto-opens on This Month vs Last Month;
+  state persists in the URL (?p=&o=&m= — shareable links); refetches dim
+  the old results instead of blanking (full spinner only on first load);
+  fixed a REAL Tailwind bug (template-string `sm:grid-cols-${n}` is never
+  JIT-generated — summary cards always fell back to 2 cols; now a static
+  class map); Rounds table gains an "Other hours (11pm-8am)" row so Total
+  reconciles with its rows; Order Type table flipped to rows=type ×
+  cols=periods (consistent with all other tables) + share %; Month tab in
+  the Add Period picker (last 12 months); chart gains a dashed "now"
+  reference line + whole-K y-ticks ≥100k; summary deltas labelled
+  "vs {period}"; outlet-context caption beside the metric toggle. Round 3b
+  (owner screenshots): **REAL BUG — outlet-filtered compare showed stale
+  cross-outlet data.** Cent-exact forensics: "Tamarind" card = Tam+SA,
+  "Shah Alam" card = ALL outlets — overlapping fetches with no guard; an
+  older bigger response landing last overwrote the newer one. Fixed with a
+  fetch sequence guard + AbortController. Also: "Other Delivery" (owner:
+  "should be grab") is actually the retired StoreHub Beep channel (May-era
+  volume ≈ Grab's; Grab has its own row) — relabelled "Beep / Other
+  Delivery". NEW: Payment Method dimension in compare (per-period gateway
+  table, Δ + share of tendered total + coverage row; pos dominant-tender +
+  pickup payment_method; validated cent-exact vs the By Payment report for
+  Jul 11-13; StoreHub era has no payment splits — caveat shown).
+  Round 3c (owner: "add QR Table to By Channel tab"): Sales Reports → By
+  Channel rebuilt from order-type (dine-in/takeaway/grab) to the SALES
+  CHANNEL source axis (Till/QR Table/Pickup App/GrabFood/Beep/Consignment,
+  each order once) — QR Table was previously invisible, folded into
+  dine-in/takeaway. reports.ts buildByChannel now aggregates ev.source via
+  SOURCE_ORDER/SOURCE_LABELS; note points to Sales over time for the
+  dine-in/takeaway split (which keeps its order-type columns). Verified
+  Jul 11-13 all-outlets: Till 21,208.52 / QR 8,049.80 / Grab 3,314.20 /
+  Pickup 602.30 = 33,174.82, cent-exact vs By Payment total. Frontend is
+  fully generic (columns/rows/note) — no page change needed.
 
 - Typecheck before pushing — every time. CI enforces it, but catch it locally.
 - Never test against the production database; the procurement runbook's seed SQL
