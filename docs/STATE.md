@@ -238,6 +238,16 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   table, Δ + share of tendered total + coverage row; pos dominant-tender +
   pickup payment_method; validated cent-exact vs the By Payment report for
   Jul 11-13; StoreHub era has no payment splits — caveat shown).
+  Round 3c (owner: "add QR Table to By Channel tab"): Sales Reports → By
+  Channel rebuilt from order-type (dine-in/takeaway/grab) to the SALES
+  CHANNEL source axis (Till/QR Table/Pickup App/GrabFood/Beep/Consignment,
+  each order once) — QR Table was previously invisible, folded into
+  dine-in/takeaway. reports.ts buildByChannel now aggregates ev.source via
+  SOURCE_ORDER/SOURCE_LABELS; note points to Sales over time for the
+  dine-in/takeaway split (which keeps its order-type columns). Verified
+  Jul 11-13 all-outlets: Till 21,208.52 / QR 8,049.80 / Grab 3,314.20 /
+  Pickup 602.30 = 33,174.82, cent-exact vs By Payment total. Frontend is
+  fully generic (columns/rows/note) — no page change needed.
 
 - Typecheck before pushing — every time. CI enforces it, but catch it locally.
 - Never test against the production database; the procurement runbook's seed SQL
