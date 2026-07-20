@@ -206,6 +206,9 @@ export default function SchedulesPage() {
   const [swapAction, setSwapAction] = useState<string | null>(null);
   const [slotBusy, setSlotBusy] = useState<string | null>(null);
   const [postSlotForm, setPostSlotForm] = useState<{ date: string; templateId: string; station: "barista" | "kitchen" } | null>(null);
+  // Collapsed by default — open-slots-first mode can post 40+ slots and a
+  // card wall buried the actual roster grid (owner: "cannot see schedule").
+  const [slotsPanelOpen, setSlotsPanelOpen] = useState(false);
 
   // Get outlets list from the old endpoint (for dropdown)
   const { data: scheduleList } = useFetch<{ outlets: { id: string; name: string }[] }>("/api/hr/schedules");
@@ -994,15 +997,25 @@ export default function SchedulesPage() {
           slotsByDay.get(s.shift_date)!.push(s);
         }
         const dayList = (grid?.days ?? []).filter((d) => slotsByDay.has(d));
+        const expanded = slotsPanelOpen || postSlotForm !== null;
+        const requestCount = openSlots.reduce((n, s) => n + (s.status === "open" ? s.requests.length : 0), 0);
         return (
         <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="font-semibold text-sky-900">
+          <div className={`flex items-center justify-between gap-2 ${expanded ? "mb-3" : ""}`}>
+            <button
+              onClick={() => setSlotsPanelOpen(!expanded ? true : false)}
+              className="flex items-center gap-2 text-left font-semibold text-sky-900"
+              title={expanded ? "Collapse" : "Expand to manage slots and requests"}
+            >
+              <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
               Open slots
-              <span className="ml-2 text-sm font-normal text-sky-700">
-                {openCount} open{(() => { const rc = openSlots.reduce((n, s) => n + (s.status === "open" ? s.requests.length : 0), 0); return rc > 0 ? ` · ${rc} request${rc > 1 ? "s" : ""} to decide` : ""; })()}{bookedCount > 0 ? ` · ${bookedCount} assigned` : ""}
+              <span className="text-sm font-normal text-sky-700">
+                {openCount} open{requestCount > 0 ? ` · ${requestCount} request${requestCount > 1 ? "s" : ""} to decide` : ""}{bookedCount > 0 ? ` · ${bookedCount} assigned` : ""}
               </span>
-            </h2>
+              {requestCount > 0 && !expanded && (
+                <span className="rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white">decide</span>
+              )}
+            </button>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => mutateOpenSlots()}
@@ -1013,7 +1026,7 @@ export default function SchedulesPage() {
               </button>
               {!postSlotForm && (
                 <button
-                  onClick={() => setPostSlotForm({ date: grid?.days?.[0] ?? weekStart, templateId: grid?.templates?.[0]?.id ?? "", station: "barista" })}
+                  onClick={() => { setSlotsPanelOpen(true); setPostSlotForm({ date: grid?.days?.[0] ?? weekStart, templateId: grid?.templates?.[0]?.id ?? "", station: "barista" }); }}
                   className="flex items-center gap-1 rounded-lg border border-sky-300 bg-white px-2.5 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-100"
                 >
                   <Plus className="h-3.5 w-3.5" /> Post slot
@@ -1022,8 +1035,8 @@ export default function SchedulesPage() {
             </div>
           </div>
 
-          {dayList.length > 0 && (
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {expanded && dayList.length > 0 && (
+            <div className="grid max-h-[420px] gap-2 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
               {dayList.map((d) => {
                 const daySlots = slotsByDay.get(d)!;
                 const isPast = d < todayMyt;
