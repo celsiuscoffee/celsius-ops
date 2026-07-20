@@ -7,6 +7,7 @@ import {
   spaceDisturbances,
   ownerDirective,
   cashScoreboard,
+  hardCutDirective,
   FLEET_SPACING_DAYS,
   FLOOR_DAILY_MYR,
   OBSERVE_DAYS,
@@ -395,6 +396,33 @@ describe("pause probe", () => {
     const d = decideCampaign(campaign({ isPaused: true, lastApplied: null }), healthy, NOW);
     expect(d.action).toBe("hold");
     expect(d.reason).toMatch(/not by the autopilot/);
+  });
+});
+
+describe("hardCutDirective (one-time cut to RM55/day)", () => {
+  const adCampaign = (over: Partial<CampaignState> = {}) =>
+    campaign({ campaignId: "pj", campaignName: "Celsius Putrajaya", dailyBudgetMyr: 89.44, ...over });
+
+  it("cuts an above-target ad campaign to RM55 on a healthy till", () => {
+    const d = hardCutDirective(adCampaign(), healthy);
+    expect(d?.action).toBe("cut");
+    expect(d?.newDailyMyr).toBe(55);
+    expect(d?.reason).toMatch(/hard-cut/);
+    // parenthesized step-down → exempt from spacing
+    expect(spaceDisturbances([d!], daysAgo(1), NOW)[0].action).toBe("cut");
+  });
+
+  it("expires once at or below target, and skips non-listed / paused campaigns", () => {
+    expect(hardCutDirective(adCampaign({ dailyBudgetMyr: 55 }), healthy)).toBeNull();
+    expect(hardCutDirective(adCampaign({ dailyBudgetMyr: 40 }), healthy)).toBeNull();
+    expect(hardCutDirective(adCampaign({ campaignName: "Celsius Coffee KL" }), healthy)).toBeNull();
+    expect(hardCutDirective(adCampaign({ isPaused: true }), healthy)).toBeNull();
+  });
+
+  it("never fires into a weak or unmeasured till", () => {
+    expect(hardCutDirective(adCampaign(), breached)).toBeNull();
+    const noGuard: GuardSignal = { rawIndex: null, adjIndex: null, anchorIndex: null, forecastDailyMyr: null, breach: false };
+    expect(hardCutDirective(adCampaign(), noGuard)).toBeNull();
   });
 });
 

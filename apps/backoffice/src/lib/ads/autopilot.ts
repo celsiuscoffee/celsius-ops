@@ -483,6 +483,33 @@ export function ownerDirective(c: CampaignState): AutopilotDecision | null {
   return null;
 }
 
+// One-time owner directive 2026-07-19 ("what do you suggest" → "ok do this"):
+// a single decisive cut of the three ad campaigns to RM55/day, banking
+// ~RM4,050/mo of the RM5k target now instead of over ~2 months; the normal
+// guarded descent + rollback continue from there. Fires ONLY on a healthy
+// measured till (never cut into weakness), only while the campaign is still
+// above target, and self-expires per campaign once it lands at RM55. Remove
+// this block in a follow-up once all three are confirmed applied.
+export const HARD_CUT_TARGET_MYR = Number(process.env.ADS_HARD_CUT_TARGET_MYR || 55);
+const HARD_CUT_CAMPAIGNS = ["Putrajaya", "Shah Alam", "Tamarind"];
+
+export function hardCutDirective(c: CampaignState, guard: GuardSignal): AutopilotDecision | null {
+  if (c.isPaused) return null;
+  if (!HARD_CUT_CAMPAIGNS.some((n) => c.campaignName.includes(n))) return null;
+  if (c.dailyBudgetMyr <= HARD_CUT_TARGET_MYR) return null; // already at/below target → expired
+  // Need a healthy measured till: no guard signal, or a breaching one, waits a night.
+  if (guard.rawIndex == null || guard.rawIndex < GUARD_RAW_MIN) return null;
+  return {
+    campaignId: c.campaignId,
+    campaignName: c.campaignName,
+    action: "cut",
+    newDailyMyr: HARD_CUT_TARGET_MYR,
+    reason:
+      `autopilot step-down (owner directive 2026-07-19 hard-cut): decisive cut RM${round2(c.dailyBudgetMyr)}→RM${HARD_CUT_TARGET_MYR}/day ` +
+      `(banks ~RM${round2((c.dailyBudgetMyr - HARD_CUT_TARGET_MYR) * 30)}/mo) — till healthy (index ${guard.rawIndex}); guarded descent + rollback continue from here`,
+  };
+}
+
 /** Stagger the descent: keep at most `max` BLIND cuts, least-efficient campaigns first. */
 export function capCuts(decisions: AutopilotDecision[], states: CampaignState[], max = MAX_CUTS_PER_RUN): AutopilotDecision[] {
   const eff = new Map(states.map((s) => [s.campaignId, s.efficiencyRatio ?? 1]));
@@ -874,8 +901,9 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
   }
 
   const baseDecisions = states.map((s) => {
-    const directive = ownerDirective(s);
-    return directive ?? decideCampaign(s, s.outletId ? guards[s.outletId] ?? noGuard : noGuard, now);
+    const guard = s.outletId ? guards[s.outletId] ?? noGuard : noGuard;
+    const directive = hardCutDirective(s, guard) ?? ownerDirective(s);
+    return directive ?? decideCampaign(s, guard, now);
   });
   const withProbe = PAUSE_PROBE_ENABLED ? selectPauseProbe(capCuts(baseDecisions, states), states, guards) : capCuts(baseDecisions, states);
   const decisions: AutopilotRunResult["decisions"] = spaceDisturbances(withProbe, lastDisturbanceAt, now);
