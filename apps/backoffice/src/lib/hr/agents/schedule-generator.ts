@@ -1543,20 +1543,18 @@ export async function generateSchedule(
       const pos = posById.get(r.user_id) ?? null;
       return station === "kitchen" ? isBOH(pos) : !isBOH(pos);
     }).length;
-  const postSlot = (date: string, t: ShiftTemplate, station: "kitchen" | "barista") =>
-    openSlotRows.push({
-      outlet_id: outletId,
-      shift_date: date,
-      start_time: hhmmss(t.start_time),
-      end_time: hhmmss(t.end_time),
-      break_minutes: t.break_minutes,
-      station,
-      role_type: t.label,
-      template_id: t.id,
-      source: "generator",
-      status: "open",
-      expires_at: `${date}T${hhmmss(t.start_time)}+08:00`,
-    });
+  // Candidates first, funding second: a slot only goes live if the SAME RM
+  // envelope that bounded the old PT-suggestion fill can pay for it (owner
+  // 2026-07-20: "PT slots creation should follow the scheduling logic. when
+  // you put 12 slots, it will shoot up the people cost"). Cost estimated at
+  // the cheapest eligible PT's day-aware rate (weekday / weekend / 2× PH).
+  type SlotCandidate = {
+    date: string; template: ShiftTemplate; station: "kitchen" | "barista";
+    anchor: boolean; dayTarget: number;
+  };
+  const slotCandidates: SlotCandidate[] = [];
+  const postSlot = (date: string, t: ShiftTemplate, station: "kitchen" | "barista", anchor = false) =>
+    slotCandidates.push({ date, template: t, station, anchor, dayTarget: ptTargetByDate.get(date) ?? 0 });
   const allTemplates: ShiftTemplate[] = [tpl.opening, ...tpl.middles, tpl.closing];
   const hoursOf = (t: ShiftTemplate) => {
     const s = Number(t.start_time.slice(0, 2));
@@ -1600,7 +1598,7 @@ export async function generateSchedule(
         }
         if (!Number.isFinite(minCover)) continue;
         for (let k = 0; k < STATION_ANCHOR_TARGET - minCover && dayBudgetH > 0; k++) {
-          postSlot(date, t, station);
+          postSlot(date, t, station, true);
           dayBudgetH -= windowHours(t);
           for (let h = Math.max(s, openH); h < Math.min(e, closeH); h++) {
             short.set(h, Math.max(0, (short.get(h) ?? 0) - 1));
@@ -1631,6 +1629,54 @@ export async function generateSchedule(
           short.set(h, Math.max(0, (short.get(h) ?? 0) - 1));
         }
       }
+    }
+  }
+  // Fund candidates from the PT envelope — kitchen first (scarce, a closed
+  // kitchen is worse than a slow bar), anchors before top-ups, deepest-gap
+  // days first. Whatever the envelope can't pay for is NOT posted; those
+  // hours surface as the ⚠ UNMANNED notes below so the owner decides
+  // deliberately (lend an FT, accept the %, or post a manual slot).
+  {
+    const wkdayRate = Math.min(9, ...eligiblePt.map((p) => p.hourly_rate ?? 9));
+    const wkendRate = Math.min(10, ...eligiblePt.map((p) => p.hourly_rate_weekend ?? p.hourly_rate ?? 10));
+    const estRate = (date: string) => {
+      const wknd = dow(date) === 0 || dow(date) === 6;
+      return (holidayDates.has(date) ? 2 : 1) * (wknd ? wkendRate : wkdayRate);
+    };
+    slotCandidates.sort(
+      (a, b) =>
+        (a.station === "kitchen" ? 0 : 1) - (b.station === "kitchen" ? 0 : 1) ||
+        Number(b.anchor) - Number(a.anchor) ||
+        b.dayTarget - a.dayTarget ||
+        a.date.localeCompare(b.date),
+    );
+    let slotSpend = 0;
+    let skipped = 0;
+    for (const c of slotCandidates) {
+      const cost = workingHours(c.template) * estRate(c.date);
+      if (ptSpend.rm + slotSpend + cost > ptBudget) {
+        skipped++;
+        continue;
+      }
+      slotSpend += cost;
+      openSlotRows.push({
+        outlet_id: outletId,
+        shift_date: c.date,
+        start_time: hhmmss(c.template.start_time),
+        end_time: hhmmss(c.template.end_time),
+        break_minutes: c.template.break_minutes,
+        station: c.station,
+        role_type: c.template.label,
+        template_id: c.template.id,
+        source: "generator",
+        status: "open",
+        expires_at: `${c.date}T${hhmmss(c.template.start_time)}+08:00`,
+      });
+    }
+    if (skipped > 0) {
+      notes.push(
+        `${skipped} gap shift(s) NOT posted — the RM${ptBudget} PT envelope can only fund ${openSlotRows.length} (est RM${Math.round(slotSpend)}). Unfunded gaps appear as UNMANNED warnings; cover by lending FT, accepting a higher labour %, or posting a manual slot.`,
+      );
     }
   }
   const slotCoverAt = (d: string, h: number, station: "kitchen" | "barista") =>
