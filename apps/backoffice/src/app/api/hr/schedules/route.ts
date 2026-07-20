@@ -78,6 +78,9 @@ export async function POST(req: NextRequest) {
   const { action, outlet_id, week_start, schedule_id } = body;
   // Staffing mode for AI Fill (tight | mid | safe); default tight if absent/invalid.
   const mode: StaffingMode = STAFFING_MODES.includes(body.mode) ? body.mode : "tight";
+  // PT stage: "open_slots" (default) posts demand gaps as bookable slots for
+  // staff to REQUEST (manager assigns); "assign" pre-proposes named PTs.
+  const ptMode: "open_slots" | "assign" = body.pt_mode === "assign" ? "assign" : "open_slots";
 
   // MANAGER can only act on outlets they're assigned to (outletId + outletIds[])
   if (session.role === "MANAGER" && outlet_id) {
@@ -100,13 +103,13 @@ export async function POST(req: NextRequest) {
         triggered_by: "manual",
         triggered_by_user_id: session.id,
         status: "running",
-        input_summary: { outlet_id, week_start, mode },
+        input_summary: { outlet_id, week_start, mode, pt_mode: ptMode },
       })
       .select()
       .single();
 
     try {
-      const result = await generateSchedule(outlet_id, week_start, mode);
+      const result = await generateSchedule(outlet_id, week_start, mode, ptMode);
 
       if (run) {
         await hrSupabaseAdmin

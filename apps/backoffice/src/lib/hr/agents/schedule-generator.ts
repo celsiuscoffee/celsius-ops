@@ -210,10 +210,18 @@ async function loadTemplates(
 
 // ─── generator ───────────────────────────────────────────────────────
 
+// ptMode (owner 2026-07-19: "can ai fill open the slots first before we
+// assign anyone?"):
+//  - "open_slots" (default): the PT stage assigns NOBODY — every demand gap
+//    is posted to hr_open_shifts for staff to book first-come-first-served;
+//    the manager assigns whatever is still unbooked closer to the week.
+//  - "assign": the previous behaviour — the fill proposes named PTs
+//    (pt_suggestion cells) and only leftover gaps become open slots.
 export async function generateSchedule(
   outletId: string,
   weekStart: string,
   mode: StaffingMode = "tight",
+  ptMode: "open_slots" | "assign" = "open_slots",
 ): Promise<GenerateResult> {
   const notes: string[] = [];
   const dates = weekDates(weekStart);
@@ -251,7 +259,7 @@ export async function generateSchedule(
   });
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, basic_salary, hourly_rate, hourly_rate_weekend, epf_employer_rate, schedule_required, rest_day, gender, religion")
+    .select("user_id, position, employment_type, basic_salary, hourly_rate, hourly_rate_weekend, epf_employer_rate, schedule_required, rest_day, gender, religion, join_date, end_date")
     .in("user_id", users.length ? users.map((u) => u.id) : ["-"]);
   type ProfileRow = {
     user_id: string; position: string | null; employment_type: string;
@@ -259,11 +267,24 @@ export async function generateSchedule(
     epf_employer_rate: number | null;
     schedule_required: boolean | null; rest_day: number | null;
     gender: string | null; religion: string | null;
+    join_date: string | null; end_date: string | null;
   };
   const profileMap = new Map<string, ProfileRow>(((profiles ?? []) as ProfileRow[]).map((p) => [p.user_id, p]));
 
   const staff: Staff[] = users
     .filter((u) => profileMap.get(u.id)?.schedule_required !== false)
+    // Employment window: someone whose last day is BEFORE this week (the
+    // deactivate cron only flips User.status after end_date passes) or whose
+    // join_date is AFTER it must not be rostered at all. Partial weeks (last
+    // day / first day mid-week) are handled per-date below via the onLeave
+    // rail (owner 2026-07-19: "check the starting date logic and last day
+    // logic during scheduling").
+    .filter((u) => {
+      const p = profileMap.get(u.id);
+      if (p?.end_date && p.end_date < weekStart) return false;
+      if (p?.join_date && p.join_date > weekEnd) return false;
+      return true;
+    })
     .map((u) => {
       const p = profileMap.get(u.id);
       return {
@@ -331,6 +352,26 @@ export async function generateSchedule(
   const onLeave = new Set<string>();
   for (const l of (leaves ?? []) as { user_id: string; start_date: string; end_date: string }[]) {
     for (const d of dates) if (d >= l.start_date && d <= l.end_date) onLeave.add(`${l.user_id}:${d}`);
+  }
+
+  // Partial employment weeks ride the onLeave rail — every placement site
+  // (FT working/resting, rover free days, PT greedy + validator) already
+  // consults it, so days before join_date / after end_date are simply never
+  // schedulable. A note keeps the manager oriented.
+  for (const s of staff) {
+    const p = profileMap.get(s.id);
+    if (!p?.join_date && !p?.end_date) continue;
+    const blockedDays = dates.filter(
+      (d) => (p.join_date != null && d < p.join_date) || (p.end_date != null && d > p.end_date),
+    );
+    if (blockedDays.length === 0) continue;
+    for (const d of blockedDays) onLeave.add(`${s.id}:${d}`);
+    if (p.end_date && p.end_date >= weekStart && p.end_date <= weekEnd) {
+      notes.push(`${s.name}: LAST DAY ${p.end_date} — not scheduled after it.`);
+    }
+    if (p.join_date && p.join_date > weekStart && p.join_date <= weekEnd) {
+      notes.push(`${s.name}: starts ${p.join_date} — not scheduled before it.`);
+    }
   }
 
   // Declared PT availability — fed by the staff apps' "My Availability" input.
@@ -1238,7 +1279,7 @@ export async function generateSchedule(
     notes.push(`PT performance (60d, weighted into suggestions): ${ranked.join("; ")}`);
   }
 
-  if (eligiblePt.length > 0 && ptBudget > 0 && gaps.length > 0 && process.env.ANTHROPIC_API_KEY) {
+  if (ptMode === "assign" && eligiblePt.length > 0 && ptBudget > 0 && gaps.length > 0 && process.env.ANTHROPIC_API_KEY) {
     try {
       proposals = await proposePtWithModel({
         outletName: outlet.name,
@@ -1267,7 +1308,7 @@ export async function generateSchedule(
       notes.push(`Agent pass failed (${err instanceof Error ? err.message : "error"}) — greedy fallback used`);
     }
   }
-  if (proposals.length === 0 && eligiblePt.length > 0 && ptBudget > 0) {
+  if (ptMode === "assign" && proposals.length === 0 && eligiblePt.length > 0 && ptBudget > 0) {
     // Greedy fallback: fill the biggest gaps first, and for each gap pick the PT
     // with the best blend of PERFORMANCE (reliability), FAIRNESS (fewest hours so
     // far) and COST (cheaper first). Fairness updates live as we propose — a PT's
@@ -1399,11 +1440,52 @@ export async function generateSchedule(
     });
     suggestionLines.push(`${p.date} ${t.label} — ${person.name} (RM${Math.round(cost)}${p.reason ? `, ${p.reason}` : ""})`);
   }
-  notes.push(
-    ptRows.length > 0
-      ? `${ptRows.length} PT SUGGESTIONS (RM${Math.round(ptSpend.rm)} of RM${ptBudget} envelope, ${agentUsed ? "agent" : "greedy"}) — confirm in grid:\n  ${suggestionLines.join("\n  ")}`
-      : `No PT suggested (envelope RM${ptBudget}, ${gaps.length} demand gaps, ${eligiblePt.length} eligible PT)`,
-  );
+  if (ptMode === "open_slots") {
+    notes.push(
+      `PT stage: OPEN-SLOTS-FIRST — nobody pre-assigned. All demand gaps go up as bookable slots in the staff apps (station-fit + weekly caps enforced at booking); assign whatever is still unbooked closer to the week.`,
+    );
+  } else {
+    notes.push(
+      ptRows.length > 0
+        ? `${ptRows.length} PT SUGGESTIONS (RM${Math.round(ptSpend.rm)} of RM${ptBudget} envelope, ${agentUsed ? "agent" : "greedy"}) — confirm in grid:\n  ${suggestionLines.join("\n  ")}`
+        : `No PT suggested (envelope RM${ptBudget}, ${gaps.length} demand gaps, ${eligiblePt.length} eligible PT)`,
+    );
+  }
+
+  // Open slots are computed HERE (before the unmanned QA) so the warnings can
+  // tell "posted, waiting for a booking" apart from a genuinely dead hour.
+  const gapsBySlotKey = new Map<string, Gap[]>();
+  for (const g of gaps) {
+    const key = `${g.date}:${g.slot}`;
+    (gapsBySlotKey.get(key) ?? gapsBySlotKey.set(key, []).get(key)!).push(g);
+  }
+  const openSlotRows: Array<{
+    outlet_id: string; shift_date: string; start_time: string; end_time: string;
+    break_minutes: number; station: "kitchen" | "barista"; role_type: string;
+    template_id: string; source: string; status: string; expires_at: string;
+  }> = [];
+  for (const [key, slotGaps] of gapsBySlotKey) {
+    for (const g of slotGaps.slice(filledBySlot.get(key) ?? 0)) {
+      openSlotRows.push({
+        outlet_id: outletId,
+        shift_date: g.date,
+        start_time: hhmmss(g.template.start_time),
+        end_time: hhmmss(g.template.end_time),
+        break_minutes: g.template.break_minutes,
+        station: g.station,
+        role_type: g.template.label,
+        template_id: g.template.id,
+        source: "generator",
+        status: "open",
+        expires_at: `${g.date}T${hhmmss(g.template.start_time)}+08:00`,
+      });
+    }
+  }
+  const slotCoverAt = (d: string, h: number, station: "kitchen" | "barista") =>
+    openSlotRows.filter(
+      (r) => r.shift_date === d && r.station === station &&
+        Number(r.start_time.slice(0, 2)) <= h && Number(r.end_time.slice(0, 2)) > h,
+    ).length;
 
   // ── Unmanned-station QA: never CLOSE a station silently ─────────────
   // After FT + suggested PT, any trading hour where a station with demand has
@@ -1423,9 +1505,17 @@ export async function generateSchedule(
     if (!daysOpen.has(dow(date))) continue;
     for (const station of ["kitchen", "barista"] as const) {
       const holes: number[] = [];
+      const pending: number[] = []; // hole hours a posted open slot would cover once booked
       for (let h = openH; h < closeH; h++) {
         const need = station === "kitchen" ? kitNeedAt(date, h) : barNeedAt(date, h);
-        if (need > 0 && staffedAt(date, h, station) + ptStaffedAt(date, h, station) === 0) holes.push(h);
+        if (need > 0 && staffedAt(date, h, station) + ptStaffedAt(date, h, station) === 0) {
+          (slotCoverAt(date, h, station) > 0 ? pending : holes).push(h);
+        }
+      }
+      if (pending.length > 0) {
+        notes.push(
+          `⏳ ${station.toUpperCase()} ${date} ${pending[0]}:00–${pending[pending.length - 1] + 1}:00 — open slot(s) posted, coverage pending a staff booking. Assign manually if nobody books.`,
+        );
       }
       if (holes.length > 0) {
         notes.push(
@@ -1477,35 +1567,11 @@ export async function generateSchedule(
     `,
   ]);
 
-  // ── Open slots: every demand gap the fill could NOT cover becomes a
-  // bookable hr_open_shifts row (source 'generator') — staff apps list them
-  // and any station-fit PT can claim, first accept wins (same table the
-  // WhatsApp PT loop already claims from). Regeneration is idempotent:
-  // still-open generator slots for this week are replaced; claimed ones are
-  // history and stay untouched.
-  const gapsBySlotKey = new Map<string, Gap[]>();
-  for (const g of gaps) {
-    const key = `${g.date}:${g.slot}`;
-    (gapsBySlotKey.get(key) ?? gapsBySlotKey.set(key, []).get(key)!).push(g);
-  }
-  const openSlotRows: Array<Record<string, unknown>> = [];
-  for (const [key, slotGaps] of gapsBySlotKey) {
-    for (const g of slotGaps.slice(filledBySlot.get(key) ?? 0)) {
-      openSlotRows.push({
-        outlet_id: outletId,
-        shift_date: g.date,
-        start_time: hhmmss(g.template.start_time),
-        end_time: hhmmss(g.template.end_time),
-        break_minutes: g.template.break_minutes,
-        station: g.station,
-        role_type: g.template.label,
-        template_id: g.template.id,
-        source: "generator",
-        status: "open",
-        expires_at: `${g.date}T${hhmmss(g.template.start_time)}+08:00`,
-      });
-    }
-  }
+  // ── Open slots: every demand gap the fill did NOT cover becomes a
+  // bookable hr_open_shifts row (source 'generator') — computed above, next
+  // to the unmanned QA; written here so a failed persist posts nothing.
+  // Regeneration is idempotent: still-open generator slots for this week are
+  // replaced; claimed ones are history and stay untouched.
   await hrSupabaseAdmin
     .from("hr_open_shifts")
     .delete()

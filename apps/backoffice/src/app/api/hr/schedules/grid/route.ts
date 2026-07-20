@@ -61,22 +61,29 @@ export async function GET(req: NextRequest) {
     orderBy: { name: "asc" },
   });
 
-  // 3. HR profiles (position, employment type, schedule flag)
+  // 3. HR profiles (position, employment type, schedule flag, employment window)
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, schedule_required")
+    .select("user_id, position, employment_type, schedule_required, join_date, end_date")
     .in("user_id", users.map((u) => u.id));
 
-  type ProfileRow = { user_id: string; position: string; employment_type: string; schedule_required: boolean };
+  type ProfileRow = { user_id: string; position: string; employment_type: string; schedule_required: boolean; join_date: string | null; end_date: string | null };
   const profileMap = new Map<string, ProfileRow>(
     (profiles || []).map((p: ProfileRow) => [p.user_id, p]),
   );
 
   // Filter out users marked schedule_required=false (Director, HQ roles, etc.)
-  // If no profile exists, include by default (schedule_required defaults to true)
+  // If no profile exists, include by default (schedule_required defaults to true).
+  // Employment window: last day before this week, or joining after it → no row
+  // on this week's grid (the deactivate cron only flips User.status after the
+  // fact, so ACTIVE alone can't be trusted for future weeks).
   const scheduledUsers = users.filter((u) => {
     const p = profileMap.get(u.id);
-    return !p || p.schedule_required !== false;
+    if (!p) return true;
+    if (p.schedule_required === false) return false;
+    if (p.end_date && p.end_date < weekStart) return false;
+    if (p.join_date && p.join_date > weekEnd) return false;
+    return true;
   });
 
   // 4. Existing schedule for this week

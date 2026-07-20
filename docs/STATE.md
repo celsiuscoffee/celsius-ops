@@ -315,6 +315,30 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-19 (round 15) — **Open slots become REQUEST → ASSIGN, and AI Fill
+  goes open-slots-first (owner: "can ai fill open the slots first before we
+  assign anyone?" → "lets do they request, we assign" → "after filled,
+  manager publish").** The loop is now: AI Fill posts every PT demand gap as
+  a bookable slot (new default `ptMode: "open_slots"`; "PT: suggest" option
+  in the Fill dropdown restores named pt_suggestion proposals) → PTs REQUEST
+  slots in the staff apps (hand-raise, several can; withdraw supported;
+  "N asked" count shown) → manager ASSIGNS one requester from the schedules
+  grid panel (requester rows show name + week h/d load; assign re-validates
+  station/caps/one-outlet-per-day server-side, materializes the shift on the
+  DRAFT week, declines the rest) → labour-gated Publish as usual. NEW TABLE
+  `hr_open_shift_requests` (migration 091, applied to prod, additive; unique
+  open_shift_id+user_id, statuses pending/assigned/declined/withdrawn).
+  Staff API POST now creates a request (no more instant claim from apps —
+  WhatsApp TAKE keeps instant claim for urgent decline/no-show backfill).
+  Unmanned-station QA now splits "⏳ open slot posted, pending booking" from
+  the hard "⚠ UNMANNED". Round-14 QA also verified live: 4 manual slots
+  posted at PJ by the team via the new UI; claim/assign semantics dry-run
+  against prod in a rolled-back txn; NOTE none of PJ's 3 PTs could take
+  those barista slots (Nurfarah 23h near-cap, Farhan Ikhmal 29h/6d OVER
+  caps in the published roster, Badri kitchen-only) — flagged to owner.
+  Weekly-availability table still empty (owner screenshot showed unsaved
+  editor) — confirm one real "Save pattern" post-deploy.
+
 - 2026-07-19 (round 14) — **Availability UX overhaul + backoffice open-slot
   management (PR #1011, merged; round-13 base was PR #1010, merged — both
   OTA'd to staff phones and live on Vercel).** Owner: "improve the ux on my

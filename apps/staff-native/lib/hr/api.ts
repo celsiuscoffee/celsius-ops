@@ -335,7 +335,7 @@ export function clearDateAvailability(date: string) {
   });
 }
 
-// ── Open slots (unfilled shifts any station-fit PT can book) ───
+// ── Open slots (unfilled shifts; PTs REQUEST, manager assigns) ───
 export type OpenSlot = {
   id: string;
   outlet_id: string;
@@ -346,7 +346,9 @@ export type OpenSlot = {
   hours: number;
   station: string; // 'barista' | 'kitchen'
   role_type: string | null;
-  blocked: string | null; // reason this user can't book it, null = bookable
+  blocked: string | null; // reason this user can't request it, null = requestable
+  my_request: "pending" | "assigned" | null;
+  pending_requests: number;
 };
 
 export type OpenSlotsResponse = {
@@ -360,9 +362,16 @@ export function fetchOpenSlots() {
   return api<OpenSlotsResponse>("/api/hr/open-shifts");
 }
 
-export function bookOpenSlot(id: string) {
-  return api<{ success: boolean; shift: { shift_date: string; start_time: string; end_time: string } }>(
-    "/api/hr/open-shifts",
-    { method: "POST", body: JSON.stringify({ id }) },
-  );
+// Raise a hand for a slot — the manager assigns one requester.
+export function requestOpenSlot(id: string) {
+  return api<{ success: boolean; status: string }>("/api/hr/open-shifts", {
+    method: "POST",
+    body: JSON.stringify({ id }),
+  });
+}
+
+export function withdrawOpenSlotRequest(id: string) {
+  return api<{ success: boolean }>(`/api/hr/open-shifts?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }

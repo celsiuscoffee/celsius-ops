@@ -189,6 +189,7 @@ export default function SchedulesPage() {
   const [dayIdx, setDayIdx] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [fillMode, setFillMode] = useState<"tight" | "mid" | "safe">("tight");
+  const [ptFillMode, setPtFillMode] = useState<"open_slots" | "assign">("open_slots");
   const [assistDate, setAssistDate] = useState<string | null>(null); // per-day Assist modal
   const [whyDate, setWhyDate] = useState<string | null>(null); // per-day "why this staffing" popover
   // Per-day demand coverage (same model as AI Fill / Assist) so the cell "+ Add"
@@ -205,6 +206,9 @@ export default function SchedulesPage() {
   const [swapAction, setSwapAction] = useState<string | null>(null);
   const [slotBusy, setSlotBusy] = useState<string | null>(null);
   const [postSlotForm, setPostSlotForm] = useState<{ date: string; templateId: string; station: "barista" | "kitchen" } | null>(null);
+  // Collapsed by default — open-slots-first mode can post 40+ slots and a
+  // card wall buried the actual roster grid (owner: "cannot see schedule").
+  const [slotsPanelOpen, setSlotsPanelOpen] = useState(false);
 
   // Get outlets list from the old endpoint (for dropdown)
   const { data: scheduleList } = useFetch<{ outlets: { id: string; name: string }[] }>("/api/hr/schedules");
@@ -241,15 +245,35 @@ export default function SchedulesPage() {
 
   // Open slots for this outlet+week — unfilled gaps the generator (or a
   // manager, source 'manual') posted for staff to book in the staff apps.
+  type SlotRequest = { id: string; user_id: string; name: string; week_hours: number; week_days: number };
   type OpenSlot = {
     id: string; shift_date: string; start_time: string; end_time: string;
     break_minutes: number | null; station: string; role_type: string | null;
     source: string; status: string; claimed_by: string | null; claimed_at: string | null; claimed_by_name: string | null;
+    requests: SlotRequest[];
   };
   const { data: openSlotsData, mutate: mutateOpenSlots } = useFetch<{ slots: OpenSlot[] }>(
     selectedOutlet ? `/api/hr/open-shifts?outlet_id=${selectedOutlet}&week_start=${weekStart}` : null,
   );
   const openSlots = useMemo(() => openSlotsData?.slots ?? [], [openSlotsData]);
+
+  // Assign one pending hand-raise — this is when the real shift materializes
+  // on the (draft) week; other requesters are declined server-side.
+  const assignRequest = async (requestId: string) => {
+    setSlotBusy(requestId);
+    try {
+      const res = await fetch("/api/hr/open-shifts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "assign", request_id: requestId }),
+      });
+      if (!res.ok) alert((await res.json().catch(() => null))?.error ?? "Assign failed");
+      mutateOpenSlots();
+      mutate(); // the shift now exists on the grid
+    } finally {
+      setSlotBusy(null);
+    }
+  };
 
   const cancelOpenSlot = async (id: string) => {
     setSlotBusy(id);
@@ -724,7 +748,7 @@ export default function SchedulesPage() {
       await fetch("/api/hr/schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "generate", outlet_id: selectedOutlet, week_start: weekStart, mode: fillMode }),
+        body: JSON.stringify({ action: "generate", outlet_id: selectedOutlet, week_start: weekStart, mode: fillMode, pt_mode: ptFillMode }),
       });
       mutate();
     } finally {
@@ -786,6 +810,16 @@ export default function SchedulesPage() {
                 <option value="tight">Tight</option>
                 <option value="mid">Mid</option>
                 <option value="safe">Safe</option>
+              </select>
+              <select
+                value={ptFillMode}
+                onChange={(e) => setPtFillMode(e.target.value as "open_slots" | "assign")}
+                disabled={generating || isPublished}
+                className="border-r bg-background px-2 py-2 text-sm font-medium disabled:opacity-50"
+                title="PT gaps: Open slots = post them for staff to request, you assign (nobody pre-picked); Suggest = AI pre-picks part-timers as amber PT? cells"
+              >
+                <option value="open_slots">PT: open slots</option>
+                <option value="assign">PT: suggest</option>
               </select>
               <button
                 onClick={handleAIFill}
@@ -963,26 +997,36 @@ export default function SchedulesPage() {
           slotsByDay.get(s.shift_date)!.push(s);
         }
         const dayList = (grid?.days ?? []).filter((d) => slotsByDay.has(d));
+        const expanded = slotsPanelOpen || postSlotForm !== null;
+        const requestCount = openSlots.reduce((n, s) => n + (s.status === "open" ? s.requests.length : 0), 0);
         return (
         <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="font-semibold text-sky-900">
+          <div className={`flex items-center justify-between gap-2 ${expanded ? "mb-3" : ""}`}>
+            <button
+              onClick={() => setSlotsPanelOpen(!expanded ? true : false)}
+              className="flex items-center gap-2 text-left font-semibold text-sky-900"
+              title={expanded ? "Collapse" : "Expand to manage slots and requests"}
+            >
+              <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
               Open slots
-              <span className="ml-2 text-sm font-normal text-sky-700">
-                {openCount} waiting for a booking{bookedCount > 0 ? ` · ${bookedCount} booked` : ""}
+              <span className="text-sm font-normal text-sky-700">
+                {openCount} open{requestCount > 0 ? ` · ${requestCount} request${requestCount > 1 ? "s" : ""} to decide` : ""}{bookedCount > 0 ? ` · ${bookedCount} assigned` : ""}
               </span>
-            </h2>
+              {requestCount > 0 && !expanded && (
+                <span className="rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white">decide</span>
+              )}
+            </button>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => mutateOpenSlots()}
                 className="rounded-lg border border-sky-200 bg-white p-1.5 text-sky-600 hover:bg-sky-100"
-                title="Refresh — bookings from the staff apps appear here"
+                title="Refresh — requests from the staff apps appear here"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
               {!postSlotForm && (
                 <button
-                  onClick={() => setPostSlotForm({ date: grid?.days?.[0] ?? weekStart, templateId: grid?.templates?.[0]?.id ?? "", station: "barista" })}
+                  onClick={() => { setSlotsPanelOpen(true); setPostSlotForm({ date: grid?.days?.[0] ?? weekStart, templateId: grid?.templates?.[0]?.id ?? "", station: "barista" }); }}
                   className="flex items-center gap-1 rounded-lg border border-sky-300 bg-white px-2.5 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-100"
                 >
                   <Plus className="h-3.5 w-3.5" /> Post slot
@@ -991,8 +1035,8 @@ export default function SchedulesPage() {
             </div>
           </div>
 
-          {dayList.length > 0 && (
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {expanded && dayList.length > 0 && (
+            <div className="grid max-h-[420px] gap-2 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
               {dayList.map((d) => {
                 const daySlots = slotsByDay.get(d)!;
                 const isPast = d < todayMyt;
@@ -1041,7 +1085,7 @@ export default function SchedulesPage() {
                               </div>
                             </div>
                             {claimed ? (
-                              <span className="shrink-0 text-xs font-semibold text-green-700" title={`Booked${s.claimed_at ? ` at ${new Date(s.claimed_at).toLocaleString("en-MY", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}` : ""} — already a real shift on the grid`}>
+                              <span className="shrink-0 text-xs font-semibold text-green-700" title={`Assigned${s.claimed_at ? ` at ${new Date(s.claimed_at).toLocaleString("en-MY", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}` : ""} — already a real shift on the grid`}>
                                 ✓ {s.claimed_by_name}
                               </span>
                             ) : (
@@ -1049,7 +1093,7 @@ export default function SchedulesPage() {
                                 onClick={() => cancelOpenSlot(s.id)}
                                 disabled={slotBusy === s.id}
                                 className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                                title="Take this slot down — staff can no longer book it"
+                                title="Take this slot down — staff can no longer request it (pending requests are declined)"
                               >
                                 {slotBusy === s.id ? "…" : "Cancel"}
                               </button>
@@ -1057,6 +1101,35 @@ export default function SchedulesPage() {
                           </div>
                         );
                       })}
+                      {/* Hand-raises: staff who requested a slot on this day.
+                          Assign ONE — the shift lands on the grid, the rest
+                          are declined automatically. */}
+                      {daySlots.filter((s) => s.status === "open" && s.requests.length > 0).map((s) => (
+                        <div key={`${s.id}-req`} className="rounded-lg border border-dashed border-sky-200 bg-sky-50/60 px-2.5 py-2">
+                          <div className="mb-1 text-[11px] font-semibold text-sky-800">
+                            {s.start_time}–{s.end_time} · {s.requests.length} request{s.requests.length > 1 ? "s" : ""} — pick one:
+                          </div>
+                          <div className="space-y-1">
+                            {s.requests.map((r) => (
+                              <div key={r.id} className="flex items-center justify-between gap-2">
+                                <span className="text-xs text-gray-700">
+                                  {r.name}
+                                  <span className="ml-1 text-[10px] text-muted-foreground">
+                                    {r.week_hours}h · {r.week_days}d this week
+                                  </span>
+                                </span>
+                                <button
+                                  onClick={() => assignRequest(r.id)}
+                                  disabled={slotBusy === r.id}
+                                  className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+                                >
+                                  {slotBusy === r.id ? "…" : "Assign"}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );
@@ -1067,7 +1140,7 @@ export default function SchedulesPage() {
           {/* Post form — all taps, no dropdowns */}
           {postSlotForm && grid && (
             <div className="mt-3 space-y-2.5 rounded-lg border border-sky-200 bg-white p-3">
-              <div className="text-sm font-semibold text-gray-700">Post a slot for part-timers to book</div>
+              <div className="text-sm font-semibold text-gray-700">Post a slot for part-timers to request</div>
               <div className="flex flex-wrap gap-1.5">
                 {(grid.days || []).map((d) => {
                   const active = postSlotForm.date === d;
@@ -1129,7 +1202,7 @@ export default function SchedulesPage() {
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Goes live in the staff apps immediately — first part-timer to book gets it (station-fit and weekly caps enforced).
+                Goes live in the staff apps immediately — part-timers request it, you assign one here (station-fit and weekly caps enforced at both steps).
               </p>
             </div>
           )}
@@ -1204,7 +1277,7 @@ export default function SchedulesPage() {
                         if (!os) return null;
                         return (
                           <div className="mt-0.5">
-                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700" title={`${os} open slot${os > 1 ? "s" : ""} waiting for a part-timer to book (see Open slots panel above)`}>
+                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700" title={`${os} open slot${os > 1 ? "s" : ""} up for staff requests (see Open slots panel above)`}>
                               {os} open slot{os > 1 ? "s" : ""}
                             </span>
                           </div>
