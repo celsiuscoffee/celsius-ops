@@ -19,7 +19,6 @@ type ParsedRecord = {
   basicSalary: number | null;
   hourlyRate: number | null;
   performanceAllowance: number | null;
-  attendanceAllowance: number | null;
   phone: string | null;
   email: string | null;
   icNumber: string | null;
@@ -146,7 +145,6 @@ export default function LoeImportPage() {
           joinDate: r.joinDate,
           basicSalary: r.basicSalary,
           hourlyRate: r.hourlyRate,
-          attendanceAllowance: r.attendanceAllowance,
           performanceAllowance: r.performanceAllowance,
           phone: r.phone,
           email: r.email,
@@ -281,7 +279,6 @@ export default function LoeImportPage() {
                   <th className="px-2 py-2 text-left">Join</th>
                   <th className="px-2 py-2 text-right">Basic</th>
                   <th className="px-2 py-2 text-right">Hr/rate</th>
-                  <th className="px-2 py-2 text-right">Att</th>
                   <th className="px-2 py-2 text-right">Perf</th>
                   <th className="px-2 py-2 text-left">Skip</th>
                   <th className="px-2 py-2 text-left">⌫</th>
@@ -325,7 +322,6 @@ export default function LoeImportPage() {
                     <td className="px-2 py-2"><input type="date" className="rounded border bg-background px-2 py-1" value={r.joinDate ?? ""} onChange={(e) => updateField(i, "joinDate", e.target.value || null)} /></td>
                     <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-20 rounded border bg-background px-1 py-1 text-right" value={r.basicSalary ?? ""} onChange={(e) => updateField(i, "basicSalary", e.target.value ? Number(e.target.value) : null)} /></td>
                     <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-16 rounded border bg-background px-1 py-1 text-right" value={r.hourlyRate ?? ""} onChange={(e) => updateField(i, "hourlyRate", e.target.value ? Number(e.target.value) : null)} /></td>
-                    <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-16 rounded border bg-background px-1 py-1 text-right" value={r.attendanceAllowance ?? ""} onChange={(e) => updateField(i, "attendanceAllowance", e.target.value ? Number(e.target.value) : null)} /></td>
                     <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-16 rounded border bg-background px-1 py-1 text-right" value={r.performanceAllowance ?? ""} onChange={(e) => updateField(i, "performanceAllowance", e.target.value ? Number(e.target.value) : null)} /></td>
                     <td className="px-2 py-2"><input type="checkbox" checked={r.skip} onChange={(e) => updateField(i, "skip", e.target.checked)} /></td>
                     <td className="px-2 py-2"><button onClick={() => removeRow(i)} className="rounded p-1 text-red-600 hover:bg-red-50"><Trash2 className="h-3 w-3" /></button></td>

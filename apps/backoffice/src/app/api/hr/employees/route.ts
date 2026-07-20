@@ -52,7 +52,7 @@ export async function GET() {
   const PII_PROFILE_FIELDS = [
     // Compensation + banking
     "basic_salary", "hourly_rate", "hourly_rate_weekend",
-    "attendance_allowance_amount", "performance_allowance_amount",
+    "performance_allowance_amount",
     "overtime_flat_rate", "shift_flat_rate",
     // Statutory / government identifiers
     "ic_number", "passport_number", "passport_expiry",
