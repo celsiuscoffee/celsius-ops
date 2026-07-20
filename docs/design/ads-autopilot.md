@@ -67,9 +67,13 @@ raise|revert|pause|restore`) — no extra tables.
   yet taken out of the budget (min RM0.50/day, ≤20%/cut). Exempt from
   observation windows / stagger / cut cap; still gated by the guard, the
   floor, and rollback coverage.
-- **DESCEND**: once no unpaid waste remains, blind step-down 8% (12% when
-  cost/conv >1.3× fleet-best), ≥14d observation, max 2 cuts/run, floor
-  RM20/day (`ADS_AUTOPILOT_FLOOR_MYR`).
+- **DESCEND**: once no unpaid waste remains, blind step-down **12%** (18% when
+  cost/conv >1.3× fleet-best), ≥14d observation PER CAMPAIGN, max **3** cuts/run,
+  **3d** fleet stagger, floor RM20/day. Aggression bumped 2026-07-19 (owner:
+  "decrease more") after the first cuts proved safe; all four env-tunable
+  (`ADS_STEP_PCT`, `ADS_STEP_PCT_INEFFICIENT`, `ADS_MAX_CUTS_PER_RUN`,
+  `ADS_FLEET_SPACING_DAYS`, `ADS_AUTOPILOT_FLOOR_MYR`). OBSERVE_DAYS stays 14
+  (= guard window) so no single campaign outruns its own measurement.
 - **GUARD**: last 14 full days actual till ÷ same-window forecast (labour
   gate's per-weekday recency-weighted forecaster; history precedes the
   window = clean counterfactual), ÷ median of the other ads outlets' indexes
