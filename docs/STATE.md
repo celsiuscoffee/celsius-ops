@@ -315,6 +315,38 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-20 (round 16) — **Slot-sizing saga: open slots now follow the FULL
+  scheduling logic (PRs #1016 + #1017, both merged; #1015 merged + OTA'd
+  earlier).** Owner pushed three times and was right each time. (1) "why 5-6
+  slots/day?" → the poster was publishing the optimizer's candidate MENU
+  (one gap per template touching a short hour — same 13:00 hole appeared in
+  4 overlapping templates); #1016 posts the smallest template set clearing
+  the residual per-hour shortfall. (2) "we already have 495 hours, you
+  schedule wrong" → hour-level audit proved it half-true: Tue had 3 bar
+  openers vs 2 closers with the third body needed in the evening — the
+  generator posted a slot for a hole its own FT split created. #1017 adds an
+  FT OPEN/CLOSE REBALANCE pass (donors keep need+2-head anchors, Fridays
+  skipped for prayer steering, no clopenings) BEFORE any slot is considered.
+  The kitchen slots were structural: 5 kit-capable FT × 6d = 30 shifts,
+  anchors alone eat 28, demand wants ~34 — a bench gap, not placement.
+  (3) "12 slots will shoot up the people cost" → slots are now FUNDED from
+  the same RM envelope as the old PT fill (forecast × target% − FT cost),
+  ranked kitchen→anchors→deepest days, priced day-aware (9/10/2×PH,
+  cheapest eligible PT); unfunded gaps become ⚠ UNMANNED notes + an ai_note
+  naming the cost of covering them. Final slot pipeline: demand → FT base →
+  rebalance → residual gaps → day cap (ptTargetByDate) → envelope funding.
+  PJ 2026-07-27 is a revenue-constrained week (FT floor 20.7% > 18% target,
+  envelope RM0) → regeneration posts ZERO slots there by design; owner's
+  levers: lend FT, accept higher %, or manual Post slot (stays uncapped as
+  the deliberate override). Also this round: employment-window guards
+  everywhere (join_date/end_date — generator onLeave rail, grid rows, cell
+  route, Assist pool, request+assign; live cases Afique last day 07-31
+  mid-week, Auni starts 07-27), open-slots panel collapses to a one-line
+  summary ("cannot see schedule" fix), Why-staffing popover edge-alignment
+  fix (#1013). Serve-rate calibration flag for owner: model says Sat 9am
+  needs 5 cooks (25 items/h ÷ 5.1) — if reality disagrees, recalibrate the
+  kitchen serve target, not the slot logic.
+
 - 2026-07-19 (round 15) — **Open slots become REQUEST → ASSIGN, and AI Fill
   goes open-slots-first (owner: "can ai fill open the slots first before we
   assign anyone?" → "lets do they request, we assign" → "after filled,
