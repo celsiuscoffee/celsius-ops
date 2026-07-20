@@ -904,6 +904,18 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   report, search-term batching, and registry registration were superseded the
   same day by the ads autopilot — next entry.)
 
+- 2026-07-19 — **Hard-cut directive (owner: "what do you suggest" → "ok do
+  this"):** one-time decisive cut of all 3 ad campaigns to RM55/day
+  (`hardCutDirective`, env ADS_HARD_CUT_TARGET_MYR) — banks ~RM4,050/mo of
+  the RM5k target at once instead of over ~2 months, then the normal guarded
+  descent + rollback continue. Fires only on a healthy measured till (raw
+  index ≥0.95; a weak/unmeasured outlet waits a night), only while >target,
+  self-expires per campaign at RM55. My reasoning: 11% cut so far moved the
+  till 0 → strong evidence marginal spend is waste; RM55 (not the floor)
+  keeps a real budget each outlet can defend so a genuine sales effect shows
+  up as a manageable dip, not a cliff. **Remove the directive block in a
+  follow-up once all 3 are confirmed at RM55.** Fleet after tonight: 265.86→
+  165/day.
 - 2026-07-19 — **Descent aggression BUMPED (owner: "decrease more")** after
   first cuts proved safe (fleet RM300.20→265.86/day = RM1,030/mo banked, ~21%
   of RM5k; per-outlet guard healthy; clean-POS till flat ex-Shah-Alam which
