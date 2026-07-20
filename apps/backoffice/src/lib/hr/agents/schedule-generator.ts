@@ -1178,6 +1178,75 @@ export async function generateSchedule(
       return station === "kitchen" ? isBOH(pos) : !isBOH(pos);
     }).length;
 
+  // ── FT block rebalance: spend the hours we already pay for BEFORE asking
+  // for PT (owner 2026-07-20: "we already have 495 hours. i think you
+  // schedule wrong — for the open slots"). If one block (open/close) holds
+  // spare FT above need+anchors at every hour while the sibling block is
+  // short, move an FT shift across. Fridays are skipped (prayer steering
+  // placed those people deliberately), donors must keep their anchors, and
+  // a move must not create a clopening (close 23:30 → open 07:30 next day).
+  {
+    const startHourOf = (t: string) => Number(t.slice(0, 2));
+    const blocks: Array<[ShiftTemplate, ShiftTemplate]> = [
+      [tpl.opening, tpl.closing],
+      [tpl.closing, tpl.opening],
+    ];
+    const hoursIn = (t: ShiftTemplate) => {
+      const out: number[] = [];
+      for (let h = Math.max(startHourOf(t.start_time), openH); h < Math.min(startHourOf(t.end_time), closeH); h++) out.push(h);
+      return out;
+    };
+    let rebalanced = 0;
+    for (const date of dates) {
+      if (!daysOpen.has(dow(date))) continue;
+      if (dow(date) === FRIDAY) continue;
+      for (const station of ["kitchen", "barista"] as const) {
+        for (let pass = 0; pass < 2; pass++) {
+          let moved = false;
+          for (const [donor, receiver] of blocks) {
+            const needAt = (h: number) => (station === "kitchen" ? kitNeedAt(date, h) : barNeedAt(date, h));
+            // Receiver must actually be short somewhere…
+            const receiverShort = hoursIn(receiver).some((h) => needAt(h) > staffedAt(date, h, station));
+            if (!receiverShort) continue;
+            // …and the donor must keep need AND its 2-head anchor at EVERY hour
+            // after giving one person up.
+            const donorSpare = hoursIn(donor).every(
+              (h) => staffedAt(date, h, station) - 1 >= Math.max(needAt(h), STATION_ANCHOR_TARGET),
+            );
+            if (!donorSpare) continue;
+            const mover = rows.find((r) => {
+              if (r.shift_date !== date || r.notes === "rest_day") return false;
+              if (startHourOf(r.start_time) !== startHourOf(hhmmss(donor.start_time))) return false;
+              const pos = posById.get(r.user_id) ?? null;
+              if (isManagementPosition(pos)) return false;
+              if ((station === "kitchen") !== isBOH(pos)) return false;
+              // No clopening in either direction.
+              if (receiver.id === tpl.closing.id) {
+                const nextDay = addDaysStr(date, 1);
+                if (rows.some((o) => o.user_id === r.user_id && o.shift_date === nextDay && o.notes !== "rest_day" && startHourOf(o.start_time) <= 8)) return false;
+              } else {
+                const prevDay = addDaysStr(date, -1);
+                if (rows.some((o) => o.user_id === r.user_id && o.shift_date === prevDay && o.notes !== "rest_day" && startHourOf(o.end_time) >= 22)) return false;
+              }
+              return true;
+            });
+            if (!mover) continue;
+            mover.start_time = hhmmss(receiver.start_time);
+            mover.end_time = hhmmss(receiver.end_time);
+            mover.role_type = receiver.label;
+            rebalanced++;
+            moved = true;
+            break;
+          }
+          if (!moved) break;
+        }
+      }
+    }
+    if (rebalanced > 0) {
+      notes.push(`${rebalanced} FT shift(s) rebalanced between open/close blocks to cover demand before asking for PT.`);
+    }
+  }
+
   type Gap = { date: string; template: ShiftTemplate; slot: string; gapHours: number; station: "kitchen" | "barista" };
   const gaps: Gap[] = [];
   // Every picker template is a candidate PT slot, keyed by template id —
