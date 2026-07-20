@@ -220,8 +220,13 @@ export async function computeAllowances(
   const performanceEarned = Math.round(levers.reduce((s, l) => s + l.earned, 0) * 100) / 100;
 
   // ── DEDUCT: lateness + absence ────────────────────────────────────────────
+  // Only REAL, communicated shifts can no-show: rest-day markers (00:00 rows)
+  // are days OFF, pt_suggestion rows were never confirmed, and draft-week
+  // shifts were never announced to the person (owner 2026-07-20: rest days
+  // were being deducted as "No-show" at RM20 each).
   const { data: scheduled } = await supabaseAdmin
-    .from("hr_schedule_shifts").select("shift_date").eq("user_id", userId)
+    .from("hr_schedule_shifts").select("shift_date, start_time, notes, hr_schedules!inner(status)").eq("user_id", userId)
+    .eq("hr_schedules.status", "published")
     .gte("shift_date", monthStart).lte("shift_date", monthEnd);
   const { data: leaves } = await supabaseAdmin
     .from("hr_leave_requests").select("start_date, end_date").eq("user_id", userId)
@@ -250,9 +255,15 @@ export async function computeAllowances(
     }
   }
   const loggedDates = new Set(logs.map((l) => mytDateString(l.clock_in)));
+  const missedDates = new Set<string>();
   for (const sh of (scheduled || [])) {
+    if (sh.notes === "rest_day" || sh.notes === "pt_suggestion") continue;
+    if ((sh.start_time ?? "").startsWith("00:00")) continue;
     if (sh.shift_date >= todayMyt || loggedDates.has(sh.shift_date) || leaveDays.has(sh.shift_date)) continue;
-    deductions.push({ kind: "absent", label: "No-show (scheduled, didn't clock in)", amount: r.absentPenalty, date: sh.shift_date });
+    missedDates.add(sh.shift_date); // dedupe: split shifts = one no-show day
+  }
+  for (const date of [...missedDates].sort()) {
+    deductions.push({ kind: "absent", label: "No-show (scheduled, didn't clock in)", amount: r.absentPenalty, date });
     absentCount++;
   }
   const attendanceTotal = deductions.reduce((s, d) => s + d.amount, 0);
