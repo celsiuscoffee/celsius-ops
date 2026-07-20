@@ -1496,7 +1496,18 @@ export async function generateSchedule(
   };
   for (const date of dates) {
     if (!daysOpen.has(dow(date))) continue;
+    // Day budget: the SAME top-up target the assign-mode fill stops at —
+    // per-hour head shortfall after FT (incl. mode buffer), or the structural
+    // anchor shortfall when that binds harder. Without this cap the poster
+    // published a full 8h slot for every 1-2h shortfall pocket (owner
+    // 2026-07-20: 32 slots for a 78h top-up week — "why do we have that
+    // many slots?"). Ceil'd so a 7h target still fits one whole shift.
+    let dayBudgetH = ptTargetByDate.get(date) ?? 0;
+    if (dayBudgetH <= 0) continue;
+    // Kitchen first: kitchen-capable people are the scarce resource and an
+    // unmanned kitchen is a closed kitchen.
     for (const station of ["kitchen", "barista"] as const) {
+      if (dayBudgetH <= 0) break;
       // Residual shortfall per hour after the FT base + accepted PT suggestions.
       const short = new Map<number, number>();
       let anyNeed = false;
@@ -1506,6 +1517,10 @@ export async function generateSchedule(
         short.set(h, Math.max(0, need - staffedAt(date, h, station) - ptCoverAt(date, h, station)));
       }
       if (!anyNeed) continue;
+      const windowHours = (t: ShiftTemplate) => {
+        const [s, e] = hoursOf(t);
+        return Math.min(e, closeH) - Math.max(s, openH);
+      };
       // Structural anchors first: opening/closing each want STATION_ANCHOR_TARGET
       // heads across their whole window.
       for (const t of [tpl.opening, tpl.closing]) {
@@ -1515,15 +1530,17 @@ export async function generateSchedule(
           minCover = Math.min(minCover, staffedAt(date, h, station) + ptCoverAt(date, h, station));
         }
         if (!Number.isFinite(minCover)) continue;
-        for (let k = 0; k < STATION_ANCHOR_TARGET - minCover; k++) {
+        for (let k = 0; k < STATION_ANCHOR_TARGET - minCover && dayBudgetH > 0; k++) {
           postSlot(date, t, station);
+          dayBudgetH -= windowHours(t);
           for (let h = Math.max(s, openH); h < Math.min(e, closeH); h++) {
             short.set(h, Math.max(0, (short.get(h) ?? 0) - 1));
           }
         }
       }
-      // Then the smallest template set that clears the remaining short hours.
-      for (let guard = 0; guard < 12; guard++) {
+      // Then the smallest template set that clears the remaining short hours,
+      // within what's left of the day budget.
+      for (let guard = 0; guard < 12 && dayBudgetH > 0; guard++) {
         let best: ShiftTemplate | null = null;
         let bestCover = 0;
         for (const t of allTemplates) {
@@ -1539,6 +1556,7 @@ export async function generateSchedule(
         }
         if (!best || bestCover === 0) break;
         postSlot(date, best, station);
+        dayBudgetH -= windowHours(best);
         const [s, e] = hoursOf(best);
         for (let h = Math.max(s, openH); h < Math.min(e, closeH); h++) {
           short.set(h, Math.max(0, (short.get(h) ?? 0) - 1));
