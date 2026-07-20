@@ -30,6 +30,10 @@ export type UnifiedSale = {
   isDeliveryQR: boolean;
   channelLabel: string; // raw channel/order_type for the channelBreakdown report
   source: SalesSourceKey; // normalized sales channel (till/grabfood/qr/pickup/…)
+  // Raw payment method, where the source records one: POS-native (dominant
+  // tender of the order) and pickup app. StoreHub/hubbo/consignment never
+  // exposed payment splits → null (payment breakdowns must say so).
+  tender: string | null;
   units: number; // count this event contributes to "transactions": 1 per receipt
   // (StoreHub/POS/pickup), or the day's item_count for consignment (daily grain,
   // no receipt count — so AOV reads as avg price per item for those outlets).
@@ -136,6 +140,7 @@ export async function getUnifiedSalesForOutlet(
       isDeliveryQR: isDeliveryOrQR(raw),
       channelLabel: (raw?.channel ?? "(direct)") as string,
       source: storehubSource(raw?.channel as string | null | undefined),
+      tender: null,
       units: 1,
     });
   };
@@ -167,6 +172,7 @@ export async function getUnifiedSalesForOutlet(
       isDeliveryQR: r.is_delivery_qr ?? false,
       channelLabel: r.channel ?? "(direct)",
       source: storehubSource(r.channel),
+      tender: null,
       units: 1,
     });
   };
@@ -196,6 +202,7 @@ export async function getUnifiedSalesForOutlet(
         isDeliveryQR: false,
         channelLabel: "counter",
         source: "till",
+        tender: null,
         units: 1,
       });
     }
@@ -274,9 +281,12 @@ export async function getUnifiedSalesForOutlet(
       ? Prisma.sql`AND created_at >= ${outlet.cutoverAt}`
       : Prisma.empty;
     const posRows = await prisma.$queryRaw<
-      Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null }>
+      Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null; pay_method: string | null }>
     >`
-      SELECT created_at AS ts, total, source, order_type
+      SELECT created_at AS ts, total, source, order_type,
+             (SELECT pay.payment_method FROM pos_order_payments pay
+              WHERE pay.order_id = pos_orders.id
+              ORDER BY pay.amount DESC NULLS LAST LIMIT 1) AS pay_method
       FROM pos_orders
       WHERE outlet_id = ${outlet.loyaltyOutletId}
         AND status = 'completed'
@@ -293,6 +303,10 @@ export async function getUnifiedSalesForOutlet(
         isDeliveryQR: posIsDeliveryQR(r.order_type, r.source),
         channelLabel: r.source && r.source !== "pos" ? r.source : (r.order_type ?? "pos"),
         source: posSource(r.order_type, r.source),
+        // Dominant tender of the order (split payments attribute the whole
+        // order to the largest payment — the By Payment report stays the
+        // precise per-payment view)
+        tender: r.pay_method,
         units: 1,
       });
     }
@@ -306,9 +320,9 @@ export async function getUnifiedSalesForOutlet(
   // all count toward Pickup & Delivery. ──
   if (!opts.storehubOnly && outlet.pickupStoreId) {
     const pickupRows = await prisma.$queryRaw<
-      Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null }>
+      Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null; payment_method: string | null }>
     >`
-      SELECT created_at AS ts, total, source, order_type
+      SELECT created_at AS ts, total, source, order_type, payment_method
       FROM orders
       WHERE store_id = ${outlet.pickupStoreId}
         AND status IN (${Prisma.join(PICKUP_PAID_STATUSES)})
@@ -324,6 +338,7 @@ export async function getUnifiedSalesForOutlet(
         isDeliveryQR: true, // pickup-app / QR-table → Pickup & Delivery bucket
         channelLabel: r.source ?? "pickup",
         source: pickupSource(r.source),
+        tender: r.payment_method,
         units: 1,
       });
     }
@@ -354,6 +369,7 @@ export async function getUnifiedSalesForOutlet(
         isDeliveryQR: false,
         channelLabel: r.channel === "cafe" ? "consignment" : r.channel,
         source: "consignment",
+        tender: null,
         // No receipt count in the weekly advice — use the day's items sold as the
         // unit count, so "transactions" reflects items and AOV = avg item price.
         units: Number(r.items) || 0,

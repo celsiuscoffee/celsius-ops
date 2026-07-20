@@ -226,7 +226,18 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   cols=periods (consistent with all other tables) + share %; Month tab in
   the Add Period picker (last 12 months); chart gains a dashed "now"
   reference line + whole-K y-ticks ≥100k; summary deltas labelled
-  "vs {period}"; outlet-context caption beside the metric toggle.
+  "vs {period}"; outlet-context caption beside the metric toggle. Round 3b
+  (owner screenshots): **REAL BUG — outlet-filtered compare showed stale
+  cross-outlet data.** Cent-exact forensics: "Tamarind" card = Tam+SA,
+  "Shah Alam" card = ALL outlets — overlapping fetches with no guard; an
+  older bigger response landing last overwrote the newer one. Fixed with a
+  fetch sequence guard + AbortController. Also: "Other Delivery" (owner:
+  "should be grab") is actually the retired StoreHub Beep channel (May-era
+  volume ≈ Grab's; Grab has its own row) — relabelled "Beep / Other
+  Delivery". NEW: Payment Method dimension in compare (per-period gateway
+  table, Δ + share of tendered total + coverage row; pos dominant-tender +
+  pickup payment_method; validated cent-exact vs the By Payment report for
+  Jul 11-13; StoreHub era has no payment splits — caveat shown).
 
 - Typecheck before pushing — every time. CI enforces it, but catch it locally.
 - Never test against the production database; the procurement runbook's seed SQL

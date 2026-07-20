@@ -68,6 +68,14 @@ type PeriodResult = {
   // Sales-channel breakdown (till / QR table / pickup app / GrabFood /
   // consignment …). Optional so a stale client survives an older API.
   sources?: PeriodSource[];
+  // Payment-gateway breakdown (POS-native + pickup only — StoreHub-era
+  // history has no payment splits). covered* = the tendered totals shares
+  // are computed against.
+  payments?: {
+    methods: PeriodSource[];
+    coveredRevenue: number;
+    coveredOrders: number;
+  };
   hourly: { hour: number; revenue: number; orders: number }[];
   dailyTotals: { date: string; revenue: number; orders: number; rounds: { key: string; revenue: number; orders: number }[] }[];
   // Server-side DOW projection — only populated when today falls inside
@@ -437,12 +445,19 @@ export default function SalesComparePage() {
   const [showRounds, setShowRounds] = useState(true);
   const [showChannels, setShowChannels] = useState(true);
   const [showSources, setShowSources] = useState(true);
+  const [showPayments, setShowPayments] = useState(true);
   const [showDow, setShowDow] = useState(true);
   const [showDaily, setShowDaily] = useState(false);
   // Guards the URL-sync effect until the mount effect has restored state
   const [booted, setBooted] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const outletPickerRef = useRef<HTMLDivElement>(null);
+  // Stale-response guard: rapid filter changes fire overlapping fetches, and
+  // an older (bigger, slower) response landing last silently replaced the
+  // newer one — e.g. "Tamarind" showing Tamarind+Shah Alam numbers. Only the
+  // latest request may write state; superseded ones are aborted outright.
+  const fetchSeqRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Close pickers on outside click
   useEffect(() => {
@@ -461,27 +476,38 @@ export default function SalesComparePage() {
   const fetchData = useCallback(
     async (currentSlots: ComparisonSlot[], outletSel: string[]) => {
       if (currentSlots.length === 0) {
+        abortRef.current?.abort();
+        fetchSeqRef.current++;
         setData(null);
+        setLoading(false);
         return;
       }
+      const seq = ++fetchSeqRef.current;
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
       setLoading(true);
       setError(null);
       try {
         const periodsStr = currentSlots.map((s) => `${s.from}:${s.to}`).join(",");
         let url = `/api/sales/compare?periods=${periodsStr}`;
         if (outletSel.length > 0) url += `&outletIds=${outletSel.join(",")}`;
-        const res = await fetch(url, { credentials: "include" });
+        const res = await fetch(url, { credentials: "include", signal: controller.signal });
+        if (seq !== fetchSeqRef.current) return; // superseded — drop silently
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || `HTTP ${res.status}`);
         }
         const json: CompareResponse = await res.json();
+        if (seq !== fetchSeqRef.current) return;
         setData(json);
         if (json.availableOutlets) setOutlets(json.availableOutlets);
       } catch (err) {
+        if (seq !== fetchSeqRef.current) return; // aborted by a newer request
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Failed to load");
       } finally {
-        setLoading(false);
+        if (seq === fetchSeqRef.current) setLoading(false);
       }
     },
     [],
@@ -1333,7 +1359,7 @@ export default function SalesComparePage() {
                 >
                   <div className="text-left">
                     <h2 className="text-sm font-semibold text-gray-900">Sales Channel Breakdown</h2>
-                    <p className="text-[11px] text-gray-400">Till · QR table · pickup app · GrabFood · consignment</p>
+                    <p className="text-[11px] text-gray-400">Till · QR table · pickup app · GrabFood · Beep (retired) · consignment</p>
                   </div>
                   {showSources ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
                 </button>
@@ -1384,6 +1410,116 @@ export default function SalesComparePage() {
                             </tr>
                           );
                         })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Payment Method — POS-native + pickup sales only */}
+          {data.periods.some((p) => p.payments && p.payments.coveredOrders > 0) && (() => {
+            const template = data.periods.find((p) => p.payments && p.payments.methods.length > 0)!.payments!.methods;
+            const activeKeys = template
+              .map((m) => m.key)
+              .filter((key) =>
+                data.periods.some((p) => {
+                  const pm = p.payments?.methods.find((m) => m.key === key);
+                  return pm && (pm.revenue > 0 || pm.orders > 0);
+                }),
+              );
+            if (activeKeys.length === 0) return null;
+            // Sort by the latest period's revenue so the biggest gateway leads
+            const latest = data.periods[0];
+            const sortedKeys = [...activeKeys].sort((a, b) => {
+              const ra = latest.payments?.methods.find((m) => m.key === a)?.revenue ?? 0;
+              const rb = latest.payments?.methods.find((m) => m.key === b)?.revenue ?? 0;
+              return rb - ra;
+            });
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden">
+                <button
+                  onClick={() => setShowPayments(!showPayments)}
+                  className="flex items-center justify-between w-full mb-3"
+                >
+                  <div className="text-left">
+                    <h2 className="text-sm font-semibold text-gray-900">Payment Method</h2>
+                    <p className="text-[11px] text-gray-400">
+                      POS-native + pickup sales only — StoreHub-era history has no payment splits
+                    </p>
+                  </div>
+                  {showPayments ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                </button>
+                {showPayments && (
+                  <div className="overflow-x-auto -mx-4 px-4">
+                    <table className="w-full text-xs" style={{ minWidth: Math.max(500, data.periods.length * 130 + 120) }}>
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          <th className="text-left py-2 pr-3 font-medium text-gray-500 sticky left-0 bg-white z-10 whitespace-nowrap">Method</th>
+                          {data.periods.map((p, i) => (
+                            <th key={i} className="text-right py-2 px-2 font-medium whitespace-nowrap" style={{ color: PERIOD_COLORS[i % PERIOD_COLORS.length] }}>
+                              {p.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedKeys.map((key) => {
+                          const label = template.find((m) => m.key === key)?.label ?? key;
+                          return (
+                            <tr key={key} className="border-b border-gray-50">
+                              <td className="py-2 pr-3 font-medium text-gray-700 sticky left-0 bg-white z-10 whitespace-nowrap">{label}</td>
+                              {data.periods.map((p, pi) => {
+                                const pm = p.payments?.methods.find((m) => m.key === key);
+                                if (!pm || (pm.revenue === 0 && pm.orders === 0)) {
+                                  return <td key={pi} className="text-right py-2 px-2 text-gray-300">—</td>;
+                                }
+                                const val = metric === "revenue" ? pm.revenue : metric === "orders" ? pm.orders : pm.aov;
+                                // Share of the TENDERED total, not all revenue —
+                                // StoreHub-era sales have no payment data
+                                const covered = metric === "orders" ? (p.payments?.coveredOrders ?? 0) : (p.payments?.coveredRevenue ?? 0);
+                                const shareBase = metric === "orders" ? pm.orders : pm.revenue;
+                                const share = metric !== "aov" && covered > 0 ? (shareBase / covered) * 100 : null;
+                                const nextPm = pi < data.periods.length - 1 ? data.periods[pi + 1].payments?.methods.find((m) => m.key === key) : undefined;
+                                const nextVal = nextPm ? (metric === "revenue" ? nextPm.revenue : metric === "orders" ? nextPm.orders : nextPm.aov) : null;
+                                const change = nextVal !== null && nextVal !== undefined && nextVal !== 0 ? pctChange(val, nextVal) : null;
+                                return (
+                                  <td key={pi} className="text-right py-2 px-2 tabular-nums whitespace-nowrap">
+                                    <span className="text-gray-700">
+                                      {metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
+                                    </span>
+                                    <span className="ml-1.5 text-[10px]">
+                                      {share !== null && <span className="text-gray-400">{share.toFixed(0)}%</span>}
+                                      {change && <span className={`ml-1 ${change.color}`}>{change.label}</span>}
+                                    </span>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                        {/* Tendered total + how much of the period it covers */}
+                        <tr className="border-t-2 border-gray-200 font-semibold">
+                          <td className="py-2 pr-3 text-gray-900 sticky left-0 bg-white z-10 whitespace-nowrap">Tendered total</td>
+                          {data.periods.map((p, pi) => {
+                            const covered = p.payments;
+                            if (!covered || covered.coveredOrders === 0) {
+                              return <td key={pi} className="text-right py-2 px-2 text-gray-300">—</td>;
+                            }
+                            const val = metric === "orders" ? covered.coveredOrders : covered.coveredRevenue;
+                            const full = metric === "orders" ? p.summary.orders : p.summary.revenue;
+                            const covPct = full > 0 ? Math.round(((metric === "orders" ? covered.coveredOrders : covered.coveredRevenue) / full) * 100) : 0;
+                            return (
+                              <td key={pi} className="text-right py-2 px-2 text-gray-900 tabular-nums whitespace-nowrap">
+                                {metric === "orders" ? val.toLocaleString() : fmtRM(val)}
+                                {covPct < 100 && metric !== "aov" && (
+                                  <span className="ml-1.5 text-[10px] font-normal text-gray-400">{covPct}% of sales</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
                       </tbody>
                     </table>
                   </div>
