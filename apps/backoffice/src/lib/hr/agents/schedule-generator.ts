@@ -259,7 +259,7 @@ export async function generateSchedule(
   });
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, basic_salary, hourly_rate, hourly_rate_weekend, epf_employer_rate, schedule_required, rest_day, gender, religion")
+    .select("user_id, position, employment_type, basic_salary, hourly_rate, hourly_rate_weekend, epf_employer_rate, schedule_required, rest_day, gender, religion, join_date, end_date")
     .in("user_id", users.length ? users.map((u) => u.id) : ["-"]);
   type ProfileRow = {
     user_id: string; position: string | null; employment_type: string;
@@ -267,11 +267,24 @@ export async function generateSchedule(
     epf_employer_rate: number | null;
     schedule_required: boolean | null; rest_day: number | null;
     gender: string | null; religion: string | null;
+    join_date: string | null; end_date: string | null;
   };
   const profileMap = new Map<string, ProfileRow>(((profiles ?? []) as ProfileRow[]).map((p) => [p.user_id, p]));
 
   const staff: Staff[] = users
     .filter((u) => profileMap.get(u.id)?.schedule_required !== false)
+    // Employment window: someone whose last day is BEFORE this week (the
+    // deactivate cron only flips User.status after end_date passes) or whose
+    // join_date is AFTER it must not be rostered at all. Partial weeks (last
+    // day / first day mid-week) are handled per-date below via the onLeave
+    // rail (owner 2026-07-19: "check the starting date logic and last day
+    // logic during scheduling").
+    .filter((u) => {
+      const p = profileMap.get(u.id);
+      if (p?.end_date && p.end_date < weekStart) return false;
+      if (p?.join_date && p.join_date > weekEnd) return false;
+      return true;
+    })
     .map((u) => {
       const p = profileMap.get(u.id);
       return {
@@ -339,6 +352,26 @@ export async function generateSchedule(
   const onLeave = new Set<string>();
   for (const l of (leaves ?? []) as { user_id: string; start_date: string; end_date: string }[]) {
     for (const d of dates) if (d >= l.start_date && d <= l.end_date) onLeave.add(`${l.user_id}:${d}`);
+  }
+
+  // Partial employment weeks ride the onLeave rail — every placement site
+  // (FT working/resting, rover free days, PT greedy + validator) already
+  // consults it, so days before join_date / after end_date are simply never
+  // schedulable. A note keeps the manager oriented.
+  for (const s of staff) {
+    const p = profileMap.get(s.id);
+    if (!p?.join_date && !p?.end_date) continue;
+    const blockedDays = dates.filter(
+      (d) => (p.join_date != null && d < p.join_date) || (p.end_date != null && d > p.end_date),
+    );
+    if (blockedDays.length === 0) continue;
+    for (const d of blockedDays) onLeave.add(`${s.id}:${d}`);
+    if (p.end_date && p.end_date >= weekStart && p.end_date <= weekEnd) {
+      notes.push(`${s.name}: LAST DAY ${p.end_date} — not scheduled after it.`);
+    }
+    if (p.join_date && p.join_date > weekStart && p.join_date <= weekEnd) {
+      notes.push(`${s.name}: starts ${p.join_date} — not scheduled before it.`);
+    }
   }
 
   // Declared PT availability — fed by the staff apps' "My Availability" input.

@@ -168,11 +168,17 @@ export async function POST(req: NextRequest) {
     // Re-validate the person NOW — their week may have changed since they asked.
     const { data: profile } = await hrSupabaseAdmin
       .from("hr_employee_profiles")
-      .select("position, employment_type")
+      .select("position, employment_type, join_date, end_date")
       .eq("user_id", request.user_id)
       .maybeSingle();
     if (!fitsStation(profile?.position ?? null, slot.station)) {
       return NextResponse.json({ error: `They don't fit the ${slot.station} station` }, { status: 409 });
+    }
+    if (profile?.end_date && slot.shift_date > profile.end_date) {
+      return NextResponse.json({ error: `Their last day is ${profile.end_date} — the shift is after it` }, { status: 409 });
+    }
+    if (profile?.join_date && slot.shift_date < profile.join_date) {
+      return NextResponse.json({ error: `They only start on ${profile.join_date}` }, { status: 409 });
     }
     const weekStart = mondayOf(slot.shift_date);
     const wl = await weekLoad(request.user_id, weekStart);

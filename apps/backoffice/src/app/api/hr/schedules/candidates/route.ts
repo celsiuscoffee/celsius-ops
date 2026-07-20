@@ -87,11 +87,18 @@ export async function GET(req: NextRequest) {
   const userIds = users.map((u) => u.id);
 
   const { data: profiles } = userIds.length
-    ? await hrSupabaseAdmin.from("hr_employee_profiles").select("user_id, position, employment_type, rest_day, schedule_required, basic_salary, hourly_rate, gender, religion").in("user_id", userIds)
+    ? await hrSupabaseAdmin.from("hr_employee_profiles").select("user_id, position, employment_type, rest_day, schedule_required, basic_salary, hourly_rate, gender, religion, join_date, end_date").in("user_id", userIds)
     : { data: [] as ProfileRow[] };
-  type ProfileRow = { user_id: string; position: string | null; employment_type: string | null; rest_day: number | null; schedule_required: boolean | null; basic_salary: number | null; hourly_rate: number | null; gender: string | null; religion: string | null };
+  type ProfileRow = { user_id: string; position: string | null; employment_type: string | null; rest_day: number | null; schedule_required: boolean | null; basic_salary: number | null; hourly_rate: number | null; gender: string | null; religion: string | null; join_date: string | null; end_date: string | null };
   const profileMap = new Map<string, ProfileRow>((profiles || []).map((p: ProfileRow) => [p.user_id, p]));
-  const pool = users.filter((u) => profileMap.get(u.id)?.schedule_required !== false);
+  // Employment window: not yet joined or already left on `date` → not a candidate.
+  const pool = users.filter((u) => {
+    const p = profileMap.get(u.id);
+    if (p?.schedule_required === false) return false;
+    if (p?.end_date && date > p.end_date) return false;
+    if (p?.join_date && date < p.join_date) return false;
+    return true;
+  });
   const poolIds = pool.map((u) => u.id);
 
   // This week's shifts (weekly hours + same-day double-book).

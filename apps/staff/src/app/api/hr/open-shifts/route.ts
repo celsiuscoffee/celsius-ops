@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
   }
   const { data: profile } = await supabase
     .from("hr_employee_profiles")
-    .select("position, employment_type")
+    .select("position, employment_type, join_date, end_date")
     .eq("user_id", session.id)
     .maybeSingle();
   if (!["part_time", "intern"].includes(profile?.employment_type ?? "")) {
@@ -215,6 +215,13 @@ export async function POST(req: NextRequest) {
   }
   if (!fitsStation(profile?.position ?? null, target.station)) {
     return NextResponse.json({ error: `This slot needs a ${target.station} position.` }, { status: 403 });
+  }
+  // Employment window — no requests before your start date or after your last day.
+  if (profile?.end_date && target.shift_date > profile.end_date) {
+    return NextResponse.json({ error: `This shift is after your last day (${profile.end_date}).` }, { status: 403 });
+  }
+  if (profile?.join_date && target.shift_date < profile.join_date) {
+    return NextResponse.json({ error: `This shift is before your start date (${profile.join_date}).` }, { status: 403 });
   }
   const { data: leave } = await supabase
     .from("hr_leave_requests")
