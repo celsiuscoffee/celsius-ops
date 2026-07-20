@@ -19,10 +19,10 @@
  *   DESCEND   — waste-matched first: while the campaign carries excluded-term
  *               spend not yet taken out of the budget, each cut removes
  *               exactly that measured amount (café-intent funding untouched);
- *               only once no unpaid waste remains does the blind 8% step
- *               (12% when cost/conv >1.3× fleet-best) resume. Every ≥14
- *               observed days, max MAX_CUTS_PER_RUN campaigns per run, never
- *               below the floor.
+ *               only once no unpaid waste remains does the blind STEP_PCT step
+ *               (STEP_PCT_INEFFICIENT when cost/conv >1.3× fleet-best) resume.
+ *               Every ≥OBSERVE_DAYS observed days per campaign, max
+ *               MAX_CUTS_PER_RUN campaigns per run, never below the floor.
  *   ROLLBACK  — if the guard breaches after a recent cut, restore the previous
  *               budget and hold ROLLBACK_HOLD_DAYS. The breach is evidence the
  *               marginal spend WAS generating till revenue.
@@ -89,9 +89,16 @@ import { microsToMYR } from "./client";
 export const AGENT_KEY = "ads_autopilot";
 
 // ── Policy knobs ────────────────────────────────────────────────────────────
-export const OBSERVE_DAYS = 14;          // min days between changes to one campaign
-export const STEP_PCT = 0.08;            // normal step down
-export const STEP_PCT_INEFFICIENT = 0.12; // when cost/conv > INEFFICIENT_RATIO × fleet-best
+// Descent aggression bumped 2026-07-19 (owner: "decrease more") after the
+// first cuts proved safe (guard healthy fleet-wide, till flat ex-Grab). All
+// four are env-tunable so aggression can be dialed without a code change.
+// Kept fixed: OBSERVE_DAYS = the guard's 14d window — cutting a single
+// campaign faster than that would stack cuts inside one measurement window
+// and blur which step a breach should roll back. Fleet-level speed comes
+// from more campaigns/run + tighter fleet spacing + bigger steps instead.
+export const OBSERVE_DAYS = 14;          // min days between changes to ONE campaign (= guard window)
+export const STEP_PCT = Number(process.env.ADS_STEP_PCT || 0.12);            // normal step down (was 0.08)
+export const STEP_PCT_INEFFICIENT = Number(process.env.ADS_STEP_PCT_INEFFICIENT || 0.18); // cost/conv > ratio (was 0.12)
 export const INEFFICIENT_RATIO = 1.3;
 export const GUARD_RAW_MIN = 0.95;       // actual/forecast below this = breach
 export const GUARD_ADJ_MIN = 0.97;       // fleet-adjusted index below this = breach
@@ -103,7 +110,8 @@ export const ROLLBACK_MAX_AGE_DAYS = 45; // only blame (and undo) a reasonably r
 // beyond FACTOR× that, the gap has another cause — hold and flag instead of
 // rolling back. The fixed anchor still guards genuine cumulative drift.
 export const ROLLBACK_PLAUSIBILITY_FACTOR = 2;
-export const MAX_CUTS_PER_RUN = 2;       // stagger: worst campaigns first, rest next Monday
+export const MAX_CUTS_PER_RUN = Number(process.env.ADS_MAX_CUTS_PER_RUN || 3); // all campaigns can cut in one run (was 2)
+export const FLEET_SPACING_DAYS = Number(process.env.ADS_FLEET_SPACING_DAYS || 3); // days between fleet disturbances (was 6)
 export const FLOOR_DAILY_MYR = Number(process.env.ADS_AUTOPILOT_FLOOR_MYR || 20);
 
 // Probe-up phase (the "increase cash" search — only ever entered after a
@@ -180,10 +188,9 @@ export const MAX_NEGATIVES_PER_CAMPAIGN = 25;
 // ADS_AUTOPILOT_PAUSE_PROBE=on if a causal baseline is wanted later.
 export const PAUSE_PROBE_ENABLED = process.env.ADS_AUTOPILOT_PAUSE_PROBE === "on";
 export const PAUSE_PROBE_DAYS = 28;      // full pause length before auto-restore
-// The cron runs nightly; this fleet-wide gap staggers NEW disturbances
-// (cut/raise/pause) so the loop keeps its ~weekly rhythm without waiting for
-// a fixed weekday. Safety actions (rollback/revert/restore) are never spaced.
-export const FLEET_SPACING_DAYS = 6;
+// FLEET_SPACING_DAYS (the nightly-cron stagger for NEW disturbances; safety
+// actions rollback/revert/restore are never spaced) is defined in the policy
+// knobs block above — env-tunable, default 3d since 2026-07-19.
 // Fixed-anchor drift guard: current share of fleet revenue ÷ the share in the
 // 28 days before the first ledgered budget change. Slightly looser than the
 // per-step thresholds because shares are noisier than forecasts.

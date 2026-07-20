@@ -78,10 +78,10 @@ describe("decideCampaign", () => {
     expect(d.action).toBe("hold");
   });
 
-  it("cuts 8% when healthy, observed, and efficient", () => {
+  it("cuts STEP_PCT (12%) when healthy, observed, and efficient", () => {
     const d = decideCampaign(campaign(), healthy, NOW);
     expect(d.action).toBe("cut");
-    expect(d.newDailyMyr).toBe(92);
+    expect(d.newDailyMyr).toBe(88);
   });
 
   it("waste-matched cut takes priority: removes exactly the excluded-term spend", () => {
@@ -101,7 +101,7 @@ describe("decideCampaign", () => {
   it("negligible pending waste falls back to the blind percentage step", () => {
     const d = decideCampaign(campaign({ pendingWasteDailyMyr: 0.3 }), healthy, NOW);
     expect(d.action).toBe("cut");
-    expect(d.newDailyMyr).toBe(92);
+    expect(d.newDailyMyr).toBe(88);
     expect(d.reason).not.toMatch(/waste-matched/);
   });
 
@@ -124,10 +124,10 @@ describe("decideCampaign", () => {
     expect(d.action).not.toBe("cut");
   });
 
-  it("cuts 12% when cost/conv is far off fleet-best", () => {
+  it("cuts STEP_PCT_INEFFICIENT (18%) when cost/conv is far off fleet-best", () => {
     const d = decideCampaign(campaign({ efficiencyRatio: 1.5 }), healthy, NOW);
     expect(d.action).toBe("cut");
-    expect(d.newDailyMyr).toBe(88);
+    expect(d.newDailyMyr).toBe(82);
   });
 
   it("holds while a recent change is still being observed", () => {

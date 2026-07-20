@@ -904,6 +904,17 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   report, search-term batching, and registry registration were superseded the
   same day by the ads autopilot — next entry.)
 
+- 2026-07-19 — **Descent aggression BUMPED (owner: "decrease more")** after
+  first cuts proved safe (fleet RM300.20→265.86/day = RM1,030/mo banked, ~21%
+  of RM5k; per-outlet guard healthy; clean-POS till flat ex-Shah-Alam which
+  tracks the Grab holdout + seasonality). Steps 8→12% (inefficient 12→18%),
+  max cuts/run 2→3, fleet spacing 6→3d; all env-tunable (ADS_STEP_PCT etc).
+  OBSERVE_DAYS kept 14 (= guard window). NOTE: the cash scoreboard's SALES
+  side is contaminated — its anchor window (28d pre-Jul-5) straddles the
+  StoreHub→pos-native cutover, so it over-reads the "before" till (logged
+  -RM9.9k/mo till Δ vs clean-POS ~-RM170/day). Cuts side is correct. Fix
+  offered (anchor to post-cutover window / exclude storehub_sales), owner
+  hasn't said go yet.
 - 2026-07-19 — **Cash TARGET (owner, revised): +RM5,000/month net from
   GOOGLE ADS ONLY** (was RM7k any-source; SMS/loyalty loop proposed and
   PARKED — 23k member phones sized, design in sms-loop-engineering.md,
