@@ -303,6 +303,31 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <blocking?>`_
 
+- 2026-07-20 — **Filters + reports QA sweep (branch
+  `claude/sales-compare-robustness-q5peil`, PR #1021).** Owner reported the
+  stale-response filter race on Sales Compare then Cashier Performance ("not
+  updated when filter"); audited ALL 92 filtered backoffice pages (5 parallel
+  agents). **SWR pages (`useFetch`) are race-safe by construction; only
+  imperative fetch+useEffect pages have the bug.** New shared hook
+  `lib/use-latest-request.ts` (seq counter + AbortController) applied to the 8
+  unguarded pages: sales/dashboard, AccumulativeChart, pos/reports,
+  reviews/geogrid (loadHistory), pickup/analytics (orders — `cancelled` flag),
+  loyalty/members (pagination — plain seq ref, helper takes no signal),
+  loyalty/loops, loyalty/dashboard. **Speed done:** per-row `pay_method`
+  correlated subquery (added in the payment work; on dashboard+compare every
+  request) → one batched `DISTINCT ON` (254/254 cent-exact vs subquery);
+  cashier phone-chunk member lookups → `Promise.all`. **Deferred/proposed
+  (change numbers or need care — NOT done):** z-report aggregates by
+  outlet+time-window not shift_id → two registers cross-contaminate
+  gross/net/tax (money bug) + its per-shift N+1; MYT date off-by-ones
+  (ops/performance, inventory purchase-summary + wastage, ads/grab,
+  reviews/dashboard, pickup/analytics — bucket to UTC not MYT, "to=today" can
+  show nothing); loyalty/members full-table item scan every mount;
+  supplier-scorecard 3×N fan-out; cogs full-scan→groupBy; optimizer unbounded
+  findMany→distinct; main dashboard triple per-outlet fan-out; cashflow
+  sequential awaits + triple BankStatementLine scan. loyalty/dashboard/kpi
+  route looks orphaned (no client consumer) — verify before optimizing.
+
 ## Lessons learned
 
 - 2026-07-14 — **Every upload control must accept drag & drop** (owner

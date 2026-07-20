@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Download, ArrowUpDown, ArrowUp, ArrowDown, Info, Search, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
+import { useLatestRequest } from "@/lib/use-latest-request";
 import { ReportsTabs } from "../_ReportsTabs";
 
 /**
@@ -87,24 +88,33 @@ export default function SalesReportsPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [page, setPage] = useState(1);
 
+  const beginRequest = useLatestRequest();
   const load = useCallback(async () => {
+    // Stale-response guard — Product/Category reports are heavy (full cost model
+    // over all outlets), so switching report/outlet quickly could let an older
+    // slow response overwrite the newer view. Only the latest request commits.
+    const { signal, isCurrent } = beginRequest();
     setLoading(true);
     try {
       const qs = new URLSearchParams({ report, from, to, outletId, groupBy });
-      const res = await adminFetch(`/api/sales/reports?${qs.toString()}`);
+      const res = await adminFetch(`/api/sales/reports?${qs.toString()}`, { signal });
+      if (!isCurrent()) return;
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Load failed");
       const json = (await res.json()) as ReportData;
+      if (!isCurrent()) return;
       setData(json);
       setSort(null);
       setSearch("");
       setCategories([]);
       setPage(1);
     } catch (e) {
+      if (!isCurrent()) return;
+      if (e instanceof DOMException && e.name === "AbortError") return;
       toast.error(e instanceof Error ? e.message : "Failed to load report");
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [report, from, to, outletId, groupBy]);
+  }, [report, from, to, outletId, groupBy, beginRequest]);
 
   useEffect(() => {
     load();

@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLatestRequest } from "@/lib/use-latest-request";
 
 // ─── Types (subset of the /api/sales/compare response) ───────────────────
 type Hourly = { hour: number; revenue: number; orders: number };
@@ -145,7 +146,9 @@ export function AccumulativeChart({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const beginRequest = useLatestRequest();
   const load = useCallback(async (m: Mode, outlet: string) => {
+    const { signal, isCurrent } = beginRequest();
     setLoading(true);
     setError(null);
     try {
@@ -153,18 +156,21 @@ export function AccumulativeChart({
       const periods = `${cur[0]}:${cur[1]},${prev[0]}:${prev[1]}`;
       let url = `/api/sales/compare?periods=${periods}`;
       if (outlet && outlet !== "all") url += `&outletId=${outlet}`;
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(url, { credentials: "include", signal });
+      if (!isCurrent()) return;
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}`);
       }
       setData(await res.json());
     } catch (e) {
+      if (!isCurrent()) return;
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, []);
+  }, [beginRequest]);
 
   useEffect(() => { load(mode, outletId); }, [mode, outletId, load]);
 
