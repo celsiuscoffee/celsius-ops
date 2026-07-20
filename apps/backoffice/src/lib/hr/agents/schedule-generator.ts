@@ -1390,7 +1390,6 @@ export async function generateSchedule(
   }
   const ptRows: ShiftRow[] = [];
   const ptSpend = { rm: 0 };
-  const filledBySlot = new Map<string, number>(); // `${date}:${slot}` → accepted PT count (for open-slot posting)
   const ptWeek = new Map<string, { hours: number; days: Set<string> }>();
   const ptHoursByDate = new Map<string, number>(); // PT man-hours suggested per day so far
   // Seed each PT's weekly tally from the hours/days they already hold at OTHER
@@ -1428,7 +1427,6 @@ export async function generateSchedule(
     ptWeek.set(person.id, wk);
     ptSpend.rm += cost;
     ptHoursByDate.set(p.date, (ptHoursByDate.get(p.date) ?? 0) + h);
-    filledBySlot.set(`${p.date}:${p.slot}`, (filledBySlot.get(`${p.date}:${p.slot}`) ?? 0) + 1);
     ptRows.push({
       user_id: person.id,
       shift_date: p.date,
@@ -1454,31 +1452,98 @@ export async function generateSchedule(
 
   // Open slots are computed HERE (before the unmanned QA) so the warnings can
   // tell "posted, waiting for a booking" apart from a genuinely dead hour.
-  const gapsBySlotKey = new Map<string, Gap[]>();
-  for (const g of gaps) {
-    const key = `${g.date}:${g.slot}`;
-    (gapsBySlotKey.get(key) ?? gapsBySlotKey.set(key, []).get(key)!).push(g);
-  }
+  //
+  // NOT the raw `gaps` list: gaps are the optimizer's candidate MENU — one
+  // entry per template whose window touches a short hour, so the SAME 1-head
+  // shortfall at 13:00 appears in Opening + all three Middles. Posting the
+  // menu put 5 overlapping slots on days that were ~2 shifts short (owner
+  // 2026-07-20: "why do we need 5-6 open slots that day?"). Instead: build
+  // the residual per-hour shortfall after FT + accepted PT, satisfy the
+  // structural anchors first, then greedily post the template covering the
+  // most remaining short-hours until the day is clear — the same "smallest
+  // crew" idea the day-split uses.
   const openSlotRows: Array<{
     outlet_id: string; shift_date: string; start_time: string; end_time: string;
     break_minutes: number; station: "kitchen" | "barista"; role_type: string;
     template_id: string; source: string; status: string; expires_at: string;
   }> = [];
-  for (const [key, slotGaps] of gapsBySlotKey) {
-    for (const g of slotGaps.slice(filledBySlot.get(key) ?? 0)) {
-      openSlotRows.push({
-        outlet_id: outletId,
-        shift_date: g.date,
-        start_time: hhmmss(g.template.start_time),
-        end_time: hhmmss(g.template.end_time),
-        break_minutes: g.template.break_minutes,
-        station: g.station,
-        role_type: g.template.label,
-        template_id: g.template.id,
-        source: "generator",
-        status: "open",
-        expires_at: `${g.date}T${hhmmss(g.template.start_time)}+08:00`,
-      });
+  const ptCoverAt = (d: string, h: number, station: "kitchen" | "barista") =>
+    ptRows.filter((r) => {
+      if (r.shift_date !== d) return false;
+      if (Number(r.start_time.slice(0, 2)) > h || Number(r.end_time.slice(0, 2)) <= h) return false;
+      const pos = posById.get(r.user_id) ?? null;
+      return station === "kitchen" ? isBOH(pos) : !isBOH(pos);
+    }).length;
+  const postSlot = (date: string, t: ShiftTemplate, station: "kitchen" | "barista") =>
+    openSlotRows.push({
+      outlet_id: outletId,
+      shift_date: date,
+      start_time: hhmmss(t.start_time),
+      end_time: hhmmss(t.end_time),
+      break_minutes: t.break_minutes,
+      station,
+      role_type: t.label,
+      template_id: t.id,
+      source: "generator",
+      status: "open",
+      expires_at: `${date}T${hhmmss(t.start_time)}+08:00`,
+    });
+  const allTemplates: ShiftTemplate[] = [tpl.opening, ...tpl.middles, tpl.closing];
+  const hoursOf = (t: ShiftTemplate) => {
+    const s = Number(t.start_time.slice(0, 2));
+    const e = Number(t.end_time.slice(0, 2));
+    return [s, e] as const;
+  };
+  for (const date of dates) {
+    if (!daysOpen.has(dow(date))) continue;
+    for (const station of ["kitchen", "barista"] as const) {
+      // Residual shortfall per hour after the FT base + accepted PT suggestions.
+      const short = new Map<number, number>();
+      let anyNeed = false;
+      for (let h = openH; h < closeH; h++) {
+        const need = station === "kitchen" ? kitNeedAt(date, h) : barNeedAt(date, h);
+        if (need > 0) anyNeed = true;
+        short.set(h, Math.max(0, need - staffedAt(date, h, station) - ptCoverAt(date, h, station)));
+      }
+      if (!anyNeed) continue;
+      // Structural anchors first: opening/closing each want STATION_ANCHOR_TARGET
+      // heads across their whole window.
+      for (const t of [tpl.opening, tpl.closing]) {
+        const [s, e] = hoursOf(t);
+        let minCover = Infinity;
+        for (let h = Math.max(s, openH); h < Math.min(e, closeH); h++) {
+          minCover = Math.min(minCover, staffedAt(date, h, station) + ptCoverAt(date, h, station));
+        }
+        if (!Number.isFinite(minCover)) continue;
+        for (let k = 0; k < STATION_ANCHOR_TARGET - minCover; k++) {
+          postSlot(date, t, station);
+          for (let h = Math.max(s, openH); h < Math.min(e, closeH); h++) {
+            short.set(h, Math.max(0, (short.get(h) ?? 0) - 1));
+          }
+        }
+      }
+      // Then the smallest template set that clears the remaining short hours.
+      for (let guard = 0; guard < 12; guard++) {
+        let best: ShiftTemplate | null = null;
+        let bestCover = 0;
+        for (const t of allTemplates) {
+          const [s, e] = hoursOf(t);
+          let cover = 0;
+          for (let h = Math.max(s, openH); h < Math.min(e, closeH); h++) {
+            if ((short.get(h) ?? 0) > 0) cover++;
+          }
+          if (cover > bestCover) {
+            bestCover = cover;
+            best = t;
+          }
+        }
+        if (!best || bestCover === 0) break;
+        postSlot(date, best, station);
+        const [s, e] = hoursOf(best);
+        for (let h = Math.max(s, openH); h < Math.min(e, closeH); h++) {
+          short.set(h, Math.max(0, (short.get(h) ?? 0) - 1));
+        }
+      }
     }
   }
   const slotCoverAt = (d: string, h: number, station: "kitchen" | "barista") =>
