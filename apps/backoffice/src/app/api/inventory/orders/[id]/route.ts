@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { computeDepositAmount } from "@/lib/inventory/deposit";
+import { mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
 import { sendPurchaseOrder } from "@/lib/inventory/procurement-po-send";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -230,12 +231,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         // P2002 as "another caller already created it, we're done".
         const existingInvoice = await prisma.invoice.findFirst({ where: { orderId: id } });
         if (!existingInvoice) {
-          const invCount = await prisma.invoice.count();
+          const placeholderNumber = await mintPlaceholderNumber(prisma, order.outletId);
           const depositAmount = await computeDepositAmount(order.supplierId, Number(order.totalAmount));
           try {
             await prisma.invoice.create({
               data: {
-                invoiceNumber: `INV-${String(invCount + 1).padStart(4, "0")}`,
+                invoiceNumber: placeholderNumber,
                 orderId: id,
                 outletId: order.outletId,
                 supplierId: order.supplierId,

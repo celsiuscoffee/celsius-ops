@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { adjustStockBalance } from "@/lib/stock";
 import { getUserFromHeaders } from "@/lib/auth";
 import { computeDepositAmount } from "@/lib/inventory/deposit";
+import { mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
 
 export async function GET(req: NextRequest) {
   // Auto-reconcile: fix PO statuses where receivings exist but the order is
@@ -383,8 +384,7 @@ export async function POST(req: NextRequest) {
           });
         }
       } else {
-        const invCount = await prisma.invoice.count();
-        const invoiceNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
+        const invoiceNumber = await mintPlaceholderNumber(prisma, outletId);
         const totalAmount = orderId
           ? (await prisma.order.findUnique({ where: { id: orderId }, select: { totalAmount: true } }))?.totalAmount ?? 0
           : items.reduce((s: number, i: { receivedQty: number; unitPrice?: number }) => s + (i.receivedQty * (i.unitPrice ?? 0)), 0);

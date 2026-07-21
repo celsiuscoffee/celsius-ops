@@ -12,7 +12,11 @@ export type InvoiceFlagCode =
   | "BANK_MISMATCH"
   // The POP-match verifier (AI) thinks this unpaid invoice was actually paid by a POP the
   // deterministic matcher dropped — surfaced for finance to confirm. meta holds the verdict.
-  | "POP_VERIFIER";
+  | "POP_VERIFIER"
+  // The AI-extracted invoice number's shape doesn't match this supplier's usual
+  // numbering (e.g. an "IVCT-#" number on a "1-15xxx" supplier) — likely the
+  // wrong document was attached. Verify against the photo.
+  | "NUMBER_FORMAT_MISMATCH";
 
 export type InvoiceFlag = {
   code: InvoiceFlagCode;
@@ -31,6 +35,7 @@ const FLAG_LABEL: Record<InvoiceFlagCode, string> = {
   AMOUNT_TOLERANCE_MATCH: "Amount matched within tolerance only",
   BANK_MISMATCH: "POP bank differs from supplier bank",
   POP_VERIFIER: "AI: a payment may have been missed — verify",
+  NUMBER_FORMAT_MISMATCH: "Invoice number doesn't match this supplier's numbering",
 };
 
 export function flagLabel(code: InvoiceFlagCode) {

@@ -550,6 +550,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   kitchen-gaps-first + ⚠ UNMANNED station warnings (Tamarind weekend
   kitchen catch). Open owner decision: Tamarind kitchen supply 12 vs 14
   anchor slots — raise PT cap / cross-train / accept flagged gaps.
+- 2026-07-18 — **GRNI namespacing + capture format guard (follow-up PR).** New
+  placeholders mint as `GRNI-<outletCode>-<n>` via
+  `lib/inventory/placeholder-number.ts` (6 mint sites switched; legacy `INV-#`
+  rows still recognised). POP matcher: number lookups now scope to the supplier
+  identified by the transfer's bank account, and placeholder-shaped refs
+  require amount/payee corroboration (they stay matchable — finance pays off
+  the card showing them). Capture: `numberShapeMatchesHistory` flags an
+  extracted number whose shape doesn't match the supplier's history
+  (NUMBER_FORMAT_MISMATCH flag) — would have caught the TMM/MnM contamination.
+  **Photo forensics (both "stolen number" rows read):** TMM CC001 RM509.76 row
+  (`ec3496d5…`) carries MnM's IVCT-00012381 photo AND number — its real TMM
+  number is unknown (likely paid by the unresolved 7/16 POP ref 9376518471);
+  MnM "1-15150" row (`bed3d671…`) is a DUPLICATE of IVCT-00012005 (same photo,
+  RM432 6/26) on a second PO — one real Jul-10 payment recorded on two rows.
+  Both corrections need owner sign-off (rename-to-true-number turned out
+  impossible; proposal = re-number TMM row pending SOA + resolve its POP, and
+  void/merge the MnM duplicate pair).
 
 - 2026-07-18 — **POP matcher: found the never-armed QA loop, armed it (PR #986
   branch).** Owner asked "is the matching agent improving itself?" — answer was

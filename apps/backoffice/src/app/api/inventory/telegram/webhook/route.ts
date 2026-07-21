@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import { v2 as cloudinary } from "cloudinary";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
+import { mintPlaceholderNumber, isPlaceholderNumber } from "@/lib/inventory/placeholder-number";
 import { createShortLink } from "@/lib/shortlink";
 import { detectPaymentFlags, appendInvoiceFlags } from "@/lib/inventory/flag-detector";
 import { computeDepositAmount } from "@/lib/inventory/deposit";
@@ -666,16 +667,50 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     }
   }
 
+  // When the transfer's recipient account identifies a supplier, every number
+  // lookup should be scoped to THAT supplier — a reference quoted on a payment
+  // to Yow Seng must never match another vendor's same-numbered row.
+  const accountDigits = pop.recipientAccount ? pop.recipientAccount.replace(/\D/g, "") : "";
+  const payeeSupplier =
+    accountDigits.length >= 6
+      ? await prisma.supplier.findFirst({
+          where: { bankAccountNumber: { contains: accountDigits }, status: "ACTIVE" },
+          select: { id: true },
+        })
+      : null;
+
   // 1. Try matching by invoice reference (most direct — invoice number in payment description)
   if (pop.invoiceReference) {
     let byInvoiceRef = await prisma.invoice.findMany({
       where: {
         invoiceNumber: { equals: pop.invoiceReference, mode: "insensitive" },
         status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
+        ...(payeeSupplier ? { supplierId: payeeSupplier.id } : {}),
       },
       include: invoiceInclude,
       take: 5,
     });
+    // A placeholder-shaped reference (GRNI-/INV-/TRF-<n>) is a number WE
+    // fabricated, not the supplier's — it's only trustworthy when something
+    // else on the receipt corroborates. Finance genuinely pays against
+    // placeholder numbers (the approve-to-pay card shows them), so they stay
+    // matchable — but each candidate must also match on amount (full or
+    // deposit) or payee tokens, or it's dropped to the safer stages below.
+    if (byInvoiceRef.length > 0 && !payeeSupplier && isPlaceholderNumber(pop.invoiceReference)) {
+      const GENERIC_PH = new Set(["sdn", "bhd", "the", "enterprise", "trading", "resources", "marketing", "malaysia"]);
+      const tok = (s: string) =>
+        s.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !GENERIC_PH.has(t));
+      const popTokens = new Set(pop.recipientName ? tok(pop.recipientName) : []);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      byInvoiceRef = byInvoiceRef.filter((inv: any) => {
+        const amtOk =
+          Math.abs(Number(inv.amount) - amount) <= 0.5 ||
+          (inv.depositAmount != null && Math.abs(Number(inv.depositAmount) - amount) <= 0.5);
+        const name = inv.supplier?.name ?? inv.vendorName ?? inv.order?.claimedBy?.name;
+        const payeeOk = name ? tok(name).some((t) => popTokens.has(t)) : false;
+        return amtOk || payeeOk;
+      });
+    }
     // The same number can sit on rows for DIFFERENT suppliers/outlets: GRNI
     // placeholders share one INV-<n> sequence across all suppliers, and capture
     // mistakes have stamped one vendor's number onto another's invoice (real
@@ -724,13 +759,9 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     }
   }
 
-  // 2. Try matching by supplier bank account (precise)
+  // 2. Try matching by supplier bank account (precise; lookup hoisted above)
   if (pop.recipientAccount) {
-    const accountDigits = pop.recipientAccount.replace(/\D/g, "");
-    const supplierByBank = await prisma.supplier.findFirst({
-      where: { bankAccountNumber: { contains: accountDigits }, status: "ACTIVE" },
-      select: { id: true },
-    });
+    const supplierByBank = payeeSupplier;
     if (supplierByBank) {
       const bankMatched = await prisma.invoice.findMany({
         where: {
@@ -1430,8 +1461,7 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
     // delivery; deposit is computed off that so a supplier charging 10%
     // deposit on RM 105 (RM 100 items + RM 5 delivery) gets RM 10.50, not
     // RM 10.00.
-    const invCount = await prisma.invoice.count();
-    const invoiceNumber = inv.invoiceNumber || `INV-${String(invCount + 1).padStart(4, "0")}`;
+    const invoiceNumber = inv.invoiceNumber || (await mintPlaceholderNumber(prisma, order.outlet.id));
     const depositAmount = await computeDepositAmount(order.supplierId, effectiveAmount);
 
     await prisma.invoice.create({

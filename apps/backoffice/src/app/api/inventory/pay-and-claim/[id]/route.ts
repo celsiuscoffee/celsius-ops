@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
 import { getUserFromHeaders } from "@/lib/auth";
 import { adjustStockBalance } from "@/lib/stock";
 
@@ -184,8 +185,7 @@ export async function PATCH(
       });
     } else {
       // Create invoice if none exists
-      const invCount = await prisma.invoice.count();
-      const invNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
+      const invNumber = await mintPlaceholderNumber(prisma, order.outletId);
       await prisma.invoice.create({
         data: {
           invoiceNumber: invNumber,
