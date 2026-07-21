@@ -373,6 +373,34 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-21 — **PWA pickup removal FINISHED (branch
+  `claude/pwa-pickup-removal-9qysgv`).** Owner screenshot showed a live
+  "PICKUP FROM Celsius Coffee Putrajaya" checkout in `apps/order` despite an
+  earlier "pickup removed" belief. Root cause: the removal had only cut the
+  two ENDS — the home entry (`_OutletRow` → "scan your table") and the SERVER
+  guard (`api/checkout/initiate` rejects non-dine_in with "use the Celsius
+  app"). The whole MIDDLE of the pickup funnel was still live: `/store` outlet
+  picker + `_StoreList`, `menu/_OutletGate` REDIRECTING no-outlet visitors to
+  `/store?next=menu`, `_OutletPickerRow` `/store` link, and `/cart` +
+  `/checkout` rendering the full "Pickup from {outlet}" branch with an enabled
+  Place-order button — so a direct visitor (bookmark, marketing URL, Google)
+  built a complete pickup order and only dead-ended at the final tap. Owner
+  chose **scan-your-table wall** for the no-table case. Shipped: new `/scan`
+  wall (`_ScanWall.tsx`; bounces a still-fresh dine-in context back to /menu,
+  else "scan the QR on your table" + Get-the-app CTA via `/get-app`).
+  `getDineInContext()` (checkout-session.ts, fresh<6h) is now the authoritative
+  "valid session" gate: `_OutletGate` redirects to /scan without it;
+  `/cart` + `/checkout` guard-redirect to /scan without it and always send
+  `orderType:"dine_in"`; pickup wording gone ("Pickup from" → "Table N ·
+  outlet"; outlet-closed banner "Switch/pick another outlet" → "order at the
+  counter", /store link dropped). `/store` is now a `redirect("/scan")` stub,
+  `_StoreList.tsx` DELETED, `_OutletPickerRow` non-dine-in branch returns null.
+  Server guard left intact (defense-in-depth). Native pickup app
+  (apps/pickup-native → `/api/orders`) UNTOUCHED — it's the intended pickup
+  channel. Typecheck + lint clean (order app). NOTE: `npm ci` fails on `sharp`
+  postinstall (libvips download 403 through the proxy) — use
+  `npm ci --ignore-scripts` for typecheck in this env.
+
 - 2026-07-20 (round 16) — **Slot-sizing saga: open slots now follow the FULL
   scheduling logic (PRs #1016 + #1017, both merged; #1015 merged + OTA'd
   earlier).** Owner pushed three times and was right each time. (1) "why 5-6

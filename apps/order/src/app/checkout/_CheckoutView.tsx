@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown, Check, Gift } from "lucide-react";
 import { StripePaymentForm } from "@/components/stripe-payment-form";
 import { PaymentBrandIcon } from "./_PaymentBrandIcon";
@@ -158,6 +159,7 @@ function readState(): Persisted["state"] {
 }
 
 export function CheckoutView() {
+  const router = useRouter();
   const [state, setState] = useState<NonNullable<Persisted["state"]> | null>(null);
   const [method, setMethod] = useState("card");
   const [placing, setPlacing] = useState(false);
@@ -186,27 +188,23 @@ export function CheckoutView() {
 
   useEffect(() => {
     const s = readState() ?? {};
-    // Dine-in is sourced from its OWN key, not the shared "celsius-pickup"
-    // blob — the blob's orderType/tableNumber get stripped between the
-    // table-QR landing and here (multiple writers + the Expo store's
-    // partialize), which is why scanned table orders were arriving as
-    // pickup. Trust the dedicated key only when it's for THIS outlet and
-    // recent, so a stale scan can't force a later pickup into dine-in.
-    try {
-      const draw = window.localStorage.getItem("celsius-dinein");
-      if (draw) {
-        const d = JSON.parse(draw) as { outletId?: string; tableNumber?: string; ts?: number };
-        const fresh = typeof d.ts === "number" && Date.now() - d.ts < 6 * 60 * 60 * 1000;
-        if (fresh && d.tableNumber && d.outletId && d.outletId === s.outletId) {
-          s.orderType = "dine_in";
-          s.tableNumber = d.tableNumber;
-        }
-      }
-    } catch {
-      /* ignore — fall back to whatever the blob says */
+    // Table-QR only. Dine-in is sourced from its OWN key, not the shared
+    // "celsius-pickup" blob — the blob's orderType/tableNumber get stripped
+    // between the table-QR landing and here (multiple writers + the Expo
+    // store's partialize), which is why scanned table orders were arriving as
+    // pickup. A fresh dine-in context for THIS outlet is REQUIRED: without one
+    // the visitor reached checkout without scanning a table (the retired
+    // pickup path), so funnel to the scan wall instead of rendering a pickup
+    // checkout that only dead-ends at the server guard.
+    const dine = getDineInContext();
+    if (!dine || dine.outletId !== s.outletId) {
+      router.replace("/scan");
+      return;
     }
+    s.orderType = "dine_in";
+    s.tableNumber = dine.tableNumber;
     setState(s);
-  }, []);
+  }, [router]);
 
   // Reconcile a leftover pending order on entry. If we came back to checkout
   // with an order that ALREADY went through (paid on the gateway, then tapped
@@ -393,7 +391,6 @@ export function CheckoutView() {
   }
 
   const cart = state.cart ?? [];
-  const isDineIn = state.orderType === "dine_in";
   if (cart.length === 0) {
     // Keep a dine-in customer in their table session — /menu carries the
     // dine-in context forward, so don't word it as "pickup".
@@ -434,8 +431,10 @@ export function CheckoutView() {
           paymentMethod: method,
           loyaltyPhone: state.phone ?? null,
           loyaltyId:    state.loyaltyId ?? null,
-          orderType:    state.orderType === "dine_in" ? "dine_in" : "pickup",
-          tableNumber:  state.orderType === "dine_in" ? (state.tableNumber ?? null) : null,
+          // Table-QR only — the load guard redirects anyone without a fresh
+          // dine-in context to /scan, so every order from here is dine-in.
+          orderType:    "dine_in",
+          tableNumber:  state.tableNumber ?? null,
           // Forward the applied reward so the server actually discounts
           // the order (otherwise the customer is charged full price).
           rewardId:          reward?.id ?? null,
@@ -534,15 +533,13 @@ export function CheckoutView() {
             className="uppercase"
             style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
           >
-            {isDineIn ? "Dine-in" : "Pickup from"}
+            Dine-in
           </p>
           <p
             className="font-peachi font-bold truncate"
             style={{ color: "#1A0200", fontSize: 15, marginTop: 4 }}
           >
-            {isDineIn
-              ? `Table ${state.tableNumber ?? ""} · ${state.outletName ?? ""}`.trim()
-              : state.outletName ?? "Select an outlet"}
+            {`Table ${state.tableNumber ?? ""} · ${state.outletName ?? ""}`.trim()}
           </p>
         </div>
       </section>

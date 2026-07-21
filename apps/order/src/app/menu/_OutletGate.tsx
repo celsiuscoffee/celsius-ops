@@ -2,27 +2,19 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getDineInContext } from "@/lib/checkout-session";
 
 /**
- * Force outlet pick before showing the menu — same gate as
- * apps/pickup-native/app/menu.tsx. If no outletId is in localStorage,
- * client-side redirect to /store?next=menu so the customer is
- * funnelled back to /menu after picking. Avoids the situation where a
- * customer browses the whole menu, hits checkout, and only then learns
- * they don't have an outlet selected.
+ * Dine-in gate for the menu. This app is table-QR ordering ONLY — a session
+ * exists only after the customer scans their table (which _TableEntry turns
+ * into a fresh dine-in context). Without one, funnel to /scan rather than the
+ * retired pickup outlet picker, so no one can browse the whole menu, hit
+ * checkout, and only then learn there's no valid table order to place.
  */
 export function OutletGate() {
   const router = useRouter();
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem("celsius-pickup");
-      const outletId = raw
-        ? (JSON.parse(raw) as { state?: { outletId?: string | null } }).state?.outletId
-        : null;
-      if (!outletId) router.replace("/store?next=menu");
-    } catch {
-      /* ignore */
-    }
+    if (!getDineInContext()) router.replace("/scan");
   }, [router]);
   return null;
 }
