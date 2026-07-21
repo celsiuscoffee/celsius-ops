@@ -946,6 +946,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   report, search-term batching, and registry registration were superseded the
   same day by the ads autopilot — next entry.)
 
+- 2026-07-21 — **Negative-keyword CONSOLIDATION (owner: "check if there is
+  still bad keywords paid" → "go ahead").** Found all 3 campaigns at 25/25
+  negative slots with ~RM170/mo junk still paid + stuck (slots full → last 2
+  runs excluded 0). Root cause: slots burned on literal near-dupes. Fix:
+  exclude broad ROOTS not literals (`negativeThemeRoot`/`exclusionPhrase`;
+  "zus" covers "zus near me"+"zus coffee" fuzzily + pre-blocks future
+  variants), `selectAutoExclusions` sums spend per root, one-time idempotent
+  `consolidateCampaignNegatives` swaps existing 25 literals→roots in the armed
+  nightly pass (removes literals=frees slots, adds roots, ledger
+  status='superseded'). Verified: applied exclusions DO stop spend (≤RM1.89
+  one-day propagation tail, not a leak); sync healthy (Google's ~2-day
+  search-term reporting lag, latest data Jul 19). Root lists exclude bare
+  "coffee"/"cafe" so café intent is never blocked. 483 tests green.
 - 2026-07-21 — **Hard-cut APPLIED + EFFECT.** Jul 20 run cut all 3 campaigns
   to RM55/day clean (fleet RM265.86→165). Cuts banked RM4,056/mo = 81% of
   RM5k. Till post-cut Jul 21 = RM6,660 fleet, inside normal RM6.5–8.4k band —

@@ -52,10 +52,23 @@ raise|revert|pause|restore`) — no extra tables.
 - **Never excluded**: café/coffee/breakfast intent, unknowns ("other" ≠
   useless). Human `rejected` ledger rows are a standing no; `failed` rows
   retry.
-- **Slot budget**: Smart campaigns cap negative keyword themes (~25).
-  `MAX_NEGATIVES_PER_CAMPAIGN=25`, highest measured cost first (≥RM2/30d,
-  ≤15/campaign/run); **seeded exclusions** (fleet-proven junk transferred to
-  campaigns without their own term data, cost NULL) only fill leftover slots.
+- **Broad ROOTS, not literals (2026-07-21):** exclusions are written as broad
+  negative-theme roots (`negativeThemeRoot`/`exclusionPhrase` in term-rules) —
+  "zus" not "zus near me", "coffee bean" not "coffee bean shah alam",
+  "restaurant" not "restaurants near me". Google themes are fuzzy so one root
+  blocks all variants AND pre-blocks future ones, using far fewer of the ~25
+  negative slots. `selectAutoExclusions` groups spend by root and sums it;
+  seeds emit roots too. A one-time idempotent `consolidateCampaignNegatives`
+  (runs in the armed nightly pass, `consolidate-negatives.ts`) swaps the
+  existing 25 literal negatives per campaign for roots — removes the literals
+  (freeing slots), adds the roots, ledgers removed rows status='superseded'.
+  Root lists never overlap café intent ("coffee bean" is a brand; bare
+  "coffee" is deliberately absent).
+- **Slot budget**: `MAX_NEGATIVES_PER_CAMPAIGN=25`, highest measured cost
+  first (≥RM2/30d summed per root, ≤15/campaign/run); seeded roots fill
+  leftover slots. **Why this was needed:** by 2026-07-21 all three campaigns
+  hit 25/25 on literals with junk still un-excluded — consolidation freed the
+  slots.
 - Google negative THEMES match related searches (fuzzy) — e.g. "kopitiam
   near me" is collateral of the kedai-makan/restaurants themes. Monitor
   café-intent impressions.

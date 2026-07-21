@@ -84,6 +84,7 @@ import { applyBudgetChange } from "./set-budget";
 import { pauseCampaign, enableCampaign } from "./pause-campaign";
 import { applyTermExclusion } from "./exclude-term";
 import { selectAutoExclusions, selectSeedExclusions, type ExclusionCandidate } from "./term-rules";
+import { consolidateCampaignNegatives } from "./consolidate-negatives";
 import { microsToMYR } from "./client";
 
 export const AGENT_KEY = "ads_autopilot";
@@ -777,6 +778,20 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     pendingWasteByCampaign.set(x.campaignId, (pendingWasteByCampaign.get(x.campaignId) ?? 0) + daily);
   }
 
+  // One-time (idempotent) consolidation of literal negatives → broad roots,
+  // BEFORE the slot count is read, so freed slots are usable this same run.
+  // No-op once every campaign is already consolidated.
+  const consolidations: Record<string, { added: number; removed: number; error?: string }> = {};
+  if (mode === "armed") {
+    for (const c of campaigns.filter((c) => ENABLED_STATUSES.includes(c.status))) {
+      try {
+        consolidations[c.name] = await consolidateCampaignNegatives(c.id);
+      } catch (e) {
+        consolidations[c.name] = { added: 0, removed: 0, error: (e as Error).message };
+      }
+    }
+  }
+
   // Exclusions run BEFORE budget decisions so tonight's exclusions and the
   // matching budget cut land in the SAME run (exclude → cut, paired). In
   // armed mode only successfully-applied exclusions count toward the cut.
@@ -968,7 +983,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
       `${exclusions.length} term exclusion(s) | cash vs RM${CASH_TARGET_MONTHLY_MYR} target: cuts RM${scoreboard.cutsMonthlyMyr}/mo` +
       `${scoreboard.salesMonthlyMyr != null ? ` + till Δ RM${scoreboard.salesMonthlyMyr}/mo` : ""} = RM${scoreboard.netMonthlyMyr}/mo (${scoreboard.pctOfTarget}%)`,
     refTable: "ads_budget_change",
-    meta: { decisions, exclusions: exclusions.slice(0, 30), guards, scoreboard },
+    meta: { decisions, exclusions: exclusions.slice(0, 30), guards, scoreboard, consolidations },
   });
 
   return { mode, decisions, exclusions, guards, scoreboard };
