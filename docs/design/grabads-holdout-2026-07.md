@@ -179,6 +179,39 @@ Full size confirmation at the **Jul 30** read. Open item: pull Putrajaya's own
 last-30-day dashboard was done (3.11×); no re-enable needed — all three are on the
 cash-positive side of the 2.22× break-even.
 
+### 2026-07-21 — latest read (5 clean days SA/Tam, 3 Putrajaya; today dropped as partial)
+
+Median-baseline decrement per outlet, and net cash = ad-saved/day − drop×0.451:
+
+| Outlet | Clean days | Grab/day | Baseline | Drop/day | **Net cash/mo (face value)** |
+|---|---|---|---|---|---|
+| Tamarind | 5 | RM261 | RM268 | −RM7 (flat) | **+RM1,145** |
+| Putrajaya | 3 | RM246 | RM344 | −RM98 | **+RM1,259** |
+| Shah Alam | 5 | RM268 | RM488 | −RM220 | −RM2,073 (artifact) |
+
+**Shah Alam's −RM2,073 is a false negative** — same over-attribution trap: a RM30/day
+ad cannot cause a RM220/day drop (7.3× ROAS; the dashboard proves 1.87×, ~RM46/day).
+So ~RM174/day of SA's drop is **Grab-channel softness, not the ad.** Corrected via SA's
+verified marginal P&L → SA pause ≈ **+RM250/mo**.
+
+**Corrected latest increment:**
+
+| Outlet | Net cash/mo |
+|---|---|
+| Tamarind | +RM1,145 |
+| Putrajaya | +RM1,000–1,260 |
+| Shah Alam | +RM250 (corrected) |
+| **Total** | **≈ +RM2,400–2,650/mo (~RM29–32k/yr)** |
+
+Tamarind (flat sales) and Putrajaya (−RM98/day ≈ 1.1× incremental, below break-even)
+both confirm positive on real data.
+
+**Operational flag (separate from the ad decision):** Shah Alam Grab is down ~45% for
+a week+ (RM268 vs RM488 baseline) **while its till is healthy** — too big/persistent for
+its 5%-of-gross ad. Likely a Grab store issue (rating / visibility / availability) around
+mid-July. Investigate independently; it does NOT change the pause verdict. Final size at
+the Jul 30 read.
+
 ## How to read it (per outlet)
 1. `decrement/day = baseline(weekday) − actual Grab gross`.
 2. `incremental ROAS = (monthly decrement) ÷ (monthly GrabAds spend)`.
