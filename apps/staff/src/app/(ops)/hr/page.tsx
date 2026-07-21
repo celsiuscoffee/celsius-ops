@@ -31,7 +31,7 @@ type AllowanceBreakdown = {
   levers: AllowanceLever[];
   performanceEarned: number;
   attendance: { deductions: { kind: string; label: string; amount: number; date?: string }[]; lateCount: number; absentCount: number; total: number };
-  reviewPenalty: { total: number; entries: { id: string; reviewDate: string; rating: number; amount: number }[] };
+  reviewPenalty: { total: number; entries: { id: string; reviewDate: string; rating: number; amount: number; reviewText?: string | null }[] };
   totalEarned: number;
   totalMax: number;
   tip: string;
@@ -253,7 +253,7 @@ export default function HRHomePage() {
                 )}
               </div>
 
-              {/* Deductions */}
+              {/* Deductions — itemized with reason, mirrors backoffice */}
               {((allowance.attendance?.total ?? 0) > 0 || (allowance.reviewPenalty?.total ?? 0) > 0) && (
                 <div className="rounded-xl bg-red-50 p-3">
                   <div className="mb-1 flex items-center justify-between text-sm">
@@ -263,13 +263,56 @@ export default function HRHomePage() {
                     </div>
                     <span className="font-semibold text-red-700">−RM {(allowance.attendance?.total ?? 0) + (allowance.reviewPenalty?.total ?? 0)}</span>
                   </div>
-                  <p className="text-xs text-red-600">
-                    {[
-                      (allowance.attendance?.lateCount ?? 0) > 0 ? `${allowance.attendance?.lateCount} late` : null,
-                      (allowance.attendance?.absentCount ?? 0) > 0 ? `${allowance.attendance?.absentCount} absence` : null,
-                      (allowance.reviewPenalty?.total ?? 0) > 0 ? `${(allowance.reviewPenalty?.entries ?? []).length} review penalty` : null,
-                    ].filter(Boolean).join(", ")} this month.
-                  </p>
+                  <div className="flex flex-wrap gap-3 text-[11px] text-red-600">
+                    <span>Late {allowance.attendance?.lateCount ?? 0}</span>
+                    <span>No-show {allowance.attendance?.absentCount ?? 0}</span>
+                    {(allowance.reviewPenalty?.entries ?? []).length > 0 && (
+                      <span>Review {(allowance.reviewPenalty?.entries ?? []).length}</span>
+                    )}
+                  </div>
+
+                  {/* Itemized attendance deductions — date · reason · amount */}
+                  {(allowance.attendance?.deductions ?? []).length > 0 && (
+                    <details className="mt-2 text-xs">
+                      <summary className="cursor-pointer select-none text-red-700 hover:text-red-800">
+                        {(allowance.attendance?.deductions ?? []).length} deduction{(allowance.attendance?.deductions ?? []).length === 1 ? "" : "s"} — tap to view
+                      </summary>
+                      <ul className="mt-1.5 space-y-1 text-red-700">
+                        {(allowance.attendance?.deductions ?? []).map((d, i) => (
+                          <li key={i} className="flex items-start justify-between gap-2">
+                            <span>
+                              {d.date ? <span className="mr-1 font-mono text-[10px] text-red-500">{d.date}</span> : null}
+                              {d.label}
+                            </span>
+                            <span className="shrink-0 font-semibold">−RM {d.amount}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+
+                  {/* Review penalties — stars · date · reason text */}
+                  {(allowance.reviewPenalty?.entries ?? []).length > 0 && (
+                    <details className="mt-2 text-xs">
+                      <summary className="cursor-pointer select-none text-red-700 hover:text-red-800">
+                        {(allowance.reviewPenalty?.entries ?? []).length} review penalt{(allowance.reviewPenalty?.entries ?? []).length === 1 ? "y" : "ies"} — tap to view
+                      </summary>
+                      <ul className="mt-1.5 space-y-1 text-red-700">
+                        {(allowance.reviewPenalty?.entries ?? []).map((e) => (
+                          <li key={e.id} className="flex flex-wrap items-center gap-1.5">
+                            <span className="flex shrink-0 items-center">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <Star key={i} className={`h-3 w-3 ${i < e.rating ? "fill-red-500 text-red-500" : "text-red-200"}`} />
+                              ))}
+                            </span>
+                            <span className="font-mono text-[10px] text-red-500">{e.reviewDate}</span>
+                            <span className="font-semibold">−RM {e.amount}</span>
+                            {e.reviewText && <span className="w-full truncate italic text-red-600">&ldquo;{e.reviewText}&rdquo;</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
                 </div>
               )}
 

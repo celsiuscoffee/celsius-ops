@@ -122,6 +122,7 @@ export default function HrIndex() {
   const router = useRouter();
   const [clock, setClock] = useState<ClockStatus | null>(null);
   const [allowance, setAllowance] = useState<AllowanceBreakdown | null>(null);
+  const [deductionsOpen, setDeductionsOpen] = useState(false);
   const [reviewsCount, setReviewsCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -252,26 +253,96 @@ export default function HrIndex() {
 
             {(allowance.attendance?.total ?? 0) > 0 ||
             (allowance.reviewPenalty?.total ?? 0) > 0 ? (
-              <View className="mt-3 flex-row items-center justify-between rounded-2xl bg-surface px-3 py-2.5">
-                <View>
-                  <Text className="text-sm font-body-semi text-espresso">
-                    Deductions
+              <View className="mt-3 rounded-2xl bg-surface px-3 py-2.5">
+                {/* Header row — tap to expand the itemized reasons */}
+                <Pressable
+                  onPress={() => setDeductionsOpen((v) => !v)}
+                  className="flex-row items-center justify-between active:opacity-70"
+                >
+                  <View className="flex-1">
+                    <Text className="text-sm font-body-semi text-espresso">
+                      Deductions
+                    </Text>
+                    <Text className="text-xs font-body text-muted">
+                      {allowance.attendance?.lateCount ?? 0} late ·{" "}
+                      {allowance.attendance?.absentCount ?? 0} no-show
+                      {(allowance.reviewPenalty?.entries?.length ?? 0) > 0
+                        ? ` · ${allowance.reviewPenalty.entries.length} review`
+                        : ""}{" "}
+                      · tap to view
+                    </Text>
+                  </View>
+                  <Text className="mr-2 text-base font-body-bold text-danger">
+                    - RM{" "}
+                    {Number(
+                      (allowance.attendance?.total ?? 0) +
+                        (allowance.reviewPenalty?.total ?? 0),
+                    ).toFixed(2)}
                   </Text>
-                  <Text className="text-xs font-body text-muted">
-                    {allowance.attendance?.lateCount ?? 0} late ·{" "}
-                    {allowance.attendance?.absentCount ?? 0} absent
-                    {(allowance.reviewPenalty?.entries?.length ?? 0) > 0
-                      ? ` · ${allowance.reviewPenalty.entries.length} review`
-                      : ""}
-                  </Text>
-                </View>
-                <Text className="text-base font-body-bold text-danger">
-                  - RM{" "}
-                  {Number(
-                    (allowance.attendance?.total ?? 0) +
-                      (allowance.reviewPenalty?.total ?? 0),
-                  ).toFixed(2)}
-                </Text>
+                  <ChevronRight
+                    color="#D1D5DB"
+                    size={16}
+                    style={{
+                      transform: [
+                        { rotate: deductionsOpen ? "90deg" : "0deg" },
+                      ],
+                    }}
+                  />
+                </Pressable>
+
+                {/* Itemized list — date · reason · amount */}
+                {deductionsOpen ? (
+                  <View className="mt-2 gap-1.5 border-t border-border pt-2">
+                    {(allowance.attendance?.deductions ?? []).map((d, i) => (
+                      <View
+                        key={`att-${i}`}
+                        className="flex-row items-start justify-between gap-2"
+                      >
+                        <Text className="flex-1 text-xs font-body text-espresso">
+                          {d.date ? (
+                            <Text className="font-mono text-[10px] text-muted">
+                              {d.date}{"  "}
+                            </Text>
+                          ) : null}
+                          {d.label}
+                        </Text>
+                        <Text className="text-xs font-body-semi text-danger">
+                          - RM {Number(d.amount).toFixed(2)}
+                        </Text>
+                      </View>
+                    ))}
+                    {(allowance.reviewPenalty?.entries ?? []).map((e) => (
+                      <View key={`rev-${e.id}`} className="gap-0.5">
+                        <View className="flex-row items-center justify-between gap-2">
+                          <View className="flex-row items-center">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                size={11}
+                                color="#DC2626"
+                                fill={i < e.rating ? "#DC2626" : "transparent"}
+                              />
+                            ))}
+                            <Text className="ml-1.5 font-mono text-[10px] text-muted">
+                              {e.reviewDate}
+                            </Text>
+                          </View>
+                          <Text className="text-xs font-body-semi text-danger">
+                            - RM {Number(e.amount).toFixed(2)}
+                          </Text>
+                        </View>
+                        {e.reviewText ? (
+                          <Text
+                            className="text-[11px] font-body italic text-muted-fg"
+                            numberOfLines={2}
+                          >
+                            “{e.reviewText}”
+                          </Text>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
               </View>
             ) : null}
 
