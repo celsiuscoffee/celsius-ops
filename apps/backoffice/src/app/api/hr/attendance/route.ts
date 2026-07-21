@@ -4,9 +4,27 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds } from "@/lib/hr/scope";
 import { signAttendancePhotos } from "@/lib/hr/photos";
-import { deriveHours, mytDateString, mytDayOfWeek } from "@/lib/hr/hours";
+import { deriveHours, mytDateString, mytDayOfWeek, computeLateMinutes } from "@/lib/hr/hours";
+import { haversineDistance } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
+
+// Shape of a raw hr_attendance_logs row (select "*") for the fields the GET
+// enrichment reads. Kept local so the route doesn't depend on the full UI type.
+type AttendanceLogRow = {
+  user_id: string;
+  outlet_id: string;
+  clock_in: string;
+  clock_out: string | null;
+  clock_in_lat: number | null;
+  clock_in_lng: number | null;
+  clock_out_lat: number | null;
+  clock_out_lng: number | null;
+  scheduled_start: string | null;
+  scheduled_date: string | null;
+  clock_in_photo_url: string | null;
+  clock_out_photo_url: string | null;
+};
 
 // GET: list attendance logs with filters
 export async function GET(req: NextRequest) {
@@ -49,6 +67,17 @@ export async function GET(req: NextRequest) {
   if (outletFilterIds !== null) {
     query = query.in("outlet_id", outletFilterIds);
   }
+  // Optional day filter — `date` is a Malaysia-wall-time YYYY-MM-DD; translate
+  // to the UTC half-open [00:00, next-00:00) window so it matches clock_in.
+  const dateParam = searchParams.get("date");
+  if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+    const startMs = Date.parse(`${dateParam}T00:00:00+08:00`);
+    if (!Number.isNaN(startMs)) {
+      const startIso = new Date(startMs).toISOString();
+      const endIso = new Date(startMs + 24 * 3600 * 1000).toISOString();
+      query = query.gte("clock_in", startIso).lt("clock_in", endIso);
+    }
+  }
 
   const { data: rawData, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -88,14 +117,37 @@ export async function GET(req: NextRequest) {
   const userMap = new Map(users.map((u) => [u.id, u]));
   const outletMap = new Map(outlets.map((o) => [o.id, o.name]));
 
+  // Geofence zone per outlet — lets us show the manager how far each clock
+  // punch was from the outlet and whether it fell inside the allowed radius.
+  const { data: zones } = outletIds.length > 0
+    ? await hrSupabaseAdmin
+        .from("hr_geofence_zones")
+        .select("outlet_id, latitude, longitude, radius_meters, is_active")
+        .in("outlet_id", outletIds as string[])
+        .eq("is_active", true)
+    : { data: [] as { outlet_id: string; latitude: number; longitude: number; radius_meters: number }[] };
+  const zoneMap = new Map(
+    (zones || []).map((z) => [z.outlet_id, z]),
+  );
+
   // Attendance selfies live in a PRIVATE bucket — swap the stored path for a
   // short-lived signed URL so the review UI can render them without exposure.
   const photoMap = await signAttendancePhotos(
     (data || []).flatMap((l: { clock_in_photo_url: string | null; clock_out_photo_url: string | null }) => [l.clock_in_photo_url, l.clock_out_photo_url]),
   );
 
-  const enriched = (data || []).map((log: { user_id: string; outlet_id: string; clock_in_photo_url: string | null; clock_out_photo_url: string | null }) => {
+  const distTo = (
+    zone: { latitude: number; longitude: number } | undefined,
+    lat: number | null,
+    lng: number | null,
+  ): number | null =>
+    zone && lat != null && lng != null
+      ? Math.round(haversineDistance(Number(lat), Number(lng), Number(zone.latitude), Number(zone.longitude)))
+      : null;
+
+  const enriched = (data || []).map((log: AttendanceLogRow) => {
     const u = userMap.get(log.user_id);
+    const zone = zoneMap.get(log.outlet_id);
     return {
       ...log,
       clock_in_photo_url: log.clock_in_photo_url ? (photoMap.get(log.clock_in_photo_url) ?? null) : null,
@@ -103,6 +155,12 @@ export async function GET(req: NextRequest) {
       user_name: u?.fullName || u?.name || null,
       user_nickname: u?.name || null,
       outlet_name: outletMap.get(log.outlet_id) || null,
+      // Manager context: how late vs the roster, and how far each punch landed
+      // from the outlet against the allowed geofence radius.
+      late_minutes: computeLateMinutes(log.clock_in, log.scheduled_start, log.scheduled_date ?? mytDateString(new Date(log.clock_in))),
+      clock_in_distance_m: distTo(zone, log.clock_in_lat, log.clock_in_lng),
+      clock_out_distance_m: distTo(zone, log.clock_out_lat, log.clock_out_lng),
+      geofence_radius_m: zone ? Number(zone.radius_meters) : null,
     };
   });
 

@@ -2,7 +2,7 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, MapPinOff, Clock, Timer, Loader2, ImageOff, PencilLine } from "lucide-react";
+import { AlertTriangle, CheckCircle2, MapPin, MapPinOff, Clock, Timer, Loader2, ImageOff, PencilLine, Smartphone, Hand, WifiOff } from "lucide-react";
 import { usePrompt } from "@celsius/ui";
 import { HrPageHeader } from "@/components/hr/page-header";
 import type { AttendanceLog } from "@/lib/hr/types";
@@ -11,7 +11,62 @@ type EnrichedLog = AttendanceLog & {
   user_name: string | null;
   user_nickname: string | null;
   outlet_name: string | null;
+  late_minutes: number;
+  clock_in_distance_m: number | null;
+  clock_out_distance_m: number | null;
+  geofence_radius_m: number | null;
 };
+
+const timeMyt = (iso: string) =>
+  new Date(iso).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
+
+// Minutes → "1h 05m" / "45m" for readable lateness.
+const fmtMins = (m: number) => {
+  const a = Math.abs(m);
+  return a >= 60 ? `${Math.floor(a / 60)}h ${String(a % 60).padStart(2, "0")}m` : `${a}m`;
+};
+
+const CLOCK_METHOD: Record<string, { label: string; icon: typeof Smartphone; color: string }> = {
+  app: { label: "GPS", icon: Smartphone, color: "text-gray-500" },
+  app_nogps: { label: "No GPS", icon: WifiOff, color: "text-amber-600" },
+  app_offsite: { label: "Off-site", icon: MapPinOff, color: "text-red-600" },
+  manual: { label: "Manual", icon: Hand, color: "text-blue-600" },
+  pos: { label: "POS", icon: Smartphone, color: "text-gray-500" },
+  system: { label: "Auto", icon: Timer, color: "text-gray-500" },
+};
+
+// A single clock punch's location chip: distance vs the geofence radius, with a
+// maps link. Green if inside the allowed radius, red if outside, grey if no GPS.
+function GeoChip({ label, lat, lng, distance, radius }: {
+  label: string;
+  lat: number | null;
+  lng: number | null;
+  distance: number | null;
+  radius: number | null;
+}) {
+  if (lat == null || lng == null) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gray-50 px-2 py-0.5 text-[11px] text-gray-500">
+        <MapPinOff className="h-3 w-3" /> {label}: no GPS
+      </span>
+    );
+  }
+  const outside = distance != null && radius != null && distance > radius;
+  const cls = outside ? "text-red-600 bg-red-50" : distance != null ? "text-green-700 bg-green-50" : "text-gray-600 bg-gray-50";
+  return (
+    <a
+      href={`https://maps.google.com/?q=${lat},${lng}`}
+      target="_blank"
+      rel="noreferrer"
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium hover:underline ${cls}`}
+      title="Open in Google Maps"
+    >
+      <MapPin className="h-3 w-3" />
+      {label}: {distance != null ? `${distance}m` : "located"}
+      {outside && radius != null ? ` · outside ${radius}m zone` : distance != null && radius != null ? " · in zone" : ""}
+    </a>
+  );
+}
 
 const FLAG_LABELS: Record<string, { label: string; icon: typeof AlertTriangle; color: string }> = {
   outside_geofence: { label: "Outside zone", icon: MapPinOff, color: "text-red-600 bg-red-50" },
@@ -23,7 +78,14 @@ const FLAG_LABELS: Record<string, { label: string; icon: typeof AlertTriangle; c
 
 export default function AttendanceReviewPage() {
   const [filter, setFilter] = useState<"flagged" | "all">("flagged");
-  const { data, mutate } = useFetch<{ logs: EnrichedLog[]; count: number }>(`/api/hr/attendance?status=${filter}`);
+  const [outletId, setOutletId] = useState<string>("");
+  const [date, setDate] = useState<string>("");
+  const { data: scheduleList } = useFetch<{ outlets: { id: string; name: string }[] }>("/api/hr/schedules");
+  const outlets = scheduleList?.outlets ?? [];
+  const qs = new URLSearchParams({ status: filter });
+  if (outletId) qs.set("outlet_id", outletId);
+  if (date) qs.set("date", date);
+  const { data, mutate } = useFetch<{ logs: EnrichedLog[]; count: number }>(`/api/hr/attendance?${qs.toString()}`);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // "Fix times" inline editor: which log is being edited + its MYT-input values.
@@ -105,19 +167,47 @@ export default function AttendanceReviewPage() {
             : `${logs.length} attendance log${logs.length !== 1 ? "s" : ""}`
         }
         action={
-          <div className="flex gap-1 rounded-lg border bg-card p-1 text-sm">
-            <button
-              onClick={() => setFilter("flagged")}
-              className={`rounded-md px-3 py-1.5 font-medium ${filter === "flagged" ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={outletId}
+              onChange={(e) => setOutletId(e.target.value)}
+              className="rounded-lg border bg-card px-2.5 py-1.5 text-sm text-foreground"
+              title="Filter by outlet"
             >
-              Flagged
-            </button>
-            <button
-              onClick={() => setFilter("all")}
-              className={`rounded-md px-3 py-1.5 font-medium ${filter === "all" ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
-            >
-              All
-            </button>
+              <option value="">All outlets</option>
+              {outlets.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="rounded-lg border bg-card px-2.5 py-1.5 text-sm text-foreground"
+              title="Filter by date"
+            />
+            {(outletId || date) && (
+              <button
+                onClick={() => { setOutletId(""); setDate(""); }}
+                className="rounded-lg border px-2.5 py-1.5 text-sm text-gray-600 hover:bg-muted"
+              >
+                Clear
+              </button>
+            )}
+            <div className="flex gap-1 rounded-lg border bg-card p-1 text-sm">
+              <button
+                onClick={() => setFilter("flagged")}
+                className={`rounded-md px-3 py-1.5 font-medium ${filter === "flagged" ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
+              >
+                Flagged
+              </button>
+              <button
+                onClick={() => setFilter("all")}
+                className={`rounded-md px-3 py-1.5 font-medium ${filter === "all" ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
+              >
+                All
+              </button>
+            </div>
           </div>
         }
       />
@@ -126,7 +216,10 @@ export default function AttendanceReviewPage() {
         <div className="flex flex-col items-center justify-center rounded-xl border bg-card py-16 text-center">
           <CheckCircle2 className="mb-3 h-12 w-12 text-green-500" />
           <p className="text-lg font-semibold">All clear</p>
-          <p className="text-sm text-muted-foreground">No flagged attendance items</p>
+          <p className="text-sm text-muted-foreground">
+            {filter === "flagged" ? "No flagged attendance items" : "No attendance logs"}
+            {(outletId || date) ? " for this filter" : ""}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -134,20 +227,32 @@ export default function AttendanceReviewPage() {
             <div key={log.id} className="rounded-xl border bg-card p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
-                  {/* Clock-in photo */}
-                  {log.clock_in_photo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={log.clock_in_photo_url}
-                      alt="Clock-in"
-                      className="h-14 w-14 flex-shrink-0 cursor-zoom-in rounded-lg object-cover"
-                      onClick={() => setPreviewUrl(log.clock_in_photo_url)}
-                    />
-                  ) : (
-                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                      <ImageOff className="h-5 w-5" />
-                    </div>
-                  )}
+                  {/* Clock-in & clock-out selfies */}
+                  <div className="flex flex-shrink-0 gap-1">
+                    {log.clock_in_photo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={log.clock_in_photo_url}
+                        alt="Clock-in"
+                        className="h-14 w-14 flex-shrink-0 cursor-zoom-in rounded-lg object-cover"
+                        onClick={() => setPreviewUrl(log.clock_in_photo_url)}
+                      />
+                    ) : (
+                      <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                        <ImageOff className="h-5 w-5" />
+                      </div>
+                    )}
+                    {log.clock_out_photo_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={log.clock_out_photo_url}
+                        alt="Clock-out"
+                        className="h-14 w-14 flex-shrink-0 cursor-zoom-in rounded-lg object-cover opacity-90"
+                        onClick={() => setPreviewUrl(log.clock_out_photo_url)}
+                        title="Clock-out selfie"
+                      />
+                    )}
+                  </div>
                   <div className="min-w-0">
                     <p className="font-semibold truncate">
                       {log.user_name || log.user_id.slice(0, 8) + "..."}
@@ -158,14 +263,40 @@ export default function AttendanceReviewPage() {
                     <p className="text-sm text-muted-foreground">
                       {log.outlet_name && <span>{log.outlet_name} &middot; </span>}
                       {new Date(log.clock_in).toLocaleDateString("en-MY")} &middot;{" "}
-                      {new Date(log.clock_in).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}
-                      {log.clock_out && (
-                        <> &rarr; {new Date(log.clock_out).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}</>
-                      )}
+                      {timeMyt(log.clock_in)}
+                      {log.clock_out && <> &rarr; {timeMyt(log.clock_out)}</>}
+                      {log.total_hours != null && <span> &middot; {log.total_hours}h{(log.overtime_hours ?? 0) > 0 ? ` (${log.overtime_hours}h OT)` : ""}</span>}
                     </p>
-                    {log.total_hours != null && (
-                      <p className="text-sm text-muted-foreground">{log.total_hours}h total</p>
+                    {/* Scheduled vs actual — how late / early vs the roster */}
+                    {log.scheduled_start && (
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Rostered {timeMyt(log.scheduled_start)}{log.scheduled_end ? `–${timeMyt(log.scheduled_end)}` : ""} · </span>
+                        {log.late_minutes > 2 ? (
+                          <span className="font-medium text-amber-600">{fmtMins(log.late_minutes)} late</span>
+                        ) : log.late_minutes < -2 ? (
+                          <span className="text-green-700">{fmtMins(log.late_minutes)} early</span>
+                        ) : (
+                          <span className="text-green-700">on time</span>
+                        )}
+                      </p>
                     )}
+                    {/* Geo + clock method context */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <GeoChip label="In" lat={log.clock_in_lat} lng={log.clock_in_lng} distance={log.clock_in_distance_m} radius={log.geofence_radius_m} />
+                      {log.clock_out && (
+                        <GeoChip label="Out" lat={log.clock_out_lat} lng={log.clock_out_lng} distance={log.clock_out_distance_m} radius={log.geofence_radius_m} />
+                      )}
+                      {[log.clock_in_method, log.clock_out_method].filter((m, i, a) => m && a.indexOf(m) === i).map((m) => {
+                        const info = CLOCK_METHOD[m as string];
+                        if (!info) return null;
+                        const Icon = info.icon;
+                        return (
+                          <span key={m} className={`inline-flex items-center gap-1 text-[11px] ${info.color}`}>
+                            <Icon className="h-3 w-3" /> {info.label}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
                 <div className="flex flex-shrink-0 flex-wrap justify-end gap-2">
