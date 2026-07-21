@@ -393,6 +393,22 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-22 — **POP matcher: separator-tolerant invoice-reference matching
+  (PR #1024).** Owner asked why a RM148 Blancoz payment was in the Confirm-POP
+  queue when the receipt named its invoice. Root cause: the receipt quoted
+  `26 0677` (space, off the bank app) for our `26-0677` (hyphen); step-1's
+  exact-equality match and step-8's raw-`contains` guard both missed on the
+  separator, so it fell to the blind picker against unrelated same-amount
+  siblings (26-0713/0714/0746). Fix: `normalizeInvoiceRef` folds both sides to
+  an alphanumeric key before comparing — step 1 gains a normalised fallback
+  over the open-invoice pool (supplier-scoped, exact normalised equality so
+  `260677`≠`1260677`); step 8's named-invoice lookup prefilters on the longest
+  digit run then compares folded keys. Also cleaned the stuck record: attached
+  ref `936475062M` to the already-PAID 26-0677 + RESOLVED the stale PendingPop
+  (d306da79) → the three phantom badges cleared. Owner insight worth acting on:
+  finance IS quoting invoice numbers on transfers — the more consistently that
+  ref lands in the payment detail, the fewer POPs reach the picker at all.
+
 - 2026-07-22 — **Cashflow page adopts the 13-week model + outgoing payables
   panel (branch `claude/cashflow-13week-payables-kozj9o`, draft PR #1037).**
   Owner: "best is to do the 13 weeks cashflow model… incoming settlement is
@@ -413,6 +429,26 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   month-add date walking (same day-31 drift as cashflow.ts addMonths —
   consistent, not fixed). Next: owner feedback on the transposed grid, and
   whether payables should also feed a per-outlet filter.
+
+- 2026-07-21 (procurement round) — **PR #990 merged (`c268332`) + staff-native
+  OTA published (run 54, green 03:07 UTC).** Ships: GRNI placeholder namespace
+  (`GRNI-<outletCode>-<n>`), supplier-scoped POP number matching + placeholder
+  corroboration, capture NUMBER_FORMAT_MISMATCH guard, and the
+  balance-receiving fix (staff web + staff-native prefill the REMAINING qty on
+  partially-received POs — was double-counting stock on the second receiving).
+  Managers get the receiving fix on next app launch. **Awaiting owner sign-off
+  (payment records):** TMM CC001 RM509.76 re-number pending TMM SOA + detach
+  MnM photo; void/merge MnM "1-15150" duplicate of IVCT-00012005; untangle the
+  1-15441 duplicate rows (Nilai INITIATED vs CC003); resolve RM894 NYC picker
+  (stale ref "1216") and RM924 verifier proposal → INV-2682. **Waiting on bank
+  feed:** the 5 Jul-20 unmatched payments (Dankoff IN600161377 909.15, TMM
+  1-15441 679.68, 365IN2607-0019/0020 490 each, XORA SO-31844 590) — re-match
+  when debits land; 3 INITIATED with no debit yet (YSIV2606-1644 932.20,
+  F26071056 181, INV-2026-0717-001 120) — owner to check bank app. NYC 1220
+  RM606 overdue, unpaid. **Known bugs, unfixed:** Telegram POP conversations
+  not persisted (0 `tg:` rows in WhatsAppMessage — no audit trail) and the
+  MULTI_POP splitter can silently under-extract pages from a batch PDF (root
+  cause of the 5 stuck INITIATED from Jul 20) — good next PR.
 
 - 2026-07-20 (round 16) — **Slot-sizing saga: open slots now follow the FULL
   scheduling logic (PRs #1016 + #1017, both merged; #1015 merged + OTA'd
