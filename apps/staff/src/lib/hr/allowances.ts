@@ -254,7 +254,17 @@ export async function computeAllowances(
       lateCount++;
     }
   }
-  const loggedDates = new Set(logs.map((l) => mytDateString(l.clock_in)));
+  // A clock-in credits BOTH the calendar day it happened AND the roster day it
+  // was FOR (scheduled_date). Without the latter, a punch that lands on a
+  // different date than its shift — cross-midnight, a late-night close, or a
+  // drifted stamp — leaves the rostered shift looking like a no-show even
+  // though the person clearly attended it. (owner 2026-07-21: "invalid date"
+  // clock-ins were still showing the shift as missed.)
+  const loggedDates = new Set<string>();
+  for (const l of logs) {
+    loggedDates.add(mytDateString(l.clock_in));
+    if (l.scheduled_date) loggedDates.add(l.scheduled_date);
+  }
   const missedDates = new Set<string>();
   for (const sh of (scheduled || [])) {
     if (sh.notes === "rest_day" || sh.notes === "pt_suggestion") continue;
