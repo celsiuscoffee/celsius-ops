@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Trash2, Plus, Minus, Gift, X, Coffee, ChevronRight } from "lucide-react";
 import { calcRewardDiscount, formatRewardValue, type AppliedReward } from "@/lib/reward-discount";
+import { getDineInContext } from "@/lib/checkout-session";
 import { CartUpsell } from "./_CartUpsell";
 import { CartChallengeNudge } from "./_CartChallengeNudge";
 
@@ -115,9 +117,11 @@ type Quote = {
 };
 
 export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
+  const router = useRouter();
   const [items, setItems] = useState<CartItem[]>([]);
   const [outletId, setOutletId] = useState<string | null>(null);
   const [outletName, setOutletName] = useState<string | null>(null);
+  const [tableNumber, setTableNumber] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
   const [loyaltyId, setLoyaltyId] = useState<string | null>(null);
   const [reward, setReward] = useState<AppliedReward | null>(null);
@@ -126,6 +130,16 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
   const [outletClosed, setOutletClosed] = useState(false);
 
   useEffect(() => {
+    // Table-QR only — the cart exists inside a dine-in session. No fresh
+    // dine-in context means the customer reached here without scanning a
+    // table (the retired pickup path), so send them to the scan wall instead
+    // of showing a cart that can only dead-end at the checkout guard.
+    const dine = getDineInContext();
+    if (!dine) {
+      router.replace("/scan");
+      return;
+    }
+    setTableNumber(dine.tableNumber);
     const snap = readCart();
     setReward(readReward());
     setItems(snap.items);
@@ -134,7 +148,7 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
     setPhone(snap.phone);
     setLoyaltyId(snap.loyaltyId);
     setHydrated(true);
-  }, []);
+  }, [router]);
 
   const subtotal = items.reduce((s, i) => s + i.totalPrice, 0);
   const rewardLines = items.map((i) => ({
@@ -261,7 +275,7 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
 
   if (items.length === 0) {
     return (
-      <CartShell outletName={outletName}>
+      <CartShell outletName={outletName} tableNumber={tableNumber}>
         {/* Empty cart sells, not just says "empty" — espresso hero +
             best-seller carousel, matching apps/pickup-native/app
             /cart.tsx:121-245. */}
@@ -361,7 +375,7 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
   }
 
   return (
-    <CartShell outletName={outletName}>
+    <CartShell outletName={outletName} tableNumber={tableNumber}>
       <ul className="px-4 py-4 flex flex-col gap-3">
         {items.map((item) => (
           <li
@@ -571,16 +585,9 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
                 {outletName ?? "This outlet"} just closed
               </p>
               <p className="text-[11px]" style={{ color: "#6B6B6B", fontWeight: 500, marginTop: 2 }}>
-                Pick another outlet to continue, or come back when we open.
+                Online ordering has paused — please order at the counter.
               </p>
             </div>
-            <Link
-              href="/store"
-              className="flex-shrink-0 active:opacity-70 text-[12px] font-bold"
-              style={{ color: "#A2492C" }}
-            >
-              Switch
-            </Link>
           </div>
         ) : null}
 
@@ -623,9 +630,11 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
 
 function CartShell({
   outletName,
+  tableNumber = null,
   children,
 }: {
   outletName: string | null;
+  tableNumber?: string | null;
   children: React.ReactNode;
 }) {
   return (
@@ -640,7 +649,7 @@ function CartShell({
         <div className="flex-1 min-w-0">
           {outletName ? (
             <p className="text-[10px] text-white/50 uppercase tracking-widest truncate">
-              Pickup from {outletName}
+              {tableNumber ? `Table ${tableNumber} · ${outletName}` : outletName}
             </p>
           ) : null}
           <h1
