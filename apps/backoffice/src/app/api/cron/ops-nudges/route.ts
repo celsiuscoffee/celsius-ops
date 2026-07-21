@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
 import { touchAgentRun } from "@celsius/agents/src/substrate";
+import { ensurePulseWebhook } from "@celsius/agents/src/pulse";
 import { GET as runClockin } from "../ops-nudge-clockin/route";
 import { GET as runReview } from "../ops-nudge-review/route";
 import { GET as runChecklist } from "../ops-nudge-checklist/route";
@@ -55,6 +56,13 @@ export async function GET(req: NextRequest) {
   // per tick would be noise; the touch keeps /agents from showing the ops
   // family as "never ran". Each sub-nudge still records its own sends.
   await touchAgentRun("ops_nudges");
+
+  // Self-heal the two-way pulse webhook. This is the highest-frequency cron, so
+  // registration lands within ~5 min of a deploy without anyone clicking the
+  // /agents Connect button. Idempotent + guarded (at most one Telegram call per
+  // warm instance); returns a diagnostic so the result is visible in the cron
+  // response and Vercel logs.
+  out.webhook = await ensurePulseWebhook();
 
   return NextResponse.json({ ok: true, ...out });
 }

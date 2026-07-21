@@ -108,6 +108,64 @@ export async function setPulseWebhook(url: string, secretToken: string): Promise
   return res.json();
 }
 
+// Read the pulse bot's current webhook registration straight from Telegram.
+// Used both to skip a redundant setWebhook and to surface last_error_message /
+// pending_update_count for diagnosis. Returns null if the bot isn't configured.
+export async function getPulseWebhookInfo(): Promise<
+  { url?: string; last_error_message?: string; pending_update_count?: number } | null
+> {
+  if (!process.env.CELSIUS_PULSE_BOT_TOKEN) return null;
+  try {
+    const res = await fetch(pulseApi("getWebhookInfo"));
+    const json = (await res.json()) as {
+      result?: { url?: string; last_error_message?: string; pending_update_count?: number };
+    };
+    return json?.result ?? null;
+  } catch (e) {
+    console.error("[pulse] getWebhookInfo failed:", e);
+    return null;
+  }
+}
+
+// Idempotent self-registration. Crons run server-side with the bot token in
+// env, so the fleet registers its OWN webhook instead of depending on a human
+// clicking the /agents Connect button. Targets the stable production domain by
+// default (CELSIUS_PULSE_WEBHOOK_URL overrides) so it never lands on a
+// protected *.vercel.app URL. Guarded to hit Telegram at most once per warm
+// instance, and skips when the webhook already points at the right URL. Never
+// throws - a registration hiccup must not break the cron that called it.
+let webhookEnsured = false;
+export async function ensurePulseWebhook(): Promise<{ ok: boolean; action: string; url?: string; detail?: string }> {
+  if (webhookEnsured) return { ok: true, action: "cached" };
+  const token = process.env.CELSIUS_PULSE_BOT_TOKEN;
+  if (!token) return { ok: false, action: "skipped", detail: "CELSIUS_PULSE_BOT_TOKEN not set" };
+  const secret = process.env.CELSIUS_PULSE_WEBHOOK_SECRET;
+  if (!secret) return { ok: false, action: "skipped", detail: "CELSIUS_PULSE_WEBHOOK_SECRET not set" };
+  const url =
+    process.env.CELSIUS_PULSE_WEBHOOK_URL || "https://backoffice.celsiuscoffee.com/api/agents/pulse-webhook";
+  try {
+    const info = await getPulseWebhookInfo();
+    if (info?.url === url) {
+      webhookEnsured = true;
+      return {
+        ok: true,
+        action: "already_set",
+        url,
+        detail: info.last_error_message ? `last_error: ${info.last_error_message}` : undefined,
+      };
+    }
+    const res = (await setPulseWebhook(url, secret)) as { ok?: boolean; description?: string };
+    if (res?.ok) {
+      webhookEnsured = true;
+      console.log(`[pulse] webhook self-registered -> ${url}`);
+      return { ok: true, action: "registered", url };
+    }
+    return { ok: false, action: "failed", url, detail: res?.description ?? "setWebhook returned not-ok" };
+  } catch (e) {
+    return { ok: false, action: "error", url, detail: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export const KIND_LABEL: Record<string, string> = {
   handoff: "handed off to",
   learning: "learned",
