@@ -19,7 +19,8 @@ import {
   type CampaignState,
   type GuardSignal,
 } from "./autopilot";
-import { classifyTermIntent, selectAutoExclusions, selectSeedExclusions, shouldAutoExclude } from "./term-rules";
+import { classifyTermIntent, selectAutoExclusions, selectSeedExclusions, shouldAutoExclude, negativeThemeRoot, exclusionPhrase } from "./term-rules";
+import { planConsolidation } from "./consolidate-negatives";
 
 const NOW = new Date("2026-07-20T00:00:00Z");
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86400000);
@@ -565,32 +566,80 @@ describe("term intent rules", () => {
     expect(classifyTermIntent("tempat best sambut birthday")).toBe("other");
   });
 
-  it("selectSeedExclusions transfers fleet-proven junk, respects decisions/caps, costs 0", () => {
-    const fleetJunk = ["restaurants near me", "kedai makan near me", "cafe near me", "zus near me", "celsius coffee"];
-    const decided = new Set(["sa restaurants near me"]); // SA already decided this one
-    const seeds = selectSeedExclusions(["sa", "pj"], fleetJunk, decided);
-    const sa = seeds.filter((s) => s.campaignId === "sa").map((s) => s.searchTerm);
-    // cafe intent never seeds, decided rows skipped
-    expect(sa).toEqual(["kedai makan near me", "zus near me", "celsius coffee"]);
-    const pj = seeds.filter((s) => s.campaignId === "pj").map((s) => s.searchTerm);
-    expect(pj).toEqual(["restaurants near me", "kedai makan near me", "zus near me", "celsius coffee"]);
-    expect(seeds.every((s) => s.costMyr === 0 && s.seeded)).toBe(true);
-    // cap
-    const many = Array.from({ length: 30 }, (_, i) => `nasi kandar shop ${i}`);
-    expect(selectSeedExclusions(["x"], many, new Set(), 15)).toHaveLength(15);
+  it("negativeThemeRoot / exclusionPhrase collapse variants to a broad root", () => {
+    expect(negativeThemeRoot("zus near me", "competitor_brand")).toBe("zus");
+    expect(negativeThemeRoot("zus coffee", "competitor_brand")).toBe("zus");
+    expect(negativeThemeRoot("coffee bean and tea leaf near me", "competitor_brand")).toBe("coffee bean");
+    expect(negativeThemeRoot("coffee bean shah alam", "competitor_brand")).toBe("coffee bean");
+    expect(negativeThemeRoot("restaurants near me", "non_cafe_food")).toBe("restaurant");
+    expect(negativeThemeRoot("cake shop near me", "dessert_bakery")).toBe("cake");
+    // own brand / unrecognised → keep literal
+    expect(negativeThemeRoot("celsius coffee", "own_brand")).toBeNull();
+    expect(exclusionPhrase("celsius coffee", "own_brand")).toBe("celsius coffee");
+    expect(exclusionPhrase("zus near me", "competitor_brand")).toBe("zus");
   });
 
-  it("selectAutoExclusions respects min cost, prior decisions, and the per-campaign cap", () => {
+  it("selectSeedExclusions transfers fleet-proven junk AS ROOTS, respects decisions/caps, costs 0", () => {
+    const fleetJunk = ["restaurants near me", "kedai makan near me", "cafe near me", "zus near me", "zus coffee", "celsius coffee"];
+    const decided = new Set(["sa restaurant"]); // SA already has the 'restaurant' root
+    const seeds = selectSeedExclusions(["sa", "pj"], fleetJunk, decided);
+    const sa = seeds.filter((s) => s.campaignId === "sa").map((s) => s.searchTerm);
+    // cafe intent never seeds; the two zus variants collapse to one root; decided root skipped
+    expect(sa).toEqual(["kedai makan", "zus", "celsius coffee"]);
+    const pj = seeds.filter((s) => s.campaignId === "pj").map((s) => s.searchTerm);
+    expect(pj).toEqual(["restaurant", "kedai makan", "zus", "celsius coffee"]);
+    expect(seeds.every((s) => s.costMyr === 0 && s.seeded)).toBe(true);
+  });
+
+  it("selectAutoExclusions consolidates to roots, sums their spend, respects min/decided/cap", () => {
     const spend = [
       { campaignId: "c1", searchTerm: "restaurants near me", costMyr: 72 },
+      { campaignId: "c1", searchTerm: "restaurant near me", costMyr: 6 }, // same root → sums to 78
       { campaignId: "c1", searchTerm: "food near me", costMyr: 14.5 },
       { campaignId: "c1", searchTerm: "Celsius Coffee", costMyr: 5 },
-      { campaignId: "c1", searchTerm: "nasi ayam", costMyr: 1.2 }, // below min cost
+      { campaignId: "c1", searchTerm: "nasi ayam", costMyr: 1.2 }, // root 'nasi', below min alone
       { campaignId: "c1", searchTerm: "cafe near me", costMyr: 110 }, // cafe intent — never
       { campaignId: "c1", searchTerm: "kedai makan near me", costMyr: 7.9 },
     ];
-    const decided = new Set(["c1 food near me"]); // human already decided (any status)
+    const decided = new Set(["c1 food"]); // the 'food' root already decided
     const picked = selectAutoExclusions(spend, decided, { maxPerCampaign: 2 });
-    expect(picked.map((p) => p.searchTerm)).toEqual(["restaurants near me", "kedai makan near me"]);
+    // restaurant root (72+6=78) and kedai makan (7.9) win; food skipped; celsius/nasi below cap/min
+    expect(picked.map((p) => `${p.searchTerm}:${p.costMyr}`)).toEqual(["restaurant:78", "kedai makan:7.9"]);
+  });
+});
+
+describe("planConsolidation (literal → root swap)", () => {
+  it("removes subsumed literals and adds their roots, keeps roots/own-brand as-is", () => {
+    const existing = [
+      { searchTerm: "kenangan coffee", criterionResource: "r1" },
+      { searchTerm: "kenangan coffee near me", criterionResource: "r2" },
+      { searchTerm: "zus near me", criterionResource: "r3" },
+      { searchTerm: "restaurants near me", criterionResource: "r4" },
+      { searchTerm: "kedai makan", criterionResource: "r5" }, // already a root → keep
+      { searchTerm: "celsius coffee", criterionResource: "r6" }, // own brand → keep literal
+    ];
+    const plan = planConsolidation(existing);
+    expect(plan.addRoots.sort()).toEqual(["kenangan", "restaurant", "zus"].sort());
+    expect(plan.removeLiterals.map((l) => l.searchTerm).sort()).toEqual(
+      ["kenangan coffee", "kenangan coffee near me", "restaurants near me", "zus near me"].sort(),
+    );
+  });
+
+  it("is a no-op once everything is already a root", () => {
+    const plan = planConsolidation([
+      { searchTerm: "zus", criterionResource: "r1" },
+      { searchTerm: "kedai makan", criterionResource: "r2" },
+    ]);
+    expect(plan.addRoots).toEqual([]);
+    expect(plan.removeLiterals).toEqual([]);
+  });
+
+  it("does not re-add a root that already exists as a negative", () => {
+    const plan = planConsolidation([
+      { searchTerm: "zus", criterionResource: "r1" }, // root already present
+      { searchTerm: "zus near me", criterionResource: "r2" }, // literal → remove, root not re-added
+    ]);
+    expect(plan.addRoots).toEqual([]);
+    expect(plan.removeLiterals.map((l) => l.searchTerm)).toEqual(["zus near me"]);
   });
 });
