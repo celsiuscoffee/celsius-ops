@@ -128,15 +128,29 @@ a summary row in `agent_actions`. Human-paused campaigns are left alone.
   the prod deploy lagged the merge ~6h. Verify the Vercel prod deployment is
   READY when a merge must beat a cron.
 
-## Projection (2026-07-18, spend baseline ~RM8.6k/mo)
+## Effect (updated 2026-07-21, after the hard-cut)
 
-Locked-in near term: Jul 5 cuts RM504/mo + PJ waste cuts (RM169/mo applied,
-tail follows) + Tamarind probe ~RM2.8k unspent during its 28d window.
-Steady-state scenarios: ads work everywhere → ~RM1-1.3k/mo freed (waste layer
-only) + probe-up revenue growth; Tamarind fails probe, PJ/SA partial →
-~RM4.5-5k/mo; nothing moves the till → ~RM6.8k/mo (~RM82k/yr) with till flat
-by construction. The Tamarind verdict (~Aug 15) collapses about half the
-range.
+Owner drove the descent hard over Jul 19–20 ("decrease more" → "how can we do
+this faster" → hard-cut to RM55). **Actual state:**
+- All 3 campaigns at **RM55/day** (fleet RM265.86 → **RM165/day**), applied
+  clean on the Jul 20 run.
+- **Cuts banked: RM4,056/mo = 81% of the RM5k target** (cash scoreboard cuts
+  side; the sales side is still contaminated by the StoreHub-cutover anchor —
+  ignore its −RM10.6k/mo till Δ until the baseline is fixed).
+- **Till post-cut:** first full day at RM55 (Jul 21) = RM6,660 fleet, inside
+  the normal RM6.5–8.4k daily band — no cliff, but 1 day; the guard's verdict
+  needs ~2 weeks. Cumulatively the fleet has been cut ~45% (RM300→165/day)
+  with no clean-POS till response, consistent with the marginal spend being
+  waste.
+
+**Remaining path to RM5k:** if the till holds through the ~2-week read, take
+the fleet down toward ~RM45/day each (fleet ~RM135) to close the last ~RM950/mo;
+if any outlet's till dips, the guard rolls it back and that outlet's true floor
+is found. Ceiling from cuts alone ≈RM6.4k/mo at the RM20 floors.
+
+**Follow-ups owed:** remove the one-time `hardCutDirective` block now all
+three are at RM55; fix the scoreboard sales-side anchor (post-cutover window /
+exclude `storehub_sales`).
 
 ## Lessons
 
