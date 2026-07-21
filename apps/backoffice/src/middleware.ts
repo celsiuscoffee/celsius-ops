@@ -72,6 +72,12 @@ export async function middleware(request: NextRequest) {
       // no browser Origin, authenticated by X-Hub-Signature-256 (verified in
       // the route against WHATSAPP_APP_SECRET).
       "/api/whatsapp/webhook",
+      // Telegram pulse-bot webhook — Telegram POSTs owner replies + button taps
+      // with no browser Origin, authenticated by the x-telegram-bot-api-secret-
+      // token header (verified in the route against CELSIUS_PULSE_WEBHOOK_SECRET).
+      // Without this exemption every reply/tap 403s at the CSRF gate before the
+      // handler runs, so pay-and-claim approvals never land.
+      "/api/agents/pulse-webhook",
     ],
   });
   if (csrfFail) {
