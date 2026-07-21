@@ -381,10 +381,16 @@ export default function MembersPage() {
   }, []);
 
   // ─── Server-side pagination: refetch on page/search change ───
+  const pageSeqRef = useRef(0);
   useEffect(() => {
     if (useClientMode) return; // client-side mode handles its own pagination
+    // Stale-response guard: rapid page-next clicks (or a page change racing the
+    // debounced search) could let an older page's response land last and show
+    // the wrong page. Only the latest request commits.
+    const seq = ++pageSeqRef.current;
     setLoading(true);
     fetchMembersPage("brand-celsius", currentPage, pageSize, debouncedSearch || undefined).then((res) => {
+      if (seq !== pageSeqRef.current) return;
       setServerMembers(res.members.map(mapMember));
       setServerTotal(res.total);
       setServerTotalPages(res.total_pages);

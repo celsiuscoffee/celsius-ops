@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Loader2, MapPin, Play, ArrowLeft, TrendingUp, ChevronDown, Sparkles, Store } from "lucide-react";
+import { useLatestRequest } from "@/lib/use-latest-request";
 
 type PointResult = { name: string; placeId: string; isUs: boolean };
 type GridPoint = { row: number; col: number; lat: number; lng: number; rank: number | null; results?: PointResult[] };
@@ -468,14 +469,24 @@ export default function GeogridPage() {
       .catch(() => setOutlets([]));
   }, []);
 
+  const beginRequest = useLatestRequest();
   const loadHistory = useCallback(async (oid: string) => {
     if (!oid) return;
-    const res = await fetch(`/api/geogrid/scan?outletId=${oid}`);
-    const d = await res.json();
-    setScans(d.scans ?? []);
-    setKeyConfigured(d.keyConfigured ?? true);
-    setActive((d.scans ?? [])[0] ?? null);
-  }, []);
+    // Guard the outlet switch: A→B quickly could let A's slower response set
+    // the wrong outlet's scans. Only the latest outlet's response commits.
+    const { signal, isCurrent } = beginRequest();
+    try {
+      const res = await fetch(`/api/geogrid/scan?outletId=${oid}`, { signal });
+      const d = await res.json();
+      if (!isCurrent()) return;
+      setScans(d.scans ?? []);
+      setKeyConfigured(d.keyConfigured ?? true);
+      setActive((d.scans ?? [])[0] ?? null);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      throw e;
+    }
+  }, [beginRequest]);
 
   useEffect(() => {
     loadHistory(outletId);

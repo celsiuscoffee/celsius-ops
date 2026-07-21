@@ -21,6 +21,7 @@ import {
   CheckCircle2, AlertTriangle, Trophy, Users, ShieldOff, Coins, Plus, X, Crown, Sparkles, Clock, BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLatestRequest } from "@/lib/use-latest-request";
 
 // ---- agreed knobs -----------------------------------------------------------
 const DEFAULT_BUDGET_RM = 200; // round-1 default; raise to scale
@@ -154,21 +155,28 @@ export default function LoopsPage() {
   const [loopKey, setLoopKey] = useState("winback");
   const [runResult, setRunResult] = useState<string | null>(null);
 
+  const beginRequest = useLatestRequest();
   const load = useCallback(async () => {
+    // Guard the loop-tab switch (and the 5s poll): a previous loop's response
+    // could land after the newly-selected one and render under the wrong tab.
+    const { signal, isCurrent } = beginRequest();
     try {
       const qs = `?loop_key=${encodeURIComponent(loopKey)}`;
       const [rRes, oRes] = await Promise.all([
-        fetch(`/api/loyalty/loops${qs}`),
-        fetch(`/api/loyalty/loops/optimizer${qs}`),
+        fetch(`/api/loyalty/loops${qs}`, { signal }),
+        fetch(`/api/loyalty/loops/optimizer${qs}`, { signal }),
       ]);
+      if (!isCurrent()) return;
       if (!rRes.ok) throw new Error(`list failed (${rRes.status})`);
       setRounds((await rRes.json()) as Round[]);
       if (oRes.ok) setOpt((await oRes.json()) as Optimizer);
       setErr(null);
     } catch (e) {
+      if (!isCurrent()) return;
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setErr(e instanceof Error ? e.message : "Failed to load");
     }
-  }, [loopKey]);
+  }, [loopKey, beginRequest]);
   useEffect(() => { setRounds(null); setOpt(null); setLastPreview(null); void load(); }, [load]);
 
   // Fire all triggered loops on demand. force=true ignores the once-a-day guard.

@@ -281,12 +281,9 @@ export async function getUnifiedSalesForOutlet(
       ? Prisma.sql`AND created_at >= ${outlet.cutoverAt}`
       : Prisma.empty;
     const posRows = await prisma.$queryRaw<
-      Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null; pay_method: string | null }>
+      Array<{ id: string; ts: Date; total: unknown; source: string | null; order_type: string | null }>
     >`
-      SELECT created_at AS ts, total, source, order_type,
-             (SELECT pay.payment_method FROM pos_order_payments pay
-              WHERE pay.order_id = pos_orders.id
-              ORDER BY pay.amount DESC NULLS LAST LIMIT 1) AS pay_method
+      SELECT id, created_at AS ts, total, source, order_type
       FROM pos_orders
       WHERE outlet_id = ${outlet.loyaltyOutletId}
         AND status = 'completed'
@@ -295,6 +292,19 @@ export async function getUnifiedSalesForOutlet(
         AND created_at <= ${to}
         ${cutoverFloor}
     `;
+    // Dominant tender per order (largest payment). ONE batched DISTINCT ON over
+    // just these orders' payment rows (order_id-indexed) instead of a correlated
+    // subquery per order — the previous shape ran a subselect for every row.
+    const tenderByOrder = new Map<string, string | null>();
+    if (posRows.length > 0) {
+      const payRows = await prisma.$queryRaw<Array<{ order_id: string; payment_method: string | null }>>`
+        SELECT DISTINCT ON (order_id) order_id, payment_method
+        FROM pos_order_payments
+        WHERE order_id IN (${Prisma.join(posRows.map((r) => r.id))})
+        ORDER BY order_id, amount DESC NULLS LAST
+      `;
+      for (const p of payRows) tenderByOrder.set(p.order_id, p.payment_method);
+    }
     for (const r of posRows) {
       sales.push({
         ts: toISO(r.ts),
@@ -306,7 +316,7 @@ export async function getUnifiedSalesForOutlet(
         // Dominant tender of the order (split payments attribute the whole
         // order to the largest payment — the By Payment report stays the
         // precise per-payment view)
-        tender: r.pay_method,
+        tender: tenderByOrder.get(r.id) ?? null,
         units: 1,
       });
     }

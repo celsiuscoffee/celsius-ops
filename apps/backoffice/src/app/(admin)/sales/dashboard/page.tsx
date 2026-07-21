@@ -16,6 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLatestRequest } from "@/lib/use-latest-request";
 import { AccumulativeChart } from "./AccumulativeChart";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -236,8 +237,13 @@ export default function SalesDashboard() {
     setAiLoading(false);
   }, []);
 
+  const beginRequest = useLatestRequest();
   const loadData = useCallback(
     async (p: Period, outlet: string, cFrom?: string, cTo?: string) => {
+      // Stale-response guard: "All Outlets" is much slower than a single outlet,
+      // so switching All→one could let the old All response land last and
+      // overwrite the filtered data. Only the latest request writes state.
+      const { signal, isCurrent } = beginRequest();
       setLoading(true);
       setError(null);
       try {
@@ -246,18 +252,20 @@ export default function SalesDashboard() {
         if (p === "custom" && cFrom && cTo) {
           url += `&from=${cFrom}&to=${cTo}`;
         }
-        const res = await fetch(url, { credentials: "include" });
+        const res = await fetch(url, { credentials: "include", signal });
+        if (!isCurrent()) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || `HTTP ${res.status}`);
         }
         setData(await res.json());
       } catch (err) {
+        if (!isCurrent()) return;
         setError(err instanceof Error ? err.message : "Failed to load");
       }
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     },
-    [],
+    [beginRequest],
   );
 
   useEffect(() => {
