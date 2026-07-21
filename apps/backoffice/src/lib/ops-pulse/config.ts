@@ -102,6 +102,12 @@ export const THRESHOLDS = {
   attendance: {
     // Minutes past a published shift's start_time before "no clock-in" counts.
     graceMinutes: 15,
+    // Morning/opening shifts are time-critical (the store has to open), so the
+    // manager needs the heads-up AT the scheduled start — not 15 min later — to
+    // still call someone in. Shifts starting before morningCutoffHour use
+    // morningGraceMinutes instead of graceMinutes. (owner: "manage early")
+    morningGraceMinutes: 0,
+    morningCutoffHour: 12,
   },
   posOpen: {
     // Minutes past an outlet's openTime before "POS not opened" counts. 0 = the
