@@ -651,6 +651,12 @@ export async function buildSourcedPnl(input: {
       })
     : [];
   const rev = { instore: 0, online: 0, grab: 0, foodpanda: 0 };
+  // Discount given away, by the same channel split. Sales sources record what
+  // the customer PAID, so every revenue line above is already net of discount.
+  // Grossing the lines up and showing the giveaway as its own contra-revenue
+  // line (COA 5001) leaves total income unchanged but finally makes the cost
+  // of promos, vouchers and staff comps visible.
+  const disc = { instore: 0, online: 0, grab: 0, foodpanda: 0 };
   let saleCount = 0;
   // Any accrual-shifted line in the period adds a short note to the report.
   let shiftedPresent = false;
@@ -669,18 +675,28 @@ export async function buildSourcedPnl(input: {
     for (const s of sales) {
       saleCount++;
       const lbl = (s.channelLabel ?? "").toLowerCase();
-      if (/grab/.test(lbl)) rev.grab += s.total;
-      else if (/panda/.test(lbl)) rev.foodpanda += s.total;
-      else if (s.isDeliveryQR || s.channel === "delivery") rev.online += s.total;
-      else rev.instore += s.total;
+      const bucket: keyof typeof rev = /grab/.test(lbl)
+        ? "grab"
+        : /panda/.test(lbl)
+          ? "foodpanda"
+          : s.isDeliveryQR || s.channel === "delivery"
+            ? "online"
+            : "instore";
+      rev[bucket] += s.total;
+      disc[bucket] += s.discount;
     }
   }
   const grabGrossRevenue = round2(rev.grab); // gross Grab, for the commission line
+  const discountGiven = round2(disc.instore + disc.online + disc.grab + disc.foodpanda);
+  // Revenue lines are shown BEFORE discount, with the giveaway pulled out below
+  // them, so the reader sees menu value -> discount -> what was actually earned.
+  // Total income is identical either way: (net + discount) - discount.
   const incomeLines: PnlLine[] = [
-    { code: "REV-INSTORE", name: "In-store sales (dine-in + takeaway)", amount: round2(rev.instore), parentCode: null },
-    { code: "REV-ONLINE", name: "Online sales (pickup + table QR)", amount: round2(rev.online), parentCode: null },
-    { code: "REV-GRAB", name: "GrabFood sales (gross)", amount: round2(rev.grab), parentCode: null },
-    { code: "REV-PANDA", name: "FoodPanda sales", amount: round2(rev.foodpanda), parentCode: null },
+    { code: "REV-INSTORE", name: "In-store sales (dine-in + takeaway)", amount: round2(rev.instore + disc.instore), parentCode: null },
+    { code: "REV-ONLINE", name: "Online sales (pickup + table QR)", amount: round2(rev.online + disc.online), parentCode: null },
+    { code: "REV-GRAB", name: "GrabFood sales (gross)", amount: round2(rev.grab + disc.grab), parentCode: null },
+    { code: "REV-PANDA", name: "FoodPanda sales", amount: round2(rev.foodpanda + disc.foodpanda), parentCode: null },
+    { code: "REV-DISCOUNT", name: "Discount given (promos, vouchers, comps) — COA 5001", amount: round2(-discountGiven), parentCode: null },
   ].filter((l) => l.amount !== 0);
   let totalIncome = round2(rev.instore + rev.online + rev.grab + rev.foodpanda);
 

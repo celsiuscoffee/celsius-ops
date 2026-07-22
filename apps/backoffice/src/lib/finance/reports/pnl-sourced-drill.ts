@@ -121,7 +121,11 @@ async function drillRevenue(code: string, companyId: string, start: string, end:
     where: { id: { in: outletIds } },
     select: { id: true, name: true, loyaltyOutletId: true, pickupStoreId: true, posNativeCutoverAt: true },
   });
+  // The discount line spans every channel, so it matches everything and sums
+  // the giveaway instead of the sale.
+  const isDiscount = code === "REV-DISCOUNT";
   const match = (lbl: string, isQR: boolean, channel: string): boolean => {
+    if (isDiscount) return true;
     const l = lbl.toLowerCase();
     if (code === "REV-GRAB") return /grab/.test(l);
     if (code === "REV-PANDA") return /panda/.test(l);
@@ -142,19 +146,23 @@ async function drillRevenue(code: string, companyId: string, start: string, end:
       const day = new Date(new Date(s.ts).getTime() + 8 * 3600_000).toISOString().slice(0, 10); // MYT day
       const k = `${day}|${o.name}`;
       const cur = agg.get(k) ?? { day, outlet: o.name, n: 0, amt: 0 };
-      cur.n++; cur.amt += s.total;
+      cur.n++;
+      // Revenue lines are reported BEFORE discount (see pnl-sourced.ts), so the
+      // drill has to gross up the same way or it won't tie to its own total.
+      cur.amt += isDiscount ? -s.discount : s.total + s.discount;
       agg.set(k, cur);
     }
   }
   return [...agg.values()]
+    .filter((r) => round2(r.amt) !== 0)
     .sort((a, b) => a.day.localeCompare(b.day) || a.outlet.localeCompare(b.outlet))
     .map((r) => ({
       transactionId: `rev-${r.day}-${r.outlet}`,
       txnDate: r.day,
       description: `${r.outlet}, ${r.n} orders`,
       amount: round2(r.amt),
-      debit: 0,
-      credit: round2(r.amt),
+      debit: isDiscount ? round2(-r.amt) : 0,
+      credit: isDiscount ? 0 : round2(r.amt),
     }));
 }
 
