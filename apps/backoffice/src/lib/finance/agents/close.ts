@@ -15,6 +15,7 @@ import {
   mgmtFeeAccrual, MGMT_FEE_EXPENSE_CODE, DUE_TO_HQ_CODE,
   grabClearingForPeriod, MARKETPLACE_FEE_CODE, GRAB_DEBTOR_CODE, DUE_TO_CONEZION_CODE,
 } from "../close-prep";
+import { postApAccrual, type PostApAccrualResult } from "../ap-accrual";
 
 export const CLOSE_AGENT_VERSION = "close-v3";
 
@@ -31,6 +32,7 @@ export type RunCloseResult = {
   depreciation: { posted: number; transactionIds: string[] };
   mgmtFee: { accrued: number; transactionId: string | null; skipped: string | null };
   grabClearing: { commission: number; intercoLeg: number; transactionId: string | null; skipped: string | null };
+  apAccrual: PostApAccrualResult;
   snapshot: { pnl: PnlSnapshot; bs: BsSnapshot };
   locked: boolean;
 };
@@ -432,11 +434,17 @@ export async function runClose(input: RunCloseInput): Promise<RunCloseResult> {
   //    snapshot so the period's P&L carries the marketplace fee.
   const grabClearing = await postGrabClearing(input.companyId, input.period);
 
-  // 4. Snapshot
+  // 4. AP accrual — recognise open supplier bills as payables (Dr expense /
+  //    Cr 3001), reversing next period so the cash-basis bank payment doesn't
+  //    double-count. Brings the Invoice subledger into the GL; 3001 at period
+  //    end ties to Aged Payables. Before the snapshot so the P&L/BS carry it.
+  const apAccrual = await postApAccrual(input.companyId, input.period);
+
+  // 5. Snapshot
   const pnl = await buildPnl(input.companyId, input.period);
   const bs = await buildBs(input.companyId, input.period);
 
-  // 3. Persist snapshot + optional lock
+  // 6. Persist snapshot + optional lock
   await client
     .from("fin_periods")
     .upsert(
@@ -458,6 +466,7 @@ export async function runClose(input: RunCloseInput): Promise<RunCloseResult> {
     depreciation,
     mgmtFee,
     grabClearing,
+    apAccrual,
     snapshot: { pnl, bs },
     locked: !!input.lock,
   };

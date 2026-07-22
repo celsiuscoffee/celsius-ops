@@ -11,6 +11,8 @@ export type TxnType =
   | "depreciation"
   | "mgmt_fee_accrual"
   | "grab_clearing"
+  | "ap_accrual"
+  | "ap_accrual_reversal"
   | "fx_adj"
   | "reversal";
 
