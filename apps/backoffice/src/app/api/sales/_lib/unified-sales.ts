@@ -25,7 +25,12 @@ import {
 
 export type UnifiedSale = {
   ts: string; // ISO timestamp (UTC, with Z) — consumed by getMYTHour/getMYTDateStr
-  total: number; // RM
+  total: number; // RM — what the customer actually paid, i.e. NET of discount
+  // Discount given away on this sale, RM. `total + discount` is the gross the
+  // menu would have charged, which is what the P&L's "Discount given" contra-
+  // revenue line (COA 5001) needs. Each source records discounts its own way —
+  // see the per-source branches below; 0 where the source has none.
+  discount: number;
   channel: "dine_in" | "takeaway" | "delivery";
   isDeliveryQR: boolean;
   channelLabel: string; // raw channel/order_type for the channelBreakdown report
@@ -136,6 +141,10 @@ export async function getUnifiedSalesForOutlet(
     sales.push({
       ts,
       total,
+      // StoreHub never exposed a discount field; subTotal is the pre-discount
+      // menu value and total is what was collected, so the difference IS the
+      // discount (no SST, service charge or rounding in this feed).
+      discount: Math.max(Number((raw as { subTotal?: number })?.subTotal ?? total) - total, 0),
       channel: classifyChannel(raw),
       isDeliveryQR: isDeliveryOrQR(raw),
       channelLabel: (raw?.channel ?? "(direct)") as string,
@@ -153,6 +162,7 @@ export async function getUnifiedSalesForOutlet(
   type ArchiveRow = {
     ts: Date;
     total: unknown;
+    sub_total: unknown;
     channel: string | null;
     channel_class: "dine_in" | "takeaway" | "delivery" | null;
     is_delivery_qr: boolean | null;
@@ -165,9 +175,11 @@ export async function getUnifiedSalesForOutlet(
     }
     const ts = toISO(r.ts);
     if (!keepStorehub(ts, r.channel)) return;
+    const shTotal = Number(r.total) || 0;
     sales.push({
       ts,
-      total: Number(r.total) || 0,
+      total: shTotal,
+      discount: Math.max((Number(r.sub_total) || shTotal) - shTotal, 0),
       channel: r.channel_class,
       isDeliveryQR: r.is_delivery_qr ?? false,
       channelLabel: r.channel ?? "(direct)",
@@ -185,8 +197,8 @@ export async function getUnifiedSalesForOutlet(
   // canonical unified_sales view). ──
   const hubboHandover = HUBBO_HANDOVER_AT[outlet.outletId];
   if (hubboHandover && from.getTime() < hubboHandover.getTime()) {
-    const hubboRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown }>>`
-      SELECT transaction_time AS ts, nett AS total
+    const hubboRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; discount: unknown }>>`
+      SELECT transaction_time AS ts, nett AS total, discount
       FROM hubbo_sales
       WHERE outlet_id = ${outlet.outletId}
         AND NOT is_refund
@@ -198,6 +210,7 @@ export async function getUnifiedSalesForOutlet(
       sales.push({
         ts: toISO(r.ts),
         total: Number(r.total) || 0, // hubbo_sales.nett is RM
+        discount: Number(r.discount) || 0, // hubbo_sales.discount is RM
         channel: "dine_in", // counter till — no order-type data in the archive
         isDeliveryQR: false,
         channelLabel: "counter",
@@ -224,7 +237,7 @@ export async function getUnifiedSalesForOutlet(
   // rows that somehow missed classification fall back to it.
   if (archiveTo.getTime() >= from.getTime()) {
     const shRows = await prisma.$queryRaw<Array<ArchiveRow>>`
-      SELECT transaction_time AS ts, total, channel, channel_class, is_delivery_qr,
+      SELECT transaction_time AS ts, total, sub_total, channel, channel_class, is_delivery_qr,
              CASE WHEN channel_class IS NULL THEN raw END AS raw
       FROM storehub_sales
       WHERE outlet_id = ${outlet.outletId}
@@ -257,7 +270,7 @@ export async function getUnifiedSalesForOutlet(
         e instanceof Error ? e.message : e,
       );
       const fb = await prisma.$queryRaw<Array<ArchiveRow>>`
-        SELECT transaction_time AS ts, total, channel, channel_class, is_delivery_qr,
+        SELECT transaction_time AS ts, total, sub_total, channel, channel_class, is_delivery_qr,
                CASE WHEN channel_class IS NULL THEN raw END AS raw
         FROM storehub_sales
         WHERE outlet_id = ${outlet.outletId}
@@ -281,9 +294,9 @@ export async function getUnifiedSalesForOutlet(
       ? Prisma.sql`AND created_at >= ${outlet.cutoverAt}`
       : Prisma.empty;
     const posRows = await prisma.$queryRaw<
-      Array<{ id: string; ts: Date; total: unknown; source: string | null; order_type: string | null }>
+      Array<{ id: string; ts: Date; total: unknown; discount_amount: unknown; source: string | null; order_type: string | null }>
     >`
-      SELECT id, created_at AS ts, total, source, order_type
+      SELECT id, created_at AS ts, total, discount_amount, source, order_type
       FROM pos_orders
       WHERE outlet_id = ${outlet.loyaltyOutletId}
         AND status = 'completed'
@@ -309,6 +322,10 @@ export async function getUnifiedSalesForOutlet(
       sales.push({
         ts: toISO(r.ts),
         total: (Number(r.total) || 0) / 100, // pos_orders.total is in sen
+        // discount_amount is the TOTAL discount applied; promo_discount and
+        // reward_discount_amount are its reason breakdown, NOT extra amounts
+        // (subtotal - total = discount_amount on 10,971 of 10,974 orders).
+        discount: (Number(r.discount_amount) || 0) / 100,
         channel: posChannel(r.order_type, r.source),
         isDeliveryQR: posIsDeliveryQR(r.order_type, r.source),
         channelLabel: r.source && r.source !== "pos" ? r.source : (r.order_type ?? "pos"),
@@ -330,9 +347,11 @@ export async function getUnifiedSalesForOutlet(
   // all count toward Pickup & Delivery. ──
   if (!opts.storehubOnly && outlet.pickupStoreId) {
     const pickupRows = await prisma.$queryRaw<
-      Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null; payment_method: string | null }>
+      Array<{ ts: Date; total: unknown; discount: unknown; source: string | null; order_type: string | null; payment_method: string | null }>
     >`
-      SELECT created_at AS ts, total, source, order_type, payment_method
+      SELECT created_at AS ts, total, source, order_type, payment_method,
+             COALESCE(promo_discount, 0) + COALESCE(reward_discount_amount, 0)
+               + COALESCE(first_order_discount_amount, 0) AS discount
       FROM orders
       WHERE store_id = ${outlet.pickupStoreId}
         AND status IN (${Prisma.join(PICKUP_PAID_STATUSES)})
@@ -344,6 +363,10 @@ export async function getUnifiedSalesForOutlet(
       sales.push({
         ts: toISO(r.ts),
         total: (Number(r.total) || 0) / 100, // orders.total is in sen
+        // Opposite convention to the till: orders.discount_amount is unused
+        // (0 on all 3,141 paid 2026 orders); the three components ARE the
+        // discount.
+        discount: (Number(r.discount) || 0) / 100,
         channel: ot === "dine_in" ? "dine_in" : "takeaway",
         isDeliveryQR: true, // pickup-app / QR-table → Pickup & Delivery bucket
         channelLabel: r.source ?? "pickup",
@@ -375,6 +398,7 @@ export async function getUnifiedSalesForOutlet(
       sales.push({
         ts: toISO(r.ts),
         total: Number(r.total) || 0, // consignment_sales.gross is already RM
+        discount: 0, // weekly payment advice — retail gross only, no discounts
         channel: "dine_in",
         isDeliveryQR: false,
         channelLabel: r.channel === "cafe" ? "consignment" : r.channel,
