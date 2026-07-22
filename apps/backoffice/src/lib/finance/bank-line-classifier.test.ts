@@ -29,6 +29,37 @@ describe("bank-line-classifier", () => {
     expect(dr("TRANSFER FR A/C 365EAT FOOD SDN BHD INV CELSIUS").isInterCo).toBe(false);
   });
 
+  it("flags the new Maybank format (no A/C marker) when the Celsius payee ≠ the account", () => {
+    // Mid-2026 format: outlets fund the central SA payroll/statutory run by
+    // transferring into "CELSIUS COFFEE SDN.*". On a Conezion/Tamarind
+    // statement that payee is a DIFFERENT entity → inter-company.
+    const on = (description: string, accountKey: string) =>
+      classifyBankLine({ description, amount: 100, direction: "DR", accountKey });
+    const conez = "CELSIUS COFFEE CONEZION SDN. BHD. (2644)";
+    const tama = "CELSIUS COFFEE TAMARIND SDN. BHD. (9345)";
+    expect(on("Celsius Coffee ConezCELSIUS COFFEE SDN.* Salary May26", conez).isInterCo).toBe(true);
+    expect(on("CELSIUS COFFEE SDN.* Salary 1/1", conez).isInterCo).toBe(true);
+    expect(on("CelsiusCoffee C CELSIUS COFFEE SDN.* Stat pay", conez).isInterCo).toBe(true);
+    expect(on("Tamarind CELSIUS COFFEE SDN.* Stat Pay Jun26", tama).isInterCo).toBe(true);
+    expect(on("Celsius Coffee TamarCELSIUS COFFEE SDN.* Salary May 1", tama).isInterCo).toBe(true);
+    // category still attributed for the P&L
+    expect(on("CELSIUS COFFEE SDN.* Salary 1/1", conez).category).toBe("EMPLOYEE_SALARY");
+  });
+
+  it("does NOT flag the same Celsius token when it IS the account holder (SA's own loan/fee debits)", () => {
+    // On the SA statement, "CELSIUS COFFEE SDN.*" is the account holder, not a
+    // counterparty — the WME loan instalments must stay external, not inter-co.
+    const sa = "CELSIUS COFFEE SDN. BHD. (4384)";
+    const on = (description: string) =>
+      classifyBankLine({ description, amount: 100, direction: "DR", accountKey: sa });
+    expect(on("0000462263001821 CELSIUS COFFEE SDN.* WME000001").isInterCo).toBe(false);
+    expect(on("0000462263002252 CELSIUS COFFEE SDN.* WME000002").isInterCo).toBe(false);
+    expect(on("0000462263001821 CELSIUS COFFEE SDN.* WME000001").category).toBe("LOAN");
+    // A glued-sender supplier payment on a Celsius account is not inter-co either
+    expect(on("CELSIUS COFFEE PUTRAYOW SENG SDN BHD*YSIV-2601").isInterCo).toBe(false);
+    expect(classifyBankLine({ description: "Celsius Coffee TamarCOLLECTIVE PROJECT *IV-1234", amount: 100, direction: "DR", accountKey: "CELSIUS COFFEE TAMARIND SDN. BHD. (9345)" }).isInterCo).toBe(false);
+  });
+
   it("classifies the reclassified OTHER_OUTFLOW vendors", () => {
     expect(dr("TRANSFER FR A/C COUNTRY BREAD BAKER INV-001").category).toBe("RAW_MATERIALS");
     expect(dr("TRANSFER FR A/C BEARD BROTHERS MEAT INV250").category).toBe("RAW_MATERIALS");
