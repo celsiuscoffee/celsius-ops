@@ -312,6 +312,14 @@ export default function InvoicesPage() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectSaving, setRejectSaving] = useState(false);
 
+  // Due-date guardrail — payments are meant to be initiated ON the due date
+  // (that's what the "Initiate all due today" batch does). Initiating an
+  // invoice that isn't due today is usually a slip: paying early ties up cash,
+  // and "wrong due date" is the most common reason on the Reject dialog. So we
+  // warn and make the user confirm. Soft control — it never blocks, it just
+  // makes the deviation deliberate.
+  const [dueWarn, setDueWarn] = useState<{ inv: Invoice; nextStatus: string } | null>(null);
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(t);
@@ -624,6 +632,13 @@ export default function InvoicesPage() {
   };
 
   const updateStatus = async (invoiceId: string, newStatus: string, inv?: Invoice) => {
+    // Guardrail: initiating a payment that isn't due today needs a deliberate
+    // confirm first (see dueWarn). Only gates the INITIATE step — recording an
+    // actual PAID payment is never blocked.
+    if (inv && newStatus === "INITIATED" && inv.dueDate && inv.dueDate !== today) {
+      setDueWarn({ inv, nextStatus: newStatus });
+      return;
+    }
     // Open payment dialog for INITIATED or PAID transitions
     if (inv && (newStatus === "INITIATED" || newStatus === "PAID")) {
       openPayDialog(inv, newStatus);
@@ -2403,6 +2418,60 @@ export default function InvoicesPage() {
           </div>
         </div>
       )}
+
+      {/* Due-date guardrail — confirm before initiating a payment that isn't due today */}
+      {dueWarn && (() => {
+        const due = dueWarn.inv.dueDate!;
+        const days = Math.round((new Date(`${due}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86_400_000);
+        const early = days > 0;
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setDueWarn(null)}>
+            <div className="relative w-full max-w-md rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="flex items-center gap-1.5 text-base font-semibold text-gray-900">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    Due date is not today
+                  </h3>
+                  <p className="mt-0.5 text-xs text-gray-500">Payments are normally initiated on the due date.</p>
+                </div>
+                <button onClick={() => setDueWarn(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                  <p><span className="font-medium text-gray-800">{dueWarn.inv.invoiceNumber}</span> · {dueWarn.inv.supplier} · {formatRM(dueWarn.inv.amount)}</p>
+                </div>
+                <div className={`rounded-lg px-3 py-2 text-xs ${early ? "bg-amber-50 text-amber-800" : "bg-gray-50 text-gray-700"}`}>
+                  <p className="flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    Due <span className="font-medium">{due}</span> — {early
+                      ? `${days} day${days === 1 ? "" : "s"} from now`
+                      : `${-days} day${days === -1 ? "" : "s"} overdue`}
+                  </p>
+                  <p className="mt-1 text-[11px] opacity-80">
+                    {early
+                      ? "Paying early ties up cash before it's owed. Initiate on the due date unless there's a reason not to."
+                      : "This one is past due — fine to pay, just confirming it's the invoice you meant."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                <button onClick={() => setDueWarn(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                <button
+                  onClick={() => { const w = dueWarn; setDueWarn(null); openPayDialog(w.inv, w.nextStatus); }}
+                  className="flex-1 rounded-md bg-amber-500 px-3 py-2 text-sm font-medium text-white hover:bg-amber-600"
+                >
+                  Initiate anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Payment dialog */}
       {payingInvoice && (
