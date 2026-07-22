@@ -170,6 +170,28 @@ export function resolveGrabSettlementRouting(
 //   • STATUTORY_PAYMENT→ 3004/3005/3006/3007 by type  (EPF/SOCSO/EIS/PCB control)
 //   • INTERCO_*        → 3600-xx Due to/from <entity>  (not suspense)
 //   • everything else  → the static CONTRA_ACCOUNT map
+// A few categories mean different things depending on which way the money went.
+// The management fee is the clear case: an outlet PAYING it is an expense
+// (6511-06), but HQ RECEIVING it is income. Crediting the same expense account
+// on the way in made HQ's P&L show a negative expense instead of revenue, which
+// understated both income and expense by the same amount and made the GL
+// impossible to compare with the sourced P&L (which books it as REV-MGMT).
+const INFLOW_CONTRA: Record<string, string> = {
+  MANAGEMENT_FEE: "5501", // Management fee income
+};
+
+/** Contra for a bank line, given its direction. Inflows can differ — see INFLOW_CONTRA. */
+export function resolveContraDirectional(
+  category: string,
+  description: string,
+  direction: "CR" | "DR",
+): { code: string; suspense: boolean } {
+  if (direction === "CR" && INFLOW_CONTRA[category]) {
+    return { code: INFLOW_CONTRA[category], suspense: false };
+  }
+  return resolveContra(category, description);
+}
+
 export function resolveContra(category: string, description: string): { code: string; suspense: boolean } {
   const d = (description || "").toUpperCase();
   if (category === "EMPLOYEE_SALARY") return { code: "3008", suspense: false };
