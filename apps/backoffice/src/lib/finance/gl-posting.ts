@@ -43,7 +43,7 @@ import { postJournal } from "./ledger";
 import { getFinanceClient } from "./supabase";
 import type { JournalLineInput } from "./types";
 import {
-  BANK_CASH, companyFromAccountName, GL_POSTING_CUTOVER, resolveContra, resolveContraDirectional,
+  BANK_CASH, companyFromAccountName, GL_POSTING_CUTOVER, resolveContraDirectional,
   resolveGrabSettlementRouting, round2, SKIP_CATS,
 } from "./gl-posting-map";
 import type { GrabSettlementRouting } from "./gl-posting-map";
