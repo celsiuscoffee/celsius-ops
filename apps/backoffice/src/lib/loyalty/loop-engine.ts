@@ -1049,9 +1049,13 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   fresh_lapse: { key: "fresh_lapse", label: "Fresh lapse", objective: "Catch drifting regulars at 2-4 weeks", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks"], messageTemplate: "It's been a couple of weeks! We miss you at Celsius - enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 45, segmentOpts: { minDaysLapsed: 14, maxDaysLapsed: 30 }, dailyLimit: 80 }, segment: lapsedDeepSegment },
   // Basket builder: habitual small-ticket regulars (avg ~RM17 vs RM40 target).
   // Success = revenue/recipient vs holdout (margin), NOT conversion lift —
-  // they'd visit anyway; the offer's job is to stretch the basket. min_order
-  // bars sit at RM30-50 so the discount only ever pays on an enlarged basket.
-  aov_push: { key: "aov_push", label: "Basket builder", objective: "Grow small baskets toward RM40", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct15_min40", "flat10_min30", "flat15_min50"], messageTemplate: "Hi {name}! Treat yourself a little extra at Celsius - {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 60, segmentOpts: { activeWithinDays: 30, minVisits: 4, maxAvgTicket: 25 }, dailyLimit: 80 }, segment: aovPushSegment },
+  // they'd visit anyway; the offer's job is to stretch the basket.
+  // OWNER RULE (2026-07-19): bars must sit ABOVE the benchmark being moved —
+  // brand AOV is ~RM30, so an RM30 bar rewards a basket people already make
+  // (RM10 off RM30 = 33% give for zero stretch). Every arm here bars at
+  // RM40+, i.e. at/above the AOV target. Same principle as round-gap's
+  // ~20%-above-round-AOV anchoring.
+  aov_push: { key: "aov_push", label: "Basket builder", objective: "Grow small baskets toward RM40", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct15_min40", "pct20_min40", "flat15_min50"], messageTemplate: "Hi {name}! Treat yourself a little extra at Celsius - {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 60, segmentOpts: { activeWithinDays: 30, minVisits: 4, maxAvgTicket: 25 }, dailyLimit: 80 }, segment: aovPushSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
