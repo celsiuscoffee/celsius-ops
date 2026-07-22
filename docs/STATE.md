@@ -6,6 +6,26 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-22 — **First-order 10% discount made native-app-only** (branch
+  `claude/first-order-discount-check-lx938r`, draft PR). Business intent: the
+  welcome 10% is now a native-app perk (drives installs) on BOTH pickup and
+  dine-in; the web/PWA gets nothing. FOD config still lives on the
+  `promotions` row `promo-first-order-celsius` (trigger_type=first_order,
+  percentage_off 10, is_active). Data finding that drove this: over 30d, FOD
+  landed on 0/2,511 dine-in orders (any source) but ~30% of pickup — because
+  the row was `channels=['pickup']` and dine-in runs the `qr_table` channel;
+  the split was order-type, NOT native-vs-PWA. **New mechanism:** gate on
+  order `source`, not channel. `/api/orders` (native, source app_ios/
+  app_android — pickup + dine-in) applies FOD; `/api/checkout/initiate`
+  (PWA, QR-table dine-in, source web_qr) and `/api/checkout/quote` (PWA
+  preview) no longer apply/preview it. The `promotions.channels` field is now
+  vestigial for FOD (code gates on source); left at `['pickup']`. Native
+  checkout still only shows FOD at the receipt (its preview uses
+  `/api/loyalty/promotions/evaluate`, which excludes first_order) — unchanged,
+  possible follow-up. **Live-behaviour note:** the discount only lands at
+  order create, so it needs the PR deployed; until then prod behaviour is
+  unchanged (native pickup only).
+
 - 2026-07-16 — **Finance warehouse baseline (SQL-verified against kqdc).**
   Fresh: unified_sales pos_native →7/16, consignment →7/12 (Nilai settles
   later than older notes claim — re-verify live, don't trust dated notes);

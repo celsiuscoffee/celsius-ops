@@ -240,31 +240,10 @@ export async function POST(request: NextRequest) {
     // in-store register for that outlet (resolved from pos_branch_settings).
     const outletSst = await getOutletSst(supabase, storeId);
 
-    // First-order discount lives on the promotions table now (see
-    // orders/route.ts for the same lookup). Reads the most recent
-    // active row with trigger_type='first_order'.
-    const { data: fodRow } = await supabase
-      .from("promotions")
-      .select("discount_type, discount_value, is_active, channels")
-      .eq("brand_id", "brand-celsius")
-      .eq("trigger_type", "first_order")
-      .eq("is_active", true)
-      .order("priority", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    // Channel scope — the first-order promo only applies on its channels
-    // (empty/null = all). The promo engine no longer applies first_order, so
-    // this path is the single authoritative + channel-aware handler.
-    const fodChannels = (fodRow?.channels as string[] | null) ?? null;
-    const fodChannelOk =
-      !fodChannels || fodChannels.length === 0 || fodChannels.includes(channelForOrderType(orderType));
-    const fodConfig = fodRow && fodChannelOk
-      ? {
-          enabled: true,
-          type: (fodRow.discount_type as string) === "percentage_off" ? "percent" : "fixed",
-          amount: Number(fodRow.discount_value ?? 0),
-        }
-      : undefined;
+    // First-order discount is intentionally NOT applied here. This route is
+    // the web/PWA QR-table (dine-in) path; the 10% welcome discount is a
+    // native-app-only perk resolved in /api/orders (gated on app_ios /
+    // app_android source). Web orders always pay full price.
 
     // ── Server-side monetary validation ────────────────────────────────────
     // The legacy client-supplied `discountSen` is no longer trusted (ignored
@@ -334,24 +313,10 @@ export async function POST(request: NextRequest) {
     const sstRate    = outletSst.rate;
     void sst; // accepted in payload for backward-compat; intentionally unused
 
-    // ── First-order discount ──────────────────────────────────────────────
-    // Mirrors /api/orders: customer's first completed/preparing/ready/paid
-    // order on this loyalty_phone gets a single welcome bump. Phone is the
-    // identity here — loyaltyId may be null for guest checkouts but a phone
-    // is always set.
+    // First-order discount: never applied on the web/PWA path (native-app-only
+    // perk — see /api/orders). Kept as a zero constant so the downstream
+    // total math and the stored first_order_discount_amount stay explicit.
     let fodDiscountSen = 0;
-    if (fodConfig?.enabled && loyaltyPhone) {
-      const { count } = await supabase
-        .from("orders")
-        .select("id", { count: "exact", head: true })
-        .eq("loyalty_phone", loyaltyPhone)
-        .in("status", ["completed", "preparing", "ready", "paid"]);
-      if ((count ?? 0) === 0) {
-        fodDiscountSen = fodConfig.type === "percent"
-          ? Math.round(serverSubtotalSen * (fodConfig.amount / 100))
-          : Math.round(fodConfig.amount * 100);
-      }
-    }
 
     // ── Resolve member tier (used for promo eligibility and points) ───────
     let memberTierId: string | null = null;
