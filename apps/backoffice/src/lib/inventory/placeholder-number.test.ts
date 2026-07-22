@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isPlaceholderNumber, numberShape, numberShapeMatchesHistory } from "./placeholder-number";
+import {
+  isPlaceholderNumber,
+  normalizeInvoiceRef,
+  numberShape,
+  numberShapeMatchesHistory,
+} from "./placeholder-number";
 
 describe("isPlaceholderNumber", () => {
   it("recognises legacy and namespaced placeholders", () => {
@@ -43,5 +48,29 @@ describe("numberShape / numberShapeMatchesHistory", () => {
     const history = ["GRNI-0071", "INV-1946", "INV-1990", "26-0644", "26-0675", "26-0676"];
     expect(numberShapeMatchesHistory("26-0677", history)).toBe(true);
     expect(numberShapeMatchesHistory("IVCT-00012381", history)).toBe(false);
+  });
+});
+
+describe("normalizeInvoiceRef", () => {
+  it("folds separators and case so receipt/stored variants match", () => {
+    // The real Blancoz case: receipt quoted "26 0677" (space) for our "26-0677".
+    expect(normalizeInvoiceRef("26 0677")).toBe(normalizeInvoiceRef("26-0677"));
+    expect(normalizeInvoiceRef("26 0677")).toBe("260677");
+    // Slashes, mixed case, stray punctuation all fold away.
+    expect(normalizeInvoiceRef("IVCT/00012381")).toBe(normalizeInvoiceRef("ivct-00012381"));
+    expect(normalizeInvoiceRef("365IN2606-0138")).toBe("365in26060138");
+  });
+
+  it("does not collapse genuinely different numbers together", () => {
+    expect(normalizeInvoiceRef("26-0677")).not.toBe(normalizeInvoiceRef("26-0678"));
+    // A shorter number must not equal a longer one that merely ends with it —
+    // exact-equality callers rely on this ("260677" ≠ "1260677").
+    expect(normalizeInvoiceRef("1-260677")).not.toBe(normalizeInvoiceRef("26-0677"));
+  });
+
+  it("handles null / empty safely", () => {
+    expect(normalizeInvoiceRef(null)).toBe("");
+    expect(normalizeInvoiceRef(undefined)).toBe("");
+    expect(normalizeInvoiceRef("")).toBe("");
   });
 });
