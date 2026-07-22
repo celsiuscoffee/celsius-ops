@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
 import { Loader2, AlertTriangle, Banknote, ArrowRight, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
 import DailyBalancePanel from "./DailyBalancePanel";
+import IncomingPanel from "./IncomingPanel";
 import { DateRangePicker } from "@/components/date-range-picker";
 
 type Outlet = { id: string; name: string; code: string };
@@ -338,6 +339,14 @@ export default function CashflowPage() {
               <DailyBalancePanel db={data.dailyBalance} />
             </div>
           )}
+
+          {/* What's actually landing next — the settlement pipeline, day by day.
+              Sits directly under the balance so the page reads position → what's
+              coming in → history, rather than leaving the reader to infer when
+              rung revenue turns into cash. */}
+          <div className="mt-4">
+            <IncomingPanel />
+          </div>
 
           {/* Headline KPIs, computed over the FILTERED cash-generated rows,
               so they move with the cadence / account / interco / period / net
