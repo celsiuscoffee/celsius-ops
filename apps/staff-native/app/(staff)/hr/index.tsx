@@ -11,7 +11,6 @@ import { useFocusEffect, useRouter } from "expo-router";
 import {
   Calendar,
   CalendarClock,
-  CalendarPlus,
   CheckCircle2,
   ChevronRight,
   Clock,
@@ -62,12 +61,8 @@ const items = [
     subtitle: "Today and upcoming",
     icon: Calendar,
   },
-  {
-    href: "/(staff)/hr/open-shifts",
-    title: "Open Slots",
-    subtitle: "Book extra shifts — first come, first served",
-    icon: CalendarPlus,
-  },
+  // Open Slots hidden for now (owner 2026-07-22: slots logic removed). The
+  // booking screen still exists — restore this entry to bring it back.
   {
     href: "/(staff)/hr/availability",
     title: "My Availability",

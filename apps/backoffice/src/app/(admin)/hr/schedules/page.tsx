@@ -189,7 +189,9 @@ export default function SchedulesPage() {
   const [dayIdx, setDayIdx] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [fillMode, setFillMode] = useState<"tight" | "mid" | "safe">("tight");
-  const [ptFillMode, setPtFillMode] = useState<"open_slots" | "assign">("open_slots");
+  // Open-slot creation is off for now (owner 2026-07-22) — generation always
+  // proposes PT suggestions. Kept as state so the flow is easy to restore.
+  const [ptFillMode] = useState<"open_slots" | "assign">("assign");
   const [assistDate, setAssistDate] = useState<string | null>(null); // per-day Assist modal
   const [whyDate, setWhyDate] = useState<string | null>(null); // per-day "why this staffing" popover
   // Per-day demand coverage (same model as AI Fill / Assist) so the cell "+ Add"
@@ -700,6 +702,13 @@ export default function SchedulesPage() {
         const data = await res.json().catch(() => ({}) as { error?: string; gate?: LabourGateInfo });
         if (data.gate) setGate(data.gate);
         const verdict = data.gate?.verdict;
+        const blockers = data.gate?.blockers ?? [];
+        if (res.status === 422 && blockers.length > 0) {
+          // Data problem (uncostable shift) — no reason/override can clear it.
+          // Name the offending people so the manager knows exactly what to fix.
+          alert(`${data.error ?? "Can't publish — roster has uncostable shifts"}\n\n${blockers.join("\n")}`);
+          return;
+        }
         if (res.status === 422 && (verdict === "amber" || verdict === "unknown")) {
           const reason = prompt(`${data.error}\n\nReason for publishing over target:`);
           if (!reason) return;
@@ -708,6 +717,12 @@ export default function SchedulesPage() {
           const override = prompt(`${data.error}\n\nOverride reason:`);
           if (!override) return;
           res = await publishOnce({ override_reason: override });
+        } else {
+          // Any other non-ok (403 / 404 / 500) — surface the parsed error we
+          // already have instead of re-reading the consumed body (which lost
+          // the message and showed a bare "Publish failed (422)").
+          alert(data.error || `Publish failed (${res.status})`);
+          return;
         }
         if (!res.ok) {
           const err = await res.json().catch(() => ({}) as { error?: string });
@@ -810,16 +825,6 @@ export default function SchedulesPage() {
                 <option value="tight">Tight</option>
                 <option value="mid">Mid</option>
                 <option value="safe">Safe</option>
-              </select>
-              <select
-                value={ptFillMode}
-                onChange={(e) => setPtFillMode(e.target.value as "open_slots" | "assign")}
-                disabled={generating || isPublished}
-                className="border-r bg-background px-2 py-2 text-sm font-medium disabled:opacity-50"
-                title="PT gaps: Open slots = post them for staff to request, you assign (nobody pre-picked); Suggest = AI pre-picks part-timers as amber PT? cells"
-              >
-                <option value="open_slots">PT: open slots</option>
-                <option value="assign">PT: suggest</option>
               </select>
               <button
                 onClick={handleAIFill}

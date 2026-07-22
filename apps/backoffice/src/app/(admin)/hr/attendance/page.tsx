@@ -20,6 +20,15 @@ type EnrichedLog = AttendanceLog & {
 const timeMyt = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
 
+// scheduled_start / scheduled_end are stored as "HH:MM:SS" wall-clock strings
+// (not ISO timestamps), so they must be formatted from the string directly —
+// new Date("12:00:00") is Invalid Date.
+const fmtSched = (t: string | null): string => {
+  if (!t) return "";
+  const m = /^(\d{1,2}):(\d{2})/.exec(t);
+  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : t;
+};
+
 // Minutes → "1h 05m" / "45m" for readable lateness.
 const fmtMins = (m: number) => {
   const a = Math.abs(m);
@@ -270,7 +279,7 @@ export default function AttendanceReviewPage() {
                     {/* Scheduled vs actual — how late / early vs the roster */}
                     {log.scheduled_start && (
                       <p className="text-sm">
-                        <span className="text-muted-foreground">Rostered {timeMyt(log.scheduled_start)}{log.scheduled_end ? `–${timeMyt(log.scheduled_end)}` : ""} · </span>
+                        <span className="text-muted-foreground">Rostered {fmtSched(log.scheduled_start)}{log.scheduled_end ? `–${fmtSched(log.scheduled_end)}` : ""} · </span>
                         {log.late_minutes > 2 ? (
                           <span className="font-medium text-amber-600">{fmtMins(log.late_minutes)} late</span>
                         ) : log.late_minutes < -2 ? (

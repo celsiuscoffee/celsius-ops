@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarDays, CalendarOff, CalendarPlus, CalendarClock, ChevronRight, CheckCircle2, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star, Target } from "lucide-react";
+import { Clock, CalendarDays, CalendarOff, CalendarClock, ChevronRight, CheckCircle2, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star, Target } from "lucide-react";
 import { useLocationPing } from "@/lib/hr/use-location-ping";
 
 type HRStatus = {
@@ -77,14 +77,8 @@ export default function HRHomePage() {
       color: "text-blue-600",
       bgColor: "bg-blue-50",
     },
-    {
-      href: "/hr/open-shifts",
-      icon: CalendarPlus,
-      label: "Open Slots",
-      subtitle: "Book extra shifts — first come, first served",
-      color: "text-terracotta",
-      bgColor: "bg-orange-50",
-    },
+    // Open Slots hidden for now (owner 2026-07-22: slots logic removed). The
+    // booking route/page still exist — restore this entry to bring it back.
     {
       href: "/hr/availability",
       icon: CalendarClock,
