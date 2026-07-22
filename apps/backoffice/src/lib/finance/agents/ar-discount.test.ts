@@ -1,12 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { allocateDiscount } from "./ar";
-import type { EodChannelSplit } from "../types";
+import { allocateDiscount, type EodChannelSplit } from "./ar";
 
 const split = (p: Partial<EodChannelSplit>): EodChannelSplit => ({
   cashQr: 0, card: 0, voucher: 0, grabfood: 0, gastrohub: 0, other: 0, ...p,
 });
 const sum = (o: Partial<Record<keyof EodChannelSplit, number>>) =>
-  Math.round(Object.values(o).reduce((s, v) => s + (v ?? 0), 0) * 100) / 100;
+  Math.round((Object.values(o) as Array<number | undefined>).reduce<number>((s, v) => s + (v ?? 0), 0) * 100) / 100;
 
 describe("allocateDiscount", () => {
   it("splits in proportion to each channel's sales", () => {
