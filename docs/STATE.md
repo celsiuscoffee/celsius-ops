@@ -393,6 +393,27 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-22 — **Cashflow page adopts the 13-week model + outgoing payables
+  panel (branch `claude/cashflow-13week-payables-kozj9o`, draft PR #1037).**
+  Owner: "best is to do the 13 weeks cashflow model… incoming settlement is
+  very good, need to add incoming payables… easy to filter incl. custom date."
+  Shipped: (1) forward horizon defaults to 13w (4/8/13/26) and the weekly
+  projection table is TRANSPOSED into the classic treasury layout (line items
+  as rows, weeks as columns, Receipts/Disbursements/Net/Closing, lowest week
+  tinted) — same computeCashflow engine, no math change; (2) NEW
+  `lib/finance/payables-forecast.ts` + `/api/finance/cashflow/payables` +
+  `PayablesPanel` mirroring IncomingPanel: unpaid invoices on due dates
+  (remaining honours amountPaid/deposit, same rules as the weekly
+  projection), active RecurringExpense occurrences on theirs, standing
+  Overdue block relative to TODAY (past-due + undated invoices — can't hide
+  behind the date filter), day rows expand to payee lists, category chips;
+  (3) incoming + payables APIs/panels both take custom from/to (shared
+  DateRangePicker) alongside 7/14/28d presets, capped 92 days. Unit tests for
+  the pure payables fns; 491 tests green. NOTE: recurring occurrences use
+  month-add date walking (same day-31 drift as cashflow.ts addMonths —
+  consistent, not fixed). Next: owner feedback on the transposed grid, and
+  whether payables should also feed a per-outlet filter.
+
 - 2026-07-20 (round 16) — **Slot-sizing saga: open slots now follow the FULL
   scheduling logic (PRs #1016 + #1017, both merged; #1015 merged + OTA'd
   earlier).** Owner pushed three times and was right each time. (1) "why 5-6
