@@ -1,4 +1,5 @@
-// Close Agent — month-end close runner. Posts depreciation for active fixed
+// Close Agent — month-end close runner. Books the annual depreciation charge
+// when December is closed, accrues
 // assets, accrues the management fee shortfall owed to HQ (6.8% of the
 // month's revenue less what was already paid), clears the Grab debtor for the
 // month (commission + the Conezion interco leg — model in close-prep.ts),
@@ -16,7 +17,7 @@ import {
   grabClearingForPeriod, MARKETPLACE_FEE_CODE, GRAB_DEBTOR_CODE, DUE_TO_CONEZION_CODE,
 } from "../close-prep";
 import { postApAccrual, type PostApAccrualResult } from "../ap-accrual";
-import { postDepreciation as postDepreciationShared } from "../depreciation";
+import { postAnnualDepreciation } from "../depreciation";
 
 export const CLOSE_AGENT_VERSION = "close-v3";
 
@@ -38,15 +39,18 @@ export type RunCloseResult = {
   locked: boolean;
 };
 
-// Depreciation is posted by the shared, idempotent lib/finance/depreciation.ts
-// (straight-line, one combined journal per period, skips if already posted).
-// The close delegates so there is a single code path for month-end and catch-up.
+// Depreciation is an ANNUAL charge (owner's policy), not a monthly drip: the
+// whole year is booked once, dated 31 Dec, when the December period is closed.
+// Closing any other month charges nothing. The underlying poster is idempotent
+// per (company, year), so re-closing December never double-charges.
 async function postDepreciation(
   companyId: string,
   period: string,
   _actor: string
 ): Promise<{ posted: number; transactionIds: string[] }> {
-  const dep = await postDepreciationShared(companyId, period);
+  const [yearStr, month] = period.split("-");
+  if (month !== "12") return { posted: 0, transactionIds: [] };
+  const dep = await postAnnualDepreciation(companyId, Number(yearStr));
   return { posted: dep.posted, transactionIds: dep.transactionId ? [dep.transactionId] : [] };
 }
 

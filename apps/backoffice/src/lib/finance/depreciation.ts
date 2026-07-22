@@ -81,14 +81,25 @@ export async function registerPpeFromGl(opts: { dryRun?: boolean } = {}): Promis
   return { created, skipped, assets };
 }
 
-// ── Post one month of straight-line depreciation for a company ──
-// Idempotent per (company, period): skips if a 'depreciation' txn already dated
-// on the period's last day exists. Charges min(cost/life, remaining book) per
-// active asset acquired on/before the period end. Returns total charge.
-export async function postDepreciation(companyId: string, period: string, opts: { dryRun?: boolean } = {}): Promise<{ posted: number; transactionId: string | null; skipped: string | null }> {
-  if (!/^\d{4}-\d{2}$/.test(period)) throw new Error(`Invalid period: ${period}`);
-  const [year, month] = period.split("-").map(Number);
-  const txnDate = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // last day of period
+// Whole months an asset was held during `year` — from the later of its
+// acquisition month and January, through December. An asset bought in March is
+// charged 10 months, not 12.
+function monthsHeldInYear(acquiredDate: string, year: number): number {
+  const acq = new Date(`${acquiredDate}T00:00:00Z`);
+  if (acq.getUTCFullYear() > year) return 0;
+  const startMonth = acq.getUTCFullYear() === year ? acq.getUTCMonth() : 0;
+  return 12 - startMonth;
+}
+
+// ── Post a full YEAR of straight-line depreciation for a company ──
+//
+// Depreciation is an ANNUAL charge (owner's policy): one journal per company per
+// financial year, dated 31 Dec, rather than a monthly drip through every close.
+// Each asset is charged for the months it was actually held that year, capped at
+// its remaining book value. Idempotent per (company, year) — re-running is a
+// no-op, so a re-close never double-charges.
+export async function postAnnualDepreciation(companyId: string, year: number, opts: { dryRun?: boolean } = {}): Promise<{ posted: number; transactionId: string | null; skipped: string | null }> {
+  const txnDate = `${year}-12-31`;
   const client = getFinanceClient();
 
   const { data: existing } = await client.from("fin_transactions").select("id").eq("company_id", companyId).eq("txn_type", "depreciation").eq("txn_date", txnDate).limit(1);
@@ -99,42 +110,24 @@ export async function postDepreciation(companyId: string, period: string, opts: 
   const updates: { id: string; accumulated_dep: number; status?: string }[] = [];
   let total = 0;
   for (const a of assets ?? []) {
-    if (a.acquired_date > txnDate) continue; // not yet acquired this period
+    const months = monthsHeldInYear(a.acquired_date, year);
+    if (months <= 0) continue; // acquired after this year
     const cost = Number(a.cost), residual = Number(a.residual ?? 0), accum = Number(a.accumulated_dep), life = Number(a.useful_life_months);
     const depreciable = Math.max(cost - residual, 0);
     const remaining = Math.max(depreciable - accum, 0);
     if (remaining <= 0.005) { updates.push({ id: a.id, accumulated_dep: accum, status: "fully_depreciated" }); continue; }
-    const charge = round2(Math.min(life > 0 ? cost / life : 0, remaining));
+    const charge = round2(Math.min(life > 0 ? (cost / life) * months : 0, remaining));
     if (charge <= 0) continue;
     const accCode = accumCodeFor(a.account_code);
-    lines.push({ accountCode: "6512", outletId: a.outlet_id ?? null, debit: charge, memo: `Dep: ${a.description}` });
-    lines.push({ accountCode: accCode, outletId: a.outlet_id ?? null, credit: charge, memo: `Acc dep: ${a.description}` });
+    lines.push({ accountCode: "6512", outletId: a.outlet_id ?? null, debit: charge, memo: `Dep ${year} (${months}mo): ${a.description}` });
+    lines.push({ accountCode: accCode, outletId: a.outlet_id ?? null, credit: charge, memo: `Acc dep ${year}: ${a.description}` });
     updates.push({ id: a.id, accumulated_dep: round2(accum + charge) });
     total += charge;
   }
   if (lines.length === 0) return { posted: 0, transactionId: null, skipped: "no depreciable assets" };
   if (opts.dryRun) return { posted: round2(total), transactionId: null, skipped: "dry-run" };
 
-  const res = await postJournal({ companyId, txnDate, description: `Depreciation ${period}`, txnType: "depreciation", outletId: null, sourceDocId: null, agent: "close", agentVersion: DEPRECIATION_VERSION, confidence: 1.0, lines });
+  const res = await postJournal({ companyId, txnDate, description: `Depreciation ${year} (annual charge)`, txnType: "depreciation", outletId: null, sourceDocId: null, agent: "close", agentVersion: DEPRECIATION_VERSION, confidence: 1.0, lines });
   for (const u of updates) await client.from("fin_fixed_assets").update({ accumulated_dep: u.accumulated_dep, ...(u.status ? { status: u.status } : {}) }).eq("id", u.id);
   return { posted: round2(total), transactionId: res.transactionId, skipped: null };
-}
-
-// ── Catch up depreciation month-by-month from `fromPeriod` to `toPeriod` ──
-// Runs postDepreciation for each month in order so accumulated_dep progresses
-// correctly and each month's charge lands in that month's P&L.
-export async function runDepreciationBacklog(companyIds: string[], fromPeriod: string, toPeriod: string, opts: { dryRun?: boolean } = {}): Promise<{ company: string; period: string; posted: number; skipped: string | null }[]> {
-  const periods: string[] = [];
-  let [y, m] = fromPeriod.split("-").map(Number);
-  const [ty, tm] = toPeriod.split("-").map(Number);
-  while (y < ty || (y === ty && m <= tm)) {
-    periods.push(`${y}-${String(m).padStart(2, "0")}`);
-    m++; if (m > 12) { m = 1; y++; }
-  }
-  const out: { company: string; period: string; posted: number; skipped: string | null }[] = [];
-  for (const c of companyIds) for (const p of periods) {
-    const r = await postDepreciation(c, p, opts);
-    out.push({ company: c, period: p, posted: r.posted, skipped: r.skipped });
-  }
-  return out;
 }
