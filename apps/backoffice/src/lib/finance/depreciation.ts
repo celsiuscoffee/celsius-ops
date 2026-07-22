@@ -10,7 +10,7 @@
 // months that were missed. Owner-approved policy: straight-line, no residual,
 // standard F&B useful lives below.
 
-import { randomUUID, createHash } from "crypto";
+import { createHash } from "crypto";
 import { getFinanceClient } from "./supabase";
 import { postJournal } from "./ledger";
 import type { JournalLineInput } from "./types";
@@ -47,10 +47,11 @@ export async function registerPpeFromGl(opts: { dryRun?: boolean } = {}): Promis
   const client = getFinanceClient();
   const { data: lines } = await client.from("fin_journal_lines").select("account_code,debit,credit,transaction_id").like("account_code", "1500-%");
   const txids = [...new Set((lines ?? []).map((l) => l.transaction_id))];
-  const txns = new Map<string, any>();
+  type TxnRow = { id: string; company_id: string; txn_date: string; description: string | null };
+  const txns = new Map<string, TxnRow>();
   for (let i = 0; i < txids.length; i += 200) {
     const { data } = await client.from("fin_transactions").select("id,company_id,txn_date,description").in("id", txids.slice(i, i + 200));
-    for (const t of data ?? []) txns.set(t.id, t);
+    for (const t of (data ?? []) as TxnRow[]) txns.set(t.id, t);
   }
   const { data: existing } = await client.from("fin_fixed_assets").select("id");
   const have = new Set((existing ?? []).map((a) => a.id));
