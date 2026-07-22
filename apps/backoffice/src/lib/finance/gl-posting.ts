@@ -43,7 +43,7 @@ import { postJournal } from "./ledger";
 import { getFinanceClient } from "./supabase";
 import type { JournalLineInput } from "./types";
 import {
-  BANK_CASH, companyFromAccountName, GL_POSTING_CUTOVER, resolveContra,
+  BANK_CASH, companyFromAccountName, GL_POSTING_CUTOVER, resolveContra, resolveContraDirectional,
   resolveGrabSettlementRouting, round2, SKIP_CATS,
 } from "./gl-posting-map";
 import type { GrabSettlementRouting } from "./gl-posting-map";
@@ -79,7 +79,7 @@ export function bankMirrorJournalKey(primaryKey: string): string {
 
 export {
   CONTRA_ACCOUNT, companyFromAccountName, contraFor, GL_POSTING_CUTOVER,
-  INTERCO_DUE_ACCOUNT, resolveContra, resolveGrabSettlementRouting,
+  INTERCO_DUE_ACCOUNT, resolveContra, resolveContraDirectional, resolveGrabSettlementRouting,
 } from "./gl-posting-map";
 
 export type Group = {
@@ -135,7 +135,7 @@ export function buildBankGroups(
       : null;
     const { code: contra, suspense } = routing
       ? { code: routing.contra, suspense: false }
-      : resolveContra(category, l.description);
+      : resolveContraDirectional(category, l.description, direction);
     const key = [company, l.outletId ?? "", contra, date, direction, routing ? `x:${routing.mirror.company}` : ""].join("|");
     const g = groups.get(key);
     if (g) { g.amount = round2(g.amount + l.amount); g.lineIds.push(l.id); }
