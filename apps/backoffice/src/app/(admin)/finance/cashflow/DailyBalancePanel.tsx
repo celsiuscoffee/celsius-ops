@@ -51,16 +51,8 @@ function dowIndex(d: string) {
 
 type Mode = "timeline" | "compare";
 type Source = "combined" | "each" | string; // "each" = per-account lines
-type WindowKey = "30" | "90" | "180" | "365" | "max";
 type CompareKey = "mom" | "m3" | "wow" | "w4";
 
-const WINDOWS: { key: WindowKey; label: string; days: number | null }[] = [
-  { key: "30", label: "30D", days: 30 },
-  { key: "90", label: "90D", days: 90 },
-  { key: "180", label: "6M", days: 180 },
-  { key: "365", label: "12M", days: 365 },
-  { key: "max", label: "Max", days: null },
-];
 const COMPARES: { key: CompareKey; label: string; unit: "month" | "week"; count: number }[] = [
   { key: "mom", label: "Month vs last", unit: "month", count: 2 },
   { key: "m3", label: "Last 3 months", unit: "month", count: 3 },
@@ -68,12 +60,30 @@ const COMPARES: { key: CompareKey; label: string; unit: "month" | "week"; count:
   { key: "w4", label: "Last 4 weeks", unit: "week", count: 4 },
 ];
 
-export default function DailyBalancePanel({ db }: { db: DailyBalance }) {
+// Account and period are CONTROLLED by the page's single control bar, so the
+// chart, the KPIs and the table all describe the same slice of money. Only
+// genuinely chart-shaped options (view mode, per-account overlay, projection)
+// stay local — they have no table equivalent.
+export default function DailyBalancePanel({
+  db,
+  account,
+  startDate,
+  endDate,
+}: {
+  db: DailyBalance;
+  account: string;   // "" = all accounts combined
+  startDate: string; // "" = from the beginning
+  endDate: string;   // "" = up to the latest point
+}) {
   const [mode, setMode] = useState<Mode>("timeline");
-  const [source, setSource] = useState<Source>("combined");
-  const [windowKey, setWindowKey] = useState<WindowKey>("90");
+  const [splitByAccount, setSplitByAccount] = useState(false);
   const [compareKey, setCompareKey] = useState<CompareKey>("mom");
   const [showProjection, setShowProjection] = useState(true);
+
+  // Overlay-by-account only makes sense on the timeline with no single account
+  // already selected; otherwise fall back to whatever the control bar says.
+  const source: Source =
+    splitByAccount && !account && mode === "timeline" ? "each" : account || "combined";
 
   const hasData = db.consolidated.length > 0 || db.perAccount.some((a) => a.points.length > 0);
 
@@ -85,15 +95,16 @@ export default function DailyBalancePanel({ db }: { db: DailyBalance }) {
 
   // ── Timeline rows ────────────────────────────────────────────────────────
   const timeline = useMemo(() => {
-    const today = todayMyt();
-    const win = WINDOWS.find((w) => w.key === windowKey)!;
-    const start = win.days ? addDays(today, -win.days) : "0000-00-00";
+    // Window comes from the page's control bar, as a real date range, so the
+    // chart shows exactly the slice the KPIs and table are describing.
+    const start = startDate || "0000-00-00";
+    const end = endDate || "9999-12-31";
 
     if (source === "each") {
       const byDate = new Map<string, Record<string, number | string>>();
       for (const acc of db.perAccount) {
         for (const p of acc.points) {
-          if (p.date < start) continue;
+          if (p.date < start || p.date > end) continue;
           const row = byDate.get(p.date) ?? { date: p.date };
           row[acc.account] = p.balance;
           byDate.set(p.date, row);
@@ -107,7 +118,7 @@ export default function DailyBalancePanel({ db }: { db: DailyBalance }) {
     // Combined or single account → one "actual" line, optional projection.
     const byDate = new Map<string, { date: string; actual: number | null; projected: number | null }>();
     for (const p of activeSeries) {
-      if (p.date < start) continue;
+      if (p.date < start || p.date > end) continue;
       byDate.set(p.date, { date: p.date, actual: p.balance, projected: null });
     }
     const series = [{ key: "actual", name: source === "combined" ? "Actual" : source, color: "#C2452D", dashed: false }];
@@ -124,7 +135,7 @@ export default function DailyBalancePanel({ db }: { db: DailyBalance }) {
     }
     const rows = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
     return { rows, series, projectedMin: null };
-  }, [db, source, activeSeries, windowKey, showProjection]);
+  }, [db, source, activeSeries, startDate, endDate, showProjection]);
 
   // ── Compare rows (period overlay aligned by day-index) ───────────────────
   const compare = useMemo(() => {
@@ -177,10 +188,9 @@ export default function DailyBalancePanel({ db }: { db: DailyBalance }) {
 
   // ── Summary chips (from the active series, within the timeline window) ────
   const stats = useMemo(() => {
-    const today = todayMyt();
-    const win = WINDOWS.find((w) => w.key === windowKey)!;
-    const start = win.days ? addDays(today, -win.days) : "0000-00-00";
-    const pts = activeSeries.filter((p) => p.date >= start);
+    const start = startDate || "0000-00-00";
+    const end = endDate || "9999-12-31";
+    const pts = activeSeries.filter((p) => p.date >= start && p.date <= end);
     if (pts.length === 0) return null;
     const latest = pts[pts.length - 1];
     const first = pts[0];
@@ -188,7 +198,7 @@ export default function DailyBalancePanel({ db }: { db: DailyBalance }) {
     for (const p of pts) if (p.balance < min.balance) min = p;
     const change = latest.balance - first.balance;
     return { latest, min, change };
-  }, [activeSeries, windowKey]);
+  }, [activeSeries, startDate, endDate]);
 
   const segBtn = (active: boolean) =>
     `rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active ? "bg-terracotta text-white" : "text-gray-600 hover:bg-gray-50"}`;
@@ -204,7 +214,7 @@ export default function DailyBalancePanel({ db }: { db: DailyBalance }) {
           <div>
             <h3 className="text-sm font-semibold text-gray-900">Daily bank balance</h3>
             <p className="text-[11px] text-gray-400">
-              Reconstructed end-of-day cash position{db.asOf ? `, actuals through ${fmtDay(db.asOf)}` : ""}. Account-level — not affected by the outlet filter.
+              Reconstructed end-of-day cash position{db.asOf ? `, actuals through ${fmtDay(db.asOf)}` : ""}. Follows the account and period above; bank-account level, so the outlet filter doesn&apos;t apply.
             </p>
           </div>
         </div>
@@ -214,26 +224,16 @@ export default function DailyBalancePanel({ db }: { db: DailyBalance }) {
         </div>
       </div>
 
-      {/* Filter bar */}
+      {/* Chart-only view options. Account and period live in the page's control
+          bar so every panel on the page reads the same slice. */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        {/* Source */}
-        <select
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-          className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700"
-        >
-          <option value="combined">All accounts (combined)</option>
-          {mode === "timeline" && <option value="each">By account (overlay)</option>}
-          {db.accounts.map((a) => <option key={a} value={a}>{a}</option>)}
-        </select>
-
         {mode === "timeline" ? (
           <>
-            <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
-              {WINDOWS.map((w) => (
-                <button key={w.key} onClick={() => setWindowKey(w.key)} className={segBtn(windowKey === w.key)}>{w.label}</button>
-              ))}
-            </div>
+            {!account && (
+              <button onClick={() => setSplitByAccount((s) => !s)} className={segBtn(splitByAccount)}>
+                By account
+              </button>
+            )}
             {source === "combined" && (
               <label className="flex items-center gap-1.5 text-xs text-gray-600">
                 <input type="checkbox" checked={showProjection} onChange={(e) => setShowProjection(e.target.checked)} className="rounded border-gray-300 text-terracotta focus:ring-terracotta" />
