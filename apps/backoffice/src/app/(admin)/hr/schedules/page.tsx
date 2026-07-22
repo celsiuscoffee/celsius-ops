@@ -700,6 +700,13 @@ export default function SchedulesPage() {
         const data = await res.json().catch(() => ({}) as { error?: string; gate?: LabourGateInfo });
         if (data.gate) setGate(data.gate);
         const verdict = data.gate?.verdict;
+        const blockers = data.gate?.blockers ?? [];
+        if (res.status === 422 && blockers.length > 0) {
+          // Data problem (uncostable shift) — no reason/override can clear it.
+          // Name the offending people so the manager knows exactly what to fix.
+          alert(`${data.error ?? "Can't publish — roster has uncostable shifts"}\n\n${blockers.join("\n")}`);
+          return;
+        }
         if (res.status === 422 && (verdict === "amber" || verdict === "unknown")) {
           const reason = prompt(`${data.error}\n\nReason for publishing over target:`);
           if (!reason) return;
@@ -708,6 +715,12 @@ export default function SchedulesPage() {
           const override = prompt(`${data.error}\n\nOverride reason:`);
           if (!override) return;
           res = await publishOnce({ override_reason: override });
+        } else {
+          // Any other non-ok (403 / 404 / 500) — surface the parsed error we
+          // already have instead of re-reading the consumed body (which lost
+          // the message and showed a bare "Publish failed (422)").
+          alert(data.error || `Publish failed (${res.status})`);
+          return;
         }
         if (!res.ok) {
           const err = await res.json().catch(() => ({}) as { error?: string });
