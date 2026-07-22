@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { Fragment, useState, useMemo } from "react";
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Loader2, AlertTriangle, Banknote, ArrowRight, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
+import { Loader2, AlertTriangle, Banknote, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
 import DailyBalancePanel from "./DailyBalancePanel";
 import IncomingPanel from "./IncomingPanel";
+import PayablesPanel from "./PayablesPanel";
 import { DateRangePicker } from "@/components/date-range-picker";
 
 type Outlet = { id: string; name: string; code: string };
@@ -135,7 +136,10 @@ type CashflowResult = {
   warnings: string[];
 };
 
-const HORIZONS = [4, 8, 12, 26] as const;
+// 13 weeks is the default — the standard treasury 13-week cash flow model
+// (a rolling quarter: far enough to see rent/payroll cycles, near enough
+// that the committed-payables layer is meaningful).
+const HORIZONS = [4, 8, 13, 26] as const;
 
 function fmtMYR(n: number): string {
   return new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", maximumFractionDigits: 0 }).format(n);
@@ -181,7 +185,7 @@ function shortRange(start: string, end: string): string {
 }
 
 export default function CashflowPage() {
-  const [weeks, setWeeks] = useState<number>(8);
+  const [weeks, setWeeks] = useState<number>(13);
   const [outletIds, setOutletIds] = useState<string[]>([]);
   const [outletPickerOpen, setOutletPickerOpen] = useState(false);
   // Cash-generated table controls: cadence toggle + single-account filter.
@@ -440,12 +444,13 @@ export default function CashflowPage() {
             </div>
           )}
 
-          {/* What's actually landing next — the settlement pipeline, day by day.
-              Sits directly under the balance so the page reads position → what's
-              coming in → history, rather than leaving the reader to infer when
-              rung revenue turns into cash. */}
-          <div className="mt-4">
+          {/* What's landing and what's leaving — the settlement pipeline and
+              the committed payables, day by day, side by side. Sits directly
+              under the balance so the page reads position → in vs out →
+              history. Each panel has its own presets + custom date range. */}
+          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <IncomingPanel />
+            <PayablesPanel />
           </div>
 
           {/* Headline KPIs, computed over the FILTERED cash-generated rows,
@@ -671,8 +676,8 @@ export default function CashflowPage() {
           {/* Forward weekly projection — sub-header */}
           <div className="mt-6 mb-2 flex items-center justify-between gap-2 flex-wrap">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Forward projection · {weeks} weeks</p>
-              <p className="text-[11px] text-gray-400">Synthetic streams + bank-flow residual. Use the {weeks}w toggle above to change horizon.</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{weeks}-week cash flow model</p>
+              <p className="text-[11px] text-gray-400">Receipts and disbursements per week, opening → closing. Use the {weeks}w toggle above to change horizon.</p>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-500">
               {lowestWeek && (
@@ -702,44 +707,10 @@ export default function CashflowPage() {
             </div>
           )}
 
-          {/* Table */}
-          <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
-            <table className="w-full min-w-[1000px] text-sm">
-              <thead>
-                <tr className="border-b bg-gray-50/50 text-left text-gray-500">
-                  <th className="px-3 py-3 font-medium">Week</th>
-                  <th className="px-3 py-3 text-right font-medium">Opening</th>
-                  <th className="px-3 py-3 text-right font-medium text-green-600">Sales</th>
-                  <th className="px-3 py-3 text-right font-medium text-green-600">Other inflow</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">Invoices due</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">Payroll</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">COGS</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">Marketing</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">Recurring</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">Other outflow</th>
-                  <th className="px-3 py-3 text-right font-medium">Closing</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {data.buckets.map((b) => (
-                  <tr key={b.weekStart} className={`hover:bg-gray-50 ${b.closing < 0 ? "bg-red-50/30" : ""}`}>
-                    <td className="px-3 py-3 text-xs font-medium text-gray-700">{shortRange(b.weekStart, b.weekEnd)}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs">{fmtMYR(b.opening)}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-green-700">{b.salesIn > 0 ? `+${fmtMYR(b.salesIn)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-green-700">{b.otherIn > 0 ? `+${fmtMYR(b.otherIn)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.invoiceOut > 0 ? `−${fmtMYR(b.invoiceOut)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.payrollOut > 0 ? `−${fmtMYR(b.payrollOut)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.cogsOut > 0 ? `−${fmtMYR(b.cogsOut)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.marketingOut > 0 ? `−${fmtMYR(b.marketingOut)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.recurringOut > 0 ? `−${fmtMYR(b.recurringOut)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.otherOut > 0 ? `−${fmtMYR(b.otherOut)}` : "—"}</td>
-                    <td className={`px-3 py-3 text-right font-mono text-xs font-bold ${b.closing < 0 ? "text-red-600" : "text-gray-900"}`}>
-                      {fmtMYR(b.closing)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* The model grid — classic 13-week layout: line items as rows,
+              weeks as columns, so the whole quarter reads left to right. */}
+          <div className="mt-4">
+            <WeeklyModelTable buckets={data.buckets} lowestWeekStart={lowestWeek?.weekStart ?? null} />
           </div>
 
           <p className="mt-3 text-[11px] text-gray-400">
@@ -748,13 +719,108 @@ export default function CashflowPage() {
               ? ` 90-day sample: avg in ${fmtMYR2(data.bankFlowsPerDay.inflow)}/day, out ${fmtMYR2(data.bankFlowsPerDay.outflow)}/day.`
               : " Upload a CSV/Excel statement with period totals to populate."}
           </p>
-          <div className="mt-3">
-            <Link href="/inventory/invoices" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-              See unpaid invoice list <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Classic 13-week cash flow model grid — line items as rows, weeks as
+// columns. Reads like the treasury spreadsheet it replaces: opening balance,
+// receipts, disbursements, net, closing, scanning a quarter left to right.
+// The lowest-closing week is tinted so the crunch is visible at a glance.
+function WeeklyModelTable({ buckets, lowestWeekStart }: { buckets: CashflowBucket[]; lowestWeekStart: string | null }) {
+  type Row = {
+    label: string;
+    value: (b: CashflowBucket) => number;
+    kind: "balance" | "in" | "out" | "subtotal-in" | "subtotal-out" | "net";
+    section?: string; // section header rendered above this row
+  };
+  const totalIn = (b: CashflowBucket) => b.salesIn + b.otherIn;
+  const totalOut = (b: CashflowBucket) =>
+    b.invoiceOut + b.payrollOut + b.cogsOut + b.marketingOut + b.recurringOut + b.otherOut;
+  const rows: Row[] = [
+    { label: "Opening balance", value: (b) => b.opening, kind: "balance" },
+    { label: "Sales settlements", value: (b) => b.salesIn, kind: "in", section: "Receipts" },
+    { label: "Other inflow", value: (b) => b.otherIn, kind: "in" },
+    { label: "Total receipts", value: totalIn, kind: "subtotal-in" },
+    { label: "Supplier invoices", value: (b) => b.invoiceOut, kind: "out", section: "Disbursements" },
+    { label: "Payroll", value: (b) => b.payrollOut, kind: "out" },
+    { label: "COGS", value: (b) => b.cogsOut, kind: "out" },
+    { label: "Marketing", value: (b) => b.marketingOut, kind: "out" },
+    { label: "Recurring", value: (b) => b.recurringOut, kind: "out" },
+    { label: "Other outflow", value: (b) => b.otherOut, kind: "out" },
+    { label: "Total disbursements", value: totalOut, kind: "subtotal-out" },
+    { label: "Net cash flow", value: (b) => totalIn(b) - totalOut(b), kind: "net" },
+    { label: "Closing balance", value: (b) => b.closing, kind: "balance" },
+  ];
+
+  const cellText = (kind: Row["kind"], v: number): string => {
+    if (kind === "in" || kind === "subtotal-in") return v > 0 ? `+${fmtMYR(v)}` : "—";
+    if (kind === "out" || kind === "subtotal-out") return v > 0 ? `−${fmtMYR(v)}` : "—";
+    if (kind === "net") return `${v >= 0 ? "+" : ""}${fmtMYR(v)}`;
+    return fmtMYR(v);
+  };
+  const cellCls = (kind: Row["kind"], v: number): string => {
+    switch (kind) {
+      case "in": return "text-green-700";
+      case "subtotal-in": return "font-semibold text-green-700";
+      case "out": return "text-red-700";
+      case "subtotal-out": return "font-semibold text-red-700";
+      case "net": return `font-semibold ${v >= 0 ? "text-green-700" : "text-red-700"}`;
+      default: return `font-bold ${v < 0 ? "text-red-600" : "text-gray-900"}`;
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-gray-50/50 text-gray-500">
+            <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-left font-medium">Week</th>
+            {buckets.map((b, i) => (
+              <th
+                key={b.weekStart}
+                className={`whitespace-nowrap px-3 py-2 text-right font-medium ${b.weekStart === lowestWeekStart ? "bg-amber-50 text-amber-700" : ""}`}
+              >
+                <span className="block text-[10px] text-gray-400">W{i + 1}</span>
+                {shortRange(b.weekStart, b.weekEnd)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <Fragment key={row.label}>
+              {row.section && (
+                <tr className="border-t border-gray-100">
+                  <td colSpan={buckets.length + 1} className="sticky left-0 bg-white px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    {row.section}
+                  </td>
+                </tr>
+              )}
+              <tr
+                className={`${row.kind.startsWith("subtotal") || row.kind === "net" ? "border-t border-gray-100" : ""} ${row.label === "Closing balance" ? "border-t-2 border-gray-200 bg-gray-50/50" : "hover:bg-gray-50"}`}
+              >
+                <td className={`sticky left-0 z-10 whitespace-nowrap px-3 py-1.5 text-xs ${row.label === "Closing balance" ? "bg-gray-50 font-semibold text-gray-900" : "bg-white font-medium text-gray-600"}`}>
+                  {row.label}
+                </td>
+                {buckets.map((b) => {
+                  const v = row.value(b);
+                  return (
+                    <td
+                      key={b.weekStart}
+                      className={`whitespace-nowrap px-3 py-1.5 text-right font-mono text-xs ${cellCls(row.kind, v)} ${b.weekStart === lowestWeekStart ? "bg-amber-50/60" : ""}`}
+                    >
+                      {cellText(row.kind, v)}
+                    </td>
+                  );
+                })}
+              </tr>
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

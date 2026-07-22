@@ -14,6 +14,7 @@
 import { useMemo, useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Loader2, ArrowDownToLine } from "lucide-react";
+import { DateRangePicker } from "@/components/date-range-picker";
 
 type Channel = "online" | "card" | "qr" | "consignment";
 
@@ -39,6 +40,14 @@ const CHANNEL_DOT: Record<Channel, string> = {
 };
 
 const RM0 = (n: number) => `RM${Math.round(n).toLocaleString("en-MY")}`;
+function todayMytStr() {
+  return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+}
+function addDaysStr(s: string, n: number): string {
+  const d = new Date(`${s}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function dayLabel(d: string, todayStr: string): { dow: string; date: string; isToday: boolean } {
   const dt = new Date(`${d}T00:00:00Z`);
@@ -50,13 +59,16 @@ function dayLabel(d: string, todayStr: string): { dow: string; date: string; isT
 }
 
 export default function IncomingPanel() {
+  // Window: a day-count preset from today, or a custom [from, to] range.
   const [days, setDays] = useState(7);
-  const { data, isLoading } = useFetch<{ forecast: Forecast }>(`/api/finance/cashflow/incoming?days=${days}`);
+  const [custom, setCustom] = useState<{ from: string; to: string } | null>(null);
+  const query = custom ? `from=${custom.from}&to=${custom.to}` : `days=${days}`;
+  const { data, isLoading } = useFetch<{ forecast: Forecast }>(`/api/finance/cashflow/incoming?${query}`);
   const f = data?.forecast;
 
   // Scale bars against the biggest day so the weekly rhythm is visible.
   const maxNet = useMemo(() => (f ? Math.max(...f.byDate.map((d) => d.net), 1) : 1), [f]);
-  const todayStr = f?.from ?? "";
+  const todayStr = todayMytStr();
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
@@ -70,16 +82,24 @@ export default function IncomingPanel() {
             Cash landing per day on each channel&apos;s real settlement calendar. Weekends are QR-only; Mon/Tue carry the card and Revenue Monster batches.
           </p>
         </div>
-        <div className="flex rounded-md border border-gray-200 p-0.5">
-          {[7, 14, 28].map((d) => (
-            <button
-              key={d}
-              onClick={() => setDays(d)}
-              className={`rounded px-2 py-1 text-xs ${days === d ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-            >
-              {d}d
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex rounded-md border border-gray-200 p-0.5">
+            {[7, 14, 28].map((d) => (
+              <button
+                key={d}
+                onClick={() => { setDays(d); setCustom(null); }}
+                className={`rounded px-2 py-1 text-xs ${!custom && days === d ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+          <DateRangePicker
+            start={custom?.from ?? todayStr}
+            end={custom?.to ?? addDaysStr(todayStr, days - 1)}
+            onChange={(s, e) => setCustom({ from: s, to: e })}
+            size="xs"
+          />
         </div>
       </div>
 
@@ -89,7 +109,9 @@ export default function IncomingPanel() {
         <>
           <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
             <div className="rounded-lg bg-gray-50 px-3 py-2">
-              <p className="text-[11px] text-gray-500">Expected in {days}d</p>
+              <p className="text-[11px] text-gray-500">
+                Expected {custom ? `${dayLabel(custom.from, todayStr).date} – ${dayLabel(custom.to, todayStr).date}` : `in ${days}d`}
+              </p>
               <p className="mt-0.5 text-lg font-bold text-gray-900">{RM0(f.total)}</p>
             </div>
             <div className="rounded-lg bg-emerald-50 px-3 py-2">

@@ -590,7 +590,8 @@ export async function computeCashflow(opts: {
   outletId?: string | null;
   outletIds?: string[];
 }): Promise<CashflowResult> {
-  const weeks = Math.max(1, Math.min(26, opts.weeks ?? 8));
+  // Default horizon is the standard 13-week (rolling quarter) model.
+  const weeks = Math.max(1, Math.min(26, opts.weeks ?? 13));
   // Normalise to an array; deduplicate just in case.
   const outletIds = Array.from(
     new Set(
