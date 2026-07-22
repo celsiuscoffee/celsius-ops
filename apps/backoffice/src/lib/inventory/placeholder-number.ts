@@ -23,6 +23,20 @@ export function isPlaceholderNumber(n: string | null | undefined): boolean {
 }
 
 /**
+ * Fold an invoice number / payment reference to a comparison key: drop every
+ * non-alphanumeric separator and case. A receipt often quotes the invoice with
+ * a different separator than we store — "26 0677" (space, OCR'd off the bank
+ * app) for our "26-0677" (hyphen) — so an exact/`contains` match misses it and
+ * the payment falls through to the blind "multiple matching invoices" picker.
+ * Comparing the folded keys ("260677" === "260677") matches regardless of
+ * spaces, hyphens, slashes, or case. Real case: Blancoz RM148 POP quoting
+ * "26 0677" that neither step-1 exact-match nor the step-8 guard could resolve.
+ */
+export function normalizeInvoiceRef(n: string | null | undefined): string {
+  return (n ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+}
+
+/**
  * Reduce an invoice number to its shape: digit runs → '#', case folded, so
  * "IVCT-00012381" → "ivct-#" and "1-15415" → "#-#". Suppliers keep one shape;
  * a number whose shape has never appeared in that supplier's history is a
