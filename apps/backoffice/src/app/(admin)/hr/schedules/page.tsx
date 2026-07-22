@@ -189,7 +189,9 @@ export default function SchedulesPage() {
   const [dayIdx, setDayIdx] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [fillMode, setFillMode] = useState<"tight" | "mid" | "safe">("tight");
-  const [ptFillMode, setPtFillMode] = useState<"open_slots" | "assign">("open_slots");
+  // Open-slot creation is off for now (owner 2026-07-22) — generation always
+  // proposes PT suggestions. Kept as state so the flow is easy to restore.
+  const [ptFillMode] = useState<"open_slots" | "assign">("assign");
   const [assistDate, setAssistDate] = useState<string | null>(null); // per-day Assist modal
   const [whyDate, setWhyDate] = useState<string | null>(null); // per-day "why this staffing" popover
   // Per-day demand coverage (same model as AI Fill / Assist) so the cell "+ Add"
@@ -823,16 +825,6 @@ export default function SchedulesPage() {
                 <option value="tight">Tight</option>
                 <option value="mid">Mid</option>
                 <option value="safe">Safe</option>
-              </select>
-              <select
-                value={ptFillMode}
-                onChange={(e) => setPtFillMode(e.target.value as "open_slots" | "assign")}
-                disabled={generating || isPublished}
-                className="border-r bg-background px-2 py-2 text-sm font-medium disabled:opacity-50"
-                title="PT gaps: Open slots = post them for staff to request, you assign (nobody pre-picked); Suggest = AI pre-picks part-timers as amber PT? cells"
-              >
-                <option value="open_slots">PT: open slots</option>
-                <option value="assign">PT: suggest</option>
               </select>
               <button
                 onClick={handleAIFill}

@@ -1507,7 +1507,12 @@ export async function generateSchedule(
     });
     suggestionLines.push(`${p.date} ${t.label} — ${person.name} (RM${Math.round(cost)}${p.reason ? `, ${p.reason}` : ""})`);
   }
-  if (ptMode === "open_slots") {
+  // Open-slot creation is switched OFF for now (owner 2026-07-22: "remove the
+  // slots logic for now"). The generator no longer posts bookable slots to the
+  // staff apps; a generated week is FT + PT-suggestions only. Flip this back to
+  // true (and the staff Open Slots screens back on) to restore the feature.
+  const SLOTS_ENABLED = false;
+  if (SLOTS_ENABLED && ptMode === "open_slots") {
     notes.push(
       `PT stage: OPEN-SLOTS-FIRST — nobody pre-assigned. All demand gaps go up as bookable slots in the staff apps (station-fit + weekly caps enforced at booking); assign whatever is still unbooked closer to the week.`,
     );
@@ -1562,6 +1567,7 @@ export async function generateSchedule(
     return [s, e] as const;
   };
   for (const date of dates) {
+    if (!SLOTS_ENABLED) break; // slots removed for now — post no open slots
     if (!daysOpen.has(dow(date))) continue;
     // Day budget: the SAME top-up target the assign-mode fill stops at —
     // per-hour head shortfall after FT (incl. mode buffer), or the structural

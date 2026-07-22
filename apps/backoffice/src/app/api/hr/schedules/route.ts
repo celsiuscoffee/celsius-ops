@@ -80,7 +80,9 @@ export async function POST(req: NextRequest) {
   const mode: StaffingMode = STAFFING_MODES.includes(body.mode) ? body.mode : "tight";
   // PT stage: "open_slots" (default) posts demand gaps as bookable slots for
   // staff to REQUEST (manager assigns); "assign" pre-proposes named PTs.
-  const ptMode: "open_slots" | "assign" = body.pt_mode === "assign" ? "assign" : "open_slots";
+  // Open-slot creation is off for now (owner 2026-07-22) — default generation
+  // proposes PT suggestions to confirm in the grid rather than posting slots.
+  const ptMode: "open_slots" | "assign" = body.pt_mode === "open_slots" ? "open_slots" : "assign";
 
   // MANAGER can only act on outlets they're assigned to (outletId + outletIds[])
   if (session.role === "MANAGER" && outlet_id) {
