@@ -462,6 +462,13 @@ type Goal = {
   // category strings that drift as the menu evolves.
   groups?: string[];
   group?: string;
+  // Optional spend floor (in sen) that the QUALIFYING order must clear.
+  // Cash rule: a mission only grows cash if its goal sits ABOVE the brand AOV
+  // (~RM28) — otherwise it rewards a basket the member already makes and the
+  // free drink is pure cash-out. Upsell goals (add-food / add-pastry / 2-drinks)
+  // carry min_total_sen so "the meal" must be a genuinely bigger bill, not the
+  // ~RM20 basket the behaviour describes. Absent → no floor (unchanged).
+  min_total_sen?: number;
 };
 
 type OrderItemForMission = {
@@ -516,6 +523,12 @@ function evalGoalOnOrder(goal: Goal, order: OrderForMission): number {
     return 0;
   }
   if (goal.filter?.order_day_in && !goal.filter.order_day_in.includes(createdMyt.getUTCDay())) {
+    return 0;
+  }
+  // Spend floor (cash rule): the qualifying order must clear min_total_sen, so
+  // an "add a food item" upsell only counts when the bill is genuinely bigger
+  // than the average basket — not the ~RM20 order the behaviour usually is.
+  if (goal.min_total_sen !== undefined && order.total_sen < goal.min_total_sen) {
     return 0;
   }
   switch (goal.type) {
@@ -715,27 +728,53 @@ export async function applyOrderToMission(args: {
     }
     if (inc === 0) continue;
 
+    // IDEMPOTENCY: an order may advance a given assignment AT MOST once. Record
+    // (assignment, order) first; a duplicate insert (retry / double webhook /
+    // client+server both firing) returns no row → skip, so progress can't be
+    // double-counted and the reward can't be minted twice. See migration 091.
+    const { data: applied, error: applyErr } = await supabase
+      .from("mission_order_applications")
+      .upsert(
+        { assignment_id: assignment.id, order_id: args.order.id },
+        { onConflict: "assignment_id,order_id", ignoreDuplicates: true },
+      )
+      .select("assignment_id");
+    if (applyErr) {
+      // Fail safe: if the ledger write errors, do NOT advance (better to under-
+      // credit than to double-mint). Callers re-run on the next order event.
+      console.warn(`[v2] mission idempotency ledger failed, skipping`, `assignment=${assignment.id}`, `order=${args.order.id}`, applyErr.message);
+      continue;
+    }
+    if (!applied || applied.length === 0) continue; // already applied this order to this assignment
+
     const newProgress = assignment.progress_current + inc;
     const completed = newProgress >= assignment.progress_target;
 
-    await supabase
-      .from("mission_assignments")
-      .update({
-        progress_current: newProgress,
-        status: completed ? "completed" : "active",
-        completed_at: completed ? new Date().toISOString() : null,
-      })
-      .eq("id", assignment.id);
-
     if (completed) {
-      completedMissionIds.push(assignment.mission_id);
-      await fulfilCompletedAssignment({
-        memberId: args.memberId,
-        assignmentId: assignment.id,
-        missionId: mission.id,
-        missionTitle: (mission.title as string) ?? "Challenge",
-        voucherTemplateIds: (mission.reward_voucher_template_ids ?? []) as string[],
-      });
+      // Guarded flip: only the call that moves active→completed issues the
+      // reward. A concurrent completer sees status≠active and gets 0 rows, so
+      // the voucher is minted exactly once even under a race.
+      const { data: flipped } = await supabase
+        .from("mission_assignments")
+        .update({ progress_current: newProgress, status: "completed", completed_at: new Date().toISOString() })
+        .eq("id", assignment.id)
+        .eq("status", "active")
+        .select("id");
+      if (flipped && flipped.length > 0) {
+        completedMissionIds.push(assignment.mission_id);
+        await fulfilCompletedAssignment({
+          memberId: args.memberId,
+          assignmentId: assignment.id,
+          missionId: mission.id,
+          missionTitle: (mission.title as string) ?? "Challenge",
+          voucherTemplateIds: (mission.reward_voucher_template_ids ?? []) as string[],
+        });
+      }
+    } else {
+      await supabase
+        .from("mission_assignments")
+        .update({ progress_current: newProgress })
+        .eq("id", assignment.id);
     }
   }
 

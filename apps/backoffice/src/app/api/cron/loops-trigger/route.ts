@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
 import { runTriggeredLoops, autoMeasureDueRounds, runRoundGapDaily, autoPauseUnderperformers } from "@/lib/loyalty/loop-engine";
 import { runWeeklyReport } from "@/lib/loyalty/weekly-report";
+import { runMissionLoop } from "@/lib/loyalty/mission-loop";
 import { touchAgentRun } from "@celsius/agents/src/substrate";
 import { logAgentMessage } from "@celsius/agents/src/messages";
 
@@ -30,6 +31,12 @@ export async function GET(req: NextRequest) {
     // (vercel-crons.test.ts), so the report doesn't get its own schedule.
     const isMondayMyt = new Date(Date.now() + 8 * 3600000).getUTCDay() === 1;
     const weeklyReport = isMondayMyt ? await runWeeklyReport().catch((e) => ({ ok: false, skipped: e instanceof Error ? e.message : "failed" })) : undefined;
+
+    // Mission cash loop: refresh each mission's net-cash-vs-baseline scorecard
+    // and auto-retire cannibalisers (reward costs more than the incremental
+    // spend it drives). Same measure→kill discipline as the SMS loops. Never
+    // throws — a bad measurement must not take down the send cron.
+    const missionLoop = await runMissionLoop().catch((e) => ({ measured: 0, retired: [], error: e instanceof Error ? e.message : "failed" }));
 
     // Fleet visibility: both loops are armed but were never calling the
     // substrate, so /agents showed them as "never ran" and they posted nothing
@@ -63,7 +70,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ triggered, roundGap, measured: measured.measured, autoPaused, ...(weeklyReport ? { weeklyReport } : {}) });
+    return NextResponse.json({ triggered, roundGap, measured: measured.measured, autoPaused, missionLoop, ...(weeklyReport ? { weeklyReport } : {}) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "loops-trigger failed";
     return NextResponse.json({ error: msg }, { status: 500 });
