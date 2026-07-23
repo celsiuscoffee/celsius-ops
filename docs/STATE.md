@@ -393,6 +393,57 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-23 — **Cashflow model deepened: recurring schedule corrected,
+  inter-company classifier fixed, outflows re-modelled (all MERGED: #1037,
+  #1042→#1045).** Continuation of the 13-week-model session below. Owner
+  reviewed the model line-by-line and drove several corrections:
+  1. **RecurringExpense schedule fixed in prod** (direct SQL, no migration —
+     these are forecast rows, `RecurringExpense` has no audit triggers):
+     salary → **3rd** (Putrajaya + HQ, RM73,875); rent → **8th** (Putrajaya,
+     Tamarind, HQ, **+ Shah Alam RM5,700 which was entirely missing**);
+     statutory → **15th**; loan → **1st** (NEW `OTHER` row RM4,415 = WME000001
+     2,233 + WME000002 2,182, the two external financing SIs from SA). Dates
+     are stored as midnight-MYT (= `day-1 T16:00Z`); the app reads UTC +8h, so
+     to fire on day N store `(N-1)T16:00:00Z`.
+  2. **Inter-transfer double-count removed.** EPF/SOCSO is remitted CENTRALLY
+     from SA (~RM15,552/mo); outlets fund it by transferring their share into
+     SA first. The auto-generator had turned Tamarind's funding transfer into a
+     2nd "Statutory — Tamarind" RM5,084 line → **deactivated** (isActive=false).
+     Keep statutory as ONE central line unless remittance stops being central.
+  3. **#1042 inter-company classifier fix (MERGED #1045).** DR legs of
+     inter-co transfers were mis-flagged `isInterCo=false` since ~June 2026:
+     `INTERCO_COUNTERPARTY` only matched the old `"TRANSFER TO/FR A/C CELSIUS
+     COFFEE <ENTITY>"` format; Maybank changed to `"CELSIUS COFFEE <ENTITY>.*"`.
+     Fix is **account-aware** (`bank-line-classifier.ts`): a Celsius payee is
+     inter-co only when its entity ≠ the account the line sits on — the WME
+     loan debits on SA's own account correctly stay external. `accountKey` is
+     passed at every live call site. **Backfilled 11 legs (RM58,621.98) in
+     prod** via the same account-aware SQL; 4 SA loan legs left external.
+     STILL OPEN: the mis-classification is in the underlying bank feed too
+     (inter-co DR legs tagged false) — only the classifier + these 11 rows
+     fixed; a broader reclassification sweep may be warranted.
+  4. **Outflow re-model (MERGED #1045).** Broke the "other outflow" smear
+     apart in `cashflow.ts`: **PT wages → weekly Friday pulse** sized from the
+     LATEST PUBLISHED ROSTER (each outlet's most-recent week summed via
+     labour-gate `ptCost`; bank PARTIMER rate is fallback; new `ptOut` field +
+     "PT wages (Fri)" row). **Marketing → monthly pulse on the 20th** from the
+     bank run-rate (DIGITAL_ADS+OTHER_MARKETING+KOL) — the old `ads_invoice`
+     feed was EMPTY so marketing showed RM0 while ~RM2k/wk left the bank;
+     removed dead `projectMarketing()`. **COGS double-count fixed**: run-rate
+     reduced by the committed-invoice-per-day rate (floored 0) so supplier
+     invoices + COGS don't stack. **Discounts**: settlement is already net of
+     discount — added an informational "Discounts given" stat to IncomingPanel
+     from `unified_sales.discount` (~3.2% of gross). Grab commission is NOT an
+     outflow line (Grab settles net). 493 tests green.
+  - **Cash-in numbers reconciled for the owner** (recurring confusion): three
+    different figures — external CR gross ≈ RM10.7k/day (isInterCo=false, all
+    sources incl. Grab/StoreHub-tail/capital); monthly table "Cash in" INCLUDES
+    interco by default (toggle Interco off to exclude); Incoming panel ≈ RM7.8k
+    net sales settlements this week (ex-Grab, net of fee). The Cashflow page's
+    "Avg cash in" KPI already responds to Period(custom range)+Scope(interco
+    on/off)+Grain. Possible follow-up the owner half-agreed to: a "sales-only"
+    cut of Avg cash-in (strip capital/refunds/StoreHub tail).
+
 - 2026-07-22 — **Cashflow page adopts the 13-week model + outgoing payables
   panel (branch `claude/cashflow-13week-payables-kozj9o`, draft PR #1037).**
   Owner: "best is to do the 13 weeks cashflow model… incoming settlement is
