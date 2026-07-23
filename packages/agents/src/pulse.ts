@@ -47,16 +47,18 @@ async function sendViaPulseBot(token: string, chatId: string, html: string, butt
 // Fire-and-forget: never throws. Returns the Telegram message id on success
 // (truthy), or null on failure/skip - a notification failure must not break the
 // agent action that produced the message.
-export async function sendPulse(html: string, opts?: { buttons?: PulseButton[][]; promptId?: string }): Promise<number | null> {
-  const chatId = pulseChatId();
-  if (chatId == null) {
-    console.warn("[pulse] no CELSIUS_PULSE_CHAT_ID / TELEGRAM_OWNER_CHAT_ID configured; skipping");
-    return null;
-  }
+// Send to a SPECIFIC chat (the owner DM or an approved group). Used for group
+// replies where the target is the originating chat, not the default pulse chat.
+export async function sendPulseTo(
+  chatId: string | number,
+  html: string,
+  opts?: { buttons?: PulseButton[][]; promptId?: string },
+): Promise<number | null> {
+  const target = String(chatId);
   const pulseToken = process.env.CELSIUS_PULSE_BOT_TOKEN;
   try {
     if (pulseToken) {
-      return await sendViaPulseBot(pulseToken, chatId, html, opts?.buttons, opts?.promptId);
+      return await sendViaPulseBot(pulseToken, target, html, opts?.buttons, opts?.promptId);
     }
     // Fallback path uses the existing shared bot (TELEGRAM_BOT_TOKEN).
     // Buttons aren't supported on the fallback (no dedicated webhook to answer).
@@ -65,7 +67,7 @@ export async function sendPulse(html: string, opts?: { buttons?: PulseButton[][]
     const res = await fetch(`https://api.telegram.org/bot${sharedToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text: html, parse_mode: "HTML", disable_web_page_preview: true }),
+      body: JSON.stringify({ chat_id: target, text: html, parse_mode: "HTML", disable_web_page_preview: true }),
     });
     if (!res.ok) throw new Error(`telegram ${res.status}: ${await res.text().catch(() => "")}`);
     return 0; // sent, but message id not tracked on the fallback bot
@@ -73,6 +75,22 @@ export async function sendPulse(html: string, opts?: { buttons?: PulseButton[][]
     console.error("[pulse] send failed:", err);
     return null;
   }
+}
+
+export async function sendPulse(html: string, opts?: { buttons?: PulseButton[][]; promptId?: string }): Promise<number | null> {
+  const chatId = pulseChatId();
+  if (chatId == null) {
+    console.warn("[pulse] no CELSIUS_PULSE_CHAT_ID / TELEGRAM_OWNER_CHAT_ID configured; skipping");
+    return null;
+  }
+  return sendPulseTo(chatId, html, opts);
+}
+
+// The owner's Telegram user id, used to authorize group enable/disable. For a
+// private chat the chat id equals the user id, so pulseChatId is the right
+// default; CELSIUS_PULSE_OWNER_USER_ID overrides if they ever differ.
+export function pulseOwnerUserId(): string | null {
+  return process.env.CELSIUS_PULSE_OWNER_USER_ID || pulseChatId();
 }
 
 // ── Pulse-bot control-plane calls (dedicated bot token) ──────────────────────
