@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAgentClient } from "@celsius/agents/src/substrate";
+import { getAgentClient, getAgentModeOrDefault } from "@celsius/agents/src/substrate";
 import { logAgentMessage } from "@celsius/agents/src/messages";
 import { answerPulseCallback, pulseChatId, sendPulse } from "@celsius/agents/src/pulse";
 import { resolvePrompt, findPromptByMessageId } from "@celsius/agents/src/ask-owner";
 import { writeApMatch, type ApMatch } from "@/lib/finance/ap-match";
+import { answerDataQuestion } from "@/lib/agents/data-analyst";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+// Longer than the default 30s: a data question can take two LLM round-trips
+// (author SQL + explain), occasionally three with a repair.
+export const maxDuration = 60;
 
 // Owner-approved actions. When a prompt carries a payload.action, the owner's
 // answer authorizes a real mutation. Kept in the app (not the shared package)
@@ -179,14 +182,39 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // (c) Free-standing message -> a general note to the agents.
-      await logAgentMessage({
-        fromAgent: "owner",
-        kind: "note",
-        summary: text.slice(0, 400),
-        notify: false,
-      });
-      await sendPulse("📝 Noted. The agents' next runs will have this on the feed.");
+      // (c) Explicit note escape hatch: prefix with "note:" to leave a note
+      // for the agents instead of asking a question.
+      if (/^note:/i.test(text)) {
+        await logAgentMessage({
+          fromAgent: "owner",
+          kind: "note",
+          summary: text.replace(/^note:/i, "").trim().slice(0, 400),
+          notify: false,
+        });
+        await sendPulse("📝 Noted. The agents' next runs will have this on the feed.");
+        return ok();
+      }
+
+      // (d) Any other free-standing message -> a data question. The analyst
+      // answers it live against the business database (read-only) and replies.
+      // Respect the registry kill switch (default armed so a lagging seed can't
+      // silently disable it).
+      if ((await getAgentModeOrDefault("data_analyst", "armed")) === "off") {
+        await sendPulse("The data agent is off right now. Prefix with <b>note:</b> to leave a note instead.");
+        return ok();
+      }
+      try {
+        const res = await answerDataQuestion(text, { askedBy: actor(msg.from) });
+        if (res.error) {
+          await sendPulse(`I couldn't answer that one.\n<i>${escapeHtml(res.error.slice(0, 300))}</i>\n\nTry rephrasing, or prefix with <b>note:</b> to leave a note instead.`);
+        } else {
+          const sqlBlock = res.sql ? `\n\n🔎 <i>${res.rowCount ?? 0} row(s)</i>\n<pre>${escapeHtml(res.sql.slice(0, 900))}</pre>` : "";
+          await sendPulse(`${escapeHtml(res.answer)}${sqlBlock}`);
+        }
+      } catch (err) {
+        console.error("[pulse-webhook] data question failed:", err);
+        await sendPulse("Something went wrong answering that. Please try again in a moment.");
+      }
       return ok();
     }
   } catch (err) {
