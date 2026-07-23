@@ -122,6 +122,11 @@ export type CashflowResult = {
   // for "should I be worried?" decisions. Inspired by QuickBooks'
   // Cash Flow Projector minimum-balance highlighting.
   projectedMin: { closing: number; weekStart: string; weekEnd: string } | null;
+  // Lowest DAILY point on the forward projection (the real intra-week walk),
+  // not just the week-end closings. This is the honest "did the projection ever
+  // dip" number — a week can close positive but dip mid-week when salary/rent
+  // clear before receipts land.
+  projectedDailyMin: { date: string; balance: number } | null;
   // Daily reconstructed bank balance — the "actual" running cash position,
   // walked day-by-day from each account's prior closing balance + its
   // transaction lines. Consolidated = sum across accounts on days where
@@ -927,7 +932,62 @@ export async function computeCashflow(opts: {
   // Daily balance chart series — actuals + forward projection overlay.
   // Account-level, so it ignores the outlet filter by design.
   const dailyBalance = buildDailyBalanceSeries(dailyBalances);
-  dailyBalance.projected = buildProjectedDaily(ymd(today), opening.amount, buckets);
+
+  // Forward projection as a REAL daily walk (not a straight line between
+  // week-ends): each inflow/outflow lands on its actual day, so the line shows
+  // the true intra-week path — the dip when salary (3rd) and rent (8th) clear,
+  // and the recovery as Mon/Tue card + Revenue-Monster batches settle. The
+  // weekly totals are unchanged (a week's daily flows sum to its bucket), so
+  // each week-end still equals that bucket's closing; the new signal is the
+  // lowest DAILY point (projectedDailyMin), the honest "did we dip" number.
+  const exactOut = new Map<string, number>();
+  const addExactOut = (d: Date, amt: number) => {
+    if (!(amt > 0) || d < today || d > horizonEnd) return;
+    const k = ymd(d);
+    exactOut.set(k, (exactOut.get(k) ?? 0) + amt);
+  };
+  for (const iv of invoices) {
+    if (!iv.dueDate) continue;
+    addExactOut(iv.dueDate, remainingAmount({
+      amount: Number(iv.amount),
+      amountPaid: iv.amountPaid == null ? null : Number(iv.amountPaid),
+      depositAmount: iv.depositAmount == null ? null : Number(iv.depositAmount),
+      status: iv.status,
+    }));
+  }
+  for (const exp of recurring) {
+    for (const o of expandRecurring(
+      { id: exp.id, amount: Number(exp.amount), cadence: exp.cadence, nextDueDate: exp.nextDueDate },
+      today, horizonEnd,
+    )) addExactOut(o.date, o.amount);
+  }
+  for (const p of payrollProjected) addExactOut(p.date, p.amount);
+  for (const m of marketingProjected) addExactOut(m.date, m.amount);
+  for (let t = new Date(today); t <= horizonEnd; t = new Date(t.getTime() + DAY_MS)) {
+    if (t.getDay() === 5) addExactOut(t, ptWeekly.perFriday);  // PT every Friday
+  }
+
+  const projected: { date: string; balance: number }[] = [{ date: ymd(today), balance: round2(opening.amount) }];
+  let projectedDailyMin: { date: string; balance: number } | null = null;
+  let walkBal = opening.amount;
+  for (const b of buckets) {
+    const ws = new Date(`${b.weekStart}T00:00:00`);
+    let active = 0;
+    for (let d = 0; d < 7; d++) if (new Date(ws.getTime() + d * DAY_MS) >= today) active++;
+    const cogsPerActiveDay = active > 0 ? b.cogsOut / active : 0;
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(ws.getTime() + d * DAY_MS);
+      if (day < today || day > horizonEnd) continue;
+      const inflow = dowAvg[day.getDay()] + otherInPerDay;
+      const outflow = cogsPerActiveDay + otherOutPerDay + (exactOut.get(ymd(day)) ?? 0);
+      walkBal += inflow - outflow;
+      const point = { date: ymd(day), balance: round2(walkBal) };
+      projected.push(point);
+      if (projectedDailyMin == null || point.balance < projectedDailyMin.balance) projectedDailyMin = point;
+    }
+  }
+  dailyBalance.projected = projected;
+
   const cashGeneration = summariseCashGeneration(monthlyHistory, opening.amount);
   // Projected min balance — lowest closing across the projection horizon
   const projectedMin = buckets.length === 0 ? null : buckets.reduce<{ closing: number; weekStart: string; weekEnd: string } | null>(
@@ -968,6 +1028,7 @@ export async function computeCashflow(opts: {
     operatingCashFlow,
     cashGeneration,
     projectedMin,
+    projectedDailyMin,
     dailyBalance,
     buckets,
     warnings,
@@ -1439,30 +1500,6 @@ function buildDailyBalanceSeries(db: DailyBalances): NonNullable<CashflowResult[
 // Linearly interpolate the weekly forward buckets into a daily projected
 // balance line, anchored at today's opening balance so it overlays the
 // reconstructed actuals continuously on a single date axis.
-function buildProjectedDaily(
-  asOf: string,
-  openingAmount: number,
-  buckets: CashflowBucket[],
-): { date: string; balance: number }[] {
-  const anchors = [
-    { date: asOf, balance: openingAmount },
-    ...buckets.map((b) => ({ date: b.weekEnd, balance: b.closing })),
-  ];
-  const out: { date: string; balance: number }[] = [];
-  for (let i = 0; i < anchors.length - 1; i++) {
-    const a = anchors[i];
-    const b = anchors[i + 1];
-    const span = Math.max(1, Math.round((Date.parse(b.date) - Date.parse(a.date)) / DAY_MS));
-    for (let d = 0; d < span; d++) {
-      const t = new Date(Date.parse(a.date) + d * DAY_MS);
-      out.push({ date: ymd(t), balance: round2(a.balance + ((b.balance - a.balance) * d) / span) });
-    }
-  }
-  const last = anchors[anchors.length - 1];
-  out.push({ date: last.date, balance: round2(last.balance) });
-  return out;
-}
-
 // Operating Cash Flow per month — sourced from classified bank lines.
 // Pure operations only: sales channels in, operating costs out.
 // Excludes financing (loans, capital injections), investing (capex,
