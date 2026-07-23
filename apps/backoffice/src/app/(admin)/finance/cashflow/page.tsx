@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
 import { Loader2, AlertTriangle, Banknote, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
 import DailyBalancePanel from "./DailyBalancePanel";
+import DailyRunRateStrip from "./DailyRunRateStrip";
 import IncomingPanel from "./IncomingPanel";
 import PayablesPanel from "./PayablesPanel";
 import { DateRangePicker } from "@/components/date-range-picker";
@@ -447,6 +448,14 @@ export default function CashflowPage() {
             </div>
           )}
 
+          {/* Daily run-rate — the true per-day cash-in/out/net off actual bank
+              flows (the ~RM10.6k/day the owner reads off the bank), with the
+              weekday/weekend split. Sits above the settlement panels because
+              those forecast a narrower, forward figure that reads lower. */}
+          <div className="mt-4">
+            <DailyRunRateStrip account={account || undefined} />
+          </div>
+
           {/* What's landing and what's leaving — the settlement pipeline and
               the committed payables, day by day, side by side. Sits directly
               under the balance so the page reads position → in vs out →
@@ -723,7 +732,7 @@ export default function CashflowPage() {
           </div>
 
           <p className="mt-3 text-[11px] text-gray-400">
-            Columns derived from classified bank-line categories over the last 90 days. <strong>Sales</strong>: Card + QR + StoreHub + Grab + FoodPanda + GastroHub + Meetings/Events. <strong>COGS</strong>: BOM — this week&apos;s sales × the sales-weighted recipe food-cost % (from menu_margins), netted against committed invoices so the two don&apos;t double-count. <strong>PT wages</strong>: latest published roster cost, one pulse each Friday. <strong>Marketing</strong>: Google Ads + SMS + KOL, one monthly pulse on the 20th. <strong>Recurring</strong>: Rent + Utilities + Software + Tax + Maintenance + bank/loan/licensing on their due dates. <strong>Other outflow</strong>: petty cash, staff claims, and anything not yet categorised.
+            Columns derived from classified bank-line categories over the last 90 days. <strong>Sales</strong>: Card + QR + StoreHub + Grab + FoodPanda + GastroHub + Meetings/Events. <strong>COGS</strong>: BOM — this week&apos;s sales × the sales-weighted recipe food-cost % (from menu_margins), netted against committed invoices so the two don&apos;t double-count. <strong>PT wages</strong>: latest published roster cost, one pulse each Friday. <strong>Marketing</strong>: Google Ads at the <em>live</em> optimizer-allocated daily budget (moves with the ads agent loop — a recent trim cut ~RM4k/mo) + SMS + KOL at the bank run-rate, one monthly pulse on the 20th. <strong>Recurring</strong>: Rent + Utilities + Software + Tax + Maintenance + bank/loan/licensing on their due dates. <strong>Other outflow</strong>: petty cash, staff claims, and anything not yet categorised.
             {data.bankFlowsPerDay
               ? ` 90-day sample: avg in ${fmtMYR2(data.bankFlowsPerDay.inflow)}/day, out ${fmtMYR2(data.bankFlowsPerDay.outflow)}/day.`
               : " Upload a CSV/Excel statement with period totals to populate."}
