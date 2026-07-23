@@ -443,6 +443,52 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
     "Avg cash in" KPI already responds to Period(custom range)+Scope(interco
     on/off)+Grain. Possible follow-up the owner half-agreed to: a "sales-only"
     cut of Avg cash-in (strip capital/refunds/StoreHub tail).
+  - **Later same day — chased down "we never had a negative closing balance"
+    (MERGED: #1046, #1047, #1049, #1050).** Model showed an early-August trough
+    of **−RM54,811**; reality never went negative (real min ≈ RM623). Root
+    causes, fixed in layers:
+    5. **COGS double-count was smeared, not netted per-week (#1047).** COGS was
+       `bankCogsPerDay * activeDays − invoiceOut` with the invoice offset spread
+       evenly, so weeks with a big supplier invoice still carried near-full COGS
+       on top. Now netted **per bucket**: `cogsOut = max(0, salesIn*foodCostPct
+       − invoiceOut)`. **Payroll fired a week early (#1047):** MYT midnights are
+       stored `(N-1)T16:00Z`; `expandRecurring` walked the raw UTC value, so a
+       3rd-of-month pulse could land in the prior week's bucket. Fixed by
+       `cursor = nextDueDate + 8h` before the bucket walk. Invoice remaining now
+       uses shared `remainingAmount()`.
+    6. **Salary + rent amounts were overstated ~RM15k/mo (corrected in prod,
+       direct SQL).** The recurring rows carried gross/accrual figures, not the
+       actual external bank outflow. Corrected to **actual bank outflow**:
+       salary total **RM64,021** (HQ 51,899.50 + Putrajaya 12,121.50), rent
+       total **RM31,795**. Owner chose "set to actual bank outflow, fix amounts
+       first."
+    7. **Salary consolidated to ONE HQ-managed line (prod SQL).** Verified all
+       outlets are paid centrally from the SA account (4384) and that "Salary —
+       HQ" already included Putrajaya. Replaced the per-outlet salary rows with
+       a single **"Salary (central, incl. all outlets)"** = RM64,021 (HQ,
+       `outletId` NULL, fires the 3rd); "Salary — Celsius Coffee Putrajaya"
+       deactivated. Verified statutory (15th) is NOT bundled into the 3rd
+       payroll pulse — they are separate recurring rows.
+    8. **Daily balance walk (MERGED #1049).** Replaced the linear-interp
+       `buildProjectedDaily()` with a real day-by-day walk: builds an `exactOut`
+       map (invoices on due date, recurring via `expandRecurring`, salary/
+       marketing on their dates, PT on Fridays) and walks each bucket's 7 days
+       placing `dowAvg[dow]+otherInPerDay` in and `cogsPerActiveDay+
+       otherOutPerDay+exactOut` out → `dailyBalance.projected` +
+       `projectedDailyMin` (page shows "Lowest day" alongside "Lowest
+       week-end"). Surfaces intra-week troughs the weekly close hides.
+    9. **COGS now follows the BOM, not the 46% supplier-payment rate (MERGED
+       #1050).** Owner: "cogs 34k is too much, we should follow bom" → chose
+       "Live BOM % (36.5%, auto)". New `bomFoodCostPct()` sales-weights
+       `menu_margins.recipe_cost` over 60d of completed `pos_order_items` +
+       `order_items` (matched on lower(trim(name))), clamped 15–60%, fallback
+       `BOM_FOOD_COST_FALLBACK = 0.365`. `menu_margins`/`product_costs` DO now
+       exist with real recipe costs (supersedes the 2026-07-18 cogs-activation
+       note that said BOM costing wasn't built). **Combined effect of 5–9: the
+       early-August trough went from −RM54,811 to ≈ +RM4,500 (positive),
+       matching the owner's reality.** OPEN: the ~10-pt gap between bank COGS
+       (46% of settlements) and BOM (36.5%) is real waste/shrinkage/delivery-fee
+       leakage — worth a variance loop (BOM-implied vs actual supplier spend).
 
 - 2026-07-22 — **Cashflow page adopts the 13-week model + outgoing payables
   panel (branch `claude/cashflow-13week-payables-kozj9o`, draft PR #1037).**
