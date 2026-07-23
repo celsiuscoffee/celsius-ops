@@ -29,6 +29,12 @@ interface Mission {
   total_picked: number;
   total_completed: number;
   created_at: string;
+  // Cash-loop verdict (net cash vs baseline − reward cost). Null until the
+  // mission has measured completers. See mission-loop.ts.
+  cash?: {
+    net_cash_rm: number; incremental_rm: number; reward_cost_rm: number;
+    completers_measured: number; verdict: "cash_positive" | "cash_negative" | "insufficient_data"; retired?: boolean;
+  } | null;
 }
 
 interface VoucherTemplate { id: string; title: string; icon: string; category: string }
@@ -219,6 +225,25 @@ function MissionCard({
           <div className="text-muted-foreground">Rate</div>
         </div>
       </div>
+
+      {/* Cash-loop verdict — the number that actually matters: does this mission
+          put more money in the bank than doing nothing? net = incremental spend
+          (completers vs their own baseline) × margin − reward cash cost. */}
+      {mission.cash && (
+        mission.cash.verdict === "insufficient_data" ? (
+          <div className="text-xs text-muted-foreground border-t pt-3">
+            Cash: measuring — {mission.cash.completers_measured} completers so far (need 15 to judge)
+          </div>
+        ) : (
+          <div className={`text-xs border-t pt-3 ${mission.cash.net_cash_rm >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
+            <span className="font-semibold">
+              {mission.cash.net_cash_rm >= 0 ? "Cash-positive" : "Cash-negative"}: {mission.cash.net_cash_rm >= 0 ? "+" : ""}RM{mission.cash.net_cash_rm.toFixed(0)}
+            </span>
+            <span className="text-muted-foreground"> · +RM{mission.cash.incremental_rm.toFixed(0)} spend vs baseline − RM{mission.cash.reward_cost_rm.toFixed(0)} reward, over {mission.cash.completers_measured} completers</span>
+            {mission.cash.retired && <span className="text-rose-500 font-medium"> · auto-retired</span>}
+          </div>
+        )
+      )}
 
       <div className="flex items-center justify-between pt-2">
         <button
