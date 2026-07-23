@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAgentClient, getAgentModeOrDefault } from "@celsius/agents/src/substrate";
 import { logAgentMessage } from "@celsius/agents/src/messages";
-import { answerPulseCallback, pulseChatId, sendPulse } from "@celsius/agents/src/pulse";
+import { answerPulseCallback, pulseChatId, pulseOwnerUserId, sendPulse, sendPulseTo } from "@celsius/agents/src/pulse";
 import { resolvePrompt, findPromptByMessageId } from "@celsius/agents/src/ask-owner";
 import { writeApMatch, type ApMatch } from "@/lib/finance/ap-match";
 import { answerDataQuestion } from "@/lib/agents/data-analyst";
@@ -66,7 +66,7 @@ async function dispatchPromptAction(payload: Record<string, unknown> | null, val
 // doesn't retry a rejected update.
 
 type TgUser = { id: number; first_name?: string; username?: string };
-type TgChat = { id: number };
+type TgChat = { id: number; type?: string; title?: string };
 type TgMessage = { message_id: number; from?: TgUser; chat: TgChat; text?: string; reply_to_message?: { message_id: number } };
 type TgCallback = { id: string; from: TgUser; message?: TgMessage; data?: string };
 type TgUpdate = { message?: TgMessage; callback_query?: TgCallback };
@@ -84,6 +84,53 @@ function ownerAllowed(chatId: number | undefined): boolean {
 function actor(u?: TgUser): string {
   if (!u) return "owner";
   return u.username ? `@${u.username}` : `${u.first_name ?? "owner"} (${u.id})`;
+}
+
+function isPrivateChat(chatType?: string): boolean {
+  return chatType === "private" || chatType === undefined;
+}
+
+// Only the owner (by Telegram user id) may enable/disable a group.
+function isOwnerUser(u?: TgUser): boolean {
+  const owner = pulseOwnerUserId();
+  return !!owner && !!u && String(u.id) === String(owner);
+}
+
+// In a group the bot's @mention is part of the message text; drop a leading one.
+function stripMention(text: string): string {
+  return text.replace(/^\s*@\w+\s*/, "").trim();
+}
+
+// Owner DM is always allowed; a group is allowed only if the owner enabled it
+// (row in pulse_allowed_chats). Cached briefly to keep the hot path cheap.
+const allowedChatCache = new Map<string, { allowed: boolean; at: number }>();
+const ALLOWED_TTL_MS = 30_000;
+async function chatAllowed(chatId: number | undefined, chatType?: string): Promise<boolean> {
+  if (chatId == null) return false;
+  if (isPrivateChat(chatType)) return ownerAllowed(chatId);
+  const key = String(chatId);
+  const hit = allowedChatCache.get(key);
+  if (hit && Date.now() - hit.at < ALLOWED_TTL_MS) return hit.allowed;
+  let allowed = false;
+  try {
+    const { data } = await getAgentClient().from("pulse_allowed_chats").select("chat_id").eq("chat_id", key).maybeSingle();
+    allowed = !!data;
+  } catch (e) {
+    console.error("[pulse-webhook] chatAllowed read failed:", e);
+  }
+  allowedChatCache.set(key, { allowed, at: Date.now() });
+  return allowed;
+}
+
+async function setChatAllowed(chatId: number, title: string | undefined, by: string, on: boolean): Promise<void> {
+  const key = String(chatId);
+  const client = getAgentClient();
+  if (on) {
+    await client.from("pulse_allowed_chats").upsert({ chat_id: key, title: title ?? null, enabled_by: by, enabled_at: new Date().toISOString() });
+  } else {
+    await client.from("pulse_allowed_chats").delete().eq("chat_id", key);
+  }
+  allowedChatCache.delete(key);
 }
 
 export async function POST(req: NextRequest) {
@@ -137,84 +184,110 @@ export async function POST(req: NextRequest) {
     // ── Message / reply ──────────────────────────────────────────────────
     if (update.message) {
       const msg = update.message;
-      if (!ownerAllowed(msg.chat.id)) return ok();
-      const text = (msg.text ?? "").trim();
+      const chatId = msg.chat.id;
+      const priv = isPrivateChat(msg.chat.type);
+      let text = (msg.text ?? "").trim();
+      if (!text) return ok();
+      // In a group the message tags the bot; strip the leading @mention.
+      if (!priv) text = stripMention(text);
       if (!text) return ok();
 
-      const client = getAgentClient();
-      const replyToId = msg.reply_to_message?.message_id;
-
-      // (a) Reply to an open question -> that's the answer.
-      if (replyToId) {
-        const prompt = await findPromptByMessageId(replyToId);
-        if (prompt) {
-          const resolved = await resolvePrompt({ promptId: prompt.id, answer: text, answeredBy: actor(msg.from) });
-          if (resolved) {
-            await logAgentMessage({
-              fromAgent: "owner",
-              toAgent: resolved.agent_key,
-              kind: "note",
-              summary: `Answered "${resolved.prompt.slice(0, 100)}": ${text.slice(0, 200)}`,
-              notify: false,
-            });
-          }
-          await sendPulse("👍 Got it, recorded your answer.");
-          return ok();
-        }
-
-        // (b) Reply to a feed message -> attach a note to that exact agent/topic.
-        const { data: fed } = await client
-          .from("agent_messages")
-          .select("from_agent, summary")
-          .eq("notified_message_id", replyToId)
-          .maybeSingle();
-        if (fed) {
-          await logAgentMessage({
-            fromAgent: "owner",
-            toAgent: fed.from_agent as string,
-            kind: "note",
-            summary: text.slice(0, 400),
-            detail: `In reply to: ${(fed.summary as string).slice(0, 160)}`,
-            notify: false,
-          });
-          await sendPulse(`📝 Noted for the ${escapeHtml(String(fed.from_agent).replace(/_/g, " "))}.`);
-          return ok();
-        }
-      }
-
-      // (c) Explicit note escape hatch: prefix with "note:" to leave a note
-      // for the agents instead of asking a question.
-      if (/^note:/i.test(text)) {
-        await logAgentMessage({
-          fromAgent: "owner",
-          kind: "note",
-          summary: text.replace(/^note:/i, "").trim().slice(0, 400),
-          notify: false,
-        });
-        await sendPulse("📝 Noted. The agents' next runs will have this on the feed.");
+      // Group enable/disable — OWNER only, run from inside the target group.
+      // This is the ONLY way a group is added to the allowlist, so no one but
+      // the owner can open the bot up to a new chat.
+      if (!priv && /^\/?(enable|disable)\b/i.test(text)) {
+        if (!isOwnerUser(msg.from)) return ok(); // silently ignore non-owners
+        const on = /^\/?enable/i.test(text);
+        await setChatAllowed(chatId, msg.chat.title, actor(msg.from), on);
+        await sendPulseTo(
+          chatId,
+          on
+            ? "✅ This group is enabled. Tag me with a question about the business and I'll answer here."
+            : "🚫 This group is disabled. I'll stop answering here.",
+        );
         return ok();
       }
 
-      // (d) Any other free-standing message -> a data question. The analyst
-      // answers it live against the business database (read-only) and replies.
-      // Respect the registry kill switch (default armed so a lagging seed can't
-      // silently disable it).
+      // Gate: owner DM, or a group the owner has enabled.
+      if (!(await chatAllowed(chatId, msg.chat.type))) {
+        if (!priv && isOwnerUser(msg.from)) {
+          await sendPulseTo(chatId, "This group isn't enabled yet. Tag me with <b>enable</b> and I'll start answering here.");
+        }
+        return ok();
+      }
+
+      const client = getAgentClient();
+
+      // Owner-DM-only flows: answering an open prompt, noting on the feed, and
+      // the note escape hatch. Groups skip straight to questions.
+      if (priv) {
+        const replyToId = msg.reply_to_message?.message_id;
+        // (a) Reply to an open question -> that's the answer.
+        if (replyToId) {
+          const prompt = await findPromptByMessageId(replyToId);
+          if (prompt) {
+            const resolved = await resolvePrompt({ promptId: prompt.id, answer: text, answeredBy: actor(msg.from) });
+            if (resolved) {
+              await logAgentMessage({
+                fromAgent: "owner",
+                toAgent: resolved.agent_key,
+                kind: "note",
+                summary: `Answered "${resolved.prompt.slice(0, 100)}": ${text.slice(0, 200)}`,
+                notify: false,
+              });
+            }
+            await sendPulse("👍 Got it, recorded your answer.");
+            return ok();
+          }
+          // (b) Reply to a feed message -> attach a note to that agent/topic.
+          const { data: fed } = await client
+            .from("agent_messages")
+            .select("from_agent, summary")
+            .eq("notified_message_id", replyToId)
+            .maybeSingle();
+          if (fed) {
+            await logAgentMessage({
+              fromAgent: "owner",
+              toAgent: fed.from_agent as string,
+              kind: "note",
+              summary: text.slice(0, 400),
+              detail: `In reply to: ${(fed.summary as string).slice(0, 160)}`,
+              notify: false,
+            });
+            await sendPulse(`📝 Noted for the ${escapeHtml(String(fed.from_agent).replace(/_/g, " "))}.`);
+            return ok();
+          }
+        }
+        // (c) Explicit note escape hatch.
+        if (/^note:/i.test(text)) {
+          await logAgentMessage({
+            fromAgent: "owner",
+            kind: "note",
+            summary: text.replace(/^note:/i, "").trim().slice(0, 400),
+            notify: false,
+          });
+          await sendPulse("📝 Noted. The agents' next runs will have this on the feed.");
+          return ok();
+        }
+      }
+
+      // (d) Data question (owner DM or an approved group). Reply into the chat
+      // it came from. Respect the kill switch (default armed).
       if ((await getAgentModeOrDefault("data_analyst", "armed")) === "off") {
-        await sendPulse("The data agent is off right now. Prefix with <b>note:</b> to leave a note instead.");
+        await sendPulseTo(chatId, "The data agent is off right now.");
         return ok();
       }
       try {
         const res = await answerDataQuestion(text, { askedBy: actor(msg.from) });
         if (res.error) {
-          await sendPulse(`I couldn't answer that one.\n<i>${escapeHtml(res.error.slice(0, 300))}</i>\n\nTry rephrasing, or prefix with <b>note:</b> to leave a note instead.`);
+          await sendPulseTo(chatId, `I couldn't answer that one.\n<i>${escapeHtml(res.error.slice(0, 300))}</i>\n\nTry rephrasing it.`);
         } else {
-          // The SQL is logged to agent_actions for audit but kept out of the
-          // reply to keep the chat clean.
-          await sendPulse(escapeHtml(res.answer));
+          // SQL is logged to agent_actions for audit but kept out of the reply.
+          await sendPulseTo(chatId, escapeHtml(res.answer));
         }
       } catch (err) {
         console.error("[pulse-webhook] data question failed:", err);
-        await sendPulse("Something went wrong answering that. Please try again in a moment.");
+        await sendPulseTo(chatId, "Something went wrong answering that. Please try again in a moment.");
       }
       return ok();
     }
