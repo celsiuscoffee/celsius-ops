@@ -16,7 +16,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { Loader2, ArrowDownToLine } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 
-type Channel = "online" | "card" | "qr" | "consignment";
+type Channel = "online" | "card" | "qr" | "consignment" | "grab";
 
 type Forecast = {
   from: string;
@@ -27,6 +27,7 @@ type Forecast = {
   bookedTotal: number;
   projectedTotal: number;
   discounts: { total: number; grossSales: number; pct: number; from: string; to: string };
+  reconcile: { grabPerDay: number; otherPerDay: number; otherWindowTotal: number; trailingDays: number };
 };
 
 const ENTITY_LABEL: Record<string, string> = {
@@ -34,10 +35,10 @@ const ENTITY_LABEL: Record<string, string> = {
   celsiusconezion: "Putrajaya",
   celsiustamarind: "Cyberjaya",
 };
-const CHANNEL_LABEL: Record<Channel, string> = { online: "Online", card: "Card", qr: "QR", consignment: "Consignment" };
-const CHANNEL_ORDER: Channel[] = ["card", "online", "qr", "consignment"];
+const CHANNEL_LABEL: Record<Channel, string> = { online: "Online", card: "Card", qr: "QR", consignment: "Consignment", grab: "Grab" };
+const CHANNEL_ORDER: Channel[] = ["card", "online", "qr", "consignment", "grab"];
 const CHANNEL_DOT: Record<Channel, string> = {
-  card: "bg-blue-500", online: "bg-violet-500", qr: "bg-emerald-500", consignment: "bg-amber-500",
+  card: "bg-blue-500", online: "bg-violet-500", qr: "bg-emerald-500", consignment: "bg-amber-500", grab: "bg-green-600",
 };
 
 const RM0 = (n: number) => `RM${Math.round(n).toLocaleString("en-MY")}`;
@@ -183,6 +184,17 @@ export default function IncomingPanel() {
               </span>
             ))}
           </div>
+
+          {/* Reconciliation to the "Avg cash in" KPI, which counts every
+              non-inter-company bank credit. Grab is now folded into the forecast
+              above (bank run-rate, ~RM{grabPerDay}/day, lands in HQ 4384). Only
+              this residual — meetings/events, refunds, misc — is left out. */}
+          <p className="mt-1.5 text-[10px] leading-relaxed text-gray-400">
+            Grab is included above at its trailing bank run-rate ({RM0(f.reconcile.grabPerDay)}/day, pools into HQ 4384).
+            {f.reconcile.otherPerDay > 0 && (
+              <> A further ~{RM0(f.reconcile.otherPerDay)}/day of non-sales credits (meetings, refunds, misc) hits the bank but isn&apos;t forecast here — that&apos;s the gap between this panel and total &ldquo;Avg cash in&rdquo;.</>
+            )}
+          </p>
         </>
       )}
     </div>
