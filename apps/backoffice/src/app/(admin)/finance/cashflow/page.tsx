@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
 import { Loader2, AlertTriangle, Banknote, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
 import DailyBalancePanel from "./DailyBalancePanel";
+import DailyRunRateStrip from "./DailyRunRateStrip";
 import IncomingPanel from "./IncomingPanel";
 import PayablesPanel from "./PayablesPanel";
 import { DateRangePicker } from "@/components/date-range-picker";
@@ -446,6 +447,14 @@ export default function CashflowPage() {
               <DailyBalancePanel db={data.dailyBalance} account={account} startDate={dateStart} endDate={dateEnd} />
             </div>
           )}
+
+          {/* Daily run-rate — the true per-day cash-in/out/net off actual bank
+              flows (the ~RM10.6k/day the owner reads off the bank), with the
+              weekday/weekend split. Sits above the settlement panels because
+              those forecast a narrower, forward figure that reads lower. */}
+          <div className="mt-4">
+            <DailyRunRateStrip account={account || undefined} />
+          </div>
 
           {/* What's landing and what's leaving — the settlement pipeline and
               the committed payables, day by day, side by side. Sits directly

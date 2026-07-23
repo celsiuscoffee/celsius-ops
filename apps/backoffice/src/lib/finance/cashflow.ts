@@ -1486,6 +1486,98 @@ export async function loadCashGenerated(
   };
 }
 
+export type RunRateLeg = { avgIn: number; avgOut: number; avgNet: number; days: number };
+export type DailyRunRate = {
+  daysBack: number;
+  from: string;
+  to: string;
+  account: string | null;
+  accountLabel: string | null;
+  overall: RunRateLeg;
+  weekday: RunRateLeg;
+  weekend: RunRateLeg;
+};
+
+// How many trailing days the daily run-rate averages over. 90 days smooths the
+// lumpy weekly/monthly outflows (payroll, rent, big supplier runs) into a
+// stable per-day figure — long enough that one heavy week doesn't dominate.
+const RUN_RATE_DAYS = 90;
+
+// Average cash IN / OUT / NET per calendar day from actual bank flows, split
+// weekday vs weekend. External only (isInterCo=false) so inter-entity
+// transfers — which net to zero across the group — don't inflate both sides.
+// Divides by the count of calendar days in the window (not just days with a
+// transaction), so a quiet weekend correctly pulls the weekend average down.
+// This is the run-rate behind the "Avg cash in ≈ RM10.6k/day" the owner reads
+// off the bank; the settlement panel forecasts a narrower, forward figure.
+export async function loadDailyRunRate(
+  accountFilter?: string | null,
+  daysBack: number = RUN_RATE_DAYS,
+): Promise<DailyRunRate> {
+  const account = accountFilter && ACCOUNT_LABELS[accountFilter] ? accountFilter : null;
+  const accountLabel = account ? ACCOUNT_LABELS[account] : null;
+  const acctClause = account ? `AND s."accountName" LIKE '%(${account})%'` : "";
+
+  const rows = await prisma.$queryRawUnsafe<
+    { is_weekend: boolean; days: number; avg_in: number; avg_out: number; avg_net: number }[]
+  >(`
+    WITH lines AS (
+      SELECT (l."txnDate" + interval '8 hours')::date AS d, l.direction, l.amount,
+             extract(isodow from (l."txnDate" + interval '8 hours')::date) >= 6 AS is_weekend
+      FROM "BankStatementLine" l
+      JOIN "BankStatement" s ON s.id = l."statementId"
+      WHERE l."isInterCo" = false
+        AND (l."txnDate" + interval '8 hours')::date >= (now() + interval '8 hours')::date - ${daysBack}
+        AND (l."txnDate" + interval '8 hours')::date <  (now() + interval '8 hours')::date
+        ${acctClause}
+    ),
+    daycounts AS (
+      SELECT extract(isodow from (now() + interval '8 hours')::date - g) >= 6 AS is_weekend, count(*)::int AS days
+      FROM generate_series(1, ${daysBack}) g GROUP BY 1
+    )
+    SELECT dc.is_weekend,
+           dc.days,
+           (COALESCE(sum(l.amount) FILTER (WHERE l.direction='CR'),0)/dc.days)::float AS avg_in,
+           (COALESCE(sum(l.amount) FILTER (WHERE l.direction='DR'),0)/dc.days)::float AS avg_out,
+           ((COALESCE(sum(l.amount) FILTER (WHERE l.direction='CR'),0)
+             - COALESCE(sum(l.amount) FILTER (WHERE l.direction='DR'),0))/dc.days)::float AS avg_net
+    FROM daycounts dc
+    LEFT JOIN lines l ON l.is_weekend = dc.is_weekend
+    GROUP BY dc.is_weekend, dc.days
+  `);
+
+  const leg = (predicate: (r: (typeof rows)[number]) => boolean): RunRateLeg => {
+    const matched = rows.filter(predicate);
+    const days = matched.reduce((s, r) => s + Number(r.days), 0);
+    // Day-weighted mean so the overall figure is a true per-calendar-day rate.
+    const wsum = (f: (r: (typeof rows)[number]) => number) =>
+      days > 0 ? matched.reduce((s, r) => s + f(r) * Number(r.days), 0) / days : 0;
+    return {
+      avgIn: round2(wsum((r) => Number(r.avg_in))),
+      avgOut: round2(wsum((r) => Number(r.avg_out))),
+      avgNet: round2(wsum((r) => Number(r.avg_net))),
+      days,
+    };
+  };
+
+  const nowMyt = new Date(Date.now() + 8 * 3600_000);
+  const to = nowMyt.toISOString().slice(0, 10);
+  const fromD = new Date(nowMyt);
+  fromD.setUTCDate(fromD.getUTCDate() - daysBack);
+  const from = fromD.toISOString().slice(0, 10);
+
+  return {
+    daysBack,
+    from,
+    to,
+    account,
+    accountLabel,
+    overall: leg(() => true),
+    weekday: leg((r) => !r.is_weekend),
+    weekend: leg((r) => r.is_weekend),
+  };
+}
+
 // Pull a single account's daily balance series out of the reconstructed
 // DailyBalances. Accounts are keyed by their full accountName in the
 // reconstruction, so match on the last-4 suffix.
