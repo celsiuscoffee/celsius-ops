@@ -97,6 +97,7 @@ const ACCOUNTS: { code: string; name: string }[] = [
 ];
 
 type ProjectedMin = { closing: number; weekStart: string; weekEnd: string };
+type ProjectedDailyMin = { date: string; balance: number };
 
 type DailyBalance = {
   asOf: string | null;
@@ -132,6 +133,7 @@ type CashflowResult = {
   operatingCashFlow: OperatingCashFlow[];
   cashGeneration: CashGeneration;
   projectedMin: ProjectedMin | null;
+  projectedDailyMin: ProjectedDailyMin | null;
   dailyBalance: DailyBalance | null;
   buckets: CashflowBucket[];
   warnings: string[];
@@ -681,9 +683,15 @@ export default function CashflowPage() {
               <p className="text-[11px] text-gray-400">Receipts and disbursements per week, opening → closing. Use the {weeks}w toggle above to change horizon.</p>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-500">
+              {data.projectedDailyMin && (
+                <span title="Lowest point on the day-by-day projection — the real intra-week dip when salary/rent clear before receipts land.">
+                  Lowest day: <span className={`font-mono ${data.projectedDailyMin.balance < 0 ? "text-red-600" : data.projectedDailyMin.balance < 10000 ? "text-amber-600" : "text-gray-700"}`}>{fmtMYR(data.projectedDailyMin.balance)}</span>{" "}
+                  ({fmtDay(data.projectedDailyMin.date)})
+                </span>
+              )}
               {lowestWeek && (
                 <span>
-                  Lowest week: <span className={`font-mono ${lowestWeek.closing < 0 ? "text-red-600" : "text-amber-600"}`}>{fmtMYR(lowestWeek.closing)}</span>{" "}
+                  Lowest week-end: <span className={`font-mono ${lowestWeek.closing < 0 ? "text-red-600" : "text-amber-600"}`}>{fmtMYR(lowestWeek.closing)}</span>{" "}
                   ({shortRange(lowestWeek.weekStart, lowestWeek.weekEnd)})
                 </span>
               )}
