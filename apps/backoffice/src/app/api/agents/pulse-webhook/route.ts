@@ -208,8 +208,9 @@ export async function POST(req: NextRequest) {
         if (res.error) {
           await sendPulse(`I couldn't answer that one.\n<i>${escapeHtml(res.error.slice(0, 300))}</i>\n\nTry rephrasing, or prefix with <b>note:</b> to leave a note instead.`);
         } else {
-          const sqlBlock = res.sql ? `\n\n🔎 <i>${res.rowCount ?? 0} row(s)</i>\n<pre>${escapeHtml(res.sql.slice(0, 900))}</pre>` : "";
-          await sendPulse(`${escapeHtml(res.answer)}${sqlBlock}`);
+          // The SQL is logged to agent_actions for audit but kept out of the
+          // reply to keep the chat clean.
+          await sendPulse(escapeHtml(res.answer));
         }
       } catch (err) {
         console.error("[pulse-webhook] data question failed:", err);

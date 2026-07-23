@@ -32,7 +32,9 @@ const TIMEOUT_MS = 8000;
 // information_schema (so they never go stale), but the table list is curated to
 // keep the model focused and off archive/system noise.
 const CATALOG_TABLES = [
-  // Sales — live POS
+  // Sales — CANONICAL all-channel views (use these for revenue)
+  "unified_sales", "unified_sale_items",
+  // Sales — per-channel source tables (operational detail only)
   "pos_orders", "pos_order_items", "pos_order_payments", "pos_shifts",
   "consignment_sales", "SalesTransaction",
   // Sales — history (pre-cutover archives)
@@ -89,12 +91,13 @@ Hard rules:
 - A SINGLE SELECT (or WITH ... SELECT). No writes, no semicolons, no multiple statements. Always include a sensible LIMIT.
 - Timestamps are stored in UTC. Malaysia is MYT (UTC+8). For any day/month bucketing or "today"/"this week"/"this month", convert: (col AT TIME ZONE 'Asia/Kuala_Lumpur')::date, and compare to (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date.
 
-Money + sales rules (critical):
-- pos_orders and pos_order_items amounts (total, subtotal, unit_price, item_total, discount_amount, ...) are INTEGER CENTS. Divide by 100.0 for RM: round(sum(total)/100.0, 2).
-- Realized POS sales = pos_orders.status = 'completed'. Exclude refunds with refund_of_order_id IS NULL. Join outlet via pos_orders.outlet_id = "outlets".id (use outlets.name).
-- fin_transactions.amount and "Invoice".amount are NUMERIC RINGGIT (already RM, not cents). fin_transactions is the accounting ledger / P&L source; txn_date is a date; join outlet via outlet_id = "Outlet".id.
-- Two outlet dimension tables: "outlets" (POS side; pos_orders.outlet_id joins here) and "Outlet" (the ops/finance/inventory side; "Invoice".outletId, "StockBalance".outletId, fin_transactions.outlet_id join here). Both have a name column. Pick the one matching the fact table.
-- "Invoice" = supplier/AP invoices (status PENDING/PAID, expenseCategory, vendorName). "BankStatementLine" = bank feed lines.
+Revenue + sales rules (CRITICAL - get the source right):
+- For ANY question about revenue, sales, "how much did we sell", AOV, sales by outlet / channel / day / product, or a sales projection: USE "unified_sales", the canonical ALL-CHANNEL view. It combines every channel: pos_native (dine-in POS + Grab), pickup (app/online), and consignment (Nilai / IOI). Using pos_orders alone UNDERCOUNTS revenue by ~25% (it misses pickup + consignment) - do not do it.
+- "unified_sales" columns: nett and gross are NUMERIC RINGGIT (already RM, NOT cents - never divide by 100). biz_date is the MYT business date (a plain date; compare it directly to (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date, do NOT timezone-convert biz_date). outlet_name is denormalized (no join needed). source / channel identify the channel. status. Exclude refunds with COALESCE(is_refund, false) = false. Prefer nett for "revenue" unless asked for gross.
+- Item / product level: "unified_sale_items" (product_name, variant, quantity, unit_price, line_total - all RM; biz_date; sale_id; outlet_id; source). For product-by-outlet, join unified_sale_items i to unified_sales s ON i.sale_id = s.sale_id and read s.outlet_name (and use s.biz_date / s.is_refund).
+- pos_orders / pos_order_items are the POS-REGISTER tables and amounts are INTEGER CENTS (/100 for RM). Use them ONLY for register-specific detail the unified views don't carry: shifts, kitchen station/status, payment tender, cancellation mechanics, promo names. NEVER for total revenue.
+- fin_transactions.amount and "Invoice".amount are NUMERIC RINGGIT (accounting ledger / AP, separate from sales). fin_transactions is the P&L/GL source (txn_date, outlet_id = "Outlet".id). "Invoice" = supplier/AP invoices (status PENDING/PAID, expenseCategory, vendorName). "BankStatementLine" = bank feed lines.
+- Outlet dimensions (only when a fact table lacks outlet_name): "outlets" (POS side) and "Outlet" (ops/finance/inventory: "Invoice".outletId, "StockBalance".outletId, fin_transactions.outlet_id). Both have name.
 
 Other domains:
 - members = loyalty members (phone, name, birthday, preferred_outlet_id, created_at, sms_opt_out).
@@ -107,13 +110,16 @@ Prefer explicit column lists over SELECT *. If the question is ambiguous, make t
 const GOLDEN_BLOCK = `Golden examples (correct patterns to follow):
 
 Q: How much did we sell today by outlet?
-{"sql": "SELECT o.name AS outlet, COUNT(*) AS orders, ROUND(SUM(po.total)/100.0, 2) AS revenue_rm FROM pos_orders po JOIN \\"outlets\\" o ON o.id = po.outlet_id WHERE po.status = 'completed' AND po.refund_of_order_id IS NULL AND (po.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date = (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date GROUP BY o.name ORDER BY revenue_rm DESC LIMIT 50", "note": "Realized completed POS sales, RM = cents/100, MYT day."}
+{"sql": "SELECT outlet_name AS outlet, COUNT(*) AS sales, ROUND(SUM(nett), 2) AS revenue_rm FROM unified_sales WHERE COALESCE(is_refund,false) = false AND biz_date = (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date GROUP BY outlet_name ORDER BY revenue_rm DESC LIMIT 50", "note": "All channels (pos_native + pickup + consignment), nett RM."}
 
 Q: What were total sales this month across all outlets?
-{"sql": "SELECT ROUND(SUM(total)/100.0, 2) AS revenue_rm, COUNT(*) AS orders, ROUND(AVG(total)/100.0, 2) AS aov_rm FROM pos_orders WHERE status = 'completed' AND refund_of_order_id IS NULL AND date_trunc('month', created_at AT TIME ZONE 'Asia/Kuala_Lumpur') = date_trunc('month', now() AT TIME ZONE 'Asia/Kuala_Lumpur') LIMIT 1", "note": "MYT current month."}
+{"sql": "SELECT ROUND(SUM(nett), 2) AS revenue_rm, COUNT(*) AS sales, ROUND(AVG(nett), 2) AS aov_rm FROM unified_sales WHERE COALESCE(is_refund,false) = false AND date_trunc('month', biz_date) = date_trunc('month', (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date) LIMIT 1", "note": "All channels, current MYT month."}
+
+Q: What's this month's projected revenue (end of month)?
+{"sql": "WITH d AS (SELECT biz_date, SUM(nett) AS day_nett FROM unified_sales WHERE COALESCE(is_refund,false) = false AND biz_date >= date_trunc('month', (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date) AND biz_date < (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date GROUP BY biz_date) SELECT ROUND(SUM(day_nett), 2) AS mtd_complete_rm, COUNT(*) AS complete_days, ROUND(AVG(day_nett), 2) AS avg_day_rm, ROUND(AVG(day_nett) * EXTRACT(day FROM (date_trunc('month', (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date) + interval '1 month - 1 day'))::int, 2) AS projected_month_rm FROM d", "note": "All channels; projects the complete-day average across every day of the month. Excludes the partial current day."}
 
 Q: Top 10 selling products this week by quantity?
-{"sql": "SELECT poi.product_name, SUM(poi.quantity) AS qty, ROUND(SUM(poi.item_total)/100.0, 2) AS revenue_rm FROM pos_order_items poi JOIN pos_orders po ON po.id = poi.order_id WHERE po.status = 'completed' AND po.refund_of_order_id IS NULL AND (po.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date >= (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date - 6 GROUP BY poi.product_name ORDER BY qty DESC LIMIT 10", "note": "Last 7 MYT days."}
+{"sql": "SELECT i.product_name, SUM(i.quantity) AS qty, ROUND(SUM(i.line_total), 2) AS revenue_rm FROM unified_sale_items i JOIN unified_sales s ON s.sale_id = i.sale_id WHERE COALESCE(s.is_refund,false) = false AND i.biz_date >= (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date - 6 GROUP BY i.product_name ORDER BY qty DESC LIMIT 10", "note": "All channels, last 7 MYT days, RM."}
 
 Q: How much do we still owe suppliers?
 {"sql": "SELECT COALESCE(vendorName, supplierId) AS supplier, COUNT(*) AS open_invoices, ROUND(SUM(amount - COALESCE(amountPaid,0)), 2) AS outstanding_rm FROM \\"Invoice\\" WHERE status <> 'PAID' GROUP BY COALESCE(vendorName, supplierId) ORDER BY outstanding_rm DESC LIMIT 50", "note": "Unpaid AP invoices, amounts in RM."}
