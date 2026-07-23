@@ -606,6 +606,41 @@ async function bankFlowsPerDay(): Promise<{ inflow: number; outflow: number; sam
   return { inflow: perDayIn, outflow: perDayOut, sampleDays: maxSpanDays };
 }
 
+// Sales-weighted BOM food-cost fraction (recipe cost ÷ price) — the "follow
+// BOM" COGS basis the owner chose: the true cost of goods SOLD, not the lumpy
+// supplier-payment rate (which also carries waste, delivery, inventory build
+// and mis-categorised payments). Reads `menu_margins` (recipe cost per menu)
+// joined to the last 60 days of sold items (POS + pickup) by name, so it always
+// follows the current recipes and price mix. Falls back to a sane constant when
+// the join coverage is thin or the ratio lands outside a plausible band.
+const BOM_FOOD_COST_FALLBACK = 0.365;
+async function bomFoodCostPct(): Promise<number> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ cogs: number | null; rev: number | null }>>`
+      WITH sold AS (
+        SELECT lower(trim(product_name)) AS nm, quantity::numeric AS qty, unit_price::numeric / 100 AS price
+        FROM pos_order_items poi JOIN pos_orders po ON po.id = poi.order_id
+        WHERE po.status = 'completed' AND po.created_at >= now() - interval '60 days'
+        UNION ALL
+        SELECT lower(trim(product_name)), quantity::numeric, unit_price::numeric / 100
+        FROM order_items oi JOIN orders o ON o.id = oi.order_id
+        WHERE o.status = 'completed' AND o.created_at >= now() - interval '60 days'
+      )
+      SELECT sum(s.qty * mm.recipe_cost)::float AS cogs, sum(s.qty * s.price)::float AS rev
+      FROM sold s JOIN menu_margins mm ON lower(trim(mm.name)) = s.nm
+    `;
+    const cogs = Number(rows[0]?.cogs ?? 0);
+    const rev = Number(rows[0]?.rev ?? 0);
+    if (rev > 0) {
+      const pct = cogs / rev;
+      if (pct >= 0.15 && pct <= 0.6) return pct;  // sanity band; else fall back
+    }
+  } catch {
+    // menu_margins / sales tables unavailable — use the fallback
+  }
+  return BOM_FOOD_COST_FALLBACK;
+}
+
 // Total invoice outflow paid out over the last 4 months / total days in the
 // window — feeds the synthetic-known per-day baseline for the residual calc.
 async function historicalInvoicePerDay(outletIds: string[]): Promise<number> {
@@ -786,12 +821,13 @@ export async function computeCashflow(opts: {
     otherOutPerDay = Math.max(0, bankFlows.outflow - dailySyntheticOut);
   }
 
-  // COGS daily rate — supplier payments smeared across the week (multiple
-  // supplier runs). The double-count with committed invoices is netted
-  // PER WEEK in the bucket loop (not spread evenly), because unpaid invoices
-  // are lumpy/front-loaded: a week with RM20k of invoices due must drop RM20k
-  // of COGS smear THAT week, not RM20k/91 every day. See cogsOut below.
-  const bankCogsPerDay = bankProj && bankProj.cogsPerDay > 0 ? bankProj.cogsPerDay : 0;
+  // COGS follows the BOM (owner: recipe cost, not the lumpy supplier-payment
+  // rate). Each week's COGS = that week's sales forecast × the sales-weighted
+  // BOM food-cost fraction, then netted PER WEEK against committed invoices
+  // (which are supplier payments and would otherwise double-count) — the
+  // netting is lumpy/front-loaded so it must land in the invoice's own week,
+  // not spread evenly. See cogsOut in the loop.
+  const foodCostPct = await bomFoodCostPct();
 
   // Bucket builder
   const buckets: CashflowBucket[] = [];
@@ -848,14 +884,12 @@ export async function computeCashflow(opts: {
     const otherIn = otherInPerDay * activeDays;
     const otherOut = otherOutPerDay * activeDays;
 
-    // COGS — the week's smeared supplier run-rate, NETTED against this week's
-    // committed invoices (which already appear as invoiceOut). Those invoices
-    // ARE supplier COGS, so the smear only covers the part of the week's buying
-    // NOT already carried by a committed invoice. Floored at 0: a week whose
-    // invoices exceed the smear shows COGS 0 (the invoices dominate its supply
-    // spend). This nets per-week rather than spreading the offset evenly, so
-    // the front-loaded invoice weeks don't double-count.
-    const cogsOut = Math.max(0, bankCogsPerDay * activeDays - invoiceOut);
+    // COGS — this week's sales × the BOM food-cost %, NETTED against this
+    // week's committed invoices (which already appear as invoiceOut; those
+    // invoices ARE supplier COGS). Floored at 0: a week whose invoices exceed
+    // the BOM cost shows COGS 0 (the invoices dominate its supply spend). Nets
+    // per-week so the front-loaded invoice weeks don't double-count.
+    const cogsOut = Math.max(0, salesIn * foodCostPct - invoiceOut);
 
     // RecurringExpense entries fire on their actual due dates inside
     // the week (no smearing). Category determines which bucket they
