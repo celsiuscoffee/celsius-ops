@@ -626,7 +626,11 @@ function expandRecurring(
   end: Date,
 ): { date: Date; amount: number; recurringExpenseId: string }[] {
   const out: { date: Date; amount: number; recurringExpenseId: string }[] = [];
-  let cursor = new Date(exp.nextDueDate);
+  // nextDueDate is stored as midnight-MYT (= prior-day 16:00 UTC). The week
+  // buckets compare in the server's (UTC) frame, so without this +8h shift a
+  // due date of e.g. 3 Aug (stored 2 Aug 16:00 UTC) lands in the PRIOR week and
+  // bunches payroll a day early into the wrong bucket. Align to the MYT day.
+  let cursor = new Date(exp.nextDueDate.getTime() + 8 * 3600_000);
   // Catch up to the window in case nextDueDate is in the past
   while (cursor < start) cursor = addCadence(cursor, exp.cadence);
   while (cursor <= end) {
@@ -778,26 +782,11 @@ export async function computeCashflow(opts: {
   }
 
   // COGS daily rate — supplier payments smeared across the week (multiple
-  // supplier runs). DOUBLE-COUNT FIX: committed unpaid invoices already appear
-  // as `invoiceOut` on their due dates, and those invoices ARE supplier COGS.
-  // Counting the full historical COGS run-rate on top would bill the same spend
-  // twice. So the run-rate is reduced by the committed-invoice rate over the
-  // horizon (floored at 0) — it now represents only the UN-invoiced tail of
-  // ongoing purchasing, while specific committed invoices carry the near term.
-  const horizonDays = weeks * 7;
-  const committedInvoiceTotal = invoices.reduce(
-    (s, iv) => s + remainingAmount({
-      amount: Number(iv.amount),
-      amountPaid: iv.amountPaid == null ? null : Number(iv.amountPaid),
-      depositAmount: iv.depositAmount == null ? null : Number(iv.depositAmount),
-      status: iv.status,
-    }),
-    0,
-  );
-  const committedInvoicePerDay = horizonDays > 0 ? committedInvoiceTotal / horizonDays : 0;
-  const bankCogsPerDay = bankProj && bankProj.cogsPerDay > 0
-    ? Math.max(0, bankProj.cogsPerDay - committedInvoicePerDay)
-    : 0;
+  // supplier runs). The double-count with committed invoices is netted
+  // PER WEEK in the bucket loop (not spread evenly), because unpaid invoices
+  // are lumpy/front-loaded: a week with RM20k of invoices due must drop RM20k
+  // of COGS smear THAT week, not RM20k/91 every day. See cogsOut below.
+  const bankCogsPerDay = bankProj && bankProj.cogsPerDay > 0 ? bankProj.cogsPerDay : 0;
 
   // Bucket builder
   const buckets: CashflowBucket[] = [];
@@ -816,19 +805,15 @@ export async function computeCashflow(opts: {
       salesIn += dowAvg[day.getDay()];
     }
 
-    // Invoices due this week
+    // Invoices due this week — remaining amount (honours partials/deposits),
+    // shared with the payables panel via remainingAmount().
     const wkInvoices = invoices.filter((iv) => iv.dueDate && iv.dueDate >= weekStart && iv.dueDate <= weekEnd);
-    const invoiceOut = wkInvoices.reduce((s, iv) => {
-      const amt = Number(iv.amount);
-      // amountPaid is the source of truth (covers DEPOSIT_PAID,
-      // PARTIALLY_PAID, and any combination of partials). Falls back to
-      // depositAmount for legacy DEPOSIT_PAID rows that haven't been
-      // touched since the partial-payments migration.
-      const paid = iv.amountPaid == null ? 0 : Number(iv.amountPaid);
-      if (paid > 0) return s + Math.max(0, amt - paid);
-      const dep = iv.depositAmount == null ? 0 : Number(iv.depositAmount);
-      return s + (iv.status === "DEPOSIT_PAID" ? Math.max(0, amt - dep) : amt);
-    }, 0);
+    const invoiceOut = wkInvoices.reduce((s, iv) => s + remainingAmount({
+      amount: Number(iv.amount),
+      amountPaid: iv.amountPaid == null ? null : Number(iv.amountPaid),
+      depositAmount: iv.depositAmount == null ? null : Number(iv.depositAmount),
+      status: iv.status,
+    }), 0);
 
     // Payroll this week
     const payrollOut = payrollProjected
@@ -858,9 +843,14 @@ export async function computeCashflow(opts: {
     const otherIn = otherInPerDay * activeDays;
     const otherOut = otherOutPerDay * activeDays;
 
-    // Bank-line daily rate ONLY for COGS (paid to suppliers throughout
-    // the week — daily smearing is the right model).
-    const cogsOut = bankCogsPerDay * activeDays;
+    // COGS — the week's smeared supplier run-rate, NETTED against this week's
+    // committed invoices (which already appear as invoiceOut). Those invoices
+    // ARE supplier COGS, so the smear only covers the part of the week's buying
+    // NOT already carried by a committed invoice. Floored at 0: a week whose
+    // invoices exceed the smear shows COGS 0 (the invoices dominate its supply
+    // spend). This nets per-week rather than spreading the offset evenly, so
+    // the front-loaded invoice weeks don't double-count.
+    const cogsOut = Math.max(0, bankCogsPerDay * activeDays - invoiceOut);
 
     // RecurringExpense entries fire on their actual due dates inside
     // the week (no smearing). Category determines which bucket they
