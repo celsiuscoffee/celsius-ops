@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { gateSchedule } from "@/lib/hr/labour-gate";
+import { remainingAmount } from "@/lib/finance/payables-forecast";
 
 // Cashflow projection compute. Pure-function-ish: takes a horizon and an
 // optional outletId, returns weekly buckets with the breakdown that the
@@ -44,6 +46,7 @@ export type CashflowBucket = {
   otherIn: number;
   invoiceOut: number;
   payrollOut: number;
+  ptOut: number;          // part-timer wages — weekly Friday pulse from the roster
   cogsOut: number;
   marketingOut: number;
   recurringOut: number;
@@ -314,28 +317,10 @@ async function projectPayroll(start: Date, end: Date): Promise<{ date: Date; amo
   return out;
 }
 
-// Last 3 months of ads_invoice → average monthly spend, projected forward.
-// Total is in micros (Google Ads convention) — divide by 1,000,000 to get RM.
-async function projectMarketing(start: Date, end: Date): Promise<{ date: Date; amount: number }[]> {
-  const rows = await prisma.$queryRaw<Array<{ avg_total: string | null; sample_day: number | null }>>`
-    SELECT
-      AVG(total_micros) / 1000000.0 AS avg_total,
-      AVG(EXTRACT(DAY FROM issue_date))::int AS sample_day
-    FROM ads_invoice
-    WHERE issue_date >= (CURRENT_DATE - INTERVAL '4 months')::date
-  `;
-  const avg = Number(rows[0]?.avg_total ?? 0);
-  if (avg <= 0) return [];
-  const sampleDay = Number(rows[0]?.sample_day ?? 5);
-
-  const out: { date: Date; amount: number }[] = [];
-  const cursor = new Date(start.getFullYear(), start.getMonth(), Math.min(28, sampleDay));
-  while (cursor <= end) {
-    if (cursor >= start) out.push({ date: new Date(cursor), amount: avg });
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-  return out;
-}
+// (Marketing is now projected as a monthly pulse on the 20th from the bank-line
+// run-rate — see computeCashflow. The old ads_invoice-based projectMarketing was
+// removed: that feed was empty, so marketing showed RM0 while ~RM2k/week actually
+// left the bank as DIGITAL_ADS.)
 
 // --- Bank-line per-category projection ---------------------------------
 //
@@ -374,6 +359,20 @@ const COGS_OUTFLOW_CATEGORIES = [
   "RAW_MATERIALS", "DELIVERY",
 ] as const;
 
+// Part-timer wages — pulled OUT of the "other outflow" smear and projected as
+// their own weekly Friday pulse from the latest published roster (owner: PT is
+// paid every Friday). Kept out of otherOut here to avoid double-counting.
+const PT_OUTFLOW_CATEGORIES = new Set<string>(["PARTIMER"]);
+
+// Marketing — Google Ads + SMS + KOL. Pulled OUT of the smear and projected as
+// a monthly pulse on the 20th (owner: marketing is paid every 20th). The old
+// ads_invoice feed was empty, so marketing was invisible; we now take the real
+// bank-line run-rate. MARKETPLACE_FEE (Grab/FP commission) is deliberately NOT
+// here — Grab settles net of commission, so it is not a separate cash outflow.
+const MARKETING_OUTFLOW_CATEGORIES = new Set<string>([
+  "DIGITAL_ADS", "OTHER_MARKETING", "KOL",
+]);
+
 // Categories that are projected via RecurringExpense entries (exact
 // pulse timing, per outlet). The auto-generator at
 // scripts/generate-recurring-from-bank-lines.ts populates these.
@@ -400,9 +399,13 @@ type BankLineProjection = {
   salesByDow: number[];          // [Sun..Sat] daily averages from sales categories
   cogsPerDay: number;            // raw materials + delivery
   otherInPerDay: number;         // catch-all CR (LOAN inflow, refunds, OTHER_INFLOW, etc.)
-  otherOutPerDay: number;        // catch-all DR (directors, partimer, marketing, capex,
-                                 // OTHER_OUTFLOW, etc.) — excludes PULSE_CATEGORIES
-                                 // to avoid double-count with RecurringExpense pulses
+  otherOutPerDay: number;        // catch-all DR (petty cash, staff claims, capex,
+                                 // OTHER_OUTFLOW, etc.) — excludes PULSE_CATEGORIES,
+                                 // PT and marketing (each projected on its own cadence)
+  marketingPerDay: number;       // DIGITAL_ADS + OTHER_MARKETING + KOL daily rate;
+                                 // fired as a monthly pulse on the 20th by the caller
+  ptPerDay: number;              // PARTIMER daily rate — bank-line fallback for the
+                                 // weekly Friday pulse when the roster is unavailable
   sampleDays: number;            // number of distinct calendar days the data covers
   hasData: boolean;
 };
@@ -434,6 +437,8 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
   let cogsSum = 0;
   let otherInSum = 0;
   let otherOutSum = 0;
+  let marketingSum = 0;
+  let ptSum = 0;
 
   const SALES_SET = new Set<string>(SALES_INFLOW_CATEGORIES as readonly string[]);
   const COGS_SET = new Set<string>(COGS_OUTFLOW_CATEGORIES as readonly string[]);
@@ -456,6 +461,8 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
     } else {
       // DR
       if (COGS_SET.has(cat)) cogsSum += amt;
+      else if (PT_OUTFLOW_CATEGORIES.has(cat)) ptSum += amt;          // → weekly Friday pulse
+      else if (MARKETING_OUTFLOW_CATEGORIES.has(cat)) marketingSum += amt; // → monthly 20th pulse
       else if (PULSE_CATEGORIES.has(cat)) {
         // Skip — these are projected via RecurringExpense expansion
         // on their actual due dates. Including them here would
@@ -466,7 +473,7 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
         // discretionary, not a recurring operating burn. Smearing them
         // as a daily rate dragged the projection far too negative.
       }
-      else otherOutSum += amt;  // partimer, marketing, petty cash, catch-alls
+      else otherOutSum += amt;  // petty cash, staff claims, marketplace fee, catch-alls
     }
   }
 
@@ -481,9 +488,55 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
     cogsPerDay: cogsSum / sampleDays,
     otherInPerDay: otherInSum / sampleDays,
     otherOutPerDay: otherOutSum / sampleDays,
+    marketingPerDay: marketingSum / sampleDays,
+    ptPerDay: ptSum / sampleDays,
     sampleDays,
     hasData: true,
   };
+}
+
+// Average days per month, for turning a per-day run-rate into a monthly pulse.
+const DAYS_PER_MONTH = 30.44;
+
+// PT wages from the latest published roster — projected on every Friday in the
+// horizon (owner: PT is paid weekly on Fridays, sized from the schedule). Sums
+// the ptCost of every outlet's most-recent published week via the vetted labour
+// -gate computation, so the projection and the actual weekly payout agree. Falls
+// back to the trailing bank-line PARTIMER rate when no roster is available.
+async function projectPtWeekly(
+  bankPtPerDay: number,
+): Promise<{ perFriday: number; source: "roster" | "bank" }> {
+  let perWeek = 0;
+  let source: "roster" | "bank" = "bank";
+  try {
+    // Each outlet's OWN latest published week (outlets publish on different
+    // cadences, so a single global "latest week" would only capture whichever
+    // outlet published most recently and undercount the rest).
+    const latest = await prisma.$queryRaw<Array<{ outlet_id: string; week_start: Date }>>`
+      SELECT DISTINCT ON (s.outlet_id) s.outlet_id, s.week_start
+      FROM hr_schedules s
+      WHERE EXISTS (SELECT 1 FROM hr_schedule_shifts sh WHERE sh.schedule_id = s.id)
+      ORDER BY s.outlet_id, s.week_start DESC
+    `;
+    if (latest.length > 0) {
+      const results = await Promise.all(
+        latest.map((r) => {
+          const ws = r.week_start instanceof Date ? ymd(r.week_start) : String(r.week_start).slice(0, 10);
+          return gateSchedule(r.outlet_id, ws).then((g) => g.ptCost).catch(() => 0);
+        }),
+      );
+      perWeek = results.reduce((s, c) => s + c, 0);
+      if (perWeek > 0) source = "roster";
+    }
+  } catch {
+    // roster unavailable — fall through to the bank-line rate
+  }
+  if (perWeek <= 0) {
+    perWeek = bankPtPerDay * 7;
+    source = "bank";
+  }
+  // Each Friday carries the full weekly PT wage.
+  return { perFriday: perWeek, source };
 }
 
 // Hybrid model — derive a per-day inflow/outflow rate from recent bank
@@ -658,18 +711,33 @@ export async function computeCashflow(opts: {
     },
   });
 
-  // Synthetic payroll/marketing streams (the legacy hr_payroll_runs
-  // and ads_invoice path) are only used as a fallback when no
-  // RecurringExpense entries exist for the relevant categories. The
-  // per-outlet RecurringExpense entries above replace this for
-  // payroll. Marketing's still synthetic since we don't auto-generate
-  // marketing recurring entries (most marketing is one-off card spend).
+  // Synthetic payroll stream (legacy hr_payroll_runs) — fallback only when no
+  // PAYROLL_SUPPORT RecurringExpense entries exist.
   const hasRecurringPayroll = recurring.some((r) => r.category === "PAYROLL_SUPPORT");
   const payrollProjected = hasRecurringPayroll ? [] : await projectPayroll(today, horizonEnd);
-  const marketingProjected = isFiltered ? [] : await projectMarketing(today, horizonEnd);
-  if (isFiltered) {
-    warnings.push("Marketing run-rate is HQ-only and not allocated to outlets — it's excluded from the filtered view.");
+
+  // Marketing — monthly pulse on the 20th (owner: paid every 20th), sized from
+  // the real bank-line run-rate (Google Ads + SMS + KOL). Consolidated-only:
+  // marketing isn't outlet-allocated, so it drops out of a filtered view.
+  const monthlyMarketing = bankProj ? round2(bankProj.marketingPerDay * DAYS_PER_MONTH) : 0;
+  const marketingProjected: { date: Date; amount: number }[] = [];
+  if (!isFiltered && monthlyMarketing > 0) {
+    const cursor = new Date(today.getFullYear(), today.getMonth(), 20);
+    while (cursor <= horizonEnd) {
+      if (cursor >= today) marketingProjected.push({ date: new Date(cursor), amount: monthlyMarketing });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
   }
+  if (isFiltered) {
+    warnings.push("Marketing and part-timer wages are HQ/roster-level and not allocated per outlet — excluded from the filtered view.");
+  }
+
+  // Part-timer wages — weekly Friday pulse sized from the latest published
+  // roster (owner: PT paid every Friday). Consolidated-only (roster cost isn't
+  // split onto the outlet-filtered bank view here).
+  const ptWeekly = isFiltered
+    ? { perFriday: 0, source: "roster" as const }
+    : await projectPtWeekly(bankProj?.ptPerDay ?? 0);
 
   // Other-bank residual. Two paths:
   //  1. Bank-line projection available → use the per-category buckets
@@ -709,15 +777,27 @@ export async function computeCashflow(opts: {
     otherOutPerDay = Math.max(0, bankFlows.outflow - dailySyntheticOut);
   }
 
-  // Bank-line daily-rate streams. Only used for COGS and the
-  // catch-all Other in/out — those are paid frequently throughout
-  // the week (multiple supplier runs, refunds, transfers etc.) so a
-  // per-day rate is more accurate than a monthly pulse. Payroll /
-  // marketing / recurring instead use exact pulse timing from the
-  // RecurringExpense expansion above so the projection shows
-  // payments on their actual due-day-of-month rather than smeared
-  // across every week.
-  const bankCogsPerDay = bankProj && bankProj.cogsPerDay > 0 ? bankProj.cogsPerDay : 0;
+  // COGS daily rate — supplier payments smeared across the week (multiple
+  // supplier runs). DOUBLE-COUNT FIX: committed unpaid invoices already appear
+  // as `invoiceOut` on their due dates, and those invoices ARE supplier COGS.
+  // Counting the full historical COGS run-rate on top would bill the same spend
+  // twice. So the run-rate is reduced by the committed-invoice rate over the
+  // horizon (floored at 0) — it now represents only the UN-invoiced tail of
+  // ongoing purchasing, while specific committed invoices carry the near term.
+  const horizonDays = weeks * 7;
+  const committedInvoiceTotal = invoices.reduce(
+    (s, iv) => s + remainingAmount({
+      amount: Number(iv.amount),
+      amountPaid: iv.amountPaid == null ? null : Number(iv.amountPaid),
+      depositAmount: iv.depositAmount == null ? null : Number(iv.depositAmount),
+      status: iv.status,
+    }),
+    0,
+  );
+  const committedInvoicePerDay = horizonDays > 0 ? committedInvoiceTotal / horizonDays : 0;
+  const bankCogsPerDay = bankProj && bankProj.cogsPerDay > 0
+    ? Math.max(0, bankProj.cogsPerDay - committedInvoicePerDay)
+    : 0;
 
   // Bucket builder
   const buckets: CashflowBucket[] = [];
@@ -755,10 +835,18 @@ export async function computeCashflow(opts: {
       .filter((p) => p.date >= weekStart && p.date <= weekEnd)
       .reduce((s, p) => s + p.amount, 0);
 
-    // Marketing this week
+    // Marketing this week (monthly pulse on the 20th)
     const marketingOut = marketingProjected
       .filter((m) => m.date >= weekStart && m.date <= weekEnd)
       .reduce((s, m) => s + m.amount, 0);
+
+    // PT wages — one weekly pulse on the Friday of this week (if it's today or
+    // later). Each Monday-start week contains exactly one Friday.
+    let ptOut = 0;
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(weekStart.getTime() + d * DAY_MS);
+      if (day >= today && day.getDay() === 5) ptOut += ptWeekly.perFriday;
+    }
 
     // Other (bank residual) — count days in the week that are
     // >= today, since partial first weeks shouldn't include past days.
@@ -802,7 +890,7 @@ export async function computeCashflow(opts: {
 
     const closing = runningOpening
       + salesIn + otherIn
-      - invoiceOut - totalPayrollOut - cogsOut - totalMarketingOut - totalRecurringOut - otherOut;
+      - invoiceOut - totalPayrollOut - ptOut - cogsOut - totalMarketingOut - totalRecurringOut - otherOut;
 
     buckets.push({
       weekStart: ymd(weekStart),
@@ -812,6 +900,7 @@ export async function computeCashflow(opts: {
       otherIn: round2(otherIn),
       invoiceOut: round2(invoiceOut),
       payrollOut: round2(totalPayrollOut),
+      ptOut: round2(ptOut),
       cogsOut: round2(cogsOut),
       marketingOut: round2(totalMarketingOut),
       recurringOut: round2(totalRecurringOut),
@@ -876,7 +965,10 @@ export async function computeCashflow(opts: {
           inflow: round2(
             (bankProj.salesByDow.reduce((a, b) => a + b, 0) / 7) + bankProj.otherInPerDay,
           ),
-          outflow: round2(bankProj.cogsPerDay + bankProj.otherOutPerDay),
+          // Full daily outflow run-rate — COGS + PT + marketing + catch-all.
+          // (PT and marketing are shown as pulses in the buckets, but the
+          // headline "avg out/day" should still reflect the whole run-rate.)
+          outflow: round2(bankProj.cogsPerDay + bankProj.otherOutPerDay + bankProj.ptPerDay + bankProj.marketingPerDay),
           sampleDays: bankProj.sampleDays,
         }
       : bankFlows

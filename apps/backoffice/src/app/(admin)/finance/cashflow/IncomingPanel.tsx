@@ -26,6 +26,7 @@ type Forecast = {
   total: number;
   bookedTotal: number;
   projectedTotal: number;
+  discounts: { total: number; grossSales: number; pct: number; from: string; to: string };
 };
 
 const ENTITY_LABEL: Record<string, string> = {
@@ -124,6 +125,18 @@ export default function IncomingPanel() {
               <p className="mt-0.5 text-lg font-bold text-gray-500">{RM0(f.projectedTotal)}</p>
               <p className="text-[10px] text-gray-400">future sales at run-rate</p>
             </div>
+          </div>
+
+          {/* Discounts given over the trailing window of the same length. The
+              settlement figures above are already net of discount — this shows
+              how much revenue was given away to bring it in. */}
+          <div className="mt-2 flex items-center justify-between rounded-lg bg-amber-50 px-3 py-1.5">
+            <p className="text-[11px] text-amber-700">
+              Discounts given <span className="text-amber-600/70">(prior {f.discounts.from === f.discounts.to ? "day" : "period"})</span>
+            </p>
+            <p className="text-sm font-semibold text-amber-700">
+              {RM0(f.discounts.total)} <span className="text-[11px] font-normal text-amber-600/70">· {f.discounts.pct}% of gross</span>
+            </p>
           </div>
 
           <div className="mt-3 space-y-1">

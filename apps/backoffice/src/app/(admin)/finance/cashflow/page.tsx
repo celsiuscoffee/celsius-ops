@@ -19,6 +19,7 @@ type CashflowBucket = {
   otherIn: number;
   invoiceOut: number;
   payrollOut: number;
+  ptOut: number;
   cogsOut: number;
   marketingOut: number;
   recurringOut: number;
@@ -714,7 +715,7 @@ export default function CashflowPage() {
           </div>
 
           <p className="mt-3 text-[11px] text-gray-400">
-            All columns derived from classified bank-line categories over the last 90 days. <strong>Sales</strong>: Card + QR + StoreHub + Grab + FoodPanda + GastroHub + Meetings/Events. <strong>COGS</strong>: Raw Materials + Delivery. <strong>Recurring</strong>: Rent + Utilities + Software + Tax + Maintenance + bank/loan/licensing. <strong>Other inflow/outflow</strong>: anything the auto-classifier hasn&apos;t mapped to a category yet — review the matrix on Cash Tracking to see what&apos;s in here.
+            Columns derived from classified bank-line categories over the last 90 days. <strong>Sales</strong>: Card + QR + StoreHub + Grab + FoodPanda + GastroHub + Meetings/Events. <strong>COGS</strong>: Raw Materials + Delivery, reduced by committed invoices so the two don&apos;t double-count. <strong>PT wages</strong>: latest published roster cost, one pulse each Friday. <strong>Marketing</strong>: Google Ads + SMS + KOL, one monthly pulse on the 20th. <strong>Recurring</strong>: Rent + Utilities + Software + Tax + Maintenance + bank/loan/licensing on their due dates. <strong>Other outflow</strong>: petty cash, staff claims, and anything not yet categorised.
             {data.bankFlowsPerDay
               ? ` 90-day sample: avg in ${fmtMYR2(data.bankFlowsPerDay.inflow)}/day, out ${fmtMYR2(data.bankFlowsPerDay.outflow)}/day.`
               : " Upload a CSV/Excel statement with period totals to populate."}
@@ -738,7 +739,7 @@ function WeeklyModelTable({ buckets, lowestWeekStart }: { buckets: CashflowBucke
   };
   const totalIn = (b: CashflowBucket) => b.salesIn + b.otherIn;
   const totalOut = (b: CashflowBucket) =>
-    b.invoiceOut + b.payrollOut + b.cogsOut + b.marketingOut + b.recurringOut + b.otherOut;
+    b.invoiceOut + b.payrollOut + b.ptOut + b.cogsOut + b.marketingOut + b.recurringOut + b.otherOut;
   const rows: Row[] = [
     { label: "Opening balance", value: (b) => b.opening, kind: "balance" },
     { label: "Sales settlements", value: (b) => b.salesIn, kind: "in", section: "Receipts" },
@@ -746,8 +747,9 @@ function WeeklyModelTable({ buckets, lowestWeekStart }: { buckets: CashflowBucke
     { label: "Total receipts", value: totalIn, kind: "subtotal-in" },
     { label: "Supplier invoices", value: (b) => b.invoiceOut, kind: "out", section: "Disbursements" },
     { label: "Payroll", value: (b) => b.payrollOut, kind: "out" },
+    { label: "PT wages (Fri)", value: (b) => b.ptOut, kind: "out" },
     { label: "COGS", value: (b) => b.cogsOut, kind: "out" },
-    { label: "Marketing", value: (b) => b.marketingOut, kind: "out" },
+    { label: "Marketing (20th)", value: (b) => b.marketingOut, kind: "out" },
     { label: "Recurring", value: (b) => b.recurringOut, kind: "out" },
     { label: "Other outflow", value: (b) => b.otherOut, kind: "out" },
     { label: "Total disbursements", value: totalOut, kind: "subtotal-out" },
