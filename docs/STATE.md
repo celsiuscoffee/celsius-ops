@@ -393,6 +393,51 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-23 (evening) — **Cashflow "upcoming cash" view: Grab reconciled into
+  the incoming forecast, daily run-rate strip added, marketing follows the live
+  ad budget (all MERGED: #1051, #1053).** Same-day continuation, driven by the
+  owner using the cashflow page as their main upcoming-cash view.
+  1. **Grab folded into the Incoming settlements forecast (#1051).** The panel's
+     "Expected" read ~RM8k/day vs the ~RM10.6k/day the owner knows from the bank.
+     Decomposed trailing bank credits: the panel forecast card/online/QR/
+     GastroHub but **excluded Grab** (~RM614/day). Grab was left out as
+     "unverified cadence" — but the bank shows it settles **daily and near-flat**
+     (a payout every day of the week). Now projected from its trailing 28-day
+     **bank run-rate** (already net of commission), placed flat across the
+     window, attributed to HQ account 4384. `settlement-forecast.ts` gained a
+     `grab` channel + a `reconcile` field; `IncomingPanel` shows Grab + a
+     footnote citing the residual ~RM56/day of non-sales credits (meetings/
+     refunds/misc) still not forecast. Grab bank categories: `GRAB`,
+     `GRAB_PUTRAJAYA`.
+  2. **Daily cash run-rate strip (#1053).** New `loadDailyRunRate()` +
+     `/api/finance/cashflow/daily-averages` + `DailyRunRateStrip.tsx` above the
+     settlement panels: avg cash **in/out/net per calendar day** from actual
+     bank flows (external only, `isInterCo=false`), 90-day trailing, split
+     weekday/weekend. Live numbers: **in RM10,692/day, out RM10,861, net
+     −RM168** overall; **weekday net −RM793** (big supplier/payroll/rent
+     outflows clear on weekdays) vs **weekend net +RM1,370** (low sales, almost
+     no outflows). This is the home for the "≈RM10.6k/day" figure — the
+     settlement panel is a narrower, forward, net-of-fee view and legitimately
+     reads lower. Respects the page account scope.
+  3. **Marketing follows the LIVE Google Ads budget (#1053).** The marketing
+     pulse sized Google Ads off the trailing bank run-rate (~RM8.8k/mo), but the
+     ads **optimizer agent loop** now controls spend and had trimmed the
+     allocated budget to ~RM4.8k/mo — a cut the 90-day bank average wouldn't
+     reflect for ~90 days. New **`getLiveAdsDailyBudgetMyr()`** in
+     `lib/ads/optimizer.ts` (sum of ENABLED non-manager campaigns'
+     `dailyBudgetMicros`; `ENABLED_STATUSES = ["2","ENABLED"]` — status is the
+     Google Ads numeric enum stored as a string). `computeCashflow` marketing =
+     live ad budget + SMS Niaga + KOL (latter two stay on the bank run-rate,
+     not agent-controlled); falls back to the bank Google-Ads run-rate if the
+     ads module is empty. `bankLineProjection` marketing split into
+     `adsBankPerDay` (fallback) + `otherMarketingPerDay`. Monthly marketing
+     pulse dropped ~RM9,474 → ~RM5,490/mo and now self-adjusts with the loop.
+  - NOTE for next session: DIGITAL_ADS is deduped out of the bank P&L (it's
+    tracked in the ads module) — the cashflow live-budget read is the forward
+    view of that same spend. Grab attribution in the incoming panel lands all
+    Grab in HQ 4384 (where it pools), which slightly inflates that entity's
+    byEntity line — acceptable (it's "where cash lands"), flag if it confuses.
+
 - 2026-07-23 — **Cashflow model deepened: recurring schedule corrected,
   inter-company classifier fixed, outflows re-modelled (all MERGED: #1037,
   #1042→#1045).** Continuation of the 13-week-model session below. Owner
