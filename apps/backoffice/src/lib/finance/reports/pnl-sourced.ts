@@ -1032,15 +1032,22 @@ export async function buildSourcedPnl(input: {
   // expense (EQUIPMENTS sits in BANK_NONOPEX above), so recognising the
   // depreciation charge here is the whole cost story, with no double count
   // whether or not a purchase line has been capitalized into an asset yet.
-  // Month convention (documented in lib/finance/fixed-assets.ts): charges
-  // start the first full month after acquisition, are dated on each month's
-  // last day (so a window includes a month iff its last day is inside), and
-  // stop from the disposal month onward.
+  //
+  // ANNUAL, to match the GL: owner policy (2026-07) charges depreciation once a
+  // year, dated 31 Dec (see lib/finance/depreciation.ts). So the P&L only shows
+  // it in a window whose END reaches the December year-end, and then as the
+  // WHOLE year's charge (Jan 1 → that Dec 31) — computed the same straight-line
+  // way. Any sub-year window (a month, a quarter that isn't year-end) shows
+  // zero, exactly as the GL does, so the two P&Ls agree month to month.
   {
-    const dep = await depreciationTotal({ companyId, start, end, outletId });
-    if (dep) {
-      expenseLines.push({ code: "DEP", name: "Depreciation (fixed assets, straight-line)", amount: dep, parentCode: null });
-      totalExpenses += dep;
+    const endMonth = end.slice(5, 7);
+    if (endMonth === "12") {
+      const year = end.slice(0, 4);
+      const dep = await depreciationTotal({ companyId, start: `${year}-01-01`, end, outletId });
+      if (dep) {
+        expenseLines.push({ code: "DEP", name: "Depreciation (fixed assets, annual charge)", amount: dep, parentCode: null });
+        totalExpenses += dep;
+      }
     }
   }
   totalExpenses = round2(totalExpenses);
