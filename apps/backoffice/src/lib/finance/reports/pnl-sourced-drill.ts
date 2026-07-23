@@ -270,9 +270,13 @@ async function drillGrabAds(companyId: string, start: string, end: string, outle
 // DEP: per-asset depreciation for the period, from the SAME math as the P&L
 // line (lib/finance/fixed-assets.ts), so the drill total ties to the line.
 async function drillDepreciation(companyId: string, start: string, end: string, outletId?: string | null): Promise<DrillLine[]> {
+  // Depreciation is an annual year-end charge (see pnl-sourced.ts): the DEP line
+  // only appears in a window ending in December, and covers the whole year. Drill
+  // over the same Jan 1 → Dec 31 span so the per-asset rows sum to the line.
+  const depStart = end.slice(5, 7) === "12" ? `${end.slice(0, 4)}-01-01` : start;
   const rows = await depreciationByAsset({
     companyId: companyId === CONSOLIDATED ? null : companyId,
-    start,
+    start: depStart,
     end,
     outletId,
   });
