@@ -109,6 +109,10 @@ export type IncomingForecast = {
   total: number;
   bookedTotal: number;
   projectedTotal: number;
+  // Discounts given over the trailing window of the SAME length (ending today),
+  // for context on how much revenue is being given away vs what's landing.
+  // Settlement figures above are already net of discount — this is informational.
+  discounts: { total: number; grossSales: number; pct: number; from: string; to: string };
 };
 
 type SalesRow = { entity: string; d: string; rm: number };
@@ -223,5 +227,24 @@ export async function buildIncomingForecast(from: string, to: string): Promise<I
   const bookedTotal = round2(rows.filter((r) => r.basis === "booked").reduce((s, r) => s + r.net, 0));
   const projectedTotal = round2(rows.filter((r) => r.basis === "projected").reduce((s, r) => s + r.net, 0));
 
-  return { from, to, rows, byDate, byEntity, total: round2(bookedTotal + projectedTotal), bookedTotal, projectedTotal };
+  // Discounts given over the trailing window of the same length, ending today.
+  // Settlement figures are already net of discount; this is context only.
+  const windowDays = Math.max(1, Math.round((parseYmd(to).getTime() - start.getTime()) / 86400_000) + 1);
+  const discFrom = ymd(addDays(parseYmd(from), -windowDays));
+  const discTo = ymd(addDays(parseYmd(from), -1));
+  const discRows = await prisma.$queryRawUnsafe<{ discount: number; gross: number }[]>(`
+    SELECT COALESCE(SUM(discount),0)::float AS discount, COALESCE(SUM(gross),0)::float AS gross
+    FROM unified_sales WHERE biz_date BETWEEN $1::date AND $2::date
+  `, discFrom, discTo);
+  const discTotal = round2(Number(discRows[0]?.discount ?? 0));
+  const grossSales = round2(Number(discRows[0]?.gross ?? 0));
+  const discounts = {
+    total: discTotal,
+    grossSales,
+    pct: grossSales > 0 ? round2((discTotal / grossSales) * 100) : 0,
+    from: discFrom,
+    to: discTo,
+  };
+
+  return { from, to, rows, byDate, byEntity, total: round2(bookedTotal + projectedTotal), bookedTotal, projectedTotal, discounts };
 }
