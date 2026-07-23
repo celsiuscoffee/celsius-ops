@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { gateSchedule } from "@/lib/hr/labour-gate";
 import { remainingAmount } from "@/lib/finance/payables-forecast";
+import { getLiveAdsDailyBudgetMyr } from "@/lib/ads/optimizer";
 
 // Cashflow projection compute. Pure-function-ish: takes a horizon and an
 // optional outletId, returns weekly buckets with the breakdown that the
@@ -322,10 +323,10 @@ async function projectPayroll(start: Date, end: Date): Promise<{ date: Date; amo
   return out;
 }
 
-// (Marketing is now projected as a monthly pulse on the 20th from the bank-line
-// run-rate — see computeCashflow. The old ads_invoice-based projectMarketing was
-// removed: that feed was empty, so marketing showed RM0 while ~RM2k/week actually
-// left the bank as DIGITAL_ADS.)
+// (Marketing is projected as a monthly pulse on the 20th — see computeCashflow.
+// Google Ads uses the LIVE optimizer-allocated budget (getLiveAdsDailyBudgetMyr)
+// so agent-loop cuts show up at once; SMS + KOL use the bank run-rate. The old
+// ads_invoice-based projectMarketing was removed: that feed was empty.)
 
 // --- Bank-line per-category projection ---------------------------------
 //
@@ -370,10 +371,12 @@ const COGS_OUTFLOW_CATEGORIES = [
 const PT_OUTFLOW_CATEGORIES = new Set<string>(["PARTIMER"]);
 
 // Marketing — Google Ads + SMS + KOL. Pulled OUT of the smear and projected as
-// a monthly pulse on the 20th (owner: marketing is paid every 20th). The old
-// ads_invoice feed was empty, so marketing was invisible; we now take the real
-// bank-line run-rate. MARKETPLACE_FEE (Grab/FP commission) is deliberately NOT
-// here — Grab settles net of commission, so it is not a separate cash outflow.
+// a monthly pulse on the 20th (owner: marketing is paid every 20th). DIGITAL_ADS
+// (Google Ads) is sized from the LIVE optimizer budget in computeCashflow, not
+// this bank run-rate — the bank figure is a fallback and feeds adsBankPerDay.
+// OTHER_MARKETING (SMS Niaga) + KOL use the bank run-rate. MARKETPLACE_FEE
+// (Grab/FP commission) is deliberately NOT here — Grab settles net of
+// commission, so it is not a separate cash outflow.
 const MARKETING_OUTFLOW_CATEGORIES = new Set<string>([
   "DIGITAL_ADS", "OTHER_MARKETING", "KOL",
 ]);
@@ -407,7 +410,10 @@ type BankLineProjection = {
   otherOutPerDay: number;        // catch-all DR (petty cash, staff claims, capex,
                                  // OTHER_OUTFLOW, etc.) — excludes PULSE_CATEGORIES,
                                  // PT and marketing (each projected on its own cadence)
-  marketingPerDay: number;       // DIGITAL_ADS + OTHER_MARKETING + KOL daily rate;
+  adsBankPerDay: number;         // DIGITAL_ADS (Google Ads) daily rate from the
+                                 // bank — used only as a FALLBACK; the live
+                                 // optimizer budget is preferred (see computeCashflow)
+  otherMarketingPerDay: number;  // OTHER_MARKETING (SMS Niaga) + KOL daily rate;
                                  // fired as a monthly pulse on the 20th by the caller
   ptPerDay: number;              // PARTIMER daily rate — bank-line fallback for the
                                  // weekly Friday pulse when the roster is unavailable
@@ -442,7 +448,8 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
   let cogsSum = 0;
   let otherInSum = 0;
   let otherOutSum = 0;
-  let marketingSum = 0;
+  let adsSum = 0;         // DIGITAL_ADS (Google Ads) — bank actuals, fallback only
+  let otherMktSum = 0;    // OTHER_MARKETING (SMS Niaga) + KOL
   let ptSum = 0;
 
   const SALES_SET = new Set<string>(SALES_INFLOW_CATEGORIES as readonly string[]);
@@ -467,7 +474,8 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
       // DR
       if (COGS_SET.has(cat)) cogsSum += amt;
       else if (PT_OUTFLOW_CATEGORIES.has(cat)) ptSum += amt;          // → weekly Friday pulse
-      else if (MARKETING_OUTFLOW_CATEGORIES.has(cat)) marketingSum += amt; // → monthly 20th pulse
+      else if (cat === "DIGITAL_ADS") adsSum += amt;                  // → live optimizer budget (fallback: this)
+      else if (MARKETING_OUTFLOW_CATEGORIES.has(cat)) otherMktSum += amt; // OTHER_MARKETING + KOL → monthly 20th pulse
       else if (PULSE_CATEGORIES.has(cat)) {
         // Skip — these are projected via RecurringExpense expansion
         // on their actual due dates. Including them here would
@@ -493,7 +501,8 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
     cogsPerDay: cogsSum / sampleDays,
     otherInPerDay: otherInSum / sampleDays,
     otherOutPerDay: otherOutSum / sampleDays,
-    marketingPerDay: marketingSum / sampleDays,
+    adsBankPerDay: adsSum / sampleDays,
+    otherMarketingPerDay: otherMktSum / sampleDays,
     ptPerDay: ptSum / sampleDays,
     sampleDays,
     hasData: true,
@@ -760,10 +769,26 @@ export async function computeCashflow(opts: {
   const hasRecurringPayroll = recurring.some((r) => r.category === "PAYROLL_SUPPORT");
   const payrollProjected = hasRecurringPayroll ? [] : await projectPayroll(today, horizonEnd);
 
-  // Marketing — monthly pulse on the 20th (owner: paid every 20th), sized from
-  // the real bank-line run-rate (Google Ads + SMS + KOL). Consolidated-only:
-  // marketing isn't outlet-allocated, so it drops out of a filtered view.
-  const monthlyMarketing = bankProj ? round2(bankProj.marketingPerDay * DAYS_PER_MONTH) : 0;
+  // Marketing — monthly pulse on the 20th (owner: paid every 20th).
+  //   • Google Ads is agent-optimised and forward-looking: read the LIVE
+  //     allocated daily budget from the ads module. The optimizer loop moves it
+  //     up and down (a recent trim cut ~RM4k/mo), and the trailing bank run-rate
+  //     lags a cut by ~90 days — so the live budget is the honest forecast.
+  //   • SMS Niaga + KOL aren't agent-controlled, so they stay on the bank
+  //     run-rate.
+  // Falls back to the bank Google-Ads run-rate if the ads module is empty.
+  // Consolidated-only: marketing isn't outlet-allocated, so it drops out of a
+  // filtered view.
+  let adsDailyMyr = bankProj?.adsBankPerDay ?? 0;
+  try {
+    const live = await getLiveAdsDailyBudgetMyr();
+    if (live.campaigns > 0 && live.dailyMyr > 0) adsDailyMyr = live.dailyMyr;
+  } catch {
+    // Ads module unreachable — keep the bank run-rate fallback.
+  }
+  const monthlyMarketing = bankProj
+    ? round2((adsDailyMyr + bankProj.otherMarketingPerDay) * DAYS_PER_MONTH)
+    : 0;
   const marketingProjected: { date: Date; amount: number }[] = [];
   if (!isFiltered && monthlyMarketing > 0) {
     const cursor = new Date(today.getFullYear(), today.getMonth(), 20);
@@ -1052,7 +1077,7 @@ export async function computeCashflow(opts: {
           // Full daily outflow run-rate — COGS + PT + marketing + catch-all.
           // (PT and marketing are shown as pulses in the buckets, but the
           // headline "avg out/day" should still reflect the whole run-rate.)
-          outflow: round2(bankProj.cogsPerDay + bankProj.otherOutPerDay + bankProj.ptPerDay + bankProj.marketingPerDay),
+          outflow: round2(bankProj.cogsPerDay + bankProj.otherOutPerDay + bankProj.ptPerDay + bankProj.adsBankPerDay + bankProj.otherMarketingPerDay),
           sampleDays: bankProj.sampleDays,
         }
       : bankFlows
