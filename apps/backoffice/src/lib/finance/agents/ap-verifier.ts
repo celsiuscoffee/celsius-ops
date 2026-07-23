@@ -207,11 +207,16 @@ export async function applyVerifiedReview(opts: { commit?: boolean; sinceDays?: 
     if (v?.payAndClaim) {
       payAndClaim++;
       // Ask the owner on Telegram to approve clearing it — one tap on ✅ Clear
-      // settles the invoice (dispatched by the pulse webhook). Dedup so the
-      // daily re-run doesn't re-ask about the same still-open bank line, and
-      // only ask on a committed run (not a dry run).
+      // settles the invoice (dispatched by the pulse webhook). Dedup on the
+      // INVOICE, not the bank line: the same real payment gets a fresh
+      // fin_bank_lines row (new id) on every statement re-ingest, so keying the
+      // dedup on bankLineId let the 6-hourly re-run re-ask the same invoice
+      // every cycle (it piled up 40+ duplicate prompts once). The invoice id is
+      // the stable identity of "clear this pay-and-claim". Only ask on a
+      // committed run (not a dry run). The payload still carries the freshest
+      // bankLineId for writeApMatch.
       let asked = false;
-      if (commit && !(await pendingPromptExists("finance_ap_verifier", m.bankLineId))) {
+      if (commit && !(await pendingPromptExists("finance_ap_verifier", m.invoiceId))) {
         const promptId = await askOwner({
           agentKey: "finance_ap_verifier",
           kind: "confirm",
@@ -220,8 +225,8 @@ export async function applyVerifiedReview(opts: { commit?: boolean; sinceDays?: 
             { label: "✅ Clear it", value: "clear" },
             { label: "🛑 Not this", value: "reject" },
           ],
-          refTable: "fin_bank_lines",
-          refId: m.bankLineId,
+          refTable: "invoices",
+          refId: m.invoiceId,
           payload: { action: "clear_ap_match", approveValue: "clear", match: m },
           expiresInHours: 72,
         });
@@ -236,8 +241,8 @@ export async function applyVerifiedReview(opts: { commit?: boolean; sinceDays?: 
           kind: "handoff",
           summary: `Staff pay-and-claim: the ${m.payee} invoice (RM${m.amount.toFixed(2)}) was paid by ${v.paidBy ?? "a staff member"} and reimbursed. Valid settlement - in your finance inbox to confirm, not cleared automatically.`,
           detail: v.reason,
-          refTable: "fin_bank_lines",
-          refId: m.bankLineId,
+          refTable: "invoices",
+          refId: m.invoiceId,
           notify: false,
         });
       }
