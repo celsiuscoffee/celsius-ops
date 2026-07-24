@@ -393,6 +393,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-24 — **BOM (Menu & Recipes) table splits COGS into dine-in vs
+  takeaway (MERGED #1061).** Owner: "for bom, can you divide dine in and
+  takeaway for cogs?" The `/api/inventory/menus` route already computed a full
+  temperature×channel matrix (`matrix.{hot,iced}.{dineIn,takeaway}`); only the
+  worst-case `cogs`/`cogsPercent` was surfaced in the table. Frontend-only
+  change to `apps/backoffice/src/app/(admin)/inventory/menus/page.tsx`: replaced
+  the single "All-in Cost" + "COGS %" columns with two sortable columns
+  **Dine-in COGS** / **Takeaway COGS** (each RM cost + colour-coded %; Hot/Iced
+  collapsed to the worst cell per channel via `channelCells()`), sort keys now
+  `dineInCogs`/`takeawayCogs`, and the Avg COGS % card shows both channel
+  averages. No API/schema change — recipe-cards page still reads the unchanged
+  worst-case fields. The "High COGS" filter still keys off worst-case (=
+  takeaway). Open design choice left for owner: drink Hot/Iced columns show the
+  higher-cost temperature (worst-case), not a split/average.
+
 - 2026-07-23 (evening) — **Cashflow "upcoming cash" view: Grab reconciled into
   the incoming forecast, daily run-rate strip added, marketing follows the live
   ad budget (all MERGED: #1051, #1053).** Same-day continuation, driven by the
