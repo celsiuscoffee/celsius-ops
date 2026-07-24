@@ -8,6 +8,7 @@ import { GET as runConsumptionPost } from "../consumption-post/route";
 import { GET as runParLevelsRecalc } from "../par-levels-recalc/route";
 import { repromptStaleColdPos } from "@/lib/inventory/procurement-po-send";
 import { runLoopWatchdog } from "@/lib/inventory/loop-watchdog";
+import { runProcurementAdvisor } from "@/lib/procurement/procurement-advisor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -69,6 +70,18 @@ export async function GET(req: NextRequest) {
   await step("receivingChases", hour !== 19, () => runRequestReceivings(req));
   await step("consumption", hour === 19, () => runConsumptionPost(req));
   await step("parRecalc", hour === 19 && isSunday, () => runParLevelsRecalc(req));
+
+  // Procurement advisor: the LLM judgment layer sends the owner a prioritised
+  // reorder recommendation on the 9am-MYT (01:00 UTC) run, after the exec pass.
+  // Advisory only (no PO writes); best-effort, never fails the loop.
+  if (hour === 1) {
+    try {
+      out.advisor = await runProcurementAdvisor();
+    } catch (err) {
+      console.error("[procurement-loop:advisor]", err);
+      out.advisor = { error: err instanceof Error ? err.message : String(err) };
+    }
+  }
 
   // Cold-prompt re-prompts: a prompted-but-unanswered PO gets one nudge after
   // 24h; after that it's flagged for the manual lane instead of dead-airing.
