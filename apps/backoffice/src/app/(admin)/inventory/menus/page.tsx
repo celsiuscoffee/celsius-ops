@@ -86,7 +86,35 @@ const rowKey = () =>
     ? crypto.randomUUID()
     : `row-${Math.random().toString(36).slice(2)}-${Date.now()}`;
 
-type SortKey = "name" | "category" | "sellingPrice" | "cogs" | "cogsPercent" | "ingredientCount";
+type SortKey = "name" | "category" | "sellingPrice" | "dineInCogs" | "takeawayCogs" | "ingredientCount";
+
+// Worst (highest) of two cells — used to collapse the Hot/Iced dimension into a
+// single per-channel figure for the summary table (the expanded recipe still
+// breaks Iced vs Hot out in full). For items without a temperature split the two
+// cells are identical, so this is a no-op there.
+const worstCell = (a: Cell, b: Cell): Cell => (b.cogs > a.cogs ? b : a);
+const channelCells = (m: MenuItem) => ({
+  dineIn: worstCell(m.matrix.iced.dineIn, m.matrix.hot.dineIn),
+  takeaway: worstCell(m.matrix.iced.takeaway, m.matrix.hot.takeaway),
+});
+
+const cogsColor = (pct: number) =>
+  pct > 40 ? "text-red-600" : pct > 30 ? "text-amber-600" : "text-green-600";
+
+// Compact per-channel COGS for the summary table: RM cost with its COGS % under
+// it (colour-coded). The ingredient/packaging breakdown stays in the expanded
+// recipe view (see CogsCell) to keep the table scannable.
+const ChannelCogs = ({ c }: { c: Cell }) => {
+  if (c.cogs <= 0) return <span className="text-gray-300">—</span>;
+  return (
+    <div className="leading-tight">
+      <div className="font-medium text-gray-900">{formatRM(c.cogs)}</div>
+      {c.cogsPercent > 0 && (
+        <div className={`text-xs font-medium ${cogsColor(c.cogsPercent)}`}>{c.cogsPercent.toFixed(1)}%</div>
+      )}
+    </div>
+  );
+};
 
 // One all-in COGS figure with its ingredients-vs-packaging split. The packaging
 // sub-line shows how much of the cost is packaging and its share of COGS (the
@@ -141,12 +169,22 @@ export default function MenusPage() {
     return matchSearch && matchCat && matchStatus;
   });
 
+  const sortNum = (m: MenuItem, key: SortKey): number => {
+    switch (key) {
+      case "sellingPrice": return m.sellingPrice;
+      case "ingredientCount": return m.ingredientCount;
+      case "dineInCogs": return channelCells(m).dineIn.cogs;
+      case "takeawayCogs": return channelCells(m).takeaway.cogs;
+      default: return 0;
+    }
+  };
+
   const sorted = [...filtered].sort((a, b) => {
     let cmp: number;
     if (sortKey === "name" || sortKey === "category") {
       cmp = String(a[sortKey]).localeCompare(String(b[sortKey]));
     } else {
-      cmp = (a[sortKey] as number) - (b[sortKey] as number);
+      cmp = sortNum(a, sortKey) - sortNum(b, sortKey);
     }
     return sortDir === "asc" ? cmp : -cmp;
   });
@@ -430,7 +468,10 @@ export default function MenusPage() {
       {(() => {
         const isFiltered = search !== "" || catFilter.length > 0 || statusFilter !== "all";
         const withCogs = sorted.filter((m) => m.cogs > 0);
-        const avgCogs = withCogs.length > 0 ? withCogs.reduce((s, m) => s + m.cogsPercent, 0) / withCogs.length : 0;
+        const avg = (pick: (m: MenuItem) => number) =>
+          withCogs.length > 0 ? withCogs.reduce((s, m) => s + pick(m), 0) / withCogs.length : 0;
+        const avgDineIn = avg((m) => channelCells(m).dineIn.cogsPercent);
+        const avgTakeaway = avg((m) => channelCells(m).takeaway.cogsPercent);
         const mapped = sorted.filter((m) => m.ingredientCount > 0).length;
         return (
           <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -446,9 +487,16 @@ export default function MenusPage() {
             </Card>
             <Card className="px-4 py-3">
               <p className="text-xs text-gray-500">Avg COGS %</p>
-              <p className={`text-xl font-bold ${avgCogs > 40 ? "text-red-600" : avgCogs > 30 ? "text-amber-600" : "text-green-600"}`}>
-                {avgCogs > 0 ? `${avgCogs.toFixed(1)}%` : "—"}
-              </p>
+              <div className="flex items-baseline gap-4">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400">Dine-in</p>
+                  <p className={`text-xl font-bold ${cogsColor(avgDineIn)}`}>{avgDineIn > 0 ? `${avgDineIn.toFixed(1)}%` : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400">Takeaway</p>
+                  <p className={`text-xl font-bold ${cogsColor(avgTakeaway)}`}>{avgTakeaway > 0 ? `${avgTakeaway.toFixed(1)}%` : "—"}</p>
+                </div>
+              </div>
               <p className="text-xs text-gray-400">{withCogs.length} {withCogs.length === 1 ? 'item' : 'items'} costed</p>
             </Card>
             <Card className="px-4 py-3">
@@ -469,8 +517,8 @@ export default function MenusPage() {
               <SortHeader label="Menu Item" sortKey="name" />
               <SortHeader label="Category" sortKey="category" />
               <SortHeader label="Selling Price" sortKey="sellingPrice" align="right" />
-              <SortHeader label="All-in Cost" sortKey="cogs" align="right" />
-              <SortHeader label="COGS %" sortKey="cogsPercent" align="right" />
+              <SortHeader label="Dine-in COGS" sortKey="dineInCogs" align="right" />
+              <SortHeader label="Takeaway COGS" sortKey="takeawayCogs" align="right" />
               <SortHeader label="Ingredients" sortKey="ingredientCount" />
               <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
             </tr>
@@ -485,6 +533,7 @@ export default function MenusPage() {
             )}
             {sorted.map((menu) => {
               const isEditing = editingMenuId === menu.id;
+              const ch = channelCells(menu);
               return (
                 <Fragment key={menu.id}>
                   <tr className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer" onClick={() => { if (!isEditing) setExpandedId(expandedId === menu.id ? null : menu.id); }}>
@@ -499,16 +548,8 @@ export default function MenusPage() {
                     </td>
                     <td className="px-4 py-3"><Badge variant="outline" className="text-[10px]">{menu.category}</Badge></td>
                     <td className="px-4 py-3 text-right font-medium text-gray-900">RM {menu.sellingPrice.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-900">
-                      {menu.cogs > 0 ? `${formatRM(menu.cogs)}` : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {menu.cogsPercent > 0 ? (
-                        <span className={`text-xs font-medium ${menu.cogsPercent > 40 ? "text-red-600" : menu.cogsPercent > 30 ? "text-amber-600" : "text-green-600"}`}>
-                          {menu.cogsPercent.toFixed(1)}%
-                        </span>
-                      ) : <span className="text-gray-300">—</span>}
-                    </td>
+                    <td className="px-4 py-3 text-right"><div className="inline-flex flex-col items-end"><ChannelCogs c={ch.dineIn} /></div></td>
+                    <td className="px-4 py-3 text-right"><div className="inline-flex flex-col items-end"><ChannelCogs c={ch.takeaway} /></div></td>
                     <td className="px-4 py-3 text-xs text-gray-500">{menu.ingredientCount} {menu.ingredientCount === 1 ? 'item' : 'items'}</td>
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       {isEditing ? (
