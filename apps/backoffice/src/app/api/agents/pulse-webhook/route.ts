@@ -4,7 +4,7 @@ import { logAgentMessage } from "@celsius/agents/src/messages";
 import { answerPulseCallback, pulseChatId, pulseOwnerUserId, sendPulse, sendPulseTo } from "@celsius/agents/src/pulse";
 import { resolvePrompt, findPromptByMessageId } from "@celsius/agents/src/ask-owner";
 import { writeApMatch, type ApMatch } from "@/lib/finance/ap-match";
-import { answerDataQuestion } from "@/lib/agents/data-analyst";
+import { runIntelligence } from "@/lib/agents/intelligence";
 
 export const dynamic = "force-dynamic";
 // Longer than the default 30s: a data question can take two LLM round-trips
@@ -278,15 +278,16 @@ export async function POST(req: NextRequest) {
         return ok();
       }
       try {
-        const res = await answerDataQuestion(text, { askedBy: actor(msg.from) });
+        const res = await runIntelligence(String(chatId), text, actor(msg.from));
         if (res.error) {
           await sendPulseTo(chatId, `I couldn't answer that one.\n<i>${escapeHtml(res.error.slice(0, 300))}</i>\n\nTry rephrasing it.`);
         } else {
-          // SQL is logged to agent_actions for audit but kept out of the reply.
+          // Reasoning + SQL are logged to agent_actions for audit but kept out
+          // of the reply.
           await sendPulseTo(chatId, escapeHtml(res.answer));
         }
       } catch (err) {
-        console.error("[pulse-webhook] data question failed:", err);
+        console.error("[pulse-webhook] intelligence question failed:", err);
         await sendPulseTo(chatId, "Something went wrong answering that. Please try again in a moment.");
       }
       return ok();
