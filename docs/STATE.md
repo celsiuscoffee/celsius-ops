@@ -290,6 +290,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-24 — **FULL WAREHOUSE COVERAGE AUDIT (owner: "find and make sure
+  all data is in the warehouse").** Swept all ~230 prod tables by live
+  rows; every material table (≥50 rows) now carries a verdict in the new
+  `docs/design/warehouse-coverage-register.md`. Closed 9 undocumented
+  material clusters in data-map.ts: **Grab commission** (expense 6519 via
+  monthly grab_clearing journals, ~RM14.6k June — was invisible as a cost);
+  **grab_ads_spend** (manual, already inside 6519 → double-count trap);
+  Grab webhook/reconcile pipeline; the **Google Ads ads_* subsystem**
+  (ads_search_term_daily ~34k fresh daily; real spend NOT reconciled into
+  GL); **consignment_sales** raw; **fin_documents** (~17k evidence layer);
+  **fin_fixed_assets** (capex/depreciation); **RecurringExpense**. Added
+  skill **check 31** (coverage ratchet — new material table must get a
+  register verdict, re-run monthly). Flagged **12 debris tables**
+  (*_backup_/_quarantine_/_deleted_) for housekeeping (rung-3 cleanup,
+  owner approves). Started from the Grab-commission question — the audit
+  generalised it so gaps get caught by sweep, not by chance.
+
 - 2026-07-18 — **JUNE GL CORRECTION EXECUTED — gate passed (delegated
   rung-2; this branch, extends PR #977).** The "mixed-regime double-count"
   was NOT bank-fed: pre-cutover pos_native "EOD Sales" journals were

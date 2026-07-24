@@ -67,6 +67,21 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
 - TRAP: sms_logs is LEGACY (old campaigns-auto + tests only; both legacy campaigns inactive). Its silence since 2026-06-21 is normal — never conclude "SMS is dead" from sms_logs. sms_credits is SMS123-era balance history.
 - campaign_outcomes = the marketing OUTCOME ledger (since 2026-07-18): one row per measured loop round (campaign_key '<loop>-r<no>'), with baseline/result conversion %, uplift_pct in PERCENTAGE POINTS, and an evidence-gated verdict (win/neutral/loss/invalid — invalid = holdout <3 or treatment <10, common for small daily triggered rounds; use the pooled leaderboard for those). Use this for "did campaign X work" — not raw loop_rounds.stats.
 
+## Delivery platforms (Grab) — gross vs commission (added 2026-07-24)
+- Grab sales ring GROSS into income 5000-04 Grabfood (also the 'grabfood' channel in unified_sales) and debit 1005 Grabfood debtors (a transit/AR account, NOT cash).
+- Grab COMMISSION/fees are captured as an EXPENSE in 6519 "Merchant fees", posted by monthly \`grab_clearing\` fin_transactions that reconcile 1005 down to the actual payout. June ≈ RM14.6k across the 3 entities (~46% all-in take on gross Grab). This is where "how much is Grab really costing us" lives — NOT a separate table.
+- grab_ads_spend = MANUAL marketing-side table (GrabMerchant settlement reports, per outlet per month; ~RM13.7k Mar–Jul). TRAP: it is "billed in payouts" so it is ALREADY INSIDE the 6519 merchant-fee wedge — never add it on top of 6519 as a separate cost. It is a marketing-ROI metric, and it is NOT a live feed (manual entry; July already lags — con/tam only through Jul 5).
+- grab_webhook_events / grab_reconcile_runs = the live Grab order pipeline (webhooks → pos_orders backfill); operational, not a revenue source. grab_campaigns/grab_menu_items = empty.
+
+## Paid acquisition (Google Ads) — the ads_* subsystem (added 2026-07-24)
+- ads_search_term_daily (~34k rows, daily, fresh) = per-search-term spend/clicks/conv; ads_metric_daily = per-campaign daily rollup; ads_campaign (status enum is TEXT numbers — '2'=ENABLED); ads_budget_change, ads_term_exclusion, ads_payment feed the ads optimizer/autopilot. Google Ads spend is a real marketing cost but is tracked in this subsystem, NOT (yet) reconciled into the finance GL — quote ad spend from ads_metric_daily, cash cost from the bank/GL separately.
+- indeed_ads_* = recruitment ads (empty/near-empty). grab ads are separate (see above).
+
+## Other finance sources (added 2026-07-24)
+- fin_documents (~17k, fresh) = ingested source docs (raw_text/raw_url) behind categorization/AP — the evidence layer, not a ledger.
+- fin_fixed_assets (61) = depreciation schedule (cost, useful_life, accumulated_dep, method); the only home for capex/depreciation. RecurringExpense (8 active) = known recurring costs (rent/utilities cadence) for cash forecasting.
+- consignment_sales (~2.2k, operator/channel, gross+commission_rate+net_payout) = the RAW consignment settlements (Nilai etc.) that feed the 'consignment' source of unified_sales; settlements lag (latest can be weeks old) — a Nilai daily-sales question is a category error.
+
 ## Metric definitions (use these consistently)
 - Labour % = month payroll (salary + employer_stat) / month gross sales.
 - Cash runway (days) = total latest closingBalance / avg daily NET outflow from BankStatementLine (28d, isInterCo=false), when net is negative.

@@ -220,6 +220,18 @@ projection for sales/cash/payroll semantics.
     MENU_SNOOZED >14d. Expiring never re-pages (dedupeKey rows persist).
     Open count creeping past ~300 = expiry broke or a new signal needs
     classifying as day-bound vs state-bound].
+31. Warehouse coverage (owner-directed 2026-07-24, "make sure all data is
+    in the warehouse"): enumerate prod tables by live rows (query in
+    docs/design/warehouse-coverage-register.md), diff material tables
+    (≥50 rows) against those named in data-map.ts + this skill. Every
+    material table must carry a verdict in the register. [A NEW material
+    table with no verdict = an unclassified source — investigate and
+    classify it (canonical / covered-via-parent / derived-cache / gap).
+    Re-run each month-end. Baseline gaps closed 2026-07-24: Grab
+    commission (6519 via grab_clearing), grab_ads_spend, Google Ads
+    ads_* subsystem, consignment_sales, fin_documents, fin_fixed_assets,
+    RecurringExpense — all now in the data-map. 12 debris tables
+    (*_backup_/_quarantine_/_deleted_) flagged for housekeeping cleanup.]
 - unified_sale_items now includes the pickup branch (migration 088,
   applied 2026-07-18): order counts reconcile 1:1 with unified_sales;
   line_total is PRE-discount (sums ~4% above nett — same semantic as all
