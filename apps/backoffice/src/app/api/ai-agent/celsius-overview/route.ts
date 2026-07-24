@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { getSession } from "@/lib/auth";
 import { runCelsiusOverviewAgent } from "@/lib/ai-agent/celsius-overview";
 import { runCommsDigest } from "@celsius/agents/src/digest";
+import { runIntelligenceBriefing } from "@/lib/agents/intelligence-briefing";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -51,6 +52,17 @@ async function runHandler(req: NextRequest) {
         await runCommsDigest();
       } catch (digestErr) {
         console.error("[ai-agent] folded comms-digest failed:", digestErr);
+      }
+    }
+
+    // Fold the proactive morning briefing into this cron's 9am MYT (01:00 UTC)
+    // firing - the intelligence agent messages the owner first with yesterday's
+    // numbers, anomalies, and pace vs target. Best-effort; never fails the run.
+    if (isCron && new Date().getUTCHours() === 1) {
+      try {
+        await runIntelligenceBriefing();
+      } catch (briefErr) {
+        console.error("[ai-agent] folded morning-briefing failed:", briefErr);
       }
     }
 

@@ -15,6 +15,24 @@ import { getAgentClient, logAgentAction } from "@celsius/agents/src/substrate";
 import { buildCatalog, runReadOnlySql, validateReadOnly, safeJson, DOMAIN_RULES } from "./data-analyst";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Retry transient API errors (429 rate limit, 5xx, 529 overloaded) so a blip
+// doesn't drop an answer mid-loop or skip the unattended morning briefing.
+async function createWithRetry(params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await anthropic.messages.create(params);
+    } catch (e) {
+      lastErr = e;
+      const status = (e as { status?: number }).status;
+      const retryable = status === 429 || status === 529 || (typeof status === "number" && status >= 500);
+      if (!retryable) throw e;
+      await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
+}
 const MODEL = "claude-sonnet-4-6";
 const MAX_STEPS = 6; // tool-use round trips before we force an answer
 const HISTORY_TURNS = 10; // conversation turns loaded for context
@@ -104,6 +122,8 @@ How you work:
 - If a question is genuinely ambiguous, ask ONE sharp clarifying question rather than guess wildly.
 - Never show raw SQL unless asked. Never fabricate numbers.
 
+Telegram formatting (IMPORTANT): your reply is shown on Telegram, which does NOT render markdown. Do NOT use markdown tables (pipes) or ** asterisk bold - they appear as literal characters. Write plain text: short lines, simple bullets with "•", and a sparing emoji for emphasis. For a labelled figure use "Label: value" on its own line, not a table.
+
 ${DOMAIN_RULES}
 
 What you've learned so far:
@@ -120,10 +140,19 @@ export interface IntelligenceResult {
   learned: number;
 }
 
-export async function runIntelligence(chatId: string, question: string, askedBy?: string): Promise<IntelligenceResult> {
+export async function runIntelligence(
+  chatId: string,
+  question: string,
+  askedBy?: string,
+  opts?: { skipHistory?: boolean },
+): Promise<IntelligenceResult> {
   if (!process.env.ANTHROPIC_API_KEY) return { answer: "", error: "ANTHROPIC_API_KEY not set", steps: 0, learned: 0 };
 
-  const [catalog, memories, history] = await Promise.all([buildCatalog(), loadMemories(), loadHistory(chatId)]);
+  const [catalog, memories, history] = await Promise.all([
+    buildCatalog(),
+    loadMemories(),
+    opts?.skipHistory ? Promise.resolve([]) : loadHistory(chatId),
+  ]);
   const system = systemPrompt(catalog, memories);
 
   const messages: Anthropic.MessageParam[] = [
@@ -137,7 +166,7 @@ export async function runIntelligence(chatId: string, question: string, askedBy?
 
   for (let i = 0; i < MAX_STEPS; i++) {
     steps++;
-    const res = await anthropic.messages.create({
+    const res = await createWithRetry({
       model: MODEL,
       max_tokens: 1500,
       system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
@@ -186,8 +215,10 @@ export async function runIntelligence(chatId: string, question: string, askedBy?
 
   if (!finalText) finalText = "I ran out of steps on that one - try narrowing the question a little.";
 
-  await saveTurn(chatId, "user", question, askedBy);
-  await saveTurn(chatId, "assistant", finalText);
+  if (!opts?.skipHistory) {
+    await saveTurn(chatId, "user", question, askedBy);
+    await saveTurn(chatId, "assistant", finalText);
+  }
   await logAgentAction({
     agentKey: "data_analyst",
     kind: "intelligence_answer",
