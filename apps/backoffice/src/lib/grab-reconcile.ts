@@ -49,6 +49,23 @@ function extractTotalSen(o: GrabListOrder): number {
   return typeof t === "number" ? t : 0;
 }
 
+// Grab's commission split off a listOrders row (sen), so backfilled orders
+// carry actual commission instead of dropping it (migration 089). null when
+// the price object is absent — unknown, not zero.
+function extractFeesSen(o: GrabListOrder): {
+  merchant: number | null; service: number | null; delivery: number | null; commission: number | null;
+} {
+  const price = o.price as Record<string, unknown> | undefined;
+  // Treat 0/absent as null (unknown): Grab's Partner API zeroes the fee fields —
+  // actual commission is settlement-only (see grab-ingest.ts note + migration 089).
+  const num = (v: unknown) => (typeof v === "number" && v !== 0 ? v : null);
+  const merchant = price ? num(price.merchantChargeFee) : null;
+  const service = price ? num(price.serviceChargeFee) : null;
+  const delivery = price ? num(price.deliveryFee) : null;
+  const commission = merchant != null || service != null ? (merchant ?? 0) + (service ?? 0) : null;
+  return { merchant, service, delivery, commission };
+}
+
 // Reconciled orders come from Grab's (mostly finished) order list, so default
 // to a terminal status — a reconciled order must NEVER be created onto the live
 // on-register KDS or get auto-accepted.
@@ -241,6 +258,7 @@ export async function reconcileGrabOrders(): Promise<ReconcileSummary> {
       // let this branch "succeed" without persisting a row).
       const short = extractShort(go).replace(/^GF-/i, "");
       const totalSen = extractTotalSen(go);
+      const fees = extractFeesSen(go);
       const ins = await insertGrabPosOrder(db, {
         external_id: ext,
         outlet_id: o.id,
@@ -248,6 +266,10 @@ export async function reconcileGrabOrders(): Promise<ReconcileSummary> {
         order_type: "takeaway",
         status,
         subtotal: totalSen, sst_amount: 0, discount_amount: 0, total: totalSen,
+        grab_merchant_charge_fee: fees.merchant,
+        grab_service_charge_fee: fees.service,
+        grab_commission_total: fees.commission,
+        grab_delivery_fee: fees.delivery,
         customer_name: "Grab Customer",
         notes: "[reconciled] backfilled from Grab order list — item detail unavailable",
       }, short, ext);

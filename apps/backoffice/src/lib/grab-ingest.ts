@@ -221,6 +221,21 @@ export async function ingestGrabOrder(
   );
   const subtotal = price.subtotal && price.subtotal > 0 ? price.subtotal : itemsSubtotal;
   const sst = price.tax ?? 0;
+  // Grab's commission split — captured so GL Grab clearing can be actual-based
+  // if/when Grab populates it (see migration 089). CAVEAT (verified against prod
+  // 2026-07-24): Grab's WEBHOOK/Partner-API price object currently sends
+  // merchantChargeFee/serviceChargeFee = 0 for every order — the real commission
+  // is only in the GrabMerchant settlement portal exports, not any received
+  // payload. So we treat 0/absent as NULL (unknown) rather than asserting a
+  // false zero-commission; this column populates only if a payload ever carries
+  // a real fee. Actual per-period commission comes from the settlement importer.
+  const merchantChargeFee = price.merchantChargeFee || null;
+  const serviceChargeFee = price.serviceChargeFee || null;
+  const deliveryFee = price.deliveryFee || null;
+  const commissionTotal =
+    merchantChargeFee != null || serviceChargeFee != null
+      ? (merchantChargeFee ?? 0) + (serviceChargeFee ?? 0)
+      : null;
   const merchantFees = (price.merchantChargeFee ?? 0) + (price.serviceChargeFee ?? 0);
   const discount = (price.grabFundPromo ?? 0) + (price.merchantFundPromo ?? 0);
   const total = subtotal + merchantFees;
@@ -242,6 +257,10 @@ export async function ingestGrabOrder(
     order_type: orderType,
     status: opts.statusOverride ?? "sent_to_kitchen",
     subtotal, sst_amount: sst, discount_amount: discount, total,
+    grab_merchant_charge_fee: merchantChargeFee,
+    grab_service_charge_fee: serviceChargeFee,
+    grab_commission_total: commissionTotal,
+    grab_delivery_fee: deliveryFee,
     customer_name: payload.receiver?.name || "Grab Customer",
     customer_phone: payload.receiver?.phones?.[0] || null,
     notes,

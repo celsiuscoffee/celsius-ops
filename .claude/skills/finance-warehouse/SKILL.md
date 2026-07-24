@@ -232,6 +232,20 @@ projection for sales/cash/payroll semantics.
     ads_* subsystem, consignment_sales, fin_documents, fin_fixed_assets,
     RecurringExpense — all now in the data-map. 12 debris tables
     (*_backup_/_quarantine_/_deleted_) flagged for housekeeping cleanup.]
+32. App data-point QA (owner-directed 2026-07-24, "QA all data points, add
+    to warehouse if not stored"): re-run the captured-but-not-stored sweep
+    at month-end alongside check 31. Findings + verdicts in
+    docs/design/app-data-point-qa.md. [A new POST/webhook/cron that
+    collects or computes business data must persist it or be listed there.
+    Baseline: BUILT Grab per-order commission columns on pos_orders
+    (migration 089) — but Grab's webhook zeroes the fee fields, so actual
+    commission is SETTLEMENT-ONLY (portal export, like grab_ads_spend);
+    the real fix (grab settlement importer, G1) + Stripe MDR fees (G2) +
+    POS discount-override audit trail (P1) + dead-letter offline sales (P2)
+    are PROPOSED (money/native → owner). Analytics/history batch
+    (client_events, whatsapp status, google_reviews, labour_variance_weekly,
+    sales_recommendation_run, ops_scoreboard_weekly, ads_optimizer_runs,
+    etc.) is rung-1 buildable, awaiting owner green-light.]
 - unified_sale_items now includes the pickup branch (migration 088,
   applied 2026-07-18): order counts reconcile 1:1 with unified_sales;
   line_total is PRE-discount (sums ~4% above nett — same semantic as all

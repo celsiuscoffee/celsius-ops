@@ -290,6 +290,28 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-24 — **APP DATA-POINT QA (owner: "QA all data points, add to
+  warehouse if not stored").** Six parallel code audits (backoffice
+  APIs/crons, finance crons/agents, customer apps, staff/POS, integrations),
+  each grep-verifying non-persistence. Full register:
+  `docs/design/app-data-point-qa.md`. **BUILT (rung 1):** Grab per-order
+  commission columns on pos_orders (migration 089, applied) + wired
+  webhook/reconcile ingest. **KEY CORRECTION (prod-verified):** Grab's
+  webhook zeroes merchantChargeFee/serviceChargeFee on every order (947 raw
+  orders all 0) — actual commission is SETTLEMENT-ONLY (portal export),
+  which is *why* GL 6519 is rate-derived. So wiring treats 0 as NULL (no
+  false zero), no backfill. The real fix is a settlement importer (proposal
+  G1). **Verified CLEAN:** Revenue Monster (mdrFee line-by-line), Bukku
+  (BankStatementLine+bukkuId), SMS status. **PROPOSED (money/native/product
+  — owner):** G1 grab settlement importer, G2 Stripe MDR fees, P1 POS
+  discount-override audit trail (manager identity verified then discarded —
+  fraud-control gap), P2 dead-lettered offline sales (silent revenue loss,
+  on-device only), P3 card-terminal refs; plus a rung-1 analytics/history
+  batch (client_events — customer funnel currently routes only to a NO-OP
+  Amplitude sink; whatsapp status callbacks; google_reviews corpus;
+  labour_variance/sales_rec/ops_scoreboard/ads_optimizer snapshots).
+  Added skill check 32 (monthly re-run). PR #977.
+
 - 2026-07-24 — **FULL WAREHOUSE COVERAGE AUDIT (owner: "find and make sure
   all data is in the warehouse").** Swept all ~230 prod tables by live
   rows; every material table (≥50 rows) now carries a verdict in the new
