@@ -85,10 +85,11 @@ export async function buildCatalog(): Promise<string> {
 }
 
 // ── Domain rules the model must know (things the column list alone won't tell) ─
-const AUTHOR_SYSTEM = `You are the SQL author for Celsius Coffee (a Malaysian coffee chain). Write ONE read-only PostgreSQL SELECT that answers the owner's question against the given schema. Output ONLY JSON: {"sql": "<query>", "note": "<one line: any assumption you made, or why unanswerable>"}. Use "sql": null if the schema can't answer it.
-
-Hard rules:
-- A SINGLE SELECT (or WITH ... SELECT). No writes, no semicolons, no multiple statements. Always include a sensible LIMIT.
+// Shared business/schema knowledge - the single source of truth for how to read
+// Celsius data. Used by the SQL author AND the conversational intelligence agent
+// so the two never drift. Append learnings here as they stabilise.
+export const DOMAIN_RULES = `Query rules:
+- Read-only. A SINGLE SELECT (or WITH ... SELECT). No writes, no semicolons, no multiple statements. Always include a sensible LIMIT.
 - Timestamps are stored in UTC. Malaysia is MYT (UTC+8). For any day/month bucketing or "today"/"this week"/"this month", convert: (col AT TIME ZONE 'Asia/Kuala_Lumpur')::date, and compare to (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date.
 
 Revenue + sales rules (CRITICAL - get the source right):
@@ -103,7 +104,11 @@ Other domains:
 - members = loyalty members (phone, name, birthday, preferred_outlet_id, created_at, sms_opt_out).
 - "User" = the staff/user directory (id, name, fullName, username). Staff names come from here: join hr_attendance_logs.user_id, hr_* .user_id, and pos_orders.employee_id to "User".id and read "User".name.
 - hr_attendance_logs = staff attendance: user_id is the staff id (join "User" for the name), outlet_id, scheduled_date (date), clock_in/clock_out (timestamptz), final_status, total_hours, overtime_hours.
-- ReviewDailySnapshot = per-outlet Google review snapshots by snapshotDate (reviewCount, averageRating, reviews7d, reviews30d).
+- ReviewDailySnapshot = per-outlet Google review snapshots by snapshotDate (reviewCount, averageRating, reviews7d, reviews30d).`;
+
+const AUTHOR_SYSTEM = `You are the SQL author for Celsius Coffee (a Malaysian coffee chain). Write ONE read-only PostgreSQL SELECT that answers the owner's question against the given schema. Output ONLY JSON: {"sql": "<query>", "note": "<one line: any assumption you made, or why unanswerable>"}. Use "sql": null if the schema can't answer it.
+
+${DOMAIN_RULES}
 
 Prefer explicit column lists over SELECT *. If the question is ambiguous, make the most reasonable assumption and say so in "note".`;
 
@@ -155,7 +160,7 @@ export async function runReadOnlySql(sql: string): Promise<{ rows: unknown[]; tr
   return { rows, truncated: rows.length >= MAX_ROWS };
 }
 
-function safeJson(v: unknown): string {
+export function safeJson(v: unknown): string {
   return JSON.stringify(v, (_k, val) => {
     if (typeof val === "bigint") return Number(val);
     if (val && typeof val === "object" && (val as { constructor?: { name?: string } }).constructor?.name === "Decimal") {
