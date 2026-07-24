@@ -616,6 +616,26 @@ function sumBoundary(
   return { value: round2(value), dates: [...new Set(dates)].sort(), coverage: note };
 }
 
+// Whole calendar months spanned by [start,end], as "YYYY-MM" — but ONLY when the
+// window is month-aligned (start on the 1st, end on a month's last day). Returns
+// null otherwise, so a partial-month window never reads a period snapshot.
+function wholeMonthsInWindow(start: string, end: string): string[] | null {
+  if (!/^\d{4}-\d{2}-01$/.test(start)) return null;
+  const ey = Number(end.slice(0, 4));
+  const em = Number(end.slice(5, 7));
+  const lastDay = new Date(Date.UTC(ey, em, 0)).getUTCDate();
+  if (Number(end.slice(8, 10)) !== lastDay) return null;
+  const out: string[] = [];
+  let y = Number(start.slice(0, 4));
+  let m = Number(start.slice(5, 7));
+  while (y < ey || (y === ey && m <= em)) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return out;
+}
+
 export async function buildSourcedPnl(input: {
   companyId: string;
   start: string;
@@ -818,9 +838,44 @@ export async function buildSourcedPnl(input: {
     valueInventoryAt(outletIds, dEnd(end), costMap),
   ]);
   const bothBounded = [...openMap.keys()].filter((o) => closeMap.has(o));
+
+  // Frozen COGS for a fully-closed window. The consumption engine re-prices
+  // recipes at the CURRENT cheapest supplier cost on every run, so a closed
+  // period's COGS would silently drift as supplier prices change. Once every
+  // month in the window is locked for this entity, serve the COGS captured in
+  // the period snapshot at close instead — so a locked quarter stops moving and
+  // stays equal to the GL. Only for a single-entity, whole-company, whole-month
+  // window (consolidated and per-outlet views keep recomputing live).
+  let frozenCogs: number | null = null;
+  if (companyId !== CONSOLIDATED_COMPANY_ID && !outletId) {
+    const months = wholeMonthsInWindow(start, end);
+    if (months) {
+      const { data: pers } = await client
+        .from("fin_periods")
+        .select("period, status, pnl_snapshot")
+        .eq("company_id", companyId)
+        .in("period", months);
+      if (pers && pers.length === months.length && pers.every((p) => p.status === "closed")) {
+        let sum = 0;
+        let ok = true;
+        for (const p of pers) {
+          const c = Number((p.pnl_snapshot as { cogs?: number } | null)?.cogs);
+          if (!Number.isFinite(c)) { ok = false; break; }
+          sum += c;
+        }
+        if (ok) frozenCogs = round2(sum);
+      }
+    }
+  }
+
   let cogsTotal: number;
   let cogsLines: PnlLine[];
-  if (bothBounded.length > 0) {
+  if (frozenCogs != null) {
+    cogsTotal = frozenCogs;
+    cogsLines = [
+      { code: "COGS-LOCKED", name: "Cost of sales (locked at period close)", amount: frozenCogs, parentCode: null },
+    ];
+  } else if (bothBounded.length > 0) {
     const opening = sumBoundary(openMap, bothBounded);
     const closing = sumBoundary(closeMap, bothBounded);
     // Outlets with no usable pair of counts contribute purchases only — say so
