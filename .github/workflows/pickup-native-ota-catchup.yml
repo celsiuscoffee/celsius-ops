@@ -43,16 +43,17 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: "1"
-        # --runtime-version 1.0.3 overrides the app.json fingerprint policy for
-        # this publish, tagging the update with the legacy appVersion runtime so
-        # the in-field binaries pick it up. --platform all (ios + android);
-        # --environment production loads the prod EAS env vars so the bundle
-        # config matches the installed app.
+        # eas-cli has no --runtime-version flag — `eas update` derives the runtime
+        # from app.json. Pin a LITERAL runtimeVersion "1.0.3" into app.json for
+        # this publish only (ephemeral checkout edit, never committed) so the
+        # update is tagged with the in-field appVersion runtime the installed
+        # 1.0.3 binaries match. --platform all (ios + android); --environment
+        # production loads the prod EAS env vars so the bundle config matches.
         run: |
+          node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('app.json','utf8'));j.expo.runtimeVersion='1.0.3';fs.writeFileSync('app.json',JSON.stringify(j,null,2));console.log('pinned runtimeVersion=1.0.3 for this publish');"
           npx eas-cli@latest update \
             --channel production \
             --platform all \
-            --runtime-version 1.0.3 \
             --environment production \
             --message "catch-up: republish current bundle to the 1.0.3 fleet" \
             --non-interactive
