@@ -4,44 +4,22 @@ name: pickup-native OTA catch-up (legacy runtimes)
 #
 # WHY THIS EXISTS: pickup-native moved from runtimeVersion policy `appVersion`
 # to `fingerprint` (2026-07-25) to stop the "old bundle suddenly reappears"
-# regression. But the fleet installed BEFORE that switch is pinned to the
-# appVersion runtime of its store build (today `1.0.3`). The normal
-# `pickup-native-ota.yml` now publishes against the NEW fingerprint runtime,
-# which those installed apps do NOT match — so without this, the current fleet
-# would stop receiving OTA updates until everyone reinstalls / gets a new store
-# build.
+# regression. The fleet installed BEFORE that switch is pinned to the appVersion
+# runtime of its store build (today `1.0.3`), and the normal pickup-native-ota.yml
+# now publishes against the NEW fingerprint runtime those installs do NOT match.
+# This republishes the current pickup JS against the legacy `1.0.3` runtime so
+# already-installed apps pull the latest bundle on next launch.
 #
-# This workflow republishes the CURRENT branch JS to each legacy appVersion
-# runtime you name, on the `production` channel, so already-installed apps pull
-# the latest bundle on next launch and end up on the same JS as everyone else.
+# HOW TO FIRE: bump the marker file apps/pickup-native/.ota-catchup-trigger on the
+# branch below. This mirrors pickup-native-ota-deploy.yml exactly (push + marker,
+# no workflow_dispatch) — that shape is the one the GitHub integration can run
+# (workflow_dispatch 403s on Actions:write; a workflow_dispatch/inputs variant
+# also startup-failed here). Only the marker should change in the triggering commit.
 #
-# SAFETY: only publish to a runtime whose native binary is compatible with the
-# current JS (no native/dependency change since that build). `1.0.3` is the
-# latest store build and is safe (it is the line this repo is on). Publishing to
-# an OLDER runtime (1.0.0-1.0.2) risks crashing those binaries if the JS now
-# expects a newer native module — only add them if you know they are still
-# native-compatible. Manual dispatch only; never runs on push.
-#
-# Requires repo secret EXPO_TOKEN.
+# SAFETY: 1.0.3 is the latest store build and is native-compatible with current
+# JS (it is the line this repo is on). Requires repo secret EXPO_TOKEN.
 
-# Two ways to fire it:
-#   - workflow_dispatch (once this file is on the default branch), or
-#   - bump the marker file apps/pickup-native/.ota-catchup-trigger on the branch
-#     below — the marker-push path exists because the GitHub integration cannot
-#     use workflow_dispatch (403 Actions:write), the same reason
-#     pickup-native-ota-deploy.yml uses a marker. The push path targets runtime
-#     1.0.3 (the current in-field fleet).
 on:
-  workflow_dispatch:
-    inputs:
-      runtime_versions:
-        description: "Comma-separated legacy appVersion runtimes to catch up (e.g. 1.0.3 or 1.0.2,1.0.3)"
-        required: true
-        default: "1.0.3"
-      message:
-        description: "Update message"
-        required: false
-        default: "catch-up: republish current bundle to legacy runtime"
   push:
     branches:
       - "claude/version-regression-bug-adwked"
@@ -61,28 +39,20 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Republish current JS to each legacy runtime
+      - name: Republish current JS to the 1.0.3 fleet
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: "1"
-          # Fall back to runtime 1.0.3 (the current in-field fleet) on the
-          # marker-push path, which carries no workflow inputs.
-          RUNTIMES: ${{ github.event.inputs.runtime_versions || '1.0.3' }}
-          MSG: ${{ github.event.inputs.message || 'catch-up: republish current bundle to the 1.0.3 fleet' }}
+        # --runtime-version 1.0.3 overrides the app.json fingerprint policy for
+        # this publish, tagging the update with the legacy appVersion runtime so
+        # the in-field binaries pick it up. --platform all (ios + android);
+        # --environment production loads the prod EAS env vars so the bundle
+        # config matches the installed app.
         run: |
-          # --runtime-version overrides the app.json fingerprint policy for this
-          # publish, tagging the update with the explicit legacy runtime so the
-          # matching in-field binaries pick it up. --platform all (ios + android).
-          IFS=',' read -ra RVS <<< "$RUNTIMES"
-          for rv in "${RVS[@]}"; do
-            rv="$(echo "$rv" | xargs)"   # trim whitespace
-            [ -z "$rv" ] && continue
-            echo "=== publishing current JS to runtime $rv ==="
-            npx eas-cli@latest update \
-              --channel production \
-              --platform all \
-              --runtime-version "$rv" \
-              --environment production \
-              --message "$MSG ($rv)" \
-              --non-interactive
-          done
+          npx eas-cli@latest update \
+            --channel production \
+            --platform all \
+            --runtime-version 1.0.3 \
+            --environment production \
+            --message "catch-up: republish current bundle to the 1.0.3 fleet" \
+            --non-interactive
