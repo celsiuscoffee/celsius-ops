@@ -77,6 +77,17 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   is reconciled; if the gap holds, the forecaster ran optimistic for this week.
   Reconcile actual vs forecast when the week closes, then treat these roster
   numbers (hours + cost, the controllable part) as the optimisation baseline.
+  **Known optimisation from the baseline (owner 2026-07-22): rover lead (Barista
+  Lead, Syafiq Kaberi) must count as COVERAGE man-hours in the generator.**
+  Today the generator EXCLUDES rovers from the demand model (schedules full FT
+  for demand, then adds the rover on top) → every day the rover is at an outlet
+  it's +1 over-staffed. Live example: PJ Tue 2026-07-21 close had 4 heads
+  (Guraf+Hidayat kit, Hafifie bar, Syafiq bar-lead) vs ~3 needed — Syafiq
+  redundant. Note the gate's coverage view already counts Barista Lead
+  (`isManagementPosition` excludes only manager/area-mgr/HoD, NOT barista lead),
+  so gate and generator disagree. Fix = in the generator, place the rover's
+  known days FIRST and let FT fill the RESIDUAL demand (his cost is already
+  pro-rata-correct; this is coverage-counting only). Not yet implemented.
 
 - 2026-07-16 — **Finance warehouse baseline (SQL-verified against kqdc).**
   Fresh: unified_sales pos_native →7/16, consignment →7/12 (Nilai settles
