@@ -338,6 +338,11 @@ export async function generateSchedule(
     throw new Error(`No schedulable staff at ${outlet.name}`);
   }
   notes.push(`${fullTimers.length} FT + ${partTimers.length} PT schedulable (rovers excluded)`);
+  if (roverUsers.length > 0) {
+    notes.push(
+      `Rover lead not auto-rostered — place manually per your needs: ${roverUsers.map((r) => r.name).join(", ")}. Once placed they count as a coverage head (day short/over updates).`,
+    );
+  }
   if (sharedFtElsewhere.length > 0) {
     notes.push(`${sharedFtElsewhere.length} shared FT (primary elsewhere) available to fill here as free coverage: ${sharedFtElsewhere.map((s) => s.name).join(", ")}`);
   }
@@ -1013,12 +1018,13 @@ export async function generateSchedule(
 
     const flex: FlexPerson[] = [];
     const flexMeta = new Map<string, { name: string; rover: boolean }>();
-    for (const r of roverUsers) {
-      const bd = busyDays.get(r.id) ?? new Set();
-      const free = openDatesList.filter((d) => !bd.has(d) && !onLeave.has(`${r.id}:${d}`));
-      flex.push({ id: r.id, freeDays: free, budget: 2 }); // workbook: 2 days/outlet-week
-      flexMeta.set(r.id, { name: r.name, rover: true });
-    }
+    // Rover lead (Barista Lead) is NO LONGER auto-rotated (owner 2026-07-22:
+    // "we schedule him based on our needs"). Auto-placing him 2 days/week
+    // dropped him on top of the finished FT skeleton, so every rover day ran
+    // +1 over-staffed (e.g. PJ Tue 21 Jul close had 4 heads vs ~3 needed). The
+    // manager now places him in the grid; the labour gate already counts a
+    // Barista Lead as a coverage head (isManagementPosition excludes only
+    // manager/area-mgr/HoD), so the grid's short/over reflects him once placed.
     for (const s of sharedFtElsewhere) {
       const bd = busyDays.get(s.id) ?? new Set();
       const budget = Math.max(0, 6 - bd.size); // fill to the 6-day combined weekly cap

@@ -61,6 +61,40 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   order create, so it needs the PR deployed; until then prod behaviour is
   unchanged (native pickup only).
 
+- 2026-07-22 — **Week 2026-07-20 = owner-designated SCHEDULING REFERENCE
+  baseline** ("make week 20th a reference and optimise from there — cost &
+  man-hours a good match"). Published rosters to measure future weeks against
+  (est cost = schedule's own `estimated_labor_cost`; % vs forecast revenue):
+  · Putrajaya  514h, RM5,693 — PT 21.5h/RM212 (2 heads) — fc RM28,616 → **19.9%**
+  · Shah Alam  410h, RM5,104 — PT 203.5h/RM2,042 (8 heads) — fc RM24,470 → **20.9%**
+  · Tamarind   312h, RM3,685 — PT 113.5h/RM1,096 (4 heads) — fc RM18,413 → **20.0%**
+  · Combined 1,236h, RM14,482 on fc RM71,499 → **20.3%** (right on the 20% target
+  we settled as the achievable ceiling for scheduling alone; 18% needs FT
+  redeploy). Structure: PJ is FT-heavy (PT tiny), SA/Tam are PT-heavy — the PT
+  lever lives at SA/Tam. **WATCH:** 6-day actual (via unified_sales) was tracking
+  BELOW forecast — PJ RM19,169, SA RM16,707, Tam RM13,419 — so labour% may land
+  higher than the forecast-based figures once the week fully closes and revenue
+  is reconciled; if the gap holds, the forecaster ran optimistic for this week.
+  Reconcile actual vs forecast when the week closes, then treat these roster
+  numbers (hours + cost, the controllable part) as the optimisation baseline.
+  **Known optimisation from the baseline (owner 2026-07-22): rover lead (Barista
+  Lead, Syafiq Kaberi) must count as COVERAGE man-hours in the generator.**
+  Today the generator EXCLUDES rovers from the demand model (schedules full FT
+  for demand, then adds the rover on top) → every day the rover is at an outlet
+  it's +1 over-staffed. Live example: PJ Tue 2026-07-21 close had 4 heads
+  (Guraf+Hidayat kit, Hafifie bar, Syafiq bar-lead) vs ~3 needed — Syafiq
+  redundant. Note the gate's coverage view already counts Barista Lead
+  (`isManagementPosition` excludes only manager/area-mgr/HoD, NOT barista lead),
+  so gate and generator disagree. Fix = in the generator, place the rover's
+  known days FIRST and let FT fill the RESIDUAL demand (his cost is already
+  pro-rata-correct; this is coverage-counting only). **Implemented 2026-07-22
+  (minimal form):** generator no longer auto-rotates the rover lead — owner
+  places him manually ("we schedule him based on our needs"); the labour gate
+  already counts a Barista Lead as a coverage head, so day short/over reflects
+  him once placed. NOTE: the generator wipes+recreates shifts each run, so a
+  place-then-regenerate flow that has FT fill the residual around a pre-placed
+  rover is NOT built (would need locked-shift preservation) — deferred.
+
 - 2026-07-16 — **Finance warehouse baseline (SQL-verified against kqdc).**
   Fresh: unified_sales pos_native →7/16, consignment →7/12 (Nilai settles
   later than older notes claim — re-verify live, don't trust dated notes);
