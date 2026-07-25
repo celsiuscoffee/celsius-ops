@@ -11,16 +11,17 @@
 //   Card (NTT/GHL) ~2 business days, lumpy batches (Shah Alam / celsius)
 //   Online (RM)    Mon/Tue/Wed → +2 days; Thu → Mon; Fri+Sat+Sun → the SAME
 //                  following Tuesday (RM never settles on a weekend)
-//   Consignment    GastroHub settles a Mon–Sun week on the following Tuesday
 //
-// Fees are netted so the figures are the cash that actually arrives. Grab is
-// the exception to the sales-feed approach: its daily payouts pool into HQ's
-// account net of a commission we don't model line-by-line, but the landings
-// themselves are verified DAILY and near-flat (a payout every day of the week,
-// ~RM0.6k/day, very stable). So Grab is projected straight from its trailing
-// BANK run-rate — the cash that actually lands — instead of guessing a net
-// factor and lag off the order feed. That also makes the panel total reconcile
-// with the "Avg cash in" KPI, which is bank-based.
+// Fees are netted so the figures are the cash that actually arrives. Grab and
+// GastroHub are the exceptions to the sales-feed approach: both pool into the
+// celsius account (4384) — Grab across outlets, GastroHub from Celsius Nilai —
+// net of commissions we don't model line-by-line, and both land ~daily and
+// near-flat. So each is projected straight from its trailing BANK run-rate —
+// the cash that actually lands — instead of a sales feed. (GastroHub used to be
+// read from consignment_sales with a week+Tuesday calendar, but that feed went
+// stale and silently showed RM0 forward while ~RM0.4k/day kept arriving.) This
+// also makes the panel total reconcile with the "Avg cash in" KPI, which is
+// bank-based.
 //
 // "Booked" rows are sales already rung and awaiting settlement (firm). QR is
 // same-day, so future QR is "projected" from the trailing weekday run-rate and
@@ -28,7 +29,7 @@
 
 import { prisma } from "@/lib/prisma";
 
-export type ForecastChannel = "online" | "card" | "qr" | "consignment" | "grab";
+export type ForecastChannel = "online" | "card" | "qr" | "gastrohub" | "grab";
 export type Basis = "booked" | "projected";
 
 // Net-of-fee factor per channel — what fraction of gross actually lands.
@@ -36,7 +37,7 @@ const NET_FACTOR: Record<ForecastChannel, number> = {
   online: 0.98,      // ~2% Revenue Monster gateway fee
   card: 0.99,        // ~1% MDR
   qr: 1.0,           // DuitNow is free
-  consignment: 0.70, // ~30% GastroHub commission
+  gastrohub: 1.0,    // projected from bank landings, already net of commission
   grab: 1.0,         // projected from bank landings, already net of commission
 };
 
@@ -87,13 +88,9 @@ export function settlementDate(channel: ForecastChannel, salesDate: Date, entity
       if (w === 4) return nextDow(salesDate, 1);                       // Thu → next Mon
       return nextDow(salesDate, 2);                                    // Fri/Sat/Sun → next Tue
     }
-    case "consignment": {
-      // GastroHub settles the Mon–Sun week on the following Tuesday.
-      const sunday = dow(salesDate) === 0 ? salesDate : nextDow(salesDate, 0);
-      return nextDow(sunday, 2);
-    }
+    case "gastrohub":
     case "grab":
-      return salesDate; // daily payout — modelled as same-day run-rate
+      return salesDate; // modelled as a same-day flat bank run-rate (see header)
   }
 }
 
@@ -140,7 +137,7 @@ type SalesRow = { entity: string; d: string; rm: number };
 export async function buildIncomingForecast(from: string, to: string): Promise<IncomingForecast> {
   const start = parseYmd(from);
   // Look back far enough that anything still unsettled is captured (the longest
-  // calendar is consignment's week + Tuesday, ~10 days).
+  // sales-feed calendar is online's Fri→next-Tue batch, ~4 days; 14 is safe).
   const lookback = ymd(addDays(start, -14));
 
   const tenderSales = await prisma.$queryRawUnsafe<{ entity: string; d: string; method: string; rm: number }[]>(`
@@ -169,14 +166,10 @@ export async function buildIncomingForecast(from: string, to: string): Promise<I
     GROUP BY 1,2
   `, lookback, to);
 
-  const consignSales = await prisma.$queryRawUnsafe<SalesRow[]>(`
-    SELECT fc.company_id AS entity, to_char(cs.biz_date,'YYYY-MM-DD') AS d,
-           COALESCE(SUM(cs.gross),0)::float AS rm
-    FROM consignment_sales cs
-    JOIN fin_outlet_companies fc ON fc.outlet_id = cs.outlet_id
-    WHERE cs.biz_date BETWEEN $1::date AND $2::date
-    GROUP BY 1,2
-  `, lookback, to);
+  // GastroHub (consignment, Celsius Nilai) is NOT read from consignment_sales:
+  // that feed proved unreliable (went stale, silently showing RM0 forward while
+  // ~RM0.4k/day kept landing). Like Grab, it's projected from its trailing bank
+  // run-rate below — the cash that actually lands, already net of commission.
 
   const rows: ForecastRow[] = [];
   const push = (channel: ForecastChannel, entity: string, salesDate: string, gross: number, basis: Basis) => {
@@ -191,7 +184,6 @@ export async function buildIncomingForecast(from: string, to: string): Promise<I
 
   for (const r of tenderSales) push(r.method === "card" ? "card" : "qr", r.entity, r.d, Number(r.rm), "booked");
   for (const r of onlineSales) push("online", r.entity, r.d, Number(r.rm), "booked");
-  for (const r of consignSales) push("consignment", r.entity, r.d, Number(r.rm), "booked");
 
   // Sales only exist up to today, so the far end of the horizon has no booked
   // revenue to settle. Project FUTURE sales per (entity, channel, day type) from
@@ -230,9 +222,10 @@ export async function buildIncomingForecast(from: string, to: string): Promise<I
   // on the calendar — it feeds the reconciliation footnote only.
   const trailingDays = 28;
   const bankFrom = ymd(addDays(parseYmd(todayMyt), -trailingDays));
-  const bankRows = await prisma.$queryRawUnsafe<{ grab_per_day: number; other_per_day: number }[]>(`
+  const bankRows = await prisma.$queryRawUnsafe<{ grab_per_day: number; gastrohub_per_day: number; other_per_day: number }[]>(`
     SELECT
       COALESCE(SUM(amount) FILTER (WHERE category::text IN ('GRAB','GRAB_PUTRAJAYA')),0)::float / ${trailingDays} AS grab_per_day,
+      COALESCE(SUM(amount) FILTER (WHERE category::text = 'GASTROHUB'),0)::float / ${trailingDays} AS gastrohub_per_day,
       COALESCE(SUM(amount) FILTER (WHERE category::text NOT IN ('CARD','REVENUE_MONSTER','QR','GRAB','GRAB_PUTRAJAYA','GASTROHUB')),0)::float / ${trailingDays} AS other_per_day
     FROM "BankStatementLine"
     WHERE direction='CR' AND "isInterCo" = false
@@ -240,13 +233,20 @@ export async function buildIncomingForecast(from: string, to: string): Promise<I
       AND ("txnDate" + interval '8 hours')::date <  $2::date
   `, bankFrom, todayMyt);
   const grabPerDay = round2(Number(bankRows[0]?.grab_per_day ?? 0));
+  const gastrohubPerDay = round2(Number(bankRows[0]?.gastrohub_per_day ?? 0));
   const otherPerDay = round2(Number(bankRows[0]?.other_per_day ?? 0));
 
-  // Grab pools into HQ's account (4384 = celsius). Place the run-rate on every
-  // day of the window — it settles same-day so nothing spills past the edge.
+  // Grab and GastroHub both pool into the celsius account (4384) — Grab across
+  // outlets, GastroHub from Celsius Nilai. Both land ~daily/near-flat, so place
+  // the run-rate on every day of the window (same-day settlement, no spill).
   if (grabPerDay > 0) {
     for (let d = parseYmd(from); ymd(d) <= to; d = addDays(d, 1)) {
       push("grab", "celsius", ymd(d), grabPerDay, "projected");
+    }
+  }
+  if (gastrohubPerDay > 0) {
+    for (let d = parseYmd(from); ymd(d) <= to; d = addDays(d, 1)) {
+      push("gastrohub", "celsius", ymd(d), gastrohubPerDay, "projected");
     }
   }
 
