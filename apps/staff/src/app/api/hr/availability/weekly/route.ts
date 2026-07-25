@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 // anon client reads zero rows. Access stays scoped by the getSession gate + the
 // per-user filters below.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
+import { isAvailabilityEligible } from "@/lib/hr/availability-access";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,9 @@ type DayInput = {
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAvailabilityEligible(session.id))) {
+    return NextResponse.json({ error: "Availability is for part-timers only" }, { status: 403 });
+  }
 
   const { data, error } = await supabase
     .from("hr_staff_weekly_availability")
@@ -41,6 +45,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAvailabilityEligible(session.id))) {
+    return NextResponse.json({ error: "Availability is for part-timers only" }, { status: 403 });
+  }
 
   const body = (await req.json()) as { days?: DayInput[]; max_shifts_per_week?: number | null };
   const days = Array.isArray(body.days) ? body.days : null;

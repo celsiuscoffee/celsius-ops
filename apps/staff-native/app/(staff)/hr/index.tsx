@@ -362,7 +362,15 @@ export default function HrIndex() {
 
         {/* Quick links */}
         <View className="mt-6 gap-2">
-          {items.map((it) => {
+          {items
+            // My Availability is part-timer / intern only (owner 2026-07-25) —
+            // full-timers work a fixed roster, so hide it for them.
+            .filter(
+              (it) =>
+                it.href !== "/(staff)/hr/availability" ||
+                ["part_time", "intern"].includes(allowance?.employmentType ?? ""),
+            )
+            .map((it) => {
             const Icon = it.icon;
             const subtitle =
               it.href === "/(staff)/hr/reviews" && reviewsCount > 0
