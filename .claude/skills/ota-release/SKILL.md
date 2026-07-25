@@ -13,20 +13,55 @@ bundle on next app launch. There is no staging channel between merge and till.
 
 ## Decision: OTA or new APK?
 
-OTA works only for **JS/asset-only** changes with unchanged `runtimeVersion`
-(pinned to appVersion, e.g. 1.0.0). A change needs a **fresh APK build** if it
-touches any of:
+OTA works only for **JS/asset-only** changes with unchanged `runtimeVersion`.
+`pickup-native` uses `runtimeVersion.policy: "fingerprint"` (switched from
+`appVersion` on 2026-07-25 — see below); `pos-native` and `staff-native` are
+still on `appVersion` (same footgun still latent there — migrate them when their
+next store build is cut). The fingerprint is derived from the native layer, so it
+changes **iff** the native runtime changes. A change needs a **fresh APK/store
+build** if it touches any of:
 
 - native modules (`apps/pos-native/modules/` — customer-display, device-speaker,
   sunmi-printer)
 - any dependency with native code (check whether `npx expo install` would alter
   android config); plain JS dep bumps are fine
-- `app.json` / `eas.json` runtime or build config, permissions, appVersion
+- `app.json` / `eas.json` runtime or build config, permissions, plugins
+
+Note: bumping the marketing `version` string is now **JS-safe** — it no longer
+changes the runtimeVersion (that was the old `appVersion`-policy footgun), so a
+version bump alone can ride OTA.
 
 APK builds: `pos-native-build-apk.yml` and `build-kds-apk.yml`
 (workflow_dispatch or push). OTA-only changes shipped on top of an outdated
 APK silently no-op on devices still running an older runtimeVersion — after a
 native change, rebuild and reinstall before relying on OTA again.
+
+### The "old bundle suddenly reappears" regression (fixed 2026-07-25)
+
+Symptom: an old app version resurfaces on customer/staff devices on its own;
+deleting + reinstalling fixes it. Cause: `runtimeVersion.policy: "appVersion"`
+glued the OTA runtime to the marketing `version`, so every bump (pickup-native
+climbed 1.0.0→1.0.3) minted a NEW runtimeVersion and **severed the OTA update
+lineage** — post-bump OTAs only reached the new runtime, and a device landing on
+a fresh store binary booted its embedded (older) bundle with no matching OTA to
+pull it forward. Fix: `policy: "fingerprint"` on all three apps. **Migration
+cost:** the fix lands on the NEXT native build, so currently-stranded devices
+recover only via reinstall or a new store release; the first fingerprint build
+orphans existing installs one final time (unavoidable for any runtimeVersion
+scheme change), then the lineage stays continuous.
+
+**Catching the current fleet up (do this alongside the fingerprint merge):** the
+switch means the normal `pickup-native-ota.yml` now publishes against a
+fingerprint runtime no installed app matches, so today's fleet (appVersion
+runtime `1.0.3`) would stop getting OTAs until reinstall / a new store build. Run
+the `pickup-native OTA catch-up (legacy runtimes)` workflow
+(`pickup-native-ota-catchup.yml`, manual dispatch, default runtime `1.0.3`) to
+republish the current JS against the in-field appVersion runtime(s) — installed
+apps then pull the latest bundle on next launch and land on the same JS as
+everyone else. Only target runtimes whose native binary is compatible with the
+current JS (1.0.3 is safe; older runtimes only if no native change since). Keep
+running the catch-up per legacy runtime until the next fingerprint store build is
+the only version in the field, then retire it.
 
 ## Pre-merge checklist (pos-native especially — this is the till)
 

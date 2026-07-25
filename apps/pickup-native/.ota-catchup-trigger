@@ -1,0 +1,2 @@
+catch-up OTA trigger — republish current pickup JS to the 1.0.3 fleet
+2026-07-25d: fire with runtimeVersion pinned in app.json (no --runtime-version flag)

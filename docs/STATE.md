@@ -6,6 +6,41 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-25 — **"Old app version suddenly reappears" = expo-updates OTA
+  regression from `runtimeVersion.policy: "appVersion"`** (branch
+  `claude/version-regression-bug-adwked`, draft PR). Owner screenshots showed
+  the pickup app's Orders tab flipping between the pre-tabs empty state and the
+  newer "In progress / Past orders" tabs — same `apps/pickup-native/app/
+  orders.tsx`, different JS BUNDLE. Root cause: `appVersion` policy glues the
+  OTA runtimeVersion to the marketing `version`, so every bump (pickup-native
+  climbed 1.0.0→1.0.3, buildNumber 12 / versionCode 10) mints a NEW runtime and
+  **severs the OTA update lineage** — post-bump OTAs only reach the new runtime,
+  and a device landing on a fresh store binary boots its embedded (older) bundle
+  with no matching OTA to pull it forward (reinstall = fresh store build =
+  recovers). Fix: **pickup-native only** → `policy: "fingerprint"` (owner
+  narrowed scope from all-three to just pickup; pos-native + staff-native LEFT on
+  `appVersion` — same footgun still latent, migrate on their next store build).
+  Fingerprint changes iff the native layer changes, so marketing-version bumps no
+  longer sever OTA. **Transition cost:** the fix lands on the next native build;
+  the fingerprint switch also means the normal `pickup-native-ota.yml` now
+  publishes against a fingerprint runtime no installed app matches. Added
+  `pickup-native-ota-catchup.yml` (manual dispatch, default runtime `1.0.3`) to
+  republish current JS against the in-field appVersion runtime so the live fleet
+  catches up on next launch. **Catch-up was EXECUTED successfully 2026-07-25**
+  (owner said "do for me") — `eas update` published to the `production` channel,
+  **runtime 1.0.3, android+ios**, update group `2ad415b6-9974-41a1-abae-
+  23477603fe17`; the 1.0.3 fleet pulls the current bundle on next launch.
+  Mechanism notes (learned the hard way): the integration can't use
+  workflow_dispatch (403), so the workflow fires on a `.ota-catchup-trigger`
+  marker push (mirrors pickup-native-ota-deploy.yml); eas-cli has **no
+  `--runtime-version` flag** — pin runtime by writing a literal
+  `expo.runtimeVersion` into app.json at publish time (ephemeral). Still on
+  `appVersion`: pos-native, staff-native. The eager
+  fetch+reload hook in `_layout.tsx:160` was NOT the bug. Also noted (not
+  touched): `pickup-native-ota-deploy.yml` publishes CURRENT-branch JS to the
+  prod channel on a marker bump from an arbitrary claude/* branch — a separate
+  footgun worth removing later.
+
 - 2026-07-22 — **First-order 10% discount made native-app-only** (branch
   `claude/first-order-discount-check-lx938r`, draft PR). Business intent: the
   welcome 10% is now a native-app perk (drives installs) on BOTH pickup and
