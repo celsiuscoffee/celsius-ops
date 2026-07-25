@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 // anon client reads zero rows (screen shows empty). Access stays scoped by the
 // getSession gate + the per-user filters below.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
+import { isAvailabilityEligible } from "@/lib/hr/availability-access";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAvailabilityEligible(session.id))) {
+    return NextResponse.json({ error: "Availability is for part-timers only" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const from = searchParams.get("from") || new Date().toISOString().slice(0, 10);
@@ -34,6 +38,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAvailabilityEligible(session.id))) {
+    return NextResponse.json({ error: "Availability is for part-timers only" }, { status: 403 });
+  }
 
   const body = await req.json();
   const { date, availability, reason } = body as {
@@ -75,6 +82,9 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAvailabilityEligible(session.id))) {
+    return NextResponse.json({ error: "Availability is for part-timers only" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date");

@@ -26,6 +26,7 @@ type AllowanceLever = {
 };
 type AllowanceBreakdown = {
   eligible: boolean;
+  employmentType?: string | null;
   period: { year: number; month: number; daysElapsed: number; daysRemaining: number };
   pool: number;
   levers: AllowanceLever[];
@@ -50,6 +51,8 @@ export default function HRHomePage() {
   const { data: memosData } = useFetch<{ unacknowledgedCount: number }>("/api/hr/memos");
   const { data: reviewsData } = useFetch<{ count: number }>("/api/hr/my-reviews");
   const allowance = allowanceData?.breakdown;
+  // Availability is a part-timer / intern feature only.
+  const isPtStaff = ["part_time", "intern"].includes(allowance?.employmentType ?? "");
   const unackMemos = memosData?.unacknowledgedCount ?? 0;
   const reviewsCount = reviewsData?.count ?? 0;
   const isClockedInForPing = !!clockStatus?.activeLog;
@@ -79,14 +82,18 @@ export default function HRHomePage() {
     },
     // Open Slots hidden for now (owner 2026-07-22: slots logic removed). The
     // booking route/page still exist — restore this entry to bring it back.
-    {
-      href: "/hr/availability",
-      icon: CalendarClock,
-      label: "My Availability",
-      subtitle: "Weekly pattern & blockout dates",
-      color: "text-indigo-600",
-      bgColor: "bg-indigo-50",
-    },
+    // My Availability is part-timer / intern only (owner 2026-07-25) — full-
+    // timers work a fixed roster, so it's hidden for them.
+    ...(isPtStaff
+      ? [{
+          href: "/hr/availability",
+          icon: CalendarClock,
+          label: "My Availability",
+          subtitle: "Weekly pattern & blockout dates",
+          color: "text-indigo-600",
+          bgColor: "bg-indigo-50",
+        }]
+      : []),
     {
       href: "/hr/attendance",
       icon: History,
