@@ -8,6 +8,7 @@ import { BeansHero } from "./_BeansHero";
 import { ActiveChallenges } from "./_ActiveChallenges";
 import { Claimables } from "./_Claimables";
 import { YourVouchers } from "./_YourVouchers";
+import { PointsHistory } from "./_PointsHistory";
 
 type Persisted = {
   state?: {
@@ -189,6 +190,11 @@ export function RewardsView() {
           ))}
         </ul>
       )}
+
+      {/* Points history — self-serve ledger so a customer can confirm an
+          order credited (the gap behind "my latest points weren't
+          credited"). Renders nothing when signed out or empty. */}
+      <PointsHistory />
     </>
   );
 }

@@ -56,7 +56,7 @@ export async function GET(
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     supabaseAdmin
       .from("point_transactions")
-      .select("id, type, points, balance_after, description, created_at")
+      .select("id, type, points, balance_after, description, reference_id, created_at")
       .eq("member_id", memberId)
       .eq("brand_id", BRAND_ID)
       .order("created_at", { ascending: false })
@@ -133,11 +133,44 @@ export async function GET(
       created_at: it.created_at,
     }));
 
+  // Resolve the human order number for each ledger row so staff see
+  // "C-3247 +80" instead of a bare description — the exact context needed
+  // when a customer says a specific order's points didn't credit. Batch a
+  // lookup of the ledger's reference_ids across both order tables (some
+  // rows reference redemptions / adjustments with no order — left null).
+  type RawLedger = { id: string; type: string; points: number; balance_after: number | null; description: string | null; reference_id: string | null; created_at: string };
+  const rawLedger = (ledgerRes.data ?? []) as RawLedger[];
+  const ledgerRefIds = Array.from(
+    new Set(rawLedger.map((l) => l.reference_id).filter((r): r is string => !!r)),
+  );
+  const orderNumberByRef = new Map<string, string>();
+  if (ledgerRefIds.length > 0) {
+    const [pickupRefRes, posRefRes] = await Promise.all([
+      supabaseAdmin.from("orders").select("id, order_number").in("id", ledgerRefIds),
+      supabaseAdmin.from("pos_orders").select("id, order_number").in("id", ledgerRefIds),
+    ]);
+    for (const o of [
+      ...((pickupRefRes.data ?? []) as { id: string; order_number: string | null }[]),
+      ...((posRefRes.data ?? []) as { id: string; order_number: string | null }[]),
+    ]) {
+      if (o?.id && o.order_number) orderNumberByRef.set(o.id, o.order_number);
+    }
+  }
+  const ledger = rawLedger.map((l) => ({
+    id: l.id,
+    type: l.type,
+    points: l.points,
+    balance_after: l.balance_after,
+    description: l.description,
+    order_number: l.reference_id ? orderNumberByRef.get(l.reference_id) ?? null : null,
+    created_at: l.created_at,
+  }));
+
   return NextResponse.json({
     member,
     brand: mbRes.data ?? null,
     orders,
-    ledger: ledgerRes.data ?? [],
+    ledger,
     redemptions: redemptionRes.data ?? [],
     purchaseHistory: { topProducts, recentItems, totalItems: allItems.length },
   });

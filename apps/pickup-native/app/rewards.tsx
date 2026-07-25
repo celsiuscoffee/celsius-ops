@@ -3,7 +3,7 @@ import { View, Text, ScrollView, Pressable, Image, Dimensions, RefreshControl } 
 import { Alert } from "@/lib/alert";
 import { Stack, router } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Gift, ChevronRight, Clock, Lock } from "lucide-react-native";
+import { Gift, ChevronRight, Clock, Lock, History, ArrowUpRight, ArrowDownRight } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { CelsiusLoader } from "../components/CelsiusLoader";
@@ -13,10 +13,12 @@ import { trackEvent } from "../lib/analytics";
 import {
   fetchRewards,
   fetchTier,
+  fetchPointsHistory,
   formatRewardValue,
   rewardUrgencyLabel,
   type Reward,
   type MemberTier,
+  type PointsHistoryEntry,
 } from "../lib/rewards";
 import {
   fetchMyVouchers,
@@ -161,6 +163,7 @@ export default function RewardsTab() {
         qc.invalidateQueries({ queryKey: ["my-vouchers"] }),
         qc.invalidateQueries({ queryKey: ["claimable-vouchers"] }),
         qc.invalidateQueries({ queryKey: ["active-missions"] }),
+        qc.invalidateQueries({ queryKey: ["points-history"] }),
       ]);
     } finally {
       setRefreshing(false);
@@ -203,12 +206,22 @@ export default function RewardsTab() {
     enabled: !!phone,
     staleTime: 60_000,
   });
+  // Points ledger for the History section at the bottom of the tab. Lets
+  // the customer confirm an order credited — the "my points weren't
+  // credited" self-serve check. Phone-gated like the other member queries.
+  const pointsHistoryQ = useQuery({
+    queryKey: ["points-history", phone ?? "anon"],
+    queryFn: () => (phone ? fetchPointsHistory(phone) : Promise.resolve([])),
+    enabled: !!phone,
+    staleTime: 60_000,
+  });
 
   const balance = rewardsQ.data?.pointsBalance ?? 0;
   const rewards = rewardsQ.data?.rewards ?? [];
   const vouchers = myVouchersQ.data ?? [];
   const claimables = claimableQ.data ?? [];
   const missions = activeMissionsQ.data ?? [];
+  const pointsHistory = pointsHistoryQ.data ?? [];
 
   const walletVouchers = useMemo(
     () =>
@@ -475,8 +488,129 @@ export default function RewardsTab() {
             ))}
           </View>
         )}
+
+        {/* Points history — self-serve ledger so a customer can confirm an
+            order credited (the "my latest points weren't credited" check).
+            Hidden until there's at least one row. */}
+        <PointsHistorySection entries={pointsHistory} />
       </ScrollView>
 
+    </View>
+  );
+}
+
+// ─── Points history ────────────────────────────────────────────────────
+// Compact earn/redeem ledger. Same espresso-card family as the rest of the
+// tab: each row leads with the order it credited (or the reason for an
+// adjustment), the running balance, and the signed delta in gold/green.
+
+function pointsHistoryLabel(e: PointsHistoryEntry): string {
+  if (e.order_number) {
+    return e.points >= 0 ? `Order ${e.order_number}` : `Redeemed on ${e.order_number}`;
+  }
+  return e.description || (e.points >= 0 ? "Points earned" : "Points redeemed");
+}
+
+function formatHistoryDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function PointsHistorySection({ entries }: { entries: PointsHistoryEntry[] }) {
+  if (!entries.length) return null;
+  return (
+    <View style={{ marginTop: 22, gap: 8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 2 }}>
+        <History size={13} color="rgba(26,2,0,0.45)" strokeWidth={2.4} />
+        <Text
+          style={{
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 10,
+            letterSpacing: 1.4,
+            color: "rgba(26,2,0,0.45)",
+            textTransform: "uppercase",
+          }}
+        >
+          Points history
+        </Text>
+      </View>
+
+      <View style={{ gap: 6 }}>
+        {entries.map((e) => {
+          const positive = e.points >= 0;
+          const Icon = positive ? ArrowUpRight : ArrowDownRight;
+          const accent = positive ? "#16A34A" : "#A2492C";
+          return (
+            <View
+              key={e.id}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                backgroundColor: "#FBEBE8",
+                borderRadius: 14,
+                paddingHorizontal: 13,
+                paddingVertical: 11,
+              }}
+            >
+              <View
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: positive ? "rgba(22,163,74,0.12)" : "rgba(162,73,44,0.14)",
+                }}
+              >
+                <Icon size={17} color={accent} strokeWidth={2.2} />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontFamily: "SpaceGrotesk_500Medium",
+                    fontSize: 14,
+                    color: "#1A0200",
+                    fontWeight: "600",
+                  }}
+                  numberOfLines={1}
+                >
+                  {pointsHistoryLabel(e)}
+                </Text>
+                <Text
+                  style={{
+                    marginTop: 1,
+                    fontFamily: "SpaceGrotesk_400Regular",
+                    fontSize: 11,
+                    color: "rgba(26,2,0,0.55)",
+                  }}
+                  numberOfLines={1}
+                >
+                  {formatHistoryDate(e.created_at)}
+                  {e.balance_after != null ? ` · balance ${e.balance_after.toLocaleString()}` : ""}
+                </Text>
+              </View>
+
+              <Text
+                style={{
+                  fontFamily: "Peachi-Bold",
+                  fontSize: 15,
+                  color: accent,
+                }}
+              >
+                {positive ? "+" : ""}
+                {e.points.toLocaleString()}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }
