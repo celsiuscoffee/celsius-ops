@@ -72,6 +72,7 @@ import {
   QrCode,
   Printer,
   Landmark,
+  ChefHat,
 } from "lucide-react";
 import { GRANTABLE_MODULE_KEYS } from "@/lib/modules";
 
@@ -395,6 +396,10 @@ export const NAV_SECTIONS: NavSection[] = [
       // Printable per-item BOM — linked from the Menu & BOM page
       // (inventory/menus/page.tsx), so hidden from the sidebar.
       { label: "Recipe Cards", href: "/inventory/menus/cards", icon: <Printer className={ICON_SIZE} />,  moduleKey: "inventory:menus", hidden: true },
+      // Central-kitchen sub-BOM (raw → prepped). Same gate as Menu & BOM: it's
+      // the same kind of recipe editing, and a fresh moduleKey would be granted
+      // to nobody, hiding the page from everyone until roles were re-issued.
+      { label: "Prep Recipes",   href: "/inventory/prep-recipes", icon: <ChefHat className={ICON_SIZE} />,   moduleKey: "inventory:menus" },
       // Packaging rules attach cups/lids/straws to menu items & channels —
       // part of the menu definition. Single nav home (dropped the duplicate
       // Procurement → Master Data entry). Gate stays inventory:packaging.

@@ -274,6 +274,9 @@ model Product {
   menuIngredients   MenuIngredient[]
   transferItems     StockTransferItem[]
   packagingRules    PackagingRule[]
+  // Central-prep sub-BOM: as the PREPPED output of a recipe, and as a RAW input line.
+  prepRecipe        ProductRecipe?      @relation("PrepOutput")
+  prepRecipeItems   ProductRecipeItem[] @relation("PrepInput")
 }
 
 // ─── PRODUCT PACKAGES (Multi-UOM) ──────────────────────────
@@ -930,6 +933,55 @@ model MenuIngredient {
   // Unique per (menu, product, channel, temperature) so the SAME ingredient can
   // appear once per temperature — e.g. milk 120ml Hot and milk 150ml Iced.
   @@unique([menuId, productId, serviceMode, modifier])
+}
+
+// ─── PREP RECIPES (central kitchen sub-BOM) ─────────────────
+// The missing link between RAW purchases and PREPPED stock. Central Preparation
+// turns raw inputs into prepped products that outlets consume (10kg raw chicken
+// → 10 pcs "Grilled Chicken"); outlet menus already carry the prepped item on
+// their MenuIngredient BOM, but nothing described the conversion — so raw stock
+// never depleted in theory, raw purchases read as 100% variance against a zero
+// theoretical, and the Central Preparation transfer price was never validated
+// against actual raw cost.
+//
+// Deliberately SEPARATE from Menu/MenuIngredient: a prep item is not a sellable
+// menu row, and conflating them would pollute the customer menu and mix
+// central-kitchen yield with outlet portioning (the two failure modes you want
+// to tell apart).
+//
+//   cost per prepped unit = Σ(input qty × input cost) ÷ yieldQuantity
+//
+model ProductRecipe {
+  id              String   @id @default(uuid())
+  // The PREPPED product this recipe produces. One recipe per output product.
+  outputProductId String   @unique
+  outputProduct   Product  @relation("PrepOutput", fields: [outputProductId], references: [id])
+  // How much the batch yields, in the output product's baseUom (e.g. 10 pcs).
+  // Cost per unit divides by this, so it must be > 0.
+  yieldQuantity   Decimal
+  yieldUom        String
+  // Free-text method / batch note for the kitchen (not costed).
+  prepNote        String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items ProductRecipeItem[]
+}
+
+// One raw input line of a prep recipe. Mirrors MenuIngredient, minus the
+// channel/temperature dimensions — central prep has no dine-in/takeaway split.
+model ProductRecipeItem {
+  id           String        @id @default(uuid())
+  recipeId     String
+  recipe       ProductRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  // The RAW input consumed (a normal inventory Product).
+  productId    String
+  product      Product       @relation("PrepInput", fields: [productId], references: [id])
+  quantityUsed Decimal
+  uom          String
+
+  @@unique([recipeId, productId])
 }
 
 // ─── PACKAGING RULES ────────────────────────────────────────
