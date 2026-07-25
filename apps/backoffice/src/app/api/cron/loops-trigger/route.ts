@@ -5,6 +5,7 @@ import { runWeeklyReport } from "@/lib/loyalty/weekly-report";
 import { runMissionLoop } from "@/lib/loyalty/mission-loop";
 import { touchAgentRun } from "@celsius/agents/src/substrate";
 import { logAgentMessage } from "@celsius/agents/src/messages";
+import { runMarketingStrategist } from "@/lib/marketing/marketing-strategist";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -31,6 +32,11 @@ export async function GET(req: NextRequest) {
     // (vercel-crons.test.ts), so the report doesn't get its own schedule.
     const isMondayMyt = new Date(Date.now() + 8 * 3600000).getUTCDay() === 1;
     const weeklyReport = isMondayMyt ? await runWeeklyReport().catch((e) => ({ ok: false, skipped: e instanceof Error ? e.message : "failed" })) : undefined;
+    // Marketing strategist rides the same Monday slot, AFTER the weekly report so
+    // it reasons over the freshest measured rounds. Advisory; never fails the run.
+    const strategist = isMondayMyt
+      ? await runMarketingStrategist().catch((e) => ({ sent: false, skipped: e instanceof Error ? e.message : "failed" }))
+      : undefined;
 
     // Mission cash loop: refresh each mission's net-cash-vs-baseline scorecard
     // and auto-retire cannibalisers (reward costs more than the incremental
@@ -70,7 +76,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ triggered, roundGap, measured: measured.measured, autoPaused, missionLoop, ...(weeklyReport ? { weeklyReport } : {}) });
+    return NextResponse.json({ triggered, roundGap, measured: measured.measured, autoPaused, missionLoop, ...(weeklyReport ? { weeklyReport } : {}), ...(strategist ? { strategist } : {}) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "loops-trigger failed";
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { runCelsiusOverviewAgent } from "@/lib/ai-agent/celsius-overview";
 import { runCommsDigest } from "@celsius/agents/src/digest";
 import { runIntelligenceBriefing } from "@/lib/agents/intelligence-briefing";
+import { runOpsIntelligence } from "@/lib/ops/ops-intelligence";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -63,6 +64,17 @@ async function runHandler(req: NextRequest) {
         await runIntelligenceBriefing();
       } catch (briefErr) {
         console.error("[ai-agent] folded morning-briefing failed:", briefErr);
+      }
+    }
+
+    // Weekly ops read: Mondays on the 1pm-MYT (05:00 UTC) firing, clear of the
+    // morning briefing and the evening comms digest so the owner's Telegram
+    // isn't three long messages at once. Best-effort; never fails the run.
+    if (isCron && new Date().getUTCHours() === 5 && new Date(Date.now() + 8 * 3600000).getUTCDay() === 1) {
+      try {
+        await runOpsIntelligence();
+      } catch (opsErr) {
+        console.error("[ai-agent] folded ops-intelligence failed:", opsErr);
       }
     }
 
