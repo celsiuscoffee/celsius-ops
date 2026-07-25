@@ -1,0 +1,74 @@
+name: pickup-native OTA catch-up (legacy runtimes)
+
+# One-time / on-demand catch-up publish for the customer pickup app.
+#
+# WHY THIS EXISTS: pickup-native moved from runtimeVersion policy `appVersion`
+# to `fingerprint` (2026-07-25) to stop the "old bundle suddenly reappears"
+# regression. But the fleet installed BEFORE that switch is pinned to the
+# appVersion runtime of its store build (today `1.0.3`). The normal
+# `pickup-native-ota.yml` now publishes against the NEW fingerprint runtime,
+# which those installed apps do NOT match — so without this, the current fleet
+# would stop receiving OTA updates until everyone reinstalls / gets a new store
+# build.
+#
+# This workflow republishes the CURRENT branch JS to each legacy appVersion
+# runtime you name, on the `production` channel, so already-installed apps pull
+# the latest bundle on next launch and end up on the same JS as everyone else.
+#
+# SAFETY: only publish to a runtime whose native binary is compatible with the
+# current JS (no native/dependency change since that build). `1.0.3` is the
+# latest store build and is safe (it is the line this repo is on). Publishing to
+# an OLDER runtime (1.0.0-1.0.2) risks crashing those binaries if the JS now
+# expects a newer native module — only add them if you know they are still
+# native-compatible. Manual dispatch only; never runs on push.
+#
+# Requires repo secret EXPO_TOKEN.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runtime_versions:
+        description: "Comma-separated legacy appVersion runtimes to catch up (e.g. 1.0.3 or 1.0.2,1.0.3)"
+        required: true
+        default: "1.0.3"
+      message:
+        description: "Update message"
+        required: false
+        default: "catch-up: republish current bundle to legacy runtime"
+
+jobs:
+  catchup:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/pickup-native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Republish current JS to each legacy runtime
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: "1"
+          RUNTIMES: ${{ github.event.inputs.runtime_versions }}
+          MSG: ${{ github.event.inputs.message }}
+        run: |
+          # --runtime-version overrides the app.json fingerprint policy for this
+          # publish, tagging the update with the explicit legacy runtime so the
+          # matching in-field binaries pick it up. --platform all (ios + android).
+          IFS=',' read -ra RVS <<< "$RUNTIMES"
+          for rv in "${RVS[@]}"; do
+            rv="$(echo "$rv" | xargs)"   # trim whitespace
+            [ -z "$rv" ] && continue
+            echo "=== publishing current JS to runtime $rv ==="
+            npx eas-cli@latest update \
+              --channel production \
+              --platform all \
+              --runtime-version "$rv" \
+              --environment production \
+              --message "$MSG ($rv)" \
+              --non-interactive
+          done

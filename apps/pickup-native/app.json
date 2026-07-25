@@ -125,7 +125,7 @@
     },
     "owner": "celsiuscoffee",
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "fingerprint"
     },
     "updates": {
       "url": "https://u.expo.dev/f22119f6-5337-49ea-a4b1-a12d5f811531"
