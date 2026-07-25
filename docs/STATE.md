@@ -87,7 +87,13 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   (`isManagementPosition` excludes only manager/area-mgr/HoD, NOT barista lead),
   so gate and generator disagree. Fix = in the generator, place the rover's
   known days FIRST and let FT fill the RESIDUAL demand (his cost is already
-  pro-rata-correct; this is coverage-counting only). Not yet implemented.
+  pro-rata-correct; this is coverage-counting only). **Implemented 2026-07-22
+  (minimal form):** generator no longer auto-rotates the rover lead — owner
+  places him manually ("we schedule him based on our needs"); the labour gate
+  already counts a Barista Lead as a coverage head, so day short/over reflects
+  him once placed. NOTE: the generator wipes+recreates shifts each run, so a
+  place-then-regenerate flow that has FT fill the residual around a pre-placed
+  rover is NOT built (would need locked-shift preservation) — deferred.
 
 - 2026-07-16 — **Finance warehouse baseline (SQL-verified against kqdc).**
   Fresh: unified_sales pos_native →7/16, consignment →7/12 (Nilai settles
