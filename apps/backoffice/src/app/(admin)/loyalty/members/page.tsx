@@ -118,7 +118,7 @@ type DetailData = {
   member: { id: string; phone: string; name: string | null; tags: string[] | null; created_at: string };
   brand: { points_balance: number; total_spent: number; total_visits: number; current_tier_id: string | null; tier_evaluated_at: string | null; last_visit_at: string | null; joined_at: string | null } | null;
   orders: { id: string; order_number: string; total: number; status: string; created_at: string; source: string }[];
-  ledger: { id: string; type: string; points: number; balance_after: number; description: string | null; created_at: string }[];
+  ledger: { id: string; type: string; points: number; balance_after: number; description: string | null; order_number: string | null; created_at: string }[];
   redemptions: { id: string; points_spent: number; status: string; code: string | null; created_at: string }[];
   purchaseHistory?: {
     topProducts: { product_id: string | null; product_name: string; quantity: number; spend: number }[];
@@ -2084,7 +2084,7 @@ export default function MembersPage() {
                     {detailData.ledger.length === 0
                       ? <p className="text-xs text-gray-400 dark:text-neutral-500">No points activity.</p>
                       : detailData.ledger.map((l) => (
-                        <DetailRow key={l.id} left={l.description || l.type} sub={`balance ${l.balance_after}`} right={`${l.points > 0 ? "+" : ""}${l.points}`} rightCls={l.points >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"} time={getTimeAgo(l.created_at)} />
+                        <DetailRow key={l.id} left={l.order_number ? `Order ${l.order_number}` : (l.description || l.type)} sub={l.order_number && l.description ? `${l.description} · balance ${l.balance_after}` : `balance ${l.balance_after}`} right={`${l.points > 0 ? "+" : ""}${l.points}`} rightCls={l.points >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"} time={getTimeAgo(l.created_at)} />
                       ))}
                   </div>
                 </div>

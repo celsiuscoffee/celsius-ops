@@ -274,6 +274,32 @@ export async function fetchOrderHistory(
   return res.orders ?? [];
 }
 
+export type PointsHistoryEntry = {
+  id: string;
+  type: string;
+  points: number;
+  balance_after: number | null;
+  description: string | null;
+  /** Resolved human order number (C-xxxx pickup / CC-xx counter) when the
+   *  ledger row is tied to an order; null for adjustments / redemptions
+   *  without an order ref. Server joins reference_id → orders/pos_orders. */
+  order_number: string | null;
+  created_at: string;
+};
+
+/** The signed-in customer's points ledger — earn / redeem / adjust rows.
+ *  Powers the "Points history" section on the Rewards tab so a customer
+ *  can confirm an order credited. Phone-scoped (Bearer via buildHeaders). */
+export async function fetchPointsHistory(
+  phone: string,
+  limit = 30,
+): Promise<PointsHistoryEntry[]> {
+  const res = await get<{ history: PointsHistoryEntry[] }>(
+    `/api/loyalty/points-history?phone=${encodeURIComponent(phone)}&limit=${limit}`,
+  );
+  return res.history ?? [];
+}
+
 export async function fetchRewards(phone?: string | null): Promise<RewardsResponse> {
   // all=1 → FULL points-shop catalogue (affordable + unaffordable) so the
   // rewards page shows locked "save up for it" cards and the home shows the
