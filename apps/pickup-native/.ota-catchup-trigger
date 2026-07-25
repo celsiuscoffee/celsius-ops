@@ -1,2 +1,3 @@
 catch-up OTA trigger — republish current pickup JS to the 1.0.3 fleet
 2026-07-25: initial fleet catch-up after fingerprint migration
+2026-07-25b: re-fire (workflow file now pre-existing on branch)
