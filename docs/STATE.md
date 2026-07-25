@@ -26,8 +26,16 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   publishes against a fingerprint runtime no installed app matches. Added
   `pickup-native-ota-catchup.yml` (manual dispatch, default runtime `1.0.3`) to
   republish current JS against the in-field appVersion runtime so the live fleet
-  catches up on next launch — **owner must trigger it** (live customer OTA; needs
-  EXPO_TOKEN). Still on `appVersion`: pos-native, staff-native. The eager
+  catches up on next launch. **Catch-up was EXECUTED successfully 2026-07-25**
+  (owner said "do for me") — `eas update` published to the `production` channel,
+  **runtime 1.0.3, android+ios**, update group `2ad415b6-9974-41a1-abae-
+  23477603fe17`; the 1.0.3 fleet pulls the current bundle on next launch.
+  Mechanism notes (learned the hard way): the integration can't use
+  workflow_dispatch (403), so the workflow fires on a `.ota-catchup-trigger`
+  marker push (mirrors pickup-native-ota-deploy.yml); eas-cli has **no
+  `--runtime-version` flag** — pin runtime by writing a literal
+  `expo.runtimeVersion` into app.json at publish time (ephemeral). Still on
+  `appVersion`: pos-native, staff-native. The eager
   fetch+reload hook in `_layout.tsx:160` was NOT the bug. Also noted (not
   touched): `pickup-native-ota-deploy.yml` publishes CURRENT-branch JS to the
   prod channel on a marker bump from an arbitrary claude/* branch — a separate
