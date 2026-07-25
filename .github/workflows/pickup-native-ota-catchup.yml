@@ -24,6 +24,13 @@ name: pickup-native OTA catch-up (legacy runtimes)
 #
 # Requires repo secret EXPO_TOKEN.
 
+# Two ways to fire it:
+#   - workflow_dispatch (once this file is on the default branch), or
+#   - bump the marker file apps/pickup-native/.ota-catchup-trigger on the branch
+#     below — the marker-push path exists because the GitHub integration cannot
+#     use workflow_dispatch (403 Actions:write), the same reason
+#     pickup-native-ota-deploy.yml uses a marker. The push path targets runtime
+#     1.0.3 (the current in-field fleet).
 on:
   workflow_dispatch:
     inputs:
@@ -35,6 +42,11 @@ on:
         description: "Update message"
         required: false
         default: "catch-up: republish current bundle to legacy runtime"
+  push:
+    branches:
+      - "claude/version-regression-bug-adwked"
+    paths:
+      - "apps/pickup-native/.ota-catchup-trigger"
 
 jobs:
   catchup:
@@ -53,8 +65,10 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: "1"
-          RUNTIMES: ${{ github.event.inputs.runtime_versions }}
-          MSG: ${{ github.event.inputs.message }}
+          # Fall back to runtime 1.0.3 (the current in-field fleet) on the
+          # marker-push path, which carries no workflow inputs.
+          RUNTIMES: ${{ github.event.inputs.runtime_versions || '1.0.3' }}
+          MSG: ${{ github.event.inputs.message || 'catch-up: republish current bundle to the 1.0.3 fleet' }}
         run: |
           # --runtime-version overrides the app.json fingerprint policy for this
           # publish, tagging the update with the explicit legacy runtime so the
