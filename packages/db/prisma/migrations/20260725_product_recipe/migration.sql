@@ -69,3 +69,13 @@ ALTER TABLE "ProductRecipeItem" ADD CONSTRAINT "ProductRecipeItem_recipeId_fkey"
 -- AddForeignKey
 ALTER TABLE "ProductRecipeItem" ADD CONSTRAINT "ProductRecipeItem_productId_fkey"
   FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- RLS: match the house pattern used by Menu / MenuIngredient / Product /
+-- PackagingRule — enabled with NO policies, i.e. deny-all for anon and
+-- authenticated PostgREST clients. The backoffice reaches these tables over its
+-- direct Prisma connection (the table owner bypasses RLS), so nothing in the
+-- app changes. Prisma's own DDL does not emit this, so it is added by hand:
+-- without it these would be the only inventory tables any authenticated client
+-- could read and write.
+ALTER TABLE "ProductRecipe" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ProductRecipeItem" ENABLE ROW LEVEL SECURITY;
