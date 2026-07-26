@@ -84,7 +84,8 @@ import { applyBudgetChange } from "./set-budget";
 import { pauseCampaign, enableCampaign } from "./pause-campaign";
 import { applyTermExclusion } from "./exclude-term";
 import { selectAutoExclusions, selectSeedExclusions, type ExclusionCandidate } from "./term-rules";
-import { consolidateCampaignNegatives } from "./consolidate-negatives";
+import { consolidateCampaignNegatives, removeCampaignNegative } from "./consolidate-negatives";
+import { findLeaks, planSlotSwap, scoreNegatives } from "./verify-exclusions";
 import { microsToMYR } from "./client";
 
 export const AGENT_KEY = "ads_autopilot";
@@ -181,6 +182,10 @@ export const WASTE_MATCH_MAX_PCT = 0.2;       // never remove more than 20% of t
 // as a scarce budget: highest measured-cost junk gets them first, seeds only
 // fill what's left, and we stop before the API starts rejecting.
 export const MAX_NEGATIVES_PER_CAMPAIGN = 25;
+// How far back to look for spend that an already-applied negative should have
+// blocked. Long enough to catch a leak that started days ago, short enough that
+// a negative fixed last week stops being re-reported.
+export const LEAK_LOOKBACK_DAYS = 7;
 
 // Pause probe — the only till-readable experiment at this spend:revenue ratio.
 // SHELVED by owner 2026-07-19 ("let tamarind follow the others") after the
@@ -655,13 +660,23 @@ export type AutopilotRunResult = {
   mode: AgentMode;
   decisions: Array<AutopilotDecision & { applied?: boolean; error?: string }>;
   exclusions: Array<ExclusionCandidate & { applied?: boolean; error?: string }>;
+  /** Negatives that were not blocking, re-excluded as literals (see findLeaks). */
+  repairs: Array<{
+    campaignId: string;
+    campaignName: string;
+    searchTerm: string;
+    coveredBy: string;
+    leakedCostMyr: number;
+    applied?: boolean;
+    error?: string;
+  }>;
   guards: Record<string, GuardSignal>;
   scoreboard?: CashScoreboard;
 };
 
 export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunResult> {
   const mode = await getAgentMode(AGENT_KEY);
-  if (mode === "off") return { mode, decisions: [], exclusions: [], guards: {} };
+  if (mode === "off") return { mode, decisions: [], exclusions: [], repairs: [], guards: {} };
   await touchAgentRun(AGENT_KEY);
 
   const [campaigns, report, changes] = await Promise.all([
@@ -669,7 +684,14 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
       // Paused campaigns stay in scope — a running pause probe must be seen so
       // it can be restored on schedule.
       where: { status: { in: [...ENABLED_STATUSES, "3", "PAUSED"] }, account: { isManager: false } },
-      select: { id: true, name: true, outletId: true, dailyBudgetMicros: true, status: true },
+      select: {
+        id: true,
+        name: true,
+        outletId: true,
+        dailyBudgetMicros: true,
+        status: true,
+        account: { select: { customerId: true } },
+      },
     }),
     buildAdsOptimizerReport(30),
     prisma.adsBudgetChange.findMany({
@@ -778,20 +800,6 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     pendingWasteByCampaign.set(x.campaignId, (pendingWasteByCampaign.get(x.campaignId) ?? 0) + daily);
   }
 
-  // One-time (idempotent) consolidation of literal negatives → broad roots,
-  // BEFORE the slot count is read, so freed slots are usable this same run.
-  // No-op once every campaign is already consolidated.
-  const consolidations: Record<string, { added: number; removed: number; error?: string }> = {};
-  if (mode === "armed") {
-    for (const c of campaigns.filter((c) => ENABLED_STATUSES.includes(c.status))) {
-      try {
-        consolidations[c.name] = await consolidateCampaignNegatives(c.id);
-      } catch (e) {
-        consolidations[c.name] = { added: 0, removed: 0, error: (e as Error).message };
-      }
-    }
-  }
-
   // Exclusions run BEFORE budget decisions so tonight's exclusions and the
   // matching budget cut land in the SAME run (exclude → cut, paired). In
   // armed mode only successfully-applied exclusions count toward the cut.
@@ -802,18 +810,155 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
       where: { date: { gte: since } },
       _sum: { costMicros: true },
     }),
-    prisma.adsTermExclusion.findMany({ select: { campaignId: true, searchTerm: true, status: true } }),
+    prisma.adsTermExclusion.findMany({
+      select: {
+        id: true,
+        campaignId: true,
+        searchTerm: true,
+        status: true,
+        appliedAt: true,
+        criterionResource: true,
+        estMonthlySavingMyr: true,
+      },
+    }),
   ]);
   // 'failed' rows are retryable (a transient API error must not permanently
-  // burn a term); applied + human-rejected rows are standing decisions.
+  // burn a term); 'superseded' rows were REMOVED from Google, so they are no
+  // longer a standing decision either and must be re-addable (this is how a
+  // wrongly-removed literal gets back in). Applied + human-rejected stand.
+  const RETRYABLE_STATUS = new Set(["failed", "superseded"]);
   const alreadyDecided = new Set(
-    decided.filter((e) => e.status !== "failed").map((e) => `${e.campaignId} ${e.searchTerm.toLowerCase()}`),
+    decided
+      .filter((e) => !RETRYABLE_STATUS.has(e.status))
+      .map((e) => `${e.campaignId} ${e.searchTerm.toLowerCase()}`),
   );
   // Negative-theme slots left per campaign (Smart campaign cap).
   const slotsLeft = new Map<string, number>();
   for (const c of campaigns) slotsLeft.set(c.id, MAX_NEGATIVES_PER_CAMPAIGN);
   for (const e of decided) {
     if (e.status === "applied") slotsLeft.set(e.campaignId, (slotsLeft.get(e.campaignId) ?? MAX_NEGATIVES_PER_CAMPAIGN) - 1);
+  }
+
+  // ── Verify the negatives we already applied are actually blocking ────────
+  // Apply-and-forget is what let the Jul 21 root consolidation silently
+  // un-block "restaurants near me". Any term still being paid for well after
+  // its covering negative went live is a LEAK: re-exclude that literal in its
+  // own right, evicting the least valuable incumbent if the campaign is full.
+  const leakSince = new Date(now.getTime() - LEAK_LOOKBACK_DAYS * DAY_MS);
+  const leakSpendRows = await prisma.adsSearchTermDaily.groupBy({
+    by: ["campaignId", "searchTerm", "date"],
+    where: { date: { gte: leakSince }, costMicros: { gt: 0 } },
+    _sum: { costMicros: true },
+  });
+  const appliedNegatives = decided
+    .filter((e) => e.status === "applied" && e.appliedAt)
+    .map((e) => ({ campaignId: e.campaignId, searchTerm: e.searchTerm, appliedAt: e.appliedAt! }));
+  const leaks = findLeaks(
+    appliedNegatives,
+    leakSpendRows.map((r) => ({
+      campaignId: r.campaignId,
+      searchTerm: r.searchTerm,
+      date: r.date,
+      costMyr: microsToMYR(r._sum.costMicros ?? BigInt(0)),
+    })),
+  );
+
+  // What each existing negative is actually worth, measured over the same 30d
+  // term window used for exclusions — the eviction ranking.
+  const negativeValues = scoreNegatives(
+    appliedNegatives,
+    termRows.map((r) => ({
+      campaignId: r.campaignId,
+      searchTerm: r.searchTerm,
+      costMyr: microsToMYR(r._sum.costMicros ?? BigInt(0)),
+    })),
+  );
+
+  const repairs: AutopilotRunResult["repairs"] = [];
+  const byCampaignLeaks = new Map<string, typeof leaks>();
+  for (const l of leaks) {
+    if (alreadyDecided.has(`${l.campaignId} ${l.leakTerm}`)) continue;
+    const list = byCampaignLeaks.get(l.campaignId) ?? [];
+    list.push(l);
+    byCampaignLeaks.set(l.campaignId, list);
+  }
+  for (const [campaignId, campaignLeaks] of byCampaignLeaks) {
+    const campaign = campaigns.find((c) => c.id === campaignId);
+    if (!campaign || !ENABLED_STATUSES.includes(campaign.status)) continue;
+    const incumbents = decided
+      .filter((e) => e.campaignId === campaignId && e.status === "applied")
+      .map((e) => ({
+        searchTerm: e.searchTerm,
+        // Measured junk covered, not the stored estimate — consolidation roots
+        // carry no estimate and would otherwise rank as worthless.
+        valueMyr: Math.max(
+          negativeValues.get(`${e.campaignId} ${e.searchTerm.toLowerCase()}`) ?? 0,
+          Number(e.estMonthlySavingMyr ?? 0),
+        ),
+        criterionResource: e.criterionResource,
+        ledgerId: e.id,
+      }));
+    // Leak spend is measured over the lookback window; scale to a month so it
+    // is comparable with the incumbents' stored monthly saving.
+    const candidates = campaignLeaks.map((l) => ({
+      searchTerm: l.leakTerm,
+      valueMyr: (l.costMyr / Math.max(1, l.days)) * 30,
+    }));
+    const plan = planSlotSwap(incumbents, candidates, MAX_NEGATIVES_PER_CAMPAIGN);
+
+    for (const ev of plan.evict) {
+      const inc = incumbents.find((i) => i.searchTerm === ev.searchTerm);
+      if (!inc?.criterionResource) continue;
+      if (mode === "armed") {
+        await removeCampaignNegative(
+          campaign.account.customerId.replace(/-/g, ""),
+          inc.criterionResource,
+          inc.ledgerId,
+        );
+      }
+      slotsLeft.set(campaignId, (slotsLeft.get(campaignId) ?? 0) + 1);
+    }
+    for (const cand of plan.add) {
+      const leak = campaignLeaks.find((l) => l.leakTerm === cand.searchTerm)!;
+      const entry = {
+        campaignId,
+        campaignName: campaign.name,
+        searchTerm: cand.searchTerm,
+        coveredBy: leak.negative,
+        leakedCostMyr: leak.costMyr,
+        applied: undefined as boolean | undefined,
+        error: undefined as string | undefined,
+      };
+      if (mode === "armed") {
+        const res = await applyTermExclusion({
+          campaignId,
+          searchTerm: cand.searchTerm,
+          decidedBy: "ads-autopilot",
+          estMonthlySavingMyr: round2(cand.valueMyr),
+          reason: `autopilot: leak repair — negative "${leak.negative}" did not block this term (RM${leak.costMyr} over ${leak.days}d after it was applied)`,
+        });
+        Object.assign(entry, res.ok ? { applied: true } : { applied: false, error: res.error });
+        if (!res.ok) continue;
+      }
+      slotsLeft.set(campaignId, Math.max(0, (slotsLeft.get(campaignId) ?? 1) - 1));
+      alreadyDecided.add(`${campaignId} ${cand.searchTerm}`);
+      repairs.push(entry);
+    }
+  }
+
+  // Broad roots are ADDITIVE only (never replace a working literal — see
+  // consolidate-negatives.ts), so they run after leak repair and take only
+  // whatever slots are genuinely free.
+  const consolidations: Record<string, { added: number; skipped: number; error?: string }> = {};
+  if (mode === "armed") {
+    for (const c of campaigns.filter((c) => ENABLED_STATUSES.includes(c.status))) {
+      try {
+        consolidations[c.name] = await consolidateCampaignNegatives(c.id, slotsLeft.get(c.id) ?? 0);
+        slotsLeft.set(c.id, Math.max(0, (slotsLeft.get(c.id) ?? 0) - consolidations[c.name].added));
+      } catch (e) {
+        consolidations[c.name] = { added: 0, skipped: 0, error: (e as Error).message };
+      }
+    }
   }
   const exclusions: AutopilotRunResult["exclusions"] = selectAutoExclusions(
     termRows.map((r) => ({
@@ -980,11 +1125,11 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     kind: mode === "armed" ? "budget_change" : "proposal",
     summary:
       `${mode}: ${acted.length ? acted.map((d) => `${d.campaignName} ${d.action}${d.newDailyMyr != null ? `→RM${d.newDailyMyr}/day` : ""}`).join("; ") : "all campaigns hold"}; ` +
-      `${exclusions.length} term exclusion(s) | cash vs RM${CASH_TARGET_MONTHLY_MYR} target: cuts RM${scoreboard.cutsMonthlyMyr}/mo` +
+      `${exclusions.length} term exclusion(s)${repairs.length ? `, ${repairs.length} leak repair(s)` : ""} | cash vs RM${CASH_TARGET_MONTHLY_MYR} target: cuts RM${scoreboard.cutsMonthlyMyr}/mo` +
       `${scoreboard.salesMonthlyMyr != null ? ` + till Δ RM${scoreboard.salesMonthlyMyr}/mo` : ""} = RM${scoreboard.netMonthlyMyr}/mo (${scoreboard.pctOfTarget}%)`,
     refTable: "ads_budget_change",
-    meta: { decisions, exclusions: exclusions.slice(0, 30), guards, scoreboard, consolidations },
+    meta: { decisions, exclusions: exclusions.slice(0, 30), repairs, guards, scoreboard, consolidations },
   });
 
-  return { mode, decisions, exclusions, guards, scoreboard };
+  return { mode, decisions, exclusions, repairs, guards, scoreboard };
 }

@@ -21,6 +21,7 @@ import {
 } from "./autopilot";
 import { classifyTermIntent, selectAutoExclusions, selectSeedExclusions, shouldAutoExclude, negativeThemeRoot, exclusionPhrase } from "./term-rules";
 import { planConsolidation } from "./consolidate-negatives";
+import { findLeaks, planSlotSwap, scoreNegatives } from "./verify-exclusions";
 
 const NOW = new Date("2026-07-20T00:00:00Z");
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86400000);
@@ -608,21 +609,21 @@ describe("term intent rules", () => {
   });
 });
 
-describe("planConsolidation (literal → root swap)", () => {
-  it("removes subsumed literals and adds their roots, keeps roots/own-brand as-is", () => {
+describe("planConsolidation (broad roots, additive only)", () => {
+  it("adds roots for subsumed literals but NEVER removes the literals", () => {
     const existing = [
       { searchTerm: "kenangan coffee", criterionResource: "r1" },
       { searchTerm: "kenangan coffee near me", criterionResource: "r2" },
       { searchTerm: "zus near me", criterionResource: "r3" },
       { searchTerm: "restaurants near me", criterionResource: "r4" },
-      { searchTerm: "kedai makan", criterionResource: "r5" }, // already a root → keep
-      { searchTerm: "celsius coffee", criterionResource: "r6" }, // own brand → keep literal
+      { searchTerm: "kedai makan", criterionResource: "r5" }, // already a root
+      { searchTerm: "celsius coffee", criterionResource: "r6" }, // own brand
     ];
     const plan = planConsolidation(existing);
     expect(plan.addRoots.sort()).toEqual(["kenangan", "restaurant", "zus"].sort());
-    expect(plan.removeLiterals.map((l) => l.searchTerm).sort()).toEqual(
-      ["kenangan coffee", "kenangan coffee near me", "restaurants near me", "zus near me"].sort(),
-    );
+    // Regression guard (2026-07-23): removing "restaurants near me" in favour
+    // of the root "restaurant" un-blocked it — Google does not stem plurals.
+    expect(plan).not.toHaveProperty("removeLiterals");
   });
 
   it("is a no-op once everything is already a root", () => {
@@ -631,15 +632,132 @@ describe("planConsolidation (literal → root swap)", () => {
       { searchTerm: "kedai makan", criterionResource: "r2" },
     ]);
     expect(plan.addRoots).toEqual([]);
-    expect(plan.removeLiterals).toEqual([]);
   });
 
   it("does not re-add a root that already exists as a negative", () => {
     const plan = planConsolidation([
-      { searchTerm: "zus", criterionResource: "r1" }, // root already present
-      { searchTerm: "zus near me", criterionResource: "r2" }, // literal → remove, root not re-added
+      { searchTerm: "zus", criterionResource: "r1" },
+      { searchTerm: "zus near me", criterionResource: "r2" },
     ]);
     expect(plan.addRoots).toEqual([]);
-    expect(plan.removeLiterals.map((l) => l.searchTerm)).toEqual(["zus near me"]);
+  });
+});
+
+describe("findLeaks (negatives that aren't actually blocking)", () => {
+  const applied = (searchTerm: string, appliedAt: string) => ({
+    campaignId: "c1",
+    searchTerm,
+    appliedAt: new Date(appliedAt),
+  });
+  const spend = (searchTerm: string, date: string, costMyr: number) => ({
+    campaignId: "c1",
+    searchTerm,
+    date: new Date(date),
+    costMyr,
+  });
+
+  it("flags the real regression: root 'restaurant' not blocking the plural", () => {
+    const leaks = findLeaks(
+      [applied("restaurant", "2026-07-21")],
+      [
+        spend("restaurants near me", "2026-07-24", 7.36),
+        spend("restaurants near me", "2026-07-25", 3.68),
+        spend("restaurants", "2026-07-24", 4.43),
+      ],
+    );
+    expect(leaks.map((l) => l.leakTerm)).toEqual(["restaurants near me", "restaurants"]);
+    expect(leaks[0]).toMatchObject({ negative: "restaurant", costMyr: 11.04, days: 2 });
+  });
+
+  it("ignores spend inside the propagation grace window", () => {
+    const leaks = findLeaks(
+      [applied("restaurant", "2026-07-21")],
+      [spend("restaurants near me", "2026-07-22", 9)], // next day = propagation
+    );
+    expect(leaks).toEqual([]);
+  });
+
+  it("ignores a term that is itself an applied negative", () => {
+    const leaks = findLeaks(
+      [applied("restaurant", "2026-07-21"), applied("restaurants near me", "2026-07-21")],
+      [spend("restaurants near me", "2026-07-25", 9)],
+    );
+    expect(leaks).toEqual([]);
+  });
+
+  it("ignores sub-threshold noise and uncovered terms", () => {
+    const leaks = findLeaks(
+      [applied("restaurant", "2026-07-21")],
+      [spend("restaurants", "2026-07-25", 0.4), spend("latte near me", "2026-07-25", 50)],
+    );
+    expect(leaks).toEqual([]);
+  });
+
+  it("attributes a leak to the most specific covering negative", () => {
+    const leaks = findLeaks(
+      [applied("food", "2026-07-21"), applied("food court", "2026-07-21")],
+      [spend("food court putrajaya", "2026-07-25", 5)],
+    );
+    expect(leaks[0].negative).toBe("food court");
+  });
+});
+
+describe("scoreNegatives (eviction ranking)", () => {
+  it("values a consolidation root by the junk it covers, not its (absent) estimate", () => {
+    const scores = scoreNegatives(
+      [
+        { campaignId: "c1", searchTerm: "restaurant" },
+        { campaignId: "c1", searchTerm: "waffle" },
+      ],
+      [
+        { campaignId: "c1", searchTerm: "restaurants near me", costMyr: 30 },
+        { campaignId: "c1", searchTerm: "restaurant cyberjaya", costMyr: 12.05 },
+        { campaignId: "c1", searchTerm: "latte", costMyr: 99 },
+      ],
+    );
+    expect(scores.get("c1 restaurant")).toBe(42.05);
+    expect(scores.get("c1 waffle")).toBe(0); // never matched → safe to evict
+  });
+
+  it("does not credit a negative with another campaign's spend", () => {
+    const scores = scoreNegatives(
+      [{ campaignId: "c1", searchTerm: "zus" }],
+      [{ campaignId: "c2", searchTerm: "zus near me", costMyr: 50 }],
+    );
+    expect(scores.get("c1 zus")).toBe(0);
+  });
+});
+
+describe("planSlotSwap (negative slots are a scarce budget)", () => {
+  const inc = (searchTerm: string, valueMyr: number, criterionResource: string | null = "r") => ({
+    searchTerm,
+    valueMyr,
+    criterionResource,
+  });
+
+  it("uses free slots before evicting anything", () => {
+    const plan = planSlotSwap([inc("a", 10)], [{ searchTerm: "new", valueMyr: 1 }], 3);
+    expect(plan.add.map((a) => a.searchTerm)).toEqual(["new"]);
+    expect(plan.evict).toEqual([]);
+  });
+
+  it("evicts the cheapest incumbent for a decisively better candidate", () => {
+    const plan = planSlotSwap(
+      [inc("waffle", 0), inc("zus", 24)],
+      [{ searchTerm: "restaurants near me", valueMyr: 160 }],
+      2,
+    );
+    expect(plan.evict.map((e) => e.searchTerm)).toEqual(["waffle"]);
+    expect(plan.add.map((a) => a.searchTerm)).toEqual(["restaurants near me"]);
+  });
+
+  it("refuses to churn when the candidate is not clearly better", () => {
+    const plan = planSlotSwap([inc("zus", 24)], [{ searchTerm: "meh", valueMyr: 25 }], 1);
+    expect(plan).toEqual({ add: [], evict: [] });
+  });
+
+  it("never evicts an incumbent with no removable resource", () => {
+    const plan = planSlotSwap([inc("stuck", 0, null)], [{ searchTerm: "big", valueMyr: 500 }], 1);
+    expect(plan).toEqual({ add: [], evict: [] });
   });
 });

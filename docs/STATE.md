@@ -41,6 +41,46 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   prod channel on a marker bump from an arbitrary claude/* branch — a separate
   footgun worth removing later.
 
+- 2026-07-23 — **Ads autopilot: root-consolidation regression found + fixed;
+  the "till held" claim corrected.** (a) **Regression:** the Jul 21
+  consolidation REMOVED the working literal negatives "restaurants" /
+  "restaurants near me" in favour of the root "restaurant". Google's negative
+  themes do NOT stem plurals — both resumed spending the next day (SQL-verified
+  natural experiment: spend →0 while literals were applied Jul 18–21, →back
+  Jul 22–23; RM24.46 in 2 days across Tam+PJ ≈ RM370/mo). Slots ended back at
+  25/25 on all three campaigns, so the swap bought nothing. Food/restaurant
+  intent is now RM105/7d fleet-wide (Tamarind **19.7% of its whole spend**, PJ
+  10.7%, SA 5.2%). Fixed: consolidation is **additive only** (never removes a
+  literal), new `verify-exclusions.ts` runs a nightly leak check
+  (`findLeaks` → re-exclude the literal, `planSlotSwap` value-ranked eviction,
+  `scoreNegatives` measures a negative by the junk it actually covers —
+  needed because consolidation roots carry no `estMonthlySavingMyr` and would
+  otherwise rank as worthless and be evicted). `superseded` ledger rows are now
+  retryable. (b) **Correction:** the Jul 21 "till held flat, RM4,056/mo banked"
+  was overconfident. Decomposing by discount status (clean post-cutover,
+  cut-week vs prior 4w): organic till RM8,628→**8,495/day (−1.5%)**, discounted
+  (SMS-voucher) RM1,459→**1,690/day (+16%)** — the flat top-line is two
+  opposite moves, and **the guard reads TOTAL till so it cannot see ad damage
+  while SMS ramps**. Honest cash range **+RM1.8k–4.25k/mo**, not RM4.25k.
+  Budgets held at PJ 51.51 / SA 53.98 / Tam 52.97 (fleet RM158.46/day, −47%)
+  since Jul 22, in the 14d observation window. **Next:** point guard +
+  scoreboard at ORGANIC till before observation expires ~Aug 3; then either
+  hold budgets through ~Aug 5 for a clean organic read or freeze one outlet as
+  an ad-control. Also owed: remove inert `hardCutDirective`, fix scoreboard
+  StoreHub-cutover anchor.
+
+- 2026-07-23 — **SMS loop is live and sending** (corrects an earlier
+  mis-read): `sms_logs` is STALE (last row Jun 21) — the real sends go via SMS
+  Niaga and are tracked in `loop_rounds`; the provider dashboard shows 200–500
+  SMS/day all through July. `winback` is on round 36, status 'sent' daily by
+  `cron:loops-trigger`. **Problems:** `approved_at` is NULL on all 75 July
+  rounds (cron self-approves, design called for an approve gate); arms have
+  drifted to **cash discounts** (RM10 off RM30+, 15%/20% off) against the
+  margin-safe-only policy; segments are 25–60 people with ~3-person holdouts so
+  `campaign_outcomes` verdicts are almost all 'invalid' (130 rows, backfilled
+  in one batch Jul 18). 6,869 campaign vouchers issued Jun 22–Jul 23, 184
+  redeemed (2.7%). No trustworthy incremental-cash number exists for SMS yet.
+
 - 2026-07-22 — **First-order 10% discount made native-app-only** (branch
   `claude/first-order-discount-check-lx938r`, draft PR). Business intent: the
   welcome 10% is now a native-app perk (drives installs) on BOTH pickup and

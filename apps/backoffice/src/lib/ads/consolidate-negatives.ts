@@ -1,18 +1,25 @@
 /**
- * One-time (self-expiring, idempotent) consolidation of a campaign's negative
- * keyword themes from LITERAL search terms to broad ROOTS.
+ * Consolidation of a campaign's negative keyword themes toward broad ROOTS.
  *
  * Why (2026-07-21): all three campaigns hit the 25-negative slot cap with
  * spend on junk still un-excluded. The slots were burned on literal
- * near-duplicates ("kenangan coffee" + "kenangan coffee near me" = 2 slots).
- * Google negative themes are fuzzy, so the root "kenangan" covers both in one
- * slot AND pre-blocks future variants. Consolidating frees slots so the
- * remaining junk can finally be excluded.
+ * near-duplicates ("kenangan coffee" + "kenangan coffee near me" = 2 slots),
+ * so adding the root "kenangan" covers both in one slot AND pre-blocks future
+ * variants.
  *
- * Runs inside the nightly autopilot (armed mode). Idempotent: once a campaign
- * has no literal that collapses into a distinct root, it plans nothing.
- * Removes superseded literals FIRST (frees slots), then adds the roots, so the
- * campaign never exceeds the cap mid-run. Every change is ledgered.
+ * IMPORTANT (2026-07-23) — this module no longer REMOVES the literals a root
+ * subsumes. The original version did, and it caused a live regression: the
+ * literals "restaurants" / "restaurants near me" were removed in favour of the
+ * root "restaurant", on the assumption that Google's fuzzy themes stem plural
+ * → singular. They do not. Both plurals resumed spending the next day
+ * (~RM12/day across Tamarind + Putrajaya) and nothing caught it.
+ *
+ * A root is an ADDITIVE bet: it may catch variants we haven't seen, but it is
+ * never proof that an existing, demonstrably-working literal is redundant.
+ * Being wrong about an add costs one slot; being wrong about a removal costs
+ * real money, silently. Slot pressure is instead handled by value-ranked
+ * eviction (`planSlotSwap` in verify-exclusions.ts), which drops the least
+ * valuable negative rather than the one that merely looks redundant.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -22,84 +29,75 @@ import { randomUUID } from "crypto";
 
 export type ExistingNegative = { searchTerm: string; criterionResource: string | null };
 export type ConsolidationPlan = {
-  addRoots: string[];        // broad roots to create
-  removeLiterals: ExistingNegative[]; // literals subsumed by a root, to remove
+  addRoots: string[]; // broad roots to create (purely additive)
 };
 
 /**
- * Pure: given a campaign's applied negatives, plan the literal→root swap.
- * A literal is removed only when its root differs from itself AND we can add
- * that root; own-brand / unrecognised terms (root === self) are left as-is.
- * Roots already present are not re-added.
+ * Pure: given a campaign's applied negatives, plan the broad roots worth
+ * adding alongside them. Never plans a removal — see the module note.
  */
 export function planConsolidation(existing: ExistingNegative[]): ConsolidationPlan {
   const present = new Set(existing.map((e) => e.searchTerm.toLowerCase()));
   const rootsNeeded = new Set<string>();
-  const removeLiterals: ExistingNegative[] = [];
 
   for (const e of existing) {
     const term = e.searchTerm.toLowerCase();
     const intent = classifyTermIntent(term);
     if (!shouldAutoExclude(intent)) continue;
     const phrase = exclusionPhrase(term, intent);
-    if (phrase === term) continue; // already a root (or own-brand/other) — keep
+    if (phrase === term) continue; // already a root (or own-brand/other)
     rootsNeeded.add(phrase);
-    removeLiterals.push(e);
   }
 
-  const addRoots = [...rootsNeeded].filter((r) => !present.has(r));
-  return { addRoots, removeLiterals };
+  return { addRoots: [...rootsNeeded].filter((r) => !present.has(r)) };
 }
 
-/** IO: apply the plan for one campaign against Google Ads + the ledger. */
+/** IO: remove one negative from Google and mark its ledger row superseded. */
+export async function removeCampaignNegative(
+  customerId: string,
+  criterionResource: string,
+  ledgerId: string,
+): Promise<boolean> {
+  try {
+    const customer = getCustomer(customerId);
+    await customer.campaignCriteria.remove([criterionResource]);
+    await prisma.adsTermExclusion.update({
+      where: { id: ledgerId },
+      data: { status: "superseded", error: null },
+    });
+    return true;
+  } catch (err) {
+    console.error(`[negatives] remove failed for ${criterionResource}:`, (err as Error).message);
+    return false;
+  }
+}
+
+/** IO: add the planned roots for one campaign, within the free slots available. */
 export async function consolidateCampaignNegatives(
   campaignPk: string,
-): Promise<{ added: number; removed: number; error?: string }> {
+  freeSlots: number,
+): Promise<{ added: number; skipped: number; error?: string }> {
+  if (freeSlots <= 0) return { added: 0, skipped: 0 };
+
   const campaign = await prisma.adsCampaign.findUnique({
     where: { id: campaignPk },
     include: { account: { select: { customerId: true } } },
   });
-  if (!campaign) return { added: 0, removed: 0, error: "Campaign not found" };
+  if (!campaign) return { added: 0, skipped: 0, error: "Campaign not found" };
 
   const applied = await prisma.adsTermExclusion.findMany({
     where: { campaignId: campaignPk, status: "applied" },
-    select: { id: true, searchTerm: true, criterionResource: true },
+    select: { searchTerm: true, criterionResource: true },
   });
-  const plan = planConsolidation(
-    applied.map((a) => ({ searchTerm: a.searchTerm, criterionResource: a.criterionResource })),
-  );
-  if (plan.addRoots.length === 0 && plan.removeLiterals.length === 0) {
-    return { added: 0, removed: 0 }; // already consolidated — no-op
-  }
+  const plan = planConsolidation(applied);
+  if (plan.addRoots.length === 0) return { added: 0, skipped: 0 }; // already consolidated
 
   const customerId = campaign.account.customerId.replace(/-/g, "");
   const customer = getCustomer(customerId);
-  const idByTerm = new Map(applied.map((a) => [a.searchTerm.toLowerCase(), a.id]));
-  let removed = 0;
+  const roots = plan.addRoots.slice(0, freeSlots);
   let added = 0;
 
-  // 1) Remove superseded literals FIRST to free slots.
-  for (const lit of plan.removeLiterals) {
-    if (!lit.criterionResource) continue; // can't remove without the resource name
-    try {
-      await customer.campaignCriteria.remove([lit.criterionResource]);
-      const id = idByTerm.get(lit.searchTerm.toLowerCase());
-      if (id) {
-        await prisma.adsTermExclusion.update({
-          where: { id },
-          data: { status: "superseded", error: null },
-        });
-      }
-      removed++;
-    } catch (err) {
-      // Leave the ledger row 'applied' if the remove failed; the root add below
-      // still improves coverage. Don't abort the whole campaign.
-      console.error(`[consolidate] remove failed for "${lit.searchTerm}":`, (err as Error).message);
-    }
-  }
-
-  // 2) Add the broad roots.
-  for (const root of plan.addRoots) {
+  for (const root of roots) {
     try {
       const res = (await customer.campaignCriteria.create([
         {
@@ -110,13 +108,20 @@ export async function consolidateCampaignNegatives(
       ])) as { results?: Array<{ resource_name?: string }> };
       await prisma.adsTermExclusion.upsert({
         where: { campaignId_searchTerm: { campaignId: campaignPk, searchTerm: root } },
-        update: { status: "applied", criterionResource: res.results?.[0]?.resource_name ?? null, error: null, decidedBy: "ads-autopilot", decidedAt: new Date(), appliedAt: new Date() },
+        update: {
+          status: "applied",
+          criterionResource: res.results?.[0]?.resource_name ?? null,
+          error: null,
+          decidedBy: "ads-autopilot",
+          decidedAt: new Date(),
+          appliedAt: new Date(),
+        },
         create: {
           id: randomUUID(),
           campaignId: campaignPk,
           searchTerm: root,
           status: "applied",
-          reason: "autopilot: consolidated broad negative root (2026-07-21)",
+          reason: "autopilot: broad negative root (additive; literals retained)",
           criterionResource: res.results?.[0]?.resource_name ?? null,
           decidedBy: "ads-autopilot",
           appliedAt: new Date(),
@@ -128,5 +133,5 @@ export async function consolidateCampaignNegatives(
     }
   }
 
-  return { added, removed };
+  return { added, skipped: plan.addRoots.length - roots.length };
 }
