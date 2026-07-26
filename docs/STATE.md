@@ -232,6 +232,22 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-20 — **HR Ops Agent designed** (`docs/design/hr-ops-agent.md`, this
+  branch): WhatsApp agent on the shared procurement number, two personas by
+  sender (ops = owner/HOO/managers create+modify staff; staff = own-record
+  self-service). Authority matrix owner-approved (subtree rule, two-person rule
+  for money: new-hire salary = HOO alone, salary *changes* = owner confirms,
+  bank changes never from a staff message alone). v1 adds proactive chasers
+  (missing bank/EPF/profiles), probation tracker, no-show alert, schedule
+  push. Voice: human-quality Manglish but never claims to be human (Meta
+  automation-disclosure policy — shared number = procurement blast radius).
+  Registry key `hr_ops_agent`, starts shadow; arming = 5 clean shadow ops +
+  1 week clean digests. Design evidence = the 2026-07-16→20 manual onboarding
+  arc in this session (5 staff ops: Farah/Nurayuni/Auni creates, Absah
+  dedup-update, Danish FT→PT split). **Next: implementation PR** (sender-router
+  + identity + staff reads in shadow + ledger wiring). Open: persona name,
+  BM register samples, chaser cadence (§11 of the doc).
+
 - 2026-07-15 -- **Agent substrate SHIPPED end-to-end.** Fleet review found the
   non-compounding pattern (every domain reinvented flags/queues/telemetry;
   shadow builds never armed; marketing loop has no outcome memory). Built the
