@@ -38,6 +38,7 @@ type Order = {
   promo_discount?: number | null;
   sst_amount?: number | null;
   loyalty_points_earned?: number | null;
+  payment_checkout_id?: string | null;
 };
 
 function rm(cents: number | null | undefined): string {
@@ -184,6 +185,52 @@ export function OrderTrackingView({
     };
   }, [status, method, orderId, fetchOrder]);
 
+  // "Try payment again" — retry payment on the SAME order, no cart rebuild.
+  // /api/payments/create allows pending/failed orders, re-checks the previous
+  // checkout with RM before minting a new one (settles instead if the money
+  // actually landed), and overwrites payment_checkout_id so the polls above
+  // watch the fresh attempt. Gated on payment_checkout_id: only RM-routed
+  // orders ever set it (the Stripe branch of /api/checkout/initiate doesn't),
+  // and payments/create is RM-only — a Stripe-routed failure must not get an
+  // RM checkout minted for it.
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const canRetryPayment =
+    status === "failed" &&
+    !!method &&
+    RM_METHODS.has(method) &&
+    !!order?.payment_checkout_id;
+  const retryPayment = useCallback(async () => {
+    if (retrying || !method) return;
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      const res = await fetch("/api/payments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, paymentMethod: method }),
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { paymentUrl?: string; error?: string; alreadyPaid?: boolean }
+        | null;
+      if (res.status === 409 && json?.alreadyPaid) {
+        // The earlier attempt actually went through — refresh so the
+        // screen heals to "Brewing" instead of charging again.
+        await fetchOrder();
+        return;
+      }
+      if (!res.ok || !json?.paymentUrl) {
+        throw new Error(json?.error || "Could not restart payment");
+      }
+      // Keep `retrying` true — we're navigating to the gateway; resetting
+      // would re-enable the button for a double tap during the redirect.
+      window.location.assign(json.paymentUrl);
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : "Could not restart payment");
+      setRetrying(false);
+    }
+  }, [retrying, method, orderId, fetchOrder]);
+
   // Clear the cart ONLY once THIS just-placed order is confirmed paid. This is
   // the single confirmed-payment clear point for the gateway-redirect methods
   // (card / FPX / e-wallets land back here via ?payment=done). Guarded on the
@@ -272,24 +319,44 @@ export function OrderTrackingView({
             </div>
           </div>
         ) : order.status.toLowerCase() === "failed" || order.status.toLowerCase() === "cancelled" ? (
-          <div className="flex items-center gap-3 rounded-2xl bg-red-50 border border-red-200 p-3">
-            <XCircle size={20} color="#B91C1C" />
-            <div>
-              <p className="font-peachi font-bold text-sm text-red-800">
-                {order.status === "failed" ? "Payment failed" : "Cancelled"}
-              </p>
-              <p className="text-[12px] text-red-700 mt-0.5">
-                {order.status === "failed"
-                  ? "Place the order again to retry."
-                  : "This order was cancelled."}
-              </p>
-              {order.status === "failed" && RM_METHODS.has(order.payment_method) ? (
-                <p className="text-[12px] text-red-700 mt-1">
-                  Just paid? Hang tight — we re-check with the bank automatically
-                  and this page will update.
+          <div className="rounded-2xl bg-red-50 border border-red-200 p-3">
+            <div className="flex items-center gap-3">
+              <XCircle size={20} color="#B91C1C" />
+              <div>
+                <p className="font-peachi font-bold text-sm text-red-800">
+                  {order.status === "failed" ? "Payment failed" : "Cancelled"}
                 </p>
-              ) : null}
+                <p className="text-[12px] text-red-700 mt-0.5">
+                  {order.status !== "failed"
+                    ? "This order was cancelled."
+                    : canRetryPayment
+                    ? "No charge was made. Your order is saved — try the payment again below."
+                    : "Place the order again to retry."}
+                </p>
+                {order.status === "failed" && RM_METHODS.has(order.payment_method) ? (
+                  <p className="text-[12px] text-red-700 mt-1">
+                    Just paid? Hang tight — we re-check with the bank automatically
+                    and this page will update.
+                  </p>
+                ) : null}
+              </div>
             </div>
+            {canRetryPayment ? (
+              <>
+                <button
+                  onClick={() => void retryPayment()}
+                  disabled={retrying}
+                  className="mt-3 w-full rounded-full bg-[#A2492C] text-white py-3 font-peachi font-bold text-sm active:opacity-80 disabled:opacity-50"
+                >
+                  {retrying ? "Opening payment…" : "Try payment again"}
+                </button>
+                {retryError ? (
+                  <p className="text-[12px] text-red-700 mt-2 text-center">
+                    {retryError} — please try once more, or order at the counter.
+                  </p>
+                ) : null}
+              </>
+            ) : null}
           </div>
         ) : (
           // Horizontal 3-step pipeline. Done steps fill terracotta-tint,

@@ -359,6 +359,43 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Open failures
 
+- 2026-07-27 — **QR-order payment failures are chronic (~16%/day) and CARD is
+  the outlier: 36% of card attempts fail (89/247 over 14d) vs ~11% FPX/TNG,
+  at ALL three stores (SA 43.5% / Con 38.6% / Tam 21.3%) — so it's the card
+  flow, not one store's RM config.** Investigated from an owner photo of
+  C-9T2N79 (SA table 11, RM63.60, card): flipped failed with `rm_expired`
+  15s after creation; same customer retried (C-E8BL26) and failed again in
+  39s; that customer never paid in-app at all. Failure signature: 42/89 card
+  failures die <60s with RM reporting the checkout EXPIRED (fpx has 8;
+  wallets have ZERO sub-minute fails — their failures are all >10-min
+  abandons swept by expire-orders). Card rides the RM HOSTED page
+  (`method:[]`, no Direct deep link — client.ts), so the sub-minute EXPIRED
+  cluster = something on the hosted page kills the session fast (customer
+  back-out flips it EXPIRED, or the card form itself errors — cannot
+  distinguish from our data; RM-side checkout logs needed, e.g. checkout
+  1785155130513125190). **No money lost:** 0 failed orders carry a
+  payment_provider_ref, and reconcile accepts failed→paid if RM ever
+  reports SUCCESS. **Cost:** 213 fails/14d, only 25 recovered in-app within
+  45 min → ~RM6.5k of baskets/14d abandon the app (some pay at till,
+  invisible here). UX gap compounding it: the failed screen says "Place the
+  order again to retry" — NO retry-payment button, though
+  `/api/payments/create` allows retry on the same failed order and the
+  tracking poll already heals failed→paid. **"Try payment again" button
+  SHIPPED on this branch (owner-approved)** — `_OrderTrackingView.tsx`
+  failed card now retries via `/api/payments/create` on the same order
+  (route already re-asks RM about the prior checkout before minting a new
+  one, and 409 alreadyPaid → refetch heals the screen). Gated on
+  `payment_checkout_id` being set: only RM-routed orders ever set it, and
+  payments/create is RM-only — keeps a Stripe-routed failure from getting
+  an RM checkout. Card retry lands on RM's hosted page which lists EVERY
+  enabled method, so a stuck card customer can switch to FPX/TNG without
+  re-ordering. pickup-native has its own failed screen — NOT touched
+  (OTA, hard rule 5). Still open: (1) live-test a card payment at an
+  outlet; (2) ask RM for checkout logs on the sub-minute EXPIRED sessions;
+  (3) consider deprioritising card in the method picker until understood.
+  Payments = hard rule 6: owner decides. — not blocking revenue capture at
+  till, but ~1 in 6 app checkouts dead-ends.
+
 - 2026-07-11 — **`sentry.io` is NOT in the CCR environment's egress
   allowlist** — live Sentry MCP call returned `403 Host not in allowlist:
   sentry.io` — so the nightly Sentry-triage routine (05:00 MYT) has no-oped
