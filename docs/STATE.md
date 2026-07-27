@@ -6,6 +6,27 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-27 — **The missing ~RM40k/mo cash vs the owner's expected cost
+  structure is FOOD COST: raw-materials cash-out runs 47–49% of sales vs the
+  38% plan = ~RM30–35k/mo** (bank lens May/Jun/Jul: RM152.7k/150.8k/118.9k
+  out vs ~RM312k/323k/249k sales inflows; June external cash ≈ breakeven,
+  matching "barely enough every month"). Bottom-up (July, clean pos_native
+  month): ingredient PO spend RM146.3k, of which RM53.3k is EXCESS over
+  theoretical consumption (sales items × MenuIngredient doses) and RM16.4k has
+  no BOM at all (Chicken Chop RM5.6k/mo the biggest). Headline ratios
+  purchased÷theoretical: Fresh Milk 3.2× (3,944L vs 1,235L; still ~1.5–1.7× at
+  realistic 200ml pours), beans 1.6× (263kg vs 160kg), salted croissant
+  336 bought/189 sold, burnt cheesecake 360/199, pull lamb 3.3×, udang 5×;
+  tight items read ~1.0–1.26 (brioche loaf 1.06) so the method is sound.
+  NOT pricing (bean RM93/kg flat, PriceHistory empty since April), NOT
+  recorded wastage (StockAdjustment RM0.1–1.1k/mo — waste simply unlogged, so
+  waste-vs-theft unseparable today). Root cause: reorder runs off receipts not
+  sales (consumption engine shadow + dead-table read), so over-purchase never
+  gets pushback. Milk pack arbitrage: 12×1L format RM7.15/L vs 24L RM3.98/L
+  (~RM1.7k/mo). Full report + ranked fixes:
+  `docs/design/food-cost-gap-2026-07-27.md`. Secondary gap: people cost ~32%
+  vs ~26% plan (~RM10k, partly addressed by the Jul-20 roster baseline).
+
 - 2026-07-25 — **"Old app version suddenly reappears" = expo-updates OTA
   regression from `runtimeVersion.policy: "appVersion"`** (branch
   `claude/version-regression-bug-adwked`, draft PR). Owner screenshots showed
