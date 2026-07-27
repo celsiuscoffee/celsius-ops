@@ -380,13 +380,21 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   invisible here). UX gap compounding it: the failed screen says "Place the
   order again to retry" — NO retry-payment button, though
   `/api/payments/create` allows retry on the same failed order and the
-  tracking poll already heals failed→paid. Next: (1) live-test a card
-  payment at an outlet to see what the hosted page does; (2) ask RM for
-  checkout logs on the sub-minute EXPIRED sessions; (3) consider a
-  "Try payment again" button on the failed screen (same order, no cart
-  rebuild); (4) consider hiding/deprioritising card in the method picker
-  until understood. Payments = hard rule 6: owner decides. — not blocking
-  revenue capture at till, but ~1 in 6 app checkouts dead-ends.
+  tracking poll already heals failed→paid. **"Try payment again" button
+  SHIPPED on this branch (owner-approved)** — `_OrderTrackingView.tsx`
+  failed card now retries via `/api/payments/create` on the same order
+  (route already re-asks RM about the prior checkout before minting a new
+  one, and 409 alreadyPaid → refetch heals the screen). Gated on
+  `payment_checkout_id` being set: only RM-routed orders ever set it, and
+  payments/create is RM-only — keeps a Stripe-routed failure from getting
+  an RM checkout. Card retry lands on RM's hosted page which lists EVERY
+  enabled method, so a stuck card customer can switch to FPX/TNG without
+  re-ordering. pickup-native has its own failed screen — NOT touched
+  (OTA, hard rule 5). Still open: (1) live-test a card payment at an
+  outlet; (2) ask RM for checkout logs on the sub-minute EXPIRED sessions;
+  (3) consider deprioritising card in the method picker until understood.
+  Payments = hard rule 6: owner decides. — not blocking revenue capture at
+  till, but ~1 in 6 app checkouts dead-ends.
 
 - 2026-07-11 — **`sentry.io` is NOT in the CCR environment's egress
   allowlist** — live Sentry MCP call returned `403 Host not in allowlist:
