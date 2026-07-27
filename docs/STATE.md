@@ -497,10 +497,11 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   native payment returns use `celsiuscoffee://`, never web /rm-return.
   (4) **PR B**: CLAUDE.md layout table + hard rule 5 + ota-release skill
   corrected (pickup-native = customer phones) + skill Lesson appended.
-  **Follow-ups needing owner:** web-push SUBSCRIBE flow lived only in the
-  Expo shell (`pickup-native/lib/notifications.web.ts`) — new web
-  subscriptions have no UI until ported to a Next page (existing subscribers
-  unaffected; sw.js + push handlers live on); delete `apps/pickup` (is the
+  **Web-push subscribe PORTED same session** (`lib/web-push-client.ts`;
+  Settings toggle now actually subscribes + POSTs /api/push/subscribe — the
+  old toggle only flipped browser permission; RegisterSw silently refreshes
+  already-granted browsers on boot, no prompt). **Follow-ups needing
+  owner:** delete `apps/pickup` (is the
   old `com.celsiuscoffee.pickup` listing retired?); delete `apps/order/
   android` + `build-kds-apk.yml` (what do kitchen screens actually run?);
   optionally rename Vercel project `celsius-pickup-app`.
