@@ -17,9 +17,8 @@
 /.next/
 /out/
 
-# Expo Web bundle copied in at build time by scripts/build-pwa.mjs.
-# Source of truth is apps/pickup-native — these are regenerated on
-# every Vercel build.
+# Leftovers of the retired Expo Web bundle (build-pwa.mjs, removed).
+# Kept ignored so a stale local copy never gets committed by accident.
 /public/_expo/
 /public/assets/
 /public/index.html

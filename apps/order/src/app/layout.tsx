@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Space_Grotesk } from "next/font/google";
 import localFont from "next/font/local";
 import { Toaster } from "@celsius/ui";
+import { RegisterSw } from "./_RegisterSw";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -72,6 +73,7 @@ export default function RootLayout({
       <body className="flex flex-col">
         {children}
         <Toaster />
+        <RegisterSw />
       </body>
     </html>
   );
