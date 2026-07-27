@@ -17,14 +17,13 @@ agentic Finance module).
 
 ## Layout
 
-npm workspaces + Turborepo. Workspace members: `apps/{backoffice,order,pickup,staff,staff-native}` and `packages/*`.
+npm workspaces + Turborepo. Workspace members: `apps/{backoffice,order,staff,staff-native}` and `packages/*`.
 
 | Path | What it is |
 | --- | --- |
 | `apps/backoffice` | Next.js 16 admin console — finance, inventory, HR/payroll, procurement, marketing loops. Dev port 3003. |
-| `apps/order` | Next.js 16 **customer webapp** at order.celsiuscoffee.com — QR-table (dine-in) ordering + loyalty/rewards/account + customer APIs & crons. Vercel project is named `celsius-pickup-app` (legacy name — it is NOT the pickup app). Web pickup ordering is retired; pickup lives only in `pickup-native`. Also holds a vestigial "Celsius Orders" Capacitor KDS shell (`android/`, `capacitor.config.ts` → retired `/staff/kds` URL). Dev port 3007. |
+| `apps/order` | Next.js 16 **customer webapp** at order.celsiuscoffee.com — QR-table (dine-in) ordering + loyalty/rewards/account + customer APIs & crons. Vercel project is named `celsius-pickup-app` (legacy name — it is NOT the pickup app). Web pickup ordering is retired; pickup lives only in `pickup-native`. Dev port 3007. |
 | `apps/staff` | Next.js 16 staff web app. Dev port 3006. |
-| `apps/pickup` | **Legacy** Capacitor webview wrapper — the original store app (`com.celsiuscoffee.pickup`), a thin shell that loads order.celsiuscoffee.com live. Superseded by `pickup-native`; kept only for the store listing history (`STORE_LISTING.md`). NOT a KDS. |
 | `apps/pickup-native` | Expo/React Native **customer app "Celsius Coffee"** (`com.celsiuscoffee.pickup.next`, App Store + Play) — pickup ordering, dine-in table-QR scanner, loyalty. NOT a KDS. **Outside the npm workspace** — own `package-lock.json`. |
 | `apps/pos-native` | Expo/React Native POS for SUNMI registers ("Celsius POS"); native modules in `modules/`. **Outside the npm workspace** — own `package-lock.json`. |
 | `apps/staff-native` | Expo/React Native manager app ("Celsius Manager"); the only native app *inside* the workspace. |

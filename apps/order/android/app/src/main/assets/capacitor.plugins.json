@@ -1,6 +1,0 @@
-[
-  {
-    "pkg": "com.celsiuscoffee.orders.plugins",
-    "classpath": "com.celsiuscoffee.orders.plugins.SunmiPrinterPlugin"
-  }
-]
