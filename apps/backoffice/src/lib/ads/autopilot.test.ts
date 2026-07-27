@@ -26,10 +26,10 @@ import { findLeaks, planSlotSwap, scoreNegatives } from "./verify-exclusions";
 const NOW = new Date("2026-07-20T00:00:00Z");
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86400000);
 
-const healthy: GuardSignal = { rawIndex: 1.01, adjIndex: 1.0, anchorIndex: 1.0, forecastDailyMyr: 250, breach: false };
+const healthy: GuardSignal = { rawIndex: 1.01, adjIndex: 1.0, anchorIndex: 1.0, momIndex: null, forecastDailyMyr: 250, breach: false };
 // Gap ~9% of RM250/day ≈ RM22.5/day — within what an RM8/day cut could
 // plausibly cause (8 ÷ 0.6 × 2 ≈ RM26.7), so rollbacks still fire on it.
-const breached: GuardSignal = { rawIndex: 0.91, adjIndex: 0.93, anchorIndex: 0.94, forecastDailyMyr: 250, breach: true };
+const breached: GuardSignal = { rawIndex: 0.91, adjIndex: 0.93, anchorIndex: 0.94, momIndex: null, forecastDailyMyr: 250, breach: true };
 
 const campaign = (over: Partial<CampaignState> = {}): CampaignState => ({
   campaignId: "c1",
@@ -62,7 +62,7 @@ describe("guardFromIndexes", () => {
     expect(g.breach).toBe(true);
   });
   it("null when no forecast", () => {
-    expect(guardFromIndexes(null, [1, 1])).toEqual({ rawIndex: null, adjIndex: null, anchorIndex: null, forecastDailyMyr: null, breach: false });
+    expect(guardFromIndexes(null, [1, 1])).toEqual({ rawIndex: null, adjIndex: null, anchorIndex: null, momIndex: null, forecastDailyMyr: null, breach: false });
   });
 
   it("breaches on cumulative anchor drift even when the trailing forecast looks fine (boiling frog)", () => {
@@ -72,6 +72,40 @@ describe("guardFromIndexes", () => {
     expect(g.breach).toBe(true);
     const ok = guardFromIndexes(1.0, [1.0, 1.0], 0.97);
     expect(ok.breach).toBe(false);
+  });
+});
+
+describe("guardFromIndexes — payday-cycle robustness (owner 2026-07-27)", () => {
+  it("suppresses a raw-only breach when the payday-aligned view is healthy (the Tamarind case)", () => {
+    // Week-over-week Tamarind read -12% because Jul 13-19 and Jul 20-26 sit at
+    // different points in the 25th-payday cycle; month-over-month it was -1.5%.
+    // Payday hits the whole fleet at once, so every sibling dips too and the
+    // fleet-adjusted index stays ~1.0 — a genuinely raw-ONLY breach.
+    const g = guardFromIndexes(0.9, [0.9, 0.9], 1.0, 2300, 0.985);
+    expect(g.breach).toBe(false);
+    expect(g.calendarArtifact).toBe(true);
+    expect(g.momIndex).toBe(0.99);
+  });
+
+  it("still breaches on raw weakness when month-over-month confirms it", () => {
+    const g = guardFromIndexes(0.9, [0.9, 0.9], 1.0, 2300, 0.88);
+    expect(g.breach).toBe(true);
+    expect(g.calendarArtifact).toBeUndefined();
+  });
+
+  it("never suppresses a RELATIVE breach — fleet-adjusted weakness is real", () => {
+    // adj/anchor already cancel payday (one salary calendar fleet-wide), so a
+    // healthy MoM must not excuse them.
+    const adj = guardFromIndexes(0.96, [1.06, 1.07], 1.0, 2300, 1.0);
+    expect(adj.breach).toBe(true);
+    expect(adj.calendarArtifact).toBeUndefined();
+    const anchor = guardFromIndexes(0.99, [1.0, 1.0], 0.9, 2300, 1.0);
+    expect(anchor.breach).toBe(true);
+  });
+
+  it("without a month-over-month signal, behaviour is unchanged", () => {
+    expect(guardFromIndexes(0.9, [0.9, 0.9], 1.0, 2300, null).breach).toBe(true);
+    expect(guardFromIndexes(1.0, [1.0, 1.0], 1.0, 2300, null).breach).toBe(false);
   });
 });
 
@@ -170,7 +204,7 @@ describe("decideCampaign", () => {
   it("plausibility bound: an implausibly large gap holds instead of rolling back (the Tamarind case)", () => {
     // Flat-but-below-trend outlet: gap 6% of RM2,300/day ≈ RM138/day, while the
     // RM15.24/day descent could cause at most ~RM51/day at margin — hold + flag.
-    const tamarindGuard: GuardSignal = { rawIndex: 0.96, adjIndex: 0.94, anchorIndex: 0.96, forecastDailyMyr: 2300, breach: true };
+    const tamarindGuard: GuardSignal = { rawIndex: 0.96, adjIndex: 0.94, anchorIndex: 0.96, momIndex: null, forecastDailyMyr: 2300, breach: true };
     const d = decideCampaign(
       campaign({
         dailyBudgetMyr: 84.96,
@@ -257,7 +291,7 @@ describe("decideCampaign — probe-up phase (spend must prove itself)", () => {
   });
 
   it("keeps a raise with proven lift and probes further, up to the baseline cap", () => {
-    const lift: GuardSignal = { rawIndex: 1.06, adjIndex: 1.05, anchorIndex: 1.04, forecastDailyMyr: 250, breach: false };
+    const lift: GuardSignal = { rawIndex: 1.06, adjIndex: 1.05, anchorIndex: 1.04, momIndex: null, forecastDailyMyr: 250, breach: false };
     const d = decideCampaign(raised(), lift, NOW);
     expect(d.action).toBe("raise");
     expect(d.newDailyMyr).toBe(100 * RAISE_CAP_OF_BASELINE); // 132.25 capped to 125
@@ -332,7 +366,7 @@ describe("pause probe", () => {
 
   it("a RELATIVE-only breach does not block the probe (owner: switch Tamarind off for a baseline)", () => {
     // Own till at forecast (raw 0.96) but fleet-adj breached because a sibling ran hot.
-    const relativeOnly: GuardSignal = { rawIndex: 0.96, adjIndex: 0.94, anchorIndex: 0.96, forecastDailyMyr: 2300, breach: true };
+    const relativeOnly: GuardSignal = { rawIndex: 0.96, adjIndex: 0.94, anchorIndex: 0.96, momIndex: null, forecastDailyMyr: 2300, breach: true };
     const states = [
       campaign({
         campaignId: "tam",
@@ -423,7 +457,7 @@ describe("hardCutDirective (one-time cut to RM55/day)", () => {
 
   it("never fires into a weak or unmeasured till", () => {
     expect(hardCutDirective(adCampaign(), breached)).toBeNull();
-    const noGuard: GuardSignal = { rawIndex: null, adjIndex: null, anchorIndex: null, forecastDailyMyr: null, breach: false };
+    const noGuard: GuardSignal = { rawIndex: null, adjIndex: null, anchorIndex: null, momIndex: null, forecastDailyMyr: null, breach: false };
     expect(hardCutDirective(adCampaign(), noGuard)).toBeNull();
   });
 });

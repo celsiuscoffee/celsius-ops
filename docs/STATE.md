@@ -6,6 +6,33 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-27 — **Ads cut VERDICT: safe. Organic till FLAT on a payday-aligned
+  read; guard rebuilt.** Owner flagged the methodology: Malaysian salaries land
+  ~the 25th, so adjacent weeks sit at different points in a monthly demand
+  cycle and are NOT comparable. Redone same-days-of-month (Jun 20–26 vs
+  Jul 20–26 — payday-aligned AND weekday-complete, both post-cutover):
+  **organic 56,333 → 56,338 (+0.01%, FLAT)**, discounted 10,532 → 12,627
+  (+19.9%), total 66,865 → 68,965 (+3.1%). Per-outlet organic: PJ **+5.6%**,
+  SA **−4.2%**, Tam **−1.5%**. So a 47% ad cut moved organic till by nothing —
+  the marginal spend WAS waste, and **+RM4,252/mo of cuts stands**. Supersedes
+  the Jul 26 "organic −6.8%, Tamarind −12%" reading, a pure payday-cycle
+  artifact of comparing Jul 20–26 against Jul 13–19.
+  **Guard rebuilt (PR after #1072):** (a) reads ORGANIC till
+  (`ads/organic-revenue.ts`, promo/reward orders excluded; actual AND forecast
+  history must come from the SAME series or the ratio compares organic against
+  total and breaches instantly; labour-gate keeps TOTAL — a voucher order still
+  takes labour; revert via `ADS_GUARD_REVENUE=total`); (b) `momIndex` = window ÷
+  same days-of-month a month earlier, and a breach driven ONLY by rawIndex while
+  momIndex ≥0.97 is flagged `calendarArtifact` and does NOT roll back
+  (adjIndex/anchorIndex already cancel payday — one salary calendar fleet-wide —
+  so only rawIndex was exposed); (c) scoreboard anchor clamped to
+  `POS_CUTOVER_YMD=2026-06-18` so it cannot straddle the StoreHub→pos_native
+  cutover (source of the phantom −RM13.5k/mo till Δ).
+  **The organic/discounted split SUBTRACTS the SMS confound; it does NOT
+  attribute revenue to gads** (organic = walk-ins + regulars + Grab + ads; an
+  ad-driven customer redeeming an SMS voucher counts as discounted). Real
+  channel separation still needs a holdout or the value-based conversion tag.
+
 - 2026-07-25 — **"Old app version suddenly reappears" = expo-updates OTA
   regression from `runtimeVersion.policy: "appVersion"`** (branch
   `claude/version-regression-bug-adwked`, draft PR). Owner screenshots showed

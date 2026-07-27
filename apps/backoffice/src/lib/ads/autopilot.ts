@@ -78,6 +78,7 @@ import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { buildWeekForecast, FORECAST_WEEKS } from "@/lib/hr/revenue-forecast";
 import { dailyRevenueSeries } from "@/lib/hr/labour-gate";
+import { organicRevenueSeries } from "./organic-revenue";
 import { getAgentMode, logAgentAction, touchAgentRun, type AgentMode } from "@celsius/agents/src/substrate";
 import { buildAdsOptimizerReport, ENABLED_STATUSES } from "./optimizer";
 import { applyBudgetChange } from "./set-budget";
@@ -187,6 +188,22 @@ export const MAX_NEGATIVES_PER_CAMPAIGN = 25;
 // a negative fixed last week stops being re-reported.
 export const LEAK_LOOKBACK_DAYS = 7;
 
+// Which till signal the guard, the anchor and the cash scoreboard read.
+// ORGANIC (default) excludes promo/reward-driven orders — see
+// organic-revenue.ts. Total till is unusable as an ad signal while the SMS
+// lifecycle loop is minting vouchers: through the Jul 20 hard-cut, organic
+// fell ~8%/day while SMS-discounted rose ~20%/day, so the total read "flat"
+// and the guard stayed silent. Set ADS_GUARD_REVENUE=total to revert.
+export const GUARD_USES_ORGANIC = (process.env.ADS_GUARD_REVENUE || "organic") !== "total";
+const guardRevenueSeries = GUARD_USES_ORGANIC ? organicRevenueSeries : dailyRevenueSeries;
+
+// The cash scoreboard's anchor must not straddle the StoreHub -> pos_native
+// cutover (per-outlet Jun 7-17 2026): the two sources measure different things,
+// so a window spanning both invents a phantom revenue collapse (the -RM13.5k/mo
+// "till Δ" the scoreboard reported all week). Clamp the anchor to start no
+// earlier than the last outlet's cutover.
+export const POS_CUTOVER_YMD = process.env.ADS_POS_CUTOVER_YMD || "2026-06-18";
+
 // Pause probe — the only till-readable experiment at this spend:revenue ratio.
 // SHELVED by owner 2026-07-19 ("let tamarind follow the others") after the
 // probe was starved two nights running — all outlets stay on the gradual
@@ -212,18 +229,36 @@ export type GuardSignal = {
   rawIndex: number | null;    // actual ÷ forecast over the observation window
   adjIndex: number | null;    // rawIndex ÷ median(other outlets' rawIndex)
   anchorIndex: number | null; // current share of fleet revenue ÷ pre-descent share (cumulative-drift detector)
+  momIndex: number | null;    // this window ÷ the SAME days-of-month a month earlier (payday-aligned)
   forecastDailyMyr: number | null; // outlet's forecast till revenue per day (converts % gaps to ringgit)
   breach: boolean;
+  /** Set when a raw-only breach was suppressed as a salary-calendar artifact. */
+  calendarArtifact?: boolean;
 };
+
+// Malaysian salaries land on ~the 25th (owner, 2026-07-27), so till revenue
+// runs on a monthly cycle that a per-WEEKDAY forecaster cannot see. Comparing
+// two adjacent weeks sitting at different points in that cycle is not
+// apples-to-apples: it made Tamarind read -12% week-over-week when the
+// payday-aligned month-over-month figure was -1.5%, and the fleet read -6.8%
+// when organic was in fact FLAT (56,333 -> 56,338).
+//
+// adjIndex (vs the fleet) and anchorIndex (share of fleet) are already immune —
+// every outlet shares one salary calendar, so a fleet-wide payday dip cancels.
+// Only rawIndex, measured against a weekday forecast, is exposed. So a breach
+// driven ONLY by rawIndex, while the payday-aligned comparison is healthy, is a
+// calendar artifact rather than ad damage, and must not trigger a rollback.
+export const MOM_HEALTHY = 0.97;
 
 export function guardFromIndexes(
   rawIndex: number | null,
   otherIndexes: number[],
   anchorIndex: number | null = null,
   forecastDailyMyr: number | null = null,
+  momIndex: number | null = null,
 ): GuardSignal {
   if (rawIndex == null || !Number.isFinite(rawIndex)) {
-    return { rawIndex: null, adjIndex: null, anchorIndex: null, forecastDailyMyr: null, breach: false };
+    return { rawIndex: null, adjIndex: null, anchorIndex: null, momIndex: null, forecastDailyMyr: null, breach: false };
   }
   const others = otherIndexes.filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
   let adjIndex: number | null = null;
@@ -233,16 +268,23 @@ export function guardFromIndexes(
     if (median > 0) adjIndex = rawIndex / median;
   }
   const anchor = anchorIndex != null && Number.isFinite(anchorIndex) ? round2(anchorIndex) : null;
-  const breach =
-    rawIndex < GUARD_RAW_MIN ||
-    (adjIndex != null && adjIndex < GUARD_ADJ_MIN) ||
-    (anchor != null && anchor < ANCHOR_MIN);
+  const mom = momIndex != null && Number.isFinite(momIndex) ? round2(momIndex) : null;
+
+  const rawBreach = rawIndex < GUARD_RAW_MIN;
+  const relBreach =
+    (adjIndex != null && adjIndex < GUARD_ADJ_MIN) || (anchor != null && anchor < ANCHOR_MIN);
+  // Suppress a raw-ONLY breach when the payday-aligned view says the outlet is
+  // fine. A relative breach is never suppressed — that is real weakness.
+  const calendarArtifact = rawBreach && !relBreach && mom != null && mom >= MOM_HEALTHY;
+
   return {
     rawIndex: round2(rawIndex),
     adjIndex: adjIndex != null ? round2(adjIndex) : null,
     anchorIndex: anchor,
+    momIndex: mom,
     forecastDailyMyr: forecastDailyMyr != null && Number.isFinite(forecastDailyMyr) ? round2(forecastDailyMyr) : null,
-    breach,
+    breach: (rawBreach && !calendarArtifact) || relBreach,
+    ...(calendarArtifact ? { calendarArtifact: true } : {}),
   };
 }
 
@@ -626,7 +668,7 @@ async function windowActualForecast(
   const histStart = addDays(startYmd, -FORECAST_WEEKS * 7);
   const histEnd = addDays(startYmd, -1);
 
-  const series = await dailyRevenueSeries(outlet, histStart, endYmd);
+  const series = await guardRevenueSeries(outlet, histStart, endYmd);
   const history: Array<{ date: string; revenue: number }> = [];
   for (let d = histStart; d <= histEnd; d = addDays(d, 1)) history.push({ date: d, revenue: series.get(d) ?? 0 });
   const windowDates: string[] = [];
@@ -644,13 +686,37 @@ async function windowActualForecast(
   return { actual, forecast: fc.weekly };
 }
 
+/**
+ * Payday-aligned month-over-month index: this window's revenue ÷ the SAME
+ * days-of-month one month earlier. Shifting by calendar month (not by 28 days)
+ * keeps the salary-cycle position identical on both sides. Any window of 7n
+ * consecutive days is also weekday-complete, so the comparison is balanced on
+ * both axes at OBSERVE_DAYS=14.
+ */
+async function momIndexFor(
+  outlet: { id: string; loyaltyOutletId: string | null },
+  startYmd: string,
+  endYmd: string,
+): Promise<number | null> {
+  const shift = (ymd: string) => {
+    const [y, m, d] = ymd.split("-").map(Number);
+    const prev = new Date(Date.UTC(y, m - 2, d)); // m-1 is this month, m-2 the previous
+    return prev.toISOString().slice(0, 10);
+  };
+  const [now, prev] = await Promise.all([
+    windowActual(outlet, startYmd, endYmd).catch(() => 0),
+    windowActual(outlet, shift(startYmd), shift(endYmd)).catch(() => 0),
+  ]);
+  return prev > 0 ? now / prev : null;
+}
+
 /** Plain actual till revenue over a window (for the anchor's share-of-fleet math). */
 async function windowActual(
   outlet: { id: string; loyaltyOutletId: string | null },
   startYmd: string,
   endYmd: string,
 ): Promise<number> {
-  const series = await dailyRevenueSeries(outlet, startYmd, endYmd);
+  const series = await guardRevenueSeries(outlet, startYmd, endYmd);
   let sum = 0;
   for (const v of series.values()) sum += v;
   return sum;
@@ -748,11 +814,13 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
   const rawIndexByOutlet = new Map<string, number | null>();
   const actualNowByOutlet = new Map<string, number>();
   const forecastDailyByOutlet = new Map<string, number | null>();
+  const momIndexByOutlet = new Map<string, number | null>();
   for (const o of outlets) {
     const w = await windowActualForecast(o, guardStart, yesterday).catch(() => null);
     rawIndexByOutlet.set(o.id, w && w.forecast > 0 ? w.actual / w.forecast : null);
     actualNowByOutlet.set(o.id, w?.actual ?? 0);
     forecastDailyByOutlet.set(o.id, w && w.forecast > 0 ? w.forecast / OBSERVE_DAYS : null);
+    momIndexByOutlet.set(o.id, await momIndexFor(o, guardStart, yesterday).catch(() => null));
   }
 
   // Fixed-anchor drift check: this outlet's share of fleet revenue now vs the
@@ -762,14 +830,19 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
   let anchorFleetDaily: number | null = null; // pre-descent fleet till/day (cash-scoreboard baseline)
   if (firstChangeAt && outlets.length > 1) {
     const aEnd = addDays(mytDate(firstChangeAt), -1);
-    const aStart = addDays(aEnd, -(ANCHOR_WINDOW_DAYS - 1));
+    // Never let the anchor reach back across the StoreHub -> pos_native cutover:
+    // the sources measure different things, so a straddling window fabricates a
+    // revenue cliff (this is what produced the scoreboard's -RM13.5k/mo "till Δ").
+    const aStartRaw = addDays(aEnd, -(ANCHOR_WINDOW_DAYS - 1));
+    const aStart = aStartRaw < POS_CUTOVER_YMD ? POS_CUTOVER_YMD : aStartRaw;
+    const anchorDays = Math.max(1, Math.round((Date.parse(aEnd) - Date.parse(aStart)) / DAY_MS) + 1);
     const anchorActual = new Map<string, number>();
     for (const o of outlets) {
       anchorActual.set(o.id, await windowActual(o, aStart, aEnd).catch(() => 0));
     }
     const anchorTotal = [...anchorActual.values()].reduce((s, v) => s + v, 0);
     const nowTotal = [...actualNowByOutlet.values()].reduce((s, v) => s + v, 0);
-    anchorFleetDaily = anchorTotal > 0 ? anchorTotal / ANCHOR_WINDOW_DAYS : null;
+    anchorFleetDaily = anchorTotal > 0 ? anchorTotal / anchorDays : null;
     for (const o of outlets) {
       const aShare = anchorTotal > 0 ? (anchorActual.get(o.id) ?? 0) / anchorTotal : 0;
       const nShare = nowTotal > 0 ? (actualNowByOutlet.get(o.id) ?? 0) / nowTotal : 0;
@@ -782,9 +855,15 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     const others = [...rawIndexByOutlet.entries()]
       .filter(([k, v]) => k !== oid && v != null)
       .map(([, v]) => v as number);
-    guards[oid] = guardFromIndexes(raw, others, anchorIndexByOutlet.get(oid) ?? null, forecastDailyByOutlet.get(oid) ?? null);
+    guards[oid] = guardFromIndexes(
+      raw,
+      others,
+      anchorIndexByOutlet.get(oid) ?? null,
+      forecastDailyByOutlet.get(oid) ?? null,
+      momIndexByOutlet.get(oid) ?? null,
+    );
   }
-  const noGuard: GuardSignal = { rawIndex: null, adjIndex: null, anchorIndex: null, forecastDailyMyr: null, breach: false };
+  const noGuard: GuardSignal = { rawIndex: null, adjIndex: null, anchorIndex: null, momIndex: null, forecastDailyMyr: null, breach: false };
 
   // Waste applied to matching but not yet to the budget: sum the measured
   // spend of exclusions applied AFTER each campaign's last budget change.
