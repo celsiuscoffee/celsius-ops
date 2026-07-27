@@ -29,6 +29,7 @@ import { handleReminderAck } from "@/lib/ops-reminders";
 import { handleInstructionAck } from "@/lib/ops-instructions";
 import { handleOutletDeliveryReply } from "@/lib/inventory/exec/outlet-delivery-check";
 import { handleInternalInbound } from "@/lib/ops-intake";
+import { handleStaffInbound } from "@/lib/hr/agent/staff-assistant";
 import { handleSupplierMessage } from "@/lib/inventory/agents/supplier-chat-agent";
 import { sendPendingPurchaseOrders } from "@/lib/inventory/procurement-po-send";
 import { captureSupplierDocument } from "@/lib/inventory/agents/invoice-capture";
@@ -163,6 +164,23 @@ export async function POST(request: NextRequest) {
           });
           fromInternal = intake.internal;
         }
+        // 2c) HR staff assistant: a message from an ACTIVE STAFF-role phone is
+        // ALWAYS consumed here (even with the hr_ops_agent kill switch off) so
+        // it can never fall through to the supplier flows — a staff MC photo
+        // must not be vision-read as a supplier invoice, and the supplier
+        // agent must never reply to a barista. Replies only when the agent's
+        // registry mode is shadow/armed. Internally guarded, never throws.
+        let fromStaff = false;
+        if (isNewInbound && !fromInternal && !consumedByAck) {
+          const staffRes = await handleStaffInbound({
+            fromNumber: msg.from,
+            text: body,
+            waMessageId: msg.id,
+            type: msg.type,
+            mediaUrl,
+          });
+          fromStaff = staffRes.handled;
+        }
         // 3) Supplier-chat AI agent (full-auto, flag-gated + allow-listed). Reads
         // the message in PO context, auto-replies in the supplier's language, and
         // edits the PO for clear low-risk cases; substitutions / cancellations /
@@ -174,7 +192,7 @@ export async function POST(request: NextRequest) {
         // re-deliveries could both pass the agent's own check and double-apply a PO edit +
         // double-reply. The @unique wamid makes the first inbound store the atomic claim.
         let agentCapturedInvoice = false;
-        if (isNewInbound && !fromInternal && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
+        if (isNewInbound && !fromInternal && !fromStaff && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
           const agentRes = await handleSupplierMessage({
             fromNumber: msg.from,
             toNumber: businessNumber,
@@ -190,7 +208,7 @@ export async function POST(request: NextRequest) {
         // completed, ad-hoc bills) still gets vision-read and filed as a DRAFT
         // invoice for human review. Internal only — never replies. Trusts the
         // parser's docType, so PoP/DO/SOA photos are left for their own flows.
-        if (isNewInbound && !fromInternal && (msg.type === "document" || msg.type === "image") && !agentCapturedInvoice) {
+        if (isNewInbound && !fromInternal && !fromStaff && (msg.type === "document" || msg.type === "image") && !agentCapturedInvoice) {
           await captureSupplierDocument({
             fromNumber: msg.from,
             type: msg.type,
@@ -201,7 +219,7 @@ export async function POST(request: NextRequest) {
         // window — deliver any PO blocks waiting behind a cold-send template
         // prompt (raw.poPromptFor with no raw.poSentFor). Best-effort, internally
         // deduped, never throws.
-        if (isNewInbound && !fromInternal) {
+        if (isNewInbound && !fromInternal && !fromStaff) {
           await sendPendingPurchaseOrders(msg.from);
         }
       }

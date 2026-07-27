@@ -244,9 +244,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   Registry key `hr_ops_agent`, starts shadow; arming = 5 clean shadow ops +
   1 week clean digests. Design evidence = the 2026-07-16→20 manual onboarding
   arc in this session (5 staff ops: Farah/Nurayuni/Auni creates, Absah
-  dedup-update, Danish FT→PT split). **Next: implementation PR** (sender-router
-  + identity + staff reads in shadow + ledger wiring). Open: persona name,
-  BM register samples, chaser cadence (§11 of the doc).
+  dedup-update, Danish FT→PT split). **Stage 1 BUILT 2026-07-26** (same
+  branch): staff-persona assistant (`lib/hr/agent/staff-assistant.ts` — own-
+  record reads: shifts/hours/leave/claims, policy answers, escalate-to-HQ; NO
+  pay figures, NO writes), HR ops tools in the internal assistant
+  (`lib/hr/agent/ops-tools.ts` — find_staff w/ manager PII-gating+subtree,
+  hr_data_gaps, propose_hr_change shadow proposals → ledger + owner digest),
+  webhook sender-router (staff messages ALWAYS consumed before supplier flows
+  — fixes the staff-MC-read-as-invoice hazard; consumed silently while mode
+  off), registry seed `20260726_hr_ops_agent_seed` (mode 'off', NOT yet
+  applied to prod). Verified: tsc, eslint, 354 vitest, next build. **Next:**
+  apply seed + flip to shadow (owner), then stage 2 (armed writes after 5
+  clean shadow diffs), PIN-gated pay reads, doc intake. Open: persona name
+  (working: "Cel"), BM register samples, chaser cron.
 
 - 2026-07-15 -- **Agent substrate SHIPPED end-to-end.** Fleet review found the
   non-compounding pattern (every domain reinvented flags/queues/telemetry;
