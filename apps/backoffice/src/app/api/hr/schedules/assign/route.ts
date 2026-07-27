@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
+import { findCrossOutletOverlap } from "@/lib/hr/cross-outlet";
 import { sendOpsPush } from "@/lib/ops-push";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +73,19 @@ export async function POST(req: NextRequest) {
 
   if (session.role === "MANAGER" && !(await canAccessOutlet(session, outlet_id))) {
     return NextResponse.json({ error: "Forbidden — managers can only edit their assigned outlets" }, { status: 403 });
+  }
+
+  // Cross-outlet double-book guard: don't assign a shift that overlaps one this
+  // person already holds at another outlet the same day.
+  const conflict = await findCrossOutletOverlap(user_id, shift_date, outlet_id, start_time.slice(0, 5), end_time.slice(0, 5));
+  if (conflict) {
+    return NextResponse.json(
+      {
+        error: `Already rostered at ${conflict.outletName} (${conflict.start_time}–${conflict.end_time}) that day — a staffer can't work two outlets at once.`,
+        conflict,
+      },
+      { status: 409 },
+    );
   }
 
   // Week bounds (Monday-anchored) for the schedule row.

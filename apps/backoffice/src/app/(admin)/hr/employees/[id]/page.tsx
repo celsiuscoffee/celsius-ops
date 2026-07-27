@@ -32,6 +32,7 @@ type Employee = {
   phone: string;
   email: string | null;
   outletId: string | null;
+  outletIds?: string[];
   outlet: { name: string } | null;
   hrProfile: EmployeeProfile | null;
   username?: string | null;
@@ -269,6 +270,7 @@ export default function EmployeeDetailPage() {
     manager_user_id: "",
     basic_salary: "",
     hourly_rate: "",
+    hourly_rate_weekend: "",
     ic_number: "",
     date_of_birth: "",
     gender: "",
@@ -296,8 +298,7 @@ export default function EmployeeDetailPage() {
     overtime_flat_rate: "",
     ssfw_number: "",
     ea_commencement_date: "",
-    // Per-staff allowance overrides (blank = use global default)
-    attendance_allowance_amount: "",
+    // Per-staff allowance override (blank = use global default)
     performance_allowance_amount: "",
   });
 
@@ -308,6 +309,7 @@ export default function EmployeeDetailPage() {
     email: "",
     status: "ACTIVE",
     outletId: "",
+    outletIds: [] as string[],
     hrAccess: false,
     appAccessSet: new Set<string>(),
     pin: "",
@@ -333,6 +335,7 @@ export default function EmployeeDetailPage() {
         email: employee.email || "",
         status: employee.status || "ACTIVE",
         outletId: employee.outletId || "",
+        outletIds: employee.outletIds || [],
         hrAccess: hrList.length > 0 || employee.role === "OWNER" || employee.role === "ADMIN",
         appAccessSet: new Set(employee.appAccess || []),
         pin: "",
@@ -402,6 +405,10 @@ export default function EmployeeDetailPage() {
         email: access.email || null,
         status: access.status,
         outletId: access.outletId || null,
+        // Additional (rotation) outlets — never duplicate the primary here; the
+        // scheduling pool matches `outletId OR outletIds has`, so primary is
+        // already covered. Keeps the two lists disjoint like Settings → Staff.
+        outletIds: access.outletIds.filter((oid) => oid !== access.outletId),
         appAccess: Array.from(access.appAccessSet),
         moduleAccess: nextModuleAccess,
       };
@@ -446,6 +453,7 @@ export default function EmployeeDetailPage() {
         manager_user_id: profile.manager_user_id || "",
         basic_salary: profile.basic_salary?.toString() || "",
         hourly_rate: profile.hourly_rate?.toString() || "",
+        hourly_rate_weekend: profile.hourly_rate_weekend?.toString() || "",
         ic_number: profile.ic_number || "",
         date_of_birth: profile.date_of_birth?.slice(0, 10) || "",
         gender: profile.gender || "",
@@ -472,7 +480,6 @@ export default function EmployeeDetailPage() {
         overtime_flat_rate: p.overtime_flat_rate != null ? String(p.overtime_flat_rate) : "",
         ssfw_number: (p.ssfw_number as string) || "",
         ea_commencement_date: p.ea_commencement_date ? String(p.ea_commencement_date).slice(0, 10) : "",
-        attendance_allowance_amount: p.attendance_allowance_amount != null ? String(p.attendance_allowance_amount) : "",
         performance_allowance_amount: p.performance_allowance_amount != null ? String(p.performance_allowance_amount) : "",
       });
     }
@@ -504,10 +511,8 @@ export default function EmployeeDetailPage() {
       if (canSeeSalary) {
         payload.basic_salary = form.basic_salary ? parseFloat(form.basic_salary) : 0;
         payload.hourly_rate = form.hourly_rate ? parseFloat(form.hourly_rate) : null;
-        // Allowance overrides: blank input → NULL (use global default)
-        payload.attendance_allowance_amount = form.attendance_allowance_amount
-          ? parseFloat(form.attendance_allowance_amount)
-          : null;
+        payload.hourly_rate_weekend = form.hourly_rate_weekend ? parseFloat(form.hourly_rate_weekend) : null;
+        // Allowance override: blank input → NULL (use global default)
         payload.performance_allowance_amount = form.performance_allowance_amount
           ? parseFloat(form.performance_allowance_amount)
           : null;
@@ -515,7 +520,7 @@ export default function EmployeeDetailPage() {
         // Remove stale empties from the spread above so they don't land on the server
         delete payload.basic_salary;
         delete payload.hourly_rate;
-        delete payload.attendance_allowance_amount;
+        delete payload.hourly_rate_weekend;
         delete payload.performance_allowance_amount;
       }
 
@@ -801,17 +806,17 @@ export default function EmployeeDetailPage() {
               <Field label="Basic Salary (RM/month)">
                 <input type="number" value={form.basic_salary} onChange={(e) => update("basic_salary", e.target.value)} className="input" placeholder="0.00" />
               </Field>
-              <Field label="Hourly Rate (RM) — for part-timers">
+              <Field label="Hourly Rate (RM) — PT weekday (Mon–Fri)">
                 <input type="number" value={form.hourly_rate} onChange={(e) => update("hourly_rate", e.target.value)} className="input" placeholder="Optional" />
+              </Field>
+              <Field label="Weekend Rate (RM) — PT Sat/Sun (blank = weekday rate; public holidays pay 2×)">
+                <input type="number" value={form.hourly_rate_weekend} onChange={(e) => update("hourly_rate_weekend", e.target.value)} className="input" placeholder="Optional" />
               </Field>
               <div className="mt-2 border-t pt-3">
                 <p className="mb-2 text-xs font-medium text-muted-foreground">
-                  Allowances — leave blank to use the global default from HR Settings → Allowances.
-                  Each value is a max; attendance penalties and performance score reduce the actual payout.
+                  Allowance — leave blank to use the global default from HR Settings → Allowances.
+                  The value is a max; lateness/absence and review penalties reduce the actual payout.
                 </p>
-                <Field label="Attendance Allowance Max (RM/month)">
-                  <input type="number" min={0} step="0.01" value={form.attendance_allowance_amount} onChange={(e) => update("attendance_allowance_amount", e.target.value)} className="input" placeholder="Use default" />
-                </Field>
                 <Field label="Performance Allowance Max (RM/month)">
                   <input type="number" min={0} step="0.01" value={form.performance_allowance_amount} onChange={(e) => update("performance_allowance_amount", e.target.value)} className="input" placeholder="Use default" />
                 </Field>
@@ -1238,12 +1243,53 @@ export default function EmployeeDetailPage() {
                   <option value="DEACTIVATED">Deactivated</option>
                 </select>
               </Field>
-              <Field label="Outlet">
-                <select value={access.outletId} onChange={(e) => setAccess((a) => ({ ...a, outletId: e.target.value }))} className="input">
+              <Field label="Primary Outlet">
+                <select
+                  value={access.outletId}
+                  onChange={(e) =>
+                    setAccess((a) => ({
+                      ...a,
+                      outletId: e.target.value,
+                      // Keep the additional list disjoint from the new primary.
+                      outletIds: a.outletIds.filter((oid) => oid !== e.target.value),
+                    }))
+                  }
+                  className="input"
+                >
                   <option value="">HQ / No outlet</option>
                   {outlets?.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
               </Field>
+              {access.outletId && (outlets?.length ?? 0) > 1 && (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Also works at (rotation)</label>
+                  <div className="space-y-1 rounded-md border border-gray-200 p-2">
+                    {outlets
+                      ?.filter((o) => o.id !== access.outletId)
+                      .map((o) => (
+                        <label key={o.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={access.outletIds.includes(o.id)}
+                            onChange={() =>
+                              setAccess((a) => ({
+                                ...a,
+                                outletIds: a.outletIds.includes(o.id)
+                                  ? a.outletIds.filter((id) => id !== o.id)
+                                  : [...a.outletIds, o.id],
+                              }))
+                            }
+                          />
+                          {o.name}
+                        </label>
+                      ))}
+                  </div>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Tick every outlet this staffer rotates to. They&apos;ll appear in the schedule
+                    grid, AI Fill pool, and shift-assist candidates for each — with weekly hours summed across all of them.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Credentials */}

@@ -1,3 +1,4 @@
+import { sortOutlets } from "@/lib/outlet-order";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, verifyToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -38,14 +39,15 @@ export async function GET(req: NextRequest) {
   const scope = isAdmin ? (reqOutlet || "all") : user.outletId;
   if (!scope) return NextResponse.json({ error: "No outlet" }, { status: 400 });
 
-  const all = await prisma.outlet.findMany({
-    where: { status: "ACTIVE" },
-    select: {
-      id: true, name: true, storehubId: true,
-      loyaltyOutletId: true, pickupStoreId: true, posNativeCutoverAt: true,
-    },
-    orderBy: { name: "asc" },
-  });
+  const all = sortOutlets(
+    await prisma.outlet.findMany({
+      where: { status: "ACTIVE" },
+      select: {
+        id: true, name: true, storehubId: true,
+        loyaltyOutletId: true, pickupStoreId: true, posNativeCutoverAt: true,
+      },
+    }),
+  );
   const pick = scope === "all" ? all : all.filter((o) => o.id === scope);
   if (scope !== "all" && pick.length === 0) {
     return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
@@ -82,13 +84,13 @@ export async function GET(req: NextRequest) {
   );
 
   const warn: string[] = [];
-  const unified: { ts: string; total: number; channel: "dine_in" | "takeaway" | "delivery" }[] = [];
+  const unified: { ts: string; total: number; channel: "dine_in" | "takeaway" | "delivery"; units: number }[] = [];
   for (const r of unifiedResults) {
     if (r.status === "rejected") {
       warn.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
       continue;
     }
-    for (const ev of r.value) unified.push({ ts: ev.ts, total: ev.total, channel: ev.channel });
+    for (const ev of r.value) unified.push({ ts: ev.ts, total: ev.total, channel: ev.channel, units: ev.units ?? 1 });
   }
 
   const inCur = (d: string) => d >= cur.from && d <= cur.to;
@@ -119,14 +121,15 @@ export async function GET(req: NextRequest) {
     const d = getMYTDateStr(ev.ts);
     const h = getMYTHour(ev.ts);
     const net = ev.total; // RM
+    const u = ev.units ?? 1; // receipts for POS/StoreHub/pickup; items/day for consignment
     if (inCur(d)) {
-      curRev += net; curOrd++;
+      curRev += net; curOrd += u;
       curByDate[d] = (curByDate[d] || 0) + net;
       curHour[h] += net;
-      chanRev[ev.channel] += net; chanOrd[ev.channel]++;
-      const rd = getRound(h); if (rd) { roundRev[rd] += net; roundOrd[rd]++; }
+      chanRev[ev.channel] += net; chanOrd[ev.channel] += u;
+      const rd = getRound(h); if (rd) { roundRev[rd] += net; roundOrd[rd] += u; }
     } else if (inPrev(d)) {
-      if (Date.parse(ev.ts) <= prevCutoffMs) { prevRev += net; prevOrd++; }
+      if (Date.parse(ev.ts) <= prevCutoffMs) { prevRev += net; prevOrd += u; }
       prevByDate[d] = (prevByDate[d] || 0) + net;
       prevHour[h] += net;
     }

@@ -43,6 +43,13 @@ import { uploadPhoto } from "../../../lib/upload";
 
 const PENDING_STATUSES = ["SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
 
+// What the CURRENT delivery should bring: the remaining balance on a
+// partially-received PO (its `quantity` was overwritten to the cumulative
+// already received — prefill that and confirming would double-receive),
+// else the ordered quantity.
+const expectedNow = (item: { quantity: number; remainingQty?: number }) =>
+  item.remainingQty ?? item.quantity;
+
 type ReceivedRow = {
   qty: string;
   expiryDate?: string;
@@ -95,10 +102,11 @@ export default function ReceivingPage() {
 
   const openPO = (po: PendingOrder) => {
     setSelectedPO(po);
-    // pre-fill ordered quantities (happy path)
+    // Pre-fill the expected quantities (happy path). For a partially-received
+    // PO that's the REMAINING balance, not the (overwritten) line quantity.
     const prefill: Record<string, ReceivedRow> = {};
     for (const item of po.items) {
-      prefill[item.id] = { qty: String(item.quantity) };
+      prefill[item.id] = { qty: String(expectedNow(item)) };
     }
     setReceived(prefill);
     setPhotos([]);
@@ -156,11 +164,14 @@ export default function ReceivingPage() {
           const qty = parseFloat(r?.qty ?? "0") || 0;
           return {
             productId: item.productId,
-            orderedQty: item.quantity,
+            // Snapshot the ORIGINAL order target so later receivings'
+            // completeness math stays anchored (line quantity is overwritten
+            // to cumulative received after each receiving).
+            orderedQty: item.orderedOriginalQty ?? item.quantity,
             receivedQty: qty,
             expiryDate: r?.expiryDate || undefined,
             discrepancyReason:
-              qty !== item.quantity
+              qty !== expectedNow(item)
                 ? r?.discrepancyReason || "Quantity mismatch"
                 : undefined,
           };
@@ -410,9 +421,11 @@ function ReceiveDetail({
             {po.items.map((item) => {
               const r = received[item.id];
               const num = parseFloat(r?.qty ?? "");
-              const isMatch = !isNaN(num) && num === item.quantity;
-              const isShort = !isNaN(num) && num < item.quantity;
-              const isOver = !isNaN(num) && num > item.quantity;
+              const expected = expectedNow(item);
+              const prior = item.receivedSoFarQty ?? 0;
+              const isMatch = !isNaN(num) && num === expected;
+              const isShort = !isNaN(num) && num < expected;
+              const isOver = !isNaN(num) && num > expected;
               return (
                 <View
                   key={item.id}
@@ -432,7 +445,10 @@ function ReceiveDetail({
                         {item.product}
                       </Text>
                       <Text className="text-xs font-body text-muted">
-                        Ordered {item.quantity} {item.uom} · RM{" "}
+                        {prior > 0
+                          ? `Balance ${expected} of ${item.orderedOriginalQty ?? item.quantity} (${prior} received)`
+                          : `Ordered ${item.quantity}`}{" "}
+                        {item.uom} · RM{" "}
                         {Number(item.unitPrice ?? 0).toFixed(2)}/{item.uom}
                       </Text>
                     </View>
@@ -441,14 +457,14 @@ function ReceiveDetail({
                     ) : isShort ? (
                       <View className="rounded-full bg-danger/10 px-2 py-0.5">
                         <Text className="text-[10px] font-body-bold text-danger">
-                          Short {(item.quantity - num).toFixed(0)}
+                          Short {(expected - num).toFixed(0)}
                         </Text>
                       </View>
                     ) : null}
                   </View>
                   <View className="mt-3 flex-row items-center gap-2">
                     <Pressable
-                      onPress={() => onStepQty(item.id, -1, item.quantity)}
+                      onPress={() => onStepQty(item.id, -1, expected)}
                       className="h-11 w-11 items-center justify-center rounded-xl bg-primary-50 active:opacity-80"
                     >
                       <Text className="text-xl font-display text-primary">−</Text>
@@ -460,7 +476,7 @@ function ReceiveDetail({
                       className="h-11 min-w-24 flex-1 rounded-xl border border-border bg-surface px-3 text-center text-base font-body-bold text-espresso tabular-nums"
                     />
                     <Pressable
-                      onPress={() => onStepQty(item.id, 1, item.quantity)}
+                      onPress={() => onStepQty(item.id, 1, expected)}
                       className="h-11 w-11 items-center justify-center rounded-xl bg-primary-50 active:opacity-80"
                     >
                       <Text className="text-xl font-display text-primary">+</Text>
@@ -471,7 +487,7 @@ function ReceiveDetail({
                     {!isMatch ? (
                       <Pressable
                         onPress={() =>
-                          onUpdateQty(item.id, String(item.quantity))
+                          onUpdateQty(item.id, String(expected))
                         }
                         className="ml-auto rounded-full bg-success/10 px-2 py-1"
                       >

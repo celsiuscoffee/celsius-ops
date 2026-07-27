@@ -3,8 +3,9 @@ import { checkCronAuth } from "@celsius/shared";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews, replyToReview } from "@/lib/reviews/gbp";
-import { generateReply, extractImprovement, POSITIVE_THRESHOLD } from "@/lib/reviews/auto-reply";
-import { logAgentAction, touchAgentRun } from "@/lib/agents/substrate";
+import { generateReplyWithUsage, extractImprovement, POSITIVE_THRESHOLD } from "@/lib/reviews/auto-reply";
+import { logAgentAction, touchAgentRun } from "@celsius/agents/src/substrate";
+import { logAgentMessage } from "@celsius/agents/src/messages";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -89,7 +90,7 @@ export async function GET(req: NextRequest) {
       for (const review of candidates) {
         if (posted >= MAX_PER_OUTLET || totalPosted + posted >= MAX_TOTAL) break;
         try {
-          const reply = await generateReply({
+          const { reply, usage } = await generateReplyWithUsage({
             rating: review.rating,
             reviewer: review.reviewer.name,
             comment: review.comment,
@@ -114,6 +115,7 @@ export async function GET(req: NextRequest) {
             refId: review.id,
             outletId: outlet.id,
             model: "claude-sonnet-4-6",
+            usage,
           });
 
           // Happy-but-fixable: read the praise for a concrete point and flag it
@@ -140,6 +142,18 @@ export async function GET(req: NextRequest) {
                   update: { point: verdict.point },
                 });
                 flagged++;
+                // Reviews agent hands the fixable point to the Ops agent, which
+                // turns it into a WhatsApp nudge for the outlet. Logged in plain
+                // English so the owner can follow the handoff on the pulse feed.
+                await logAgentMessage({
+                  fromAgent: "reviews_auto_reply",
+                  toAgent: "ops_nudges",
+                  kind: "handoff",
+                  summary: `Spotted "${verdict.point}" inside a ${review.rating}-star review at ${outlet.name} and passed it to the Ops agent to follow up with the outlet.`,
+                  refTable: "review_improvement_flag",
+                  refId: review.id,
+                  outletId: outlet.id,
+                });
               }
             } catch (cErr) {
               console.error(

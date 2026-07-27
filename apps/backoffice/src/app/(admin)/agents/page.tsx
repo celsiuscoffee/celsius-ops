@@ -10,6 +10,7 @@ import {
   Zap,
   AlertTriangle,
   RefreshCw,
+  Send,
 } from "lucide-react";
 
 // /agents — the fleet control panel. One row per autonomous actor from
@@ -36,6 +37,8 @@ interface AgentRow {
   last_run_at: string | null;
   last_action_at: string | null;
   week: { total: number; autonomous: number; overridden: number };
+  estCost: { perRun: number; perMonth: number };
+  actualCost30d: number;
 }
 
 interface ActionRow {
@@ -50,6 +53,28 @@ interface ActionRow {
   model: string | null;
   cost_usd: number | null;
 }
+
+interface MessageRow {
+  id: string;
+  at: string;
+  from_agent: string;
+  to_agent: string | null;
+  kind: "handoff" | "learning" | "logic_change" | "report" | "correction" | "note";
+  summary: string;
+  detail: string | null;
+  outlet_id: string | null;
+  fromLabel: string;
+  toLabel: string | null;
+}
+
+const KIND_META: Record<MessageRow["kind"], { label: string; emoji: string; classes: string }> = {
+  handoff: { label: "Handoff", emoji: "🔁", classes: "bg-blue-50 text-blue-700" },
+  correction: { label: "Correction", emoji: "🛠", classes: "bg-rose-50 text-rose-700" },
+  learning: { label: "Learned", emoji: "🧠", classes: "bg-violet-50 text-violet-700" },
+  logic_change: { label: "Logic change", emoji: "⚙️", classes: "bg-amber-50 text-amber-700" },
+  report: { label: "Report", emoji: "📣", classes: "bg-emerald-50 text-emerald-700" },
+  note: { label: "Your note", emoji: "💬", classes: "bg-gray-100 text-gray-700" },
+};
 
 const MODE_META: Record<AgentMode, { label: string; classes: string; icon: React.ReactNode }> = {
   off: { label: "Off", classes: "bg-gray-100 text-gray-600", icon: <CircleOff className="h-3.5 w-3.5" /> },
@@ -68,6 +93,13 @@ const DOMAIN_LABELS: Record<string, string> = {
   pos: "POS & Merchandising",
 };
 
+function usd(n: number): string {
+  if (n === 0) return "$0";
+  if (n < 0.01) return "<$0.01";
+  if (n < 10) return `$${n.toFixed(2)}`;
+  return `$${n.toFixed(0)}`;
+}
+
 function timeAgo(iso: string | null): string {
   if (!iso) return "never";
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
@@ -85,6 +117,42 @@ export default function AgentsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [actions, setActions] = useState<Record<string, ActionRow[]>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  const [view, setView] = useState<"fleet" | "conversations">("fleet");
+  const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [msgKind, setMsgKind] = useState<string>("");
+  const [msgLoading, setMsgLoading] = useState(false);
+  const [tgBusy, setTgBusy] = useState(false);
+  const [tgStatus, setTgStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function connectTelegram() {
+    setTgBusy(true);
+    setTgStatus(null);
+    try {
+      const res = await fetch("/api/agents/pulse-webhook/register", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) {
+        // The register route returns a plain-English reason when an env var is
+        // still missing (bot token / webhook secret / app url).
+        throw new Error(json.error || "Registration failed");
+      }
+      setTgStatus({ ok: true, text: "Connected. Replies and button taps now reach the agents." });
+    } catch (e) {
+      setTgStatus({ ok: false, text: e instanceof Error ? e.message : "Registration failed" });
+    } finally {
+      setTgBusy(false);
+    }
+  }
+
+  const loadMessages = useCallback(async (kind: string) => {
+    setMsgLoading(true);
+    try {
+      const res = await fetch(`/api/agents/messages${kind ? `?kind=${kind}` : ""}`);
+      const json = await res.json();
+      if (res.ok) setMessages(json.messages);
+    } finally {
+      setMsgLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,6 +215,11 @@ export default function AgentsPage() {
   const armed = agents.filter((a) => a.mode === "armed").length;
   const shadow = agents.filter((a) => a.mode === "shadow").length;
   const noCriteria = agents.filter((a) => a.mode !== "off" && !a.arming_criteria).length;
+  // Only armed/shadow agents actually run, so only they carry a live cost.
+  const estMonthly = agents
+    .filter((a) => a.mode !== "off")
+    .reduce((sum, a) => sum + (a.estCost?.perMonth ?? 0), 0);
+  const actual30d = agents.reduce((sum, a) => sum + (a.actualCost30d ?? 0), 0);
 
   return (
     <div className="p-3 sm:p-6">
@@ -156,22 +229,75 @@ export default function AgentsPage() {
             <Bot className="h-5 w-5 text-gray-500" /> AI Agents
           </h2>
           <p className="mt-0.5 text-sm text-gray-500">
-            Every autonomous actor, its mode, and its action ledger. Arming requires written arming criteria.
+            Every autonomous actor, its mode and cost, and the plain-English record of what they tell each other.
           </p>
         </div>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void connectTelegram()}
+              disabled={tgBusy}
+              title="Register the Telegram webhook so your replies and button taps reach the agents. Set CELSIUS_PULSE_WEBHOOK_SECRET first."
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <Send className="h-3.5 w-3.5" /> {tgBusy ? "Connecting..." : "Connect Telegram"}
+            </button>
+            <button
+              onClick={() => (view === "fleet" ? void load() : void loadMessages(msgKind))}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Refresh
+            </button>
+          </div>
+          {tgStatus && (
+            <p className={`max-w-xs text-right text-xs ${tgStatus.ok ? "text-green-600" : "text-amber-600"}`}>
+              {tgStatus.text}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-5 inline-flex overflow-hidden rounded-lg border border-gray-200">
         <button
-          onClick={() => void load()}
-          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+          onClick={() => setView("fleet")}
+          className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${view === "fleet" ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
         >
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          Fleet
+        </button>
+        <button
+          onClick={() => {
+            setView("conversations");
+            if (messages.length === 0) void loadMessages(msgKind);
+          }}
+          className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${view === "conversations" ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+        >
+          Conversations
         </button>
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {view === "conversations" && (
+        <Conversations
+          messages={messages}
+          loading={msgLoading}
+          activeKind={msgKind}
+          onKind={(k) => {
+            setMsgKind(k);
+            void loadMessages(k);
+          }}
+        />
+      )}
+
+      {view === "fleet" && (
+      <>
+      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Total agents" value={agents.length} />
         <Stat label="Armed" value={armed} accent="text-emerald-700" />
         <Stat label="Shadow" value={shadow} accent="text-amber-700" />
         <Stat label="Active w/o arming criteria" value={noCriteria} accent={noCriteria ? "text-red-600" : undefined} />
+      </div>
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <TextStat label="Est. API cost / month" value={usd(estMonthly)} sub="running agents, at current token estimates" />
+        <TextStat label="Actual API cost / 30d" value={usd(actual30d)} sub="from the action ledger" accent="text-gray-900" />
       </div>
 
       {error && (
@@ -200,8 +326,10 @@ export default function AgentsPage() {
                   <th className="px-4 py-2.5 font-medium">Trigger</th>
                   <th className="px-4 py-2.5 font-medium">LLM</th>
                   <th className="px-4 py-2.5 font-medium">Last run</th>
-                  <th className="px-4 py-2.5 font-medium">Last action</th>
                   <th className="px-4 py-2.5 font-medium">7-day actions</th>
+                  <th className="px-4 py-2.5 font-medium">Est / run</th>
+                  <th className="px-4 py-2.5 font-medium">Est / month</th>
+                  <th className="px-4 py-2.5 font-medium">Actual 30d</th>
                 </tr>
               </thead>
               <tbody>
@@ -221,6 +349,86 @@ export default function AgentsPage() {
           </div>
         </div>
       ))}
+      </>
+      )}
+    </div>
+  );
+}
+
+// The Conversations feed: plain-English record of what agents tell each other,
+// what they learn, and when their logic changes. Same data the pulse Telegram
+// channel receives, always live here regardless of Telegram config.
+function Conversations({
+  messages,
+  loading,
+  activeKind,
+  onKind,
+}: {
+  messages: MessageRow[];
+  loading: boolean;
+  activeKind: string;
+  onKind: (k: string) => void;
+}) {
+  const FILTERS: { key: string; label: string }[] = [
+    { key: "", label: "All" },
+    { key: "handoff", label: "🔁 Handoffs" },
+    { key: "correction", label: "🛠 Corrections" },
+    { key: "learning", label: "🧠 Learnings" },
+    { key: "logic_change", label: "⚙️ Logic changes" },
+    { key: "report", label: "📣 Reports" },
+    { key: "note", label: "💬 Your notes" },
+  ];
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap gap-1.5">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            onClick={() => onKind(f.key)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              activeKind === f.key ? "bg-gray-900 text-white" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {loading && <div className="py-12 text-center text-sm text-gray-400">Loading conversations…</div>}
+      {!loading && messages.length === 0 && (
+        <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-sm text-gray-500">
+          No agent communications yet. They appear here (and on the pulse Telegram channel) as agents hand work
+          to each other, learn from corrections, or change mode.
+        </div>
+      )}
+      {!loading && messages.length > 0 && (
+        <ul className="space-y-2">
+          {messages.map((m) => {
+            const meta = KIND_META[m.kind];
+            return (
+              <li key={m.id} className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <span className="font-semibold text-gray-900">{m.fromLabel}</span>
+                    {m.toLabel && (
+                      <>
+                        <span className="text-gray-400">→</span>
+                        <span className="font-semibold text-gray-900">{m.toLabel}</span>
+                      </>
+                    )}
+                    <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.classes}`}>
+                      {meta.emoji} {meta.label}
+                    </span>
+                  </div>
+                  <span className="shrink-0 text-xs text-gray-400">{timeAgo(m.at)}</span>
+                </div>
+                <p className="mt-1 text-sm text-gray-700">{m.summary}</p>
+                {m.detail && <p className="mt-0.5 text-xs text-gray-400">{m.detail}</p>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -230,6 +438,16 @@ function Stat({ label, value, accent }: { label: string; value: number; accent?:
     <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
       <div className={`text-2xl font-semibold ${accent ?? "text-gray-900"}`}>{value}</div>
       <div className="mt-0.5 text-xs text-gray-500">{label}</div>
+    </div>
+  );
+}
+
+function TextStat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className={`mt-0.5 text-2xl font-semibold ${accent ?? "text-gray-900"}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-[11px] text-gray-400">{sub}</div>}
     </div>
   );
 }
@@ -303,17 +521,25 @@ function AgentRowView({
           )}
         </td>
         <td className="px-4 py-3 text-xs text-gray-500">{timeAgo(agent.last_run_at)}</td>
-        <td className="px-4 py-3 text-xs text-gray-500">{timeAgo(agent.last_action_at)}</td>
         <td className="px-4 py-3 text-xs text-gray-600">
           {agent.week.total}
           {agent.week.overridden > 0 && (
             <span className="ml-1.5 text-red-600">({agent.week.overridden} overridden)</span>
           )}
         </td>
+        <td className="px-4 py-3 text-xs text-gray-600">
+          {agent.uses_llm && agent.estCost.perRun > 0 ? usd(agent.estCost.perRun) : <span className="text-gray-300">-</span>}
+        </td>
+        <td className="px-4 py-3 text-xs text-gray-600">
+          {agent.mode !== "off" && agent.estCost.perMonth > 0 ? usd(agent.estCost.perMonth) : <span className="text-gray-300">-</span>}
+        </td>
+        <td className="px-4 py-3 text-xs text-gray-700">
+          {agent.actualCost30d > 0 ? usd(agent.actualCost30d) : <span className="text-gray-300">-</span>}
+        </td>
       </tr>
       {expanded && (
         <tr className="border-b border-gray-50 bg-gray-50/40 last:border-0">
-          <td colSpan={7} className="px-4 py-4 sm:px-11">
+          <td colSpan={9} className="px-4 py-4 sm:px-11">
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3 text-sm">
                 <p className="text-gray-700">{agent.description || "No description."}</p>
@@ -329,6 +555,11 @@ function AgentRowView({
                     <span className="text-red-600">Not set — this agent cannot be armed until it is.</span>
                   )}
                 </Detail>
+                {agent.uses_llm && agent.estCost.perRun > 0 && (
+                  <Detail label="Expected cost">
+                    {usd(agent.estCost.perRun)}/run, {usd(agent.estCost.perMonth)}/month at current token estimates ({agent.model}). Actual last 30 days: {usd(agent.actualCost30d)}.
+                  </Detail>
+                )}
                 {agent.kill_switch_note && (
                   <Detail label="Legacy kill switch">{agent.kill_switch_note}</Detail>
                 )}

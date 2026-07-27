@@ -6,9 +6,11 @@ import { Fragment, useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   Bot, CalendarDays, Send, Loader2, ArrowLeftRight,
-  ChevronLeft, ChevronRight, RotateCcw, Trash2,
+  ChevronLeft, ChevronRight, RotateCcw, Trash2, Sparkles, X,
+  ChefHat, Coffee, RefreshCw, Plus,
 } from "lucide-react";
 import { HrPageHeader } from "@/components/hr/page-header";
+import { AssistPanel } from "@/components/hr/assist-panel";
 
 type ShiftTemplate = {
   id: string;
@@ -67,6 +69,8 @@ type GridData = {
   schedule: { id: string; status: string } | null;
   shifts: Shift[];
   leaves: LeaveRange[];
+  // Shifts this person holds at OTHER outlets this week — blocks the cell here.
+  elsewhere?: Array<{ user_id: string; shift_date: string; start_time: string; end_time: string; outlet_name: string; suggested: boolean }>;
   availability: Availability[];
   weeklyAvailability: WeeklyAvailability[];
   coverageRules: CoverageRule[];
@@ -77,6 +81,8 @@ type GridData = {
 type LabourGateInfo = {
   forecastRevenue: number;
   rosterCost: number;
+  ftFixedCost: number;
+  ptCost: number;
   rosterHours: number;
   pct: number | null;
   targetPct: number;
@@ -84,7 +90,13 @@ type LabourGateInfo = {
   verdict: "green" | "amber" | "red" | "unknown";
   blockers: string[];
   warnings: string[];
-  coverage?: Array<{ date: string; neededHours: number; scheduledHours: number; shortHours: number }>;
+  coverage?: Array<{
+    date: string; neededHours: number; scheduledHours: number; shortHours: number;
+    items?: number;
+    barItems?: number;
+    kitItems?: number;
+    forecast?: number; pct?: number | null; isWeekend?: boolean; isHoliday?: boolean; holidayName?: string;
+  }>;
 };
 
 type SwapRequest = {
@@ -125,6 +137,10 @@ function addWeeks(date: string, n: number): string {
 function formatDay(date: string) {
   const d = new Date(date + "T00:00:00Z");
   return String(d.getUTCDate());
+}
+
+function fmtH(h: number): string {
+  return h % 1 === 0 ? String(h) : h.toFixed(1);
 }
 
 export default function SchedulesPage() {
@@ -172,11 +188,47 @@ export default function SchedulesPage() {
   const [view, setView] = useState<"week" | "day">("week");
   const [dayIdx, setDayIdx] = useState(0);
   const [generating, setGenerating] = useState(false);
+  const [fillMode, setFillMode] = useState<"tight" | "mid" | "safe">("tight");
+  // Open-slot creation is off for now (owner 2026-07-22) — generation always
+  // proposes PT suggestions. Kept as state so the flow is easy to restore.
+  const [ptFillMode] = useState<"open_slots" | "assign">("assign");
+  const [assistDate, setAssistDate] = useState<string | null>(null); // per-day Assist modal
+  const [whyDate, setWhyDate] = useState<string | null>(null); // per-day "why this staffing" popover
+  // Per-day demand coverage (same model as AI Fill / Assist) so the cell "+ Add"
+  // picker can lead with the shift the day is actually short on — filtered to
+  // the clicked person's station (a kitchen hand sees kitchen gaps, a barista
+  // sees counter gaps). Lazily fetched per date when a picker opens; cleared on
+  // any save so gaps stay live.
+  const [dayCov, setDayCov] = useState<Record<string, Array<{
+    template_id?: string; label?: string; slot_start: string; slot_end: string;
+    min_staff: number; concurrent: number; gap: number;
+    kitchen_gap?: number; barista_gap?: number;
+  }>>>({});
   const [clearing, setClearing] = useState(false);
   const [swapAction, setSwapAction] = useState<string | null>(null);
+  const [slotBusy, setSlotBusy] = useState<string | null>(null);
+  const [postSlotForm, setPostSlotForm] = useState<{ date: string; templateId: string; station: "barista" | "kitchen" } | null>(null);
+  // Collapsed by default — open-slots-first mode can post 40+ slots and a
+  // card wall buried the actual roster grid (owner: "cannot see schedule").
+  const [slotsPanelOpen, setSlotsPanelOpen] = useState(false);
 
   // Get outlets list from the old endpoint (for dropdown)
   const { data: scheduleList } = useFetch<{ outlets: { id: string; name: string }[] }>("/api/hr/schedules");
+
+  // When a cell picker opens, fetch that day's demand coverage (once per date)
+  // so the picker can suggest the short window directly on "+ Add".
+  useEffect(() => {
+    const dt = pickerOpen?.date;
+    if (!dt || !selectedOutlet || dayCov[dt]) return;
+    let stale = false;
+    fetch(`/api/hr/schedules/candidates?outlet_id=${selectedOutlet}&date=${dt}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!stale && j) setDayCov((prev) => ({ ...prev, [dt]: j.coverage || [] }));
+      })
+      .catch(() => {});
+    return () => { stale = true; };
+  }, [pickerOpen, selectedOutlet, dayCov]);
 
   useEffect(() => {
     if (scheduleList?.outlets && outlets.length === 0) {
@@ -192,6 +244,81 @@ export default function SchedulesPage() {
     : null;
 
   const { data: grid, mutate } = useFetch<GridData>(gridUrl);
+
+  // Open slots for this outlet+week — unfilled gaps the generator (or a
+  // manager, source 'manual') posted for staff to book in the staff apps.
+  type SlotRequest = { id: string; user_id: string; name: string; week_hours: number; week_days: number };
+  type OpenSlot = {
+    id: string; shift_date: string; start_time: string; end_time: string;
+    break_minutes: number | null; station: string; role_type: string | null;
+    source: string; status: string; claimed_by: string | null; claimed_at: string | null; claimed_by_name: string | null;
+    requests: SlotRequest[];
+  };
+  const { data: openSlotsData, mutate: mutateOpenSlots } = useFetch<{ slots: OpenSlot[] }>(
+    selectedOutlet ? `/api/hr/open-shifts?outlet_id=${selectedOutlet}&week_start=${weekStart}` : null,
+  );
+  const openSlots = useMemo(() => openSlotsData?.slots ?? [], [openSlotsData]);
+
+  // Assign one pending hand-raise — this is when the real shift materializes
+  // on the (draft) week; other requesters are declined server-side.
+  const assignRequest = async (requestId: string) => {
+    setSlotBusy(requestId);
+    try {
+      const res = await fetch("/api/hr/open-shifts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "assign", request_id: requestId }),
+      });
+      if (!res.ok) alert((await res.json().catch(() => null))?.error ?? "Assign failed");
+      mutateOpenSlots();
+      mutate(); // the shift now exists on the grid
+    } finally {
+      setSlotBusy(null);
+    }
+  };
+
+  const cancelOpenSlot = async (id: string) => {
+    setSlotBusy(id);
+    try {
+      const res = await fetch("/api/hr/open-shifts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel", id }),
+      });
+      if (!res.ok) alert((await res.json().catch(() => null))?.error ?? "Cancel failed");
+      mutateOpenSlots();
+    } finally {
+      setSlotBusy(null);
+    }
+  };
+
+  const postOpenSlot = async () => {
+    if (!postSlotForm || !grid) return;
+    const t = (grid.templates || []).find((x) => x.id === postSlotForm.templateId);
+    if (!t) return;
+    setSlotBusy("post");
+    try {
+      const res = await fetch("/api/hr/open-shifts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          outlet_id: selectedOutlet,
+          shift_date: postSlotForm.date,
+          start_time: t.start_time,
+          end_time: t.end_time,
+          break_minutes: t.break_minutes,
+          station: postSlotForm.station,
+          role_type: t.label,
+        }),
+      });
+      if (!res.ok) alert((await res.json().catch(() => null))?.error ?? "Post failed");
+      else setPostSlotForm(null);
+      mutateOpenSlots();
+    } finally {
+      setSlotBusy(null);
+    }
+  };
 
   // Labour-cost gate preview — reprices the week whenever the roster changes
   // so the manager sees the projected labour % while still editing.
@@ -225,6 +352,62 @@ export default function SchedulesPage() {
     return m;
   }, [grid]);
 
+  // Per-day staffing composition — decomposes the opaque "75h total" into
+  // FT + rover + PT (and who's resting), so the day headers explain themselves
+  // instead of looking arbitrary (owner, 2026-07-18: "the math does not make
+  // sense"). FT hours are sunk; rover/PT are the visible add-ons.
+  type DayComp = {
+    ftH: number; roverH: number; ptH: number; ptSuggestedH: number; mgrH: number;
+    ftCount: number; resting: string[]; rovers: string[]; mgrs: string[];
+    pts: Array<{ name: string; suggested: boolean }>;
+  };
+  const dayComposition = useMemo(() => {
+    const map = new Map<string, DayComp>();
+    if (!grid) return map;
+    const userOf = new Map(grid.users.map((u) => [u.id, u]));
+    // Management = presence, NOT man-hours (owner rule 2026-07-18); shown as a
+    // separate "MGR … cover" tag outside the additive total. The Barista Lead
+    // rover DOES work the bar, so their hours stay inside the total as RV.
+    const isMgmtPos = (p: string | null | undefined) => {
+      const s = (p ?? "").trim().toLowerCase();
+      return s === "manager" || s === "area manager" || s === "head of department";
+    };
+    const isRoverPos = (p: string | null | undefined) =>
+      (p ?? "").trim().toLowerCase() === "barista lead";
+    const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+    for (const s of grid.shifts) {
+      const entry = map.get(s.shift_date) ?? {
+        ftH: 0, roverH: 0, ptH: 0, ptSuggestedH: 0, mgrH: 0, ftCount: 0, resting: [], rovers: [], mgrs: [], pts: [],
+      };
+      const u = userOf.get(s.user_id);
+      const nm = u ? (u.fullName || u.name).split(" ")[0] : "?";
+      if (s.start_time.slice(0, 5) === "00:00") {
+        entry.resting.push(nm);
+        map.set(s.shift_date, entry);
+        continue;
+      }
+      const h = Math.max(0, (toMin(s.end_time) - toMin(s.start_time) - (s.break_minutes || 0)) / 60);
+      const p = u?.profile;
+      if (isMgmtPos(p?.position)) {
+        entry.mgrH += h;
+        entry.mgrs.push(nm);
+      } else if (isRoverPos(p?.position)) {
+        entry.roverH += h;
+        entry.rovers.push(nm);
+      } else if (p?.employment_type === "part_time" || p?.employment_type === "intern") {
+        entry.ptH += h;
+        const suggested = s.notes === "pt_suggestion";
+        if (suggested) entry.ptSuggestedH += h;
+        entry.pts.push({ name: nm, suggested });
+      } else {
+        entry.ftH += h;
+        entry.ftCount += 1;
+      }
+      map.set(s.shift_date, entry);
+    }
+    return map;
+  }, [grid]);
+
   // Index leaves by (user_id, date)
   const leavesMap = useMemo(() => {
     const m = new Map<string, LeaveRange>();
@@ -239,6 +422,14 @@ export default function SchedulesPage() {
   }, [grid]);
 
   // Index availability blockouts
+  // Cross-outlet block: (user, date) → the shift they hold at ANOTHER outlet.
+  // One outlet per person per day — the cell renders blocked with the remark.
+  const elsewhereMap = useMemo(() => {
+    const m = new Map<string, { outlet_name: string; start_time: string; end_time: string; suggested: boolean }>();
+    for (const e of grid?.elsewhere || []) m.set(`${e.user_id}|${e.shift_date}`, e);
+    return m;
+  }, [grid]);
+
   const blockoutMap = useMemo(() => {
     const m = new Map<string, Availability>();
     (grid?.availability || []).forEach((a) => {
@@ -275,6 +466,30 @@ export default function SchedulesPage() {
     });
   }, [grid]);
 
+  // Station grouping for easier scheduling: BOH (kitchen) vs FOH (barista /
+  // service), with MANAGEMENT in its own section (owner rule 2026-07-18) —
+  // manager shifts are presence, not man-hours, so they sit outside the two
+  // station groups whose counts must track the item curves.
+  const userGroups = useMemo(() => {
+    const isBOHPos = (p: string | null | undefined) => {
+      const s = (p ?? "").toLowerCase();
+      return s.includes("kitchen") || s.includes("chef") || s.includes("boh");
+    };
+    const isMgmtPos = (p: string | null | undefined) => {
+      const s = (p ?? "").trim().toLowerCase();
+      return s === "manager" || s === "area manager" || s === "head of department";
+    };
+    const mgmt = sortedUsers.filter((u) => isMgmtPos(u.profile?.position));
+    const rest = sortedUsers.filter((u) => !isMgmtPos(u.profile?.position));
+    const boh = rest.filter((u) => isBOHPos(u.profile?.position));
+    const foh = rest.filter((u) => !isBOHPos(u.profile?.position));
+    return [
+      { key: "foh", label: "Front of House · Barista / Service", users: foh },
+      { key: "boh", label: "Back of House · Kitchen", users: boh },
+      { key: "mgmt", label: "Management · presence, not counted as man-hours", users: mgmt },
+    ].filter((g) => g.users.length > 0);
+  }, [sortedUsers]);
+
   // Total net working hours per user for the week (gross - break).
   // Rest-day markers don't count.
   const hoursByUser = useMemo(() => {
@@ -289,12 +504,22 @@ export default function SchedulesPage() {
     return m;
   }, [grid]);
 
-  // Total net working hours per date (all staff combined)
+  // Total net working hours per date. Management shifts are EXCLUDED (owner
+  // rule 2026-07-18: manager presence is not man-hours) — the header total
+  // must match the coverage math, which also ignores them.
   const hoursByDate = useMemo(() => {
     const m = new Map<string, number>();
+    const mgmtIds = new Set(
+      (grid?.users || [])
+        .filter((u) => {
+          const p = (u.profile?.position ?? "").trim().toLowerCase();
+          return p === "manager" || p === "area manager" || p === "head of department";
+        })
+        .map((u) => u.id),
+    );
     const toMin = (s: string) => { const [h, mm] = s.split(":").map(Number); return h * 60 + (mm || 0); };
     for (const sh of grid?.shifts || []) {
-      if (sh.notes === "rest_day") continue;
+      if (sh.notes === "rest_day" || mgmtIds.has(sh.user_id)) continue;
       const gross = toMin(sh.end_time) - toMin(sh.start_time);
       const net = Math.max(0, gross - (sh.break_minutes || 0));
       m.set(sh.shift_date, (m.get(sh.shift_date) ?? 0) + net / 60);
@@ -415,6 +640,7 @@ export default function SchedulesPage() {
         return;
       }
       mutate();
+      setDayCov({}); // coverage gaps changed — refetch on next picker open
       setPickerOpen(null);
       setPendingCheck(null);
     } finally {
@@ -450,6 +676,7 @@ export default function SchedulesPage() {
         return;
       }
       mutate();
+      setDayCov({});
       setPickerOpen(null);
     } finally {
       setSaving(false);
@@ -475,6 +702,13 @@ export default function SchedulesPage() {
         const data = await res.json().catch(() => ({}) as { error?: string; gate?: LabourGateInfo });
         if (data.gate) setGate(data.gate);
         const verdict = data.gate?.verdict;
+        const blockers = data.gate?.blockers ?? [];
+        if (res.status === 422 && blockers.length > 0) {
+          // Data problem (uncostable shift) — no reason/override can clear it.
+          // Name the offending people so the manager knows exactly what to fix.
+          alert(`${data.error ?? "Can't publish — roster has uncostable shifts"}\n\n${blockers.join("\n")}`);
+          return;
+        }
         if (res.status === 422 && (verdict === "amber" || verdict === "unknown")) {
           const reason = prompt(`${data.error}\n\nReason for publishing over target:`);
           if (!reason) return;
@@ -483,6 +717,12 @@ export default function SchedulesPage() {
           const override = prompt(`${data.error}\n\nOverride reason:`);
           if (!override) return;
           res = await publishOnce({ override_reason: override });
+        } else {
+          // Any other non-ok (403 / 404 / 500) — surface the parsed error we
+          // already have instead of re-reading the consumed body (which lost
+          // the message and showed a bare "Publish failed (422)").
+          alert(data.error || `Publish failed (${res.status})`);
+          return;
         }
         if (!res.ok) {
           const err = await res.json().catch(() => ({}) as { error?: string });
@@ -523,7 +763,7 @@ export default function SchedulesPage() {
       await fetch("/api/hr/schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "generate", outlet_id: selectedOutlet, week_start: weekStart }),
+        body: JSON.stringify({ action: "generate", outlet_id: selectedOutlet, week_start: weekStart, mode: fillMode, pt_mode: ptFillMode }),
       });
       mutate();
     } finally {
@@ -574,14 +814,27 @@ export default function SchedulesPage() {
               {clearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               Clear Week
             </button>
-            <button
-              onClick={handleAIFill}
-              disabled={generating || !selectedOutlet || isPublished}
-              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
-            >
-              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-              AI Fill
-            </button>
+            <div className="flex items-center rounded-lg border">
+              <select
+                value={fillMode}
+                onChange={(e) => setFillMode(e.target.value as "tight" | "mid" | "safe")}
+                disabled={generating || isPublished}
+                className="rounded-l-lg border-r bg-background px-2 py-2 text-sm font-medium disabled:opacity-50"
+                title="Coverage buffer: Tight = exactly to demand; Mid = +1 at the peak block; Safe = +1 all day (break/no-show cover)"
+              >
+                <option value="tight">Tight</option>
+                <option value="mid">Mid</option>
+                <option value="safe">Safe</option>
+              </select>
+              <button
+                onClick={handleAIFill}
+                disabled={generating || !selectedOutlet || isPublished}
+                className="flex items-center gap-2 rounded-r-lg px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
+              >
+                {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+                AI Fill
+              </button>
+            </div>
             <button
               onClick={handlePublish}
               disabled={publishing || !grid?.schedule}
@@ -657,6 +910,13 @@ export default function SchedulesPage() {
             }`}
             title={[
               `Roster RM${gate.rosterCost.toLocaleString()} vs forecast RM${gate.forecastRevenue.toLocaleString()}`,
+              gate.forecastRevenue > 0
+                ? `  • FT RM${gate.ftFixedCost.toLocaleString()} (fixed; rotated FT split by hours worked here, manager/rover cost = HQ) = ${((gate.ftFixedCost / gate.forecastRevenue) * 100).toFixed(1)}%`
+                : `  • FT RM${gate.ftFixedCost.toLocaleString()} (fixed; rotated FT split by hours, manager/rover = HQ)`,
+              gate.forecastRevenue > 0
+                ? `  • PT RM${gate.ptCost.toLocaleString()} (discretionary) = ${((gate.ptCost / gate.forecastRevenue) * 100).toFixed(1)}%`
+                : `  • PT RM${gate.ptCost.toLocaleString()} (discretionary)`,
+              `Only PT + revenue move the %; benching FT is fixed cost, so it saves nothing.`,
               `Budget ${(gate.targetPct * 100).toFixed(0)}% target / ${(gate.ceilingPct * 100).toFixed(0)}% ceiling`,
               ...gate.blockers,
               ...gate.warnings,
@@ -681,6 +941,16 @@ export default function SchedulesPage() {
             </div>
           ) : null;
         })()}
+
+        {selectedOutlet && grid?.schedule && openSlots.length === 0 && !postSlotForm && (
+          <button
+            onClick={() => setPostSlotForm({ date: grid?.days?.[0] ?? weekStart, templateId: grid?.templates?.[0]?.id ?? "", station: "barista" })}
+            className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-100"
+            title="Post an extra shift for part-timers to book in the staff apps"
+          >
+            + Open slot
+          </button>
+        )}
 
         {gate?.coverage && gate.coverage.some((c) => c.neededHours > 0) && (
           <div className="flex items-center gap-1" title="Sales-derived coverage: staff-hours rostered vs needed per day">
@@ -719,6 +989,231 @@ export default function SchedulesPage() {
           )}
         </div>
       </div>
+
+      {/* Open slots — bookable in the staff apps, managed here */}
+      {selectedOutlet && (openSlots.length > 0 || postSlotForm) && (() => {
+        const openCount = openSlots.filter((s) => s.status === "open").length;
+        const bookedCount = openSlots.filter((s) => s.status === "claimed").length;
+        const todayMyt = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+        const mm = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+        const slotsByDay = new Map<string, typeof openSlots>();
+        for (const s of openSlots) {
+          if (!slotsByDay.has(s.shift_date)) slotsByDay.set(s.shift_date, []);
+          slotsByDay.get(s.shift_date)!.push(s);
+        }
+        const dayList = (grid?.days ?? []).filter((d) => slotsByDay.has(d));
+        const expanded = slotsPanelOpen || postSlotForm !== null;
+        const requestCount = openSlots.reduce((n, s) => n + (s.status === "open" ? s.requests.length : 0), 0);
+        return (
+        <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-4">
+          <div className={`flex items-center justify-between gap-2 ${expanded ? "mb-3" : ""}`}>
+            <button
+              onClick={() => setSlotsPanelOpen(!expanded ? true : false)}
+              className="flex items-center gap-2 text-left font-semibold text-sky-900"
+              title={expanded ? "Collapse" : "Expand to manage slots and requests"}
+            >
+              <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
+              Open slots
+              <span className="text-sm font-normal text-sky-700">
+                {openCount} open{requestCount > 0 ? ` · ${requestCount} request${requestCount > 1 ? "s" : ""} to decide` : ""}{bookedCount > 0 ? ` · ${bookedCount} assigned` : ""}
+              </span>
+              {requestCount > 0 && !expanded && (
+                <span className="rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white">decide</span>
+              )}
+            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => mutateOpenSlots()}
+                className="rounded-lg border border-sky-200 bg-white p-1.5 text-sky-600 hover:bg-sky-100"
+                title="Refresh — requests from the staff apps appear here"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </button>
+              {!postSlotForm && (
+                <button
+                  onClick={() => { setSlotsPanelOpen(true); setPostSlotForm({ date: grid?.days?.[0] ?? weekStart, templateId: grid?.templates?.[0]?.id ?? "", station: "barista" }); }}
+                  className="flex items-center gap-1 rounded-lg border border-sky-300 bg-white px-2.5 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-100"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Post slot
+                </button>
+              )}
+            </div>
+          </div>
+
+          {expanded && dayList.length > 0 && (
+            <div className="grid max-h-[420px] gap-2 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+              {dayList.map((d) => {
+                const daySlots = slotsByDay.get(d)!;
+                const isPast = d < todayMyt;
+                return (
+                  <div key={d} className={`rounded-lg border border-sky-100 bg-white p-2.5 ${isPast ? "opacity-60" : ""}`}>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-sm font-semibold text-gray-700">
+                        {new Date(d + "T00:00:00Z").toLocaleDateString("en-MY", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" })}
+                        {isPast && <span className="ml-1.5 text-[10px] font-medium uppercase text-gray-400">past</span>}
+                      </span>
+                      {!isPast && (
+                        <button
+                          onClick={() => setPostSlotForm({ date: d, templateId: grid?.templates?.[0]?.id ?? "", station: "barista" })}
+                          className="rounded p-1 text-sky-500 hover:bg-sky-50"
+                          title={`Post another slot on this day`}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      {daySlots.map((s) => {
+                        const claimed = s.status === "claimed";
+                        const h = Math.round(((mm(s.end_time) - mm(s.start_time)) / 60) * 10) / 10;
+                        return (
+                          <div
+                            key={s.id}
+                            className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 ${
+                              claimed ? "border-green-200 bg-green-50" : "border-gray-150 bg-white"
+                            }`}
+                          >
+                            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${s.station === "kitchen" ? "bg-amber-50 text-amber-600" : "bg-sky-50 text-sky-600"}`}>
+                              {s.station === "kitchen" ? <ChefHat className="h-4 w-4" /> : <Coffee className="h-4 w-4" />}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-semibold text-gray-800">
+                                {s.start_time}–{s.end_time}
+                                <span className="ml-1 font-normal text-gray-400">({h}h)</span>
+                              </div>
+                              <div className="truncate text-[11px] text-muted-foreground">
+                                {s.station === "kitchen" ? "Kitchen" : "Barista"}
+                                {s.role_type ? ` · ${s.role_type}` : ""}
+                                <span className={`ml-1.5 rounded px-1 py-px text-[9px] font-semibold uppercase ${s.source === "manual" ? "bg-violet-50 text-violet-600" : "bg-sky-50 text-sky-600"}`}>
+                                  {s.source === "manual" ? "manual" : s.source === "generator" ? "AI" : s.source}
+                                </span>
+                              </div>
+                            </div>
+                            {claimed ? (
+                              <span className="shrink-0 text-xs font-semibold text-green-700" title={`Assigned${s.claimed_at ? ` at ${new Date(s.claimed_at).toLocaleString("en-MY", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}` : ""} — already a real shift on the grid`}>
+                                ✓ {s.claimed_by_name}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => cancelOpenSlot(s.id)}
+                                disabled={slotBusy === s.id}
+                                className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                                title="Take this slot down — staff can no longer request it (pending requests are declined)"
+                              >
+                                {slotBusy === s.id ? "…" : "Cancel"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {/* Hand-raises: staff who requested a slot on this day.
+                          Assign ONE — the shift lands on the grid, the rest
+                          are declined automatically. */}
+                      {daySlots.filter((s) => s.status === "open" && s.requests.length > 0).map((s) => (
+                        <div key={`${s.id}-req`} className="rounded-lg border border-dashed border-sky-200 bg-sky-50/60 px-2.5 py-2">
+                          <div className="mb-1 text-[11px] font-semibold text-sky-800">
+                            {s.start_time}–{s.end_time} · {s.requests.length} request{s.requests.length > 1 ? "s" : ""} — pick one:
+                          </div>
+                          <div className="space-y-1">
+                            {s.requests.map((r) => (
+                              <div key={r.id} className="flex items-center justify-between gap-2">
+                                <span className="text-xs text-gray-700">
+                                  {r.name}
+                                  <span className="ml-1 text-[10px] text-muted-foreground">
+                                    {r.week_hours}h · {r.week_days}d this week
+                                  </span>
+                                </span>
+                                <button
+                                  onClick={() => assignRequest(r.id)}
+                                  disabled={slotBusy === r.id}
+                                  className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+                                >
+                                  {slotBusy === r.id ? "…" : "Assign"}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Post form — all taps, no dropdowns */}
+          {postSlotForm && grid && (
+            <div className="mt-3 space-y-2.5 rounded-lg border border-sky-200 bg-white p-3">
+              <div className="text-sm font-semibold text-gray-700">Post a slot for part-timers to request</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(grid.days || []).map((d) => {
+                  const active = postSlotForm.date === d;
+                  const past = d < todayMyt;
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => !past && setPostSlotForm({ ...postSlotForm, date: d })}
+                      disabled={past}
+                      className={`rounded-lg px-2.5 py-1.5 text-sm font-medium ${
+                        active ? "bg-sky-600 text-white" : past ? "bg-gray-50 text-gray-300" : "bg-gray-50 text-gray-600 hover:bg-sky-50"
+                      }`}
+                    >
+                      {new Date(d + "T00:00:00Z").toLocaleDateString("en-MY", { weekday: "short", day: "numeric", timeZone: "UTC" })}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(grid.templates || []).map((t) => {
+                  const active = postSlotForm.templateId === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setPostSlotForm({ ...postSlotForm, templateId: t.id })}
+                      className={`rounded-lg px-2.5 py-1.5 text-sm font-medium ${active ? "bg-sky-600 text-white" : "bg-gray-50 text-gray-600 hover:bg-sky-50"}`}
+                    >
+                      {t.label} {t.start_time}–{t.end_time}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex overflow-hidden rounded-lg border border-gray-200">
+                  {(["barista", "kitchen"] as const).map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setPostSlotForm({ ...postSlotForm, station: st })}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium ${
+                        postSlotForm.station === st ? "bg-sky-600 text-white" : "bg-white text-gray-600 hover:bg-sky-50"
+                      }`}
+                    >
+                      {st === "kitchen" ? <ChefHat className="h-3.5 w-3.5" /> : <Coffee className="h-3.5 w-3.5" />}
+                      {st === "kitchen" ? "Kitchen" : "Barista"}
+                    </button>
+                  ))}
+                </div>
+                <div className="ml-auto flex gap-1.5">
+                  <button onClick={() => setPostSlotForm(null)} className="rounded-lg border px-3 py-1.5 text-sm text-muted-foreground">
+                    Close
+                  </button>
+                  <button
+                    onClick={postOpenSlot}
+                    disabled={slotBusy === "post" || !postSlotForm.templateId || postSlotForm.date < todayMyt}
+                    className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+                  >
+                    {slotBusy === "post" ? "Posting…" : "Post slot"}
+                  </button>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Goes live in the staff apps immediately — part-timers request it, you assign one here (station-fit and weekly caps enforced at both steps).
+              </p>
+            </div>
+          )}
+        </div>
+        );
+      })()}
 
       {/* Pending Swap Approvals */}
       {pendingSwaps.length > 0 && (
@@ -774,18 +1269,162 @@ export default function SchedulesPage() {
                   const dayHours = hoursByDate.get(d) ?? 0;
                   const dayLabel = dayHours === 0 ? "—" : dayHours % 1 === 0 ? `${dayHours}h` : `${dayHours.toFixed(1)}h`;
                   return (
-                    <th key={d} className={`p-2 text-center font-medium min-w-[120px] ${hol ? "bg-red-50" : "bg-muted/50"}`}>
+                    <th key={d} className={`relative p-2 text-center font-medium min-w-[120px] ${hol ? "bg-red-50" : "bg-muted/50"}`}>
                       <div className="text-xs text-muted-foreground">{DAY_NAMES[i]}</div>
                       <div className="text-base">{formatDay(d)}</div>
                       {hol && <div className="text-[9px] text-red-600 truncate" title={hol.name}>PH: {hol.name}</div>}
                       <div className="mt-1 text-[10px] font-semibold tabular-nums text-gray-600">{dayLabel} total</div>
+                      {(() => {
+                        // Open-slot badge: this day still has bookable slots out
+                        // in the staff apps — the manager sees it at the column,
+                        // not just in the panel above.
+                        const os = openSlots.filter((s) => s.shift_date === d && s.status === "open").length;
+                        if (!os) return null;
+                        return (
+                          <div className="mt-0.5">
+                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700" title={`${os} open slot${os > 1 ? "s" : ""} up for staff requests (see Open slots panel above)`}>
+                              {os} open slot{os > 1 ? "s" : ""}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                      {(() => {
+                        // Composition line: where the total comes from. Click → Why panel.
+                        const c = dayComposition.get(d);
+                        if (!c) return null;
+                        const parts = [
+                          c.ftH > 0 ? `FT${fmtH(c.ftH)}` : null,
+                          c.roverH > 0 ? `RV${fmtH(c.roverH)}` : null,
+                          c.ptH > 0 ? `PT${fmtH(c.ptH)}` : null,
+                        ].filter(Boolean);
+                        if (parts.length === 0 && c.mgrH === 0) return null;
+                        return (
+                          <button
+                            onClick={() => setWhyDate(whyDate === d ? null : d)}
+                            className="text-[9px] tabular-nums text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
+                            title="Why is this day staffed this way? Click for the breakdown. MGR hours are cover — not counted in the total."
+                          >
+                            {parts.join("+")}
+                            {c.mgrH > 0 ? `${parts.length ? " · " : ""}MGR${fmtH(c.mgrH)} cover` : ""}
+                          </button>
+                        );
+                      })()}
+                      {whyDate === d && (() => {
+                        const c = dayComposition.get(d);
+                        const cov = gate?.coverage?.find((x) => x.date === d);
+                        const ranked = [...(gate?.coverage ?? [])]
+                          .filter((x) => (x.items ?? 0) > 0)
+                          .sort((a, b) => (b.items ?? 0) - (a.items ?? 0));
+                        const rank = ranked.findIndex((x) => x.date === d) + 1;
+                        // Edge columns hug their edge — a centered popover on
+                        // Sat/Sun (or Mon) hangs past the scroll container and
+                        // gets clipped (owner screenshot 2026-07-19).
+                        const align = i >= 5 ? "right-0" : i <= 1 ? "left-0" : "left-1/2 -translate-x-1/2";
+                        return (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setWhyDate(null)} />
+                            <div className={`absolute z-50 mt-1 w-72 ${align} rounded-lg border bg-white p-3 text-left text-[11px] font-normal shadow-lg`}>
+                              <div className="mb-1.5 font-semibold">Why this staffing?</div>
+                              <ul className="space-y-1 text-muted-foreground">
+                                {cov?.items ? (
+                                  <li>
+                                    📈 {cov.items} items{rank > 0 ? ` — #${rank} busiest day` : ""}
+                                    {cov.barItems != null && cov.kitItems != null ? ` (FOH ${cov.barItems} · BOH ${cov.kitItems})` : ""}
+                                  </li>
+                                ) : null}
+                                <li>
+                                  👥 {c?.ftCount ?? 0} FT working
+                                  {c?.resting.length ? ` · resting: ${c.resting.join(", ")}` : " · nobody resting"}
+                                </li>
+                                {c?.rovers.length ? <li>🔄 Rover {c.rovers.join(", ")} (+{fmtH(c.roverH)}h — fixed 2-day rotation)</li> : null}
+                                {c?.mgrs.length ? <li>👔 Manager {c.mgrs.join(", ")} ({fmtH(c.mgrH)}h cover — not counted as man-hours)</li> : null}
+                                {c?.pts.length ? (
+                                  <li>
+                                    🧩 PT {c.pts.map((p) => p.name + (p.suggested ? "?" : "")).join(", ")} (+{fmtH(c.ptH)}h
+                                    {c.ptSuggestedH > 0 ? `, ${fmtH(c.ptSuggestedH)}h awaiting confirm` : ""})
+                                  </li>
+                                ) : null}
+                                {cov && cov.shortHours > 0 ? (
+                                  <li className="font-medium text-red-600">⚠ Short {cov.shortHours}h vs demand — fill via ✨ Assist or + Add</li>
+                                ) : (
+                                  <li className="text-green-600">✓ Demand covered</li>
+                                )}
+                                <li className="pt-1 text-[10px] leading-snug">
+                                  Rests sit on quiet days (FT is sunk — everyone works 6 days); the rover rotates 2 fixed days; PT patches the item-holes the rests leave, within the RM envelope. Daily hours track items only at the margin — shifts move in 7.5h blocks.
+                                </li>
+                              </ul>
+                            </div>
+                          </>
+                        );
+                      })()}
+                      {(() => {
+                        const g = gate;
+                        const cov = g?.coverage?.find((c) => c.date === d);
+                        if (!g || !cov || cov.forecast == null) return null;
+                        const fc = cov.forecast;
+                        const rm = fc >= 1000 ? `RM${(fc / 1000).toFixed(1)}k` : `RM${fc}`;
+                        const pctColor =
+                          cov.pct == null ? "text-gray-400"
+                            : cov.pct <= g.targetPct ? "text-green-600"
+                              : cov.pct <= g.ceilingPct ? "text-amber-600"
+                                : "text-red-600";
+                        return (
+                          <div
+                            className={`text-[9px] font-medium tabular-nums ${pctColor}`}
+                            title={`Forecast ${rm}${cov.isWeekend ? " · weekend" : " · weekday"}${cov.isHoliday ? ` · ${cov.holidayName ?? "public holiday"}` : ""} — daily labour %: this day's share of the week's actual roster cost (pro-rata by hours) ÷ this day's forecast. Day costs sum to the weekly total, so these average back to the Labour chip.`}
+                          >
+                            {rm}{cov.pct == null ? "" : ` · ${(cov.pct * 100).toFixed(0)}%`}
+                            {cov.items != null && cov.items > 0 && (
+                              cov.barItems != null && cov.kitItems != null && cov.barItems + cov.kitItems > 0 ? (
+                                <span title={`${cov.barItems} FOH items (drinks/pastry) + ${cov.kitItems} BOH items (kitchen), 28-day avg for this weekday incl. pickup app`}>
+                                  {" · "}F{cov.barItems}·B{cov.kitItems}it
+                                </span>
+                              ) : (
+                                ` · ${cov.items}it`
+                              )
+                            )}
+                          </div>
+                        );
+                      })()}
+                      {(() => {
+                        // Insufficient man-hours vs THE demand model (items ×
+                        // serve-calibrated rates) — the exact hours PT should
+                        // fill. Same model AI Fill staffs to.
+                        const cov = gate?.coverage?.find((c) => c.date === d);
+                        if (!cov || cov.shortHours <= 0) return null;
+                        return (
+                          <div
+                            className="mt-0.5 inline-block rounded bg-red-100 px-1 py-0.5 text-[9px] font-bold tabular-nums text-red-700"
+                            title={`${cov.scheduledHours}/${cov.neededHours} demand man-hours covered — short ${cov.shortHours}h. Fill with PT via ✨ Assist (same demand model as AI Fill: items ÷ serve-calibrated station rates).`}
+                          >
+                            short {cov.shortHours}h
+                          </div>
+                        );
+                      })()}
+                      {!isPublished && (
+                        <button
+                          onClick={() => setAssistDate(d)}
+                          className="mt-1 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                          title="Assist: rank who fits best for this day's gaps (reliability · availability · fairness · cost)"
+                        >
+                          <Sparkles className="h-2.5 w-2.5" /> Assist
+                        </button>
+                      )}
                     </th>
                   );
                 })}
               </tr>
             </thead>
             <tbody>
-              {sortedUsers.map((u) => {
+              {userGroups.map((g) => (
+                <Fragment key={g.key}>
+                  <tr className="border-b bg-muted/60">
+                    <td className="sticky left-0 z-10 bg-muted/60 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {g.label} ({g.users.length})
+                    </td>
+                    <td colSpan={grid.days.length} className="bg-muted/60" />
+                  </tr>
+                  {g.users.map((u) => {
                 const position = u.profile?.position || (u.role === "MANAGER" ? "Manager" : "Barista");
                 const isPartTime = u.profile?.employment_type === "part_time";
                 const empType = isPartTime ? "PT" : "FT";
@@ -878,6 +1517,19 @@ export default function SchedulesPage() {
                                 </button>
                               );
                             })()
+                          ) : elsewhereMap.get(`${u.id}|${d}`) ? (
+                            (() => {
+                              const ew = elsewhereMap.get(`${u.id}|${d}`)!;
+                              return (
+                                <div
+                                  className="w-full rounded-lg border border-violet-200 bg-violet-50/70 p-2 text-center"
+                                  title={`Scheduled at ${ew.outlet_name} ${ew.start_time}–${ew.end_time}${ew.suggested ? " (AI suggestion, unconfirmed)" : ""} — one outlet per day. Remove it there first to schedule here.`}
+                                >
+                                  <div className="text-[10px] font-semibold text-violet-700">@ {ew.outlet_name}{ew.suggested ? "?" : ""}</div>
+                                  <div className="text-[10px] tabular-nums text-violet-600">{ew.start_time} – {ew.end_time}</div>
+                                </div>
+                              );
+                            })()
                           ) : (
                             <button
                               onClick={(e) => openPicker(u.id, d, e)}
@@ -899,6 +1551,60 @@ export default function SchedulesPage() {
                                 className="fixed z-50 w-56 rounded-lg border bg-white p-1 shadow-lg max-h-[70vh] overflow-y-auto"
                                 style={{ top: pickerOpen!.top, left: pickerOpen!.left }}
                               >
+                                {/* Demand suggestion — the windows this day is short on
+                                    for THIS person's station (same model as AI Fill /
+                                    Assist), so "+ Add" leads with what the day needs. */}
+                                {(() => {
+                                  const pos = (u.profile?.position ?? "").trim().toLowerCase();
+                                  const isBohUser = pos.includes("kitchen") || pos.includes("chef") || pos.includes("boh");
+                                  // Managers can be offered ANY short window as
+                                  // COVER — their shift won't count as man-hours,
+                                  // so the gap stays visible until line staff fill it.
+                                  const isMgmtUser = pos === "manager" || pos === "area manager" || pos === "head of department";
+                                  const gaps = (dayCov[d] || []).filter(
+                                    (c) =>
+                                      c.template_id &&
+                                      (isMgmtUser
+                                        ? (c.kitchen_gap ?? 0) > 0 || (c.barista_gap ?? 0) > 0
+                                        : isBohUser
+                                          ? (c.kitchen_gap ?? 0) > 0
+                                          : (c.barista_gap ?? 0) > 0),
+                                  );
+                                  if (gaps.length === 0) return null;
+                                  return (
+                                    <>
+                                      <div className="px-3 pb-0.5 pt-1.5 text-[9px] font-semibold uppercase tracking-wider text-amber-700">
+                                        {isMgmtUser
+                                          ? "✨ Cover a short window (not man-hours)"
+                                          : `✨ Suggested — ${isBohUser ? "kitchen" : "barista"} short`}
+                                      </div>
+                                      {gaps.map((c) => (
+                                        <button
+                                          key={c.template_id}
+                                          onClick={() => setCell(u.id, d, c.template_id!)}
+                                          disabled={saving}
+                                          className="w-full rounded bg-amber-50 px-3 py-2 text-left text-xs hover:bg-amber-100"
+                                        >
+                                          <div className="flex items-center justify-between gap-1">
+                                            <span className="font-medium">{c.label || "Shift"}</span>
+                                            <span className="shrink-0 rounded bg-red-100 px-1 text-[9px] font-bold tabular-nums text-red-700">
+                                              short{" "}
+                                              {isMgmtUser
+                                                ? (c.kitchen_gap ?? 0) + (c.barista_gap ?? 0)
+                                                : isBohUser
+                                                  ? c.kitchen_gap
+                                                  : c.barista_gap}
+                                            </span>
+                                          </div>
+                                          <div className="text-[10px] text-muted-foreground tabular-nums">
+                                            {c.slot_start} - {c.slot_end} · {c.concurrent}/{c.min_staff} staffed
+                                          </div>
+                                        </button>
+                                      ))}
+                                      <div className="my-1 border-t" />
+                                    </>
+                                  );
+                                })()}
                                 <button
                                   onClick={() => setCell(u.id, d, "rest_day")}
                                   disabled={saving}
@@ -1022,6 +1728,8 @@ export default function SchedulesPage() {
                   </tr>
                 );
               })}
+                </Fragment>
+              ))}
             </tbody>
             <tfoot className="border-t-2 border-gray-200">
               {/* Coverage gap footer — for each day shows how each coverage rule is satisfied */}
@@ -1133,6 +1841,26 @@ export default function SchedulesPage() {
           </div>
         </div>
       )}
+
+      {/* Per-day Assist modal — the fit-ranking flow embedded in the grid, so
+          assist happens during scheduling. Prefills the day's first coverage
+          gap; each assign refreshes the grid + labour gate behind it. */}
+      {assistDate && selectedOutlet && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" onClick={() => setAssistDate(null)}>
+          <div className="w-full max-w-3xl rounded-2xl bg-background p-4 shadow-xl sm:p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <Sparkles className="h-4 w-4 text-terracotta" />
+                Assist · {new Date(assistDate + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "2-digit", month: "short" })}
+              </h2>
+              <button onClick={() => setAssistDate(null)} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Close assist">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <AssistPanel outletId={selectedOutlet} date={assistDate} autoPickGap onAssigned={() => mutate()} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1187,8 +1915,15 @@ function DayView({
   const sorted = [...working].sort(
     (a, b) => a.start_time.localeCompare(b.start_time) || a.end_time.localeCompare(b.end_time),
   );
-  const fohRows = sorted.filter((s) => !isBOH(s.user_id));
-  const bohRows = sorted.filter((s) => isBOH(s.user_id));
+  // Management sits outside FOH/BOH — presence, not man-hours (owner rule
+  // 2026-07-18) — so the station "on shift" counts stay honest vs demand.
+  const isMgmt = (userId: string) => {
+    const p = (positionOf.get(userId) ?? "").trim().toLowerCase();
+    return p === "manager" || p === "area manager" || p === "head of department";
+  };
+  const mgmtRows = sorted.filter((s) => isMgmt(s.user_id));
+  const fohRows = sorted.filter((s) => !isMgmt(s.user_id) && !isBOH(s.user_id));
+  const bohRows = sorted.filter((s) => !isMgmt(s.user_id) && isBOH(s.user_id));
   let minH = 24;
   let maxH = 0;
   for (const s of working) {
@@ -1230,6 +1965,22 @@ function DayView({
             {cov.shortHours > 0 ? ` — ${cov.shortHours}h short` : " ✓"}
           </span>
         )}
+        {cov?.forecast != null && (
+          <span
+            className={`${cov.neededHours > 0 ? "" : "ml-auto "}rounded-lg border px-3 py-1.5 text-sm font-medium ${
+              cov.pct == null ? "border-gray-200 bg-gray-50 text-gray-600"
+                : gate && cov.pct <= gate.targetPct ? "border-green-200 bg-green-50 text-green-700"
+                  : gate && cov.pct <= gate.ceilingPct ? "border-amber-300 bg-amber-50 text-amber-700"
+                    : "border-red-300 bg-red-50 text-red-700"
+            }`}
+            title="Daily labour %: this day's share of the week's actual roster cost (pro-rata by hours) ÷ this day's forecast. Day costs sum to the weekly total, so these average back to the Labour chip."
+          >
+            {cov.isWeekend ? "Weekend" : "Weekday"}
+            {cov.isHoliday ? ` · ${cov.holidayName ?? "PH"}` : ""} · forecast RM
+            {cov.forecast >= 1000 ? `${(cov.forecast / 1000).toFixed(1)}k` : cov.forecast}
+            {cov.pct == null ? "" : ` · ${(cov.pct * 100).toFixed(0)}%`}
+          </span>
+        )}
       </div>
 
       {working.length === 0 && (
@@ -1257,6 +2008,7 @@ function DayView({
               {[
                 { title: "Front of house", list: fohRows, fill: "bg-terracotta/80", count: "text-terracotta" },
                 { title: "Back of house", list: bohRows, fill: "bg-slate-500/80", count: "text-slate-600" },
+                { title: "Management (not man-hours)", list: mgmtRows, fill: "bg-violet-400/70", count: "text-violet-600" },
               ]
                 .filter((sec) => sec.list.length > 0)
                 .map((sec) => (

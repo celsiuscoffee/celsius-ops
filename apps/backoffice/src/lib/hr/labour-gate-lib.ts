@@ -19,6 +19,7 @@ import {
   WORKING_DAYS_PER_MONTH,
   NORMAL_WORKING_HOURS_PER_DAY,
 } from "./constants";
+import { ptRateForDate } from "./pt-rate";
 
 // Per-outlet labour budgets (fraction of forecast revenue), keyed by
 // Outlet.code. Tamarind's interim budget is deliberately above the company
@@ -40,6 +41,16 @@ export const ROVER_SHARE_WEEKLY = Math.round(((4022 / 3) * 12) / 52); // ≈ RM3
 // HR positions treated as rovers/HQ: never costed per shift, but capped at
 // 2 shifts per outlet-week (the rover rotation).
 const ROVER_POSITIONS = new Set(["manager", "area manager", "head of department", "barista lead"]);
+
+// Management positions (owner rule 2026-07-18): shown OUTSIDE the FOH/BOH
+// sections in the grid, and their shifts never count as man-hours toward
+// demand coverage — but Assist may still suggest them to plug a gap when
+// nobody else fits. Barista Lead is deliberately NOT here: the rover lead
+// works the bar, so their shift is real coverage.
+export const MANAGEMENT_POSITIONS = new Set(["manager", "area manager", "head of department"]);
+export function isManagementPosition(position: string | null | undefined): boolean {
+  return MANAGEMENT_POSITIONS.has((position ?? "").trim().toLowerCase());
+}
 export const ROVER_WEEKLY_QUOTA = 2;
 
 // Employer statutory on top of FT gross when the profile doesn't carry an
@@ -55,7 +66,8 @@ export type ShiftCostRow = {
   userName: string;
   position: string | null;
   employment_type: string | null; // null = no HR profile
-  hourly_rate: number | null;
+  hourly_rate: number | null; // PT weekday base
+  hourly_rate_weekend?: number | null; // PT Sat/Sun rate (null → base)
   basic_salary: number | null;
   epf_employer_rate: number | null;
 };
@@ -67,6 +79,11 @@ export type LabourGateResult = {
   weekStart: string;
   forecastRevenue: number;
   rosterCost: number;
+  // Cost split — FT salaries + rover are SUNK (fixed regardless of the grid);
+  // PT is the only spend the roster actually moves. Benching FT never lowers
+  // ftFixedCost, so it can't lower the %: the discretionary lever is PT + revenue.
+  ftFixedCost: number;
+  ptCost: number;
   rosterHours: number;
   pct: number | null; // null when forecast is 0
   targetPct: number;
@@ -76,7 +93,16 @@ export type LabourGateResult = {
   warnings: string[]; // quota breaches etc. — publish allowed, logged
   // Per-day demand coverage: staff-hours needed (hourly sales / RM69) vs
   // staff-hours rostered; shortHours > 0 means the day is under-covered.
-  coverage: Array<{ date: string; neededHours: number; scheduledHours: number; shortHours: number }>;
+  // forecast/pct/isWeekend/isHoliday surface the weekday-vs-weekend labour split
+  // (pct is INDICATIVE: day hours × blended rate ÷ day forecast — FT salary is a
+  // weekly fixed cost, so daily % is a coverage lens, not the billed figure).
+  coverage: Array<{
+    date: string; neededHours: number; scheduledHours: number; shortHours: number;
+    items?: number; // avg items that weekday (28d) — why the day needs its hours
+    barItems?: number; // FOH share (drinks + pastries + uncategorised)
+    kitItems?: number; // BOH share (cooked food)
+    forecast?: number; pct?: number | null; isWeekend?: boolean; isHoliday?: boolean; holidayName?: string;
+  }>;
 };
 
 export function shiftHours(start: string, end: string): number {
@@ -93,7 +119,9 @@ function normalizeRate(rate: number | null): number | null {
 }
 
 // Pure costing over pre-joined rows — unit-testable without IO.
-export function costRoster(rows: ShiftCostRow[]): {
+// `holidays` (YYYY-MM-DD set) doubles PT pay on public holidays; PT weekends
+// price at hourly_rate_weekend (owner rule 2026-07-18).
+export function costRoster(rows: ShiftCostRow[], holidays: Set<string> = new Set()): {
   cost: number;
   hours: number;
   blockers: string[];
@@ -128,7 +156,7 @@ export function costRoster(rows: ShiftCostRow[]): {
         blockers.push(`${r.userName}: part-timer with no hourly rate`);
         continue;
       }
-      cost += h * r.hourly_rate;
+      cost += h * ptRateForDate(r, r.shift_date, holidays.has(r.shift_date));
     } else {
       if (!r.basic_salary || r.basic_salary <= 0) {
         blockers.push(`${r.userName}: full-timer with no basic salary`);
@@ -160,6 +188,25 @@ export function weeklySalaryShare(basicSalary: number, epfEmployerRate: number |
   const stat = normalizeRate(epfEmployerRate);
   const load = stat != null && stat > 0 ? stat + 0.0175 + 0.002 : DEFAULT_EMPLOYER_STATUTORY;
   return (basicSalary * (1 + load) * 12) / 52;
+}
+
+// ── Cross-outlet FT cost split (owner rule: "for FT that rotate, divide the
+// cost accordingly") ─────────────────────────────────────────────────────
+// A rotating full-timer's weekly salary share follows their HOURS: the outlet
+// they actually work pays pro-rata, the home outlet is credited the same
+// amount. Unworked hours stay with the home outlet (sunk). Fractions clamp to
+// [0,1] so data glitches can't over-credit.
+export const FT_WEEK_HOURS = 45; // Employment Act full week (6 × 7.5h)
+
+// What a BORROWING outlet pays for a shared FT: share × (hours here ÷ 45).
+export function borrowedFtCharge(weeklyShare: number, hoursHere: number): number {
+  return weeklyShare * Math.min(1, Math.max(0, hoursHere) / FT_WEEK_HOURS);
+}
+
+// What the HOME outlet deducts for a primary FT lent out: share × (hours
+// elsewhere ÷ 45). Home pays the remainder — including any idle hours.
+export function lentFtCredit(weeklyShare: number, hoursElsewhere: number): number {
+  return weeklyShare * Math.min(1, Math.max(0, hoursElsewhere) / FT_WEEK_HOURS);
 }
 
 export function verdictFor(

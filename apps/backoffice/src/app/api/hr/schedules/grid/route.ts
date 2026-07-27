@@ -61,22 +61,29 @@ export async function GET(req: NextRequest) {
     orderBy: { name: "asc" },
   });
 
-  // 3. HR profiles (position, employment type, schedule flag)
+  // 3. HR profiles (position, employment type, schedule flag, employment window)
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, schedule_required")
+    .select("user_id, position, employment_type, schedule_required, join_date, end_date")
     .in("user_id", users.map((u) => u.id));
 
-  type ProfileRow = { user_id: string; position: string; employment_type: string; schedule_required: boolean };
+  type ProfileRow = { user_id: string; position: string; employment_type: string; schedule_required: boolean; join_date: string | null; end_date: string | null };
   const profileMap = new Map<string, ProfileRow>(
     (profiles || []).map((p: ProfileRow) => [p.user_id, p]),
   );
 
   // Filter out users marked schedule_required=false (Director, HQ roles, etc.)
-  // If no profile exists, include by default (schedule_required defaults to true)
+  // If no profile exists, include by default (schedule_required defaults to true).
+  // Employment window: last day before this week, or joining after it → no row
+  // on this week's grid (the deactivate cron only flips User.status after the
+  // fact, so ACTIVE alone can't be trusted for future weeks).
   const scheduledUsers = users.filter((u) => {
     const p = profileMap.get(u.id);
-    return !p || p.schedule_required !== false;
+    if (!p) return true;
+    if (p.schedule_required === false) return false;
+    if (p.end_date && p.end_date < weekStart) return false;
+    if (p.join_date && p.join_date > weekEnd) return false;
+    return true;
   });
 
   // 4. Existing schedule for this week
@@ -133,6 +140,37 @@ export async function GET(req: NextRequest) {
         .in("user_id", partTimerIds)
     : { data: [] as unknown[] };
 
+  // 9b. Shifts at OTHER outlets this week — a person already working
+  // elsewhere that day is BLOCKED here, and the cell says where they are
+  // (owner 2026-07-19: the rover/shared staff were double-bookable because
+  // each outlet's grid was blind to the others).
+  const { data: elsewhereRaw } = await hrSupabaseAdmin
+    .from("hr_schedule_shifts")
+    .select("user_id, shift_date, start_time, end_time, notes, hr_schedules!inner(outlet_id)")
+    .in("user_id", scheduledUsers.map((u) => u.id))
+    .gte("shift_date", weekStart)
+    .lte("shift_date", weekEnd)
+    .neq("hr_schedules.outlet_id", outletId)
+    .neq("start_time", "00:00:00");
+  type ElseRow = { user_id: string; shift_date: string; start_time: string; end_time: string; notes: string | null; hr_schedules: { outlet_id: string } | { outlet_id: string }[] };
+  const elseRows = ((elsewhereRaw ?? []) as unknown as ElseRow[]).filter((r) => r.notes !== "rest_day");
+  const elseOutletIds = [...new Set(elseRows.map((r) => (Array.isArray(r.hr_schedules) ? r.hr_schedules[0]?.outlet_id : r.hr_schedules?.outlet_id)).filter(Boolean))] as string[];
+  const elseOutlets = elseOutletIds.length
+    ? await prisma.outlet.findMany({ where: { id: { in: elseOutletIds } }, select: { id: true, name: true } })
+    : [];
+  const elseOutletName = new Map(elseOutlets.map((o) => [o.id, o.name.replace(/^Celsius Coffee\s*/i, "")]));
+  const elsewhere = elseRows.map((r) => {
+    const oid = Array.isArray(r.hr_schedules) ? r.hr_schedules[0]?.outlet_id : r.hr_schedules?.outlet_id;
+    return {
+      user_id: r.user_id,
+      shift_date: r.shift_date,
+      start_time: r.start_time.slice(0, 5),
+      end_time: r.end_time.slice(0, 5),
+      outlet_name: (oid && elseOutletName.get(oid)) || "another outlet",
+      suggested: r.notes === "pt_suggestion",
+    };
+  });
+
   // 10. Outlet coverage rules for this outlet
   const { data: coverageRules } = await hrSupabaseAdmin
     .from("hr_outlet_coverage_rules")
@@ -185,6 +223,7 @@ export async function GET(req: NextRequest) {
     schedule, // null if not yet created
     shifts,
     leaves: leaves || [],
+    elsewhere, // shifts at OTHER outlets this week — blocks the cell here
     availability: availability || [],        // per-date exceptions (existing)
     weeklyAvailability: weeklyAvailability || [],  // part-timer recurring (new)
     coverageRules: coverageRules || [],

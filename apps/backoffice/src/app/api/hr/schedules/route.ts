@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
-import { generateSchedule } from "@/lib/hr/agents/schedule-generator";
+import { generateSchedule, STAFFING_MODES, type StaffingMode } from "@/lib/hr/agents/schedule-generator";
 import { linkChecklistsToSchedule } from "@/lib/hr/agents/checklist-linker";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds, canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
+import { sortOutlets } from "@/lib/outlet-order";
 
 export const dynamic = "force-dynamic";
 
@@ -31,14 +32,15 @@ export async function GET(req: NextRequest) {
         ? requestedOutletId
         : allowedOutletIds[0] || null);
 
-  const outlets = await prisma.outlet.findMany({
-    where: {
-      status: "ACTIVE",
-      ...(allowedOutletIds !== null ? { id: { in: allowedOutletIds } } : {}),
-    },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
+  const outlets = sortOutlets(
+    await prisma.outlet.findMany({
+      where: {
+        status: "ACTIVE",
+        ...(allowedOutletIds !== null ? { id: { in: allowedOutletIds } } : {}),
+      },
+      select: { id: true, name: true },
+    }),
+  );
 
   if (session.role === "MANAGER" && !outletId) {
     return NextResponse.json({ schedules: [], outlets });
@@ -74,6 +76,13 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { action, outlet_id, week_start, schedule_id } = body;
+  // Staffing mode for AI Fill (tight | mid | safe); default tight if absent/invalid.
+  const mode: StaffingMode = STAFFING_MODES.includes(body.mode) ? body.mode : "tight";
+  // PT stage: "open_slots" (default) posts demand gaps as bookable slots for
+  // staff to REQUEST (manager assigns); "assign" pre-proposes named PTs.
+  // Open-slot creation is off for now (owner 2026-07-22) — default generation
+  // proposes PT suggestions to confirm in the grid rather than posting slots.
+  const ptMode: "open_slots" | "assign" = body.pt_mode === "open_slots" ? "open_slots" : "assign";
 
   // MANAGER can only act on outlets they're assigned to (outletId + outletIds[])
   if (session.role === "MANAGER" && outlet_id) {
@@ -96,13 +105,13 @@ export async function POST(req: NextRequest) {
         triggered_by: "manual",
         triggered_by_user_id: session.id,
         status: "running",
-        input_summary: { outlet_id, week_start },
+        input_summary: { outlet_id, week_start, mode, pt_mode: ptMode },
       })
       .select()
       .single();
 
     try {
-      const result = await generateSchedule(outlet_id, week_start);
+      const result = await generateSchedule(outlet_id, week_start, mode, ptMode);
 
       if (run) {
         await hrSupabaseAdmin

@@ -40,6 +40,7 @@ type ShRow = {
   channel: string | null;
   order_type: string | null;
   is_cancelled: boolean | null;
+  status: string | null;
 };
 
 /** StoreHub channel/order_type → the dashboard's 3 channels (Grab/Beep → delivery). */
@@ -86,7 +87,7 @@ export async function getStorehubFromDB(opts: {
   let data: ShRow[] = [];
   try {
     data = await prisma.$queryRaw<ShRow[]>`
-      SELECT outlet_id, transaction_time, total, channel, order_type, is_cancelled
+      SELECT outlet_id, transaction_time, total, channel, order_type, is_cancelled, status
       FROM storehub_sales
       WHERE outlet_id IN (${Prisma.join(ids)})
         AND transaction_time >= ${new Date(winStart)}
@@ -101,7 +102,12 @@ export async function getStorehubFromDB(opts: {
   const inPrev = (d: string) => d >= opts.prev.from && d <= opts.prev.to;
 
   for (const r of data) {
-    if (r.is_cancelled === true) continue;
+    // Exclude voided sales AND cancelled-payment rows. `paymentCancelled` is
+    // NOT flagged is_cancelled but the payment never completed, so it isn't
+    // revenue — the backoffice unified reader / Sales Compare exclude it too
+    // (they diverged by exactly these rows: ~RM3.4k of June StoreHub, making
+    // the manager app read higher than Compare). Keep the two in lockstep.
+    if (r.is_cancelled === true || r.status === "paymentCancelled") continue;
     const ts = typeof r.transaction_time === "string" ? r.transaction_time : r.transaction_time.toISOString();
     // StoreHub is history only. Pre-cutover keep every row; post-cutover keep
     // ONLY external delivery (Grab/Beep) that was still on StoreHub before it

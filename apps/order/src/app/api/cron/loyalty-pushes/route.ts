@@ -15,6 +15,8 @@ import {
   type SweepCounters,
 } from "@/lib/push/campaigns";
 import { evaluateAudience, reachableCandidateMemberIds, type RuleNode } from "@/lib/push/audience";
+import { touchAgentRun } from "@celsius/agents/src/substrate";
+import { logAgentMessage } from "@celsius/agents/src/messages";
 
 /**
  * Cron-driven loyalty push fan-out. One endpoint, one sweep per
@@ -58,23 +60,52 @@ export async function GET(request: NextRequest) {
   }
   const job = request.nextUrl.searchParams.get("job") ?? "";
 
+  const runners: Record<string, () => Promise<unknown>> = {
+    "birthday": runBirthday,
+    "reward-expiring": runRewardExpiring,
+    "tier-at-risk": runTierAtRisk,
+    "miss-you": runMissYou,
+    "sitting-on-beans": runSittingOnBeans,
+    "custom": runCustomCampaigns,
+  };
+  const runner = runners[job];
+  if (!runner) {
+    return NextResponse.json(
+      { error: "unknown job — expected birthday|reward-expiring|tier-at-risk|miss-you|sitting-on-beans|custom" },
+      { status: 400 },
+    );
+  }
+
   try {
-    switch (job) {
-      case "birthday":         return NextResponse.json(await runBirthday());
-      case "reward-expiring":  return NextResponse.json(await runRewardExpiring());
-      case "tier-at-risk":     return NextResponse.json(await runTierAtRisk());
-      case "miss-you":         return NextResponse.json(await runMissYou());
-      case "sitting-on-beans": return NextResponse.json(await runSittingOnBeans());
-      case "custom":           return NextResponse.json(await runCustomCampaigns());
-      default:
-        return NextResponse.json(
-          { error: "unknown job — expected birthday|reward-expiring|tier-at-risk|miss-you|sitting-on-beans|custom" },
-          { status: 400 },
-        );
-    }
+    const result = await runner();
+    await reportPushSweep(job, result);
+    return NextResponse.json(result as Record<string, unknown>);
   } catch (err) {
     console.error("[cron/loyalty-pushes]", err);
     return NextResponse.json({ error: "Cron job failed" }, { status: 500 });
+  }
+}
+
+// Fleet visibility for the order app's push agent. It runs on its own Vercel
+// schedule (this app, not backoffice) and was invisible to /agents. Heartbeat
+// every sweep so the panel shows it alive; post one feed line (notify:false =
+// /agents + daily digest, no real-time ping) only when a push actually went
+// out. Both substrate helpers swallow their own errors, so this never breaks
+// the sweep even if the agent env vars are absent.
+async function reportPushSweep(job: string, result: unknown): Promise<void> {
+  await touchAgentRun("order_loyalty_pushes");
+  const sent =
+    typeof result === "object" && result !== null && typeof (result as { sent?: unknown }).sent === "number"
+      ? (result as { sent: number }).sent
+      : 0;
+  if (sent > 0) {
+    await logAgentMessage({
+      fromAgent: "order_loyalty_pushes",
+      toAgent: "owner",
+      kind: "report",
+      summary: `Loyalty push "${job}" sent ${sent} app notification(s) to members today.`,
+      notify: false,
+    });
   }
 }
 

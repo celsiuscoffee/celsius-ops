@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { getSession } from "@/lib/auth";
 import { runCelsiusOverviewAgent } from "@/lib/ai-agent/celsius-overview";
+import { runCommsDigest } from "@celsius/agents/src/digest";
+import { runIntelligenceBriefing } from "@/lib/agents/intelligence-briefing";
+import { runOpsIntelligence } from "@/lib/ops/ops-intelligence";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -40,6 +43,41 @@ async function runHandler(req: NextRequest) {
 
   try {
     const result = await runCelsiusOverviewAgent({ sendTelegram: !skipTelegram });
+
+    // Fold the once-a-day agent-comms digest into this cron's 9pm MYT (13:00
+    // UTC) firing instead of spending a separate Vercel cron slot (project is
+    // near the 40-cron cap). Best-effort: a digest failure never fails the
+    // overview run.
+    if (isCron && new Date().getUTCHours() === 13) {
+      try {
+        await runCommsDigest();
+      } catch (digestErr) {
+        console.error("[ai-agent] folded comms-digest failed:", digestErr);
+      }
+    }
+
+    // Fold the proactive morning briefing into this cron's 9am MYT (01:00 UTC)
+    // firing - the intelligence agent messages the owner first with yesterday's
+    // numbers, anomalies, and pace vs target. Best-effort; never fails the run.
+    if (isCron && new Date().getUTCHours() === 1) {
+      try {
+        await runIntelligenceBriefing();
+      } catch (briefErr) {
+        console.error("[ai-agent] folded morning-briefing failed:", briefErr);
+      }
+    }
+
+    // Weekly ops read: Mondays on the 1pm-MYT (05:00 UTC) firing, clear of the
+    // morning briefing and the evening comms digest so the owner's Telegram
+    // isn't three long messages at once. Best-effort; never fails the run.
+    if (isCron && new Date().getUTCHours() === 5 && new Date(Date.now() + 8 * 3600000).getUTCDay() === 1) {
+      try {
+        await runOpsIntelligence();
+      } catch (opsErr) {
+        console.error("[ai-agent] folded ops-intelligence failed:", opsErr);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       generatedAt: result.generatedAt,

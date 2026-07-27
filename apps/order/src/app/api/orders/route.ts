@@ -293,19 +293,20 @@ export async function POST(request: NextRequest) {
     // Falls back to disabled when nothing's configured.
     const { data: fodRow } = await supabase
       .from("promotions")
-      .select("discount_type, discount_value, is_active, channels")
+      .select("discount_type, discount_value")
       .eq("brand_id", "brand-celsius")
       .eq("trigger_type", "first_order")
       .eq("is_active", true)
       .order("priority", { ascending: false })
       .limit(1)
       .maybeSingle();
-    // Channel scope — the first-order promo applies only if it allows this
-    // order's channel (qr_table for dine-in, else pickup; empty/null = all).
-    const fodChannels = (fodRow?.channels as string[] | null) ?? null;
-    const fodChannelOk =
-      !fodChannels || fodChannels.length === 0 || fodChannels.includes(orderChannel);
-    const fodConfig = fodRow && fodChannelOk
+    // First-order discount is a NATIVE-APP-ONLY perk (drives app installs):
+    // it applies to app_ios / app_android orders on ANY fulfilment type
+    // (pickup + dine-in). The web/PWA — which only ever does QR-table dine-in
+    // via /api/checkout/initiate (source 'web_qr') — intentionally never gets
+    // it, so we gate on the native source rather than the order's channel.
+    const fodNativeOk = orderSource === "app_ios" || orderSource === "app_android";
+    const fodConfig = fodRow && fodNativeOk
       ? {
           enabled: true,
           type: (fodRow.discount_type as string) === "percentage_off" ? "percent" : "fixed",

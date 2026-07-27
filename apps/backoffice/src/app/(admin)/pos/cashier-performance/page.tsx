@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Loader2, Target, Users, UserPlus, Repeat, AlertTriangle, Search, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
@@ -57,6 +57,13 @@ export default function CashierPerformancePage() {
   const [sortKey, setSortKey] = useState<SortKey>("rate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
+  // Stale-response guard. Switching from the slow "All outlets" query to a
+  // faster single-outlet one let the older all-outlets response land last and
+  // overwrite the filtered data — the KPIs read as if the filter never applied.
+  // Only the latest request may write state; superseded ones are aborted.
+  const fetchSeqRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+
   // Outlet list for the filter dropdown (loaded once). We key options on
   // loyaltyOutletId — the POS outlet id stored on pos_orders/pos_pair_events —
   // and drop outlets without one (they have no counter-rung POS data to filter).
@@ -73,17 +80,26 @@ export default function CashierPerformancePage() {
   }, []);
 
   const load = useCallback(async () => {
+    const seq = ++fetchSeqRef.current;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     try {
       const params = new URLSearchParams({ days: String(days) });
       if (outletId !== "all") params.set("outletId", outletId);
-      const res = await adminFetch(`/api/pos/cashier-performance?${params.toString()}`);
+      const res = await adminFetch(`/api/pos/cashier-performance?${params.toString()}`, { signal: controller.signal });
+      if (seq !== fetchSeqRef.current) return; // superseded by a newer filter change
       if (!res.ok) throw new Error("Load failed");
-      setData((await res.json()) as Data);
+      const json = (await res.json()) as Data;
+      if (seq !== fetchSeqRef.current) return;
+      setData(json);
     } catch (e) {
+      if (seq !== fetchSeqRef.current) return;
+      if (e instanceof DOMException && e.name === "AbortError") return;
       toast.error(e instanceof Error ? e.message : "Failed to load");
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
   }, [days, outletId]);
 
@@ -155,11 +171,14 @@ export default function CashierPerformancePage() {
               <option key={d} value={d}>Last {d} days</option>
             ))}
           </select>
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-[#A2492C]" />}
         </div>
       </div>
 
-      {/* Headline KPIs — reflect the outlet + period selection (server totals). */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Headline KPIs — reflect the outlet + period selection (server totals).
+          Dimmed while a filter change is loading so stale numbers don't read as
+          "unchanged" — this query can take a few seconds on All outlets. */}
+      <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 transition-opacity ${loading ? "opacity-40" : ""}`}>
         <div className="rounded-2xl bg-white p-4 border border-gray-100">
           <div className="flex items-center gap-2 mb-1.5">
             <Target className="h-4 w-4 text-[#A2492C]" />

@@ -1,5 +1,91 @@
 import { describe, it, expect } from "vitest";
-import { baseQtyByProduct, countDiscrepancies, isCleanCount } from "../stock-count";
+import {
+  baseQtyByProduct,
+  countDiscrepancies,
+  isCleanCount,
+  evaluateCountCoverage,
+} from "../stock-count";
+
+describe("evaluateCountCoverage", () => {
+  const universe = Array.from({ length: 212 }, (_, i) => `p${i}`);
+
+  it("BLOCKS a short monthly census (the Putrajaya 49/212 case)", () => {
+    const r = evaluateCountCoverage({
+      frequency: "MONTHLY",
+      expectedProductIds: universe,
+      countedProductIds: universe.slice(0, 49),
+    });
+    expect(r.expected).toBe(212);
+    expect(r.counted).toBe(49);
+    expect(r.missing).toBe(163);
+    expect(r.belowFloor).toBe(true);
+    expect(r.block).toBe(true);
+    expect(r.warn).toBe(false);
+    expect(r.missingProductIds).toHaveLength(163);
+  });
+
+  it("passes a near-complete monthly count (254/255 within tolerance)", () => {
+    const full = Array.from({ length: 255 }, (_, i) => `p${i}`);
+    const r = evaluateCountCoverage({
+      frequency: "MONTHLY",
+      expectedProductIds: full,
+      countedProductIds: full.slice(0, 254),
+    });
+    expect(r.belowFloor).toBe(false);
+    expect(r.block).toBe(false);
+  });
+
+  it("WARNS but never blocks a short daily/weekly count", () => {
+    const daily = evaluateCountCoverage({
+      frequency: "DAILY",
+      expectedProductIds: universe,
+      countedProductIds: universe.slice(0, 10),
+    });
+    expect(daily.block).toBe(false);
+    expect(daily.warn).toBe(true);
+
+    const weekly = evaluateCountCoverage({
+      frequency: "WEEKLY",
+      expectedProductIds: universe,
+      countedProductIds: universe.slice(0, 5),
+    });
+    expect(weekly.block).toBe(false);
+    expect(weekly.warn).toBe(true);
+  });
+
+  it("passes when there is no baseline to judge against (first-ever count)", () => {
+    const r = evaluateCountCoverage({
+      frequency: "MONTHLY",
+      expectedProductIds: [],
+      countedProductIds: ["a", "b", "c"],
+    });
+    expect(r.expected).toBe(0);
+    expect(r.coverage).toBe(1);
+    expect(r.block).toBe(false);
+    expect(r.warn).toBe(false);
+  });
+
+  it("ignores extra counted products not in the expected universe", () => {
+    const r = evaluateCountCoverage({
+      frequency: "MONTHLY",
+      expectedProductIds: ["a", "b", "c", "d"],
+      countedProductIds: ["a", "b", "c", "d", "x", "y"], // x,y are new products
+    });
+    expect(r.coverage).toBe(1);
+    expect(r.belowFloor).toBe(false);
+  });
+
+  it("respects a custom minCoverage", () => {
+    const r = evaluateCountCoverage({
+      frequency: "MONTHLY",
+      expectedProductIds: ["a", "b", "c", "d"],
+      countedProductIds: ["a", "b", "c"], // 75%
+      minCoverage: 0.7,
+    });
+    expect(r.coverage).toBe(0.75);
+    expect(r.belowFloor).toBe(false);
+  });
+});
 
 describe("baseQtyByProduct", () => {
   it("multiplies the counted package qty by its conversion factor", () => {

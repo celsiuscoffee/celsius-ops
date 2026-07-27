@@ -1,18 +1,31 @@
 "use client";
 
+// Schedule Assist panel — the fit-ranking flow (coverage picture → shift window
+// → ranked candidates → assign, with the override/training log). Lives ONLY
+// inside the Schedules grid (per-day ✨ Assist modal): assist happens DURING
+// scheduling. The old standalone /hr/schedule-assist tab was removed
+// 2026-07-18 (owner: "no need these as we already done it on the schedules
+// page").
+
 import { useEffect, useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Users, Sparkles, AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
-import { HrPageHeader } from "@/components/hr/page-header";
 
 type Template = { id: string; label: string; start_time: string; end_time: string; break_minutes: number };
-type CoverageSlot = { slot_start: string; slot_end: string; min_staff: number; concurrent: number; gap: number };
+type CoverageSlot = {
+  label?: string; slot_start: string; slot_end: string;
+  min_staff: number; concurrent: number; gap: number;
+  kitchen_need?: number; kitchen_got?: number; kitchen_gap?: number;
+  barista_need?: number; barista_got?: number; barista_gap?: number;
+};
 type Signals = { reliability: number; availability: number; fairness: number; skill: number; home: number };
-type Candidate = {
+export type AssistCandidate = {
   user_id: string;
   name: string | null;
   position: string | null;
   employment_type: string;
+  manager_cover?: boolean; // manager offered as COVER — shift won't count as man-hours
+  friday_prayer?: boolean; // leaves the floor ~13:00–14:15 for Friday prayer on this slot
   fit_score: number;
   weekly_hours: number;
   weekly_hours_after: number;
@@ -28,13 +41,12 @@ type Resp = {
   coverage: CoverageSlot[];
   assigned_headcount: number;
   has_coverage_rule: boolean;
+  demand_note?: string;
   templates: Template[];
   weights: Weights;
   slot?: { start: string; end: string; role: string | null; hours: number };
-  candidates: Candidate[] | null;
+  candidates: AssistCandidate[] | null;
 };
-
-const mytToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 
 const BLOCK_LABEL: Record<string, string> = {
   double_booked: "Already on a shift",
@@ -51,27 +63,33 @@ const EMP_LABEL: Record<string, string> = {
   intern: "Intern",
 };
 
-export default function ScheduleAssistPage() {
-  const [outlets, setOutlets] = useState<{ id: string; name: string }[]>([]);
-  const [outletId, setOutletId] = useState("");
-  const [date, setDate] = useState(mytToday);
+export function AssistPanel({
+  outletId,
+  date,
+  autoPickGap = false,
+  onAssigned,
+}: {
+  outletId: string;
+  date: string;
+  // Embedded (grid) usage: pre-select the day's first coverage-gap window so
+  // the manager lands straight on a ranked list for the hole they clicked.
+  autoPickGap?: boolean;
+  onAssigned?: () => void;
+}) {
   const [slot, setSlot] = useState<{ start: string; end: string } | null>(null);
   const [role, setRole] = useState("");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [assigning, setAssigning] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
-
-  const { data: scheduleList } = useFetch<{ outlets: { id: string; name: string }[] }>("/api/hr/schedules");
-  useEffect(() => {
-    if (scheduleList?.outlets && outlets.length === 0) {
-      setOutlets(scheduleList.outlets);
-      if (scheduleList.outlets.length > 0 && !outletId) setOutletId(scheduleList.outlets[0].id);
-    }
-  }, [scheduleList, outlets.length, outletId]);
+  const [gapPicked, setGapPicked] = useState(false);
 
   // Changing outlet/date invalidates the picked slot.
-  useEffect(() => setSlot(null), [outletId, date]);
+  useEffect(() => {
+    setSlot(null);
+    setGapPicked(false);
+    setFlash(null);
+  }, [outletId, date]);
 
   const slotQs = slot ? `&start=${slot.start}&end=${slot.end}${role ? `&role=${encodeURIComponent(role)}` : ""}` : "";
   const url = outletId && date ? `/api/hr/schedules/candidates?outlet_id=${outletId}&date=${date}${slotQs}` : null;
@@ -81,6 +99,23 @@ export default function ScheduleAssistPage() {
   const coverage = data?.coverage || [];
   const totalGap = coverage.reduce((a, c) => a + c.gap, 0);
 
+  // Picking a gap chip also pre-fills the role when the gap is one station's —
+  // a kitchen hole should rank kitchen crew first (skill weight keys off role).
+  const pickGap = (c: CoverageSlot) => {
+    setSlot({ start: c.slot_start, end: c.slot_end });
+    if ((c.kitchen_gap ?? 0) > 0 && (c.barista_gap ?? 0) === 0) setRole("kitchen");
+    else if ((c.barista_gap ?? 0) > 0 && (c.kitchen_gap ?? 0) === 0) setRole("barista");
+  };
+
+  // Grid-embedded flow: jump straight to the first under-covered window.
+  useEffect(() => {
+    if (!autoPickGap || gapPicked || slot || !data) return;
+    const gap = coverage.find((c) => c.gap > 0);
+    if (gap) pickGap(gap);
+    setGapPicked(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPickGap, gapPicked, slot, data]);
+
   const pickTemplate = (t: Template) => setSlot({ start: t.start_time, end: t.end_time });
   const pickCustom = () => {
     if (/^\d{2}:\d{2}$/.test(customStart) && /^\d{2}:\d{2}$/.test(customEnd) && customStart < customEnd) {
@@ -88,7 +123,7 @@ export default function ScheduleAssistPage() {
     }
   };
 
-  async function assign(c: Candidate) {
+  async function assign(c: AssistCandidate) {
     if (!data || !slot) return;
     const candidates = data.candidates || [];
     const eligible = candidates.filter((x) => x.hard_blocks.length === 0);
@@ -142,6 +177,7 @@ export default function ScheduleAssistPage() {
       setFlash({ kind: "ok", text: `${c.name || "Staff"} assigned to ${slot.start}–${slot.end}.` });
       setSlot(null);
       mutate();
+      onAssigned?.();
     } catch (e) {
       setFlash({ kind: "err", text: e instanceof Error ? e.message : "Assign failed" });
     } finally {
@@ -150,23 +186,7 @@ export default function ScheduleAssistPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <HrPageHeader
-        title="Schedule Assist"
-        description="Pick a shift, and we rank who fits best — reliability, availability, fairness and cost. Every choice trains the model toward auto-scheduling."
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="rounded-lg border bg-card px-3 py-1.5 text-sm">
-              <option value="">Select outlet…</option>
-              {outlets.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </select>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border bg-card px-3 py-1.5 text-sm" />
-          </div>
-        }
-      />
-
+    <div className="space-y-4">
       {flash && (
         <div className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm ${flash.kind === "ok" ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800"}`}>
           {flash.kind === "ok" ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
@@ -174,90 +194,90 @@ export default function ScheduleAssistPage() {
         </div>
       )}
 
-      {!outletId ? (
-        <Empty title="Pick an outlet" body="Select an outlet and date to start assigning shifts." />
+      {/* Coverage picture */}
+      <section className="rounded-xl border bg-card p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Coverage · {new Date(date + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "2-digit", month: "short" })}</h2>
+          <span className="text-xs text-muted-foreground">{data?.assigned_headcount ?? 0} rostered</span>
+        </div>
+        {coverage.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No demand history for this day yet — pick a shift template below and assign against your own judgement.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2" title={data?.demand_note || undefined}>
+            {coverage.map((c, i) => (
+              <button
+                key={i}
+                onClick={() => pickGap(c)}
+                className={`rounded-lg border px-3 py-2 text-left text-xs ${c.gap > 0 ? "border-red-200 bg-red-50 hover:border-red-300" : "border-green-200 bg-green-50 hover:border-green-300"}`}
+                title={`Rank candidates for this window${data?.demand_note ? ` — ${data.demand_note}` : ""}`}
+              >
+                <div className="font-medium">
+                  {c.label ? `${c.label} ` : ""}<span className="tabular-nums opacity-80">{c.slot_start}–{c.slot_end}</span>
+                </div>
+                <div className={c.gap > 0 ? "text-red-700" : "text-green-700"}>
+                  {c.concurrent}/{c.min_staff} staff
+                  {c.gap > 0
+                    ? ` · short ${[
+                        (c.kitchen_gap ?? 0) > 0 ? `${c.kitchen_gap} kitchen` : "",
+                        (c.barista_gap ?? 0) > 0 ? `${c.barista_gap} barista` : "",
+                      ].filter(Boolean).join(" + ") || c.gap}`
+                    : " · covered"}
+                </div>
+              </button>
+            ))}
+            {totalGap > 0 && (
+              <div className="flex items-center gap-1 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                <AlertTriangle className="h-3.5 w-3.5" /> {totalGap} slot-gap{totalGap > 1 ? "s" : ""} to fill
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Shift window picker */}
+      <section className="rounded-xl border bg-card p-4 shadow-sm">
+        <h2 className="mb-3 text-sm font-semibold">Shift to fill</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          {templates.map((t) => {
+            const active = slot?.start === t.start_time && slot?.end === t.end_time;
+            return (
+              <button
+                key={t.id}
+                onClick={() => pickTemplate(t)}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${active ? "border-terracotta bg-terracotta text-white" : "hover:bg-muted"}`}
+              >
+                {t.label} <span className="opacity-70">{t.start_time}–{t.end_time}</span>
+              </button>
+            );
+          })}
+          <div className="flex items-center gap-1 rounded-lg border px-2 py-1 text-sm">
+            <input type="time" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="w-24 bg-transparent" aria-label="Custom start" />
+            <span className="text-muted-foreground">–</span>
+            <input type="time" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="w-24 bg-transparent" aria-label="Custom end" />
+            <button onClick={pickCustom} className="ml-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium hover:bg-muted/70">Use</button>
+          </div>
+          <input
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            placeholder="Role (optional, e.g. Barista)"
+            className="rounded-lg border bg-card px-3 py-1.5 text-sm"
+          />
+        </div>
+        {slot && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Ranking for <span className="font-medium text-foreground">{slot.start}–{slot.end}</span>
+            {role && <> · {role}</>}
+          </p>
+        )}
+      </section>
+
+      {/* Candidate ranking */}
+      {!slot ? (
+        <Empty title="Pick a shift window" body="Choose a template, a coverage slot, or a custom time to see who fits best." icon={Sparkles} />
+      ) : isLoading || !data ? (
+        <Empty title="Ranking…" body="" icon={Sparkles} />
       ) : (
-        <>
-          {/* Coverage picture */}
-          <section className="rounded-xl border bg-card p-4 shadow-sm">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Coverage · {new Date(date + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "2-digit", month: "short" })}</h2>
-              <span className="text-xs text-muted-foreground">{data?.assigned_headcount ?? 0} rostered</span>
-            </div>
-            {!data?.has_coverage_rule ? (
-              <p className="text-sm text-muted-foreground">No coverage rule set for this day. Assign against your own judgement, or set targets under Coverage Rules.</p>
-            ) : coverage.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No coverage slots for this weekday.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {coverage.map((c, i) => (
-                  <div key={i} className={`rounded-lg border px-3 py-2 text-xs ${c.gap > 0 ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}`}>
-                    <div className="font-medium tabular-nums">{c.slot_start}–{c.slot_end}</div>
-                    <div className={c.gap > 0 ? "text-red-700" : "text-green-700"}>
-                      {c.concurrent}/{c.min_staff} staff{c.gap > 0 ? ` · short ${c.gap}` : " · covered"}
-                    </div>
-                  </div>
-                ))}
-                {totalGap > 0 && (
-                  <div className="flex items-center gap-1 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-                    <AlertTriangle className="h-3.5 w-3.5" /> {totalGap} slot-gap{totalGap > 1 ? "s" : ""} to fill
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-
-          {/* Shift window picker */}
-          <section className="rounded-xl border bg-card p-4 shadow-sm">
-            <h2 className="mb-3 text-sm font-semibold">Shift to fill</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              {templates.map((t) => {
-                const active = slot?.start === t.start_time && slot?.end === t.end_time;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => pickTemplate(t)}
-                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${active ? "border-terracotta bg-terracotta text-white" : "hover:bg-muted"}`}
-                  >
-                    {t.label} <span className="opacity-70">{t.start_time}–{t.end_time}</span>
-                  </button>
-                );
-              })}
-              <div className="flex items-center gap-1 rounded-lg border px-2 py-1 text-sm">
-                <input type="time" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="w-24 bg-transparent" aria-label="Custom start" />
-                <span className="text-muted-foreground">–</span>
-                <input type="time" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="w-24 bg-transparent" aria-label="Custom end" />
-                <button onClick={pickCustom} className="ml-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium hover:bg-muted/70">Use</button>
-              </div>
-              <input
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                placeholder="Role (optional, e.g. Barista)"
-                className="rounded-lg border bg-card px-3 py-1.5 text-sm"
-              />
-            </div>
-            {slot && (
-              <p className="mt-3 text-xs text-muted-foreground">
-                Ranking for <span className="font-medium text-foreground">{slot.start}–{slot.end}</span>
-                {role && <> · {role}</>}
-              </p>
-            )}
-          </section>
-
-          {/* Candidate ranking */}
-          {!slot ? (
-            <Empty title="Pick a shift window" body="Choose a template or enter a custom time to see who fits best." icon={Sparkles} />
-          ) : isLoading || !data ? (
-            <Empty title="Ranking…" body="" icon={Sparkles} />
-          ) : (
-            <CandidateList
-              candidates={data.candidates || []}
-              weights={data.weights}
-              onAssign={assign}
-              assigning={assigning}
-            />
-          )}
-        </>
+        <CandidateList candidates={data.candidates || []} weights={data.weights} onAssign={assign} assigning={assigning} />
       )}
     </div>
   );
@@ -269,9 +289,9 @@ function CandidateList({
   onAssign,
   assigning,
 }: {
-  candidates: Candidate[];
+  candidates: AssistCandidate[];
   weights: Weights;
-  onAssign: (c: Candidate) => void;
+  onAssign: (c: AssistCandidate) => void;
   assigning: string | null;
 }) {
   const eligible = candidates.filter((c) => c.hard_blocks.length === 0);
@@ -311,12 +331,13 @@ function CandidateRow({
   onAssign,
   busy,
 }: {
-  c: Candidate;
+  c: AssistCandidate;
   rank: number | null;
   isTop: boolean;
-  onAssign: (c: Candidate) => void;
+  onAssign: (c: AssistCandidate) => void;
   busy: boolean;
 }) {
+  void rank;
   const blocked = c.hard_blocks.length > 0;
   return (
     <div className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 shadow-sm ${blocked ? "border-gray-200 bg-gray-50/60" : isTop ? "border-terracotta/40 bg-terracotta/5" : "bg-card"}`}>
@@ -336,6 +357,22 @@ function CandidateRow({
             </span>
           )}
           <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{EMP_LABEL[c.employment_type] || c.employment_type}</span>
+          {c.manager_cover && (
+            <span
+              className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"
+              title="Manager covering — this shift is presence, not counted as man-hours"
+            >
+              cover · not man-hours
+            </span>
+          )}
+          {c.friday_prayer && (
+            <span
+              className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+              title="Attends Friday prayer — will be off the floor ~1:00–2:15pm on this shift; prefer women/non-Muslim staff or plan relief"
+            >
+              Friday prayer 1–2pm
+            </span>
+          )}
         </div>
         <div className="text-xs text-muted-foreground">
           {c.position || "—"} · {c.weekly_hours}h this week → {c.weekly_hours_after}h

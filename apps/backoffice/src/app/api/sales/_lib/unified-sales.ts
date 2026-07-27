@@ -1,5 +1,8 @@
 // Unified sales source for the sales dashboard during/after the StoreHub →
 // POS-native migration. Per outlet, merges:
+//   • Hubbo: the pre-StoreHub till archive (hubbo_sales) — Putrajaya/Shah Alam
+//     history before their Jan 2026 StoreHub start. Strictly before the
+//     handover instant; StoreHub owns everything from it.
 //   • StoreHub: the local archive (storehub_sales) for HISTORY. Pre-cutover:
 //     every row. Post-cutover: ONLY external delivery (Grab/Beep) that was still
 //     on StoreHub during the brief window before it went native — the till
@@ -13,13 +16,32 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { getTransactions, type StoreHubTransaction } from "@/lib/storehub";
 import { classifyChannel, isDeliveryOrQR } from "./storehub-helpers";
+import {
+  type SalesSourceKey,
+  storehubSource,
+  posSource,
+  pickupSource,
+} from "./source-channels";
 
 export type UnifiedSale = {
   ts: string; // ISO timestamp (UTC, with Z) — consumed by getMYTHour/getMYTDateStr
-  total: number; // RM
+  total: number; // RM — what the customer actually paid, i.e. NET of discount
+  // Discount given away on this sale, RM. `total + discount` is the gross the
+  // menu would have charged, which is what the P&L's "Discount given" contra-
+  // revenue line (COA 5001) needs. Each source records discounts its own way —
+  // see the per-source branches below; 0 where the source has none.
+  discount: number;
   channel: "dine_in" | "takeaway" | "delivery";
   isDeliveryQR: boolean;
   channelLabel: string; // raw channel/order_type for the channelBreakdown report
+  source: SalesSourceKey; // normalized sales channel (till/grabfood/qr/pickup/…)
+  // Raw payment method, where the source records one: POS-native (dominant
+  // tender of the order) and pickup app. StoreHub/hubbo/consignment never
+  // exposed payment splits → null (payment breakdowns must say so).
+  tender: string | null;
+  units: number; // count this event contributes to "transactions": 1 per receipt
+  // (StoreHub/POS/pickup), or the day's item_count for consignment (daily grain,
+  // no receipt count — so AOV reads as avg price per item for those outlets).
 };
 
 // Money-received statuses for the pickup/QR `orders` table. Payment is
@@ -41,6 +63,17 @@ export type OutletSource = {
 };
 
 // (cutover routing is applied per-row in getUnifiedSalesForOutlet, not in SQL)
+
+// Hubbo → StoreHub handover instants, per outlet. Hubbo was the till before
+// StoreHub; both archives briefly overlap around the switch (SA ran both for
+// ~a day), so each system owns an exclusive half: hubbo rows STRICTLY BEFORE
+// the instant, StoreHub rows AT/AFTER it. Constants mirror the canonical
+// unified_sales VIEW (migration 085) exactly — both systems are retired, so
+// these are frozen history, safe to hardcode.
+const HUBBO_HANDOVER_AT: Record<string, Date> = {
+  "89b19c9f-b1e0-42fe-a404-6d1a472e34c5": new Date("2026-01-02T16:00:00Z"), // Putrajaya (Conezion)
+  "b3b6299e-09dc-4f4a-80ef-bbc04316d324": new Date("2026-01-20T16:00:00Z"), // Shah Alam
+};
 
 /** Map a POS-native order_type/source to the dashboard's 3 channels. */
 function posChannel(orderType: string | null, source: string | null): "dine_in" | "takeaway" | "delivery" {
@@ -108,9 +141,16 @@ export async function getUnifiedSalesForOutlet(
     sales.push({
       ts,
       total,
+      // StoreHub never exposed a discount field; subTotal is the pre-discount
+      // menu value and total is what was collected, so the difference IS the
+      // discount (no SST, service charge or rounding in this feed).
+      discount: Math.max(Number((raw as { subTotal?: number })?.subTotal ?? total) - total, 0),
       channel: classifyChannel(raw),
       isDeliveryQR: isDeliveryOrQR(raw),
       channelLabel: (raw?.channel ?? "(direct)") as string,
+      source: storehubSource(raw?.channel as string | null | undefined),
+      tender: null,
+      units: 1,
     });
   };
 
@@ -122,6 +162,7 @@ export async function getUnifiedSalesForOutlet(
   type ArchiveRow = {
     ts: Date;
     total: unknown;
+    sub_total: unknown;
     channel: string | null;
     channel_class: "dine_in" | "takeaway" | "delivery" | null;
     is_delivery_qr: boolean | null;
@@ -134,32 +175,78 @@ export async function getUnifiedSalesForOutlet(
     }
     const ts = toISO(r.ts);
     if (!keepStorehub(ts, r.channel)) return;
+    const shTotal = Number(r.total) || 0;
     sales.push({
       ts,
-      total: Number(r.total) || 0,
+      total: shTotal,
+      discount: Math.max((Number(r.sub_total) || shTotal) - shTotal, 0),
       channel: r.channel_class,
       isDeliveryQR: r.is_delivery_qr ?? false,
       channelLabel: r.channel ?? "(direct)",
+      source: storehubSource(r.channel),
+      tender: null,
+      units: 1,
     });
   };
 
+  // ── Hubbo PAST — the till BEFORE StoreHub (Putrajaya/Shah Alam, 2025 →
+  // Jan 2026). Without this branch any comparison reaching before the outlet's
+  // StoreHub start silently read near-zero. Strictly before the handover
+  // instant; the StoreHub query below floors at the same instant, so the
+  // brief dual-running window is counted exactly once (same split as the
+  // canonical unified_sales view). ──
+  const hubboHandover = HUBBO_HANDOVER_AT[outlet.outletId];
+  if (hubboHandover && from.getTime() < hubboHandover.getTime()) {
+    const hubboRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; discount: unknown }>>`
+      SELECT transaction_time AS ts, nett AS total, discount
+      FROM hubbo_sales
+      WHERE outlet_id = ${outlet.outletId}
+        AND NOT is_refund
+        AND transaction_time >= ${from}
+        AND transaction_time <= ${to}
+        AND transaction_time < ${hubboHandover}
+    `;
+    for (const r of hubboRows) {
+      sales.push({
+        ts: toISO(r.ts),
+        total: Number(r.total) || 0, // hubbo_sales.nett is RM
+        discount: Number(r.discount) || 0, // hubbo_sales.discount is RM
+        channel: "dine_in", // counter till — no order-type data in the archive
+        isDeliveryQR: false,
+        channelLabel: "counter",
+        source: "till",
+        tender: null,
+        units: 1,
+      });
+    }
+  }
+
   // ── StoreHub PAST — local archive up to today 00:00 MYT (today is the live
   // pull below). pushArchive applies the cutover rule per row: all rows
-  // pre-cutover, delivery-only post-cutover. ──
+  // pre-cutover, delivery-only post-cutover. `status <> 'paymentCancelled'`
+  // matches the canonical revenue convention — those rows are NOT flagged
+  // is_cancelled and were being counted as revenue (741 rows / RM24.4k,
+  // verified 2026-07-18). Floors at the hubbo handover so the dual-running
+  // switchover window isn't double-counted now that hubbo is included. ──
   const archiveTo = new Date(Math.min(to.getTime(), todayStartMyt.getTime() - 1));
+  const hubboFloor = hubboHandover
+    ? Prisma.sql`AND transaction_time >= ${hubboHandover}`
+    : Prisma.empty;
   // channel_class / is_delivery_qr are materialized at import (and
   // backfilled) so this no longer ships the heavy `raw` JSONB — only
   // rows that somehow missed classification fall back to it.
   if (archiveTo.getTime() >= from.getTime()) {
     const shRows = await prisma.$queryRaw<Array<ArchiveRow>>`
-      SELECT transaction_time AS ts, total, channel, channel_class, is_delivery_qr,
+      SELECT transaction_time AS ts, total, sub_total, channel, channel_class, is_delivery_qr,
              CASE WHEN channel_class IS NULL THEN raw END AS raw
       FROM storehub_sales
       WHERE outlet_id = ${outlet.outletId}
         AND NOT is_cancelled
+        AND (status IS NULL OR status <> 'paymentCancelled')
         AND transaction_time IS NOT NULL
         AND transaction_time >= ${from}
         AND transaction_time <= ${archiveTo}
+        ${hubboFloor}
     `;
     for (const r of shRows) pushArchive(r);
   }
@@ -183,11 +270,12 @@ export async function getUnifiedSalesForOutlet(
         e instanceof Error ? e.message : e,
       );
       const fb = await prisma.$queryRaw<Array<ArchiveRow>>`
-        SELECT transaction_time AS ts, total, channel, channel_class, is_delivery_qr,
+        SELECT transaction_time AS ts, total, sub_total, channel, channel_class, is_delivery_qr,
                CASE WHEN channel_class IS NULL THEN raw END AS raw
         FROM storehub_sales
         WHERE outlet_id = ${outlet.outletId}
           AND NOT is_cancelled
+          AND (status IS NULL OR status <> 'paymentCancelled')
           AND transaction_time IS NOT NULL
           AND transaction_time >= ${todayStartMyt}
           AND transaction_time <= ${to}
@@ -206,23 +294,47 @@ export async function getUnifiedSalesForOutlet(
       ? Prisma.sql`AND created_at >= ${outlet.cutoverAt}`
       : Prisma.empty;
     const posRows = await prisma.$queryRaw<
-      Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null }>
+      Array<{ id: string; ts: Date; total: unknown; discount_amount: unknown; source: string | null; order_type: string | null }>
     >`
-      SELECT created_at AS ts, total, source, order_type
+      SELECT id, created_at AS ts, total, discount_amount, source, order_type
       FROM pos_orders
       WHERE outlet_id = ${outlet.loyaltyOutletId}
         AND status = 'completed'
+        AND refund_of_order_id IS NULL
         AND created_at >= ${from}
         AND created_at <= ${to}
         ${cutoverFloor}
     `;
+    // Dominant tender per order (largest payment). ONE batched DISTINCT ON over
+    // just these orders' payment rows (order_id-indexed) instead of a correlated
+    // subquery per order — the previous shape ran a subselect for every row.
+    const tenderByOrder = new Map<string, string | null>();
+    if (posRows.length > 0) {
+      const payRows = await prisma.$queryRaw<Array<{ order_id: string; payment_method: string | null }>>`
+        SELECT DISTINCT ON (order_id) order_id, payment_method
+        FROM pos_order_payments
+        WHERE order_id IN (${Prisma.join(posRows.map((r) => r.id))})
+        ORDER BY order_id, amount DESC NULLS LAST
+      `;
+      for (const p of payRows) tenderByOrder.set(p.order_id, p.payment_method);
+    }
     for (const r of posRows) {
       sales.push({
         ts: toISO(r.ts),
         total: (Number(r.total) || 0) / 100, // pos_orders.total is in sen
+        // discount_amount is the TOTAL discount applied; promo_discount and
+        // reward_discount_amount are its reason breakdown, NOT extra amounts
+        // (subtotal - total = discount_amount on 10,971 of 10,974 orders).
+        discount: (Number(r.discount_amount) || 0) / 100,
         channel: posChannel(r.order_type, r.source),
         isDeliveryQR: posIsDeliveryQR(r.order_type, r.source),
         channelLabel: r.source && r.source !== "pos" ? r.source : (r.order_type ?? "pos"),
+        source: posSource(r.order_type, r.source),
+        // Dominant tender of the order (split payments attribute the whole
+        // order to the largest payment — the By Payment report stays the
+        // precise per-payment view)
+        tender: tenderByOrder.get(r.id) ?? null,
+        units: 1,
       });
     }
   }
@@ -235,9 +347,11 @@ export async function getUnifiedSalesForOutlet(
   // all count toward Pickup & Delivery. ──
   if (!opts.storehubOnly && outlet.pickupStoreId) {
     const pickupRows = await prisma.$queryRaw<
-      Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null }>
+      Array<{ ts: Date; total: unknown; discount: unknown; source: string | null; order_type: string | null; payment_method: string | null }>
     >`
-      SELECT created_at AS ts, total, source, order_type
+      SELECT created_at AS ts, total, source, order_type, payment_method,
+             COALESCE(promo_discount, 0) + COALESCE(reward_discount_amount, 0)
+               + COALESCE(first_order_discount_amount, 0) AS discount
       FROM orders
       WHERE store_id = ${outlet.pickupStoreId}
         AND status IN (${Prisma.join(PICKUP_PAID_STATUSES)})
@@ -249,9 +363,50 @@ export async function getUnifiedSalesForOutlet(
       sales.push({
         ts: toISO(r.ts),
         total: (Number(r.total) || 0) / 100, // orders.total is in sen
+        // Opposite convention to the till: orders.discount_amount is unused
+        // (0 on all 3,141 paid 2026 orders); the three components ARE the
+        // discount.
+        discount: (Number(r.discount) || 0) / 100,
         channel: ot === "dine_in" ? "dine_in" : "takeaway",
         isDeliveryQR: true, // pickup-app / QR-table → Pickup & Delivery bucket
         channelLabel: r.source ?? "pickup",
+        source: pickupSource(r.source),
+        tender: r.payment_method,
+        units: 1,
+      });
+    }
+  }
+
+  // ── Consignment — Gyro Gastro (Nilai) & Kiddytopia (IOI Mall) weekly payment
+  // advices, digitised from the "Finance GH x Celsius" WhatsApp archive into
+  // consignment_sales (daily grain, gross = pre-commission retail). These two
+  // outlets have NO till of their own — no StoreHub, no pos_orders, no pickup —
+  // so this is their ONLY sales source and can never double-count. Keyed on the
+  // Celsius Outlet.id (= consignment_sales.outlet_id), same id used above for
+  // the StoreHub archive. `channel` is cafe|buttercream|moreh|bazaar|event|promo
+  // — all in-store counter sales, so they map to dine_in. ──
+  if (!opts.storehubOnly) {
+    const consRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; items: unknown; channel: string }>>`
+      SELECT ts, gross AS total, item_count AS items, channel FROM (
+        SELECT (biz_date + time '12:00') AT TIME ZONE 'Asia/Kuala_Lumpur' AS ts, gross, item_count, channel
+        FROM consignment_sales
+        WHERE outlet_id = ${outlet.outletId}
+      ) c
+      WHERE ts >= ${from} AND ts <= ${to}
+    `;
+    for (const r of consRows) {
+      sales.push({
+        ts: toISO(r.ts),
+        total: Number(r.total) || 0, // consignment_sales.gross is already RM
+        discount: 0, // weekly payment advice — retail gross only, no discounts
+        channel: "dine_in",
+        isDeliveryQR: false,
+        channelLabel: r.channel === "cafe" ? "consignment" : r.channel,
+        source: "consignment",
+        tender: null,
+        // No receipt count in the weekly advice — use the day's items sold as the
+        // unit count, so "transactions" reflects items and AOV = avg item price.
+        units: Number(r.items) || 0,
       });
     }
   }

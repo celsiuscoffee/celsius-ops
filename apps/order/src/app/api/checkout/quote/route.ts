@@ -27,7 +27,6 @@ export async function POST(request: NextRequest) {
     const {
       items,
       storeId,
-      loyaltyPhone,
       loyaltyId,
       rewardId = null,
       walletVoucherId = null,
@@ -129,43 +128,11 @@ export async function POST(request: NextRequest) {
     const pointsPerRm = Number((settingsMap.get("points_per_rm") as { rate?: number } | undefined)?.rate ?? 1);
     const minOrderRm = Number((settingsMap.get("min_order_value") as { rm?: number } | undefined)?.rm ?? 0);
 
-    // First-order discount — lives on the promotions table (same lookup
-    // as initiate / orders): most recent active trigger_type=first_order.
-    const { data: fodRow } = await supabase
-      .from("promotions")
-      .select("discount_type, discount_value, channels")
-      .eq("brand_id", "brand-celsius")
-      .eq("trigger_type", "first_order")
-      .eq("is_active", true)
-      .order("priority", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    // Channel scope — match initiate/orders so the preview equals the charge.
-    const fodChannels = (fodRow?.channels as string[] | null) ?? null;
-    const fodChannelOk =
-      !fodChannels || fodChannels.length === 0 || fodChannels.includes(channelForOrderType(orderType));
-    const fodConfig = fodRow && fodChannelOk
-      ? {
-          type: (fodRow.discount_type as string) === "percentage_off" ? "percent" : "fixed",
-          amount: Number((fodRow as { discount_value?: number }).discount_value ?? 0),
-        }
-      : null;
-
-    // First-order discount — first qualifying order on this phone.
-    let fodDiscountSen = 0;
-    if (fodConfig && loyaltyPhone) {
-      const { count } = await supabase
-        .from("orders")
-        .select("id", { count: "exact", head: true })
-        .eq("loyalty_phone", loyaltyPhone)
-        .in("status", ["completed", "preparing", "ready", "paid"]);
-      if ((count ?? 0) === 0) {
-        fodDiscountSen =
-          fodConfig.type === "percent"
-            ? Math.round(subtotalSen * (fodConfig.amount / 100))
-            : Math.round(fodConfig.amount * 100);
-      }
-    }
+    // First-order discount is a native-app-only perk (applied in /api/orders,
+    // gated on app_ios / app_android source). This quote powers the web/PWA
+    // checkout preview, which never gets the discount, so it always previews
+    // zero — keeping the preview equal to what /api/checkout/initiate charges.
+    const fodDiscountSen = 0;
 
     // Member tier → promo eligibility + points multiplier.
     let memberTierId: string | null = null;

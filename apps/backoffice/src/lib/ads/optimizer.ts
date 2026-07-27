@@ -39,6 +39,22 @@ export const CAPPED_AT = 0.9;           // spending ≥ 90% of budget ⇒ budget
 export const ENABLED_STATUSES = ["2", "ENABLED"];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Live allocated Google Ads daily budget across ENABLED (non-manager)
+ * campaigns, in MYR/day. This is the forward-looking committed spend the
+ * optimizer loop moves up and down — the cashflow marketing forecast reads it
+ * instead of the trailing bank run-rate so a budget cut (or raise) shows up in
+ * the projection immediately rather than bleeding in over 90 days.
+ */
+export async function getLiveAdsDailyBudgetMyr(): Promise<{ dailyMyr: number; campaigns: number }> {
+  const rows = await prisma.adsCampaign.findMany({
+    where: { status: { in: ENABLED_STATUSES }, account: { isManager: false } },
+    select: { dailyBudgetMicros: true },
+  });
+  const micros = rows.reduce((s, r) => s + (r.dailyBudgetMicros ?? BigInt(0)), BigInt(0));
+  return { dailyMyr: round2(Number(micros) / 1_000_000), campaigns: rows.length };
+}
 const round0 = (n: number) => Math.round(n);
 
 export type TrimSuggestion = {

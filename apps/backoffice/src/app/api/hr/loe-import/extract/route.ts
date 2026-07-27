@@ -17,7 +17,6 @@ type LoeRecord = {
   basicSalary: number | null;  // monthly RM
   hourlyRate: number | null;   // per-hour RM
   performanceAllowance: number | null;
-  attendanceAllowance: number | null;
   phone: string | null;
   email: string | null;
   icNumber: string | null;
@@ -39,7 +38,6 @@ Schema:
   "basicSalary": number | null,      // monthly base salary in RM. null for part-time. E.g. "RM 1,900.00" -> 1900.
   "hourlyRate": number | null,       // RM per hour for part-timers. null for FT. E.g. "RM9.00 per hour" -> 9.
   "performanceAllowance": number | null, // "Performance allowance: up to RM X monthly" -> X. null if not mentioned.
-  "attendanceAllowance": number | null,  // rare — only if explicitly labelled "Attendance allowance: up to RM X". Do NOT infer from performance allowance.
   "phone": string | null,            // if on the letter; usually absent
   "email": string | null,            // if on the letter; usually absent
   "icNumber": string | null,         // Malaysian IC if printed (format 000000-00-0000)
@@ -52,7 +50,7 @@ Rules:
 - "Part-time", "hourly-rated" -> employmentType="part_time".
 - Base wage / basic salary / "shall receive a monthly base salary" -> basicSalary.
 - If the letter says BOTH an amount and an allowance, separate them.
-- "RM2000 per month and allowance RM300" -> basicSalary=2000, attendanceAllowance=null, performanceAllowance=null, notes="Fixed allowance RM 300 mentioned — classify manually".
+- "RM2000 per month and allowance RM300" -> basicSalary=2000, performanceAllowance=null, notes="Fixed allowance RM 300 mentioned — classify manually".
 - Return STRICT JSON. No code fences, no prose.`;
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -108,7 +106,6 @@ async function extractOne(file: File): Promise<LoeRecord> {
       basicSalary: parsed.basicSalary ?? null,
       hourlyRate: parsed.hourlyRate ?? null,
       performanceAllowance: parsed.performanceAllowance ?? null,
-      attendanceAllowance: parsed.attendanceAllowance ?? null,
       phone: parsed.phone ?? null,
       email: parsed.email ?? null,
       icNumber: parsed.icNumber ?? null,
@@ -128,7 +125,6 @@ async function extractOne(file: File): Promise<LoeRecord> {
       basicSalary: null,
       hourlyRate: null,
       performanceAllowance: null,
-      attendanceAllowance: null,
       phone: null,
       email: null,
       icNumber: null,

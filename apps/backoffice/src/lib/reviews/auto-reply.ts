@@ -21,7 +21,22 @@ export type ReviewForReply = {
 };
 
 /** Generate a Google review reply in the Celsius owner voice. */
+export interface ReplyResult {
+  reply: string;
+  usage: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number | null;
+    cache_creation_input_tokens?: number | null;
+  } | null;
+}
+
 export async function generateReply(review: ReviewForReply): Promise<string> {
+  return (await generateReplyWithUsage(review)).reply;
+}
+
+// Same as generateReply but also returns token usage for cost logging.
+export async function generateReplyWithUsage(review: ReviewForReply): Promise<ReplyResult> {
   const isPositive = review.rating >= POSITIVE_THRESHOLD;
 
   const contextBlock = review.context?.trim()
@@ -65,7 +80,7 @@ Reply:`;
   });
 
   const text = response.content[0];
-  return text.type === "text" ? text.text.trim() : "";
+  return { reply: text.type === "text" ? text.text.trim() : "", usage: response.usage ?? null };
 }
 
 export type ImprovementVerdict = {

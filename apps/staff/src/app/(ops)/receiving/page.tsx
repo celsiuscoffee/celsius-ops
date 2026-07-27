@@ -35,6 +35,12 @@ interface OrderItem {
   unitPrice: number;
   totalPrice: number;
   notes: string | null;
+  // Balance-receiving context (see /api/orders GET): after a partial delivery,
+  // `quantity` is overwritten to the cumulative received — these carry the
+  // original target and the running total so the form can prefill the balance.
+  orderedOriginalQty?: number;
+  receivedSoFarQty?: number;
+  remainingQty?: number;
 }
 
 interface Order {
@@ -90,6 +96,14 @@ const STATUS_PILL: Record<string, { label: string; cls: string }> = {
   SENT: { label: "Sent", cls: "border-indigo-300 text-indigo-700 bg-indigo-50" },
   PARTIALLY_RECEIVED: { label: "Partial", cls: "border-orange-300 text-orange-700 bg-orange-50" },
 };
+
+// The quantity the CURRENT delivery is expected to bring: the remaining
+// balance on a partially-received PO, else the ordered quantity. Never
+// prefill `quantity` on a partial PO — it has been overwritten to the
+// already-received cumulative, and confirming it would double-receive.
+function expectedNow(item: OrderItem): number {
+  return item.remainingQty ?? item.quantity;
+}
 
 function isPerishable(name: string): boolean {
   const lower = name.toLowerCase();
@@ -185,7 +199,7 @@ export default function ReceivePage() {
     // visible "3" was a placeholder being mistaken for an entered value.
     const prefill: ReceivedQty = {};
     for (const item of po.items) {
-      prefill[item.id] = { qty: String(item.quantity), hasDiscrepancy: false };
+      prefill[item.id] = { qty: String(expectedNow(item)), hasDiscrepancy: false };
     }
     setReceivedQtys(prefill);
     setInvoicePhotos([]);
@@ -233,7 +247,7 @@ export default function ReceivePage() {
 
   const hasDiscrepancies = selectedPO?.items.some((item) => {
     const received = receivedQtys[item.id];
-    return received && parseFloat(received.qty) !== item.quantity;
+    return received && parseFloat(received.qty) !== expectedNow(item);
   });
 
   const submitReceiving = async () => {
@@ -248,7 +262,9 @@ export default function ReceivePage() {
         const receivedQty = parseFloat(receivedQtys[item.id]?.qty || "0") || 0;
         return {
           productId: item.productId,
-          orderedQty: item.quantity,
+          // Snapshot the ORIGINAL order target (not the overwritten cumulative)
+          // so completeness math on later receivings stays anchored correctly.
+          orderedQty: item.orderedOriginalQty ?? item.quantity,
           receivedQty,
           expiryDate: expiryDates[item.id] || undefined,
           discrepancyReason:
@@ -482,12 +498,14 @@ export default function ReceivePage() {
                 const receivedNum = received
                   ? parseFloat(received.qty)
                   : NaN;
+                const expected = expectedNow(item);
+                const priorReceived = item.receivedSoFarQty ?? 0;
                 const isShort =
-                  !isNaN(receivedNum) && receivedNum < item.quantity;
+                  !isNaN(receivedNum) && receivedNum < expected;
                 const isOver =
-                  !isNaN(receivedNum) && receivedNum > item.quantity;
+                  !isNaN(receivedNum) && receivedNum > expected;
                 const isMatch =
-                  !isNaN(receivedNum) && receivedNum === item.quantity;
+                  !isNaN(receivedNum) && receivedNum === expected;
 
                 return (
                   <Card
@@ -507,7 +525,10 @@ export default function ReceivePage() {
                             {item.product}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {item.sku} &middot; Ordered: {item.quantity}{" "}
+                            {item.sku} &middot;{" "}
+                            {priorReceived > 0
+                              ? `Balance: ${expected} of ${item.orderedOriginalQty ?? item.quantity} ordered (${priorReceived} already received)`
+                              : `Ordered: ${item.quantity}`}{" "}
                             {item.uom} &middot; RM{" "}
                             {item.unitPrice.toFixed(2)}/{item.uom}
                           </p>
@@ -520,7 +541,16 @@ export default function ReceivePage() {
                             variant="destructive"
                             className="text-[10px]"
                           >
-                            Short {item.quantity - receivedNum} {item.uom}
+                            Short {expected - receivedNum} {item.uom}
+                          </Badge>
+                        )}
+                        {isOver && (
+                          <Badge
+                            variant="outline"
+                            className="border-orange-300 text-[10px] text-orange-700"
+                          >
+                            Over by {receivedNum - expected} {item.uom}
+                            {priorReceived > 0 ? " — exceeds outstanding balance" : ""}
                           </Badge>
                         )}
                       </div>

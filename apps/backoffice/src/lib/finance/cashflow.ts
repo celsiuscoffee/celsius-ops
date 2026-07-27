@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { gateSchedule } from "@/lib/hr/labour-gate";
+import { remainingAmount } from "@/lib/finance/payables-forecast";
+import { getLiveAdsDailyBudgetMyr } from "@/lib/ads/optimizer";
 
 // Cashflow projection compute. Pure-function-ish: takes a horizon and an
 // optional outletId, returns weekly buckets with the breakdown that the
@@ -44,6 +47,7 @@ export type CashflowBucket = {
   otherIn: number;
   invoiceOut: number;
   payrollOut: number;
+  ptOut: number;          // part-timer wages — weekly Friday pulse from the roster
   cogsOut: number;
   marketingOut: number;
   recurringOut: number;
@@ -119,6 +123,11 @@ export type CashflowResult = {
   // for "should I be worried?" decisions. Inspired by QuickBooks'
   // Cash Flow Projector minimum-balance highlighting.
   projectedMin: { closing: number; weekStart: string; weekEnd: string } | null;
+  // Lowest DAILY point on the forward projection (the real intra-week walk),
+  // not just the week-end closings. This is the honest "did the projection ever
+  // dip" number — a week can close positive but dip mid-week when salary/rent
+  // clear before receipts land.
+  projectedDailyMin: { date: string; balance: number } | null;
   // Daily reconstructed bank balance — the "actual" running cash position,
   // walked day-by-day from each account's prior closing balance + its
   // transaction lines. Consolidated = sum across accounts on days where
@@ -314,28 +323,10 @@ async function projectPayroll(start: Date, end: Date): Promise<{ date: Date; amo
   return out;
 }
 
-// Last 3 months of ads_invoice → average monthly spend, projected forward.
-// Total is in micros (Google Ads convention) — divide by 1,000,000 to get RM.
-async function projectMarketing(start: Date, end: Date): Promise<{ date: Date; amount: number }[]> {
-  const rows = await prisma.$queryRaw<Array<{ avg_total: string | null; sample_day: number | null }>>`
-    SELECT
-      AVG(total_micros) / 1000000.0 AS avg_total,
-      AVG(EXTRACT(DAY FROM issue_date))::int AS sample_day
-    FROM ads_invoice
-    WHERE issue_date >= (CURRENT_DATE - INTERVAL '4 months')::date
-  `;
-  const avg = Number(rows[0]?.avg_total ?? 0);
-  if (avg <= 0) return [];
-  const sampleDay = Number(rows[0]?.sample_day ?? 5);
-
-  const out: { date: Date; amount: number }[] = [];
-  const cursor = new Date(start.getFullYear(), start.getMonth(), Math.min(28, sampleDay));
-  while (cursor <= end) {
-    if (cursor >= start) out.push({ date: new Date(cursor), amount: avg });
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-  return out;
-}
+// (Marketing is projected as a monthly pulse on the 20th — see computeCashflow.
+// Google Ads uses the LIVE optimizer-allocated budget (getLiveAdsDailyBudgetMyr)
+// so agent-loop cuts show up at once; SMS + KOL use the bank run-rate. The old
+// ads_invoice-based projectMarketing was removed: that feed was empty.)
 
 // --- Bank-line per-category projection ---------------------------------
 //
@@ -374,6 +365,22 @@ const COGS_OUTFLOW_CATEGORIES = [
   "RAW_MATERIALS", "DELIVERY",
 ] as const;
 
+// Part-timer wages — pulled OUT of the "other outflow" smear and projected as
+// their own weekly Friday pulse from the latest published roster (owner: PT is
+// paid every Friday). Kept out of otherOut here to avoid double-counting.
+const PT_OUTFLOW_CATEGORIES = new Set<string>(["PARTIMER"]);
+
+// Marketing — Google Ads + SMS + KOL. Pulled OUT of the smear and projected as
+// a monthly pulse on the 20th (owner: marketing is paid every 20th). DIGITAL_ADS
+// (Google Ads) is sized from the LIVE optimizer budget in computeCashflow, not
+// this bank run-rate — the bank figure is a fallback and feeds adsBankPerDay.
+// OTHER_MARKETING (SMS Niaga) + KOL use the bank run-rate. MARKETPLACE_FEE
+// (Grab/FP commission) is deliberately NOT here — Grab settles net of
+// commission, so it is not a separate cash outflow.
+const MARKETING_OUTFLOW_CATEGORIES = new Set<string>([
+  "DIGITAL_ADS", "OTHER_MARKETING", "KOL",
+]);
+
 // Categories that are projected via RecurringExpense entries (exact
 // pulse timing, per outlet). The auto-generator at
 // scripts/generate-recurring-from-bank-lines.ts populates these.
@@ -400,9 +407,16 @@ type BankLineProjection = {
   salesByDow: number[];          // [Sun..Sat] daily averages from sales categories
   cogsPerDay: number;            // raw materials + delivery
   otherInPerDay: number;         // catch-all CR (LOAN inflow, refunds, OTHER_INFLOW, etc.)
-  otherOutPerDay: number;        // catch-all DR (directors, partimer, marketing, capex,
-                                 // OTHER_OUTFLOW, etc.) — excludes PULSE_CATEGORIES
-                                 // to avoid double-count with RecurringExpense pulses
+  otherOutPerDay: number;        // catch-all DR (petty cash, staff claims, capex,
+                                 // OTHER_OUTFLOW, etc.) — excludes PULSE_CATEGORIES,
+                                 // PT and marketing (each projected on its own cadence)
+  adsBankPerDay: number;         // DIGITAL_ADS (Google Ads) daily rate from the
+                                 // bank — used only as a FALLBACK; the live
+                                 // optimizer budget is preferred (see computeCashflow)
+  otherMarketingPerDay: number;  // OTHER_MARKETING (SMS Niaga) + KOL daily rate;
+                                 // fired as a monthly pulse on the 20th by the caller
+  ptPerDay: number;              // PARTIMER daily rate — bank-line fallback for the
+                                 // weekly Friday pulse when the roster is unavailable
   sampleDays: number;            // number of distinct calendar days the data covers
   hasData: boolean;
 };
@@ -434,6 +448,9 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
   let cogsSum = 0;
   let otherInSum = 0;
   let otherOutSum = 0;
+  let adsSum = 0;         // DIGITAL_ADS (Google Ads) — bank actuals, fallback only
+  let otherMktSum = 0;    // OTHER_MARKETING (SMS Niaga) + KOL
+  let ptSum = 0;
 
   const SALES_SET = new Set<string>(SALES_INFLOW_CATEGORIES as readonly string[]);
   const COGS_SET = new Set<string>(COGS_OUTFLOW_CATEGORIES as readonly string[]);
@@ -456,6 +473,9 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
     } else {
       // DR
       if (COGS_SET.has(cat)) cogsSum += amt;
+      else if (PT_OUTFLOW_CATEGORIES.has(cat)) ptSum += amt;          // → weekly Friday pulse
+      else if (cat === "DIGITAL_ADS") adsSum += amt;                  // → live optimizer budget (fallback: this)
+      else if (MARKETING_OUTFLOW_CATEGORIES.has(cat)) otherMktSum += amt; // OTHER_MARKETING + KOL → monthly 20th pulse
       else if (PULSE_CATEGORIES.has(cat)) {
         // Skip — these are projected via RecurringExpense expansion
         // on their actual due dates. Including them here would
@@ -466,7 +486,7 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
         // discretionary, not a recurring operating burn. Smearing them
         // as a daily rate dragged the projection far too negative.
       }
-      else otherOutSum += amt;  // partimer, marketing, petty cash, catch-alls
+      else otherOutSum += amt;  // petty cash, staff claims, marketplace fee, catch-alls
     }
   }
 
@@ -481,9 +501,56 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
     cogsPerDay: cogsSum / sampleDays,
     otherInPerDay: otherInSum / sampleDays,
     otherOutPerDay: otherOutSum / sampleDays,
+    adsBankPerDay: adsSum / sampleDays,
+    otherMarketingPerDay: otherMktSum / sampleDays,
+    ptPerDay: ptSum / sampleDays,
     sampleDays,
     hasData: true,
   };
+}
+
+// Average days per month, for turning a per-day run-rate into a monthly pulse.
+const DAYS_PER_MONTH = 30.44;
+
+// PT wages from the latest published roster — projected on every Friday in the
+// horizon (owner: PT is paid weekly on Fridays, sized from the schedule). Sums
+// the ptCost of every outlet's most-recent published week via the vetted labour
+// -gate computation, so the projection and the actual weekly payout agree. Falls
+// back to the trailing bank-line PARTIMER rate when no roster is available.
+async function projectPtWeekly(
+  bankPtPerDay: number,
+): Promise<{ perFriday: number; source: "roster" | "bank" }> {
+  let perWeek = 0;
+  let source: "roster" | "bank" = "bank";
+  try {
+    // Each outlet's OWN latest published week (outlets publish on different
+    // cadences, so a single global "latest week" would only capture whichever
+    // outlet published most recently and undercount the rest).
+    const latest = await prisma.$queryRaw<Array<{ outlet_id: string; week_start: Date }>>`
+      SELECT DISTINCT ON (s.outlet_id) s.outlet_id, s.week_start
+      FROM hr_schedules s
+      WHERE EXISTS (SELECT 1 FROM hr_schedule_shifts sh WHERE sh.schedule_id = s.id)
+      ORDER BY s.outlet_id, s.week_start DESC
+    `;
+    if (latest.length > 0) {
+      const results = await Promise.all(
+        latest.map((r) => {
+          const ws = r.week_start instanceof Date ? ymd(r.week_start) : String(r.week_start).slice(0, 10);
+          return gateSchedule(r.outlet_id, ws).then((g) => g.ptCost).catch(() => 0);
+        }),
+      );
+      perWeek = results.reduce((s, c) => s + c, 0);
+      if (perWeek > 0) source = "roster";
+    }
+  } catch {
+    // roster unavailable — fall through to the bank-line rate
+  }
+  if (perWeek <= 0) {
+    perWeek = bankPtPerDay * 7;
+    source = "bank";
+  }
+  // Each Friday carries the full weekly PT wage.
+  return { perFriday: perWeek, source };
 }
 
 // Hybrid model — derive a per-day inflow/outflow rate from recent bank
@@ -548,6 +615,41 @@ async function bankFlowsPerDay(): Promise<{ inflow: number; outflow: number; sam
   return { inflow: perDayIn, outflow: perDayOut, sampleDays: maxSpanDays };
 }
 
+// Sales-weighted BOM food-cost fraction (recipe cost ÷ price) — the "follow
+// BOM" COGS basis the owner chose: the true cost of goods SOLD, not the lumpy
+// supplier-payment rate (which also carries waste, delivery, inventory build
+// and mis-categorised payments). Reads `menu_margins` (recipe cost per menu)
+// joined to the last 60 days of sold items (POS + pickup) by name, so it always
+// follows the current recipes and price mix. Falls back to a sane constant when
+// the join coverage is thin or the ratio lands outside a plausible band.
+const BOM_FOOD_COST_FALLBACK = 0.365;
+async function bomFoodCostPct(): Promise<number> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ cogs: number | null; rev: number | null }>>`
+      WITH sold AS (
+        SELECT lower(trim(product_name)) AS nm, quantity::numeric AS qty, unit_price::numeric / 100 AS price
+        FROM pos_order_items poi JOIN pos_orders po ON po.id = poi.order_id
+        WHERE po.status = 'completed' AND po.created_at >= now() - interval '60 days'
+        UNION ALL
+        SELECT lower(trim(product_name)), quantity::numeric, unit_price::numeric / 100
+        FROM order_items oi JOIN orders o ON o.id = oi.order_id
+        WHERE o.status = 'completed' AND o.created_at >= now() - interval '60 days'
+      )
+      SELECT sum(s.qty * mm.recipe_cost)::float AS cogs, sum(s.qty * s.price)::float AS rev
+      FROM sold s JOIN menu_margins mm ON lower(trim(mm.name)) = s.nm
+    `;
+    const cogs = Number(rows[0]?.cogs ?? 0);
+    const rev = Number(rows[0]?.rev ?? 0);
+    if (rev > 0) {
+      const pct = cogs / rev;
+      if (pct >= 0.15 && pct <= 0.6) return pct;  // sanity band; else fall back
+    }
+  } catch {
+    // menu_margins / sales tables unavailable — use the fallback
+  }
+  return BOM_FOOD_COST_FALLBACK;
+}
+
 // Total invoice outflow paid out over the last 4 months / total days in the
 // window — feeds the synthetic-known per-day baseline for the residual calc.
 async function historicalInvoicePerDay(outletIds: string[]): Promise<number> {
@@ -573,7 +675,11 @@ function expandRecurring(
   end: Date,
 ): { date: Date; amount: number; recurringExpenseId: string }[] {
   const out: { date: Date; amount: number; recurringExpenseId: string }[] = [];
-  let cursor = new Date(exp.nextDueDate);
+  // nextDueDate is stored as midnight-MYT (= prior-day 16:00 UTC). The week
+  // buckets compare in the server's (UTC) frame, so without this +8h shift a
+  // due date of e.g. 3 Aug (stored 2 Aug 16:00 UTC) lands in the PRIOR week and
+  // bunches payroll a day early into the wrong bucket. Align to the MYT day.
+  let cursor = new Date(exp.nextDueDate.getTime() + 8 * 3600_000);
   // Catch up to the window in case nextDueDate is in the past
   while (cursor < start) cursor = addCadence(cursor, exp.cadence);
   while (cursor <= end) {
@@ -590,7 +696,8 @@ export async function computeCashflow(opts: {
   outletId?: string | null;
   outletIds?: string[];
 }): Promise<CashflowResult> {
-  const weeks = Math.max(1, Math.min(26, opts.weeks ?? 8));
+  // Default horizon is the standard 13-week (rolling quarter) model.
+  const weeks = Math.max(1, Math.min(26, opts.weeks ?? 13));
   // Normalise to an array; deduplicate just in case.
   const outletIds = Array.from(
     new Set(
@@ -657,18 +764,49 @@ export async function computeCashflow(opts: {
     },
   });
 
-  // Synthetic payroll/marketing streams (the legacy hr_payroll_runs
-  // and ads_invoice path) are only used as a fallback when no
-  // RecurringExpense entries exist for the relevant categories. The
-  // per-outlet RecurringExpense entries above replace this for
-  // payroll. Marketing's still synthetic since we don't auto-generate
-  // marketing recurring entries (most marketing is one-off card spend).
+  // Synthetic payroll stream (legacy hr_payroll_runs) — fallback only when no
+  // PAYROLL_SUPPORT RecurringExpense entries exist.
   const hasRecurringPayroll = recurring.some((r) => r.category === "PAYROLL_SUPPORT");
   const payrollProjected = hasRecurringPayroll ? [] : await projectPayroll(today, horizonEnd);
-  const marketingProjected = isFiltered ? [] : await projectMarketing(today, horizonEnd);
-  if (isFiltered) {
-    warnings.push("Marketing run-rate is HQ-only and not allocated to outlets — it's excluded from the filtered view.");
+
+  // Marketing — monthly pulse on the 20th (owner: paid every 20th).
+  //   • Google Ads is agent-optimised and forward-looking: read the LIVE
+  //     allocated daily budget from the ads module. The optimizer loop moves it
+  //     up and down (a recent trim cut ~RM4k/mo), and the trailing bank run-rate
+  //     lags a cut by ~90 days — so the live budget is the honest forecast.
+  //   • SMS Niaga + KOL aren't agent-controlled, so they stay on the bank
+  //     run-rate.
+  // Falls back to the bank Google-Ads run-rate if the ads module is empty.
+  // Consolidated-only: marketing isn't outlet-allocated, so it drops out of a
+  // filtered view.
+  let adsDailyMyr = bankProj?.adsBankPerDay ?? 0;
+  try {
+    const live = await getLiveAdsDailyBudgetMyr();
+    if (live.campaigns > 0 && live.dailyMyr > 0) adsDailyMyr = live.dailyMyr;
+  } catch {
+    // Ads module unreachable — keep the bank run-rate fallback.
   }
+  const monthlyMarketing = bankProj
+    ? round2((adsDailyMyr + bankProj.otherMarketingPerDay) * DAYS_PER_MONTH)
+    : 0;
+  const marketingProjected: { date: Date; amount: number }[] = [];
+  if (!isFiltered && monthlyMarketing > 0) {
+    const cursor = new Date(today.getFullYear(), today.getMonth(), 20);
+    while (cursor <= horizonEnd) {
+      if (cursor >= today) marketingProjected.push({ date: new Date(cursor), amount: monthlyMarketing });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+  }
+  if (isFiltered) {
+    warnings.push("Marketing and part-timer wages are HQ/roster-level and not allocated per outlet — excluded from the filtered view.");
+  }
+
+  // Part-timer wages — weekly Friday pulse sized from the latest published
+  // roster (owner: PT paid every Friday). Consolidated-only (roster cost isn't
+  // split onto the outlet-filtered bank view here).
+  const ptWeekly = isFiltered
+    ? { perFriday: 0, source: "roster" as const }
+    : await projectPtWeekly(bankProj?.ptPerDay ?? 0);
 
   // Other-bank residual. Two paths:
   //  1. Bank-line projection available → use the per-category buckets
@@ -708,15 +846,13 @@ export async function computeCashflow(opts: {
     otherOutPerDay = Math.max(0, bankFlows.outflow - dailySyntheticOut);
   }
 
-  // Bank-line daily-rate streams. Only used for COGS and the
-  // catch-all Other in/out — those are paid frequently throughout
-  // the week (multiple supplier runs, refunds, transfers etc.) so a
-  // per-day rate is more accurate than a monthly pulse. Payroll /
-  // marketing / recurring instead use exact pulse timing from the
-  // RecurringExpense expansion above so the projection shows
-  // payments on their actual due-day-of-month rather than smeared
-  // across every week.
-  const bankCogsPerDay = bankProj && bankProj.cogsPerDay > 0 ? bankProj.cogsPerDay : 0;
+  // COGS follows the BOM (owner: recipe cost, not the lumpy supplier-payment
+  // rate). Each week's COGS = that week's sales forecast × the sales-weighted
+  // BOM food-cost fraction, then netted PER WEEK against committed invoices
+  // (which are supplier payments and would otherwise double-count) — the
+  // netting is lumpy/front-loaded so it must land in the invoice's own week,
+  // not spread evenly. See cogsOut in the loop.
+  const foodCostPct = await bomFoodCostPct();
 
   // Bucket builder
   const buckets: CashflowBucket[] = [];
@@ -735,29 +871,33 @@ export async function computeCashflow(opts: {
       salesIn += dowAvg[day.getDay()];
     }
 
-    // Invoices due this week
+    // Invoices due this week — remaining amount (honours partials/deposits),
+    // shared with the payables panel via remainingAmount().
     const wkInvoices = invoices.filter((iv) => iv.dueDate && iv.dueDate >= weekStart && iv.dueDate <= weekEnd);
-    const invoiceOut = wkInvoices.reduce((s, iv) => {
-      const amt = Number(iv.amount);
-      // amountPaid is the source of truth (covers DEPOSIT_PAID,
-      // PARTIALLY_PAID, and any combination of partials). Falls back to
-      // depositAmount for legacy DEPOSIT_PAID rows that haven't been
-      // touched since the partial-payments migration.
-      const paid = iv.amountPaid == null ? 0 : Number(iv.amountPaid);
-      if (paid > 0) return s + Math.max(0, amt - paid);
-      const dep = iv.depositAmount == null ? 0 : Number(iv.depositAmount);
-      return s + (iv.status === "DEPOSIT_PAID" ? Math.max(0, amt - dep) : amt);
-    }, 0);
+    const invoiceOut = wkInvoices.reduce((s, iv) => s + remainingAmount({
+      amount: Number(iv.amount),
+      amountPaid: iv.amountPaid == null ? null : Number(iv.amountPaid),
+      depositAmount: iv.depositAmount == null ? null : Number(iv.depositAmount),
+      status: iv.status,
+    }), 0);
 
     // Payroll this week
     const payrollOut = payrollProjected
       .filter((p) => p.date >= weekStart && p.date <= weekEnd)
       .reduce((s, p) => s + p.amount, 0);
 
-    // Marketing this week
+    // Marketing this week (monthly pulse on the 20th)
     const marketingOut = marketingProjected
       .filter((m) => m.date >= weekStart && m.date <= weekEnd)
       .reduce((s, m) => s + m.amount, 0);
+
+    // PT wages — one weekly pulse on the Friday of this week (if it's today or
+    // later). Each Monday-start week contains exactly one Friday.
+    let ptOut = 0;
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(weekStart.getTime() + d * DAY_MS);
+      if (day >= today && day.getDay() === 5) ptOut += ptWeekly.perFriday;
+    }
 
     // Other (bank residual) — count days in the week that are
     // >= today, since partial first weeks shouldn't include past days.
@@ -769,9 +909,12 @@ export async function computeCashflow(opts: {
     const otherIn = otherInPerDay * activeDays;
     const otherOut = otherOutPerDay * activeDays;
 
-    // Bank-line daily rate ONLY for COGS (paid to suppliers throughout
-    // the week — daily smearing is the right model).
-    const cogsOut = bankCogsPerDay * activeDays;
+    // COGS — this week's sales × the BOM food-cost %, NETTED against this
+    // week's committed invoices (which already appear as invoiceOut; those
+    // invoices ARE supplier COGS). Floored at 0: a week whose invoices exceed
+    // the BOM cost shows COGS 0 (the invoices dominate its supply spend). Nets
+    // per-week so the front-loaded invoice weeks don't double-count.
+    const cogsOut = Math.max(0, salesIn * foodCostPct - invoiceOut);
 
     // RecurringExpense entries fire on their actual due dates inside
     // the week (no smearing). Category determines which bucket they
@@ -801,7 +944,7 @@ export async function computeCashflow(opts: {
 
     const closing = runningOpening
       + salesIn + otherIn
-      - invoiceOut - totalPayrollOut - cogsOut - totalMarketingOut - totalRecurringOut - otherOut;
+      - invoiceOut - totalPayrollOut - ptOut - cogsOut - totalMarketingOut - totalRecurringOut - otherOut;
 
     buckets.push({
       weekStart: ymd(weekStart),
@@ -811,6 +954,7 @@ export async function computeCashflow(opts: {
       otherIn: round2(otherIn),
       invoiceOut: round2(invoiceOut),
       payrollOut: round2(totalPayrollOut),
+      ptOut: round2(ptOut),
       cogsOut: round2(cogsOut),
       marketingOut: round2(totalMarketingOut),
       recurringOut: round2(totalRecurringOut),
@@ -847,7 +991,62 @@ export async function computeCashflow(opts: {
   // Daily balance chart series — actuals + forward projection overlay.
   // Account-level, so it ignores the outlet filter by design.
   const dailyBalance = buildDailyBalanceSeries(dailyBalances);
-  dailyBalance.projected = buildProjectedDaily(ymd(today), opening.amount, buckets);
+
+  // Forward projection as a REAL daily walk (not a straight line between
+  // week-ends): each inflow/outflow lands on its actual day, so the line shows
+  // the true intra-week path — the dip when salary (3rd) and rent (8th) clear,
+  // and the recovery as Mon/Tue card + Revenue-Monster batches settle. The
+  // weekly totals are unchanged (a week's daily flows sum to its bucket), so
+  // each week-end still equals that bucket's closing; the new signal is the
+  // lowest DAILY point (projectedDailyMin), the honest "did we dip" number.
+  const exactOut = new Map<string, number>();
+  const addExactOut = (d: Date, amt: number) => {
+    if (!(amt > 0) || d < today || d > horizonEnd) return;
+    const k = ymd(d);
+    exactOut.set(k, (exactOut.get(k) ?? 0) + amt);
+  };
+  for (const iv of invoices) {
+    if (!iv.dueDate) continue;
+    addExactOut(iv.dueDate, remainingAmount({
+      amount: Number(iv.amount),
+      amountPaid: iv.amountPaid == null ? null : Number(iv.amountPaid),
+      depositAmount: iv.depositAmount == null ? null : Number(iv.depositAmount),
+      status: iv.status,
+    }));
+  }
+  for (const exp of recurring) {
+    for (const o of expandRecurring(
+      { id: exp.id, amount: Number(exp.amount), cadence: exp.cadence, nextDueDate: exp.nextDueDate },
+      today, horizonEnd,
+    )) addExactOut(o.date, o.amount);
+  }
+  for (const p of payrollProjected) addExactOut(p.date, p.amount);
+  for (const m of marketingProjected) addExactOut(m.date, m.amount);
+  for (let t = new Date(today); t <= horizonEnd; t = new Date(t.getTime() + DAY_MS)) {
+    if (t.getDay() === 5) addExactOut(t, ptWeekly.perFriday);  // PT every Friday
+  }
+
+  const projected: { date: string; balance: number }[] = [{ date: ymd(today), balance: round2(opening.amount) }];
+  let projectedDailyMin: { date: string; balance: number } | null = null;
+  let walkBal = opening.amount;
+  for (const b of buckets) {
+    const ws = new Date(`${b.weekStart}T00:00:00`);
+    let active = 0;
+    for (let d = 0; d < 7; d++) if (new Date(ws.getTime() + d * DAY_MS) >= today) active++;
+    const cogsPerActiveDay = active > 0 ? b.cogsOut / active : 0;
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(ws.getTime() + d * DAY_MS);
+      if (day < today || day > horizonEnd) continue;
+      const inflow = dowAvg[day.getDay()] + otherInPerDay;
+      const outflow = cogsPerActiveDay + otherOutPerDay + (exactOut.get(ymd(day)) ?? 0);
+      walkBal += inflow - outflow;
+      const point = { date: ymd(day), balance: round2(walkBal) };
+      projected.push(point);
+      if (projectedDailyMin == null || point.balance < projectedDailyMin.balance) projectedDailyMin = point;
+    }
+  }
+  dailyBalance.projected = projected;
+
   const cashGeneration = summariseCashGeneration(monthlyHistory, opening.amount);
   // Projected min balance — lowest closing across the projection horizon
   const projectedMin = buckets.length === 0 ? null : buckets.reduce<{ closing: number; weekStart: string; weekEnd: string } | null>(
@@ -875,7 +1074,10 @@ export async function computeCashflow(opts: {
           inflow: round2(
             (bankProj.salesByDow.reduce((a, b) => a + b, 0) / 7) + bankProj.otherInPerDay,
           ),
-          outflow: round2(bankProj.cogsPerDay + bankProj.otherOutPerDay),
+          // Full daily outflow run-rate — COGS + PT + marketing + catch-all.
+          // (PT and marketing are shown as pulses in the buckets, but the
+          // headline "avg out/day" should still reflect the whole run-rate.)
+          outflow: round2(bankProj.cogsPerDay + bankProj.otherOutPerDay + bankProj.ptPerDay + bankProj.adsBankPerDay + bankProj.otherMarketingPerDay),
           sampleDays: bankProj.sampleDays,
         }
       : bankFlows
@@ -885,6 +1087,7 @@ export async function computeCashflow(opts: {
     operatingCashFlow,
     cashGeneration,
     projectedMin,
+    projectedDailyMin,
     dailyBalance,
     buckets,
     warnings,
@@ -1308,6 +1511,98 @@ export async function loadCashGenerated(
   };
 }
 
+export type RunRateLeg = { avgIn: number; avgOut: number; avgNet: number; days: number };
+export type DailyRunRate = {
+  daysBack: number;
+  from: string;
+  to: string;
+  account: string | null;
+  accountLabel: string | null;
+  overall: RunRateLeg;
+  weekday: RunRateLeg;
+  weekend: RunRateLeg;
+};
+
+// How many trailing days the daily run-rate averages over. 90 days smooths the
+// lumpy weekly/monthly outflows (payroll, rent, big supplier runs) into a
+// stable per-day figure — long enough that one heavy week doesn't dominate.
+const RUN_RATE_DAYS = 90;
+
+// Average cash IN / OUT / NET per calendar day from actual bank flows, split
+// weekday vs weekend. External only (isInterCo=false) so inter-entity
+// transfers — which net to zero across the group — don't inflate both sides.
+// Divides by the count of calendar days in the window (not just days with a
+// transaction), so a quiet weekend correctly pulls the weekend average down.
+// This is the run-rate behind the "Avg cash in ≈ RM10.6k/day" the owner reads
+// off the bank; the settlement panel forecasts a narrower, forward figure.
+export async function loadDailyRunRate(
+  accountFilter?: string | null,
+  daysBack: number = RUN_RATE_DAYS,
+): Promise<DailyRunRate> {
+  const account = accountFilter && ACCOUNT_LABELS[accountFilter] ? accountFilter : null;
+  const accountLabel = account ? ACCOUNT_LABELS[account] : null;
+  const acctClause = account ? `AND s."accountName" LIKE '%(${account})%'` : "";
+
+  const rows = await prisma.$queryRawUnsafe<
+    { is_weekend: boolean; days: number; avg_in: number; avg_out: number; avg_net: number }[]
+  >(`
+    WITH lines AS (
+      SELECT (l."txnDate" + interval '8 hours')::date AS d, l.direction, l.amount,
+             extract(isodow from (l."txnDate" + interval '8 hours')::date) >= 6 AS is_weekend
+      FROM "BankStatementLine" l
+      JOIN "BankStatement" s ON s.id = l."statementId"
+      WHERE l."isInterCo" = false
+        AND (l."txnDate" + interval '8 hours')::date >= (now() + interval '8 hours')::date - ${daysBack}
+        AND (l."txnDate" + interval '8 hours')::date <  (now() + interval '8 hours')::date
+        ${acctClause}
+    ),
+    daycounts AS (
+      SELECT extract(isodow from (now() + interval '8 hours')::date - g) >= 6 AS is_weekend, count(*)::int AS days
+      FROM generate_series(1, ${daysBack}) g GROUP BY 1
+    )
+    SELECT dc.is_weekend,
+           dc.days,
+           (COALESCE(sum(l.amount) FILTER (WHERE l.direction='CR'),0)/dc.days)::float AS avg_in,
+           (COALESCE(sum(l.amount) FILTER (WHERE l.direction='DR'),0)/dc.days)::float AS avg_out,
+           ((COALESCE(sum(l.amount) FILTER (WHERE l.direction='CR'),0)
+             - COALESCE(sum(l.amount) FILTER (WHERE l.direction='DR'),0))/dc.days)::float AS avg_net
+    FROM daycounts dc
+    LEFT JOIN lines l ON l.is_weekend = dc.is_weekend
+    GROUP BY dc.is_weekend, dc.days
+  `);
+
+  const leg = (predicate: (r: (typeof rows)[number]) => boolean): RunRateLeg => {
+    const matched = rows.filter(predicate);
+    const days = matched.reduce((s, r) => s + Number(r.days), 0);
+    // Day-weighted mean so the overall figure is a true per-calendar-day rate.
+    const wsum = (f: (r: (typeof rows)[number]) => number) =>
+      days > 0 ? matched.reduce((s, r) => s + f(r) * Number(r.days), 0) / days : 0;
+    return {
+      avgIn: round2(wsum((r) => Number(r.avg_in))),
+      avgOut: round2(wsum((r) => Number(r.avg_out))),
+      avgNet: round2(wsum((r) => Number(r.avg_net))),
+      days,
+    };
+  };
+
+  const nowMyt = new Date(Date.now() + 8 * 3600_000);
+  const to = nowMyt.toISOString().slice(0, 10);
+  const fromD = new Date(nowMyt);
+  fromD.setUTCDate(fromD.getUTCDate() - daysBack);
+  const from = fromD.toISOString().slice(0, 10);
+
+  return {
+    daysBack,
+    from,
+    to,
+    account,
+    accountLabel,
+    overall: leg(() => true),
+    weekday: leg((r) => !r.is_weekend),
+    weekend: leg((r) => r.is_weekend),
+  };
+}
+
 // Pull a single account's daily balance series out of the reconstructed
 // DailyBalances. Accounts are keyed by their full accountName in the
 // reconstruction, so match on the last-4 suffix.
@@ -1356,30 +1651,6 @@ function buildDailyBalanceSeries(db: DailyBalances): NonNullable<CashflowResult[
 // Linearly interpolate the weekly forward buckets into a daily projected
 // balance line, anchored at today's opening balance so it overlays the
 // reconstructed actuals continuously on a single date axis.
-function buildProjectedDaily(
-  asOf: string,
-  openingAmount: number,
-  buckets: CashflowBucket[],
-): { date: string; balance: number }[] {
-  const anchors = [
-    { date: asOf, balance: openingAmount },
-    ...buckets.map((b) => ({ date: b.weekEnd, balance: b.closing })),
-  ];
-  const out: { date: string; balance: number }[] = [];
-  for (let i = 0; i < anchors.length - 1; i++) {
-    const a = anchors[i];
-    const b = anchors[i + 1];
-    const span = Math.max(1, Math.round((Date.parse(b.date) - Date.parse(a.date)) / DAY_MS));
-    for (let d = 0; d < span; d++) {
-      const t = new Date(Date.parse(a.date) + d * DAY_MS);
-      out.push({ date: ymd(t), balance: round2(a.balance + ((b.balance - a.balance) * d) / span) });
-    }
-  }
-  const last = anchors[anchors.length - 1];
-  out.push({ date: last.date, balance: round2(last.balance) });
-  return out;
-}
-
 // Operating Cash Flow per month — sourced from classified bank lines.
 // Pure operations only: sales channels in, operating costs out.
 // Excludes financing (loans, capital injections), investing (capex,

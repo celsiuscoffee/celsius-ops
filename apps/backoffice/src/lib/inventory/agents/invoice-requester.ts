@@ -80,7 +80,9 @@ export async function runInvoiceRequests(): Promise<InvoiceRequestSummary> {
   // A placeholder means the invoice is MISSING; those POs are exactly the ones
   // to chase. Real invoices (supplier-numbered, or dated, or paid) stop it.
   const isPlaceholder = (i: { invoiceNumber: string; status: string; dueDate: Date | null }) =>
-    i.invoiceNumber.startsWith("INV-") && i.dueDate == null && i.status === "PENDING";
+    (i.invoiceNumber.startsWith("INV-") || i.invoiceNumber.startsWith("GRNI-")) &&
+    i.dueDate == null &&
+    i.status === "PENDING";
   const orders = candidates.filter((o) => o.invoices.every(isPlaceholder)).slice(0, 100);
 
   let requested = 0;

@@ -2458,6 +2458,86 @@ function ChannelSettlementSection({ start, end }: { start: string; end: string }
   );
 }
 
+// ─── Cash-in by channel (per entity) ───────────────────────────
+// Revenue rung up vs cash actually banked, one row per entity per channel,
+// the gap judged against the channel's expected fee/commission. This is the
+// tender-level view (card/qr/online/consignment per entity, Grab group-level)
+// that complements the GL-debtor channel-settlement table below.
+
+type CashInRow = {
+  company: string;
+  channel: "card" | "qr" | "online" | "grab" | "consignment";
+  revenue: number;
+  banked: number;
+  gap: number;
+  gapPct: number | null;
+  expectedPct: number;
+  status: "ok" | "review";
+  note: string;
+};
+type CashInReport = { from: string; to: string; rows: CashInRow[]; totals: { revenue: number; banked: number; gap: number } };
+
+const CASHIN_ENTITY: Record<string, string> = {
+  celsius: "Shah Alam + Nilai (SB)",
+  celsiusconezion: "Putrajaya (Conezion)",
+  celsiustamarind: "Cyberjaya (Tamarind)",
+  group: "Group",
+};
+const CASHIN_CHANNEL: Record<string, string> = { card: "Card", qr: "DuitNow QR", online: "Online (RM)", grab: "GrabFood", consignment: "Consignment" };
+
+function CashInByChannelSection({ start, end }: { start: string; end: string }) {
+  const { data, isLoading } = useFetch<{ report: CashInReport }>(`/api/finance/reports/cash-in?start=${start}&end=${end}`);
+  if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading cash-in…</div>;
+  if (!data?.report) return null;
+  const { rows, totals } = data.report;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between">
+        <h3 className="text-sm font-semibold">Cash-in by channel, per entity</h3>
+        <span className="text-[11px] text-muted-foreground">revenue rung vs cash banked</span>
+      </div>
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Entity</th>
+            <th className="px-3 py-2 font-medium">Channel</th>
+            <th className="px-3 py-2 text-right font-medium">Revenue</th>
+            <th className="px-3 py-2 text-right font-medium">Banked</th>
+            <th className="px-3 py-2 text-right font-medium">Gap</th>
+            <th className="px-3 py-2 text-right font-medium">Gap %</th>
+            <th className="px-3 py-2 font-medium">Status</th>
+          </tr></thead>
+          <tbody className="divide-y">
+            {rows.map((r) => (
+              <tr key={`${r.company}-${r.channel}`} className="hover:bg-muted/40" title={r.note}>
+                <td className="px-3 py-1.5">{CASHIN_ENTITY[r.company] ?? r.company}</td>
+                <td className="px-3 py-1.5">{CASHIN_CHANNEL[r.channel] ?? r.channel}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">{RM(r.revenue)}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">{RM(r.banked)}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">{RM(r.gap)}</td>
+                <td className="px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{r.gapPct === null ? "" : `${r.gapPct}%`}</td>
+                <td className="px-3 py-1.5">
+                  <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${r.status === "review" ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"}`}>
+                    {r.status === "review" ? "Review" : "OK"}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot><tr className="border-t-2 font-semibold">
+            <td className="px-3 py-2" colSpan={2}>Total</td>
+            <td className="px-3 py-2 text-right tabular-nums">{RM(totals.revenue)}</td>
+            <td className="px-3 py-2 text-right tabular-nums">{RM(totals.banked)}</td>
+            <td className="px-3 py-2 text-right tabular-nums">{RM(totals.gap)}</td>
+            <td className="px-3 py-2" colSpan={2} />
+          </tr></tfoot>
+        </table>
+      </div>
+      <p className="text-[11px] text-muted-foreground">Revenue is what the till/app rang; banked is the classified bank credit for that channel. The gap is the expected fee/commission (card MDR ~1%, QR free, online ~2%, Grab ~45% incl. GrabAds, consignment ~30%). Where the bank line carries a sales date — Maybank card and Revenue Monster — each credit is matched to the day it settles, so the residual is the true fee, not a timing tail. DuitNow QR is real-time and free (residual is window-edge timing); Shah Alam card settles through NTT as an undated batch, so it reconciles on cash received in the window and lags. Rows flagged <span className="font-medium">Review</span> exceed the band, meaning money rung has not fully arrived (worth confirming). Grab is group-level because Conezion and Shah Alam Grab both settle into HQ&apos;s account.</p>
+    </div>
+  );
+}
+
 function ReconTab() {
   // Default to the matched period: sales archive + bank feed both exist from
   // 2026-01, so the channels net to true fees/timing (before that the bank feed
@@ -2472,6 +2552,7 @@ function ReconTab() {
         <span className="text-xs text-muted-foreground">Period</span>
         <DateRangePicker start={start} end={end} onChange={(s, e) => { setStart(s); setEnd(e); }} />
       </div>
+      <CashInByChannelSection start={start} end={end} />
       {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full min-w-[640px] text-sm">

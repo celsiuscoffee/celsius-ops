@@ -5,7 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { computeLateMinutes, mytDateString } from "@/lib/hr/hours";
 import { GRACE_PERIOD_MINUTES } from "@/lib/hr/constants";
-import { minConcurrentInSlot } from "@/lib/hr/coverage";
+import { computeWeekDemand, SERVICE_FLOOR } from "@/lib/hr/demand";
+import { allocateStationCounts, STATION_ANCHOR_TARGET, type ShiftWindow } from "@/lib/hr/shift-allocation";
+import { isManagementPosition } from "@/lib/hr/labour-gate-lib";
+import { attendsFridayPrayer } from "@/lib/hr/agents/schedule-generator";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +16,12 @@ export const dynamic = "force-dynamic";
 // and stored in each assist-log snapshot so they can later be re-learned from
 // manager overrides. Keep them summing sensibly; cost is a *penalty*.
 export const FIT_WEIGHTS = { reliability: 0.3, availability: 0.25, fairness: 0.2, skill: 0.15, home: 0.1, cost: 0.1 };
+
+// Managers/HQ (owner rule 2026-07-18): their shifts are never man-hours and
+// AI Fill never auto-schedules them, but Assist MAY offer them as a manual
+// cover option — ranked BELOW every eligible line-staff candidate and tagged
+// manager_cover so the UI labels them. Barista Lead is ordinary pool: the
+// rover lead works the bar.
 
 const toMin = (t: string) => {
   const [h, m] = t.split(":").map(Number);
@@ -53,18 +62,10 @@ export async function GET(req: NextRequest) {
   const weekEnd = new Date(dateMs + (6 - daysSinceMonday) * 86400000).toISOString().slice(0, 10);
 
   // Outlet + open window (fallback to 08:00–22:00).
-  const outlet = await prisma.outlet.findUnique({ where: { id: outletId }, select: { id: true, name: true, openTime: true, closeTime: true } });
+  const outlet = await prisma.outlet.findUnique({ where: { id: outletId }, select: { id: true, name: true, openTime: true, closeTime: true, loyaltyOutletId: true } });
   if (!outlet) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
   const openT = (outlet.openTime || "08:00").slice(0, 5);
   const closeT = (outlet.closeTime || "22:00").slice(0, 5);
-
-  // Coverage target for this weekday (daily concurrency requirement).
-  const { data: covRules } = await hrSupabaseAdmin
-    .from("hr_outlet_coverage_rules")
-    .select("day_of_week, slot_start, slot_end, min_staff")
-    .eq("outlet_id", outletId)
-    .eq("day_of_week", weekday);
-  const dayRules = (covRules || []) as { slot_start: string; slot_end: string; min_staff: number }[];
 
   // Shift templates for the window picker.
   const { data: tpls } = await hrSupabaseAdmin
@@ -86,11 +87,18 @@ export async function GET(req: NextRequest) {
   const userIds = users.map((u) => u.id);
 
   const { data: profiles } = userIds.length
-    ? await hrSupabaseAdmin.from("hr_employee_profiles").select("user_id, position, employment_type, rest_day, schedule_required, basic_salary, hourly_rate").in("user_id", userIds)
+    ? await hrSupabaseAdmin.from("hr_employee_profiles").select("user_id, position, employment_type, rest_day, schedule_required, basic_salary, hourly_rate, gender, religion, join_date, end_date").in("user_id", userIds)
     : { data: [] as ProfileRow[] };
-  type ProfileRow = { user_id: string; position: string | null; employment_type: string | null; rest_day: number | null; schedule_required: boolean | null; basic_salary: number | null; hourly_rate: number | null };
+  type ProfileRow = { user_id: string; position: string | null; employment_type: string | null; rest_day: number | null; schedule_required: boolean | null; basic_salary: number | null; hourly_rate: number | null; gender: string | null; religion: string | null; join_date: string | null; end_date: string | null };
   const profileMap = new Map<string, ProfileRow>((profiles || []).map((p: ProfileRow) => [p.user_id, p]));
-  const pool = users.filter((u) => profileMap.get(u.id)?.schedule_required !== false);
+  // Employment window: not yet joined or already left on `date` → not a candidate.
+  const pool = users.filter((u) => {
+    const p = profileMap.get(u.id);
+    if (p?.schedule_required === false) return false;
+    if (p?.end_date && date > p.end_date) return false;
+    if (p?.join_date && date < p.join_date) return false;
+    return true;
+  });
   const poolIds = pool.map((u) => u.id);
 
   // This week's shifts (weekly hours + same-day double-book).
@@ -151,6 +159,11 @@ export async function GET(req: NextRequest) {
   const capH = Number(settings?.max_regular_hours_per_week ?? 45);
 
   // ---- Coverage picture (always returned) ----
+  // Same logic as AI Fill's day split: THE demand model gives heads-needed per
+  // hour, allocateShiftCounts turns that into per-template head counts (the
+  // smallest crew that clears every hour's shortfall). Gap = that count minus
+  // who's actually rostered on the window — so what Assist says is short is
+  // exactly what the generator would have staffed.
   const { data: sched } = await hrSupabaseAdmin.from("hr_schedules").select("id").eq("outlet_id", outletId).eq("week_start", weekStart).maybeSingle();
   let daysShifts: { user_id: string; start_time: string; end_time: string }[] = [];
   if (sched) {
@@ -158,16 +171,97 @@ export async function GET(req: NextRequest) {
     daysShifts = (data || []).filter((s: { start_time: string }) => s.start_time !== "00:00");
   }
   const assignedHeadcount = new Set(daysShifts.map((s) => s.user_id)).size;
-  const coverage = dayRules.map((r) => {
-    const concurrent = minConcurrentInSlot(daysShifts.map((s) => ({ start_time: s.start_time, end_time: s.end_time })), r.slot_start.slice(0, 5), r.slot_end.slice(0, 5));
-    return { slot_start: r.slot_start.slice(0, 5), slot_end: r.slot_end.slice(0, 5), min_staff: r.min_staff, concurrent, gap: Math.max(0, r.min_staff - concurrent) };
-  });
+
+  const weekDemand = await computeWeekDemand(outlet, weekStart);
+  const openH = Number(openT.slice(0, 2));
+  const closeH = Number(closeT.slice(0, 2));
+  // Per-station hourly need, same split as the generator's day allocation:
+  // kitchen from the cooked-food curve; barista/counter carries the floor.
+  const kitToday: Record<number, number> = {};
+  const barToday: Record<number, number> = {};
+  for (let h = openH; h < closeH; h++) {
+    const kit = weekDemand.kitHeadsByHour.get(`${weekday}:${h}`) ?? 0;
+    kitToday[h] = kit;
+    barToday[h] = Math.max(weekDemand.barHeadsByHour.get(`${weekday}:${h}`) ?? SERVICE_FLOOR, SERVICE_FLOOR - kit);
+  }
+
+  const windows: ShiftWindow[] = templates
+    .map((t) => ({ key: t.id, startH: Number(t.start_time.slice(0, 2)), endH: Number(t.end_time.slice(0, 2)) }))
+    .sort((a, b) => a.startH - b.startH || a.endH - b.endH);
+  // Smallest crew whose allocation clears every hour of a station's demand,
+  // arranged the way the generator would arrange it (structural anchors first:
+  // 2 at open + 2 at close carry prep/cleaning the item curve can't see, so a
+  // station with any demand needs at least 4). Zero-demand stations need zero.
+  const neededFor = (demandByHour: Record<number, number>): Map<string, number> => {
+    let total = 0;
+    for (let h = openH; h < closeH; h++) total += demandByHour[h] ?? 0;
+    if (total === 0 || windows.length === 0) return new Map();
+    const shortfallOf = (counts: Map<string, number>): number => {
+      const cov: Record<number, number> = {};
+      for (const w of windows) {
+        const c = counts.get(w.key) ?? 0;
+        for (let h = w.startH; h < w.endH; h++) cov[h] = (cov[h] ?? 0) + c;
+      }
+      let s = 0;
+      for (let h = openH; h < closeH; h++) s += Math.max(0, (demandByHour[h] ?? 0) - (cov[h] ?? 0));
+      return s;
+    };
+    let counts = new Map<string, number>();
+    for (let n = STATION_ANCHOR_TARGET * 2; n <= 30; n++) {
+      counts = allocateStationCounts({ heads: n, windows, demandByHour });
+      if (shortfallOf(counts) === 0) break;
+    }
+    return counts;
+  };
+  const kitNeed = neededFor(kitToday);
+  const barNeed = neededFor(barToday);
+
+  // Each rostered shift counts toward the template it matches (exact times), or
+  // failing that the window it overlaps most — manual/custom shifts still count.
+  // Split by the worker's station so a kitchen gap isn't "covered" by a barista.
+  const isBOHPosition = (p: string | null | undefined) => {
+    const s = (p ?? "").toLowerCase();
+    return s.includes("kitchen") || s.includes("chef") || s.includes("boh");
+  };
+  const kitGot = new Map<string, number>();
+  const barGot = new Map<string, number>();
+  for (const s of daysShifts) {
+    // Management shifts don't count as man-hours toward the template coverage.
+    if (isManagementPosition(profileMap.get(s.user_id)?.position)) continue;
+    const st = s.start_time.slice(0, 5), en = s.end_time.slice(0, 5);
+    let win = templates.find((t) => t.start_time === st && t.end_time === en)?.id;
+    if (!win && windows.length > 0) {
+      let best = windows[0], bestOv = -Infinity;
+      for (const w of windows) {
+        const ov = Math.min(toMin(en) / 60, w.endH) - Math.max(toMin(st) / 60, w.startH);
+        if (ov > bestOv) { bestOv = ov; best = w; }
+      }
+      win = best.key;
+    }
+    if (!win) continue;
+    const target = isBOHPosition(profileMap.get(s.user_id)?.position) ? kitGot : barGot;
+    target.set(win, (target.get(win) ?? 0) + 1);
+  }
+  const coverage = templates
+    .map((t) => {
+      const kNeed = kitNeed.get(t.id) ?? 0, bNeed = barNeed.get(t.id) ?? 0;
+      const kGot = kitGot.get(t.id) ?? 0, bGot = barGot.get(t.id) ?? 0;
+      return {
+        template_id: t.id, label: t.label, slot_start: t.start_time, slot_end: t.end_time,
+        min_staff: kNeed + bNeed, concurrent: kGot + bGot,
+        gap: Math.max(0, kNeed - kGot) + Math.max(0, bNeed - bGot),
+        kitchen_need: kNeed, kitchen_got: kGot, kitchen_gap: Math.max(0, kNeed - kGot),
+        barista_need: bNeed, barista_got: bGot, barista_gap: Math.max(0, bNeed - bGot),
+      };
+    })
+    .filter((c) => c.min_staff > 0 || c.concurrent > 0);
 
   const base = {
     outlet: { id: outlet.id, name: outlet.name, open: openT, close: closeT },
     date, weekday, week_start: weekStart,
     coverage, assigned_headcount: assignedHeadcount,
-    has_coverage_rule: dayRules.length > 0,
+    has_coverage_rule: coverage.length > 0,
+    demand_note: weekDemand.calibrationNote,
     templates,
     weights: FIT_WEIGHTS,
   };
@@ -176,11 +270,18 @@ export async function GET(req: NextRequest) {
   if (!start || !end) return NextResponse.json({ ...base, candidates: null });
 
   const slotH = Math.max(0, (toMin(end) - toMin(start)) / 60);
+  // Friday prayer (~13:00–14:15): a Muslim man on a Friday slot spanning it
+  // will leave the floor mid-shift — flag + rank women/non-Muslims first
+  // (owner rule 2026-07-18). Soft signal, not a block: sometimes there's
+  // nobody else, and the flag tells the manager to plan midday relief.
+  const slotSpansFridayPrayer = weekday === 5 && toMin(start) <= 13 * 60 && toMin(end) >= 14 * 60;
 
   const candidates = pool.map((u) => {
     const p = profileMap.get(u.id);
     const empType = p?.employment_type || "full_time";
     const isPT = empType === "part_time" || empType === "intern";
+    const isMgr = isManagementPosition(p?.position);
+    const fridayPrayer = slotSpansFridayPrayer && attendsFridayPrayer(p?.gender ?? null, p?.religion ?? null);
     const weeklyH = (weeklyMin.get(u.id) || 0) / 60;
 
     // Hard blocks (candidate stays visible; blocked ones drop to the bottom).
@@ -212,7 +313,9 @@ export async function GET(req: NextRequest) {
       : 0.7;
     // Marginal-cost penalty: a salaried FT under the cap is nearly free at the
     // margin; a PT is pay-per-hour; anyone pushed into OT is the most expensive.
-    let costNorm = isPT ? 0.6 : 0.2;
+    // Managers cost the outlet RM0 (HQ overhead) — but they rank below line
+    // staff regardless (see sort): a manager shift is cover, not man-hours.
+    let costNorm = isMgr ? 0 : isPT ? 0.6 : 0.2;
     if (weeklyH + slotH > capH) costNorm = 1;
 
     const fit = 100 * clamp01(
@@ -221,7 +324,8 @@ export async function GET(req: NextRequest) {
       FIT_WEIGHTS.fairness * fairness +
       FIT_WEIGHTS.skill * skill +
       FIT_WEIGHTS.home * home -
-      FIT_WEIGHTS.cost * costNorm,
+      FIT_WEIGHTS.cost * costNorm -
+      (fridayPrayer ? 0.1 : 0), // ~10 fit points: prefer prayer-free on Friday midday slots
     );
 
     return {
@@ -229,6 +333,8 @@ export async function GET(req: NextRequest) {
       name: u.fullName || u.name || null,
       position: p?.position || null,
       employment_type: empType,
+      manager_cover: isMgr || undefined, // suggested as COVER only — not man-hours
+      friday_prayer: fridayPrayer || undefined, // will leave the floor ~13:00–14:15 for Jumaat
       fit_score: Math.round(fit),
       weekly_hours: Math.round(weeklyH * 10) / 10,
       weekly_hours_after: Math.round((weeklyH + slotH) * 10) / 10,
@@ -243,10 +349,12 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  // Eligible (no blocks) first, then by fit desc.
+  // Eligible (no blocks) first, line staff before manager-cover, then fit desc.
   candidates.sort((a, b) => {
     const aB = a.hard_blocks.length > 0, bB = b.hard_blocks.length > 0;
     if (aB !== bB) return aB ? 1 : -1;
+    const aM = a.manager_cover ? 1 : 0, bM = b.manager_cover ? 1 : 0;
+    if (aM !== bM) return aM - bM;
     return b.fit_score - a.fit_score;
   });
 

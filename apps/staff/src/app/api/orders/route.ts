@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
           select: {
             id: true,
             productId: true,
+            productPackageId: true,
             quantity: true,
             unitPrice: true,
             totalPrice: true,
@@ -77,6 +78,40 @@ export async function GET(req: NextRequest) {
     }),
     prisma.order.count({ where }),
   ]);
+
+  // Balance-receiving context. Each receiving OVERWRITES OrderItem.quantity to
+  // the cumulative received, so on a partially-received PO `quantity` no longer
+  // holds the original order — the receive screens need the original target and
+  // the running total to prefill the REMAINING balance (prefolding `quantity`
+  // invites double-receipt: confirm-the-prefill records the already-received
+  // amount again). Original ordered = MAX of the per-receiving orderedQty
+  // snapshots (the first receiving saw the pre-overwrite PO); received-so-far =
+  // sum of receivedQty across receivings, keyed per product+package line.
+  const withReceipts = orders.filter((o) => o._count.receivings > 0).map((o) => o.id);
+  const cumByOrder = new Map<string, Map<string, { received: number; ordered: number }>>();
+  if (withReceipts.length > 0) {
+    const recvItems = await prisma.receivingItem.findMany({
+      where: { receiving: { orderId: { in: withReceipts } } },
+      select: {
+        productId: true,
+        productPackageId: true,
+        receivedQty: true,
+        orderedQty: true,
+        receiving: { select: { orderId: true } },
+      },
+    });
+    for (const ri of recvItems) {
+      const orderId = ri.receiving.orderId;
+      if (!orderId) continue;
+      const key = `${ri.productId}::${ri.productPackageId ?? ""}`;
+      const byLine = cumByOrder.get(orderId) ?? new Map();
+      const cur = byLine.get(key) ?? { received: 0, ordered: 0 };
+      cur.received += Number(ri.receivedQty);
+      if (ri.orderedQty != null) cur.ordered = Math.max(cur.ordered, Number(ri.orderedQty));
+      byLine.set(key, cur);
+      cumByOrder.set(orderId, byLine);
+    }
+  }
 
   const mapped = orders.map((o) => ({
     id: o.id,
@@ -95,19 +130,29 @@ export async function GET(req: NextRequest) {
     approvedAt: o.approvedAt?.toISOString() ?? null,
     sentAt: o.sentAt?.toISOString() ?? null,
     createdAt: o.createdAt.toISOString(),
-    items: o.items.map((i) => ({
-      id: i.id,
-      productId: i.productId,
-      product: i.product.name,
-      sku: i.product.sku,
-      uom: i.productPackage?.packageLabel ?? i.product.baseUom,
-      shelfLifeDays: i.product.shelfLifeDays,
-      package: i.productPackage?.packageLabel ?? i.productPackage?.packageName ?? "",
-      quantity: Number(i.quantity),
-      unitPrice: Number(i.unitPrice),
-      totalPrice: Number(i.totalPrice),
-      notes: i.notes,
-    })),
+    items: o.items.map((i) => {
+      const line = cumByOrder.get(o.id)?.get(`${i.productId}::${i.productPackageId ?? ""}`);
+      const receivedSoFar = line?.received ?? 0;
+      // No snapshot (line never touched by a receiving) → quantity still holds
+      // the original order.
+      const orderedOriginal = line && line.ordered > 0 ? line.ordered : Number(i.quantity);
+      return {
+        id: i.id,
+        productId: i.productId,
+        product: i.product.name,
+        sku: i.product.sku,
+        uom: i.productPackage?.packageLabel ?? i.product.baseUom,
+        shelfLifeDays: i.product.shelfLifeDays,
+        package: i.productPackage?.packageLabel ?? i.productPackage?.packageName ?? "",
+        quantity: Number(i.quantity),
+        unitPrice: Number(i.unitPrice),
+        totalPrice: Number(i.totalPrice),
+        notes: i.notes,
+        orderedOriginalQty: orderedOriginal,
+        receivedSoFarQty: receivedSoFar,
+        remainingQty: Math.max(0, orderedOriginal - receivedSoFar),
+      };
+    }),
     receivingCount: o._count.receivings,
   }));
 

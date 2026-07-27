@@ -102,3 +102,15 @@ attribution (populate `related_id` at decision time, join on it in
 
 _Append dated entries when this skill misses something. Promote stable ones
 into the sections above._
+
+- 2026-07-20 — **Staff pay-and-claim is a first-class AP pattern, not a
+  mismatch.** Staff frequently pay a vendor out of pocket and get reimbursed,
+  so the bank line shows the STAFF NAME (often with an outlet prefix, e.g.
+  "Putrajaya ARIFF IZHAM BIN ABD*"), not the vendor. The invoice IS settled.
+  The AP verifier (`ap-verifier.ts`, now `ap-verifier-v2`) loads active staff
+  names and flags these as `pay_and_claim` → routed to the human finance queue,
+  NOT rejected as a wrong match and NOT auto-cleared (fuzzy name match is too
+  weak to auto-post money). `fin_agent_decisions.output` now carries
+  `pay_and_claim` + `paid_by` for the eval loop. Owner-facing: these post a
+  "staff pay-and-claim" handoff on the pulse feed, never the "stopped a wrong
+  match" correction.

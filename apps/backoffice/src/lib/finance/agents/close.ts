@@ -1,4 +1,5 @@
-// Close Agent — month-end close runner. Posts depreciation for active fixed
+// Close Agent — month-end close runner. Books the annual depreciation charge
+// when December is closed, accrues
 // assets, accrues the management fee shortfall owed to HQ (6.8% of the
 // month's revenue less what was already paid), clears the Grab debtor for the
 // month (commission + the Conezion interco leg — model in close-prep.ts),
@@ -15,6 +16,8 @@ import {
   mgmtFeeAccrual, MGMT_FEE_EXPENSE_CODE, DUE_TO_HQ_CODE,
   grabClearingForPeriod, MARKETPLACE_FEE_CODE, GRAB_DEBTOR_CODE, DUE_TO_CONEZION_CODE,
 } from "../close-prep";
+import { postApAccrual, type PostApAccrualResult } from "../ap-accrual";
+import { postAnnualDepreciation } from "../depreciation";
 
 export const CLOSE_AGENT_VERSION = "close-v3";
 
@@ -31,109 +34,24 @@ export type RunCloseResult = {
   depreciation: { posted: number; transactionIds: string[] };
   mgmtFee: { accrued: number; transactionId: string | null; skipped: string | null };
   grabClearing: { commission: number; intercoLeg: number; transactionId: string | null; skipped: string | null };
+  apAccrual: PostApAccrualResult;
   snapshot: { pnl: PnlSnapshot; bs: BsSnapshot };
   locked: boolean;
 };
 
-// 1500 maps to its 1550 accumulated-dep counterpart by suffix.
-//   1500-00 Coffee machines       → 1550-00 Coffee machines - Acc dep
-//   1500-01 Furniture and fittings → 1550-01 Furniture and fittings - Acc dep
-function accumulatedDepCode(assetCode: string): string {
-  if (!assetCode.startsWith("1500-")) {
-    throw new Error(`Cannot derive accumulated-dep code from ${assetCode}`);
-  }
-  return `1550-${assetCode.slice("1500-".length)}`;
-}
-
-// Straight-line monthly depreciation — only method we support today. The
-// fin_fixed_assets row tracks accumulated_dep, so we compute the marginal
-// charge for THIS period only.
-function monthlyCharge(cost: number, usefulLifeMonths: number): number {
-  if (usefulLifeMonths <= 0) return 0;
-  return Math.round((cost / usefulLifeMonths) * 100) / 100;
-}
-
+// Depreciation is an ANNUAL charge (owner's policy), not a monthly drip: the
+// whole year is booked once, dated 31 Dec, when the December period is closed.
+// Closing any other month charges nothing. The underlying poster is idempotent
+// per (company, year), so re-closing December never double-charges.
 async function postDepreciation(
   companyId: string,
   period: string,
   _actor: string
 ): Promise<{ posted: number; transactionIds: string[] }> {
-  const client = getFinanceClient();
-  const { data: assets, error } = await client
-    .from("fin_fixed_assets")
-    .select("id, account_code, outlet_id, description, cost, useful_life_months, accumulated_dep, status")
-    .eq("company_id", companyId)
-    .eq("status", "active");
-  if (error) throw error;
-
-  // Last day of the period — depreciation posts on the closing date.
-  const [year, month] = period.split("-").map(Number);
-  const lastDay = new Date(Date.UTC(year, month, 0));
-  const txnDate = lastDay.toISOString().slice(0, 10);
-
-  const transactionIds: string[] = [];
-  let totalCharge = 0;
-
-  for (const asset of assets ?? []) {
-    const cost = Number(asset.cost);
-    const accumDep = Number(asset.accumulated_dep);
-    const useful = asset.useful_life_months as number;
-
-    // Don't depreciate beyond cost.
-    const remaining = Math.max(cost - accumDep, 0);
-    if (remaining <= 0) {
-      // Mark as fully depreciated so we stop iterating it.
-      await client
-        .from("fin_fixed_assets")
-        .update({ status: "fully_depreciated" })
-        .eq("id", asset.id);
-      continue;
-    }
-    const charge = Math.min(monthlyCharge(cost, useful), remaining);
-    if (charge <= 0) continue;
-
-    const accumCode = accumulatedDepCode(asset.account_code as string);
-
-    // DR 6512 Depreciation expense / CR 1550-xx Accumulated dep
-    const lines: JournalLineInput[] = [
-      {
-        accountCode: "6512",
-        outletId: (asset.outlet_id as string) ?? null,
-        debit: charge,
-        memo: `Dep: ${asset.description}`,
-      },
-      {
-        accountCode: accumCode,
-        outletId: (asset.outlet_id as string) ?? null,
-        credit: charge,
-        memo: `Acc dep: ${asset.description}`,
-      },
-    ];
-
-    const result = await postJournal({
-      companyId,
-      txnDate,
-      description: `Depreciation ${period} — ${asset.description}`,
-      txnType: "depreciation",
-      outletId: (asset.outlet_id as string) ?? null,
-      sourceDocId: null,
-      agent: "close",
-      agentVersion: CLOSE_AGENT_VERSION,
-      confidence: 1.0,
-      lines,
-    });
-
-    transactionIds.push(result.transactionId);
-    totalCharge += charge;
-
-    // Update the asset row.
-    await client
-      .from("fin_fixed_assets")
-      .update({ accumulated_dep: accumDep + charge })
-      .eq("id", asset.id);
-  }
-
-  return { posted: Math.round(totalCharge * 100) / 100, transactionIds };
+  const [yearStr, month] = period.split("-");
+  if (month !== "12") return { posted: 0, transactionIds: [] };
+  const dep = await postAnnualDepreciation(companyId, Number(yearStr));
+  return { posted: dep.posted, transactionIds: dep.transactionId ? [dep.transactionId] : [] };
 }
 
 export type PnlSnapshot = {
@@ -432,11 +350,17 @@ export async function runClose(input: RunCloseInput): Promise<RunCloseResult> {
   //    snapshot so the period's P&L carries the marketplace fee.
   const grabClearing = await postGrabClearing(input.companyId, input.period);
 
-  // 4. Snapshot
+  // 4. AP accrual — recognise open supplier bills as payables (Dr expense /
+  //    Cr 3001), reversing next period so the cash-basis bank payment doesn't
+  //    double-count. Brings the Invoice subledger into the GL; 3001 at period
+  //    end ties to Aged Payables. Before the snapshot so the P&L/BS carry it.
+  const apAccrual = await postApAccrual(input.companyId, input.period);
+
+  // 5. Snapshot
   const pnl = await buildPnl(input.companyId, input.period);
   const bs = await buildBs(input.companyId, input.period);
 
-  // 3. Persist snapshot + optional lock
+  // 6. Persist snapshot + optional lock
   await client
     .from("fin_periods")
     .upsert(
@@ -458,6 +382,7 @@ export async function runClose(input: RunCloseInput): Promise<RunCloseResult> {
     depreciation,
     mgmtFee,
     grabClearing,
+    apAccrual,
     snapshot: { pnl, bs },
     locked: !!input.lock,
   };

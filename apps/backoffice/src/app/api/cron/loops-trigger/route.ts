@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
 import { runTriggeredLoops, autoMeasureDueRounds, runRoundGapDaily, autoPauseUnderperformers } from "@/lib/loyalty/loop-engine";
+import { runWeeklyReport } from "@/lib/loyalty/weekly-report";
+import { runMissionLoop } from "@/lib/loyalty/mission-loop";
+import { touchAgentRun } from "@celsius/agents/src/substrate";
+import { logAgentMessage } from "@celsius/agents/src/messages";
+import { runMarketingStrategist } from "@/lib/marketing/marketing-strategist";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -21,7 +26,57 @@ export async function GET(req: NextRequest) {
     const autoPaused = await autoPauseUnderperformers();
     const triggered = await runTriggeredLoops();
     const roundGap = await runRoundGapDaily(); // per-segment promo loop (its own mechanic)
-    return NextResponse.json({ triggered, roundGap, measured: measured.measured, autoPaused });
+    // Mondays (MYT): send the owner's weekly Telegram scorecard AFTER the
+    // day's measure/kill/send so it reads the freshest numbers. Rides this
+    // cron on purpose — the repo runs a hard Vercel cron budget
+    // (vercel-crons.test.ts), so the report doesn't get its own schedule.
+    const isMondayMyt = new Date(Date.now() + 8 * 3600000).getUTCDay() === 1;
+    const weeklyReport = isMondayMyt ? await runWeeklyReport().catch((e) => ({ ok: false, skipped: e instanceof Error ? e.message : "failed" })) : undefined;
+    // Marketing strategist rides the same Monday slot, AFTER the weekly report so
+    // it reasons over the freshest measured rounds. Advisory; never fails the run.
+    const strategist = isMondayMyt
+      ? await runMarketingStrategist().catch((e) => ({ sent: false, skipped: e instanceof Error ? e.message : "failed" }))
+      : undefined;
+
+    // Mission cash loop: refresh each mission's net-cash-vs-baseline scorecard
+    // and auto-retire cannibalisers (reward costs more than the incremental
+    // spend it drives). Same measure→kill discipline as the SMS loops. Never
+    // throws — a bad measurement must not take down the send cron.
+    const missionLoop = await runMissionLoop().catch((e) => ({ measured: 0, retired: [], error: e instanceof Error ? e.message : "failed" }));
+
+    // Fleet visibility: both loops are armed but were never calling the
+    // substrate, so /agents showed them as "never ran" and they posted nothing
+    // to the feed. Heartbeat every run (even a quiet one) so the panel can tell
+    // healthy-but-quiet from stopped; post one plain-English feed line only when
+    // there was real activity (notify:false = shows on /agents + the daily
+    // digest, no real-time ping). Never throws.
+    await touchAgentRun("sms_lifecycle_loops");
+    await touchAgentRun("round_gap_loop");
+    const smsSent = triggered.reduce((n, r) => n + (r.sent ?? 0), 0);
+    const smsQualified = triggered.reduce((n, r) => n + (r.qualified ?? 0), 0);
+    if (smsSent > 0) {
+      await logAgentMessage({
+        fromAgent: "sms_lifecycle_loops",
+        toAgent: "owner",
+        kind: "report",
+        summary: `Lifecycle loops sent ${smsSent} SMS today across birthday, first-visit and just-lapsed members (${smsQualified} qualified).`,
+        detail: triggered.filter((r) => (r.sent ?? 0) > 0).map((r) => `${r.loop}: ${r.sent} sent`).join("; ") || undefined,
+        notify: false,
+      });
+    }
+    const gapSent = roundGap.reduce((n, r) => n + (r.sent ?? 0), 0);
+    if (gapSent > 0) {
+      await logAgentMessage({
+        fromAgent: "round_gap_loop",
+        toAgent: "owner",
+        kind: "report",
+        summary: `Round-gap loop sent ${gapSent} win-back SMS across ${roundGap.filter((r) => (r.sent ?? 0) > 0).length} segment(s) today.`,
+        detail: roundGap.filter((r) => (r.sent ?? 0) > 0).map((r) => `${r.campaign}: ${r.sent} sent`).join("; ") || undefined,
+        notify: false,
+      });
+    }
+
+    return NextResponse.json({ triggered, roundGap, measured: measured.measured, autoPaused, missionLoop, ...(weeklyReport ? { weeklyReport } : {}), ...(strategist ? { strategist } : {}) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "loops-trigger failed";
     return NextResponse.json({ error: msg }, { status: 500 });

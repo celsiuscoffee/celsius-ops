@@ -15,24 +15,22 @@ export async function GET() {
 
   const { data: settings } = await hrSupabaseAdmin
     .from("hr_company_settings")
-    .select("attendance_allowance_amount, performance_allowance_amount")
+    .select("performance_allowance_amount")
     .limit(1)
     .maybeSingle();
   const defaults = {
-    attendance_allowance_amount: Number(settings?.attendance_allowance_amount ?? 100),
-    performance_allowance_amount: Number(settings?.performance_allowance_amount ?? 100),
+    performance_allowance_amount: Number(settings?.performance_allowance_amount ?? 200),
   };
 
   // All profiles, we filter client-side for employment_type eligibility.
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, employment_type, schedule_required, attendance_allowance_amount, performance_allowance_amount");
+    .select("user_id, employment_type, schedule_required, performance_allowance_amount");
 
   type ProfileRow = {
     user_id: string;
     employment_type: string | null;
     schedule_required: boolean | null;
-    attendance_allowance_amount: number | null;
     performance_allowance_amount: number | null;
   };
   const rows = (profiles || []) as ProfileRow[];
@@ -62,9 +60,6 @@ export async function GET() {
       fullName: u.fullName,
       role: u.role,
       outletName: u.outlet?.name ?? null,
-      attendance_allowance_amount: p?.attendance_allowance_amount != null
-        ? Number(p.attendance_allowance_amount)
-        : null,
       performance_allowance_amount: p?.performance_allowance_amount != null
         ? Number(p.performance_allowance_amount)
         : null,
@@ -82,9 +77,8 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { user_id, attendance_allowance_amount, performance_allowance_amount } = body as {
+  const { user_id, performance_allowance_amount } = body as {
     user_id: string;
-    attendance_allowance_amount: number | null;
     performance_allowance_amount: number | null;
   };
   if (!user_id) {
@@ -100,7 +94,6 @@ export async function PATCH(req: NextRequest) {
   };
 
   const patch = {
-    attendance_allowance_amount: norm(attendance_allowance_amount),
     performance_allowance_amount: norm(performance_allowance_amount),
     updated_at: new Date().toISOString(),
   };
@@ -109,7 +102,7 @@ export async function PATCH(req: NextRequest) {
     .from("hr_employee_profiles")
     .update(patch)
     .eq("user_id", user_id)
-    .select("user_id, attendance_allowance_amount, performance_allowance_amount")
+    .select("user_id, performance_allowance_amount")
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

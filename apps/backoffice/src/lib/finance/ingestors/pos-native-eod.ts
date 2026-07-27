@@ -121,6 +121,10 @@ export function aggregateNativeEod(
     txnCount += 1;
     refIds.push(o.id);
     sst += sstRm;
+    // pos_orders.discount_amount is the TOTAL discount on the order; the
+    // promo_discount / reward_discount_amount columns are its reason
+    // breakdown, not additional amounts. The pickup query above aliases its
+    // own components into the same field.
     discounts += Number(o.discount_amount ?? 0) / 100;
 
     // Delivery aggregator → whole order to that channel, ignore tender.
@@ -279,7 +283,13 @@ export async function ingestOutletNativeEod(
   // Single inline tender per order → synthesize a payment line for `total`. ──
   if (outlet.pickupStoreId) {
     const pickupRows = await prisma.$queryRaw<Array<OrderRow & { payment_method: string | null }>>`
-      SELECT id, source, subtotal, sst_amount, total, discount_amount, payment_method
+      SELECT id, source, subtotal, sst_amount, total, payment_method,
+             -- The pickup app uses the OPPOSITE discount convention to the
+             -- till: orders.discount_amount is unused (0 on every paid 2026
+             -- order) and the three components below ARE the discount. Reading
+             -- discount_amount here reported every pickup discount as zero.
+             COALESCE(promo_discount, 0) + COALESCE(reward_discount_amount, 0)
+               + COALESCE(first_order_discount_amount, 0) AS discount_amount
       FROM orders
       WHERE store_id = ${outlet.pickupStoreId}
         AND status = 'completed'

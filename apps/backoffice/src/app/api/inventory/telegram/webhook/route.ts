@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import { v2 as cloudinary } from "cloudinary";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
+import { mintPlaceholderNumber, isPlaceholderNumber, normalizeInvoiceRef } from "@/lib/inventory/placeholder-number";
 import { createShortLink } from "@/lib/shortlink";
 import { detectPaymentFlags, appendInvoiceFlags } from "@/lib/inventory/flag-detector";
 import { computeDepositAmount } from "@/lib/inventory/deposit";
@@ -666,28 +667,126 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     }
   }
 
+  // When the transfer's recipient account identifies a supplier, every number
+  // lookup should be scoped to THAT supplier — a reference quoted on a payment
+  // to Yow Seng must never match another vendor's same-numbered row.
+  const accountDigits = pop.recipientAccount ? pop.recipientAccount.replace(/\D/g, "") : "";
+  const payeeSupplier =
+    accountDigits.length >= 6
+      ? await prisma.supplier.findFirst({
+          where: { bankAccountNumber: { contains: accountDigits }, status: "ACTIVE" },
+          select: { id: true },
+        })
+      : null;
+
   // 1. Try matching by invoice reference (most direct — invoice number in payment description)
   if (pop.invoiceReference) {
-    const byInvoiceRef = await prisma.invoice.findMany({
+    let byInvoiceRef = await prisma.invoice.findMany({
       where: {
         invoiceNumber: { equals: pop.invoiceReference, mode: "insensitive" },
         status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
+        ...(payeeSupplier ? { supplierId: payeeSupplier.id } : {}),
       },
       include: invoiceInclude,
       take: 5,
     });
+    // Separator-tolerant fallback. The exact query above misses when the receipt
+    // quotes the number with a different separator than we store — "26 0677"
+    // (space, off the bank app) vs our "26-0677" (hyphen) — dropping a payment
+    // that NAMED its invoice into the blind picker. Fold both sides to their
+    // alphanumeric key and match that. Scoped to open invoices (supplier-scoped
+    // when the recipient account identified one) so it can't reach across
+    // suppliers; exact NORMALISED equality only, so "260677" never grabs a
+    // "1260677".
+    if (byInvoiceRef.length === 0) {
+      const refNorm = normalizeInvoiceRef(pop.invoiceReference);
+      if (refNorm.length >= 4) {
+        const openPool = await prisma.invoice.findMany({
+          where: {
+            status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
+            ...(payeeSupplier ? { supplierId: payeeSupplier.id } : {}),
+          },
+          include: invoiceInclude,
+          take: 500,
+        });
+        byInvoiceRef = openPool
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+          .filter((inv: any) => normalizeInvoiceRef(inv.invoiceNumber) === refNorm)
+          .slice(0, 5);
+      }
+    }
+    // A placeholder-shaped reference (GRNI-/INV-/TRF-<n>) is a number WE
+    // fabricated, not the supplier's — it's only trustworthy when something
+    // else on the receipt corroborates. Finance genuinely pays against
+    // placeholder numbers (the approve-to-pay card shows them), so they stay
+    // matchable — but each candidate must also match on amount (full or
+    // deposit) or payee tokens, or it's dropped to the safer stages below.
+    if (byInvoiceRef.length > 0 && !payeeSupplier && isPlaceholderNumber(pop.invoiceReference)) {
+      const GENERIC_PH = new Set(["sdn", "bhd", "the", "enterprise", "trading", "resources", "marketing", "malaysia"]);
+      const tok = (s: string) =>
+        s.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !GENERIC_PH.has(t));
+      const popTokens = new Set(pop.recipientName ? tok(pop.recipientName) : []);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      byInvoiceRef = byInvoiceRef.filter((inv: any) => {
+        const amtOk =
+          Math.abs(Number(inv.amount) - amount) <= 0.5 ||
+          (inv.depositAmount != null && Math.abs(Number(inv.depositAmount) - amount) <= 0.5);
+        const name = inv.supplier?.name ?? inv.vendorName ?? inv.order?.claimedBy?.name;
+        const payeeOk = name ? tok(name).some((t) => popTokens.has(t)) : false;
+        return amtOk || payeeOk;
+      });
+    }
+    // The same number can sit on rows for DIFFERENT suppliers/outlets: GRNI
+    // placeholders share one INV-<n> sequence across all suppliers, and capture
+    // mistakes have stamped one vendor's number onto another's invoice (real
+    // case: INV-1844 open on both Yow Seng RM1312.30 and Unique Paper RM260.47;
+    // IVCT-00012381 on both Milk n Moka RM432 and TMM RM509.76). The receipt
+    // carries more than the number — narrow by amount, payee, and outlet before
+    // ever asking a human to pick.
+    if (byInvoiceRef.length > 1) {
+      // (a) Amount — full or deposit leg within the usual ±RM0.50 tolerance.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      const byAmt = byInvoiceRef.filter((inv: any) => {
+        const full = Math.abs(Number(inv.amount) - amount) <= 0.5;
+        const dep = inv.depositAmount != null && Math.abs(Number(inv.depositAmount) - amount) <= 0.5;
+        return full || dep;
+      });
+      if (byAmt.length > 0) byInvoiceRef = byAmt;
+    }
+    if (byInvoiceRef.length > 1 && pop.recipientName) {
+      // (b) Payee — distinctive-token overlap between the transfer's recipient
+      // and the row's supplier/vendor/claimant ("MILK & MOKA MARKETIN" shares
+      // "moka" with "Milk n Moka" but nothing with "The Milk Ministry").
+      const GENERIC = new Set(["sdn", "bhd", "the", "enterprise", "trading", "resources", "marketing", "malaysia"]);
+      const tokens = (s: string) =>
+        s.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !GENERIC.has(t));
+      const payeeTokens = new Set(tokens(pop.recipientName));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      const byPayee = byInvoiceRef.filter((inv: any) => {
+        const name = inv.supplier?.name ?? inv.vendorName ?? inv.order?.claimedBy?.name;
+        return name ? tokens(name).some((t) => payeeTokens.has(t)) : false;
+      });
+      if (byPayee.length > 0 && byPayee.length < byInvoiceRef.length) byInvoiceRef = byPayee;
+    }
+    if (byInvoiceRef.length > 1 && pop.outletHint) {
+      // (c) Outlet — same rule as the amount-path narrowing below.
+      const hint = pop.outletHint.toLowerCase();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      const byOutlet = byInvoiceRef.filter((inv: any) => {
+        const code = inv.outlet?.code?.toLowerCase();
+        const name = inv.outlet?.name?.toLowerCase();
+        return (code && hint.includes(code)) || (name && hint.includes(name));
+      });
+      if (byOutlet.length > 0) byInvoiceRef = byOutlet;
+    }
     if (byInvoiceRef.length > 0) {
       return await resolvePop(chatId, msgId, photoUrl, pop, amount, byInvoiceRef);
     }
   }
 
-  // 2. Try matching by supplier bank account (precise)
+  // 2. Try matching by supplier bank account (precise; lookup hoisted above)
   if (pop.recipientAccount) {
-    const accountDigits = pop.recipientAccount.replace(/\D/g, "");
-    const supplierByBank = await prisma.supplier.findFirst({
-      where: { bankAccountNumber: { contains: accountDigits }, status: "ACTIVE" },
-      select: { id: true },
-    });
+    const supplierByBank = payeeSupplier;
     if (supplierByBank) {
       const bankMatched = await prisma.invoice.findMany({
         where: {
@@ -847,20 +946,32 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
   // finance instead of silently paying the wrong one. The correctly-named
   // invoice, when still open, already matched in step 1.
   if (candidates.length > 0 && pop.invoiceReference) {
-    const refNorm = pop.invoiceReference.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    const refNorm = normalizeInvoiceRef(pop.invoiceReference);
     if (refNorm.length >= 5) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
       const refHitsCandidate = candidates.some((c: any) => {
-        const n = (c.invoiceNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+        const n = normalizeInvoiceRef(c.invoiceNumber);
         return n.length >= 5 && (n === refNorm || n.endsWith(refNorm) || refNorm.endsWith(n));
       });
       if (!refHitsCandidate) {
-        const named = await prisma.invoice.findFirst({
-          where: { invoiceNumber: { contains: pop.invoiceReference, mode: "insensitive" } },
-          select: { id: true, invoiceNumber: true, status: true, paidVia: true },
+        // Find the named invoice by its NORMALISED number so a separator/space
+        // variant ("26 0677" for "26-0677") still trips the guard. Can't fold in
+        // SQL, so prefilter on the longest digit run (cheap LIKE) then compare
+        // folded keys in JS. Searches every status — the guard's whole job is to
+        // catch a receipt naming an already-PAID invoice.
+        const digitRun = (pop.invoiceReference.match(/\d{3,}/g) ?? []).sort((a, b) => b.length - a.length)[0] ?? "";
+        const pool = digitRun
+          ? await prisma.invoice.findMany({
+              where: { invoiceNumber: { contains: digitRun, mode: "insensitive" } },
+              select: { id: true, invoiceNumber: true, status: true, paidVia: true },
+              take: 20,
+            })
+          : [];
+        const named = pool.find((inv) => {
+          const n = normalizeInvoiceRef(inv.invoiceNumber);
+          return n.length >= 5 && (n === refNorm || n.endsWith(refNorm) || refNorm.endsWith(n));
         });
-        const namedNorm = named ? named.invoiceNumber.replace(/[^a-z0-9]/gi, "").toLowerCase() : "";
-        const namesReal = !!named && (namedNorm === refNorm || namedNorm.endsWith(refNorm) || refNorm.endsWith(namedNorm));
+        const namesReal = !!named;
         if (namesReal) {
           console.warn(
             `[telegram:pop] ref "${pop.invoiceReference}" names ${named!.invoiceNumber} (${named!.status}) — not among the RM${amount} candidates; not auto-paying a same-amount sibling`,
@@ -1387,8 +1498,7 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
     // delivery; deposit is computed off that so a supplier charging 10%
     // deposit on RM 105 (RM 100 items + RM 5 delivery) gets RM 10.50, not
     // RM 10.00.
-    const invCount = await prisma.invoice.count();
-    const invoiceNumber = inv.invoiceNumber || `INV-${String(invCount + 1).padStart(4, "0")}`;
+    const invoiceNumber = inv.invoiceNumber || (await mintPlaceholderNumber(prisma, order.outlet.id));
     const depositAmount = await computeDepositAmount(order.supplierId, effectiveAmount);
 
     await prisma.invoice.create({

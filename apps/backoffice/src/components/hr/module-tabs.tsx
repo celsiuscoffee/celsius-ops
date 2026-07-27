@@ -38,6 +38,7 @@ const TAB_GROUPS: { module: string; tabs: { href: string; label: string }[] }[] 
     tabs: [
       { href: "/hr/attendance", label: "Attendance" },
       { href: "/hr/roster-attendance", label: "Roster" },
+      { href: "/hr/pt-hours", label: "PT Hours" },
       { href: "/hr/overtime", label: "Overtime" },
       { href: "/hr/shift-swaps", label: "Shift Swaps" },
     ],
@@ -46,7 +47,6 @@ const TAB_GROUPS: { module: string; tabs: { href: string; label: string }[] }[] 
     module: "Scheduling",
     tabs: [
       { href: "/hr/schedules", label: "Schedules" },
-      { href: "/hr/schedule-assist", label: "Assist" },
       { href: "/hr/availability", label: "Availability" },
       { href: "/hr/coverage", label: "Coverage Rules" },
     ],

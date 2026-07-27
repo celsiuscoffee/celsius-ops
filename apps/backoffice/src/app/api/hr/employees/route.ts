@@ -41,7 +41,7 @@ export async function GET() {
     },
     select: {
       id: true, name: true, fullName: true, role: true, phone: true, email: true,
-      outletId: true, outlet: { select: { name: true } },
+      outletId: true, outletIds: true, outlet: { select: { name: true } },
       username: true, appAccess: true, moduleAccess: true, status: true,
       pin: true, passwordHash: true, lastLoginAt: true,
       ...(canSeePayrollPII ? { bankName: true, bankAccountNumber: true, bankAccountName: true } : {}),
@@ -51,8 +51,8 @@ export async function GET() {
 
   const PII_PROFILE_FIELDS = [
     // Compensation + banking
-    "basic_salary", "hourly_rate",
-    "attendance_allowance_amount", "performance_allowance_amount",
+    "basic_salary", "hourly_rate", "hourly_rate_weekend",
+    "performance_allowance_amount",
     "overtime_flat_rate", "shift_flat_rate",
     // Statutory / government identifiers
     "ic_number", "passport_number", "passport_expiry",

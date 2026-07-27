@@ -19,6 +19,7 @@ export type ConsumptionResult = {
   alreadyPosted: boolean; // idempotency hit
   menusSold: number;
   menusWithoutRecipe: number;
+  itemsUnmapped: number; // items sold whose product_id maps to no Menu row
   productsConsumed: number;
   lines: { productId: string; productName: string; baseUom: string; quantity: number }[];
 };

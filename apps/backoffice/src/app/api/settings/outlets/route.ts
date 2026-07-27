@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { OutletStatus } from "@prisma/client";
 import { getUserFromHeaders } from "@/lib/auth";
+import { sortOutlets } from "@/lib/outlet-order";
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
     productCount: b._count.outletProducts,
   }));
 
-  return NextResponse.json(mapped);
+  return NextResponse.json(sortOutlets(mapped));
 }
 
 export async function POST(req: NextRequest) {

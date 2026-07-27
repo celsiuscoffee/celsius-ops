@@ -115,6 +115,10 @@ export default function PickupAnalyticsPage() {
   const [engLoading,    setEngLoading]    = useState(true);
 
   useEffect(() => {
+    // `cancelled` guard (matching the engagement effect below): switching
+    // 7d→90d→7d lets the slower 90d response resolve last; without this it
+    // overwrites the newer range's data — the range filter looks stuck.
+    let cancelled = false;
     async function load() {
       setLoading(true);
       const since = startOf(RANGE_DAYS[range]);
@@ -130,18 +134,19 @@ export default function PickupAnalyticsPage() {
           { cache: "no-store" },
         );
         const raw = res.ok ? await res.json() : [];
+        if (cancelled) return;
         const all = (Array.isArray(raw) ? raw : []) as OrderWithItems[];
         const usable = all.filter((o) => o.status !== "pending" && o.status !== "failed");
         setOrders(usable as OrderRow[]);
         setOrdersItems(usable);
       } catch {
-        setOrders([]);
-        setOrdersItems([]);
+        if (!cancelled) { setOrders([]); setOrdersItems([]); }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
     load();
+    return () => { cancelled = true; };
   }, [range]);
 
   // Engagement metrics live behind a server endpoint (admin-RLS reads

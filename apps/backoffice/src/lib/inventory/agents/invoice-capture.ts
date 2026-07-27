@@ -30,6 +30,7 @@ import { storeWhatsAppMedia } from "@/lib/whatsapp-media";
 import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { parseSupplierDoc } from "@/lib/finance/parsers/supplier-doc";
 import { detectCreationFlags } from "@/lib/inventory/flag-detector";
+import { numberShapeMatchesHistory } from "@/lib/inventory/placeholder-number";
 
 const digits = (s: string | null | undefined) => (s ?? "").replace(/[^0-9]/g, "");
 
@@ -90,6 +91,7 @@ export async function captureInvoice(
   // ── Try to read the document for a real amount/number/date ──
   let extractedTotal: number | null = null;
   let extractedNumber: string | null = null;
+  let numberFormatSuspicious = false;
   let billDate: Date | null = null;
   let dueDate: Date | null = null;
   let outletHint: string | null = null;
@@ -110,6 +112,31 @@ export async function captureInvoice(
         if (parsed.billNumber) {
           extractedNumber = parsed.billNumber.slice(0, 64);
           prefilled.push("invoiceNumber");
+          // Format sanity: each supplier keeps one number shape ("IVCT-#" vs
+          // "#-#"). An extracted number whose shape has never appeared in THIS
+          // supplier's history almost always means the wrong document got
+          // attached (real case: a Milk n Moka "IVCT-…" number stamped onto a
+          // Milk Ministry invoice whose numbers are "1-15xxx"). Keep the
+          // number (the paper bill wins over our history) but flag it so
+          // review sees it instead of it silently poisoning payment matching.
+          try {
+            const history = (
+              await prisma.invoice.findMany({
+                where: { supplierId, invoiceNumber: { not: extractedNumber } },
+                orderBy: { createdAt: "desc" },
+                take: 15,
+                select: { invoiceNumber: true },
+              })
+            ).map((r) => r.invoiceNumber);
+            if (!numberShapeMatchesHistory(extractedNumber, history)) {
+              numberFormatSuspicious = true;
+              console.warn(
+                `[invoice-capture] number "${extractedNumber}" doesn't match this supplier's numbering shape — flagging`,
+              );
+            }
+          } catch {
+            /* shape check is best-effort */
+          }
         }
         if (parsed.billDate && /^\d{4}-\d{2}-\d{2}$/.test(parsed.billDate)) {
           billDate = new Date(parsed.billDate);
@@ -313,6 +340,13 @@ export async function captureInvoice(
       amount,
       issueDate: billDate,
     });
+    if (numberFormatSuspicious) {
+      flags.push({
+        code: "NUMBER_FORMAT_MISMATCH",
+        message: `Invoice number "${invoiceNumber}" doesn't match this supplier's usual numbering — possible wrong document attached. Verify against the photo before paying.`,
+        detectedAt: new Date().toISOString(),
+      });
+    }
     const created = await prisma.invoice.create({
       data: {
         invoiceNumber,

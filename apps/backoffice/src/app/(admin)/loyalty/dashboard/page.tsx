@@ -17,6 +17,7 @@ import {
   MinusCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLatestRequest } from "@/lib/use-latest-request";
 
 // ---------------------------------------------------------------------------
 // Types — mirror /api/scorecard
@@ -184,20 +185,25 @@ export default function AreaScorecardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const beginRequest = useLatestRequest();
   const load = useCallback(async (p: Period) => {
+    const { signal, isCurrent } = beginRequest();
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/scorecard?period=${p}`, { credentials: "include" });
+      const res = await fetch(`/api/scorecard?period=${p}`, { credentials: "include", signal });
+      if (!isCurrent()) return;
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load");
       setData(json);
     } catch (e) {
+      if (!isCurrent()) return;
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(e instanceof Error ? e.message : "Network error");
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, []);
+  }, [beginRequest]);
 
   useEffect(() => {
     load(period);

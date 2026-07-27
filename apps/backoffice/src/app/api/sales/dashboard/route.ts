@@ -1,3 +1,4 @@
+import { sortOutlets } from "@/lib/outlet-order";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -379,15 +380,16 @@ export async function GET(request: NextRequest) {
     const totalRevenue = roundsData.reduce((s, r) => s + r.totals.revenue, 0) + outsideRoundRevenue;
     const totalOrders = roundsData.reduce((s, r) => s + r.totals.orders, 0) + outsideRoundOrders;
 
-    // All outlets for dropdown
-    const allOutlets = await prisma.outlet.findMany({
-      where: {
-        status: "ACTIVE",
-        OR: [{ storehubId: { not: null } }, { loyaltyOutletId: { not: null } }],
-      },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    });
+    // All outlets for dropdown (canonical business order)
+    const allOutlets = sortOutlets(
+      await prisma.outlet.findMany({
+        where: {
+          status: "ACTIVE",
+          OR: [{ storehubId: { not: null } }, { loyaltyOutletId: { not: null } }],
+        },
+        select: { id: true, name: true },
+      }),
+    );
 
     // Previous period comparison
     const prevAov = prevOrders > 0 ? Math.round((prevRevenue / prevOrders) * 100) / 100 : 0;

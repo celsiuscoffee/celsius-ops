@@ -10,10 +10,14 @@
 // The projection is floored at what's already been booked in the period
 // (including today's partial day), so it can never read lower than reality.
 //
-// Reads from the local SalesTransaction table — no StoreHub round-trip,
-// keeps the compare endpoint snappy.
+// Reads from the unified_sales VIEW — the canonical estate-wide sales source
+// (hubbo + StoreHub + pos-native + pickup + consignment), applying the
+// standard revenue convention (NOT is_refund AND status <> 'paymentCancelled').
+// The previous source, SalesTransaction, is a dead sync (no rows after
+// 2026-04-11) — it silently returned null and disabled the server projection.
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export type ProjectionResult = {
   projected: number;
@@ -53,6 +57,34 @@ function addDays(d: Date, n: number): Date {
   return out;
 }
 
+/** Per-day revenue/orders from the unified_sales view, [from, to] inclusive
+ *  (MYT business dates — biz_date is pre-computed in the view). Consignment
+ *  rows are daily settlements with no receipt count, so their "orders" use
+ *  the day's item_count — same convention as the compare aggregation. */
+async function unifiedDailySeries(
+  outletIds: string[],
+  fromDate: string,
+  toDate: string,
+): Promise<Map<string, { revenue: number; orders: number }>> {
+  const rows = await prisma.$queryRaw<Array<{ d: Date; rev: unknown; ord: unknown }>>`
+    SELECT biz_date AS d,
+           SUM(nett) AS rev,
+           SUM(CASE WHEN source = 'consignment' THEN COALESCE(item_count, 0) ELSE 1 END) AS ord
+    FROM unified_sales
+    WHERE outlet_id IN (${Prisma.join(outletIds)})
+      AND NOT is_refund
+      AND (status IS NULL OR status <> 'paymentCancelled')
+      AND biz_date >= ${fromDate}::date
+      AND biz_date <= ${toDate}::date
+    GROUP BY biz_date
+  `;
+  const out = new Map<string, { revenue: number; orders: number }>();
+  for (const r of rows) {
+    out.set(fmtISODate(r.d), { revenue: Number(r.rev) || 0, orders: Number(r.ord) || 0 });
+  }
+  return out;
+}
+
 /**
  * Compute a 7-day-MA projection for a period. Returns null when today is
  * outside the period or when there is no MA history to work with.
@@ -75,32 +107,23 @@ export async function computeProjection(opts: {
   if (daysElapsed > totalDays) return null;
 
   // ── 1. 7-day moving average (today-7 → yesterday in MYT) ────────────────
-  const maStart = addDays(today, -7);
-  const maTxns = await prisma.salesTransaction.findMany({
-    where: {
-      outletId: { in: outletIds },
-      transactedAt: { gte: maStart, lt: today },
-    },
-    select: { grossAmount: true, quantity: true, transactedAt: true },
-  });
+  const maDays = await unifiedDailySeries(
+    outletIds,
+    fmtISODate(addDays(today, -7)),
+    fmtISODate(addDays(today, -1)),
+  );
 
-  // Bucket by MYT calendar day so we average over distinct days, not over
-  // transaction count. A busy Saturday shouldn't outweigh a quiet Monday
-  // just because it has more rows.
-  const dailyRev = new Map<string, number>();
-  const dailyOrd = new Map<string, number>();
-  for (const t of maTxns) {
-    const myt = new Date(t.transactedAt.getTime() + 8 * 60 * 60 * 1000);
-    const dateKey = fmtISODate(myt);
-    dailyRev.set(dateKey, (dailyRev.get(dateKey) ?? 0) + Number(t.grossAmount));
-    dailyOrd.set(dateKey, (dailyOrd.get(dateKey) ?? 0) + t.quantity);
-  }
-
-  const dayCount = dailyRev.size;
+  // Average over distinct trading days, not transaction count — a busy
+  // Saturday shouldn't outweigh a quiet Monday just because it has more rows.
+  const dayCount = maDays.size;
   if (dayCount === 0) return null;
 
-  const sumRev = [...dailyRev.values()].reduce((a, b) => a + b, 0);
-  const sumOrd = [...dailyOrd.values()].reduce((a, b) => a + b, 0);
+  let sumRev = 0;
+  let sumOrd = 0;
+  for (const d of maDays.values()) {
+    sumRev += d.revenue;
+    sumOrd += d.orders;
+  }
   const avgRev = sumRev / dayCount;
   const avgOrd = sumOrd / dayCount;
 
@@ -112,15 +135,13 @@ export async function computeProjection(opts: {
   // month following a hot weekend). If actuals already exceed the MA
   // projection, use the actuals — projection should never read lower than
   // what's in the till.
-  const periodTxns = await prisma.salesTransaction.findMany({
-    where: {
-      outletId: { in: outletIds },
-      transactedAt: { gte: fromD, lt: addDays(today, 1) },
-    },
-    select: { grossAmount: true, quantity: true },
-  });
-  const periodRev = periodTxns.reduce((s, t) => s + Number(t.grossAmount), 0);
-  const periodOrd = periodTxns.reduce((s, t) => s + t.quantity, 0);
+  const periodDays = await unifiedDailySeries(outletIds, from, fmtISODate(today));
+  let periodRev = 0;
+  let periodOrd = 0;
+  for (const d of periodDays.values()) {
+    periodRev += d.revenue;
+    periodOrd += d.orders;
+  }
   projected = Math.max(projected, periodRev);
   projectedOrders = Math.max(projectedOrders, periodOrd);
 

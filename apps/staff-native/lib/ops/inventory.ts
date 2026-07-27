@@ -148,6 +148,12 @@ export type OrderItem = {
   unitPrice: number;
   totalPrice: number;
   notes: string | null;
+  // Balance-receiving context: on a partially-received PO `quantity` is the
+  // cumulative already received; these carry the original target + running
+  // total so the receive screen prefills the REMAINING balance.
+  orderedOriginalQty?: number;
+  receivedSoFarQty?: number;
+  remainingQty?: number;
 };
 
 export type PendingOrder = {

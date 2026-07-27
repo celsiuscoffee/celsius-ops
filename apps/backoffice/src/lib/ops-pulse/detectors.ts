@@ -590,14 +590,21 @@ export async function findNoClockInBreaches(now: Date): Promise<Breach[]> {
   `;
   const clockedIn = new Set(clockRows.map((r) => r.user_id));
 
-  const grace = THRESHOLDS.attendance.graceMinutes;
+  // Morning/opening shifts fire at the scheduled start (0 grace) so managers can
+  // manage early; later shifts keep the standard grace before they count.
+  const graceForShift = (startTime: string): number => {
+    const hour = parseInt(startTime.slice(0, 2), 10);
+    return Number.isFinite(hour) && hour < THRESHOLDS.attendance.morningCutoffHour
+      ? THRESHOLDS.attendance.morningGraceMinutes
+      : THRESHOLDS.attendance.graceMinutes;
+  };
   const candidates = shifts.filter((s) => {
     if (!s.user_id || clockedIn.has(s.user_id)) return false;
     // Skip 00:00 starts — a midnight start_time is a roster placeholder (untimed
     // shift), not a real shift. Nudging "clock in for your 00:00 shift" is noise.
     if (s.start_time.startsWith("00:00")) return false;
     const start = new Date(`${ymd}T${s.start_time}+08:00`);
-    return now.getTime() > start.getTime() + grace * 60_000;
+    return now.getTime() > start.getTime() + graceForShift(s.start_time) * 60_000;
   });
   if (candidates.length === 0) return [];
 

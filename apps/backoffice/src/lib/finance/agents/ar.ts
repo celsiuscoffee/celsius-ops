@@ -62,6 +62,32 @@ const REVENUE: Record<keyof EodChannelSplit, string> = {
   other: "5000-01",  // fallback; ideally exception path catches these
 };
 
+// Contra-revenue account for discounts given away (promos, vouchers, comps).
+export const DISCOUNT_GIVEN_CODE = "5001";
+
+// Splits the day's discount across the revenue channels in proportion to their
+// sales. Any rounding residual lands on the biggest channel so the grossed-up
+// credits still sum to netSales + discount to the cent. A day with sales but no
+// discount, or discount but no sales, both return zeros.
+export function allocateDiscount(
+  channels: EodChannelSplit,
+  discount: number,
+): Partial<Record<keyof EodChannelSplit, number>> {
+  const keys = (Object.keys(channels) as (keyof EodChannelSplit)[]).filter((k) => channels[k] > 0);
+  const base = keys.reduce((s, k) => s + channels[k], 0);
+  if (discount <= 0 || base <= 0) return {};
+  const out: Partial<Record<keyof EodChannelSplit, number>> = {};
+  let assigned = 0;
+  for (const k of keys) {
+    const share = round2((discount * channels[k]) / base);
+    out[k] = share;
+    assigned = round2(assigned + share);
+  }
+  const biggest = keys.reduce((a, b) => (channels[b] > channels[a] ? b : a));
+  out[biggest] = round2((out[biggest] ?? 0) + round2(discount - assigned));
+  return out;
+}
+
 const DEBTOR: Record<keyof EodChannelSplit, string> = {
   cashQr: "1000-02",
   card: "1006",
@@ -94,15 +120,32 @@ export async function postDailyAr(summary: EodSummary): Promise<ArAgentResult> {
     });
   }
 
-  // Credits — one per revenue channel
+  // Credits — one per revenue channel, GROSSED UP by the discount given away.
+  // The tender debits above are what was actually collected (net), so booking
+  // revenue at the same net figure made every promo, voucher and staff comp
+  // vanish from the books: COA 5001 "Discount Given" had never been posted to.
+  // Grossing revenue up and debiting 5001 for the same total leaves net income
+  // untouched and finally shows the giveaway. Allocated across channels in
+  // proportion to their sales, with the rounding residual dropped on the
+  // largest channel so debits and credits still tie exactly.
+  const discount = round2(Math.max(summary.discounts, 0));
+  const grossUp = allocateDiscount(channels, discount);
   for (const key of Object.keys(channels) as (keyof EodChannelSplit)[]) {
-    const amount = round2(channels[key]);
+    const amount = round2(channels[key] + (grossUp[key] ?? 0));
     if (amount === 0) continue;
     lines.push({
       accountCode: REVENUE[key],
       outletId: summary.outletId,
       credit: amount,
       memo: `${labelFor(key)} revenue — ${summary.outletName} ${summary.date}`,
+    });
+  }
+  if (discount > 0) {
+    lines.push({
+      accountCode: DISCOUNT_GIVEN_CODE,
+      outletId: summary.outletId,
+      debit: discount,
+      memo: `Discount given — ${summary.outletName} ${summary.date}`,
     });
   }
 
@@ -126,10 +169,6 @@ export async function postDailyAr(summary: EodSummary): Promise<ArAgentResult> {
     });
   }
 
-  // Discounts given — booked separately so audit trail shows gross→net.
-  // Only post if we want to track discount as a contra-revenue. For v1 we
-  // assume netSales already excludes discounts (so this is informational only).
-  // Skip the journal entry; record it in the description.
   const description =
     `EOD Sales — ${summary.outletName} ${summary.date} ` +
     `(${summary.transactions} txns, RM${summary.netSales.toFixed(2)} net` +

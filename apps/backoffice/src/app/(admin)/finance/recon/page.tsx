@@ -475,6 +475,7 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
   const [attachOpen, setAttachOpen] = useState(false);
   const [attachments, setAttachments] = useState<{ id: string; filename: string; url: string | null }[] | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [attachDragging, setAttachDragging] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [events, setEvents] = useState<LineEvent[] | null>(null);
 
@@ -671,9 +672,24 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
                   <button onClick={() => removeAttachment(a.id)} className="text-[10px] text-gray-400 underline hover:text-gray-600">remove</button>
                 </div>
               ))}
-              <label className="mt-0.5 inline-flex w-fit cursor-pointer items-center gap-1 rounded border border-dashed border-gray-300 px-2 py-1 text-[11px] text-gray-600 hover:bg-white">
+              <label
+                onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setAttachDragging(true); }}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setAttachDragging(true); }}
+                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setAttachDragging(false); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setAttachDragging(false);
+                  if (uploading) return;
+                  const f = e.dataTransfer.files?.[0];
+                  if (f) upload(f);
+                }}
+                className={`mt-0.5 inline-flex w-fit cursor-pointer items-center gap-1 rounded border border-dashed px-2 py-1 text-[11px] transition-colors ${
+                  attachDragging ? "border-terracotta bg-terracotta/5 text-terracotta" : "border-gray-300 text-gray-600 hover:bg-white"
+                }`}
+              >
                 {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Paperclip className="h-3 w-3" />}
-                {uploading ? "Uploading…" : "Upload invoice / receipt (PDF or image)"}
+                {uploading ? "Uploading…" : attachDragging ? "Drop to attach" : "Upload invoice / receipt (PDF or image) — or drag & drop"}
                 <input type="file" accept="application/pdf,image/*" className="hidden" disabled={uploading}
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
               </label>

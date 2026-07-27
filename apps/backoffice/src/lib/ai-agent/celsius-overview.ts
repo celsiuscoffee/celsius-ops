@@ -12,7 +12,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { sendMessage } from "@/lib/telegram";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
-import { logAgentAction, touchAgentRun } from "@/lib/agents/substrate";
+import { logAgentAction, touchAgentRun } from "@celsius/agents/src/substrate";
+import { logAgentMessage } from "@celsius/agents/src/messages";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -395,7 +396,16 @@ async function buildSnapshot(): Promise<OverviewSnapshot> {
 // Claude analysis — return structured recommendations
 // ────────────────────────────────────────────────────────────
 
-async function analyse(snapshot: OverviewSnapshot): Promise<AgentRecommendation[]> {
+type AnalyseUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number | null;
+  cache_creation_input_tokens?: number | null;
+} | null;
+
+async function analyse(
+  snapshot: OverviewSnapshot,
+): Promise<{ recommendations: AgentRecommendation[]; usage: AnalyseUsage }> {
   const mytNow = new Date().toLocaleString("en-MY", { timeZone: "Asia/Kuala_Lumpur" });
 
   const prompt = `You are the AI operations advisor for Celsius Coffee, a multi-outlet specialty coffee
@@ -448,10 +458,11 @@ Return STRICT JSON with this shape — no markdown, no commentary:
     .map((b) => b.text)
     .join("");
 
+  const usage = response.usage ?? null;
   const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return [];
+  if (!jsonMatch) return { recommendations: [], usage };
   const parsed = JSON.parse(jsonMatch[0]) as { recommendations?: AgentRecommendation[] };
-  return (parsed.recommendations ?? []).slice(0, 8);
+  return { recommendations: (parsed.recommendations ?? []).slice(0, 8), usage };
 }
 
 // ────────────────────────────────────────────────────────────
@@ -527,17 +538,34 @@ export async function runCelsiusOverviewAgent(opts: RunOptions = {}): Promise<Ag
   const { sendTelegram = true, persist = true } = opts;
   await touchAgentRun("celsius_overview");
   const snapshot = await buildSnapshot();
-  const recommendations = await analyse(snapshot);
+  const { recommendations, usage } = await analyse(snapshot);
   const delivered = sendTelegram ? await deliver(recommendations) : null;
   const generatedAt = new Date().toISOString();
 
+  // Log every run that actually called the model (cost is incurred even on a
+  // silent run that sends nothing), so the ledger reflects true spend.
+  await logAgentAction({
+    agentKey: "celsius_overview",
+    kind: delivered && delivered.messages > 0 ? "briefing_sent" : "run_silent",
+    summary:
+      delivered && delivered.messages > 0
+        ? `${recommendations.length} recommendation${recommendations.length === 1 ? "" : "s"} to owner Telegram: ${recommendations.map((r) => r.title).join("; ")}`
+        : "Ran; nothing worth interrupting the owner",
+    model: "claude-sonnet-4-6",
+    usage,
+    meta: { areas: recommendations.map((r) => r.area), priorities: recommendations.map((r) => r.priority) },
+  });
+
+  // Record the briefing as a report to the owner on the Conversations feed.
+  // Its own Telegram delivery already went to the owner chat, so don't double-
+  // notify the pulse channel in real time (notify:false); it still shows on
+  // /agents and rolls into the daily digest.
   if (delivered && delivered.messages > 0) {
-    await logAgentAction({
-      agentKey: "celsius_overview",
-      kind: "briefing_sent",
-      summary: `${recommendations.length} recommendation${recommendations.length === 1 ? "" : "s"} to owner Telegram: ${recommendations.map((r) => r.title).join("; ")}`,
-      model: "claude-sonnet-4-6",
-      meta: { areas: recommendations.map((r) => r.area), priorities: recommendations.map((r) => r.priority) },
+    await logAgentMessage({
+      fromAgent: "celsius_overview",
+      toAgent: "owner",
+      kind: "report",
+      summary: `Reported ${recommendations.length} item${recommendations.length === 1 ? "" : "s"} worth the owner's attention: ${recommendations.map((r) => r.title).join("; ")}.`,
     });
   }
 

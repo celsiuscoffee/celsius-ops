@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
 import { requireAuth } from "@/lib/auth";
+import { sortOutlets } from "@/lib/outlet-order";
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
       .order("name");
 
     if (error) return NextResponse.json([], { status: 200 });
-    return NextResponse.json(data ?? []);
+    return NextResponse.json(sortOutlets(data ?? []));
   } catch {
     return NextResponse.json([], { status: 200 });
   }

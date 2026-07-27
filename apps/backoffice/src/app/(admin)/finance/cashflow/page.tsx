@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { Fragment, useState, useMemo } from "react";
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Loader2, AlertTriangle, Banknote, ArrowRight, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
+import { Loader2, AlertTriangle, Banknote, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
 import DailyBalancePanel from "./DailyBalancePanel";
+import DailyRunRateStrip from "./DailyRunRateStrip";
+import IncomingPanel from "./IncomingPanel";
+import PayablesPanel from "./PayablesPanel";
 import { DateRangePicker } from "@/components/date-range-picker";
 
 type Outlet = { id: string; name: string; code: string };
@@ -17,6 +20,7 @@ type CashflowBucket = {
   otherIn: number;
   invoiceOut: number;
   payrollOut: number;
+  ptOut: number;
   cogsOut: number;
   marketingOut: number;
   recurringOut: number;
@@ -62,6 +66,25 @@ type CashGeneratedResult = {
   reconciled: boolean;
 };
 
+// Lookback presets for the single Period control. One vocabulary for the whole
+// page — previously the header spoke in weeks, the chart in 30D/90D/6M/12M/Max
+// and the table in a date picker, so nothing agreed on "the period".
+const PERIODS: { key: string; label: string; days: number | null }[] = [
+  { key: "30", label: "30D", days: 30 },
+  { key: "90", label: "90D", days: 90 },
+  { key: "180", label: "6M", days: 180 },
+  { key: "365", label: "12M", days: 365 },
+  { key: "max", label: "Max", days: null },
+];
+function todayMytStr() {
+  return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+}
+function minusDays(days: number) {
+  const d = new Date(Date.now() + 8 * 3600_000);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
 const CADENCES: { key: Cadence; label: string }[] = [
   { key: "DAILY", label: "Daily" },
   { key: "WEEKLY", label: "Weekly" },
@@ -75,6 +98,7 @@ const ACCOUNTS: { code: string; name: string }[] = [
 ];
 
 type ProjectedMin = { closing: number; weekStart: string; weekEnd: string };
+type ProjectedDailyMin = { date: string; balance: number };
 
 type DailyBalance = {
   asOf: string | null;
@@ -110,12 +134,16 @@ type CashflowResult = {
   operatingCashFlow: OperatingCashFlow[];
   cashGeneration: CashGeneration;
   projectedMin: ProjectedMin | null;
+  projectedDailyMin: ProjectedDailyMin | null;
   dailyBalance: DailyBalance | null;
   buckets: CashflowBucket[];
   warnings: string[];
 };
 
-const HORIZONS = [4, 8, 12, 26] as const;
+// 13 weeks is the default — the standard treasury 13-week cash flow model
+// (a rolling quarter: far enough to see rent/payroll cycles, near enough
+// that the committed-payables layer is meaningful).
+const HORIZONS = [4, 8, 13, 26] as const;
 
 function fmtMYR(n: number): string {
   return new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", maximumFractionDigits: 0 }).format(n);
@@ -161,7 +189,7 @@ function shortRange(start: string, end: string): string {
 }
 
 export default function CashflowPage() {
-  const [weeks, setWeeks] = useState<number>(8);
+  const [weeks, setWeeks] = useState<number>(13);
   const [outletIds, setOutletIds] = useState<string[]>([]);
   const [outletPickerOpen, setOutletPickerOpen] = useState(false);
   // Cash-generated table controls: cadence toggle + single-account filter.
@@ -175,8 +203,22 @@ export default function CashflowPage() {
   const [netFilter, setNetFilter] = useState<"all" | "pos" | "neg">("all");
   // Date-range filter over the fetched rows. "" = no range (show all). Uses the
   // shared single-calendar range picker (one calendar, click start then end).
-  const [dateStart, setDateStart] = useState("");
-  const [dateEnd, setDateEnd] = useState("");
+  const [dateStart, setDateStart] = useState(() => minusDays(90));
+  const [dateEnd, setDateEnd] = useState(() => todayMytStr());
+  // Which preset is active ("custom" once a bespoke range is picked). The
+  // period drives the chart window, the KPI cards and the table together.
+  const [periodKey, setPeriodKey] = useState<string>("90");
+  const applyPeriod = (key: string) => {
+    setPeriodKey(key);
+    const p = PERIODS.find((x) => x.key === key);
+    if (!p || p.days == null) { setDateStart(""); setDateEnd(""); return; }
+    setDateStart(minusDays(p.days));
+    setDateEnd(todayMytStr());
+  };
+  const periodLabel =
+    periodKey === "custom"
+      ? `${dateStart || "start"} → ${dateEnd || "today"}`
+      : (PERIODS.find((p) => p.key === periodKey)?.label ?? "");
   const toggleSort = (col: SortCol) => {
     if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortCol(col); setSortDir(col === "period" ? "asc" : "desc"); }
@@ -327,6 +369,73 @@ export default function CashflowPage() {
         </div>
       </div>
 
+      {/* One control bar for the whole page. The balance chart, the KPI cards
+          and the cash-generated table all read from these, so everything on
+          screen describes the same slice of money. Previously period lived in
+          three different vocabularies (weeks / 30D-Max / a date picker) and
+          account existed twice, with the controls that drove the KPIs sitting
+          BELOW them inside the table toolbar — so nothing told you what window
+          you were looking at. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50/60 px-3 py-2">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Period</span>
+        <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
+          {PERIODS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => applyPeriod(p.key)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${periodKey === p.key ? "bg-terracotta text-white" : "text-gray-600 hover:bg-gray-50"}`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <DateRangePicker
+          start={dateStart}
+          end={dateEnd}
+          onChange={(s, e) => { setDateStart(s); setDateEnd(e); setPeriodKey("custom"); }}
+          size="xs"
+        />
+
+        <span className="mx-1 hidden h-4 w-px bg-gray-200 sm:block" />
+
+        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Scope</span>
+        <select
+          value={account}
+          onChange={(e) => setAccount(e.target.value)}
+          className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-700 focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta"
+          aria-label="Filter by bank account"
+        >
+          <option value="">All accounts</option>
+          {ACCOUNTS.map((a) => (
+            <option key={a.code} value={a.code}>{a.name}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => setIncludeInterco((v) => !v)}
+          aria-pressed={includeInterco}
+          title="Include or exclude inter-entity transfers"
+          className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${includeInterco ? "border-terracotta bg-terracotta/10 text-terracotta" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
+        >
+          Interco {includeInterco ? "on" : "off"}
+        </button>
+
+        <span className="mx-1 hidden h-4 w-px bg-gray-200 sm:block" />
+
+        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Grain</span>
+        <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
+          {CADENCES.map((c) => (
+            <button
+              key={c.key}
+              onClick={() => setCadence(c.key)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${cadence === c.key ? "bg-terracotta text-white" : "text-gray-600 hover:bg-gray-50"}`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {isLoading || !data ? (
         <div className="mt-6 flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
       ) : (
@@ -335,14 +444,38 @@ export default function CashflowPage() {
               time, with period-overlay comparison and forward projection. */}
           {data.dailyBalance && (
             <div className="mt-4">
-              <DailyBalancePanel db={data.dailyBalance} />
+              <DailyBalancePanel db={data.dailyBalance} account={account} startDate={dateStart} endDate={dateEnd} />
             </div>
           )}
 
+          {/* Daily run-rate — the true per-day cash-in/out/net off actual bank
+              flows (the ~RM10.6k/day the owner reads off the bank), with the
+              weekday/weekend split. Sits above the settlement panels because
+              those forecast a narrower, forward figure that reads lower. */}
+          <div className="mt-4">
+            <DailyRunRateStrip account={account || undefined} />
+          </div>
+
+          {/* What's landing and what's leaving — the settlement pipeline and
+              the committed payables, day by day, side by side. Sits directly
+              under the balance so the page reads position → in vs out →
+              history. Each panel has its own presets + custom date range. */}
+          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <IncomingPanel />
+            <PayablesPanel />
+          </div>
+
           {/* Headline KPIs, computed over the FILTERED cash-generated rows,
-              so they move with the cadence / account / interco / period / net
-              filters on the table below. */}
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+              so they move with the control bar above. The scope is echoed
+              underneath the heading because the single most confusing thing
+              about the old layout was not knowing what window a number covered. */}
+          <p className="mt-4 text-[11px] text-gray-400">
+            Showing <span className="font-medium text-gray-600">{periodLabel}</span>
+            {" · "}{account ? (ACCOUNTS.find((a) => a.code === account)?.name ?? account) : "all accounts"}
+            {" · "}interco {includeInterco ? "on" : "off"}
+            {" · "}per {cadenceUnit}
+          </p>
+          <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
             <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
               <p className="text-xs text-gray-500">Avg cash in</p>
               <p className="mt-0.5 text-lg font-bold text-green-600">
@@ -394,23 +527,9 @@ export default function CashflowPage() {
                     : "Loading..."}
                 </p>
               </div>
+              {/* Period, account, interco and grain now live in the page
+                  control bar. Only the net-sign filter is table-specific. */}
               <div className="flex flex-wrap items-center gap-2">
-                <DateRangePicker
-                  start={dateStart}
-                  end={dateEnd}
-                  onChange={(s, e) => { setDateStart(s); setDateEnd(e); }}
-                  size="xs"
-                />
-                {(dateStart || dateEnd) && (
-                  <button
-                    type="button"
-                    onClick={() => { setDateStart(""); setDateEnd(""); }}
-                    className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-500 hover:bg-gray-50"
-                    aria-label="Clear date filter"
-                  >
-                    Clear
-                  </button>
-                )}
                 <select
                   value={netFilter}
                   onChange={(e) => setNetFilter(e.target.value as "all" | "pos" | "neg")}
@@ -421,34 +540,6 @@ export default function CashflowPage() {
                   <option value="pos">Net positive</option>
                   <option value="neg">Net negative</option>
                 </select>
-                <select
-                  value={account}
-                  onChange={(e) => setAccount(e.target.value)}
-                  className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-700 focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta"
-                  aria-label="Filter by bank account"
-                >
-                  <option value="">All accounts</option>
-                  {ACCOUNTS.map((a) => (
-                    <option key={a.code} value={a.code}>{a.name}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setIncludeInterco((v) => !v)}
-                  aria-pressed={includeInterco}
-                  title="Include or exclude inter-entity transfers"
-                  className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${includeInterco ? "border-terracotta bg-terracotta/10 text-terracotta" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
-                >
-                  Interco {includeInterco ? "on" : "off"}
-                </button>
-                <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
-                  {CADENCES.map((c) => (
-                    <button key={c.key} onClick={() => setCadence(c.key)}
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${cadence === c.key ? "bg-terracotta text-white" : "text-gray-600 hover:bg-gray-50"}`}>
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
               </div>
             </div>
             {cashGenLoading || !cashGen ? (
@@ -597,13 +688,19 @@ export default function CashflowPage() {
           {/* Forward weekly projection — sub-header */}
           <div className="mt-6 mb-2 flex items-center justify-between gap-2 flex-wrap">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Forward projection · {weeks} weeks</p>
-              <p className="text-[11px] text-gray-400">Synthetic streams + bank-flow residual. Use the {weeks}w toggle above to change horizon.</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{weeks}-week cash flow model</p>
+              <p className="text-[11px] text-gray-400">Receipts and disbursements per week, opening → closing. Use the {weeks}w toggle above to change horizon.</p>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-500">
+              {data.projectedDailyMin && (
+                <span title="Lowest point on the day-by-day projection — the real intra-week dip when salary/rent clear before receipts land.">
+                  Lowest day: <span className={`font-mono ${data.projectedDailyMin.balance < 0 ? "text-red-600" : data.projectedDailyMin.balance < 10000 ? "text-amber-600" : "text-gray-700"}`}>{fmtMYR(data.projectedDailyMin.balance)}</span>{" "}
+                  ({fmtDay(data.projectedDailyMin.date)})
+                </span>
+              )}
               {lowestWeek && (
                 <span>
-                  Lowest week: <span className={`font-mono ${lowestWeek.closing < 0 ? "text-red-600" : "text-amber-600"}`}>{fmtMYR(lowestWeek.closing)}</span>{" "}
+                  Lowest week-end: <span className={`font-mono ${lowestWeek.closing < 0 ? "text-red-600" : "text-amber-600"}`}>{fmtMYR(lowestWeek.closing)}</span>{" "}
                   ({shortRange(lowestWeek.weekStart, lowestWeek.weekEnd)})
                 </span>
               )}
@@ -628,59 +725,121 @@ export default function CashflowPage() {
             </div>
           )}
 
-          {/* Table */}
-          <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
-            <table className="w-full min-w-[1000px] text-sm">
-              <thead>
-                <tr className="border-b bg-gray-50/50 text-left text-gray-500">
-                  <th className="px-3 py-3 font-medium">Week</th>
-                  <th className="px-3 py-3 text-right font-medium">Opening</th>
-                  <th className="px-3 py-3 text-right font-medium text-green-600">Sales</th>
-                  <th className="px-3 py-3 text-right font-medium text-green-600">Other inflow</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">Invoices due</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">Payroll</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">COGS</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">Marketing</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">Recurring</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">Other outflow</th>
-                  <th className="px-3 py-3 text-right font-medium">Closing</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {data.buckets.map((b) => (
-                  <tr key={b.weekStart} className={`hover:bg-gray-50 ${b.closing < 0 ? "bg-red-50/30" : ""}`}>
-                    <td className="px-3 py-3 text-xs font-medium text-gray-700">{shortRange(b.weekStart, b.weekEnd)}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs">{fmtMYR(b.opening)}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-green-700">{b.salesIn > 0 ? `+${fmtMYR(b.salesIn)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-green-700">{b.otherIn > 0 ? `+${fmtMYR(b.otherIn)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.invoiceOut > 0 ? `−${fmtMYR(b.invoiceOut)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.payrollOut > 0 ? `−${fmtMYR(b.payrollOut)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.cogsOut > 0 ? `−${fmtMYR(b.cogsOut)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.marketingOut > 0 ? `−${fmtMYR(b.marketingOut)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.recurringOut > 0 ? `−${fmtMYR(b.recurringOut)}` : "—"}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.otherOut > 0 ? `−${fmtMYR(b.otherOut)}` : "—"}</td>
-                    <td className={`px-3 py-3 text-right font-mono text-xs font-bold ${b.closing < 0 ? "text-red-600" : "text-gray-900"}`}>
-                      {fmtMYR(b.closing)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* The model grid — classic 13-week layout: line items as rows,
+              weeks as columns, so the whole quarter reads left to right. */}
+          <div className="mt-4">
+            <WeeklyModelTable buckets={data.buckets} lowestWeekStart={lowestWeek?.weekStart ?? null} />
           </div>
 
           <p className="mt-3 text-[11px] text-gray-400">
-            All columns derived from classified bank-line categories over the last 90 days. <strong>Sales</strong>: Card + QR + StoreHub + Grab + FoodPanda + GastroHub + Meetings/Events. <strong>COGS</strong>: Raw Materials + Delivery. <strong>Recurring</strong>: Rent + Utilities + Software + Tax + Maintenance + bank/loan/licensing. <strong>Other inflow/outflow</strong>: anything the auto-classifier hasn&apos;t mapped to a category yet — review the matrix on Cash Tracking to see what&apos;s in here.
+            Columns derived from classified bank-line categories over the last 90 days. <strong>Sales</strong>: Card + QR + StoreHub + Grab + FoodPanda + GastroHub + Meetings/Events. <strong>COGS</strong>: BOM — this week&apos;s sales × the sales-weighted recipe food-cost % (from menu_margins), netted against committed invoices so the two don&apos;t double-count. <strong>PT wages</strong>: latest published roster cost, one pulse each Friday. <strong>Marketing</strong>: Google Ads at the <em>live</em> optimizer-allocated daily budget (moves with the ads agent loop — a recent trim cut ~RM4k/mo) + SMS + KOL at the bank run-rate, one monthly pulse on the 20th. <strong>Recurring</strong>: Rent + Utilities + Software + Tax + Maintenance + bank/loan/licensing on their due dates. <strong>Other outflow</strong>: petty cash, staff claims, and anything not yet categorised.
             {data.bankFlowsPerDay
               ? ` 90-day sample: avg in ${fmtMYR2(data.bankFlowsPerDay.inflow)}/day, out ${fmtMYR2(data.bankFlowsPerDay.outflow)}/day.`
               : " Upload a CSV/Excel statement with period totals to populate."}
           </p>
-          <div className="mt-3">
-            <Link href="/inventory/invoices" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-              See unpaid invoice list <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Classic 13-week cash flow model grid — line items as rows, weeks as
+// columns. Reads like the treasury spreadsheet it replaces: opening balance,
+// receipts, disbursements, net, closing, scanning a quarter left to right.
+// The lowest-closing week is tinted so the crunch is visible at a glance.
+function WeeklyModelTable({ buckets, lowestWeekStart }: { buckets: CashflowBucket[]; lowestWeekStart: string | null }) {
+  type Row = {
+    label: string;
+    value: (b: CashflowBucket) => number;
+    kind: "balance" | "in" | "out" | "subtotal-in" | "subtotal-out" | "net";
+    section?: string; // section header rendered above this row
+  };
+  const totalIn = (b: CashflowBucket) => b.salesIn + b.otherIn;
+  const totalOut = (b: CashflowBucket) =>
+    b.invoiceOut + b.payrollOut + b.ptOut + b.cogsOut + b.marketingOut + b.recurringOut + b.otherOut;
+  const rows: Row[] = [
+    { label: "Opening balance", value: (b) => b.opening, kind: "balance" },
+    { label: "Sales settlements", value: (b) => b.salesIn, kind: "in", section: "Receipts" },
+    { label: "Other inflow", value: (b) => b.otherIn, kind: "in" },
+    { label: "Total receipts", value: totalIn, kind: "subtotal-in" },
+    { label: "Supplier invoices", value: (b) => b.invoiceOut, kind: "out", section: "Disbursements" },
+    { label: "Payroll", value: (b) => b.payrollOut, kind: "out" },
+    { label: "PT wages (Fri)", value: (b) => b.ptOut, kind: "out" },
+    { label: "COGS", value: (b) => b.cogsOut, kind: "out" },
+    { label: "Marketing (20th)", value: (b) => b.marketingOut, kind: "out" },
+    { label: "Recurring", value: (b) => b.recurringOut, kind: "out" },
+    { label: "Other outflow", value: (b) => b.otherOut, kind: "out" },
+    { label: "Total disbursements", value: totalOut, kind: "subtotal-out" },
+    { label: "Net cash flow", value: (b) => totalIn(b) - totalOut(b), kind: "net" },
+    { label: "Closing balance", value: (b) => b.closing, kind: "balance" },
+  ];
+
+  const cellText = (kind: Row["kind"], v: number): string => {
+    if (kind === "in" || kind === "subtotal-in") return v > 0 ? `+${fmtMYR(v)}` : "—";
+    if (kind === "out" || kind === "subtotal-out") return v > 0 ? `−${fmtMYR(v)}` : "—";
+    if (kind === "net") return `${v >= 0 ? "+" : ""}${fmtMYR(v)}`;
+    return fmtMYR(v);
+  };
+  const cellCls = (kind: Row["kind"], v: number): string => {
+    switch (kind) {
+      case "in": return "text-green-700";
+      case "subtotal-in": return "font-semibold text-green-700";
+      case "out": return "text-red-700";
+      case "subtotal-out": return "font-semibold text-red-700";
+      case "net": return `font-semibold ${v >= 0 ? "text-green-700" : "text-red-700"}`;
+      default: return `font-bold ${v < 0 ? "text-red-600" : "text-gray-900"}`;
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-gray-50/50 text-gray-500">
+            <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-left font-medium">Week</th>
+            {buckets.map((b, i) => (
+              <th
+                key={b.weekStart}
+                className={`whitespace-nowrap px-3 py-2 text-right font-medium ${b.weekStart === lowestWeekStart ? "bg-amber-50 text-amber-700" : ""}`}
+              >
+                <span className="block text-[10px] text-gray-400">W{i + 1}</span>
+                {shortRange(b.weekStart, b.weekEnd)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <Fragment key={row.label}>
+              {row.section && (
+                <tr className="border-t border-gray-100">
+                  <td colSpan={buckets.length + 1} className="sticky left-0 bg-white px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    {row.section}
+                  </td>
+                </tr>
+              )}
+              <tr
+                className={`${row.kind.startsWith("subtotal") || row.kind === "net" ? "border-t border-gray-100" : ""} ${row.label === "Closing balance" ? "border-t-2 border-gray-200 bg-gray-50/50" : "hover:bg-gray-50"}`}
+              >
+                <td className={`sticky left-0 z-10 whitespace-nowrap px-3 py-1.5 text-xs ${row.label === "Closing balance" ? "bg-gray-50 font-semibold text-gray-900" : "bg-white font-medium text-gray-600"}`}>
+                  {row.label}
+                </td>
+                {buckets.map((b) => {
+                  const v = row.value(b);
+                  return (
+                    <td
+                      key={b.weekStart}
+                      className={`whitespace-nowrap px-3 py-1.5 text-right font-mono text-xs ${cellCls(row.kind, v)} ${b.weekStart === lowestWeekStart ? "bg-amber-50/60" : ""}`}
+                    >
+                      {cellText(row.kind, v)}
+                    </td>
+                  );
+                })}
+              </tr>
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

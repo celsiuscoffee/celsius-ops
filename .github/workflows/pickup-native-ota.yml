@@ -3,9 +3,12 @@ name: pickup-native OTA
 # Ships JS-only changes in apps/pickup-native to customers' installed apps via
 # EAS Update (the `production` channel the App Store / Play builds subscribe to).
 # No new binary needed — expo-updates pulls the bundle on next app launch, as
-# long as the change is JS/asset-only and the runtimeVersion (appVersion, today
-# 1.0.3) is unchanged. A native/dependency change still needs a fresh `eas build`
-# + store submission, and a version bump won't be picked up by OTA.
+# long as the change is JS/asset-only and the runtimeVersion (fingerprint policy)
+# is unchanged. The fingerprint only changes when the NATIVE layer changes, so a
+# marketing-version bump (e.g. 1.0.2 -> 1.0.3) no longer severs the OTA lineage —
+# that appVersion-policy footgun was the cause of the "old bundle reappears"
+# regression. A native/dependency change alters the fingerprint and still needs a
+# fresh `eas build` + store submission before OTA resumes for those devices.
 #
 # Triggers on a push to main that touches apps/pickup-native, plus manual
 # dispatch so a release can be re-pushed on demand.

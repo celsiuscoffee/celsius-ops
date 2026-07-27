@@ -56,9 +56,14 @@ export async function GET(request: NextRequest) {
   // not found is counted as repeat (never inflate the new-acquisition number).
   const phones = [...new Set(rows.map((o) => o.loyalty_phone as string | null).filter(Boolean))] as string[];
   const memberCreatedMs: Record<string, number> = {};
-  for (let i = 0; i < phones.length; i += 1000) {
-    const chunk = phones.slice(i, i + 1000);
-    const { data: members } = await supabase.from("members").select("phone, created_at").in("phone", chunk);
+  const phoneChunks: string[][] = [];
+  for (let i = 0; i < phones.length; i += 1000) phoneChunks.push(phones.slice(i, i + 1000));
+  // Chunks are independent — fetch them concurrently instead of awaiting each
+  // 1000-phone lookup in series.
+  const memberChunks = await Promise.all(
+    phoneChunks.map((chunk) => supabase.from("members").select("phone, created_at").in("phone", chunk)),
+  );
+  for (const { data: members } of memberChunks) {
     for (const m of members ?? []) {
       const c = m.created_at as string | null;
       if (m.phone && c) memberCreatedMs[m.phone as string] = Date.parse(c);

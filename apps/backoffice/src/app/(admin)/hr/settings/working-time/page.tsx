@@ -13,7 +13,6 @@ type CompanySettings = {
   overtime_requires_approval: boolean;
   max_consecutive_days: number;
   min_rest_between_shifts_hours: number;
-  attendance_allowance_amount: number;
   attendance_penalty_late: number;
   attendance_penalty_absent: number;
   attendance_penalty_early_out: number;
@@ -189,50 +188,10 @@ export default function WorkingTimeRulesPage() {
           </div>
         </div>
 
-        {/* Allowance rules */}
-        <div className="mt-6 border-t pt-5">
-          <h3 className="mb-3 text-sm font-semibold">Monthly Allowances</h3>
-          <p className="mb-4 text-xs text-muted-foreground">These amounts appear as line items on the monthly payslip. Staff can track live earnings in the staff app.</p>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg border p-3">
-              <h4 className="mb-2 text-xs font-semibold uppercase text-blue-700">Attendance allowance</h4>
-              <div className="space-y-2">
-                <Row label="Base amount (RM)"><input type="number" step="1" value={form.attendance_allowance_amount} onChange={(e) => setForm({ ...form, attendance_allowance_amount: Number(e.target.value) })} className="w-full rounded border px-2 py-1 text-sm" /></Row>
-                <Row label="Late threshold (min)"><input type="number" value={form.attendance_late_threshold_minutes} onChange={(e) => setForm({ ...form, attendance_late_threshold_minutes: Number(e.target.value) })} className="w-full rounded border px-2 py-1 text-sm" /></Row>
-                <Row label="Penalty — late (RM)"><input type="number" step="0.50" value={form.attendance_penalty_late} onChange={(e) => setForm({ ...form, attendance_penalty_late: Number(e.target.value) })} className="w-full rounded border px-2 py-1 text-sm" /></Row>
-                <Row label="Penalty — no-show (RM)"><input type="number" step="0.50" value={form.attendance_penalty_absent} onChange={(e) => setForm({ ...form, attendance_penalty_absent: Number(e.target.value) })} className="w-full rounded border px-2 py-1 text-sm" /></Row>
-                <Row label="Penalty — early leave (RM)"><input type="number" step="0.50" value={form.attendance_penalty_early_out} onChange={(e) => setForm({ ...form, attendance_penalty_early_out: Number(e.target.value) })} className="w-full rounded border px-2 py-1 text-sm" /></Row>
-                <Row label="Penalty — missed clock-out (RM)"><input type="number" step="0.50" value={form.attendance_penalty_missed_clockout} onChange={(e) => setForm({ ...form, attendance_penalty_missed_clockout: Number(e.target.value) })} className="w-full rounded border px-2 py-1 text-sm" /></Row>
-                <Row label="Penalty — exceeded break (RM)"><input type="number" step="0.50" value={form.attendance_penalty_exceeded_break} onChange={(e) => setForm({ ...form, attendance_penalty_exceeded_break: Number(e.target.value) })} className="w-full rounded border px-2 py-1 text-sm" /></Row>
-              </div>
-            </div>
-
-            <div className="rounded-lg border p-3">
-              <h4 className="mb-2 text-xs font-semibold uppercase text-amber-700">Performance allowance</h4>
-              <div className="space-y-2">
-                <Row label="Base amount (RM)"><input type="number" step="1" value={form.performance_allowance_amount} onChange={(e) => setForm({ ...form, performance_allowance_amount: Number(e.target.value) })} className="w-full rounded border px-2 py-1 text-sm" /></Row>
-                <Row label="Mode">
-                  <select value={form.performance_allowance_mode} onChange={(e) => setForm({ ...form, performance_allowance_mode: e.target.value as "tiered" | "linear" })} className="w-full rounded border px-2 py-1 text-sm">
-                    <option value="tiered">Tiered (clear targets)</option>
-                    <option value="linear">Linear (proportional to score)</option>
-                  </select>
-                </Row>
-                {form.performance_allowance_mode === "tiered" && (
-                  <>
-                    <Row label={`Full ${form.performance_allowance_amount} at score ≥`}><input type="number" value={form.performance_tier_full_threshold} onChange={(e) => setForm({ ...form, performance_tier_full_threshold: Number(e.target.value) })} className="w-full rounded border px-2 py-1 text-sm" /></Row>
-                    <Row label={`Half (RM ${form.performance_allowance_amount / 2}) at score ≥`}><input type="number" value={form.performance_tier_half_threshold} onChange={(e) => setForm({ ...form, performance_tier_half_threshold: Number(e.target.value) })} className="w-full rounded border px-2 py-1 text-sm" /></Row>
-                    <Row label={`Quarter (RM ${form.performance_allowance_amount / 4}) at score ≥`}><input type="number" value={form.performance_tier_quarter_threshold} onChange={(e) => setForm({ ...form, performance_tier_quarter_threshold: Number(e.target.value) })} className="w-full rounded border px-2 py-1 text-sm" /></Row>
-                    <p className="text-xs text-gray-500">Below {form.performance_tier_quarter_threshold}: RM 0.</p>
-                  </>
-                )}
-                {form.performance_allowance_mode === "linear" && (
-                  <p className="text-xs text-gray-500">Earn RM {(form.performance_allowance_amount / 100).toFixed(2)} per score point (score 80 → RM {(form.performance_allowance_amount * 0.8).toFixed(0)}).</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Allowances (attendance + performance) are configured on the dedicated
+            Allowances page — the single RM200 performance pool with per-KPI
+            levers and lateness/absence deductions. This page is working-time
+            only (hours, overtime, rest). */}
 
         <div className="mt-6 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
           <strong>Who this affects:</strong> AI scheduler, attendance reviewer, payroll OT calculation. When creating a weekly schedule, the system:
@@ -246,14 +205,5 @@ export default function WorkingTimeRulesPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex items-center gap-2 text-xs">
-      <span className="flex-1 text-gray-600">{label}</span>
-      <span className="w-28">{children}</span>
-    </label>
   );
 }

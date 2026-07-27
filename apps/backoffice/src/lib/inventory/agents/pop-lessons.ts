@@ -17,7 +17,11 @@
 import { prisma } from "@/lib/prisma";
 
 export function popLessonsEnabled(): boolean {
-  return process.env.PROCUREMENT_POP_VERIFIER_LESSONS === "true";
+  // Default ON (2026-07-18, same owner call as agent-lessons in #895): the lessons
+  // block is the "improves by itself" half of the POP QA loop and it only feeds the
+  // judge prompt — it never moves money. Set PROCUREMENT_POP_VERIFIER_LESSONS=false
+  // to disable for debugging.
+  return process.env.PROCUREMENT_POP_VERIFIER_LESSONS !== "false";
 }
 
 type PopVerifierFlag = {
@@ -82,7 +86,52 @@ export async function recentPopLessons(limit = 6): Promise<string> {
     }
   }
 
-  if (misses.length === 0 && dups.length === 0) return "";
+  // (c) How a human resolved past AMBIGUOUS POPs (the tap-to-pick keyboard /
+  //     backoffice confirm). The picker is the third dead-end the judge never
+  //     sees at decision time — but its resolutions are ground truth for which
+  //     sibling a payee's identical-amount payments actually settle. Uses only
+  //     our own structured fields (supplier name, invoice number, outlet code).
+  const seenPick = new Set<string>();
+  const picks: string[] = [];
+  try {
+    const resolved = await prisma.pendingPop.findMany({
+      where: { resolvedInvoiceId: { not: null } },
+      orderBy: { resolvedAt: "desc" },
+      take: 30,
+      select: { amount: true, resolvedInvoiceId: true },
+    });
+    if (resolved.length > 0) {
+      const invs = await prisma.invoice.findMany({
+        where: { id: { in: resolved.map((r) => r.resolvedInvoiceId!) } },
+        select: {
+          id: true,
+          invoiceNumber: true,
+          supplier: { select: { name: true } },
+          vendorName: true,
+          outlet: { select: { code: true } },
+        },
+      });
+      const byId = new Map(invs.map((i) => [i.id, i]));
+      for (const r of resolved) {
+        if (picks.length >= limit) break;
+        const inv = byId.get(r.resolvedInvoiceId!);
+        if (!inv) continue;
+        const payee = inv.supplier?.name ?? inv.vendorName ?? "a payee";
+        const key = `${payee}::${Number(r.amount).toFixed(2)}`;
+        if (seenPick.has(key)) continue;
+        seenPick.add(key);
+        picks.push(
+          `- ${payee} RM ${Number(r.amount).toFixed(2)}: finance resolved the ambiguity to ${inv.invoiceNumber}${
+            inv.outlet?.code ? ` (${inv.outlet.code})` : ""
+          }.`,
+        );
+      }
+    }
+  } catch {
+    // lessons are best-effort — never block the judge on a read failure
+  }
+
+  if (misses.length === 0 && dups.length === 0 && picks.length === 0) return "";
 
   let block = "";
   if (misses.length) {
@@ -90,6 +139,9 @@ export async function recentPopLessons(limit = 6): Promise<string> {
   }
   if (dups.length) {
     block += `\n# Bank references that have repeated across DISTINCT payments (don't read a repeat as a re-send)\n${dups.join("\n")}\n`;
+  }
+  if (picks.length) {
+    block += `\n# How finance resolved past ambiguous same-amount POPs (learn the payee's pattern; still verify)\n${picks.join("\n")}\n`;
   }
   return block;
 }

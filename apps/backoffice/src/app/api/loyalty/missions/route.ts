@@ -18,7 +18,14 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data ?? []);
+
+  // Attach each mission's cash-loop verdict (net cash vs baseline − reward cost),
+  // computed by runMissionLoop and stored in app_settings.mission_loop_stats.
+  const { data: statsRow } = await supabaseAdmin
+    .from("app_settings").select("value").eq("key", "mission_loop_stats").maybeSingle();
+  const stats = (statsRow?.value ?? {}) as Record<string, { net_cash_rm: number; incremental_rm: number; reward_cost_rm: number; completers_measured: number; verdict: string; retired?: boolean }>;
+  const withStats = (data ?? []).map((m) => ({ ...m, cash: stats[m.id] ?? null }));
+  return NextResponse.json(withStats);
 }
 
 // POST /api/loyalty/missions — create

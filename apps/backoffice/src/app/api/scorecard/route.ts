@@ -1,3 +1,4 @@
+import { sortOutlets } from "@/lib/outlet-order";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
@@ -150,11 +151,12 @@ export async function computeScorecard(p: ScorecardPeriod) {
   const supabase = getSupabaseAdmin();
 
   // ── Outlets: the join hub (active storefronts only) ─────────
-  const outlets = await prisma.outlet.findMany({
-    where: { status: "ACTIVE", type: "OUTLET" },
-    select: { id: true, code: true, name: true, loyaltyOutletId: true, pickupStoreId: true },
-    orderBy: { name: "asc" },
-  });
+  const outlets = sortOutlets(
+    await prisma.outlet.findMany({
+      where: { status: "ACTIVE", type: "OUTLET" },
+      select: { id: true, code: true, name: true, loyaltyOutletId: true, pickupStoreId: true },
+    }),
+  );
 
   // Map the cross-app outlet ids back to the Prisma outlet:
   //  • loyaltyOutletId → pos_orders.outlet_id (POS / Grab)

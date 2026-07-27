@@ -23,6 +23,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { getFinanceClient } from "./supabase";
+import { buildApAccrual } from "./ap-accrual";
 
 export const MGMT_FEE_RATE = 0.068;
 export const MGMT_FEE_EXPENSE_CODE = "6511-06"; // Management fees
@@ -78,6 +79,7 @@ export type ClosePrep = {
   };
   grabClearing: GrabClearing;
   depreciationPreview: number; // total monthly charge across active assets
+  apAccrualPreview: number;    // open supplier bills at period end (Dr expense / Cr 3001), ties to Aged Payables
 };
 
 function monthWindow(period: string): { start: Date; end: Date; startYmd: string; endYmd: string } {
@@ -318,13 +320,15 @@ export async function prepareClose(companyId: string, companyName: string, perio
   if (!suffix) throw new Error(`No bank account mapping for company ${companyId}`);
 
   const client = getFinanceClient();
-  const [{ data: periodRow }, coverage, flows, payroll, depPreview, grabClearing] = await Promise.all([
+  const { endYmd } = monthWindow(period);
+  const [{ data: periodRow }, coverage, flows, payroll, depPreview, grabClearing, apAccrual] = await Promise.all([
     client.from("fin_periods").select("status").eq("company_id", companyId).eq("period", period).maybeSingle(),
     statementCoverage(suffix, period),
     monthFlows(suffix, period),
     payrollLoaded(companyId, period),
     depreciationPreview(companyId),
     grabClearingForPeriod(companyId, period),
+    buildApAccrual(companyId, endYmd),
   ]);
 
   const checks: CloseCheck[] = [
@@ -360,5 +364,6 @@ export async function prepareClose(companyId: string, companyName: string, perio
     mgmtFee,
     grabClearing,
     depreciationPreview: depPreview,
+    apAccrualPreview: apAccrual.total,
   };
 }

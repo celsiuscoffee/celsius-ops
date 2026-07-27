@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     name, fullName, phone, email, role, outletId,
     position, employment_type, join_date, basic_salary, hourly_rate,
     ic_number, date_of_birth, gender, pin,
-    attendance_allowance_amount, performance_allowance_amount,
+    performance_allowance_amount,
   } = body;
 
   if (!name || !role) {
@@ -68,7 +68,6 @@ export async function POST(req: NextRequest) {
         date_of_birth: date_of_birth || null,
         gender: gender || null,
         nationality: "Malaysian",
-        attendance_allowance_amount: attendance_allowance_amount != null ? Number(attendance_allowance_amount) : null,
         performance_allowance_amount: performance_allowance_amount != null ? Number(performance_allowance_amount) : null,
       });
 

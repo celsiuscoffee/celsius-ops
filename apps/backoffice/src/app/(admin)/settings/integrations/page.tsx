@@ -304,6 +304,7 @@ export default function IntegrationsPage() {
   const [qr, setQr] = useState<MaybankQrConfig>({ enabled: false, outlets: {} });
   const [qrOpen, setQrOpen] = useState(false);
   const [qrSaving, setQrSaving] = useState(false);
+  const [qrDragging, setQrDragging] = useState<string | null>(null); // storeId being dragged over
   const [qrMsg, setQrMsg] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
@@ -824,9 +825,23 @@ export default function IntegrationsPage() {
                           Poster image (preferred)
                         </span>
                         <div className="flex items-center gap-2">
-                          <label className="inline-flex items-center gap-1.5 cursor-pointer rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">
+                          <label
+                            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setQrDragging(sid); }}
+                            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setQrDragging(sid); }}
+                            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setQrDragging(null); }}
+                            onDrop={async (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setQrDragging(null);
+                              const f = e.dataTransfer.files?.[0];
+                              if (f) await uploadQrImage(sid, f);
+                            }}
+                            className={`inline-flex items-center gap-1.5 cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-colors ${
+                              qrDragging === sid ? "bg-emerald-700 ring-2 ring-emerald-400" : "bg-emerald-600 hover:bg-emerald-700"
+                            }`}
+                          >
                             <Save className="h-3 w-3" />
-                            {hasImage ? "Replace" : "Upload"}
+                            {qrDragging === sid ? "Drop image" : hasImage ? "Replace" : "Upload"}
                             <input
                               type="file"
                               accept="image/png,image/jpeg,image/webp"

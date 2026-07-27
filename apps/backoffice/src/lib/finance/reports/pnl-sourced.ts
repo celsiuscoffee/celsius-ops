@@ -462,8 +462,8 @@ function addMonths(s: string, n: number): string {
 //               the bug: it divided every packaged line by its conversion
 //               factor (24000x, 1000x) down to pennies, so whole counts read
 //               RM40 and got rejected, forcing the purchases proxy.
-type CostMaps = { byBase: Map<string, number>; byPackage: Map<string, number> };
-async function costPerBaseUnit(): Promise<CostMaps> {
+export type CostMaps = { byBase: Map<string, number>; byPackage: Map<string, number> };
+export async function costPerBaseUnit(): Promise<CostMaps> {
   const sps = await prisma.supplierProduct.findMany({
     where: { isActive: true, price: { gt: 0 } },
     select: { productId: true, productPackageId: true, price: true, productPackage: { select: { conversionFactor: true } }, supplier: { select: { supplierCode: true } } },
@@ -514,7 +514,7 @@ const MAX_TYPO_LINE_SHARE = 0.1;
 // per-line typos, and decide whether the cleaned count is a usable full
 // inventory. Returns null when it is partial (too few real items), too
 // corrupted (too many typo lines), or values outside the plausible band.
-function evaluateCount(
+export function evaluateCount(
   items: { productId: string; productPackageId: string | null; countedQty: unknown }[],
   cost: CostMaps,
 ): { value: number; items: number; costed: number; dropped: number } | null {
@@ -616,6 +616,26 @@ function sumBoundary(
   return { value: round2(value), dates: [...new Set(dates)].sort(), coverage: note };
 }
 
+// Whole calendar months spanned by [start,end], as "YYYY-MM" — but ONLY when the
+// window is month-aligned (start on the 1st, end on a month's last day). Returns
+// null otherwise, so a partial-month window never reads a period snapshot.
+function wholeMonthsInWindow(start: string, end: string): string[] | null {
+  if (!/^\d{4}-\d{2}-01$/.test(start)) return null;
+  const ey = Number(end.slice(0, 4));
+  const em = Number(end.slice(5, 7));
+  const lastDay = new Date(Date.UTC(ey, em, 0)).getUTCDate();
+  if (Number(end.slice(8, 10)) !== lastDay) return null;
+  const out: string[] = [];
+  let y = Number(start.slice(0, 4));
+  let m = Number(start.slice(5, 7));
+  while (y < ey || (y === ey && m <= em)) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return out;
+}
+
 export async function buildSourcedPnl(input: {
   companyId: string;
   start: string;
@@ -651,6 +671,12 @@ export async function buildSourcedPnl(input: {
       })
     : [];
   const rev = { instore: 0, online: 0, grab: 0, foodpanda: 0 };
+  // Discount given away, by the same channel split. Sales sources record what
+  // the customer PAID, so every revenue line above is already net of discount.
+  // Grossing the lines up and showing the giveaway as its own contra-revenue
+  // line (COA 5001) leaves total income unchanged but finally makes the cost
+  // of promos, vouchers and staff comps visible.
+  const disc = { instore: 0, online: 0, grab: 0, foodpanda: 0 };
   let saleCount = 0;
   // Any accrual-shifted line in the period adds a short note to the report.
   let shiftedPresent = false;
@@ -669,18 +695,28 @@ export async function buildSourcedPnl(input: {
     for (const s of sales) {
       saleCount++;
       const lbl = (s.channelLabel ?? "").toLowerCase();
-      if (/grab/.test(lbl)) rev.grab += s.total;
-      else if (/panda/.test(lbl)) rev.foodpanda += s.total;
-      else if (s.isDeliveryQR || s.channel === "delivery") rev.online += s.total;
-      else rev.instore += s.total;
+      const bucket: keyof typeof rev = /grab/.test(lbl)
+        ? "grab"
+        : /panda/.test(lbl)
+          ? "foodpanda"
+          : s.isDeliveryQR || s.channel === "delivery"
+            ? "online"
+            : "instore";
+      rev[bucket] += s.total;
+      disc[bucket] += s.discount;
     }
   }
   const grabGrossRevenue = round2(rev.grab); // gross Grab, for the commission line
+  const discountGiven = round2(disc.instore + disc.online + disc.grab + disc.foodpanda);
+  // Revenue lines are shown BEFORE discount, with the giveaway pulled out below
+  // them, so the reader sees menu value -> discount -> what was actually earned.
+  // Total income is identical either way: (net + discount) - discount.
   const incomeLines: PnlLine[] = [
-    { code: "REV-INSTORE", name: "In-store sales (dine-in + takeaway)", amount: round2(rev.instore), parentCode: null },
-    { code: "REV-ONLINE", name: "Online sales (pickup + table QR)", amount: round2(rev.online), parentCode: null },
-    { code: "REV-GRAB", name: "GrabFood sales (gross)", amount: round2(rev.grab), parentCode: null },
-    { code: "REV-PANDA", name: "FoodPanda sales", amount: round2(rev.foodpanda), parentCode: null },
+    { code: "REV-INSTORE", name: "In-store sales (dine-in + takeaway)", amount: round2(rev.instore + disc.instore), parentCode: null },
+    { code: "REV-ONLINE", name: "Online sales (pickup + table QR)", amount: round2(rev.online + disc.online), parentCode: null },
+    { code: "REV-GRAB", name: "GrabFood sales (gross)", amount: round2(rev.grab + disc.grab), parentCode: null },
+    { code: "REV-PANDA", name: "FoodPanda sales", amount: round2(rev.foodpanda + disc.foodpanda), parentCode: null },
+    { code: "REV-DISCOUNT", name: "Discount given (promos, vouchers, comps) — COA 5001", amount: round2(-discountGiven), parentCode: null },
   ].filter((l) => l.amount !== 0);
   let totalIncome = round2(rev.instore + rev.online + rev.grab + rev.foodpanda);
 
@@ -802,9 +838,44 @@ export async function buildSourcedPnl(input: {
     valueInventoryAt(outletIds, dEnd(end), costMap),
   ]);
   const bothBounded = [...openMap.keys()].filter((o) => closeMap.has(o));
+
+  // Frozen COGS for a fully-closed window. The consumption engine re-prices
+  // recipes at the CURRENT cheapest supplier cost on every run, so a closed
+  // period's COGS would silently drift as supplier prices change. Once every
+  // month in the window is locked for this entity, serve the COGS captured in
+  // the period snapshot at close instead — so a locked quarter stops moving and
+  // stays equal to the GL. Only for a single-entity, whole-company, whole-month
+  // window (consolidated and per-outlet views keep recomputing live).
+  let frozenCogs: number | null = null;
+  if (companyId !== CONSOLIDATED_COMPANY_ID && !outletId) {
+    const months = wholeMonthsInWindow(start, end);
+    if (months) {
+      const { data: pers } = await client
+        .from("fin_periods")
+        .select("period, status, pnl_snapshot")
+        .eq("company_id", companyId)
+        .in("period", months);
+      if (pers && pers.length === months.length && pers.every((p) => p.status === "closed")) {
+        let sum = 0;
+        let ok = true;
+        for (const p of pers) {
+          const c = Number((p.pnl_snapshot as { cogs?: number } | null)?.cogs);
+          if (!Number.isFinite(c)) { ok = false; break; }
+          sum += c;
+        }
+        if (ok) frozenCogs = round2(sum);
+      }
+    }
+  }
+
   let cogsTotal: number;
   let cogsLines: PnlLine[];
-  if (bothBounded.length > 0) {
+  if (frozenCogs != null) {
+    cogsTotal = frozenCogs;
+    cogsLines = [
+      { code: "COGS-LOCKED", name: "Cost of sales (locked at period close)", amount: frozenCogs, parentCode: null },
+    ];
+  } else if (bothBounded.length > 0) {
     const opening = sumBoundary(openMap, bothBounded);
     const closing = sumBoundary(closeMap, bothBounded);
     // Outlets with no usable pair of counts contribute purchases only — say so
@@ -1016,15 +1087,22 @@ export async function buildSourcedPnl(input: {
   // expense (EQUIPMENTS sits in BANK_NONOPEX above), so recognising the
   // depreciation charge here is the whole cost story, with no double count
   // whether or not a purchase line has been capitalized into an asset yet.
-  // Month convention (documented in lib/finance/fixed-assets.ts): charges
-  // start the first full month after acquisition, are dated on each month's
-  // last day (so a window includes a month iff its last day is inside), and
-  // stop from the disposal month onward.
+  //
+  // ANNUAL, to match the GL: owner policy (2026-07) charges depreciation once a
+  // year, dated 31 Dec (see lib/finance/depreciation.ts). So the P&L only shows
+  // it in a window whose END reaches the December year-end, and then as the
+  // WHOLE year's charge (Jan 1 → that Dec 31) — computed the same straight-line
+  // way. Any sub-year window (a month, a quarter that isn't year-end) shows
+  // zero, exactly as the GL does, so the two P&Ls agree month to month.
   {
-    const dep = await depreciationTotal({ companyId, start, end, outletId });
-    if (dep) {
-      expenseLines.push({ code: "DEP", name: "Depreciation (fixed assets, straight-line)", amount: dep, parentCode: null });
-      totalExpenses += dep;
+    const endMonth = end.slice(5, 7);
+    if (endMonth === "12") {
+      const year = end.slice(0, 4);
+      const dep = await depreciationTotal({ companyId, start: `${year}-01-01`, end, outletId });
+      if (dep) {
+        expenseLines.push({ code: "DEP", name: "Depreciation (fixed assets, annual charge)", amount: dep, parentCode: null });
+        totalExpenses += dep;
+      }
     }
   }
   totalExpenses = round2(totalExpenses);

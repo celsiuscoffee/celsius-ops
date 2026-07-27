@@ -30,6 +30,7 @@ import { handleInstructionAck } from "@/lib/ops-instructions";
 import { handleOutletDeliveryReply } from "@/lib/inventory/exec/outlet-delivery-check";
 import { handleInternalInbound } from "@/lib/ops-intake";
 import { handleStaffInbound } from "@/lib/hr/agent/staff-assistant";
+import { handleStaffLoopReply } from "@/lib/hr/pt-loop/inbound";
 import { handleSupplierMessage } from "@/lib/inventory/agents/supplier-chat-agent";
 import { sendPendingPurchaseOrders } from "@/lib/inventory/procurement-po-send";
 import { captureSupplierDocument } from "@/lib/inventory/agents/invoice-capture";
@@ -164,14 +165,31 @@ export async function POST(request: NextRequest) {
           });
           fromInternal = intake.internal;
         }
-        // 2c) HR staff assistant: a message from an ACTIVE STAFF-role phone is
-        // ALWAYS consumed here (even with the hr_ops_agent kill switch off) so
-        // it can never fall through to the supplier flows — a staff MC photo
-        // must not be vision-read as a supplier invoice, and the supplier
-        // agent must never reply to a barista. Replies only when the agent's
-        // registry mode is shadow/armed. Internally guarded, never throws.
+        // 2c) PT scheduling loop: roster acks ("OK"/"CANNOT Sat"), open-shift
+        // claims ("TAKE 4f2a"), and availability replies from staff phones
+        // (docs/design/pt-loop.md). Gated inside on the sender matching an
+        // ACTIVE staff phone with an outstanding prompt (or a TAKE code), so
+        // customer/supplier numbers pass straight through. Consuming here
+        // stops the supplier agent from answering a staffer. Never throws.
+        // Runs BEFORE the HR staff assistant (2d): loop replies are protocol
+        // messages the general assistant must not swallow.
+        let consumedByLoop = false;
+        if (isNewInbound && !fromInternal && msg.type === "text") {
+          try {
+            consumedByLoop = await handleStaffLoopReply(msg.from, body);
+          } catch (err) {
+            console.error("[pt-loop] inbound failed:", err);
+          }
+        }
+        // 2d) HR staff assistant (hr_ops_agent): a message from an ACTIVE
+        // STAFF-role phone is ALWAYS consumed here (even with the kill switch
+        // off) so it can never fall through to the supplier flows — a staff MC
+        // photo must not be vision-read as a supplier invoice, and the
+        // supplier agent must never reply to a barista. Replies only when the
+        // agent's registry mode is shadow/armed. Internally guarded, never
+        // throws.
         let fromStaff = false;
-        if (isNewInbound && !fromInternal && !consumedByAck) {
+        if (isNewInbound && !fromInternal && !consumedByAck && !consumedByLoop) {
           const staffRes = await handleStaffInbound({
             fromNumber: msg.from,
             text: body,
@@ -192,7 +210,7 @@ export async function POST(request: NextRequest) {
         // re-deliveries could both pass the agent's own check and double-apply a PO edit +
         // double-reply. The @unique wamid makes the first inbound store the atomic claim.
         let agentCapturedInvoice = false;
-        if (isNewInbound && !fromInternal && !fromStaff && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
+        if (isNewInbound && !fromInternal && !consumedByLoop && !fromStaff && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
           const agentRes = await handleSupplierMessage({
             fromNumber: msg.from,
             toNumber: businessNumber,

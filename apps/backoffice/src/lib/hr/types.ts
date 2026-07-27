@@ -17,7 +17,8 @@ export type EmployeeProfile = {
   stations: ("foh" | "boh" | "lead" | "shared")[];
   manager_user_id: string | null;
   basic_salary: number;
-  hourly_rate: number | null;
+  hourly_rate: number | null; // PT weekday base
+  hourly_rate_weekend: number | null; // PT Sat/Sun rate (null → weekday base); PH pays 2× in code
   epf_number: string | null;
   socso_number: string | null;
   eis_number: string | null;

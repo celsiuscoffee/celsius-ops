@@ -339,20 +339,63 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "interco_celsius_entity_fallback", match: /TRANSFER (TO|FR) A\/C CELSIUS\s?COFFEE\s+(SDN|CONEZION|TAMARIND|CONE|TAMA)/i, direction: "DR", category: "INTERCO_PEOPLE" as CashCategory, isInterCo: true },
 ];
 
-// InterCo override: any transfer whose COUNTERPARTY (the name right after
-// "TRANSFER TO/FR A/C") is another Celsius entity is internal movement within
-// the group — flag it InterCo regardless of the stated purpose. (Per the owner:
-// "anything transferred in and out within the Celsius Coffee company.") We still
-// keep the purpose-based category so the P&L can attribute the real spend, but
-// the flag lets the ledger exclude internal shuffling. Matched on the
-// counterparty position only, so a supplier payment that merely references
-// "Celsius Coffee" elsewhere in the line is NOT caught.
-const INTERCO_COUNTERPARTY = /TRANSFER (TO|FR) A\/C CELSIUS ?COFFEE (SDN|CONEZION|TAMARIND|CONE|TAMA)/;
+// InterCo override: any transfer whose COUNTERPARTY is another Celsius entity
+// is internal movement within the group — flag it InterCo regardless of the
+// stated purpose. (Per the owner: "anything transferred in and out within the
+// Celsius Coffee company.") We still keep the purpose-based category so the P&L
+// can attribute the real spend, but the flag lets the ledger exclude internal
+// shuffling.
+//
+// Two Maybank description formats carry a Celsius counterparty:
+//
+//   Old — "TRANSFER TO/FR A/C CELSIUS COFFEE <ENTITY> …". The A/C marker makes
+//   the Celsius name unambiguously the counterparty, so a match is enough.
+//
+//   New (mid-2026) — the counterparty is written "CELSIUS COFFEE <ENTITY>.*"
+//   (often glued straight after a truncated sender prefix), with NO A/C marker.
+//   The catch: the SAME token also appears as the ACCOUNT HOLDER on that
+//   entity's OWN statements — e.g. Shah Alam's monthly loan debits read
+//   "0000462263001821 CELSIUS COFFEE SDN.* WME000001" on the SA account itself.
+//   So the new format only means inter-company when the entity named differs
+//   from the account the line sits on. Without accountKey we cannot tell the
+//   two apart, so we stay conservative and don't flag from the new format —
+//   every live caller passes accountKey, and the historical backfill applies
+//   the identical account-aware rule in SQL.
+const INTERCO_TRANSFER_PREFIX = /TRANSFER (TO|FR) A\/C CELSIUS ?COFFEE (SDN|CONEZION|TAMARIND|CONE|TAMA)/;
+const INTERCO_NEW_PAYEE = /CELSIUS ?COFFEE (SDN|CONEZION|CONE|TAMARIND|TAMA)\.? *\*/g;
+
+// The Celsius legal entity that owns a given bank account label.
+function accountEntity(accountKey?: string): string | null {
+  if (!accountKey) return null;
+  const a = accountKey.toUpperCase();
+  if (/TAMARIND/.test(a)) return "TAMARIND";
+  if (/CONEZION/.test(a)) return "CONEZION";
+  if (/CELSIUS ?COFFEE\s+SDN/.test(a)) return "SDN";
+  return null;
+}
+
+// Collapse the entity-token spellings Maybank uses to one canonical key.
+function canonEntity(tok: string): string {
+  const t = tok.toUpperCase();
+  if (t === "CONE" || t === "CONEZION") return "CONEZION";
+  if (t === "TAMA" || t === "TAMARIND") return "TAMARIND";
+  return "SDN";
+}
+
+function isIntercoCounterparty(norm: string, accountKey?: string): boolean {
+  if (INTERCO_TRANSFER_PREFIX.test(norm)) return true;
+  const acct = accountEntity(accountKey);
+  if (!acct) return false;
+  for (const m of norm.matchAll(INTERCO_NEW_PAYEE)) {
+    if (canonEntity(m[1]) !== acct) return true;
+  }
+  return false;
+}
 
 export function classifyBankLine(input: ClassifyInput): ClassifyResult {
   const desc = input.description ?? "";
   const norm = desc.toUpperCase().replace(/\s+/g, " ").trim();
-  const intercoCounterparty = INTERCO_COUNTERPARTY.test(norm);
+  const intercoCounterparty = isIntercoCounterparty(norm, input.accountKey);
 
   // Maybank's beneficiary field glues a fixed-width 20-char sender name straight
   // onto the payee — "CELSIUS COFFEE PUTRAYOW SENG SDN BHD*…" — which defeats

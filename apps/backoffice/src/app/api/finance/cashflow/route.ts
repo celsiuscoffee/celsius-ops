@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     ...req.nextUrl.searchParams.getAll("outlet"),
     ...req.nextUrl.searchParams.getAll("outletId"),
   ].filter(Boolean);
-  const weeks = weeksParam ? parseInt(weeksParam, 10) : 8;
+  const weeks = weeksParam ? parseInt(weeksParam, 10) : 13;
 
   try {
     const result = await computeCashflow({ weeks, outletIds });

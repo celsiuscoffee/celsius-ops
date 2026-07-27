@@ -8,7 +8,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { ingestEodForDate } from "@/lib/finance/ingestors/pos-native-eod";
+import { runAndNotify as runCashInRecon } from "@/lib/finance/cash-in-recon-agent";
 import { checkCronAuth } from "@celsius/shared";
+import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -20,10 +22,18 @@ function yesterdayMyt(): string {
   return myt.toISOString().slice(0, 10);
 }
 
+// MYT weekday, 1 = Monday. The cash-in recon watchdog is weekly (settlements
+// take days to complete), folded here to avoid a new Vercel cron slot.
+function mytWeekday(): number {
+  const myt = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return myt.getUTCDay();
+}
+
 export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
+  await touchAgentRun("finance_eod");
   const date = yesterdayMyt();
   const results = await ingestEodForDate(date);
 
@@ -36,5 +46,24 @@ export async function GET(req: NextRequest) {
     totalAmount: results.reduce((s, r) => s + (r.posted?.amount ?? 0), 0),
   };
 
-  return NextResponse.json({ summary, results });
+  await logAgentAction({
+    agentKey: "finance_eod",
+    kind: "eod_posted",
+    summary: `Posted EOD AR for ${summary.date}: ${summary.posted}/${summary.outlets} outlets, RM${summary.totalAmount.toFixed(2)}${summary.errors ? `, ${summary.errors} errors` : ""}`,
+    meta: summary,
+  });
+
+  // Weekly cash-in reconciliation (Mondays MYT): flag any channel where the
+  // cash banked falls short of what was rung, per entity. Best-effort — a
+  // failure here must not fail the EOD ingestion.
+  let cashInRecon: unknown = null;
+  if (mytWeekday() === 1) {
+    try {
+      cashInRecon = await runCashInRecon();
+    } catch (e) {
+      cashInRecon = { error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  return NextResponse.json({ summary, cashInRecon, results });
 }

@@ -22,7 +22,6 @@ type ImportRecord = {
   joinDate: string | null;
   basicSalary: number | null;
   hourlyRate: number | null;
-  attendanceAllowance: number | null;
   performanceAllowance: number | null;
   phone: string | null;
   email: string | null;
@@ -128,7 +127,6 @@ export async function POST(req: NextRequest) {
           basic_salary: rec.basicSalary ?? 0,
           hourly_rate: rec.hourlyRate ?? null,
           ic_number: rec.icNumber || null,
-          attendance_allowance_amount: rec.attendanceAllowance,
           performance_allowance_amount: rec.performanceAllowance,
           notes: rec.notes || null,
           nationality: "Malaysian",

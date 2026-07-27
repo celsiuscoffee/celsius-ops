@@ -121,7 +121,11 @@ async function drillRevenue(code: string, companyId: string, start: string, end:
     where: { id: { in: outletIds } },
     select: { id: true, name: true, loyaltyOutletId: true, pickupStoreId: true, posNativeCutoverAt: true },
   });
+  // The discount line spans every channel, so it matches everything and sums
+  // the giveaway instead of the sale.
+  const isDiscount = code === "REV-DISCOUNT";
   const match = (lbl: string, isQR: boolean, channel: string): boolean => {
+    if (isDiscount) return true;
     const l = lbl.toLowerCase();
     if (code === "REV-GRAB") return /grab/.test(l);
     if (code === "REV-PANDA") return /panda/.test(l);
@@ -142,19 +146,23 @@ async function drillRevenue(code: string, companyId: string, start: string, end:
       const day = new Date(new Date(s.ts).getTime() + 8 * 3600_000).toISOString().slice(0, 10); // MYT day
       const k = `${day}|${o.name}`;
       const cur = agg.get(k) ?? { day, outlet: o.name, n: 0, amt: 0 };
-      cur.n++; cur.amt += s.total;
+      cur.n++;
+      // Revenue lines are reported BEFORE discount (see pnl-sourced.ts), so the
+      // drill has to gross up the same way or it won't tie to its own total.
+      cur.amt += isDiscount ? -s.discount : s.total + s.discount;
       agg.set(k, cur);
     }
   }
   return [...agg.values()]
+    .filter((r) => round2(r.amt) !== 0)
     .sort((a, b) => a.day.localeCompare(b.day) || a.outlet.localeCompare(b.outlet))
     .map((r) => ({
       transactionId: `rev-${r.day}-${r.outlet}`,
       txnDate: r.day,
       description: `${r.outlet}, ${r.n} orders`,
       amount: round2(r.amt),
-      debit: 0,
-      credit: round2(r.amt),
+      debit: isDiscount ? round2(-r.amt) : 0,
+      credit: isDiscount ? 0 : round2(r.amt),
     }));
 }
 
@@ -262,9 +270,13 @@ async function drillGrabAds(companyId: string, start: string, end: string, outle
 // DEP: per-asset depreciation for the period, from the SAME math as the P&L
 // line (lib/finance/fixed-assets.ts), so the drill total ties to the line.
 async function drillDepreciation(companyId: string, start: string, end: string, outletId?: string | null): Promise<DrillLine[]> {
+  // Depreciation is an annual year-end charge (see pnl-sourced.ts): the DEP line
+  // only appears in a window ending in December, and covers the whole year. Drill
+  // over the same Jan 1 → Dec 31 span so the per-asset rows sum to the line.
+  const depStart = end.slice(5, 7) === "12" ? `${end.slice(0, 4)}-01-01` : start;
   const rows = await depreciationByAsset({
     companyId: companyId === CONSOLIDATED ? null : companyId,
-    start,
+    start: depStart,
     end,
     outletId,
   });

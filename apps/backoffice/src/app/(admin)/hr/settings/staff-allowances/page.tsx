@@ -12,12 +12,10 @@ type StaffRow = {
   fullName: string | null;
   role: string;
   outletName: string | null;
-  attendance_allowance_amount: number | null;
   performance_allowance_amount: number | null;
 };
 
 type Defaults = {
-  attendance_allowance_amount: number;
   performance_allowance_amount: number;
 };
 
@@ -25,17 +23,16 @@ type Payload = { defaults: Defaults; staff: StaffRow[] };
 
 export default function StaffAllowancesPage() {
   const { data, mutate, isLoading } = useFetch<Payload>("/api/hr/allowance-overrides");
-  const [draft, setDraft] = useState<Record<string, { attendance: string; performance: string }>>({});
+  const [draft, setDraft] = useState<Record<string, { performance: string }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   // Seed draft from server rows once data lands
   useEffect(() => {
     if (!data?.staff) return;
-    const seed: Record<string, { attendance: string; performance: string }> = {};
+    const seed: Record<string, { performance: string }> = {};
     for (const s of data.staff) {
       seed[s.userId] = {
-        attendance: s.attendance_allowance_amount != null ? String(s.attendance_allowance_amount) : "",
         performance: s.performance_allowance_amount != null ? String(s.performance_allowance_amount) : "",
       };
     }
@@ -68,7 +65,6 @@ export default function StaffAllowancesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: userId,
-          attendance_allowance_amount: parse(d.attendance),
           performance_allowance_amount: parse(d.performance),
         }),
       });
@@ -84,8 +80,8 @@ export default function StaffAllowancesPage() {
   };
 
   const resetRow = async (userId: string) => {
-    // Clear both overrides → null → falls back to defaults
-    setDraft((d) => ({ ...d, [userId]: { attendance: "", performance: "" } }));
+    // Clear the override → null → falls back to default
+    setDraft((d) => ({ ...d, [userId]: { performance: "" } }));
     setSavingId(userId);
     try {
       await fetch("/api/hr/allowance-overrides", {
@@ -93,7 +89,6 @@ export default function StaffAllowancesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: userId,
-          attendance_allowance_amount: null,
           performance_allowance_amount: null,
         }),
       });
@@ -114,12 +109,12 @@ export default function StaffAllowancesPage() {
         <div>
           <h2 className="text-xl font-semibold">Per-Staff Allowances</h2>
           <p className="text-sm text-muted-foreground">
-            Each value is a MAX — the actual payout is reduced by attendance penalties (attendance) or
-            performance score (performance). Leave blank to use the global default from the Allowances tab.
+            The value is a MAX — the actual payout is reduced by the KPI levers and by
+            lateness/absence and review penalties. Leave blank to use the global default from the Allowances tab.
           </p>
           {defaults && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Current defaults: Attendance RM {defaults.attendance_allowance_amount.toFixed(2)} · Performance RM {defaults.performance_allowance_amount.toFixed(2)}
+              Current default: Performance RM {defaults.performance_allowance_amount.toFixed(2)}
             </p>
           )}
         </div>
@@ -150,16 +145,15 @@ export default function StaffAllowancesPage() {
                 <tr>
                   <th className="px-4 py-3 text-left">Staff</th>
                   <th className="px-4 py-3 text-left">Role · Outlet</th>
-                  <th className="px-4 py-3 text-right">Attendance (RM)</th>
                   <th className="px-4 py-3 text-right">Performance (RM)</th>
                   <th className="px-4 py-3 text-right w-40">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((s) => {
-                  const d = draft[s.userId] || { attendance: "", performance: "" };
+                  const d = draft[s.userId] || { performance: "" };
                   const saving = savingId === s.userId;
-                  const hasOverride = s.attendance_allowance_amount != null || s.performance_allowance_amount != null;
+                  const hasOverride = s.performance_allowance_amount != null;
                   return (
                     <tr key={s.userId} className="border-t">
                       <td className="px-4 py-3">
@@ -173,17 +167,6 @@ export default function StaffAllowancesPage() {
                           {s.role}
                         </span>{" "}
                         {s.outletName || "HQ"}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={d.attendance}
-                          placeholder={defaults ? defaults.attendance_allowance_amount.toFixed(2) : ""}
-                          onChange={(e) => setDraft((x) => ({ ...x, [s.userId]: { ...x[s.userId], attendance: e.target.value } }))}
-                          className="w-28 rounded-lg border bg-background px-3 py-1.5 text-right text-sm"
-                        />
                       </td>
                       <td className="px-4 py-3 text-right">
                         <input
