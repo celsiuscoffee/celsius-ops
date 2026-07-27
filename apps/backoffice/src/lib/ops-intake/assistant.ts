@@ -24,6 +24,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DATA_MAP } from "./data-map";
+import { buildHrOpsTools } from "@/lib/hr/agent/ops-tools";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -472,7 +473,7 @@ async function whatsappCost(days: number) {
 
 // ── Tool registry ─────────────────────────────────────────────────────────────
 
-type ToolSpec = { def: Anthropic.Tool; ownerOnly?: boolean; run: (args: Record<string, unknown>, outletIds: string[] | null) => Promise<unknown> };
+export type ToolSpec = { def: Anthropic.Tool; ownerOnly?: boolean; run: (args: Record<string, unknown>, outletIds: string[] | null) => Promise<unknown> };
 
 const TOOLS: ToolSpec[] = [
   {
@@ -634,6 +635,7 @@ const SYSTEM = `You are the internal operations assistant for Celsius Coffee (Ma
 
 Rules:
 - Answer questions using the tools. Prefer the purpose-built tools; when none covers the question AND you have the database tools (owner/admin), explore: list_tables → describe_table → query_database. Never invent numbers — if you truly can't get it, say so plainly.
+- HR/staff requests (new hire, reactivate an ID, FT↔PT conversion, transfer, resignation, PIN/bank/EPF updates): ALWAYS find_staff first (dedup — the person may already exist or be deactivated), then file the request with propose_hr_change restating every detail given. Tell the requester it's captured and HQ will apply it — NEVER say the change is already made. If key facts are missing or ambiguous (pay rate, start date, FT vs PT), ask ONE crisp question before proposing.
 - If the message reports a system problem/bug (something broken or behaving wrongly), call file_bug_report instead of answering.
 - Reply in the sender's language (Malay, English, or their mix). Keep it SHORT and chat-friendly: a few lines, *bold* for key numbers, no markdown headers, no tables. Lead with the answer, then 1-2 lines of context. Mention it when a number is an estimate.
 - Data is scoped server-side: managers only ever see their own outlet's data. Never mention other outlets' numbers to a manager.
@@ -652,7 +654,13 @@ export async function runInternalAssistant(params: {
 }): Promise<AssistantOutcome> {
   try {
     const scope = await scopeOutlets(params.reporter);
-    const tools = TOOLS.filter((t) => !t.ownerOnly || params.reporter.role !== "MANAGER");
+    // HR ops tools (find_staff / hr_data_gaps / propose_hr_change) ride a
+    // per-call factory so the reporter's identity travels in the closure —
+    // manager scoping + PII gating happen inside the tools, in code.
+    const tools = [
+      ...TOOLS.filter((t) => !t.ownerOnly || params.reporter.role !== "MANAGER"),
+      ...buildHrOpsTools(params.reporter),
+    ];
     const toolByName = new Map(tools.map((t) => [t.def.name, t]));
 
     const historyLines = params.history

@@ -95,6 +95,19 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   place-then-regenerate flow that has FT fill the residual around a pre-placed
   rover is NOT built (would need locked-shift preservation) — deferred.
 
+- 2026-07-16 — **"Cyberjaya" = the Celsius Coffee Tamarind outlet.** It's the
+  informal/local name owners use on hiring paperwork; there is NO separate
+  Cyberjaya `Outlet` row. Staff listed under "Cyberjaya" belong to Tamarind
+  (`5d1f2731-1985-4e54-a6df-3990e7d5c159`). (The five real outlets: IOI Mall,
+  Nilai, Putrajaya, Shah Alam, Tamarind.) New-hire onboarding is done by
+  mirroring `/api/hr/employees/create` in one atomic SQL insert: `User`
+  (bank fields live here) + `hr_employee_profiles` + `hr_salary_history` +
+  `hr_job_history`. PT crew convention: `employment_type='part_time'`,
+  `hourly_rate` (RM9 standard), `basic_salary=0`, `statutory_applicable=false`,
+  `epf_category='A'`, `payroll_cadence='MONTHLY'`, `stations=['foh']` barista /
+  `['boh']` kitchen; staff-app access = the `barista`/`kitchen crew` crew preset
+  (`appAccess ['ops','inventory']`). DOB + gender are derivable from the IC.
+
 - 2026-07-16 — **Finance warehouse baseline (SQL-verified against kqdc).**
   Fresh: unified_sales pos_native →7/16, consignment →7/12 (Nilai settles
   later than older notes claim — re-verify live, don't trust dated notes);
@@ -461,6 +474,26 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-07-26 — **HR Ops Agent: designed + stage 1 BUILT** (this branch;
+  design `docs/design/hr-ops-agent.md`, audit `docs/hr-data-audit-2026-07-26.md`).
+  WhatsApp agent on the business number, personas by sender. Authority matrix
+  owner-approved (subtree rule; two-person rule for money: new-hire salary =
+  HOO alone, salary *changes* = owner confirms, bank changes never from a
+  staff message alone). Stage 1 code: staff-persona assistant
+  (`lib/hr/agent/staff-assistant.ts` — own-record reads shifts/hours/leave/
+  claims, LOE policy answers, escalate-to-HQ; NO pay figures, NO writes), HR
+  ops tools in the internal assistant (`lib/hr/agent/ops-tools.ts` —
+  find_staff w/ manager PII-gate+subtree, hr_data_gaps, propose_hr_change
+  shadow proposals → ledger + owner digest), webhook staff branch (staff
+  messages ALWAYS consumed before supplier flows — fixes staff-MC-read-as-
+  invoice; runs AFTER pt-loop's protocol replies), registry seed
+  `20260726_hr_ops_agent_seed` (mode 'off', **not yet applied to prod**).
+  Verified: tsc, eslint, vitest, next build. **Next:** apply seed + flip
+  shadow (owner), stage 2 armed writes after 5 clean shadow diffs, PIN-gated
+  pay reads, doc intake (blocked: session egress denies supabase.co storage
+  host). Design evidence = the 2026-07-16→20 manual onboarding arc (5 staff
+  ops). Open: persona name ("Cel"), BM register samples, chaser cron.
 
 - 2026-07-23 (evening) — **Cashflow "upcoming cash" view: Grab reconciled into
   the incoming forecast, daily run-rate strip added, marketing follows the live
