@@ -28,7 +28,7 @@ import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { sendOpsDigest } from "@/lib/ops-pulse/sender";
 import { resolveOwner } from "@/lib/ops-pulse/router";
 import { samePhone } from "@/lib/ops-pulse/inbound";
-import { getAgentMode, logAgentAction } from "@/lib/agents/substrate";
+import { getAgentMode, logAgentAction } from "@celsius/agents/src/substrate";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

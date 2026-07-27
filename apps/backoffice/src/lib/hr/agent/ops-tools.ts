@@ -20,7 +20,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sendOpsDigest } from "@/lib/ops-pulse/sender";
 import { resolveOwner } from "@/lib/ops-pulse/router";
-import { getAgentMode, logAgentAction } from "@/lib/agents/substrate";
+import { getAgentMode, logAgentAction } from "@celsius/agents/src/substrate";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
 import type { AssistantReporter, ToolSpec } from "@/lib/ops-intake/assistant";
 import { HR_AGENT_KEY } from "./staff-assistant";
