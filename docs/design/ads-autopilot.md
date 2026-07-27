@@ -52,18 +52,28 @@ raise|revert|pause|restore`) — no extra tables.
 - **Never excluded**: café/coffee/breakfast intent, unknowns ("other" ≠
   useless). Human `rejected` ledger rows are a standing no; `failed` rows
   retry.
-- **Broad ROOTS, not literals (2026-07-21):** exclusions are written as broad
-  negative-theme roots (`negativeThemeRoot`/`exclusionPhrase` in term-rules) —
-  "zus" not "zus near me", "coffee bean" not "coffee bean shah alam",
-  "restaurant" not "restaurants near me". Google themes are fuzzy so one root
-  blocks all variants AND pre-blocks future ones, using far fewer of the ~25
-  negative slots. `selectAutoExclusions` groups spend by root and sums it;
-  seeds emit roots too. A one-time idempotent `consolidateCampaignNegatives`
-  (runs in the armed nightly pass, `consolidate-negatives.ts`) swaps the
-  existing 25 literal negatives per campaign for roots — removes the literals
-  (freeing slots), adds the roots, ledgers removed rows status='superseded'.
-  Root lists never overlap café intent ("coffee bean" is a brand; bare
-  "coffee" is deliberately absent).
+- **Broad ROOTS, added alongside literals (2026-07-21, corrected 2026-07-23):**
+  exclusions are written as broad negative-theme roots
+  (`negativeThemeRoot`/`exclusionPhrase` in term-rules) — "zus" not "zus near
+  me", "coffee bean" not "coffee bean shah alam". One root covers many variants
+  and pre-blocks future ones, using fewer of the ~25 negative slots.
+  `selectAutoExclusions` groups spend by root and sums it; seeds emit roots too.
+  `consolidateCampaignNegatives` (armed nightly pass) adds roots **additively**
+  and takes only genuinely free slots. Root lists never overlap café intent
+  ("coffee bean" is a brand; bare "coffee" is deliberately absent).
+  **A root NEVER removes the literal it appears to subsume** — see the Jul 21
+  regression below. Slot pressure is resolved by value-ranked eviction
+  (`planSlotSwap`), which drops the least valuable negative measured by the
+  junk it actually covers (`scoreNegatives`), not the one that looks redundant.
+- **Post-apply verification (2026-07-23, `verify-exclusions.ts`):** every night
+  `findLeaks` checks whether each applied negative is actually blocking — any
+  term still being paid for >2 days (propagation grace) after its covering
+  negative went live is a LEAK, and the offending literal is re-excluded in its
+  own right, evicting the cheapest incumbent if the campaign is full. This is
+  empirical rather than another guess about Google's matcher, so future
+  surprises (plurals, accents, transliterations) self-correct. `superseded`
+  ledger rows are retryable (they are no longer on Google), which is how a
+  wrongly-removed literal gets back in.
 - **Slot budget**: `MAX_NEGATIVES_PER_CAMPAIGN=25`, highest measured cost
   first (≥RM2/30d summed per root, ≤15/campaign/run); seeded roots fill
   leftover slots. **Why this was needed:** by 2026-07-21 all three campaigns
@@ -141,29 +151,41 @@ a summary row in `agent_actions`. Human-paused campaigns are left alone.
   the prod deploy lagged the merge ~6h. Verify the Vercel prod deployment is
   READY when a merge must beat a cron.
 
-## Effect (updated 2026-07-21, after the hard-cut)
+## Effect (updated 2026-07-23 — earlier claim corrected)
 
 Owner drove the descent hard over Jul 19–20 ("decrease more" → "how can we do
-this faster" → hard-cut to RM55). **Actual state:**
-- All 3 campaigns at **RM55/day** (fleet RM265.86 → **RM165/day**), applied
-  clean on the Jul 20 run.
-- **Cuts banked: RM4,056/mo = 81% of the RM5k target** (cash scoreboard cuts
-  side; the sales side is still contaminated by the StoreHub-cutover anchor —
-  ignore its −RM10.6k/mo till Δ until the baseline is fixed).
-- **Till post-cut:** first full day at RM55 (Jul 21) = RM6,660 fleet, inside
-  the normal RM6.5–8.4k daily band — no cliff, but 1 day; the guard's verdict
-  needs ~2 weeks. Cumulatively the fleet has been cut ~45% (RM300→165/day)
-  with no clean-POS till response, consistent with the marginal spend being
-  waste.
+this faster" → hard-cut to RM55). **Actual state:** fleet at **RM158.46/day**
+(PJ 51.51 / SA 53.98 / Tam 52.97) from a RM300.20/day pre-descent baseline —
+a ~47% cut. Autopilot has held since Jul 22, in its 14d observation window.
 
-**Remaining path to RM5k:** if the till holds through the ~2-week read, take
-the fleet down toward ~RM45/day each (fleet ~RM135) to close the last ~RM950/mo;
-if any outlet's till dips, the guard rolls it back and that outlet's true floor
-is found. Ceiling from cuts alone ≈RM6.4k/mo at the RM20 floors.
+**The Jul 21 claim ("till held flat, cuts banked RM4,056/mo = 81% of target")
+was overconfident. Two confounds surfaced on Jul 23:**
 
-**Follow-ups owed:** remove the one-time `hardCutDirective` block now all
-three are at RM55; fix the scoreboard sales-side anchor (post-cutover window /
-exclude `storehub_sales`).
+1. **SMS masked the till.** Decomposing the flat top-line by discount status
+   (clean post-cutover, cut-week vs the 4 weeks before): **organic** (no
+   discount) till fell RM8,628 → **RM8,495/day (−1.5%)** while **discounted**
+   (SMS-voucher) till rose RM1,459 → **RM1,690/day (+16%)**. The headline was
+   flat only because the two moved in opposite directions — the ad-exposed
+   half did soften. Both levers were changed in the same window, so neither is
+   cleanly attributable.
+2. **The guard is blind to this.** It reads TOTAL till, which the SMS loop
+   inflates, so it cannot detect ad-cut damage while SMS ramps. **Fix owed:
+   point the guard and scoreboard at organic (non-discounted) till.**
+
+**Honest cash range: +RM1.8k to +RM4.25k/mo**, not a settled RM4.25k. Lower
+bound = RM142/day saved − up to RM133/day organic gross (≈RM80/day margin).
+The true figure sits inside that band because part of the organic "decline" is
+cannibalisation (a walk-in who now pays with a voucher moves buckets), and the
+SMS loop's own holdouts (~3–4 people) are far too small to separate it.
+
+**Remaining path to RM5k:** measurement before more cutting. Hold budgets
+through ~Aug 5 and read *organic* till with SMS steady; or freeze one outlet as
+an ad-control while the others descend. Ceiling from cuts alone ≈RM6.4k/mo at
+the RM20 floors.
+
+**Follow-ups owed:** guard + scoreboard → organic till; remove the one-time
+`hardCutDirective` block (inert, all three below RM55); fix the scoreboard
+sales-side anchor (post-cutover window / exclude `storehub_sales`).
 
 ## Lessons
 
@@ -173,5 +195,23 @@ exclude `storehub_sales`).
   have caused — bound attribution by effect-size plausibility.
 - Negative keyword themes are fuzzy and slot-capped — treat slots as a
   scarce budget, spend them on measured cost.
+- **Google's negative themes do NOT stem plurals.** The Jul 21 consolidation
+  removed the working literals "restaurants" / "restaurants near me" in favour
+  of the root "restaurant"; both plurals resumed spending the next day
+  (RM24.46 in 2 days across Tamarind + Putrajaya ≈ RM370/mo) and the slots
+  ended back at 25/25 anyway, so the swap bought nothing. Clean natural
+  experiment in the data: spend → 0 while the literals were on (Jul 18–21),
+  → back the day after they were removed.
+- **Adding is a cheap bet; removing is an expensive one.** A speculative root
+  that catches nothing costs one slot. Removing a demonstrably-working
+  negative costs real money, silently. Never trade proven for assumed.
+- **Apply-and-forget hides regressions.** The autopilot mutated Google and
+  never checked the result, so a live leak read as "reporting lag" for two
+  days. Anything applied to an external system needs a verification pass that
+  can contradict the assumption behind it.
+- **A flat aggregate can be two opposite moves.** Total till looked unchanged
+  through the hard cut only because SMS-discounted orders rose as organic
+  fell. Decompose before concluding a lever was free — and never let a guard
+  read a metric another loop is actively inflating.
 - Relative weakness (hot sibling) is not outlet weakness — gate experiments
   on the outlet's own absolute signal.
