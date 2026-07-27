@@ -4,8 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3004",
-    "build:pwa": "node scripts/build-pwa.mjs",
-    "build": "node scripts/build-pwa.mjs && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"

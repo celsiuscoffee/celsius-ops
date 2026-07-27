@@ -32,81 +32,18 @@ async function isValidAdminToken(token: string): Promise<boolean> {
   return diff === 0;
 }
 
-// Paths that must NOT be rewritten to the PWA SPA shell — Next.js
-// routes (api), build assets, and known static files. `/staff` is kept
-// reserved so a stale bookmark to the retired staff/KDS web pages 404s via
-// routing instead of falling through to the customer SPA shell.
-const PWA_PASSTHROUGH = [
-  /^\/api(\/|$)/,
-  /^\/staff(\/|$)/,
-  // Deep-link association files (AASA + assetlinks.json) are real Next.js
-  // route handlers in this app. The AASA path
-  // (/.well-known/apple-app-site-association) is EXTENSIONLESS, so without
-  // this it falls through to the SPA-shell rewrite below and gets served
-  // index.html — Apple then can't parse it and iOS Universal Links silently
-  // break. assetlinks.json already passes via the file-extension rule, but
-  // pin the whole dir so both stay served by their routes.
-  /^\/\.well-known(\/|$)/,
-  /^\/_next(\/|$)/,
-  /^\/_expo(\/|$)/,
-  /^\/assets(\/|$)/,
-  /^\/icons(\/|$)/,
-  /^\/fonts(\/|$)/,
-  /^\/manifest\.json$/,
-  /^\/sw\.js$/,
-  /^\/favicon\.ico$/,
-  /^\/apple-touch-icon\.png$/,
-  /^\/robots\.txt$/,
-  /^\/sitemap\.xml$/,
-  /\.[a-zA-Z0-9]+$/,
-];
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
 
-  // Customer routes that are NOW Next.js pages (apps/order/src/app/…/page.tsx)
-  // bypass the SPA rewrite — they render plain HTML so iOS Safari can
-  // collapse its URL bar on body scroll. Each route added here means
-  // one less screen the customer hits through the RN-Web SPA. Inner
-  // routes that haven't been ported yet (cart, product/[id], orders,
-  // rewards, account, checkout, store, etc.) still rewrite to the
-  // SPA's index.html below.
-  const isNextOwned =
-    pathname === "/" ||
-    pathname === "/menu" ||
-    pathname === "/cart" ||
-    pathname === "/orders" ||
-    pathname === "/rewards" ||
-    pathname === "/account" ||
-    pathname === "/checkout" ||
-    pathname === "/store" ||
-    pathname === "/referral" ||
-    pathname === "/support" ||
-    pathname === "/settings" ||
-    pathname === "/privacy" ||
-    pathname === "/tier-benefits" ||
-    pathname === "/wrapped" ||
-    pathname === "/account-delete" ||
-    pathname === "/get-app" ||
-    pathname.startsWith("/product/") ||
-    pathname.startsWith("/order/") ||
-    pathname.startsWith("/challenge/") ||
-    pathname.startsWith("/table/");
-
-  // Customer-facing UI lives in the Expo Web PWA shipped from
-  // apps/pickup-native and copied into /public during build. For any
-  // non-Next route, rewrite to /index.html so the SPA bootstraps and
-  // client-side routing handles the rest. Apply security headers on
-  // this branch too — these are the customer-facing pages and need
-  // CSP / X-Frame-Options / Referrer-Policy just like any other page.
-  if (!isApi && !isNextOwned && !PWA_PASSTHROUGH.some((rx) => rx.test(pathname))) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/index.html";
-    const r = NextResponse.rewrite(url);
-    applySecurityHeaders(r, { isApi: false });
-    return r;
-  }
+  // Every customer route is a Next.js page now. The old Expo-Web SPA shell
+  // (apps/pickup-native's web export, copied into /public by build-pwa.mjs and
+  // rewritten to for any un-ported route) is GONE — it was the retired pickup
+  // ordering flow leaking onto the web, complete with its own outlet picker
+  // and manual table entry that bypassed the QR-table-only rules. Unknown
+  // paths now fall through to Next routing and 404 like any normal app;
+  // stale Expo-only routes (/rm-return, /stripe-redirect) have no live web
+  // callers (native payment returns use the celsiuscoffee:// scheme).
 
   // CSRF protection — applies to ALL state-changing /api/* requests
   // except webhooks/cron (auto-exempt). Runs before the per-route

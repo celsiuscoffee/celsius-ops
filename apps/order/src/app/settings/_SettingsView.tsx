@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Bell, BellOff, Shield, CircleHelp, Trash2, ChevronRight } from "lucide-react";
+import { registerForPush } from "@/lib/web-push-client";
 
 /**
  * Settings — divider-row list matching apps/pickup-native/app
@@ -24,12 +25,13 @@ export function SettingsView() {
 
   const togglePush = async () => {
     if (typeof Notification === "undefined") return;
-    if (Notification.permission === "default") {
-      const r = await Notification.requestPermission();
-      setPushOn(r === "granted");
-    } else {
-      setPushOn(Notification.permission === "granted");
-    }
+    // Permission alone isn't a subscription — registerForPush also creates
+    // the PushSubscription and POSTs it to /api/push/subscribe, which is
+    // what actually puts this browser in the loyalty-push audience. (The
+    // old version of this toggle only requested permission; the real
+    // subscribe lived in the retired Expo shell.)
+    const endpoint = await registerForPush({ prompt: true });
+    setPushOn(endpoint != null || Notification.permission === "granted");
   };
 
   return (

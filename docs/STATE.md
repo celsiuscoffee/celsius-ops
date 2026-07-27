@@ -475,6 +475,64 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-27 (later) — **App-identity audit + Expo web bundle REMOVED from the
+  web (branch `claude/pwa-pickup-removal-9qysgv`, PR #1073).** Owner: "there
+  will be no pickup app in PWA" + "clean up which code is which app." Verified
+  map: `apps/order` = THE customer webapp (order.celsiuscoffee.com, Vercel
+  project misleadingly named `celsius-pickup-app`) — QR-table ordering +
+  loyalty; `apps/pickup-native` = THE customer native app "Celsius Coffee"
+  (`com.celsiuscoffee.pickup.next`, App Store id6766792077) — NOT a KDS
+  despite CLAUDE.md's old label; `apps/pickup` = LEGACY webview wrapper
+  (`com.celsiuscoffee.pickup`, no `.next`) that loads order.celsiuscoffee.com
+  LIVE (old installs mirror the website in real time); `apps/order/android`
+  + `build-kds-apk.yml` = vestigial "Celsius Orders" KDS webview pointing at
+  the retired `/staff/kds` (page no longer exists). **Shipped on the branch:**
+  (1) `/scan` added to isNextOwned (stopgap, then subsumed); (2) pickup-native
+  manual-table-entry removal REVERTED (owner: native untouched — net-zero
+  native diff, no OTA); (3) **PR A**: middleware SPA-rewrite + isNextOwned +
+  PWA_PASSTHROUGH deleted (all routes Next-owned, unknown → 404),
+  `build-pwa.mjs` deleted, build = `next build` only, sw.js v45→v46 (purges
+  cached Expo shell; push handlers kept), new `<RegisterSw />` in layout
+  (registration used to live in the Expo shell's inline script). Safe:
+  native payment returns use `celsiuscoffee://`, never web /rm-return.
+  (4) **PR B**: CLAUDE.md layout table + hard rule 5 + ota-release skill
+  corrected (pickup-native = customer phones) + skill Lesson appended.
+  **Web-push subscribe PORTED same session** (`lib/web-push-client.ts`;
+  Settings toggle now actually subscribes + POSTs /api/push/subscribe — the
+  old toggle only flipped browser permission; RegisterSw silently refreshes
+  already-granted browsers on boot, no prompt). **Follow-ups needing
+  owner:** delete `apps/pickup` (is the
+  old `com.celsiuscoffee.pickup` listing retired?); delete `apps/order/
+  android` + `build-kds-apk.yml` (what do kitchen screens actually run?);
+  optionally rename Vercel project `celsius-pickup-app`.
+
+- 2026-07-27 — **PWA pickup removal follow-up: the customer SPA IS the Expo
+  pickup app, and `/scan` was leaking into it.** After #1028 merged, live
+  verification (via `mcp__Vercel__web_fetch_vercel_url`, since
+  `order.celsiuscoffee.com` is NOT in the CCR egress allowlist — proxy 403,
+  same class as the sentry.io block) exposed the real architecture: **`apps/order`
+  is a HYBRID** — `apps/order/src/middleware.ts` serves an allowlist of
+  `isNextOwned` routes (`/ /menu /cart /checkout /store /table/* …`) from the
+  Next.js pages, and **rewrites every other route to `/index.html`, which is the
+  Expo react-native-web build from `apps/pickup-native` copied into
+  `apps/order/public/` by `scripts/build-pwa.mjs` at build.** So the customer
+  "PWA" shell literally IS the pickup-native app; un-ported routes render it.
+  **Bug in #1028:** `/scan` (my new Next page) was NOT added to `isNextOwned`,
+  so on prod middleware rewrote `/scan` → Expo pickup SPA shell — the
+  OutletGate/cart/checkout redirects were dumping customers INTO the pickup PWA
+  (opposite of the wall). Live-confirmed: `/store` → Next.js 307→/scan (my
+  redirect works), but `/scan` → served Expo shell (`/_expo/static/…`, desc
+  "Order your favourite Celsius Coffee drinks ahead and skip the queue").
+  **Fix (this follow-up branch, restarted from merged main):** added
+  `pathname === "/scan"` to the `isNextOwned` allowlist. Typecheck clean.
+  **STILL OPEN (systemic, needs owner decision):** the Expo pickup SPA is the
+  fallback shell for all non-allowlisted routes; fully retiring pickup means
+  either rebuilding `apps/pickup-native`'s web target without the pickup flow,
+  or replacing the `/index.html` SPA-rewrite fallback with a redirect to /scan.
+  Manifest `start_url` is "/" (Next home = scan instruction). Installed PWAs
+  with a cached Expo bundle + `sw.js` (network-first, cache `celsius-v45`) are a
+  secondary stale-access vector.
+
 - 2026-07-26 — **HR Ops Agent: designed + stage 1 BUILT** (this branch;
   design `docs/design/hr-ops-agent.md`, audit `docs/hr-data-audit-2026-07-26.md`).
   WhatsApp agent on the business number, personas by sender. Authority matrix

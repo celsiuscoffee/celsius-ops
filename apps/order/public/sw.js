@@ -1,8 +1,15 @@
-// Mirror of apps/pickup-native/public/sw.js — overwritten on each
-// build-pwa run. v3 bumps over v2 to flush customers off the broken
-// CSS shipped in #157/#158 before this revert deployed.
-const CACHE = "celsius-v45";
-const SHELL = ["/", "/index.html", "/manifest.json"];
+// Service worker for order.celsiuscoffee.com (the Next.js customer webapp).
+//
+// This file is now the SINGLE source of truth — the old build-pwa step that
+// overwrote it with apps/pickup-native's copy is gone, along with the Expo
+// web bundle it cached. v46 bumps over v45 specifically to purge the cached
+// Expo SPA shell (/index.html + /_expo/* assets) from every installed PWA,
+// so stale installs stop booting the retired pickup UI offline.
+//
+// Push handlers stay: existing web-push subscribers (loyalty pushes) are
+// registered against this SW and must keep receiving notifications.
+const CACHE = "celsius-v46";
+const SHELL = ["/", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));
@@ -23,21 +30,8 @@ self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   if (url.pathname.startsWith("/api/")) return;
 
-  if (url.pathname.startsWith("/_expo/static/")) {
-    e.respondWith(
-      caches.match(e.request).then(
-        (cached) =>
-          cached ||
-          fetch(e.request).then((res) => {
-            const clone = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, clone)).catch(() => {});
-            return res;
-          }),
-      ),
-    );
-    return;
-  }
-
+  // Network-first with cache fallback — pages keep working offline-ish,
+  // but a deploy is picked up on the next online load.
   e.respondWith(
     fetch(e.request)
       .then((res) => {
