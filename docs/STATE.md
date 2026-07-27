@@ -475,6 +475,33 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-27 — **PWA pickup removal follow-up: the customer SPA IS the Expo
+  pickup app, and `/scan` was leaking into it.** After #1028 merged, live
+  verification (via `mcp__Vercel__web_fetch_vercel_url`, since
+  `order.celsiuscoffee.com` is NOT in the CCR egress allowlist — proxy 403,
+  same class as the sentry.io block) exposed the real architecture: **`apps/order`
+  is a HYBRID** — `apps/order/src/middleware.ts` serves an allowlist of
+  `isNextOwned` routes (`/ /menu /cart /checkout /store /table/* …`) from the
+  Next.js pages, and **rewrites every other route to `/index.html`, which is the
+  Expo react-native-web build from `apps/pickup-native` copied into
+  `apps/order/public/` by `scripts/build-pwa.mjs` at build.** So the customer
+  "PWA" shell literally IS the pickup-native app; un-ported routes render it.
+  **Bug in #1028:** `/scan` (my new Next page) was NOT added to `isNextOwned`,
+  so on prod middleware rewrote `/scan` → Expo pickup SPA shell — the
+  OutletGate/cart/checkout redirects were dumping customers INTO the pickup PWA
+  (opposite of the wall). Live-confirmed: `/store` → Next.js 307→/scan (my
+  redirect works), but `/scan` → served Expo shell (`/_expo/static/…`, desc
+  "Order your favourite Celsius Coffee drinks ahead and skip the queue").
+  **Fix (this follow-up branch, restarted from merged main):** added
+  `pathname === "/scan"` to the `isNextOwned` allowlist. Typecheck clean.
+  **STILL OPEN (systemic, needs owner decision):** the Expo pickup SPA is the
+  fallback shell for all non-allowlisted routes; fully retiring pickup means
+  either rebuilding `apps/pickup-native`'s web target without the pickup flow,
+  or replacing the `/index.html` SPA-rewrite fallback with a redirect to /scan.
+  Manifest `start_url` is "/" (Next home = scan instruction). Installed PWAs
+  with a cached Expo bundle + `sw.js` (network-first, cache `celsius-v45`) are a
+  secondary stale-access vector.
+
 - 2026-07-26 — **HR Ops Agent: designed + stage 1 BUILT** (this branch;
   design `docs/design/hr-ops-agent.md`, audit `docs/hr-data-audit-2026-07-26.md`).
   WhatsApp agent on the business number, personas by sender. Authority matrix

@@ -74,6 +74,12 @@ export async function middleware(request: NextRequest) {
   // SPA's index.html below.
   const isNextOwned =
     pathname === "/" ||
+    // The dine-in scan wall. MUST be Next-owned: the OutletGate / cart /
+    // checkout redirect here when there's no table session, and if it fell
+    // through to the SPA rewrite below it would serve the Expo pickup PWA
+    // shell — dropping the customer back INTO pickup, the exact opposite of
+    // the wall's purpose.
+    pathname === "/scan" ||
     pathname === "/menu" ||
     pathname === "/cart" ||
     pathname === "/orders" ||
