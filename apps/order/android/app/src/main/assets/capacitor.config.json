@@ -1,9 +1,0 @@
-{
-  "appId": "com.celsiuscoffee.orders",
-  "appName": "Celsius Orders",
-  "webDir": "out",
-  "server": {
-    "url": "https://celsius-pickup-app.vercel.app/staff/kds",
-    "cleartext": true
-  }
-}

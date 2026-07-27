@@ -512,6 +512,25 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-27 (cleanup) — **`apps/pickup` + the dead KDS shell DELETED (branch
+  `claude/pwa-pickup-removal-9qysgv`, follow-up to #1073/#1075).** Owner:
+  "delete apps/pickup and the dead kds shell." Removed: `apps/pickup` (legacy
+  Capacitor webview wrapper `com.celsiuscoffee.pickup`; STORE_LISTING.md moved
+  to `docs/store-listing.md`), `apps/order/android` + `capacitor.config.ts`
+  (the vestigial "Celsius Orders" KDS webview pointing at retired /staff/kds),
+  `.github/workflows/build-kds-apk.yml`, the 3 `@capacitor/*` deps in
+  apps/order, the `apps/pickup` workspace entry + `typecheck:apps` leg, and
+  the pickup legs of the CI typecheck/build matrices. KEPT: middleware
+  `capacitor://localhost`/`ionic://localhost` ALLOWED_ORIGINS — field installs
+  of the old webview app still exist on customer phones and load the site
+  live; drop only when the old store listing is confirmed dead. Verified:
+  order typecheck clean, full vitest 511/511 (note: `npm i --ignore-scripts`
+  skips `prisma generate` — 7 suites fail with ".prisma/client" missing until
+  `npx prisma generate --schema packages/db/prisma/schema.prisma`). Camera
+  scanner on /scan shipped as #1075 (jsQR in-browser, same /table handoff;
+  owner kept native manual entry). Remaining owner decision: rename Vercel
+  project `celsius-pickup-app`.
+
 - 2026-07-27 (later) — **App-identity audit + Expo web bundle REMOVED from the
   web (branch `claude/pwa-pickup-removal-9qysgv`, PR #1073).** Owner: "there
   will be no pickup app in PWA" + "clean up which code is which app." Verified

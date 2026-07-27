@@ -29,7 +29,7 @@ jobs:
       matrix:
         # staff-native is an Expo app but lives in the npm workspace, so
         # the root npm ci covers it — no per-app install needed.
-        app: [backoffice, staff, order, pickup, staff-native]
+        app: [backoffice, staff, order, staff-native]
     env:
       DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
       DIRECT_URL: "postgresql://fake:fake@localhost:5432/fake"
@@ -107,8 +107,7 @@ jobs:
           fi
           echo "Migration guard passed."
 
-  # Lint — BLOCKING for all four web apps (each at 0 errors).
-  # pickup is excluded — the Capacitor shell has no eslint deps.
+  # Lint — BLOCKING for the web apps (each at 0 errors).
   # Errors block; warnings don't (set-state-in-effect / purity are
   # deliberately warn-level — see the per-app eslint.config.mjs).
   # Legacy `any` sites carry "ratchet" disable markers — reduce them,
@@ -139,7 +138,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [backoffice, staff, order, pickup]
+        app: [backoffice, staff, order]
     env:
       DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
       DIRECT_URL: "postgresql://fake:fake@localhost:5432/fake"
