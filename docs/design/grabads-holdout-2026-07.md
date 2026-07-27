@@ -212,6 +212,32 @@ its 5%-of-gross ad. Likely a Grab store issue (rating / visibility / availabilit
 mid-July. Investigate independently; it does NOT change the pause verdict. Final size at
 the Jul 30 read.
 
+### 2026-07-27 — SOLID read (10–12 clean days; effectively the Jul 30 read)
+
+| Outlet | Clean days | Grab/day | Baseline | Drop/day | **Net cash/mo (face value)** |
+|---|---|---|---|---|---|
+| Tamarind | 12 | RM260 | RM276 | −RM15 (flat) | **+RM1,039** |
+| Putrajaya | 10 | RM268 | RM349 | −RM81 | **+RM1,496** |
+| Shah Alam | 12 | RM380 | RM464 | −RM84 | −RM237 (mild) |
+
+**Shah Alam RECOVERED.** The mid-July ~45% Grab collapse was **transient/operational** —
+SA Grab is back to RM380/day (was RM268 in the Jul 21 read), drop now only −18%. Confirms
+it was never the ad. Its −RM84/day still implies 2.8× on a RM30/day ad (impossible; ad is
+1.87×), so corrected via SA's marginal P&L → SA pause ≈ **+RM200/mo**.
+
+**Corrected latest increment (robust, 10–12 days):**
+
+| Outlet | Net cash/mo |
+|---|---|
+| Tamarind | +RM1,039 |
+| Putrajaya | +RM1,496 |
+| Shah Alam | +RM200 (corrected) |
+| **Total** | **≈ +RM2,700/mo (~RM32k/yr)** |
+
+Putrajaya's −RM81/day ≈ 0.94× incremental (below the 2.22× break-even) → solidly positive,
+confirming the dashboard-incremental read. **Holdout CONCLUDED: keep all three paused, cash
+gain ~RM2,700/mo (~RM32k/yr).** SA operational Grab dip self-resolved.
+
 ## How to read it (per outlet)
 1. `decrement/day = baseline(weekday) − actual Grab gross`.
 2. `incremental ROAS = (monthly decrement) ÷ (monthly GrabAds spend)`.
