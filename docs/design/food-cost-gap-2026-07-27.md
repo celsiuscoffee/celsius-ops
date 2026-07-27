@@ -39,6 +39,32 @@ PO spike is partly system-adoption catch-up; the two lenses bracket the truth
 (cash lags via unpaid AP — RM45k+ pending). Recurring food-cost gap:
 **~RM12–25k/mo** vs plan.
 
+### 1a. Apples-to-apples scope (owner: exclude Nilai + IOI — no item sales, cannot check BOM)
+
+Nilai/IOI are consignment (no till items → no theoretical), and they add
+revenue with almost no purchases, so excluding them RAISES the measured %.
+Three till outlets + GastroHub credits (GH supply rides these outlets' POs):
+
+| Month | Revenue (3 outlets + GH) | Cash %† | PO % | Plan |
+| --- | --- | --- | --- | --- |
+| May | RM349.8k | 42.5% | 57.4% | 38% |
+| Jun | RM324.6k | 45.8% | 40.8% | 38% |
+| Jul (→27) | RM290.3k | 39.5% | 46.6% | 38% |
+| 3-mo | RM964.6k | **42.7%** | **48.6%** | 38% |
+
+†bank RAW_MATERIALS minus Nilai/IOI PO amounts (bank feed can't split them;
+RM2–4k/mo). Clean-scope gap: **~RM15–30k/mo**.
+
+Per-outlet (PO purchases ÷ own till revenue): Tamarind Jun 33.6% / Jul 39.3%
+(June ON plan), Shah Alam 43.3% / 49.0%, **Putrajaya 47.5% / 54.0%** (~43–49%
+if all GastroHub supply is credited to PJ — confirm with ops which outlet
+feeds GH). Same menu, same suppliers, same prices → if PJ + SA bought at
+Tamarind's ratio that alone is ~RM20–25k/mo. The fastest practical probe is a
+PJ-vs-Tamarind item-level order-habit comparison, not a chain-wide program.
+
+July bottom-up restated for the 3-outlet scope: spend RM142.4k, no-BOM
+RM16.4k, nominal excess RM49.5k; beans 253kg vs 160kg (1.58×, ~RM8.6k).
+
 June cash P&L (external): inflows ~RM336k vs outflows ~RM333k → ~breakeven,
 which matches "barely enough". People (salary+PT+statutory) RM104k ≈ 32% vs
 plan ~26% is the second, smaller gap (~RM10k, partly addressed by the Jul
