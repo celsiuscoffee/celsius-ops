@@ -22,10 +22,10 @@ npm workspaces + Turborepo. Workspace members: `apps/{backoffice,order,pickup,st
 | Path | What it is |
 | --- | --- |
 | `apps/backoffice` | Next.js 16 admin console — finance, inventory, HR/payroll, procurement, marketing loops. Dev port 3003. |
-| `apps/order` | Next.js 16 customer online-ordering app. Dev port 3007. |
+| `apps/order` | Next.js 16 **customer webapp** at order.celsiuscoffee.com — QR-table (dine-in) ordering + loyalty/rewards/account + customer APIs & crons. Vercel project is named `celsius-pickup-app` (legacy name — it is NOT the pickup app). Web pickup ordering is retired; pickup lives only in `pickup-native`. Also holds a vestigial "Celsius Orders" Capacitor KDS shell (`android/`, `capacitor.config.ts` → retired `/staff/kds` URL). Dev port 3007. |
 | `apps/staff` | Next.js 16 staff web app. Dev port 3006. |
-| `apps/pickup` | Next.js + Capacitor shell for the kitchen/pickup display (KDS). |
-| `apps/pickup-native` | Expo/React Native KDS ("Celsius Coffee"). **Outside the npm workspace** — own `package-lock.json`. |
+| `apps/pickup` | **Legacy** Capacitor webview wrapper — the original store app (`com.celsiuscoffee.pickup`), a thin shell that loads order.celsiuscoffee.com live. Superseded by `pickup-native`; kept only for the store listing history (`STORE_LISTING.md`). NOT a KDS. |
+| `apps/pickup-native` | Expo/React Native **customer app "Celsius Coffee"** (`com.celsiuscoffee.pickup.next`, App Store + Play) — pickup ordering, dine-in table-QR scanner, loyalty. NOT a KDS. **Outside the npm workspace** — own `package-lock.json`. |
 | `apps/pos-native` | Expo/React Native POS for SUNMI registers ("Celsius POS"); native modules in `modules/`. **Outside the npm workspace** — own `package-lock.json`. |
 | `apps/staff-native` | Expo/React Native manager app ("Celsius Manager"); the only native app *inside* the workspace. |
 | `packages/db` | Prisma schema — **source of truth** for the database. Migrations are hand-applied SQL (see hard rule 1). |
@@ -64,8 +64,9 @@ and the migration guard. Always typecheck before pushing.
    (grep `"ratchet: reduce, never add"`).
 5. **A merge to `main` touching `apps/pos-native`, `apps/pickup-native`, or
    `apps/staff-native` is a production deploy** — the OTA workflows push the JS
-   bundle to live tills/KDS screens on the next app launch. See the
-   `ota-release` skill before merging native-app changes.
+   bundle to live devices on the next app launch: SUNMI tills (`pos-native`),
+   **customer phones** (`pickup-native`), manager phones (`staff-native`). See
+   the `ota-release` skill before merging native-app changes.
 6. **Keep a human in the loop** for: applying migrations to the production
    database, anything touching payroll or payments, and `pos-native` releases.
    Propose, show the diff/SQL, wait for approval.

@@ -8,8 +8,9 @@ description: Ship or verify a release of the native apps (pos-native, pickup-nat
 A merge to `main` touching `apps/pos-native`, `apps/pickup-native`, or
 `apps/staff-native` **is a production deploy**: the matching
 `.github/workflows/<app>-ota.yml` publishes an EAS Update to the `production`
-channel, and devices (SUNMI tills, KDS tablets, manager phones) pull the new JS
-bundle on next app launch. There is no staging channel between merge and till.
+channel, and devices (SUNMI tills for `pos-native`, CUSTOMER PHONES for
+`pickup-native`, manager phones for `staff-native`) pull the new JS bundle on
+next app launch. There is no staging channel between merge and till.
 
 ## Decision: OTA or new APK?
 
@@ -92,3 +93,15 @@ the only version in the field, then retire it.
 
 _Append dated entries when this skill misses something. Promote stable ones into
 the sections above._
+
+- 2026-07-27 — `pickup-native` is NOT a KDS: it is the customer app "Celsius
+  Coffee" (`com.celsiuscoffee.pickup.next`, App Store id6766792077 + Play) —
+  a pickup-native merge OTAs to CUSTOMER phones, the highest-blast-radius
+  surface after the till. The old "KDS" label here and in CLAUDE.md caused an
+  agent to nearly ship a customer-facing UI change believing it targeted
+  kitchen tablets. Related: `build-kds-apk.yml` + `apps/order/android` are a
+  vestigial "Celsius Orders" webview pointing at the retired `/staff/kds`
+  URL — pending owner decision to delete; `apps/pickup` is the legacy
+  webview wrapper (`com.celsiuscoffee.pickup`, no `.next`) that loads
+  order.celsiuscoffee.com live, so WEB deploys instantly change whatever
+  those legacy installs show.

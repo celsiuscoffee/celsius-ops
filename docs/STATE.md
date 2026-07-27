@@ -475,6 +475,36 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-27 (later) — **App-identity audit + Expo web bundle REMOVED from the
+  web (branch `claude/pwa-pickup-removal-9qysgv`, PR #1073).** Owner: "there
+  will be no pickup app in PWA" + "clean up which code is which app." Verified
+  map: `apps/order` = THE customer webapp (order.celsiuscoffee.com, Vercel
+  project misleadingly named `celsius-pickup-app`) — QR-table ordering +
+  loyalty; `apps/pickup-native` = THE customer native app "Celsius Coffee"
+  (`com.celsiuscoffee.pickup.next`, App Store id6766792077) — NOT a KDS
+  despite CLAUDE.md's old label; `apps/pickup` = LEGACY webview wrapper
+  (`com.celsiuscoffee.pickup`, no `.next`) that loads order.celsiuscoffee.com
+  LIVE (old installs mirror the website in real time); `apps/order/android`
+  + `build-kds-apk.yml` = vestigial "Celsius Orders" KDS webview pointing at
+  the retired `/staff/kds` (page no longer exists). **Shipped on the branch:**
+  (1) `/scan` added to isNextOwned (stopgap, then subsumed); (2) pickup-native
+  manual-table-entry removal REVERTED (owner: native untouched — net-zero
+  native diff, no OTA); (3) **PR A**: middleware SPA-rewrite + isNextOwned +
+  PWA_PASSTHROUGH deleted (all routes Next-owned, unknown → 404),
+  `build-pwa.mjs` deleted, build = `next build` only, sw.js v45→v46 (purges
+  cached Expo shell; push handlers kept), new `<RegisterSw />` in layout
+  (registration used to live in the Expo shell's inline script). Safe:
+  native payment returns use `celsiuscoffee://`, never web /rm-return.
+  (4) **PR B**: CLAUDE.md layout table + hard rule 5 + ota-release skill
+  corrected (pickup-native = customer phones) + skill Lesson appended.
+  **Follow-ups needing owner:** web-push SUBSCRIBE flow lived only in the
+  Expo shell (`pickup-native/lib/notifications.web.ts`) — new web
+  subscriptions have no UI until ported to a Next page (existing subscribers
+  unaffected; sw.js + push handlers live on); delete `apps/pickup` (is the
+  old `com.celsiuscoffee.pickup` listing retired?); delete `apps/order/
+  android` + `build-kds-apk.yml` (what do kitchen screens actually run?);
+  optionally rename Vercel project `celsius-pickup-app`.
+
 - 2026-07-27 — **PWA pickup removal follow-up: the customer SPA IS the Expo
   pickup app, and `/scan` was leaking into it.** After #1028 merged, live
   verification (via `mcp__Vercel__web_fetch_vercel_url`, since
