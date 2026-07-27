@@ -30,6 +30,41 @@ const LEAVE_TYPES = [
   { key: "unpaid", label: "Unpaid" },
 ];
 
+// Free-text date → ISO. Staff type dates the Malaysian way (27/7/2026,
+// 27-07-2026), but only strict ISO used to validate, so the day-count and
+// submit button silently never enabled — "apply tak boleh" reports with no
+// error shown. Accept day-first D/M/Y with /, - or . separators (2-digit
+// years → 20xx) plus ISO, and round-trip through Date so 31/2 can't sneak by.
+export function parseLeaveDate(raw: string): string | null {
+  const s = raw.trim();
+  let y: number, m: number, d: number;
+  let match: RegExpMatchArray | null;
+  if ((match = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) {
+    y = Number(match[1]); m = Number(match[2]); d = Number(match[3]);
+  } else if ((match = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/))) {
+    d = Number(match[1]); m = Number(match[2]); y = Number(match[3]);
+    if (match[3].length <= 2) y += 2000;
+  } else {
+    return null;
+  }
+  if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const date = new Date(Date.UTC(y, m - 1, d));
+  // Round-trip: JS rolls invalid days forward (31 Feb → 2/3 Mar) — reject those.
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+// Short human echo ("Mon, 3 Aug 2026") so the typist can confirm the app
+// understood their date the way they meant it.
+function prettyDate(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-MY", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export default function LeaveScreen() {
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
@@ -59,30 +94,27 @@ export default function LeaveScreen() {
     load();
   }, [load]);
 
-  // Guard against malformed free-text dates: a bad end date made `endDate >=
-  // startDate` (a string compare) pass while new Date() was NaN, so totalDays
-  // came out NaN and slipped past the `<= 0` submit/button guards, POSTing
-  // total_days: null. Require real ISO dates before computing anything.
-  const isISODate = (s: string) =>
-    /^\d{4}-\d{2}-\d{2}$/.test(s) &&
-    !Number.isNaN(new Date(`${s}T00:00:00`).getTime());
-  const datesValid =
-    isISODate(startDate) && isISODate(endDate) && endDate >= startDate;
+  // Normalize free-text input to ISO before computing anything (see
+  // parseLeaveDate — accepts 27/7/2026-style local input, rejects rolled-over
+  // dates so total_days can never POST as null).
+  const startISO = parseLeaveDate(startDate);
+  const endISO = parseLeaveDate(endDate);
+  const datesValid = !!startISO && !!endISO && endISO >= startISO;
   const totalDays = datesValid
     ? Math.ceil(
-        (new Date(endDate).getTime() - new Date(startDate).getTime()) /
+        (new Date(endISO!).getTime() - new Date(startISO!).getTime()) /
           (1000 * 60 * 60 * 24),
       ) + 1
     : 0;
 
   const submit = async () => {
-    if (!startDate || !endDate || totalDays <= 0) return;
+    if (!startISO || !endISO || totalDays <= 0) return;
     setSubmitting(true);
     try {
       await submitLeave({
         leave_type: type,
-        start_date: startDate,
-        end_date: endDate,
+        start_date: startISO,
+        end_date: endISO,
         total_days: totalDays,
         reason,
       });
@@ -259,9 +291,10 @@ export default function LeaveScreen() {
                   <TextInput
                     value={startDate}
                     onChangeText={setStartDate}
-                    placeholder="YYYY-MM-DD"
+                    placeholder="27/7/2026"
                     placeholderTextColor="#9CA3AF"
                     autoCapitalize="none"
+                    keyboardType="numbers-and-punctuation"
                     className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso"
                   />
                 </View>
@@ -272,16 +305,29 @@ export default function LeaveScreen() {
                   <TextInput
                     value={endDate}
                     onChangeText={setEndDate}
-                    placeholder="YYYY-MM-DD"
+                    placeholder="27/7/2026"
                     placeholderTextColor="#9CA3AF"
                     autoCapitalize="none"
+                    keyboardType="numbers-and-punctuation"
                     className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso"
                   />
                 </View>
               </View>
+              {/* Feedback row: previously a bad format failed SILENTLY — no day
+                  count, submit stuck disabled, no reason shown. Always tell the
+                  typist what the app understood or what's wrong. */}
               {totalDays > 0 ? (
                 <Text className="mt-2 text-sm font-body-bold text-primary">
-                  {totalDays} day{totalDays === 1 ? "" : "s"}
+                  {prettyDate(startISO!)} → {prettyDate(endISO!)} · {totalDays} day
+                  {totalDays === 1 ? "" : "s"}
+                </Text>
+              ) : (startDate.trim() && !startISO) || (endDate.trim() && !endISO) ? (
+                <Text className="mt-2 text-sm font-body text-red-600">
+                  Can&apos;t read the date — try 27/7/2026 or 2026-07-27
+                </Text>
+              ) : startISO && endISO && endISO < startISO ? (
+                <Text className="mt-2 text-sm font-body text-red-600">
+                  End date is before start date
                 </Text>
               ) : null}
 
