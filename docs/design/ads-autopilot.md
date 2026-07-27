@@ -177,20 +177,31 @@ this faster" → hard-cut to RM55). **Actual state:** fleet at **RM158.46/day**
 (PJ 51.51 / SA 53.98 / Tam 52.97) from a RM300.20/day pre-descent baseline —
 a ~47% cut. Autopilot has held since Jul 22, in its 14d observation window.
 
-**VERDICT (2026-07-27, payday-aligned): the cut is SAFE.** Comparing the same
-days-of-month — Jun 20–26 vs Jul 20–26, which is both payday-aligned and
-weekday-complete (7 consecutive days = one of each weekday), entirely
-post-POS-cutover:
+**VERDICT (2026-07-27, payday-aligned): no visible harm; effect is below the
+noise floor.** Compare the same days-of-month (payday-aligned) over 7 consecutive
+days (weekday-complete), post-POS-cutover. **Use EVERY available aligned window,
+not one** — a single window is fragile, and the first pass reported "organic
+flat" from what turned out to be the most favourable of three:
 
-| | Jun 20–26 | Jul 20–26 | Δ |
-| --- | --- | --- | --- |
-| Organic (no promo/reward) | 56,333 | **56,338** | **+0.01% — flat** |
-| Discounted (SMS voucher) | 10,532 | 12,627 | +19.9% |
-| Total | 66,865 | 68,965 | +3.1% |
+| Aligned window (Jun→Jul) | Organic Δ | Total Δ |
+| --- | --- | --- |
+| 18–24 | −4.2% | +1.5% |
+| 19–25 | −3.5% | +0.4% |
+| 20–26 | 0.0% | +3.1% |
+| **mean** | **≈ −2.6%** | **≈ +1.7%** |
 
-Per-outlet organic: Putrajaya **+5.6%**, Shah Alam **−4.2%**, Tamarind **−1.5%**.
-**Ad spend is down 47% and organic till has not moved** — the marginal spend was
-waste, as the thesis predicted. The cuts side (**+RM4,252/mo**) stands.
+**Ad spend is down 47% (RM300.20 → RM158.46/day) while TOTAL till is UP in all
+three windows.** Organic softened ~2.6%, but discounted revenue rose by MORE in
+ringgit than organic fell in every window — i.e. the organic dip is fully
+explainable by cannibalisation (a walk-in who now pays with an SMS voucher
+switches bucket without being a lost customer). So there is no evidence the cut
+damaged demand, and equally no proof of a zero effect: the window-to-window
+spread (~4 points) is as large as the effect being hunted.
+
+Per-outlet organic on the 20–26 window: PJ **+5.6%**, SA **−4.2%**, Tam **−1.5%**
+(the earlier "Tamarind −12%" was a payday artifact). The cuts side
+(**+RM4,252/mo**) is real; whether any of it is offset cannot be resolved at this
+precision — bounded roughly **−RM2k to +RM4.25k/mo** net.
 
 *What the organic/discounted split is and isn't:* it SUBTRACTS a confound (the
 SMS loop inflating the number the guard reads); it does NOT attribute revenue to
@@ -220,8 +231,9 @@ value-based conversion tag.
    inflates, so it cannot detect ad-cut damage while SMS ramps. **Fix owed:
    point the guard and scoreboard at organic (non-discounted) till.**
 
-**Cash: +RM4,252/mo from cuts**, with organic till flat on the payday-aligned
-read. Ceiling from cuts alone ≈RM6.4k/mo at the RM20 floors.
+**Cash: +RM4,252/mo from cuts**, net bounded ≈−RM2k to +RM4.25k/mo depending on
+how much of the ~2.6% organic softening is real vs cannibalisation. Ceiling from
+cuts alone ≈RM6.4k/mo at the RM20 floors.
 
 **Remaining path to RM5k:** the guard now reads organic till and is
 payday-robust, so the descent can resume when the observation window expires
@@ -264,6 +276,10 @@ clamped past the StoreHub cutover; payday-aligned momIndex.)*
   on weekday AND payday at once. Comparing week-to-week manufactured a −12%
   Tamarind "collapse" that was really −1.5%, and nearly reversed a correct
   conclusion.
+- **One aligned window is still one sample.** The three available Jun→Jul
+  windows spread −4.2% / −3.5% / 0.0%, so picking one silently picks a
+  conclusion. Report every window and its spread; if the spread is as wide as
+  the effect, say the effect is unresolvable rather than quoting the best number.
 - **Removing a confound is not attribution.** Stripping voucher orders stops
   the SMS loop inflating the guard's signal; it does not make what remains
   "ad-driven revenue". Know which of the two a metric is doing.

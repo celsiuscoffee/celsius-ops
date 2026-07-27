@@ -10,13 +10,19 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   read; guard rebuilt.** Owner flagged the methodology: Malaysian salaries land
   ~the 25th, so adjacent weeks sit at different points in a monthly demand
   cycle and are NOT comparable. Redone same-days-of-month (Jun 20–26 vs
-  Jul 20–26 — payday-aligned AND weekday-complete, both post-cutover):
-  **organic 56,333 → 56,338 (+0.01%, FLAT)**, discounted 10,532 → 12,627
-  (+19.9%), total 66,865 → 68,965 (+3.1%). Per-outlet organic: PJ **+5.6%**,
-  SA **−4.2%**, Tam **−1.5%**. So a 47% ad cut moved organic till by nothing —
-  the marginal spend WAS waste, and **+RM4,252/mo of cuts stands**. Supersedes
-  the Jul 26 "organic −6.8%, Tamarind −12%" reading, a pure payday-cycle
-  artifact of comparing Jul 20–26 against Jul 13–19.
+  Jul 20–26 — payday-aligned AND weekday-complete, both post-cutover).
+  **Use EVERY aligned window, not one** — the three available spread
+  organic **−4.2% / −3.5% / 0.0%** (starts 18/19/20), mean ≈−2.6%, while TOTAL
+  till is UP in all three (+1.5/+0.4/+3.1%, mean ≈+1.7%). An early pass quoted
+  "organic FLAT +0.01%" from the single most favourable window — don't. In every
+  window discounted revenue rose by MORE in ringgit than organic fell, so the
+  organic dip is fully explainable by cannibalisation (walk-in switches to a
+  voucher) rather than lost demand. Verdict: **47% ad cut, no visible harm, but
+  the ~4pt window spread is as wide as the effect — unresolvable at this
+  precision.** Cuts side **+RM4,252/mo** real; net bounded ≈−RM2k to +RM4.25k/mo.
+  Per-outlet organic (20–26 window): PJ **+5.6%**, SA **−4.2%**, Tam **−1.5%**.
+  Supersedes the Jul 26 "organic −6.8%, Tamarind −12%" reading, a pure
+  payday-cycle artifact of comparing Jul 20–26 against Jul 13–19.
   **Guard rebuilt (PR after #1072):** (a) reads ORGANIC till
   (`ads/organic-revenue.ts`, promo/reward orders excluded; actual AND forecast
   history must come from the SAME series or the ratio compares organic against
