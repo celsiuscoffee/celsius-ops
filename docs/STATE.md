@@ -574,6 +574,35 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-28 (later) — **OT policy: FT-only + backlog cleared.** Owner: "remove
+  backlog OT from before jul" + "OT is only for FT". Root cause of the backlog:
+  the OT sync cron (`api/hr/overtime-requests/sync`) auto-created a pending
+  request for EVERY attendance log with ≥1h computed OT, including part-timers
+  — but PT never gets an OT premium anywhere (monthly run is FT-only; weekly
+  run pays flat hourly on total_hours, `total_ot_hours` always 0; an approved
+  PT OT request only lifted the daily roster cap at flat rate). Data (prod SQL,
+  owner-directed): cancelled 81 pre-Jul pending requests (Apr, 138h, note
+  "Pre-Jul 2026 backlog cleared") + 116 PT July pending requests (285h, note
+  "OT is FT-only"); 24 FT July requests (48h) left pending for manager review.
+  No pay impact — none were ever approved. July monthly run reads only
+  clock_in within Jul, so pre-Jul attendance OT (Mar 3.65h + Apr 177.66h)
+  never entered it; those attendance rows left intact as history. Code (this
+  branch): sync cron filters to full_time; OT-request POST 400s for non-FT
+  ("adjust the roster"); weekly-calc cap note no longer tells managers to
+  approve PT OT. Dedupe note: sync's existing-keys check includes cancelled
+  rows, so cancelled days won't be re-created even before deploy. Still open:
+  Yusri Bin Safarudin (DEACTIVATED but on Jul run at full RM2,100 — awaiting
+  owner's last-working-day answer).
+  Follow-up (same day): owner added "if early clock in, the counter should
+  starts during their shift starts" → `deriveHours` (identical copies in
+  apps/staff + apps/backoffice `lib/hr/hours.ts` — keep in sync) gained
+  optional `scheduledStart`; pay-hours (and hence the OT threshold) count
+  from max(clock_in, rostered start), total_hours still records the real
+  span. All 4 callers pass the roster stamp (staff clock-out, AI processor,
+  auto-close cron, manager set_times). Pinned in hours.test.ts. Pending
+  owner decision: 9 of 24 existing FT July OT rows had >10-min-early
+  clock-ins computed under the old rule — recompute offered, not applied.
+
 - 2026-07-28 — **HR Ops Agent stage 2 BUILT: guarded writes** (this branch;
   design §6b). Typed op allowlist (create/update/convert/reactivate/resign/
   assignment/set_pin/salary_change) + stage→CONFIRM-code flow

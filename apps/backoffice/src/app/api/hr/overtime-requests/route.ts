@@ -139,6 +139,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // OT is FT-only (owner policy 2026-07-28). Part-timers are paid flat hourly
+  // on the weekly cycle — extra PT hours go through the roster, not OT.
+  const { data: targetProfile } = await hrSupabaseAdmin
+    .from("hr_employee_profiles")
+    .select("employment_type")
+    .eq("user_id", targetUserId)
+    .maybeSingle();
+  if (targetProfile && targetProfile.employment_type !== "full_time") {
+    return NextResponse.json(
+      { error: "OT requests are for full-time staff only — part-timers are paid hourly; adjust the roster to cover extra hours" },
+      { status: 400 },
+    );
+  }
+
   const { data, error } = await hrSupabaseAdmin
     .from("hr_overtime_requests")
     .insert({

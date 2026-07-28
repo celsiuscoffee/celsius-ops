@@ -7,6 +7,9 @@ export const dynamic = "force-dynamic";
 // Scans attendance logs for the current month with overtime_hours >= 1 and
 // creates pending post_hoc OT requests for any that don't already have one.
 // Manager then reviews them via the standard OT request flow.
+// FULL-TIMERS ONLY (owner policy 2026-07-28): part-timers are paid flat
+// hourly on the weekly cycle — extra PT hours are handled via the roster,
+// not OT, so generating PT requests just floods the approval queue.
 //   POST — admin UI trigger (session-authed)
 //   GET  — Vercel Cron trigger (Bearer CRON_SECRET)
 async function runSync(actorUserId: string) {
@@ -24,6 +27,19 @@ async function runSync(actorUserId: string) {
     .gte("overtime_hours", 1);
 
   if (!logs || logs.length === 0) {
+    return NextResponse.json({ ok: true, created: 0 });
+  }
+
+  // OT is FT-only — drop logs belonging to part-time/contract staff.
+  const logUserIds = Array.from(new Set(logs.map((l) => l.user_id)));
+  const { data: ftProfiles } = await hrSupabaseAdmin
+    .from("hr_employee_profiles")
+    .select("user_id")
+    .in("user_id", logUserIds)
+    .eq("employment_type", "full_time");
+  const ftIds = new Set((ftProfiles || []).map((p) => p.user_id));
+  const ftLogs = logs.filter((l) => ftIds.has(l.user_id));
+  if (ftLogs.length === 0) {
     return NextResponse.json({ ok: true, created: 0 });
   }
 
@@ -62,7 +78,7 @@ async function runSync(actorUserId: string) {
 
   // Aggregate per user per date (sum OT hours)
   const agg = new Map<string, { user_id: string; outlet_id: string | null; date: string; hours: number; ot_type: string }>();
-  for (const l of logs) {
+  for (const l of ftLogs) {
     const date = toMytDate(l.clock_in);
     const key = `${l.user_id}|${date}`;
     if (existingKeys.has(key)) continue;
