@@ -28,7 +28,8 @@ import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { sendOpsDigest } from "@/lib/ops-pulse/sender";
 import { resolveOwner } from "@/lib/ops-pulse/router";
 import { samePhone } from "@/lib/ops-pulse/inbound";
-import { getAgentMode, logAgentAction } from "@celsius/agents/src/substrate";
+import { getAgentMode, logAgentAction, type AgentMode } from "@celsius/agents/src/substrate";
+import { staffSubmitLeave, staffUpdateOwnContact } from "./write-ops";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -180,8 +181,17 @@ Hard rules:
 - NO personal pay figures in chat yet (payslip amounts, salary) — direct them to the staff app payslips or their manager. Policy figures above are fine.
 - NEVER take or change bank account details over chat, even if they insist — say bank changes must be confirmed with the manager/HQ, then call escalate_to_human so HQ follows up.
 - Complaints, grievances, resignation notices, anything about another person's conduct, or anything you cannot handle → acknowledge with empathy, say you're passing it to HQ, and call escalate_to_human. Do not attempt to counsel or resolve it yourself.
-- To APPLY/change things (leave, swaps, availability): point them to the staff app for now — you'll be able to take these soon.
 - Never invent data. If a tool returns nothing, say so plainly.`;
+
+// Appended only when the registry mode is "armed" — the write tools don't
+// exist in the toolset at all outside armed mode.
+const STAFF_ARMED_ADDENDUM = `
+
+Actions you CAN take directly (armed):
+- submit_leave_request — BEFORE calling, restate the dates back in full words ("3 hingga 4 Ogos 2026, 2 hari, annual leave — betul?") and wait for their yes. The request still goes to their manager for approval; say so. Balance shortfalls are flagged, not blocked.
+- update_my_contact — emergency contact name/phone, personal email, home address. Update immediately when given.
+- Swaps and availability: still the staff app / roster messages.
+- Bank details remain OFF-LIMITS in chat no matter what — escalate_to_human.`;
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -249,7 +259,7 @@ export async function handleStaffInbound(input: StaffInboundInput): Promise<Staf
       select: { direction: true, body: true },
     });
 
-    const outcome = await runStaffAssistant(sender, body, history.reverse());
+    const outcome = await runStaffAssistant(sender, body, history.reverse(), mode);
     if (outcome.escalated) {
       const owner = await resolveOwner();
       if (owner?.phone) {
@@ -301,8 +311,10 @@ async function runStaffAssistant(
   sender: StaffSender,
   text: string,
   history: Array<{ direction: string; body: string | null }>,
+  mode: AgentMode,
 ): Promise<{ reply: string | null; escalated: boolean; topic?: string }> {
   if (!process.env.ANTHROPIC_API_KEY) return { reply: null, escalated: false };
+  const armed = mode === "armed";
 
   const tools: Anthropic.Tool[] = [
     { name: "my_shifts", description: "This staff member's published shifts for the next 7 days.", input_schema: { type: "object" as const, properties: {} } },
@@ -318,12 +330,89 @@ async function runStaffAssistant(
         properties: { topic: { type: "string", description: "2-5 word topic label, e.g. 'bank change request'" } },
       },
     },
+    // Write tools exist ONLY in armed mode — outside it the model can't even
+    // see them (guardrail in code, not prompt).
+    ...(armed
+      ? ([
+          {
+            name: "submit_leave_request",
+            description:
+              "Submit this staff member's leave request (goes to their manager as pending — never auto-approved). Call ONLY after restating the dates in words and getting their yes. Dates must be ISO YYYY-MM-DD.",
+            input_schema: {
+              type: "object" as const,
+              properties: {
+                leave_type: { type: "string", enum: ["annual", "sick", "emergency", "unpaid"] },
+                start_date: { type: "string", description: "YYYY-MM-DD" },
+                end_date: { type: "string", description: "YYYY-MM-DD" },
+                reason: { type: "string" },
+              },
+              required: ["leave_type", "start_date", "end_date"],
+            },
+          },
+          {
+            name: "update_my_contact",
+            description:
+              "Update this staff member's own contact/profile info: emergency contact, personal email, home address. NEVER bank details (those escalate to HQ).",
+            input_schema: {
+              type: "object" as const,
+              properties: {
+                emergency_name: { type: "string" },
+                emergency_phone: { type: "string" },
+                personal_email: { type: "string" },
+                address_line1: { type: "string" },
+                address_city: { type: "string" },
+                address_state: { type: "string" },
+                address_postcode: { type: "string" },
+              },
+            },
+          },
+        ] as Anthropic.Tool[])
+      : []),
   ];
-  const run: Record<string, () => Promise<unknown>> = {
+  const run: Record<string, (input: Record<string, unknown>) => Promise<unknown>> = {
     my_shifts: () => myShifts(sender.id),
     my_hours: () => myHours(sender.id),
     my_leave: () => myLeave(sender.id),
     my_claims: () => myClaims(sender.id),
+    ...(armed
+      ? {
+          submit_leave_request: async (input) => {
+            const summary = await staffSubmitLeave(sender.id, {
+              leaveType: String(input.leave_type ?? "annual"),
+              startDate: String(input.start_date ?? ""),
+              endDate: String(input.end_date ?? ""),
+              reason: input.reason ? String(input.reason) : undefined,
+            });
+            await logAgentAction({
+              agentKey: HR_AGENT_KEY,
+              kind: "staff_write",
+              summary: `leave request by ${sender.name}: ${summary}`.slice(0, 400),
+              outletId: sender.outletId ?? undefined,
+              meta: { requestedById: sender.id, tool: "submit_leave_request" },
+            });
+            return { ok: true, summary };
+          },
+          update_my_contact: async (input) => {
+            const summary = await staffUpdateOwnContact(sender.id, {
+              emergencyName: input.emergency_name ? String(input.emergency_name) : undefined,
+              emergencyPhone: input.emergency_phone ? String(input.emergency_phone) : undefined,
+              personalEmail: input.personal_email ? String(input.personal_email) : undefined,
+              addressLine1: input.address_line1 ? String(input.address_line1) : undefined,
+              addressCity: input.address_city ? String(input.address_city) : undefined,
+              addressState: input.address_state ? String(input.address_state) : undefined,
+              addressPostcode: input.address_postcode ? String(input.address_postcode) : undefined,
+            });
+            await logAgentAction({
+              agentKey: HR_AGENT_KEY,
+              kind: "staff_write",
+              summary: `contact update by ${sender.name}: ${summary}`.slice(0, 400),
+              outletId: sender.outletId ?? undefined,
+              meta: { requestedById: sender.id, tool: "update_my_contact" },
+            });
+            return { ok: true, summary };
+          },
+        }
+      : {}),
   };
 
   const historyLines = history
@@ -341,7 +430,7 @@ async function runStaffAssistant(
     const res = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 600,
-      system: STAFF_SYSTEM,
+      system: STAFF_SYSTEM + (armed ? STAFF_ARMED_ADDENDUM : ""),
       tools,
       messages,
     });
@@ -364,7 +453,9 @@ async function runStaffAssistant(
         payload = { routed: true, note: "HQ has been notified — reassure the sender." };
       } else {
         try {
-          payload = run[tu.name] ? await run[tu.name]() : { error: "unknown tool" };
+          payload = run[tu.name]
+            ? await run[tu.name]((tu.input ?? {}) as Record<string, unknown>)
+            : { error: "unknown tool" };
         } catch (err) {
           payload = { error: err instanceof Error ? err.message : "tool failed" };
         }

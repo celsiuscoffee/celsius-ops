@@ -574,6 +574,22 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-28 — **HR Ops Agent stage 2 BUILT: guarded writes** (this branch;
+  design §6b). Typed op allowlist (create/update/convert/reactivate/resign/
+  assignment/set_pin/salary_change) + stage→CONFIRM-code flow
+  (`hr_agent_pending_actions`, migration `20260728_hr_agent_pending` — **not
+  yet applied to prod**): managers' changes confirm with HOO, salary/bank with
+  OWNER, codes single-use/15-min/phone-bound, deterministic pre-LLM confirm
+  hook in the webhook. Staff persona gains submit_leave_request (lands
+  pending for manager) + update_my_contact; write tools absent outside
+  mode='armed'. Owner explicitly chose to arm ahead of the 5-clean-shadow
+  criterion — per-write human confirm is the compensating control. Earlier
+  same-day: staff-native leave form date-fix OTA'd (#1076, run 30289741291
+  success), 31 leave-balance rows seeded (15 FT staff), owner phone rebound
+  +60109335369 (was on the App Store Review dummy). **Next:** merge+deploy,
+  apply pending migration, flip registry to 'armed', live-test one staged
+  write end-to-end.
+
 - 2026-07-27 (cleanup) — **`apps/pickup` + the dead KDS shell DELETED (branch
   `claude/pwa-pickup-removal-9qysgv`, follow-up to #1073/#1075).** Owner:
   "delete apps/pickup and the dead kds shell." Removed: `apps/pickup` (legacy
