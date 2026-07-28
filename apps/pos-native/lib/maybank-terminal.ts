@@ -1,48 +1,96 @@
 /**
- * Maybank terminal payment integration (STUB).
+ * Maybank terminal payment front-door for the checkout flow.
  *
- * Until the real Maybank MAPI / DTMC terminal SDK is wired up, this
- * module shape lets the checkout flow drive a card payment via a
- * single Promise — UI doesn't change when we swap the implementation.
- *
- * The real integration would either:
- *   - Bluetooth-pair an external Maybank EDC and exchange APDUs, OR
- *   - Call Maybank's online card-not-present API with tokenised cards
- *
- * For now this resolves after a short delay with a synthetic "approved"
- * response so the cashier flow can be tested end-to-end before the real
- * device or API key arrives. The downstream sale persists with
- * payment_method='card' and provider_ref=approval code, just like a
- * real Maybank EDC would supply.
+ * When the ECR link is configured in Settings → Maybank Terminal (X990 on the
+ * outlet LAN — see lib/maybank-ecr.ts), a charge drives the REAL terminal via
+ * ECR-over-TCP using SALE_CARD_QR, so one "charge" accepts either a card
+ * (tap/insert/swipe) or a DuitNow/wallet QR at the terminal. When it is NOT
+ * configured, the old rehearsal stub answers instead — clearly marked so a
+ * synthetic approval can never be mistaken for a real one.
  */
+import { loadEcrConfig, ecrConfigured, ecrTransaction, type EcrOutcome } from "./maybank-ecr";
+
 export type MaybankTerminalResult =
   | {
       status: "approved";
       approvalCode: string;
-      cardBrand: "VISA" | "MASTERCARD" | "AMEX" | "MYDEBIT";
+      cardBrand: string;
       maskedPan: string;
       txnRef: string;
+      /** true = rehearsal stub, NOT a real charge. UI must label it. */
+      simulated?: boolean;
+      /** DUITNOWQR when the customer paid by QR at the terminal. */
+      entry?: string;
     }
   | { status: "declined"; reason: string }
-  | { status: "cancelled" };
+  | { status: "cancelled" }
+  | { status: "error"; code: string; message: string };
 
-/** Prompt the terminal for a card payment of the given amount (sen).
- *  Returns the terminal's verdict. Cashier UI should show "Insert card
- *  on terminal" while this is pending. */
-export async function chargeMaybankCard(amountSen: number): Promise<MaybankTerminalResult> {
-  // TODO: replace with real Maybank terminal SDK call. Expected wiring:
-  //   1. Pair / connect to the EDC over Bluetooth (one-time, in Settings)
-  //   2. Send SALE command with amountSen + invoice ref
-  //   3. Stream status updates (idle → prompt → reading → online → result)
-  //   4. Receive approval/decline + capture the receipt-printable fields
+function fromEcr(o: EcrOutcome): MaybankTerminalResult {
+  switch (o.status) {
+    case "approved":
+      return {
+        status: "approved",
+        approvalCode: o.approvalCode,
+        cardBrand: o.issuer || o.host || "CARD",
+        maskedPan: o.maskedPan ?? (o.entry === "DUITNOWQR" ? "DuitNow QR" : ""),
+        txnRef: o.rrn,
+        entry: o.entry,
+      };
+    case "declined":
+      return { status: "declined", reason: o.reason };
+    case "cancelled":
+      return { status: "cancelled" };
+    case "timeout":
+      return { status: "error", code: "ECR_TIMEOUT", message: "No result from terminal — check the terminal screen before retrying" };
+    case "error":
+      return { status: "error", code: o.code, message: o.message };
+  }
+}
+
+/** Charge on the terminal: card OR DuitNow QR (SALE_CARD_QR).
+ *  `onStatus` streams the terminal's live state into the checkout UI. */
+export async function chargeMaybankCard(
+  amountSen: number,
+  onStatus?: (s: string) => void,
+): Promise<MaybankTerminalResult> {
+  const cfg = await loadEcrConfig();
+  if (ecrConfigured(cfg)) {
+    return fromEcr(await ecrTransaction({ cfg, txn: "SALE_CARD_QR", amountSen, onStatus }));
+  }
+  // ── Rehearsal stub (terminal not configured) ──
   await new Promise((r) => setTimeout(r, 2500));
-  // Stub: always approves with a synthetic ref so cashiers can rehearse
-  // the flow. Swap to a real call when Maybank credentials land.
   return {
     status: "approved",
-    approvalCode: `APR-${Math.floor(Math.random() * 900000 + 100000)}`,
+    simulated: true,
+    approvalCode: `SIM-${Math.floor(Math.random() * 900000 + 100000)}`,
     cardBrand: "VISA",
     maskedPan: "**** **** **** 4242",
-    txnRef: `MBB-${Date.now().toString().slice(-10)}`,
+    txnRef: `SIM-${Date.now().toString().slice(-10)}`,
   };
+}
+
+/** DuitNow QR only (terminal displays the QR / scans the customer's). */
+export async function chargeDuitNowQr(
+  amountSen: number,
+  onStatus?: (s: string) => void,
+): Promise<MaybankTerminalResult> {
+  const cfg = await loadEcrConfig();
+  if (!ecrConfigured(cfg)) {
+    return { status: "error", code: "ECR_REJECTED", message: "Terminal not configured (Settings → Maybank Terminal)" };
+  }
+  return fromEcr(await ecrTransaction({ cfg, txn: "QRSALE", amountSen, onStatus }));
+}
+
+/** End-of-day settlement — call from store close. Best-effort: settlement can
+ *  also be run on the terminal itself, so a failure here must never block the
+ *  Z-report close. */
+export async function settleTerminal(): Promise<{ ok: boolean; message: string }> {
+  const cfg = await loadEcrConfig();
+  if (!ecrConfigured(cfg)) return { ok: true, message: "Terminal not configured — nothing to settle" };
+  const out = await ecrTransaction({ cfg, txn: "SETTLE", timeoutMs: 180_000 });
+  if (out.status === "approved") return { ok: true, message: "Settlement complete" };
+  if (out.status === "error") return { ok: false, message: out.message };
+  if (out.status === "declined") return { ok: false, message: out.reason };
+  return { ok: false, message: `Settlement ${out.status}` };
 }
