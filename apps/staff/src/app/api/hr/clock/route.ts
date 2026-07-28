@@ -352,6 +352,8 @@ export async function POST(req: NextRequest) {
       employmentType: profileResp.data?.employment_type || "full_time",
       isPublicHoliday: !!holidayResp.data,
       isRestDay: mytDayOfWeek(clockIn) === restDay,
+      // Early clock-in pays from the rostered start (stamped at clock-in).
+      scheduledStart: mytInstant(activeLog.scheduled_date ?? mytDateString(clockIn), activeLog.scheduled_start),
     });
     const totalHours = derived.totalHours;
 

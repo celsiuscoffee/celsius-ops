@@ -81,6 +81,11 @@ export type DerivedHours = {
  * single source of truth for pay-hours — the AI processor AND the auto-close cron
  * both call it, so an auto-closed log carries the same regular/OT a normal
  * clock-out would (previously the cron wrote total_hours only → 0 paid hours).
+ *
+ * EARLY CLOCK-IN (owner policy 2026-07-28): when a rostered shift start is known
+ * and the staffer clocked in BEFORE it, the pay counter starts at the shift
+ * start — waiting around before shift never accrues regular hours or pushes the
+ * day over the OT threshold. totalHours still records the actual clocked span.
  */
 export function deriveHours(opts: {
   clockIn: Date;
@@ -88,11 +93,19 @@ export function deriveHours(opts: {
   employmentType: string;
   isPublicHoliday: boolean;
   isRestDay: boolean;
+  /** Rostered shift-start instant (null/undefined = no roster → pay from clock-in). */
+  scheduledStart?: Date | null;
 }): DerivedHours {
-  const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay } = opts;
+  const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay, scheduledStart } = opts;
   const otThreshold = OT_THRESHOLD_HOURS[employmentType] ?? 8;
   const totalHours = Math.round(((clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)) * 100) / 100;
-  const workedHours = totalHours - breakHoursFor(employmentType, totalHours);
+  // Pay-hours start: the later of clock-in and rostered start (never past clock-out).
+  const payStartMs = Math.min(
+    Math.max(clockIn.getTime(), scheduledStart?.getTime() ?? clockIn.getTime()),
+    clockOut.getTime(),
+  );
+  const payableHours = Math.round(((clockOut.getTime() - payStartMs) / (1000 * 60 * 60)) * 100) / 100;
+  const workedHours = payableHours - breakHoursFor(employmentType, payableHours);
 
   let regularHours = 0;
   let overtimeHours = 0;

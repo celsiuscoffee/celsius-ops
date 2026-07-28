@@ -593,6 +593,15 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   rows, so cancelled days won't be re-created even before deploy. Still open:
   Yusri Bin Safarudin (DEACTIVATED but on Jul run at full RM2,100 — awaiting
   owner's last-working-day answer).
+  Follow-up (same day): owner added "if early clock in, the counter should
+  starts during their shift starts" → `deriveHours` (identical copies in
+  apps/staff + apps/backoffice `lib/hr/hours.ts` — keep in sync) gained
+  optional `scheduledStart`; pay-hours (and hence the OT threshold) count
+  from max(clock_in, rostered start), total_hours still records the real
+  span. All 4 callers pass the roster stamp (staff clock-out, AI processor,
+  auto-close cron, manager set_times). Pinned in hours.test.ts. Pending
+  owner decision: 9 of 24 existing FT July OT rows had >10-min-early
+  clock-ins computed under the old rule — recompute offered, not applied.
 
 - 2026-07-28 — **HR Ops Agent stage 2 BUILT: guarded writes** (this branch;
   design §6b). Typed op allowlist (create/update/convert/reactivate/resign/
