@@ -87,6 +87,38 @@ Milk per-outlet is data-suspect until the §3a package fix: PJ/Tam "4×" is
 partly (maybe mostly) mis-selected 12×2L packages; SA at 1.79 recorded is the
 believable shape. Re-read after backfill.
 
+## Stock-up or real usage? (owner question, settled with counts + cadence)
+
+Three tests, all run against prod:
+
+1. **Physical stock counts show no pile-up.** Latest submitted counts
+   (Jul 12 PJ / Jul 13 SA / Jul 19 Tam), on hand:
+   - Beans: PJ **0 g**, SA 19 kg, Tam 22 kg → **41 kg chain-wide ≈ 4–5 days
+     buffer.** July alone bought ~90–110 kg above need; 3-mo cumulative gap
+     ~580 kg. If it were stock-up the shelves would hold hundreds of kg.
+     The beans are gone — consumed or lost.
+   - Milk: 14 L + 83 L + 32 L = **129 L ≈ ~1 day's usage.** Also perishable
+     (days, not months) — a 3-month 1.7× ratio physically cannot be inventory.
+   - Eggs 565 pcs, sandwiches 250 pcs on hand — days of buffer vs a
+     ~1,500–2,900/mo excess.
+2. **Purchase cadence = replenishment, not hoarding.** Beans and milk are
+   bought EVERY week, steady volumes (beans ~70–150 kg/wk, milk ~0.5–1.0 M
+   ml/wk recorded, May→Jul). Stock-up looks like one bulk buy then silence;
+   this is continuous topping-up of something that keeps running out.
+3. **The exceptions the counts DID find (freezer/aging stock):**
+   - **Pull Lamb: 11 kg of the 15 kg bought is in the freezer** — its 3.3×
+     is mostly genuine stock-up; real excess small. Udang: 22 kg on hand of
+     81 kg bought — partial stock-up, but ~60 kg still unaccounted.
+   - **PJ held 72 slices of Burnt Cheesecake on Jul 12** — that's aging
+     display stock that becomes waste; over-ordering caught in the act.
+   - Data-quality flag: Tamarind's Jul 19 count shows **560 salted
+     croissants on hand** — implausible (likely counted in packs or typo);
+     stock counts need the same package-selection discipline as POs.
+
+Net: for the big leak items (beans, milk, eggs, sandwiches, pastries) the
+excess is REAL consumption/loss. Only slow freezer proteins carry a genuine
+stock component, and even there half or more is unexplained.
+
 ## Intervention playbook (micro)
 
 1. **Standing orders vs sell-through (pastries)**: all 3 outlets take a flat
