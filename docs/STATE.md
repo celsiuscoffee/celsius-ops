@@ -6,28 +6,39 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
-- 2026-07-27 — **The missing cash vs the owner's expected cost structure is
-  mostly FOOD COST (+ a package-data bug).** Corrected denominator per owner
-  (gross pre-commission revenue, ALL outlets incl Nilai+IOI+GastroHub):
-  raw-materials cash-out = **41.6% 3-mo avg (May 41.3/Jun 44.1/Jul 39.2) vs
-  38% plan → ~RM12–15k/mo recurring; PO-commitment lens 46.4%** — range
-  RM12–25k/mo. Rest of the gap: people ~32% vs ~26% plan (~RM10k), June ads
-  overspend (~RM9k, since fixed), GastroHub revenue 12k vs 25k plan, one-offs
-  (June compliance 16k). Bottom-up July: RM53.3k nominal excess over
-  theoretical, of which **~RM20k/mo is conversion-unambiguous hard evidence**
-  (beans 1.6× = RM9.6k; salted croissant 336 bought/189 sold; cheesecake
-  360/199; eggs 2×; brioche sandwich 2.05×) + RM16.4k spend with NO BOM
-  (Chicken Chop RM5.6k/mo). NOT pricing (PriceHistory empty since April), NOT
-  recorded wastage (StockAdjustment RM0.1–1.1k/mo — unlogged). **Owner-caught
-  systemic bug: PO-line PACKAGE MIS-SELECTION** — milk POs paid RM95.54
-  against the "Carton 12×2L" package (supplier list RM163–175; the 12×1L is
-  RM84) → buyers pick the 24L package for a 12L carton, recorded volume 2×
-  inflated; same too-cheap signature on 10+ products (Oatside, Emborg
-  whipping 14.9×, Samyang 43×, Planta, peanut butter, pesto, Monin). Any
-  product_costs/menu-margin work (cogs-activation W3/W4) reads garbage until
-  PO/receiving package selection is guarded (default from supplier-product
-  row + ±40% list-price check). True milk cost ~RM7/L (RM1.40/latte). Full
-  report + ranked fixes: `docs/design/food-cost-gap-2026-07-27.md` (PR #1080).
+- 2026-07-27/28 — **The missing cash vs the owner's expected cost structure is
+  mostly FOOD COST (+ a package-data bug).** Final scope per owner: 3 till
+  outlets only (PJ/SA/Tam — Nilai+IOI excluded, no item sales/BOM). Bank-cash
+  lens Apr–Jul: **43.4% of revenue vs 38% plan ≈ RM17.5k/mo excess**. Rest of
+  the gap: people ~RM10k/mo, GastroHub revenue at half plan, one-offs.
+  Cumulative Apr–Jul purchased-vs-theoretical ratios (buy-cycle-proof):
+  **BEANS 1.92× = ~RM11.5k/mo, the dominant leak** (only 41kg on-hand
+  chain-wide + weekly replenishment ⇒ consumed, not stored); brioche sandwich
+  1.65× (June bulk 613×10pc loaves); proteins 1.4–1.6×; milk TRUE 1.31×;
+  eggs 1.27× (worsening at PJ, 3.9× in Jul); lamb 3.37× (freezer stock).
+  July-only pastry-waste claim was buy-cycle noise — croissants ~1.0 cumulative.
+  Per-outlet: Tamarind best (Jun on plan), PJ worst. NOT pricing (PriceHistory
+  flat), NOT recorded wastage (StockAdjustment RM0.1–1.1k/mo — unlogged, so
+  waste-vs-theft unseparable until logging exists). **Owner-caught systemic
+  bug: PO-line PACKAGE MIS-SELECTION** — milk POs pay the 12×1L price (~RM84–95)
+  against the "Carton 12×2L" package → recorded volume 2× inflated; same
+  signature on 10+ products (Oatside, Emborg whipping, Samyang, Planta, pesto,
+  Monin). Any product_costs/menu-margin work (cogs-activation W3/W4) reads
+  garbage until PO/receiving package selection is guarded (default from
+  supplier-product row + ±40% list-price check) + backfill. True milk cost
+  ~RM7/L. Ranked interventions (owner-facing): weekly bean kg-count vs POS
+  drink count; PJ order-sheet review vs Tamarind; protein portioning / stop
+  lamb; PO package guard; cogs-activation W1/W3/W5; wastage-logging fortnight;
+  add missing BOMs (Chicken Chop RM5.6k/mo). Deliverables: reports
+  `docs/design/food-cost-gap-2026-07-27.md` +
+  `docs/design/food-cost-variance-jul-2026-micro.md`; raw ledgers
+  `docs/data/food-cost-{po,bank,sales}-ledger-apr-jul-2026.csv`; formula model
+  `docs/data/food-cost-model-apr-jul-2026.xlsx`; **live outlet-filterable
+  Google Sheet** (owner barista@): "Celsius Food Cost Model Apr-Jul 2026
+  (live)" id `1L6PS3gTB8qxeEYe9Em9QnBxfraJHfOP9-VKgVGC3gw8` — filter B4
+  (*/PJ/SA/TAM), editable costs/doses, SUMIFS analysis over in-sheet sales+PO
+  ledgers. Caveats: ~8% sold items map to outlet "OTHER" (unmapped pickup
+  store_ids); April PO coverage ~33%. All in PR #1080.
 
 - 2026-07-25 — **"Old app version suddenly reappears" = expo-updates OTA
   regression from `runtimeVersion.policy: "appVersion"`** (branch
@@ -574,6 +585,16 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-07-28 — **Food-cost gap investigation COMPLETE, deliverables shipped**
+  (branch `claude/celsius-cost-optimization-wdwj6t`, draft PR #1080, CI green).
+  See the 2026-07-27/28 verified-facts entry for numbers + deliverable list.
+  Owner has the live outlet-filterable Google Sheet; next moves are OWNER
+  interventions (bean count, PJ order-sheet review, protein portioning) —
+  agent follow-ups offered but NOT started: PO package-selection guard
+  implementation + historical backfill, cogs-activation W1 re-point to
+  unified_sales, weekly auto-regeneration of the model. Pick up whichever the
+  owner asks for; the guard is the highest-leverage code change.
 
 - 2026-07-27 (cleanup) — **`apps/pickup` + the dead KDS shell DELETED (branch
   `claude/pwa-pickup-removal-9qysgv`, follow-up to #1073/#1075).** Owner:
