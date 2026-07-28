@@ -22,6 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { hashPin } from "@celsius/auth";
 import { applyStaffPreset } from "@/lib/staff-access-presets";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
+import { seedLeaveBalancesForHire } from "@/lib/hr/leave-seed";
 
 export type ActionType =
   | "create_staff"
@@ -337,7 +338,7 @@ async function execCreateStaff(p: Record<string, unknown>): Promise<string> {
   const perfAllow = num(p.performanceAllowance);
   const attAllow = num(p.attendanceAllowance);
 
-  const userId = await prisma.$transaction(async (tx) => {
+  const createdRes = await prisma.$transaction(async (tx) => {
     const created = await tx.user.create({
       data: {
         name,
@@ -381,10 +382,13 @@ async function execCreateStaff(p: Record<string, unknown>): Promise<string> {
       INSERT INTO hr_job_history (user_id, effective_date, job_title, outlet_id, manager_user_id, employment_type, note, created_at)
       VALUES (${created.id}, ${joinDate}::date, ${position}, ${outlet.id}, ${managerId}, ${employmentType}, 'Initial hire (HR agent)', now())
     `;
-    return created.id;
+    // FT hires start with join-year leave balances (pro-rated AL + flat sick)
+    // so the staff app's Leave screen works from day one.
+    const seeded = await seedLeaveBalancesForHire(tx, created.id, joinDate, employmentType);
+    return { id: created.id, seeded };
   });
 
-  return `✅ ${name} created — ${position} (${employmentType === "part_time" ? `PT RM${hourlyRate}/hr` : `FT RM${basicSalary}/mo`}) at ${outlet.name}, join ${joinDate}${pinHash ? ", PIN set" : ""}${bankAcc ? ", bank on file" : ", bank still needed"} (id ${userId.slice(0, 8)})`;
+  return `✅ ${name} created — ${position} (${employmentType === "part_time" ? `PT RM${hourlyRate}/hr` : `FT RM${basicSalary}/mo`}) at ${outlet.name}, join ${joinDate}${pinHash ? ", PIN set" : ""}${bankAcc ? ", bank on file" : ", bank still needed"}${createdRes.seeded ? `, ${createdRes.seeded}` : ""} (id ${createdRes.id.slice(0, 8)})`;
 }
 
 const UPDATABLE_USER_FIELDS = ["email", "phone", "bankName", "bankAccountNumber", "bankAccountName"] as const;

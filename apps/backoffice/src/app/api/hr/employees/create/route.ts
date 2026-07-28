@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { hashPin } from "@celsius/auth";
 import { applyStaffPreset } from "@/lib/staff-access-presets";
+import { seedLeaveBalancesForHire } from "@/lib/hr/leave-seed";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,20 @@ export async function POST(req: NextRequest) {
         { error: `Profile insert failed: ${profileError.message}` },
         { status: 500 },
       );
+    }
+
+    // FT hires start with join-year leave balances (pro-rated AL + flat
+    // sick) so the staff app's Leave screen works from day one. Best-effort —
+    // a seeding failure must not fail the hire.
+    try {
+      await seedLeaveBalancesForHire(
+        prisma,
+        user.id,
+        join_date || new Date().toISOString().slice(0, 10),
+        employment_type || "full_time",
+      );
+    } catch (err) {
+      console.error("[create-employee] leave seed failed:", err instanceof Error ? err.message : err);
     }
 
     // Backfill initial salary/job history rows
