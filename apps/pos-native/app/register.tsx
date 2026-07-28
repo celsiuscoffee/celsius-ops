@@ -158,14 +158,19 @@ export default function Register() {
   // modal. `null` = method picker; "qr" = show Maybank QR awaiting
   // payment; "card" = drive the Maybank terminal flow.
   const [payMethod, setPayMethod] = useState<null | "qr" | "card">(null);
-  // Card terminal state — purely a UI proxy until the real Maybank
-  // terminal SDK is wired (see lib/maybank-terminal.ts).
+  // Card terminal state. With the ECR link configured (Settings → Maybank
+  // Terminal) this drives the REAL X990 over the LAN; unconfigured tills get
+  // the rehearsal stub, whose approvals are labelled SIMULATION on screen.
   const [cardStage, setCardStage] = useState<"idle" | "prompting" | "approved" | "declined">("idle");
   // The terminal's approval payload — held so the cashier-verification
   // screen can show the approval code + masked PAN before we record the
   // sale. Card payments now require a manual confirm (mirrors QR), so the
   // terminal "approved" result no longer auto-commits.
   const [cardResult, setCardResult] = useState<Extract<MaybankTerminalResult, { status: "approved" }> | null>(null);
+  // Decline/error detail for the failure card, + the terminal's live state
+  // ("CARD_INSERTION", …) streamed into the prompting screen.
+  const [cardError, setCardError] = useState<string | null>(null);
+  const [cardLive, setCardLive] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   // Bumped after each paid sale / pair add so the cashier's self-scorecard chip
   // refetches its today numbers (collection rate + pair adds).
@@ -2419,8 +2424,10 @@ export default function Register() {
                     setPayMethod("card");
                     setCardStage("prompting");
                     setCardResult(null);
+                    setCardError(null);
+                    setCardLive(null);
                     try {
-                      const result = await chargeMaybankCard(total);
+                      const result = await chargeMaybankCard(total, (s) => setCardLive(s));
                       if (result.status === "approved") {
                         // Don't auto-commit. Park on a verify screen so the
                         // cashier confirms the approval on the physical
@@ -2428,6 +2435,12 @@ export default function Register() {
                         setCardResult(result);
                         setCardStage("approved");
                       } else if (result.status === "declined") {
+                        setCardError(result.reason || null);
+                        setCardStage("declined");
+                      } else if (result.status === "error") {
+                        // Terminal unreachable / not configured / no result —
+                        // show the reason so staff know it's the LINK, not the card.
+                        setCardError(result.message);
                         setCardStage("declined");
                       } else {
                         // Cancelled → return to method picker.
@@ -2436,6 +2449,7 @@ export default function Register() {
                       }
                     } catch (e) {
                       console.error("[card]", e);
+                      setCardError(String((e as Error)?.message ?? e));
                       setCardStage("declined");
                     }
                   }}
@@ -2483,10 +2497,15 @@ export default function Register() {
                 {cardStage === "prompting" && (
                   <View className="h-44 items-center justify-center gap-3">
                     <ActivityIndicator color="#3B82F6" size="large" />
-                    <Text className="text-cream text-base" style={{ fontFamily: "Peachi-Bold" }}>Tap or insert card</Text>
+                    <Text className="text-cream text-base" style={{ fontFamily: "Peachi-Bold" }}>Card or DuitNow QR on terminal</Text>
                     <Text className="text-cream/55 text-xs text-center" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
                       Hand the terminal to your customer. Verify the approval before recording.
                     </Text>
+                    {!!cardLive && (
+                      <Text className="text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#3B82F6", letterSpacing: 1 }}>
+                        {cardLive.replace(/_/g, " ")}
+                      </Text>
+                    )}
                   </View>
                 )}
                 {cardStage === "approved" && (
@@ -2497,7 +2516,9 @@ export default function Register() {
                     <View className="rounded-2xl px-5 py-4" style={{ backgroundColor: "rgba(34,197,94,0.10)", borderWidth: 1, borderColor: "rgba(34,197,94,0.45)" }}>
                       <View className="flex-row items-center gap-2 mb-2">
                         <CheckCircle2 size={20} color="#22C55E" />
-                        <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: "#22C55E" }}>Terminal Approved</Text>
+                        <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: "#22C55E" }}>
+                          {cardResult?.simulated ? "SIMULATION — no real charge" : "Terminal Approved"}
+                        </Text>
                       </View>
                       {!!cardResult && (
                         <View className="gap-0.5">
@@ -2531,8 +2552,10 @@ export default function Register() {
                 {cardStage === "declined" && (
                   <View className="gap-3">
                     <View className="rounded-2xl px-5 py-4 items-center" style={{ backgroundColor: DANGER + "14", borderWidth: 1, borderColor: DANGER + "55" }}>
-                      <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: DANGER }}>Card Declined</Text>
-                      <Text className="text-cream/60 text-xs mt-1 text-center" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Ask customer to try another card or switch to QR.</Text>
+                      <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: DANGER }}>Payment Not Completed</Text>
+                      <Text className="text-cream/60 text-xs mt-1 text-center" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                        {cardError || "Ask customer to try another card or switch to QR."}
+                      </Text>
                     </View>
                     <Pressable
                       onPress={() => { setCardStage("idle"); setPayMethod(null); }}
