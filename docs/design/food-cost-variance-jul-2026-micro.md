@@ -119,6 +119,42 @@ Net: for the big leak items (beans, milk, eggs, sandwiches, pastries) the
 excess is REAL consumption/loss. Only slow freezer proteins carry a genuine
 stock component, and even there half or more is unexplained.
 
+## Apr–Jul extension + raw ledger (2026-07-28, owner: "not robust enough — include raw data and ledger")
+
+Full period Apr 1 – Jul 27, real item-level sales for ALL months (StoreHub era
+via `storehub_sale_items`, 130k rows, matched on storehub_product_id →
+Menu.storehubId; post-cutover via pos/pickup items). Raw line-level ledgers
+committed: `docs/data/food-cost-po-ledger-apr-jul-2026.csv` (383 PO lines,
+top-8 leak ingredients) and `docs/data/food-cost-bank-ledger-apr-jul-2026.csv`
+(1,676 RAW_MATERIALS bank lines, RM584k). Sheets version:
+"Celsius Food Cost Apr-Jul 2026 - with Ledger" (barista@ Drive).
+
+**Top-down Apr–Jul (bank lens, gross rev incl GH): 45.4 / 42.5 / 45.8 /
+39.5% → 4-mo 43.4% vs 38% plan ≈ RM70k excess ≈ RM17.5k/mo.** April PO
+records cover only ~33% of April's bank raw-material cash (procurement
+adoption) — April is bank-lens only.
+
+**Cumulative 4-mo ratios (robust — smooths bulk-buy months). CONFIRMED:
+beans 1.92× (1,032 kg bought vs 537 kg needed May–Jul; ~RM46k excess ≈
+RM11.5k/mo — the dominant leak), brioche sandwich 1.65×, streaky beef
+1.59×, smoked duck 1.48×, santan 1.39×, milk TRUE 1.31× (~RM3k/mo — the
+2.45× recorded is the package bug), eggs 1.27× and worsening
+(1.51/1.38/1.90 May→Jul, PJ-driven), lamb 3.37× (mostly freezer).
+CORRECTED — July-only reads were buy-cycle artifacts, fine cumulatively:
+almond croissant 1.00, classic 0.87, cheesecake 1.14, mudslide 1.15,
+matcha 1.08, choc powder 0.85, cooking cream 0.93, brioche loaf 1.15.
+The display-pastry-waste claim is therefore DOWNGRADED (salted croissant
+2.24× rests on a conversion-suspect April line; ex-Apr it is 0.99).**
+
+Ledger-exposed data errors (each visible as a line in the PO CSV): milk
+"12×2L" cartons paid at 12×1L prices every month (Apr/May also have
+RM30–40/carton lines needing human check); June udang "230 kg" for RM879
+(conversion error); April salted croissant "1,848 pcs" for RM1,998; June
+brioche sandwich bulk-buy of 613 loaf-packs (6,130 pcs, RM9.9k) then July
+bought with no package selected. Reorder priorities accordingly: beans
+count-and-reconcile weekly is action #1; eggs at PJ #2; protein portioning
+#3; package hygiene fix underpins everything.
+
 ## Intervention playbook (micro)
 
 1. **Standing orders vs sell-through (pastries)**: all 3 outlets take a flat

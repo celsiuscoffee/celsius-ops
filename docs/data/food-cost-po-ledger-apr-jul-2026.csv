@@ -1,0 +1,384 @@
+date,po_number,status,outlet,supplier,product,product_id6,package,qty,conversion,base_units,unit_price_rm,line_total_rm
+2026-05-11,CC-CC001-0108,COMP,PJ,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,28.0,10,280,15.50,434.00
+2026-05-11,CC-CC001-0109,COMP,PJ,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,24.0,10,240,15.50,372.00
+2026-05-11,CC-CC003-0059,COMP,TAM,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,12.0,10,120,15.50,186.00
+2026-05-11,CC-CC002-0089,COMP,SA,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,12.0,10,120,15.50,186.00
+2026-05-11,CC-CC003-0060,COMP,TAM,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,24.0,10,240,15.50,372.00
+2026-05-11,CC-CC003-0061,COMP,TAM,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,15.0,10,150,15.50,232.50
+2026-05-11,CC-CC002-0090,COMP,SA,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,12.0,10,120,15.50,186.00
+2026-05-11,CC-CC003-0062,COMP,TAM,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,12.0,10,120,15.50,186.00
+2026-05-11,CC-CC003-0063,COMP,TAM,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,14.0,10,140,15.50,217.00
+2026-05-11,CC-CC003-0064,COMP,TAM,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,24.0,10,240,15.50,372.00
+2026-06-17,CC-CC001-0217,COMP,PJ,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,174.0,10,1740,16.19,2817.00
+2026-06-17,CC-CC003-0141,COMP,TAM,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,71.0,10,710,16.63,1180.50
+2026-06-17,CC-CC002-0202,COMP,SA,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,78.0,10,780,16.27,1269.00
+2026-06-30,CC-CC001-0247,COMP,PJ,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,153.0,10,1530,15.95,2441.00
+2026-06-30,CC-CC002-0234,COMP,SA,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,73.0,10,730,16.05,1171.50
+2026-06-30,CC-CC003-0160,COMP,TAM,Country Bread,Brioche Sandwich,60b8b6,10pcs Loaf,64.0,10,640,16.44,1052.00
+2026-07-17,CC-CC001-0301,PART,PJ,Blancoz,Brioche Sandwich,60b8b6,(no pkg),10.0,1,10,5.90,59.00
+2026-07-17,CC-CC002-0291,AWAI,SA,Blancoz,Brioche Sandwich,60b8b6,(no pkg),10.0,1,10,5.90,59.00
+2026-07-17,CC-CC003-0202,AWAI,TAM,Blancoz,Brioche Sandwich,60b8b6,(no pkg),13.0,1,13,5.90,76.70
+2026-07-22,CC-CC001-0314,AWAI,PJ,Blancoz,Brioche Sandwich,60b8b6,(no pkg),20.0,1,20,5.90,118.00
+2026-07-22,CC-CC002-0300,COMP,SA,Blancoz,Brioche Sandwich,60b8b6,(no pkg),20.0,1,20,5.90,118.00
+2026-07-22,CC-CC003-0205,COMP,TAM,Blancoz,Brioche Sandwich,60b8b6,(no pkg),8.0,1,8,5.90,47.20
+2026-07-26,CC-CC001-0327,AWAI,PJ,Blancoz,Brioche Sandwich,60b8b6,(no pkg),10.0,1,10,5.90,59.00
+2026-07-26,CC-CC002-0317,AWAI,SA,Blancoz,Brioche Sandwich,60b8b6,(no pkg),10.0,1,10,5.90,59.00
+2026-04-16,CC-CC001-0016,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-04-16,CC-CC003-0006,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-04-19,CC-CC002-0018,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-04-19,CC-CC001-0021,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-04-19,CC-CC003-0010,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-04-27,CC-CC001-0037,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),3.0,12,36,100.00,300.00
+2026-04-27,CC-CC002-0032,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),3.0,12,36,100.00,300.00
+2026-04-27,CC-CC003-0021,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-04,CC-CC003-0030,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-04,CC-CC001-0069,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),3.0,12,36,100.00,300.00
+2026-05-04,CC-CC002-0051,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),3.0,12,36,100.00,300.00
+2026-05-07,CC-CC001-0085,AWAI,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-07,CC-CC002-0066,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-10,CC-CC003-0049,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-10,CC-CC001-0095,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-10,CC-CC002-0076,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-10,CC-CC002-0084,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),3.0,12,36,100.00,300.00
+2026-05-10,CC-CC003-0055,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-10,CC-CC001-0101,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-17,CC-CC001-0131,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-17,CC-CC002-0116,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-17,CC-CC003-0080,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-24,CC-CC002-0137,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-05-24,CC-CC001-0147,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-24,CC-CC003-0098,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-31,CC-CC002-0155,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-05-31,CC-CC001-0165,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-06-07,CC-CC001-0190,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-06-07,CC-CC002-0178,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-06-07,CC-CC003-0130,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-06-14,CC-CC001-0205,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-06-14,CC-CC002-0190,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-06-14,CC-CC003-0136,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-06-18,CC-CC002-0206,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-06-21,CC-CC001-0224,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-06-21,CC-CC003-0145,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-01,CC-CC003-0166,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-01,CC-CC001-0252,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-07-01,CC-CC002-0240,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-05,CC-CC001-0269,AWAI,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-07-05,CC-CC002-0255,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-05,CC-CC003-0177,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-07,CC-CC003-0180,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-07,CC-CC002-0260,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-07,CC-CC001-0275,COMP,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-07-13,CC-CC001-0287,AWAI,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-07-13,CC-CC002-0272,AWAI,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-13,CC-CC003-0189,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-15,CC-CC002-0281,PART,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-07-17,CC-CC001-0301,PART,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),0.0,12,0,100.00,0.00
+2026-07-17,CC-CC002-0291,AWAI,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-07-17,CC-CC003-0202,AWAI,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-07-22,CC-CC001-0314,AWAI,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-07-22,CC-CC002-0300,COMP,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-07-22,CC-CC003-0205,COMP,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-26,CC-CC001-0327,AWAI,PJ,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-26,CC-CC002-0317,AWAI,SA,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),1.0,12,12,100.00,100.00
+2026-07-26,CC-CC003-0214,AWAI,TAM,Blancoz,Burnt Cheesecake,1f4181,1 Cake (12 slices),2.0,12,24,100.00,200.00
+2026-04-14,CC-CC002-0004,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",6.0,12000,72000,84.00,504.00
+2026-04-14,CC-CC001-0010,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,81.78,654.24
+2026-04-16,CC-CC003-0007,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,81.78,654.24
+2026-04-16,PC-CC002-0008,COMP,SA,Ad-hoc Purchase,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",3.0,12000,36000,16.20,48.60
+2026-04-19,CC-CC002-0020,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",6.0,12000,72000,84.00,504.00
+2026-04-19,CC-CC002-0021,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",6.0,12000,72000,84.00,504.00
+2026-04-22,CC-CC001-0027,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,81.78,654.24
+2026-04-22,CC-CC003-0014,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",8.0,12000,96000,84.46,675.68
+2026-04-23,PC-CC001-0027,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,(no pkg),2.0,1,2,16.20,32.40
+2026-04-23,PC-CC003-0013,COMP,TAM,Ad-hoc Purchase,Fresh Milk,5a3115,(no pkg),1.0,1,1,66.80,66.80
+2026-04-23,PC-CC001-0039,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,(no pkg),3.0,1,3,7.90,23.70
+2026-04-23,PC-CC001-0046,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,(no pkg),4.0,1,4,7.90,31.60
+2026-04-26,PC-CC001-0047,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,(no pkg),10.0,1,10,7.95,79.50
+2026-04-26,PC-CC001-0048,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,(no pkg),5.0,1,5,16.20,81.00
+2026-04-26,PC-CC003-0028,COMP,TAM,Ad-hoc Purchase,Fresh Milk,5a3115,(no pkg),3.0,1,3,16.20,48.60
+2026-04-26,PC-CC002-0028,COMP,SA,Ad-hoc Purchase,Fresh Milk,5a3115,(no pkg),3.0,1,3,8.45,25.35
+2026-04-26,PC-CC002-0029,COMP,SA,Ad-hoc Purchase,Fresh Milk,5a3115,(no pkg),1.0,1,1,42.45,42.45
+2026-04-27,CC-CC003-0019,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",8.0,12000,96000,84.46,675.68
+2026-04-27,CC-CC002-0033,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",96.0,12000,1152000,7.00,672.00
+2026-04-27,CC-CC001-0039,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",8.0,12000,96000,84.46,675.68
+2026-04-27,PC-CC003-0038,COMP,TAM,Ad-hoc Purchase,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",5.0,24000,120000,7.90,39.50
+2026-05-03,CC-CC001-0059,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",8.0,12000,96000,84.46,675.68
+2026-05-03,CC-CC002-0044,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",8.0,12000,96000,84.00,672.00
+2026-05-03,CC-CC002-0045,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",6.0,12000,72000,84.00,504.00
+2026-05-03,CC-CC003-0026,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,81.78,654.24
+2026-05-03,CC-CC001-0060,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,81.78,654.24
+2026-05-07,CC-CC001-0081,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",96.0,12000,1152000,7.04,675.84
+2026-05-07,CC-CC002-0065,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",8.0,12000,96000,84.00,672.00
+2026-05-07,CC-CC003-0040,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,81.78,654.24
+2026-05-07,CC-CC001-0083,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,81.78,654.24
+2026-05-07,PC-CC003-0041,COMP,TAM,Ad-hoc Purchase,Fresh Milk,5a3115,"Bottle (1,000ml)",3.0,1000,3000,7.90,23.70
+2026-05-07,PC-CC003-0043,COMP,TAM,Ad-hoc Purchase,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",6.0,12000,72000,8.40,50.40
+2026-05-07,PC-CC003-0044,COMP,TAM,Ad-hoc Purchase,Fresh Milk,5a3115,"Bottle (1,000ml)",3.0,1000,3000,7.90,23.70
+2026-05-10,CC-CC001-0100,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",6.0,24000,144000,81.78,490.68
+2026-05-10,CC-CC002-0082,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",6.0,12000,72000,85.45,512.70
+2026-05-10,CC-CC002-0083,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",4.0,12000,48000,84.00,336.00
+2026-05-11,CC-CC003-0066,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,81.78,654.24
+2026-05-11,CC-CC001-0111,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,81.78,654.24
+2026-05-13,CC-CC001-0119,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,84.96,679.68
+2026-05-13,CC-CC003-0069,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",6.0,24000,144000,81.78,490.68
+2026-05-13,CC-CC002-0099,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",6.0,12000,72000,85.45,512.70
+2026-05-13,CC-CC002-0100,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",4.0,12000,48000,84.00,336.00
+2026-05-14,PC-CC001-0114,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,"Bottle (1,000ml)",12.0,1000,12000,16.56,198.70
+2026-05-14,PC-CC003-0060,COMP,TAM,Ad-hoc Purchase,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",1.0,24000,24000,194.06,194.06
+2026-05-14,PC-CC001-0116,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,"2,000ml Bottle",5.0,2000,10000,16.20,81.00
+2026-05-19,CC-CC001-0136,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",7.0,24000,168000,84.96,594.72
+2026-05-19,CC-CC003-0088,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",7.0,24000,168000,84.96,594.72
+2026-05-19,CC-CC002-0125,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,85.45,427.25
+2026-05-24,CC-CC001-0144,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,84.96,679.68
+2026-05-24,CC-CC003-0095,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,84.96,679.68
+2026-05-24,CC-CC001-0145,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",7.0,24000,168000,84.96,594.72
+2026-05-24,CC-CC003-0096,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",5.0,24000,120000,84.96,424.80
+2026-05-24,PC-CC001-0152,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",1.0,24000,24000,198.70,198.70
+2026-05-24,PC-CC003-0073,COMP,TAM,Ad-hoc Purchase,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",1.0,24000,24000,194.06,194.06
+2026-05-24,PC-CC001-0153,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,"2,000ml Bottle",10.0,2000,20000,17.66,176.60
+2026-05-24,PC-CC002-0078,COMP,SA,Ad-hoc Purchase,Fresh Milk,5a3115,"Bottle (1,000ml)",10.0,1000,10000,12.56,125.60
+2026-05-24,PC-CC001-0166,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",6.0,24000,144000,16.20,97.20
+2026-05-24,PC-CC001-0167,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,"Bottle (1,000ml)",6.0,1000,6000,16.20,97.20
+2026-05-25,CC-CC002-0143,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,85.45,427.25
+2026-05-25,PC-CC001-0179,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,"2,000ml Bottle",9.0,2000,18000,16.20,145.80
+2026-05-27,CC-CC002-0144,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",6.0,12000,72000,84.00,504.00
+2026-05-31,CC-CC002-0154,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",8.0,12000,96000,86.40,691.20
+2026-05-31,CC-CC001-0164,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,81.78,654.24
+2026-05-31,CC-CC003-0112,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",4.0,24000,96000,84.96,339.84
+2026-06-04,CC-CC002-0166,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",4.0,12000,48000,86.40,345.60
+2026-06-07,CC-CC001-0184,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,84.96,679.68
+2026-06-07,CC-CC003-0126,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",7.0,24000,168000,84.96,594.72
+2026-06-07,CC-CC002-0174,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,86.40,432.00
+2026-06-09,CC-CC001-0197,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",7.0,24000,168000,84.96,594.72
+2026-06-09,CC-CC002-0184,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,86.40,432.00
+2026-06-11,CC-CC001-0202,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",7.0,24000,168000,84.96,594.72
+2026-06-11,CC-CC002-0188,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,86.40,432.00
+2026-06-11,CC-CC003-0134,COMP,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",5.0,24000,120000,84.96,424.80
+2026-06-17,CC-CC003-0139,AWAI,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,84.96,679.68
+2026-06-17,CC-CC001-0214,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",6.0,24000,144000,84.96,509.76
+2026-06-18,CC-CC002-0204,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",4.0,12000,48000,86.40,345.60
+2026-06-18,CC-CC001-0220,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,84.96,679.68
+2026-06-18,CC-CC003-0143,AWAI,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,84.96,679.68
+2026-06-21,PC-CC003-0112,COMP,TAM,Ad-hoc Purchase,Fresh Milk,5a3115,"Bottle (1,000ml)",6.0,1000,6000,7.90,47.40
+2026-06-21,CC-CC002-0218,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,86.40,432.00
+2026-06-23,PC-CC002-0133,COMP,SA,Ad-hoc Purchase,Fresh Milk,5a3115,"Bottle (1,000ml)",10.0,1000,10000,8.70,87.00
+2026-06-23,PC-CC001-0253,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,"2,000ml Bottle",12.0,2000,24000,16.37,196.40
+2026-06-23,PC-CC003-0128,COMP,TAM,Ad-hoc Purchase,Fresh Milk,5a3115,"Bottle (1,000ml)",5.0,1000,5000,7.90,39.50
+2026-06-24,CC-CC001-0234,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,84.96,679.68
+2026-06-24,CC-CC003-0153,AWAI,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",6.0,24000,144000,84.96,509.76
+2026-06-24,CC-CC002-0224,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,86.40,432.00
+2026-06-25,CC-CC001-0239,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",7.0,24000,168000,84.96,594.72
+2026-06-25,CC-CC002-0226,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,86.40,432.00
+2026-06-30,CC-CC001-0248,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,84.96,679.68
+2026-06-30,CC-CC002-0236,AWAI,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,86.40,432.00
+2026-07-02,CC-CC003-0171,AWAI,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,84.96,679.68
+2026-07-02,CC-CC001-0260,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",6.0,24000,144000,84.96,509.76
+2026-07-03,CC-CC002-0248,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,86.40,432.00
+2026-07-05,PC-CC001-0295,COMP,PJ,Ad-hoc Purchase,Fresh Milk,5a3115,"2,000ml Bottle",10.0,2000,20000,16.88,168.80
+2026-07-08,CC-CC001-0278,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,84.96,679.68
+2026-07-08,CC-CC003-0182,AWAI,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",7.0,24000,168000,84.96,594.72
+2026-07-09,CC-CC002-0263,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",6.0,12000,72000,86.40,518.40
+2026-07-09,CC-CC002-0264,AWAI,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,86.40,432.00
+2026-07-09,CC-CC001-0280,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",6.0,24000,144000,84.96,509.76
+2026-07-09,CC-CC003-0184,AWAI,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",6.0,24000,144000,84.96,509.76
+2026-07-09,CC-CC002-0266,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,86.40,432.00
+2026-07-15,CC-CC001-0294,COMP,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",10.0,24000,240000,88.70,887.00
+2026-07-15,CC-CC003-0194,AWAI,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",7.0,24000,168000,83.90,587.30
+2026-07-16,CC-CC002-0284,AWAI,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,88.20,441.00
+2026-07-16,CC-CC002-0285,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,85.54,427.70
+2026-07-16,CC-CC002-0286,AWAI,SA,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,83.90,419.50
+2026-07-16,CC-CC003-0197,AWAI,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",7.0,24000,168000,174.96,1224.72
+2026-07-16,CC-CC001-0295,AWAI,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",7.0,24000,168000,83.90,587.30
+2026-07-20,CC-CC003-0204,AWAI,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,86.30,690.40
+2026-07-22,CC-CC001-0313,AWAI,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",10.0,24000,240000,83.90,839.00
+2026-07-22,CC-CC002-0303,AWAI,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,84.96,424.80
+2026-07-22,CC-CC002-0304,COMP,SA,Milk n Moka,Fresh Milk,5a3115,"Carton (12× 1,000ml Bottle)",5.0,12000,60000,84.00,420.00
+2026-07-23,CC-CC001-0317,AWAI,PJ,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,83.90,671.20
+2026-07-23,CC-CC003-0208,AWAI,TAM,The Milk Ministry,Fresh Milk,5a3115,"Carton (12× 2,000ml Bottle)",8.0,24000,192000,83.90,671.20
+2026-05-02,CC-CC001-0054,COMP,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-05-02,CC-CC002-0041,COMP,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-05-02,CC-CC003-0024,COMP,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-05-05,CC-CC001-0077,COMP,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-05-05,CC-CC003-0037,COMP,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-05-05,CC-CC002-0059,COMP,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-05-10,CC-CC003-0047,COMP,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-05-10,CC-CC001-0092,COMP,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-05-10,CC-CC002-0073,COMP,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-05-10,CC-CC001-0097,COMP,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-05-10,CC-CC002-0078,COMP,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-05-10,CC-CC003-0051,COMP,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-05-17,CC-CC001-0129,COMP,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-05-17,CC-CC002-0112,COMP,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-05-17,CC-CC003-0077,COMP,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),25.0,1000,25000,93.00,2325.00
+2026-05-24,CC-CC001-0142,COMP,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-05-24,CC-CC002-0134,COMP,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-05-24,CC-CC003-0093,COMP,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-06-01,CC-CC001-0173,COMP,PJ, CARRIE COFFEE ROASTERY,Home Blend (Collective),a83f0e,Kilogram (1000g),12.0,1000,12000,85.00,1020.00
+2026-06-01,CC-CC003-0117,COMP,TAM, CARRIE COFFEE ROASTERY,Home Blend (Collective),a83f0e,Kilogram (1000g),8.0,1000,8000,85.00,680.00
+2026-06-01,CC-CC002-0164,COMP,SA, CARRIE COFFEE ROASTERY,Home Blend (Collective),a83f0e,Kilogram (1000g),4.0,1000,4000,85.00,340.00
+2026-06-02,CC-CC001-0174,AWAI,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-06-02,CC-CC002-0165,AWAI,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),25.0,1000,25000,93.00,2325.00
+2026-06-02,CC-CC003-0118,COMP,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-06-18,CC-CC002-0203,AWAI,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),25.0,1000,25000,93.00,2325.00
+2026-06-18,CC-CC001-0219,COMP,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-06-18,CC-CC003-0142,COMP,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-06-21,CC-CC001-0232,COMP,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-06-21,CC-CC002-0221,AWAI,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),25.0,1000,25000,93.00,2325.00
+2026-06-21,CC-CC003-0152,COMP,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-06-29,CC-CC001-0242,COMP,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-06-29,CC-CC002-0231,AWAI,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),25.0,1000,25000,93.00,2325.00
+2026-06-29,CC-CC003-0158,COMP,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-07-05,CC-CC001-0265,COMP,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-07-05,CC-CC002-0253,AWAI,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),23.0,1000,23000,93.00,2139.00
+2026-07-05,CC-CC003-0175,COMP,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),20.0,1000,20000,93.00,1860.00
+2026-07-14,CC-CC001-0292,AWAI,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),35.0,1000,35000,93.00,3255.00
+2026-07-14,CC-CC002-0273,AWAI,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-07-14,CC-CC003-0191,AWAI,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),25.0,1000,25000,93.00,2325.00
+2026-07-26,CC-CC001-0326,AWAI,PJ,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),35.0,1000,35000,93.00,3255.00
+2026-07-26,CC-CC002-0316,AWAI,SA,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),30.0,1000,30000,93.00,2790.00
+2026-07-26,CC-CC003-0213,AWAI,TAM,Collective Project,Home Blend (Collective),a83f0e,Kilogram (1000g),25.0,1000,25000,93.00,2325.00
+2026-05-11,CC-CC002-0086,COMP,SA,Beard Brothers,Pull Lamb,b13757,Pack (1000g),5.0,1000,5000,129.16,645.80
+2026-05-11,CC-CC003-0057,COMP,TAM,Beard Brothers,Pull Lamb,b13757,Pack (1000g),5.0,1000,5000,129.16,645.80
+2026-05-11,CC-CC001-0103,COMP,PJ,Beard Brothers,Pull Lamb,b13757,Pack (1000g),5.0,1000,5000,129.16,645.80
+2026-05-31,CC-CC001-0160,COMP,PJ,Beard Brothers,Pull Lamb,b13757,Pack (1000g),5.0,1000,5000,129.16,645.80
+2026-05-31,CC-CC002-0152,COMP,SA,Beard Brothers,Pull Lamb,b13757,Pack (1000g),5.0,1000,5000,129.16,645.80
+2026-05-31,CC-CC003-0110,COMP,TAM,Beard Brothers,Pull Lamb,b13757,Pack (1000g),5.0,1000,5000,129.16,645.80
+2026-06-22,CC-CC001-0233,COMP,PJ,Beard Brothers,Pull Lamb,b13757,Pack (1000g),5.0,1000,5000,133.66,668.30
+2026-07-20,CC-CC001-0311,AWAI,PJ,Beard Brothers,Pull Lamb,b13757,Pack (1000g),10.0,1000,10000,129.16,1291.60
+2026-07-20,CC-CC002-0298,AWAI,SA,Beard Brothers,Pull Lamb,b13757,Pack (1000g),5.0,1000,5000,129.16,645.80
+2026-04-14,CC-CC001-0008,COMP,PJ,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,162.40,324.80
+2026-04-14,CC-CC002-0008,COMP,SA,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),56.0,28,1568,6.09,341.04
+2026-04-14,CC-CC003-0002,COMP,TAM,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,162.40,324.80
+2026-04-21,CC-CC003-0012,COMP,TAM,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,162.40,324.80
+2026-04-21,CC-CC002-0023,COMP,SA,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-04-21,CC-CC001-0024,COMP,PJ,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-05-10,CC-CC001-0102,COMP,PJ,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-05-10,CC-CC002-0085,COMP,SA,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-05-10,CC-CC003-0056,COMP,TAM,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-05-17,CC-CC001-0126,COMP,PJ,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-05-17,CC-CC003-0074,COMP,TAM,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-05-17,CC-CC002-0108,COMP,SA,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-06-10,CC-CC001-0199,COMP,PJ,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),4.0,28,112,170.52,682.08
+2026-06-10,CC-CC002-0185,COMP,SA,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-07-05,CC-CC001-0268,COMP,PJ,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-07-05,CC-CC002-0254,COMP,SA,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-07-05,CC-CC003-0176,COMP,TAM,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-07-16,CC-CC001-0296,AWAI,PJ,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-07-16,CC-CC003-0198,COMP,TAM,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-07-16,CC-CC002-0287,COMP,SA,Pastry World Sdn Bhd,Salted Croissant,3027c3,Carton (4× 7pcs Pack),2.0,28,56,170.52,341.04
+2026-04-16,PC-CC002-0001,COMP,SA,Ad-hoc Purchase,Telur Omega,3677c0,(no pkg),1.0,1,1,54.00,54.00
+2026-04-18,PC-CC001-0010,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,(no pkg),1.0,1,1,13.00,13.00
+2026-04-18,PC-CC002-0010,COMP,SA,Ad-hoc Purchase,Telur Omega,3677c0,(no pkg),1.0,1,1,19.50,19.50
+2026-04-18,PC-CC002-0012,COMP,SA,Ad-hoc Purchase,Telur Omega,3677c0,(no pkg),3.0,1,3,19.50,58.50
+2026-04-18,PC-CC001-0023,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,(no pkg),1.0,1,1,24.40,24.40
+2026-04-23,PC-CC002-0022,COMP,SA,Ad-hoc Purchase,Telur Omega,3677c0,(no pkg),2.0,1,2,19.50,39.00
+2026-04-23,PC-CC001-0026,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,(no pkg),1.0,1,1,5.30,5.30
+2026-04-23,PC-CC003-0019,COMP,TAM,Ad-hoc Purchase,Telur Omega,3677c0,(no pkg),1.0,1,1,9.50,9.50
+2026-04-23,PC-CC001-0044,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,(no pkg),1.0,1,1,23.60,23.60
+2026-04-26,PC-CC003-0031,COMP,TAM,Ad-hoc Purchase,Telur Omega,3677c0,(no pkg),1.0,1,1,10.25,10.25
+2026-04-26,PC-CC001-0062,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,(no pkg),1.0,1,1,45.60,45.60
+2026-05-05,CC-CC001-0071,AWAI,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-05-08,PC-CC001-0082,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,5.0,10,50,6.50,32.50
+2026-05-08,PC-CC003-0049,COMP,TAM,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,1.0,10,10,10.25,10.25
+2026-05-08,PC-CC001-0088,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,3.0,10,30,6.50,19.50
+2026-05-10,CC-CC003-0046,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-05-10,CC-CC002-0074,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-05-13,CC-CC001-0122,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-05-13,CC-CC002-0103,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-05-13,CC-CC003-0072,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-05-14,PC-CC001-0106,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,3.0,10,30,6.50,19.50
+2026-05-14,PC-CC001-0107,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,3.0,10,30,6.50,19.50
+2026-05-14,PC-CC001-0109,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,3.0,10,30,6.50,19.50
+2026-05-14,PC-CC001-0119,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,4.0,10,40,6.50,26.00
+2026-05-14,PC-CC001-0124,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,4.0,10,40,6.50,26.00
+2026-05-20,CC-CC002-0128,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-05-20,CC-CC003-0090,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,10.10,151.50
+2026-05-20,CC-CC001-0138,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,8.80,264.00
+2026-05-24,PC-CC001-0130,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,11.0,10,110,6.50,71.50
+2026-05-24,PC-CC002-0070,COMP,SA,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,6.0,10,60,7.60,45.60
+2026-05-24,PC-CC003-0070,COMP,TAM,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,1.0,10,10,9.10,9.10
+2026-05-24,PC-CC001-0147,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,4.0,10,40,6.50,26.00
+2026-05-24,PC-CC001-0149,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,3.0,10,30,6.50,19.50
+2026-05-24,CC-CC002-0140,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-05-24,CC-CC001-0150,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-05-24,CC-CC003-0100,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-05-25,PC-CC001-0173,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,5.0,10,50,7.90,39.50
+2026-05-25,PC-CC001-0178,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,9.0,10,90,6.50,58.50
+2026-05-31,CC-CC002-0151,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-05-31,CC-CC003-0109,AWAI,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-05-31,CC-CC001-0159,AWAI,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-06-01,CC-CC001-0171,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-06-01,CC-CC003-0115,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-06-01,CC-CC002-0162,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-06-04,CC-CC002-0172,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-06-04,CC-CC001-0182,AWAI,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.00,210.00
+2026-06-04,CC-CC003-0125,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.00,105.00
+2026-06-10,CC-CC001-0198,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-06-11,CC-CC001-0201,AWAI,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-06-11,CC-CC002-0187,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-06-11,CC-CC003-0133,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-06-11,PC-CC002-0104,COMP,SA,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,4.0,10,40,6.35,25.40
+2026-06-11,PC-CC001-0213,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,3.0,10,30,6.90,20.70
+2026-06-11,PC-CC002-0106,COMP,SA,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,3.0,10,30,4.30,12.90
+2026-06-16,CC-CC001-0209,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-06-21,CC-CC002-0217,AWAI,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-06-21,CC-CC003-0148,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.00,210.00
+2026-06-21,CC-CC001-0228,AWAI,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.00,210.00
+2026-06-21,PC-CC001-0232,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,5.0,10,50,8.46,42.30
+2026-06-21,PC-CC001-0235,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,2.0,10,20,9.15,18.30
+2026-06-24,CC-CC001-0235,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,9.77,293.00
+2026-06-24,CC-CC002-0225,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-06-24,CC-CC003-0154,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-06-28,PC-CC001-0280,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,6.0,10,60,12.00,72.00
+2026-06-30,CC-CC001-0249,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-02,CC-CC001-0258,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.00,210.00
+2026-07-02,CC-CC001-0259,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-07-02,CC-CC002-0247,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-02,CC-CC003-0172,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-07,CC-CC001-0274,SENT,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,150.0,10,1500,7.50,1125.00
+2026-07-09,CC-CC001-0279,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-07-09,CC-CC002-0265,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-09,CC-CC003-0183,PART,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-12,PC-CC002-0170,COMP,SA,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,3.0,10,30,25.90,77.70
+2026-07-15,CC-CC002-0274,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-15,CC-CC001-0293,AWAI,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-07-15,CC-CC003-0192,PART,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-16,CC-CC002-0289,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-16,CC-CC001-0299,AWAI,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-07-22,CC-CC002-0301,COMP,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-22,CC-CC001-0315,PART,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-07-22,CC-CC003-0206,PART,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-23,PC-CC002-0180,COMP,SA,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,2.0,10,20,11.20,22.40
+2026-07-23,CC-CC002-0307,AWAI,SA,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-23,PC-CC001-0329,COMP,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-23,PC-CC003-0176,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-07-23,PC-CC001-0345,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,3.0,10,30,9.38,28.15
+2026-07-23,PC-CC001-0346,COMP,PJ,Ad-hoc Purchase,Telur Omega,3677c0,10pcs Pack,3.0,10,30,11.50,34.50
+2026-07-26,CC-CC001-0325,AWAI,PJ,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,30.0,10,300,7.50,225.00
+2026-07-26,CC-CC003-0212,COMP,TAM,Yow Seng Sdn Bhd,Telur Omega,3677c0,10pcs Pack,15.0,10,150,7.50,112.50
+2026-04-18,PC-CC002-0018,COMP,SA,Ad-hoc Purchase,Udang,830dba,Pack (1000g),10.0,1000,10000,15.50,155.00
+2026-04-18,PC-CC001-0022,COMP,PJ,Ad-hoc Purchase,Udang,830dba,Pack (1000g),10.0,1000,10000,15.50,155.00
+2026-04-18,PC-CC003-0008,COMP,TAM,Ad-hoc Purchase,Udang,830dba,Pack (1000g),10.0,1000,10000,15.50,155.00
+2026-04-22,CC-CC001-0025,COMP,PJ,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-04-22,CC-CC002-0024,COMP,SA,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-04-22,CC-CC003-0013,COMP,TAM,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-05-03,CC-CC001-0055,COMP,PJ,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-05-03,CC-CC002-0043,COMP,SA,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-05-03,CC-CC003-0025,COMP,TAM,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-05-12,PC-CC001-0094,COMP,PJ,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),2.0,10000,20000,168.00,336.00
+2026-05-14,PC-CC002-0053,COMP,SA,Ad-hoc Purchase,Udang,830dba,Pack (1000g),1.0,1000,1000,24.15,24.15
+2026-05-24,CC-CC001-0141,COMP,PJ,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-05-24,CC-CC002-0133,COMP,SA,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-05-24,CC-CC003-0092,COMP,TAM,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-06-11,PC-CC002-0105,COMP,SA,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),10.0,10000,100000,18.10,181.00
+2026-06-11,PC-CC003-0098,COMP,TAM,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),10.0,10000,100000,18.10,181.00
+2026-06-11,PC-CC001-0212,COMP,PJ,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,181.00,181.00
+2026-06-15,CC-CC001-0208,COMP,PJ,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,181.00,181.00
+2026-06-22,CC-CC002-0222,AWAI,SA,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-07-01,CC-CC001-0254,COMP,PJ,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),2.0,10000,20000,155.00,310.00
+2026-07-09,PC-CC001-0300,COMP,PJ,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-07-09,PC-CC002-0168,COMP,SA,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-07-14,CC-CC001-0290,COMP,PJ,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),2.0,10000,20000,155.00,310.00
+2026-07-20,CC-CC001-0309,AWAI,PJ,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-07-20,CC-CC002-0296,COMP,SA,CATELUX ENTERPRISE,Udang,830dba,Carton (10× Pack (1000g)),1.0,10000,10000,155.00,155.00
+2026-07-23,PC-CC002-0182,COMP,SA,Ad-hoc Purchase,Udang,830dba,Pack (1000g),1.0,1000,1000,38.20,38.20
