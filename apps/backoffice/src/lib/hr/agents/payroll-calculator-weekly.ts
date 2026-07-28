@@ -214,7 +214,7 @@ export async function calculateWeeklyPayroll(
     totalGross += gross;
     if (cappedHours > 0.01) {
       notes.push(
-        `Capped ${cappedHours}h for ${profile.user_id.slice(0, 8)} (clocked ${workedHours}h vs schedule+OT ${paidHours}h) — add the shift to the roster or approve OT to pay the difference.`,
+        `Capped ${cappedHours}h for ${profile.user_id.slice(0, 8)} (clocked ${workedHours}h vs schedule+OT ${paidHours}h) — add the shift to the roster to pay the difference (OT is FT-only; legacy approved PT OT still lifts the cap).`,
       );
     }
 

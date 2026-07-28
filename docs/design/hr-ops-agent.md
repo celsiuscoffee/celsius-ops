@@ -175,6 +175,40 @@ Goal: **human in every way that matters — but never claims to be human.**
   `armed-full`) checked per message via `getAgentMode` (fail-safe **off** —
   this is a NEW agent).
 
+## 6b. Write guardrails (stage 2 — implemented 2026-07-28)
+
+Owner opted to arm writes ahead of the 5-clean-shadow criterion; the
+compensating control is that EVERY dangerous operation still requires an
+explicit human confirmation, enforced in code (`lib/hr/agent/write-ops.ts`,
+`pending.ts`, `hr_agent_pending_actions`):
+
+1. **Typed operation allowlist** — create_staff, update_details,
+   convert_employment, reactivate, resign, assignment, set_pin,
+   salary_change (+ staff-persona: submit_leave_request, update_my_contact).
+   The model fills parameters; it can never write SQL or touch other tables.
+2. **Stage → CONFIRM flow** — ops writes are staged with a single-use 4-char
+   code (unambiguous alphabet, 15-min expiry). Execution happens only in a
+   deterministic pre-LLM webhook hook when the DESIGNATED approver's phone
+   replies `CONFIRM <code>`; `REJECT <code>` kills it. Wrong-phone confirms
+   are refused and ledgered.
+3. **Authority routing** — plain managers' changes confirm with the HOO;
+   salary changes and any bank-detail change confirm with the OWNER
+   (two-person rule; owner self-confirms). Subtree rule on targets for
+   managers. HOO identified by profile position (`head of …`).
+4. **Dedup gates** — create_staff refuses on IC/phone/email match with an
+   existing record; target resolution must land on exactly one person or the
+   candidates are returned for disambiguation.
+5. **Staff persona** — leave requests execute directly but always land as
+   `pending` for manager approval (inherently double-gated); own contact
+   updates execute directly; bank tools do not exist in the staff toolset.
+6. **Rate limits** — ≤8 executed writes/hour per requester, ≤20 global.
+7. **Kill switch re-checked at execution time** — flipping the registry off
+   mid-flight stops already-staged actions. `shadow` = staging degrades to
+   proposal-only logging; write tools are absent from the staff toolset
+   outside `armed`.
+8. **Ledger** — write_staged / write_executed / write_rejected /
+   write_failed / confirm_refused all land in `agent_actions` with payloads.
+
 ## 7. Shadow mode & arming criteria
 
 - **Shadow:** agent parses, validates, dedups, and produces the record card +

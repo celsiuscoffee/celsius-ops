@@ -164,6 +164,8 @@ export async function GET(req: NextRequest) {
       employmentType,
       isPublicHoliday: publicHolidaySet.has(mytDateString(clockIn)),
       isRestDay: mytDayOfWeek(clockIn) === restDay,
+      // Early clock-in pays from the rostered start (stamped at clock-in).
+      scheduledStart: mytInstant(log.scheduled_date ?? mytDateString(clockIn), log.scheduled_start),
     });
 
     flags.push(`auto_closed_${reason}`, ...derived.dayTypeFlags);

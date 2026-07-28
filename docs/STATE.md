@@ -464,11 +464,33 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   an RM checkout. Card retry lands on RM's hosted page which lists EVERY
   enabled method, so a stuck card customer can switch to FPX/TNG without
   re-ordering. pickup-native has its own failed screen — NOT touched
-  (OTA, hard rule 5). Still open: (1) live-test a card payment at an
-  outlet; (2) ask RM for checkout logs on the sub-minute EXPIRED sessions;
-  (3) consider deprioritising card in the method picker until understood.
-  Payments = hard rule 6: owner decides. — not blocking revenue capture at
-  till, but ~1 in 6 app checkouts dead-ends.
+  (OTA, hard rule 5). **VERDICT (2026-07-27 evening, Vercel runtime-log
+  forensics): the fault is RM-SIDE — their hosted card page intermittently
+  bounces the customer straight back with no payment form.** Timeline
+  reconstruction (order create in DB vs `GET /order/[id]` arrivals in the
+  celsius-pickup-app prod logs; web checkout is a SAME-TAB redirect to RM,
+  and the only programmed route back is RM's own redirect): C-9T2N79
+  created 12:25:29Z → customer back on OUR tracking page **12:25:31Z (+2s)**
+  → RM's checkout-status query answers EXPIRED → failed 12:25:44Z. C-E8BL26
+  same customer, same pattern: created 12:28:55Z → back at **12:28:59Z
+  (+4s)**. No card form can render in 2–4s — RM's page bounced them on
+  arrival and the session died. CONTRAST: successful card order C-OO0R20
+  (12:09Z) has ZERO order-page hits for 3.5 min after creation — the
+  customer stayed on RM's page doing card+3DS, i.e. a normal journey. Our
+  side behaved correctly at every step: checkout minted (code SUCCESS +
+  checkoutId + url), redirect issued, no webhook needed, poll faithfully
+  recorded RM's own EXPIRED answer. C-2SW359 (+45s to return) may be a
+  genuine form-level failure/cancel — mixed in with real declines/abandons,
+  which is why card still succeeds 64% of the time. For the RM support
+  ticket, dead-on-arrival checkout ids (all 2026-07-27): 1785155130513125190
+  (C-9T2N79 12:25Z), 1785155337969132047 (C-E8BL26 12:28Z), 1785137709574802454
+  (C-WEI821 07:35Z), 1785116295817108378 (C-5FVC46 01:38Z); working
+  contrast: 1785154144224524567 (C-OO0R20 12:09Z). Still open: (1) file the
+  RM support ticket with the above; (2) live-test a card payment at an
+  outlet; (3) consider deprioritising card in the method picker until RM
+  fixes their side. Payments = hard rule 6: owner decides. — not blocking
+  revenue capture at till, but ~1 in 6 app checkouts dead-ends (the merged
+  retry button now softens it).
 
 - 2026-07-11 — **`sentry.io` is NOT in the CCR environment's egress
   allowlist** — live Sentry MCP call returned `403 Host not in allowlist:
@@ -595,6 +617,51 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   implementation + historical backfill, cogs-activation W1 re-point to
   unified_sales, weekly auto-regeneration of the model. Pick up whichever the
   owner asks for; the guard is the highest-leverage code change.
+
+- 2026-07-28 (later) — **OT policy: FT-only + backlog cleared.** Owner: "remove
+  backlog OT from before jul" + "OT is only for FT". Root cause of the backlog:
+  the OT sync cron (`api/hr/overtime-requests/sync`) auto-created a pending
+  request for EVERY attendance log with ≥1h computed OT, including part-timers
+  — but PT never gets an OT premium anywhere (monthly run is FT-only; weekly
+  run pays flat hourly on total_hours, `total_ot_hours` always 0; an approved
+  PT OT request only lifted the daily roster cap at flat rate). Data (prod SQL,
+  owner-directed): cancelled 81 pre-Jul pending requests (Apr, 138h, note
+  "Pre-Jul 2026 backlog cleared") + 116 PT July pending requests (285h, note
+  "OT is FT-only"); 24 FT July requests (48h) left pending for manager review.
+  No pay impact — none were ever approved. July monthly run reads only
+  clock_in within Jul, so pre-Jul attendance OT (Mar 3.65h + Apr 177.66h)
+  never entered it; those attendance rows left intact as history. Code (this
+  branch): sync cron filters to full_time; OT-request POST 400s for non-FT
+  ("adjust the roster"); weekly-calc cap note no longer tells managers to
+  approve PT OT. Dedupe note: sync's existing-keys check includes cancelled
+  rows, so cancelled days won't be re-created even before deploy. Still open:
+  Yusri Bin Safarudin (DEACTIVATED but on Jul run at full RM2,100 — awaiting
+  owner's last-working-day answer).
+  Follow-up (same day): owner added "if early clock in, the counter should
+  starts during their shift starts" → `deriveHours` (identical copies in
+  apps/staff + apps/backoffice `lib/hr/hours.ts` — keep in sync) gained
+  optional `scheduledStart`; pay-hours (and hence the OT threshold) count
+  from max(clock_in, rostered start), total_hours still records the real
+  span. All 4 callers pass the roster stamp (staff clock-out, AI processor,
+  auto-close cron, manager set_times). Pinned in hours.test.ts. Pending
+  owner decision: 9 of 24 existing FT July OT rows had >10-min-early
+  clock-ins computed under the old rule — recompute offered, not applied.
+
+- 2026-07-28 — **HR Ops Agent stage 2 BUILT: guarded writes** (this branch;
+  design §6b). Typed op allowlist (create/update/convert/reactivate/resign/
+  assignment/set_pin/salary_change) + stage→CONFIRM-code flow
+  (`hr_agent_pending_actions`, migration `20260728_hr_agent_pending` — **not
+  yet applied to prod**): managers' changes confirm with HOO, salary/bank with
+  OWNER, codes single-use/15-min/phone-bound, deterministic pre-LLM confirm
+  hook in the webhook. Staff persona gains submit_leave_request (lands
+  pending for manager) + update_my_contact; write tools absent outside
+  mode='armed'. Owner explicitly chose to arm ahead of the 5-clean-shadow
+  criterion — per-write human confirm is the compensating control. Earlier
+  same-day: staff-native leave form date-fix OTA'd (#1076, run 30289741291
+  success), 31 leave-balance rows seeded (15 FT staff), owner phone rebound
+  +60109335369 (was on the App Store Review dummy). **Next:** merge+deploy,
+  apply pending migration, flip registry to 'armed', live-test one staged
+  write end-to-end.
 
 - 2026-07-27 (cleanup) — **`apps/pickup` + the dead KDS shell DELETED (branch
   `claude/pwa-pickup-removal-9qysgv`, follow-up to #1073/#1075).** Owner:

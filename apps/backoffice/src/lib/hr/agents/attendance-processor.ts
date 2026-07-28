@@ -5,7 +5,7 @@ import {
   LATE_THRESHOLD_MINUTES,
   AUTO_CLOCKOUT_AFTER_HOURS,
 } from "../constants";
-import { deriveHours, mytDateString, mytDayOfWeek, computeLateMinutes } from "../hours";
+import { deriveHours, mytDateString, mytDayOfWeek, mytInstant, computeLateMinutes } from "../hours";
 import type { AttendanceLog, GeofenceZone, EmployeeProfile } from "../types";
 
 type ProcessResult = {
@@ -138,6 +138,8 @@ export async function processAttendance(): Promise<ProcessResult> {
         employmentType,
         isPublicHoliday: isPH,
         isRestDay,
+        // Early clock-in pays from the rostered start (stamped at clock-in).
+        scheduledStart: mytInstant(log.scheduled_date ?? clockDate, log.scheduled_start),
       });
       totalHours = derived.totalHours;
       regularHours = derived.regularHours;

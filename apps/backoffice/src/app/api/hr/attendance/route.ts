@@ -4,7 +4,7 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds } from "@/lib/hr/scope";
 import { signAttendancePhotos } from "@/lib/hr/photos";
-import { deriveHours, mytDateString, mytDayOfWeek, computeLateMinutes } from "@/lib/hr/hours";
+import { deriveHours, mytDateString, mytDayOfWeek, mytInstant, computeLateMinutes } from "@/lib/hr/hours";
 import { haversineDistance } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
@@ -193,7 +193,7 @@ export async function PATCH(req: NextRequest) {
   // 'adjust' can preserve the original overtime_type (PH/rest-day/weekday).
   const { data: existingLog } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("user_id, outlet_id, clock_in, clock_out, overtime_type")
+    .select("user_id, outlet_id, clock_in, clock_out, overtime_type, scheduled_start, scheduled_date")
     .eq("id", id)
     .maybeSingle();
   if (!existingLog) {
@@ -246,6 +246,8 @@ export async function PATCH(req: NextRequest) {
       employmentType,
       isPublicHoliday: !!ph,
       isRestDay: mytDayOfWeek(ci) === restDay,
+      // Early clock-in pays from the rostered start (stamped at clock-in).
+      scheduledStart: mytInstant(existingLog.scheduled_date ?? mytDate, existingLog.scheduled_start),
     });
     const wasOpen = !existingLog.clock_out;
     const { data: updated, error: setErr } = await hrSupabaseAdmin
