@@ -1,294 +1,988 @@
-ingredient,menu,month,qty_sold,dose,usage_base_units
-Home Blend (Collective),Latte,2026-04,2834,18,51012
-Home Blend (Collective),Latte,2026-05,2797,18,50346
-Home Blend (Collective),Latte,2026-06,2730,18,49140
-Home Blend (Collective),Latte,2026-07,2548,18,45864
-Home Blend (Collective),Buttercream Latte,2026-04,1604,18,28872
-Home Blend (Collective),Buttercream Latte,2026-05,1542,18,27756
-Home Blend (Collective),Buttercream Latte,2026-06,1384,18,24912
-Home Blend (Collective),Buttercream Latte,2026-07,1267,18,22806
-Home Blend (Collective),Black,2026-04,1417,18,25506
-Home Blend (Collective),Black,2026-05,1366,18,24588
-Home Blend (Collective),Black,2026-06,1228,18,22104
-Home Blend (Collective),Black,2026-07,1055,18,18990
-Home Blend (Collective),Spanish Latte,2026-04,817,18,14706
-Home Blend (Collective),Spanish Latte,2026-05,724,18,13032
-Home Blend (Collective),Spanish Latte,2026-06,848,18,15264
-Home Blend (Collective),Spanish Latte,2026-07,763,18,13734
-Home Blend (Collective),Cappucino,2026-04,472,18,8496
-Home Blend (Collective),Cappucino,2026-05,528,18,9504
-Home Blend (Collective),Cappucino,2026-06,503,18,9054
-Home Blend (Collective),Cappucino,2026-07,529,18,9522
-Home Blend (Collective),Mont Blanc,2026-04,475,18,8550
-Home Blend (Collective),Mont Blanc,2026-05,521,18,9378
-Home Blend (Collective),Mont Blanc,2026-06,558,18,10044
-Home Blend (Collective),Mont Blanc,2026-07,527,18,9486
-Home Blend (Collective),Hazelnut Latte,2026-04,352,18,6336
-Home Blend (Collective),Hazelnut Latte,2026-05,302,18,5436
-Home Blend (Collective),Hazelnut Latte,2026-06,298,18,5364
-Home Blend (Collective),Hazelnut Latte,2026-07,285,18,5130
-Home Blend (Collective),Caramel Macchiato,2026-04,359,18,6462
-Home Blend (Collective),Caramel Macchiato,2026-05,330,18,5940
-Home Blend (Collective),Caramel Macchiato,2026-06,329,18,5922
-Home Blend (Collective),Caramel Macchiato,2026-07,250,18,4500
-Home Blend (Collective),Salted Caramel Latte,2026-04,346,18,6228
-Home Blend (Collective),Salted Caramel Latte,2026-05,338,18,6084
-Home Blend (Collective),Salted Caramel Latte,2026-06,330,18,5940
-Home Blend (Collective),Salted Caramel Latte,2026-07,312,18,5616
-Home Blend (Collective),Dirty Latte,2026-04,313,18,5634
-Home Blend (Collective),Dirty Latte,2026-05,316,18,5688
-Home Blend (Collective),Dirty Latte,2026-06,392,18,7056
-Home Blend (Collective),Dirty Latte,2026-07,331,18,5958
-Home Blend (Collective),Vanilla Latte,2026-04,332,18,5976
-Home Blend (Collective),Vanilla Latte,2026-05,250,18,4500
-Home Blend (Collective),Vanilla Latte,2026-06,215,18,3870
-Home Blend (Collective),Vanilla Latte,2026-07,210,18,3780
-Home Blend (Collective),Caramel Latte,2026-04,308,18,5544
-Home Blend (Collective),Caramel Latte,2026-05,277,18,4986
-Home Blend (Collective),Caramel Latte,2026-06,294,18,5292
-Home Blend (Collective),Caramel Latte,2026-07,220,18,3960
-Home Blend (Collective),Mocha,2026-04,286,18,5148
-Home Blend (Collective),Mocha,2026-05,275,18,4950
-Home Blend (Collective),Mocha,2026-06,257,18,4626
-Home Blend (Collective),Mocha,2026-07,242,18,4356
-Home Blend (Collective),Doppio Freddo,2026-04,274,18,4932
-Home Blend (Collective),Doppio Freddo,2026-05,260,18,4680
-Home Blend (Collective),Doppio Freddo,2026-06,262,18,4716
-Home Blend (Collective),Doppio Freddo,2026-07,173,18,3114
-Home Blend (Collective),Peanut Butter Mocha,2026-04,179,18,3222
-Home Blend (Collective),Peanut Butter Mocha,2026-05,208,18,3744
-Home Blend (Collective),Peanut Butter Mocha,2026-06,159,18,2862
-Home Blend (Collective),Peanut Butter Mocha,2026-07,146,18,2628
-Home Blend (Collective),Piccolo,2026-04,177,18,3186
-Home Blend (Collective),Piccolo,2026-05,170,18,3060
-Home Blend (Collective),Piccolo,2026-06,182,18,3276
-Home Blend (Collective),Piccolo,2026-07,136,18,2448
-Home Blend (Collective),White Mocha,2026-04,147,18,2646
-Home Blend (Collective),White Mocha,2026-05,118,18,2124
-Home Blend (Collective),White Mocha,2026-06,106,18,1908
-Home Blend (Collective),White Mocha,2026-07,87,18,1566
-Home Blend (Collective),Espresso,2026-04,133,18,2394
-Home Blend (Collective),Espresso,2026-05,137,18,2466
-Home Blend (Collective),Espresso,2026-06,92,18,1656
-Home Blend (Collective),Espresso,2026-07,98,18,1764
-Home Blend (Collective),Affogato,2026-04,9,18,162
-Home Blend (Collective),Affogato,2026-05,6,18,108
-Home Blend (Collective),Affogato,2026-06,8,18,144
-Home Blend (Collective),Caramel Latte (Bottle),2026-06,30,18,540
-Home Blend (Collective),Classic Latte (Bottle),2026-05,6,18,108
-Home Blend (Collective),Classic Latte (Bottle),2026-06,1,18,18
-Home Blend (Collective),Mocha (Bottle),2026-04,1,18,18
-Fresh Milk,Latte,2026-04,2834,120,340080
-Fresh Milk,Latte,2026-05,2797,120,335640
-Fresh Milk,Latte,2026-06,2730,120,327600
-Fresh Milk,Latte,2026-07,2548,120,305760
-Fresh Milk,Buttercream Latte,2026-04,1604,140,224560
-Fresh Milk,Buttercream Latte,2026-05,1542,140,215880
-Fresh Milk,Buttercream Latte,2026-06,1384,140,193760
-Fresh Milk,Buttercream Latte,2026-07,1267,140,177380
-Fresh Milk,Spanish Latte,2026-04,817,120,98040
-Fresh Milk,Spanish Latte,2026-05,724,120,86880
-Fresh Milk,Spanish Latte,2026-06,848,120,101760
-Fresh Milk,Spanish Latte,2026-07,763,120,91560
-Fresh Milk,Strawberry Matcha,2026-04,634,140,88760
-Fresh Milk,Strawberry Matcha,2026-05,685,140,95900
-Fresh Milk,Strawberry Matcha,2026-06,562,140,78680
-Fresh Milk,Strawberry Matcha,2026-07,585,140,81900
-Fresh Milk,Chocolate,2026-04,586,120,70320
-Fresh Milk,Chocolate,2026-05,650,120,78000
-Fresh Milk,Chocolate,2026-06,507,120,60840
-Fresh Milk,Chocolate,2026-07,467,120,56040
-Fresh Milk,Matcha Cream Latte,2026-04,526,140,73640
-Fresh Milk,Matcha Cream Latte,2026-05,450,140,63000
-Fresh Milk,Matcha Cream Latte,2026-06,469,140,65660
-Fresh Milk,Matcha Cream Latte,2026-07,445,140,62300
-Fresh Milk,Matcha,2026-04,507,120,60840
-Fresh Milk,Matcha,2026-05,437,120,52440
-Fresh Milk,Matcha,2026-06,449,120,53880
-Fresh Milk,Matcha,2026-07,365,120,43800
-Fresh Milk,Cappucino,2026-04,472,120,56640
-Fresh Milk,Cappucino,2026-05,528,120,63360
-Fresh Milk,Cappucino,2026-06,503,120,60360
-Fresh Milk,Cappucino,2026-07,529,120,63480
-Fresh Milk,Mont Blanc,2026-04,475,25,11875
-Fresh Milk,Mont Blanc,2026-05,521,25,13025
-Fresh Milk,Mont Blanc,2026-06,558,25,13950
-Fresh Milk,Mont Blanc,2026-07,527,25,13175
-Fresh Milk,Buttercream Chocolate,2026-04,440,140,61600
-Fresh Milk,Buttercream Chocolate,2026-05,515,140,72100
-Fresh Milk,Buttercream Chocolate,2026-06,430,140,60200
-Fresh Milk,Buttercream Chocolate,2026-07,480,140,67200
-Fresh Milk,Caramel Macchiato,2026-04,359,120,43080
-Fresh Milk,Caramel Macchiato,2026-05,330,120,39600
-Fresh Milk,Caramel Macchiato,2026-06,329,120,39480
-Fresh Milk,Caramel Macchiato,2026-07,250,120,30000
-Fresh Milk,Hazelnut Latte,2026-04,352,120,42240
-Fresh Milk,Hazelnut Latte,2026-05,302,120,36240
-Fresh Milk,Hazelnut Latte,2026-06,298,120,35760
-Fresh Milk,Hazelnut Latte,2026-07,285,120,34200
-Fresh Milk,Salted Caramel Latte,2026-04,346,120,41520
-Fresh Milk,Salted Caramel Latte,2026-05,338,120,40560
-Fresh Milk,Salted Caramel Latte,2026-06,330,120,39600
-Fresh Milk,Salted Caramel Latte,2026-07,312,120,37440
-Fresh Milk,Vanilla Latte,2026-04,332,120,39840
-Fresh Milk,Vanilla Latte,2026-05,250,120,30000
-Fresh Milk,Vanilla Latte,2026-06,215,120,25800
-Fresh Milk,Vanilla Latte,2026-07,210,120,25200
-Fresh Milk,Dirty Latte,2026-04,313,120,37560
-Fresh Milk,Dirty Latte,2026-05,316,120,37920
-Fresh Milk,Dirty Latte,2026-06,392,120,47040
-Fresh Milk,Dirty Latte,2026-07,331,120,39720
-Fresh Milk,Caramel Latte,2026-04,308,120,36960
-Fresh Milk,Caramel Latte,2026-05,277,120,33240
-Fresh Milk,Caramel Latte,2026-06,294,120,35280
-Fresh Milk,Caramel Latte,2026-07,220,120,26400
-Fresh Milk,Mocha,2026-04,286,120,34320
-Fresh Milk,Mocha,2026-05,275,120,33000
-Fresh Milk,Mocha,2026-06,257,120,30840
-Fresh Milk,Mocha,2026-07,242,120,29040
-Fresh Milk,Doppio Freddo,2026-04,274,50,13700
-Fresh Milk,Doppio Freddo,2026-05,260,50,13000
-Fresh Milk,Doppio Freddo,2026-06,262,50,13100
-Fresh Milk,Doppio Freddo,2026-07,173,50,8650
-Fresh Milk,Cloudy Matcha,2026-04,179,30,5370
-Fresh Milk,Cloudy Matcha,2026-05,215,30,6450
-Fresh Milk,Cloudy Matcha,2026-06,215,30,6450
-Fresh Milk,Cloudy Matcha,2026-07,171,30,5130
-Fresh Milk,Mint Chocolate,2026-04,179,120,21480
-Fresh Milk,Mint Chocolate,2026-05,158,120,18960
-Fresh Milk,Mint Chocolate,2026-06,168,120,20160
-Fresh Milk,Mint Chocolate,2026-07,167,120,20040
-Fresh Milk,Peanut Butter Mocha,2026-04,179,120,21480
-Fresh Milk,Peanut Butter Mocha,2026-05,208,120,24960
-Fresh Milk,Peanut Butter Mocha,2026-06,159,120,19080
-Fresh Milk,Peanut Butter Mocha,2026-07,146,120,17520
-Fresh Milk,Piccolo,2026-04,177,100,17700
-Fresh Milk,Piccolo,2026-05,170,100,17000
-Fresh Milk,Piccolo,2026-06,182,100,18200
-Fresh Milk,Piccolo,2026-07,136,100,13600
-Fresh Milk,Chocolate Freddo,2026-04,151,40,6040
-Fresh Milk,Chocolate Freddo,2026-05,164,40,6560
-Fresh Milk,Chocolate Freddo,2026-06,128,40,5120
-Fresh Milk,Chocolate Freddo,2026-07,141,40,5640
-Fresh Milk,White Mocha,2026-04,147,120,17640
-Fresh Milk,White Mocha,2026-05,118,120,14160
-Fresh Milk,White Mocha,2026-06,106,120,12720
-Fresh Milk,White Mocha,2026-07,87,120,10440
-Fresh Milk,Mint Matcha,2026-04,89,120,10680
-Fresh Milk,Mint Matcha,2026-05,74,120,8880
-Fresh Milk,Mint Matcha,2026-06,57,120,6840
-Fresh Milk,Mint Matcha,2026-07,65,120,7800
-Fresh Milk,Matcha Affogato,2026-04,5,25,125
-Fresh Milk,Matcha Affogato,2026-05,10,25,250
-Fresh Milk,Matcha Affogato,2026-06,14,25,350
-Fresh Milk,Matcha Affogato,2026-07,18,25,450
-Fresh Milk,Caramel Latte (Bottle),2026-06,30,130,3900
-Fresh Milk,Classic Latte (Bottle),2026-05,6,130,780
-Fresh Milk,Classic Latte (Bottle),2026-06,1,130,130
-Fresh Milk,Chocolate (Bottle),2026-04,1,130,130
-Fresh Milk,Chocolate (Bottle),2026-05,1,130,130
-Fresh Milk,Mocha (Bottle),2026-04,1,130,130
-Brioche Sandwich,Streaky Beef Pesto,2026-04,241,2,482
-Brioche Sandwich,Streaky Beef Pesto,2026-05,303,2,606
-Brioche Sandwich,Streaky Beef Pesto,2026-06,271,2,542
-Brioche Sandwich,Streaky Beef Pesto,2026-07,256,2,512
-Brioche Sandwich,Egg Sando,2026-04,138,2,276
-Brioche Sandwich,Egg Sando,2026-05,200,2,400
-Brioche Sandwich,Egg Sando,2026-06,262,2,524
-Brioche Sandwich,Egg Sando,2026-07,227,2,454
-Brioche Sandwich,Korean Crispy Chicken,2026-04,148,2,296
-Brioche Sandwich,Korean Crispy Chicken,2026-05,136,2,272
-Brioche Sandwich,Korean Crispy Chicken,2026-06,187,2,374
-Brioche Sandwich,Korean Crispy Chicken,2026-07,134,2,268
-Brioche Sandwich,Smoked Pulled Lamb,2026-04,87,2,174
-Brioche Sandwich,Smoked Pulled Lamb,2026-05,118,2,236
-Brioche Sandwich,Smoked Pulled Lamb,2026-06,87,2,174
-Brioche Sandwich,Smoked Pulled Lamb,2026-07,92,2,184
-Brioche Sandwich,Ebi Sando,2026-04,45,2,90
-Brioche Sandwich,Ebi Sando,2026-05,53,2,106
-Brioche Sandwich,Ebi Sando,2026-06,60,2,120
-Brioche Sandwich,Ebi Sando,2026-07,39,2,78
-Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-04,357,2,714
-Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-05,422,2,844
-Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-06,495,2,990
-Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-07,543,2,1086
-Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-04,355,1,355
-Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-05,433,1,433
-Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-06,427,1,427
-Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-07,377,1,377
-Telur Omega,Nasi Lemak 2 Sambal,2026-04,216,1,216
-Telur Omega,Nasi Lemak 2 Sambal,2026-05,259,1,259
-Telur Omega,Nasi Lemak 2 Sambal,2026-06,288,1,288
-Telur Omega,Nasi Lemak 2 Sambal,2026-07,310,1,310
-Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-04,194,1,194
-Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-05,192,1,192
-Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-06,210,1,210
-Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-07,289,1,289
-Telur Omega,Egg Sando,2026-04,138,1,138
-Telur Omega,Egg Sando,2026-05,200,1,200
-Telur Omega,Egg Sando,2026-06,262,1,262
-Telur Omega,Egg Sando,2026-07,227,1,227
-Telur Omega,Half Boiled Eggs,2026-04,116,2,232
-Telur Omega,Half Boiled Eggs,2026-05,116,2,232
-Telur Omega,Half Boiled Eggs,2026-06,148,2,296
-Telur Omega,Half Boiled Eggs,2026-07,151,2,302
-Telur Omega,Crispy Prawn Creamy Carbonara,2026-04,110,1,110
-Telur Omega,Crispy Prawn Creamy Carbonara,2026-05,110,1,110
-Telur Omega,Crispy Prawn Creamy Carbonara,2026-06,89,1,89
-Telur Omega,Crispy Prawn Creamy Carbonara,2026-07,107,1,107
-Telur Omega,Samyang Pasta,2026-04,85,1,85
-Telur Omega,Samyang Pasta,2026-05,89,1,89
-Telur Omega,Samyang Pasta,2026-06,50,1,50
-Telur Omega,Samyang Pasta,2026-07,69,1,69
-Telur Omega,Mee Kari,2026-04,55,0.5,27.5
-Telur Omega,Mee Kari,2026-05,87,0.5,43.5
-Telur Omega,Mee Kari,2026-06,108,0.5,54.0
-Telur Omega,Mee Kari,2026-07,111,0.5,55.5
-Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-04,49,1,49
-Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-05,58,1,58
-Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-06,52,1,52
-Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-07,66,1,66
-Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-04,47,1,47
-Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-05,34,1,34
-Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-06,25,1,25
-Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-07,46,1,46
-Telur Omega,Bihun Kari,2026-04,15,0.5,7.5
-Telur Omega,Bihun Kari,2026-05,22,0.5,11.0
-Telur Omega,Bihun Kari,2026-06,32,0.5,16.0
-Telur Omega,Bihun Kari,2026-07,46,0.5,23.0
-Telur Omega,Mee Kari Asam,2026-04,6,0.5,3.0
-Telur Omega,Mee Kari Asam,2026-05,12,0.5,6.0
-Telur Omega,Mee Kari Asam,2026-06,22,0.5,11.0
-Telur Omega,Mee Kari Asam,2026-07,23,0.5,11.5
-Telur Omega,Bihun Kari Asam,2026-04,5,0.5,2.5
-Telur Omega,Bihun Kari Asam,2026-05,7,0.5,3.5
-Telur Omega,Bihun Kari Asam,2026-06,15,0.5,7.5
-Telur Omega,Bihun Kari Asam,2026-07,23,0.5,11.5
-Burnt Cheesecake,Burnt Cheesecake,2026-04,304,1,304
-Burnt Cheesecake,Burnt Cheesecake,2026-05,353,1,353
-Burnt Cheesecake,Burnt Cheesecake,2026-06,217,1,217
-Burnt Cheesecake,Burnt Cheesecake,2026-07,201,1,201
-Salted Croissant,Salted Egg Croissant,2026-04,350,1,350
-Salted Croissant,Salted Egg Croissant,2026-05,360,1,360
-Salted Croissant,Salted Egg Croissant,2026-06,296,1,296
-Salted Croissant,Salted Egg Croissant,2026-07,194,1,194
-Udang,Mee Kari,2026-04,55,80,4400
-Udang,Mee Kari,2026-05,87,80,6960
-Udang,Mee Kari,2026-06,108,80,8640
-Udang,Mee Kari,2026-07,111,80,8880
-Udang,Bihun Kari,2026-04,15,80,1200
-Udang,Bihun Kari,2026-05,22,80,1760
-Udang,Bihun Kari,2026-06,32,80,2560
-Udang,Bihun Kari,2026-07,46,80,3680
-Udang,Mee Kari Asam,2026-04,6,80,480
-Udang,Mee Kari Asam,2026-05,12,80,960
-Udang,Mee Kari Asam,2026-06,22,80,1760
-Udang,Mee Kari Asam,2026-07,23,80,1840
-Udang,Bihun Kari Asam,2026-04,5,80,400
-Udang,Bihun Kari Asam,2026-05,7,80,560
-Udang,Bihun Kari Asam,2026-06,15,80,1200
-Udang,Bihun Kari Asam,2026-07,23,80,1840
-Pull Lamb,Smoked Pulled Lamb,2026-04,87,50,4350
-Pull Lamb,Smoked Pulled Lamb,2026-05,118,50,5900
-Pull Lamb,Smoked Pulled Lamb,2026-06,87,50,4350
-Pull Lamb,Smoked Pulled Lamb,2026-07,92,50,4600
+ingredient,menu,month,outlet,qty_sold,dose,usage_base_units
+Brioche Sandwich,Ebi Sando,2026-04,PJ,28,2.0,56.0
+Brioche Sandwich,Ebi Sando,2026-04,SA,10,2.0,20.0
+Brioche Sandwich,Ebi Sando,2026-04,TAM,7,2.0,14.0
+Brioche Sandwich,Ebi Sando,2026-05,PJ,28,2.0,56.0
+Brioche Sandwich,Ebi Sando,2026-05,SA,9,2.0,18.0
+Brioche Sandwich,Ebi Sando,2026-05,TAM,16,2.0,32.0
+Brioche Sandwich,Ebi Sando,2026-06,OTHER,8,2.0,16.0
+Brioche Sandwich,Ebi Sando,2026-06,PJ,17,2.0,34.0
+Brioche Sandwich,Ebi Sando,2026-06,SA,16,2.0,32.0
+Brioche Sandwich,Ebi Sando,2026-06,TAM,19,2.0,38.0
+Brioche Sandwich,Ebi Sando,2026-07,OTHER,14,2.0,28.0
+Brioche Sandwich,Ebi Sando,2026-07,PJ,7,2.0,14.0
+Brioche Sandwich,Ebi Sando,2026-07,SA,11,2.0,22.0
+Brioche Sandwich,Ebi Sando,2026-07,TAM,7,2.0,14.0
+Brioche Sandwich,Egg Sando,2026-04,PJ,69,2.0,138.0
+Brioche Sandwich,Egg Sando,2026-04,SA,30,2.0,60.0
+Brioche Sandwich,Egg Sando,2026-04,TAM,39,2.0,78.0
+Brioche Sandwich,Egg Sando,2026-05,PJ,119,2.0,238.0
+Brioche Sandwich,Egg Sando,2026-05,SA,37,2.0,74.0
+Brioche Sandwich,Egg Sando,2026-05,TAM,44,2.0,88.0
+Brioche Sandwich,Egg Sando,2026-06,OTHER,33,2.0,66.0
+Brioche Sandwich,Egg Sando,2026-06,PJ,97,2.0,194.0
+Brioche Sandwich,Egg Sando,2026-06,SA,48,2.0,96.0
+Brioche Sandwich,Egg Sando,2026-06,TAM,84,2.0,168.0
+Brioche Sandwich,Egg Sando,2026-07,OTHER,66,2.0,132.0
+Brioche Sandwich,Egg Sando,2026-07,PJ,82,2.0,164.0
+Brioche Sandwich,Egg Sando,2026-07,SA,46,2.0,92.0
+Brioche Sandwich,Egg Sando,2026-07,TAM,33,2.0,66.0
+Brioche Sandwich,Korean Crispy Chicken,2026-04,PJ,99,2.0,198.0
+Brioche Sandwich,Korean Crispy Chicken,2026-04,SA,13,2.0,26.0
+Brioche Sandwich,Korean Crispy Chicken,2026-04,TAM,36,2.0,72.0
+Brioche Sandwich,Korean Crispy Chicken,2026-05,PJ,75,2.0,150.0
+Brioche Sandwich,Korean Crispy Chicken,2026-05,SA,32,2.0,64.0
+Brioche Sandwich,Korean Crispy Chicken,2026-05,TAM,29,2.0,58.0
+Brioche Sandwich,Korean Crispy Chicken,2026-06,OTHER,40,2.0,80.0
+Brioche Sandwich,Korean Crispy Chicken,2026-06,PJ,82,2.0,164.0
+Brioche Sandwich,Korean Crispy Chicken,2026-06,SA,37,2.0,74.0
+Brioche Sandwich,Korean Crispy Chicken,2026-06,TAM,28,2.0,56.0
+Brioche Sandwich,Korean Crispy Chicken,2026-07,OTHER,44,2.0,88.0
+Brioche Sandwich,Korean Crispy Chicken,2026-07,PJ,31,2.0,62.0
+Brioche Sandwich,Korean Crispy Chicken,2026-07,SA,33,2.0,66.0
+Brioche Sandwich,Korean Crispy Chicken,2026-07,TAM,26,2.0,52.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-04,PJ,60,2.0,120.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-04,SA,10,2.0,20.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-04,TAM,17,2.0,34.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-05,PJ,77,2.0,154.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-05,SA,27,2.0,54.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-05,TAM,14,2.0,28.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-06,OTHER,13,2.0,26.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-06,PJ,33,2.0,66.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-06,SA,21,2.0,42.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-06,TAM,20,2.0,40.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-07,OTHER,25,2.0,50.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-07,PJ,41,2.0,82.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-07,SA,17,2.0,34.0
+Brioche Sandwich,Smoked Pulled Lamb,2026-07,TAM,9,2.0,18.0
+Brioche Sandwich,Streaky Beef Pesto,2026-04,PJ,158,2.0,316.0
+Brioche Sandwich,Streaky Beef Pesto,2026-04,SA,31,2.0,62.0
+Brioche Sandwich,Streaky Beef Pesto,2026-04,TAM,52,2.0,104.0
+Brioche Sandwich,Streaky Beef Pesto,2026-05,PJ,182,2.0,364.0
+Brioche Sandwich,Streaky Beef Pesto,2026-05,SA,80,2.0,160.0
+Brioche Sandwich,Streaky Beef Pesto,2026-05,TAM,41,2.0,82.0
+Brioche Sandwich,Streaky Beef Pesto,2026-06,OTHER,37,2.0,74.0
+Brioche Sandwich,Streaky Beef Pesto,2026-06,PJ,130,2.0,260.0
+Brioche Sandwich,Streaky Beef Pesto,2026-06,SA,49,2.0,98.0
+Brioche Sandwich,Streaky Beef Pesto,2026-06,TAM,55,2.0,110.0
+Brioche Sandwich,Streaky Beef Pesto,2026-07,OTHER,35,2.0,70.0
+Brioche Sandwich,Streaky Beef Pesto,2026-07,PJ,111,2.0,222.0
+Brioche Sandwich,Streaky Beef Pesto,2026-07,SA,64,2.0,128.0
+Brioche Sandwich,Streaky Beef Pesto,2026-07,TAM,46,2.0,92.0
+Burnt Cheesecake,Burnt Cheesecake,2026-04,PJ,115,1.0,115.0
+Burnt Cheesecake,Burnt Cheesecake,2026-04,SA,83,1.0,83.0
+Burnt Cheesecake,Burnt Cheesecake,2026-04,TAM,106,1.0,106.0
+Burnt Cheesecake,Burnt Cheesecake,2026-05,PJ,112,1.0,112.0
+Burnt Cheesecake,Burnt Cheesecake,2026-05,SA,133,1.0,133.0
+Burnt Cheesecake,Burnt Cheesecake,2026-05,TAM,108,1.0,108.0
+Burnt Cheesecake,Burnt Cheesecake,2026-06,OTHER,18,1.0,18.0
+Burnt Cheesecake,Burnt Cheesecake,2026-06,PJ,82,1.0,82.0
+Burnt Cheesecake,Burnt Cheesecake,2026-06,SA,59,1.0,59.0
+Burnt Cheesecake,Burnt Cheesecake,2026-06,TAM,58,1.0,58.0
+Burnt Cheesecake,Burnt Cheesecake,2026-07,OTHER,41,1.0,41.0
+Burnt Cheesecake,Burnt Cheesecake,2026-07,PJ,62,1.0,62.0
+Burnt Cheesecake,Burnt Cheesecake,2026-07,SA,36,1.0,36.0
+Burnt Cheesecake,Burnt Cheesecake,2026-07,TAM,62,1.0,62.0
+Fresh Milk,Buttercream Chocolate,2026-04,PJ,150,140.0,21000.0
+Fresh Milk,Buttercream Chocolate,2026-04,SA,186,140.0,26040.0
+Fresh Milk,Buttercream Chocolate,2026-04,TAM,104,140.0,14560.0
+Fresh Milk,Buttercream Chocolate,2026-05,OTHER,12,140.0,1680.0
+Fresh Milk,Buttercream Chocolate,2026-05,PJ,188,140.0,26320.0
+Fresh Milk,Buttercream Chocolate,2026-05,SA,209,140.0,29260.0
+Fresh Milk,Buttercream Chocolate,2026-05,TAM,106,140.0,14840.0
+Fresh Milk,Buttercream Chocolate,2026-06,OTHER,68,140.0,9520.0
+Fresh Milk,Buttercream Chocolate,2026-06,PJ,92,140.0,12880.0
+Fresh Milk,Buttercream Chocolate,2026-06,SA,179,140.0,25060.0
+Fresh Milk,Buttercream Chocolate,2026-06,TAM,91,140.0,12740.0
+Fresh Milk,Buttercream Chocolate,2026-07,OTHER,164,140.0,22960.0
+Fresh Milk,Buttercream Chocolate,2026-07,PJ,104,140.0,14560.0
+Fresh Milk,Buttercream Chocolate,2026-07,SA,130,140.0,18200.0
+Fresh Milk,Buttercream Chocolate,2026-07,TAM,82,140.0,11480.0
+Fresh Milk,Buttercream Latte,2026-04,PJ,642,140.0,89880.0
+Fresh Milk,Buttercream Latte,2026-04,SA,446,140.0,62440.0
+Fresh Milk,Buttercream Latte,2026-04,TAM,516,140.0,72240.0
+Fresh Milk,Buttercream Latte,2026-05,PJ,536,140.0,75040.0
+Fresh Milk,Buttercream Latte,2026-05,SA,531,140.0,74340.0
+Fresh Milk,Buttercream Latte,2026-05,TAM,475,140.0,66500.0
+Fresh Milk,Buttercream Latte,2026-06,OTHER,101,140.0,14140.0
+Fresh Milk,Buttercream Latte,2026-06,PJ,418,140.0,58520.0
+Fresh Milk,Buttercream Latte,2026-06,SA,447,140.0,62580.0
+Fresh Milk,Buttercream Latte,2026-06,TAM,418,140.0,58520.0
+Fresh Milk,Buttercream Latte,2026-07,OTHER,220,140.0,30800.0
+Fresh Milk,Buttercream Latte,2026-07,PJ,325,140.0,45500.0
+Fresh Milk,Buttercream Latte,2026-07,SA,359,140.0,50260.0
+Fresh Milk,Buttercream Latte,2026-07,TAM,363,140.0,50820.0
+Fresh Milk,Cappucino,2026-04,PJ,231,120.0,27720.0
+Fresh Milk,Cappucino,2026-04,SA,116,120.0,13920.0
+Fresh Milk,Cappucino,2026-04,TAM,125,120.0,15000.0
+Fresh Milk,Cappucino,2026-05,OTHER,1,120.0,120.0
+Fresh Milk,Cappucino,2026-05,PJ,257,120.0,30840.0
+Fresh Milk,Cappucino,2026-05,SA,121,120.0,14520.0
+Fresh Milk,Cappucino,2026-05,TAM,149,120.0,17880.0
+Fresh Milk,Cappucino,2026-06,OTHER,55,120.0,6600.0
+Fresh Milk,Cappucino,2026-06,PJ,209,120.0,25080.0
+Fresh Milk,Cappucino,2026-06,SA,96,120.0,11520.0
+Fresh Milk,Cappucino,2026-06,TAM,143,120.0,17160.0
+Fresh Milk,Cappucino,2026-07,OTHER,107,120.0,12840.0
+Fresh Milk,Cappucino,2026-07,PJ,182,120.0,21840.0
+Fresh Milk,Cappucino,2026-07,SA,99,120.0,11880.0
+Fresh Milk,Cappucino,2026-07,TAM,141,120.0,16920.0
+Fresh Milk,Caramel Latte,2026-04,PJ,114,120.0,13680.0
+Fresh Milk,Caramel Latte,2026-04,SA,87,120.0,10440.0
+Fresh Milk,Caramel Latte,2026-04,TAM,107,120.0,12840.0
+Fresh Milk,Caramel Latte,2026-05,PJ,109,120.0,13080.0
+Fresh Milk,Caramel Latte,2026-05,SA,80,120.0,9600.0
+Fresh Milk,Caramel Latte,2026-05,TAM,88,120.0,10560.0
+Fresh Milk,Caramel Latte,2026-06,OTHER,27,120.0,3240.0
+Fresh Milk,Caramel Latte,2026-06,PJ,109,120.0,13080.0
+Fresh Milk,Caramel Latte,2026-06,SA,70,120.0,8400.0
+Fresh Milk,Caramel Latte,2026-06,TAM,88,120.0,10560.0
+Fresh Milk,Caramel Latte,2026-07,OTHER,60,120.0,7200.0
+Fresh Milk,Caramel Latte,2026-07,PJ,49,120.0,5880.0
+Fresh Milk,Caramel Latte,2026-07,SA,61,120.0,7320.0
+Fresh Milk,Caramel Latte,2026-07,TAM,50,120.0,6000.0
+Fresh Milk,Caramel Latte (Bottle),2026-06,TAM,30,130.0,3900.0
+Fresh Milk,Caramel Macchiato,2026-04,PJ,128,120.0,15360.0
+Fresh Milk,Caramel Macchiato,2026-04,SA,124,120.0,14880.0
+Fresh Milk,Caramel Macchiato,2026-04,TAM,107,120.0,12840.0
+Fresh Milk,Caramel Macchiato,2026-05,PJ,109,120.0,13080.0
+Fresh Milk,Caramel Macchiato,2026-05,SA,122,120.0,14640.0
+Fresh Milk,Caramel Macchiato,2026-05,TAM,99,120.0,11880.0
+Fresh Milk,Caramel Macchiato,2026-06,OTHER,27,120.0,3240.0
+Fresh Milk,Caramel Macchiato,2026-06,PJ,94,120.0,11280.0
+Fresh Milk,Caramel Macchiato,2026-06,SA,110,120.0,13200.0
+Fresh Milk,Caramel Macchiato,2026-06,TAM,98,120.0,11760.0
+Fresh Milk,Caramel Macchiato,2026-07,OTHER,39,120.0,4680.0
+Fresh Milk,Caramel Macchiato,2026-07,PJ,73,120.0,8760.0
+Fresh Milk,Caramel Macchiato,2026-07,SA,69,120.0,8280.0
+Fresh Milk,Caramel Macchiato,2026-07,TAM,69,120.0,8280.0
+Fresh Milk,Chocolate,2026-04,PJ,260,120.0,31200.0
+Fresh Milk,Chocolate,2026-04,SA,197,120.0,23640.0
+Fresh Milk,Chocolate,2026-04,TAM,129,120.0,15480.0
+Fresh Milk,Chocolate,2026-05,PJ,247,120.0,29640.0
+Fresh Milk,Chocolate,2026-05,SA,255,120.0,30600.0
+Fresh Milk,Chocolate,2026-05,TAM,148,120.0,17760.0
+Fresh Milk,Chocolate,2026-06,OTHER,41,120.0,4920.0
+Fresh Milk,Chocolate,2026-06,PJ,141,120.0,16920.0
+Fresh Milk,Chocolate,2026-06,SA,197,120.0,23640.0
+Fresh Milk,Chocolate,2026-06,TAM,128,120.0,15360.0
+Fresh Milk,Chocolate,2026-07,OTHER,94,120.0,11280.0
+Fresh Milk,Chocolate,2026-07,PJ,126,120.0,15120.0
+Fresh Milk,Chocolate,2026-07,SA,127,120.0,15240.0
+Fresh Milk,Chocolate,2026-07,TAM,120,120.0,14400.0
+Fresh Milk,Chocolate (Bottle),2026-04,TAM,1,130.0,130.0
+Fresh Milk,Chocolate (Bottle),2026-05,SA,1,130.0,130.0
+Fresh Milk,Chocolate Freddo,2026-04,PJ,57,40.0,2280.0
+Fresh Milk,Chocolate Freddo,2026-04,SA,55,40.0,2200.0
+Fresh Milk,Chocolate Freddo,2026-04,TAM,39,40.0,1560.0
+Fresh Milk,Chocolate Freddo,2026-05,PJ,75,40.0,3000.0
+Fresh Milk,Chocolate Freddo,2026-05,SA,52,40.0,2080.0
+Fresh Milk,Chocolate Freddo,2026-05,TAM,37,40.0,1480.0
+Fresh Milk,Chocolate Freddo,2026-06,OTHER,25,40.0,1000.0
+Fresh Milk,Chocolate Freddo,2026-06,PJ,35,40.0,1400.0
+Fresh Milk,Chocolate Freddo,2026-06,SA,38,40.0,1520.0
+Fresh Milk,Chocolate Freddo,2026-06,TAM,30,40.0,1200.0
+Fresh Milk,Chocolate Freddo,2026-07,OTHER,52,40.0,2080.0
+Fresh Milk,Chocolate Freddo,2026-07,PJ,44,40.0,1760.0
+Fresh Milk,Chocolate Freddo,2026-07,SA,21,40.0,840.0
+Fresh Milk,Chocolate Freddo,2026-07,TAM,24,40.0,960.0
+Fresh Milk,Classic Latte (Bottle),2026-05,SA,6,130.0,780.0
+Fresh Milk,Classic Latte (Bottle),2026-06,TAM,1,130.0,130.0
+Fresh Milk,Cloudy Matcha,2026-04,PJ,48,30.0,1440.0
+Fresh Milk,Cloudy Matcha,2026-04,SA,82,30.0,2460.0
+Fresh Milk,Cloudy Matcha,2026-04,TAM,49,30.0,1470.0
+Fresh Milk,Cloudy Matcha,2026-05,OTHER,7,30.0,210.0
+Fresh Milk,Cloudy Matcha,2026-05,PJ,61,30.0,1830.0
+Fresh Milk,Cloudy Matcha,2026-05,SA,101,30.0,3030.0
+Fresh Milk,Cloudy Matcha,2026-05,TAM,46,30.0,1380.0
+Fresh Milk,Cloudy Matcha,2026-06,OTHER,31,30.0,930.0
+Fresh Milk,Cloudy Matcha,2026-06,PJ,63,30.0,1890.0
+Fresh Milk,Cloudy Matcha,2026-06,SA,80,30.0,2400.0
+Fresh Milk,Cloudy Matcha,2026-06,TAM,41,30.0,1230.0
+Fresh Milk,Cloudy Matcha,2026-07,OTHER,37,30.0,1110.0
+Fresh Milk,Cloudy Matcha,2026-07,PJ,41,30.0,1230.0
+Fresh Milk,Cloudy Matcha,2026-07,SA,51,30.0,1530.0
+Fresh Milk,Cloudy Matcha,2026-07,TAM,42,30.0,1260.0
+Fresh Milk,Dirty Latte,2026-04,PJ,94,120.0,11280.0
+Fresh Milk,Dirty Latte,2026-04,SA,130,120.0,15600.0
+Fresh Milk,Dirty Latte,2026-04,TAM,89,120.0,10680.0
+Fresh Milk,Dirty Latte,2026-05,PJ,107,120.0,12840.0
+Fresh Milk,Dirty Latte,2026-05,SA,109,120.0,13080.0
+Fresh Milk,Dirty Latte,2026-05,TAM,100,120.0,12000.0
+Fresh Milk,Dirty Latte,2026-06,OTHER,45,120.0,5400.0
+Fresh Milk,Dirty Latte,2026-06,PJ,114,120.0,13680.0
+Fresh Milk,Dirty Latte,2026-06,SA,112,120.0,13440.0
+Fresh Milk,Dirty Latte,2026-06,TAM,121,120.0,14520.0
+Fresh Milk,Dirty Latte,2026-07,OTHER,66,120.0,7920.0
+Fresh Milk,Dirty Latte,2026-07,PJ,92,120.0,11040.0
+Fresh Milk,Dirty Latte,2026-07,SA,88,120.0,10560.0
+Fresh Milk,Dirty Latte,2026-07,TAM,85,120.0,10200.0
+Fresh Milk,Doppio Freddo,2026-04,PJ,109,50.0,5450.0
+Fresh Milk,Doppio Freddo,2026-04,SA,79,50.0,3950.0
+Fresh Milk,Doppio Freddo,2026-04,TAM,86,50.0,4300.0
+Fresh Milk,Doppio Freddo,2026-05,OTHER,1,50.0,50.0
+Fresh Milk,Doppio Freddo,2026-05,PJ,113,50.0,5650.0
+Fresh Milk,Doppio Freddo,2026-05,SA,78,50.0,3900.0
+Fresh Milk,Doppio Freddo,2026-05,TAM,68,50.0,3400.0
+Fresh Milk,Doppio Freddo,2026-06,OTHER,30,50.0,1500.0
+Fresh Milk,Doppio Freddo,2026-06,PJ,77,50.0,3850.0
+Fresh Milk,Doppio Freddo,2026-06,SA,78,50.0,3900.0
+Fresh Milk,Doppio Freddo,2026-06,TAM,77,50.0,3850.0
+Fresh Milk,Doppio Freddo,2026-07,OTHER,24,50.0,1200.0
+Fresh Milk,Doppio Freddo,2026-07,PJ,65,50.0,3250.0
+Fresh Milk,Doppio Freddo,2026-07,SA,46,50.0,2300.0
+Fresh Milk,Doppio Freddo,2026-07,TAM,38,50.0,1900.0
+Fresh Milk,Hazelnut Latte,2026-04,PJ,127,120.0,15240.0
+Fresh Milk,Hazelnut Latte,2026-04,SA,131,120.0,15720.0
+Fresh Milk,Hazelnut Latte,2026-04,TAM,94,120.0,11280.0
+Fresh Milk,Hazelnut Latte,2026-05,PJ,119,120.0,14280.0
+Fresh Milk,Hazelnut Latte,2026-05,SA,102,120.0,12240.0
+Fresh Milk,Hazelnut Latte,2026-05,TAM,81,120.0,9720.0
+Fresh Milk,Hazelnut Latte,2026-06,OTHER,32,120.0,3840.0
+Fresh Milk,Hazelnut Latte,2026-06,PJ,87,120.0,10440.0
+Fresh Milk,Hazelnut Latte,2026-06,SA,79,120.0,9480.0
+Fresh Milk,Hazelnut Latte,2026-06,TAM,100,120.0,12000.0
+Fresh Milk,Hazelnut Latte,2026-07,OTHER,46,120.0,5520.0
+Fresh Milk,Hazelnut Latte,2026-07,PJ,78,120.0,9360.0
+Fresh Milk,Hazelnut Latte,2026-07,SA,77,120.0,9240.0
+Fresh Milk,Hazelnut Latte,2026-07,TAM,84,120.0,10080.0
+Fresh Milk,Latte,2026-04,PJ,1274,120.0,152880.0
+Fresh Milk,Latte,2026-04,SA,813,120.0,97560.0
+Fresh Milk,Latte,2026-04,TAM,747,120.0,89640.0
+Fresh Milk,Latte,2026-05,OTHER,6,120.0,720.0
+Fresh Milk,Latte,2026-05,PJ,1111,120.0,133320.0
+Fresh Milk,Latte,2026-05,SA,1033,120.0,123960.0
+Fresh Milk,Latte,2026-05,TAM,647,120.0,77640.0
+Fresh Milk,Latte,2026-06,OTHER,221,120.0,26520.0
+Fresh Milk,Latte,2026-06,PJ,1051,120.0,126120.0
+Fresh Milk,Latte,2026-06,SA,837,120.0,100440.0
+Fresh Milk,Latte,2026-06,TAM,621,120.0,74520.0
+Fresh Milk,Latte,2026-07,OTHER,358,120.0,42960.0
+Fresh Milk,Latte,2026-07,PJ,856,120.0,102720.0
+Fresh Milk,Latte,2026-07,SA,739,120.0,88680.0
+Fresh Milk,Latte,2026-07,TAM,595,120.0,71400.0
+Fresh Milk,Matcha,2026-04,PJ,156,120.0,18720.0
+Fresh Milk,Matcha,2026-04,SA,232,120.0,27840.0
+Fresh Milk,Matcha,2026-04,TAM,119,120.0,14280.0
+Fresh Milk,Matcha,2026-05,PJ,138,120.0,16560.0
+Fresh Milk,Matcha,2026-05,SA,202,120.0,24240.0
+Fresh Milk,Matcha,2026-05,TAM,97,120.0,11640.0
+Fresh Milk,Matcha,2026-06,OTHER,38,120.0,4560.0
+Fresh Milk,Matcha,2026-06,PJ,121,120.0,14520.0
+Fresh Milk,Matcha,2026-06,SA,190,120.0,22800.0
+Fresh Milk,Matcha,2026-06,TAM,100,120.0,12000.0
+Fresh Milk,Matcha,2026-07,OTHER,70,120.0,8400.0
+Fresh Milk,Matcha,2026-07,PJ,118,120.0,14160.0
+Fresh Milk,Matcha,2026-07,SA,117,120.0,14040.0
+Fresh Milk,Matcha,2026-07,TAM,60,120.0,7200.0
+Fresh Milk,Matcha Affogato,2026-04,SA,4,25.0,100.0
+Fresh Milk,Matcha Affogato,2026-04,TAM,1,25.0,25.0
+Fresh Milk,Matcha Affogato,2026-05,OTHER,3,25.0,75.0
+Fresh Milk,Matcha Affogato,2026-05,PJ,1,25.0,25.0
+Fresh Milk,Matcha Affogato,2026-05,SA,4,25.0,100.0
+Fresh Milk,Matcha Affogato,2026-05,TAM,2,25.0,50.0
+Fresh Milk,Matcha Affogato,2026-06,OTHER,6,25.0,150.0
+Fresh Milk,Matcha Affogato,2026-06,PJ,1,25.0,25.0
+Fresh Milk,Matcha Affogato,2026-06,SA,2,25.0,50.0
+Fresh Milk,Matcha Affogato,2026-06,TAM,5,25.0,125.0
+Fresh Milk,Matcha Affogato,2026-07,OTHER,9,25.0,225.0
+Fresh Milk,Matcha Affogato,2026-07,PJ,5,25.0,125.0
+Fresh Milk,Matcha Affogato,2026-07,TAM,4,25.0,100.0
+Fresh Milk,Matcha Cream Latte,2026-04,PJ,153,140.0,21420.0
+Fresh Milk,Matcha Cream Latte,2026-04,SA,227,140.0,31780.0
+Fresh Milk,Matcha Cream Latte,2026-04,TAM,146,140.0,20440.0
+Fresh Milk,Matcha Cream Latte,2026-05,OTHER,5,140.0,700.0
+Fresh Milk,Matcha Cream Latte,2026-05,PJ,128,140.0,17920.0
+Fresh Milk,Matcha Cream Latte,2026-05,SA,219,140.0,30660.0
+Fresh Milk,Matcha Cream Latte,2026-05,TAM,98,140.0,13720.0
+Fresh Milk,Matcha Cream Latte,2026-06,OTHER,60,140.0,8400.0
+Fresh Milk,Matcha Cream Latte,2026-06,PJ,109,140.0,15260.0
+Fresh Milk,Matcha Cream Latte,2026-06,SA,202,140.0,28280.0
+Fresh Milk,Matcha Cream Latte,2026-06,TAM,98,140.0,13720.0
+Fresh Milk,Matcha Cream Latte,2026-07,OTHER,130,140.0,18200.0
+Fresh Milk,Matcha Cream Latte,2026-07,PJ,93,140.0,13020.0
+Fresh Milk,Matcha Cream Latte,2026-07,SA,143,140.0,20020.0
+Fresh Milk,Matcha Cream Latte,2026-07,TAM,79,140.0,11060.0
+Fresh Milk,Mint Chocolate,2026-04,PJ,71,120.0,8520.0
+Fresh Milk,Mint Chocolate,2026-04,SA,63,120.0,7560.0
+Fresh Milk,Mint Chocolate,2026-04,TAM,45,120.0,5400.0
+Fresh Milk,Mint Chocolate,2026-05,PJ,72,120.0,8640.0
+Fresh Milk,Mint Chocolate,2026-05,SA,47,120.0,5640.0
+Fresh Milk,Mint Chocolate,2026-05,TAM,39,120.0,4680.0
+Fresh Milk,Mint Chocolate,2026-06,OTHER,17,120.0,2040.0
+Fresh Milk,Mint Chocolate,2026-06,PJ,44,120.0,5280.0
+Fresh Milk,Mint Chocolate,2026-06,SA,63,120.0,7560.0
+Fresh Milk,Mint Chocolate,2026-06,TAM,44,120.0,5280.0
+Fresh Milk,Mint Chocolate,2026-07,OTHER,68,120.0,8160.0
+Fresh Milk,Mint Chocolate,2026-07,PJ,31,120.0,3720.0
+Fresh Milk,Mint Chocolate,2026-07,SA,49,120.0,5880.0
+Fresh Milk,Mint Chocolate,2026-07,TAM,19,120.0,2280.0
+Fresh Milk,Mint Matcha,2026-04,PJ,42,120.0,5040.0
+Fresh Milk,Mint Matcha,2026-04,SA,30,120.0,3600.0
+Fresh Milk,Mint Matcha,2026-04,TAM,17,120.0,2040.0
+Fresh Milk,Mint Matcha,2026-05,PJ,24,120.0,2880.0
+Fresh Milk,Mint Matcha,2026-05,SA,38,120.0,4560.0
+Fresh Milk,Mint Matcha,2026-05,TAM,12,120.0,1440.0
+Fresh Milk,Mint Matcha,2026-06,OTHER,9,120.0,1080.0
+Fresh Milk,Mint Matcha,2026-06,PJ,17,120.0,2040.0
+Fresh Milk,Mint Matcha,2026-06,SA,20,120.0,2400.0
+Fresh Milk,Mint Matcha,2026-06,TAM,11,120.0,1320.0
+Fresh Milk,Mint Matcha,2026-07,OTHER,26,120.0,3120.0
+Fresh Milk,Mint Matcha,2026-07,PJ,10,120.0,1200.0
+Fresh Milk,Mint Matcha,2026-07,SA,20,120.0,2400.0
+Fresh Milk,Mint Matcha,2026-07,TAM,9,120.0,1080.0
+Fresh Milk,Mocha,2026-04,PJ,127,120.0,15240.0
+Fresh Milk,Mocha,2026-04,SA,79,120.0,9480.0
+Fresh Milk,Mocha,2026-04,TAM,80,120.0,9600.0
+Fresh Milk,Mocha,2026-05,PJ,118,120.0,14160.0
+Fresh Milk,Mocha,2026-05,SA,87,120.0,10440.0
+Fresh Milk,Mocha,2026-05,TAM,70,120.0,8400.0
+Fresh Milk,Mocha,2026-06,OTHER,56,120.0,6720.0
+Fresh Milk,Mocha,2026-06,PJ,81,120.0,9720.0
+Fresh Milk,Mocha,2026-06,SA,65,120.0,7800.0
+Fresh Milk,Mocha,2026-06,TAM,55,120.0,6600.0
+Fresh Milk,Mocha,2026-07,OTHER,61,120.0,7320.0
+Fresh Milk,Mocha,2026-07,PJ,83,120.0,9960.0
+Fresh Milk,Mocha,2026-07,SA,43,120.0,5160.0
+Fresh Milk,Mocha,2026-07,TAM,55,120.0,6600.0
+Fresh Milk,Mocha (Bottle),2026-04,TAM,1,130.0,130.0
+Fresh Milk,Mont Blanc,2026-04,PJ,138,25.0,3450.0
+Fresh Milk,Mont Blanc,2026-04,SA,164,25.0,4100.0
+Fresh Milk,Mont Blanc,2026-04,TAM,173,25.0,4325.0
+Fresh Milk,Mont Blanc,2026-05,PJ,149,25.0,3725.0
+Fresh Milk,Mont Blanc,2026-05,SA,224,25.0,5600.0
+Fresh Milk,Mont Blanc,2026-05,TAM,148,25.0,3700.0
+Fresh Milk,Mont Blanc,2026-06,OTHER,67,25.0,1675.0
+Fresh Milk,Mont Blanc,2026-06,PJ,135,25.0,3375.0
+Fresh Milk,Mont Blanc,2026-06,SA,208,25.0,5200.0
+Fresh Milk,Mont Blanc,2026-06,TAM,148,25.0,3700.0
+Fresh Milk,Mont Blanc,2026-07,OTHER,105,25.0,2625.0
+Fresh Milk,Mont Blanc,2026-07,PJ,124,25.0,3100.0
+Fresh Milk,Mont Blanc,2026-07,SA,181,25.0,4525.0
+Fresh Milk,Mont Blanc,2026-07,TAM,117,25.0,2925.0
+Fresh Milk,Peanut Butter Mocha,2026-04,PJ,66,120.0,7920.0
+Fresh Milk,Peanut Butter Mocha,2026-04,SA,54,120.0,6480.0
+Fresh Milk,Peanut Butter Mocha,2026-04,TAM,59,120.0,7080.0
+Fresh Milk,Peanut Butter Mocha,2026-05,PJ,78,120.0,9360.0
+Fresh Milk,Peanut Butter Mocha,2026-05,SA,77,120.0,9240.0
+Fresh Milk,Peanut Butter Mocha,2026-05,TAM,53,120.0,6360.0
+Fresh Milk,Peanut Butter Mocha,2026-06,OTHER,29,120.0,3480.0
+Fresh Milk,Peanut Butter Mocha,2026-06,PJ,42,120.0,5040.0
+Fresh Milk,Peanut Butter Mocha,2026-06,SA,36,120.0,4320.0
+Fresh Milk,Peanut Butter Mocha,2026-06,TAM,52,120.0,6240.0
+Fresh Milk,Peanut Butter Mocha,2026-07,OTHER,43,120.0,5160.0
+Fresh Milk,Peanut Butter Mocha,2026-07,PJ,18,120.0,2160.0
+Fresh Milk,Peanut Butter Mocha,2026-07,SA,43,120.0,5160.0
+Fresh Milk,Peanut Butter Mocha,2026-07,TAM,42,120.0,5040.0
+Fresh Milk,Piccolo,2026-04,PJ,75,100.0,7500.0
+Fresh Milk,Piccolo,2026-04,SA,38,100.0,3800.0
+Fresh Milk,Piccolo,2026-04,TAM,64,100.0,6400.0
+Fresh Milk,Piccolo,2026-05,PJ,75,100.0,7500.0
+Fresh Milk,Piccolo,2026-05,SA,41,100.0,4100.0
+Fresh Milk,Piccolo,2026-05,TAM,54,100.0,5400.0
+Fresh Milk,Piccolo,2026-06,OTHER,35,100.0,3500.0
+Fresh Milk,Piccolo,2026-06,PJ,60,100.0,6000.0
+Fresh Milk,Piccolo,2026-06,SA,36,100.0,3600.0
+Fresh Milk,Piccolo,2026-06,TAM,51,100.0,5100.0
+Fresh Milk,Piccolo,2026-07,OTHER,47,100.0,4700.0
+Fresh Milk,Piccolo,2026-07,PJ,35,100.0,3500.0
+Fresh Milk,Piccolo,2026-07,SA,24,100.0,2400.0
+Fresh Milk,Piccolo,2026-07,TAM,30,100.0,3000.0
+Fresh Milk,Salted Caramel Latte,2026-04,PJ,121,120.0,14520.0
+Fresh Milk,Salted Caramel Latte,2026-04,SA,100,120.0,12000.0
+Fresh Milk,Salted Caramel Latte,2026-04,TAM,125,120.0,15000.0
+Fresh Milk,Salted Caramel Latte,2026-05,PJ,144,120.0,17280.0
+Fresh Milk,Salted Caramel Latte,2026-05,SA,107,120.0,12840.0
+Fresh Milk,Salted Caramel Latte,2026-05,TAM,87,120.0,10440.0
+Fresh Milk,Salted Caramel Latte,2026-06,OTHER,49,120.0,5880.0
+Fresh Milk,Salted Caramel Latte,2026-06,PJ,92,120.0,11040.0
+Fresh Milk,Salted Caramel Latte,2026-06,SA,98,120.0,11760.0
+Fresh Milk,Salted Caramel Latte,2026-06,TAM,91,120.0,10920.0
+Fresh Milk,Salted Caramel Latte,2026-07,OTHER,85,120.0,10200.0
+Fresh Milk,Salted Caramel Latte,2026-07,PJ,87,120.0,10440.0
+Fresh Milk,Salted Caramel Latte,2026-07,SA,62,120.0,7440.0
+Fresh Milk,Salted Caramel Latte,2026-07,TAM,78,120.0,9360.0
+Fresh Milk,Spanish Latte,2026-04,PJ,321,120.0,38520.0
+Fresh Milk,Spanish Latte,2026-04,SA,262,120.0,31440.0
+Fresh Milk,Spanish Latte,2026-04,TAM,234,120.0,28080.0
+Fresh Milk,Spanish Latte,2026-05,PJ,276,120.0,33120.0
+Fresh Milk,Spanish Latte,2026-05,SA,230,120.0,27600.0
+Fresh Milk,Spanish Latte,2026-05,TAM,218,120.0,26160.0
+Fresh Milk,Spanish Latte,2026-06,OTHER,68,120.0,8160.0
+Fresh Milk,Spanish Latte,2026-06,PJ,289,120.0,34680.0
+Fresh Milk,Spanish Latte,2026-06,SA,240,120.0,28800.0
+Fresh Milk,Spanish Latte,2026-06,TAM,251,120.0,30120.0
+Fresh Milk,Spanish Latte,2026-07,OTHER,97,120.0,11640.0
+Fresh Milk,Spanish Latte,2026-07,PJ,256,120.0,30720.0
+Fresh Milk,Spanish Latte,2026-07,SA,195,120.0,23400.0
+Fresh Milk,Spanish Latte,2026-07,TAM,215,120.0,25800.0
+Fresh Milk,Strawberry Matcha,2026-04,PJ,194,140.0,27160.0
+Fresh Milk,Strawberry Matcha,2026-04,SA,209,140.0,29260.0
+Fresh Milk,Strawberry Matcha,2026-04,TAM,231,140.0,32340.0
+Fresh Milk,Strawberry Matcha,2026-05,PJ,182,140.0,25480.0
+Fresh Milk,Strawberry Matcha,2026-05,SA,316,140.0,44240.0
+Fresh Milk,Strawberry Matcha,2026-05,TAM,187,140.0,26180.0
+Fresh Milk,Strawberry Matcha,2026-06,OTHER,94,140.0,13160.0
+Fresh Milk,Strawberry Matcha,2026-06,PJ,145,140.0,20300.0
+Fresh Milk,Strawberry Matcha,2026-06,SA,184,140.0,25760.0
+Fresh Milk,Strawberry Matcha,2026-06,TAM,139,140.0,19460.0
+Fresh Milk,Strawberry Matcha,2026-07,OTHER,169,140.0,23660.0
+Fresh Milk,Strawberry Matcha,2026-07,PJ,119,140.0,16660.0
+Fresh Milk,Strawberry Matcha,2026-07,SA,169,140.0,23660.0
+Fresh Milk,Strawberry Matcha,2026-07,TAM,128,140.0,17920.0
+Fresh Milk,Vanilla Latte,2026-04,PJ,115,120.0,13800.0
+Fresh Milk,Vanilla Latte,2026-04,SA,139,120.0,16680.0
+Fresh Milk,Vanilla Latte,2026-04,TAM,78,120.0,9360.0
+Fresh Milk,Vanilla Latte,2026-05,PJ,102,120.0,12240.0
+Fresh Milk,Vanilla Latte,2026-05,SA,84,120.0,10080.0
+Fresh Milk,Vanilla Latte,2026-05,TAM,64,120.0,7680.0
+Fresh Milk,Vanilla Latte,2026-06,OTHER,14,120.0,1680.0
+Fresh Milk,Vanilla Latte,2026-06,PJ,73,120.0,8760.0
+Fresh Milk,Vanilla Latte,2026-06,SA,60,120.0,7200.0
+Fresh Milk,Vanilla Latte,2026-06,TAM,68,120.0,8160.0
+Fresh Milk,Vanilla Latte,2026-07,OTHER,34,120.0,4080.0
+Fresh Milk,Vanilla Latte,2026-07,PJ,64,120.0,7680.0
+Fresh Milk,Vanilla Latte,2026-07,SA,55,120.0,6600.0
+Fresh Milk,Vanilla Latte,2026-07,TAM,57,120.0,6840.0
+Fresh Milk,White Mocha,2026-04,PJ,64,120.0,7680.0
+Fresh Milk,White Mocha,2026-04,SA,39,120.0,4680.0
+Fresh Milk,White Mocha,2026-04,TAM,44,120.0,5280.0
+Fresh Milk,White Mocha,2026-05,OTHER,1,120.0,120.0
+Fresh Milk,White Mocha,2026-05,PJ,48,120.0,5760.0
+Fresh Milk,White Mocha,2026-05,SA,36,120.0,4320.0
+Fresh Milk,White Mocha,2026-05,TAM,33,120.0,3960.0
+Fresh Milk,White Mocha,2026-06,OTHER,13,120.0,1560.0
+Fresh Milk,White Mocha,2026-06,PJ,33,120.0,3960.0
+Fresh Milk,White Mocha,2026-06,SA,23,120.0,2760.0
+Fresh Milk,White Mocha,2026-06,TAM,37,120.0,4440.0
+Fresh Milk,White Mocha,2026-07,OTHER,22,120.0,2640.0
+Fresh Milk,White Mocha,2026-07,PJ,32,120.0,3840.0
+Fresh Milk,White Mocha,2026-07,SA,15,120.0,1800.0
+Fresh Milk,White Mocha,2026-07,TAM,18,120.0,2160.0
+Home Blend (Collective),Affogato,2026-04,PJ,4,18.0,72.0
+Home Blend (Collective),Affogato,2026-04,SA,5,18.0,90.0
+Home Blend (Collective),Affogato,2026-05,SA,4,18.0,72.0
+Home Blend (Collective),Affogato,2026-05,TAM,2,18.0,36.0
+Home Blend (Collective),Affogato,2026-06,TAM,8,18.0,144.0
+Home Blend (Collective),Black,2026-04,OTHER,4,18.0,72.0
+Home Blend (Collective),Black,2026-04,PJ,697,18.0,12546.0
+Home Blend (Collective),Black,2026-04,SA,348,18.0,6264.0
+Home Blend (Collective),Black,2026-04,TAM,368,18.0,6624.0
+Home Blend (Collective),Black,2026-05,OTHER,30,18.0,540.0
+Home Blend (Collective),Black,2026-05,PJ,597,18.0,10746.0
+Home Blend (Collective),Black,2026-05,SA,397,18.0,7146.0
+Home Blend (Collective),Black,2026-05,TAM,342,18.0,6156.0
+Home Blend (Collective),Black,2026-06,OTHER,151,18.0,2718.0
+Home Blend (Collective),Black,2026-06,PJ,409,18.0,7362.0
+Home Blend (Collective),Black,2026-06,SA,348,18.0,6264.0
+Home Blend (Collective),Black,2026-06,TAM,320,18.0,5760.0
+Home Blend (Collective),Black,2026-07,OTHER,195,18.0,3510.0
+Home Blend (Collective),Black,2026-07,PJ,333,18.0,5994.0
+Home Blend (Collective),Black,2026-07,SA,274,18.0,4932.0
+Home Blend (Collective),Black,2026-07,TAM,253,18.0,4554.0
+Home Blend (Collective),Buttercream Latte,2026-04,PJ,642,18.0,11556.0
+Home Blend (Collective),Buttercream Latte,2026-04,SA,446,18.0,8028.0
+Home Blend (Collective),Buttercream Latte,2026-04,TAM,516,18.0,9288.0
+Home Blend (Collective),Buttercream Latte,2026-05,PJ,536,18.0,9648.0
+Home Blend (Collective),Buttercream Latte,2026-05,SA,531,18.0,9558.0
+Home Blend (Collective),Buttercream Latte,2026-05,TAM,475,18.0,8550.0
+Home Blend (Collective),Buttercream Latte,2026-06,OTHER,101,18.0,1818.0
+Home Blend (Collective),Buttercream Latte,2026-06,PJ,418,18.0,7524.0
+Home Blend (Collective),Buttercream Latte,2026-06,SA,447,18.0,8046.0
+Home Blend (Collective),Buttercream Latte,2026-06,TAM,418,18.0,7524.0
+Home Blend (Collective),Buttercream Latte,2026-07,OTHER,220,18.0,3960.0
+Home Blend (Collective),Buttercream Latte,2026-07,PJ,325,18.0,5850.0
+Home Blend (Collective),Buttercream Latte,2026-07,SA,359,18.0,6462.0
+Home Blend (Collective),Buttercream Latte,2026-07,TAM,363,18.0,6534.0
+Home Blend (Collective),Cappucino,2026-04,PJ,231,18.0,4158.0
+Home Blend (Collective),Cappucino,2026-04,SA,116,18.0,2088.0
+Home Blend (Collective),Cappucino,2026-04,TAM,125,18.0,2250.0
+Home Blend (Collective),Cappucino,2026-05,OTHER,1,18.0,18.0
+Home Blend (Collective),Cappucino,2026-05,PJ,257,18.0,4626.0
+Home Blend (Collective),Cappucino,2026-05,SA,121,18.0,2178.0
+Home Blend (Collective),Cappucino,2026-05,TAM,149,18.0,2682.0
+Home Blend (Collective),Cappucino,2026-06,OTHER,55,18.0,990.0
+Home Blend (Collective),Cappucino,2026-06,PJ,209,18.0,3762.0
+Home Blend (Collective),Cappucino,2026-06,SA,96,18.0,1728.0
+Home Blend (Collective),Cappucino,2026-06,TAM,143,18.0,2574.0
+Home Blend (Collective),Cappucino,2026-07,OTHER,107,18.0,1926.0
+Home Blend (Collective),Cappucino,2026-07,PJ,182,18.0,3276.0
+Home Blend (Collective),Cappucino,2026-07,SA,99,18.0,1782.0
+Home Blend (Collective),Cappucino,2026-07,TAM,141,18.0,2538.0
+Home Blend (Collective),Caramel Latte,2026-04,PJ,114,18.0,2052.0
+Home Blend (Collective),Caramel Latte,2026-04,SA,87,18.0,1566.0
+Home Blend (Collective),Caramel Latte,2026-04,TAM,107,18.0,1926.0
+Home Blend (Collective),Caramel Latte,2026-05,PJ,109,18.0,1962.0
+Home Blend (Collective),Caramel Latte,2026-05,SA,80,18.0,1440.0
+Home Blend (Collective),Caramel Latte,2026-05,TAM,88,18.0,1584.0
+Home Blend (Collective),Caramel Latte,2026-06,OTHER,27,18.0,486.0
+Home Blend (Collective),Caramel Latte,2026-06,PJ,109,18.0,1962.0
+Home Blend (Collective),Caramel Latte,2026-06,SA,70,18.0,1260.0
+Home Blend (Collective),Caramel Latte,2026-06,TAM,88,18.0,1584.0
+Home Blend (Collective),Caramel Latte,2026-07,OTHER,60,18.0,1080.0
+Home Blend (Collective),Caramel Latte,2026-07,PJ,49,18.0,882.0
+Home Blend (Collective),Caramel Latte,2026-07,SA,61,18.0,1098.0
+Home Blend (Collective),Caramel Latte,2026-07,TAM,50,18.0,900.0
+Home Blend (Collective),Caramel Latte (Bottle),2026-06,TAM,30,18.0,540.0
+Home Blend (Collective),Caramel Macchiato,2026-04,PJ,128,18.0,2304.0
+Home Blend (Collective),Caramel Macchiato,2026-04,SA,124,18.0,2232.0
+Home Blend (Collective),Caramel Macchiato,2026-04,TAM,107,18.0,1926.0
+Home Blend (Collective),Caramel Macchiato,2026-05,PJ,109,18.0,1962.0
+Home Blend (Collective),Caramel Macchiato,2026-05,SA,122,18.0,2196.0
+Home Blend (Collective),Caramel Macchiato,2026-05,TAM,99,18.0,1782.0
+Home Blend (Collective),Caramel Macchiato,2026-06,OTHER,27,18.0,486.0
+Home Blend (Collective),Caramel Macchiato,2026-06,PJ,94,18.0,1692.0
+Home Blend (Collective),Caramel Macchiato,2026-06,SA,110,18.0,1980.0
+Home Blend (Collective),Caramel Macchiato,2026-06,TAM,98,18.0,1764.0
+Home Blend (Collective),Caramel Macchiato,2026-07,OTHER,39,18.0,702.0
+Home Blend (Collective),Caramel Macchiato,2026-07,PJ,73,18.0,1314.0
+Home Blend (Collective),Caramel Macchiato,2026-07,SA,69,18.0,1242.0
+Home Blend (Collective),Caramel Macchiato,2026-07,TAM,69,18.0,1242.0
+Home Blend (Collective),Classic Latte (Bottle),2026-05,SA,6,18.0,108.0
+Home Blend (Collective),Classic Latte (Bottle),2026-06,TAM,1,18.0,18.0
+Home Blend (Collective),Dirty Latte,2026-04,PJ,94,18.0,1692.0
+Home Blend (Collective),Dirty Latte,2026-04,SA,130,18.0,2340.0
+Home Blend (Collective),Dirty Latte,2026-04,TAM,89,18.0,1602.0
+Home Blend (Collective),Dirty Latte,2026-05,PJ,107,18.0,1926.0
+Home Blend (Collective),Dirty Latte,2026-05,SA,109,18.0,1962.0
+Home Blend (Collective),Dirty Latte,2026-05,TAM,100,18.0,1800.0
+Home Blend (Collective),Dirty Latte,2026-06,OTHER,45,18.0,810.0
+Home Blend (Collective),Dirty Latte,2026-06,PJ,114,18.0,2052.0
+Home Blend (Collective),Dirty Latte,2026-06,SA,112,18.0,2016.0
+Home Blend (Collective),Dirty Latte,2026-06,TAM,121,18.0,2178.0
+Home Blend (Collective),Dirty Latte,2026-07,OTHER,66,18.0,1188.0
+Home Blend (Collective),Dirty Latte,2026-07,PJ,92,18.0,1656.0
+Home Blend (Collective),Dirty Latte,2026-07,SA,88,18.0,1584.0
+Home Blend (Collective),Dirty Latte,2026-07,TAM,85,18.0,1530.0
+Home Blend (Collective),Doppio Freddo,2026-04,PJ,109,18.0,1962.0
+Home Blend (Collective),Doppio Freddo,2026-04,SA,79,18.0,1422.0
+Home Blend (Collective),Doppio Freddo,2026-04,TAM,86,18.0,1548.0
+Home Blend (Collective),Doppio Freddo,2026-05,OTHER,1,18.0,18.0
+Home Blend (Collective),Doppio Freddo,2026-05,PJ,113,18.0,2034.0
+Home Blend (Collective),Doppio Freddo,2026-05,SA,78,18.0,1404.0
+Home Blend (Collective),Doppio Freddo,2026-05,TAM,68,18.0,1224.0
+Home Blend (Collective),Doppio Freddo,2026-06,OTHER,30,18.0,540.0
+Home Blend (Collective),Doppio Freddo,2026-06,PJ,77,18.0,1386.0
+Home Blend (Collective),Doppio Freddo,2026-06,SA,78,18.0,1404.0
+Home Blend (Collective),Doppio Freddo,2026-06,TAM,77,18.0,1386.0
+Home Blend (Collective),Doppio Freddo,2026-07,OTHER,24,18.0,432.0
+Home Blend (Collective),Doppio Freddo,2026-07,PJ,65,18.0,1170.0
+Home Blend (Collective),Doppio Freddo,2026-07,SA,46,18.0,828.0
+Home Blend (Collective),Doppio Freddo,2026-07,TAM,38,18.0,684.0
+Home Blend (Collective),Espresso,2026-04,PJ,94,18.0,1692.0
+Home Blend (Collective),Espresso,2026-04,SA,10,18.0,180.0
+Home Blend (Collective),Espresso,2026-04,TAM,29,18.0,522.0
+Home Blend (Collective),Espresso,2026-05,PJ,96,18.0,1728.0
+Home Blend (Collective),Espresso,2026-05,SA,10,18.0,180.0
+Home Blend (Collective),Espresso,2026-05,TAM,31,18.0,558.0
+Home Blend (Collective),Espresso,2026-06,OTHER,6,18.0,108.0
+Home Blend (Collective),Espresso,2026-06,PJ,47,18.0,846.0
+Home Blend (Collective),Espresso,2026-06,SA,13,18.0,234.0
+Home Blend (Collective),Espresso,2026-06,TAM,26,18.0,468.0
+Home Blend (Collective),Espresso,2026-07,OTHER,7,18.0,126.0
+Home Blend (Collective),Espresso,2026-07,PJ,35,18.0,630.0
+Home Blend (Collective),Espresso,2026-07,SA,6,18.0,108.0
+Home Blend (Collective),Espresso,2026-07,TAM,50,18.0,900.0
+Home Blend (Collective),Hazelnut Latte,2026-04,PJ,127,18.0,2286.0
+Home Blend (Collective),Hazelnut Latte,2026-04,SA,131,18.0,2358.0
+Home Blend (Collective),Hazelnut Latte,2026-04,TAM,94,18.0,1692.0
+Home Blend (Collective),Hazelnut Latte,2026-05,PJ,119,18.0,2142.0
+Home Blend (Collective),Hazelnut Latte,2026-05,SA,102,18.0,1836.0
+Home Blend (Collective),Hazelnut Latte,2026-05,TAM,81,18.0,1458.0
+Home Blend (Collective),Hazelnut Latte,2026-06,OTHER,32,18.0,576.0
+Home Blend (Collective),Hazelnut Latte,2026-06,PJ,87,18.0,1566.0
+Home Blend (Collective),Hazelnut Latte,2026-06,SA,79,18.0,1422.0
+Home Blend (Collective),Hazelnut Latte,2026-06,TAM,100,18.0,1800.0
+Home Blend (Collective),Hazelnut Latte,2026-07,OTHER,46,18.0,828.0
+Home Blend (Collective),Hazelnut Latte,2026-07,PJ,78,18.0,1404.0
+Home Blend (Collective),Hazelnut Latte,2026-07,SA,77,18.0,1386.0
+Home Blend (Collective),Hazelnut Latte,2026-07,TAM,84,18.0,1512.0
+Home Blend (Collective),Latte,2026-04,PJ,1274,18.0,22932.0
+Home Blend (Collective),Latte,2026-04,SA,813,18.0,14634.0
+Home Blend (Collective),Latte,2026-04,TAM,747,18.0,13446.0
+Home Blend (Collective),Latte,2026-05,OTHER,6,18.0,108.0
+Home Blend (Collective),Latte,2026-05,PJ,1111,18.0,19998.0
+Home Blend (Collective),Latte,2026-05,SA,1033,18.0,18594.0
+Home Blend (Collective),Latte,2026-05,TAM,647,18.0,11646.0
+Home Blend (Collective),Latte,2026-06,OTHER,221,18.0,3978.0
+Home Blend (Collective),Latte,2026-06,PJ,1051,18.0,18918.0
+Home Blend (Collective),Latte,2026-06,SA,837,18.0,15066.0
+Home Blend (Collective),Latte,2026-06,TAM,621,18.0,11178.0
+Home Blend (Collective),Latte,2026-07,OTHER,358,18.0,6444.0
+Home Blend (Collective),Latte,2026-07,PJ,856,18.0,15408.0
+Home Blend (Collective),Latte,2026-07,SA,739,18.0,13302.0
+Home Blend (Collective),Latte,2026-07,TAM,595,18.0,10710.0
+Home Blend (Collective),Mocha,2026-04,PJ,127,18.0,2286.0
+Home Blend (Collective),Mocha,2026-04,SA,79,18.0,1422.0
+Home Blend (Collective),Mocha,2026-04,TAM,80,18.0,1440.0
+Home Blend (Collective),Mocha,2026-05,PJ,118,18.0,2124.0
+Home Blend (Collective),Mocha,2026-05,SA,87,18.0,1566.0
+Home Blend (Collective),Mocha,2026-05,TAM,70,18.0,1260.0
+Home Blend (Collective),Mocha,2026-06,OTHER,56,18.0,1008.0
+Home Blend (Collective),Mocha,2026-06,PJ,81,18.0,1458.0
+Home Blend (Collective),Mocha,2026-06,SA,65,18.0,1170.0
+Home Blend (Collective),Mocha,2026-06,TAM,55,18.0,990.0
+Home Blend (Collective),Mocha,2026-07,OTHER,61,18.0,1098.0
+Home Blend (Collective),Mocha,2026-07,PJ,83,18.0,1494.0
+Home Blend (Collective),Mocha,2026-07,SA,43,18.0,774.0
+Home Blend (Collective),Mocha,2026-07,TAM,55,18.0,990.0
+Home Blend (Collective),Mocha (Bottle),2026-04,TAM,1,18.0,18.0
+Home Blend (Collective),Mont Blanc,2026-04,PJ,138,18.0,2484.0
+Home Blend (Collective),Mont Blanc,2026-04,SA,164,18.0,2952.0
+Home Blend (Collective),Mont Blanc,2026-04,TAM,173,18.0,3114.0
+Home Blend (Collective),Mont Blanc,2026-05,PJ,149,18.0,2682.0
+Home Blend (Collective),Mont Blanc,2026-05,SA,224,18.0,4032.0
+Home Blend (Collective),Mont Blanc,2026-05,TAM,148,18.0,2664.0
+Home Blend (Collective),Mont Blanc,2026-06,OTHER,67,18.0,1206.0
+Home Blend (Collective),Mont Blanc,2026-06,PJ,135,18.0,2430.0
+Home Blend (Collective),Mont Blanc,2026-06,SA,208,18.0,3744.0
+Home Blend (Collective),Mont Blanc,2026-06,TAM,148,18.0,2664.0
+Home Blend (Collective),Mont Blanc,2026-07,OTHER,105,18.0,1890.0
+Home Blend (Collective),Mont Blanc,2026-07,PJ,124,18.0,2232.0
+Home Blend (Collective),Mont Blanc,2026-07,SA,181,18.0,3258.0
+Home Blend (Collective),Mont Blanc,2026-07,TAM,117,18.0,2106.0
+Home Blend (Collective),Peanut Butter Mocha,2026-04,PJ,66,18.0,1188.0
+Home Blend (Collective),Peanut Butter Mocha,2026-04,SA,54,18.0,972.0
+Home Blend (Collective),Peanut Butter Mocha,2026-04,TAM,59,18.0,1062.0
+Home Blend (Collective),Peanut Butter Mocha,2026-05,PJ,78,18.0,1404.0
+Home Blend (Collective),Peanut Butter Mocha,2026-05,SA,77,18.0,1386.0
+Home Blend (Collective),Peanut Butter Mocha,2026-05,TAM,53,18.0,954.0
+Home Blend (Collective),Peanut Butter Mocha,2026-06,OTHER,29,18.0,522.0
+Home Blend (Collective),Peanut Butter Mocha,2026-06,PJ,42,18.0,756.0
+Home Blend (Collective),Peanut Butter Mocha,2026-06,SA,36,18.0,648.0
+Home Blend (Collective),Peanut Butter Mocha,2026-06,TAM,52,18.0,936.0
+Home Blend (Collective),Peanut Butter Mocha,2026-07,OTHER,43,18.0,774.0
+Home Blend (Collective),Peanut Butter Mocha,2026-07,PJ,18,18.0,324.0
+Home Blend (Collective),Peanut Butter Mocha,2026-07,SA,43,18.0,774.0
+Home Blend (Collective),Peanut Butter Mocha,2026-07,TAM,42,18.0,756.0
+Home Blend (Collective),Piccolo,2026-04,PJ,75,18.0,1350.0
+Home Blend (Collective),Piccolo,2026-04,SA,38,18.0,684.0
+Home Blend (Collective),Piccolo,2026-04,TAM,64,18.0,1152.0
+Home Blend (Collective),Piccolo,2026-05,PJ,75,18.0,1350.0
+Home Blend (Collective),Piccolo,2026-05,SA,41,18.0,738.0
+Home Blend (Collective),Piccolo,2026-05,TAM,54,18.0,972.0
+Home Blend (Collective),Piccolo,2026-06,OTHER,35,18.0,630.0
+Home Blend (Collective),Piccolo,2026-06,PJ,60,18.0,1080.0
+Home Blend (Collective),Piccolo,2026-06,SA,36,18.0,648.0
+Home Blend (Collective),Piccolo,2026-06,TAM,51,18.0,918.0
+Home Blend (Collective),Piccolo,2026-07,OTHER,47,18.0,846.0
+Home Blend (Collective),Piccolo,2026-07,PJ,35,18.0,630.0
+Home Blend (Collective),Piccolo,2026-07,SA,24,18.0,432.0
+Home Blend (Collective),Piccolo,2026-07,TAM,30,18.0,540.0
+Home Blend (Collective),Salted Caramel Latte,2026-04,PJ,121,18.0,2178.0
+Home Blend (Collective),Salted Caramel Latte,2026-04,SA,100,18.0,1800.0
+Home Blend (Collective),Salted Caramel Latte,2026-04,TAM,125,18.0,2250.0
+Home Blend (Collective),Salted Caramel Latte,2026-05,PJ,144,18.0,2592.0
+Home Blend (Collective),Salted Caramel Latte,2026-05,SA,107,18.0,1926.0
+Home Blend (Collective),Salted Caramel Latte,2026-05,TAM,87,18.0,1566.0
+Home Blend (Collective),Salted Caramel Latte,2026-06,OTHER,49,18.0,882.0
+Home Blend (Collective),Salted Caramel Latte,2026-06,PJ,92,18.0,1656.0
+Home Blend (Collective),Salted Caramel Latte,2026-06,SA,98,18.0,1764.0
+Home Blend (Collective),Salted Caramel Latte,2026-06,TAM,91,18.0,1638.0
+Home Blend (Collective),Salted Caramel Latte,2026-07,OTHER,85,18.0,1530.0
+Home Blend (Collective),Salted Caramel Latte,2026-07,PJ,87,18.0,1566.0
+Home Blend (Collective),Salted Caramel Latte,2026-07,SA,62,18.0,1116.0
+Home Blend (Collective),Salted Caramel Latte,2026-07,TAM,78,18.0,1404.0
+Home Blend (Collective),Spanish Latte,2026-04,PJ,321,18.0,5778.0
+Home Blend (Collective),Spanish Latte,2026-04,SA,262,18.0,4716.0
+Home Blend (Collective),Spanish Latte,2026-04,TAM,234,18.0,4212.0
+Home Blend (Collective),Spanish Latte,2026-05,PJ,276,18.0,4968.0
+Home Blend (Collective),Spanish Latte,2026-05,SA,230,18.0,4140.0
+Home Blend (Collective),Spanish Latte,2026-05,TAM,218,18.0,3924.0
+Home Blend (Collective),Spanish Latte,2026-06,OTHER,68,18.0,1224.0
+Home Blend (Collective),Spanish Latte,2026-06,PJ,289,18.0,5202.0
+Home Blend (Collective),Spanish Latte,2026-06,SA,240,18.0,4320.0
+Home Blend (Collective),Spanish Latte,2026-06,TAM,251,18.0,4518.0
+Home Blend (Collective),Spanish Latte,2026-07,OTHER,97,18.0,1746.0
+Home Blend (Collective),Spanish Latte,2026-07,PJ,256,18.0,4608.0
+Home Blend (Collective),Spanish Latte,2026-07,SA,195,18.0,3510.0
+Home Blend (Collective),Spanish Latte,2026-07,TAM,215,18.0,3870.0
+Home Blend (Collective),Vanilla Latte,2026-04,PJ,115,18.0,2070.0
+Home Blend (Collective),Vanilla Latte,2026-04,SA,139,18.0,2502.0
+Home Blend (Collective),Vanilla Latte,2026-04,TAM,78,18.0,1404.0
+Home Blend (Collective),Vanilla Latte,2026-05,PJ,102,18.0,1836.0
+Home Blend (Collective),Vanilla Latte,2026-05,SA,84,18.0,1512.0
+Home Blend (Collective),Vanilla Latte,2026-05,TAM,64,18.0,1152.0
+Home Blend (Collective),Vanilla Latte,2026-06,OTHER,14,18.0,252.0
+Home Blend (Collective),Vanilla Latte,2026-06,PJ,73,18.0,1314.0
+Home Blend (Collective),Vanilla Latte,2026-06,SA,60,18.0,1080.0
+Home Blend (Collective),Vanilla Latte,2026-06,TAM,68,18.0,1224.0
+Home Blend (Collective),Vanilla Latte,2026-07,OTHER,34,18.0,612.0
+Home Blend (Collective),Vanilla Latte,2026-07,PJ,64,18.0,1152.0
+Home Blend (Collective),Vanilla Latte,2026-07,SA,55,18.0,990.0
+Home Blend (Collective),Vanilla Latte,2026-07,TAM,57,18.0,1026.0
+Home Blend (Collective),White Mocha,2026-04,PJ,64,18.0,1152.0
+Home Blend (Collective),White Mocha,2026-04,SA,39,18.0,702.0
+Home Blend (Collective),White Mocha,2026-04,TAM,44,18.0,792.0
+Home Blend (Collective),White Mocha,2026-05,OTHER,1,18.0,18.0
+Home Blend (Collective),White Mocha,2026-05,PJ,48,18.0,864.0
+Home Blend (Collective),White Mocha,2026-05,SA,36,18.0,648.0
+Home Blend (Collective),White Mocha,2026-05,TAM,33,18.0,594.0
+Home Blend (Collective),White Mocha,2026-06,OTHER,13,18.0,234.0
+Home Blend (Collective),White Mocha,2026-06,PJ,33,18.0,594.0
+Home Blend (Collective),White Mocha,2026-06,SA,23,18.0,414.0
+Home Blend (Collective),White Mocha,2026-06,TAM,37,18.0,666.0
+Home Blend (Collective),White Mocha,2026-07,OTHER,22,18.0,396.0
+Home Blend (Collective),White Mocha,2026-07,PJ,32,18.0,576.0
+Home Blend (Collective),White Mocha,2026-07,SA,15,18.0,270.0
+Home Blend (Collective),White Mocha,2026-07,TAM,18,18.0,324.0
+Pull Lamb,Smoked Pulled Lamb,2026-04,PJ,60,50.0,3000.0
+Pull Lamb,Smoked Pulled Lamb,2026-04,SA,10,50.0,500.0
+Pull Lamb,Smoked Pulled Lamb,2026-04,TAM,17,50.0,850.0
+Pull Lamb,Smoked Pulled Lamb,2026-05,PJ,77,50.0,3850.0
+Pull Lamb,Smoked Pulled Lamb,2026-05,SA,27,50.0,1350.0
+Pull Lamb,Smoked Pulled Lamb,2026-05,TAM,14,50.0,700.0
+Pull Lamb,Smoked Pulled Lamb,2026-06,OTHER,13,50.0,650.0
+Pull Lamb,Smoked Pulled Lamb,2026-06,PJ,33,50.0,1650.0
+Pull Lamb,Smoked Pulled Lamb,2026-06,SA,21,50.0,1050.0
+Pull Lamb,Smoked Pulled Lamb,2026-06,TAM,20,50.0,1000.0
+Pull Lamb,Smoked Pulled Lamb,2026-07,OTHER,25,50.0,1250.0
+Pull Lamb,Smoked Pulled Lamb,2026-07,PJ,41,50.0,2050.0
+Pull Lamb,Smoked Pulled Lamb,2026-07,SA,17,50.0,850.0
+Pull Lamb,Smoked Pulled Lamb,2026-07,TAM,9,50.0,450.0
+Salted Croissant,Salted Egg Croissant,2026-04,PJ,135,1.0,135.0
+Salted Croissant,Salted Egg Croissant,2026-04,SA,125,1.0,125.0
+Salted Croissant,Salted Egg Croissant,2026-04,TAM,90,1.0,90.0
+Salted Croissant,Salted Egg Croissant,2026-05,PJ,132,1.0,132.0
+Salted Croissant,Salted Egg Croissant,2026-05,SA,107,1.0,107.0
+Salted Croissant,Salted Egg Croissant,2026-05,TAM,121,1.0,121.0
+Salted Croissant,Salted Egg Croissant,2026-06,OTHER,39,1.0,39.0
+Salted Croissant,Salted Egg Croissant,2026-06,PJ,105,1.0,105.0
+Salted Croissant,Salted Egg Croissant,2026-06,SA,85,1.0,85.0
+Salted Croissant,Salted Egg Croissant,2026-06,TAM,67,1.0,67.0
+Salted Croissant,Salted Egg Croissant,2026-07,OTHER,35,1.0,35.0
+Salted Croissant,Salted Egg Croissant,2026-07,PJ,61,1.0,61.0
+Salted Croissant,Salted Egg Croissant,2026-07,SA,51,1.0,51.0
+Salted Croissant,Salted Egg Croissant,2026-07,TAM,47,1.0,47.0
+Telur Omega,Bihun Kari,2026-04,PJ,11,0.5,5.5
+Telur Omega,Bihun Kari,2026-04,SA,4,0.5,2.0
+Telur Omega,Bihun Kari,2026-05,PJ,11,0.5,5.5
+Telur Omega,Bihun Kari,2026-05,SA,11,0.5,5.5
+Telur Omega,Bihun Kari,2026-06,OTHER,12,0.5,6.0
+Telur Omega,Bihun Kari,2026-06,PJ,13,0.5,6.5
+Telur Omega,Bihun Kari,2026-06,SA,7,0.5,3.5
+Telur Omega,Bihun Kari,2026-07,OTHER,16,0.5,8.0
+Telur Omega,Bihun Kari,2026-07,PJ,13,0.5,6.5
+Telur Omega,Bihun Kari,2026-07,SA,10,0.5,5.0
+Telur Omega,Bihun Kari,2026-07,TAM,7,0.5,3.5
+Telur Omega,Bihun Kari Asam,2026-04,PJ,4,0.5,2.0
+Telur Omega,Bihun Kari Asam,2026-04,SA,1,0.5,0.5
+Telur Omega,Bihun Kari Asam,2026-05,PJ,5,0.5,2.5
+Telur Omega,Bihun Kari Asam,2026-05,SA,2,0.5,1.0
+Telur Omega,Bihun Kari Asam,2026-06,OTHER,11,0.5,5.5
+Telur Omega,Bihun Kari Asam,2026-06,PJ,3,0.5,1.5
+Telur Omega,Bihun Kari Asam,2026-06,SA,1,0.5,0.5
+Telur Omega,Bihun Kari Asam,2026-07,OTHER,12,0.5,6.0
+Telur Omega,Bihun Kari Asam,2026-07,PJ,7,0.5,3.5
+Telur Omega,Bihun Kari Asam,2026-07,SA,3,0.5,1.5
+Telur Omega,Bihun Kari Asam,2026-07,TAM,1,0.5,0.5
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-04,PJ,38,1.0,38.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-04,SA,54,1.0,54.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-04,TAM,18,1.0,18.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-05,PJ,55,1.0,55.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-05,SA,28,1.0,28.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-05,TAM,27,1.0,27.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-06,OTHER,20,1.0,20.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-06,PJ,24,1.0,24.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-06,SA,33,1.0,33.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-06,TAM,12,1.0,12.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-07,OTHER,53,1.0,53.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-07,PJ,27,1.0,27.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-07,SA,16,1.0,16.0
+Telur Omega,Crispy Prawn Creamy Carbonara,2026-07,TAM,11,1.0,11.0
+Telur Omega,Egg Sando,2026-04,PJ,69,1.0,69.0
+Telur Omega,Egg Sando,2026-04,SA,30,1.0,30.0
+Telur Omega,Egg Sando,2026-04,TAM,39,1.0,39.0
+Telur Omega,Egg Sando,2026-05,PJ,119,1.0,119.0
+Telur Omega,Egg Sando,2026-05,SA,37,1.0,37.0
+Telur Omega,Egg Sando,2026-05,TAM,44,1.0,44.0
+Telur Omega,Egg Sando,2026-06,OTHER,33,1.0,33.0
+Telur Omega,Egg Sando,2026-06,PJ,97,1.0,97.0
+Telur Omega,Egg Sando,2026-06,SA,48,1.0,48.0
+Telur Omega,Egg Sando,2026-06,TAM,84,1.0,84.0
+Telur Omega,Egg Sando,2026-07,OTHER,66,1.0,66.0
+Telur Omega,Egg Sando,2026-07,PJ,82,1.0,82.0
+Telur Omega,Egg Sando,2026-07,SA,46,1.0,46.0
+Telur Omega,Egg Sando,2026-07,TAM,33,1.0,33.0
+Telur Omega,Half Boiled Eggs,2026-04,PJ,51,2.0,102.0
+Telur Omega,Half Boiled Eggs,2026-04,SA,36,2.0,72.0
+Telur Omega,Half Boiled Eggs,2026-04,TAM,29,2.0,58.0
+Telur Omega,Half Boiled Eggs,2026-05,PJ,52,2.0,104.0
+Telur Omega,Half Boiled Eggs,2026-05,SA,38,2.0,76.0
+Telur Omega,Half Boiled Eggs,2026-05,TAM,26,2.0,52.0
+Telur Omega,Half Boiled Eggs,2026-06,OTHER,36,2.0,72.0
+Telur Omega,Half Boiled Eggs,2026-06,PJ,63,2.0,126.0
+Telur Omega,Half Boiled Eggs,2026-06,SA,26,2.0,52.0
+Telur Omega,Half Boiled Eggs,2026-06,TAM,23,2.0,46.0
+Telur Omega,Half Boiled Eggs,2026-07,OTHER,51,2.0,102.0
+Telur Omega,Half Boiled Eggs,2026-07,PJ,46,2.0,92.0
+Telur Omega,Half Boiled Eggs,2026-07,SA,32,2.0,64.0
+Telur Omega,Half Boiled Eggs,2026-07,TAM,22,2.0,44.0
+Telur Omega,Mee Kari,2026-04,PJ,18,0.5,9.0
+Telur Omega,Mee Kari,2026-04,SA,37,0.5,18.5
+Telur Omega,Mee Kari,2026-05,PJ,52,0.5,26.0
+Telur Omega,Mee Kari,2026-05,SA,35,0.5,17.5
+Telur Omega,Mee Kari,2026-06,OTHER,33,0.5,16.5
+Telur Omega,Mee Kari,2026-06,PJ,29,0.5,14.5
+Telur Omega,Mee Kari,2026-06,SA,31,0.5,15.5
+Telur Omega,Mee Kari,2026-06,TAM,15,0.5,7.5
+Telur Omega,Mee Kari,2026-07,OTHER,36,0.5,18.0
+Telur Omega,Mee Kari,2026-07,PJ,38,0.5,19.0
+Telur Omega,Mee Kari,2026-07,SA,21,0.5,10.5
+Telur Omega,Mee Kari,2026-07,TAM,16,0.5,8.0
+Telur Omega,Mee Kari Asam,2026-04,PJ,2,0.5,1.0
+Telur Omega,Mee Kari Asam,2026-04,SA,4,0.5,2.0
+Telur Omega,Mee Kari Asam,2026-05,PJ,11,0.5,5.5
+Telur Omega,Mee Kari Asam,2026-05,SA,1,0.5,0.5
+Telur Omega,Mee Kari Asam,2026-06,OTHER,4,0.5,2.0
+Telur Omega,Mee Kari Asam,2026-06,PJ,9,0.5,4.5
+Telur Omega,Mee Kari Asam,2026-06,SA,5,0.5,2.5
+Telur Omega,Mee Kari Asam,2026-06,TAM,4,0.5,2.0
+Telur Omega,Mee Kari Asam,2026-07,OTHER,11,0.5,5.5
+Telur Omega,Mee Kari Asam,2026-07,PJ,4,0.5,2.0
+Telur Omega,Mee Kari Asam,2026-07,SA,3,0.5,1.5
+Telur Omega,Mee Kari Asam,2026-07,TAM,5,0.5,2.5
+Telur Omega,Nasi Lemak 2 Sambal,2026-04,PJ,117,1.0,117.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-04,SA,39,1.0,39.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-04,TAM,60,1.0,60.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-05,PJ,165,1.0,165.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-05,SA,42,1.0,42.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-05,TAM,52,1.0,52.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-06,OTHER,64,1.0,64.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-06,PJ,124,1.0,124.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-06,SA,45,1.0,45.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-06,TAM,55,1.0,55.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-07,OTHER,98,1.0,98.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-07,PJ,114,1.0,114.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-07,SA,23,1.0,23.0
+Telur Omega,Nasi Lemak 2 Sambal,2026-07,TAM,75,1.0,75.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-04,PJ,207,1.0,207.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-04,SA,68,1.0,68.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-04,TAM,80,1.0,80.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-05,PJ,229,1.0,229.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-05,SA,122,1.0,122.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-05,TAM,82,1.0,82.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-06,OTHER,103,1.0,103.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-06,PJ,174,1.0,174.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-06,SA,69,1.0,69.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-06,TAM,81,1.0,81.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-07,OTHER,118,1.0,118.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-07,PJ,130,1.0,130.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-07,SA,61,1.0,61.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Crispy,2026-07,TAM,68,1.0,68.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-04,PJ,134,1.0,134.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-04,SA,31,1.0,31.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-04,TAM,29,1.0,29.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-05,PJ,137,1.0,137.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-05,SA,22,1.0,22.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-05,TAM,33,1.0,33.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-06,OTHER,56,1.0,56.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-06,PJ,80,1.0,80.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-06,SA,36,1.0,36.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-06,TAM,38,1.0,38.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-07,OTHER,127,1.0,127.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-07,PJ,88,1.0,88.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-07,SA,32,1.0,32.0
+Telur Omega,Nasi Lemak 2 Sambal + Ayam Grilled,2026-07,TAM,42,1.0,42.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-04,PJ,25,1.0,25.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-04,SA,9,1.0,9.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-04,TAM,15,1.0,15.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-05,PJ,30,1.0,30.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-05,SA,11,1.0,11.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-05,TAM,17,1.0,17.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-06,OTHER,9,1.0,9.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-06,PJ,21,1.0,21.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-06,SA,11,1.0,11.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-06,TAM,11,1.0,11.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-07,OTHER,22,1.0,22.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-07,PJ,29,1.0,29.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-07,SA,7,1.0,7.0
+Telur Omega,Nasi Lemak 2 Sambal + Sambal Udang,2026-07,TAM,8,1.0,8.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-04,PJ,28,1.0,28.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-04,SA,11,1.0,11.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-04,TAM,8,1.0,8.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-05,PJ,19,1.0,19.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-05,SA,6,1.0,6.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-05,TAM,9,1.0,9.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-06,OTHER,5,1.0,5.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-06,PJ,7,1.0,7.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-06,SA,4,1.0,4.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-06,TAM,9,1.0,9.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-07,OTHER,25,1.0,25.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-07,PJ,10,1.0,10.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-07,SA,3,1.0,3.0
+Telur Omega,Nasi Lemak 2 Sambal + Udang Crispy,2026-07,TAM,8,1.0,8.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-04,PJ,153,2.0,306.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-04,SA,127,2.0,254.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-04,TAM,77,2.0,154.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-05,PJ,210,2.0,420.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-05,SA,134,2.0,268.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-05,TAM,78,2.0,156.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-06,OTHER,120,2.0,240.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-06,PJ,195,2.0,390.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-06,SA,112,2.0,224.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-06,TAM,68,2.0,136.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-07,OTHER,153,2.0,306.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-07,PJ,196,2.0,392.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-07,SA,110,2.0,220.0
+Telur Omega,Roti Bakar Brioche with Half Boiled Eggs,2026-07,TAM,84,2.0,168.0
+Telur Omega,Samyang Pasta,2026-04,PJ,37,1.0,37.0
+Telur Omega,Samyang Pasta,2026-04,SA,33,1.0,33.0
+Telur Omega,Samyang Pasta,2026-04,TAM,15,1.0,15.0
+Telur Omega,Samyang Pasta,2026-05,PJ,34,1.0,34.0
+Telur Omega,Samyang Pasta,2026-05,SA,42,1.0,42.0
+Telur Omega,Samyang Pasta,2026-05,TAM,13,1.0,13.0
+Telur Omega,Samyang Pasta,2026-06,OTHER,6,1.0,6.0
+Telur Omega,Samyang Pasta,2026-06,PJ,25,1.0,25.0
+Telur Omega,Samyang Pasta,2026-06,SA,18,1.0,18.0
+Telur Omega,Samyang Pasta,2026-06,TAM,1,1.0,1.0
+Telur Omega,Samyang Pasta,2026-07,OTHER,25,1.0,25.0
+Telur Omega,Samyang Pasta,2026-07,PJ,19,1.0,19.0
+Telur Omega,Samyang Pasta,2026-07,SA,15,1.0,15.0
+Telur Omega,Samyang Pasta,2026-07,TAM,10,1.0,10.0
+Udang,Bihun Kari,2026-04,PJ,11,80.0,880.0
+Udang,Bihun Kari,2026-04,SA,4,80.0,320.0
+Udang,Bihun Kari,2026-05,PJ,11,80.0,880.0
+Udang,Bihun Kari,2026-05,SA,11,80.0,880.0
+Udang,Bihun Kari,2026-06,OTHER,12,80.0,960.0
+Udang,Bihun Kari,2026-06,PJ,13,80.0,1040.0
+Udang,Bihun Kari,2026-06,SA,7,80.0,560.0
+Udang,Bihun Kari,2026-07,OTHER,16,80.0,1280.0
+Udang,Bihun Kari,2026-07,PJ,13,80.0,1040.0
+Udang,Bihun Kari,2026-07,SA,10,80.0,800.0
+Udang,Bihun Kari,2026-07,TAM,7,80.0,560.0
+Udang,Bihun Kari Asam,2026-04,PJ,4,80.0,320.0
+Udang,Bihun Kari Asam,2026-04,SA,1,80.0,80.0
+Udang,Bihun Kari Asam,2026-05,PJ,5,80.0,400.0
+Udang,Bihun Kari Asam,2026-05,SA,2,80.0,160.0
+Udang,Bihun Kari Asam,2026-06,OTHER,11,80.0,880.0
+Udang,Bihun Kari Asam,2026-06,PJ,3,80.0,240.0
+Udang,Bihun Kari Asam,2026-06,SA,1,80.0,80.0
+Udang,Bihun Kari Asam,2026-07,OTHER,12,80.0,960.0
+Udang,Bihun Kari Asam,2026-07,PJ,7,80.0,560.0
+Udang,Bihun Kari Asam,2026-07,SA,3,80.0,240.0
+Udang,Bihun Kari Asam,2026-07,TAM,1,80.0,80.0
+Udang,Mee Kari,2026-04,PJ,18,80.0,1440.0
+Udang,Mee Kari,2026-04,SA,37,80.0,2960.0
+Udang,Mee Kari,2026-05,PJ,52,80.0,4160.0
+Udang,Mee Kari,2026-05,SA,35,80.0,2800.0
+Udang,Mee Kari,2026-06,OTHER,33,80.0,2640.0
+Udang,Mee Kari,2026-06,PJ,29,80.0,2320.0
+Udang,Mee Kari,2026-06,SA,31,80.0,2480.0
+Udang,Mee Kari,2026-06,TAM,15,80.0,1200.0
+Udang,Mee Kari,2026-07,OTHER,36,80.0,2880.0
+Udang,Mee Kari,2026-07,PJ,38,80.0,3040.0
+Udang,Mee Kari,2026-07,SA,21,80.0,1680.0
+Udang,Mee Kari,2026-07,TAM,16,80.0,1280.0
+Udang,Mee Kari Asam,2026-04,PJ,2,80.0,160.0
+Udang,Mee Kari Asam,2026-04,SA,4,80.0,320.0
+Udang,Mee Kari Asam,2026-05,PJ,11,80.0,880.0
+Udang,Mee Kari Asam,2026-05,SA,1,80.0,80.0
+Udang,Mee Kari Asam,2026-06,OTHER,4,80.0,320.0
+Udang,Mee Kari Asam,2026-06,PJ,9,80.0,720.0
+Udang,Mee Kari Asam,2026-06,SA,5,80.0,400.0
+Udang,Mee Kari Asam,2026-06,TAM,4,80.0,320.0
+Udang,Mee Kari Asam,2026-07,OTHER,11,80.0,880.0
+Udang,Mee Kari Asam,2026-07,PJ,4,80.0,320.0
+Udang,Mee Kari Asam,2026-07,SA,3,80.0,240.0
+Udang,Mee Kari Asam,2026-07,TAM,5,80.0,400.0
