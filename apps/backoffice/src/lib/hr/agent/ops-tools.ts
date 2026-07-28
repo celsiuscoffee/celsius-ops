@@ -1,42 +1,38 @@
 // HR ops tools — the OPS persona of the HR Ops Agent, exposed through the
-// existing internal WhatsApp assistant (owner/admin/manager senders).
-// Design: docs/design/hr-ops-agent.md §3 (authority matrix), §4 (capabilities).
+// existing internal WhatsApp assistant (owner/HOO/manager senders).
+// Design: docs/design/hr-ops-agent.md §3 (authority matrix), §"Write guardrails".
 //
-// Stage 1 is SHADOW: propose_hr_change validates and builds the record card,
-// logs the structured proposal to the agent_actions ledger, and pings the
-// owner — but writes NOTHING to HR tables. A human applies the change (today:
-// via Claude Code / backoffice) and the applied result is diffed against the
-// proposal to earn arming (design §7).
+// Stage 2: stage_hr_change stages a TYPED operation (write-ops allowlist) with
+// a single-use confirm code; execution happens only in the deterministic
+// confirm hook (pending.ts) when the DESIGNATED approver's phone replies
+// CONFIRM <code>. In shadow mode staging degrades to proposal-only logging.
 //
 // Authority in code, not prompt:
-//   - find_staff: managers see only their own reporting subtree
-//     (resolveVisibleUserIds — the same walk the HR employees API uses) and
-//     NEVER pay/bank/statutory fields (parity with the backoffice PII gate).
-//   - hr_data_gaps / propose_hr_change: available to all internal senders;
-//     proposals carry the requester so the applier enforces the matrix
-//     (e.g. salary changes need the owner) before applying.
+//   - find_staff: managers see only their reporting subtree
+//     (resolveVisibleUserIds) and NEVER pay/bank/statutory fields.
+//   - stage_hr_change: authorize() enforces the matrix — plain managers'
+//     changes confirm with the HOO; salary/bank changes confirm with the
+//     OWNER; subtree rule on targets; rate limits.
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { sendOpsDigest } from "@/lib/ops-pulse/sender";
-import { resolveOwner } from "@/lib/ops-pulse/router";
-import { getAgentMode, logAgentAction } from "@celsius/agents/src/substrate";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
 import type { AssistantReporter, ToolSpec } from "@/lib/ops-intake/assistant";
-import { HR_AGENT_KEY } from "./staff-assistant";
+import {
+  type ActionType,
+  type Requester,
+  isHOOUser,
+  resolveStaffTarget,
+  OUTLET_ALIASES,
+} from "./write-ops";
+import { stageAction } from "./pending";
 
-// Informal names used on hiring paperwork → real Outlet rows. Learned aliases
-// go here until the hr_agent_knowledge table ships (design §6).
-export const OUTLET_ALIASES: Record<string, string> = {
-  cyberjaya: "Celsius Coffee Tamarind", // STATE.md 2026-07-16 — no Cyberjaya outlet exists
-  ioi: "Celsius Coffee IOI Mall",
-  "ioi mall": "Celsius Coffee IOI Mall",
-  putrajaya: "Celsius Coffee Putrajaya",
-  conezion: "Celsius Coffee Putrajaya",
-  "shah alam": "Celsius Coffee Shah Alam",
-  tamarind: "Celsius Coffee Tamarind",
-  nilai: "Celsius Coffee Nilai",
-};
+export { OUTLET_ALIASES };
+
+const ACTION_TYPES: ActionType[] = [
+  "create_staff", "update_details", "convert_employment", "reactivate",
+  "resign", "assignment", "set_pin", "salary_change",
+];
 
 const like = (q: string) => `%${q.trim()}%`;
 
@@ -48,25 +44,12 @@ async function findStaff(reporter: AssistantReporter, query: string) {
 
   const rows = await prisma.$queryRaw<
     Array<{
-      id: string;
-      name: string;
-      full_name: string | null;
-      status: string;
-      outlet: string | null;
-      phone: string | null;
-      position: string | null;
-      employment_type: string | null;
-      join_date: string | null;
-      resigned_at: string | null;
-      stations: string[] | null;
-      manager: string | null;
-      has_pin: boolean;
-      ic_number: string | null;
-      epf_number: string | null;
-      bank_name: string | null;
-      has_bank: boolean;
-      hourly_rate: number | null;
-      basic_salary: number | null;
+      id: string; name: string; full_name: string | null; status: string;
+      outlet: string | null; phone: string | null; position: string | null;
+      employment_type: string | null; join_date: string | null; resigned_at: string | null;
+      stations: string[] | null; manager: string | null; has_pin: boolean;
+      ic_number: string | null; epf_number: string | null; bank_name: string | null;
+      has_bank: boolean; hourly_rate: number | null; basic_salary: number | null;
     }>
   >`
     SELECT u.id, u.name, u."fullName" AS full_name, u.status::text, o.name AS outlet, u.phone,
@@ -147,58 +130,58 @@ async function hrDataGaps(reporter: AssistantReporter) {
   };
 }
 
-interface ProposalInput {
-  change_type?: string;
-  staff_name?: string;
-  details?: string;
+interface StageInput {
+  action?: string;
+  target?: { name?: string; ic?: string; phone?: string };
+  fields?: Record<string, unknown>;
 }
 
-async function proposeHrChange(reporter: AssistantReporter, input: ProposalInput) {
-  const mode = await getAgentMode(HR_AGENT_KEY);
-  if (mode === "off") {
-    return {
-      disabled: true,
-      note: "The HR agent is not enabled yet (registry mode off) — tell the requester to send this to Ammar directly for now.",
-    };
+function buildCard(action: ActionType, targetLabel: string | null, fields: Record<string, unknown>, requester: string): string {
+  const lines = [
+    `HR change: ${action.replace(/_/g, " ")}`,
+    targetLabel ? `Staff: ${targetLabel}` : null,
+    ...Object.entries(fields)
+      .filter(([k, v]) => v !== undefined && v !== null && v !== "" && k !== "pin")
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join("+") : String(v)}`),
+    ...(fields.pin ? ["pin: (provided, will be stored hashed)"] : []),
+    `Requested by: ${requester}`,
+  ].filter(Boolean) as string[];
+  return lines.join("\n");
+}
+
+async function stageHrChange(reporter: AssistantReporter, input: StageInput) {
+  const action = (input.action ?? "") as ActionType;
+  if (!ACTION_TYPES.includes(action)) {
+    return { error: `action must be one of: ${ACTION_TYPES.join(", ")}` };
   }
-  const changeType = String(input.change_type ?? "other").slice(0, 40);
-  const staffName = String(input.staff_name ?? "").slice(0, 120);
-  const details = String(input.details ?? "").slice(0, 1500);
-  if (!details) return { error: "details required — restate the full request" };
-
-  const card = [
-    `HR change proposal (${changeType})`,
-    staffName ? `Staff: ${staffName}` : null,
-    `Requested by: ${reporter.name} (${reporter.role})`,
-    `Details: ${details}`,
-    `Status: PENDING HUMAN APPLY (agent is in shadow — nothing written yet)`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  await logAgentAction({
-    agentKey: HR_AGENT_KEY,
-    kind: "proposal",
-    summary: `${changeType}${staffName ? ` — ${staffName}` : ""} (by ${reporter.name})`,
-    meta: { changeType, staffName, details, requestedBy: reporter.name, requesterRole: reporter.role },
-  });
-
-  // Ping the owner unless the owner asked — they're the applier in shadow.
-  if (reporter.role !== "OWNER") {
-    const owner = await resolveOwner();
-    if (owner?.phone) {
-      await sendOpsDigest(owner.phone, "🧑‍🍳 HR change proposed", [
-        `${reporter.name}: ${changeType}${staffName ? ` — ${staffName}` : ""}`,
-        details.slice(0, 200),
-      ]);
-    }
-  }
-  return {
-    logged: true,
-    card,
-    tellRequester:
-      "Confirm the request is captured and HQ will apply it shortly. Do NOT claim the change is already made — it is a pending proposal.",
+  const fields = input.fields ?? {};
+  const requester: Requester = {
+    id: reporter.id,
+    name: reporter.name,
+    role: reporter.role,
+    isHOO: await isHOOUser(reporter.id),
   };
+
+  // Resolve the target person for everything except a brand-new hire.
+  let targetId: string | null = null;
+  let targetLabel: string | null = null;
+  let target = null;
+  if (action !== "create_staff") {
+    const res = await resolveStaffTarget(input.target ?? {}, {
+      includeDeactivated: action === "reactivate",
+    });
+    if (res.error || !res.target) {
+      return { error: res.error, candidates: res.candidates };
+    }
+    target = res.target;
+    targetId = res.target.id;
+    targetLabel = `${res.target.name}${res.target.fullName ? ` (${res.target.fullName})` : ""} — ${res.target.outletName ?? "no outlet"}, ${res.target.status}`;
+  }
+
+  const payload = { ...fields, ...(targetId ? { targetId } : {}) };
+  const card = buildCard(action, targetLabel, fields, `${reporter.name} (${reporter.role}${requester.isHOO ? "/HOO" : ""})`);
+  const result = await stageAction({ action, payload, card, requester, target });
+  return { card, ...result };
 }
 
 // Factory: the internal assistant concatenates these per call, so `reporter`
@@ -209,7 +192,7 @@ export function buildHrOpsTools(reporter: AssistantReporter): ToolSpec[] {
       def: {
         name: "find_staff",
         description:
-          "Look up staff/employee records by name, phone, email, or IC — employment status, outlet, position, manager, login readiness; ALWAYS use before proposing any staff change (dedup: the person may already exist or be deactivated). Informal branch names: 'Cyberjaya' means the Tamarind outlet.",
+          "Look up staff/employee records by name, phone, email, or IC — employment status, outlet, position, manager, login readiness; ALWAYS use before staging any staff change (dedup: the person may already exist or be deactivated). Informal branch names: 'Cyberjaya' means the Tamarind outlet.",
         input_schema: {
           type: "object" as const,
           properties: { query: { type: "string", description: "Name / phone / email / IC fragment" } },
@@ -229,23 +212,35 @@ export function buildHrOpsTools(reporter: AssistantReporter): ToolSpec[] {
     },
     {
       def: {
-        name: "propose_hr_change",
+        name: "stage_hr_change",
         description:
-          "File an HR change REQUEST as a structured proposal for HQ to apply: new hire, reactivate, FT↔PT conversion, outlet/position/manager change, resignation, PIN reset, bank/EPF detail updates. Use after find_staff. Nothing is written by this tool — it logs the proposal and notifies the owner. Restate ALL specifics the requester gave (names, IC, rates, dates, outlet) in details.",
+          "Stage an HR change for execution. NOTHING is applied by this tool — it returns a record card and a single-use confirm code; the change executes only when the designated approver replies 'CONFIRM <code>' on WhatsApp (plain managers' changes go to the HOO; salary or bank changes go to the owner). Use find_staff first. Actions and their fields: " +
+          "create_staff {name, fullName?, phone?, email?, outletName, position, employmentType: full_time|part_time, hourlyRate? (PT), basicSalary? (FT), performanceAllowance?, attendanceAllowance?, epf?, ic?, bankName?, bankAccountNumber?, bankAccountName?, joinDate? YYYY-MM-DD, pin?, notes?} · " +
+          "update_details {email?, phone?, epf_number?, ic_number?, bankName?, bankAccountNumber?, bankAccountName?, emergency_contact_name?, emergency_contact_phone?, personal_email?, pin?} · " +
+          "convert_employment {to: full_time|part_time, hourlyRate?|basicSalary?, effectiveDate?} · " +
+          "reactivate {effectiveDate?} · resign {resignedAt?, endDate?, reason?} · " +
+          "assignment {outletName?, position?, stations? [foh|boh|lead], managerUserId?} · " +
+          "set_pin {pin (4-6 digits)} · salary_change {hourlyRate?|basicSalary?, attendanceAllowance?, performanceAllowance?, effectiveDate?}. " +
+          "Restate EVERY detail the requester gave into fields; if pay/dates are missing or FT-vs-PT is ambiguous, ask ONE crisp question first instead of guessing.",
         input_schema: {
           type: "object" as const,
           properties: {
-            change_type: {
-              type: "string",
-              description: "hire | reactivate | convert_ft_pt | transfer | position_change | resignation | pin_reset | detail_update | other",
+            action: { type: "string", enum: ACTION_TYPES as unknown as string[] },
+            target: {
+              type: "object",
+              description: "Who the change is about (omit for create_staff). Give the most specific identifier available.",
+              properties: {
+                name: { type: "string" },
+                ic: { type: "string" },
+                phone: { type: "string" },
+              },
             },
-            staff_name: { type: "string", description: "Who the change is about (as given)" },
-            details: { type: "string", description: "Complete restatement of the request with every detail provided" },
+            fields: { type: "object", description: "Action-specific fields, see tool description" },
           },
-          required: ["change_type", "details"],
+          required: ["action", "fields"],
         },
       },
-      run: (a) => proposeHrChange(reporter, a as ProposalInput),
+      run: (a) => stageHrChange(reporter, a as StageInput),
     },
   ];
 }

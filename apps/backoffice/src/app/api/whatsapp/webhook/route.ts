@@ -30,6 +30,7 @@ import { handleInstructionAck } from "@/lib/ops-instructions";
 import { handleOutletDeliveryReply } from "@/lib/inventory/exec/outlet-delivery-check";
 import { handleInternalInbound } from "@/lib/ops-intake";
 import { handleStaffInbound } from "@/lib/hr/agent/staff-assistant";
+import { handleHrConfirmReply } from "@/lib/hr/agent/pending";
 import { handleStaffLoopReply } from "@/lib/hr/pt-loop/inbound";
 import { handleSupplierMessage } from "@/lib/inventory/agents/supplier-chat-agent";
 import { sendPendingPurchaseOrders } from "@/lib/inventory/procurement-po-send";
@@ -153,8 +154,17 @@ export async function POST(request: NextRequest) {
         // (the agent would reply to a manager; a manager's screenshot would be
         // vision-read as a supplier invoice). Non-internal senders pass straight
         // through. Internally guarded, never throws.
+        // 2a2) HR write confirmations: "CONFIRM <code>" / "REJECT <code>" on a
+        // staged HR change. Deterministic (regex + phone-identity check inside,
+        // no LLM), runs BEFORE the intake/assistant paths so an approval from
+        // the owner/HOO can never be swallowed as a question or bug report.
+        // Consumes only real codes; everything else passes through untouched.
+        let consumedByHrConfirm = false;
+        if (isNewInbound && msg.type === "text") {
+          consumedByHrConfirm = await handleHrConfirmReply(msg.from, body);
+        }
         let fromInternal = false;
-        if (isNewInbound) {
+        if (isNewInbound && !consumedByHrConfirm) {
           const intake = await handleInternalInbound({
             fromNumber: msg.from,
             text: body,
@@ -174,7 +184,7 @@ export async function POST(request: NextRequest) {
         // Runs BEFORE the HR staff assistant (2d): loop replies are protocol
         // messages the general assistant must not swallow.
         let consumedByLoop = false;
-        if (isNewInbound && !fromInternal && msg.type === "text") {
+        if (isNewInbound && !consumedByHrConfirm && !fromInternal && msg.type === "text") {
           try {
             consumedByLoop = await handleStaffLoopReply(msg.from, body);
           } catch (err) {
@@ -189,7 +199,7 @@ export async function POST(request: NextRequest) {
         // agent's registry mode is shadow/armed. Internally guarded, never
         // throws.
         let fromStaff = false;
-        if (isNewInbound && !fromInternal && !consumedByAck && !consumedByLoop) {
+        if (isNewInbound && !consumedByHrConfirm && !fromInternal && !consumedByAck && !consumedByLoop) {
           const staffRes = await handleStaffInbound({
             fromNumber: msg.from,
             text: body,
@@ -210,7 +220,7 @@ export async function POST(request: NextRequest) {
         // re-deliveries could both pass the agent's own check and double-apply a PO edit +
         // double-reply. The @unique wamid makes the first inbound store the atomic claim.
         let agentCapturedInvoice = false;
-        if (isNewInbound && !fromInternal && !consumedByLoop && !fromStaff && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
+        if (isNewInbound && !consumedByHrConfirm && !fromInternal && !consumedByLoop && !fromStaff && (msg.type === "text" || msg.type === "document" || msg.type === "image")) {
           const agentRes = await handleSupplierMessage({
             fromNumber: msg.from,
             toNumber: businessNumber,
