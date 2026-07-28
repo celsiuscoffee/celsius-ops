@@ -72,6 +72,10 @@ roster baseline); rent/utilities/loan are on plan; ads already fixed.
 
 ## 2. Bottom-up: purchases vs theoretical consumption (July)
 
+> Micro-level detail (per ingredient: items sold → expected usage →
+> purchased, per-outlet ratios, intervention playbook):
+> `food-cost-variance-jul-2026-micro.md`.
+
 Method: drinks/food sold (pos_order_items + pickup/QR order_items, 94–96%
 matched to `Menu` via storehubId) × `MenuIngredient` doses, vs purchased base
 units (OrderItem qty × ProductPackage.conversionFactor).
