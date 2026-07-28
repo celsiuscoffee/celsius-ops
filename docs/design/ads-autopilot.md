@@ -244,6 +244,45 @@ payday-robust, so the descent can resume when the observation window expires
 three below RM55). *(Done 2026-07-27: guard + scoreboard on organic till; anchor
 clamped past the StoreHub cutover; payday-aligned momIndex.)*
 
+## Channel performance (payday-aligned Jun 20–26 → Jul 20–26)
+
+Same days-of-month, so demand-cycle and weekday effects cancel. Source:
+`ads_metric_daily`.
+
+| | Jun 20–26 | Jul 20–26 | Δ |
+| --- | --- | --- | --- |
+| Spend | RM2,050 | RM1,198 | **−41.6%** |
+| Impressions | 165,938 | 127,884 | −22.9% |
+| Clicks | 3,744 | 2,972 | **−20.6%** |
+| Avg CPC | RM0.55 | **RM0.40** | **−26.4%** |
+| CTR | 2.26% | 2.32% | +0.06pp |
+| Clicks per RM | 1.83 | **2.48** | **+36%** |
+
+**The headline: spend fell 42% but clicks fell only 21%** — traffic held up far
+better than budget because the money that left was buying junk. CPC dropped a
+quarter and CTR rose, i.e. the *remaining* spend is better targeted, not merely
+smaller. That is the exclusion work showing up in the auction, independent of
+the till.
+
+Per campaign (clicks per RM, Jun → Jul):
+
+| Campaign | Spend Δ | Clicks Δ | CPC | Clicks/RM |
+| --- | --- | --- | --- | --- |
+| Putrajaya | −43.2% | −14.8% | 0.58 → **0.39** | 1.71 → **2.57** (+50%) |
+| Tamarind | −43.4% | −17.3% | 0.93 → **0.64** | 1.07 → **1.56** (+46%) |
+| Shah Alam | −37.8% | −25.8% | 0.36 → **0.30** | 2.77 → **3.31** (+19%) |
+
+Tamarind — the junk-heaviest campaign (19.7% of spend on food terms) — had by
+far the worst CPC at RM0.93 and improved most in CTR (1.85% → 2.06%), exactly
+the signature of removing waste rather than reach. Shah Alam gave up the most
+clicks per ringgit cut and is also the only outlet whose organic till is down in
+every aligned window; it is the one to watch.
+
+**Google's "conversions" fell 274 → 132 (−52%), cost/conv RM7.48 → RM9.07.
+Ignore both.** These are Directions-clicks and calls (per-action sync stale
+since 2026-04-19), not sales — they were never the objective and a 52% drop in
+map-pin taps says nothing about cash. The till is the source of truth.
+
 ## Lessons
 
 - Trailing forecasts normalize slow damage (boiling frog) — pair them with a
