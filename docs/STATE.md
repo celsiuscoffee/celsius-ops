@@ -599,9 +599,16 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   optional `scheduledStart`; pay-hours (and hence the OT threshold) count
   from max(clock_in, rostered start), total_hours still records the real
   span. All 4 callers pass the roster stamp (staff clock-out, AI processor,
-  auto-close cron, manager set_times). Pinned in hours.test.ts. Pending
-  owner decision: 9 of 24 existing FT July OT rows had >10-min-early
-  clock-ins computed under the old rule — recompute offered, not applied.
+  auto-close cron, manager set_times). Pinned in hours.test.ts. MERGED as
+  #1083 (squash edbe065). Owner then approved recompute of the 9 early-
+  clock-in FT July OT rows: applied 2026-07-28 (prod SQL) — total FT July
+  OT 18h→5h (Sherry Jul5 5→2, Atthirah Jul8 3→2, Shairuleen Jul25 2→1,
+  six rows→0); matching pending OT requests synced (6 cancelled, 3
+  corrected), leaving 18 pending FT requests in the queue. ⚠ Two rows
+  look like BAD ROSTER STAMPS, not early birds — Shairuleen Jul 16 (worked
+  07:09–16:51 MYT but rostered 15:30 → now pays only 1.36h) and Hidayat
+  Jul 18 (worked 08:05–20:06, rostered 12:00 → pays 7.11h) — manager
+  should verify the real shift and fix via set_times/roster if wrong.
 
 - 2026-07-28 — **HR Ops Agent stage 2 BUILT: guarded writes** (this branch;
   design §6b). Typed op allowlist (create/update/convert/reactivate/resign/
