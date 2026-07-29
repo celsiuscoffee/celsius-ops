@@ -1761,6 +1761,7 @@ model AdsCampaign {
   searchTerms AdsSearchTermDaily[]
   exclusions  AdsTermExclusion[]
   budgetChanges AdsBudgetChange[]
+  creative      AdsCampaignCreative[]
 
   @@unique([accountId, campaignId])
   @@index([accountId])
@@ -1857,6 +1858,32 @@ model AdsTermExclusion {
 
   @@unique([campaignId, searchTerm])
   @@map("ads_term_exclusion")
+}
+
+// Snapshot of everything about a campaign we could previously not see: the ad
+// copy actually being served, its images, the landing page it points at, the
+// geo radius and the ad schedule. Until this existed the optimiser could only
+// move budget and negatives — every creative question ("is the ad text any
+// good?", "where does the click land?") was unanswerable, and the Jul 21
+// negative-keyword regression showed what mutating an unobserved surface
+// costs. Read-only: written by syncAdCreative, never mutated by the autopilot.
+//
+// Deliberately schemaless in `payload` — Google's Smart-campaign shapes differ
+// per kind (ad / setting / geo / schedule / asset) and change without notice;
+// a column per field would need a migration every time Google adds one.
+model AdsCampaignCreative {
+  id         String   @id
+  campaignId String   @map("campaign_id")
+  kind       String // ad | setting | geo | schedule | asset
+  ref        String // Ads resource name (stable identity within a kind)
+  payload    Json
+  syncedAt   DateTime @default(now()) @map("synced_at")
+
+  campaign AdsCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, kind, ref])
+  @@index([campaignId, kind])
+  @@map("ads_campaign_creative")
 }
 
 // Approval ledger for cutting a Smart campaign's daily budget (reclaim spend to
