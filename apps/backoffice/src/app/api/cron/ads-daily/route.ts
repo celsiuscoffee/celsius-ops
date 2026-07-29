@@ -4,8 +4,10 @@ import { syncAccounts } from "@/lib/ads/sync-accounts";
 import { syncCampaigns } from "@/lib/ads/sync-campaigns";
 import { syncMetrics } from "@/lib/ads/sync-metrics";
 import { syncSearchTerms } from "@/lib/ads/sync-search-terms";
+import { syncAllAdCreative } from "@/lib/ads/sync-ad-creative";
 import { runSync } from "@/lib/ads/run-sync";
 import { runAdsAutopilot } from "@/lib/ads/autopilot";
+import { ENABLED_STATUSES } from "@/lib/ads/optimizer";
 import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +60,19 @@ export async function GET(req: NextRequest) {
       return { rowsInserted: rows };
     });
 
+    // What the ads actually SAY and where they LAND — copy, images, final URL,
+    // geo radius, ad schedule. Read-only; the optimiser could previously only
+    // see spend and matched terms, so every creative question was unanswerable.
+    const creativeCampaigns = await prisma.adsCampaign.findMany({
+      where: { accountId: acc.id, status: { in: ENABLED_STATUSES } },
+      select: { id: true },
+    });
+    const creative = await runSync("ad-creative", acc.id, async () => {
+      const byCampaign = await syncAllAdCreative(creativeCampaigns.map((c) => c.id));
+      const rows = Object.values(byCampaign).reduce((s, r) => s + r.rows, 0);
+      return { rowsInserted: rows, metadata: byCampaign };
+    });
+
     await prisma.adsAccount.update({
       where: { id: acc.id },
       data: { lastSyncedAt: new Date() },
@@ -68,6 +83,7 @@ export async function GET(req: NextRequest) {
       campaigns: camp.error ?? camp.result,
       metrics: met.error ?? met.result,
       searchTerms: terms.error ?? terms.result,
+      adCreative: creative.error ?? creative.result,
     });
   }
 
