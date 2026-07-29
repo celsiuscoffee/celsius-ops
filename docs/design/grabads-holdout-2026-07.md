@@ -238,6 +238,25 @@ Putrajaya's −RM81/day ≈ 0.94× incremental (below the 2.22× break-even) →
 confirming the dashboard-incremental read. **Holdout CONCLUDED: keep all three paused, cash
 gain ~RM2,700/mo (~RM32k/yr).** SA operational Grab dip self-resolved.
 
+### 2026-07-29 — FINAL 2-week read (12–14 clean days). All three positive at face value.
+
+| Outlet | Clean days | Grab/day | Baseline | Drop/day | **Net cash/mo (face value)** |
+|---|---|---|---|---|---|
+| Tamarind | 14 | RM271 | RM281 | −RM10 (flat) | **+RM1,109** |
+| Putrajaya | 12 | RM285 | RM340 | −RM55 | **+RM1,842** |
+| Shah Alam | 14 | RM391 | RM448 | −RM57 | **+RM126** |
+
+**No correction needed anymore.** Shah Alam fully recovered (Grab RM391/day, drop just −13%),
+and its −RM57/day now implies **1.9× — matching SA's verified 1.87× ad ROAS** — so the
+face-value figure is the real one. Putrajaya's drop narrowed to −RM55/day as Grab drifted
+back toward baseline; still solidly positive.
+
+**FINAL RESULT: keep all three paused → ~+RM3,100/month (~RM37k/yr)**
+(Putrajaya +1,842, Tamarind +1,109, Shah Alam +126). Up from the interim ~RM2,700 as SA
+recovered and Putrajaya's Grab held. Verdict confirmed end-to-end: first-principles margin
+math → verified settlement take → marginal cash-ROAS → 2-week live holdout, all agree the
+sub-2× ads were cash-negative. **Holdout closed.**
+
 ## How to read it (per outlet)
 1. `decrement/day = baseline(weekday) − actual Grab gross`.
 2. `incremental ROAS = (monthly decrement) ÷ (monthly GrabAds spend)`.
