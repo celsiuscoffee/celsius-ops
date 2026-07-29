@@ -134,7 +134,7 @@ export type AttendanceLog = {
   clock_out_lat: number | null;
   clock_out_lng: number | null;
   clock_in_method: "app" | "manual" | "pos" | "app_nogps" | "app_offsite" | "system";
-  clock_out_method: "app" | "manual" | "pos" | "system" | null;
+  clock_out_method: "app" | "manual" | "pos" | "system" | "app_nogps" | "app_offsite" | null;
   scheduled_start: string | null;
   scheduled_end: string | null;
   scheduled_date: string | null;
