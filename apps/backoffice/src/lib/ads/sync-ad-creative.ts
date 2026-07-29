@@ -25,6 +25,40 @@ import { randomUUID } from "crypto";
 
 export type CreativeKind = "ad" | "setting" | "geo" | "schedule" | "asset" | "hour_profile";
 
+/**
+ * Safely describe a thrown value.
+ *
+ * google-ads-api rejects with `{ errors: [{ message }] }` and NO top-level
+ * `.message` — exclude-term.ts has handled that shape since it was written.
+ * The first cut of this file did `(err as Error).message.slice(0, 300)`, so
+ * `.message` was undefined, `.slice` threw a TypeError *inside the catch
+ * block*, that TypeError escaped the per-kind handler, and one unavailable
+ * resource killed the whole campaign: the 2026-07-29 run logged
+ * "Cannot read properties of undefined (reading 'slice')" for all three
+ * campaigns and wrote zero rows.
+ *
+ * The error path is the one path that must never throw — it only runs when
+ * something has already gone wrong, so a failure here converts a partial
+ * result into total silence.
+ */
+export function errMessage(err: unknown, max = 300): string {
+  const e = err as { errors?: Array<{ message?: string }>; message?: unknown } | null | undefined;
+  const fromArray = Array.isArray(e?.errors)
+    ? e.errors.map((x) => x?.message).filter(Boolean).join(" | ")
+    : "";
+  const raw =
+    fromArray || (typeof e?.message === "string" ? e.message : "") || safeString(err) || "unknown error";
+  return raw.slice(0, max);
+}
+
+function safeString(v: unknown): string {
+  try {
+    return typeof v === "string" ? v : JSON.stringify(v) ?? String(v);
+  } catch {
+    return "unserialisable error";
+  }
+}
+
 // Trading hours measured from the TILL, not from Outlet.openTime/closeTime.
 // The config says 08:00-22:00; the tills say first sale ~07:46 and last ~22:47,
 // with 184 real transactions inside the 22:00 hour (2.3% of the day). Acting on
@@ -210,7 +244,7 @@ export async function syncCampaignCreative(
     } catch (err) {
       // A campaign without a given resource is normal; record it and move on
       // rather than aborting the whole sync for one unavailable surface.
-      errors[q.kind] = (err as Error).message.slice(0, 300);
+      errors[q.kind] = errMessage(err);
       byKind[q.kind] = 0;
     }
   }
@@ -250,7 +284,7 @@ export async function syncCampaignCreative(
     });
     byKind.hour_profile = 1;
   } catch (err) {
-    errors.hour_profile = (err as Error).message.slice(0, 300);
+    errors.hour_profile = errMessage(err);
     byKind.hour_profile = 0;
   }
 
@@ -294,7 +328,7 @@ export async function syncAllAdCreative(
     try {
       out[pk] = await syncCampaignCreative(pk);
     } catch (err) {
-      out[pk] = { rows: 0, byKind: {}, errors: { fatal: (err as Error).message.slice(0, 300) } };
+      out[pk] = { rows: 0, byKind: {}, errors: { fatal: errMessage(err) } };
     }
   }
   return out;
