@@ -21,6 +21,20 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   ~07:45–23:00 is an open owner decision (it may be intentional "scheduled"
   vs "actual" hours, and it feeds staffing).
 
+- 2026-07-29 — **Ad-serving window DECIDED by owner: 07:30–22:00 MYT**
+  (`AD_WINDOW` in `ads/sync-ad-creative.ts`, tested). Owner proposed
+  07:30–21:30 ("after 10 people wont come"); the 15-min till profile says the
+  arrival instinct is right but lands ~30 min later — 21:30 (136 txns/RM3,774),
+  21:45 (129/RM3,918), 22:00 (108/RM2,947), 22:15 (62/RM1,582), then the real
+  cliff 22:30 (13) → 22:45 (1). 21:30–22:29 is ~RM12.2k of genuine trade, so a
+  21:30 cutoff would go dark in four of the busiest remaining quarter-hours.
+  Ending 22:00 leaves a ~30-min conversion runway into the cliff. NOTE this is
+  a different question from `DEAD_HOURS` (23:00–06:59 = till provably silent);
+  the ad window needs runway for the customer to decide and travel.
+  **NOT yet applied to Google** — pending the `hour_profile` read that prices
+  how much we actually spend per hour; if overnight spend is trivial the lever
+  gets dropped rather than shipped.
+
 - 2026-07-29 — **Ads creative is now visible (PR #1088, merged 132034f8;
   migration `20260729_ads_campaign_creative` APPLIED to prod).** The ads sync
   covered spend and matched terms but nothing about the ad itself — no copy, no

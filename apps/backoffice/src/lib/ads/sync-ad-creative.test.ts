@@ -1,5 +1,25 @@
 import { describe, it, expect } from "vitest";
-import { hourProfile, DEAD_HOURS } from "./sync-ad-creative";
+import { hourProfile, DEAD_HOURS, AD_WINDOW } from "./sync-ad-creative";
+
+// Owner-approved serving window, 2026-07-29. Distinct from DEAD_HOURS: that is
+// "the till is provably silent"; this is "still worth buying a click", which
+// needs a conversion runway for the customer to decide and travel.
+describe("AD_WINDOW", () => {
+  it("opens 07:30 — before the 07:46 first sale, so ads reach people on the way in", () => {
+    expect(AD_WINDOW.startHour).toBe(7);
+    expect(AD_WINDOW.startMinute).toBe(30);
+  });
+
+  it("closes 22:00, NOT 21:30 — 21:30-22:29 still carries ~RM12.2k of trade", () => {
+    expect(AD_WINDOW.endHour).toBe(22);
+    expect(AD_WINDOW.endMinute).toBe(0);
+  });
+
+  it("stops before the real 22:30 cliff (62 -> 13 -> 1 txns per 15 min)", () => {
+    // A 30-minute runway: an ad at 21:59 can still yield a 22:15 arrival.
+    expect(AD_WINDOW.endHour * 60 + AD_WINDOW.endMinute).toBeLessThan(22 * 60 + 30);
+  });
+});
 
 // The dead window is measured from the till, not from Outlet.openTime/closeTime.
 // Config says 08:00-22:00; the tills say first sale ~07:46, last ~22:47, and the

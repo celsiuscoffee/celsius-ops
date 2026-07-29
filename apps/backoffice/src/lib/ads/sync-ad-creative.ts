@@ -33,6 +33,28 @@ export type CreativeKind = "ad" | "setting" | "geo" | "schedule" | "asset" | "ho
 // only that, is the provably dead window.
 export const DEAD_HOURS = [23, 0, 1, 2, 3, 4, 5, 6];
 
+/**
+ * The ad-serving window the owner approved on 2026-07-29: 07:30–22:00 MYT.
+ *
+ * DEAD_HOURS answers "when is the till provably silent"; this answers the
+ * different question "when is it still worth BUYING a click", which needs a
+ * conversion runway — someone who sees an ad has to decide and travel.
+ *
+ * Owner proposed 07:30–21:30 ("after 10 people wont come"). The 15-minute
+ * profile says the arrival instinct is right but lands ~30 min later:
+ *
+ *   21:30  136 txns / RM3,774     21:45  129 / RM3,918
+ *   22:00  108 txns / RM2,947     22:15   62 / RM1,582
+ *   22:30   13 txns / RM299       22:45    1 / RM14
+ *
+ * 21:30–22:29 is still ~RM12.2k of real trade, so a 21:30 cutoff would go dark
+ * during four of the busiest remaining quarter-hours. The genuine cliff is
+ * 22:30 (62 → 13 → 1). Ending at 22:00 leaves a ~30-minute runway into that
+ * cliff. Start 07:30 is the owner's, unchanged — first sale is 07:46, so ads
+ * should be live for people searching on the way in.
+ */
+export const AD_WINDOW = { startHour: 7, startMinute: 30, endHour: 22, endMinute: 0 } as const;
+
 type Row = { kind: CreativeKind; ref: string; payload: Record<string, unknown> };
 
 /** GAQL per kind. Each is optional — a campaign may legitimately have none. */
