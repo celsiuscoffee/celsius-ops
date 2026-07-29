@@ -68,6 +68,50 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   RM0.494/click vs café intent RM0.374 — a CPC-minimising rule would cut the
   valuable expensive clicks. Optimise for cash; use CPC as early warning only.
 
+- 2026-07-29 — **IOI Mall clock-out trap: fixed and DEPLOYED, but NOT yet
+  exercised in production — and it probably never will be by waiting.**
+  Incident: staff rostered at Celsius Coffee IOI Mall could clock in but not
+  out; the app said "571m from Celsius Coffee Putrajaya". Cause: IOI Mall was
+  the only outlet with no `hr_geofence_zones` row, `pickOutletByLocation`
+  only ranks candidates that HAVE a zone, so IOI staff were snapped to
+  Conezion and tagged `app_offsite` at clock-in; the clock-out hard gate then
+  measured them against an outlet they were never at. Fix (#1087, `773afb0`,
+  `clock-out-gate.ts`): hard-gate ONLY a clock-in verified inside the zone
+  (`clock_in_method === "app"`); an unverified clock-in falls back to
+  warn + allow + audit, tagging the clock-out `app_offsite` / `app_nogps`.
+  **Timeline, all 2026-07-29 UTC:** 09:04:43 Farhan clocks in (app_offsite,
+  571m, stamped Putrajaya — old code, no IOI zone yet) → 09:47:46 staff prod
+  deploy READY on `773afb0` → 09:47:51 IOI Mall zone created
+  (2.96965143 / 101.71552897, **radius 250m**) → 12:56:58 later prod deploy
+  (`132034f`, still carries the fix) → 14:06:39 Farhan clocks out. **The fix
+  was live 4h19m before that clock-out.**
+  **Verdict: inconclusive, NOT a failure.** He clocked out **13m from
+  Conezion** → in-zone → `clock_out_method 'app'`, which the OLD code would
+  have allowed identically. Same shape as Fatin (12m inside Tamarind, `app`).
+  **Why organic verification won't come:** every one of Farhan's last 7 shifts
+  (Jul 20,22,23,25,26,27,28,29) ends with a clock-out **6–65m from Conezion,
+  method `app`**, while clock-in is `app_offsite`. He walks to Conezion to end
+  every shift, and has done since before the fix existed. Waiting for him to
+  tap out at IOI Mall is not a test that will fire on its own — it needs a
+  **deliberate** one (ask him, or Chef Bo, to tap clock-out AT the IOI kiosk
+  before walking over; expect `clock_out_method 'app_offsite'` + the
+  "flagged for review" warning).
+  **New IOI zone is still untested** — no clock-in has been stamped IOI Mall
+  since it went live; nobody near IOI clocked in after 09:47:51Z.
+  **Zone coverage is marginal at the boundary:** today's clock-in point sits
+  **279m** from the IOI centre, outside the 250m radius, so it would still be
+  `app_offsite` (though now stamped **IOI Mall**, since nearest-zone wins:
+  279m < 571m — that alone fixes the wrong-outlet attribution). His Jul
+  20/22/23 clock-ins were 153m / 32m / 20m from the same centre, i.e. INSIDE —
+  so the centre is right and 279m is an edge point (mall entrance/carpark or
+  GPS drift), not a mis-placed zone. Bumping the radius is a judgement call,
+  not an obvious fix; it is prod data and needs owner sign-off.
+  **Side finding, unrelated to the trap:** Farhan's clock-ins on Jul 26/27/28
+  were **6.4km / 5.1km / 5.1km from ANY outlet** — accepted by the soft gate
+  as `app_offsite` with `ai_flags` EMPTY on every row. Clocking in from ~5km
+  away at shift start is an attendance-integrity issue nothing currently
+  surfaces. Not addressed by #1087.
+
 - 2026-07-27 — **Ads cut VERDICT: safe. Organic till FLAT on a payday-aligned
   read; guard rebuilt.** Owner flagged the methodology: Malaysian salaries land
   ~the 25th, so adjacent weeks sit at different points in a monthly demand
@@ -684,6 +728,26 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   26 Jul and there are 0 `tg:` transcript rows, so either the payments were
   never made or the POPs were lost to the known Telegram-persistence gap. That
   gap (and MULTI_POP under-extraction) is still unfixed.
+- 2026-07-29 — **Two threads open, both HR.**
+  (a) **Clock-out geofence fix is deployed but unverified** — see the Verified
+  facts entry above. Needs a *deliberate* test at the IOI Mall kiosk; passively
+  watching Farhan will not produce one (he ends every shift at Conezion).
+  Also open: whether to widen the new 250m IOI zone (a real clock-in landed at
+  279m), and the unflagged ~5km clock-ins.
+  (b) **Availability lock requested by Farah (manager, WhatsApp)** — he wants
+  staff blocked from changing availability Fri→Mon so next week's roster inputs
+  can't move under him after he builds it. Nothing like it exists in the repo
+  (no lock/freeze concept anywhere in HR). Scoping established: the weekly
+  pattern is RECURRING so it blocks outright; one-off blockouts must be blocked
+  only for dates inside the protected week; `pt-loop/inbound.ts:379` (WhatsApp)
+  is a third write path that rewrites the pattern wholesale and would otherwise
+  bypass the lock. `apps/staff` and `apps/staff-native` share one endpoint, so
+  one server-side check covers both. Weeks are Monday-anchored
+  (`hr_schedules.week_start`), so the protected week derives from the calendar —
+  no week picker needed. HR tables are SQL-managed (no `model hr_*` in
+  schema.prisma), so this ships as standalone SQL, no migration-guard exposure.
+  **Blocked on two owner decisions:** manual switch vs automatic Fri→Mon, and
+  own-outlet-subtree vs fleet-wide.
 - 2026-07-29 — **Mystery reward could silently miss its moment on QR-table
   orders (fixed).** Owner asked whether QR-table still has mystery rewards:
   YES — not gated on order type, 56/59 paid QR orders from signed-in members
