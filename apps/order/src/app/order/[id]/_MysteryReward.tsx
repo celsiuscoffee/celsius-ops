@@ -30,6 +30,12 @@ type Revealed = {
 
 type Persisted = { state?: { sessionToken?: string | null } };
 
+// Retry cadence for finding the drop after payment (see the effect below).
+// ~40s of coverage sits well past the observed hook latency without leaving a
+// request loop running on a page customers keep open while they wait.
+const LOOKUP_INTERVAL_MS = 2_500;
+const MAX_LOOKUPS = 16;
+
 function token(): string | null {
   try {
     const raw = window.localStorage.getItem("celsius-pickup");
@@ -52,23 +58,48 @@ export function MysteryReward({
   const [revealing, setRevealing] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
+  // Look for this order's drop, retrying until it lands.
+  //
+  // The drop is minted by the loyalty hooks that run AFTER the order's paid
+  // transition commits (markRmOrderPaid → applyOrderV2Hooks), while this card
+  // mounts the instant the tracking page's status poll first sees "paid" — so
+  // a single lookup races the insert. When it lost that race the card stayed
+  // empty for the whole page view and the customer only ever found their
+  // reward by reopening the order, which is precisely when the moment is gone.
+  // Retrying closes the window; the reward itself was never at risk.
   useEffect(() => {
     const t = token();
     if (!t) return;
     let cancelled = false;
-    fetch(`/api/loyalty/me/mystery/${orderId}`, {
-      headers: { Authorization: `Bearer ${t}` },
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
+    let tries = 0;
+    let timer: number | undefined;
+
+    const look = async () => {
+      tries += 1;
+      try {
+        const res = await fetch(`/api/loyalty/me/mystery/${orderId}`, {
+          headers: { Authorization: `Bearer ${t}` },
+        });
+        const d = res.ok ? ((await res.json()) as Pending | null) : null;
         if (cancelled) return;
-        if (d && d.drop_id && !d.revealed) setPending(d as Pending);
-      })
-      .catch(() => {
-        /* ignore */
-      });
+        if (d?.drop_id) {
+          // Found it. An unrevealed drop opens the card; an already-revealed
+          // one just ends the search (never re-reveal).
+          if (!d.revealed) setPending(d);
+          return;
+        }
+      } catch {
+        /* transient — the retry below covers it */
+      }
+      if (!cancelled && tries < MAX_LOOKUPS) {
+        timer = window.setTimeout(look, LOOKUP_INTERVAL_MS);
+      }
+    };
+    void look();
+
     return () => {
       cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
     };
   }, [orderId]);
 

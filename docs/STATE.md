@@ -574,6 +574,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-29 — **Mystery reward could silently miss its moment on QR-table
+  orders (fixed).** Owner asked whether QR-table still has mystery rewards:
+  YES — not gated on order type, 56/59 paid QR orders from signed-in members
+  got a drop in 7 days (95%), pool active (56% no-bonus / 27% +100 pts / ~17%
+  voucher). But `_MysteryReward.tsx` did a ONE-SHOT lookup on mount with no
+  retry, while `markRmOrderPaid` commits the paid status BEFORE running
+  `applyOrderV2Hooks` (which mints the drop) — and the card mounts the instant
+  the tracking page's 5s status poll first sees "paid". So the lookup raced the
+  insert; when it lost, the card stayed empty for that whole page view and the
+  customer only found the reward by reopening the order. Reward was never lost,
+  only the moment. **Fix: bounded retry** (2.5s × 16 ≈ 40s, stops as soon as a
+  drop is found or is already revealed) — client-only. Deliberately did NOT
+  reorder the payment path: the status-first update with
+  `.in("status",["pending","failed"])` is the idempotency guard that makes the
+  hooks run exactly once. NOTE: guests get no drop at all (minting is inside
+  `if (order.loyalty_id)`) — by design, but walk-ups never see it. QR-table
+  reveal rate was 48%.
 - 2026-07-28 (later) — **OT policy: FT-only + backlog cleared.** Owner: "remove
   backlog OT from before jul" + "OT is only for FT". Root cause of the backlog:
   the OT sync cron (`api/hr/overtime-requests/sync`) auto-created a pending
