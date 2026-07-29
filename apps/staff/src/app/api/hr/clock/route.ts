@@ -6,6 +6,7 @@ import { getUser } from "@/lib/auth";
 // before RLS even runs.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { haversineDistance, GEOFENCE_RADIUS_METERS } from "@/lib/hr/constants";
+import { evaluateClockOut } from "@/lib/hr/clock-out-gate";
 import { deriveHours, mytDateString, mytDayOfWeek, mytInstant } from "@/lib/hr/hours";
 import type { AttendanceLog, GeofenceZone } from "@/lib/hr/types";
 
@@ -290,47 +291,33 @@ export async function POST(req: NextRequest) {
     }
 
     // Geofence check against the OUTLET THEY CLOCKED INTO (not their session outletId — rotating staff may differ)
-    let clockOutWithinGeofence = false;
-    let clockOutDistance: number | null = null;
-    let clockOutZoneName: string | null = null;
-    let clockOutZoneRadius = GEOFENCE_RADIUS_METERS;
-
     const { data: clockInZone } = await supabase
       .from("hr_geofence_zones")
       .select("*")
       .eq("outlet_id", activeLog.outlet_id)
       .eq("is_active", true)
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (clockInZone) {
-      clockOutZoneName = clockInZone.name;
-      clockOutZoneRadius = clockInZone.radius_meters || GEOFENCE_RADIUS_METERS;
-      if (latitude != null && longitude != null) {
-        clockOutDistance = Math.round(haversineDistance(
-          latitude, longitude,
-          Number(clockInZone.latitude), Number(clockInZone.longitude),
-        ));
-        clockOutWithinGeofence = clockOutDistance <= clockOutZoneRadius;
-      }
-    }
+    // HARD GATE — but only against a clock-in we actually verified. An
+    // app_offsite / app_nogps log carries a guessed outlet, and gating on a
+    // guess locks the staffer out of ending their own shift. See clock-out-gate.ts.
+    const gate = evaluateClockOut({
+      zone: clockInZone,
+      clockInMethod: activeLog.clock_in_method,
+      latitude,
+      longitude,
+    });
+    const clockOutWithinGeofence = gate.withinGeofence;
+    const clockOutDistance = gate.distanceMeters;
 
-    // HARD GATE: must clock out at the same outlet they clocked in at
-    if (clockInZone) {
-      if (latitude == null || longitude == null) {
-        return NextResponse.json({
-          error: "GPS location required to clock out. Please enable location and try again.",
-          needsGps: true,
-        }, { status: 400 });
-      }
-      if (!clockOutWithinGeofence) {
-        return NextResponse.json({
-          error: `You must be at ${clockOutZoneName} to clock out. You're ${clockOutDistance}m away (zone: ${clockOutZoneRadius}m). Return to the outlet or ask your manager to clock you out manually.`,
-          withinGeofence: false,
-          distanceMeters: clockOutDistance,
-          zoneName: clockOutZoneName,
-        }, { status: 403 });
-      }
+    if (!gate.allowed) {
+      return NextResponse.json({
+        error: gate.error,
+        ...(gate.reason === "no_gps"
+          ? { needsGps: true }
+          : { withinGeofence: false, distanceMeters: gate.distanceMeters, zoneName: gate.zoneName }),
+      }, { status: gate.reason === "no_gps" ? 400 : 403 });
     }
 
     const clockOut = new Date();
@@ -365,7 +352,7 @@ export async function POST(req: NextRequest) {
         clock_out: clockOut.toISOString(),
         clock_out_lat: latitude ?? null,
         clock_out_lng: longitude ?? null,
-        clock_out_method: "app",
+        clock_out_method: gate.method,
         clock_out_photo_url: photoUrl,
         total_hours: totalHours,
         regular_hours: derived.regularHours,
@@ -385,6 +372,7 @@ export async function POST(req: NextRequest) {
       log: data,
       withinGeofence: clockOutWithinGeofence,
       distanceMeters: clockOutDistance,
+      warning: gate.warning,
       totalHours: Math.round(totalHours * 100) / 100,
     });
   }
