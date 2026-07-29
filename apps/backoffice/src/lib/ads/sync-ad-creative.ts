@@ -23,7 +23,37 @@ import { prisma } from "@/lib/prisma";
 import { getCustomer } from "./client";
 import { randomUUID } from "crypto";
 
-export type CreativeKind = "ad" | "setting" | "geo" | "schedule" | "asset";
+export type CreativeKind = "ad" | "setting" | "geo" | "schedule" | "asset" | "hour_profile";
+
+// Trading hours measured from the TILL, not from Outlet.openTime/closeTime.
+// The config says 08:00-22:00; the tills say first sale ~07:46 and last ~22:47,
+// with 184 real transactions inside the 22:00 hour (2.3% of the day). Acting on
+// the config would have switched ads off during a genuinely trading hour.
+// Hours 23:00-06:59 carry ZERO transactions across every outlet — that, and
+// only that, is the provably dead window.
+export const DEAD_HOURS = [23, 0, 1, 2, 3, 4, 5, 6];
+
+/**
+ * The ad-serving window the owner approved on 2026-07-29: 07:30–22:00 MYT.
+ *
+ * DEAD_HOURS answers "when is the till provably silent"; this answers the
+ * different question "when is it still worth BUYING a click", which needs a
+ * conversion runway — someone who sees an ad has to decide and travel.
+ *
+ * Owner proposed 07:30–21:30 ("after 10 people wont come"). The 15-minute
+ * profile says the arrival instinct is right but lands ~30 min later:
+ *
+ *   21:30  136 txns / RM3,774     21:45  129 / RM3,918
+ *   22:00  108 txns / RM2,947     22:15   62 / RM1,582
+ *   22:30   13 txns / RM299       22:45    1 / RM14
+ *
+ * 21:30–22:29 is still ~RM12.2k of real trade, so a 21:30 cutoff would go dark
+ * during four of the busiest remaining quarter-hours. The genuine cliff is
+ * 22:30 (62 → 13 → 1). Ending at 22:00 leaves a ~30-minute runway into that
+ * cliff. Start 07:30 is the owner's, unchanged — first sale is 07:46, so ads
+ * should be live for people searching on the way in.
+ */
+export const AD_WINDOW = { startHour: 7, startMinute: 30, endHour: 22, endMinute: 0 } as const;
 
 type Row = { kind: CreativeKind; ref: string; payload: Record<string, unknown> };
 
@@ -105,6 +135,49 @@ const QUERIES: Array<{ kind: CreativeKind; gaql: (campaignId: string) => string 
 ];
 
 /**
+ * Pure: fold hour-segmented rows into a 24-slot spend profile and price the
+ * dead window. This exists because the schedule question was being answered by
+ * assertion — "we must be wasting money at 3am" — with no way to check. Nobody
+ * searches for coffee at 3am, so the honest answer may well be "almost
+ * nothing", and that is worth knowing BEFORE touching the ad schedule.
+ */
+export function hourProfile(
+  rows: Array<{ hour: number; costMyr: number; clicks: number; impressions: number }>,
+  days: number,
+): {
+  byHour: Record<number, { costMyr: number; clicks: number; impressions: number }>;
+  deadCostMyr: number;
+  totalCostMyr: number;
+  deadPct: number;
+  deadCostPerDayMyr: number;
+} {
+  const byHour: Record<number, { costMyr: number; clicks: number; impressions: number }> = {};
+  for (let h = 0; h < 24; h++) byHour[h] = { costMyr: 0, clicks: 0, impressions: 0 };
+  for (const r of rows) {
+    const slot = byHour[r.hour];
+    if (!slot) continue;
+    slot.costMyr += r.costMyr;
+    slot.clicks += r.clicks;
+    slot.impressions += r.impressions;
+  }
+  for (const h of Object.keys(byHour)) {
+    const s = byHour[Number(h)];
+    s.costMyr = Math.round(s.costMyr * 100) / 100;
+  }
+  const deadCostMyr =
+    Math.round(DEAD_HOURS.reduce((sum, h) => sum + (byHour[h]?.costMyr ?? 0), 0) * 100) / 100;
+  const totalCostMyr =
+    Math.round(Object.values(byHour).reduce((sum, s) => sum + s.costMyr, 0) * 100) / 100;
+  return {
+    byHour,
+    deadCostMyr,
+    totalCostMyr,
+    deadPct: totalCostMyr > 0 ? Math.round((deadCostMyr / totalCostMyr) * 1000) / 10 : 0,
+    deadCostPerDayMyr: days > 0 ? Math.round((deadCostMyr / days) * 100) / 100 : 0,
+  };
+}
+
+/**
  * Pull every creative/targeting surface for one campaign and upsert it.
  * Returns per-kind counts plus any kinds Google refused, so a silent blind
  * spot shows up as data rather than as nothing.
@@ -140,6 +213,45 @@ export async function syncCampaignCreative(
       errors[q.kind] = (err as Error).message.slice(0, 300);
       byKind[q.kind] = 0;
     }
+  }
+
+  // Hour-of-day spend: the only way to price the ad-schedule question instead
+  // of asserting it. Aggregated into one 24-slot row per campaign rather than a
+  // time series — we need "how much do we spend while shut", not history.
+  try {
+    const HOURLY_DAYS = 7;
+    const to = new Date();
+    to.setUTCDate(to.getUTCDate() - 1);
+    const from = new Date(to);
+    from.setUTCDate(from.getUTCDate() - (HOURLY_DAYS - 1));
+    const ymd = (d: Date) => d.toISOString().slice(0, 10);
+    const hourRows = (await customer.query(`
+      SELECT segments.hour, metrics.cost_micros, metrics.clicks, metrics.impressions
+      FROM campaign
+      WHERE campaign.id = ${campaign.campaignId}
+        AND segments.date BETWEEN '${ymd(from)}' AND '${ymd(to)}'
+    `)) as Array<Record<string, unknown>>;
+
+    const parsed = hourRows.map((r) => {
+      const seg = (r.segments ?? {}) as Record<string, unknown>;
+      const m = (r.metrics ?? {}) as Record<string, unknown>;
+      return {
+        hour: Number(seg.hour ?? -1),
+        costMyr: Number(m.cost_micros ?? 0) / 1_000_000,
+        clicks: Number(m.clicks ?? 0),
+        impressions: Number(m.impressions ?? 0),
+      };
+    });
+    const profile = hourProfile(parsed, HOURLY_DAYS);
+    collected.push({
+      kind: "hour_profile",
+      ref: `${ymd(from)}..${ymd(to)}`,
+      payload: { windowDays: HOURLY_DAYS, from: ymd(from), to: ymd(to), deadHours: DEAD_HOURS, ...profile },
+    });
+    byKind.hour_profile = 1;
+  } catch (err) {
+    errors.hour_profile = (err as Error).message.slice(0, 300);
+    byKind.hour_profile = 0;
   }
 
   for (const row of collected) {
