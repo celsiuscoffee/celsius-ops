@@ -1,5 +1,47 @@
 import { describe, it, expect } from "vitest";
-import { hourProfile, DEAD_HOURS, AD_WINDOW } from "./sync-ad-creative";
+import { hourProfile, DEAD_HOURS, AD_WINDOW, errMessage } from "./sync-ad-creative";
+
+// The 2026-07-29 run wrote ZERO rows for all three campaigns with
+// "Cannot read properties of undefined (reading 'slice')". google-ads-api
+// rejects with { errors: [{ message }] } and no top-level .message, so
+// (err as Error).message.slice() threw INSIDE the catch block, escaped the
+// per-kind handler, and one unavailable resource killed the whole campaign.
+// The error path is the one path that must never throw.
+describe("errMessage", () => {
+  it("reads the google-ads-api shape that broke the first run", () => {
+    const err = { errors: [{ message: "Metric not found" }, { message: "Bad field" }] };
+    expect(errMessage(err)).toBe("Metric not found | Bad field");
+  });
+
+  it("never throws on a value with no .message", () => {
+    expect(() => errMessage({ weird: true })).not.toThrow();
+    expect(() => errMessage(undefined)).not.toThrow();
+    expect(() => errMessage(null)).not.toThrow();
+    expect(() => errMessage("plain string")).not.toThrow();
+    expect(() => errMessage(42)).not.toThrow();
+  });
+
+  it("still handles an ordinary Error", () => {
+    expect(errMessage(new Error("boom"))).toBe("boom");
+  });
+
+  it("survives a circular object rather than throwing while reporting", () => {
+    const circular: Record<string, unknown> = { a: 1 };
+    circular.self = circular;
+    expect(() => errMessage(circular)).not.toThrow();
+    expect(errMessage(circular)).toBeTruthy();
+  });
+
+  it("truncates so one huge payload cannot bloat the sync log", () => {
+    expect(errMessage(new Error("x".repeat(1000))).length).toBe(300);
+  });
+
+  it("always returns a non-empty string", () => {
+    for (const v of [undefined, null, {}, [], 0, "", NaN]) {
+      expect(errMessage(v).length).toBeGreaterThan(0);
+    }
+  });
+});
 
 // Owner-approved serving window, 2026-07-29. Distinct from DEAD_HOURS: that is
 // "the till is provably silent"; this is "still worth buying a click", which
