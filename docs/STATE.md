@@ -797,8 +797,12 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   `CC_BRAND_SYSTEM_v2026.pdf` (Celsius Black `#1A0200` ink, terracotta ramp
   `#A54A2C`/`#672F16`/`#301100`, Space Grotesk; Peachii is logotype-only and
   ships as a limited demo face, so the wordmark is PLACED as artwork, never
-  typed in a substitute). Three charts embedded: combined YoY lines, per-outlet
-  small multiples, and a grouped bar chart per outlet. Headline figures:
+  typed in a substitute). Owner then asked to simplify — final build is
+  `build_cafes_simple.js`, five sections (sales by outlet, growth, delivery
+  caveat, basis, corporate structure) and ONE chart, the grouped bar chart per
+  outlet. The two line charts and the three monthly-detail tables were cut;
+  the delivery caveat was deliberately kept, since the headline is misleading
+  without it. Headline figures:
   FY2024 RM1,603,549.04 → FY2025 RM2,328,235.42 (+45.2%); H1 FY2026
   RM1,771,676.01 vs H1 FY2025 RM940,127 (+88.5%).
   ⚠ **Two numbers must never be quoted without their caveat.** (1) Of the
