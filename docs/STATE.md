@@ -788,6 +788,39 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-30 — **Maybank financing pack: café sales growth FY2024→H1 FY2026
+  (delivered, NOT in the repo).** Owner asked for revenue per outlet since 2021,
+  narrowed to sales growth for the three CAFÉS ONLY — Putrajaya (Conezion),
+  Shah Alam Seksyen 13, Tamarind Square — consignment counters (Nilai, IOI Mall)
+  excluded, GrabFood INCLUDED. Deliverable is a Word document built by
+  `build_cafes.js` in the session scratchpad, brand-styled to
+  `CC_BRAND_SYSTEM_v2026.pdf` (Celsius Black `#1A0200` ink, terracotta ramp
+  `#A54A2C`/`#672F16`/`#301100`, Space Grotesk; Peachii is logotype-only and
+  ships as a limited demo face, so the wordmark is PLACED as artwork, never
+  typed in a substitute). Three charts embedded: combined YoY lines, per-outlet
+  small multiples, and a grouped bar chart per outlet. Headline figures:
+  FY2024 RM1,603,549.04 → FY2025 RM2,328,235.42 (+45.2%); H1 FY2026
+  RM1,771,676.01 vs H1 FY2025 RM940,127 (+88.5%).
+  ⚠ **Two numbers must never be quoted without their caveat.** (1) Of the
+  +88.5% half-on-half, 16.4 points is DELIVERY BECOMING VISIBLE rather than new
+  business — like-for-like ex-delivery is +72.0%, and FY2025's +45.2% is +44.3%
+  ex-delivery. (2) Shah Alam's +10.9% is delivery capture in full: ex-delivery
+  it is FLAT (−0.4%). Delivery started being recorded at Shah Alam and
+  Putrajaya only in Jan 2026, so it is inside the FY2026 figures and absent
+  from FY2025 and earlier.
+  Putrajaya's +45% step in Jan 2026 coincides with a Hubbo→StoreHub till
+  change; evidence says it is mostly real (AOV stable RM28.50→29.10, level
+  sustained, and Shah Alam switched on the same schedule with NO discontinuity:
+  Dec 89,495 → Jan 89,096). The FY2026 bar in the bar chart is deliberately
+  SPLIT — solid = the six months actually taken to 30 June, hatched = the same
+  figure again as straight-line arithmetic — so a projection is never shown as
+  fact. Still open for the owner: GrabFood merchant statements (to restate
+  delivery back into FY2025), and confirmation of the Putrajaya transfer date
+  to Conezion Sdn Bhd (assumed 25/09/2025; RM257,535.75 of FY2025 turns on it).
+  ⚠ Never quote the Corporate Info sheet wholesale into a shared artefact — it
+  carries KWSP/SOCSO/LHDN/Maybank credentials, bank account numbers and
+  director IC numbers. All were deliberately excluded from the report.
+
 - 2026-07-29 — **Mystery reward could silently miss its moment on QR-table
   orders (fixed).** Owner asked whether QR-table still has mystery rewards:
   YES — not gated on order type, 56/59 paid QR orders from signed-in members
