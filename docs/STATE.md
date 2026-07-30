@@ -6,6 +6,58 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-30 — **Revenue history: the DB only reaches back to 2025-01-01 for the
+  cafés. Pre-2025 per-outlet revenue lives ONLY in Google Sheets.** Asked for
+  "revenue per outlet since 2021"; coverage map (SQL-verified against kqdc +
+  the owner's sheets):
+  · `unified_sales` earliest row per source — consignment **2022-05-23**, hubbo
+  **2025-01-01**, storehub 2025-08-29, pickup 2026-04-11, pos_native 2026-06-08.
+  Every other candidate table starts LATER (fin_transactions 2026-01-01,
+  BankStatementLine 2025-01-01, SalesTransaction 2026-03-02) — so **nothing in
+  the database predates 2022-05, and no café till data predates 2025-01**.
+  · The hubbo 2025-01-01 floor is an **import boundary, not a business start**:
+  Jan 2025 is a full steady month (PJ RM67,606 / SA RM96,961), not a new-store
+  ramp. PJ/SA were trading well before it; that history was never imported.
+  · Pre-2025 per-outlet truth = **"Celsius - Sales Tracking <year>"** sheets in
+  Drive folder `1cAv54MvGzjK9nuQ_2QkgQ-6bg6uYIp0-` (2024:
+  `1NxHDK1k6cFFKbBbTYmuOgCqACVH94c8feLk6iaGQNbk`, 2025:
+  `14Z6yIV9BU5b_tRIWsFClyKBRwGuWT0k5ux26i3Seahk`, 2026:
+  `1Imkmokf_VUpPsrMKIFEjoIihfA4klZax2rzVE6I3gRM`). Each has Daily / Weekly /
+  Monthly / Overall blocks per outlet (Sales, #, AOV). **The series STARTS at
+  2024** — there is no 2023/2022/2021 tracking sheet (Drive-searched).
+  · **The sheets and the DB agree to the ringgit** where they overlap — 2025
+  Jan–Apr PJ 67,606/61,011/60,933/65,179 and SA 96,961/80,499/75,867/78,056 match
+  `unified_sales` hubbo cent-for-cent. Same underlying till data, so the 2024
+  sheet is trustworthy as the 2024 lens.
+  · BUT the **sheets stop being maintained mid-year and the DB is more complete
+  for 2025**: sheet 2025 covers Jan–Nov only (Dec = 0) and drops Nilai/IOI after
+  Aug; DB 2025 has the full year. Sheet 2025 total RM2,372,711 vs DB
+  RM2,800,962. **Prefer the DB for 2025+, the sheet for 2024.**
+  · 2023 has **no per-outlet split anywhere**. The owner's "Sales Celsius 2023"
+  (`1VzUqBERujv7I0pK76UaKTEa11aUv0948nvV2YYN9bb4`) is a Bukku GL *Sales-account
+  ledger* (bank narrations, one company, no outlet dimension) totalling
+  **RM1,263,790.41 income** — that is the group banked lens, NOT comparable to
+  till nett, and it can't be decomposed by outlet.
+  · 2021 = **pre-outlet**. The only artefact is "Celsius Coffee - Lama"
+  (`1d-9YpRXvaH27Ii4RregqdmQd8Wk_4IcE-l_tHWasGr0`, Jan 2021): a bottled-coffee
+  delivery operation, **RM14,000.20 sales / RM9,045 COGS**, no outlets.
+  · Consignment rows in `unified_sales` are **GROSS customer sales, not the
+  Celsius share** — DB IOI Aug 2023 RM5,606 matches the "GH Sales Tracking"
+  sheet's gross exactly, while that sheet's "Celsius" column is 70% of it. The
+  bank/GL lens sees only the ~70% settlement, so consignment revenue is
+  systematically ~30% lower in the GL lens than in `unified_sales`.
+  · Best available per-outlet annual series (till lens; 2024 = sheet, 2025+ = DB):
+  2024 PJ 828,907 / SA 774,643 / Nilai 420,363 / IOI 195,865 (total 2,219,778);
+  2025 PJ 905,844 / SA 1,082,382 / Tam 340,010 / Nilai 358,743 / IOI 113,983
+  (total 2,800,962); 2026-YTD→07-30 PJ 840,644 / SA 684,363 / Tam 544,305 /
+  Nilai 103,049 / IOI 14,990 (total 2,187,351). 2023 Nilai 332,741 + IOI 77,470
+  (consignment only). 2022 Nilai 240,894 (from 05-23) only.
+  · **Reusable lesson:** any "since <year>" revenue question earlier than 2025
+  CANNOT be answered from SQL alone — check the Drive tracking sheets, and say
+  which lens each year comes from. Backfilling 2021–2024 café history into
+  `unified_sales` from the sheets is an open owner decision (would make the
+  warehouse answer these questions without Drive).
+
 - 2026-07-29 — **`Outlet.openTime/closeTime` is NOT the real trading window —
   measure from the till.** Config says 08:00–22:00 for all three outlets. The
   tills say first sale **07:46** (PJ), last **22:47**, and the **22:00 hour
