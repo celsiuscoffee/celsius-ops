@@ -99,20 +99,68 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   | Jul 15–21 | 65,773 | 3,745 | 4,444 | 8,189 | 17.6 |
   | Jul 22–28 | 63,233 | **2,092** | **5,800** | 7,892 | **30.2** |
 
+  (Discount column CORRECTED — see the entry immediately below; the first pass
+  double-counted it and reached the opposite cash conclusion.)
+
   **Revenue answer: yes, maintained.** Jul 22–28 (63,233) sits inside the
   full-spend range 62,304–66,263 — the spread among full-spend blocks (6.4%) is
   wider than the gap to the cut block (−2.4% vs their mean). Mon–Wed
   like-for-like organic confirms it across six weeks: 17,646 / 19,922 / 18,878 /
   18,947 / 18,001 / **18,102** (Jul 27) — the newest low-spend week is mid-range
   and ABOVE the previous one. Two consecutive low-spend weeks now, not one.
-  **Cash answer: no.** Ads fell RM1,653/wk vs Jul 15–21 but discounts rose
-  RM1,356/wk, so ads+discounts is FLAT (7,892 vs 8,189) and has drifted UP all
-  month (6,978 → 7,892) on flat revenue. Discount breakdown (POS, ex-Grab):
-  **manual/staff 1,637 → 1,472 → 1,892 → 2,600** (RM11.3k/mo run-rate, +59% in
-  4 weeks — till-level staff discretion, the single largest marketing-ish
-  outflow and larger than the entire ad budget), reward/voucher 668 → 984 →
-  1,239 → **1,602**, promo code 901 → 482 → 653 → **985**. Cutting ads while
-  this grows cannot reach +RM5,000/mo net.
+
+- 2026-07-30 (correction, supersedes the discount half of the entry above) —
+  **`pos_orders.discount_amount` is the TOTAL, not a manual-discount column.**
+  `pos-native/lib/checkout.ts:194`: `discount = rewardDiscount + promoDiscount +
+  manualDiscount`, and `promo_discount` / `reward_discount_amount` are ALSO
+  persisted separately. Summing all three double-counts. Manual =
+  `discount_amount − promo_discount − reward_discount_amount`.
+  **Manual/staff discounting is effectively ZERO** — RM40 / RM6 / RM0 / RM12 per
+  week across the four July blocks, not the RM2,600/wk claimed above. The
+  cashier manual-discount path exists (`register.tsx:3686`) and is essentially
+  unused. Corrected discounts (POS order-level total + web parts; the web
+  `orders.discount_amount` column is always 0, its real parts are
+  promo/reward/first_order):
+
+  | Block | Ads | Discounts | Ads+disc | In-store |
+  | --- | --- | --- | --- | --- |
+  | Jul 1–7 | 3,269 | 2,377 | 5,646 | 66,263 |
+  | Jul 8–14 | 4,027 | 2,120 | 6,147 | 62,304 |
+  | Jul 15–21 | 3,745 | 2,587 | 6,332 | 65,773 |
+  | Jul 22–28 | **2,092** | 3,247 | **5,339** | 63,233 |
+
+  **So the cash conclusion FLIPS: the ad saving IS reaching the bank.** Jul 22–28
+  total marketing cash (5,339) is the LOWEST of the four blocks. vs Jul 15–21:
+  ads −1,653/wk, discounts +660/wk, net **−RM993/wk ≈ −RM4,300/mo** on held
+  revenue. vs the mean of the three prior blocks: net −RM703/wk ≈ −RM3,046/mo.
+  The discount rise is real but roughly half the ad saving, and it is
+  **loyalty-voucher redemption on POS** (reward 612 → 984 → 1,239 → **1,602**/wk,
+  +RM4,290/mo annualised) plus promo (766 → 482 → 653 → 985) — the SMS/loyalty
+  loop that still has NO approval gate. Not staff discretion.
+
+- 2026-07-30 — **BUG (money path, unfixed): per-line discounts are charged to the
+  customer but NOT persisted — the till OVER-REPORTS revenue.**
+  `cart.ts:127 cartSubtotal` is net of `line_discount_sen` and drives both the
+  cashier's on-screen total (`register.tsx:870`) and the customer display
+  (`customer-display.tsx:250`), so the customer correctly pays the discounted
+  amount. But `checkout.ts:179` RECOMPUTES `subtotal = Σ unit_sen × qty` — GROSS,
+  ignoring `line_discount_sen` — and that gross figure is what lands in
+  `pos_orders.subtotal`, `.total`, and the `payments` row (`amount: total`).
+  The line discount is written to `pos_order_items.discount_amount` and printed
+  on the receipt (`receipt-format.ts:208`) but never deducted from the order.
+  **Verified against prod:** for every affected order `total` equals
+  `subtotal + service_charge − discount_amount + sst` exactly, i.e. the line
+  discount is absent. e.g. CC-CON-4797 subtotal 7450, line_disc 1390, promo 0,
+  reward 0, total 7450; CC-TAM-2757 line_disc 6760 = 100% of subtotal, total
+  6760. **RM1,636.34 across 222 lines since 2026-06-08, still occurring
+  2026-07-30.** Effects: reported revenue overstated by that amount, and card
+  settlements / cash counts run short against reported sales. Small vs ~RM330k
+  of till (~0.4%) so it does not move the ads conclusions, but it is real money
+  and it corrupts every revenue lens. **NOT fixed — `pos-native` is a
+  production OTA deploy and this is payments-adjacent, so hard rule 6 applies:
+  needs owner approval.** Fix is one line (make checkout's subtotal use
+  `cartSubtotal`/`lineNet`), but decide first whether historical rows get
+  restated or left as-is.
 
 - 2026-07-30 — **Actual ad spend runs 1.3–2.1× the daily budget on file,
   persistently.** Jul 4–19: RM550–670/day actual against ~RM283/day of budget
@@ -845,11 +893,16 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 - 2026-07-30 — **Ads: revenue verdict settled, cash verdict is now about
   DISCOUNTS, not ads.** Two low-spend weeks in, in-store revenue is holding
   (see Verified facts, same date). Pick up here, in priority order:
-  1. **Manual/staff discounts are the biggest leak** — RM2,600/wk ≈ RM11.3k/mo,
-     +59% in 4 weeks, larger than the whole ad budget. Nobody has looked at
-     `pos_orders.discount_reason` / `discount_by`. Break it down by outlet, by
-     staff member, by reason before touching ads further. This is where the
-     +RM5,000/mo is, and it needs owner sign-off (staff-facing).
+  1. **Line-discount money bug** (see Verified facts, same date) — awaiting owner
+     approval: one-line fix in `pos-native/lib/checkout.ts`, plus a decision on
+     restating the 222 historical rows. NOT staff discretion — manual
+     discounting is ~zero; `discount_reason` / `discount_by` are NULL on every
+     row because that path is unused.
+  1b. **Loyalty-voucher redemption is the growing outflow** — RM612 → RM1,602/wk
+     in four weeks (≈RM4,290/mo annualised), and the SMS/loyalty loop issuing
+     them still has NO approval gate (`approved_at` NULL on 75 rounds). It is
+     about half the ad saving, so it does not cancel it, but left ungated it
+     will. Gate it before it does.
   2. **Spend overruns budget 1.3–2.1×** — add a spend-vs-budget overrun check to
      the descent controller, and stop quoting `monthly_saving_myr` as realised
      cash (reconcile against `ads_metric_daily` instead). Also find out WHAT
