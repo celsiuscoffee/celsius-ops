@@ -71,6 +71,70 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   with the closing day. Expiry is **derived from `createdAt`**, not stored — no
   `EXPIRED` enum, no migration, no cron to flip stale rows.
 
+- 2026-07-30 — **Week-to-week: revenue IS holding, but the ad saving is NOT
+  reaching the bank — a different line ate it.** Owner asked "can we maintain
+  it". Verified series (in-store = `pos_orders` ex-`grabfood` + `orders`
+  QR/app; ad spend = `ads_metric_daily`, 3 campaigns, one sync row per day):
+
+  | Week (Mon–Sun) | In-store MYR | Ad spend MYR |
+  | --- | --- | --- |
+  | Jun 22–28 | 59,409 | 1,997 |
+  | Jun 29–Jul 5 | 65,839 | 2,632 |
+  | Jul 6–12 | 63,710 | 4,171 |
+  | Jul 13–19 | 64,986 | 3,968 |
+  | Jul 20–26 | 61,976 | 2,395 |
+
+  **A previous session's weekly spend table was WRONG** (quoted ~RM2,000/wk flat
+  for Jun 22–Jul 13, and RM1,198 for Jul 20 — the later weeks were roughly
+  halved). The table above is recomputed from the daily series and reconciles to
+  it; the false "40% less spend, same revenue" headline derived from it is
+  withdrawn and replaced by the blocks below.
+
+  Rolling 7-day blocks (every block weekday-complete, so no day-of-week bias):
+
+  | Block | In-store | Ads | Discounts | Ads+disc | Rev per ad-RM |
+  | --- | --- | --- | --- | --- | --- |
+  | Jul 1–7 | 66,263 | 3,269 | 3,709 | 6,978 | 20.3 |
+  | Jul 8–14 | 62,304 | 4,027 | 3,565 | 7,592 | 15.5 |
+  | Jul 15–21 | 65,773 | 3,745 | 4,444 | 8,189 | 17.6 |
+  | Jul 22–28 | 63,233 | **2,092** | **5,800** | 7,892 | **30.2** |
+
+  **Revenue answer: yes, maintained.** Jul 22–28 (63,233) sits inside the
+  full-spend range 62,304–66,263 — the spread among full-spend blocks (6.4%) is
+  wider than the gap to the cut block (−2.4% vs their mean). Mon–Wed
+  like-for-like organic confirms it across six weeks: 17,646 / 19,922 / 18,878 /
+  18,947 / 18,001 / **18,102** (Jul 27) — the newest low-spend week is mid-range
+  and ABOVE the previous one. Two consecutive low-spend weeks now, not one.
+  **Cash answer: no.** Ads fell RM1,653/wk vs Jul 15–21 but discounts rose
+  RM1,356/wk, so ads+discounts is FLAT (7,892 vs 8,189) and has drifted UP all
+  month (6,978 → 7,892) on flat revenue. Discount breakdown (POS, ex-Grab):
+  **manual/staff 1,637 → 1,472 → 1,892 → 2,600** (RM11.3k/mo run-rate, +59% in
+  4 weeks — till-level staff discretion, the single largest marketing-ish
+  outflow and larger than the entire ad budget), reward/voucher 668 → 984 →
+  1,239 → **1,602**, promo code 901 → 482 → 653 → **985**. Cutting ads while
+  this grows cannot reach +RM5,000/mo net.
+
+- 2026-07-30 — **Actual ad spend runs 1.3–2.1× the daily budget on file,
+  persistently.** Jul 4–19: RM550–670/day actual against ~RM283/day of budget
+  (ledger `prev_daily_micros` on Jul 18 reads 84.96/98.42/100.00, so the
+  autopilot genuinely believed the cap was RM283). Jul 22–26: RM330/day against
+  RM165/day of budget. Jul 27–28: RM222/day against ~RM160/day. **The ramp is
+  real, not a sync artifact** — clicks 604→1,476 and impressions 26k→56k both
+  doubled on Jul 4 at unchanged CPC (0.43–0.62), and there is exactly one
+  `ads_metric_daily` row per campaign per day (111 rows / 37 days / 3
+  campaigns). Google permits 2× on individual days but smooths to
+  budget×30.4/month; 16 consecutive days at 2× does not fit that, so either
+  something raised budgets outside `ads_budget_change` (UI edit, or Smart
+  campaign auto-apply recommendations) or Smart campaigns simply overrun here.
+  **Consequences:** (a) `monthly_saving_myr` in the ledger is computed from
+  budget deltas and therefore does NOT equal realised bank saving — always
+  reconcile against `ads_metric_daily`; (b) budget is not a reliable cap, so the
+  descent controller needs a spend-vs-budget overrun check; (c) realised saving
+  measured from actual spend: RM17,488/mo at the Jul 8–14 peak → RM9,085/mo
+  (Jul 22–28) → RM6,753/mo at the Jul 27–28 run-rate, i.e. **−RM10,735/mo vs
+  peak but only −RM1,920/mo vs the June baseline** of RM8,673/mo. Quote the June
+  baseline, not the peak: the peak was itself 16 days of unbudgeted overrun.
+
 - 2026-07-29 — **`Outlet.openTime/closeTime` is NOT the real trading window —
   measure from the till.** Config says 08:00–22:00 for all three outlets. The
   tills say first sale **07:46** (PJ), last **22:47**, and the **22:00 hour
@@ -777,6 +841,36 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   26 Jul and there are 0 `tg:` transcript rows, so either the payments were
   never made or the POPs were lost to the known Telegram-persistence gap. That
   gap (and MULTI_POP under-extraction) is still unfixed.
+
+- 2026-07-30 — **Ads: revenue verdict settled, cash verdict is now about
+  DISCOUNTS, not ads.** Two low-spend weeks in, in-store revenue is holding
+  (see Verified facts, same date). Pick up here, in priority order:
+  1. **Manual/staff discounts are the biggest leak** — RM2,600/wk ≈ RM11.3k/mo,
+     +59% in 4 weeks, larger than the whole ad budget. Nobody has looked at
+     `pos_orders.discount_reason` / `discount_by`. Break it down by outlet, by
+     staff member, by reason before touching ads further. This is where the
+     +RM5,000/mo is, and it needs owner sign-off (staff-facing).
+  2. **Spend overruns budget 1.3–2.1×** — add a spend-vs-budget overrun check to
+     the descent controller, and stop quoting `monthly_saving_myr` as realised
+     cash (reconcile against `ads_metric_daily` instead). Also find out WHAT
+     raised spend on Jul 4 with no ledger entry (UI edit? Smart-campaign
+     auto-apply recommendations? check the Google Ads change history).
+  3. **Guard still has 3 confirmed measurement bugs** (`ads/organic-revenue.ts`):
+     includes `pos_orders.source='grabfood'`, excludes the `orders` table
+     (QR-table/app, ~25% of in-store), and lets Nilai (consignment, campaigns
+     paused, rawIndex 0.33) pollute the fleet median and the scoreboard. Every
+     number in the Verified-facts entry above was computed with these bugs
+     corrected by hand in SQL — the shipped guard does NOT yet agree with it.
+  4. **Creative sync has still never produced a row.** #1091 (errMessage) merged
+     2026-07-30; the first run that can succeed is the 19:01 UTC cron tonight.
+     Until it lands, radius / schedule / ad-copy / landing-page questions are
+     unanswerable — do not speculate. `AD_WINDOW` (07:30–22:00, owner-approved)
+     is still NOT applied to Google, pending the `hour_profile` read.
+  5. Leak repair looks like it FAILED: Jul 28 (first post-fix day) still
+     RM13.80 of leaked spend vs RM18.26 pre-fix. Re-applied literals aren't
+     blocking. Unexplained.
+  6. Housekeeping: remove the inert `hardCutDirective` block.
+
 - 2026-07-29 — **Two threads open, both HR.**
   (a) **Clock-out geofence fix is deployed but unverified** — see the Verified
   facts entry above. Needs a *deliberate* test at the IOI Mall kiosk; passively
