@@ -9,6 +9,9 @@
 //     (OFFLINE_PAYMENTS) is on pos_orders now, so keeping it would double-count.
 //     A live "today" pull runs only while the outlet is still pre-cutover.
 //   • POS-native (pos_orders) + pickup (orders): real-time, AT/AFTER cutover.
+//   • Historical (historical_daily_sales): café takings BEFORE the hubbo import
+//     floor (2025-01-01), hand-digitised from the owner's sales-tracking sheets.
+//     Daily grain, strictly pre-2025, so it can never meet the hubbo era.
 // Each sale is counted once. StoreHub is frozen after the final cutover (no new
 // rows) and its Grab never shares a day with native Grab, so no double-count.
 
@@ -74,6 +77,13 @@ const HUBBO_HANDOVER_AT: Record<string, Date> = {
   "89b19c9f-b1e0-42fe-a404-6d1a472e34c5": new Date("2026-01-02T16:00:00Z"), // Putrajaya (Conezion)
   "b3b6299e-09dc-4f4a-80ef-bbc04316d324": new Date("2026-01-20T16:00:00Z"), // Shah Alam
 };
+
+// Where the hand-digitised pre-import history stops and the hubbo till archive
+// takes over: 2025-01-01 MYT, hubbo's earliest row for both cafés. The same
+// bound is enforced three ways — a CHECK constraint on historical_daily_sales,
+// the unified_sales VIEW's branch, and the query below — so the two eras cannot
+// overlap however the table is later loaded.
+const HISTORICAL_UNTIL = new Date("2024-12-31T16:00:00Z");
 
 /** Map a POS-native order_type/source to the dashboard's 3 channels. */
 function posChannel(orderType: string | null, source: string | null): "dine_in" | "takeaway" | "delivery" {
@@ -407,6 +417,46 @@ export async function getUnifiedSalesForOutlet(
         // No receipt count in the weekly advice — use the day's items sold as the
         // unit count, so "transactions" reflects items and AOV = avg item price.
         units: Number(r.items) || 0,
+      });
+    }
+  }
+
+  // ── Historical — café revenue predating the hubbo till import (2025-01-01),
+  // digitised from the owner's "Celsius - Sales Tracking" sheets into
+  // historical_daily_sales (daily grain, one row per outlet-day). Putrajaya and
+  // Shah Alam were trading through 2024 but that history was never imported, so
+  // without this branch every 2024 comparison reads zero for them.
+  // Cannot double-count: rows are pinned strictly before HISTORICAL_UNTIL by a
+  // CHECK constraint, which is where hubbo's earliest row sits — the bound is
+  // repeated here and in the unified_sales VIEW.
+  // Fidelity caveats (migration 20260730_historical_daily_sales): no per-receipt
+  // or per-hour detail, no tender, no discount split, and a single daily figure
+  // per outlet — so all of it maps to `till` even if Grab was inside those
+  // numbers. Do not read these rows expecting an intraday distribution.
+  if (!opts.storehubOnly && from.getTime() < HISTORICAL_UNTIL.getTime()) {
+    const histRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; orders: unknown }>>`
+      SELECT ts, nett AS total, item_count AS orders FROM (
+        SELECT (biz_date + time '12:00') AT TIME ZONE 'Asia/Kuala_Lumpur' AS ts, nett, item_count
+        FROM historical_daily_sales
+        WHERE outlet_id = ${outlet.outletId}
+          AND biz_date < ${HISTORICAL_UNTIL}
+      ) h
+      WHERE ts >= ${from} AND ts <= ${to}
+    `;
+    for (const r of histRows) {
+      sales.push({
+        ts: toISO(r.ts),
+        total: Number(r.total) || 0, // historical_daily_sales.nett is already RM
+        discount: 0, // daily summary — the sheet recorded takings net of discount only
+        channel: "dine_in", // counter trade; the sheet had no order-type split
+        isDeliveryQR: false,
+        channelLabel: "counter (daily summary)",
+        source: "till",
+        tender: null, // no payment splits at this grain
+        // The sheet's "#" column is the day's ORDER count (its AOV = Sales / #),
+        // so unlike consignment this is a true transaction count and AOV reads
+        // as an average order value.
+        units: Number(r.orders) || 0,
       });
     }
   }

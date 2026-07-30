@@ -52,11 +52,31 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   (total 2,800,962); 2026-YTD→07-30 PJ 840,644 / SA 684,363 / Tam 544,305 /
   Nilai 103,049 / IOI 14,990 (total 2,187,351). 2023 Nilai 332,741 + IOI 77,470
   (consignment only). 2022 Nilai 240,894 (from 05-23) only.
-  · **Reusable lesson:** any "since <year>" revenue question earlier than 2025
+  · **2024 IS NOW BACKFILLED (migration `20260730_historical_daily_sales`,
+  NOT YET APPLIED — needs owner approval, hard rule 6).** New SQL-managed table
+  `historical_daily_sales` (daily grain, deliberately NOT in schema.prisma,
+  mirroring `consignment_sales`) + a `source='historical'` branch in the
+  `unified_sales` view and in `api/sales/_lib/unified-sales.ts`. 722 rows:
+  Putrajaya 360 trading days / RM828,906.52 and Shah Alam 362 / RM774,642.52 —
+  cent-exact against the sheet's own Monthly and Overall blocks. Read at full
+  stored precision, NOT the display-rounded daily cells (those drift the annual
+  total by RM4–20 per outlet). Non-trading days are ABSENT, not zero — the sheet
+  marks them two ways (blank, and an explicit 0 against 0 orders on Putrajaya
+  26 Sep), and loading zeros would drag every daily average down.
+  **No-double-count is enforced three ways** (CHECK constraint `biz_date <
+  2025-01-01`, the view branch, and `HISTORICAL_UNTIL` in unified-sales.ts) and
+  pinned by `_lib/__tests__/historical-sales.test.ts` so the three cannot drift.
+  Verified by applying the migration to a throwaway local Postgres 16 with a
+  faithful schema skeleton — 7 assertions incl. idempotent re-run, zero leak
+  into the 2025+ era, and 2025-01-01 still reading hubbo alone. **Fidelity
+  limits:** daily grain (no per-receipt/per-hour/tender detail — nothing
+  intraday may read these rows), one channel bucket (all of it maps to `till`,
+  so any 2024 GrabFood is inside those figures and unsplittable), and gross =
+  nett (no organic-vs-discounted split before 2025).
+  · **Reusable lesson:** any "since <year>" revenue question earlier than 2024
   CANNOT be answered from SQL alone — check the Drive tracking sheets, and say
-  which lens each year comes from. Backfilling 2021–2024 café history into
-  `unified_sales` from the sheets is an open owner decision (would make the
-  warehouse answer these questions without Drive).
+  which lens each year comes from. 2023 and earlier stay un-backfillable: no
+  tracking sheet exists, and the 2023 GL ledger has no outlet dimension.
 
 - 2026-07-29 — **`Outlet.openTime/closeTime` is NOT the real trading window —
   measure from the till.** Config says 08:00–22:00 for all three outlets. The
