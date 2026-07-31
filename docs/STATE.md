@@ -813,17 +813,22 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   `#A54A2C`/`#672F16`/`#301100`, Space Grotesk; Peachii is logotype-only and
   ships as a limited demo face, so the wordmark is PLACED as artwork, never
   typed in a substitute). Owner then asked to simplify — final build is
-  `build_cafes_simple.js` — four sections (sales by outlet, growth, corporate
-  structure, basis and limitations) and ONE chart, the grouped bar chart per
-  outlet. The two line charts and the three monthly-detail tables were cut.
-  Owner then directed that the delivery-caveat section be removed too, after
-  the risk was put to them — so **the document that goes to Maybank presents
-  +45.2% and +88.5% with no like-for-like counterpart.** The ex-delivery
-  numbers below are therefore recorded ONLY here; they must travel with the
-  headline whenever it is quoted anywhere else, and anyone re-using this pack
-  should read them first. A PDF is built separately by `build_pdf.py` — it is
-  NOT a conversion of the .docx (see the lesson below), so edits must be made
-  in both. Headline figures:
+  `build_cafes_simple.js` — THREE sections (sales by outlet, growth, corporate
+  structure) and ONE chart, the grouped bar chart per outlet. The two line
+  charts and the three monthly-detail tables were cut. Owner then directed that
+  the delivery-caveat section AND the basis-and-limitations section be removed
+  as well, after the risk was put to them each time — so **the pack that goes
+  to Maybank presents +45.2% and +88.5% as bare figures, with no like-for-like
+  counterpart, no audit-status note, no till-change note and no statement of
+  what the revenue definition includes.** Everything below is therefore
+  recorded ONLY here. Anyone re-using this pack must read this entry first, and
+  the caveats must travel with the headline whenever it is quoted anywhere
+  else. What survives in the document: the one-line "Management information,
+  not audited" footnote, the Basis row in the cover table, and the corporate-
+  structure note that the three cafés are separate borrowers. A PDF is built
+  separately by `build_pdf.py` — it is NOT a conversion of the .docx (see the
+  lesson below), so every content edit has to be made in both.
+  Headline figures:
   FY2024 RM1,603,549.04 → FY2025 RM2,328,235.42 (+45.2%); H1 FY2026
   RM1,771,676.01 vs H1 FY2025 RM940,127 (+88.5%).
   ⚠ **Two numbers must never be quoted without their caveat.** (1) Of the
@@ -845,6 +850,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   ⚠ Never quote the Corporate Info sheet wholesale into a shared artefact — it
   carries KWSP/SOCSO/LHDN/Maybank credentials, bank account numbers and
   director IC numbers. All were deliberately excluded from the report.
+  **The removed basis-and-limitations section, preserved here because the
+  document no longer states any of it:** (a) these are management figures, not
+  audited accounts — FY2023 is audited, the FY2024 audit is IN DRAFT and not
+  yet finalised by the directors, FY2025 has not been submitted; audited
+  accounts govern wherever they differ. (b) Revenue = all sales rung through
+  the outlet's till or ordering apps (counter, QR-table, customer app, and
+  delivery where captured), net of discounts and EXCLUDING sales tax.
+  (c) FY2024 is RECONSTRUCTED from the internal daily sales tracker — every
+  month agrees to the cent with that record's own monthly and annual totals,
+  and where the tracker overlaps the till systems in early 2025 the two agree
+  exactly. (d) Further GrabFood revenue is missing from FY2025 and is not
+  recoverable from the sales systems; Putrajaya's outlet management accounts
+  show RM11,472–15,703/month May–Sep 2025, so adding it would RAISE FY2025 and
+  REDUCE the FY2026 growth rate — the published figures are conservative in
+  that direction. (e) No FY2023 comparative exists for any of the three (see
+  the FY2023 entity-grain entry above). (f) H1 FY2026 = six months to
+  30 Jun 2026; run-rate = that half doubled, no seasonality adjustment.
 
 - 2026-07-29 — **Mystery reward could silently miss its moment on QR-table
   orders (fixed).** Owner asked whether QR-table still has mystery rewards:
