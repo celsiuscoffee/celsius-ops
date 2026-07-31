@@ -46,6 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       frequency: true,
       notes: true,
       createdAt: true,
+      countDate: true,
       items: {
         select: {
           productId: true,
@@ -116,18 +117,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const now = new Date();
 
   // Freshness guard — a count is a point-in-time snapshot, so one left open
-  // across trading days no longer describes any single date. Past the block
-  // window we refuse without an explicit note of when stock was really counted;
-  // past the stale window we allow it but never auto-approve, so a human sees
-  // the gap. (Putrajaya counts sat open 6–25 days and silently corrupted every
-  // shrinkage figure derived from them.)
+  // across trading days no longer describes any single date. Open more than a
+  // full day and the count is EXPIRED: a soft block, refused until the counter
+  // says when the stock was actually counted. Past the stale window (18h) we
+  // allow it but never auto-approve, so a human sees the gap. (Putrajaya counts
+  // sat open 6–25 days and silently corrupted every shrinkage figure derived
+  // from them.)
   const freshness = evaluateCountFreshness({ createdAt: count.createdAt, now });
-  if (freshness.block && !staleReason) {
+  if (freshness.expired && !staleReason) {
     return NextResponse.json(
       {
-        error: `This count has been open ${Math.floor(freshness.hoursOpen / 24)} day(s). Stock has moved since it was started, so the numbers may not reflect one date. Start a fresh count, or confirm when the stock was actually counted.`,
-        code: "COUNT_TOO_STALE",
+        error: `This count has been open ${freshness.daysOpen} day(s) — it expired. Stock has moved since it was started, so the numbers no longer describe one date. Start a fresh count, or confirm when the stock was actually counted.`,
+        code: "COUNT_EXPIRED",
         hoursOpen: Math.round(freshness.hoursOpen),
+        daysOpen: freshness.daysOpen,
         startedAt: count.createdAt,
       },
       { status: 400 },
@@ -145,6 +148,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     freshness.staleNote
       ? `${freshness.staleNote}${staleReason ? ` counted: ${staleReason}` : ""}`
       : null,
+    // An expired count is re-dated below, so record what it was opened as —
+    // otherwise the original date is lost and the re-stamp looks like the
+    // count simply started today.
+    freshness.expired
+      ? `[re-dated] opened ${count.countDate.toISOString().slice(0, 10)}, closed ${now
+          .toISOString()
+          .slice(0, 10)}; countDate moved to the closing date.`
+      : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -160,6 +171,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       submittedAt: now,
       finalizedById: session.id,
       finalizedAt: now,
+      // The balances written below are as-of NOW, so an expired count must be
+      // stamped with the day it actually closed. Leaving countDate at the day
+      // it was opened is exactly the bug this guard exists for: a 29 Jul count
+      // finalized on the 31st was filed as 29 Jul stock.
+      ...(freshness.expired ? { countDate: now } : {}),
       ...(autoApprove ? { reviewedAt: now } : {}),
       ...(mergedNotes !== undefined ? { notes: mergedNotes } : {}),
     },

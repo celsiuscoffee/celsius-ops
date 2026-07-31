@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import { evaluateCountFreshness } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
@@ -49,18 +50,90 @@ export async function POST(req: NextRequest) {
     expectedPriorCountedById?: string | null;
   }>;
 
+  // What to do when the open draft has expired (see the soft block below).
+  // Absent → the request is refused with COUNT_EXPIRED so the counter chooses.
+  const expiredAction: "new" | "continue" | null =
+    body.expiredAction === "new" || body.expiredAction === "continue" ? body.expiredAction : null;
+
   // 1. Find-or-create the active DRAFT count for this outlet+frequency.
   //    Race-safe enough: if two users hit this endpoint simultaneously, the
-  //    second findFirst sees the first's just-created row. If both miss
-  //    (rare, ~10ms window), both create — we'd have 2 drafts, which the
-  //    frontend handles by picking the oldest via orderBy createdAt asc
-  //    on the active endpoint. A proper fix would be a partial unique
-  //    index on (outletId, frequency) WHERE status='DRAFT' — deferred.
-  let count = await prisma.stockCount.findFirst({
+  //    second read sees the first's just-created row. If both miss (rare, ~10ms
+  //    window), both create — the newest wins on the next read. A proper fix
+  //    would be a partial unique index on (outletId, frequency) WHERE
+  //    status='DRAFT' — deferred.
+  //
+  //    Expiry (owner's rule): a draft open more than a full day no longer
+  //    describes one date, so it is never silently reused. Only a *fresh* draft
+  //    is picked up automatically; an expired one soft-blocks the write until
+  //    the counter chooses what to do with it (see 1a).
+  const now = new Date();
+
+  const openDrafts = await prisma.stockCount.findMany({
     where: { outletId: session.outletId, frequency, status: "DRAFT" },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, createdAt: true, countDate: true, notes: true },
+    take: 10,
   });
+  const isExpired = (d: { createdAt: Date }) =>
+    evaluateCountFreshness({ createdAt: d.createdAt, now }).expired;
+
+  let count = openDrafts.find((d) => !isExpired(d)) ?? null;
+
+  // 1a. Expiry soft block. Counting on into a day-old draft silently files
+  //     today's shelves under the date it was opened — the exact defect that
+  //     made Putrajaya's shrinkage figures meaningless. Refuse the write and
+  //     make the counter pick:
+  //       "new"      → leave the stale draft alone, start a fresh count today
+  //       "continue" → keep the draft, but re-date it to today, because that
+  //                    is the date its remaining lines are being counted on
+  //     Soft, not hard: the draft's existing lines are real work, and nothing
+  //     is discarded without the counter saying so.
+  const expiredDraft = count ? null : openDrafts.find(isExpired);
+  if (expiredDraft) {
+    const freshness = evaluateCountFreshness({ createdAt: expiredDraft.createdAt, now });
+    if (!expiredAction) {
+      return NextResponse.json(
+        {
+          error: `This count was started ${freshness.daysOpen} day(s) ago and has expired. Counting more into it would file today's stock under ${expiredDraft.countDate
+            .toISOString()
+            .slice(0, 10)}. Start a new count for today, or continue this one and re-date it.`,
+          code: "COUNT_EXPIRED",
+          countId: expiredDraft.id,
+          startedAt: expiredDraft.createdAt,
+          countDate: expiredDraft.countDate,
+          hoursOpen: Math.round(freshness.hoursOpen),
+          daysOpen: freshness.daysOpen,
+        },
+        { status: 409 },
+      );
+    }
+    if (expiredAction === "continue") {
+      // The count carries on, so it belongs to today. Re-dating it is the
+      // whole point: the alternative is a snapshot filed under a date nobody
+      // counted on.
+      count = await prisma.stockCount.update({
+        where: { id: expiredDraft.id },
+        data: {
+          countDate: now,
+          notes: [
+            expiredDraft.notes,
+            `[re-dated] opened ${expiredDraft.countDate
+              .toISOString()
+              .slice(0, 10)}, counting continued ${now
+              .toISOString()
+              .slice(0, 10)}; countDate moved forward. Earlier lines may pre-date it.`,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        },
+        select: { id: true, createdAt: true, countDate: true, notes: true },
+      });
+    }
+    // "new" falls through to the create below. The stale draft stays a DRAFT
+    // (its lines are evidence of what was counted) but is never picked up
+    // again — the fresh count now satisfies the non-expired lookup above.
+  }
+
   if (!count) {
     count = await prisma.stockCount.create({
       data: {
@@ -69,7 +142,7 @@ export async function POST(req: NextRequest) {
         frequency,
         status: "DRAFT",
       },
-      select: { id: true },
+      select: { id: true, createdAt: true, countDate: true, notes: true },
     });
   }
 
@@ -140,7 +213,6 @@ export async function POST(req: NextRequest) {
   //    Note: Prisma's typed compound-unique upsert requires a non-null
   //    productPackageId. When packageId IS null we fall back to a
   //    findFirst+update/create dance — same pattern as setStockBalance.
-  const now = new Date();
   const countId = count.id;
 
   async function upsertOne(it: typeof incoming[number]) {

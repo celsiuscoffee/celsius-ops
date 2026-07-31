@@ -14,7 +14,7 @@ describe("evaluateCountFreshness", () => {
   it("passes a count finished the same session", () => {
     const r = evaluateCountFreshness({ createdAt: start, now: plus(3) });
     expect(r.stale).toBe(false);
-    expect(r.block).toBe(false);
+    expect(r.expired).toBe(false);
     expect(r.staleNote).toBeNull();
   });
 
@@ -22,43 +22,47 @@ describe("evaluateCountFreshness", () => {
     // 18h window exists precisely so this case isn't punished.
     const r = evaluateCountFreshness({ createdAt: start, now: plus(17) });
     expect(r.stale).toBe(false);
+    expect(r.expired).toBe(false);
   });
 
-  it("flags a count spanning a second trading day", () => {
-    const r = evaluateCountFreshness({ createdAt: start, now: plus(30) });
+  it("warns, but does not expire, between 18h and a full day", () => {
+    const r = evaluateCountFreshness({ createdAt: start, now: plus(20) });
     expect(r.stale).toBe(true);
-    expect(r.block).toBe(false);
+    expect(r.expired).toBe(false);
     expect(r.staleNote).toMatch(/stale count/i);
   });
 
-  it("blocks the real Putrajaya cases (2, 6, 9 and 25 days open)", () => {
-    for (const days of [6, 9, 25]) {
+  it("expires a count open more than one day (the owner's rule)", () => {
+    expect(evaluateCountFreshness({ createdAt: start, now: plus(24) }).expired).toBe(false);
+    expect(evaluateCountFreshness({ createdAt: start, now: plus(25) }).expired).toBe(true);
+  });
+
+  it("expires every real Putrajaya case (2, 6, 9 and 25 days open)", () => {
+    for (const days of [2, 6, 9, 25]) {
       const r = evaluateCountFreshness({ createdAt: start, now: plus(days * 24) });
-      expect(r.block).toBe(true);
+      expect(r.expired).toBe(true);
       expect(r.stale).toBe(true);
+      expect(r.daysOpen).toBe(days);
     }
-    // 2 days is stale but under the 72h block window — warn, don't refuse.
-    const twoDay = evaluateCountFreshness({ createdAt: start, now: plus(48) });
-    expect(twoDay.stale).toBe(true);
-    expect(twoDay.block).toBe(false);
   });
 
   it("reports how long the count was open", () => {
     const r = evaluateCountFreshness({ createdAt: start, now: plus(48) });
     expect(Math.round(r.hoursOpen)).toBe(48);
+    expect(r.daysOpen).toBe(2);
     expect(r.staleNote).toMatch(/2d/);
   });
 
-  it("never blocks on unparseable dates or clock skew", () => {
+  it("never expires on unparseable dates or clock skew", () => {
     // A finalize must not fail because a clock ran backwards.
-    expect(evaluateCountFreshness({ createdAt: "nonsense", now: start }).block).toBe(false);
-    expect(evaluateCountFreshness({ createdAt: plus(5), now: start }).block).toBe(false);
+    expect(evaluateCountFreshness({ createdAt: "nonsense", now: start }).expired).toBe(false);
+    expect(evaluateCountFreshness({ createdAt: plus(5), now: start }).expired).toBe(false);
   });
 
   it("honours custom windows", () => {
-    const r = evaluateCountFreshness({ createdAt: start, now: plus(10), staleHours: 8, blockHours: 9 });
+    const r = evaluateCountFreshness({ createdAt: start, now: plus(10), staleHours: 8, expireHours: 9 });
     expect(r.stale).toBe(true);
-    expect(r.block).toBe(true);
+    expect(r.expired).toBe(true);
   });
 });
 
