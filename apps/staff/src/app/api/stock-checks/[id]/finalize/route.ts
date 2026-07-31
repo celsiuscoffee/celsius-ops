@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { isCleanCount, baseQtyByProduct } from "@celsius/db";
+import { isCleanCount, baseQtyByProduct, evaluateCountFreshness } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { setStockBalance } from "@/lib/stock";
 import { checkCountCoverage } from "@/lib/stock-coverage";
@@ -30,6 +30,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ? body.partialReason.trim().slice(0, 300)
       : null;
 
+  // Acknowledgement for a count left open past the block window — the counter
+  // must say when the stock was actually counted before we accept it.
+  const staleReason: string | null =
+    typeof body?.staleReason === "string" && body.staleReason.trim()
+      ? body.staleReason.trim().slice(0, 300)
+      : null;
+
   const count = await prisma.stockCount.findUnique({
     where: { id },
     select: {
@@ -38,6 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       outletId: true,
       frequency: true,
       notes: true,
+      createdAt: true,
       items: {
         select: {
           productId: true,
@@ -107,14 +115,39 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const now = new Date();
 
+  // Freshness guard — a count is a point-in-time snapshot, so one left open
+  // across trading days no longer describes any single date. Past the block
+  // window we refuse without an explicit note of when stock was really counted;
+  // past the stale window we allow it but never auto-approve, so a human sees
+  // the gap. (Putrajaya counts sat open 6–25 days and silently corrupted every
+  // shrinkage figure derived from them.)
+  const freshness = evaluateCountFreshness({ createdAt: count.createdAt, now });
+  if (freshness.block && !staleReason) {
+    return NextResponse.json(
+      {
+        error: `This count has been open ${Math.floor(freshness.hoursOpen / 24)} day(s). Stock has moved since it was started, so the numbers may not reflect one date. Start a fresh count, or confirm when the stock was actually counted.`,
+        code: "COUNT_TOO_STALE",
+        hoursOpen: Math.round(freshness.hoursOpen),
+        startedAt: count.createdAt,
+      },
+      { status: 400 },
+    );
+  }
+
   // A short count (below floor, or a monthly submitted with an explicit partial
   // reason) must never auto-approve — it goes to the manager's review queue with
   // a note, so the gap is seen. Otherwise, zero-variance counts auto-approve.
+  // A stale count is held back from auto-approval for the same reason.
   const isShort = coverage.belowFloor;
-  const autoApprove = !isShort && isCleanCount(count.items);
-  const noteAddition = isShort
-    ? `${coverage.shortNote}${partialReason ? ` reason: ${partialReason}` : ""}`
-    : null;
+  const autoApprove = !isShort && !freshness.stale && isCleanCount(count.items);
+  const noteAddition = [
+    isShort ? `${coverage.shortNote}${partialReason ? ` reason: ${partialReason}` : ""}` : null,
+    freshness.staleNote
+      ? `${freshness.staleNote}${staleReason ? ` counted: ${staleReason}` : ""}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
   const mergedNotes = noteAddition
     ? [count.notes, noteAddition].filter(Boolean).join(" ")
     : undefined;
