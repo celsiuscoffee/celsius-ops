@@ -745,6 +745,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Lessons learned
 
+- 2026-07-30 — **LibreOffice is broken in the session container — do not plan
+  on `.docx` → PDF conversion.** `soffice --headless --convert-to pdf` returns
+  "source file could not be loaded" on every input, including a plain `.txt`,
+  so it is the binary and not the document. Working recipe for a PDF
+  deliverable: write the report as HTML, inline every image as a `data:` URI,
+  and print with `chromium --headless --no-sandbox --no-pdf-header-footer
+  --print-to-pdf=out.pdf page.html`; proof it by rasterising with
+  `pdftoppm -png -r 90` and *reading the pages back*. Two traps: CSS braces
+  blow up a Python f-string (keep the stylesheet in its own plain string), and
+  `page-break-inside: avoid` on a block that no longer fits will shunt the
+  whole thing to the next page and leave a half-empty one behind — reordering
+  sections or tightening leading beats forcing a keep. Space Grotesk is not
+  installed, so the font stack must terminate in a generic `sans-serif` or the
+  PDF silently falls back to a serif.
+
 - 2026-07-14 — **Every upload control must accept drag & drop** (owner
   directive: "this should be the standard"). Backoffice audit found the
   standard mostly hand-rolled per page and four click-only gaps (invoice Edit
@@ -798,11 +813,17 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   `#A54A2C`/`#672F16`/`#301100`, Space Grotesk; Peachii is logotype-only and
   ships as a limited demo face, so the wordmark is PLACED as artwork, never
   typed in a substitute). Owner then asked to simplify — final build is
-  `build_cafes_simple.js`, five sections (sales by outlet, growth, delivery
-  caveat, basis, corporate structure) and ONE chart, the grouped bar chart per
-  outlet. The two line charts and the three monthly-detail tables were cut;
-  the delivery caveat was deliberately kept, since the headline is misleading
-  without it. Headline figures:
+  `build_cafes_simple.js` — four sections (sales by outlet, growth, corporate
+  structure, basis and limitations) and ONE chart, the grouped bar chart per
+  outlet. The two line charts and the three monthly-detail tables were cut.
+  Owner then directed that the delivery-caveat section be removed too, after
+  the risk was put to them — so **the document that goes to Maybank presents
+  +45.2% and +88.5% with no like-for-like counterpart.** The ex-delivery
+  numbers below are therefore recorded ONLY here; they must travel with the
+  headline whenever it is quoted anywhere else, and anyone re-using this pack
+  should read them first. A PDF is built separately by `build_pdf.py` — it is
+  NOT a conversion of the .docx (see the lesson below), so edits must be made
+  in both. Headline figures:
   FY2024 RM1,603,549.04 → FY2025 RM2,328,235.42 (+45.2%); H1 FY2026
   RM1,771,676.01 vs H1 FY2025 RM940,127 (+88.5%).
   ⚠ **Two numbers must never be quoted without their caveat.** (1) Of the
