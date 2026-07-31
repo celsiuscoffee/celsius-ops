@@ -6,6 +6,22 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-31 — **Stock counts were being filed under the wrong date, and it
+  invalidates the Putrajaya shrinkage finding.** Owner asked whether Firdaus's
+  count saved ("but the date?"). It did — count `3ad902a3` — but it was dated
+  **29 Jul and finalized 31 Jul**. `countDate` defaults to creation and was
+  never touched again, while the balances a finalize writes are as-of *now*.
+  Systemic, not a one-off: CC001 counts sat open **2, 6, 9 and 25 days**; CC003
+  (Tamarind) closes every count same-day. Tamarind is also the ONLY outlet whose
+  stock reconciles cleanly (0.6% vs Putrajaya's 7.3%) — so the "worst shrinkage
+  outlet" conclusion is at least partly an artefact of how the counts were
+  taken. **Treat every Putrajaya reconciliation figure as unproven until a
+  clean same-day count exists.** Fix shipped (PR #1094): counts expire after
+  24h; counting on into an expired one is soft-blocked (start fresh, or continue
+  and have `countDate` moved forward); finalizing an expired count stamps it
+  with the closing day. Expiry is **derived from `createdAt`**, not stored — no
+  `EXPIRED` enum, no migration, no cron to flip stale rows.
+
 - 2026-07-29 — **`Outlet.openTime/closeTime` is NOT the real trading window —
   measure from the till.** Config says 08:00–22:00 for all three outlets. The
   tills say first sale **07:46** (PJ), last **22:47**, and the **22:00 hour
@@ -653,6 +669,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-07-31 — **PR #1094 (stock-count freshness + expiry) is a DRAFT awaiting
+  CI.** Two commits: `920a80b` (18h stale → no auto-approve; CI green) and
+  `1237124` (24h expiry + soft block + countDate re-stamp). No migration, so it
+  is mergeable without owner sign-off on prod DB — but it changes what the staff
+  app does at the till, so confirm before merging. Open questions for the owner:
+  (1) was the 29 Jul Putrajaya stock physically counted that day or spread to
+  the 31st? — decides whether that count can be reconciled at all;
+  (2) whether to add per-line `countedAt` on `StockCountItem` (needs a
+  migration) so a long count can be sliced by the day each line was keyed,
+  instead of judged as one blob.
+  Still unanswered from earlier in the session: the 12 INITIATED payments where
+  the owner says POPs were shared — bank feed shows NO matching debits through
+  26 Jul and there are 0 `tg:` transcript rows, so either the payments were
+  never made or the POPs were lost to the known Telegram-persistence gap. That
+  gap (and MULTI_POP under-extraction) is still unfixed.
 - 2026-07-29 — **Mystery reward could silently miss its moment on QR-table
   orders (fixed).** Owner asked whether QR-table still has mystery rewards:
   YES — not gated on order type, 56/59 paid QR orders from signed-in members
