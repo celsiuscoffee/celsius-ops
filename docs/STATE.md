@@ -6,6 +6,141 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-07-30 — **Revenue history: the DB only reaches back to 2025-01-01 for the
+  cafés. Pre-2025 per-outlet revenue lives ONLY in Google Sheets.** Asked for
+  "revenue per outlet since 2021"; coverage map (SQL-verified against kqdc +
+  the owner's sheets):
+  · `unified_sales` earliest row per source — consignment **2022-05-23**, hubbo
+  **2025-01-01**, storehub 2025-08-29, pickup 2026-04-11, pos_native 2026-06-08.
+  Every other candidate table starts LATER (fin_transactions 2026-01-01,
+  BankStatementLine 2025-01-01, SalesTransaction 2026-03-02) — so **nothing in
+  the database predates 2022-05, and no café till data predates 2025-01**.
+  · The hubbo 2025-01-01 floor is an **import boundary, not a business start**:
+  Jan 2025 is a full steady month (PJ RM67,606 / SA RM96,961), not a new-store
+  ramp. PJ/SA were trading well before it; that history was never imported.
+  · Pre-2025 per-outlet truth = **"Celsius - Sales Tracking <year>"** sheets in
+  Drive folder `1cAv54MvGzjK9nuQ_2QkgQ-6bg6uYIp0-` (2024:
+  `1NxHDK1k6cFFKbBbTYmuOgCqACVH94c8feLk6iaGQNbk`, 2025:
+  `14Z6yIV9BU5b_tRIWsFClyKBRwGuWT0k5ux26i3Seahk`, 2026:
+  `1Imkmokf_VUpPsrMKIFEjoIihfA4klZax2rzVE6I3gRM`). Each has Daily / Weekly /
+  Monthly / Overall blocks per outlet (Sales, #, AOV). **The series STARTS at
+  2024** — there is no 2023/2022/2021 tracking sheet (Drive-searched).
+  · **The sheets and the DB agree to the ringgit** where they overlap — 2025
+  Jan–Apr PJ 67,606/61,011/60,933/65,179 and SA 96,961/80,499/75,867/78,056 match
+  `unified_sales` hubbo cent-for-cent. Same underlying till data, so the 2024
+  sheet is trustworthy as the 2024 lens.
+  · BUT the **sheets stop being maintained mid-year and the DB is more complete
+  for 2025**: sheet 2025 covers Jan–Nov only (Dec = 0) and drops Nilai/IOI after
+  Aug; DB 2025 has the full year. Sheet 2025 total RM2,372,711 vs DB
+  RM2,800,962. **Prefer the DB for 2025+, the sheet for 2024.**
+  · 2023 has **no per-outlet split anywhere**. The owner's "Sales Celsius 2023"
+  (`1VzUqBERujv7I0pK76UaKTEa11aUv0948nvV2YYN9bb4`) is a Bukku GL *Sales-account
+  ledger* (bank narrations, one company, no outlet dimension) totalling
+  **RM1,263,790.41 income** — that is the group banked lens, NOT comparable to
+  till nett, and it can't be decomposed by outlet.
+  · 2021 = **pre-outlet**. The only artefact is "Celsius Coffee - Lama"
+  (`1d-9YpRXvaH27Ii4RregqdmQd8Wk_4IcE-l_tHWasGr0`, Jan 2021): a bottled-coffee
+  delivery operation, **RM14,000.20 sales / RM9,045 COGS**, no outlets.
+  · Consignment rows in `unified_sales` are **GROSS customer sales, not the
+  Celsius share** — DB IOI Aug 2023 RM5,606 matches the "GH Sales Tracking"
+  sheet's gross exactly, while that sheet's "Celsius" column is 70% of it. The
+  bank/GL lens sees only the ~70% settlement, so consignment revenue is
+  systematically ~30% lower in the GL lens than in `unified_sales`.
+  · Best available per-outlet annual series (till lens; 2024 = sheet, 2025+ = DB):
+  2024 PJ 828,907 / SA 774,643 / Nilai 420,363 / IOI 195,865 (total 2,219,778);
+  2025 PJ 905,844 / SA 1,082,382 / Tam 340,010 / Nilai 358,743 / IOI 113,983
+  (total 2,800,962); 2026-YTD→07-30 PJ 840,644 / SA 684,363 / Tam 544,305 /
+  Nilai 103,049 / IOI 14,990 (total 2,187,351). 2023 Nilai 332,741 + IOI 77,470
+  (consignment only). 2022 Nilai 240,894 (from 05-23) only.
+  · **2024 IS NOW BACKFILLED (migration `20260730_historical_daily_sales`,
+  NOT YET APPLIED — needs owner approval, hard rule 6).** New SQL-managed table
+  `historical_daily_sales` (daily grain, deliberately NOT in schema.prisma,
+  mirroring `consignment_sales`) + a `source='historical'` branch in the
+  `unified_sales` view and in `api/sales/_lib/unified-sales.ts`. 722 rows:
+  Putrajaya 360 trading days / RM828,906.52 and Shah Alam 362 / RM774,642.52 —
+  cent-exact against the sheet's own Monthly and Overall blocks. Read at full
+  stored precision, NOT the display-rounded daily cells (those drift the annual
+  total by RM4–20 per outlet). Non-trading days are ABSENT, not zero — the sheet
+  marks them two ways (blank, and an explicit 0 against 0 orders on Putrajaya
+  26 Sep), and loading zeros would drag every daily average down.
+  **No-double-count is enforced three ways** (CHECK constraint `biz_date <
+  2025-01-01`, the view branch, and `HISTORICAL_UNTIL` in unified-sales.ts) and
+  pinned by `_lib/__tests__/historical-sales.test.ts` so the three cannot drift.
+  Verified by applying the migration to a throwaway local Postgres 16 with a
+  faithful schema skeleton — 7 assertions incl. idempotent re-run, zero leak
+  into the 2025+ era, and 2025-01-01 still reading hubbo alone. **Fidelity
+  limits:** daily grain (no per-receipt/per-hour/tender detail — nothing
+  intraday may read these rows), one channel bucket (all of it maps to `till`,
+  so any 2024 GrabFood is inside those figures and unsplittable), and gross =
+  nett (no organic-vs-discounted split before 2025).
+  · **FY2023 IS NOW BACKFILLED TOO — at ENTITY grain, on the BANKED lens
+  (migration `20260730_historical_entity_revenue`, NOT YET APPLIED).** New
+  SQL-managed table `historical_entity_revenue` (entity_reg_no, biz_date,
+  amount, lens) holding 362 daily rows for Celsius Coffee Sdn Bhd totalling
+  **RM1,263,790.41 — ties EXACTLY to the Income line on the Bukku ledger's own
+  summary.** Deliberately **NOT joined into `unified_sales`**: that view is till
+  truth, and this is the banked lens (settlement-lagged, SST-incl, includes
+  wholesale/B2B and consignment at the ~70% share). Mixing them would corrupt
+  every till dashboard, the labour gate and the ads guard. A `lens` CHECK plus a
+  pre-2024 CHECK keep it in its own era; an assertion proves `unified_sales`
+  neither reads nor reports it. **Two evidenced corrections were needed:**
+  (a) 39 postings carried an Excel-epoch year (1900-02-27/28) — every memo
+  referenced late Feb 2023 (`HH230227…`, `HH230228…`, "20 to 26 feb"), so only
+  the year was wrong; remapping restored **RM34,830.82** to February, without
+  which the year understates. (b) the single Refund row (−RM35.70) is kept
+  negative so the total ties to stated Income, not gross credits.
+  · **FY2023 channel mix** (narration-classified, foots exactly to the year):
+  inter-bank batches narrated "U MOBILE SDN BHD" **RM442,417.62 / 35.0%** (257
+  postings, avg RM1,721 — largest single channel and NOT self-evidently Celsius
+  trade; **owner must identify it**, a credit assessor will ask), consignment
+  settlements RM314,264.10 / 24.9%, wholesale/B2B RM175,841.44 / 13.9%, retail
+  DuitNow QR RM131,190.76 / 10.4%, other small transfers RM107,594.91 / 8.5%,
+  card acquiring RM92,509.38 / 7.3%.
+  · **Reusable lesson:** any "since <year>" revenue question earlier than 2024
+  CANNOT be answered from SQL alone — check the Drive tracking sheets, and say
+  which lens each year comes from. FY2023 has **no outlet split at any
+  fidelity** (one Account, one Split Account, one bank account — verified across
+  the full 10,605-row workbook); do not attempt to allocate it per outlet.
+  FY2022 and earlier have no surviving revenue record beyond Nilai consignment.
+
+- 2026-07-30 — **Outlet↔legal-entity mapping matters and is NOT what the DB
+  implies.** Three companies, common directors (Ammar bin Shahrin, Ammar bin
+  Roslizar): **Celsius Coffee Sdn Bhd** `202101024485` inc. 19/07/2021 (Shah
+  Alam, Nilai, IOI Mall); **Celsius Coffee Tamarind Sdn Bhd** `202501036872`
+  inc. 07/08/2025 (Tamarind); **Celsius Coffee Conezion Sdn Bhd**
+  `202501044958` inc. 25/09/2025 (Putrajaya). Source: the "Celsius Coffee -
+  Corporate Info" sheet (`1xVQY-adAm3mUoa_MzIkKDFdhW9A_A6ZeP5WoK7u8C9U`) —
+  which ALSO contains live KWSP/SOCSO/LHDN/Maybank credentials, so never quote
+  it wholesale into any shared artefact.
+  **Consequence for revenue reporting:** Putrajaya's trade belongs to Celsius
+  Coffee Sdn Bhd before Conezion Sdn Bhd existed and to Conezion Sdn Bhd after,
+  so an entity-scoped series must split it (assumed at the 25/09/2025
+  incorporation date — RM257,535.75 of FY2025 turns on that assumption, still
+  **unconfirmed against the statutory accounts**). Entity-scoped totals (till
+  lens): CCSB FY2024 2,219,777.83 / FY2025 2,203,415.84 / H1-FY2026 685,821.29;
+  Conezion FY2025 257,535.75 / H1-FY2026 722,230.20; Tamarind FY2025 340,010.05
+  / H1-FY2026 468,837.64. **CCSB's headline falls in FY2026 purely because
+  Putrajaya left the entity — not a trading decline.** Like-for-like on the
+  continuing outlets: FY2024 1,390,871.31 → FY2025 1,555,108.06 (+11.8%), but
+  H1 798,924.23 → 685,821.29 (**−14.2%**) as the two consignment counters fall
+  away while Shah Alam grows (+10.9% H1). Audit status: FY2023 audited, FY2024
+  **draft only** (not finalised by directors, lodgement late), FY2025 not
+  submitted (EOT to 30/09/2026) — audited FS govern over any figure we produce.
+
+- 2026-07-30 — **The consignment feed (Nilai, IOI Mall) has REAL coverage gaps
+  — do not read the FY2026 decline as trading.** IOI Mall has **no
+  `consignment_sales` rows at all** for 2025-09, 2025-10, 2026-04, 2026-05;
+  both sites have part-covered months (IOI 2026-03 = 7 distinct days,
+  2026-06 = 9; Nilai 2026-01 = 17, 2026-03 = 9). Their FY2026 figures are a
+  FLOOR, not a total. **Separately, a genuine seasonal pattern is easy to
+  mistake for a gap:** both sites collapse every March (Nilai RM3,785 in
+  Mar-2025 and RM3,790 in Mar-2026 against a RM20–31k norm) — that is the
+  Ramadan food-court pattern and it recurs annually. Note `count(*)` on
+  `consignment_sales` OVERSTATES coverage (multiple channel rows per day:
+  cafe/buttercream/moreh/bazaar) — always use `count(distinct biz_date)`.
+  Open: obtain the missing settlement advices, and confirm whether both
+  counters are still trading at all.
+
 - 2026-07-29 — **`Outlet.openTime/closeTime` is NOT the real trading window —
   measure from the till.** Config says 08:00–22:00 for all three outlets. The
   tills say first sale **07:46** (PJ), last **22:47**, and the **22:00 hour
@@ -610,6 +745,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Lessons learned
 
+- 2026-07-30 — **LibreOffice is broken in the session container — do not plan
+  on `.docx` → PDF conversion.** `soffice --headless --convert-to pdf` returns
+  "source file could not be loaded" on every input, including a plain `.txt`,
+  so it is the binary and not the document. Working recipe for a PDF
+  deliverable: write the report as HTML, inline every image as a `data:` URI,
+  and print with `chromium --headless --no-sandbox --no-pdf-header-footer
+  --print-to-pdf=out.pdf page.html`; proof it by rasterising with
+  `pdftoppm -png -r 90` and *reading the pages back*. Two traps: CSS braces
+  blow up a Python f-string (keep the stylesheet in its own plain string), and
+  `page-break-inside: avoid` on a block that no longer fits will shunt the
+  whole thing to the next page and leave a half-empty one behind — reordering
+  sections or tightening leading beats forcing a keep. Space Grotesk is not
+  installed, so the font stack must terminate in a generic `sans-serif` or the
+  PDF silently falls back to a serif.
+
 - 2026-07-14 — **Every upload control must accept drag & drop** (owner
   directive: "this should be the standard"). Backoffice audit found the
   standard mostly hand-rolled per page and four click-only gaps (invoice Edit
@@ -652,6 +802,71 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-07-30 — **Maybank financing pack: café sales growth FY2024→H1 FY2026
+  (delivered, NOT in the repo).** Owner asked for revenue per outlet since 2021,
+  narrowed to sales growth for the three CAFÉS ONLY — Putrajaya (Conezion),
+  Shah Alam Seksyen 13, Tamarind Square — consignment counters (Nilai, IOI Mall)
+  excluded, GrabFood INCLUDED. Deliverable is a Word document built by
+  `build_cafes.js` in the session scratchpad, brand-styled to
+  `CC_BRAND_SYSTEM_v2026.pdf` (Celsius Black `#1A0200` ink, terracotta ramp
+  `#A54A2C`/`#672F16`/`#301100`, Space Grotesk; Peachii is logotype-only and
+  ships as a limited demo face, so the wordmark is PLACED as artwork, never
+  typed in a substitute). Owner then asked to simplify — final build is
+  `build_cafes_simple.js` — THREE sections (sales by outlet, growth, corporate
+  structure) and ONE chart, the grouped bar chart per outlet. The two line
+  charts and the three monthly-detail tables were cut. Owner then directed that
+  the delivery-caveat section AND the basis-and-limitations section be removed
+  as well, after the risk was put to them each time — so **the pack that goes
+  to Maybank presents +45.2% and +88.5% as bare figures, with no like-for-like
+  counterpart, no audit-status note, no till-change note and no statement of
+  what the revenue definition includes.** Everything below is therefore
+  recorded ONLY here. Anyone re-using this pack must read this entry first, and
+  the caveats must travel with the headline whenever it is quoted anywhere
+  else. What survives in the document: the one-line "Management information,
+  not audited" footnote, the Basis row in the cover table, and the corporate-
+  structure note that the three cafés are separate borrowers. A PDF is built
+  separately by `build_pdf.py` — it is NOT a conversion of the .docx (see the
+  lesson below), so every content edit has to be made in both.
+  Headline figures:
+  FY2024 RM1,603,549.04 → FY2025 RM2,328,235.42 (+45.2%); H1 FY2026
+  RM1,771,676.01 vs H1 FY2025 RM940,127 (+88.5%).
+  ⚠ **Two numbers must never be quoted without their caveat.** (1) Of the
+  +88.5% half-on-half, 16.4 points is DELIVERY BECOMING VISIBLE rather than new
+  business — like-for-like ex-delivery is +72.0%, and FY2025's +45.2% is +44.3%
+  ex-delivery. (2) Shah Alam's +10.9% is delivery capture in full: ex-delivery
+  it is FLAT (−0.4%). Delivery started being recorded at Shah Alam and
+  Putrajaya only in Jan 2026, so it is inside the FY2026 figures and absent
+  from FY2025 and earlier.
+  Putrajaya's +45% step in Jan 2026 coincides with a Hubbo→StoreHub till
+  change; evidence says it is mostly real (AOV stable RM28.50→29.10, level
+  sustained, and Shah Alam switched on the same schedule with NO discontinuity:
+  Dec 89,495 → Jan 89,096). The FY2026 bar in the bar chart is deliberately
+  SPLIT — solid = the six months actually taken to 30 June, hatched = the same
+  figure again as straight-line arithmetic — so a projection is never shown as
+  fact. Still open for the owner: GrabFood merchant statements (to restate
+  delivery back into FY2025), and confirmation of the Putrajaya transfer date
+  to Conezion Sdn Bhd (assumed 25/09/2025; RM257,535.75 of FY2025 turns on it).
+  ⚠ Never quote the Corporate Info sheet wholesale into a shared artefact — it
+  carries KWSP/SOCSO/LHDN/Maybank credentials, bank account numbers and
+  director IC numbers. All were deliberately excluded from the report.
+  **The removed basis-and-limitations section, preserved here because the
+  document no longer states any of it:** (a) these are management figures, not
+  audited accounts — FY2023 is audited, the FY2024 audit is IN DRAFT and not
+  yet finalised by the directors, FY2025 has not been submitted; audited
+  accounts govern wherever they differ. (b) Revenue = all sales rung through
+  the outlet's till or ordering apps (counter, QR-table, customer app, and
+  delivery where captured), net of discounts and EXCLUDING sales tax.
+  (c) FY2024 is RECONSTRUCTED from the internal daily sales tracker — every
+  month agrees to the cent with that record's own monthly and annual totals,
+  and where the tracker overlaps the till systems in early 2025 the two agree
+  exactly. (d) Further GrabFood revenue is missing from FY2025 and is not
+  recoverable from the sales systems; Putrajaya's outlet management accounts
+  show RM11,472–15,703/month May–Sep 2025, so adding it would RAISE FY2025 and
+  REDUCE the FY2026 growth rate — the published figures are conservative in
+  that direction. (e) No FY2023 comparative exists for any of the three (see
+  the FY2023 entity-grain entry above). (f) H1 FY2026 = six months to
+  30 Jun 2026; run-rate = that half doubled, no seasonality adjustment.
 
 - 2026-07-29 — **Mystery reward could silently miss its moment on QR-table
   orders (fixed).** Owner asked whether QR-table still has mystery rewards:
