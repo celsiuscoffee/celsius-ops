@@ -157,6 +157,24 @@ export default function StockCheckPage() {
   // "Start new count" — bypasses the read-only view for this session.
   const [startNewOverride, setStartNewOverride] = useState(false);
 
+  // ── Expiry (soft block) ──
+  // A draft left open more than a full day is not a single-date snapshot any
+  // more, so the server refuses further saves until the counter decides:
+  // start fresh for today, or continue and let the count be re-dated. Held in
+  // state so the choice sticks for the rest of the session and every
+  // subsequent save carries it.
+  const [expiredCount, setExpiredCount] = useState<{
+    countId: string;
+    daysOpen: number;
+    countDate: string | null;
+  } | null>(null);
+  const [expiredAction, setExpiredAction] = useState<"new" | "continue" | null>(null);
+  // Finalize-time counterpart: an expired count can still be closed, but only
+  // once someone states when the stock was really counted.
+  const [stalePrompt, setStalePrompt] = useState<{ daysOpen: number; reason: string } | null>(null);
+  const expiredActionRef = useRef(expiredAction);
+  useEffect(() => { expiredActionRef.current = expiredAction; }, [expiredAction]);
+
   // serverItems is also surfaced via a ref for the realtime callback,
   // which doesn't see fresh React state via closure.
   const serverItemsRef = useRef(serverItems);
@@ -211,12 +229,37 @@ export default function StockCheckPage() {
         active: {
           id: string;
           items: ServerItem[];
+          countDate?: string | null;
+          expired?: boolean;
+          daysOpen?: number;
         } | null;
         submittedToday: typeof submittedToday;
       } = await res.json();
 
+      // "Start a new count" was chosen but nothing has been keyed yet, so the
+      // expired draft is still the newest one on the server. Ignore it —
+      // otherwise the 3-second poll re-hydrates the very count we abandoned.
+      if (data.active?.expired && expiredActionRef.current === "new") {
+        setCountId(null);
+        setServerItems({});
+        setExpiredCount(null);
+        setSubmittedToday(null);
+        return;
+      }
+
       if (data.active) {
         setCountId(data.active.id);
+        // Surface the soft block on open, so nobody keys a quantity into a
+        // day-old count only to have it bounce. Cleared once they choose.
+        setExpiredCount(
+          data.active.expired && !expiredActionRef.current
+            ? {
+                countId: data.active.id,
+                daysOpen: data.active.daysOpen ?? 1,
+                countDate: data.active.countDate ?? null,
+              }
+            : null,
+        );
         const map: Record<string, ServerItem> = {};
         for (const it of data.active.items) {
           map[serverItemKey(it.productId, it.productPackageId)] = it;
@@ -241,6 +284,7 @@ export default function StockCheckPage() {
       } else {
         setCountId(null);
         setServerItems({});
+        setExpiredCount(null);
         setSubmittedToday(data.submittedToday ?? null);
       }
     } catch {
@@ -440,6 +484,7 @@ export default function StockCheckPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             frequency: frequency.toUpperCase(),
+            ...(expiredActionRef.current ? { expiredAction: expiredActionRef.current } : {}),
             items: [
               {
                 productId,
@@ -452,6 +497,16 @@ export default function StockCheckPage() {
         });
         if (res.status === 409) {
           const body = await res.json();
+          // Soft block: the open count is more than a day old. Prompt for the
+          // choice, then the retry carries expiredAction and goes through.
+          if (body.code === "COUNT_EXPIRED") {
+            setExpiredCount({
+              countId: body.countId,
+              daysOpen: body.daysOpen ?? 1,
+              countDate: body.countDate ?? null,
+            });
+            return false;
+          }
           const conflict: ConflictItem | undefined = body.conflicts?.[0];
           if (conflict) {
             setConflictPrompt({
@@ -524,7 +579,7 @@ export default function StockCheckPage() {
   // triggers the stock balance commit. The "Submit" button is named
   // "Finalize" in the UI — anyone at the outlet can tap once 235/235 is
   // reached, even if they didn't start the count.
-  const handleSubmit = async () => {
+  const handleSubmit = async (opts?: { staleReason?: string }) => {
     if (submitting) return;
     if (!user?.outletId) {
       const msg = "No outlet assigned to your account.";
@@ -544,15 +599,28 @@ export default function StockCheckPage() {
     try {
       const res = await fetch(`/api/stock-checks/${countId}/finalize`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(opts?.staleReason ? { staleReason: opts.staleReason } : {}),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => null);
+        // Soft block: the count expired before it was finalized. Ask when the
+        // stock was actually counted, then resend — the count is filed under
+        // the day it closes, with the answer recorded on it.
+        if (errBody?.code === "COUNT_EXPIRED") {
+          setStalePrompt({ daysOpen: errBody.daysOpen ?? 1, reason: "" });
+          toast.dismiss(pendingToastId);
+          return;
+        }
         throw new Error(errBody?.error || "Finalize failed");
       }
+      setStalePrompt(null);
       setSubmitted(true);
       setCounts({});
       setCountId(null);
       setServerItems({});
+      setExpiredCount(null);
+      setExpiredAction(null);
       try { localStorage.removeItem(STORAGE_KEY); } catch { /* iOS private mode */ }
       toast.success(`Stock count finalized (${countedItems} items)`, { id: pendingToastId });
     } catch (err) {
@@ -893,7 +961,7 @@ export default function StockCheckPage() {
           <Button
             className="flex-1 h-14 bg-terracotta hover:bg-terracotta-dark text-base font-semibold"
             disabled={countedItems < totalItems || submitting}
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
           >
             {submitting ? (
               <><Loader2 className="mr-1.5 h-5 w-5 animate-spin" /> Finalizing...</>
@@ -903,6 +971,111 @@ export default function StockCheckPage() {
           </Button>
         </div>
       </div>
+
+      {/* ── Expired-count modal (soft block) ── the open count is more than a
+          day old, so it can no longer be a single-date snapshot. Counting on
+          into it would file today's shelves under the day it was opened, which
+          is what silently corrupted past shrinkage figures. Two honest ways
+          out; no way to carry on pretending it's the same date. */}
+      {expiredCount && !expiredAction && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 sm:rounded-2xl">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-gray-900">
+                  This count expired
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  It was started {expiredCount.daysOpen === 1 ? "a day" : `${expiredCount.daysOpen} days`} ago
+                  {expiredCount.countDate && (
+                    <> and is dated {new Date(expiredCount.countDate).toLocaleDateString()}</>
+                  )}
+                  . Stock has moved since. Counting more into it would record today&apos;s stock under that
+                  older date.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-2">
+              <Button
+                className="h-12 bg-terracotta hover:bg-terracotta-dark"
+                onClick={() => {
+                  // Leave the old draft alone and count today from scratch.
+                  setExpiredAction("new");
+                  setExpiredCount(null);
+                  setCounts({});
+                  setCountId(null);
+                  setServerItems({});
+                  try { localStorage.removeItem(STORAGE_KEY); } catch { /* iOS private mode */ }
+                }}
+              >
+                Start a new count for today
+              </Button>
+              <Button
+                variant="outline"
+                className="h-12"
+                onClick={() => {
+                  // Keep the lines already counted; the count gets re-dated to
+                  // today server-side on the next save.
+                  setExpiredAction("continue");
+                  setExpiredCount(null);
+                  toast("Count re-dated to today — carry on where you left off.");
+                }}
+              >
+                Continue it (re-date to today)
+              </Button>
+            </div>
+            <p className="mt-3 text-center text-xs text-gray-400">
+              Nothing already counted is deleted either way.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Stale-finalize modal ── an expired count can still be closed, but
+          only once someone records when the stock was actually counted. The
+          count is then filed under the day it closes, with that answer on it. */}
+      {stalePrompt && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 sm:rounded-2xl">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-gray-900">
+                  Open {stalePrompt.daysOpen === 1 ? "a day" : `${stalePrompt.daysOpen} days`} — when was this counted?
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  A manager will review it. Say which day(s) the stock was physically counted so the
+                  numbers can be read correctly.
+                </p>
+              </div>
+            </div>
+            <Input
+              className="mt-4"
+              autoFocus
+              placeholder="e.g. counted Tue morning, finished Wed"
+              value={stalePrompt.reason}
+              onChange={(e) => setStalePrompt({ ...stalePrompt, reason: e.target.value })}
+            />
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={() => setStalePrompt(null)}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-terracotta hover:bg-terracotta-dark"
+                disabled={stalePrompt.reason.trim().length < 3 || submitting}
+                onClick={() => void handleSubmit({ staleReason: stalePrompt.reason.trim() })}
+              >
+                Finalize
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Conflict modal ── shown when another counter already saved this
           item with a different value. User picks: overwrite or keep theirs. */}

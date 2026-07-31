@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { isCleanCount, baseQtyByProduct } from "@celsius/db";
+import { isCleanCount, baseQtyByProduct, evaluateCountFreshness } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { setStockBalance } from "@/lib/stock";
 import { checkCountCoverage } from "@/lib/stock-coverage";
@@ -30,6 +30,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ? body.partialReason.trim().slice(0, 300)
       : null;
 
+  // Acknowledgement for a count left open past the block window — the counter
+  // must say when the stock was actually counted before we accept it.
+  const staleReason: string | null =
+    typeof body?.staleReason === "string" && body.staleReason.trim()
+      ? body.staleReason.trim().slice(0, 300)
+      : null;
+
   const count = await prisma.stockCount.findUnique({
     where: { id },
     select: {
@@ -38,6 +45,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       outletId: true,
       frequency: true,
       notes: true,
+      createdAt: true,
+      countDate: true,
       items: {
         select: {
           productId: true,
@@ -107,14 +116,49 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const now = new Date();
 
+  // Freshness guard — a count is a point-in-time snapshot, so one left open
+  // across trading days no longer describes any single date. Open more than a
+  // full day and the count is EXPIRED: a soft block, refused until the counter
+  // says when the stock was actually counted. Past the stale window (18h) we
+  // allow it but never auto-approve, so a human sees the gap. (Putrajaya counts
+  // sat open 6–25 days and silently corrupted every shrinkage figure derived
+  // from them.)
+  const freshness = evaluateCountFreshness({ createdAt: count.createdAt, now });
+  if (freshness.expired && !staleReason) {
+    return NextResponse.json(
+      {
+        error: `This count has been open ${freshness.daysOpen} day(s) — it expired. Stock has moved since it was started, so the numbers no longer describe one date. Start a fresh count, or confirm when the stock was actually counted.`,
+        code: "COUNT_EXPIRED",
+        hoursOpen: Math.round(freshness.hoursOpen),
+        daysOpen: freshness.daysOpen,
+        startedAt: count.createdAt,
+      },
+      { status: 400 },
+    );
+  }
+
   // A short count (below floor, or a monthly submitted with an explicit partial
   // reason) must never auto-approve — it goes to the manager's review queue with
   // a note, so the gap is seen. Otherwise, zero-variance counts auto-approve.
+  // A stale count is held back from auto-approval for the same reason.
   const isShort = coverage.belowFloor;
-  const autoApprove = !isShort && isCleanCount(count.items);
-  const noteAddition = isShort
-    ? `${coverage.shortNote}${partialReason ? ` reason: ${partialReason}` : ""}`
-    : null;
+  const autoApprove = !isShort && !freshness.stale && isCleanCount(count.items);
+  const noteAddition = [
+    isShort ? `${coverage.shortNote}${partialReason ? ` reason: ${partialReason}` : ""}` : null,
+    freshness.staleNote
+      ? `${freshness.staleNote}${staleReason ? ` counted: ${staleReason}` : ""}`
+      : null,
+    // An expired count is re-dated below, so record what it was opened as —
+    // otherwise the original date is lost and the re-stamp looks like the
+    // count simply started today.
+    freshness.expired
+      ? `[re-dated] opened ${count.countDate.toISOString().slice(0, 10)}, closed ${now
+          .toISOString()
+          .slice(0, 10)}; countDate moved to the closing date.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
   const mergedNotes = noteAddition
     ? [count.notes, noteAddition].filter(Boolean).join(" ")
     : undefined;
@@ -127,6 +171,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       submittedAt: now,
       finalizedById: session.id,
       finalizedAt: now,
+      // The balances written below are as-of NOW, so an expired count must be
+      // stamped with the day it actually closed. Leaving countDate at the day
+      // it was opened is exactly the bug this guard exists for: a 29 Jul count
+      // finalized on the 31st was filed as 29 Jul stock.
+      ...(freshness.expired ? { countDate: now } : {}),
       ...(autoApprove ? { reviewedAt: now } : {}),
       ...(mergedNotes !== undefined ? { notes: mergedNotes } : {}),
     },

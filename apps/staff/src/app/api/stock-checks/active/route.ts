@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import { evaluateCountFreshness } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
@@ -87,5 +88,23 @@ export async function GET(req: NextRequest) {
         orderBy: { submittedAt: "desc" },
       });
 
-  return NextResponse.json({ active, submittedToday });
+  // Expiry state for the resumed draft. A count open more than a full day is
+  // no longer a single-date snapshot, so the app must prompt before letting
+  // anyone count on into it — surfaced here so the prompt appears on open
+  // rather than after the first quantity is keyed and rejected.
+  const freshness = active
+    ? evaluateCountFreshness({ createdAt: active.createdAt, now: new Date() })
+    : null;
+
+  return NextResponse.json({
+    active: active
+      ? {
+          ...active,
+          expired: freshness!.expired,
+          hoursOpen: Math.round(freshness!.hoursOpen),
+          daysOpen: freshness!.daysOpen,
+        }
+      : null,
+    submittedToday,
+  });
 }

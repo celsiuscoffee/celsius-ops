@@ -130,6 +130,85 @@ export function evaluateCountCoverage(input: CoverageInput): CoverageResult {
   };
 }
 
+// ─── Count freshness (guard against counts left open across days) ───────────
+//
+// A stock count is a POINT-IN-TIME snapshot: opening/closing balances, COGS and
+// shrinkage all assume every line reflects the same moment. Nothing enforced
+// that. Counts were created on one day and finalized days later while stock
+// kept moving, yet stored under the ORIGINAL countDate — so the snapshot date
+// was a lie and the variance either side of it was smeared.
+//
+// Real cases (Putrajaya, 2026): created 4 Jun → finalized 30 Jun (25 days);
+// 19 Jul → 28 Jul (9 days); 12 Jul → 19 Jul (6 days). Tamarind, by contrast,
+// closed every count same-day and is the only outlet whose stock reconciles
+// cleanly — which is why this is a data-integrity bug, not a staff issue.
+//
+// Policy (owner's rule, 2026-07-31 — "if opened more than 1 day, needs to make
+// it expired if not finalized … or can put a soft block if they continue
+// counting … but it is a diff date"):
+//   - within the same working window  → fine
+//   - open past STALE_HOURS (18h)     → WARN: never auto-approve; the count
+//                                       goes to manager review with a note
+//                                       recording how long it was open
+//   - open past EXPIRE_HOURS (24h)    → EXPIRED: a soft block. Counting on into
+//                                       it, and finalizing it, both refuse
+//                                       until the counter explicitly chooses
+//                                       what to do — because the numbers are
+//                                       now spread over more than one date.
+//
+// An 18h stale window (not 24h) so an evening count finishing next morning is
+// warned-but-allowed; expiry lands at a full day, which is the owner's rule.
+//
+// "Soft", not hard: an expired count still holds real counted lines, so the
+// counter picks — start fresh for today, or carry on and have the count
+// re-dated to the day it actually closes. What must never happen again is the
+// silent third option: keep the original countDate and pretend it was a
+// same-day snapshot.
+
+export const STALE_COUNT_HOURS = 18;
+export const EXPIRE_COUNT_HOURS = 24;
+
+export interface FreshnessInput {
+  /** When the count was created (first line keyed). */
+  createdAt: Date | string;
+  /** Evaluation time — pass the finalize timestamp. */
+  now: Date | string;
+  staleHours?: number;
+  expireHours?: number;
+}
+
+export interface FreshnessResult {
+  hoursOpen: number;
+  /** Whole days the count has been open — what the UI shows ("open 2 days"). */
+  daysOpen: number;
+  stale: boolean; // past the stale window → must not auto-approve
+  expired: boolean; // past a full day → soft block on counting and finalizing
+  /** Human note appended to the count so the gap is visible in review. */
+  staleNote: string | null;
+}
+
+export function evaluateCountFreshness(input: FreshnessInput): FreshnessResult {
+  const staleH = input.staleHours ?? STALE_COUNT_HOURS;
+  const expireH = input.expireHours ?? EXPIRE_COUNT_HOURS;
+  const started = new Date(input.createdAt).getTime();
+  const ended = new Date(input.now).getTime();
+
+  // Unparseable or clock-skewed input must not block a legitimate finalize.
+  if (!Number.isFinite(started) || !Number.isFinite(ended) || ended < started) {
+    return { hoursOpen: 0, daysOpen: 0, stale: false, expired: false, staleNote: null };
+  }
+
+  const hoursOpen = (ended - started) / 3_600_000;
+  const stale = hoursOpen > staleH;
+  const expired = hoursOpen > expireH;
+  const days = Math.floor(hoursOpen / 24);
+  const staleNote = stale
+    ? `[stale count] open ${days >= 1 ? `${days}d ` : ""}${Math.round(hoursOpen % 24)}h before finalizing — quantities may not reflect a single date.`
+    : null;
+
+  return { hoursOpen, daysOpen: days, stale, expired, staleNote };
+}
+
 export interface CountedLine {
   productId: string;
   /** Quantity as physically counted — in the *package's* units, not base UOM. */

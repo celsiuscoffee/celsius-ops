@@ -4,7 +4,67 @@ import {
   countDiscrepancies,
   isCleanCount,
   evaluateCountCoverage,
+  evaluateCountFreshness,
 } from "../stock-count";
+
+describe("evaluateCountFreshness", () => {
+  const start = "2026-07-29T10:00:00Z";
+  const plus = (h: number) => new Date(Date.parse(start) + h * 3_600_000).toISOString();
+
+  it("passes a count finished the same session", () => {
+    const r = evaluateCountFreshness({ createdAt: start, now: plus(3) });
+    expect(r.stale).toBe(false);
+    expect(r.expired).toBe(false);
+    expect(r.staleNote).toBeNull();
+  });
+
+  it("still passes an evening count closed next morning", () => {
+    // 18h window exists precisely so this case isn't punished.
+    const r = evaluateCountFreshness({ createdAt: start, now: plus(17) });
+    expect(r.stale).toBe(false);
+    expect(r.expired).toBe(false);
+  });
+
+  it("warns, but does not expire, between 18h and a full day", () => {
+    const r = evaluateCountFreshness({ createdAt: start, now: plus(20) });
+    expect(r.stale).toBe(true);
+    expect(r.expired).toBe(false);
+    expect(r.staleNote).toMatch(/stale count/i);
+  });
+
+  it("expires a count open more than one day (the owner's rule)", () => {
+    expect(evaluateCountFreshness({ createdAt: start, now: plus(24) }).expired).toBe(false);
+    expect(evaluateCountFreshness({ createdAt: start, now: plus(25) }).expired).toBe(true);
+  });
+
+  it("expires every real Putrajaya case (2, 6, 9 and 25 days open)", () => {
+    for (const days of [2, 6, 9, 25]) {
+      const r = evaluateCountFreshness({ createdAt: start, now: plus(days * 24) });
+      expect(r.expired).toBe(true);
+      expect(r.stale).toBe(true);
+      expect(r.daysOpen).toBe(days);
+    }
+  });
+
+  it("reports how long the count was open", () => {
+    const r = evaluateCountFreshness({ createdAt: start, now: plus(48) });
+    expect(Math.round(r.hoursOpen)).toBe(48);
+    expect(r.daysOpen).toBe(2);
+    expect(r.staleNote).toMatch(/2d/);
+  });
+
+  it("never expires on unparseable dates or clock skew", () => {
+    // A finalize must not fail because a clock ran backwards.
+    expect(evaluateCountFreshness({ createdAt: "nonsense", now: start }).expired).toBe(false);
+    expect(evaluateCountFreshness({ createdAt: plus(5), now: start }).expired).toBe(false);
+  });
+
+  it("honours custom windows", () => {
+    const r = evaluateCountFreshness({ createdAt: start, now: plus(10), staleHours: 8, expireHours: 9 });
+    expect(r.stale).toBe(true);
+    expect(r.expired).toBe(true);
+  });
+});
 
 describe("evaluateCountCoverage", () => {
   const universe = Array.from({ length: 212 }, (_, i) => `p${i}`);
