@@ -6,6 +6,55 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-01 — **Payroll module end-to-end QA: four real defects, three now
+  fixed in code.** Owner is moving payroll off BrioHR onto the HR module this
+  month, so this was a pre-flight audit of the Aug 2026 run
+  (`217fb693`, `ai_computed`, 28 lines, gross RM66,431.00).
+  **(1) OT was silently unpaid.** `processAttendance()` had NO cron — it was
+  reachable only from a manual `POST /api/hr/attendance/process`, so logs sat at
+  `ai_status='pending'` forever, and the payroll calculator pays OT only on
+  APPROVED logs (`isOtApproved`). July 2026: 763 logs / **391 OT hours**, of
+  which **527 pending logs carried 265 hours (68%) that would never have been
+  paid**. Fixed by calling the processor at the END of the
+  `attendance-auto-close` cron (auto-close must run first so a forgotten tap-out
+  is closed before being judged "missing clock-out"). **It could not have its own
+  cron entry — `apps/backoffice/vercel.json` is at 38, the budget ceiling in
+  `src/vercel-crons.test.ts`.** The other 147 approved-with-0-OT logs are
+  auto-closes, which zero OT deliberately (a missed tap-out isn't proven OT).
+  **(2) Allowances were not prorated for partial months.** Basic salary WAS
+  prorated correctly (verified to the cent against four July joiners), but the
+  RM200 performance pool was paid in full: Auni Sefhia joined 2026-07-27 and
+  drew the full RM180 on 5/31 of her basic. The levers score RATES, not volume,
+  so nothing else scaled it. Now prorated on `joiner`/`resigner`/
+  `joiner_and_resigner` — NOT on `unpaid_leave`, where the allowance engine
+  already nets absence deductions and prorating would double-count.
+  `payroll/prorate.test.ts` pins the shipped figures.
+  **(3) HRDF was charged to an unregistered employer.** `hrdfApplicable` keyed
+  only off the per-employee `hrdf_relation` (default `non_related`), while
+  `hr_company_settings.hrdf_number` is **NULL** — Celsius has never registered
+  with PSMB. RM635.00 of phantom employer cost on the July run. Now gated on the
+  registration number, so it stays off until that field is filled and switches
+  itself on when it is. `hr_stat_hrdf_config.min_employees` (10) was and remains
+  unenforced — registration, not headcount, is what makes the levy due.
+  **(4) Manual line overrides ERASED HRDF from the run header.** The run's
+  `total_employer_cost` = EPF+SOCSO+EIS+**HRDF**, but HRDF has no column on
+  `hr_payroll_items`, and `items/[item_id]/route.ts` re-summed the header from
+  the item rows — deleting the whole levy on any override. Now applies the
+  edited line's employer DELTA to the stored header instead. Same approach in
+  the new DELETE handler (there was no delete path at all; removing someone
+  meant hand-written SQL against prod).
+  **Still open, needs an owner call:** `statutory_applicable` on
+  `hr_employee_profiles` is a DEAD flag — written by `write-ops.ts:365`, read
+  NOWHERE. 25 of 29 in the July run had it `false` and were charged EPF/SOCSO/EIS
+  anyway. **Do NOT naively wire it up** — that would zero statutory for almost
+  the whole company. Either correct the data and then wire it, or drop the
+  column.
+  **Structural, not a code bug:** the Aug run was computed on 1 Aug, when the
+  month had 16 open logs, 0 regular hours and 0 OT — so every line had zero
+  attendance input. The calculator now pushes a loud note when `Date.now()` is
+  before cycle end. Left as a warning, not a block, because a mid-month preview
+  is legitimate.
+
 - 2026-07-31 — **Stock counts were being filed under the wrong date, and it
   invalidates the Putrajaya shrinkage finding.** Owner asked whether Firdaus's
   count saved ("but the date?"). It did — count `3ad902a3` — but it was dated
