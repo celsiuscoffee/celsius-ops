@@ -71,27 +71,47 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   data-analyst agent writes, since `ads_metric_daily` is in its allowlist
   (`agents/data-analyst.ts:55`) and it has no such guard.
 
-- 2026-08-01 (correction, supersedes the ad-spend half of both 2026-07-30
-  entries) — **Real ad spend is HALF what was recorded, and the cash saving is
-  ~RM700–1,100/mo, not RM4,300/mo.** Recomputed with the roll-up row excluded
-  (revenue = order `total` incl. tax/service, POS ex-Grab + web; discounts =
-  promo + reward + web first-order):
+- 2026-08-01 — **A DISCOUNT IS NOT CASH OUT, AND `total` IS ALREADY NET OF IT.**
+  Ad spend leaves the bank; a discount is revenue that never arrived. Verified:
+  `total = subtotal + service − discount + sst (+rounding)` holds on **7,955 of
+  7,955** POS rows and **2,918 of 2,919** `orders` rows since Jul 1. So any table
+  that shows revenue from `total` **and** adds discounts as a cost subtracts them
+  twice. An earlier pass here did exactly that and reported a "marketing cash =
+  ads + discounts" column — **that column was not a real quantity; ignore it.**
+  Correct shape: net banked revenue is the inflow, ads are the outflow, and
+  discounts are already inside the inflow. Also: a ringgit of ad spend is gone
+  unconditionally, whereas a ringgit of discount is only fully lost if that
+  customer would have bought anyway — on ~70% coffee margin a voucher that causes
+  an otherwise-absent RM15 sale still nets ≈+RM6. **The two are not
+  interchangeable per ringgit** and must not be summed.
 
-  | Block | In-store | Ads | Discounts | Marketing cash |
-  | --- | --- | --- | --- | --- |
-  | Jun 24–30 | 63,583 | 2,047 | 2,041 | 4,088 |
-  | Jul 1–7 | 69,427 | 2,091 | 2,420 | 4,511 |
-  | Jul 8–14 | 66,977 | 2,014 | 2,172 | 4,186 |
-  | Jul 15–21 | 69,406 | 1,873 | 2,615 | 4,488 |
-  | **Jul 24–30** | 66,718 | **1,042** | **3,187** | **4,229** |
+- 2026-08-01 (correction, supersedes the ad-spend half of both 2026-07-30
+  entries) — **Real ad spend is HALF what was recorded. The ad cut keeps
+  ≈RM4,100/mo of real cash; rising discounts give back ≈RM3,400/mo of revenue;
+  net ≈ +RM720/mo — but that is below the noise floor (see caveat).** Recomputed
+  with the roll-up row excluded (POS ex-Grab + web; discounts = promo + reward +
+  web first-order):
+
+  | Block | Gross | Discounts | Net banked | Ads cash out | After ads |
+  | --- | --- | --- | --- | --- | --- |
+  | Jun 24–30 | 65,625 | 2,042 | 63,583 | 2,047 | 61,536 |
+  | Jul 1–7 | 71,849 | 2,420 | 69,429 | 2,091 | 67,338 |
+  | Jul 8–14 | 69,152 | 2,173 | 66,978 | 2,014 | 64,965 |
+  | Jul 15–21 | 72,021 | 2,615 | 69,405 | 1,873 | 67,533 |
+  | **Jul 24–30** | 69,906 | **3,188** | 66,718 | **1,042** | **65,676** |
 
   The recorded ads column (3,269 / 4,027 / 3,745 / 2,092) was exactly 2× from
-  Jul 4 on. Cash delta for Jul 24–30: **−RM259/wk ≈ −RM1,124/mo** vs Jul 15–21,
-  **−RM166/wk ≈ −RM720/mo** vs the mean of the three full-spend blocks, and
-  **+RM141/wk (worse)** vs the June baseline block. The ad cut alone is worth
-  ≈RM4,100/mo; loyalty discounts absorb ≈RM3,400/mo of it, i.e. **83%**.
-  **Revenue still holds** — 66,718 is −2.7% vs the full-spend mean, inside the
-  3.7% spread among full-spend blocks themselves. Discount split per week
+  Jul 4 on. Decomposed vs the mean of the three full-spend blocks: ads
+  1,993 → 1,042 = **+RM951/wk of real cash kept** (RM4,127/mo); discounts
+  2,403 → 3,188 = **−RM785/wk of revenue never collected** (RM3,407/mo);
+  **net ≈ +RM166/wk ≈ +RM720/mo**.
+  **CAVEAT that outweighs the result:** the "after ads" column on the three
+  full-spend blocks alone spans 64,965–67,533, a **RM2,568 spread**. The ad
+  saving is RM951. **The saving is smaller than ordinary week-to-week revenue
+  variance**, so no single week's bank balance can demonstrate it — it needs
+  another month or two, or a proper holdout.
+  **Revenue still holds** — 66,718 net is −2.7% vs the full-spend mean, inside
+  that same spread. Discount split per week
   confirms it is vouchers, not staff: reward 540 → 612 → 984 → 1,239 → **1,563**,
   promo 696 → 766 → 482 → 653 → **1,015**, manual 39 → 40 → 6 → 0 → **19**.
   Ads sync runs ~2 days behind (last date Jul 30 as of Aug 1) — do not read the
@@ -941,13 +961,20 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   never made or the POPs were lost to the known Telegram-persistence gap. That
   gap (and MULTI_POP under-extraction) is still unfixed.
 
-- 2026-08-01 — **Ads: cash IS increasing, but only ~RM700–1,100/mo — an order of
-  magnitude less than recorded, because ad spend was double-counted 2×.** See the
-  three 2026-08-01 Verified facts. Revenue holds; the ad cut is worth ≈RM4,100/mo
-  on its own but loyalty vouchers absorb ≈83% of it. Priority 1b below (gating the
-  loyalty loop) is therefore the whole ballgame — the ads side has little left to
-  give. The 2026-07-30 pointer below still applies EXCEPT its item 2, now
-  withdrawn.
+- 2026-08-01 — **Ads: the cut keeps ≈RM4,100/mo of real cash, but rising voucher
+  discounts hand back ≈RM3,400/mo of revenue, so net is ≈+RM720/mo — and that is
+  smaller than weekly revenue variance, so it cannot yet be seen in the bank.**
+  See the four 2026-08-01 Verified facts. The ads side has little left to give
+  (spend is already ~RM1,040/wk), so the loyalty loop is now the bigger and
+  faster-moving number. Next, in order:
+  1. **Gate the loyalty loop** (priority 1b below) — it is the whole ballgame.
+  2. **The loop has no holdout, so voucher incrementality is unmeasurable.**
+     Gross sales FELL (72,021 → 69,906) while discounts rose, which does not look
+     like vouchers are buying volume — suggestive, not proof. Build a holdout
+     before spending more on redemptions, otherwise this question stays open.
+  3. Do NOT keep cutting ads looking for cash that is not there; if the ad
+     saving is to be proven at all it needs another month or a holdout.
+  The 2026-07-30 pointer below still applies EXCEPT its item 2, now withdrawn.
 
 - 2026-07-30 — **Ads: revenue verdict settled, cash verdict is now about
   DISCOUNTS, not ads.** Two low-spend weeks in, in-store revenue is holding
