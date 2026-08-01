@@ -458,7 +458,6 @@ function EvaluationPanel({ data, days, onDays, loops }: { data: Evaluation; days
   const campaigns = loops.length
     ? loops.map((l) => ({ key: l.key, label: l.label, objective: l.objective, triggered: l.triggered }))
     : data.live.per_loop.map((l) => ({ key: l.loop_key, label: l.label, objective: "", triggered: false }));
-  const totalReturn = lv.sms_cost_rm > 0 ? `${(lv.revenue_rm / lv.sms_cost_rm).toFixed(1)}×` : "—";
   return (
     <div className="mb-6 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -485,11 +484,10 @@ function EvaluationPanel({ data, days, onDays, loops }: { data: Evaluation; days
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Kpi label="SMS sent" value={lv.sent.toLocaleString()} sub={`${rm(lv.sms_cost_rm)} spent`} />
           <Kpi label="Redeemed" value={lv.redeemed.toLocaleString()} sub={`${lv.redeemed_rate}%`} />
-          <Kpi label="Orders" value={lv.orders.toLocaleString()} sub="so far" />
-          <Kpi label="RM Orders" value={rm(lv.revenue_rm)} sub="gross · in window" />
-          <Kpi label="Return" value={totalReturn} sub="RM per RM1 SMS" highlight />
+          <Kpi label="Orders (raw)" value={lv.orders.toLocaleString()} sub="not incremental" />
+          <Kpi label="RM Orders (raw)" value={rm(lv.revenue_rm)} sub="gross · in window" />
         </div>
-        <p className="mt-2 text-[11px] text-gray-400">Orders, RM &amp; return are <strong>gross attributed so far</strong>. True ROI vs the holdout shows per campaign once each window closes.</p>
+        <p className="mt-2 text-[11px] text-gray-400">Orders &amp; RM are <strong>gross attributed</strong> — every order a recipient made in the window, including ones they&apos;d have made anyway. <strong>Not ROI.</strong> True ROI vs the holdout shows per campaign once each window closes.</p>
       </div>
 
       {/* One board per campaign */}
@@ -510,7 +508,6 @@ function CampaignBoard({ meta, live, meas }: {
   const measuring = (live?.in_flight ?? 0) > 0;
   const hasResults = !!meas && meas.rounds > 0;
   const next = live?.next_results_at ? new Date(live.next_results_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" }) : null;
-  const ret = live && live.sms_cost_rm > 0 ? `${(live.revenue_rm / live.sms_cost_rm).toFixed(1)}×` : "—";
   const pausedArmKeys = Object.keys(meta.pausedArms ?? {});
   const status = meta.paused ? { t: "Paused", c: "bg-amber-100 text-amber-800" }
     : pausedArmKeys.length ? { t: "Partly paused", c: "bg-amber-100 text-amber-800" }
@@ -536,20 +533,25 @@ function CampaignBoard({ meta, live, meas }: {
         <p className="mt-3 text-sm text-gray-400">{meta.triggered ? "Runs automatically — fires when customers qualify." : "No sends yet."}</p>
       ) : (
         <>
+          {/* Raw activity only — NO gross "Return" multiple. That tile divided
+              raw attributed revenue by SMS spend, which for frequency-selected
+              segments (aov_push: regulars with 4+ visits) counted every order
+              they'd have made anyway and read 400×+. ROI belongs to the holdout
+              line below; showing a second, flattering multiple next to it just
+              invites the sales-not-cash misread. */}
           <div className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2">
             <MiniStat label="Sent" value={sent.toLocaleString()} />
             <MiniStat label="Redeemed" value={`${live!.redeemed} (${live!.redeemed_rate}%)`} />
+            <MiniStat label="Spent" value={rm(live!.sms_cost_rm)} />
             <MiniStat label="Orders (raw)" value={live!.orders.toLocaleString()} />
             <MiniStat label="RM Orders (raw)" value={rm(live!.revenue_rm)} />
-            <MiniStat label="Return (gross)" value={ret} />
-            <MiniStat label="Spent" value={rm(live!.sms_cost_rm)} />
           </div>
           {hasResults ? (
-            // The ONLY causal number on this card — lift vs the POOLED holdout.
+            // The ONLY ROI number on this card — lift vs the POOLED holdout.
             // Raw orders above include natural repeats + other marketing.
             <div className="mt-3 rounded-lg bg-green-50 px-2.5 py-1.5 text-xs text-green-900"><strong>True ROI vs holdout:</strong> {meas!.roi > 0 ? `${meas!.roi}×` : "—"} · {meas!.avg_lift_pp > 0 ? "+" : ""}{meas!.avg_lift_pp}pp lift · {rm(meas!.incremental_margin_rm)} incr. margin{meas!.holdout_n > 0 ? ` · vs ${meas!.holdout_n} held out${meas!.holdout_n < 30 ? " (low confidence)" : ""}` : ""}</div>
           ) : measuring && next ? (
-            <p className="mt-2 text-xs text-blue-700">Measuring — results vs holdout from {next}</p>
+            <p className="mt-2 text-xs text-blue-700">Measuring — no ROI verdict until the holdout closes ({next}). Raw orders above are not ROI.</p>
           ) : null}
         </>
       )}
