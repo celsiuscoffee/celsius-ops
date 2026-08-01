@@ -55,6 +55,57 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   before cycle end. Left as a warning, not a block, because a mid-month preview
   is legitimate.
 
+- 2026-08-01 — **`ads_metric_daily` holds an account-level ROLL-UP row
+  (`campaign_id IS NULL`) as well as the per-campaign rows. Any `sum(cost_micros)`
+  that does not filter `campaign_id IS NOT NULL` double-counts spend 2×.**
+  This is by design and documented at `apps/backoffice/src/lib/ads/sync-metrics.ts:7`
+  — the sync writes per-campaign rows, then a per-date account total. The roll-up
+  first appears **2026-07-04**, which is why row count per day goes 3 → 4 there.
+  Proof (Jul 30): campaigns 42.76 + 34.02 + 58.73 = **135.52**, and the null row
+  is **135.52** — identical spend, clicks and impressions, same sync batch.
+  **Shipped code is CORRECT** — `ads/optimizer.ts:145` and the P&L readers filter
+  `campaign_id IS NOT NULL`; `api/ads/overview/route.ts:61-63` deliberately reads
+  either the roll-up *or* the campaigns, never both. The double-count was in the
+  ad-hoc SQL behind the 2026-07-30 entries below. **Any future hand-written query
+  against this table must filter the null row** — including anything the
+  data-analyst agent writes, since `ads_metric_daily` is in its allowlist
+  (`agents/data-analyst.ts:55`) and it has no such guard.
+
+- 2026-08-01 (correction, supersedes the ad-spend half of both 2026-07-30
+  entries) — **Real ad spend is HALF what was recorded, and the cash saving is
+  ~RM700–1,100/mo, not RM4,300/mo.** Recomputed with the roll-up row excluded
+  (revenue = order `total` incl. tax/service, POS ex-Grab + web; discounts =
+  promo + reward + web first-order):
+
+  | Block | In-store | Ads | Discounts | Marketing cash |
+  | --- | --- | --- | --- | --- |
+  | Jun 24–30 | 63,583 | 2,047 | 2,041 | 4,088 |
+  | Jul 1–7 | 69,427 | 2,091 | 2,420 | 4,511 |
+  | Jul 8–14 | 66,977 | 2,014 | 2,172 | 4,186 |
+  | Jul 15–21 | 69,406 | 1,873 | 2,615 | 4,488 |
+  | **Jul 24–30** | 66,718 | **1,042** | **3,187** | **4,229** |
+
+  The recorded ads column (3,269 / 4,027 / 3,745 / 2,092) was exactly 2× from
+  Jul 4 on. Cash delta for Jul 24–30: **−RM259/wk ≈ −RM1,124/mo** vs Jul 15–21,
+  **−RM166/wk ≈ −RM720/mo** vs the mean of the three full-spend blocks, and
+  **+RM141/wk (worse)** vs the June baseline block. The ad cut alone is worth
+  ≈RM4,100/mo; loyalty discounts absorb ≈RM3,400/mo of it, i.e. **83%**.
+  **Revenue still holds** — 66,718 is −2.7% vs the full-spend mean, inside the
+  3.7% spread among full-spend blocks themselves. Discount split per week
+  confirms it is vouchers, not staff: reward 540 → 612 → 984 → 1,239 → **1,563**,
+  promo 696 → 766 → 482 → 653 → **1,015**, manual 39 → 40 → 6 → 0 → **19**.
+  Ads sync runs ~2 days behind (last date Jul 30 as of Aug 1) — do not read the
+  newest two days as a drop.
+
+- 2026-08-01 — **WITHDRAWN: "actual ad spend runs 1.3–2.1× the daily budget".**
+  Same root cause. Real spend Jul 4–19 was RM280–330/day against ~RM283/day of
+  budget — the cap was being respected almost exactly. The "ramp on Jul 4 at
+  unchanged CPC, therefore real" argument was itself the artefact: clicks
+  604 → 1,476 and impressions 26k → 56k doubled because the roll-up row started
+  that day, not because delivery changed. **Do not build the spend-vs-budget
+  overrun check** that the previous resume pointer queued. `monthly_saving_myr`
+  is still a budget delta rather than realised cash — that part stands.
+
 - 2026-07-31 — **Stock counts were being filed under the wrong date, and it
   invalidates the Putrajaya shrinkage finding.** Owner asked whether Firdaus's
   count saved ("but the date?"). It did — count `3ad902a3` — but it was dated
@@ -890,6 +941,14 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   never made or the POPs were lost to the known Telegram-persistence gap. That
   gap (and MULTI_POP under-extraction) is still unfixed.
 
+- 2026-08-01 — **Ads: cash IS increasing, but only ~RM700–1,100/mo — an order of
+  magnitude less than recorded, because ad spend was double-counted 2×.** See the
+  three 2026-08-01 Verified facts. Revenue holds; the ad cut is worth ≈RM4,100/mo
+  on its own but loyalty vouchers absorb ≈83% of it. Priority 1b below (gating the
+  loyalty loop) is therefore the whole ballgame — the ads side has little left to
+  give. The 2026-07-30 pointer below still applies EXCEPT its item 2, now
+  withdrawn.
+
 - 2026-07-30 — **Ads: revenue verdict settled, cash verdict is now about
   DISCOUNTS, not ads.** Two low-spend weeks in, in-store revenue is holding
   (see Verified facts, same date). Pick up here, in priority order:
@@ -903,11 +962,12 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
      them still has NO approval gate (`approved_at` NULL on 75 rounds). It is
      about half the ad saving, so it does not cancel it, but left ungated it
      will. Gate it before it does.
-  2. **Spend overruns budget 1.3–2.1×** — add a spend-vs-budget overrun check to
-     the descent controller, and stop quoting `monthly_saving_myr` as realised
-     cash (reconcile against `ads_metric_daily` instead). Also find out WHAT
-     raised spend on Jul 4 with no ledger entry (UI edit? Smart-campaign
-     auto-apply recommendations? check the Google Ads change history).
+  2. ~~**Spend overruns budget 1.3–2.1×**~~ — **WITHDRAWN 2026-08-01**, see
+     Verified facts. There is no overrun; do NOT build the spend-vs-budget check
+     and do NOT go hunting for what "raised spend on Jul 4" — that was the
+     `campaign_id IS NULL` roll-up row appearing in the table. Still true, and
+     still worth doing: stop quoting `monthly_saving_myr` as realised cash
+     (reconcile against `ads_metric_daily`, filtering the roll-up row).
   3. **Guard still has 3 confirmed measurement bugs** (`ads/organic-revenue.ts`):
      includes `pos_orders.source='grabfood'`, excludes the `orders` table
      (QR-table/app, ~25% of in-store), and lets Nilai (consignment, campaigns
