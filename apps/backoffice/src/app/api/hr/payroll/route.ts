@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { action, month, year, run_id } = body;
+  const { action, month, year, run_id, allow_early_confirm } = body;
 
   if (action === "compute") {
     if (!month || !year) {
@@ -115,6 +115,54 @@ export async function POST(req: NextRequest) {
   if (action === "confirm") {
     if (!run_id) return NextResponse.json({ error: "run_id required" }, { status: 400 });
 
+    // Refuse to confirm a cycle that is still running.
+    //
+    // Computing early is fine and often useful — previewing cash needs, checking
+    // a new joiner's prorated figure. The run sits at 'ai_computed' and hurts
+    // nobody. CONFIRM is the irreversible step: it is what payslips and the bank
+    // file are generated from. Confirming mid-cycle books attendance that has not
+    // happened yet, so OT is 0 and the performance levers score an empty month.
+    // The Aug 2026 run was computed on 1 August with 0 regular hours and 0 OT
+    // across all 28 lines, and nothing here would have stopped it being paid.
+    //
+    // Escape hatch: payday lands on or near the last working day, so preparing on
+    // the 29th for a 31st payday is legitimate. Pass allow_early_confirm to do it
+    // deliberately — the point is that it cannot happen by accident.
+    const { data: cycle } = await hrSupabaseAdmin
+      .from("hr_payroll_runs")
+      .select("period_year, period_month, period_end, cycle_type")
+      .eq("id", run_id)
+      .maybeSingle();
+
+    if (cycle && !allow_early_confirm) {
+      // Cycle end in MYT (UTC+8), not UTC — otherwise the guard would keep
+      // blocking until 08:00 local on the 1st.
+      let cycleEndMs: number | null = null;
+      if (cycle.period_end) {
+        cycleEndMs = Date.parse(`${cycle.period_end}T23:59:59+08:00`);
+      } else if (cycle.period_year && cycle.period_month) {
+        const lastDay = new Date(cycle.period_year, cycle.period_month, 0).getDate();
+        const mm = String(cycle.period_month).padStart(2, "0");
+        cycleEndMs = Date.parse(`${cycle.period_year}-${mm}-${String(lastDay).padStart(2, "0")}T23:59:59+08:00`);
+      }
+
+      if (cycleEndMs != null && !Number.isNaN(cycleEndMs) && Date.now() < cycleEndMs) {
+        const daysLeft = Math.ceil((cycleEndMs - Date.now()) / 86_400_000);
+        return NextResponse.json(
+          {
+            error:
+              `This ${cycle.cycle_type || "payroll"} cycle has not ended — ${daysLeft} day${daysLeft === 1 ? "" : "s"} left. `
+              + `Attendance for the rest of it does not exist yet, so overtime and attendance-based allowances are incomplete. `
+              + `Recompute after the cycle ends, or confirm deliberately with allow_early_confirm if you are paying before month end.`,
+            reason: "cycle_not_ended",
+            cycleEndsAt: new Date(cycleEndMs).toISOString(),
+            daysLeft,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     // Only a not-yet-confirmed run can be confirmed. The status filter makes
     // this atomic: a concurrent double-confirm — or confirming an already-paid
     // run, which would otherwise silently DOWNGRADE it back to "confirmed" and
@@ -153,7 +201,13 @@ export async function POST(req: NextRequest) {
       module: "hr",
       targetId: run_id,
       targetName: data ? `${data.cycle_type} ${data.period_month}/${data.period_year}` : null,
-      details: { total_net: data?.total_net, total_gross: data?.total_gross },
+      details: {
+        total_net: data?.total_net,
+        total_gross: data?.total_gross,
+        // Recorded so an early confirm is auditable after the fact, not just
+        // refused up front.
+        ...(allow_early_confirm ? { early_confirm: true } : {}),
+      },
       request: req,
     });
     return NextResponse.json({ run: data });
