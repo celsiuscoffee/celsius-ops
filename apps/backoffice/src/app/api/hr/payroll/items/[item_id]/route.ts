@@ -77,7 +77,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ it
   // Don't allow editing confirmed/paid runs.
   const { data: run } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
-    .select("status, id")
+    .select("status, id, total_employer_cost")
     .eq("id", item.payroll_run_id)
     .maybeSingle();
   if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 });
@@ -198,17 +198,35 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ it
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
 
   // Bump run-level totals.
+  //
+  // gross / deductions / net are fully reconstructible from the item rows, so
+  // re-sum them. total_employer_cost is NOT: the calculator builds it from
+  // EPF + SOCSO + EIS + **HRDF** employer (agents/payroll-calculator.ts), and
+  // HRDF has no column on hr_payroll_items. Re-summing the items therefore
+  // silently DELETED the HRDF levy from the run header on every override —
+  // RM635.00 on the July 2026 run. Apply this line's employer delta to the
+  // stored header instead, which leaves every other component untouched.
   const { data: allItems } = await hrSupabaseAdmin
     .from("hr_payroll_items")
-    .select("total_gross, total_deductions, net_pay, epf_employer, socso_employer, eis_employer")
+    .select("total_gross, total_deductions, net_pay")
     .eq("payroll_run_id", run.id);
-  let totalGross = 0, totalDeduct = 0, totalNet = 0, totalEmployerCost = 0;
+  let totalGross = 0, totalDeduct = 0, totalNet = 0;
   for (const it of allItems || []) {
     totalGross += Number(it.total_gross || 0);
     totalDeduct += Number(it.total_deductions || 0);
     totalNet += Number(it.net_pay || 0);
-    totalEmployerCost += Number(it.epf_employer || 0) + Number(it.socso_employer || 0) + Number(it.eis_employer || 0);
   }
+
+  const employerStat = (row: Record<string, unknown>) =>
+    Number(row.epf_employer || 0) + Number(row.socso_employer || 0) + Number(row.eis_employer || 0);
+  const employerDelta = employerStat(updated as Record<string, unknown>)
+    - employerStat(item as Record<string, unknown>);
+  // NOTE: HRDF is a % of wage, so an override that moves basic_salary should
+  // strictly also move HRDF. It can't be recomputed here without a per-item
+  // hrdf_employer column — carrying it forward unchanged is wrong by the HRDF
+  // delta alone, where re-summing was wrong by the entire levy.
+  const totalEmployerCost = Number(run.total_employer_cost || 0) + employerDelta;
+
   await hrSupabaseAdmin
     .from("hr_payroll_runs")
     .update({
@@ -221,4 +239,82 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ it
     .eq("id", run.id);
 
   return NextResponse.json({ item: updated });
+}
+
+// DELETE /api/hr/payroll/items/[item_id]
+//
+// Drop one line from a draft run. There was no delete path at all before this,
+// so pulling somebody out of a run meant hand-written SQL against production.
+//
+// This is the ESCAPE HATCH, not the routine fix. Someone who has left should be
+// removed by recording their resignation (hr_employee_profiles.end_date) and
+// recomputing — the calculator then skips them here and in every future run
+// (see the resigned-before-cycle check in agents/payroll-calculator.ts). Delete
+// only when the line itself is wrong and a recompute won't clear it.
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ item_id: string }> }) {
+  const session = await getSession();
+  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { item_id } = await params;
+
+  const { data: item, error: itemErr } = await hrSupabaseAdmin
+    .from("hr_payroll_items")
+    .select("*")
+    .eq("id", item_id)
+    .single();
+  if (itemErr || !item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
+
+  const { data: run } = await hrSupabaseAdmin
+    .from("hr_payroll_runs")
+    .select("status, id, total_employer_cost")
+    .eq("id", item.payroll_run_id)
+    .maybeSingle();
+  if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 });
+  if (["confirmed", "paid"].includes(run.status)) {
+    return NextResponse.json({ error: `Cannot edit a ${run.status} run` }, { status: 400 });
+  }
+
+  const { error: delErr } = await hrSupabaseAdmin
+    .from("hr_payroll_items")
+    .delete()
+    .eq("id", item_id);
+  if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+
+  // Same asymmetry as PATCH: gross/deductions/net re-sum from the surviving
+  // rows, employer cost moves by this line's delta so the run's HRDF survives.
+  const { data: allItems } = await hrSupabaseAdmin
+    .from("hr_payroll_items")
+    .select("total_gross, total_deductions, net_pay")
+    .eq("payroll_run_id", run.id);
+  let totalGross = 0, totalDeduct = 0, totalNet = 0;
+  for (const it of allItems || []) {
+    totalGross += Number(it.total_gross || 0);
+    totalDeduct += Number(it.total_deductions || 0);
+    totalNet += Number(it.net_pay || 0);
+  }
+  const removedEmployerStat = Number(item.epf_employer || 0)
+    + Number(item.socso_employer || 0)
+    + Number(item.eis_employer || 0);
+  const totalEmployerCost = Math.max(0, Number(run.total_employer_cost || 0) - removedEmployerStat);
+
+  await hrSupabaseAdmin
+    .from("hr_payroll_runs")
+    .update({
+      total_gross: Math.round(totalGross * 100) / 100,
+      total_deductions: Math.round(totalDeduct * 100) / 100,
+      total_net: Math.round(totalNet * 100) / 100,
+      total_employer_cost: Math.round(totalEmployerCost * 100) / 100,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", run.id);
+
+  return NextResponse.json({
+    deleted: item_id,
+    user_id: item.user_id,
+    // The removed line's HRDF share stays in the header — it can't be derived
+    // per-item. Recompute the run for an exact figure.
+    note: "Run totals adjusted. Recompute the run if you need HRDF re-derived.",
+  });
 }

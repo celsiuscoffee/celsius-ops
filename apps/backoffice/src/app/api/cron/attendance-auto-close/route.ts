@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { checkCronAuth } from "@celsius/shared";
 import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 import { deriveHours, mytDateString, mytDayOfWeek, mytInstant } from "@/lib/hr/hours";
+import { processAttendance } from "@/lib/hr/agents/attendance-processor";
 
 export const dynamic = "force-dynamic";
 
@@ -215,10 +216,49 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Evaluate everything still sitting at ai_status='pending' — geofence, late
+  // arrival, OT detection, auto-approve or flag.
+  //
+  // This runs HERE rather than on its own Vercel Cron entry because the project
+  // is at the 38-cron budget (`src/vercel-crons.test.ts`; Vercel silently drops
+  // entries past 40). Auto-close is the right host: same table, same domain, and
+  // it must run FIRST so a forgotten tap-out is closed before the processor
+  // judges it as "missing clock-out".
+  //
+  // Without this the processor only ever ran from a manual POST to
+  // /api/hr/attendance/process, so logs stayed 'pending' indefinitely — and the
+  // payroll calculator pays OT only on APPROVED logs (see isOtApproved in
+  // agents/payroll-calculator.ts). July 2026: 527 pending logs carried 265 of the
+  // month's 391 OT hours, none of it payable.
+  let processorResult: Awaited<ReturnType<typeof processAttendance>> | null = null;
+  try {
+    processorResult = await processAttendance();
+    if (processorResult.processed > 0) {
+      await logAgentAction({
+        agentKey: "hr_attendance_auto_close",
+        kind: "attendance_processed",
+        summary:
+          `Processed ${processorResult.processed} pending log${processorResult.processed === 1 ? "" : "s"} ` +
+          `(${processorResult.autoApproved} auto-approved, ${processorResult.flagged} flagged for review)`,
+        meta: processorResult,
+      });
+    }
+  } catch (err) {
+    // Never let a processor failure mask the auto-close result — the close
+    // writes above already landed.
+    processorResult = {
+      processed: 0,
+      autoApproved: 0,
+      flagged: 0,
+      errors: [err instanceof Error ? err.message : String(err)],
+    };
+  }
+
   return NextResponse.json({
     processed: activeLogs.length,
     closed,
     actions,
     thresholds: { staleMin, abandonedMin },
+    attendanceProcessor: processorResult,
   });
 }

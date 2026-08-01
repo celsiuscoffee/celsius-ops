@@ -43,6 +43,25 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     );
   }
 
+  // 0b. Warn loudly when the cycle hasn't finished. A monthly run computed on
+  // day 1 has no attendance to read: every line comes out with 0 regular hours
+  // and 0 OT, and the performance levers score an empty month. The August 2026
+  // run was computed on 1 August and did exactly that across 28 people.
+  //
+  // This is a WARNING, not a block — a mid-month preview is legitimate, and
+  // the run stays 'ai_computed' until someone confirms it. But it must be
+  // impossible to confirm a run like this without having been told.
+  const lastDayOfCycle = new Date(year, month, 0).getDate();
+  const cycleEndsAt = Date.UTC(year, month - 1, lastDayOfCycle, 23, 59, 59);
+  if (Date.now() < cycleEndsAt) {
+    const daysLeft = Math.ceil((cycleEndsAt - Date.now()) / 86_400_000);
+    notes.push(
+      `⚠ ${year}-${String(month).padStart(2, "0")} has not ended — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remain. ` +
+      `Attendance for the rest of the cycle does not exist yet, so OT and attendance-derived ` +
+      `allowances are incomplete. Recompute after month end before confirming.`,
+    );
+  }
+
   // 1. Get all employee profiles
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
@@ -258,6 +277,18 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
   // 5. Load allowance rules once — shared across all users
   const allowanceRules = await loadAllowanceRules();
 
+  // Employer-level HRDF (PSMB) registration. Read once, applied per employee
+  // below — an unregistered employer owes no levy at all.
+  const { data: companySettings } = await hrSupabaseAdmin
+    .from("hr_company_settings")
+    .select("hrdf_number")
+    .limit(1)
+    .maybeSingle();
+  const hrdfRegistered = Boolean(companySettings?.hrdf_number?.trim());
+  if (!hrdfRegistered) {
+    notes.push("HRDF not levied — no PSMB registration number in company settings.");
+  }
+
   // 6. Calculate per employee — run in parallel. Each employee does 5
   // independent statutory DB round-trips (EPF/SOCSO/EIS/HRDF/PCB); sequential
   // was ~200 RTTs for 40 staff and hit the serverless timeout. All calls
@@ -365,7 +396,20 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     // amount already NET of attendance (late/absent) + negative-review
     // deductions, floored at 0 (breakdown.totalEarned). It's variable incentive
     // pay → added to gross + PCB but excluded from the EPF/SOCSO/EIS basis.
-    const perfAllowance = Math.round(allowanceBreakdown.totalEarned * 100) / 100;
+    const perfAllowanceFull = Math.round(allowanceBreakdown.totalEarned * 100) / 100;
+    // Prorate the pool for a partial month. The levers score RATES (avg serving
+    // time, audit %, checklist completion), not volume, so a joiner who worked
+    // five days and scored well earned the WHOLE month's pool: Auni Sefhia
+    // joined 2026-07-27 and drew the full RM180 on top of 5/31 of her basic.
+    // Unpaid leave is excluded — the allowance engine already nets absence
+    // deductions off the pool, and prorating on top would double-count.
+    const allowanceProrated =
+      prorate.reason === "joiner"
+      || prorate.reason === "resigner"
+      || prorate.reason === "joiner_and_resigner";
+    const perfAllowance = allowanceProrated
+      ? prorateAmount(perfAllowanceFull, prorate)
+      : perfAllowanceFull;
     const attendanceDeducted = Math.round(allowanceBreakdown.attendance.total * 100) / 100;
     const reviewPenalty = Math.round(allowanceBreakdown.reviewPenalty.total * 100) / 100;
     const totalAllowances = perfAllowance;
@@ -445,7 +489,15 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       epfEmployerRateOverride: profile.epf_employer_rate ? Number(profile.epf_employer_rate) : undefined,
       socsoCategory: (profile.socso_category as "invalidity_injury" | "injury_only" | "exempt") || "invalidity_injury",
       eisEnabled: profile.eis_enabled !== false,
-      hrdfApplicable: profile.hrdf_relation !== "exempt",
+      // HRDF (PSMB) is only payable once the EMPLOYER is registered with PSMB.
+      // Nothing checked that: `hrdf_relation` is a per-employee exemption and
+      // defaults to "non_related", so the levy was charged to a company that
+      // has never registered — RM635.00 of phantom employer cost on the July
+      // 2026 run. Gate on the registration number in hr_company_settings, which
+      // also means HRDF switches itself on the moment that number is filled in.
+      // (hr_stat_hrdf_config.min_employees stays advisory — registration, not
+      // headcount, is what makes the levy due.)
+      hrdfApplicable: hrdfRegistered && profile.hrdf_relation !== "exempt",
       monthlyZakat: profile.zakat_enabled ? Number(profile.zakat_amount || 0) : 0,
       taxResidentCategory: (profile.tax_resident_category as "normal" | "knowledge_worker" | "returning_expert") || "normal",
       tp3Reliefs: employeeReliefs,
@@ -485,6 +537,15 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         attendance_deducted: attendanceDeducted,
         review_entries: allowanceBreakdown.reviewPenalty.entries,
         review_deducted: reviewPenalty,
+        // Present only on a partial month, so the payslip can show why the
+        // earned pool and the paid amount differ.
+        ...(allowanceProrated
+          ? {
+              prorated_from: perfAllowanceFull,
+              prorate_days_worked: prorate.daysWorked,
+              prorate_days_total: prorate.daysTotal,
+            }
+          : {}),
       };
     }
     // Recurring additions / pre-tax deductions show up in allowancesDetail with
