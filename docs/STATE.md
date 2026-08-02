@@ -6,6 +6,28 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-02 — **Rest days are ROSTERED, not a profile weekday. The old code
+  read the wrong column and mis-stamped 107 of 108 rest-day logs.** Owner
+  correction: "rest day is set on schedule". Confirmed in the data — the roster
+  carries a `hr_schedule_shifts` row with `role_type = 'Rest Day'` and a
+  00:00–00:00 window, one per person per week, and it **rotates**: 312 rows
+  since 2026-06-01 landing Sun 33 / Mon 35 / Tue 25 / Wed 38 / Thu 35 / Fri 34 /
+  Sat 29. `'Rest Day'` is the ONLY `role_type` containing "rest", so an
+  `ilike 'rest%'` match cannot collide with a real shift.
+  All three places that pick the OT multiplier were instead reading
+  `hr_employee_profiles.rest_day` — **NULL for every full-timer** — and coercing
+  it to `0`, i.e. Sunday for the whole company. Of 108 logs since 2026-07-01
+  flagged `rest_day_work`, exactly **1** was a genuine rostered rest day; 107
+  were wrong and 34 of those were stamped `ot_2x`. One log that DID work a
+  rostered rest day was never flagged. Fixed in `attendance-processor.ts`
+  (batch query over the pending logs' MYT dates), the `attendance-auto-close`
+  cron (same batch, so an auto-closed log pays identically to a normal
+  clock-out), and `apps/staff/.../api/hr/clock/route.ts` (single-row lookup
+  beside the PH check). `REST_DAY_ROLE` / `REST_DAY_ROLE_PATTERN` live in both
+  apps' `lib/hr/constants.ts` — **keep the two copies in step.**
+  **Not corrected, needs an owner call:** the 107 mis-flagged historical logs
+  and the 42 `ot_2x` hours already on record. Rewriting them changes pay.
+
 - 2026-08-01 — **Payroll module end-to-end QA: four real defects, three now
   fixed in code.** Owner is moving payroll off BrioHR onto the HR module this
   month, so this was a pre-flight audit of the Aug 2026 run
