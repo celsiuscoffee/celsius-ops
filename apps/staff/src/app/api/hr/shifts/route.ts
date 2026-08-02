@@ -30,7 +30,33 @@ export async function GET() {
   // `shift.position`, but the row stores it as `role_type` (no `position`
   // column). Alias it additively, same mapping the backoffice grid uses.
   const rows = (shifts || []) as Array<Record<string, unknown>>;
-  const mapped = rows.map((row) => ({ ...row, position: row.role_type ?? null }));
+
+  // Resolve the outlet NAME. The schedule carries only outlet_id, so a staffer
+  // who rotates between outlets saw a week of shifts with no way to tell where
+  // any of them were.
+  //
+  // Names live in the Prisma-cased "Outlet" table — NOT `outlets`, which does
+  // not carry these ids and silently joins to null.
+  const outletIds = [
+    ...new Set(
+      rows
+        .map((row) => (row.hr_schedules as { outlet_id?: string } | null)?.outlet_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const { data: outlets } = outletIds.length
+    ? await supabase.from("Outlet").select("id, name").in("id", outletIds)
+    : { data: [] as Array<{ id: string; name: string }> };
+  const outletNameById = new Map((outlets || []).map((o) => [o.id, o.name]));
+
+  const mapped = rows.map((row) => {
+    const outletId = (row.hr_schedules as { outlet_id?: string } | null)?.outlet_id;
+    return {
+      ...row,
+      position: row.role_type ?? null,
+      outlet_name: outletId ? outletNameById.get(outletId) ?? null : null,
+    };
+  });
 
   return NextResponse.json({ shifts: mapped });
 }
