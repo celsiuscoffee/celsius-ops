@@ -132,11 +132,21 @@ export async function GET(req: NextRequest) {
           const outlet = outletMap.get(log.outlet_id);
           if (outlet?.closeTime) end = mytInstant(shiftDate, outlet.closeTime);
         }
-        // Only close when we have a real shift-end reference; never before
-        // clock-in. With no roster AND no outlet close, leave it for the (2)
-        // backstop rather than inventing a time.
-        if (end) {
-          closeAt = end < clockIn ? clockIn : end;
+        // Only close when we have a real shift-end reference. An end at or
+        // BEFORE clock-in is a bad reference, not a zero-hour shift — clamping
+        // it to clock-in wrote a 0.00h log that was auto-approved AND excused,
+        // so the staffer was paid nothing and nothing surfaced for review.
+        // Three ways it happens, all seen in production:
+        //   - stale scheduled_date: yesterday's roster stamped on today's log,
+        //     putting the end ~24h in the past (the common case)
+        //   - a rest-day roster row, which stores 00:00-00:00, so the end is
+        //     midnight at the START of the shift date
+        //   - a clock-in a few minutes AFTER the rostered end (late arrival
+        //     onto the next shift)
+        // Refuse to close on a reference we don't trust; leave it open for the
+        // (2) backstop or a human.
+        if (end && end > clockIn) {
+          closeAt = end;
           reason = "forgot_clockout";
         }
       }
@@ -151,9 +161,11 @@ export async function GET(req: NextRequest) {
 
     if (!closeAt || !reason) continue;
 
-    // Don't close in the future or before clock_in
+    // Don't close in the future.
     if (closeAt > now) closeAt = now;
-    if (closeAt < clockIn) closeAt = clockIn;
+    // Never fabricate a zero-length shift. Previously this clamped to clock-in,
+    // which is what turned a bad close reference into a paid-nothing log.
+    if (closeAt <= clockIn) continue;
 
     // Pay-hours split — same shared engine as a normal clock-out, so the day-type
     // (PH / rest-day) multiplier on regular hours is preserved.
