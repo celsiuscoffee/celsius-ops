@@ -79,3 +79,10 @@ export const REST_DAY_ROLE = "Rest Day";
 // "rest day" casing. Verified against the live schedule: "Rest Day" is the only
 // role_type containing "rest", so this can't over-match a real shift.
 export const REST_DAY_ROLE_PATTERN = "rest%";
+
+// Highest hourly rate a MANAGER may set for a part-timer without an owner
+// signing it off (owner 2026-08-02). Anything ABOVE this is stored at `pending`
+// and does not reach payroll until an OWNER/ADMIN approves it. Current PT band
+// is RM9 weekday / RM10 weekend, so this clears normal adjustments and catches
+// a move in the wage band. See lib/hr/pt-rate-change.ts.
+export const PT_RATE_SELF_APPROVE_MAX = 11;
