@@ -60,11 +60,15 @@ export async function processAttendance(): Promise<ProcessResult> {
     .in("user_id", userIds);
 
   const profileMap = new Map<string, string>();
-  const restDayByUser = new Map<string, number>();
+  const restDayByUser = new Map<string, number | null>();
   (profiles || []).forEach((p: { user_id: string; employment_type: string; rest_day: number | null }) => {
     profileMap.set(p.user_id, p.employment_type);
-    // NULL → Sunday (0) default per MY Employment Act convention.
-    restDayByUser.set(p.user_id, p.rest_day == null ? 0 : Number(p.rest_day));
+    // NULL means NO rest day has been configured — it does NOT mean Sunday.
+    // This used to default to 0, and since every full-time profile has rest_day
+    // NULL, every Sunday shift company-wide was treated as rest-day work: 108 of
+    // 127 Sunday logs in July flagged, and Sunday overtime costed at 2x instead
+    // of the weekday 1.5x. Sunday was the only day of the week ever flagged.
+    restDayByUser.set(p.user_id, p.rest_day == null ? null : Number(p.rest_day));
   });
 
   // 4. Get public holidays for the date range of pending logs (MYT calendar day —
@@ -129,8 +133,8 @@ export async function processAttendance(): Promise<ProcessResult> {
       // opening shift gets the right rest-day / public-holiday OT multiplier.
       const clockDate = mytDateString(log.clock_in);
       const isPH = publicHolidaySet.has(clockDate);
-      const restDay = restDayByUser.get(log.user_id) ?? 0; // NULL → Sunday default
-      const isRestDay = mytDayOfWeek(log.clock_in) === restDay;
+      const restDay = restDayByUser.get(log.user_id) ?? null;
+      const isRestDay = restDay != null && mytDayOfWeek(log.clock_in) === restDay;
 
       const derived = deriveHours({
         clockIn: new Date(log.clock_in),
@@ -154,7 +158,18 @@ export async function processAttendance(): Promise<ProcessResult> {
     }
 
     // --- Decision ---
-    const aiStatus = flags.length === 0 ? "approved" : "flagged";
+    // `rest_day_work` and `public_holiday` describe how the hours are PAID (the
+    // day-type multiplier), not something a manager has to adjudicate. Treating
+    // them as exceptions buried the queue: Sunday 2026-08-02 was a rostered rest
+    // day, the whole crew worked it, and every single log came back flagged with
+    // nothing actually wrong. Keep them on the row — the multiplier and the
+    // payslip breakdown both read them — but don't let them force a review.
+    //
+    // `overtime_detected` stays actionable ON PURPOSE: OT needs approval before
+    // it is paid (hr_company_settings.overtime_requires_approval).
+    const INFORMATIONAL_FLAGS = new Set(["rest_day_work", "public_holiday"]);
+    const actionableFlags = flags.filter((f) => !INFORMATIONAL_FLAGS.has(f));
+    const aiStatus = actionableFlags.length === 0 ? "approved" : "flagged";
 
     const { error: updateError } = await hrSupabaseAdmin
       .from("hr_attendance_logs")

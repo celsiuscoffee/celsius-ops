@@ -75,10 +75,11 @@ export async function GET(req: NextRequest) {
     .select("user_id, employment_type, rest_day")
     .in("user_id", userIds);
   const employmentByUser = new Map<string, string>();
-  const restDayByUser = new Map<string, number>();
+  const restDayByUser = new Map<string, number | null>();
   (profiles || []).forEach((p: { user_id: string; employment_type: string | null; rest_day: number | null }) => {
     employmentByUser.set(p.user_id, p.employment_type || "full_time");
-    restDayByUser.set(p.user_id, p.rest_day == null ? 0 : Number(p.rest_day));
+    // NULL means no rest day configured, NOT Sunday — see attendance-processor.
+    restDayByUser.set(p.user_id, p.rest_day == null ? null : Number(p.rest_day));
   });
   const logMytDates = Array.from(new Set(activeLogs.map((l: { clock_in: string }) => mytDateString(l.clock_in))));
   const { data: holidays } = await hrSupabaseAdmin
@@ -170,13 +171,13 @@ export async function GET(req: NextRequest) {
     // Pay-hours split — same shared engine as a normal clock-out, so the day-type
     // (PH / rest-day) multiplier on regular hours is preserved.
     const employmentType = employmentByUser.get(log.user_id) || "full_time";
-    const restDay = restDayByUser.get(log.user_id) ?? 0;
+    const restDay = restDayByUser.get(log.user_id) ?? null;
     const derived = deriveHours({
       clockIn,
       clockOut: closeAt,
       employmentType,
       isPublicHoliday: publicHolidaySet.has(mytDateString(clockIn)),
-      isRestDay: mytDayOfWeek(clockIn) === restDay,
+      isRestDay: restDay != null && mytDayOfWeek(clockIn) === restDay,
       // Early clock-in pays from the rostered start (stamped at clock-in).
       scheduledStart: mytInstant(log.scheduled_date ?? mytDateString(clockIn), log.scheduled_start),
     });

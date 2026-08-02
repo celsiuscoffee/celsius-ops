@@ -352,6 +352,12 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     const lastDayOfMonth = new Date(year, month, 0).getDate();
     const cycleEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
     const unpaidDays = unpaidLeaveByUser.get(profile.user_id) || 0;
+    // Is this the last cycle they'll appear in? True whenever a resignation
+    // date lands on or before cycle end — including exactly ON cycle end, which
+    // proration deliberately ignores because a full month was worked.
+    const resignDateStr = profile.end_date || profile.resigned_at || null;
+    const isFinalCycle = Boolean(resignDateStr) && String(resignDateStr) <= cycleEnd;
+
     const prorate = isPartTime
       ? ({ reason: null, daysWorked: 0, daysTotal: 0, factor: 1, explanation: null, basis: "calendar" as const } as ReturnType<typeof computeProrate>)
       : computeProrate({
@@ -601,13 +607,17 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         allowance_attendance_deducted: attendanceDeducted,
         allowance_eligible: allowanceBreakdown.eligible,
         review_penalty: reviewPenalty,
-        // Final-payroll marker: staff resigned this cycle. HR should add
-        // leave encashment + notice-pay manually via an ad-hoc adjustment
-        // line before confirming the run.
-        final_payroll: prorate.reason === "resigner" || prorate.reason === "joiner_and_resigner",
-        resignation_end_date: (prorate.reason === "resigner" || prorate.reason === "joiner_and_resigner")
-          ? (profile.end_date || profile.resigned_at)
-          : null,
+        // Final-payroll marker: this is the staffer's LAST cycle. HR should add
+        // leave encashment + notice-pay manually via an ad-hoc adjustment line
+        // before confirming the run.
+        //
+        // Keyed off "no cycle after this one", not off the prorate reason.
+        // Proration only fires when the last day falls strictly INSIDE the
+        // cycle, so someone whose last day is the final day of the month — a
+        // full month's pay, no proration — was never marked final. Adam Kelvin
+        // left on 2026-07-31 and his July payslip would have gone out unmarked.
+        final_payroll: isFinalCycle,
+        resignation_end_date: isFinalCycle ? (profile.end_date || profile.resigned_at) : null,
       },
     });
   }));
