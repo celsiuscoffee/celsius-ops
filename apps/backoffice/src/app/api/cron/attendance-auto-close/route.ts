@@ -3,7 +3,8 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { checkCronAuth } from "@celsius/shared";
 import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
-import { deriveHours, mytDateString, mytDayOfWeek, mytInstant } from "@/lib/hr/hours";
+import { deriveHours, mytDateString, mytInstant } from "@/lib/hr/hours";
+import { REST_DAY_ROLE_PATTERN } from "@/lib/hr/constants";
 import { processAttendance } from "@/lib/hr/agents/attendance-processor";
 
 export const dynamic = "force-dynamic";
@@ -72,14 +73,11 @@ export async function GET(req: NextRequest) {
   const userIds = Array.from(new Set(activeLogs.map((l: { user_id: string }) => l.user_id)));
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, employment_type, rest_day")
+    .select("user_id, employment_type")
     .in("user_id", userIds);
   const employmentByUser = new Map<string, string>();
-  const restDayByUser = new Map<string, number | null>();
-  (profiles || []).forEach((p: { user_id: string; employment_type: string | null; rest_day: number | null }) => {
+  (profiles || []).forEach((p: { user_id: string; employment_type: string | null }) => {
     employmentByUser.set(p.user_id, p.employment_type || "full_time");
-    // NULL means no rest day configured, NOT Sunday — see attendance-processor.
-    restDayByUser.set(p.user_id, p.rest_day == null ? null : Number(p.rest_day));
   });
   const logMytDates = Array.from(new Set(activeLogs.map((l: { clock_in: string }) => mytDateString(l.clock_in))));
   const { data: holidays } = await hrSupabaseAdmin
@@ -87,6 +85,19 @@ export async function GET(req: NextRequest) {
     .select("date")
     .in("date", logMytDates);
   const publicHolidaySet = new Set((holidays || []).map((h: { date: string }) => h.date));
+
+  // Rest day is ROSTERED, not a weekday on the profile — the roster carries a
+  // "Rest Day" row per person per week and it rotates. Same source as the AI
+  // processor so an auto-closed log pays the identical multiplier.
+  const { data: restRows } = await hrSupabaseAdmin
+    .from("hr_schedule_shifts")
+    .select("user_id, shift_date")
+    .ilike("role_type", REST_DAY_ROLE_PATTERN)
+    .in("user_id", userIds)
+    .in("shift_date", logMytDates);
+  const rosteredRestDays = new Set(
+    (restRows || []).map((r: { user_id: string; shift_date: string }) => `${r.user_id}|${r.shift_date}`),
+  );
 
   let closed = 0;
   const actions: { logId: string; reason: string; closeAt: string }[] = [];
@@ -171,13 +182,13 @@ export async function GET(req: NextRequest) {
     // Pay-hours split — same shared engine as a normal clock-out, so the day-type
     // (PH / rest-day) multiplier on regular hours is preserved.
     const employmentType = employmentByUser.get(log.user_id) || "full_time";
-    const restDay = restDayByUser.get(log.user_id) ?? null;
+    const clockInDate = mytDateString(clockIn);
     const derived = deriveHours({
       clockIn,
       clockOut: closeAt,
       employmentType,
-      isPublicHoliday: publicHolidaySet.has(mytDateString(clockIn)),
-      isRestDay: restDay != null && mytDayOfWeek(clockIn) === restDay,
+      isPublicHoliday: publicHolidaySet.has(clockInDate),
+      isRestDay: rosteredRestDays.has(`${log.user_id}|${clockInDate}`),
       // Early clock-in pays from the rostered start (stamped at clock-in).
       scheduledStart: mytInstant(log.scheduled_date ?? mytDateString(clockIn), log.scheduled_start),
     });

@@ -5,9 +5,9 @@ import { getUser } from "@/lib/auth";
 // hr_attendance_logs ("permission denied for table"), so writes would fail
 // before RLS even runs.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
-import { haversineDistance, GEOFENCE_RADIUS_METERS } from "@/lib/hr/constants";
+import { haversineDistance, GEOFENCE_RADIUS_METERS, REST_DAY_ROLE_PATTERN } from "@/lib/hr/constants";
 import { evaluateClockOut } from "@/lib/hr/clock-out-gate";
-import { deriveHours, mytDateString, mytDayOfWeek, mytInstant } from "@/lib/hr/hours";
+import { deriveHours, mytDateString, mytInstant } from "@/lib/hr/hours";
 import type { AttendanceLog, GeofenceZone } from "@/lib/hr/types";
 
 export const dynamic = "force-dynamic";
@@ -350,21 +350,31 @@ export async function POST(req: NextRequest) {
     // ONLY, leaving regular_hours/overtime_hours NULL; payroll sums
     // regular_hours, so every app clock-out paid 0 hours. Derive them here so a
     // clean clock-out pays immediately.
-    const [profileResp, holidayResp] = await Promise.all([
-      supabase.from("hr_employee_profiles").select("employment_type, rest_day").eq("user_id", session.id).maybeSingle(),
-      supabase.from("hr_public_holidays").select("date").eq("date", mytDateString(clockIn)).maybeSingle(),
+    // Rest day is ROSTERED, not a weekday on the profile: the schedule carries a
+    // "Rest Day" row (00:00-00:00) per person per week and it rotates. The old
+    // profile-based read defaulted NULL to Sunday and mis-stamped 107 of 108
+    // rest-day logs. Same source as the AI processor and the auto-close cron.
+    const clockInDate = mytDateString(clockIn);
+    const [profileResp, holidayResp, restResp] = await Promise.all([
+      supabase.from("hr_employee_profiles").select("employment_type").eq("user_id", session.id).maybeSingle(),
+      supabase.from("hr_public_holidays").select("date").eq("date", clockInDate).maybeSingle(),
+      supabase
+        .from("hr_schedule_shifts")
+        .select("id")
+        .eq("user_id", session.id)
+        .eq("shift_date", clockInDate)
+        .ilike("role_type", REST_DAY_ROLE_PATTERN)
+        .limit(1)
+        .maybeSingle(),
     ]);
-    // NULL means no rest day configured, NOT Sunday. Defaulting to 0 treated
-    // every Sunday as rest-day work for every staffer (all 27 have it NULL).
-    const restDay = profileResp.data?.rest_day == null ? null : Number(profileResp.data.rest_day);
     const derived = deriveHours({
       clockIn,
       clockOut,
       employmentType: profileResp.data?.employment_type || "full_time",
       isPublicHoliday: !!holidayResp.data,
-      isRestDay: restDay != null && mytDayOfWeek(clockIn) === restDay,
+      isRestDay: !!restResp.data,
       // Early clock-in pays from the rostered start (stamped at clock-in).
-      scheduledStart: mytInstant(activeLog.scheduled_date ?? mytDateString(clockIn), activeLog.scheduled_start),
+      scheduledStart: mytInstant(activeLog.scheduled_date ?? clockInDate, activeLog.scheduled_start),
     });
     const totalHours = derived.totalHours;
 

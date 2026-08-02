@@ -70,3 +70,12 @@ export function haversineDistance(
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
+// The roster records a rest day as a shift row with this role_type and a
+// 00:00-00:00 window. It is the ONLY source of truth for whether a given day is
+// a rest day for a given person — rest days rotate, so there is no fixed weekday.
+export const REST_DAY_ROLE = "Rest Day";
+// Match pattern for reads. The roster is hand-entered, so tolerate "Rest day" /
+// "rest day" casing. Verified against the live schedule: "Rest Day" is the only
+// role_type containing "rest", so this can't over-match a real shift.
+export const REST_DAY_ROLE_PATTERN = "rest%";

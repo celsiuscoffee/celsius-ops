@@ -47,6 +47,14 @@ export type LeaveType = keyof typeof LEAVE_TYPES;
 // data. Mirror of the backoffice PAYROLL_UI_ENABLED; flip both when payroll goes live.
 export const PAYROLL_UI_ENABLED = false;
 
+// The roster records a rest day as a shift row with this role_type and a
+// 00:00-00:00 window. It is the ONLY source of truth for whether a given day is
+// a rest day for a given person — rest days rotate, so there is no fixed
+// weekday. Mirror of the backoffice constant; keep the two in step.
+export const REST_DAY_ROLE = "Rest Day";
+// Match pattern for reads — the roster is hand-entered, so tolerate casing.
+export const REST_DAY_ROLE_PATTERN = "rest%";
+
 // Malaysia time offset
 export const MYT_OFFSET_HOURS = 8;
 
