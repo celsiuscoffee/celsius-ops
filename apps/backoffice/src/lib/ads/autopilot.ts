@@ -205,12 +205,26 @@ const guardRevenueSeries = GUARD_USES_ORGANIC ? organicRevenueSeries : dailyReve
 export const POS_CUTOVER_YMD = process.env.ADS_POS_CUTOVER_YMD || "2026-06-18";
 
 // Pause probe — the only till-readable experiment at this spend:revenue ratio.
-// SHELVED by owner 2026-07-19 ("let tamarind follow the others") after the
-// probe was starved two nights running — all outlets stay on the gradual
-// descent. The machinery is kept and can be re-enabled with
-// ADS_AUTOPILOT_PAUSE_PROBE=on if a causal baseline is wanted later.
+// Shelved by owner 2026-07-19 ("let tamarind follow the others") after the probe
+// was starved two nights running; UN-shelved by owner 2026-08-01 to settle
+// whether Tamarind's spend earns its keep. Still env-gated: turn on with
+// ADS_AUTOPILOT_PAUSE_PROBE=on, off by removing the var.
+//
+// Why Tamarind is worth the probe: over the clean POS-only window (Jun 18 - Jul
+// 30, 37d) its weekday-adjusted revenue/ad-ringgit slope is 2.13 — the ONLY
+// outlet above the 1.32 break-even implied by a 75.6% drink margin (Shah Alam
+// 0.56, Putrajaya -0.71). At n=37 that is not significant (p~0.24), which is
+// precisely why it needs an experiment rather than another week of staring at
+// the correlation.
 export const PAUSE_PROBE_ENABLED = process.env.ADS_AUTOPILOT_PAUSE_PROBE === "on";
-export const PAUSE_PROBE_DAYS = 28;      // full pause length before auto-restore
+// Full pause length before auto-restore. Owner chose 14 over the original 28 on
+// 2026-08-01 to halve the downside if the 2.13 slope is real (~RM395 expected
+// cost instead of ~RM790). The shorter window does NOT sit on a whole payday
+// cycle — Malaysian salaries land ~the 25th — but the restore verdict reads
+// adjIndex (fleet-adjusted) as well as the raw index, and the two control
+// outlets ride the same cycle, so the payday swing largely divides out. Read
+// the raw index alone at this length and it will mislead.
+export const PAUSE_PROBE_DAYS = 14;
 // FLEET_SPACING_DAYS (the nightly-cron stagger for NEW disturbances; safety
 // actions rollback/revert/restore are never spaced) is defined in the policy
 // knobs block above — env-tunable, default 3d since 2026-07-19.
