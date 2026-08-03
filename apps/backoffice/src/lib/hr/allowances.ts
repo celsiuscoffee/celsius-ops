@@ -126,6 +126,9 @@ export type AllowanceBreakdown = {
   employmentType: string | null;
   isFullTime: boolean;
   eligible: boolean;
+  /** Scored as normal, but payroll pays nothing while this is true. */
+  onProbation: boolean;
+  probationEndDate: string | null;
   period: { year: number; month: number; daysElapsed: number; daysRemaining: number };
   pool: number;
   levers: AllowanceLever[];
@@ -221,6 +224,8 @@ export function buildFixedAllowanceBreakdown(o: {
     employmentType: o.employmentType,
     isFullTime: o.isFullTime,
     eligible: true,
+    onProbation: false,
+    probationEndDate: null,
     period: o.period,
     pool: o.amount,
     levers: (["checklist", "phone", "serving", "audit"] as AllowanceLeverKey[]).map((k) => ({
@@ -267,18 +272,22 @@ export async function computeAllowancesForUser(
   const employmentType = profile?.employment_type ?? null;
   const isFullTime = employmentType === "full_time";
   const scheduleRequired = profile?.schedule_required !== false;
-  // Probation: not entitled to the performance allowance until confirmed
-  // (owner 2026-08-03). Compared against the END of the month being computed,
-  // so the month someone is confirmed part-way through pays in full rather
-  // than being lost — the generous side of the boundary, deliberately.
+  // Probation: still SCORED, just not PAID (owner 2026-08-03: "for probation
+  // staff, they are not entitled to allowances (we still need the performance).
+  // gate this on payroll?"). So the gate lives in payroll-calculator, not here —
+  // zeroing eligibility here would blank the levers too, and the whole point is
+  // to keep watching how a new joiner is doing while paying them nothing.
+  //
+  // Compared against the END of the month, so someone confirmed part-way
+  // through is paid for that whole month — the generous side, deliberately.
   //
   // A NULL probation_end_date means "not on probation", NOT "unknown". That is
   // the only safe default: the column was empty for all 48 active profiles when
   // this shipped, so treating NULL as probation would have zeroed the whole
-  // company's allowance.
+  // company's allowance in one deploy.
   const probationEnd = (profile?.probation_end_date as string | null) ?? null;
   const onProbation = !!probationEnd && monthEnd <= probationEnd;
-  const eligible = isFullTime && scheduleRequired && !onProbation;
+  const eligible = isFullTime && scheduleRequired;
   const isFoh = FOH_POSITIONS.includes((profile?.position ?? "").trim());
 
   // FLAT allowance — checked before everything else, including the eligibility
@@ -325,11 +334,10 @@ export async function computeAllowancesForUser(
       attendance: { deductions: [], lateCount: 0, absentCount: 0, total: 0 },
       reviewPenalty: { total: 0, entries: [] },
       totalEarned: 0, totalMax: 0,
-      tip: onProbation
-        ? `On probation until ${probationEnd} — the performance allowance starts once confirmed.`
-        : isFullTime
-          ? "Not applicable — schedule not required for this role."
-          : "Performance allowance is for full-time staff only.",
+      onProbation, probationEndDate: probationEnd,
+      tip: isFullTime
+        ? "Not applicable — schedule not required for this role."
+        : "Performance allowance is for full-time staff only.",
     };
   }
 
@@ -491,6 +499,7 @@ export async function computeAllowancesForUser(
 
   return {
     userId, employmentType, isFullTime, eligible: true,
+    onProbation, probationEndDate: probationEnd,
     period: { year, month, daysElapsed, daysRemaining },
     pool: r.pool, levers, performanceEarned,
     attendance: { deductions, lateCount, absentCount, total: attendanceTotal },

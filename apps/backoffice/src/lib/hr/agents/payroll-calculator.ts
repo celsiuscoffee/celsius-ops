@@ -535,9 +535,22 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       prorate.reason === "joiner"
       || prorate.reason === "resigner"
       || prorate.reason === "joiner_and_resigner";
-    const perfAllowance = allowanceProrated
+    const perfAllowanceProrated = allowanceProrated
       ? prorateAmount(perfAllowanceFull, prorate)
       : perfAllowanceFull;
+    // PROBATION — scored, not paid. Owner 2026-08-03: "for probation staff,
+    // they are not entitled to allowances (we still need the performance)."
+    // The engine keeps scoring the levers so the Performance page shows how a
+    // new joiner is doing; the money is withheld here, on the payslip, and the
+    // breakdown still lands in computation_details so the reason is on record.
+    const perfAllowance = allowanceBreakdown.onProbation ? 0 : perfAllowanceProrated;
+    if (allowanceBreakdown.onProbation && perfAllowanceProrated > 0) {
+      notes.push(
+        `${profile.user_id.slice(0, 8)}: performance allowance of ` +
+        `RM${perfAllowanceProrated.toFixed(2)} withheld — on probation until ` +
+        `${allowanceBreakdown.probationEndDate}. Still scored.`,
+      );
+    }
     const attendanceDeducted = Math.round(allowanceBreakdown.attendance.total * 100) / 100;
     const reviewPenalty = Math.round(allowanceBreakdown.reviewPenalty.total * 100) / 100;
     const totalAllowances = perfAllowance;
