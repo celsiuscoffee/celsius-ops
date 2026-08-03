@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
-import { isGrabConfigured, batchUpdateMenu } from "@/lib/grab";
+import { syncItemAvailabilityToGrab } from "@/lib/grab-availability";
+
+// The push retries through Grab's "retry after N seconds" throttle, so give the
+// request room to finish rather than being cut off mid-retry.
+export const maxDuration = 60;
 
 /**
  * POS register "86" (out-of-stock) toggle — the consolidated, single write
@@ -13,10 +17,17 @@ import { isGrabConfigured, batchUpdateMenu } from "@/lib/grab";
  * (e.g. "shah-alam"), resolved from the loyalty outlet id the register sends
  * ("outlet-sa"), so all channels agree.
  *
- * On every toggle we also best-effort push the new status to GrabFood for that
- * outlet's own Grab merchant, so a 86 reaches delivery within seconds. The
- * Grab push never blocks the DB write — if Grab isn't configured / live yet,
- * the toggle still succeeds and pickup + every register update via realtime.
+ * On every toggle we also push the new status to GrabFood for that outlet's own
+ * Grab merchant, so a 86 reaches delivery within seconds. The Grab push never
+ * blocks the DB write — if Grab isn't configured / live yet, the toggle still
+ * succeeds and pickup + every register update via realtime.
+ *
+ * The push RETRIES through Grab's menu-record throttle (409 "batchUpdate ITEM
+ * <id> too frequently, retry after N seconds"), which staff trip routinely by
+ * 86-ing several items in a row. A single un-retried call used to drop the 86 on
+ * the floor: closed on the till, still selling on Grab. Whatever the retry can't
+ * land is left un-synced in the pushed-state snapshot so `cron/grab-reconcile`
+ * re-sends it — see lib/grab-availability.ts.
  *
  * Body: { outlet_id: string (loyalty id), product_id: string,
  *         is_available: boolean, reason?: string }
@@ -71,45 +82,13 @@ export async function POST(req: NextRequest) {
     );
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // 3. Best-effort live push to this outlet's GrabFood merchant.
-  let grab = "skipped";
-  try {
-    const { data: outlet } = await supabase
-      .from("outlets")
-      .select("grab_merchant_id")
-      .eq("id", outlet_id)
-      .maybeSingle();
-    const merchantId = (outlet as { grab_merchant_id?: string | null } | null)?.grab_merchant_id;
-    if (!merchantId) {
-      grab = "no-merchant";
-    } else if (!isGrabConfigured()) {
-      grab = "grab-not-configured";
-    } else {
-      // Records must target GRAB's item id, not ours — a portal-built (self-serve)
-      // menu keys items by Grab's id (e.g. "MYITE2026..."), so a record keyed by
-      // our product id matches nothing and the 86 silently never reaches Grab.
-      // Use products.grab_item_id when linked; fall back to our id (works only on
-      // stores that pulled our menu).
-      const { data: prod } = await supabase
-        .from("products")
-        .select("grab_item_id")
-        .eq("id", product_id)
-        .maybeSingle();
-      const grabItemId =
-        (prod as { grab_item_id?: string | null } | null)?.grab_item_id || product_id;
-      // field is the record TYPE ("ITEM"), attributes go in the entity. To set
-      // UNAVAILABLE Grab requires maxStock:0 alongside the status.
-      await batchUpdateMenu(merchantId, "ITEM", [
-        is_available
-          ? { id: grabItemId, availableStatus: "AVAILABLE" }
-          : { id: grabItemId, availableStatus: "UNAVAILABLE", maxStock: 0 },
-      ]);
-      grab = "pushed";
-    }
-  } catch (e) {
-    grab = "error";
-    console.error("[pos/availability] Grab push failed:", e);
-  }
+  // 3. Live push to this outlet's GrabFood merchant, with throttle retry.
+  const grab = await syncItemAvailabilityToGrab(
+    supabase,
+    { loyaltyOutletId: outlet_id },
+    product_id,
+    is_available,
+  );
 
   return NextResponse.json({ ok: true, store_id: storeId, grab });
 }
