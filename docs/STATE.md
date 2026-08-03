@@ -289,6 +289,77 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   before cycle end. Left as a warning, not a block, because a mid-month preview
   is legitimate.
 
+- 2026-08-01 — **`ads_metric_daily` holds an account-level ROLL-UP row
+  (`campaign_id IS NULL`) as well as the per-campaign rows. Any `sum(cost_micros)`
+  that does not filter `campaign_id IS NOT NULL` double-counts spend 2×.**
+  This is by design and documented at `apps/backoffice/src/lib/ads/sync-metrics.ts:7`
+  — the sync writes per-campaign rows, then a per-date account total. The roll-up
+  first appears **2026-07-04**, which is why row count per day goes 3 → 4 there.
+  Proof (Jul 30): campaigns 42.76 + 34.02 + 58.73 = **135.52**, and the null row
+  is **135.52** — identical spend, clicks and impressions, same sync batch.
+  **Shipped code is CORRECT** — `ads/optimizer.ts:145` and the P&L readers filter
+  `campaign_id IS NOT NULL`; `api/ads/overview/route.ts:61-63` deliberately reads
+  either the roll-up *or* the campaigns, never both. The double-count was in the
+  ad-hoc SQL behind the 2026-07-30 entries below. **Any future hand-written query
+  against this table must filter the null row** — including anything the
+  data-analyst agent writes, since `ads_metric_daily` is in its allowlist
+  (`agents/data-analyst.ts:55`) and it has no such guard.
+
+- 2026-08-01 — **A DISCOUNT IS NOT CASH OUT, AND `total` IS ALREADY NET OF IT.**
+  Ad spend leaves the bank; a discount is revenue that never arrived. Verified:
+  `total = subtotal + service − discount + sst (+rounding)` holds on **7,955 of
+  7,955** POS rows and **2,918 of 2,919** `orders` rows since Jul 1. So any table
+  that shows revenue from `total` **and** adds discounts as a cost subtracts them
+  twice. An earlier pass here did exactly that and reported a "marketing cash =
+  ads + discounts" column — **that column was not a real quantity; ignore it.**
+  Correct shape: net banked revenue is the inflow, ads are the outflow, and
+  discounts are already inside the inflow. Also: a ringgit of ad spend is gone
+  unconditionally, whereas a ringgit of discount is only fully lost if that
+  customer would have bought anyway — on ~70% coffee margin a voucher that causes
+  an otherwise-absent RM15 sale still nets ≈+RM6. **The two are not
+  interchangeable per ringgit** and must not be summed.
+
+- 2026-08-01 (correction, supersedes the ad-spend half of both 2026-07-30
+  entries) — **Real ad spend is HALF what was recorded. The ad cut keeps
+  ≈RM4,100/mo of real cash; rising discounts give back ≈RM3,400/mo of revenue;
+  net ≈ +RM720/mo — but that is below the noise floor (see caveat).** Recomputed
+  with the roll-up row excluded (POS ex-Grab + web; discounts = promo + reward +
+  web first-order):
+
+  | Block | Gross | Discounts | Net banked | Ads cash out | After ads |
+  | --- | --- | --- | --- | --- | --- |
+  | Jun 24–30 | 65,625 | 2,042 | 63,583 | 2,047 | 61,536 |
+  | Jul 1–7 | 71,849 | 2,420 | 69,429 | 2,091 | 67,338 |
+  | Jul 8–14 | 69,152 | 2,173 | 66,978 | 2,014 | 64,965 |
+  | Jul 15–21 | 72,021 | 2,615 | 69,405 | 1,873 | 67,533 |
+  | **Jul 24–30** | 69,906 | **3,188** | 66,718 | **1,042** | **65,676** |
+
+  The recorded ads column (3,269 / 4,027 / 3,745 / 2,092) was exactly 2× from
+  Jul 4 on. Decomposed vs the mean of the three full-spend blocks: ads
+  1,993 → 1,042 = **+RM951/wk of real cash kept** (RM4,127/mo); discounts
+  2,403 → 3,188 = **−RM785/wk of revenue never collected** (RM3,407/mo);
+  **net ≈ +RM166/wk ≈ +RM720/mo**.
+  **CAVEAT that outweighs the result:** the "after ads" column on the three
+  full-spend blocks alone spans 64,965–67,533, a **RM2,568 spread**. The ad
+  saving is RM951. **The saving is smaller than ordinary week-to-week revenue
+  variance**, so no single week's bank balance can demonstrate it — it needs
+  another month or two, or a proper holdout.
+  **Revenue still holds** — 66,718 net is −2.7% vs the full-spend mean, inside
+  that same spread. Discount split per week
+  confirms it is vouchers, not staff: reward 540 → 612 → 984 → 1,239 → **1,563**,
+  promo 696 → 766 → 482 → 653 → **1,015**, manual 39 → 40 → 6 → 0 → **19**.
+  Ads sync runs ~2 days behind (last date Jul 30 as of Aug 1) — do not read the
+  newest two days as a drop.
+
+- 2026-08-01 — **WITHDRAWN: "actual ad spend runs 1.3–2.1× the daily budget".**
+  Same root cause. Real spend Jul 4–19 was RM280–330/day against ~RM283/day of
+  budget — the cap was being respected almost exactly. The "ramp on Jul 4 at
+  unchanged CPC, therefore real" argument was itself the artefact: clicks
+  604 → 1,476 and impressions 26k → 56k doubled because the roll-up row started
+  that day, not because delivery changed. **Do not build the spend-vs-budget
+  overrun check** that the previous resume pointer queued. `monthly_saving_myr`
+  is still a budget delta rather than realised cash — that part stands.
+
 - 2026-07-31 — **Stock counts were being filed under the wrong date, and it
   invalidates the Putrajaya shrinkage finding.** Owner asked whether Firdaus's
   count saved ("but the date?"). It did — count `3ad902a3` — but it was dated
@@ -304,6 +375,118 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   and have `countDate` moved forward); finalizing an expired count stamps it
   with the closing day. Expiry is **derived from `createdAt`**, not stored — no
   `EXPIRED` enum, no migration, no cron to flip stale rows.
+
+- 2026-07-30 — **Week-to-week: revenue IS holding, but the ad saving is NOT
+  reaching the bank — a different line ate it.** Owner asked "can we maintain
+  it". Verified series (in-store = `pos_orders` ex-`grabfood` + `orders`
+  QR/app; ad spend = `ads_metric_daily`, 3 campaigns, one sync row per day):
+
+  | Week (Mon–Sun) | In-store MYR | Ad spend MYR |
+  | --- | --- | --- |
+  | Jun 22–28 | 59,409 | 1,997 |
+  | Jun 29–Jul 5 | 65,839 | 2,632 |
+  | Jul 6–12 | 63,710 | 4,171 |
+  | Jul 13–19 | 64,986 | 3,968 |
+  | Jul 20–26 | 61,976 | 2,395 |
+
+  **A previous session's weekly spend table was WRONG** (quoted ~RM2,000/wk flat
+  for Jun 22–Jul 13, and RM1,198 for Jul 20 — the later weeks were roughly
+  halved). The table above is recomputed from the daily series and reconciles to
+  it; the false "40% less spend, same revenue" headline derived from it is
+  withdrawn and replaced by the blocks below.
+
+  Rolling 7-day blocks (every block weekday-complete, so no day-of-week bias):
+
+  | Block | In-store | Ads | Discounts | Ads+disc | Rev per ad-RM |
+  | --- | --- | --- | --- | --- | --- |
+  | Jul 1–7 | 66,263 | 3,269 | 3,709 | 6,978 | 20.3 |
+  | Jul 8–14 | 62,304 | 4,027 | 3,565 | 7,592 | 15.5 |
+  | Jul 15–21 | 65,773 | 3,745 | 4,444 | 8,189 | 17.6 |
+  | Jul 22–28 | 63,233 | **2,092** | **5,800** | 7,892 | **30.2** |
+
+  (Discount column CORRECTED — see the entry immediately below; the first pass
+  double-counted it and reached the opposite cash conclusion.)
+
+  **Revenue answer: yes, maintained.** Jul 22–28 (63,233) sits inside the
+  full-spend range 62,304–66,263 — the spread among full-spend blocks (6.4%) is
+  wider than the gap to the cut block (−2.4% vs their mean). Mon–Wed
+  like-for-like organic confirms it across six weeks: 17,646 / 19,922 / 18,878 /
+  18,947 / 18,001 / **18,102** (Jul 27) — the newest low-spend week is mid-range
+  and ABOVE the previous one. Two consecutive low-spend weeks now, not one.
+
+- 2026-07-30 (correction, supersedes the discount half of the entry above) —
+  **`pos_orders.discount_amount` is the TOTAL, not a manual-discount column.**
+  `pos-native/lib/checkout.ts:194`: `discount = rewardDiscount + promoDiscount +
+  manualDiscount`, and `promo_discount` / `reward_discount_amount` are ALSO
+  persisted separately. Summing all three double-counts. Manual =
+  `discount_amount − promo_discount − reward_discount_amount`.
+  **Manual/staff discounting is effectively ZERO** — RM40 / RM6 / RM0 / RM12 per
+  week across the four July blocks, not the RM2,600/wk claimed above. The
+  cashier manual-discount path exists (`register.tsx:3686`) and is essentially
+  unused. Corrected discounts (POS order-level total + web parts; the web
+  `orders.discount_amount` column is always 0, its real parts are
+  promo/reward/first_order):
+
+  | Block | Ads | Discounts | Ads+disc | In-store |
+  | --- | --- | --- | --- | --- |
+  | Jul 1–7 | 3,269 | 2,377 | 5,646 | 66,263 |
+  | Jul 8–14 | 4,027 | 2,120 | 6,147 | 62,304 |
+  | Jul 15–21 | 3,745 | 2,587 | 6,332 | 65,773 |
+  | Jul 22–28 | **2,092** | 3,247 | **5,339** | 63,233 |
+
+  **So the cash conclusion FLIPS: the ad saving IS reaching the bank.** Jul 22–28
+  total marketing cash (5,339) is the LOWEST of the four blocks. vs Jul 15–21:
+  ads −1,653/wk, discounts +660/wk, net **−RM993/wk ≈ −RM4,300/mo** on held
+  revenue. vs the mean of the three prior blocks: net −RM703/wk ≈ −RM3,046/mo.
+  The discount rise is real but roughly half the ad saving, and it is
+  **loyalty-voucher redemption on POS** (reward 612 → 984 → 1,239 → **1,602**/wk,
+  +RM4,290/mo annualised) plus promo (766 → 482 → 653 → 985) — the SMS/loyalty
+  loop that still has NO approval gate. Not staff discretion.
+
+- 2026-07-30 — **BUG (money path, unfixed): per-line discounts are charged to the
+  customer but NOT persisted — the till OVER-REPORTS revenue.**
+  `cart.ts:127 cartSubtotal` is net of `line_discount_sen` and drives both the
+  cashier's on-screen total (`register.tsx:870`) and the customer display
+  (`customer-display.tsx:250`), so the customer correctly pays the discounted
+  amount. But `checkout.ts:179` RECOMPUTES `subtotal = Σ unit_sen × qty` — GROSS,
+  ignoring `line_discount_sen` — and that gross figure is what lands in
+  `pos_orders.subtotal`, `.total`, and the `payments` row (`amount: total`).
+  The line discount is written to `pos_order_items.discount_amount` and printed
+  on the receipt (`receipt-format.ts:208`) but never deducted from the order.
+  **Verified against prod:** for every affected order `total` equals
+  `subtotal + service_charge − discount_amount + sst` exactly, i.e. the line
+  discount is absent. e.g. CC-CON-4797 subtotal 7450, line_disc 1390, promo 0,
+  reward 0, total 7450; CC-TAM-2757 line_disc 6760 = 100% of subtotal, total
+  6760. **RM1,636.34 across 222 lines since 2026-06-08, still occurring
+  2026-07-30.** Effects: reported revenue overstated by that amount, and card
+  settlements / cash counts run short against reported sales. Small vs ~RM330k
+  of till (~0.4%) so it does not move the ads conclusions, but it is real money
+  and it corrupts every revenue lens. **NOT fixed — `pos-native` is a
+  production OTA deploy and this is payments-adjacent, so hard rule 6 applies:
+  needs owner approval.** Fix is one line (make checkout's subtotal use
+  `cartSubtotal`/`lineNet`), but decide first whether historical rows get
+  restated or left as-is.
+
+- 2026-07-30 — **Actual ad spend runs 1.3–2.1× the daily budget on file,
+  persistently.** Jul 4–19: RM550–670/day actual against ~RM283/day of budget
+  (ledger `prev_daily_micros` on Jul 18 reads 84.96/98.42/100.00, so the
+  autopilot genuinely believed the cap was RM283). Jul 22–26: RM330/day against
+  RM165/day of budget. Jul 27–28: RM222/day against ~RM160/day. **The ramp is
+  real, not a sync artifact** — clicks 604→1,476 and impressions 26k→56k both
+  doubled on Jul 4 at unchanged CPC (0.43–0.62), and there is exactly one
+  `ads_metric_daily` row per campaign per day (111 rows / 37 days / 3
+  campaigns). Google permits 2× on individual days but smooths to
+  budget×30.4/month; 16 consecutive days at 2× does not fit that, so either
+  something raised budgets outside `ads_budget_change` (UI edit, or Smart
+  campaign auto-apply recommendations) or Smart campaigns simply overrun here.
+  **Consequences:** (a) `monthly_saving_myr` in the ledger is computed from
+  budget deltas and therefore does NOT equal realised bank saving — always
+  reconcile against `ads_metric_daily`; (b) budget is not a reliable cap, so the
+  descent controller needs a spend-vs-budget overrun check; (c) realised saving
+  measured from actual spend: RM17,488/mo at the Jul 8–14 peak → RM9,085/mo
+  (Jul 22–28) → RM6,753/mo at the Jul 27–28 run-rate, i.e. **−RM10,735/mo vs
+  peak but only −RM1,920/mo vs the June baseline** of RM8,673/mo. Quote the June
+  baseline, not the peak: the peak was itself 16 days of unbudgeted overrun.
 
 - 2026-07-29 — **`Outlet.openTime/closeTime` is NOT the real trading window —
   measure from the till.** Config says 08:00–22:00 for all three outlets. The
@@ -1040,6 +1223,57 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   26 Jul and there are 0 `tg:` transcript rows, so either the payments were
   never made or the POPs were lost to the known Telegram-persistence gap. That
   gap (and MULTI_POP under-extraction) is still unfixed.
+
+- 2026-08-01 — **Ads: the cut keeps ≈RM4,100/mo of real cash, but rising voucher
+  discounts hand back ≈RM3,400/mo of revenue, so net is ≈+RM720/mo — and that is
+  smaller than weekly revenue variance, so it cannot yet be seen in the bank.**
+  See the four 2026-08-01 Verified facts. The ads side has little left to give
+  (spend is already ~RM1,040/wk), so the loyalty loop is now the bigger and
+  faster-moving number. Next, in order:
+  1. **Gate the loyalty loop** (priority 1b below) — it is the whole ballgame.
+  2. **The loop has no holdout, so voucher incrementality is unmeasurable.**
+     Gross sales FELL (72,021 → 69,906) while discounts rose, which does not look
+     like vouchers are buying volume — suggestive, not proof. Build a holdout
+     before spending more on redemptions, otherwise this question stays open.
+  3. Do NOT keep cutting ads looking for cash that is not there; if the ad
+     saving is to be proven at all it needs another month or a holdout.
+  The 2026-07-30 pointer below still applies EXCEPT its item 2, now withdrawn.
+
+- 2026-07-30 — **Ads: revenue verdict settled, cash verdict is now about
+  DISCOUNTS, not ads.** Two low-spend weeks in, in-store revenue is holding
+  (see Verified facts, same date). Pick up here, in priority order:
+  1. **Line-discount money bug** (see Verified facts, same date) — awaiting owner
+     approval: one-line fix in `pos-native/lib/checkout.ts`, plus a decision on
+     restating the 222 historical rows. NOT staff discretion — manual
+     discounting is ~zero; `discount_reason` / `discount_by` are NULL on every
+     row because that path is unused.
+  1b. **Loyalty-voucher redemption is the growing outflow** — RM612 → RM1,602/wk
+     in four weeks (≈RM4,290/mo annualised), and the SMS/loyalty loop issuing
+     them still has NO approval gate (`approved_at` NULL on 75 rounds). It is
+     about half the ad saving, so it does not cancel it, but left ungated it
+     will. Gate it before it does.
+  2. ~~**Spend overruns budget 1.3–2.1×**~~ — **WITHDRAWN 2026-08-01**, see
+     Verified facts. There is no overrun; do NOT build the spend-vs-budget check
+     and do NOT go hunting for what "raised spend on Jul 4" — that was the
+     `campaign_id IS NULL` roll-up row appearing in the table. Still true, and
+     still worth doing: stop quoting `monthly_saving_myr` as realised cash
+     (reconcile against `ads_metric_daily`, filtering the roll-up row).
+  3. **Guard still has 3 confirmed measurement bugs** (`ads/organic-revenue.ts`):
+     includes `pos_orders.source='grabfood'`, excludes the `orders` table
+     (QR-table/app, ~25% of in-store), and lets Nilai (consignment, campaigns
+     paused, rawIndex 0.33) pollute the fleet median and the scoreboard. Every
+     number in the Verified-facts entry above was computed with these bugs
+     corrected by hand in SQL — the shipped guard does NOT yet agree with it.
+  4. **Creative sync has still never produced a row.** #1091 (errMessage) merged
+     2026-07-30; the first run that can succeed is the 19:01 UTC cron tonight.
+     Until it lands, radius / schedule / ad-copy / landing-page questions are
+     unanswerable — do not speculate. `AD_WINDOW` (07:30–22:00, owner-approved)
+     is still NOT applied to Google, pending the `hour_profile` read.
+  5. Leak repair looks like it FAILED: Jul 28 (first post-fix day) still
+     RM13.80 of leaked spend vs RM18.26 pre-fix. Re-applied literals aren't
+     blocking. Unexplained.
+  6. Housekeeping: remove the inert `hardCutDirective` block.
+
 - 2026-07-29 — **Two threads open, both HR.**
   (a) **Clock-out geofence fix is deployed but unverified** — see the Verified
   facts entry above. Needs a *deliberate* test at the IOI Mall kiosk; passively
