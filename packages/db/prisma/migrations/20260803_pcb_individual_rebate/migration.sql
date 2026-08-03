@@ -21,8 +21,11 @@
 -- SQL-managed table (not in schema.prisma). Apply manually via Supabase SQL —
 -- hybrid workflow, docs/database-migrations.md. NEVER prisma db push / migrate deploy.
 
-INSERT INTO hr_stat_pcb_reliefs (relief_code, amount, effective_year)
+-- NOTE: relief_name is NOT NULL on this table — an INSERT without it fails.
+INSERT INTO hr_stat_pcb_reliefs (relief_code, relief_name, amount, effective_year, per_person, notes)
 VALUES
-  ('REBATE_INDIVIDUAL',    400,   2026),
-  ('REBATE_MAX_CHARGEABLE', 35000, 2026)
+  ('REBATE_INDIVIDUAL',     'Individual rebate (ITA s.6A(2))',        400,   2026, false,
+   'REBATE, not a relief — comes off the tax charged, not the income. Applies only when chargeable income <= REBATE_MAX_CHARGEABLE.'),
+  ('REBATE_MAX_CHARGEABLE', 'Chargeable-income ceiling for s.6A(2)',  35000, 2026, false,
+   'Not a relief amount — the ceiling above which the RM400 individual rebate is not given.')
 ON CONFLICT DO NOTHING;
