@@ -202,8 +202,13 @@ export async function calcPCB(
   // Standard personal
   totalRelief += reliefCatalog.get("PERSONAL") ?? 9000;
 
-  // EPF + life insurance combined cap (7000)
-  const epfCap = reliefCatalog.get("EPF_CAP") ?? 7000;
+  // EPF relief cap. LHDN splits this: RM4,000 for EPF contributions and RM3,000
+  // for life insurance / takaful, RM7,000 only when BOTH are claimed. We hold no
+  // life-insurance data, so the EPF leg is all that may be granted — the old
+  // RM7,000 default handed the combined cap to EPF alone and under-deducted
+  // everyone contributing more than RM4,000/year (Ariff: RM125.00/month).
+  // A life-insurance leg would be a separate relief code, claimed via TP1.
+  const epfCap = reliefCatalog.get("EPF_CAP") ?? 4000;
   totalRelief += Math.min(inputs.annualEpfContribution, epfCap);
 
   // SOCSO+EIS cap
@@ -251,9 +256,29 @@ export async function calcPCB(
     annualTax = chargeableIncome * 0.15;
   }
 
-  // Subtract annual zakat
+  // ─── Rebates (Income Tax Act 1967 s.6A) ────────────────────────────────
+  // s.6A(2): a resident individual whose CHARGEABLE income does not exceed
+  // RM35,000 gets a RM400 rebate off the tax charged. This is a rebate, not a
+  // relief — it comes off the tax, not the income — and it is what makes the
+  // low end of the payroll pay nothing at all.
+  //
+  // It was missing entirely, and that is the whole reason our PCB disagreed with
+  // BrioHR for everyone except Ariff. On the Jul 2026 run we charged 15 people
+  // where Brio charged 1: annual tax of RM5.64 (Firdaus) to RM163.79 (Ameir) all
+  // sit under the RM400 rebate and should have been NIL. Syafiq is the sharpest
+  // case — annual tax RM451.45, rebate RM400, net RM51.45, already below the
+  // RM56.15 he had paid by June, so RM0. Ariff is unaffected: RM91,650
+  // chargeable is far past the RM35,000 ceiling.
+  //
+  // s.6A(3) treats zakat the same way. Both are rebates and neither can create a
+  // refund, so they are summed and floored at the tax charged.
+  const rebateCeiling = reliefCatalog.get("REBATE_MAX_CHARGEABLE") ?? 35000;
+  const rebateAmount = reliefCatalog.get("REBATE_INDIVIDUAL") ?? 400;
+  const individualRebate = chargeableIncome <= rebateCeiling ? rebateAmount : 0;
+
   const annualZakat = (inputs.monthlyZakat ?? 0) * 12;
-  const netAnnualTax = Math.max(0, annualTax - annualZakat);
+  const totalRebates = individualRebate + annualZakat;
+  const netAnnualTax = Math.max(0, annualTax - totalRebates);
 
   // PCB this month = (annual tax − YTD paid) / remaining months, rounded to RM 0.05
   const remainingTax = Math.max(0, netAnnualTax - ytdPaid);
@@ -267,6 +292,8 @@ export async function calcPCB(
       totalRelief,
       projectedAnnual,
       annualZakat,
+      individualRebate,
+      netAnnualTax,
       ytdPaid,
       remainingMonths,
     },

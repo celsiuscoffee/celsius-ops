@@ -157,28 +157,82 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     attendanceByUser.set(a.user_id, list);
   });
 
-  // 2b. YTD totals — sum confirmed runs earlier in the same year for PCB carryover.
-  // Includes prior MONTHLY runs (period_month < month) AND the H1 "opening_balance"
-  // run (period_month NULL) that carries the BrioHR Jan-Jun YTD, so the cumulative
-  // PCB / EPF / gross continue correctly across the mid-year switch off BrioHR.
-  const { data: priorRuns } = await hrSupabaseAdmin
+  // 2b. YTD totals — cumulative gross and PCB for the year so far. LHDN's MTD
+  // formula is cumulative (PCB = [(P−M)R + B − Z − X] / (n+1), where X is PCB
+  // already deducted), so this is the single most load-bearing input to PCB:
+  // understate it and the projection lands in a lower bracket.
+  //
+  // Two sources, and they OVERLAP:
+  //   - the "opening_balance" run (period_month NULL, period_start/period_end
+  //     spanning the imported window) carrying the BrioHR Jan–Jun YTD;
+  //   - the monthly runs, which were ALSO imported for part of that same window.
+  //
+  // The old query tried to union both and got it wrong twice over. It filtered
+  // `status in (confirmed, paid)` — but an opening balance is an import artifact
+  // that is never "paid", so it sat at `draft` and the `cycle_type.eq.opening_balance`
+  // clause was dead: the balance never counted, despite the comment saying it did.
+  // Ariff had no Jan/Feb monthly line (that import covered only 19 of 27 people),
+  // so his YTD came in RM23,019.23 short, his projected annual fell from
+  // RM128,019 to RM105,000, and July PCB was computed in the 19% bracket instead
+  // of 25% — RM504.50 against BrioHR's RM1,054.15.
+  //
+  // Simply un-filtering the status would have been worse: 32 of the 34 people DO
+  // have complete monthly lines for the imported window, so counting both would
+  // roughly double their YTD. Instead, take the opening balance as authoritative
+  // for the window it declares, and only add monthly runs from AFTER that window.
+  // Per user, because someone with no opening-balance row still needs their
+  // monthly lines counted from January.
+  const { data: openingRuns } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
-    .select("id")
+    .select("id, period_end")
     .eq("period_year", year)
-    .or(`period_month.lt.${month},cycle_type.eq.opening_balance`)
-    .in("status", ["confirmed", "paid"]);
-  const priorRunIds = (priorRuns || []).map((r: { id: string }) => r.id);
+    .eq("cycle_type", "opening_balance");
+  const openingRun = (openingRuns || [])[0] as { id: string; period_end: string | null } | undefined;
+  // Last month the opening balance already accounts for; 0 when there is none.
+  const openingCoversThroughMonth = openingRun?.period_end
+    ? Number(openingRun.period_end.slice(5, 7))
+    : 0;
+
   const ytdByUser = new Map<string, { gross: number; pcb: number }>();
-  if (priorRunIds.length > 0) {
-    const { data: priorItems } = await hrSupabaseAdmin
+  const addYtd = (userId: string, gross: unknown, pcb: unknown) => {
+    const existing = ytdByUser.get(userId) || { gross: 0, pcb: 0 };
+    existing.gross += Number(gross || 0);
+    existing.pcb += Number(pcb || 0);
+    ytdByUser.set(userId, existing);
+  };
+
+  const coveredByOpening = new Set<string>();
+  if (openingRun) {
+    const { data: openingItems } = await hrSupabaseAdmin
       .from("hr_payroll_items")
       .select("user_id, total_gross, pcb_tax")
-      .in("payroll_run_id", priorRunIds);
+      .eq("payroll_run_id", openingRun.id);
+    for (const p of openingItems || []) {
+      coveredByOpening.add(p.user_id);
+      addYtd(p.user_id, p.total_gross, p.pcb_tax);
+    }
+  }
+
+  const { data: priorRuns } = await hrSupabaseAdmin
+    .from("hr_payroll_runs")
+    .select("id, period_month")
+    .eq("period_year", year)
+    .eq("cycle_type", "monthly")
+    .lt("period_month", month)
+    .in("status", ["confirmed", "paid"]);
+  const priorMonthByRun = new Map<string, number>(
+    (priorRuns || []).map((r: { id: string; period_month: number }) => [r.id, Number(r.period_month)]),
+  );
+  if (priorMonthByRun.size > 0) {
+    const { data: priorItems } = await hrSupabaseAdmin
+      .from("hr_payroll_items")
+      .select("user_id, total_gross, pcb_tax, payroll_run_id")
+      .in("payroll_run_id", [...priorMonthByRun.keys()]);
     for (const p of priorItems || []) {
-      const existing = ytdByUser.get(p.user_id) || { gross: 0, pcb: 0 };
-      existing.gross += Number(p.total_gross || 0);
-      existing.pcb += Number(p.pcb_tax || 0);
-      ytdByUser.set(p.user_id, existing);
+      const itemMonth = priorMonthByRun.get(p.payroll_run_id) ?? 0;
+      // Already inside the opening balance for this person — don't count twice.
+      if (coveredByOpening.has(p.user_id) && itemMonth <= openingCoversThroughMonth) continue;
+      addYtd(p.user_id, p.total_gross, p.pcb_tax);
     }
   }
 
@@ -352,6 +406,12 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     const lastDayOfMonth = new Date(year, month, 0).getDate();
     const cycleEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
     const unpaidDays = unpaidLeaveByUser.get(profile.user_id) || 0;
+    // Is this the last cycle they'll appear in? True whenever a resignation
+    // date lands on or before cycle end — including exactly ON cycle end, which
+    // proration deliberately ignores because a full month was worked.
+    const resignDateStr = profile.end_date || profile.resigned_at || null;
+    const isFinalCycle = Boolean(resignDateStr) && String(resignDateStr) <= cycleEnd;
+
     const prorate = isPartTime
       ? ({ reason: null, daysWorked: 0, daysTotal: 0, factor: 1, explanation: null, basis: "calendar" as const } as ReturnType<typeof computeProrate>)
       : computeProrate({
@@ -601,13 +661,17 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         allowance_attendance_deducted: attendanceDeducted,
         allowance_eligible: allowanceBreakdown.eligible,
         review_penalty: reviewPenalty,
-        // Final-payroll marker: staff resigned this cycle. HR should add
-        // leave encashment + notice-pay manually via an ad-hoc adjustment
-        // line before confirming the run.
-        final_payroll: prorate.reason === "resigner" || prorate.reason === "joiner_and_resigner",
-        resignation_end_date: (prorate.reason === "resigner" || prorate.reason === "joiner_and_resigner")
-          ? (profile.end_date || profile.resigned_at)
-          : null,
+        // Final-payroll marker: this is the staffer's LAST cycle. HR should add
+        // leave encashment + notice-pay manually via an ad-hoc adjustment line
+        // before confirming the run.
+        //
+        // Keyed off "no cycle after this one", not off the prorate reason.
+        // Proration only fires when the last day falls strictly INSIDE the
+        // cycle, so someone whose last day is the final day of the month — a
+        // full month's pay, no proration — was never marked final. Adam Kelvin
+        // left on 2026-07-31 and his July payslip would have gone out unmarked.
+        final_payroll: isFinalCycle,
+        resignation_end_date: isFinalCycle ? (profile.end_date || profile.resigned_at) : null,
       },
     });
   }));

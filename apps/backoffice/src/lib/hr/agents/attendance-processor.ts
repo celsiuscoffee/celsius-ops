@@ -4,9 +4,10 @@ import {
   GEOFENCE_RADIUS_METERS,
   LATE_THRESHOLD_MINUTES,
   AUTO_CLOCKOUT_AFTER_HOURS,
+  REST_DAY_ROLE_PATTERN,
 } from "../constants";
-import { deriveHours, mytDateString, mytDayOfWeek, mytInstant, computeLateMinutes } from "../hours";
-import type { AttendanceLog, GeofenceZone, EmployeeProfile } from "../types";
+import { deriveHours, mytDateString, mytInstant, computeLateMinutes } from "../hours";
+import type { AttendanceLog, GeofenceZone } from "../types";
 
 type ProcessResult = {
   processed: number;
@@ -52,19 +53,16 @@ export async function processAttendance(): Promise<ProcessResult> {
   const zonesByOutlet = new Map<string, GeofenceZone>();
   (zones || []).forEach((z: GeofenceZone) => zonesByOutlet.set(z.outlet_id, z));
 
-  // 3. Get employee profiles (employment type for OT threshold, rest_day for OT rate)
+  // 3. Get employee profiles (employment type for OT threshold)
   const userIds = [...new Set((pendingLogs as AttendanceLog[]).map((l) => l.user_id))];
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, employment_type, rest_day")
+    .select("user_id, employment_type")
     .in("user_id", userIds);
 
   const profileMap = new Map<string, string>();
-  const restDayByUser = new Map<string, number>();
-  (profiles || []).forEach((p: { user_id: string; employment_type: string; rest_day: number | null }) => {
+  (profiles || []).forEach((p: { user_id: string; employment_type: string }) => {
     profileMap.set(p.user_id, p.employment_type);
-    // NULL → Sunday (0) default per MY Employment Act convention.
-    restDayByUser.set(p.user_id, p.rest_day == null ? 0 : Number(p.rest_day));
   });
 
   // 4. Get public holidays for the date range of pending logs (MYT calendar day —
@@ -76,6 +74,23 @@ export async function processAttendance(): Promise<ProcessResult> {
     .in("date", logDates);
 
   const publicHolidaySet = new Set((holidays || []).map((h: { date: string }) => h.date));
+
+  // 5. Rest days come from the ROSTER, not from a fixed weekday on the profile.
+  // Celsius rosters a "Rest Day" row (00:00-00:00) per person per week and it
+  // rotates: across July the 229 rest-day rows fall Sun 33 / Mon 35 / Tue 25 /
+  // Wed 38 / Thu 35 / Fri 34 / Sat 29. There is no weekly pattern to read off a
+  // profile column — and in fact `rest_day` is NULL for all 27 full-timers, so
+  // the old `?? 0` default made it Sunday for everybody. Of the 108 logs that
+  // default flagged as rest-day work, exactly ONE was a real rostered rest day.
+  const { data: restRows } = await hrSupabaseAdmin
+    .from("hr_schedule_shifts")
+    .select("user_id, shift_date")
+    .ilike("role_type", REST_DAY_ROLE_PATTERN)
+    .in("user_id", userIds)
+    .in("shift_date", logDates);
+  const rosteredRestDays = new Set(
+    (restRows || []).map((r: { user_id: string; shift_date: string }) => `${r.user_id}|${r.shift_date}`),
+  );
 
   // 4. Process each log
   const now = new Date();
@@ -129,8 +144,7 @@ export async function processAttendance(): Promise<ProcessResult> {
       // opening shift gets the right rest-day / public-holiday OT multiplier.
       const clockDate = mytDateString(log.clock_in);
       const isPH = publicHolidaySet.has(clockDate);
-      const restDay = restDayByUser.get(log.user_id) ?? 0; // NULL → Sunday default
-      const isRestDay = mytDayOfWeek(log.clock_in) === restDay;
+      const isRestDay = rosteredRestDays.has(`${log.user_id}|${clockDate}`);
 
       const derived = deriveHours({
         clockIn: new Date(log.clock_in),
@@ -154,7 +168,18 @@ export async function processAttendance(): Promise<ProcessResult> {
     }
 
     // --- Decision ---
-    const aiStatus = flags.length === 0 ? "approved" : "flagged";
+    // `rest_day_work` and `public_holiday` describe how the hours are PAID (the
+    // day-type multiplier), not something a manager has to adjudicate. Treating
+    // them as exceptions buried the queue: Sunday 2026-08-02 was a rostered rest
+    // day, the whole crew worked it, and every single log came back flagged with
+    // nothing actually wrong. Keep them on the row — the multiplier and the
+    // payslip breakdown both read them — but don't let them force a review.
+    //
+    // `overtime_detected` stays actionable ON PURPOSE: OT needs approval before
+    // it is paid (hr_company_settings.overtime_requires_approval).
+    const INFORMATIONAL_FLAGS = new Set(["rest_day_work", "public_holiday"]);
+    const actionableFlags = flags.filter((f) => !INFORMATIONAL_FLAGS.has(f));
+    const aiStatus = actionableFlags.length === 0 ? "approved" : "flagged";
 
     const { error: updateError } = await hrSupabaseAdmin
       .from("hr_attendance_logs")

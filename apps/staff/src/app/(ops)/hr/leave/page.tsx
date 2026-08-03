@@ -19,6 +19,26 @@ export default function LeavePage() {
     end_date: "",
     reason: "",
   });
+  // MC for sick leave — held as a data URL and posted as `attachment`, the same
+  // shape the clock-in photo uses. The API rejects sick leave without one.
+  const [mc, setMc] = useState<{ dataUrl: string; name: string } | null>(null);
+  const [mcError, setMcError] = useState<string | null>(null);
+  const needsMc = form.leave_type === "sick";
+
+  const MC_MAX_BYTES = 15 * 1024 * 1024;
+
+  const onPickMc = (file: File | undefined) => {
+    setMcError(null);
+    if (!file) { setMc(null); return; }
+    if (file.size > MC_MAX_BYTES) {
+      setMcError("That file is over 15MB. Try a photo instead of a scan.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setMc({ dataUrl: String(reader.result), name: file.name });
+    reader.onerror = () => setMcError("Couldn't read that file. Try again.");
+    reader.readAsDataURL(file);
+  };
 
   const balances = data?.balances || [];
   const requests = data?.requests || [];
@@ -30,13 +50,17 @@ export default function LeavePage() {
 
   const handleSubmit = async () => {
     if (!form.start_date || !form.end_date || dateRangeInvalid) return;
+    if (needsMc && !mc) {
+      setMcError("Attach your MC to submit sick leave.");
+      return;
+    }
     setSubmitting(true);
     setResult(null);
     try {
       const res = await fetch("/api/hr/leave", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, total_days: totalDays }),
+        body: JSON.stringify({ ...form, total_days: totalDays, attachment: mc?.dataUrl ?? null }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -49,6 +73,8 @@ export default function LeavePage() {
         });
         setShowForm(false);
         setForm({ leave_type: "annual", start_date: "", end_date: "", reason: "" });
+        setMc(null);
+        setMcError(null);
         mutate();
       } else {
         setResult({ success: false, message: data.error || "Failed" });
@@ -132,6 +158,29 @@ export default function LeavePage() {
             </div>
             {totalDays > 0 && (
               <p className="text-sm font-medium text-terracotta">{totalDays} day{totalDays !== 1 ? "s" : ""}</p>
+            )}
+            {needsMc && (
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-gray-500">
+                  MC <span className="text-terracotta">*</span>
+                </span>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  capture="environment"
+                  onChange={(e) => onPickMc(e.target.files?.[0])}
+                  className="w-full rounded-lg border px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-1 file:text-xs"
+                />
+                {mc && (
+                  <span className="mt-1 block truncate text-xs text-green-700">Attached: {mc.name}</span>
+                )}
+                {mcError && <span className="mt-1 block text-xs text-red-600">{mcError}</span>}
+                {!mc && !mcError && (
+                  <span className="mt-1 block text-xs text-gray-500">
+                    Photo or PDF of your medical certificate. Required for sick leave.
+                  </span>
+                )}
+              </label>
             )}
             {dateRangeInvalid && (
               <p className="text-sm font-medium text-red-600">End date must be on or after start date.</p>

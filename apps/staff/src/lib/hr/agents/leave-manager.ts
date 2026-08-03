@@ -34,6 +34,14 @@ export async function processLeaveRequest(requestId: string): Promise<LeaveDecis
 
   const { user_id, leave_type, start_date, end_date, total_days } = request;
 
+  // 1b. Sick leave must have an MC attached. The submit route now refuses one
+  // without it, but this is the gate that actually matters: it catches rows
+  // created by any other path, and it is what stops an AUTO-APPROVE. Four sick
+  // leaves were approved on a free-text reason with attachment_url NULL.
+  if (leave_type === "sick" && !request.attachment_url) {
+    return { decision: "escalate", reason: "Sick leave has no MC attached — needs a manager to review." };
+  }
+
   // 2. Balance check
   const currentYear = new Date().getFullYear();
   const { data: balance } = await hrSupabaseAdmin
