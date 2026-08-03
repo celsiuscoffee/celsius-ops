@@ -64,12 +64,50 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
   }
 
   // 1. Get all employee profiles
-  const { data: profiles } = await hrSupabaseAdmin
+  let { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
     .select("*");
 
   if (!profiles || profiles.length === 0) {
     throw new Error("No employee profiles found. Set up employee HR profiles first.");
+  }
+
+  // ONE PERSON, ONE LINE.
+  //
+  // Adib was paid TWICE for July: he exists as two User rows for the same human
+  // — a DEACTIVATED full_time record with a synthetic id and end_date
+  // 2026-07-03, and the ACTIVE part_time record he actually uses. Both resolved
+  // to the same RM183.87 prorated 3/31 stint, so the run showed him twice.
+  //
+  // The duplicate pre-dated the FT→PT converter rule, but that rule is what made
+  // it visible: before it, only the deactivated row produced a line.
+  //
+  // Deduped on ic_number, which is a real identity — never on name, because two
+  // people can share one. A blank IC is not an identity and never groups.
+  // Preference goes to the record still in service (no end_date), since that is
+  // the one carrying the live salary history; the other is the import artifact.
+  // Loud note either way: a duplicate identity is a data problem to fix at
+  // source, and silently picking one would hide it.
+  const byIc = new Map<string, typeof profiles>();
+  for (const p of profiles) {
+    const ic = String(p.ic_number ?? "").trim();
+    if (!ic) continue;
+    const list = byIc.get(ic);
+    if (list) list.push(p); else byIc.set(ic, [p]);
+  }
+  const duplicateUserIds = new Set<string>();
+  for (const [ic, group] of byIc) {
+    if (group.length < 2) continue;
+    const keep = group.find((g) => !g.end_date && !g.resigned_at) ?? group[0];
+    for (const g of group) if (g.user_id !== keep.user_id) duplicateUserIds.add(g.user_id);
+    notes.push(
+      `⚠ DUPLICATE IDENTITY: IC ${ic} has ${group.length} employee records ` +
+      `(${group.map((g) => g.user_id.slice(0, 8)).join(", ")}). Paid once, on ` +
+      `${keep.user_id.slice(0, 8)}. Merge them — this will keep recurring.`,
+    );
+  }
+  if (duplicateUserIds.size > 0) {
+    profiles = profiles.filter((p) => !duplicateUserIds.has(p.user_id));
   }
 
   // Per-user pre-flight — skip invalid profiles instead of aborting the
