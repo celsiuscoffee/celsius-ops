@@ -93,6 +93,23 @@ export async function GET(req: NextRequest) {
       totalMax: b.totalMax,
       lateCount: b.attendance.lateCount,
       absentCount: b.attendance.absentCount,
+      // Every deduction as its own line, so /hr/performance-review can waive one
+      // without replacing the whole month. `key` is what a waiver is stored
+      // against — see the hr_performance_deduction_waivers migration.
+      deductions: [
+        ...b.attendance.deductions.map((d) => ({
+          key: d.key, kind: d.kind, label: d.label, date: d.date ?? null,
+          amount: d.amount, originalAmount: d.originalAmount,
+          waived: d.waived, waivedReason: d.waivedReason,
+        })),
+        ...b.reviewPenalty.entries.map((e) => ({
+          key: e.key, kind: "review" as const,
+          label: `${e.rating}★ review${e.reviewText ? ` — ${e.reviewText.slice(0, 80)}` : ""}`,
+          date: e.reviewDate,
+          amount: e.amount, originalAmount: e.originalAmount,
+          waived: e.waived, waivedReason: e.waivedReason,
+        })),
+      ],
     }))),
   );
   const results = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));

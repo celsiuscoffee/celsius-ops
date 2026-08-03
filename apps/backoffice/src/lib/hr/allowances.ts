@@ -62,7 +62,51 @@ export type AllowanceLever = {
   detail: string;
 };
 
-export type AllowanceDeduction = { kind: "late" | "absent" | "review"; label: string; amount: number; date?: string };
+export type AllowanceDeduction = {
+  kind: "late" | "absent" | "review";
+  label: string;
+  amount: number;
+  date?: string;
+  /**
+   * Stable identity for this line, so a waiver survives a recompute. Keyed on
+   * the source row's id — NOT its position in the list, which moves. See the
+   * hr_performance_deduction_waivers migration for the formats.
+   */
+  key: string;
+  /** What the engine computed, before any waiver. Equals `amount` when unwaived. */
+  originalAmount: number;
+  waived: boolean;
+  waivedReason: string | null;
+};
+
+/** A row from hr_performance_deduction_waivers, reduced to what the engine needs. */
+export type DeductionWaiver = { amount: number; reason: string };
+
+/**
+ * Apply a per-line waiver to one deduction.
+ *
+ * The waived amount is what to charge INSTEAD, clamped to [0, computed]: a
+ * waiver can only ever REDUCE a deduction, never invent one or inflate it.
+ * That bound is the whole reason this is safe to delegate to a manager.
+ *
+ * Pure, so the clamp is testable without a database.
+ */
+export function applyDeductionWaiver(
+  line: Omit<AllowanceDeduction, "originalAmount" | "waived" | "waivedReason">,
+  waivers: Map<string, DeductionWaiver>,
+): AllowanceDeduction {
+  const w = waivers.get(line.key);
+  if (!w) return { ...line, originalAmount: line.amount, waived: false, waivedReason: null };
+  const raw = Number(w.amount);
+  const charge = Number.isFinite(raw) ? Math.max(0, Math.min(line.amount, raw)) : line.amount;
+  return {
+    ...line,
+    amount: Math.round(charge * 100) / 100,
+    originalAmount: line.amount,
+    waived: true,
+    waivedReason: w.reason,
+  };
+}
 
 export type AllowanceBreakdown = {
   userId: string;
@@ -74,7 +118,13 @@ export type AllowanceBreakdown = {
   levers: AllowanceLever[];
   performanceEarned: number;
   attendance: { deductions: AllowanceDeduction[]; lateCount: number; absentCount: number; total: number };
-  reviewPenalty: { total: number; entries: { id: string; reviewDate: string; rating: number; amount: number; reviewText?: string | null }[] };
+  reviewPenalty: {
+    total: number;
+    entries: {
+      id: string; reviewDate: string; rating: number; amount: number; reviewText?: string | null;
+      key: string; originalAmount: number; waived: boolean; waivedReason: string | null;
+    }[];
+  };
   totalEarned: number;
   totalMax: number;
   tip: string;
@@ -123,7 +173,7 @@ const LEVER_LABEL: Record<AllowanceLeverKey, string> = {
 };
 
 type RawLever = { tier: AllowanceTier; applicable: boolean; detail: string; score: number };
-type AttendanceLog = { clock_in: string; clock_out: string | null; scheduled_start: string | null; scheduled_date: string | null; outlet_id: string | null; excused: boolean | null };
+type AttendanceLog = { id: string; clock_in: string; clock_out: string | null; scheduled_start: string | null; scheduled_date: string | null; outlet_id: string | null; excused: boolean | null };
 
 /**
  * Read `hr_employee_profiles.fixed_performance_allowance`. Returns null when the
@@ -256,7 +306,7 @@ export async function computeAllowancesForUser(
 
   const { data: logsRaw } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("clock_in, clock_out, scheduled_start, scheduled_date, outlet_id, excused")
+    .select("id, clock_in, clock_out, scheduled_start, scheduled_date, outlet_id, excused")
     .eq("user_id", userId)
     .gte("clock_in", monthStartIso)
     .lte("clock_in", monthEndIso);
@@ -335,8 +385,24 @@ export async function computeAllowancesForUser(
     for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) leaveDays.add(d.toISOString().slice(0, 10));
   });
 
+  // Per-line waivers for THIS month — a reviewer saying "that absence was
+  // approved leave, don't charge it" without discarding the lever scoring the
+  // way a whole-month override does. Clamped to [0, computed] in
+  // applyDeductionWaiver, so this can only reduce a deduction.
+  const { data: waiverRows } = await hrSupabaseAdmin
+    .from("hr_performance_deduction_waivers")
+    .select("deduction_key, waived_amount, reason")
+    .eq("user_id", userId)
+    .eq("period_year", year)
+    .eq("period_month", month);
+  const waivers = new Map<string, DeductionWaiver>(
+    ((waiverRows || []) as { deduction_key: string; waived_amount: unknown; reason: string | null }[]).map((w) => [
+      w.deduction_key,
+      { amount: Number(w.waived_amount) || 0, reason: String(w.reason ?? "") },
+    ]),
+  );
+
   const deductions: AllowanceDeduction[] = [];
-  let lateCount = 0, absentCount = 0;
   for (const log of logs) {
     if (log.excused) continue;
     const date = mytDateString(log.clock_in);
@@ -344,11 +410,15 @@ export async function computeAllowancesForUser(
     // cross-midnight safe. No schedule stamped → 0 (no penalty), the safe default.
     const lateMin = computeLateMinutes(log.clock_in, log.scheduled_start, log.scheduled_date ?? date);
     if (lateMin > r.latenessAbsentMinutes) {
-      deductions.push({ kind: "absent", label: `Very late (${Math.round(lateMin)}m) — counted as absent`, amount: r.absentPenalty, date });
-      absentCount++;
+      deductions.push(applyDeductionWaiver(
+        { kind: "absent", label: `Very late (${Math.round(lateMin)}m) — counted as absent`, amount: r.absentPenalty, date, key: `absent|${log.id}` },
+        waivers,
+      ));
     } else if (lateMin > r.latenessGraceMinutes) {
-      deductions.push({ kind: "late", label: `Late ${Math.round(lateMin)}m`, amount: r.latenessPenalty, date });
-      lateCount++;
+      deductions.push(applyDeductionWaiver(
+        { kind: "late", label: `Late ${Math.round(lateMin)}m`, amount: r.latenessPenalty, date, key: `late|${log.id}` },
+        waivers,
+      ));
     }
   }
   // A clock-in credits BOTH the calendar day it happened AND the roster day it
@@ -370,10 +440,17 @@ export async function computeAllowancesForUser(
     missedDates.add(sh.shift_date); // dedupe: split shifts = one no-show day
   }
   for (const date of [...missedDates].sort()) {
-    deductions.push({ kind: "absent", label: "No-show (scheduled, didn't clock in)", amount: r.absentPenalty, date });
-    absentCount++;
+    deductions.push(applyDeductionWaiver(
+      { kind: "absent", label: "No-show (scheduled, didn't clock in)", amount: r.absentPenalty, date, key: `noshow|${date}` },
+      waivers,
+    ));
   }
-  const attendanceTotal = deductions.reduce((s, d) => s + d.amount, 0);
+  // Counts drive the coaching tip and the summary column, so they follow the
+  // money: a fully waived line is not held against the person. A partial
+  // waiver still counts — the incident happened, it just cost less.
+  const lateCount = deductions.filter((d) => d.kind === "late" && d.amount > 0).length;
+  const absentCount = deductions.filter((d) => d.kind === "absent" && d.amount > 0).length;
+  const attendanceTotal = Math.round(deductions.reduce((s, d) => s + d.amount, 0) * 100) / 100;
 
   // ── DEDUCT: manager-approved negative reviews ─────────────────────────────
   const { data: rpRows } = await hrSupabaseAdmin
@@ -381,10 +458,18 @@ export async function computeAllowancesForUser(
     .select("id, review_date, rating, penalty_amount, review_text")
     .eq("status", "applied").gte("review_date", monthStart).lte("review_date", monthEnd)
     .contains("attributed_user_ids", [userId]);
-  const reviewEntries = (rpRows || []).map((row: { id: string; review_date: string; rating: number; penalty_amount: number; review_text: string | null }) => ({
-    id: row.id, reviewDate: row.review_date, rating: row.rating, amount: Number(row.penalty_amount), reviewText: row.review_text,
-  }));
-  const reviewTotal = reviewEntries.reduce((s, e) => s + e.amount, 0);
+  const reviewEntries = (rpRows || []).map((row: { id: string; review_date: string; rating: number; penalty_amount: number; review_text: string | null }) => {
+    const waived = applyDeductionWaiver(
+      { kind: "review", label: `${row.rating}★ review ${row.review_date}`, amount: Number(row.penalty_amount), date: row.review_date, key: `review|${row.id}` },
+      waivers,
+    );
+    return {
+      id: row.id, reviewDate: row.review_date, rating: row.rating, reviewText: row.review_text,
+      amount: waived.amount, key: waived.key,
+      originalAmount: waived.originalAmount, waived: waived.waived, waivedReason: waived.waivedReason,
+    };
+  });
+  const reviewTotal = Math.round(reviewEntries.reduce((s, e) => s + e.amount, 0) * 100) / 100;
 
   const totalEarned = Math.max(0, performanceEarned - attendanceTotal - reviewTotal);
 
