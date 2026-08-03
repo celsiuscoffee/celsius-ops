@@ -22,6 +22,7 @@ import { hrSupabaseAdmin } from "./supabase";
 import { prisma } from "@/lib/prisma";
 import { computeLateMinutes, mytDateString } from "./hours";
 import { getMYTToday } from "./constants";
+import { effectiveProbationEnd, isOnProbation } from "./probation";
 
 // Phone capture is a FRONT-OF-HOUSE lever (kitchen does no phone collection).
 const FOH_POSITIONS = ["Barista", "Barista Lead", "Supervisor", "Shift Lead", "Manager", "Cashier"];
@@ -271,7 +272,7 @@ export async function computeAllowancesForUser(
 
   const { data: profile } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("employment_type, schedule_required, position, fixed_performance_allowance, probation_end_date")
+    .select("employment_type, schedule_required, position, fixed_performance_allowance, probation_end_date, join_date")
     .eq("user_id", userId)
     .maybeSingle();
   const employmentType = profile?.employment_type ?? null;
@@ -283,15 +284,24 @@ export async function computeAllowancesForUser(
   // zeroing eligibility here would blank the levers too, and the whole point is
   // to keep watching how a new joiner is doing while paying them nothing.
   //
-  // Compared against the END of the month, so someone confirmed part-way
-  // through is paid for that whole month — the generous side, deliberately.
+  // WHICH date counts is the whole story here. Reading the raw
+  // probation_end_date column made this gate dead: it is NULL on 61 of 62 active
+  // profiles, so nobody was ever on probation and the exclusion had to be done
+  // by hand, lever by lever, with a typed reason. Nur Iffa Sofea was paid RM120
+  // in July because that manual pass missed her.
   //
-  // A NULL probation_end_date means "not on probation", NOT "unknown". That is
-  // the only safe default: the column was empty for all 48 active profiles when
-  // this shipped, so treating NULL as probation would have zeroed the whole
-  // company's allowance in one deploy.
-  const probationEnd = (profile?.probation_end_date as string | null) ?? null;
-  const onProbation = !!probationEnd && monthEnd <= probationEnd;
+  // `effectiveProbationEnd` is the rule the HR profile page has always applied —
+  // explicit date if set, else join + 90 days — so payroll and HR now agree.
+  // See probation.ts for the boundary and the NULL semantics.
+  const probationEnd = effectiveProbationEnd(
+    profile?.join_date as string | null,
+    profile?.probation_end_date as string | null,
+  );
+  const onProbation = isOnProbation(
+    monthEnd,
+    profile?.join_date as string | null,
+    profile?.probation_end_date as string | null,
+  );
   const eligible = isFullTime && scheduleRequired;
   const isFoh = FOH_POSITIONS.includes((profile?.position ?? "").trim());
 

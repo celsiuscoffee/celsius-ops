@@ -8,6 +8,7 @@ import { formatRM } from "@celsius/shared";
 import { ArrowLeft, Save, Loader2, Lock, KeyRound, Shield, Eye, EyeOff, CheckCircle2, TrendingUp, Clock, Sparkles, AlertTriangle, AlertCircle, Star, FileText, Upload, Trash2, Download, Plus, Repeat, Receipt, Award } from "lucide-react";
 import Link from "next/link";
 import type { EmployeeProfile } from "@/lib/hr/types";
+import { effectiveProbationEnd } from "@/lib/hr/probation";
 
 type EmployeeDocument = {
   id: string;
@@ -1384,9 +1385,10 @@ export default function EmployeeDetailPage() {
         const p = profile as unknown as { join_date?: string | null; probation_end_date?: string | null; resigned_at?: string | null; end_date?: string | null } | null;
         if (!p?.join_date) return null;
         if (p.resigned_at || p.end_date) return null; // already resigning, skip
-        const joinTs = Date.parse(p.join_date);
-        // Effective probation end: explicit field if set, else join_date + 90 days.
-        const effectiveEnd = p.probation_end_date || new Date(joinTs + 90 * 86400000).toISOString().slice(0, 10);
+        // Shared with payroll — this banner and the allowance gate must never
+        // disagree about who is on probation. See lib/hr/probation.ts.
+        const effectiveEnd = effectiveProbationEnd(p.join_date, p.probation_end_date);
+        if (!effectiveEnd) return null;
         const today = new Date().toISOString().slice(0, 10);
         if (effectiveEnd < today) return null; // probation already ended
         const daysLeft = Math.ceil((Date.parse(effectiveEnd) - Date.now()) / 86400000);

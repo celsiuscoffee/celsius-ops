@@ -101,9 +101,27 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   intended — but when the ROSTER is wrong rather than the clock-in being early,
   it eats the shift. Shairuleen 16 Jul: clocked 07:09–16:51 (9.70h) against a
   roster of **15:30–23:30**, credited **1.36h**. Farah Nabilah 18 Jul: 9.23h
-  worked, 1.29h credited. Across July, **41 full-time shifts have >2h credited as
-  neither regular nor OT — 185.61 hours total.** Not yet triaged into "genuine
-  roster error" vs "genuinely early"; needs owner review before any of it is paid.
+  worked, 1.29h credited. Across July, 41 full-time shifts have >2h credited as
+  neither regular nor OT — 185.61 hours gross. **TRIAGED 2026-08-03, and only
+  ~50h of it is real:**
+  - **Group A — 9 shifts, ~50h, GENUINE.** Roster said evening, they worked
+    morning, so pay-time starting at the rostered start credited almost nothing.
+    Amirul Yazid 12 Jul: worked 8.08h, **credited 0.01h**. Also Shairuleen 16 Jul
+    (9.70h→1.36h), Nur Iffa 16 Jul, Nurul Alianatasha 18 Jul, Firdaus 12 Jul,
+    Hanisa 12 Jul, Akmal Aiman 17 + 30 Jul, Syafiq Aiman 21 Jul.
+  - **Group B — 7 shifts, ~49h, NOT REAL. Do not pay.** All are `clock_out_method
+    = 'system'` with `auto_closed_no_pings_stale` (6) or `auto_closed_forgot_
+    clockout` (1). **The clock-out timestamp is fabricated**, so the 16h "spans"
+    are `clock_in → auto-close cutoff`, not worked time — the tell is that they
+    repeat exactly (Guraf 3 Jul and 4 Jul are both 23:30 / 16.03h). The system
+    already did the right thing: paid the rostered shift (7.50h), excluded the
+    phantom OT. An earlier note in this session listed these as ~49.4h lost;
+    withdrawn. Farah Nabilah 7 Jul is an eighth of the same shape (PT, so outside
+    the FT query).
+  - **Group C/D — 25 shifts.** Genuine early clock-ins owing nothing, except four
+    late-outs where `Math.floor` ate partial OT (Firdaus 1.40h and 1.38h → zero).
+  Open question from Group B: six shifts went `no_pings_stale` mid-day in one
+  month — the PWA is losing GPS or being backgrounded while staff are clocked in.
 - 2026-08-03 — **OT hours are floored, so partial OT is always discarded.**
   `hours.ts:128` and `:137`: `overtimeHours = Math.floor(workedHours - otThreshold)`.
   Firdaus lost 0.90h (17 Jul) and 0.87h (21 Jul) that way. This is why the
