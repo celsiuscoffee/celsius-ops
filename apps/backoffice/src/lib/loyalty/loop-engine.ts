@@ -67,6 +67,16 @@ type MemberRow = { id: string; phone: string | null; name: string | null; sms_op
 const MEMBER_SELECT = "member_id, members!inner(id, phone, name, sms_opt_out, birthday, preferred_outlet_id)";
 
 // Dedupe by phone, drop unreachable + PDPA opt-outs, apply an optional predicate.
+// A phone we must never target. "+600…" is the signature of a legacy-import
+// bug (2026-03-29 batch): +60 prepended to a local number WITHOUT stripping the
+// leading 0, producing a GHOST member that duplicates a real account. The SMS
+// still reaches the handset, but any voucher we mint lands on the ghost — so
+// the customer is told about an offer that isn't in their wallet at the till
+// (reported 2026-08-03). Skip them: the real twin gets targeted on its own row.
+function isMalformedPhone(phone: string): boolean {
+  return /^\+600\d/.test(phone);
+}
+
 function reachable(rows: Array<{ member_id: string; members: MemberRow | null }>, pred?: (m: MemberRow) => boolean): SegmentRow[] {
   const out: SegmentRow[] = [];
   const seen = new Set<string>();
@@ -76,6 +86,7 @@ function reachable(rows: Array<{ member_id: string; members: MemberRow | null }>
     if (m.sms_opt_out === true) continue;          // PDPA: never message opt-outs
     const phone = (m.phone ?? "").trim();
     if (!phone || seen.has(phone)) continue;
+    if (isMalformedPhone(phone)) continue;         // ghost record — voucher would strand
     if (pred && !pred(m)) continue;
     seen.add(phone);
     out.push({ member_id: r.member_id, phone, name: m.name ?? null });
@@ -276,6 +287,7 @@ async function birthdaySegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; la
   for (const r of (data ?? []) as Array<{ member_id: string; phone: string; member_name: string | null }>) {
     const phone = (r.phone ?? "").trim();
     if (!phone || seen.has(phone)) continue; // dedupe by phone (PDPA opt-outs already excluded in the RPC)
+    if (isMalformedPhone(phone)) continue;   // ghost record — voucher would strand
     seen.add(phone);
     rows.push({ member_id: r.member_id, phone, name: r.member_name ?? null });
   }
@@ -407,6 +419,7 @@ async function rewardExpiringSegment(o: SegmentOpts): Promise<{ rows: SegmentRow
     if (nonStackable.has(memberId)) continue; // tier wipes the voucher — can't redeem
     const phone = (m.phone ?? "").trim();
     if (!phone || seen.has(phone)) continue;
+    if (isMalformedPhone(phone)) continue;    // ghost record — voucher would strand
     seen.add(phone);
     rows.push({
       member_id: memberId,
