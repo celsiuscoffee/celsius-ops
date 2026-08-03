@@ -201,15 +201,26 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     ytdByUser.set(userId, existing);
   };
 
+  // YTD gross must be TAXABLE gross. A line that paid a reimbursement carries
+  // it in total_gross (the money was paid) but not in computation_details
+  // .pcb_gross. Prefer the latter when the line has it; fall back to
+  // total_gross for older lines and for the imported opening balance, which
+  // predate the field.
+  const taxableGrossOf = (p: { total_gross: unknown; computation_details?: unknown }) => {
+    const details = p.computation_details as { pcb_gross?: unknown } | null | undefined;
+    const pcbGross = details?.pcb_gross;
+    return pcbGross != null && Number.isFinite(Number(pcbGross)) ? Number(pcbGross) : Number(p.total_gross || 0);
+  };
+
   const coveredByOpening = new Set<string>();
   if (openingRun) {
     const { data: openingItems } = await hrSupabaseAdmin
       .from("hr_payroll_items")
-      .select("user_id, total_gross, pcb_tax")
+      .select("user_id, total_gross, pcb_tax, computation_details")
       .eq("payroll_run_id", openingRun.id);
     for (const p of openingItems || []) {
       coveredByOpening.add(p.user_id);
-      addYtd(p.user_id, p.total_gross, p.pcb_tax);
+      addYtd(p.user_id, taxableGrossOf(p), p.pcb_tax);
     }
   }
 
@@ -226,13 +237,13 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
   if (priorMonthByRun.size > 0) {
     const { data: priorItems } = await hrSupabaseAdmin
       .from("hr_payroll_items")
-      .select("user_id, total_gross, pcb_tax, payroll_run_id")
+      .select("user_id, total_gross, pcb_tax, payroll_run_id, computation_details")
       .in("payroll_run_id", [...priorMonthByRun.keys()]);
     for (const p of priorItems || []) {
       const itemMonth = priorMonthByRun.get(p.payroll_run_id) ?? 0;
       // Already inside the opening balance for this person — don't count twice.
       if (coveredByOpening.has(p.user_id) && itemMonth <= openingCoversThroughMonth) continue;
-      addYtd(p.user_id, p.total_gross, p.pcb_tax);
+      addYtd(p.user_id, taxableGrossOf(p), p.pcb_tax);
     }
   }
 
@@ -487,6 +498,9 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     let recurringAdd = 0;
     let recurringStatBasis = 0;
     let recurringPreTaxDeduct = 0;
+    // Recurring ADDITIONS the catalog marks pcb_taxable=false. Paid in full,
+    // but subtracted back out of the PCB basis below.
+    let recurringNonTaxableAdd = 0;
     for (const ri of myRecurring) {
       const cat = catalogByCode.get(ri.catalog_code) as
         | { code: string; name: string; category: string; item_type: string;
@@ -508,6 +522,16 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         if (cat.epf_contributing && cat.item_type === "fixed_remuneration") {
           recurringStatBasis += amt;
         }
+        // Not every payment is taxable income. A mileage reimbursement, a
+        // parking/meal allowance, a non-taxable perquisite — the catalog marks
+        // these pcb_taxable=false, and they must NOT inflate the PCB basis.
+        // The flag was fetched and then never read, so they did: Adam Kelvin's
+        // RM315 of approved mileage claims pushed his projected annual income
+        // to RM46,596.60 and his chargeable past the RM400 rebate, costing him
+        // RM9.45 on a FINAL payslip he can't be re-issued.
+        if (!cat.pcb_taxable) {
+          recurringNonTaxableAdd += amt;
+        }
         recurringAdditionsDetail[cat.code] = { amount: amt, label: cat.name, code: cat.code, note: ri.note };
       }
     }
@@ -524,6 +548,22 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       );
     }
 
+    // The PCB basis is gross MINUS anything the catalog says isn't taxable
+    // income. It stays in `gross` because the money is genuinely paid and has
+    // to reach the bank file — it just isn't remuneration for tax.
+    //
+    // Additions only. The flag's meaning on a DEDUCTION is ambiguous (UNPAID_LEAVE
+    // carries pcb_taxable=false, yet unpaid leave plainly does reduce taxable
+    // income), so deductions keep their existing behaviour rather than being
+    // changed on a guess.
+    const pcbGross = Math.max(0, Math.round((gross - recurringNonTaxableAdd) * 100) / 100);
+    if (recurringNonTaxableAdd > 0) {
+      notes.push(
+        `${profile.user_id.slice(0, 8)}: RM${recurringNonTaxableAdd.toFixed(2)} of non-taxable ` +
+        `payments (reimbursements/allowances) paid but excluded from the PCB basis.`,
+      );
+    }
+
     // Statutory deductions via hr_stat_* reference tables.
     // Malaysian convention (KWSP/PERKESO): EPF + SOCSO + EIS basis = basic +
     // FIXED recurring allowances only. The performance allowance is VARIABLE
@@ -537,7 +577,8 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       // PERKESO SOCSO/EIS wages include overtime; EPF (statutoryBasis) excludes
       // it. Pass the OT-inclusive figure so SOCSO/EIS aren't under-contributed.
       socsoEisWage: statutoryBasis + totalOT,
-      monthlyGross: gross,
+      // PCB is assessed on TAXABLE income, not on everything paid — see pcbGross.
+      monthlyGross: pcbGross,
       currentMonth: month,
       periodYear: year,
       periodMonth: month,
@@ -652,6 +693,11 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       socso_employer: socsoRates.employer,
       eis_employer: eisRates.employer,
       computation_details: {
+        // Taxable gross for this month. Differs from total_gross whenever a
+        // non-taxable payment (reimbursement, non-taxable allowance) was paid.
+        // The YTD aggregation prefers this over total_gross so a reimbursement
+        // doesn't re-inflate NEXT month's projected annual income either.
+        pcb_gross: pcbGross,
         hourly_rate: Math.round(hourlyRate * 100) / 100,
         employment_type: profile.employment_type,
         unpaid_days: unpaidDays,
