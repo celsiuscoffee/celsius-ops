@@ -51,6 +51,24 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `SUPABASE_SERVICE_ROLE_KEY` in the repo; it needs a human to hit Compute on
   `/hr/payroll` (the July run is `ai_computed`, so recompute is permitted;
   it fails on `confirmed`).
+- 2026-08-03 — **EVERY REST-DAY STAMP IN JULY WAS WRONG: the manual attendance
+  edit was the last path still reading `hr_employee_profiles.rest_day`, and that
+  column is NULL for all 77 profiles.** `api/hr/attendance/route.ts` did
+  `const restDay = prof?.rest_day == null ? 0 : Number(prof.rest_day)` then
+  `isRestDay: mytDayOfWeek(ci) === restDay` — so `?? 0` resolved to **Sunday for
+  everybody**. Measured on July 2026: **96 logs carry a rest-day `overtime_type`,
+  all 96 are Sundays, and NOT ONE falls on a rostered rest day** — while 161
+  genuine rest-day rows exist across 40 people on all 31 dates. The two sources
+  agreed on zero logs. **Owner ruling 2026-08-03: "rest day should follow
+  schedule."** FIXED — that path now reads `hr_schedule_shifts` +
+  `REST_DAY_ROLE_PATTERN` like the other three writers (staff clock-out, AI
+  processor, auto-close cron), which had already been migrated. Pinned by
+  `apps/backoffice/src/lib/hr/rest-day-source.test.ts`. Note `rest_day` on the
+  profile is still legitimately used by `schedule-generator.ts` as a *preference*
+  when building the roster — do not delete the column, just never derive pay
+  from it. **The 96 mis-stamped July logs are NOT retro-corrected** — July is
+  `confirmed`; a false rest day charges OT at 2× instead of 1.5×, or stamps
+  `rest_day_1x` where the type should be null.
 - 2026-08-03 — **REST-DAY WORK PAYS 1× BY DESIGN AND THAT IS THE OWNER'S POLICY —
   DO NOT RE-RAISE IT AS UNPAID.** `hours.ts:125-134`: on a rest day, work within
   the OT threshold is tagged `overtime_type='rest_day_1x'` with `overtimeHours=0`
