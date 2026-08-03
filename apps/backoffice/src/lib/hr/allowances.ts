@@ -125,6 +125,51 @@ const LEVER_LABEL: Record<AllowanceLeverKey, string> = {
 type RawLever = { tier: AllowanceTier; applicable: boolean; detail: string; score: number };
 type AttendanceLog = { clock_in: string; clock_out: string | null; scheduled_start: string | null; scheduled_date: string | null; outlet_id: string | null; excused: boolean | null };
 
+/**
+ * Read `hr_employee_profiles.fixed_performance_allowance`. Returns null when the
+ * employee is on the normal scored pool — which is NULL, a blank, or any value
+ * that isn't a usable non-negative number. A junk value must fall back to
+ * scoring rather than silently paying something arbitrary.
+ */
+export function parseFixedAllowance(raw: unknown): number | null {
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/**
+ * A performance allowance paid FLAT: the full amount, every month, with the
+ * levers marked not-applicable and no attendance or review deductions. Used for
+ * roles the lever engine cannot score (see the fixed_performance_allowance
+ * migration). Pure, so the payout is testable without a database.
+ */
+export function buildFixedAllowanceBreakdown(o: {
+  userId: string;
+  employmentType: string | null;
+  isFullTime: boolean;
+  amount: number;
+  period: { year: number; month: number; daysElapsed: number; daysRemaining: number };
+}): AllowanceBreakdown {
+  return {
+    userId: o.userId,
+    employmentType: o.employmentType,
+    isFullTime: o.isFullTime,
+    eligible: true,
+    period: o.period,
+    pool: o.amount,
+    levers: (["checklist", "phone", "serving", "audit"] as AllowanceLeverKey[]).map((k) => ({
+      key: k, label: LEVER_LABEL[k], applicable: false, score: 0, tier: "under" as AllowanceTier,
+      slice: 0, earned: 0, detail: "n/a — fixed allowance, not scored",
+    })),
+    performanceEarned: o.amount,
+    attendance: { deductions: [], lateCount: 0, absentCount: 0, total: 0 },
+    reviewPenalty: { total: 0, entries: [] },
+    totalEarned: o.amount,
+    totalMax: o.amount,
+    tip: `Fixed allowance of RM${o.amount.toFixed(2)} — not scored against the performance levers.`,
+  };
+}
+
 export async function computeAllowancesForUser(
   userId: string,
   year: number,
@@ -148,7 +193,7 @@ export async function computeAllowancesForUser(
 
   const { data: profile } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("employment_type, schedule_required, position")
+    .select("employment_type, schedule_required, position, fixed_performance_allowance")
     .eq("user_id", userId)
     .maybeSingle();
   const employmentType = profile?.employment_type ?? null;
@@ -156,6 +201,24 @@ export async function computeAllowancesForUser(
   const scheduleRequired = profile?.schedule_required !== false;
   const eligible = isFullTime && scheduleRequired;
   const isFoh = FOH_POSITIONS.includes((profile?.position ?? "").trim());
+
+  // FLAT allowance — checked before everything else, including the eligibility
+  // gate. Some roles cannot be scored by these levers at all: a Head of
+  // Department has no roster (schedule_required = false), no checklists and no
+  // register orders, so the engine would force RM0 no matter what is configured.
+  // Their scheme is a different one (COGS, people cost) that does not exist yet,
+  // so the amount is paid flat until it does.
+  //
+  // Flat means flat: no lever scoring, no lateness/absence deductions, no review
+  // penalties. Proration for a partial month still applies downstream in
+  // payroll-calculator.ts, same as a scored allowance.
+  const fixedAllowance = parseFixedAllowance(profile?.fixed_performance_allowance);
+  if (fixedAllowance != null) {
+    return buildFixedAllowanceBreakdown({
+      userId, employmentType, isFullTime, amount: fixedAllowance,
+      period: { year, month, daysElapsed, daysRemaining },
+    });
+  }
 
   const { data: logsRaw } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
