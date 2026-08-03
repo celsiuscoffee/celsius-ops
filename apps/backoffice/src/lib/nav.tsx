@@ -249,7 +249,11 @@ export const NAV_SECTIONS: NavSection[] = [
       // Keyed on hr:employees, not hr:payroll — a PT staffing manager sets hourly
       // rates without getting the payroll module (runs, payslips, bank files).
       { label: "PT Rates",    href: "/hr/pt-rates",  icon: <Banknote className={ICON_SIZE} />,        moduleKey: "hr:employees" },
-      { label: "Allowances",  href: "/hr/allowances", icon: <Banknote className={ICON_SIZE} />,       moduleKey: "hr:allowances", hidden: true },
+      // Both were reachable only by typing the URL. Allowances is the read-only
+      // view of what the levers scored; Performance Review is the same data with
+      // a manual override on each line.
+      { label: "Allowances",  href: "/hr/allowances", icon: <Banknote className={ICON_SIZE} />,       moduleKey: "hr:allowances" },
+      { label: "Performance Review", href: "/hr/performance-review", icon: <Trophy className={ICON_SIZE} />, moduleKey: "hr:allowances" },
       { label: "Statutory Calendar", href: "/hr/compliance", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "hr:payroll", hidden: true },
       { label: "Performance", href: "/hr/performance", icon: <TrendingUp className={ICON_SIZE} />,    moduleKey: "hr:performance" },
       { label: "Review Penalties", href: "/hr/review-penalties", icon: <AlertTriangle className={ICON_SIZE} />, moduleKey: "hr:review-penalties", hidden: true },

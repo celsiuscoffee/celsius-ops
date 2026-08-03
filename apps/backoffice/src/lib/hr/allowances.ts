@@ -149,7 +149,16 @@ export function buildFixedAllowanceBreakdown(o: {
   isFullTime: boolean;
   amount: number;
   period: { year: number; month: number; daysElapsed: number; daysRemaining: number };
+  /** Set when the amount came from a manual month override rather than a flat rate. */
+  override?: { reason: string; computedAmount: number | null };
 }): AllowanceBreakdown {
+  const detail = o.override ? "n/a — manually overridden for this month" : "n/a — fixed allowance, not scored";
+  const tip = o.override
+    ? `Manually set to RM${o.amount.toFixed(2)} for this month` +
+      (o.override.computedAmount != null ? ` (engine computed RM${o.override.computedAmount.toFixed(2)})` : "") +
+      ` — ${o.override.reason}`
+    : `Fixed allowance of RM${o.amount.toFixed(2)} — not scored against the performance levers.`;
+
   return {
     userId: o.userId,
     employmentType: o.employmentType,
@@ -159,14 +168,17 @@ export function buildFixedAllowanceBreakdown(o: {
     pool: o.amount,
     levers: (["checklist", "phone", "serving", "audit"] as AllowanceLeverKey[]).map((k) => ({
       key: k, label: LEVER_LABEL[k], applicable: false, score: 0, tier: "under" as AllowanceTier,
-      slice: 0, earned: 0, detail: "n/a — fixed allowance, not scored",
+      slice: 0, earned: 0, detail,
     })),
     performanceEarned: o.amount,
+    // An override REPLACES the outcome, deductions included — otherwise waiving
+    // a wrong absence would still leave its RM20 subtracted below the number the
+    // reviewer just typed.
     attendance: { deductions: [], lateCount: 0, absentCount: 0, total: 0 },
     reviewPenalty: { total: 0, entries: [] },
     totalEarned: o.amount,
     totalMax: o.amount,
-    tip: `Fixed allowance of RM${o.amount.toFixed(2)} — not scored against the performance levers.`,
+    tip,
   };
 }
 
@@ -212,6 +224,28 @@ export async function computeAllowancesForUser(
   // Flat means flat: no lever scoring, no lateness/absence deductions, no review
   // penalties. Proration for a partial month still applies downstream in
   // payroll-calculator.ts, same as a scored allowance.
+  // 1. A manual override for THIS month wins over everything — it is a human
+  //    correcting this specific month's outcome, reason on the record.
+  const { data: overrideRow } = await hrSupabaseAdmin
+    .from("hr_performance_overrides")
+    .select("override_amount, computed_amount, reason")
+    .eq("user_id", userId)
+    .eq("period_year", year)
+    .eq("period_month", month)
+    .maybeSingle();
+  const overrideAmount = parseFixedAllowance(overrideRow?.override_amount);
+  if (overrideRow && overrideAmount != null) {
+    return buildFixedAllowanceBreakdown({
+      userId, employmentType, isFullTime, amount: overrideAmount,
+      period: { year, month, daysElapsed, daysRemaining },
+      override: {
+        reason: String(overrideRow.reason ?? ""),
+        computedAmount: overrideRow.computed_amount != null ? Number(overrideRow.computed_amount) : null,
+      },
+    });
+  }
+
+  // 2. Then a flat all-months amount (unrostered roles the levers can't score).
   const fixedAllowance = parseFixedAllowance(profile?.fixed_performance_allowance);
   if (fixedAllowance != null) {
     return buildFixedAllowanceBreakdown({
