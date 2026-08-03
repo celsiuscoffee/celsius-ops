@@ -1234,6 +1234,42 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-08-03 (late) — **HR module-level QA review DONE (3-agent sweep, findings
+  reported to owner, no fixes applied yet).** Top confirmed findings, ranked:
+  (1) **Confirmed monthly payroll cannot be corrected from the UI** — the
+  Delete button still renders on confirmed runs and always 409s; the `revert`
+  action shipped today has NO button; `allow_early_confirm` has no caller; the
+  Confirm button swallows every error response (`payroll/page.tsx:103-132`).
+  (2) **Weekly PT payroll route lacks every guard the monthly route got**:
+  bare `.eq("id")` confirm can downgrade a `paid` run, `mark_paid` unguarded,
+  zero ActivityLog (`payroll/weekly/route.ts:128-158`). Same hole class that
+  ate July. (3) **Approved leave never reaches roster-attendance** — rostered
+  staffer on approved leave renders "Absent"; route never queries
+  `hr_leave_requests`. (4) **Two swap-approval APIs diverge**:
+  `/api/hr/shift-swaps` has NO outlet scoping (any manager approves any
+  outlet) and doesn't clear `is_ai_assigned`; schedules-page swap panel shows
+  raw UUIDs from the unenriched `/api/hr/swap`. (5) **Per-staff allowance
+  screen is a decoy**: `performance_allowance_amount` has 5 writers/0 readers;
+  the live `fixed_performance_allowance` column has no UI (DBA-only).
+  (6) `api/hr/analytics` still counts probation by the REJECTED time-based
+  rule, and its swap pill counts statuses that don't exist. (7) PT Hours and
+  Attendance Review both write `final_status='approved'` — acknowledging in
+  one silently satisfies the other's payment gate. (8) No probation
+  confirmation worklist anywhere (banner is per-profile only) — under the
+  confirmed_at gate an unnoticed probation withholds allowance forever.
+  (9) Nav: 5 hand-maintained lists drifted; orphans `/hr/employees/import`
+  (403-line LoE bulk wizard, zero links), `/hr/performance-review` (dead
+  redirect), `/hr/settings/payroll-items` (only payroll-items CRUD, zero
+  links); `access-presets`/`pt-hours`/`roster-attendance` missing from
+  NAV_SECTIONS entirely = bypass the client route gate; `pt-rates` in no tab
+  group. (10) Dead config: `hr_leave_policies` closed loop (screen writes,
+  nothing enforces), availability `notes`+`max_shifts_per_week` write-only,
+  `working-time` blind-PATCHes the whole settings row (no server allowlist —
+  clobber risk vs the allowances screen), rest-day shifts identified 3
+  different ways (needs one `isRestDayShift()` helper), monthly payroll list
+  API lacks `cycle_type` filter so weekly runs render as blank months, HR
+  dashboard outlet-scopes only 1 of 4 tiles. Full details in the session
+  transcript / report to owner. NOTHING fixed yet — owner to pick.
 - 2026-08-03 (late) — **End-to-end payroll QA pass landed on
   `claude/farah-staff-onboarding-99yg3j` (feeds PR #1110); stamp-repair
   migration APPLIED to prod and verified 0/0/0/0.** The sequence the owner
