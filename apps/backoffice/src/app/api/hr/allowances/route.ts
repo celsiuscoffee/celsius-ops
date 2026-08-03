@@ -85,7 +85,13 @@ export async function GET(req: NextRequest) {
       isFullTime: b.isFullTime,
       eligible: b.eligible,
       // v2 single-pool shape
-      levers: b.levers.map((l) => ({ key: l.key, label: l.label, applicable: l.applicable, score: l.score, tier: l.tier, slice: l.slice, earned: l.earned, detail: l.detail })),
+      // `lineKey` is what a hand edit is stored against — see the
+      // hr_performance_line_overrides migration.
+      levers: b.levers.map((l) => ({
+        key: l.key, lineKey: `lever|${l.key}`, label: l.label, applicable: l.applicable,
+        score: l.score, tier: l.tier, slice: l.slice, earned: l.earned, detail: l.detail,
+        originalEarned: l.originalEarned, edited: l.edited, editReason: l.editReason,
+      })),
       performanceEarned: b.performanceEarned,
       attendanceDeducted: b.attendance.total,
       reviewPenaltyTotal: b.reviewPenalty.total,
@@ -100,14 +106,14 @@ export async function GET(req: NextRequest) {
         ...b.attendance.deductions.map((d) => ({
           key: d.key, kind: d.kind, label: d.label, date: d.date ?? null,
           amount: d.amount, originalAmount: d.originalAmount,
-          waived: d.waived, waivedReason: d.waivedReason,
+          edited: d.edited, editReason: d.editReason,
         })),
         ...b.reviewPenalty.entries.map((e) => ({
           key: e.key, kind: "review" as const,
           label: `${e.rating}★ review${e.reviewText ? ` — ${e.reviewText.slice(0, 80)}` : ""}`,
           date: e.reviewDate,
           amount: e.amount, originalAmount: e.originalAmount,
-          waived: e.waived, waivedReason: e.waivedReason,
+          edited: e.edited, editReason: e.editReason,
         })),
       ],
     }))),

@@ -6,38 +6,25 @@ import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
-// Manual corrections to the computed performance allowance. Two shapes, one
-// route, because the page reads and writes both:
+// Hand edits to one LINE of a computed performance allowance — a lever the
+// engine couldn't score fairly, or a deduction that shouldn't stand.
 //
-//   WHOLE MONTH (no deduction_key) — replaces the entire outcome with one
-//   figure. Sets pay outright, so OWNER/ADMIN only.
+// There is no whole-month replace any more (owner 2026-08-03: "make the lever
+// edit manual, remove the replace the whole month"). Every correction now names
+// the thing it is correcting, so the reason sits next to the line it explains
+// and the rest of the scoring survives.
 //
-//   ONE LINE (deduction_key) — reduces a single deduction (a late, an absence,
-//   a no-show, a negative review) and leaves everything else computing. Bounded
-//   to [0, computed] by the engine, so it can only ever give back money the
-//   engine took, never invent pay. That bound is why a MANAGER may do it for
-//   their own team — the same delegation shape as PT rates.
+// The engine clamps what it reads: a deduction edit to [0, computed] and a
+// lever edit to [0, pool]. Those bounds are what make this delegable to a
+// MANAGER for their own team — no edit can inflate a month past the allowance.
 
 type OverrideRow = {
   id: string;
   user_id: string;
   period_year: number;
   period_month: number;
-  override_amount: number | string;
-  computed_amount: number | string | null;
-  reason: string;
-  created_by: string | null;
-  updated_by: string | null;
-  updated_at: string | null;
-};
-
-type WaiverRow = {
-  id: string;
-  user_id: string;
-  period_year: number;
-  period_month: number;
-  deduction_key: string;
-  waived_amount: number | string;
+  line_key: string;
+  amount: number | string;
   computed_amount: number | string | null;
   label: string | null;
   reason: string;
@@ -54,8 +41,8 @@ function parseAmount(v: unknown): number | null {
 
 /**
  * Who this session may correct.
- * - OWNER/ADMIN: everyone, whole-month overrides included.
- * - MANAGER: their own subtree, line waivers only.
+ * - OWNER / ADMIN: everyone.
+ * - MANAGER: their own subtree.
  * - anyone else: nobody.
  */
 async function resolveScope(session: { role: string; id: string }) {
@@ -79,7 +66,6 @@ async function lockedRunFor(year: number, month: number) {
 }
 
 // GET /api/hr/performance-overrides?year=2026&month=7
-// → { overrides, waivers } for the period, scoped to what the caller may see.
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -91,48 +77,41 @@ export async function GET(req: NextRequest) {
   const year = parseInt(searchParams.get("year") || String(now.getFullYear()));
   const month = parseInt(searchParams.get("month") || String(now.getMonth() + 1));
 
-  const [ovRes, wvRes] = await Promise.all([
-    hrSupabaseAdmin.from("hr_performance_overrides").select("*").eq("period_year", year).eq("period_month", month),
-    hrSupabaseAdmin.from("hr_performance_deduction_waivers").select("*").eq("period_year", year).eq("period_month", month),
-  ]);
-  if (ovRes.error) return NextResponse.json({ error: ovRes.error.message }, { status: 500 });
-  if (wvRes.error) return NextResponse.json({ error: wvRes.error.message }, { status: 500 });
+  const { data, error } = await hrSupabaseAdmin
+    .from("hr_performance_line_overrides")
+    .select("*")
+    .eq("period_year", year)
+    .eq("period_month", month);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const visible = (userId: string) => scope.allowed === null || scope.allowed.includes(userId);
-  const overrides = ((ovRes.data || []) as OverrideRow[]).filter((r) => visible(r.user_id));
-  const waivers = ((wvRes.data || []) as WaiverRow[]).filter((r) => visible(r.user_id));
+  const rows = ((data || []) as OverrideRow[]).filter(
+    (r) => scope.allowed === null || scope.allowed.includes(r.user_id),
+  );
 
-  const actorIds = [
-    ...new Set(
-      [...overrides, ...waivers].flatMap((r) => [r.created_by, r.updated_by]).filter(Boolean) as string[],
-    ),
-  ];
+  const actorIds = [...new Set(rows.flatMap((r) => [r.created_by, r.updated_by]).filter(Boolean) as string[])];
   const actors = actorIds.length
     ? await prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, name: true } })
     : [];
   const actorName = new Map(actors.map((a) => [a.id, a.name]));
 
+  // Whether the month is editable at all, so the page can say so up front
+  // rather than letting someone type a reason into a form that will 409.
+  const locked = await lockedRunFor(year, month);
+
   return NextResponse.json({
     period: { year, month },
-    canOverrideWholeMonth: scope.isAdmin,
-    overrides: overrides.map((r) => ({
+    locked: locked ? { status: locked.status } : null,
+    overrides: rows.map((r) => ({
       ...r,
-      override_amount: Number(r.override_amount),
-      computed_amount: r.computed_amount != null ? Number(r.computed_amount) : null,
-      updated_by_name: r.updated_by ? actorName.get(r.updated_by) ?? null : null,
-    })),
-    waivers: waivers.map((r) => ({
-      ...r,
-      waived_amount: Number(r.waived_amount),
+      amount: Number(r.amount),
       computed_amount: r.computed_amount != null ? Number(r.computed_amount) : null,
       updated_by_name: r.updated_by ? actorName.get(r.updated_by) ?? null : null,
     })),
   });
 }
 
-// POST — upsert one correction.
-//   whole month: { user_id, year, month, override_amount, computed_amount?, reason }
-//   one line:    { user_id, year, month, deduction_key, waived_amount, computed_amount?, label?, reason }
+// POST — upsert one line edit.
+// body: { user_id, year, month, line_key, amount, computed_amount?, label?, reason }
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -140,8 +119,7 @@ export async function POST(req: NextRequest) {
   if (!scope) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json().catch(() => null);
-  const { user_id, year, month, deduction_key, override_amount, waived_amount, computed_amount, label, reason } =
-    body || {};
+  const { user_id, year, month, line_key, amount, computed_amount, label, reason } = body || {};
 
   if (!user_id || !year || !month) {
     return NextResponse.json({ error: "user_id, year and month are required" }, { status: 400 });
@@ -149,13 +127,21 @@ export async function POST(req: NextRequest) {
   if (Number(month) < 1 || Number(month) > 12) {
     return NextResponse.json({ error: "month must be 1-12" }, { status: 400 });
   }
+  if (typeof line_key !== "string" || !line_key.trim()) {
+    return NextResponse.json({ error: "line_key is required" }, { status: 400 });
+  }
   if (scope.allowed !== null && !scope.allowed.includes(user_id)) {
     return NextResponse.json({ error: "This employee is not in your team." }, { status: 403 });
   }
   // An unexplained pay correction is worse than no correction — the DB enforces
   // this too, but reject it here so the message is a sentence, not a 23514.
   if (typeof reason !== "string" || reason.trim().length === 0) {
-    return NextResponse.json({ error: "A reason is required." }, { status: 400 });
+    return NextResponse.json({ error: "Say why this line is being changed." }, { status: 400 });
+  }
+  // Absent amount means 0 — waiving a deduction outright, the common case.
+  const value = amount == null || amount === "" ? 0 : parseAmount(amount);
+  if (value == null) {
+    return NextResponse.json({ error: "amount must be a number ≥ 0" }, { status: 400 });
   }
 
   const locked = await lockedRunFor(Number(year), Number(month));
@@ -169,88 +155,41 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const nowIso = new Date().toISOString();
-  const isLine = typeof deduction_key === "string" && deduction_key.trim().length > 0;
-
-  if (isLine) {
-    // waived_amount is what to CHARGE instead, not the discount. Absent means 0
-    // (waive the line entirely), which is the common case.
-    const charge = waived_amount == null || waived_amount === "" ? 0 : parseAmount(waived_amount);
-    if (charge == null) {
-      return NextResponse.json({ error: "waived_amount must be a number ≥ 0" }, { status: 400 });
-    }
-    const { data, error } = await hrSupabaseAdmin
-      .from("hr_performance_deduction_waivers")
-      .upsert(
-        {
-          user_id,
-          period_year: Number(year),
-          period_month: Number(month),
-          deduction_key: deduction_key.trim(),
-          waived_amount: charge,
-          computed_amount: parseAmount(computed_amount),
-          label: typeof label === "string" && label.trim() ? label.trim() : null,
-          reason: reason.trim(),
-          created_by: session.id,
-          updated_by: session.id,
-          updated_at: nowIso,
-        },
-        { onConflict: "user_id,period_year,period_month,deduction_key" },
-      )
-      .select()
-      .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({
-      waiver: data,
-      message:
-        charge === 0
-          ? "Deduction waived. Recompute the payroll run for it to reach the payslip."
-          : `Deduction reduced to RM${charge.toFixed(2)}. Recompute the payroll run for it to reach the payslip.`,
-    });
-  }
-
-  // Whole-month override — this SETS pay rather than giving back a deduction,
-  // so it stays with the people who own the pay decision.
-  if (!scope.isAdmin) {
-    return NextResponse.json(
-      { error: "Only an owner or admin can replace the whole month's amount. You can waive individual deductions." },
-      { status: 403 },
-    );
-  }
-  const amount = parseAmount(override_amount);
-  if (amount == null) {
-    return NextResponse.json({ error: "override_amount must be a number ≥ 0" }, { status: 400 });
-  }
-
   const { data, error } = await hrSupabaseAdmin
-    .from("hr_performance_overrides")
+    .from("hr_performance_line_overrides")
     .upsert(
       {
         user_id,
         period_year: Number(year),
         period_month: Number(month),
-        override_amount: amount,
+        line_key: line_key.trim(),
+        amount: value,
         computed_amount: parseAmount(computed_amount),
+        label: typeof label === "string" && label.trim() ? label.trim() : null,
         reason: reason.trim(),
         created_by: session.id,
         updated_by: session.id,
-        updated_at: nowIso,
+        updated_at: new Date().toISOString(),
       },
-      { onConflict: "user_id,period_year,period_month" },
+      { onConflict: "user_id,period_year,period_month,line_key" },
     )
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  const isLever = line_key.startsWith("lever|");
   return NextResponse.json({
     override: data,
-    message: "Saved. Recompute the payroll run for it to reach the payslip.",
+    message: isLever
+      ? `Set to RM${value.toFixed(2)}. Recompute the run for it to reach the payslip.`
+      : value === 0
+        ? "Deduction waived. Recompute the run for it to reach the payslip."
+        : `Deduction reduced to RM${value.toFixed(2)}. Recompute the run for it to reach the payslip.`,
   });
 }
 
-// DELETE /api/hr/performance-overrides?user_id=..&year=..&month=..[&deduction_key=..]
-// With deduction_key: restore that one deduction. Without: drop the whole-month
-// override so the lever engine decides again.
+// DELETE /api/hr/performance-overrides?user_id=..&year=..&month=..&line_key=..
+// Hands the line back to the engine.
 export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -261,9 +200,9 @@ export async function DELETE(req: NextRequest) {
   const userId = searchParams.get("user_id");
   const year = searchParams.get("year");
   const month = searchParams.get("month");
-  const deductionKey = searchParams.get("deduction_key");
-  if (!userId || !year || !month) {
-    return NextResponse.json({ error: "user_id, year and month are required" }, { status: 400 });
+  const lineKey = searchParams.get("line_key");
+  if (!userId || !year || !month || !lineKey) {
+    return NextResponse.json({ error: "user_id, year, month and line_key are required" }, { status: 400 });
   }
   if (scope.allowed !== null && !scope.allowed.includes(userId)) {
     return NextResponse.json({ error: "This employee is not in your team." }, { status: 403 });
@@ -277,28 +216,14 @@ export async function DELETE(req: NextRequest) {
     );
   }
 
-  if (deductionKey) {
-    const { error } = await hrSupabaseAdmin
-      .from("hr_performance_deduction_waivers")
-      .delete()
-      .eq("user_id", userId)
-      .eq("period_year", Number(year))
-      .eq("period_month", Number(month))
-      .eq("deduction_key", deductionKey);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, message: "Deduction restored." });
-  }
-
-  if (!scope.isAdmin) {
-    return NextResponse.json({ error: "Only an owner or admin can remove a whole-month override." }, { status: 403 });
-  }
   const { error } = await hrSupabaseAdmin
-    .from("hr_performance_overrides")
+    .from("hr_performance_line_overrides")
     .delete()
     .eq("user_id", userId)
     .eq("period_year", Number(year))
-    .eq("period_month", Number(month));
+    .eq("period_month", Number(month))
+    .eq("line_key", lineKey);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, message: "Override removed — the levers decide again." });
+  return NextResponse.json({ ok: true, message: "Back to the computed figure." });
 }
