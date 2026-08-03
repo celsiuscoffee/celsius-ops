@@ -131,11 +131,6 @@ export function submitLeave(req: {
   end_date: string;
   total_days: number;
   reason: string;
-  /**
-   * MC photo as a data URL. REQUIRED for sick leave — /api/hr/leave rejects a
-   * sick request without one, and the AI approver refuses to auto-approve it.
-   */
-  attachment?: string | null;
 }) {
   return api<{ success: boolean }>("/api/hr/leave", {
     method: "POST",

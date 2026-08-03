@@ -17,10 +17,6 @@ import { Bot, CheckCircle2, Clock, Plus, XCircle } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import {
-  ReceiptCapture,
-  type CapturedPhoto,
-} from "../../../components/ReceiptCapture";
-import {
   fetchLeave,
   submitLeave,
   type LeaveBalance,
@@ -80,10 +76,6 @@ export default function LeaveScreen() {
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  // MC for sick leave — captured with the same camera component the claims
-  // receipts use, so no new dependency and no new permission prompt.
-  const [mc, setMc] = useState<CapturedPhoto | null>(null);
-  const [mcCaptureOpen, setMcCaptureOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -115,20 +107,8 @@ export default function LeaveScreen() {
       ) + 1
     : 0;
 
-  // Sick leave must carry an MC. The API refuses one without it, so without
-  // this the Sick chip was a dead end on native — submit came back 400 with
-  // nothing on screen to attach.
-  const needsMc = type === "sick";
-
   const submit = async () => {
     if (!startISO || !endISO || totalDays <= 0) return;
-    if (needsMc && !mc) {
-      Alert.alert(
-        "MC required",
-        "Attach a photo of your medical certificate to submit sick leave.",
-      );
-      return;
-    }
     setSubmitting(true);
     try {
       await submitLeave({
@@ -137,7 +117,6 @@ export default function LeaveScreen() {
         end_date: endISO,
         total_days: totalDays,
         reason,
-        attachment: mc?.base64 ? `data:image/jpeg;base64,${mc.base64}` : null,
       });
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
@@ -146,7 +125,6 @@ export default function LeaveScreen() {
       setStartDate("");
       setEndDate("");
       setReason("");
-      setMc(null);
       load();
     } catch (e) {
       Alert.alert(
@@ -305,38 +283,6 @@ export default function LeaveScreen() {
                 ))}
               </View>
 
-              {needsMc && (
-                <View className="mt-5">
-                  <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
-                    Medical certificate <Text className="text-primary">*</Text>
-                  </Text>
-                  <Pressable
-                    onPress={() => setMcCaptureOpen(true)}
-                    className={`h-14 flex-row items-center justify-center gap-2 rounded-2xl border-2 ${
-                      mc
-                        ? "border-primary bg-primary-50"
-                        : "border-dashed border-border bg-surface"
-                    }`}
-                  >
-                    {mc ? (
-                      <>
-                        <CheckCircle2 color="#A2492C" size={18} />
-                        <Text className="text-sm font-body-bold text-primary">
-                          MC attached — tap to retake
-                        </Text>
-                      </>
-                    ) : (
-                      <Text className="text-sm font-body-bold text-muted-fg">
-                        Take a photo of your MC
-                      </Text>
-                    )}
-                  </Pressable>
-                  <Text className="mt-1 text-[11px] font-body text-muted">
-                    Required for sick leave.
-                  </Text>
-                </View>
-              )}
-
               <View className="mt-5 flex-row gap-3">
                 <View className="flex-1">
                   <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
@@ -400,17 +346,9 @@ export default function LeaveScreen() {
             <View className="border-t border-border p-5">
               <Pressable
                 onPress={submit}
-                disabled={
-                  !startDate ||
-                  !endDate ||
-                  totalDays <= 0 ||
-                  submitting ||
-                  (needsMc && !mc)
-                }
+                disabled={!startDate || !endDate || totalDays <= 0 || submitting}
                 className={`h-14 items-center justify-center rounded-2xl ${
-                  totalDays > 0 && !submitting && !(needsMc && !mc)
-                    ? "bg-primary"
-                    : "bg-primary/40"
+                  totalDays > 0 && !submitting ? "bg-primary" : "bg-primary/40"
                 }`}
               >
                 {submitting ? (
@@ -424,21 +362,6 @@ export default function LeaveScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
-
-      {/* MC camera — same component the claims receipts use. */}
-      <Modal
-        visible={mcCaptureOpen}
-        animationType="slide"
-        onRequestClose={() => setMcCaptureOpen(false)}
-      >
-        <ReceiptCapture
-          onCapture={(photo) => {
-            setMc(photo);
-            setMcCaptureOpen(false);
-          }}
-          onCancel={() => setMcCaptureOpen(false)}
-        />
       </Modal>
     </Screen>
   );
