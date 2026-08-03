@@ -3,6 +3,7 @@ import { WORKING_DAYS_PER_MONTH, NORMAL_WORKING_HOURS_PER_DAY, OT_RATES } from "
 import { computeAllowancesForUser, loadAllowanceRules } from "../allowances";
 import { calcAllStatutory } from "../statutory/calculators";
 import { computeProrate, prorateAmount } from "../payroll/prorate";
+import { mytDateString } from "../hours";
 
 type PayrollResult = {
   payrollRunId: string;
@@ -75,7 +76,38 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
   // whole run. Reasons get surfaced in `notes` so the UI can show them
   // against the affected staff.
   const cycleStartStr = `${year}-${String(month).padStart(2, "0")}-01`;
+  const cycleEndStr = `${year}-${String(month).padStart(2, "0")}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
   const skippedUsers = new Map<string, string>();
+
+  // FT→PT CONVERTERS.
+  //
+  // employment_type is a single CURRENT value with no date range, so the moment
+  // someone moves from a monthly salary to hourly, this run stops seeing them —
+  // including for the part of the month they were still salaried. Zarif (FT to
+  // 2026-07-07) and Danish (FT to 2026-07-11) both fell out of July entirely and
+  // were owed RM451.61 and RM674.19 that nothing would ever have paid.
+  //
+  // hr_salary_history already records it correctly: a `monthly` row that ENDS
+  // inside this cycle, followed by an `hourly` one. Take that as the FT stint.
+  // Their hours AFTER the switch belong to the weekly PT run, not here.
+  const { data: stintRows } = await hrSupabaseAdmin
+    .from("hr_salary_history")
+    .select("user_id, amount, effective_date, end_date")
+    .eq("salary_type", "monthly")
+    .eq("status", "approved")
+    .not("end_date", "is", null)
+    .gte("end_date", cycleStartStr)
+    .lte("end_date", cycleEndStr);
+  const ftStints = new Map<string, { amount: number; endDate: string }>();
+  for (const row of (stintRows || []) as { user_id: string; amount: unknown; end_date: string }[]) {
+    const amount = Number(row.amount);
+    // A zero or unreadable amount is a data gap, not a free month. Leaving them
+    // out keeps them visible as "missing from payroll" instead of silently
+    // paying RM0 and looking settled. (Danish sat at 0.00 until it was
+    // recovered from his Apr/May/Jun payslips.)
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    ftStints.set(row.user_id, { amount, endDate: row.end_date });
+  }
 
   for (const p of profiles) {
     // Resigned before this cycle → don't include in this run at all.
@@ -89,7 +121,20 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     // Monthly cycle is for FULL-TIMERS only. Part-timers (and anyone else paid
     // by the hour) run through /hr/payroll/weekly. Exclude them silently — no
     // skip note needed since this is by design, not a data issue.
-    if (p.employment_type !== "full_time") {
+    const stint = ftStints.get(p.user_id);
+    if (p.employment_type !== "full_time" && stint) {
+      // Salaried for part of this cycle. Present them to the rest of the run as
+      // a full-timer whose engagement ended on the stint's last day, which is
+      // exactly what computeProrate already knows how to handle — it prorates a
+      // resigner over calendar days, giving RM2,000 x 7/31 for Zarif.
+      p.employment_type = "full_time";
+      p.basic_salary = stint.amount;
+      p.end_date = stint.endDate;
+      notes.push(
+        `${p.user_id.slice(0, 8)}: paid the monthly stint to ${stint.endDate} ` +
+        `(RM${stint.amount.toFixed(2)} prorated); hours after that are the weekly run's.`,
+      );
+    } else if (p.employment_type !== "full_time") {
       skippedUsers.set(p.user_id, `not full-time (${p.employment_type || "unset"}) — handled by weekly run`);
       continue;
     }
@@ -156,6 +201,18 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     list.push(a);
     attendanceByUser.set(a.user_id, list);
   });
+
+  // A converter's attendance spans both engagements. Only the salaried part
+  // belongs to this run — their later hours are paid hourly by the weekly cycle,
+  // and counting the OT here would pay it twice.
+  for (const [userId, stint] of ftStints) {
+    const logs = attendanceByUser.get(userId);
+    if (!logs) continue;
+    attendanceByUser.set(
+      userId,
+      logs.filter((l: { clock_in: string }) => mytDateString(l.clock_in) <= stint.endDate),
+    );
+  }
 
   // 2b. YTD totals — cumulative gross and PCB for the year so far. LHDN's MTD
   // formula is cumulative (PCB = [(P−M)R + B − Z − X] / (n+1), where X is PCB
