@@ -202,8 +202,13 @@ export async function calcPCB(
   // Standard personal
   totalRelief += reliefCatalog.get("PERSONAL") ?? 9000;
 
-  // EPF + life insurance combined cap (7000)
-  const epfCap = reliefCatalog.get("EPF_CAP") ?? 7000;
+  // EPF relief cap. LHDN splits this: RM4,000 for EPF contributions and RM3,000
+  // for life insurance / takaful, RM7,000 only when BOTH are claimed. We hold no
+  // life-insurance data, so the EPF leg is all that may be granted — the old
+  // RM7,000 default handed the combined cap to EPF alone and under-deducted
+  // everyone contributing more than RM4,000/year (Ariff: RM125.00/month).
+  // A life-insurance leg would be a separate relief code, claimed via TP1.
+  const epfCap = reliefCatalog.get("EPF_CAP") ?? 4000;
   totalRelief += Math.min(inputs.annualEpfContribution, epfCap);
 
   // SOCSO+EIS cap
