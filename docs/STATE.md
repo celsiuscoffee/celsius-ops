@@ -27,9 +27,15 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   and `status='DEACTIVATED'`, matching the original import.
   **Ariff YTD-through-June is now 65,019.23 gross / 6,829.85 PCB paid**
   (= 1,559.10 Jan + 1,054.15 × 5 for Feb–Jun).
-- 2026-08-03 — **Ariff's July PCB of RM618.50 is the understated figure and
-  RM1,064.60 is the corrected one — July MUST be recomputed before it is
-  confirmed or paid.** The deleted opening balance took his Jan–Jun YTD with it;
+- 2026-08-03 — **DONE: July was recomputed at 12:23:58 and Ariff's PCB landed on
+  RM1,064.60, exactly as modelled.** Run `1fadf5ea-baf3-4460-a4bc-660dfdfe5669`,
+  status `confirmed`, 29 lines, run PCB total 1,069.15. Note the recompute mints
+  a NEW run id each time and deletes the old run's items — do not cache a July
+  run id across a recompute (cost one confusing "run has 0 lines" moment).
+  The entry below is kept for the diagnosis, which is what makes the figure
+  trustworthy; the "must be recomputed" instruction is now satisfied.
+- 2026-08-03 — **Ariff's July PCB of RM618.50 was the understated figure and
+  RM1,064.60 is the corrected one.** The deleted opening balance took his Jan–Jun YTD with it;
   the calculator then saw only Mar–Jun (42,000.00 / 4,216.60), projected
   RM105,600 annual instead of RM128,619.23, and landed a bracket low. Modelling
   the LHDN formula against the broken YTD reproduces the stored 618.50 exactly,
@@ -45,6 +51,47 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `SUPABASE_SERVICE_ROLE_KEY` in the repo; it needs a human to hit Compute on
   `/hr/payroll` (the July run is `ai_computed`, so recompute is permitted;
   it fails on `confirmed`).
+- 2026-08-03 — **REST-DAY WORK PAYS 1× BY DESIGN AND THAT IS THE OWNER'S POLICY —
+  DO NOT RE-RAISE IT AS UNPAID.** `hours.ts:125-134`: on a rest day, work within
+  the OT threshold is tagged `overtime_type='rest_day_1x'` with `overtimeHours=0`
+  (the hours are regular, i.e. already inside the monthly salary); only hours
+  BEYOND the threshold become `ot_2x`. `constants.ts:20` names the intent
+  (`rest_day_normal: 1.0`). July has 65 such logs / 460.83h across 25 people with
+  zero OT credited — that is correct, not a defect. **Owner ruling 2026-08-03:
+  "there will be no rest day premium. there should only be overtime."** An
+  earlier note in this session called those 460h unpaid and quoted ~RM89.56 owed
+  to Razley for 19 Jul; both were wrong — his payable time starts at the rostered
+  12:00, giving 7.04h, under threshold, so no OT is owed. Withdrawn.
+- 2026-08-03 — **The 122 cancelled July OT requests were never approved first —
+  the cancels PREDATE the only review round.** All 122 were cancelled on 28 Jul
+  in two bulk operations (116 at `08:03:19.479132`, 6 at `11:05:06.549605`, each
+  a single instant); Ariff's entire review round — all 16 approvals (30h) and all
+  4 rejections — is 31 Jul `04:06–04:13`, three days LATER. Corroborating:
+  `hours_approved` is NULL on all 122 and set on all 16 approved. **There is no
+  audit trail to check this against** — `hr_overtime_requests` stores only the
+  current status, `reviewed_by`/`reviewed_at` are overwritten by whoever acts
+  last, and `ActivityLog` records nothing for OT (only 3 `payroll.*` rows in all
+  of Jul–Aug). The cancels split cleanly by employment type and both match a
+  stated policy: 116 requests / 285h / 20 people **all part_time** ("OT is FT-only
+  — PT extra hours pay flat via roster/weekly cycle"), 6 / 8h / 4 people **all
+  full_time** ("early clock-in pays from rostered shift start"). Every July
+  request, in all three states, is `reason='Auto-created from attendance log (OT
+  detected)'` — nobody hand-filed OT all month.
+- 2026-08-03 — **A WRONG ROSTER SILENTLY DELETES MOST OF A DAY'S PAY, and nothing
+  flags it.** Pay-hours start at `max(clock_in, scheduled_start)`
+  (`hours.ts:103-107`), which is the owner's early-clock-in policy working as
+  intended — but when the ROSTER is wrong rather than the clock-in being early,
+  it eats the shift. Shairuleen 16 Jul: clocked 07:09–16:51 (9.70h) against a
+  roster of **15:30–23:30**, credited **1.36h**. Farah Nabilah 18 Jul: 9.23h
+  worked, 1.29h credited. Across July, **41 full-time shifts have >2h credited as
+  neither regular nor OT — 185.61 hours total.** Not yet triaged into "genuine
+  roster error" vs "genuinely early"; needs owner review before any of it is paid.
+- 2026-08-03 — **OT hours are floored, so partial OT is always discarded.**
+  `hours.ts:128` and `:137`: `overtimeHours = Math.floor(workedHours - otThreshold)`.
+  Firdaus lost 0.90h (17 Jul) and 0.87h (21 Jul) that way. This is why the
+  auto-creator kept filing "OT detected" requests for shifts that then computed to
+  zero OT — the detector and the payer disagree. Rounding to the nearest quarter
+  hour was proposed; no decision yet.
 - 2026-08-03 — **Adam Kelvin is missing March, April and May payroll entirely,
   and he is the ONLY remaining YTD hole.** Joined 2026-03-05, resigned
   2026-07-31, basic RM3,900 — but the system holds only June and July lines. His
