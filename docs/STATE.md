@@ -6,6 +6,30 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-03 — **Payslips are now open to staff in the PWA; the manager app never
+  needed a change.** Owner: "can you open payslip in pwa staff app and native
+  staff app." **`apps/staff-native` was already fully wired** — tile at
+  `(staff)/hr/index.tsx`, screen at `(staff)/hr/payslips.tsx`, `fetchPayslips()`
+  → `/api/hr/payslips`, no feature flag — so NOTHING was changed there, which
+  also means this carries no OTA risk to manager phones (hard rule 5).
+  `apps/staff` had **three** gates stacked, and all three had to go:
+  1. `PAYROLL_UI_ENABLED = false` in `lib/hr/constants.ts` — showed a
+     "coming soon" notice and skipped the fetch entirely.
+  2. `hr/payslips/layout.tsx` redirected anyone not OWNER/ADMIN back to `/hr`.
+  3. **Nothing anywhere in the app linked to `/hr/payslips`** — even an OWNER had
+     to type the URL. A tile now sits on the HR hub next to My Skills.
+  The stale bit worth knowing: that flag's comment called itself a "mirror of the
+  backoffice PAYROLL_UI_ENABLED". **No such constant exists in the backoffice** —
+  it was removed at some point and the reference rotted.
+  **`/api/hr/payslips` is the real security boundary and it is sound**:
+  service-role client (hr_* is RLS deny-all) scoped to `session.id`, `status in
+  (confirmed, paid)`, and `cycle_type != 'opening_balance'` so the Jan–Jun BrioHR
+  YTD aggregate can't reappear mislabelled as one month's pay.
+  **Split onto its own branch on the owner's instruction (2026-08-03)** so the
+  July payroll corrections could merge first: deploying this publishes July
+  payslips, and July still carried Nur Iffa Sofea's RM120 probation allowance and
+  the Group A roster-error shifts at the time.
+
 - 2026-08-04 — **JULY "ALREADY PAID" BASELINE recovered from the session
   transcript (owner: "already paid based on the prev compute" / "use the ones
   that we computed before").** The deleted run's per-person NET figures,

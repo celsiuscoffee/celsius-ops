@@ -42,10 +42,19 @@ export const LEAVE_TYPES = {
 
 export type LeaveType = keyof typeof LEAVE_TYPES;
 
-// Feature flag: is Payroll (payslips) exposed to staff yet? OFF pre-launch — the
-// wiring stays, but the Payslips page shows a "coming soon" notice instead of
-// data. Mirror of the backoffice PAYROLL_UI_ENABLED; flip both when payroll goes live.
-export const PAYROLL_UI_ENABLED = false;
+// Feature flag: is Payroll (payslips) exposed to staff? ON since 2026-08-03 —
+// the owner asked for payslips to be openable in this app and the manager app.
+//
+// The comment here used to say "mirror of the backoffice PAYROLL_UI_ENABLED".
+// There is no such constant in the backoffice — it was removed at some point and
+// this reference went stale. There is nothing to keep in step; this flag governs
+// the staff PWA alone. The manager app (staff-native) never had a flag: its
+// payslips screen has always fetched straight from /api/hr/payslips.
+//
+// The API is the real boundary either way: it scopes to the caller's own
+// user_id, returns only `confirmed`/`paid` runs, and excludes the
+// `opening_balance` import.
+export const PAYROLL_UI_ENABLED = true;
 
 // The roster records a rest day as a shift row with this role_type and a
 // 00:00-00:00 window. It is the ONLY source of truth for whether a given day is
