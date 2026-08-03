@@ -25,22 +25,38 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   discrepancy; (2) BrioHR-era leavers with no `User` row get a synthetic id
   spelling ASCII `briohr-<empid>` (Izzah = `6272696f-6872-2d43-4330-363100000000`)
   and `status='DEACTIVATED'`, matching the original import.
-  **Ariff YTD-through-June is now 65,019.23 gross / 5,775.70 PCB paid.**
+  **Ariff YTD-through-June is now 65,019.23 gross / 6,829.85 PCB paid**
+  (= 1,559.10 Jan + 1,054.15 × 5 for Feb–Jun).
 - 2026-08-03 — **Ariff's July PCB of RM618.50 is the understated figure and
-  RM1,240.25 is the corrected one — July MUST be recomputed before it is
+  RM1,064.60 is the corrected one — July MUST be recomputed before it is
   confirmed or paid.** The deleted opening balance took his Jan–Jun YTD with it;
   the calculator then saw only Mar–Jun (42,000.00 / 4,216.60), projected
   RM105,600 annual instead of RM128,619.23, and landed a bracket low. Modelling
   the LHDN formula against the broken YTD reproduces the stored 618.50 exactly,
-  which is what confirms the diagnosis. With Jan/Feb restored the same model
-  gives **1,240.25**. Note this is HIGHER than the RM1,064.60 the run showed
-  before the balance was deleted — the old opening balance implied YTD gross of
-  only ~60,803, i.e. **it was itself ~4,216 short**; the figures now in the
-  monthly runs come straight off the BrioHR exports and are the better source.
+  which is what confirms the diagnosis; against the restored YTD it gives
+  **1,064.60** — chargeable 115,269.23, annual 13,217.31, less 6,829.85 already
+  paid, over 6 remaining months. **That is the same figure the run showed before
+  the opening balance was deleted, which is the real corroboration here: the
+  deleted balance and the BrioHR monthly lines agree.** (A working note briefly
+  claimed 1,240.25 and that the old balance was ~4,216 short — that came from
+  summing only four of the five Feb–Jun PCB months. Both claims were wrong;
+  1,064.60 stands.)
   **The recompute cannot be triggered from an agent session** — no
   `SUPABASE_SERVICE_ROLE_KEY` in the repo; it needs a human to hit Compute on
   `/hr/payroll` (the July run is `ai_computed`, so recompute is permitted;
   it fails on `confirmed`).
+- 2026-08-03 — **Adam Kelvin is missing March, April and May payroll entirely,
+  and he is the ONLY remaining YTD hole.** Joined 2026-03-05, resigned
+  2026-07-31, basic RM3,900 — but the system holds only June and July lines. His
+  Mar–May pay lived in the deleted opening balance and the BrioHR Jan/Feb
+  exports do not cover it. Checked every one of the 29 people on the July run
+  against their join date: everyone else's monthly lines start at or before
+  their first eligible month. **Tax impact is nil** — with June alone his
+  projection is 31,260, chargeable 17,936.60, and the s.6A(2) RM400 rebate wipes
+  the RM129 of tax out, so July PCB is correctly 0.00; restoring Mar–May moves
+  it to at most RM0.65. **The reason to fix it anyway is the EA form** — he is a
+  2026 leaver and his EA must state real annual earnings, which are understated
+  by roughly RM11,200. Needs the Mar/Apr/May BrioHR exports.
 - 2026-08-03 — **The BrioHR import dropped people silently, and the delete
   endpoint let it happen twice.** The original Jan/Feb import covered 19 of 20
   and 21 of 23; nothing flagged the gap because run headers were written from

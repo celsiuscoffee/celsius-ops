@@ -159,5 +159,14 @@ COMMIT;
 --
 -- STILL OWED, and it needs a human: recompute July on /hr/payroll. The July run
 -- is `ai_computed` so recompute is permitted. Ariff's July PCB is 618.50 today
--- and should land at 1,240.25 once it reads the restored YTD. Do not confirm or
--- pay July before that.
+-- and should land at 1,064.60 once it reads the restored YTD (chargeable
+-- 115,269.23, annual 13,217.31, less 6,829.85 already paid, over 6 months).
+-- That equals what the run showed BEFORE the opening balance was deleted, which
+-- is the corroboration: the deleted balance and these BrioHR lines agree.
+-- Do not confirm or pay July before the recompute.
+--
+-- NOT fixed by this migration: Adam Kelvin (joined 2026-03-05, resigned
+-- 2026-07-31) has no March/April/May lines - that pay was only ever in the
+-- deleted opening balance and is outside these two exports. No tax consequence
+-- (the s.6A(2) rebate zeroes him either way) but his EA form understates annual
+-- earnings by ~RM11,200. Needs the Mar/Apr/May BrioHR exports.
