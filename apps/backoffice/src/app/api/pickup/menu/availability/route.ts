@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 import { requireRole } from "@/lib/auth";
+import { syncItemAvailabilityToGrab } from "@/lib/grab-availability";
 
 // Per-outlet menu availability — admin equivalent of the POS /oos screen.
 // Reads (and writes) the same `outlet_product_availability` table the POS
 // uses, so an admin override here is identical to a barista marking the
-// item OOS at their counter.
+// item OOS at their counter — including the GrabFood push, which this route
+// used to skip entirely (an admin 86 never reached delivery at all).
+
+// The Grab push retries through Grab's "retry after N seconds" throttle, so
+// give the request room to finish rather than being cut off mid-retry.
+export const maxDuration = 60;
 
 // GET — list products + every existing override row.
 export async function GET(req: NextRequest) {
@@ -63,5 +69,15 @@ export async function POST(req: NextRequest) {
     );
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+
+  // This route is keyed by the pickup STORE SLUG (the availability table's own
+  // key), unlike the POS route which sends the loyalty outlet id.
+  const grab = await syncItemAvailabilityToGrab(
+    supabase,
+    { storeId: outlet_id },
+    product_id,
+    is_available,
+  );
+
+  return NextResponse.json({ ok: true, grab });
 }
