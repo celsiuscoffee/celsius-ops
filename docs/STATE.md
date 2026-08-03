@@ -6,6 +6,55 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-03 — **Grab 86 sync: Grab THROTTLES menu-record updates, and an
+  un-retried push silently loses the 86 forever.** Ariff reported items closed
+  in POS still selling on Grab (Pavlova, Shah Alam, closed since the day
+  before). The DB write was never the problem — `outlet_product_availability`
+  had Mini Pavlova / `shah-alam` / `is_available=false` at `2026-08-02
+  12:31:50.186Z`. The Vercel runtime log shows the Grab push failing **at that
+  same second**: `PUT /partner/v1/batch/menu (409) {"reason":"conflict",
+  "message":"batchUpdate ITEM 68d92fd799cecc0007dafb92 too frequently, retry
+  after 10 seconds"}`. Grab then took order **GF-7046 for that item 15h
+  later** (2026-08-03 03:26:11Z). NYC Smores at SA shows the same shape at
+  13:52:50Z. **Trigger: staff 86 several items in a burst** (log shows POSTs
+  ~1.7s apart) — exactly what the throttle rejects. The route returned HTTP
+  200 regardless, so the register showed success and nobody knew.
+  **Two things RULED OUT — don't re-investigate them:** (1) *outbound Grab
+  creds are fine* — 191 orders auto-accepted since Jul 27, order reconcile
+  clean 2026-08-02 12:15, so `isGrabConfigured()` is true in prod incl.
+  `GRAB_MERCHANT_ID`; (2) *item targeting was never wrong* — **Grab echoes OUR
+  product id as the partner `externalID`**: the GF-7046 webhook carries
+  `"id":"68d92fd799cecc0007dafb92"` alongside `"grabItemID":
+  "MYITE20260619072306047458"`. So the `grab_item_id`-vs-our-id worry in the
+  route comments is moot for these stores. **`products.grab_item_id` is NULL on
+  ALL 92 products** and the BackOffice link panel shows nothing to link — its
+  "unlinked" query keys off `pos_order_items.product_id`, which ingest already
+  resolves to our catalogue id, so linkable rows never surface. Leave it: the
+  fallback (our id) is the correct key. NOTE Grab item ids are **per-merchant
+  AND multi-generation** (2026-06-17 and 2026-06-19 batches both still ordered
+  live; up to 6 distinct `MYITE…` ids per product across 3 outlets), so the
+  scalar `products.grab_item_id` column could never represent them anyway.
+  **Fix (PR #1099, draft, branch `claude/new-session-h2ujof`):** new
+  `lib/grab-availability.ts` — `pushAvailability` retries through the throttle
+  honouring Grab's own "retry after N seconds" and does NOT retry permanent
+  failures; `reconcileGrabAvailability` diffs desired availability against a
+  snapshot of what was last successfully pushed
+  (`app_settings.grab_availability_pushed`) and re-sends only the difference,
+  so a lost 86 self-heals within the cron interval instead of never. **Folded
+  into `cron/grab-reconcile` (*/15) — vercel.json is at the 38 ceiling, a 39th
+  entry was not an option.** Snapshot deliberately in `app_settings` JSONB: no
+  DDL, no migration, and a missing entry just means "push again" (idempotent).
+  **Second hole fixed on the way: the BackOffice availability matrix
+  (`/api/pickup/menu/availability`) wrote the 86 row and NEVER pushed to Grab
+  at all** — both writers now share `syncItemAvailabilityToGrab` (it takes
+  either the loyalty outlet id or the pickup store slug). The POS route now
+  returns the real outcome (`pushed`/`throttled`/`error`/…) instead of always
+  "pushed". No `pos-native` change → no OTA deploy.
+  **Owner action while the PR is unmerged:** items currently stuck open on
+  Grab (SA Mini Pavlova, NYC Smores, Almond Crepe Cake, …) need closing by
+  hand in the Grab merchant portal; the first reconcile run after merge
+  corrects them automatically.
+
 - 2026-08-01 — **Payroll module end-to-end QA: four real defects, three now
   fixed in code.** Owner is moving payroll off BrioHR onto the HR module this
   month, so this was a pre-flight audit of the Aug 2026 run
