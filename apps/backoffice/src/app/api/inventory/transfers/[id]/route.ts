@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { adjustStockBalance } from "@/lib/stock";
+import { adjustStockByPackages } from "@/lib/stock";
 import { getUserFromHeaders } from "@/lib/auth";
 
 // Valid status transitions
@@ -123,9 +123,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // Stock movements based on transition
       // PENDING_APPROVAL -> APPROVED or IN_TRANSIT: subtract stock from source outlet
       if (existing.status === "PENDING_APPROVAL" && (status === "APPROVED" || status === "IN_TRANSIT")) {
-        for (const item of updated.items) {
-          await adjustStockBalance(updated.fromOutletId, item.productId, -Number(item.quantity), item.productPackageId);
-        }
+        await adjustStockByPackages(
+          updated.fromOutletId,
+          updated.items.map((i) => ({ ...i, quantity: -Number(i.quantity) })),
+        );
       }
 
       // IN_TRANSIT -> RECEIVED: add stock to destination outlet
@@ -135,17 +136,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           where: { transferId: id },
         });
         if (!existingReceiving) {
-          for (const item of updated.items) {
-            await adjustStockBalance(updated.toOutletId, item.productId, Number(item.quantity), item.productPackageId);
-          }
+          await adjustStockByPackages(
+            updated.toOutletId,
+            updated.items.map((i) => ({ ...i, quantity: Number(i.quantity) })),
+          );
         }
       }
 
       // APPROVED/IN_TRANSIT -> CANCELLED: return stock to source outlet
       if ((existing.status === "APPROVED" || existing.status === "IN_TRANSIT") && status === "CANCELLED") {
-        for (const item of updated.items) {
-          await adjustStockBalance(updated.fromOutletId, item.productId, Number(item.quantity), item.productPackageId);
-        }
+        await adjustStockByPackages(
+          updated.fromOutletId,
+          updated.items.map((i) => ({ ...i, quantity: Number(i.quantity) })),
+        );
       }
 
       // IN_TRANSIT -> RECEIVED: auto-create internal transfer invoice
@@ -178,16 +181,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
       // PENDING -> COMPLETED (legacy): add stock to destination
       if (existing.status === "PENDING" && status === "COMPLETED") {
-        for (const item of updated.items) {
-          await adjustStockBalance(updated.toOutletId, item.productId, Number(item.quantity), item.productPackageId);
-        }
+        await adjustStockByPackages(
+          updated.toOutletId,
+          updated.items.map((i) => ({ ...i, quantity: Number(i.quantity) })),
+        );
       }
 
       // PENDING -> CANCELLED (legacy): return stock to source
       if (existing.status === "PENDING" && status === "CANCELLED") {
-        for (const item of updated.items) {
-          await adjustStockBalance(updated.fromOutletId, item.productId, Number(item.quantity), item.productPackageId);
-        }
+        await adjustStockByPackages(
+          updated.fromOutletId,
+          updated.items.map((i) => ({ ...i, quantity: Number(i.quantity) })),
+        );
       }
 
       return updated;
