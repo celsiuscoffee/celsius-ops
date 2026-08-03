@@ -1,31 +1,41 @@
 // Probation, in one place, because payroll and the HR profile page were
 // disagreeing about who was on it.
 //
-// Owner 2026-08-03: "if probation, should guard during payroll computation. no
-// need to manual fill reason" / "follow HR profile".
+// Owner 2026-08-03, in order:
+//   "if probation, should guard during payroll computation. no need to manual
+//    fill reason"  →  the gate must fire in the calculator, not be applied by
+//    hand, lever by lever, with a typed reason.
+//   "follow HR profile"
+//   "probation will end only after confirmation. it is not time base"  ←  THIS
+//    IS THE RULE. Elapsed time never confirms anybody.
 //
-// The HR profile page has always used: explicit probation_end_date if set,
-// otherwise join_date + 90 days. Payroll read the raw column only — and that
-// column is NULL on 61 of 62 active profiles, so the payroll gate never fired
-// for anyone. The exclusion was being done by editing each lever by hand with a
-// typed reason ("probation", "not yet confirm"), which is why Nur Iffa Sofea was
-// paid RM120.00 in July: her seven colleagues were edited, she was missed.
+// So probation ends on an EVENT, not a date. Someone 200 days past their
+// nominal probation end who has never been confirmed is still on probation and
+// still earns no performance allowance. An earlier revision of this file used
+// "explicit probation_end_date, else join + 90 days" — that is exactly the
+// time-based rule the owner rejected, and it would have paid people nobody has
+// signed off. Replaced.
 //
-// Same rule, one function, both callers.
+// `confirmed_at` is the event. It is written by the probation-review flow when
+// an OWNER/ADMIN approves a `decision = 'confirm'` review, and nothing else
+// writes it.
+//
+// `probation_end_date` survives, with a NARROWER meaning: the date confirmation
+// is EXPECTED, i.e. when the review is due. The extend flow pushes it out. It is
+// scheduling information for the HR banner and it must never decide pay — that
+// is what made the old rule wrong.
 
-/** Default probation length when the profile carries no explicit end date.
- *  90 days = the "Probation end (3 months)" onboarding stage. */
+/** Nominal probation length, used only to SCHEDULE the review that confirms
+ *  someone. It does not end probation; see the module comment. */
 export const DEFAULT_PROBATION_DAYS = 90;
 
 /**
- * The date probation ends for this person, or null if it cannot be determined.
+ * When is this person's probation review due?
  *
- * An explicit `probation_end_date` ALWAYS wins — that is what lets HR confirm
- * someone early or extend them, and it is what the probation-review flow writes.
- * Falling back to join + 90 days only fills the gap where nobody has recorded a
- * decision yet.
+ * Purely informational — for the "confirmation due in N days" banner and for
+ * chasing overdue reviews. Never gate pay on this.
  */
-export function effectiveProbationEnd(
+export function probationReviewDue(
   joinDate: string | null | undefined,
   probationEndDate: string | null | undefined,
 ): string | null {
@@ -37,22 +47,35 @@ export function effectiveProbationEnd(
 }
 
 /**
- * Is this person on probation for the payroll month ending `monthEnd`?
+ * Is this person on probation for a payroll month ending `monthEnd`?
  *
- * Compared against the END of the month, so someone confirmed part-way through
- * is paid for that whole month. That is the generous side of the boundary and
- * it is deliberate: losing a month's allowance to a mid-month confirmation date
- * would be the worse error.
+ * On probation until confirmed. The only thing that ends it is `confirmed_at`,
+ * and it ends it from the month the confirmation lands — compared against the
+ * END of the month, so someone confirmed part-way through is paid for that whole
+ * month. That is the generous side of the boundary and it is deliberate: losing
+ * a month's allowance to a mid-month confirmation date is the worse error.
  *
- * Returns false when neither a probation end date nor a join date is known.
- * "Unknown" must not read as "on probation" — that would silently zero the
- * allowance for anyone with an incomplete profile.
+ * A confirmation dated in the FUTURE does not apply yet, which is what stops a
+ * post-dated confirmation from paying someone early.
  */
 export function isOnProbation(
   monthEnd: string,
+  confirmedAt: string | null | undefined,
+): boolean {
+  if (!confirmedAt) return true;
+  return confirmedAt.slice(0, 10) > monthEnd;
+}
+
+/**
+ * Is this review overdue? Used to chase HR, not to pay anybody.
+ */
+export function isProbationReviewOverdue(
+  today: string,
   joinDate: string | null | undefined,
   probationEndDate: string | null | undefined,
+  confirmedAt: string | null | undefined,
 ): boolean {
-  const end = effectiveProbationEnd(joinDate, probationEndDate);
-  return !!end && monthEnd <= end;
+  if (confirmedAt) return false;
+  const due = probationReviewDue(joinDate, probationEndDate);
+  return !!due && due < today;
 }

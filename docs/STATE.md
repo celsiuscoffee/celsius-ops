@@ -6,6 +6,33 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-03 — **PROBATION ENDS ON CONFIRMATION, NEVER ON ELAPSED TIME. Owner
+  ruling: "probation will end only after confirmation. it is not time base."**
+  Two earlier gates this session were wrong in opposite directions: reading raw
+  `probation_end_date` (NULL on 61/62, so NOBODY was on probation — Iffa paid
+  RM120), then falling back to join + 90 days (pays anyone whose 90 days elapsed
+  even though no one confirmed them — the exact time rule the owner rejected).
+  Now `lib/hr/probation.ts` gates on a new `hr_employee_profiles.confirmed_at`;
+  `probationReviewDue()` keeps join+90d but is DISPLAY ONLY and decides no pay.
+  **The blocker that made this non-trivial: nothing in the DB recorded a
+  confirmation.** `hr_probation_reviews` is EMPTY (zero rows, ever — the flow
+  works, it has never been used) and `probation_end_date` is NULL on all 62
+  active profiles. `probation_end_date` could not serve as the marker anyway:
+  the only writer is the EXTEND decision, which sets a FUTURE date while the
+  person is still on probation — it means "review due", not "confirmed". So a
+  confirmation-only gate on today's data puts **all 22 active full-timers** on
+  probation and wipes ~RM1,573/month of allowance, Syafiq Aiman (joined 2021)
+  included. Hence `packages/db/prisma/migrations/20260803_probation_confirmed_at/`
+  ships the column WITH a backfill: `confirmed_at = join_date` for everyone who
+  joined before 2026-04-01 (11 people), leaving 11 on probation. **NOT APPLIED —
+  the backfill list is a proposal and moving one name changes that person's pay.**
+  Also fixed: approving a `decision='confirm'` review previously did nothing to
+  the profile (it only unlocked the confirmation letter); it now stamps
+  `confirmed_at`, which is what actually ends probation.
+  Implied July claw-back under this rule is **RM540** (Nor Armin 70, Mohd Haziq
+  200, Razley 150, Iffa 120) — up from RM370 under the 90-day rule, because
+  Armin and Haziq had elapsed but were never confirmed.
+
 - 2026-08-03 — **The deleted `opening_balance` is no longer needed: Jan and Feb
   monthly runs now carry the full BrioHR figures (APPLIED to prod).** Owner
   re-exported `202601`/`202602_payroll_report.xlsx` from BrioHR; reconciling

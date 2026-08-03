@@ -8,7 +8,7 @@ import { formatRM } from "@celsius/shared";
 import { ArrowLeft, Save, Loader2, Lock, KeyRound, Shield, Eye, EyeOff, CheckCircle2, TrendingUp, Clock, Sparkles, AlertTriangle, AlertCircle, Star, FileText, Upload, Trash2, Download, Plus, Repeat, Receipt, Award } from "lucide-react";
 import Link from "next/link";
 import type { EmployeeProfile } from "@/lib/hr/types";
-import { effectiveProbationEnd } from "@/lib/hr/probation";
+import { probationReviewDue } from "@/lib/hr/probation";
 
 type EmployeeDocument = {
   id: string;
@@ -1382,24 +1382,34 @@ export default function EmployeeDetailPage() {
 
       {/* Probation banner — surfaces 3-month confirmation deadline */}
       {(() => {
-        const p = profile as unknown as { join_date?: string | null; probation_end_date?: string | null; resigned_at?: string | null; end_date?: string | null } | null;
+        const p = profile as unknown as { join_date?: string | null; probation_end_date?: string | null; confirmed_at?: string | null; resigned_at?: string | null; end_date?: string | null } | null;
         if (!p?.join_date) return null;
         if (p.resigned_at || p.end_date) return null; // already resigning, skip
-        // Shared with payroll — this banner and the allowance gate must never
-        // disagree about who is on probation. See lib/hr/probation.ts.
-        const effectiveEnd = effectiveProbationEnd(p.join_date, p.probation_end_date);
-        if (!effectiveEnd) return null;
+        // Probation ends on CONFIRMATION, never on elapsed time (owner
+        // 2026-08-03) — so the banner stays up until confirmed_at is set, and it
+        // does NOT disappear once the due date passes. It going overdue is the
+        // point: an unconfirmed employee earns no performance allowance, so a
+        // review nobody got round to is costing them money.
+        if (p.confirmed_at) return null;
+        const dueDate = probationReviewDue(p.join_date, p.probation_end_date);
+        if (!dueDate) return null;
         const today = new Date().toISOString().slice(0, 10);
-        if (effectiveEnd < today) return null; // probation already ended
-        const daysLeft = Math.ceil((Date.parse(effectiveEnd) - Date.now()) / 86400000);
+        const daysLeft = Math.ceil((Date.parse(dueDate) - Date.now()) / 86400000);
+        const overdue = dueDate < today;
         return (
-          <section className="mt-6 rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+          <section className={`mt-6 rounded-lg border p-4 ${overdue ? "border-amber-300 bg-amber-50/60" : "border-blue-200 bg-blue-50/40"}`}>
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-blue-900">In Probation</h3>
-                <p className="mt-1 text-xs text-blue-800">
-                  Joined <strong>{p.join_date}</strong>. Confirmation due by <strong>{effectiveEnd}</strong>
-                  {" "}({daysLeft} day{daysLeft === 1 ? "" : "s"} left). Issue a confirmation letter, extend, or terminate before then.
+                <h3 className={`text-sm font-semibold ${overdue ? "text-amber-900" : "text-blue-900"}`}>
+                  {overdue ? "In Probation — review overdue" : "In Probation"}
+                </h3>
+                <p className={`mt-1 text-xs ${overdue ? "text-amber-800" : "text-blue-800"}`}>
+                  Joined <strong>{p.join_date}</strong>. Confirmation was due by <strong>{dueDate}</strong>
+                  {overdue
+                    ? ` (${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? "" : "s"} ago).`
+                    : ` (${daysLeft} day${daysLeft === 1 ? "" : "s"} left).`}
+                  {" "}Probation ends only when a confirmation is approved — not when this date passes —
+                  and the performance allowance is withheld until it is.
                 </p>
               </div>
               {canSeeSalary && (

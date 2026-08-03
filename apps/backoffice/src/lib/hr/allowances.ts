@@ -22,7 +22,7 @@ import { hrSupabaseAdmin } from "./supabase";
 import { prisma } from "@/lib/prisma";
 import { computeLateMinutes, mytDateString } from "./hours";
 import { getMYTToday } from "./constants";
-import { effectiveProbationEnd, isOnProbation } from "./probation";
+import { probationReviewDue, isOnProbation } from "./probation";
 
 // Phone capture is a FRONT-OF-HOUSE lever (kitchen does no phone collection).
 const FOH_POSITIONS = ["Barista", "Barista Lead", "Supervisor", "Shift Lead", "Manager", "Cashier"];
@@ -272,7 +272,7 @@ export async function computeAllowancesForUser(
 
   const { data: profile } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("employment_type, schedule_required, position, fixed_performance_allowance, probation_end_date, join_date")
+    .select("employment_type, schedule_required, position, fixed_performance_allowance, probation_end_date, join_date, confirmed_at")
     .eq("user_id", userId)
     .maybeSingle();
   const employmentType = profile?.employment_type ?? null;
@@ -284,21 +284,12 @@ export async function computeAllowancesForUser(
   // zeroing eligibility here would blank the levers too, and the whole point is
   // to keep watching how a new joiner is doing while paying them nothing.
   //
-  // WHICH date counts is the whole story here. Reading the raw
-  // probation_end_date column made this gate dead: it is NULL on 61 of 62 active
-  // profiles, so nobody was ever on probation and the exclusion had to be done
-  // by hand, lever by lever, with a typed reason. Nur Iffa Sofea was paid RM120
-  // in July because that manual pass missed her.
-  //
-  // `effectiveProbationEnd` is the rule the HR profile page has always applied —
-  // explicit date if set, else join + 90 days — so payroll and HR now agree.
-  // See probation.ts for the boundary and the NULL semantics.
-  const probationEnd = effectiveProbationEnd(
-    profile?.join_date as string | null,
-    profile?.probation_end_date as string | null,
-  );
-  const onProbation = isOnProbation(
-    monthEnd,
+  // Probation ends on CONFIRMATION, never on elapsed time (owner 2026-08-03:
+  // "probation will end only after confirmation. it is not time base"). So the
+  // gate reads `confirmed_at` and nothing else. `probationEnd` below is the date
+  // the review is DUE — carried for display only, it decides nothing.
+  const onProbation = isOnProbation(monthEnd, profile?.confirmed_at as string | null);
+  const probationEnd = probationReviewDue(
     profile?.join_date as string | null,
     profile?.probation_end_date as string | null,
   );
