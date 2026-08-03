@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarDays, CalendarOff, CalendarClock, ChevronRight, CheckCircle2, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star, Target } from "lucide-react";
+import { Clock, CalendarDays, CalendarOff, CalendarClock, ChevronRight, CheckCircle2, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star, Target, Users } from "lucide-react";
 import { useLocationPing } from "@/lib/hr/use-location-ping";
 
 type HRStatus = {
@@ -76,6 +76,14 @@ export default function HRHomePage() {
       subtitle: "View upcoming schedule",
       color: "text-blue-600",
       bgColor: "bg-blue-50",
+    },
+    {
+      href: "/hr/whos-working",
+      icon: Users,
+      label: "Who's Working",
+      subtitle: "See who's on shift with you",
+      color: "text-cyan-600",
+      bgColor: "bg-cyan-50",
     },
     // Open Slots hidden for now (owner 2026-07-22: slots logic removed). The
     // booking route/page still exist — restore this entry to bring it back.
