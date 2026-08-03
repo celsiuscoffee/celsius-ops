@@ -7,7 +7,9 @@ import { describe, it, expect } from "vitest";
 // which side of the boundary the confirming month falls on, and what a NULL
 // means. Both are pinned here because both decide pay.
 
-/** Mirrors the shipped gate in computeAllowancesForUser. */
+/** Mirrors the shipped gate. It lives in payroll-calculator, NOT the allowance
+ *  engine: probation staff are still SCORED (owner: "we still need the
+ *  performance"), the money is simply withheld on the payslip. */
 function isOnProbation(monthEnd: string, probationEnd: string | null): boolean {
   return !!probationEnd && monthEnd <= probationEnd;
 }

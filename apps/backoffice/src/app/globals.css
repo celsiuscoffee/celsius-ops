@@ -342,6 +342,29 @@
 .dark .placeholder-gray-400::placeholder, .dark .placeholder-neutral-400::placeholder { color: #71717a !important; }
 .dark input::placeholder, .dark textarea::placeholder, .dark select::placeholder { color: #71717a !important; }
 
+/* ── .input — the shared form-field class ──────────────────────────────────
+   Used in 154 places across the backoffice and defined NOWHERE. Tailwind 4's
+   Preflight zeroes border-width on form controls, so in LIGHT mode every one of
+   those fields rendered with no border, no padding and no background —
+   indistinguishable from static caption text. Only the .dark rules below ever
+   styled them, which is why this survived unnoticed.
+
+   Reported 2026-08-03 twice on /hr/performance: "cannot waive" (the reason field
+   looked like a caption, so nobody filled it and the button stayed disabled) and
+   then "you gated this but cannot fill reason". The field was always there and
+   focusable — it just did not look like a field.
+
+   Component layer, so per-element utilities (w-24, text-xs) still win. */
+@layer components {
+  .input {
+    @apply w-full rounded-lg border border-input bg-background px-3 py-2 text-sm
+           transition-colors outline-none
+           placeholder:text-muted-foreground
+           focus:border-terracotta focus:ring-2 focus:ring-terracotta/20
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+}
+
 /* ── Form elements ── */
 .dark select, .dark input[type="date"], .dark input[type="text"], .dark input[type="number"], .dark input[type="search"], .dark input[type="email"], .dark input[type="tel"], .dark input[type="password"], .dark input[type="url"], .dark textarea {
   background-color: var(--card) !important;
