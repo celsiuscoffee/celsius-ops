@@ -19,13 +19,12 @@
 -- exist yet. This migration creates it and backfills the people who are already
 -- confirmed in fact.
 --
--- ⚠ THE BACKFILL LIST BELOW IS A PROPOSAL AND NEEDS THE OWNER'S EYES.
--- It is drawn from the owner's own statements this session: the seven named as
--- probation staff, plus everyone who joined from April 2026 and has never been
--- reviewed. Everyone hired before that is treated as long-since confirmed.
--- Moving one name between the lists changes that person's pay.
+-- THE BACKFILL LIST, CONFIRMED BY THE OWNER 2026-08-03.
+-- Pre-April-2026 joiners are long since confirmed. Mohd Haziq and Nor Armin were
+-- queried specifically and the owner ruled "haziq and armin confirmed", so they
+-- move across. Everyone else who joined from April onward stays on probation.
 --
---   CONFIRMED (11) — allowance continues to pay
+--   CONFIRMED (13) — allowance continues to pay
 --     Ammar Bin Shahrin              2021-01-01  Director
 --     Muhamad Syafiq Aiman           2021-02-08  Barista Lead
 --     Tengku Syahirah Balqis         2025-05-01  Barista
@@ -37,11 +36,11 @@
 --     Zikry Yusuf                    2026-01-16  Kitchen Crew
 --     Shairuleen                     2026-02-01  Kitchen Lead
 --     Nuralia Aina                   2026-02-16  Barista
+--     Nor Armin Hafifie              2026-04-16  Barista       ← owner 2026-08-03
+--     Mohd Haziq                     2026-04-27  Kitchen Lead  ← owner 2026-08-03
 --
---   ON PROBATION (11) — allowance withheld until someone confirms them
---     Nor Armin Hafifie              2026-04-16   (was paid RM70 in July)
+--   ON PROBATION (9) — allowance withheld until someone confirms them
 --     Ammar Roslizar                 2026-04-17
---     Mohd Haziq                     2026-04-27   (was paid RM200 in July)
 --     Ahmad Razley                   2026-05-05   (was paid RM150 in July)
 --     Amirul Yazid                   2026-05-14   owner-named
 --     Firdaus                        2026-05-31   owner-named
@@ -51,14 +50,20 @@
 --     Nur Iffa Sofea                 2026-06-23   owner-named (was paid RM120)
 --     Muhammad Akmal Aiman           2026-07-06   owner-named
 --
--- July claw-back implied: 70 + 200 + 150 + 120 = RM540. July is `confirmed`, so
--- realising it needs an unlock and recompute — deliberately NOT done here.
+-- July claw-back implied: Razley 150 + Iffa 120 = RM270. Haziq's 200 and Armin's
+-- 70 now stand. July is `confirmed`, so realising the RM270 needs an unlock and
+-- recompute — deliberately NOT done here.
 --
--- The confirmed_at date is set to the join date for the backfilled group. Their
--- real confirmation dates are not recorded anywhere; using the join date is
--- honest about that (it says "confirmed at least since they started") and it
--- cannot accidentally withhold a month, because any date at or before the month
--- end pays.
+-- WHICH DATE. For the pre-April group, `confirmed_at = join_date`. Their real
+-- confirmation dates are recorded nowhere, and the join date is honest about
+-- that — it says "confirmed at least since they started" and cannot accidentally
+-- withhold a month, since any date at or before month end pays.
+--
+-- Haziq and Armin are dated to the END of their probation (join + 90 days:
+-- 2026-07-26 and 2026-07-15) rather than their join date, because they DID serve
+-- a probation — backdating to the join date would assert they never had one.
+-- Both dates fall inside July, so July pays either way; the difference is that
+-- June correctly stays withheld.
 --
 -- SQL-managed table (hr_* are not in schema.prisma). Apply manually via
 -- Supabase SQL — hybrid workflow, docs/database-migrations.md.
@@ -72,15 +77,25 @@ ALTER TABLE hr_employee_profiles
 COMMENT ON COLUMN hr_employee_profiles.confirmed_at IS
   'The date this employee was confirmed (probation ended). NULL = still on probation, regardless of how long ago they joined — probation is ended by an act of confirmation, never by elapsed time. Written by the probation-review flow when an approved decision=confirm review lands. The performance allowance is withheld while this is NULL. Do NOT confuse with probation_end_date, which is only when the review is DUE.';
 
--- Backfill: everyone hired before April 2026, none of whom the owner has flagged
--- as still on probation. Confirmed as of their join date — see the note above on
--- why that date and not another.
+-- Backfill 1: everyone hired before April 2026 — long since confirmed.
 UPDATE hr_employee_profiles
    SET confirmed_at = join_date,
        updated_at   = now()
  WHERE confirmed_at IS NULL
    AND join_date IS NOT NULL
    AND join_date < DATE '2026-04-01';
+
+-- Backfill 2: Mohd Haziq and Nor Armin, confirmed by the owner 2026-08-03.
+-- Dated to the end of the probation they actually served, not their join date.
+-- Matched on user_id so a name change cannot silently miss them.
+UPDATE hr_employee_profiles
+   SET confirmed_at = join_date + 90,
+       updated_at   = now()
+ WHERE confirmed_at IS NULL
+   AND user_id IN (
+     '6ff33793-1374-459d-93f2-02cd9c0ff0f9',  -- Mohd Haziq   joined 2026-04-27 → 2026-07-26
+     '69d05911-b402-4b98-b5dc-8d954094b98d'   -- Nor Armin    joined 2026-04-16 → 2026-07-15
+   );
 
 COMMIT;
 

@@ -94,8 +94,7 @@ describe("isProbationReviewOverdue — chases HR, never pays anybody", () => {
 });
 
 describe("July 2026 under the confirmation rule", () => {
-  // With confirmed_at backfilled for pre-April joiners (see the
-  // 20260803_probation_confirmed_at migration), July splits like this.
+  // The split the 20260803_probation_confirmed_at migration backfills.
   const confirmed: Record<string, string> = {
     "Muhamad Syafiq Aiman": "2021-02-08",
     "Tengku Syahirah Balqis": "2025-05-01",
@@ -104,15 +103,15 @@ describe("July 2026 under the confirmation rule", () => {
     "Zikry Yusuf": "2026-01-16",
     "Shairuleen": "2026-02-01",
     "Nuralia Aina": "2026-02-16",
+    // Owner 2026-08-03: "haziq and armin confirmed". Dated to the end of the
+    // probation they actually served, not their join date — see below.
+    "Nor Armin Hafifie": "2026-07-15",
+    "Mohd Haziq": "2026-07-26",
   };
 
-  // Nobody has confirmed any of these, so all are withheld — including the four
-  // whose 90 days had already elapsed by 31 July. Under the OLD time-based rule
-  // Mohd Haziq and Nor Armin would have been paid.
   const withheld = [
-    "Nor Armin Hafifie",   // joined 2026-04-16, 90d elapsed 15 Jul
-    "Mohd Haziq",          // joined 2026-04-27, 90d elapsed 26 Jul
-    "Ahmad Razley",        // joined 2026-05-05
+    "Ammar Roslizar",      // joined 2026-04-17, never reviewed
+    "Ahmad Razley",        // joined 2026-05-05 — 90d elapsed 3 Aug, still unconfirmed
     "Amirul Yazid", "Firdaus", "Nurul Alianatasha",
     "Guraf Lal Joshi", "Nur Nazihah", "Nur Iffa Sofea", "Muhammad Akmal Aiman",
   ];
@@ -129,12 +128,21 @@ describe("July 2026 under the confirmation rule", () => {
     }
   });
 
-  it("the two the time rule would have paid are Nor Armin and Mohd Haziq", () => {
-    // Their reviews came due inside July, which under join+90d meant "confirmed".
+  it("Haziq and Armin are confirmed for July but NOT retroactively for June", () => {
+    // The reason their confirmed_at is the end of probation rather than the join
+    // date: backdating to the join date would assert they never served one, and
+    // would retroactively entitle them to May and June allowance too.
     expect(probationReviewDue("2026-04-16", null)).toBe("2026-07-15");
     expect(probationReviewDue("2026-04-27", null)).toBe("2026-07-26");
-    // Both are overdue and neither is confirmed.
-    expect(isProbationReviewOverdue("2026-07-31", "2026-04-16", null, null)).toBe(true);
-    expect(isProbationReviewOverdue("2026-07-31", "2026-04-27", null, null)).toBe(true);
+    for (const at of ["2026-07-15", "2026-07-26"]) {
+      expect(isOnProbation("2026-07-31", at)).toBe(false);  // July pays
+      expect(isOnProbation("2026-06-30", at)).toBe(true);   // June does not
+    }
+  });
+
+  it("Razley stays withheld — his 90 days had not even elapsed by 31 July", () => {
+    expect(probationReviewDue("2026-05-05", null)).toBe("2026-08-03");
+    expect(isProbationReviewOverdue("2026-07-31", "2026-05-05", null, null)).toBe(false);
+    expect(isOnProbation("2026-07-31", null)).toBe(true);
   });
 });

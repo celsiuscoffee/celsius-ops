@@ -24,14 +24,17 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   probation and wipes ~RM1,573/month of allowance, Syafiq Aiman (joined 2021)
   included. Hence `packages/db/prisma/migrations/20260803_probation_confirmed_at/`
   ships the column WITH a backfill: `confirmed_at = join_date` for everyone who
-  joined before 2026-04-01 (11 people), leaving 11 on probation. **NOT APPLIED —
-  the backfill list is a proposal and moving one name changes that person's pay.**
+  joined before 2026-04-01, **plus Mohd Haziq and Nor Armin, whom the owner
+  confirmed explicitly on 2026-08-03 ("haziq and armin confirmed")**. Those two
+  are dated to the END of the probation they served (join + 90d = 2026-07-26 and
+  2026-07-15) rather than their join date — backdating would assert they never
+  had a probation, and would retroactively entitle them to May/June allowance.
+  Final split: **13 confirmed / 9 on probation.** NOT YET APPLIED.
   Also fixed: approving a `decision='confirm'` review previously did nothing to
   the profile (it only unlocked the confirmation letter); it now stamps
   `confirmed_at`, which is what actually ends probation.
-  Implied July claw-back under this rule is **RM540** (Nor Armin 70, Mohd Haziq
-  200, Razley 150, Iffa 120) — up from RM370 under the 90-day rule, because
-  Armin and Haziq had elapsed but were never confirmed.
+  Implied July claw-back is **RM270** — Razley 150 + Iffa 120. Haziq's RM200 and
+  Armin's RM70 stand, since the owner confirmed them.
 
 - 2026-08-03 — **The deleted `opening_balance` is no longer needed: Jan and Feb
   monthly runs now carry the full BrioHR figures (APPLIED to prod).** Owner
