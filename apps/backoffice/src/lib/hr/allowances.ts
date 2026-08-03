@@ -60,6 +60,10 @@ export type AllowanceLever = {
   slice: number;
   earned: number;
   detail: string;
+  /** What the engine scored, before any hand edit. Equals `earned` when unedited. */
+  originalEarned: number;
+  edited: boolean;
+  editReason: string | null;
 };
 
 export type AllowanceDeduction = {
@@ -68,43 +72,52 @@ export type AllowanceDeduction = {
   amount: number;
   date?: string;
   /**
-   * Stable identity for this line, so a waiver survives a recompute. Keyed on
+   * Stable identity for this line, so an edit survives a recompute. Keyed on
    * the source row's id — NOT its position in the list, which moves. See the
-   * hr_performance_deduction_waivers migration for the formats.
+   * hr_performance_line_overrides migration for the formats.
    */
   key: string;
-  /** What the engine computed, before any waiver. Equals `amount` when unwaived. */
+  /** What the engine computed, before any edit. Equals `amount` when unedited. */
   originalAmount: number;
-  waived: boolean;
-  waivedReason: string | null;
+  edited: boolean;
+  editReason: string | null;
 };
 
-/** A row from hr_performance_deduction_waivers, reduced to what the engine needs. */
-export type DeductionWaiver = { amount: number; reason: string };
+/** A row from hr_performance_line_overrides, reduced to what the engine needs. */
+export type LineOverride = { amount: number; reason: string };
+
+/** Applied result shared by levers and deductions. */
+type Edited<T> = T & { originalAmount: number; edited: boolean; editReason: string | null };
 
 /**
- * Apply a per-line waiver to one deduction.
+ * Replace one line's figure with a hand-entered one, clamped to [0, max].
  *
- * The waived amount is what to charge INSTEAD, clamped to [0, computed]: a
- * waiver can only ever REDUCE a deduction, never invent one or inflate it.
- * That bound is the whole reason this is safe to delegate to a manager.
+ * `amount` on the stored row is what to pay (a lever) or charge (a deduction)
+ * INSTEAD of the computed figure — never a delta. The clamp is what keeps this
+ * delegable: `max` is the computed charge for a deduction, so an edit can only
+ * give back money the engine took; and the pool for a lever, so no single edit
+ * can inflate a month past the allowance itself.
+ *
+ * A stored amount that isn't a usable number leaves the computed figure alone.
+ * Silently paying — or charging — something arbitrary is the worse failure.
  *
  * Pure, so the clamp is testable without a database.
  */
-export function applyDeductionWaiver(
-  line: Omit<AllowanceDeduction, "originalAmount" | "waived" | "waivedReason">,
-  waivers: Map<string, DeductionWaiver>,
-): AllowanceDeduction {
-  const w = waivers.get(line.key);
-  if (!w) return { ...line, originalAmount: line.amount, waived: false, waivedReason: null };
-  const raw = Number(w.amount);
-  const charge = Number.isFinite(raw) ? Math.max(0, Math.min(line.amount, raw)) : line.amount;
+export function applyLineOverride<T extends { key: string; amount: number }>(
+  line: T,
+  overrides: Map<string, LineOverride>,
+  max: number,
+): Edited<T> {
+  const o = overrides.get(line.key);
+  if (!o) return { ...line, originalAmount: line.amount, edited: false, editReason: null };
+  const raw = Number(o.amount);
+  const applied = Number.isFinite(raw) ? Math.max(0, Math.min(max, raw)) : line.amount;
   return {
     ...line,
-    amount: Math.round(charge * 100) / 100,
+    amount: Math.round(applied * 100) / 100,
     originalAmount: line.amount,
-    waived: true,
-    waivedReason: w.reason,
+    edited: true,
+    editReason: o.reason,
   };
 }
 
@@ -122,7 +135,7 @@ export type AllowanceBreakdown = {
     total: number;
     entries: {
       id: string; reviewDate: string; rating: number; amount: number; reviewText?: string | null;
-      key: string; originalAmount: number; waived: boolean; waivedReason: string | null;
+      key: string; originalAmount: number; edited: boolean; editReason: string | null;
     }[];
   };
   totalEarned: number;
@@ -199,15 +212,9 @@ export function buildFixedAllowanceBreakdown(o: {
   isFullTime: boolean;
   amount: number;
   period: { year: number; month: number; daysElapsed: number; daysRemaining: number };
-  /** Set when the amount came from a manual month override rather than a flat rate. */
-  override?: { reason: string; computedAmount: number | null };
 }): AllowanceBreakdown {
-  const detail = o.override ? "n/a — manually overridden for this month" : "n/a — fixed allowance, not scored";
-  const tip = o.override
-    ? `Manually set to RM${o.amount.toFixed(2)} for this month` +
-      (o.override.computedAmount != null ? ` (engine computed RM${o.override.computedAmount.toFixed(2)})` : "") +
-      ` — ${o.override.reason}`
-    : `Fixed allowance of RM${o.amount.toFixed(2)} — not scored against the performance levers.`;
+  const detail = "n/a — fixed allowance, not scored";
+  const tip = `Fixed allowance of RM${o.amount.toFixed(2)} — not scored against the performance levers.`;
 
   return {
     userId: o.userId,
@@ -218,12 +225,11 @@ export function buildFixedAllowanceBreakdown(o: {
     pool: o.amount,
     levers: (["checklist", "phone", "serving", "audit"] as AllowanceLeverKey[]).map((k) => ({
       key: k, label: LEVER_LABEL[k], applicable: false, score: 0, tier: "under" as AllowanceTier,
-      slice: 0, earned: 0, detail,
+      slice: 0, earned: 0, detail, originalEarned: 0, edited: false, editReason: null,
     })),
     performanceEarned: o.amount,
-    // An override REPLACES the outcome, deductions included — otherwise waiving
-    // a wrong absence would still leave its RM20 subtracted below the number the
-    // reviewer just typed.
+    // A flat allowance is flat: no lever scoring, and no attendance or review
+    // deductions taken off it.
     attendance: { deductions: [], lateCount: 0, absentCount: 0, total: 0 },
     reviewPenalty: { total: 0, entries: [] },
     totalEarned: o.amount,
@@ -255,13 +261,24 @@ export async function computeAllowancesForUser(
 
   const { data: profile } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("employment_type, schedule_required, position, fixed_performance_allowance")
+    .select("employment_type, schedule_required, position, fixed_performance_allowance, probation_end_date")
     .eq("user_id", userId)
     .maybeSingle();
   const employmentType = profile?.employment_type ?? null;
   const isFullTime = employmentType === "full_time";
   const scheduleRequired = profile?.schedule_required !== false;
-  const eligible = isFullTime && scheduleRequired;
+  // Probation: not entitled to the performance allowance until confirmed
+  // (owner 2026-08-03). Compared against the END of the month being computed,
+  // so the month someone is confirmed part-way through pays in full rather
+  // than being lost — the generous side of the boundary, deliberately.
+  //
+  // A NULL probation_end_date means "not on probation", NOT "unknown". That is
+  // the only safe default: the column was empty for all 48 active profiles when
+  // this shipped, so treating NULL as probation would have zeroed the whole
+  // company's allowance.
+  const probationEnd = (profile?.probation_end_date as string | null) ?? null;
+  const onProbation = !!probationEnd && monthEnd <= probationEnd;
+  const eligible = isFullTime && scheduleRequired && !onProbation;
   const isFoh = FOH_POSITIONS.includes((profile?.position ?? "").trim());
 
   // FLAT allowance — checked before everything else, including the eligibility
@@ -274,28 +291,11 @@ export async function computeAllowancesForUser(
   // Flat means flat: no lever scoring, no lateness/absence deductions, no review
   // penalties. Proration for a partial month still applies downstream in
   // payroll-calculator.ts, same as a scored allowance.
-  // 1. A manual override for THIS month wins over everything — it is a human
-  //    correcting this specific month's outcome, reason on the record.
-  const { data: overrideRow } = await hrSupabaseAdmin
-    .from("hr_performance_overrides")
-    .select("override_amount, computed_amount, reason")
-    .eq("user_id", userId)
-    .eq("period_year", year)
-    .eq("period_month", month)
-    .maybeSingle();
-  const overrideAmount = parseFixedAllowance(overrideRow?.override_amount);
-  if (overrideRow && overrideAmount != null) {
-    return buildFixedAllowanceBreakdown({
-      userId, employmentType, isFullTime, amount: overrideAmount,
-      period: { year, month, daysElapsed, daysRemaining },
-      override: {
-        reason: String(overrideRow.reason ?? ""),
-        computedAmount: overrideRow.computed_amount != null ? Number(overrideRow.computed_amount) : null,
-      },
-    });
-  }
-
-  // 2. Then a flat all-months amount (unrostered roles the levers can't score).
+  // There is no whole-month replace any more (owner 2026-08-03: "remove the
+  // replace the whole month"). Corrections are made line by line further down,
+  // where the reason attaches to the thing that was actually wrong.
+  //
+  // A flat all-months amount, for unrostered roles the levers can't score.
   const fixedAllowance = parseFixedAllowance(profile?.fixed_performance_allowance);
   if (fixedAllowance != null) {
     return buildFixedAllowanceBreakdown({
@@ -318,13 +318,18 @@ export async function computeAllowancesForUser(
       period: { year, month, daysElapsed, daysRemaining },
       pool: r.pool,
       levers: (["checklist", "phone", "serving", "audit"] as AllowanceLeverKey[]).map((k) => ({
-        key: k, label: LEVER_LABEL[k], applicable: false, score: 0, tier: "under" as AllowanceTier, slice: 0, earned: 0, detail: "Not eligible",
+        key: k, label: LEVER_LABEL[k], applicable: false, score: 0, tier: "under" as AllowanceTier, slice: 0, earned: 0,
+        detail: "Not eligible", originalEarned: 0, edited: false, editReason: null,
       })),
       performanceEarned: 0,
       attendance: { deductions: [], lateCount: 0, absentCount: 0, total: 0 },
       reviewPenalty: { total: 0, entries: [] },
       totalEarned: 0, totalMax: 0,
-      tip: isFullTime ? "Not applicable — schedule not required for this role." : "Performance allowance is for full-time staff only.",
+      tip: onProbation
+        ? `On probation until ${probationEnd} — the performance allowance starts once confirmed.`
+        : isFullTime
+          ? "Not applicable — schedule not required for this role."
+          : "Performance allowance is for full-time staff only.",
     };
   }
 
@@ -340,6 +345,23 @@ export async function computeAllowancesForUser(
 
   // Outlet UUIDs the person actually worked (for shift-wide audit attribution).
   const workedOutletUuids = Array.from(new Set(logs.map((l) => l.outlet_id).filter((x): x is string => !!x)));
+
+  // Hand edits for THIS month, for any line — a lever the engine couldn't score
+  // fairly, or a deduction that shouldn't stand (an absence that was approved
+  // leave, a review the person wasn't on shift for). Fetched once and applied
+  // to both halves below; see applyLineOverride for the clamps.
+  const { data: overrideRows } = await hrSupabaseAdmin
+    .from("hr_performance_line_overrides")
+    .select("line_key, amount, reason")
+    .eq("user_id", userId)
+    .eq("period_year", year)
+    .eq("period_month", month);
+  const overrides = new Map<string, LineOverride>(
+    ((overrideRows || []) as { line_key: string; amount: unknown; reason: string | null }[]).map((o) => [
+      o.line_key,
+      { amount: Number(o.amount), reason: String(o.reason ?? "") },
+    ]),
+  );
 
   // ── EARN: score each lever on its OWN KPI ─────────────────────────────────
   const [rawChecklist, rawPhone, rawServing, rawAudit] = await Promise.all([
@@ -358,10 +380,20 @@ export async function computeAllowancesForUser(
   const levers: AllowanceLever[] = keys.map((k) => {
     const applicable = raw[k].applicable && applicableBase > 0;
     const slice = applicable ? Math.round((r.pool * baseSlice[k]) / applicableBase) : 0;
-    return {
+    const scored = {
       key: k, label: LEVER_LABEL[k], applicable, score: raw[k].score, tier: raw[k].tier, slice,
-      earned: applicable ? payoutOf(raw[k].tier, slice) : 0,
+      // applyLineOverride keys on `amount`; the lever's public field is `earned`.
+      amount: applicable ? payoutOf(raw[k].tier, slice) : 0,
       detail: applicable ? raw[k].detail : `n/a — ${raw[k].detail} (RM redistributed)`,
+    };
+    // A lever edit is clamped to the POOL, not to the lever's own slice: a lever
+    // that scored n/a has a slice of 0, and refusing to pay it would make the
+    // one case this exists for — "the engine couldn't score this, pay it by
+    // hand" — impossible. The pool still bounds any single month.
+    const { amount, originalAmount, edited, editReason } = applyLineOverride({ ...scored, key: `lever|${k}` }, overrides, r.pool);
+    return {
+      ...scored, earned: amount, originalEarned: originalAmount, edited, editReason,
+      detail: edited ? `set by hand — ${editReason ?? ""}`.trim() : scored.detail,
     };
   });
   const performanceEarned = Math.round(levers.reduce((s, l) => s + l.earned, 0) * 100) / 100;
@@ -385,22 +417,6 @@ export async function computeAllowancesForUser(
     for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) leaveDays.add(d.toISOString().slice(0, 10));
   });
 
-  // Per-line waivers for THIS month — a reviewer saying "that absence was
-  // approved leave, don't charge it" without discarding the lever scoring the
-  // way a whole-month override does. Clamped to [0, computed] in
-  // applyDeductionWaiver, so this can only reduce a deduction.
-  const { data: waiverRows } = await hrSupabaseAdmin
-    .from("hr_performance_deduction_waivers")
-    .select("deduction_key, waived_amount, reason")
-    .eq("user_id", userId)
-    .eq("period_year", year)
-    .eq("period_month", month);
-  const waivers = new Map<string, DeductionWaiver>(
-    ((waiverRows || []) as { deduction_key: string; waived_amount: unknown; reason: string | null }[]).map((w) => [
-      w.deduction_key,
-      { amount: Number(w.waived_amount) || 0, reason: String(w.reason ?? "") },
-    ]),
-  );
 
   const deductions: AllowanceDeduction[] = [];
   for (const log of logs) {
@@ -410,14 +426,14 @@ export async function computeAllowancesForUser(
     // cross-midnight safe. No schedule stamped → 0 (no penalty), the safe default.
     const lateMin = computeLateMinutes(log.clock_in, log.scheduled_start, log.scheduled_date ?? date);
     if (lateMin > r.latenessAbsentMinutes) {
-      deductions.push(applyDeductionWaiver(
-        { kind: "absent", label: `Very late (${Math.round(lateMin)}m) — counted as absent`, amount: r.absentPenalty, date, key: `absent|${log.id}` },
-        waivers,
+      deductions.push(applyLineOverride(
+        { kind: "absent" as const, label: `Very late (${Math.round(lateMin)}m) — counted as absent`, amount: r.absentPenalty, date, key: `absent|${log.id}` },
+        overrides, r.absentPenalty,
       ));
     } else if (lateMin > r.latenessGraceMinutes) {
-      deductions.push(applyDeductionWaiver(
-        { kind: "late", label: `Late ${Math.round(lateMin)}m`, amount: r.latenessPenalty, date, key: `late|${log.id}` },
-        waivers,
+      deductions.push(applyLineOverride(
+        { kind: "late" as const, label: `Late ${Math.round(lateMin)}m`, amount: r.latenessPenalty, date, key: `late|${log.id}` },
+        overrides, r.latenessPenalty,
       ));
     }
   }
@@ -440,14 +456,14 @@ export async function computeAllowancesForUser(
     missedDates.add(sh.shift_date); // dedupe: split shifts = one no-show day
   }
   for (const date of [...missedDates].sort()) {
-    deductions.push(applyDeductionWaiver(
-      { kind: "absent", label: "No-show (scheduled, didn't clock in)", amount: r.absentPenalty, date, key: `noshow|${date}` },
-      waivers,
+    deductions.push(applyLineOverride(
+      { kind: "absent" as const, label: "No-show (scheduled, didn't clock in)", amount: r.absentPenalty, date, key: `noshow|${date}` },
+      overrides, r.absentPenalty,
     ));
   }
   // Counts drive the coaching tip and the summary column, so they follow the
-  // money: a fully waived line is not held against the person. A partial
-  // waiver still counts — the incident happened, it just cost less.
+  // money: a line edited down to zero is not held against the person. A partial
+  // reduction still counts — the incident happened, it just cost less.
   const lateCount = deductions.filter((d) => d.kind === "late" && d.amount > 0).length;
   const absentCount = deductions.filter((d) => d.kind === "absent" && d.amount > 0).length;
   const attendanceTotal = Math.round(deductions.reduce((s, d) => s + d.amount, 0) * 100) / 100;
@@ -459,14 +475,14 @@ export async function computeAllowancesForUser(
     .eq("status", "applied").gte("review_date", monthStart).lte("review_date", monthEnd)
     .contains("attributed_user_ids", [userId]);
   const reviewEntries = (rpRows || []).map((row: { id: string; review_date: string; rating: number; penalty_amount: number; review_text: string | null }) => {
-    const waived = applyDeductionWaiver(
-      { kind: "review", label: `${row.rating}★ review ${row.review_date}`, amount: Number(row.penalty_amount), date: row.review_date, key: `review|${row.id}` },
-      waivers,
+    const applied = applyLineOverride(
+      { kind: "review" as const, label: `${row.rating}★ review ${row.review_date}`, amount: Number(row.penalty_amount), date: row.review_date, key: `review|${row.id}` },
+      overrides, Number(row.penalty_amount),
     );
     return {
       id: row.id, reviewDate: row.review_date, rating: row.rating, reviewText: row.review_text,
-      amount: waived.amount, key: waived.key,
-      originalAmount: waived.originalAmount, waived: waived.waived, waivedReason: waived.waivedReason,
+      amount: applied.amount, key: applied.key,
+      originalAmount: applied.originalAmount, edited: applied.edited, editReason: applied.editReason,
     };
   });
   const reviewTotal = Math.round(reviewEntries.reduce((s, e) => s + e.amount, 0) * 100) / 100;

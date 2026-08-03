@@ -6,6 +6,86 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-03 — **PART-TIMERS ARE NOT IN THE MONTHLY RUN, AND THAT IS EXPECTED —
+  DO NOT RE-RAISE IT.** Every payroll run that exists is `monthly` (8) or
+  `opening_balance` (1); **zero weekly runs, ever**, despite
+  `payroll-calculator-weekly.ts` and `/api/hr/payroll/weekly` both existing.
+  For July 2026 that is 23 part-timers and 1,970 clocked hours with no payroll
+  record in this system (Farah 202.54h, Fatin 197.95h, Emran 186.68h); the July
+  monthly run is **28 lines, all full-time**. **Owner ruled 2026-08-03: "bayar
+  jumaat is the PT weekly payroll, just ignore"** — PT wages are run outside
+  this system on a Friday cycle, so the absence is by design, not a gap. The
+  practical consequence to remember: **the monthly run is the FT half only.**
+  Never reconcile "everyone who worked" against it, and note that any change to
+  PT attendance or OT (e.g. the `ot_1x` reclassification) has no effect on it.
+- 2026-08-03 — **`isOtApproved` treats an ATTENDANCE approval as an OT
+  approval.** `payroll-calculator.ts` pays OT when `final_status` is
+  `approved`/`adjusted`, or `ai_status='approved'` with no final status. So a
+  manager confirming a clock-in is correct silently authorises its overtime.
+  `hr_overtime_requests` — the table that actually records an OT decision — is
+  **not consulted at all**, and `hr_attendance_logs.ot_approval_id` is NULL on
+  all 174 July OT-bearing logs (nothing in the codebase reads or writes it).
+  Result for Jul 2026: 406h detected, 126h payable off the logs, 30h approved
+  via requests — three different numbers. **Owner ruling 2026-08-03: the 30h of
+  approved requests is the truth, and unapproved hours are paid at PLAIN hourly
+  rather than zeroed** — `regular_hours` is capped at the rostered shift (5.00
+  for PTs), so zeroing OT would leave real worked hours unpaid (Emran worked
+  9.03h on 22 Jul: regular 5, OT 3). **Applied:** 40 logs with OT but no
+  approved request for that date set to `overtime_type='ot_1x'` (the calculator
+  already pays that at 1.0×, so no code change), each stamped in `review_notes`.
+  July now reads **100h at 1.0× + 30h at premium**, and the 30h matches the
+  approved requests exactly. Fixing the root cause — make `hr_overtime_requests`
+  the only thing that approves OT — is still open.
+- 2026-08-03 — **Adib is two User rows and the wrong one is being paid.** A
+  DEACTIVATED **full_time** record with a synthetic id
+  (`6272696f-6872-2d43-4330-363200000000`, ASCII-looking) and `end_date`
+  2026-07-03 drew RM183.87 gross / RM160.82 net on **zero hours** in the July
+  run. His real ACTIVE **part_time** record worked 26.66h and is correctly
+  outside the monthly run. Duplicate identity, not a proration bug.
+- 2026-08-03 — **Two FT→PT converts are owed prorated FT pay that nobody
+  raised.** `hr_employee_profiles.notes` for **Zarif** says it in as many words:
+  *"[FT→PT conversion, effective 2026-07-08] … PAYROLL NOTE: July 2026 monthly
+  run must include a MANUAL prorated item for his FT stint Jul 1–7 (RM2,000 ×
+  7/31 ≈ RM451.61 basic) — the calculator will skip him now that he is
+  part_time."* The note was right about the skip; **the manual item was never
+  created** and he is not in the July run. **Danish** is the same shape ("FT→PT:
+  resigned FT 2026-07-11, part-time from 2026-07-12") with no payroll note, and
+  **his FT monthly salary is recorded as RM0.00** in `hr_salary_history`, so his
+  Jul 1–11 proration cannot be computed until the real figure is supplied.
+- 2026-08-03 — **"Manager: Ariff Izham. [Resigned 2026-07-07]" in the UI does
+  NOT mean Ariff resigned.** He is ACTIVE, MANAGER, no end_date. That string is
+  **Zarif's own `notes` field printed verbatim** — line 1 "Manager: Ariff
+  Izham.", line 2 the `[Resigned <date>]` marker that
+  `lib/hr/agent/write-ops.ts` appends to notes on a resign. The employee screen
+  renders the whole blob next to the manager label. Display bug; cost one
+  false alarm.
+- 2026-08-03 — **PCB was assessed on non-taxable payments (PR #1102, MERGED
+  `cf7df2a`).** `hr_payroll_item_catalog.pcb_taxable` was fetched and never
+  read, so mileage/parking/meal reimbursements went into the tax basis. Found on
+  Adam Kelvin's FINAL Jul payslip: RM315 of approved mileage pushed his
+  chargeable past the RM400 s.6A(2) rebate, deducting RM21.35 where RM11.90 was
+  correct. **Verified after recompute: PCB is now 11.90 with `pcb_gross` 4,350
+  against `total_gross` 4,665.** The money still pays; only the basis changed.
+  Deductions deliberately untouched (`UNPAID_LEAVE` carries `pcb_taxable=false`
+  yet plainly does reduce taxable income) — worth a separate look.
+- 2026-08-03 — **Recomputing July needs an authenticated OWNER/ADMIN browser
+  session.** `POST /api/hr/payroll {action:"compute"}` is the only entry point;
+  there is no cron or service-role path. An agent cannot trigger it — ask the
+  owner to click Compute. (Jul 2026 recomputed 4× today: 08:20, 09:32, 10:00,
+  10:03, by Ammar Shahrin and Nurul Aqilah.)
+- 2026-08-03 — **`hr_employee_profiles` has no `employment_status`,
+  `resignation_date` or `last_working_date`.** The columns are `end_date` and
+  `resigned_at`. `hr_attendance_logs` has no `updated_at` (only `created_at`,
+  `reviewed_at`, `review_notes`, `excused_reason`) and no CHECK on
+  `overtime_type`. `hr_payroll_items` stores tax as `pcb_tax`, not `pcb`.
+  Three queries were lost to guessing these — check
+  `information_schema.columns` first.
+- 2026-08-03 — **The NULL trap bites in analysis SQL too, not just PostgREST.**
+  `NOT (final_status IN ('approved','adjusted') OR …)` is NULL — not TRUE — for
+  the ~288 rows where `final_status IS NULL`, so a "dropped hours" total came
+  back as 0 when the real figure was 280. Use `coalesce(final_status,'')`. Same
+  root cause as the `.neq` bug already documented for the payroll fetch.
+
 - 2026-08-03 — **Grab 86 sync: Grab THROTTLES menu-record updates, and an
   un-retried push silently loses the 86 forever.** Ariff reported items closed
   in POS still selling on Grab (Pavlova, Shah Alam, closed since the day
@@ -915,6 +995,35 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-08-03 — **HR/payroll session. Three things are with the owner, and July
+  must NOT be confirmed until they land.**
+  (a) CLOSED 2026-08-03 — part-timers absent from the monthly run is BY DESIGN;
+  "bayar jumaat" is a separate PT weekly payroll run outside this system. Do not
+  re-raise it.
+  (b) **Zarif is owed ~RM451.61** (FT stint Jul 1–7) and it was never added.
+  **Danish** is owed Jul 1–11 but **his FT salary is RM0.00 in
+  `hr_salary_history`** — needs the real figure before it can be priced.
+  (c) **Adib is being paid on a duplicate DEACTIVATED full_time record**
+  (RM183.87 on zero hours) while his real active PT record sits outside the run.
+  Also still open, lower priority: **June SOCSO over-deducted RM477.42 across 25
+  people** (employer:employee ratio 1.400 in June vs 3.500 every other month —
+  the employee was charged 1.25%, the Cat 2 *employer* rate; ours is right, that
+  import is wrong) — refund is an owner decision. **Three dead columns**:
+  `statutory_applicable` (false for 25 of 29 who are contributing),
+  `hr_employee_profiles.performance_allowance_amount` (written by
+  `/hr/settings/staff-allowances`, read by nothing — reviving it moves ~12
+  people's pay), and now `hr_performance_overrides` (the whole-month replace,
+  removed in PR #1106, table left empty in place). **`hr_employee_tax_reliefs`
+  is empty company-wide** and the profile relief fields (`marital_status`,
+  `spouse_working`, `children_count`) are never read by PCB — Ariff is married
+  with `spouse_working` NULL, possibly RM4,000 of relief unclaimed (~RM167/mo).
+  **`apps/staff/src/lib/hr/allowances.ts` is a stale FORK** of the backoffice
+  engine — no month override, no flat allowance, no line overrides — so the
+  staff PWA already shows a staffer a different figure than payroll pays. Worth
+  a PR that makes staff import the shared engine instead of widening the copy.
+  **PR #1106 (line overrides + one Performance screen) is an open draft** and
+  its migration `20260803_hr_performance_line_overrides` is NOT applied.
 
 - 2026-07-31 — **PR #1094 (stock-count freshness + expiry) is a DRAFT awaiting
   CI.** Two commits: `920a80b` (18h stale → no auto-approve; CI green) and

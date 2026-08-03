@@ -17,14 +17,15 @@ import { useFetch } from "@/lib/use-fetch";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
-  Trophy, Loader2, Save, RotateCcw, AlertTriangle, Lock, X, Undo2, PencilLine, TrendingUp,
+  Trophy, Loader2, AlertTriangle, Lock, X, Undo2, PencilLine, TrendingUp,
 } from "lucide-react";
 import { HrPageHeader } from "@/components/hr/page-header";
 import { PerformanceScorecard } from "@/components/hr/performance-scorecard";
 
 type Lever = {
-  key: string; label: string; applicable: boolean; score: number;
+  key: string; lineKey: string; label: string; applicable: boolean; score: number;
   tier: "under" | "ok" | "perform"; slice: number; earned: number; detail: string;
+  originalEarned: number; edited: boolean; editReason: string | null;
 };
 
 type Deduction = {
@@ -34,8 +35,8 @@ type Deduction = {
   date: string | null;
   amount: number;
   originalAmount: number;
-  waived: boolean;
-  waivedReason: string | null;
+  edited: boolean;
+  editReason: string | null;
 };
 
 type StaffSummary = {
@@ -57,8 +58,10 @@ type StaffSummary = {
 
 type Override = {
   user_id: string;
-  override_amount: number;
+  line_key: string;
+  amount: number;
   computed_amount: number | null;
+  label: string | null;
   reason: string;
   updated_at: string | null;
   updated_by_name: string | null;
@@ -99,34 +102,32 @@ export default function PerformancePage() {
   );
   const { data: ovData, mutate: mutateOv } = useFetch<{
     overrides: Override[];
-    canOverrideWholeMonth: boolean;
+    locked: { status: string } | null;
   }>(canSeeAllowance ? `/api/hr/performance-overrides?${qs}` : null);
 
-  // Hold the id, not the row: the modal is open across saves, and deriving it
-  // from `staff` means a waive re-renders the open panel with fresh figures
+  // Hold the id, not the row: the modal stays open across saves, and deriving
+  // it from `staff` means an edit re-renders the open panel with fresh figures
   // instead of leaving a stale copy on screen.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  // Per-line reason inputs, keyed by deduction key.
-  const [lineReason, setLineReason] = useState<Record<string, string>>({});
-  // Whole-month override form (owner/admin only).
-  const [amount, setAmount] = useState("");
-  const [reason, setReason] = useState("");
+  // Per-line draft state, keyed by line key. `amount` is only used by levers;
+  // a deduction is waived to 0.
+  const [draftReason, setDraftReason] = useState<Record<string, string>>({});
+  const [draftAmount, setDraftAmount] = useState<Record<string, string>>({});
 
   const staff = data?.staff || [];
-  const canOverrideWholeMonth = ovData?.canOverrideWholeMonth ?? false;
-  const overrideByUser = new Map((ovData?.overrides || []).map((o) => [o.user_id, o]));
+  // A confirmed or paid run has gone to KWSP/LHDN and the bank. Say so once, at
+  // the top, instead of letting someone fill in a form that will 409.
+  const locked = ovData?.locked ?? null;
   const editing = editingId ? staff.find((s) => s.userId === editingId) ?? null : null;
 
   const refresh = async () => { await Promise.all([mutateStaff(), mutateOv()]); };
 
   const open = (s: StaffSummary) => {
-    const existing = overrideByUser.get(s.userId);
     setEditingId(s.userId);
-    setLineReason({});
-    setAmount(existing ? String(existing.override_amount) : s.totalEarned.toFixed(2));
-    setReason(existing?.reason ?? "");
+    setDraftReason({});
+    setDraftAmount(Object.fromEntries(s.levers.map((l) => [l.lineKey, l.earned.toFixed(2)])));
   };
 
   const post = async (body: Record<string, unknown>, key: string) => {
@@ -161,36 +162,27 @@ export default function PerformancePage() {
     } finally { setBusy(null); }
   };
 
-  const waiveLine = async (s: StaffSummary, d: Deduction) => {
-    const why = (lineReason[d.key] || "").trim();
-    if (!why) { toast.error("Say why this line is being waived."); return; }
+  // Save one line. The button is deliberately NOT disabled when the reason is
+  // blank — a dead button reads as "the system won't let me", which is exactly
+  // how it was misread. Click it and it says what's missing.
+  const saveLine = async (
+    s: StaffSummary,
+    o: { lineKey: string; label: string; amount: number; computed: number },
+  ) => {
+    const why = (draftReason[o.lineKey] || "").trim();
+    if (!why) { toast.error(`Say why "${o.label}" is being changed.`); return; }
+    if (!Number.isFinite(o.amount) || o.amount < 0) { toast.error("Enter an amount of RM0 or more."); return; }
     const ok = await post(
-      { user_id: s.userId, deduction_key: d.key, waived_amount: 0, computed_amount: d.originalAmount, label: d.label, reason: why },
-      d.key,
+      { user_id: s.userId, line_key: o.lineKey, amount: o.amount, computed_amount: o.computed, label: o.label, reason: why },
+      o.lineKey,
     );
-    if (ok) setLineReason((prev) => ({ ...prev, [d.key]: "" }));
+    if (ok) setDraftReason((prev) => ({ ...prev, [o.lineKey]: "" }));
   };
 
-  const restoreLine = (s: StaffSummary, d: Deduction) =>
-    del({ user_id: s.userId, year: String(year), month: String(month), deduction_key: d.key }, d.key);
+  const resetLine = (s: StaffSummary, lineKey: string) =>
+    del({ user_id: s.userId, year: String(year), month: String(month), line_key: lineKey }, lineKey);
 
-  const saveWholeMonth = async () => {
-    if (!editing) return;
-    const parsed = Number(amount);
-    if (!Number.isFinite(parsed) || parsed < 0) { toast.error("Enter an amount of RM0 or more."); return; }
-    if (!reason.trim()) { toast.error("A reason is required."); return; }
-    const ok = await post(
-      { user_id: editing.userId, override_amount: parsed, computed_amount: editing.totalEarned, reason: reason.trim() },
-      "whole",
-    );
-    if (ok) setEditingId(null);
-  };
-
-  const clearWholeMonth = (s: StaffSummary) =>
-    del({ user_id: s.userId, year: String(year), month: String(month) }, "whole");
-
-  const overriddenCount = overrideByUser.size;
-  const waivedCount = staff.reduce((n, s) => n + s.deductions.filter((d) => d.waived).length, 0);
+  const editedCount = (ovData?.overrides || []).length;
 
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "allowance", label: "Allowance", icon: <Trophy className="h-4 w-4" /> },
@@ -242,15 +234,22 @@ export default function PerformancePage() {
 
       {activeTab === "allowance" && (
       <div className="space-y-6">
-      {(overriddenCount > 0 || waivedCount > 0) && (
+      {locked && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50/60 px-4 py-3.5 text-sm text-red-900">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="leading-relaxed">
+            The {MONTHS[month - 1]} {year} payroll run is <strong>{locked.status}</strong> — it has gone to
+            KWSP/LHDN and the bank. Nothing on this page can change it.
+          </span>
+        </div>
+      )}
+
+      {editedCount > 0 && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3.5 text-sm text-amber-900">
           <PencilLine className="mt-0.5 h-4 w-4 shrink-0" />
           <span className="leading-relaxed">
-            {[
-              waivedCount > 0 && `${waivedCount} deduction${waivedCount === 1 ? "" : "s"} waived`,
-              overriddenCount > 0 && `${overriddenCount} whole-month override${overriddenCount === 1 ? "" : "s"}`,
-            ].filter(Boolean).join(" · ")}
-            {" "}for {MONTHS[month - 1]} {year}.
+            <strong>{editedCount}</strong> line{editedCount === 1 ? "" : "s"} set by hand for
+            {" "}{MONTHS[month - 1]} {year}.
             {" "}<strong>Recompute the payroll run</strong> for these to reach the payslips.
           </span>
         </div>
@@ -276,32 +275,29 @@ export default function PerformancePage() {
                   <th className="px-4 py-3 font-medium">Levers</th>
                   <th className="px-4 py-3 text-right font-medium">Earned</th>
                   <th className="px-4 py-3 text-right font-medium">Deductions</th>
-                  <th className="px-4 py-3 text-right font-medium">Computed</th>
-                  <th className="px-4 py-3 text-right font-medium">Paying</th>
+                  <th className="px-4 py-3 text-right font-medium">Total</th>
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody>
                 {staff.map((s) => {
-                  const ov = overrideByUser.get(s.userId);
                   const deductions = (s.attendanceDeducted || 0) + (s.reviewPenaltyTotal || 0);
-                  const waived = s.deductions.filter((d) => d.waived).length;
-                  const paying = ov ? ov.override_amount : s.totalEarned;
+                  const edits = s.levers.filter((l) => l.edited).length + s.deductions.filter((d) => d.edited).length;
                   return (
-                    <tr key={s.userId} className={`border-b align-top last:border-0 ${ov ? "bg-amber-50/40" : ""}`}>
+                    <tr key={s.userId} className={`border-b align-top last:border-0 ${edits > 0 ? "bg-amber-50/40" : ""}`}>
                       <td className="px-5 py-3.5">
                         <div className="font-medium">{s.name}</div>
                         <div className="mt-0.5 text-xs text-muted-foreground">{s.outletName || "—"}</div>
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex max-w-[240px] flex-wrap gap-1.5">
-                          {s.levers.filter((l) => l.applicable).map((l) => (
+                          {s.levers.filter((l) => l.applicable || l.edited).map((l) => (
                             <span key={l.key} title={l.detail}
-                              className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${TIER_STYLE[l.tier]}`}>
-                              {l.label.split(" ")[0]} {l.score}%
+                              className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${l.edited ? "bg-amber-100 text-amber-800" : TIER_STYLE[l.tier]}`}>
+                              {l.label.split(" ")[0]} {l.edited ? rm(l.earned) : `${l.score}%`}
                             </span>
                           ))}
-                          {s.levers.every((l) => !l.applicable) && (
+                          {s.levers.every((l) => !l.applicable && !l.edited) && (
                             <span className="text-xs text-muted-foreground">not scored</span>
                           )}
                         </div>
@@ -313,36 +309,20 @@ export default function PerformancePage() {
                             −{rm(deductions)}
                           </span>
                         ) : <span className="text-muted-foreground">—</span>}
-                        {waived > 0 && (
-                          <div className="mt-0.5 text-[11px] font-normal text-amber-700">
-                            {waived} waived
-                          </div>
-                        )}
                       </td>
-                      <td className={`px-4 py-3.5 text-right font-mono tabular-nums ${ov ? "text-muted-foreground line-through" : ""}`}>
+                      <td className="px-4 py-3.5 text-right font-mono tabular-nums">
                         {rm(s.totalEarned)}
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-mono font-semibold tabular-nums">
-                        {rm(paying)}
-                        {ov && (
-                          <div className="mt-0.5 max-w-[160px] truncate text-[11px] font-normal text-amber-700" title={ov.reason}>
-                            {ov.reason}
+                        {edits > 0 && (
+                          <div className="mt-0.5 text-[11px] font-normal text-amber-700">
+                            {edits} line{edits === 1 ? "" : "s"} by hand
                           </div>
                         )}
                       </td>
                       <td className="px-5 py-3.5 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button onClick={() => open(s)}
-                            className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted">
-                            Review
-                          </button>
-                          {ov && canOverrideWholeMonth && (
-                            <button onClick={() => clearWholeMonth(s)} disabled={busy !== null} title="Remove the whole-month override"
-                              className="rounded-lg border px-2.5 py-1.5 text-xs hover:bg-muted disabled:opacity-50">
-                              <RotateCcw className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
+                        <button onClick={() => open(s)}
+                          className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted">
+                          Review
+                        </button>
                       </td>
                     </tr>
                   );
@@ -363,7 +343,7 @@ export default function PerformancePage() {
               <div>
                 <h3 className="font-semibold">{editing.name}</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {MONTHS[month - 1]} {year} · engine computed <strong>{rm(editing.totalEarned)}</strong>
+                  {MONTHS[month - 1]} {year} · paying <strong>{rm(editing.totalEarned)}</strong>
                   {" "}({rm(editing.performanceEarned)} earned
                   {(editing.attendanceDeducted + editing.reviewPenaltyTotal) > 0 &&
                     <> less {rm(editing.attendanceDeducted + editing.reviewPenaltyTotal)} deductions</>})
@@ -377,24 +357,72 @@ export default function PerformancePage() {
             {/* body */}
             <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
               <section className="space-y-2.5">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Levers</h4>
+                <h4 className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Levers
+                  <span className="font-normal normal-case tracking-normal">— set any lever by hand when the score isn&apos;t fair</span>
+                </h4>
                 <ul className="divide-y rounded-lg border">
                   {editing.levers.map((l) => (
-                    <li key={l.key} className="flex items-center justify-between gap-4 px-3.5 py-2.5 text-sm">
-                      <span className={l.applicable ? "font-medium" : "text-muted-foreground"}>{l.label}</span>
-                      <span className="flex items-center gap-3 text-right">
-                        <span className="text-xs text-muted-foreground">{l.detail}</span>
-                        {l.applicable && (
-                          <span className="w-20 shrink-0 font-mono tabular-nums">{rm(l.earned)}</span>
-                        )}
-                      </span>
+                    <li key={l.key} className={`px-3.5 py-3 ${l.edited ? "bg-amber-50/50" : ""}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className={l.applicable || l.edited ? "text-sm font-medium" : "text-sm text-muted-foreground"}>
+                            {l.label}
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">{l.detail}</div>
+                          {l.edited && (
+                            <div className="mt-1 text-xs text-amber-700">
+                              Engine scored {rm(l.originalEarned)}
+                              {l.applicable && l.slice > 0 && <> of {rm(l.slice)}</>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">RM</span>
+                            <input
+                              type="number" step="0.01" min={0}
+                              value={draftAmount[l.lineKey] ?? l.earned.toFixed(2)}
+                              onChange={(e) => setDraftAmount((p) => ({ ...p, [l.lineKey]: e.target.value }))}
+                              disabled={!!locked}
+                              className="input w-24 text-right font-mono text-sm tabular-nums disabled:opacity-50"
+                            />
+                          </div>
+                          {l.edited ? (
+                            <button onClick={() => resetLine(editing, l.lineKey)} disabled={busy !== null || !!locked}
+                              title="Hand this lever back to the engine"
+                              className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs hover:bg-muted disabled:opacity-50">
+                              {busy === l.lineKey ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />}
+                              Reset
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => saveLine(editing, {
+                                lineKey: l.lineKey, label: l.label,
+                                amount: Number(draftAmount[l.lineKey] ?? l.earned), computed: l.originalEarned,
+                              })}
+                              disabled={busy !== null || !!locked}
+                              className="rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
+                              {busy === l.lineKey ? <Loader2 className="h-3 w-3 animate-spin" /> : "Set"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        value={draftReason[l.lineKey] || (l.edited ? l.editReason ?? "" : "")}
+                        onChange={(e) => setDraftReason((p) => ({ ...p, [l.lineKey]: e.target.value }))}
+                        disabled={!!locked}
+                        className="input mt-2.5 w-full text-xs disabled:opacity-50"
+                        placeholder="Why? e.g. no checklists were assigned to this outlet in July"
+                      />
                     </li>
                   ))}
                 </ul>
               </section>
 
               <section className="space-y-2.5">
-                <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <h4 className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Deductions
                   {editing.deductions.length > 0 && (
                     <span className="font-normal normal-case tracking-normal">— waive any line that shouldn&apos;t count</span>
@@ -407,7 +435,7 @@ export default function PerformancePage() {
                 ) : (
                   <ul className="divide-y rounded-lg border">
                     {editing.deductions.map((d) => (
-                      <li key={d.key} className={`px-3.5 py-3 ${d.waived ? "bg-amber-50/50" : ""}`}>
+                      <li key={d.key} className={`px-3.5 py-3 ${d.edited ? "bg-amber-50/50" : ""}`}>
                         <div className="flex items-start justify-between gap-4">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
@@ -417,34 +445,37 @@ export default function PerformancePage() {
                               {d.date && <span className="text-xs text-muted-foreground">{d.date}</span>}
                             </div>
                             <div className="mt-1 truncate text-sm">{d.label}</div>
-                            {d.waived && d.waivedReason && (
-                              <div className="mt-1 text-xs text-amber-700">Waived — {d.waivedReason}</div>
+                            {d.edited && d.editReason && (
+                              <div className="mt-1 text-xs text-amber-700">Waived — {d.editReason}</div>
                             )}
                           </div>
                           <div className="flex shrink-0 items-center gap-3">
-                            <span className={`font-mono text-sm tabular-nums ${d.waived ? "text-muted-foreground line-through" : "text-red-600"}`}>
+                            <span className={`font-mono text-sm tabular-nums ${d.edited ? "text-muted-foreground line-through" : "text-red-600"}`}>
                               −{rm(d.originalAmount)}
                             </span>
-                            {d.waived ? (
-                              <button onClick={() => restoreLine(editing, d)} disabled={busy !== null}
+                            {d.edited ? (
+                              <button onClick={() => resetLine(editing, d.key)} disabled={busy !== null || !!locked}
                                 className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs hover:bg-muted disabled:opacity-50">
                                 {busy === d.key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />}
                                 Restore
                               </button>
                             ) : (
-                              <button onClick={() => waiveLine(editing, d)} disabled={busy !== null || !(lineReason[d.key] || "").trim()}
-                                className="rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-40">
+                              <button
+                                onClick={() => saveLine(editing, { lineKey: d.key, label: d.label, amount: 0, computed: d.originalAmount })}
+                                disabled={busy !== null || !!locked}
+                                className="rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
                                 {busy === d.key ? <Loader2 className="h-3 w-3 animate-spin" /> : "Waive"}
                               </button>
                             )}
                           </div>
                         </div>
-                        {!d.waived && (
+                        {!d.edited && (
                           <input
                             type="text"
-                            value={lineReason[d.key] || ""}
-                            onChange={(e) => setLineReason((p) => ({ ...p, [d.key]: e.target.value }))}
-                            className="input mt-2.5 w-full text-xs"
+                            value={draftReason[d.key] || ""}
+                            onChange={(e) => setDraftReason((p) => ({ ...p, [d.key]: e.target.value }))}
+                            disabled={!!locked}
+                            className="input mt-2.5 w-full text-xs disabled:opacity-50"
                             placeholder="Why waive this? e.g. approved leave, roster changed verbally"
                           />
                         )}
@@ -454,39 +485,11 @@ export default function PerformancePage() {
                 )}
               </section>
 
-              {canOverrideWholeMonth && (
-                <section className="space-y-3 rounded-lg border border-dashed p-4">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Or replace the whole month
-                  </h4>
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Pay this amount (RM)</span>
-                    <input type="number" step="0.01" min={0} value={amount}
-                      onChange={(e) => setAmount(e.target.value)} className="input w-full" />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                      Reason <span className="text-terracotta">*</span>
-                    </span>
-                    <input type="text" value={reason} onChange={(e) => setReason(e.target.value)}
-                      className="input w-full"
-                      placeholder="e.g. paid flat this month pending the new COGS lever" />
-                  </label>
-                  <p className="flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
-                    <Lock className="mt-0.5 h-3 w-3 shrink-0" />
-                    Replaces the entire outcome — levers and deductions both — and does not carry into the next
-                    month. Prefer waiving the specific lines above when only part of it is wrong.
-                  </p>
-                </section>
-              )}
-
-              {!canOverrideWholeMonth && (
-                <p className="flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
-                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                  You can waive individual deductions for your team. Replacing a month&apos;s amount outright is
-                  owner/admin only.
-                </p>
-              )}
+              <p className="flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                Every edit needs a reason and applies to this month only — next month goes back to the levers.
+                A lever can be set up to the {rm(editing.totalMax)} pool; a deduction can only be reduced.
+              </p>
             </div>
 
             {/* footer */}
@@ -494,18 +497,10 @@ export default function PerformancePage() {
               <p className="text-[11px] leading-relaxed text-muted-foreground">
                 Changes reach a payslip only when the run is recomputed. A confirmed or paid run can&apos;t be changed.
               </p>
-              <div className="flex shrink-0 gap-2">
-                <button onClick={() => setEditingId(null)} className="rounded-lg border px-3.5 py-2 text-xs font-medium hover:bg-muted">
-                  Done
-                </button>
-                {canOverrideWholeMonth && (
-                  <button onClick={saveWholeMonth} disabled={busy !== null || !reason.trim()}
-                    className="flex items-center gap-1.5 rounded-lg bg-terracotta px-3.5 py-2 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50">
-                    {busy === "whole" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                    Save override
-                  </button>
-                )}
-              </div>
+              <button onClick={() => setEditingId(null)}
+                className="shrink-0 rounded-lg border px-3.5 py-2 text-xs font-medium hover:bg-muted">
+                Done
+              </button>
             </div>
           </div>
         </div>
