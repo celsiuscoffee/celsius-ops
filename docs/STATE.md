@@ -6,16 +6,18 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
-- 2026-08-03 — **PART-TIMERS HAVE NEVER BEEN PAID THROUGH THIS SYSTEM.** Every
-  payroll run that exists is `monthly` (8) or `opening_balance` (1). **Zero
-  weekly runs, ever**, despite `payroll-calculator-weekly.ts` and
-  `/api/hr/payroll/weekly` both existing and working. For July 2026 that is
-  **23 part-timers, 1,970 clocked hours, with no payroll record anywhere** —
-  Farah alone 202.54h, Fatin 197.95h, Emran 186.68h. The July monthly run has
-  **28 lines, all full-time, 0 part-time**. Owner's WhatsApp ("bayar jumaat")
-  implies PTs are paid Fridays outside the system. **Do not read the monthly run
-  as "the July payroll" — it is the FT half.** Open with the owner: stand up the
-  weekly run, or leave PT pay off-system.
+- 2026-08-03 — **PART-TIMERS ARE NOT IN THE MONTHLY RUN, AND THAT IS EXPECTED —
+  DO NOT RE-RAISE IT.** Every payroll run that exists is `monthly` (8) or
+  `opening_balance` (1); **zero weekly runs, ever**, despite
+  `payroll-calculator-weekly.ts` and `/api/hr/payroll/weekly` both existing.
+  For July 2026 that is 23 part-timers and 1,970 clocked hours with no payroll
+  record in this system (Farah 202.54h, Fatin 197.95h, Emran 186.68h); the July
+  monthly run is **28 lines, all full-time**. **Owner ruled 2026-08-03: "bayar
+  jumaat is the PT weekly payroll, just ignore"** — PT wages are run outside
+  this system on a Friday cycle, so the absence is by design, not a gap. The
+  practical consequence to remember: **the monthly run is the FT half only.**
+  Never reconcile "everyone who worked" against it, and note that any change to
+  PT attendance or OT (e.g. the `ot_1x` reclassification) has no effect on it.
 - 2026-08-03 — **`isOtApproved` treats an ATTENDANCE approval as an OT
   approval.** `payroll-calculator.ts` pays OT when `final_status` is
   `approved`/`adjusted`, or `ai_status='approved'` with no final status. So a
@@ -996,9 +998,9 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 - 2026-08-03 — **HR/payroll session. Three things are with the owner, and July
   must NOT be confirmed until they land.**
-  (a) **Part-timers are absent from payroll entirely** — see Verified facts.
-  23 people, 1,970 July hours, no run of any kind. Decide: stand up the weekly
-  run, or keep PT pay off-system.
+  (a) CLOSED 2026-08-03 — part-timers absent from the monthly run is BY DESIGN;
+  "bayar jumaat" is a separate PT weekly payroll run outside this system. Do not
+  re-raise it.
   (b) **Zarif is owed ~RM451.61** (FT stint Jul 1–7) and it was never added.
   **Danish** is owed Jul 1–11 but **his FT salary is RM0.00 in
   `hr_salary_history`** — needs the real figure before it can be priced.
