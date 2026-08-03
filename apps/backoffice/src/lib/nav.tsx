@@ -249,12 +249,16 @@ export const NAV_SECTIONS: NavSection[] = [
       // Keyed on hr:employees, not hr:payroll — a PT staffing manager sets hourly
       // rates without getting the payroll module (runs, payslips, bank files).
       { label: "PT Rates",    href: "/hr/pt-rates",  icon: <Banknote className={ICON_SIZE} />,        moduleKey: "hr:employees" },
-      // Both were reachable only by typing the URL. Allowances is the read-only
-      // view of what the levers scored; Performance Review is the same data with
-      // a manual override on each line.
+      // Read-only view of what the levers scored. Corrections live on
+      // /hr/performance; this stays as the plain company-wide readout.
       { label: "Allowances",  href: "/hr/allowances", icon: <Banknote className={ICON_SIZE} />,       moduleKey: "hr:allowances" },
-      { label: "Performance Review", href: "/hr/performance-review", icon: <Trophy className={ICON_SIZE} />, moduleKey: "hr:allowances" },
       { label: "Statutory Calendar", href: "/hr/compliance", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "hr:payroll", hidden: true },
+      // One screen, two tabs: Allowance (levers, deductions, corrections) and
+      // Scorecard (the composite attendance/ops/reviews view that used to be
+      // this page on its own). Deliberately NOT keyed on hr:allowances, which
+      // canAccess hard-restricts to OWNER/ADMIN — a staffing manager needs to
+      // waive a wrongly-docked absence for their own team, and the API scopes
+      // them to their subtree and to line waivers.
       { label: "Performance", href: "/hr/performance", icon: <TrendingUp className={ICON_SIZE} />,    moduleKey: "hr:performance" },
       { label: "Review Penalties", href: "/hr/review-penalties", icon: <AlertTriangle className={ICON_SIZE} />, moduleKey: "hr:review-penalties", hidden: true },
     ],
