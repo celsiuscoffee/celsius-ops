@@ -261,13 +261,24 @@ export async function computeAllowancesForUser(
 
   const { data: profile } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("employment_type, schedule_required, position, fixed_performance_allowance")
+    .select("employment_type, schedule_required, position, fixed_performance_allowance, probation_end_date")
     .eq("user_id", userId)
     .maybeSingle();
   const employmentType = profile?.employment_type ?? null;
   const isFullTime = employmentType === "full_time";
   const scheduleRequired = profile?.schedule_required !== false;
-  const eligible = isFullTime && scheduleRequired;
+  // Probation: not entitled to the performance allowance until confirmed
+  // (owner 2026-08-03). Compared against the END of the month being computed,
+  // so the month someone is confirmed part-way through pays in full rather
+  // than being lost — the generous side of the boundary, deliberately.
+  //
+  // A NULL probation_end_date means "not on probation", NOT "unknown". That is
+  // the only safe default: the column was empty for all 48 active profiles when
+  // this shipped, so treating NULL as probation would have zeroed the whole
+  // company's allowance.
+  const probationEnd = (profile?.probation_end_date as string | null) ?? null;
+  const onProbation = !!probationEnd && monthEnd <= probationEnd;
+  const eligible = isFullTime && scheduleRequired && !onProbation;
   const isFoh = FOH_POSITIONS.includes((profile?.position ?? "").trim());
 
   // FLAT allowance — checked before everything else, including the eligibility
@@ -314,7 +325,11 @@ export async function computeAllowancesForUser(
       attendance: { deductions: [], lateCount: 0, absentCount: 0, total: 0 },
       reviewPenalty: { total: 0, entries: [] },
       totalEarned: 0, totalMax: 0,
-      tip: isFullTime ? "Not applicable — schedule not required for this role." : "Performance allowance is for full-time staff only.",
+      tip: onProbation
+        ? `On probation until ${probationEnd} — the performance allowance starts once confirmed.`
+        : isFullTime
+          ? "Not applicable — schedule not required for this role."
+          : "Performance allowance is for full-time staff only.",
     };
   }
 
