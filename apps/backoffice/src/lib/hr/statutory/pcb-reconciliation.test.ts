@@ -35,6 +35,10 @@ function annualTax(chargeable: number): number {
 /** roundToCents in the calculator snaps to RM0.05, matching LHDN's MTD rounding. */
 const round5sen = (v: number) => Math.round(v * 20) / 20;
 
+/** Income Tax Act 1967 s.6A(2) — RM400 off the TAX where chargeable ≤ RM35,000. */
+const REBATE = 400;
+const REBATE_MAX_CHARGEABLE = 35_000;
+
 function monthlyPcb(o: {
   ytdGross: number;
   ytdPcb: number;
@@ -44,6 +48,8 @@ function monthlyPcb(o: {
   annualSocsoEis: number;
   epfCap: number;
   socsoEisCap?: number;
+  /** Set false to model the pre-fix behaviour, which granted no rebate at all. */
+  rebate?: boolean;
 }) {
   const remainingMonths = Math.max(1, 12 - (o.month - 1));
   const projectedAnnual = o.ytdGross + o.monthlyGross * remainingMonths;
@@ -53,7 +59,10 @@ function monthlyPcb(o: {
     Math.min(o.annualSocsoEis, o.socsoEisCap ?? 350);
   const chargeable = Math.max(0, projectedAnnual - relief);
   const tax = annualTax(chargeable);
-  return round5sen(Math.max(0, tax - o.ytdPcb) / remainingMonths);
+  const rebate =
+    o.rebate !== false && chargeable <= REBATE_MAX_CHARGEABLE ? REBATE : 0;
+  const net = Math.max(0, tax - rebate);
+  return round5sen(Math.max(0, net - o.ytdPcb) / remainingMonths);
 }
 
 // Ariff, July 2026: RM10,500/month, EPF 11% = RM1,155, SOCSO 29.75, EIS 11.90.
@@ -99,6 +108,59 @@ describe("PCB — bracket boundary the YTD bug straddled", () => {
     const correctProjection = 65_019.23 + 10_500 * 6;  // 128,019.23
     expect(brokenProjection - relief).toBeLessThan(100_000);
     expect(correctProjection - relief).toBeGreaterThan(100_000);
+  });
+});
+
+describe("PCB — the RM400 individual rebate (s.6A(2))", () => {
+  // This is why BrioHR charged ONE person and we charged fifteen.
+  it("zeroes the low end of the payroll, matching BrioHR's RM0", () => {
+    // Ameir: the largest of the fourteen we wrongly charged. Annual tax RM163.79,
+    // comfortably under the RM400 rebate.
+    const ameir = {
+      ytdGross: 18_494.71, ytdPcb: 0, monthlyGross: 2_365, month: 7,
+      annualEpf: 253 * 12, annualSocsoEis: (11.25 + 4.5) * 12, epfCap: 4_000,
+    };
+    expect(monthlyPcb({ ...ameir, rebate: false })).toBe(27.3); // what shipped
+    expect(monthlyPcb(ameir)).toBe(0); // what BrioHR says
+  });
+
+  it("zeroes the smallest case too", () => {
+    const firdaus = {
+      ytdGross: 4_723.19, ytdPcb: 0, monthlyGross: 2_132.31, month: 7,
+      annualEpf: 231 * 12, annualSocsoEis: (10.75 + 4.3) * 12, epfCap: 4_000,
+    };
+    expect(monthlyPcb({ ...firdaus, rebate: false })).toBe(0.95);
+    expect(monthlyPcb(firdaus)).toBe(0);
+  });
+
+  it("Syafiq — tax EXCEEDS the rebate, and he still lands on nil", () => {
+    // Annual tax RM451.45, less RM400 = RM51.45 net — already below the RM56.15
+    // he had paid by June, so nothing more is due. The sharpest confirmation
+    // that the rebate is the missing rule and not a coincidence.
+    const syafiq = {
+      ytdGross: 23_242.82, ytdPcb: 56.15, monthlyGross: 3_347.83, month: 7,
+      annualEpf: 370 * 12, annualSocsoEis: (16.75 + 6.7) * 12, epfCap: 4_000,
+    };
+    expect(monthlyPcb({ ...syafiq, rebate: false })).toBe(65.9);
+    expect(monthlyPcb(syafiq)).toBe(0);
+  });
+
+  it("does NOT apply to Ariff — he is past the RM35,000 ceiling", () => {
+    // Which is exactly why he is the one person BrioHR did charge.
+    const withRebate = monthlyPcb({ ...ARIFF, ...YTD_CORRECT, epfCap: 4_000 });
+    const without = monthlyPcb({ ...ARIFF, ...YTD_CORRECT, epfCap: 4_000, rebate: false });
+    expect(withRebate).toBe(without);
+    expect(withRebate).toBe(1_039.6);
+  });
+
+  it("is capped at the tax charged — a rebate can never create a refund", () => {
+    // Tiny liability, RM400 rebate: the result floors at zero, not minus RM390.
+    const tiny = {
+      ytdGross: 0, ytdPcb: 0, monthlyGross: 1_300, month: 1,
+      annualEpf: 143 * 12, annualSocsoEis: (6.75 + 2.7) * 12, epfCap: 4_000,
+    };
+    expect(monthlyPcb(tiny)).toBe(0);
+    expect(monthlyPcb(tiny)).toBeGreaterThanOrEqual(0);
   });
 });
 
