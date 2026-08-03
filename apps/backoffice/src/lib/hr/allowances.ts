@@ -38,6 +38,8 @@ export type AllowanceRules = {
   checklistHalfPct: number;
   phoneTargetUpliftPp: number;
   phoneDefaultBaselinePct: number;
+  /** Fixed target for every outlet. When set, baseline + uplift is not used. */
+  phoneTargetPct: number | null;
   phoneFullPct: number; // achievement-vs-target % for full
   phoneHalfPct: number;
   servingFullMinutes: number; // avg serve time <= this → full
@@ -150,7 +152,7 @@ export async function loadAllowanceRules(): Promise<AllowanceRules> {
   const { data } = await hrSupabaseAdmin
     .from("hr_company_settings")
     .select(
-      "performance_allowance_amount, perf_lever_checklist, perf_lever_phone, perf_lever_serving, perf_lever_audit, checklist_full_pct, checklist_half_pct, perf_tier_perform_pct, perf_tier_ok_pct, phone_capture_target_uplift_pp, phone_capture_default_baseline_pct, serving_full_minutes, serving_half_minutes, attendance_lateness_grace_minutes, attendance_lateness_penalty, attendance_lateness_absent_minutes, attendance_penalty_absent",
+      "performance_allowance_amount, perf_lever_checklist, perf_lever_phone, perf_lever_serving, perf_lever_audit, checklist_full_pct, checklist_half_pct, perf_tier_perform_pct, perf_tier_ok_pct, phone_capture_target_pct, phone_capture_target_uplift_pp, phone_capture_default_baseline_pct, serving_full_minutes, serving_half_minutes, attendance_lateness_grace_minutes, attendance_lateness_penalty, attendance_lateness_absent_minutes, attendance_penalty_absent",
     )
     .limit(1)
     .maybeSingle();
@@ -164,6 +166,9 @@ export async function loadAllowanceRules(): Promise<AllowanceRules> {
     checklistHalfPct: Number(data?.checklist_half_pct ?? 70),
     phoneTargetUpliftPp: Number(data?.phone_capture_target_uplift_pp ?? 15),
     phoneDefaultBaselinePct: Number(data?.phone_capture_default_baseline_pct ?? 40),
+    phoneTargetPct: data?.phone_capture_target_pct != null && Number.isFinite(Number(data.phone_capture_target_pct))
+      ? Number(data.phone_capture_target_pct)
+      : null,
     phoneFullPct: Number(data?.perf_tier_perform_pct ?? 70),
     phoneHalfPct: Number(data?.perf_tier_ok_pct ?? 50),
     servingFullMinutes: Number(data?.serving_full_minutes ?? 15),
@@ -545,18 +550,37 @@ async function scorePhoneCapture(userId: string, loyaltyOutletId: string | null,
   const captured = (mine || []).filter((o: { customer_phone: string | null; loyalty_phone: string | null }) => o.customer_phone || o.loyalty_phone).length;
   const myRate = (captured / total) * 100;
 
-  let baseline = r.phoneDefaultBaselinePct;
-  if (loyaltyOutletId) {
-    const since = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
-    const { data: outletRows } = await hrSupabaseAdmin
-      .from("pos_orders").select("customer_phone, loyalty_phone").eq("outlet_id", loyaltyOutletId).gte("created_at", since);
-    const oTotal = (outletRows || []).length;
-    if (oTotal >= 50) {
-      const oCap = (outletRows || []).filter((o: { customer_phone: string | null; loyalty_phone: string | null }) => o.customer_phone || o.loyalty_phone).length;
-      baseline = (oCap / oTotal) * 100;
+  // ONE fixed target for every outlet (owner 2026-08-03: "put phone target 70%
+  // for all"). This replaced a per-outlet target of "your own trailing-90-day
+  // capture rate + 15pp", which was wrong twice over:
+  //
+  //   1. A self-referential target rewards a low starting point — the worst
+  //      outlet got the easiest bar, and improving raised your own bar.
+  //   2. The baseline read below has NO .range(), and PostgREST caps a response
+  //      at 1000 rows. Every outlet is far past that (5,601 / 4,457 / 4,192
+  //      orders per 90 days), so the baseline was computed from the OLDEST 1000
+  //      orders and every target came out too low. Tamarind's showed 35% where
+  //      the true figure was 44%, which is what surfaced this.
+  //
+  // The per-outlet path is kept, and NULL restores it — but note it still has
+  // the 1000-row bug, so fix that before ever turning it back on.
+  let target: number;
+  if (r.phoneTargetPct != null) {
+    target = r.phoneTargetPct;
+  } else {
+    let baseline = r.phoneDefaultBaselinePct;
+    if (loyaltyOutletId) {
+      const since = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+      const { data: outletRows } = await hrSupabaseAdmin
+        .from("pos_orders").select("customer_phone, loyalty_phone").eq("outlet_id", loyaltyOutletId).gte("created_at", since);
+      const oTotal = (outletRows || []).length;
+      if (oTotal >= 50) {
+        const oCap = (outletRows || []).filter((o: { customer_phone: string | null; loyalty_phone: string | null }) => o.customer_phone || o.loyalty_phone).length;
+        baseline = (oCap / oTotal) * 100;
+      }
     }
+    target = Math.min(95, baseline + r.phoneTargetUpliftPp);
   }
-  const target = Math.min(95, baseline + r.phoneTargetUpliftPp);
   const achievement = Math.min(100, Math.round((myRate / target) * 100));
   const tier: AllowanceTier = achievement >= r.phoneFullPct ? "perform" : achievement >= r.phoneHalfPct ? "ok" : "under";
   return { tier, applicable: true, detail: `${Math.round(myRate)}% vs ${Math.round(target)}% target`, score: achievement };
