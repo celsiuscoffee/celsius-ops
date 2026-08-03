@@ -6,6 +6,71 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-03 — **PCB reconciled to BrioHR to the cent; SOCSO went the other way
+  and BrioHR is the one that's wrong.** Owner flagged Ariff (RM10,500/mo)
+  diverging badly from Brio.
+  **PCB — three causes, all under-deducting.** The MTD arithmetic itself was
+  fine (it reproduces the shipped RM504.50 exactly from `hr_stat_pcb_brackets`);
+  the inputs were wrong. (1) **YTD was short.** LHDN's MTD is cumulative, so YTD
+  is the most load-bearing input there is. The query unioned monthly runs with
+  the BrioHR `opening_balance` run then filtered `status in (confirmed, paid)` —
+  but an opening balance is an import artifact that is never *paid*, so it sat
+  at `draft` and the `cycle_type.eq.opening_balance` clause was **dead**, despite
+  the comment claiming otherwise. Ariff has no Jan/Feb monthly line (that import
+  covered 19 of 27 people), so his YTD was RM23,019.23 short and he was assessed
+  in the **19% bracket instead of 25%**. **Do NOT "fix" this by un-filtering the
+  status** — 32 of the 34 people DO have complete monthly lines for the imported
+  window, so counting both sources roughly doubles their YTD. The fix takes the
+  opening balance as authoritative for the window its `period_end` declares and
+  adds monthly runs only from after it, decided per user. (2) **`EPF_CAP` was
+  RM7,000.** LHDN splits it: RM4,000 EPF + RM3,000 life insurance; RM7,000 only
+  when both are claimed, and we hold no life-insurance data. Under-deducted
+  everyone contributing over RM4,000/yr. (3) The residual RM14.55 is the
+  **RM350 SOCSO/EIS relief** — we grant it monthly, Brio doesn't. Left alone: it
+  is legitimate at year-end assessment, so it is an owner call, not a bug.
+  July run effect: 3 lines move, 22 don't — Ariff 504.50→1039.60, Adam Kelvin
+  13.40→69.85, Syafiq 63.70→65.90; total 754.20→1347.95.
+  **Ordering trap:** August only comes right *after July is confirmed*, because
+  unconfirmed runs correctly don't feed YTD. Sequence is migration → recompute
+  July → confirm July → recompute August. August currently shows RM206.40.
+  **SOCSO — ours is right, June's Brio import is wrong.** The tell is the
+  employer:employee ratio, 3.500 in every month of 2026 except **June, where it
+  is 1.400** → employee charged at **1.25%**, which is the Category 2 *employer*
+  rate. Under the Act an employee pays 0.5%; there is no case where they pay
+  1.25%. The employer leg didn't move at all (Ariff RM104.15 both months), which
+  is why it can't be a ceiling or rate change. **All 25 people in the June run
+  were over-deducted: RM795.70 charged against RM318.28 due = RM477.42 taken
+  from staff pay.** Ariff RM44.65, Syafiq RM25.85. Jan–May were all correct, and
+  it reconciles (Ariff's Jan–Jun RM223.15 = 29.75×5 + 74.40). **Refund not
+  actioned — owner decision.**
+  **Still open:** `hr_employee_tax_reliefs` is **empty company-wide (0 rows)**,
+  and the relief columns that DO exist on `hr_employee_profiles`
+  (`marital_status`, `num_children`, `spouse_working`, `life_insurance_relief`,
+  `zakat_amount`, …) are **never read by the PCB calc**. Everyone runs on
+  statutory defaults. Ariff is `married` with `spouse_working` NULL — possibly
+  RM4,000 of relief not given. Also: variable pay (bonus, performance allowance)
+  is **annualised ×remaining-months as if it were fixed salary**; LHDN treats it
+  as *additional remuneration* with its own formula. Small here (~RM6 for
+  Syafiq) but wrong for a real bonus, and it is the residual behind Syafiq's
+  PCB disagreeing with Brio (his profile is single/0 children/no reliefs, so our
+  RM65.75 looks right and Brio's RM0 across four months looks under-deducted).
+
+- 2026-08-03 — **Two more dead columns in the allowance path.**
+  `hr_employee_profiles.performance_allowance_amount` is written by the employee
+  form AND by `/api/hr/allowance-overrides`, and the payroll calculator **never
+  reads it** — `computeAllowancesForUser` takes the pool from
+  `hr_company_settings`, one company-wide RM200. Verified: every line on the Jul
+  2026 run records `"pool": 200`, including Syafiq (profile says 300) and the ten
+  people whose profiles say 100. Same shape as `statutory_applicable`. Making it
+  live would move ~12 people's pay, so it was left dead **deliberately** —
+  whether to honour it company-wide is an owner decision.
+  Separately, the lever engine gates on `schedule_required`, so an unrostered
+  role (Ariff, Head of Department) is forced to RM0 whatever is configured.
+  New `fixed_performance_allowance` column pays a flat amount, bypassing the
+  levers, the attendance/review deductions and that gate. Ariff = RM100, interim:
+  his scheme is RM100 of an eventual RM500 pool on COGS + people-cost levers,
+  neither of which exists yet.
+
 - 2026-08-02 — **Rest days are ROSTERED, not a profile weekday. The old code
   read the wrong column and mis-stamped 107 of 108 rest-day logs.** Owner
   correction: "rest day is set on schedule". Confirmed in the data — the roster
