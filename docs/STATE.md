@@ -34,7 +34,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   AND multi-generation** (2026-06-17 and 2026-06-19 batches both still ordered
   live; up to 6 distinct `MYITE…` ids per product across 3 outlets), so the
   scalar `products.grab_item_id` column could never represent them anyway.
-  **Fix (PR #1099, draft, branch `claude/new-session-h2ujof`):** new
+  **Fix (PR #1099, MERGED as `0e38e36`):** new
   `lib/grab-availability.ts` — `pushAvailability` retries through the throttle
   honouring Grab's own "retry after N seconds" and does NOT retry permanent
   failures; `reconcileGrabAvailability` diffs desired availability against a
@@ -50,10 +50,28 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   either the loyalty outlet id or the pickup store slug). The POS route now
   returns the real outcome (`pushed`/`throttled`/`error`/…) instead of always
   "pushed". No `pos-native` change → no OTA deploy.
-  **Owner action while the PR is unmerged:** items currently stuck open on
-  Grab (SA Mini Pavlova, NYC Smores, Almond Crepe Cake, …) need closing by
-  hand in the Grab merchant portal; the first reconcile run after merge
-  corrects them automatically.
+  **VERIFIED IN PRODUCTION 2026-08-03 05:50Z, no manual portal pass needed.**
+  The 39 items that were stuck open on Grab were corrected by the reconciler
+  itself. Evidence: (a) `app_settings.grab_availability_pushed` holds all 3
+  merchants × **81** Grab-visible items — the whole sweep landed in ONE run,
+  not spread over ticks; (b) a snapshot-vs-86-list cross join returns **zero**
+  missing and zero diverged; (c) `cron/grab-reconcile` ran 05:30:11 and
+  05:45:11 on the new deploy, both 200, **no `[grab:availability]` failures
+  and no 409s**. (d) **The original failure condition reproduced live and
+  passed:** at 05:45:29–05:45:53 Shah Alam 86'd SEVEN items in 24s (~4s
+  apart — the exact burst shape that was 409-ing the day before) and all
+  seven are in sync with zero error lines.
+  **Limit of the proof:** the snapshot records what Grab ACCEPTED (2xx on our
+  push), not a read-back of Grab's live menu — there is no cheap read-back
+  API. Also NOT tested from the order side: zero GrabFood orders arrived in
+  the 30 min after deploy, so nothing exercised "Grab refuses a closed item".
+  If a 86'd item is ever ordered again on Grab, that is the signal the retry
+  budget or the cron interval needs revisiting — check for
+  `[grab:availability] push failed` first.
+  **Watch:** first run pushed 81 items × 3 merchants without tripping the
+  throttle, so Grab's limit is looser than one-item-per-10s in a batch; the
+  409s came from rapid SEPARATE single-item calls. Steady state now sends
+  zero calls (diff-driven), so throttle pressure should stay low.
 
 - 2026-08-03 — **PCB reconciled to BrioHR to the cent; SOCSO went the other way
   and BrioHR is the one that's wrong.** Owner flagged Ariff (RM10,500/mo)
