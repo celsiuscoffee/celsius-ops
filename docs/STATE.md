@@ -6,6 +6,35 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-03 — **THE DELETE ENDPOINT WAS THE GUARDRAIL HOLE, AND IT ATE JULY.**
+  `DELETE /api/hr/payroll` guarded `paid` only, so a **confirmed** run — the
+  thing payslips and bank files come from — could be destroyed in one call with
+  no prompt, no backup and **no ActivityLog row** (the route never logged). It
+  cost data twice in one day: the `opening_balance` (BrioHR Jan–Jun YTD for 34
+  people; understated Ariff's July PCB by RM446.10) and then **the entire July
+  monthly run, deleted 22 seconds after a recompute rebuilt it** — 29 lines,
+  gone, with nothing recording who. Root cause was that "unlock so I can
+  recompute" had no path except delete. **FIXED both sides:** DELETE now refuses
+  `confirmed` as well as `paid`, and `POST action=revert` takes a confirmed run
+  back to `ai_computed` in place, keeping the run id. Both delete and revert now
+  write ActivityLog. `paid` is deliberately a dead end — bank files exist.
+  Pinned by `payroll-run-guards.test.ts`.
+  **July is recoverable from a recompute** — 761 attendance logs, 53 line
+  overrides, 16 approved OT requests and 36 `confirmed_at` profiles all survived.
+- 2026-08-03 — **PostgREST's silent 1000-row cap was truncating payroll inputs
+  in THREE places, not one.** No error, no flag, just a short array. **FIXED**
+  with a `fetchAllRows` paging helper in `allowances.ts`; pinned by
+  `fetch-all-rows.test.ts`.
+  - **Serving time — the one actually biting.** 7,626 served orders across the
+    outlets in July, so the lever scored everyone off roughly **1–4 July**
+    (~13% of the month). Worth RM40–50 a head per month.
+  - **Phone-capture outlet baseline** (legacy path, inert while
+    `phone_capture_target_pct` is set). 4,192–5,601 orders per outlet per 90d.
+  - **Per-employee capture.** Busiest July operator rang 778 — under the cap
+    today, but a busier month would truncate silently.
+  Lesson: **any unbounded `.select()` on `pos_orders` or `hr_attendance_logs` is
+  a latent truncation bug.** Use `fetchAllRows`.
+
 - 2026-08-03 — **PROBATION ENDS ON CONFIRMATION, NEVER ON ELAPSED TIME. Owner
   ruling: "probation will end only after confirmation. it is not time base."**
   Two earlier gates this session were wrong in opposite directions: reading raw
