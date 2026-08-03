@@ -3,7 +3,8 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { checkCronAuth } from "@celsius/shared";
 import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
-import { deriveHours, mytDateString, mytDayOfWeek, mytInstant } from "@/lib/hr/hours";
+import { deriveHours, mytDateString, mytInstant } from "@/lib/hr/hours";
+import { REST_DAY_ROLE_PATTERN } from "@/lib/hr/constants";
 import { processAttendance } from "@/lib/hr/agents/attendance-processor";
 
 export const dynamic = "force-dynamic";
@@ -72,13 +73,11 @@ export async function GET(req: NextRequest) {
   const userIds = Array.from(new Set(activeLogs.map((l: { user_id: string }) => l.user_id)));
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, employment_type, rest_day")
+    .select("user_id, employment_type")
     .in("user_id", userIds);
   const employmentByUser = new Map<string, string>();
-  const restDayByUser = new Map<string, number>();
-  (profiles || []).forEach((p: { user_id: string; employment_type: string | null; rest_day: number | null }) => {
+  (profiles || []).forEach((p: { user_id: string; employment_type: string | null }) => {
     employmentByUser.set(p.user_id, p.employment_type || "full_time");
-    restDayByUser.set(p.user_id, p.rest_day == null ? 0 : Number(p.rest_day));
   });
   const logMytDates = Array.from(new Set(activeLogs.map((l: { clock_in: string }) => mytDateString(l.clock_in))));
   const { data: holidays } = await hrSupabaseAdmin
@@ -86,6 +85,19 @@ export async function GET(req: NextRequest) {
     .select("date")
     .in("date", logMytDates);
   const publicHolidaySet = new Set((holidays || []).map((h: { date: string }) => h.date));
+
+  // Rest day is ROSTERED, not a weekday on the profile — the roster carries a
+  // "Rest Day" row per person per week and it rotates. Same source as the AI
+  // processor so an auto-closed log pays the identical multiplier.
+  const { data: restRows } = await hrSupabaseAdmin
+    .from("hr_schedule_shifts")
+    .select("user_id, shift_date")
+    .ilike("role_type", REST_DAY_ROLE_PATTERN)
+    .in("user_id", userIds)
+    .in("shift_date", logMytDates);
+  const rosteredRestDays = new Set(
+    (restRows || []).map((r: { user_id: string; shift_date: string }) => `${r.user_id}|${r.shift_date}`),
+  );
 
   let closed = 0;
   const actions: { logId: string; reason: string; closeAt: string }[] = [];
@@ -132,11 +144,21 @@ export async function GET(req: NextRequest) {
           const outlet = outletMap.get(log.outlet_id);
           if (outlet?.closeTime) end = mytInstant(shiftDate, outlet.closeTime);
         }
-        // Only close when we have a real shift-end reference; never before
-        // clock-in. With no roster AND no outlet close, leave it for the (2)
-        // backstop rather than inventing a time.
-        if (end) {
-          closeAt = end < clockIn ? clockIn : end;
+        // Only close when we have a real shift-end reference. An end at or
+        // BEFORE clock-in is a bad reference, not a zero-hour shift — clamping
+        // it to clock-in wrote a 0.00h log that was auto-approved AND excused,
+        // so the staffer was paid nothing and nothing surfaced for review.
+        // Three ways it happens, all seen in production:
+        //   - stale scheduled_date: yesterday's roster stamped on today's log,
+        //     putting the end ~24h in the past (the common case)
+        //   - a rest-day roster row, which stores 00:00-00:00, so the end is
+        //     midnight at the START of the shift date
+        //   - a clock-in a few minutes AFTER the rostered end (late arrival
+        //     onto the next shift)
+        // Refuse to close on a reference we don't trust; leave it open for the
+        // (2) backstop or a human.
+        if (end && end > clockIn) {
+          closeAt = end;
           reason = "forgot_clockout";
         }
       }
@@ -151,20 +173,22 @@ export async function GET(req: NextRequest) {
 
     if (!closeAt || !reason) continue;
 
-    // Don't close in the future or before clock_in
+    // Don't close in the future.
     if (closeAt > now) closeAt = now;
-    if (closeAt < clockIn) closeAt = clockIn;
+    // Never fabricate a zero-length shift. Previously this clamped to clock-in,
+    // which is what turned a bad close reference into a paid-nothing log.
+    if (closeAt <= clockIn) continue;
 
     // Pay-hours split — same shared engine as a normal clock-out, so the day-type
     // (PH / rest-day) multiplier on regular hours is preserved.
     const employmentType = employmentByUser.get(log.user_id) || "full_time";
-    const restDay = restDayByUser.get(log.user_id) ?? 0;
+    const clockInDate = mytDateString(clockIn);
     const derived = deriveHours({
       clockIn,
       clockOut: closeAt,
       employmentType,
-      isPublicHoliday: publicHolidaySet.has(mytDateString(clockIn)),
-      isRestDay: mytDayOfWeek(clockIn) === restDay,
+      isPublicHoliday: publicHolidaySet.has(clockInDate),
+      isRestDay: rosteredRestDays.has(`${log.user_id}|${clockInDate}`),
       // Early clock-in pays from the rostered start (stamped at clock-in).
       scheduledStart: mytInstant(log.scheduled_date ?? mytDateString(clockIn), log.scheduled_start),
     });

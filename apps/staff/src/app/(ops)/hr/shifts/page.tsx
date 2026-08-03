@@ -3,7 +3,7 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import Link from "next/link";
-import { CalendarDays, Clock, ArrowLeftRight, Loader2, CheckCircle2, XCircle, ArrowLeft, Sunrise, Sun, Moon, Coffee } from "lucide-react";
+import { CalendarDays, Clock, ArrowLeftRight, Loader2, CheckCircle2, XCircle, ArrowLeft, Sunrise, Sun, Moon, Coffee, MapPin } from "lucide-react";
 
 type Shift = {
   id: string;
@@ -14,6 +14,8 @@ type Shift = {
   break_minutes: number;
   user_id: string;
   schedule_id: string;
+  /** Resolved server-side from the schedule's outlet_id — see api/hr/shifts. */
+  outlet_name?: string | null;
 };
 
 type SwapRequest = {
@@ -301,8 +303,19 @@ export default function MyShiftsPage() {
                               {style.label}
                             </span>
                           </div>
-                          {shift.role_type && (
-                            <p className={`mt-0.5 text-xs ${style.dateText} opacity-75`}>{shift.role_type}</p>
+                          {(shift.role_type || shift.outlet_name) && (
+                            <p className={`mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs ${style.dateText} opacity-75`}>
+                              {shift.role_type && <span>{shift.role_type}</span>}
+                              {shift.role_type && shift.outlet_name && <span aria-hidden>·</span>}
+                              {/* Rotating staff work several outlets in one week —
+                                  without this the card never said where. */}
+                              {shift.outlet_name && (
+                                <span className="inline-flex items-center gap-1 font-medium">
+                                  <MapPin className="h-3 w-3 shrink-0" />
+                                  {shift.outlet_name}
+                                </span>
+                              )}
+                            </p>
                           )}
                         </div>
                         {isToday && (

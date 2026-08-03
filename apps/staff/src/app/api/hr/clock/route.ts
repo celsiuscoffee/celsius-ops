@@ -5,9 +5,9 @@ import { getUser } from "@/lib/auth";
 // hr_attendance_logs ("permission denied for table"), so writes would fail
 // before RLS even runs.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
-import { haversineDistance, GEOFENCE_RADIUS_METERS } from "@/lib/hr/constants";
+import { haversineDistance, GEOFENCE_RADIUS_METERS, REST_DAY_ROLE_PATTERN } from "@/lib/hr/constants";
 import { evaluateClockOut } from "@/lib/hr/clock-out-gate";
-import { deriveHours, mytDateString, mytDayOfWeek, mytInstant } from "@/lib/hr/hours";
+import { deriveHours, mytDateString, mytInstant } from "@/lib/hr/hours";
 import type { AttendanceLog, GeofenceZone } from "@/lib/hr/types";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +60,11 @@ async function pickOutletByLocation(candidateIds: string[], lat: number | undefi
 // the same hr_schedule_shifts rows the no-show / allowance logic reads. Picks the
 // shift whose start is closest to the clock-in, and checks today AND yesterday
 // (MYT) so a just-past-midnight clock-in still matches its previous-evening shift.
+// How far past a shift's own end we'll still accept it as the shift being
+// started. Covers a late arrival onto a shift already running, and a
+// just-past-midnight clock-in for the previous evening's shift.
+const ROSTER_STALE_GRACE_MS = 4 * 3600 * 1000;
+
 async function findRosterShift(userId: string, clockIn: Date): Promise<{ scheduled_start: string; scheduled_end: string | null; scheduled_date: string } | null> {
   const todayMyt = mytDateString(clockIn);
   const prevMyt = mytDateString(new Date(clockIn.getTime() - 24 * 3600 * 1000));
@@ -77,9 +82,26 @@ async function findRosterShift(userId: string, clockIn: Date): Promise<{ schedul
   for (const s of shifts) {
     const startInstant = mytInstant(s.shift_date, s.start_time);
     if (!startInstant) continue;
+
+    // Skip a shift that is already OVER. Nearest-start alone picked yesterday's
+    // shift whenever there was no roster row for today — it was the only
+    // candidate, so it won by default and stamped a shift-end reference ~24h in
+    // the past. That produced 13 of the 21 zero-hour auto-closes (the cron read
+    // the stale end, found it before clock-in, and settled the log at 0.00h),
+    // and it also judged lateness and early-clock-in pay against the wrong day.
+    //
+    // A generous grace keeps the case this lookback exists for: clocking in just
+    // after midnight for a shift that ran to 23:30 the previous evening, or
+    // arriving a little late onto a shift already underway.
+    const endInstant = s.end_time ? mytInstant(s.shift_date, s.end_time) : null;
+    if (endInstant && clockIn.getTime() - endInstant.getTime() > ROSTER_STALE_GRACE_MS) continue;
+
     const diff = Math.abs(clockIn.getTime() - startInstant.getTime());
     if (!best || diff < best.diff) best = { shift: s, diff };
   }
+  // No plausible roster row → stamp nothing. A null roster is handled everywhere
+  // downstream (the auto-close cron falls through to its stale-session
+  // backstop); a stale one silently corrupts lateness, pay and the close time.
   if (!best) return null;
   return { scheduled_start: best.shift.start_time, scheduled_end: best.shift.end_time, scheduled_date: best.shift.shift_date };
 }
@@ -328,19 +350,31 @@ export async function POST(req: NextRequest) {
     // ONLY, leaving regular_hours/overtime_hours NULL; payroll sums
     // regular_hours, so every app clock-out paid 0 hours. Derive them here so a
     // clean clock-out pays immediately.
-    const [profileResp, holidayResp] = await Promise.all([
-      supabase.from("hr_employee_profiles").select("employment_type, rest_day").eq("user_id", session.id).maybeSingle(),
-      supabase.from("hr_public_holidays").select("date").eq("date", mytDateString(clockIn)).maybeSingle(),
+    // Rest day is ROSTERED, not a weekday on the profile: the schedule carries a
+    // "Rest Day" row (00:00-00:00) per person per week and it rotates. The old
+    // profile-based read defaulted NULL to Sunday and mis-stamped 107 of 108
+    // rest-day logs. Same source as the AI processor and the auto-close cron.
+    const clockInDate = mytDateString(clockIn);
+    const [profileResp, holidayResp, restResp] = await Promise.all([
+      supabase.from("hr_employee_profiles").select("employment_type").eq("user_id", session.id).maybeSingle(),
+      supabase.from("hr_public_holidays").select("date").eq("date", clockInDate).maybeSingle(),
+      supabase
+        .from("hr_schedule_shifts")
+        .select("id")
+        .eq("user_id", session.id)
+        .eq("shift_date", clockInDate)
+        .ilike("role_type", REST_DAY_ROLE_PATTERN)
+        .limit(1)
+        .maybeSingle(),
     ]);
-    const restDay = profileResp.data?.rest_day == null ? 0 : Number(profileResp.data.rest_day);
     const derived = deriveHours({
       clockIn,
       clockOut,
       employmentType: profileResp.data?.employment_type || "full_time",
       isPublicHoliday: !!holidayResp.data,
-      isRestDay: mytDayOfWeek(clockIn) === restDay,
+      isRestDay: !!restResp.data,
       // Early clock-in pays from the rostered start (stamped at clock-in).
-      scheduledStart: mytInstant(activeLog.scheduled_date ?? mytDateString(clockIn), activeLog.scheduled_start),
+      scheduledStart: mytInstant(activeLog.scheduled_date ?? clockInDate, activeLog.scheduled_start),
     });
     const totalHours = derived.totalHours;
 

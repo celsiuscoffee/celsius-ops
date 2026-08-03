@@ -36,7 +36,27 @@ type PayrollItem = {
   total_deductions: number;
   net_pay: number;
   computation_details: { employment_type: string; hourly_rate: number; attendance_records: number } | null;
+  // jsonb: the RM200 performance pool under `performance`, plus any recurring
+  // catalog items keyed by their code (negative amount = pre-tax deduction).
+  allowances: Record<string, {
+    amount?: number;
+    pool?: number;
+    /** Present only on a partial month — the pool before proration. */
+    prorated_from?: number;
+    prorate_days_worked?: number;
+    prorate_days_total?: number;
+  }> | null;
 };
+
+/**
+ * The performance allowance actually paid on a line — already net of the
+ * attendance and negative-review deductions, and prorated for a partial month.
+ * Gross was previously the only place this showed up, which made a line like
+ * "basic 354.84, gross 534.84" impossible to read off the table.
+ */
+function perfAllowance(item: PayrollItem): number {
+  return Number(item.allowances?.performance?.amount ?? 0);
+}
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -276,6 +296,7 @@ export default function PayrollPage() {
                           <th className="pb-2 pr-3">Employee</th>
                           <th className="pb-2 pr-3 text-right">Basic</th>
                           <th className="pb-2 pr-3 text-right">OT</th>
+                          <th className="pb-2 pr-3 text-right">Allowance</th>
                           <th className="pb-2 pr-3 text-right">Gross</th>
                           <th className="pb-2 pr-3 text-right">EPF</th>
                           <th className="pb-2 pr-3 text-right">SOCSO</th>
@@ -292,6 +313,18 @@ export default function PayrollPage() {
                             <td className="py-2 pr-3 text-right">{fmt(item.basic_salary)}</td>
                             <td className="py-2 pr-3 text-right">
                               {Number(item.total_ot_hours) > 0 ? `${item.total_ot_hours}h` : "—"}
+                            </td>
+                            <td
+                              className="py-2 pr-3 text-right"
+                              title={
+                                item.allowances?.performance?.prorated_from != null
+                                  ? `${fmt(item.allowances.performance.prorated_from)} earned, prorated to `
+                                    + `${item.allowances.performance.prorate_days_worked}/`
+                                    + `${item.allowances.performance.prorate_days_total} days`
+                                  : undefined
+                              }
+                            >
+                              {perfAllowance(item) > 0 ? fmt(perfAllowance(item)) : "—"}
                             </td>
                             <td className="py-2 pr-3 text-right">{fmt(item.total_gross)}</td>
                             <td className="py-2 pr-3 text-right">{fmt(item.epf_employee)}</td>
