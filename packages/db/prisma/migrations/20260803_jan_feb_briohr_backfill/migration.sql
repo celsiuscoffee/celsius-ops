@@ -151,8 +151,13 @@ WHERE r.id = t.payroll_run_id;
 
 COMMIT;
 
--- Expected after apply:
+-- APPLIED to production 2026-08-03 on the owner's instruction, and verified:
 --   Jan  20 lines  gross 77,516.31  deductions 10,847.65  net 66,668.66  employer 9,958.50
 --   Feb  23 lines  gross 67,671.00  deductions  9,350.05  net 58,320.95  employer 9,344.45
 -- Gross matches BrioHR exactly in both months. Net sits 898.19 (Jan) / 158.00
 -- (Feb) below BrioHR's, being the expense claims - see judgement call 1 above.
+--
+-- STILL OWED, and it needs a human: recompute July on /hr/payroll. The July run
+-- is `ai_computed` so recompute is permitted. Ariff's July PCB is 618.50 today
+-- and should land at 1,240.25 once it reads the restored YTD. Do not confirm or
+-- pay July before that.

@@ -6,6 +6,49 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-03 — **The deleted `opening_balance` is no longer needed: Jan and Feb
+  monthly runs now carry the full BrioHR figures (APPLIED to prod).** Owner
+  re-exported `202601`/`202602_payroll_report.xlsx` from BrioHR; reconciling
+  every line against the DB showed all existing lines already matched to the
+  sen and **exactly three were missing** — Ariff Izham in BOTH months (Jan
+  12,519.23 gross / 1,559.10 PCB; Feb 10,500.00 / 1,054.15) and Izzah Nusaibah
+  in Feb (1,700.00 / 0.00). Run-level shortfalls matched to the sen, which is
+  what makes this certain rather than plausible. Applied via
+  `packages/db/prisma/migrations/20260803_jan_feb_briohr_backfill/`: Jan is now
+  20 lines / 77,516.31 gross, Feb 23 lines / 67,671.00 — both equal to BrioHR.
+  Run headers are re-totalled **from their own lines**, not hardcoded.
+  **Two conventions worth keeping:** (1) every 2026 monthly line satisfies
+  `net = gross − deductions` with a zero gap, so Ariff's expense-claim
+  reimbursements (898.19 Jan / 158.00 Feb) were kept OUT of gross and net and
+  recorded in `computation_details.net_additions` — our Jan/Feb net therefore
+  sits that much below BrioHR's own net figure BY DESIGN, it is not a
+  discrepancy; (2) BrioHR-era leavers with no `User` row get a synthetic id
+  spelling ASCII `briohr-<empid>` (Izzah = `6272696f-6872-2d43-4330-363100000000`)
+  and `status='DEACTIVATED'`, matching the original import.
+  **Ariff YTD-through-June is now 65,019.23 gross / 5,775.70 PCB paid.**
+- 2026-08-03 — **Ariff's July PCB of RM618.50 is the understated figure and
+  RM1,240.25 is the corrected one — July MUST be recomputed before it is
+  confirmed or paid.** The deleted opening balance took his Jan–Jun YTD with it;
+  the calculator then saw only Mar–Jun (42,000.00 / 4,216.60), projected
+  RM105,600 annual instead of RM128,619.23, and landed a bracket low. Modelling
+  the LHDN formula against the broken YTD reproduces the stored 618.50 exactly,
+  which is what confirms the diagnosis. With Jan/Feb restored the same model
+  gives **1,240.25**. Note this is HIGHER than the RM1,064.60 the run showed
+  before the balance was deleted — the old opening balance implied YTD gross of
+  only ~60,803, i.e. **it was itself ~4,216 short**; the figures now in the
+  monthly runs come straight off the BrioHR exports and are the better source.
+  **The recompute cannot be triggered from an agent session** — no
+  `SUPABASE_SERVICE_ROLE_KEY` in the repo; it needs a human to hit Compute on
+  `/hr/payroll` (the July run is `ai_computed`, so recompute is permitted;
+  it fails on `confirmed`).
+- 2026-08-03 — **The BrioHR import dropped people silently, and the delete
+  endpoint let it happen twice.** The original Jan/Feb import covered 19 of 20
+  and 21 of 23; nothing flagged the gap because run headers were written from
+  the import, not derived from the lines, so header and detail agreed while both
+  were wrong. Separately, `DELETE /api/hr/payroll` blocks only `paid` — a
+  `confirmed` run (and the `opening_balance`, which sat at `draft` and was never
+  protected at all) can still be deleted, which is how the YTD was lost. Both
+  worth fixing: derive headers from lines on import, and widen the delete guard.
 - 2026-08-03 — **PART-TIMERS ARE NOT IN THE MONTHLY RUN, AND THAT IS EXPECTED —
   DO NOT RE-RAISE IT.** Every payroll run that exists is `monthly` (8) or
   `opening_balance` (1); **zero weekly runs, ever**, despite
