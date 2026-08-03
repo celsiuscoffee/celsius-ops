@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { fetchAllRows } from "./fetch-all";
 
 // PostgREST caps an unbounded response at 1000 rows and tells you nothing:
 // no error, no flag, just a short array. Every consumer that treated
@@ -10,24 +11,10 @@ import { describe, it, expect } from "vitest";
 //   * phone capture target — 4,192–5,601 orders per outlet per 90 days, so the
 //     baseline came from the oldest 1000. Tamarind read 35% against a true 44%.
 //     Found only because a human thought the number looked wrong.
+//   * the monthly payroll attendance fetch sat at 761 of the 1000 cap.
 //
-// This mirrors the shipped `fetchAllRows` paging loop.
-
-const PAGE = 1000;
-
-async function fetchAllRows<T>(
-  build: () => { range: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }> },
-): Promise<T[]> {
-  const out: T[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await build().range(from, from + PAGE - 1);
-    if (error || !data) break;
-    out.push(...data);
-    if (data.length < PAGE) break;
-    if (out.length >= 100_000) break;
-  }
-  return out;
-}
+// Tests the REAL implementation — an earlier revision tested a local copy,
+// which is exactly how the probation gate stayed "green" while dead.
 
 /** A fake table of `total` rows that honours .range() the way PostgREST does. */
 const table = (total: number, opts: { errorAt?: number } = {}) => {

@@ -6,6 +6,36 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-03 — **OT RATE NOW COMES FROM hr_overtime_requests, AND REST-DAY FROM
+  THE ROSTER AS IT FINALLY STANDS — the end-to-end payroll QA pass.** Three
+  owner rulings landed together in `lib/hr/ot-policy.ts` + the monthly
+  calculator (pinned by `ot-policy.test.ts`):
+  - **Rate vs payability split.** The attendance log decides WHETHER OT hours
+    are payable; approved/partial `hr_overtime_requests` are a per-user-per-day
+    budget deciding the RATE. `splitOtHours` caps premium at the budget and pays
+    the remainder at plain 1.0× — worked hours are never zeroed and never
+    silently upgraded. (Monthly run had never read the requests table; weekly PT
+    always did.)
+  - **Rest day = roster row, re-derived at compute time.** Stamped
+    `overtime_type`/`ai_flags` are snapshots; rosters get re-published after
+    processing (Sunday 2 Aug: whole crew stamped `rest_day_work` off a roster
+    replaced later that day). `effectiveOtType` re-checks
+    `hr_schedule_shifts.role_type ILIKE 'rest%'` per log: stale rest-day stamps
+    off-roster downgrade to 1.5×, weekday stamps on a rostered rest day upgrade
+    to 2×, holiday classes pass through. Safe because both deriveHours branches
+    split hours identically — only the multiplier label differed.
+  - **Stored labels repaired in prod** via
+    `20260803_rest_day_stamp_repair` (APPLIED 2026-08-03, verified): 42 logs
+    ot_2x→ot_1_5x, 81 rest_day_1x→NULL, 22 OT requests '2x'→'1.5x' (incl. the
+    two APPROVED Sunday rows that a recompute would have paid 2×). All four
+    stray counts now 0 — and 0 legitimate rest-day stamps remain, i.e. not one
+    July/Aug rest-day stamp was on a rostered rest day.
+  Also in this pass: the monthly attendance fetch and the YTD priorItems fetch
+  are paged through `fetchAllRows` (attendance sat at 761/1000 — one busy month
+  from silent truncation); a roster-mismatch tripwire notes shifts where worked
+  exceeds payable by >2h outside system auto-close; `fetch-all-rows.test.ts`
+  now imports the REAL helper (it had tested a local copy). PT OT needs no new
+  guard — FT-only checks shipped on main in #1083.
 - 2026-08-03 — **THE DELETE ENDPOINT WAS THE GUARDRAIL HOLE, AND IT ATE JULY.**
   `DELETE /api/hr/payroll` guarded `paid` only, so a **confirmed** run — the
   thing payslips and bank files come from — could be destroyed in one call with
@@ -1204,6 +1234,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-08-03 (late) — **End-to-end payroll QA pass landed on
+  `claude/farah-staff-onboarding-99yg3j` (feeds PR #1110); stamp-repair
+  migration APPLIED to prod and verified 0/0/0/0.** The sequence the owner
+  still drives: **merge #1110 → Vercel deploy → compute July** (the run is
+  currently DELETED; a plain compute rebuilds it — expect serving-time movement
+  for everyone from the paging fix, Iffa −120 / Razley −150 probation
+  claw-back, and OT rate corrections from the request-budget split) → read-back
+  → then merge #1113 (staff payslips, split out on `claude/staff-payslips-open`).
+  NEXT TASK, not yet started: owner asked for a module-level QA review of the
+  whole HR area — Dashboard, Employees, Attendance, Leave, Schedules, Payroll,
+  PT Rates, Allowances, Performance — "functions, redundancies, management
+  workflow… currently it is a bit messy." Deliverable is a findings report,
+  not fixes. Parked decisions: quarter-hour Math.floor rounding; the
+  apps/staff allowances fork; Group A ~50h repayment; Adam Kelvin Mar–May
+  BrioHR exports (EA understates ~RM11,200); hr_probation_reviews flow never
+  used end-to-end. Do NOT re-raise: Group B auto-clockouts, rest-day premium
+  (1× within threshold is policy), PT absence from the monthly run.
 - 2026-08-03 — **HR/payroll session. Three things are with the owner, and July
   must NOT be confirmed until they land.**
   (a) CLOSED 2026-08-03 — part-timers absent from the monthly run is BY DESIGN;

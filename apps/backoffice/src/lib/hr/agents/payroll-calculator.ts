@@ -4,6 +4,9 @@ import { computeAllowancesForUser, loadAllowanceRules } from "../allowances";
 import { calcAllStatutory } from "../statutory/calculators";
 import { computeProrate, prorateAmount } from "../payroll/prorate";
 import { mytDateString } from "../hours";
+import { fetchAllRows } from "../fetch-all";
+import { splitOtHours, effectiveOtType } from "../ot-policy";
+import { REST_DAY_ROLE_PATTERN } from "../constants";
 
 type PayrollResult = {
   payrollRunId: string;
@@ -220,21 +223,79 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
   //   - Manager approved after review (final_status='approved') → pay
   //   - Manager adjusted hours (final_status='adjusted') → pay
   //   - Rejected OR still pending/flagged/reviewed-unactioned → don't pay
-  const { data: attendance } = await hrSupabaseAdmin
-    .from("hr_attendance_logs")
-    .select("*")
-    .gte("clock_in", startDate)
-    .lt("clock_in", endDate)
-    // NULL-safe "not rejected": PostgREST `.neq` compiles to `final_status <>
-    // 'rejected'`, which is FALSE for NULL rows and silently drops them — but
-    // the AI-auto-approved happy path is exactly `final_status = NULL` (see the
-    // paying-out rules above). Dropping those means unpaid shifts. Keep NULL +
-    // any non-rejected value; exclude only explicit rejections.
-    .or("final_status.is.null,final_status.neq.rejected");
+  // Paged: July 2026 alone returned 761 rows against PostgREST's silent
+  // 1000-row cap. Unpaged, one busier month drops the last shifts of the month
+  // from pay for whoever sorts last — no error, no note, just missing hours.
+  // This is the single most load-bearing read in payroll; see fetch-all.ts.
+  const attendance = await fetchAllRows<Record<string, unknown> & {
+    user_id: string;
+    clock_in: string;
+    ai_status: string | null;
+    final_status: string | null;
+    clock_out_method: string | null;
+    total_hours: number | string | null;
+    regular_hours: number | string | null;
+    overtime_hours: number | string | null;
+    overtime_type: string | null;
+  }>(() =>
+    hrSupabaseAdmin
+      .from("hr_attendance_logs")
+      .select("*")
+      .gte("clock_in", startDate)
+      .lt("clock_in", endDate)
+      // NULL-safe "not rejected": PostgREST `.neq` compiles to `final_status <>
+      // 'rejected'`, which is FALSE for NULL rows and silently drops them — but
+      // the AI-auto-approved happy path is exactly `final_status = NULL` (see the
+      // paying-out rules above). Dropping those means unpaid shifts. Keep NULL +
+      // any non-rejected value; exclude only explicit rejections.
+      .or("final_status.is.null,final_status.neq.rejected"),
+  );
+
+  // Approved OT budget per (user, MYT day). hr_overtime_requests is the table
+  // that records an actual OT decision, and until now the monthly run never
+  // read it — an attendance approval silently authorised premium OT (the
+  // weekly PT calculator has read this table all along). Owner 2026-08-03:
+  // approved hours pay premium, everything beyond them pays PLAIN 1.0× —
+  // worked hours are never zeroed, and never silently upgraded either.
+  const { data: otRequestRows } = await hrSupabaseAdmin
+    .from("hr_overtime_requests")
+    .select("user_id, date, hours_approved")
+    .gte("date", startDate.slice(0, 10))
+    .lt("date", endDate.slice(0, 10))
+    .in("status", ["approved", "partial"]);
+  const otBudgetByUserDay = new Map<string, number>();
+  for (const o of (otRequestRows || []) as Array<{ user_id: string; date: string; hours_approved: number | null }>) {
+    const key = `${o.user_id}:${o.date}`;
+    otBudgetByUserDay.set(key, (otBudgetByUserDay.get(key) ?? 0) + (Number(o.hours_approved) || 0));
+  }
+
+  // Rest days AS THE ROSTER FINALLY STANDS (owner 2026-08-03: "rest-day is
+  // only when we schedule. it is not fixed on weekends"). The log's stamped
+  // overtime_type is a snapshot from processing time, and rosters get edited
+  // after the fact — on Sunday 2 Aug the whole crew carried `rest_day_work`
+  // stamps from a roster republished later that day. The rate is re-derived
+  // per log against this set (see effectiveOtType); hour splits are unchanged.
+  const restShiftRows = await fetchAllRows<{ user_id: string; shift_date: string }>(() =>
+    hrSupabaseAdmin
+      .from("hr_schedule_shifts")
+      .select("user_id, shift_date")
+      .ilike("role_type", REST_DAY_ROLE_PATTERN)
+      .gte("shift_date", startDate.slice(0, 10))
+      .lt("shift_date", endDate.slice(0, 10)),
+  );
+  const rosteredRestDays = new Set(restShiftRows.map((r) => `${r.user_id}:${r.shift_date}`));
+  let staleRestStamps = 0;
+
+  // Shifts where far more was clocked than is payable, outside the system
+  // auto-close path (whose clock-outs are synthetic and legitimately capped).
+  // Usually a wrong roster: Amirul Yazid worked 8.08h on 12 Jul 2026 against
+  // an evening roster and was credited 0.01h. Pay is NOT changed here — the
+  // roster is the thing to fix — but it must stop happening silently.
+  const rosterMismatches: string[] = [];
 
   // Group attendance by user
   const attendanceByUser = new Map<string, typeof attendance>();
-  (attendance || []).forEach((a: { user_id: string }) => {
+  (attendance || []).forEach((a) => {
     const list = attendanceByUser.get(a.user_id) || [];
     list.push(a);
     attendanceByUser.set(a.user_id, list);
@@ -330,10 +391,18 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     (priorRuns || []).map((r: { id: string; period_month: number }) => [r.id, Number(r.period_month)]),
   );
   if (priorMonthByRun.size > 0) {
-    const { data: priorItems } = await hrSupabaseAdmin
-      .from("hr_payroll_items")
-      .select("user_id, total_gross, pcb_tax, payroll_run_id, computation_details")
-      .in("payroll_run_id", [...priorMonthByRun.keys()]);
+    // Paged: eleven prior months × ~30 lines stays under the 1000-row cap
+    // today, but this feeds YTD → PCB, where a silent shortfall means every
+    // bracket lands low. Cheap insurance; see fetch-all.ts.
+    const priorItems = await fetchAllRows<{
+      user_id: string; total_gross: unknown; pcb_tax: unknown;
+      payroll_run_id: string; computation_details: unknown;
+    }>(() =>
+      hrSupabaseAdmin
+        .from("hr_payroll_items")
+        .select("user_id, total_gross, pcb_tax, payroll_run_id, computation_details")
+        .in("payroll_run_id", [...priorMonthByRun.keys()]),
+    );
     for (const p of priorItems || []) {
       const itemMonth = priorMonthByRun.get(p.payroll_run_id) ?? 0;
       // Already inside the opening balance for this person — don't count twice.
@@ -477,8 +546,13 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     let ot3xAmount = 0;
 
     // OT rules:
-    //   1. Must be approved (by AI or manager) — unapproved OT isn't paid
-    //   2. Must be >= 1 hour on that log — shorter overruns are ignored
+    //   1. The attendance log decides WHETHER the hours are payable — a
+    //      rejected or still-pending log pays no OT at all.
+    //   2. hr_overtime_requests decides the RATE — hours inside an approved
+    //      request pay the log's premium; hours beyond it pay PLAIN 1.0×
+    //      (owner 2026-08-03: worked hours are never zeroed, and an attendance
+    //      approval alone never buys the premium).
+    //   3. Must be >= 1 whole hour on that log — shorter overruns are ignored.
     // Regular hours still count regardless (the shift happened, pay for it).
     const OT_MIN_HOURS = 1;
     const isOtApproved = (a: { ai_status: string | null; final_status: string | null }) =>
@@ -486,6 +560,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       a.final_status === "adjusted" ||
       (a.ai_status === "approved" && !a.final_status);
 
+    let plainRateOtHours = 0;
     for (const a of userAttendance) {
       totalRegularHours += Number(a.regular_hours) || 0;
       // OT must always be floored to whole hours per Celsius payroll policy.
@@ -496,13 +571,43 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       totalOtHours += otHours;
 
       if (otHours > 0) {
-        const otType = a.overtime_type || "ot_1_5x";
-        const amount = otHours * hourlyRate;
-        if (otType === "rest_day_1x" || otType === "ot_1x") ot1xAmount += amount * 1;
-        else if (otType === "ot_1_5x") ot15xAmount += amount * OT_RATES.normal;
-        else if (otType === "ot_2x") ot2xAmount += amount * OT_RATES.rest_day;
-        else if (otType === "ot_3x" || otType === "ph_2x") ot3xAmount += amount * OT_RATES.public_holiday_ot;
+        // The approved budget is per (user, day) and shared across a day's
+        // logs — split shifts draw down the same approval.
+        const dayKey = `${profile.user_id}:${mytDateString(new Date(a.clock_in))}`;
+        const { premium, plain } = splitOtHours(otHours, otBudgetByUserDay.get(dayKey) ?? 0);
+        otBudgetByUserDay.set(dayKey, (otBudgetByUserDay.get(dayKey) ?? 0) - premium);
+
+        // Rate class follows the roster as it finally stands, not the stamp.
+        const otType = effectiveOtType(a.overtime_type, rosteredRestDays.has(dayKey));
+        if (otType !== (a.overtime_type || "ot_1_5x")) staleRestStamps++;
+        if (premium > 0) {
+          const amount = premium * hourlyRate;
+          if (otType === "rest_day_1x" || otType === "ot_1x") ot1xAmount += amount * 1;
+          else if (otType === "ot_1_5x") ot15xAmount += amount * OT_RATES.normal;
+          else if (otType === "ot_2x") ot2xAmount += amount * OT_RATES.rest_day;
+          else if (otType === "ot_3x" || otType === "ph_2x") ot3xAmount += amount * OT_RATES.public_holiday_ot;
+        }
+        if (plain > 0) {
+          ot1xAmount += plain * hourlyRate;
+          // Types that already pay 1.0× aren't a downgrade — don't report them.
+          if (otType !== "ot_1x" && otType !== "rest_day_1x") plainRateOtHours += plain;
+        }
       }
+
+      // Roster-mismatch tripwire — real clock-outs only; system auto-closes
+      // cap payable time deliberately and their timestamps are synthetic.
+      const workedH = Number(a.total_hours) || 0;
+      const payableH = (Number(a.regular_hours) || 0) + rawOtHours;
+      if (a.clock_out_method !== "system" && workedH - payableH > 2) {
+        rosterMismatches.push(
+          `${profile.user_id.slice(0, 8)} ${mytDateString(new Date(a.clock_in))}: worked ${workedH.toFixed(2)}h, payable ${payableH.toFixed(2)}h`,
+        );
+      }
+    }
+    if (plainRateOtHours > 0) {
+      notes.push(
+        `${profile.user_id.slice(0, 8)}: ${plainRateOtHours}h OT had no approved hr_overtime_requests cover — paid at plain 1.0× (owner policy 2026-08-03), not premium and not zeroed.`,
+      );
     }
 
     // Prorate — calendar-day based per MY Employment Act. Applies to fixed
@@ -842,6 +947,21 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
   }
   if (finalPayrollNames.length > 0) {
     notes.push(`⚠ Final payroll for: ${finalPayrollNames.join(", ")} — add leave encashment / notice pay if applicable before confirming`);
+  }
+
+  if (rosterMismatches.length > 0) {
+    const shown = rosterMismatches.slice(0, 10);
+    notes.push(
+      `⚠ ROSTER MISMATCH on ${rosterMismatches.length} shift(s) — clocked far more than payable, usually a wrong scheduled_start. ` +
+      `Pay follows the roster (unchanged); fix the roster and recompute if wrong: ${shown.join(" | ")}` +
+      (rosterMismatches.length > shown.length ? ` … +${rosterMismatches.length - shown.length} more` : ""),
+    );
+  }
+
+  if (staleRestStamps > 0) {
+    notes.push(
+      `${staleRestStamps} OT log(s) carried a rest-day stamp that disagrees with the final roster — rate re-derived from the schedule (rest day is a roster row, not a weekend; owner 2026-08-03). Hours unchanged, multiplier corrected.`,
+    );
   }
 
   // 6. Insert payroll items
