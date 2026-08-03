@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 // anon client reads zero rows (screen shows empty). Access stays scoped by the
 // getSession gate + the per-user filters below.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
+import { leaveDays } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +33,17 @@ export async function GET() {
   // "remaining" headline the app shows, so compute it: what the staff can still
   // take = entitled + carried forward, minus used and pending. Values come back
   // as numeric strings, so coerce.
+  // Rounded here, at the source: this figure is rendered verbatim by BOTH the
+  // staff web app and the native manager app (which reads remaining_days
+  // straight off this response), so fixing it server-side covers both without
+  // shipping a native build.
   const num = (v: unknown) => Number(v ?? 0) || 0;
   const balances = (balancesRes.data || []).map((b: Record<string, unknown>) => ({
     ...b,
-    remaining_days:
+    entitled_days: leaveDays(num(b.entitled_days)),
+    remaining_days: leaveDays(
       num(b.entitled_days) + num(b.carried_forward) - num(b.used_days) - num(b.pending_days),
+    ),
   }));
 
   return NextResponse.json({
