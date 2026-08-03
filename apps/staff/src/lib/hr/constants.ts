@@ -55,6 +55,22 @@ export const REST_DAY_ROLE = "Rest Day";
 // Match pattern for reads — the roster is hand-entered, so tolerate casing.
 export const REST_DAY_ROLE_PATTERN = "rest%";
 
+/**
+ * Round a leave-day figure for display and comparison.
+ *
+ * Leave is tracked in half-days, and the balance is a subtraction:
+ * entitled + carried_forward − used − pending. Those are decimals, so binary
+ * floating point leaks — 8 − 0.7 is 7.300000000000001, and the staff app
+ * rendered exactly that under "Annual Leave".
+ *
+ * Two decimals is well past the half-day granularity the business actually
+ * uses, so this cannot hide a real value. Returns a NUMBER, so 7.3 prints as
+ * "7.3" and 8 prints as "8" without trailing zeros.
+ */
+export function leaveDays(n: number): number {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
 // Malaysia time offset
 export const MYT_OFFSET_HOURS = 8;
 

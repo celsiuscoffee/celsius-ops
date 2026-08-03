@@ -5,7 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { CalendarOff, CheckCircle2, XCircle, Clock, Loader2, Bot, Plus, ArrowLeft } from "lucide-react";
 import type { LeaveBalance, LeaveRequest } from "@/lib/hr/types";
-import { LEAVE_TYPES } from "@/lib/hr/constants";
+import { LEAVE_TYPES, leaveDays } from "@/lib/hr/constants";
 
 export default function LeavePage() {
   const { data, mutate } = useFetch<{ balances: LeaveBalance[]; requests: LeaveRequest[] }>("/api/hr/leave");
@@ -214,7 +214,11 @@ export default function LeavePage() {
           <div className="grid grid-cols-2 gap-2">
             {balances.map((b) => {
               const typeInfo = LEAVE_TYPES[b.leave_type as keyof typeof LEAVE_TYPES];
-              const remaining = Number(b.entitled_days) + Number(b.carried_forward) - Number(b.used_days) - Number(b.pending_days);
+              // Rounded — the raw subtraction is a float, and 8 - 0.7 rendered
+              // as "7.300000000000001" on this very card.
+              const remaining = leaveDays(
+                Number(b.entitled_days) + Number(b.carried_forward) - Number(b.used_days) - Number(b.pending_days),
+              );
               return (
                 <div key={b.id} className="rounded-xl border border-gray-100 bg-white p-3">
                   <p className="text-xs font-medium text-gray-500">{typeInfo?.label || b.leave_type}</p>
