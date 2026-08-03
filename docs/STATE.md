@@ -29,7 +29,14 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   are dated to the END of the probation they served (join + 90d = 2026-07-26 and
   2026-07-15) rather than their join date — backdating would assert they never
   had a probation, and would retroactively entitle them to May/June allowance.
-  Final split: **13 confirmed / 9 on probation.** NOT YET APPLIED.
+  Final split: **13 confirmed / 9 on probation — APPLIED to prod 2026-08-03 and
+  verified.** **ORDERING RULE, learned here: apply the column BEFORE deploying
+  the code.** `allowances.ts` selects `confirmed_at`; if the deploy had landed
+  first, PostgREST would 400 on the unknown column, `profile` would read null,
+  `isFullTime` would be false and EVERY performance allowance would silently
+  drop to zero. Column → deploy → recompute, in that order.
+  **A recompute alone does nothing until #1110 is merged and deployed** — the
+  live backoffice still runs the old gate that never fires.
   Also fixed: approving a `decision='confirm'` review previously did nothing to
   the profile (it only unlocked the confirmation letter); it now stamps
   `confirmed_at`, which is what actually ends probation.

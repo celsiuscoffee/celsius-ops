@@ -99,6 +99,16 @@ UPDATE hr_employee_profiles
 
 COMMIT;
 
+-- APPLIED to production 2026-08-03 and verified: of the 22 active full-timers,
+-- 13 confirmed / 9 on probation, exactly the split above.
+--
+-- ORDER MATTERS, and this was applied FIRST for a reason. `allowances.ts` now
+-- does `.select("... confirmed_at")`. Had the code deployed before this
+-- migration, PostgREST would have 400'd on the unknown column, `profile` would
+-- have come back null, `isFullTime` would have been false, and EVERY
+-- performance allowance would have silently dropped to zero. Column first,
+-- deploy second, recompute third.
+--
 -- Expected after apply, across ALL profiles (not just active full-timers):
 --   select count(*) filter (where confirmed_at is not null) as confirmed,
 --          count(*) filter (where confirmed_at is null)     as on_probation
