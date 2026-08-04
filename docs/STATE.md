@@ -6,6 +6,34 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-04 — **Owner's paper OT imported ahead of the July recompute
+  ("All Outlet OT July 2026" xlsx): 42 approved post_hoc `hr_overtime_requests`
+  inserted + Shairuleen 25 Jul topped up 1→2.5h; 37 attendance logs stamped
+  with the approved hours (ot_1_5x, final approved); 6 SYNTHETIC OT-only logs
+  created for Shahrul Afique 5–10 Jul (4h/day, clock_in_method='ot_approval',
+  IOI) — he had NO logs those days.** Verified: per-person approved budget ==
+  payable log OT for all 8 (Afique 24, Shairuleen 19/18 floored, Firdaus 10,
+  Zikry 10, Atthira 7.5/7, Razley 5.5/5, Sherry 5, Nazihah 1+2 plain). New
+  premium value ≈ RM991.59 vs the deleted run (which paid these hours RM0).
+  Judgment calls: Atthira's "17.06.26" row read as 17 JULY (typo; she has a
+  17 Jul log); Firdaus 29 Jul paper approval supersedes the DB-rejected row
+  (new approved row, rejected kept for audit); Sherry 5 Jul kept at the DB's
+  2h approval (sheet said 1 — never reduce without instruction); **Adib
+  EXCLUDED — his active record is part_time** (PT not entitled to OT, outside
+  the monthly run); Afique is FT resigned 31 Jul (end_date) so July still
+  pays. Floors ate 2.0h (Razley 0.5, Atthira 0.5, Shairuleen 1.0) — P4.
+  **LATENT BUG found: `ot-payroll-sync.ts` inserts synthetic logs with
+  clock_out NULL, but unique index `hr_attendance_logs_one_open_per_user`
+  allows ONE open log per user — a second same-user synthetic approval will
+  throw.** Fix: set clock_out on synthetic logs (done in the manual SQL).
+- 2026-08-04 — **PT rates flattened per owner: RM10/h (weekday AND weekend)
+  for Qaseh, Farah Nabilah, Batrisyia; RM9/9 for the other 18 active PT** —
+  note this REMOVED the RM10 weekend premium most PT carried. **Nurfarah
+  Quraisya (Putrajaya, was 10/10) HELD unchanged pending owner: is she one of
+  the intended "Farah"s, or does she drop to 9?** No hr_salary_history rows
+  were written (direct profile update) — history screen won't show this
+  change.
+
 - 2026-08-03 — **OT RATE NOW COMES FROM hr_overtime_requests, AND REST-DAY FROM
   THE ROSTER AS IT FINALLY STANDS — the end-to-end payroll QA pass.** Three
   owner rulings landed together in `lib/hr/ot-policy.ts` + the monthly
