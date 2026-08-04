@@ -1269,7 +1269,16 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   different ways (needs one `isRestDayShift()` helper), monthly payroll list
   API lacks `cycle_type` filter so weekly runs render as blank months, HR
   dashboard outlet-scopes only 1 of 4 tiles. Full details in the session
-  transcript / report to owner. NOTHING fixed yet — owner to pick.
+  transcript / report to owner.
+  **Slice 1 FIXED same session (owner said "continue"):** (1) monthly payroll
+  UI — Revert button on confirmed runs, Delete hidden where the server refuses
+  it, Confirm surfaces errors + offers `allow_early_confirm` on the
+  cycle-not-ended 409; (2) weekly route — atomic `.in(status)` confirm (no
+  paid→confirmed downgrade), `mark_paid` only from confirmed + appends to
+  ai_notes instead of overwriting, both log ActivityLog; (3) monthly list API
+  now filters `cycle_type='monthly'` (weekly runs rendered as blank months).
+  Guards pinned in payroll-run-guards.test.ts (canConfirm/canMarkPaid ladder).
+  Remaining findings still awaiting owner's pick.
 - 2026-08-03 (late) — **End-to-end payroll QA pass landed on
   `claude/farah-staff-onboarding-99yg3j` (feeds PR #1110); stamp-repair
   migration APPLIED to prod and verified 0/0/0/0.** The sequence the owner

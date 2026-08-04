@@ -22,6 +22,12 @@ const canDelete = (s: Status) => s !== "paid" && s !== "confirmed";
 /** Mirrors the shipped revert guard: confirmed → ai_computed, nothing else. */
 const canRevert = (s: Status) => s === "confirmed";
 
+/** Mirrors the confirm guard (monthly and weekly alike): only forward. */
+const canConfirm = (s: Status) => s === "ai_computed" || s === "draft";
+
+/** Mirrors the weekly mark_paid guard: the bank file comes from confirmed. */
+const canMarkPaid = (s: Status) => s === "confirmed";
+
 describe("DELETE guard", () => {
   it("allows a draft or ai_computed run — nothing has been published from these", () => {
     expect(canDelete("draft")).toBe(true);
@@ -49,6 +55,35 @@ describe("revert", () => {
   it("refuses runs that are not confirmed in the first place", () => {
     expect(canRevert("draft")).toBe(false);
     expect(canRevert("ai_computed")).toBe(false);
+  });
+});
+
+describe("confirm and mark_paid only move forward", () => {
+  // The weekly route shipped without these guards: a bare update meant
+  // confirming a PAID run silently downgraded it to confirmed — desyncing the
+  // bank file already generated — and mark_paid accepted any status at all.
+  it("confirm takes only a computed or draft run", () => {
+    expect(canConfirm("ai_computed")).toBe(true);
+    expect(canConfirm("draft")).toBe(true);
+  });
+
+  it("confirm refuses confirmed and paid — no silent downgrade of paid", () => {
+    expect(canConfirm("confirmed")).toBe(false);
+    expect(canConfirm("paid")).toBe(false);
+  });
+
+  it("mark_paid takes only a confirmed run — the bank file's source", () => {
+    expect(canMarkPaid("confirmed")).toBe(true);
+    expect(canMarkPaid("draft")).toBe(false);
+    expect(canMarkPaid("ai_computed")).toBe(false);
+    expect(canMarkPaid("paid")).toBe(false);
+  });
+
+  it("the lifecycle is a one-way ladder with revert as the only rung down", () => {
+    // draft/ai_computed → confirmed → paid; the sole reverse edge is
+    // confirmed → ai_computed via revert. Nothing exits `paid`.
+    expect(canConfirm("ai_computed") && canMarkPaid("confirmed")).toBe(true);
+    expect(canRevert("paid")).toBe(false);
   });
 });
 

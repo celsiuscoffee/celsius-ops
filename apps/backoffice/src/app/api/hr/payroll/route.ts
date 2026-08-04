@@ -45,10 +45,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ run: runRes.data, items: enriched });
   }
 
-  // List all runs
+  // List all MONTHLY runs. Without the cycle_type filter this list also picked
+  // up weekly and opening_balance runs, whose period_month is NULL — the page
+  // rendered them as blank months. The weekly route filters its side already.
   const { data } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
     .select("*")
+    .eq("cycle_type", "monthly")
     .order("period_year", { ascending: false })
     .order("period_month", { ascending: false })
     .limit(12);
