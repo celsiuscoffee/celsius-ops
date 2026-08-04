@@ -1,3 +1,4 @@
+// Deploy marker: 2026-08-04 — forces a build after the lost webhook for the #1110 merge (empty-commit re-fire was skipped by turbo-ignore).
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
