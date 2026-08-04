@@ -1305,7 +1305,26 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   `isShiftOutsideAvailability` in schedules/page.tsx was ALREADY dead at HEAD
   (defined, never called) — availability windows gate nothing in the grid;
   strengthens finding #13.
-  Remaining findings still awaiting owner's pick.
+  **Slice 4 (nav/orphans) FIXED same session:** roster-attendance + pt-hours +
+  access-presets added to NAV_SECTIONS as hidden entries (restores the client
+  route gate + ⌘K); PT Rates joined the People tab group (was in NO group —
+  rendered with no lateral nav); SettingsNav got a Pay group with Payroll
+  Items (the only item-catalog CRUD screen had zero inbound links) and lost
+  its dead void-icon imports; /hr/performance-review (dead redirect, zero
+  links) deleted; "Import LoEs" button added next to New Employee (the
+  403-line bulk wizard had zero inbound links); /hr/allowances "Configure →"
+  repointed from working-time (no allowance fields) to /hr/settings/allowances;
+  #tab= deep links on the employee profile now work (certifications rows used
+  to land on Profile regardless).
+  Remaining findings still awaiting owner's pick: monthly mark-paid step,
+  pre-approval OT prefill from the roster grid, PT-hours flagged-link →
+  /hr/attendance deep link, availability/coverage edit-in-place,
+  hr_leave_policies wiring (or deletion), working-time blind-PATCH allowlist,
+  dashboard outlet scoping for the other 3 tiles, dead-column drop
+  (performance_allowance_amount + its 4 remaining writers), single
+  isRestDayShift() helper, apps/staff allowances fork, quarter-hour rounding,
+  Group A repayment, Adam Kelvin exports, /hr/allowances↔performance merge
+  (move AllowanceTabs first — W3 ordering).
 - 2026-08-03 (late) — **End-to-end payroll QA pass landed on
   `claude/farah-staff-onboarding-99yg3j` (feeds PR #1110); stamp-repair
   migration APPLIED to prod and verified 0/0/0/0.** The sequence the owner

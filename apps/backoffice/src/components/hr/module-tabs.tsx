@@ -17,6 +17,11 @@ const TAB_GROUPS: { module: string; tabs: { href: string; label: string }[] }[] 
     module: "People",
     tabs: [
       { href: "/hr/employees", label: "Employees" },
+      // PT Rates sits with People, not Payroll: it's keyed on hr:employees so a
+      // staffing manager sets hourly rates without the payroll module — and the
+      // Payroll tab group is hidden from managers entirely. Until now the page
+      // was in NO group, so it rendered with no lateral nav at all.
+      { href: "/hr/pt-rates", label: "PT Rates" },
       { href: "/hr/access-presets", label: "App Access" },
       { href: "/hr/certifications", label: "Certifications" },
       { href: "/hr/memos", label: "Memos" },

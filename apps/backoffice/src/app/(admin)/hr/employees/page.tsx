@@ -4,6 +4,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { useState, useEffect } from "react";
 import { ChevronRight, CheckCircle2, AlertCircle, Search, Plus, Loader2, X, Download, Sparkles, FileText, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { EmployeeProfile } from "@/lib/hr/types";
 
 type Employee = {
@@ -376,13 +377,24 @@ export default function EmployeesPage() {
           )}
         </div>
         {canCreate && (
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90"
-          >
-            <Plus className="h-4 w-4" />
-            New Employee
-          </button>
+          <div className="flex items-center gap-2">
+            {/* The bulk LoE wizard existed with zero inbound links — reachable
+                only by typing the URL. */}
+            <Link
+              href="/hr/employees/import"
+              className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+            >
+              <FileText className="h-4 w-4" />
+              Import LoEs
+            </Link>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90"
+            >
+              <Plus className="h-4 w-4" />
+              New Employee
+            </button>
+          </div>
         )}
       </div>
 

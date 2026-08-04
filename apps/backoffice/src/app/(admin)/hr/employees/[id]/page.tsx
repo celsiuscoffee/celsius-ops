@@ -118,7 +118,14 @@ export default function EmployeeDetailPage() {
   // Profile is split into tabs so the page renders fast and isn't a wall of
   // forms. Sections only mount (and only fire their fetches) when their tab
   // is active.
-  const [tab, setTab] = useState<"profile" | "performance" | "comp" | "records" | "access">("profile");
+  const [tab, setTab] = useState<"profile" | "performance" | "comp" | "records" | "access">(() => {
+    // #tab=records deep links (certifications rows, doc reminders) were inert —
+    // every entry landed on Profile regardless of the hash.
+    if (typeof window === "undefined") return "profile";
+    const h = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("tab");
+    const valid = ["profile", "performance", "comp", "records", "access"] as const;
+    return (valid as readonly string[]).includes(h ?? "") ? (h as (typeof valid)[number]) : "profile";
+  });
   const { data, mutate } = useFetch<{ employees: Employee[] }>("/api/hr/employees");
   const { data: me } = useFetch<{ role: string }>("/api/auth/me");
   const canSeeSalary = me?.role === "OWNER" || me?.role === "ADMIN";
