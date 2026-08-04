@@ -1278,6 +1278,18 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   ai_notes instead of overwriting, both log ActivityLog; (3) monthly list API
   now filters `cycle_type='monthly'` (weekly runs rendered as blank months).
   Guards pinned in payroll-run-guards.test.ts (canConfirm/canMarkPaid ladder).
+  **Slice 2 FIXED same session:** (1) `/api/hr/allowance-overrides` +
+  `/hr/settings/staff-allowances` repointed from the dead
+  `performance_allowance_amount` column (5 writers / 0 readers) to the LIVE
+  `fixed_performance_allowance` — screen relabeled "Flat Allowances", honest
+  copy (flat = no levers, no deductions), scored/flat mode badge, eligibility
+  no longer excludes unrostered staff (they are exactly whom flat is for);
+  (2) probation worklist — "On Probation" dashboard tile (API counts FT ACTIVE
+  with confirmed_at NULL — verified 9 against prod) deep-linking to a new
+  Probation tab on /hr/employees (`?filter=probation`). Still to do from D1:
+  the four OTHER writers of the dead column (create modal, [id] Compensation
+  tab, loe-import commit, agent write-ops) still write it — removing them +
+  dropping the column is a follow-up cleanup + owner-approved migration.
   Remaining findings still awaiting owner's pick.
 - 2026-08-03 (late) — **End-to-end payroll QA pass landed on
   `claude/farah-staff-onboarding-99yg3j` (feeds PR #1110); stamp-repair

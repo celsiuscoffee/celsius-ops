@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function GET() {
     ? { outlet_id: session.outletId }
     : {};
 
-  const [flaggedRes, leaveRes, scheduleRes, payrollRes, agentRes] = await Promise.all([
+  const [flaggedRes, leaveRes, scheduleRes, payrollRes, agentRes, probationRes] = await Promise.all([
     // Flagged attendance count
     hrSupabaseAdmin
       .from("hr_attendance_logs")
@@ -64,7 +65,27 @@ export async function GET() {
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+
+    // Full-timers still on probation — confirmed_at is the ONLY thing that ends
+    // probation (owner 2026-08-03), and while it is unset payroll withholds the
+    // performance allowance. There is no other worklist for this: the banner
+    // lives on the individual profile, so an unnoticed probation silently costs
+    // the staffer money every month.
+    hrSupabaseAdmin
+      .from("hr_employee_profiles")
+      .select("user_id")
+      .eq("employment_type", "full_time")
+      .is("confirmed_at", null)
+      .is("resigned_at", null)
+      .is("end_date", null),
   ]);
+
+  // Deactivated users can linger with a live-looking profile (no resigned_at) —
+  // count only ACTIVE accounts.
+  const probationIds = (probationRes.data || []).map((p: { user_id: string }) => p.user_id);
+  const onProbation = probationIds.length
+    ? await prisma.user.count({ where: { id: { in: probationIds }, status: "ACTIVE" } })
+    : 0;
 
   return NextResponse.json({
     flaggedAttendance: flaggedRes.count || 0,
@@ -72,5 +93,6 @@ export async function GET() {
     scheduleStatus: scheduleRes.data?.status || "no_schedule",
     payrollStatus: payrollRes.data?.status || "not_started",
     lastAgentRun: agentRes.data || null,
+    onProbation,
   });
 }
