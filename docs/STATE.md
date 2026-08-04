@@ -22,10 +22,16 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   EXCLUDED — his active record is part_time** (PT not entitled to OT, outside
   the monthly run); Afique is FT resigned 31 Jul (end_date) so July still
   pays. Floors ate 2.0h (Razley 0.5, Atthira 0.5, Shairuleen 1.0) — P4.
-  **LATENT BUG found: `ot-payroll-sync.ts` inserts synthetic logs with
-  clock_out NULL, but unique index `hr_attendance_logs_one_open_per_user`
-  allows ONE open log per user — a second same-user synthetic approval will
-  throw.** Fix: set clock_out on synthetic logs (done in the manual SQL).
+  **LATENT BUG FIXED same day: `ot-payroll-sync.ts` inserted synthetic logs
+  with clock_out NULL, but unique index `hr_attendance_logs_one_open_per_user`
+  allows ONE open log per user — a second same-user synthetic approval threw
+  23505.** Synthetic logs now close over the approved span. Also 2026-08-04:
+  owner ruled "follow exactly the sheet" → **OT now pays to the half-hour**
+  (P4 resolved: calculator + sync no longer Math.floor; ≥1h minimum kept);
+  Sherry 5 Jul reduced 2→1h per sheet; Adib 2 Jul 3h added against his FT
+  stint (monthly RM1900 ends 3 Jul; log 83939522 6h flagged → 3h approved).
+  ⚠ hours.ts still floors at attendance-processing time — future logs get
+  whole hours at the stamp; only approvals carry fractions through.
 - 2026-08-04 — **PT rates flattened per owner: RM10/h (weekday AND weekend)
   for Qaseh, Farah Nabilah, Batrisyia; RM9/9 for the other 18 active PT** —
   note this REMOVED the RM10 weekend premium most PT carried. **Nurfarah
