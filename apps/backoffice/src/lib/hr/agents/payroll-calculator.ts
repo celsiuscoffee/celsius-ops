@@ -563,10 +563,11 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     let plainRateOtHours = 0;
     for (const a of userAttendance) {
       totalRegularHours += Number(a.regular_hours) || 0;
-      // OT must always be floored to whole hours per Celsius payroll policy.
-      // The attendance-processor already floors; this is defensive for any
-      // historical data that snuck in rounded.
-      const rawOtHours = Math.floor(Number(a.overtime_hours) || 0);
+      // OT pays to the half-hour as approved (owner 2026-08-04, "follow exactly
+      // the sheet" — the July import carries 1.5h/2.5h approvals). The old
+      // whole-hour Math.floor here silently ate those fractions. The ≥1h
+      // minimum below still filters sub-hour overruns.
+      const rawOtHours = Math.round((Number(a.overtime_hours) || 0) * 100) / 100;
       const otHours = isOtApproved(a) && rawOtHours >= OT_MIN_HOURS ? rawOtHours : 0;
       totalOtHours += otHours;
 

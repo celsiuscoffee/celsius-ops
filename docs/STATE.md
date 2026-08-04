@@ -6,6 +6,77 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-04 — **JULY "ALREADY PAID" BASELINE recovered from the session
+  transcript (owner: "already paid based on the prev compute" / "use the ones
+  that we computed before").** The deleted run's per-person NET figures,
+  snapshotted 2026-08-03 11:37 UTC before deletion — the settlement after the
+  recompute is new_net − this baseline, per person. Ariff's line here carries
+  the WRONG PCB (618.50; correct is 1,064.60) so he was over-transferred
+  ~RM446. Adib appeared TWICE at 160.82 (duplicate later fixed by #1109) —
+  ask owner whether one or both were transferred. Zero-net rows omitted.
+  Adam Ariff Irfan Bin Mohamed Ismail: 1589.75
+  Adam Kelvin: 4209.05
+  AHMAD RAZLEY HIDAYAT BIN SUHAINI: 1651.45
+  AMIRUL YAZID BIN ASNOR: 1501.45
+  Ariff Izham Bin Abd Rahman: 8784.85
+  Azmer Zul Qiefli Bin Mohamad Azlan: 1768.05
+  FIRDAUS BIN NAJIB: 1886.26
+  GURAF LAL JOSHI: 1644.43
+  Hanisa Amirah Bt Md Shamsulrizal: 1649.75
+  Mohamed Danish Hyqal Bin Mohamed Faizal: 594.64
+  Mohd Haziq Bin Mohd Zaini: 2407.85
+  Muhamad Syafiq Aiman Bin Mohamed Kaberi: 3128.03
+  Muhammad Adib Bin Zulkifli: 160.82
+  Muhammad Adib Bin Zulkifli: 160.82
+  MUHAMMAD AKMAL AIMAN AMIR: 1701.38
+  Muhammad Ameir Haziq Bin Noor Azman: 2136.25
+  Muhammad Zarif Bin Abdul Rahman: 397.46
+  Nor Armin Hafifie Bin Nor Arwan: 1791.20
+  Nur Atthira Bt M Salleh: 2096.10
+  NUR IFFA SOFEA BINTI MAZLAN: 1778.28
+  NUR NAZIHAH BINTI NORAZLAN: 1875.49
+  Nuralia Aina Binti Noor Azlan: 2135.65
+  NURUL ALIANATASHA BINTI NARZARI: 1691.97
+  Shahrul Afique Bin Nazarudin: 1678.05
+  Shairuleen Binti Jeffri Aziz: 2188.15
+  Tengku Syahirah Balqis Binti Tengku Helme Fazle: 2100.24
+  Zikry Yusuf Bin Nor Hamidi: 1659.75
+  Total net (incl. both Adib lines): 54,367.17.
+
+- 2026-08-04 — **Owner's paper OT imported ahead of the July recompute
+  ("All Outlet OT July 2026" xlsx): 42 approved post_hoc `hr_overtime_requests`
+  inserted + Shairuleen 25 Jul topped up 1→2.5h; 37 attendance logs stamped
+  with the approved hours (ot_1_5x, final approved); 6 SYNTHETIC OT-only logs
+  created for Shahrul Afique 5–10 Jul (4h/day, clock_in_method='ot_approval',
+  IOI) — he had NO logs those days.** Verified: per-person approved budget ==
+  payable log OT for all 8 (Afique 24, Shairuleen 19/18 floored, Firdaus 10,
+  Zikry 10, Atthira 7.5/7, Razley 5.5/5, Sherry 5, Nazihah 1+2 plain). New
+  premium value ≈ RM991.59 vs the deleted run (which paid these hours RM0).
+  Judgment calls: Atthira's "17.06.26" row read as 17 JULY (typo; she has a
+  17 Jul log); Firdaus 29 Jul paper approval supersedes the DB-rejected row
+  (new approved row, rejected kept for audit); Sherry 5 Jul kept at the DB's
+  2h approval (sheet said 1 — never reduce without instruction); **Adib
+  EXCLUDED — his active record is part_time** (PT not entitled to OT, outside
+  the monthly run); Afique is FT resigned 31 Jul (end_date) so July still
+  pays. Floors ate 2.0h (Razley 0.5, Atthira 0.5, Shairuleen 1.0) — P4.
+  **LATENT BUG FIXED same day: `ot-payroll-sync.ts` inserted synthetic logs
+  with clock_out NULL, but unique index `hr_attendance_logs_one_open_per_user`
+  allows ONE open log per user — a second same-user synthetic approval threw
+  23505.** Synthetic logs now close over the approved span. Also 2026-08-04:
+  owner ruled "follow exactly the sheet" → **OT now pays to the half-hour**
+  (P4 resolved: calculator + sync no longer Math.floor; ≥1h minimum kept);
+  Sherry 5 Jul reduced 2→1h per sheet; Adib 2 Jul 3h added against his FT
+  stint (monthly RM1900 ends 3 Jul; log 83939522 6h flagged → 3h approved).
+  ⚠ hours.ts still floors at attendance-processing time — future logs get
+  whole hours at the stamp; only approvals carry fractions through.
+- 2026-08-04 — **PT rates flattened per owner: RM10/h (weekday AND weekend)
+  for Qaseh, Farah Nabilah, Batrisyia; RM9/9 for the other 18 active PT** —
+  note this REMOVED the RM10 weekend premium most PT carried. **Nurfarah
+  Quraisya (Putrajaya, was 10/10) HELD unchanged pending owner: is she one of
+  the intended "Farah"s, or does she drop to 9?** No hr_salary_history rows
+  were written (direct profile update) — history screen won't show this
+  change.
+
 - 2026-08-03 — **OT RATE NOW COMES FROM hr_overtime_requests, AND REST-DAY FROM
   THE ROSTER AS IT FINALLY STANDS — the end-to-end payroll QA pass.** Three
   owner rulings landed together in `lib/hr/ot-policy.ts` + the monthly

@@ -57,9 +57,11 @@ export type OtSyncAction = "updated_log" | "updated_ot_log" | "created_ot_log" |
 // Idempotent per (user, date). Returns the action taken. Never throws to the
 // caller's happy path — the OT route wraps this and surfaces payroll_synced.
 export async function applyApprovedOt(req: ApprovedOtRequest): Promise<OtSyncAction> {
-  // Payroll floors OT to whole hours; mirror it so the synced value matches pay.
-  const hours = Math.floor(Number(req.hours_approved) || 0);
-  if (hours < 1) return "skipped_zero"; // <1h floored OT is never paid anyway
+  // OT pays to the half-hour as approved (owner 2026-08-04); payroll no longer
+  // floors, so the synced value carries the fraction. Sub-hour approvals are
+  // still skipped — payroll's ≥1h minimum would never pay them.
+  const hours = Math.round((Number(req.hours_approved) || 0) * 100) / 100;
+  if (hours < 1) return "skipped_zero";
   const otType = mapOtType(req.ot_type);
 
   // 1. Find the attendance log for that day: explicit link, else any log whose
@@ -107,17 +109,24 @@ export async function applyApprovedOt(req: ApprovedOtRequest): Promise<OtSyncAct
       .eq("id", existing.id as string);
     return "updated_ot_log";
   }
+  // clock_out MUST be set: the unique index hr_attendance_logs_one_open_per_user
+  // allows one open (NULL clock_out) log per user, so a second synthetic
+  // approval for the same person used to throw 23505 here. Pay reads the
+  // regular_hours/overtime_hours columns, not the clock span, so a span equal
+  // to the approved hours is presentation only.
+  const clockOut = new Date(Date.parse(clockIn) + hours * 3600 * 1000).toISOString();
   await hrSupabaseAdmin.from("hr_attendance_logs").insert({
     user_id: req.user_id,
     outlet_id: req.outlet_id ?? null,
     clock_in: clockIn,
-    clock_out: null,
+    clock_out: clockOut,
     regular_hours: 0,
     overtime_hours: hours,
     overtime_type: otType,
     ai_status: "approved",
     final_status: "approved",
     clock_in_method: "ot_approval",
+    clock_out_method: "ot_approval",
   });
   return "created_ot_log";
 }
