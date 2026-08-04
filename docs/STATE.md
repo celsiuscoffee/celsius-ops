@@ -6,6 +6,43 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-04 — **JULY "ALREADY PAID" BASELINE recovered from the session
+  transcript (owner: "already paid based on the prev compute" / "use the ones
+  that we computed before").** The deleted run's per-person NET figures,
+  snapshotted 2026-08-03 11:37 UTC before deletion — the settlement after the
+  recompute is new_net − this baseline, per person. Ariff's line here carries
+  the WRONG PCB (618.50; correct is 1,064.60) so he was over-transferred
+  ~RM446. Adib appeared TWICE at 160.82 (duplicate later fixed by #1109) —
+  ask owner whether one or both were transferred. Zero-net rows omitted.
+  Adam Ariff Irfan Bin Mohamed Ismail: 1589.75
+  Adam Kelvin: 4209.05
+  AHMAD RAZLEY HIDAYAT BIN SUHAINI: 1651.45
+  AMIRUL YAZID BIN ASNOR: 1501.45
+  Ariff Izham Bin Abd Rahman: 8784.85
+  Azmer Zul Qiefli Bin Mohamad Azlan: 1768.05
+  FIRDAUS BIN NAJIB: 1886.26
+  GURAF LAL JOSHI: 1644.43
+  Hanisa Amirah Bt Md Shamsulrizal: 1649.75
+  Mohamed Danish Hyqal Bin Mohamed Faizal: 594.64
+  Mohd Haziq Bin Mohd Zaini: 2407.85
+  Muhamad Syafiq Aiman Bin Mohamed Kaberi: 3128.03
+  Muhammad Adib Bin Zulkifli: 160.82
+  Muhammad Adib Bin Zulkifli: 160.82
+  MUHAMMAD AKMAL AIMAN AMIR: 1701.38
+  Muhammad Ameir Haziq Bin Noor Azman: 2136.25
+  Muhammad Zarif Bin Abdul Rahman: 397.46
+  Nor Armin Hafifie Bin Nor Arwan: 1791.20
+  Nur Atthira Bt M Salleh: 2096.10
+  NUR IFFA SOFEA BINTI MAZLAN: 1778.28
+  NUR NAZIHAH BINTI NORAZLAN: 1875.49
+  Nuralia Aina Binti Noor Azlan: 2135.65
+  NURUL ALIANATASHA BINTI NARZARI: 1691.97
+  Shahrul Afique Bin Nazarudin: 1678.05
+  Shairuleen Binti Jeffri Aziz: 2188.15
+  Tengku Syahirah Balqis Binti Tengku Helme Fazle: 2100.24
+  Zikry Yusuf Bin Nor Hamidi: 1659.75
+  Total net (incl. both Adib lines): 54,367.17.
+
 - 2026-08-04 — **Owner's paper OT imported ahead of the July recompute
   ("All Outlet OT July 2026" xlsx): 42 approved post_hoc `hr_overtime_requests`
   inserted + Shairuleen 25 Jul topped up 1→2.5h; 37 attendance logs stamped
