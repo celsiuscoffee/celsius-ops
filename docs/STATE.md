@@ -1290,6 +1290,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   the four OTHER writers of the dead column (create modal, [id] Compensation
   tab, loe-import commit, agent write-ops) still write it — removing them +
   dropping the column is a follow-up cleanup + owner-approved migration.
+  **Slice 3 FIXED same session:** (1) roster-attendance now checks approved
+  `hr_leave_requests` — new `on_leave` cell status (violet) outranks the
+  roster, so approved-after-publish leave no longer renders "Absent"; a real
+  clock-in still wins; (2) swap approval consolidated onto
+  `/api/hr/shift-swaps` — MANAGER outlet scoping (both shifts, approve AND
+  reject) and the `is_ai_assigned: false` reset ported from the deleted
+  backoffice `/api/hr/swap` route (apps/staff keeps its own same-named route,
+  untouched); the schedules-page raw-UUID swap panel is now a count badge
+  linking to /hr/shift-swaps; (3) analytics — swap pill counts the real
+  statuses (`pending_consent`/`pending_approval`; the old
+  "pending"/"consented" never existed, pill sat at 0 forever), probation
+  cohort now `full_time && !confirmed_at` matching the payroll gate. Noted:
+  `isShiftOutsideAvailability` in schedules/page.tsx was ALREADY dead at HEAD
+  (defined, never called) — availability windows gate nothing in the grid;
+  strengthens finding #13.
   Remaining findings still awaiting owner's pick.
 - 2026-08-03 (late) — **End-to-end payroll QA pass landed on
   `claude/farah-staff-onboarding-99yg3j` (feeds PR #1110); stamp-repair
