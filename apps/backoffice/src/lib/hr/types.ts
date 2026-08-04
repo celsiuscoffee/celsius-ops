@@ -52,6 +52,9 @@ export type EmployeeProfile = {
   dietary_restrictions?: string | null;
   profile_completed_at?: string | null;    // set when staff hits "mark complete"
   profile_self_updated_at?: string | null; // bumped on every save from staff app
+  // Probation ends ONLY when this is stamped (owner 2026-08-03: "probation will
+  // end only after confirmation. it is not time base"). NULL = on probation.
+  confirmed_at?: string | null;
   created_at: string;
   updated_at: string;
 };

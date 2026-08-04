@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarClock, Briefcase, Clock, Timer, Building2, UserCog, CalendarDays } from "lucide-react";
+import { CalendarClock, Briefcase, Clock, Building2 } from "lucide-react";
 
 // Settings is grouped into 4 logical buckets so the nav doesn't wrap to a
 // second line. Sub-pages live under their group and share the same group
@@ -30,9 +30,17 @@ const GROUPS = [
       { href: "/hr/settings/working-time",    label: "Working Time" },
     ],
   },
-  // Pay configuration (allowance rules + per-staff overrides) lives with
-  // payouts under /hr/allowances now, sharing a single tab strip there.
-  // Settings keeps Time Off / Schedule / Company only.
+  // Allowance config (rules + per-staff flat amounts) lives with payouts under
+  // /hr/allowances, sharing a single tab strip there. The recurring payroll
+  // item CATALOG has no home there — without this entry the only screen with
+  // full item CRUD was reachable by typed URL alone.
+  {
+    label: "Pay",
+    icon: Briefcase,
+    items: [
+      { href: "/hr/settings/payroll-items", label: "Payroll Items" },
+    ],
+  },
   {
     label: "Company",
     icon: Building2,
@@ -41,11 +49,6 @@ const GROUPS = [
     ],
   },
 ] as const;
-
-// Quick-lookup table — kept around for icons that older code might still want.
-// (Imports retained so removing icons doesn't break existing references.)
-void Briefcase; void CalendarDays; void Timer; void UserCog;
-void CalendarClock;
 
 export function SettingsNav() {
   const pathname = usePathname();

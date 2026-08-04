@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
       totalMax: b.totalMax,
       lateCount: b.attendance.lateCount,
       absentCount: b.attendance.absentCount,
-      // Every deduction as its own line, so /hr/performance-review can waive one
+      // Every deduction as its own line, so /hr/performance can waive one
       // without replacing the whole month. `key` is what a waiver is stored
       // against — see the hr_performance_deduction_waivers migration.
       deductions: [

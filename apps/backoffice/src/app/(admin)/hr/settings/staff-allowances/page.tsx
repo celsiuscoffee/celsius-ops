@@ -12,7 +12,8 @@ type StaffRow = {
   fullName: string | null;
   role: string;
   outletName: string | null;
-  performance_allowance_amount: number | null;
+  scheduleRequired: boolean;
+  fixed_performance_allowance: number | null;
 };
 
 type Defaults = {
@@ -23,17 +24,17 @@ type Payload = { defaults: Defaults; staff: StaffRow[] };
 
 export default function StaffAllowancesPage() {
   const { data, mutate, isLoading } = useFetch<Payload>("/api/hr/allowance-overrides");
-  const [draft, setDraft] = useState<Record<string, { performance: string }>>({});
+  const [draft, setDraft] = useState<Record<string, { fixed: string }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   // Seed draft from server rows once data lands
   useEffect(() => {
     if (!data?.staff) return;
-    const seed: Record<string, { performance: string }> = {};
+    const seed: Record<string, { fixed: string }> = {};
     for (const s of data.staff) {
       seed[s.userId] = {
-        performance: s.performance_allowance_amount != null ? String(s.performance_allowance_amount) : "",
+        fixed: s.fixed_performance_allowance != null ? String(s.fixed_performance_allowance) : "",
       };
     }
     setDraft(seed);
@@ -65,7 +66,7 @@ export default function StaffAllowancesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: userId,
-          performance_allowance_amount: parse(d.performance),
+          fixed_performance_allowance: parse(d.fixed),
         }),
       });
       if (!res.ok) {
@@ -80,8 +81,8 @@ export default function StaffAllowancesPage() {
   };
 
   const resetRow = async (userId: string) => {
-    // Clear the override → null → falls back to default
-    setDraft((d) => ({ ...d, [userId]: { performance: "" } }));
+    // Clear the flat amount → null → back to the scored pool
+    setDraft((d) => ({ ...d, [userId]: { fixed: "" } }));
     setSavingId(userId);
     try {
       await fetch("/api/hr/allowance-overrides", {
@@ -89,7 +90,7 @@ export default function StaffAllowancesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: userId,
-          performance_allowance_amount: null,
+          fixed_performance_allowance: null,
         }),
       });
       mutate();
@@ -107,16 +108,13 @@ export default function StaffAllowancesPage() {
 
       <div className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold">Per-Staff Allowances</h2>
+          <h2 className="text-xl font-semibold">Flat Allowances (Per Staff)</h2>
           <p className="text-sm text-muted-foreground">
-            The value is a MAX — the actual payout is reduced by the KPI levers and by
-            lateness/absence and review penalties. Leave blank to use the global default from the Allowances tab.
+            A value here pays <strong>flat</strong> — the full amount every month, with no KPI
+            scoring and no lateness/absence or review deductions. Meant for roles the levers
+            cannot score (unrostered, HQ). Leave blank for the normal scored pool
+            {defaults ? ` (RM ${defaults.performance_allowance_amount.toFixed(2)} max, reduced by the levers)` : ""}.
           </p>
-          {defaults && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Current default: Performance RM {defaults.performance_allowance_amount.toFixed(2)}
-            </p>
-          )}
         </div>
 
         <div className="relative">
@@ -145,15 +143,16 @@ export default function StaffAllowancesPage() {
                 <tr>
                   <th className="px-4 py-3 text-left">Staff</th>
                   <th className="px-4 py-3 text-left">Role · Outlet</th>
-                  <th className="px-4 py-3 text-right">Performance (RM)</th>
+                  <th className="px-4 py-3 text-left">Mode</th>
+                  <th className="px-4 py-3 text-right">Flat amount (RM)</th>
                   <th className="px-4 py-3 text-right w-40">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((s) => {
-                  const d = draft[s.userId] || { performance: "" };
+                  const d = draft[s.userId] || { fixed: "" };
                   const saving = savingId === s.userId;
-                  const hasOverride = s.performance_allowance_amount != null;
+                  const isFlat = s.fixed_performance_allowance != null;
                   return (
                     <tr key={s.userId} className="border-t">
                       <td className="px-4 py-3">
@@ -168,24 +167,31 @@ export default function StaffAllowancesPage() {
                         </span>{" "}
                         {s.outletName || "HQ"}
                       </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          isFlat ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"
+                        }`}>
+                          {isFlat ? "Flat — not scored" : "Scored by levers"}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <input
                           type="number"
                           min={0}
                           step={0.01}
-                          value={d.performance}
-                          placeholder={defaults ? defaults.performance_allowance_amount.toFixed(2) : ""}
-                          onChange={(e) => setDraft((x) => ({ ...x, [s.userId]: { ...x[s.userId], performance: e.target.value } }))}
+                          value={d.fixed}
+                          placeholder="scored"
+                          onChange={(e) => setDraft((x) => ({ ...x, [s.userId]: { fixed: e.target.value } }))}
                           className="w-28 rounded-lg border bg-background px-3 py-1.5 text-right text-sm"
                         />
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {hasOverride && (
+                          {isFlat && (
                             <button
                               onClick={() => resetRow(s.userId)}
                               disabled={saving}
-                              title="Revert to defaults"
+                              title="Back to the scored pool"
                               className="rounded-lg border px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"
                             >
                               <RotateCcw className="h-3.5 w-3.5" />

@@ -22,6 +22,8 @@ import { hrSupabaseAdmin } from "./supabase";
 import { prisma } from "@/lib/prisma";
 import { computeLateMinutes, mytDateString } from "./hours";
 import { getMYTToday } from "./constants";
+import { probationReviewDue, isOnProbation } from "./probation";
+import { fetchAllRows } from "./fetch-all";
 
 // Phone capture is a FRONT-OF-HOUSE lever (kitchen does no phone collection).
 const FOH_POSITIONS = ["Barista", "Barista Lead", "Supervisor", "Shift Lead", "Manager", "Cashier"];
@@ -271,7 +273,7 @@ export async function computeAllowancesForUser(
 
   const { data: profile } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("employment_type, schedule_required, position, fixed_performance_allowance, probation_end_date")
+    .select("employment_type, schedule_required, position, fixed_performance_allowance, probation_end_date, join_date, confirmed_at")
     .eq("user_id", userId)
     .maybeSingle();
   const employmentType = profile?.employment_type ?? null;
@@ -283,15 +285,15 @@ export async function computeAllowancesForUser(
   // zeroing eligibility here would blank the levers too, and the whole point is
   // to keep watching how a new joiner is doing while paying them nothing.
   //
-  // Compared against the END of the month, so someone confirmed part-way
-  // through is paid for that whole month — the generous side, deliberately.
-  //
-  // A NULL probation_end_date means "not on probation", NOT "unknown". That is
-  // the only safe default: the column was empty for all 48 active profiles when
-  // this shipped, so treating NULL as probation would have zeroed the whole
-  // company's allowance in one deploy.
-  const probationEnd = (profile?.probation_end_date as string | null) ?? null;
-  const onProbation = !!probationEnd && monthEnd <= probationEnd;
+  // Probation ends on CONFIRMATION, never on elapsed time (owner 2026-08-03:
+  // "probation will end only after confirmation. it is not time base"). So the
+  // gate reads `confirmed_at` and nothing else. `probationEnd` below is the date
+  // the review is DUE — carried for display only, it decides nothing.
+  const onProbation = isOnProbation(monthEnd, profile?.confirmed_at as string | null);
+  const probationEnd = probationReviewDue(
+    profile?.join_date as string | null,
+    profile?.probation_end_date as string | null,
+  );
   const eligible = isFullTime && scheduleRequired;
   const isFoh = FOH_POSITIONS.includes((profile?.position ?? "").trim());
 
@@ -542,12 +544,17 @@ async function scoreChecklist(userId: string, outletId: string | null, monthStar
 // Phone capture: capture rate vs the outlet target (trailing-90d baseline + uplift).
 // Achievement = capture/target. ≥ full% → full · ≥ half% → half · else none.
 async function scorePhoneCapture(userId: string, loyaltyOutletId: string | null, monthStartIso: string, monthEndIso: string, r: AllowanceRules): Promise<RawLever> {
-  const { data: mine } = await hrSupabaseAdmin
-    .from("pos_orders").select("customer_phone, loyalty_phone").eq("employee_id", userId)
-    .gte("created_at", monthStartIso).lte("created_at", monthEndIso);
-  const total = (mine || []).length;
+  // Paged: the busiest July operator rang 778 orders, under the 1000 cap today,
+  // but a busier month or a two-month window would silently truncate and
+  // understate their capture rate. See fetchAllRows.
+  const mine = await fetchAllRows<{ customer_phone: string | null; loyalty_phone: string | null }>(() =>
+    hrSupabaseAdmin
+      .from("pos_orders").select("customer_phone, loyalty_phone").eq("employee_id", userId)
+      .gte("created_at", monthStartIso).lte("created_at", monthEndIso),
+  );
+  const total = mine.length;
   if (total < MIN_REGISTER_ORDERS) return { tier: "under", applicable: false, detail: `not a register operator (${total} orders)`, score: 0 };
-  const captured = (mine || []).filter((o: { customer_phone: string | null; loyalty_phone: string | null }) => o.customer_phone || o.loyalty_phone).length;
+  const captured = mine.filter((o) => o.customer_phone || o.loyalty_phone).length;
   const myRate = (captured / total) * 100;
 
   // ONE fixed target for every outlet (owner 2026-08-03: "put phone target 70%
@@ -556,14 +563,15 @@ async function scorePhoneCapture(userId: string, loyaltyOutletId: string | null,
   //
   //   1. A self-referential target rewards a low starting point — the worst
   //      outlet got the easiest bar, and improving raised your own bar.
-  //   2. The baseline read below has NO .range(), and PostgREST caps a response
+  //   2. The baseline read below had NO .range(), and PostgREST caps a response
   //      at 1000 rows. Every outlet is far past that (5,601 / 4,457 / 4,192
   //      orders per 90 days), so the baseline was computed from the OLDEST 1000
   //      orders and every target came out too low. Tamarind's showed 35% where
   //      the true figure was 44%, which is what surfaced this.
   //
-  // The per-outlet path is kept, and NULL restores it — but note it still has
-  // the 1000-row bug, so fix that before ever turning it back on.
+  // The per-outlet path is kept and NULL restores it. The truncation is FIXED
+  // now (it pages via fetchAllRows), so turning it back on is safe on that
+  // count — reason 1 is the reason it stays off.
   let target: number;
   if (r.phoneTargetPct != null) {
     target = r.phoneTargetPct;
@@ -571,11 +579,13 @@ async function scorePhoneCapture(userId: string, loyaltyOutletId: string | null,
     let baseline = r.phoneDefaultBaselinePct;
     if (loyaltyOutletId) {
       const since = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
-      const { data: outletRows } = await hrSupabaseAdmin
-        .from("pos_orders").select("customer_phone, loyalty_phone").eq("outlet_id", loyaltyOutletId).gte("created_at", since);
-      const oTotal = (outletRows || []).length;
+      const outletRows = await fetchAllRows<{ customer_phone: string | null; loyalty_phone: string | null }>(() =>
+        hrSupabaseAdmin
+          .from("pos_orders").select("customer_phone, loyalty_phone").eq("outlet_id", loyaltyOutletId).gte("created_at", since),
+      );
+      const oTotal = outletRows.length;
       if (oTotal >= 50) {
-        const oCap = (outletRows || []).filter((o: { customer_phone: string | null; loyalty_phone: string | null }) => o.customer_phone || o.loyalty_phone).length;
+        const oCap = outletRows.filter((o) => o.customer_phone || o.loyalty_phone).length;
         baseline = (oCap / oTotal) * 100;
       }
     }
@@ -597,13 +607,19 @@ async function scoreServingTime(logs: AttendanceLog[], loyaltyByUuid: Map<string
   if (windows.length === 0) return { tier: "under", applicable: false, detail: "no shifts worked", score: 0 };
 
   const outlets = Array.from(new Set(windows.map((w) => w.outlet)));
-  const { data: orders } = await hrSupabaseAdmin
-    .from("pos_orders").select("created_at, served_at, outlet_id")
-    .in("outlet_id", outlets).not("served_at", "is", null)
-    .gte("created_at", monthStartIso).lte("created_at", monthEndIso);
+  // THE ONE THAT WAS ACTUALLY BITING. This spans whole outlets for a whole
+  // month — 7,626 served orders in July 2026 — so the old unbounded read saw
+  // the first 1000 and scored everybody's serving time off roughly 1–4 July.
+  // Worth RM40–50 a head per month.
+  const orders = await fetchAllRows<{ created_at: string; served_at: string; outlet_id: string }>(() =>
+    hrSupabaseAdmin
+      .from("pos_orders").select("created_at, served_at, outlet_id")
+      .in("outlet_id", outlets).not("served_at", "is", null)
+      .gte("created_at", monthStartIso).lte("created_at", monthEndIso),
+  );
 
   let total = 0, sumMs = 0;
-  for (const o of (orders || []) as { created_at: string; served_at: string; outlet_id: string }[]) {
+  for (const o of orders) {
     const servedMs = new Date(o.served_at).getTime();
     const createdMs = new Date(o.created_at).getTime();
     if (servedMs < createdMs) continue;

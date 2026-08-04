@@ -149,6 +149,22 @@ export async function PATCH(
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // APPROVING A CONFIRM IS WHAT ENDS PROBATION — and until now it did nothing
+    // to the profile at all, it only unlocked the confirmation letter. Probation
+    // ends on this act, never on elapsed time (owner 2026-08-03), so the
+    // performance allowance stays withheld until `confirmed_at` is stamped here.
+    // Dated today rather than the review's due date: this is when the decision
+    // was actually taken, and the allowance gate pays from the month it lands.
+    if (existing.decision === "confirm") {
+      await hrSupabaseAdmin
+        .from("hr_employee_profiles")
+        .update({
+          confirmed_at: new Date().toISOString().slice(0, 10),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", id);
+    }
     return NextResponse.json({ review: data });
   }
 

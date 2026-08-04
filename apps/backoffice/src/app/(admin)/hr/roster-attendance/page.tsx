@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { HrPageHeader } from "@/components/hr/page-header";
 
-type Status = "on_time" | "late" | "absent" | "upcoming" | "rest_day" | "no_roster" | "off";
+type Status = "on_time" | "late" | "absent" | "upcoming" | "rest_day" | "no_roster" | "on_leave" | "off";
 type Cell = {
   scheduled_start: string | null;
   scheduled_end: string | null;
@@ -39,7 +39,7 @@ type Cell = {
 };
 type Staff = { user_id: string; name: string | null; nickname: string | null; position: string | null };
 type DayRow = Staff & Cell;
-type Summary = { rostered: number; present: number; late: number; absent: number; upcoming: number; unrostered: number };
+type Summary = { rostered: number; present: number; late: number; absent: number; upcoming: number; unrostered: number; on_leave?: number };
 type DayResp = { mode: "day"; date: string; outlet: { id: string; name: string }; rows: DayRow[]; summary: Summary };
 type WeekResp = {
   mode: "week";
@@ -78,6 +78,9 @@ const STATUS: Record<Status, { label: string; cls: string; dot: string; icon: ty
   upcoming: { label: "Upcoming", cls: "text-slate-500 bg-slate-50 border-slate-200", dot: "bg-slate-300", icon: CalendarClock },
   rest_day: { label: "Off day", cls: "text-indigo-500 bg-indigo-50/60 border-indigo-100", dot: "bg-indigo-300", icon: Moon },
   no_roster: { label: "Unrostered", cls: "text-sky-700 bg-sky-50 border-sky-200", dot: "bg-sky-500", icon: HelpCircle },
+  // Approved leave — was rendered "Absent" before the API learned to check
+  // hr_leave_requests, because leave approval leaves rostered shifts in place.
+  on_leave: { label: "On leave", cls: "text-violet-700 bg-violet-50 border-violet-200", dot: "bg-violet-400", icon: CalendarClock },
   off: { label: "Off", cls: "text-gray-400 bg-transparent border-transparent", dot: "bg-transparent", icon: HelpCircle },
 };
 
@@ -279,6 +282,7 @@ function WeekCell({ cell, onClick }: { cell: Cell; onClick: () => void }) {
   if (cell.status === "absent") headline = <span className="text-sm font-semibold">Absent</span>;
   else if (cell.status === "upcoming") headline = <span className="text-sm font-medium">Upcoming</span>;
   else if (cell.status === "rest_day") headline = <span className="text-sm font-medium">Off day</span>;
+  else if (cell.status === "on_leave") headline = <span className="text-sm font-medium">On leave</span>;
   else
     headline = (
       <span className="flex items-baseline gap-1">

@@ -6,6 +6,244 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-03 — **OT RATE NOW COMES FROM hr_overtime_requests, AND REST-DAY FROM
+  THE ROSTER AS IT FINALLY STANDS — the end-to-end payroll QA pass.** Three
+  owner rulings landed together in `lib/hr/ot-policy.ts` + the monthly
+  calculator (pinned by `ot-policy.test.ts`):
+  - **Rate vs payability split.** The attendance log decides WHETHER OT hours
+    are payable; approved/partial `hr_overtime_requests` are a per-user-per-day
+    budget deciding the RATE. `splitOtHours` caps premium at the budget and pays
+    the remainder at plain 1.0× — worked hours are never zeroed and never
+    silently upgraded. (Monthly run had never read the requests table; weekly PT
+    always did.)
+  - **Rest day = roster row, re-derived at compute time.** Stamped
+    `overtime_type`/`ai_flags` are snapshots; rosters get re-published after
+    processing (Sunday 2 Aug: whole crew stamped `rest_day_work` off a roster
+    replaced later that day). `effectiveOtType` re-checks
+    `hr_schedule_shifts.role_type ILIKE 'rest%'` per log: stale rest-day stamps
+    off-roster downgrade to 1.5×, weekday stamps on a rostered rest day upgrade
+    to 2×, holiday classes pass through. Safe because both deriveHours branches
+    split hours identically — only the multiplier label differed.
+  - **Stored labels repaired in prod** via
+    `20260803_rest_day_stamp_repair` (APPLIED 2026-08-03, verified): 42 logs
+    ot_2x→ot_1_5x, 81 rest_day_1x→NULL, 22 OT requests '2x'→'1.5x' (incl. the
+    two APPROVED Sunday rows that a recompute would have paid 2×). All four
+    stray counts now 0 — and 0 legitimate rest-day stamps remain, i.e. not one
+    July/Aug rest-day stamp was on a rostered rest day.
+  Also in this pass: the monthly attendance fetch and the YTD priorItems fetch
+  are paged through `fetchAllRows` (attendance sat at 761/1000 — one busy month
+  from silent truncation); a roster-mismatch tripwire notes shifts where worked
+  exceeds payable by >2h outside system auto-close; `fetch-all-rows.test.ts`
+  now imports the REAL helper (it had tested a local copy). PT OT needs no new
+  guard — FT-only checks shipped on main in #1083.
+- 2026-08-03 — **THE DELETE ENDPOINT WAS THE GUARDRAIL HOLE, AND IT ATE JULY.**
+  `DELETE /api/hr/payroll` guarded `paid` only, so a **confirmed** run — the
+  thing payslips and bank files come from — could be destroyed in one call with
+  no prompt, no backup and **no ActivityLog row** (the route never logged). It
+  cost data twice in one day: the `opening_balance` (BrioHR Jan–Jun YTD for 34
+  people; understated Ariff's July PCB by RM446.10) and then **the entire July
+  monthly run, deleted 22 seconds after a recompute rebuilt it** — 29 lines,
+  gone, with nothing recording who. Root cause was that "unlock so I can
+  recompute" had no path except delete. **FIXED both sides:** DELETE now refuses
+  `confirmed` as well as `paid`, and `POST action=revert` takes a confirmed run
+  back to `ai_computed` in place, keeping the run id. Both delete and revert now
+  write ActivityLog. `paid` is deliberately a dead end — bank files exist.
+  Pinned by `payroll-run-guards.test.ts`.
+  **July is recoverable from a recompute** — 761 attendance logs, 53 line
+  overrides, 16 approved OT requests and 36 `confirmed_at` profiles all survived.
+- 2026-08-03 — **PostgREST's silent 1000-row cap was truncating payroll inputs
+  in THREE places, not one.** No error, no flag, just a short array. **FIXED**
+  with a `fetchAllRows` paging helper in `allowances.ts`; pinned by
+  `fetch-all-rows.test.ts`.
+  - **Serving time — the one actually biting.** 7,626 served orders across the
+    outlets in July, so the lever scored everyone off roughly **1–4 July**
+    (~13% of the month). Worth RM40–50 a head per month.
+  - **Phone-capture outlet baseline** (legacy path, inert while
+    `phone_capture_target_pct` is set). 4,192–5,601 orders per outlet per 90d.
+  - **Per-employee capture.** Busiest July operator rang 778 — under the cap
+    today, but a busier month would truncate silently.
+  Lesson: **any unbounded `.select()` on `pos_orders` or `hr_attendance_logs` is
+  a latent truncation bug.** Use `fetchAllRows`.
+
+- 2026-08-03 — **PROBATION ENDS ON CONFIRMATION, NEVER ON ELAPSED TIME. Owner
+  ruling: "probation will end only after confirmation. it is not time base."**
+  Two earlier gates this session were wrong in opposite directions: reading raw
+  `probation_end_date` (NULL on 61/62, so NOBODY was on probation — Iffa paid
+  RM120), then falling back to join + 90 days (pays anyone whose 90 days elapsed
+  even though no one confirmed them — the exact time rule the owner rejected).
+  Now `lib/hr/probation.ts` gates on a new `hr_employee_profiles.confirmed_at`;
+  `probationReviewDue()` keeps join+90d but is DISPLAY ONLY and decides no pay.
+  **The blocker that made this non-trivial: nothing in the DB recorded a
+  confirmation.** `hr_probation_reviews` is EMPTY (zero rows, ever — the flow
+  works, it has never been used) and `probation_end_date` is NULL on all 62
+  active profiles. `probation_end_date` could not serve as the marker anyway:
+  the only writer is the EXTEND decision, which sets a FUTURE date while the
+  person is still on probation — it means "review due", not "confirmed". So a
+  confirmation-only gate on today's data puts **all 22 active full-timers** on
+  probation and wipes ~RM1,573/month of allowance, Syafiq Aiman (joined 2021)
+  included. Hence `packages/db/prisma/migrations/20260803_probation_confirmed_at/`
+  ships the column WITH a backfill: `confirmed_at = join_date` for everyone who
+  joined before 2026-04-01, **plus Mohd Haziq and Nor Armin, whom the owner
+  confirmed explicitly on 2026-08-03 ("haziq and armin confirmed")**. Those two
+  are dated to the END of the probation they served (join + 90d = 2026-07-26 and
+  2026-07-15) rather than their join date — backdating would assert they never
+  had a probation, and would retroactively entitle them to May/June allowance.
+  Final split: **13 confirmed / 9 on probation — APPLIED to prod 2026-08-03 and
+  verified.** **ORDERING RULE, learned here: apply the column BEFORE deploying
+  the code.** `allowances.ts` selects `confirmed_at`; if the deploy had landed
+  first, PostgREST would 400 on the unknown column, `profile` would read null,
+  `isFullTime` would be false and EVERY performance allowance would silently
+  drop to zero. Column → deploy → recompute, in that order.
+  **A recompute alone does nothing until #1110 is merged and deployed** — the
+  live backoffice still runs the old gate that never fires.
+  Also fixed: approving a `decision='confirm'` review previously did nothing to
+  the profile (it only unlocked the confirmation letter); it now stamps
+  `confirmed_at`, which is what actually ends probation.
+  Implied July claw-back is **RM270** — Razley 150 + Iffa 120. Haziq's RM200 and
+  Armin's RM70 stand, since the owner confirmed them.
+
+- 2026-08-03 — **The deleted `opening_balance` is no longer needed: Jan and Feb
+  monthly runs now carry the full BrioHR figures (APPLIED to prod).** Owner
+  re-exported `202601`/`202602_payroll_report.xlsx` from BrioHR; reconciling
+  every line against the DB showed all existing lines already matched to the
+  sen and **exactly three were missing** — Ariff Izham in BOTH months (Jan
+  12,519.23 gross / 1,559.10 PCB; Feb 10,500.00 / 1,054.15) and Izzah Nusaibah
+  in Feb (1,700.00 / 0.00). Run-level shortfalls matched to the sen, which is
+  what makes this certain rather than plausible. Applied via
+  `packages/db/prisma/migrations/20260803_jan_feb_briohr_backfill/`: Jan is now
+  20 lines / 77,516.31 gross, Feb 23 lines / 67,671.00 — both equal to BrioHR.
+  Run headers are re-totalled **from their own lines**, not hardcoded.
+  **Two conventions worth keeping:** (1) every 2026 monthly line satisfies
+  `net = gross − deductions` with a zero gap, so Ariff's expense-claim
+  reimbursements (898.19 Jan / 158.00 Feb) were kept OUT of gross and net and
+  recorded in `computation_details.net_additions` — our Jan/Feb net therefore
+  sits that much below BrioHR's own net figure BY DESIGN, it is not a
+  discrepancy; (2) BrioHR-era leavers with no `User` row get a synthetic id
+  spelling ASCII `briohr-<empid>` (Izzah = `6272696f-6872-2d43-4330-363100000000`)
+  and `status='DEACTIVATED'`, matching the original import.
+  **Ariff YTD-through-June is now 65,019.23 gross / 6,829.85 PCB paid**
+  (= 1,559.10 Jan + 1,054.15 × 5 for Feb–Jun).
+- 2026-08-03 — **DONE: July was recomputed at 12:23:58 and Ariff's PCB landed on
+  RM1,064.60, exactly as modelled.** Run `1fadf5ea-baf3-4460-a4bc-660dfdfe5669`,
+  status `confirmed`, 29 lines, run PCB total 1,069.15. Note the recompute mints
+  a NEW run id each time and deletes the old run's items — do not cache a July
+  run id across a recompute (cost one confusing "run has 0 lines" moment).
+  The entry below is kept for the diagnosis, which is what makes the figure
+  trustworthy; the "must be recomputed" instruction is now satisfied.
+- 2026-08-03 — **Ariff's July PCB of RM618.50 was the understated figure and
+  RM1,064.60 is the corrected one.** The deleted opening balance took his Jan–Jun YTD with it;
+  the calculator then saw only Mar–Jun (42,000.00 / 4,216.60), projected
+  RM105,600 annual instead of RM128,619.23, and landed a bracket low. Modelling
+  the LHDN formula against the broken YTD reproduces the stored 618.50 exactly,
+  which is what confirms the diagnosis; against the restored YTD it gives
+  **1,064.60** — chargeable 115,269.23, annual 13,217.31, less 6,829.85 already
+  paid, over 6 remaining months. **That is the same figure the run showed before
+  the opening balance was deleted, which is the real corroboration here: the
+  deleted balance and the BrioHR monthly lines agree.** (A working note briefly
+  claimed 1,240.25 and that the old balance was ~4,216 short — that came from
+  summing only four of the five Feb–Jun PCB months. Both claims were wrong;
+  1,064.60 stands.)
+  **The recompute cannot be triggered from an agent session** — no
+  `SUPABASE_SERVICE_ROLE_KEY` in the repo; it needs a human to hit Compute on
+  `/hr/payroll` (the July run is `ai_computed`, so recompute is permitted;
+  it fails on `confirmed`).
+- 2026-08-03 — **EVERY REST-DAY STAMP IN JULY WAS WRONG: the manual attendance
+  edit was the last path still reading `hr_employee_profiles.rest_day`, and that
+  column is NULL for all 77 profiles.** `api/hr/attendance/route.ts` did
+  `const restDay = prof?.rest_day == null ? 0 : Number(prof.rest_day)` then
+  `isRestDay: mytDayOfWeek(ci) === restDay` — so `?? 0` resolved to **Sunday for
+  everybody**. Measured on July 2026: **96 logs carry a rest-day `overtime_type`,
+  all 96 are Sundays, and NOT ONE falls on a rostered rest day** — while 161
+  genuine rest-day rows exist across 40 people on all 31 dates. The two sources
+  agreed on zero logs. **Owner ruling 2026-08-03: "rest day should follow
+  schedule."** FIXED — that path now reads `hr_schedule_shifts` +
+  `REST_DAY_ROLE_PATTERN` like the other three writers (staff clock-out, AI
+  processor, auto-close cron), which had already been migrated. Pinned by
+  `apps/backoffice/src/lib/hr/rest-day-source.test.ts`. Note `rest_day` on the
+  profile is still legitimately used by `schedule-generator.ts` as a *preference*
+  when building the roster — do not delete the column, just never derive pay
+  from it. **The 96 mis-stamped July logs are NOT retro-corrected** — July is
+  `confirmed`; a false rest day charges OT at 2× instead of 1.5×, or stamps
+  `rest_day_1x` where the type should be null.
+- 2026-08-03 — **REST-DAY WORK PAYS 1× BY DESIGN AND THAT IS THE OWNER'S POLICY —
+  DO NOT RE-RAISE IT AS UNPAID.** `hours.ts:125-134`: on a rest day, work within
+  the OT threshold is tagged `overtime_type='rest_day_1x'` with `overtimeHours=0`
+  (the hours are regular, i.e. already inside the monthly salary); only hours
+  BEYOND the threshold become `ot_2x`. `constants.ts:20` names the intent
+  (`rest_day_normal: 1.0`). July has 65 such logs / 460.83h across 25 people with
+  zero OT credited — that is correct, not a defect. **Owner ruling 2026-08-03:
+  "there will be no rest day premium. there should only be overtime."** An
+  earlier note in this session called those 460h unpaid and quoted ~RM89.56 owed
+  to Razley for 19 Jul; both were wrong — his payable time starts at the rostered
+  12:00, giving 7.04h, under threshold, so no OT is owed. Withdrawn.
+- 2026-08-03 — **The 122 cancelled July OT requests were never approved first —
+  the cancels PREDATE the only review round.** All 122 were cancelled on 28 Jul
+  in two bulk operations (116 at `08:03:19.479132`, 6 at `11:05:06.549605`, each
+  a single instant); Ariff's entire review round — all 16 approvals (30h) and all
+  4 rejections — is 31 Jul `04:06–04:13`, three days LATER. Corroborating:
+  `hours_approved` is NULL on all 122 and set on all 16 approved. **There is no
+  audit trail to check this against** — `hr_overtime_requests` stores only the
+  current status, `reviewed_by`/`reviewed_at` are overwritten by whoever acts
+  last, and `ActivityLog` records nothing for OT (only 3 `payroll.*` rows in all
+  of Jul–Aug). The cancels split cleanly by employment type and both match a
+  stated policy: 116 requests / 285h / 20 people **all part_time** ("OT is FT-only
+  — PT extra hours pay flat via roster/weekly cycle"), 6 / 8h / 4 people **all
+  full_time** ("early clock-in pays from rostered shift start"). Every July
+  request, in all three states, is `reason='Auto-created from attendance log (OT
+  detected)'` — nobody hand-filed OT all month.
+- 2026-08-03 — **A WRONG ROSTER SILENTLY DELETES MOST OF A DAY'S PAY, and nothing
+  flags it.** Pay-hours start at `max(clock_in, scheduled_start)`
+  (`hours.ts:103-107`), which is the owner's early-clock-in policy working as
+  intended — but when the ROSTER is wrong rather than the clock-in being early,
+  it eats the shift. Shairuleen 16 Jul: clocked 07:09–16:51 (9.70h) against a
+  roster of **15:30–23:30**, credited **1.36h**. Farah Nabilah 18 Jul: 9.23h
+  worked, 1.29h credited. Across July, 41 full-time shifts have >2h credited as
+  neither regular nor OT — 185.61 hours gross. **TRIAGED 2026-08-03, and only
+  ~50h of it is real:**
+  - **Group A — 9 shifts, ~50h, GENUINE.** Roster said evening, they worked
+    morning, so pay-time starting at the rostered start credited almost nothing.
+    Amirul Yazid 12 Jul: worked 8.08h, **credited 0.01h**. Also Shairuleen 16 Jul
+    (9.70h→1.36h), Nur Iffa 16 Jul, Nurul Alianatasha 18 Jul, Firdaus 12 Jul,
+    Hanisa 12 Jul, Akmal Aiman 17 + 30 Jul, Syafiq Aiman 21 Jul.
+  - **Group B — 7 shifts, ~49h, NOT REAL. Do not pay.** All are `clock_out_method
+    = 'system'` with `auto_closed_no_pings_stale` (6) or `auto_closed_forgot_
+    clockout` (1). **The clock-out timestamp is fabricated**, so the 16h "spans"
+    are `clock_in → auto-close cutoff`, not worked time — the tell is that they
+    repeat exactly (Guraf 3 Jul and 4 Jul are both 23:30 / 16.03h). The system
+    already did the right thing: paid the rostered shift (7.50h), excluded the
+    phantom OT. An earlier note in this session listed these as ~49.4h lost;
+    withdrawn. Farah Nabilah 7 Jul is an eighth of the same shape (PT, so outside
+    the FT query).
+  - **Group C/D — 25 shifts.** Genuine early clock-ins owing nothing, except four
+    late-outs where `Math.floor` ate partial OT (Firdaus 1.40h and 1.38h → zero).
+  Open question from Group B: six shifts went `no_pings_stale` mid-day in one
+  month — the PWA is losing GPS or being backgrounded while staff are clocked in.
+- 2026-08-03 — **OT hours are floored, so partial OT is always discarded.**
+  `hours.ts:128` and `:137`: `overtimeHours = Math.floor(workedHours - otThreshold)`.
+  Firdaus lost 0.90h (17 Jul) and 0.87h (21 Jul) that way. This is why the
+  auto-creator kept filing "OT detected" requests for shifts that then computed to
+  zero OT — the detector and the payer disagree. Rounding to the nearest quarter
+  hour was proposed; no decision yet.
+- 2026-08-03 — **Adam Kelvin is missing March, April and May payroll entirely,
+  and he is the ONLY remaining YTD hole.** Joined 2026-03-05, resigned
+  2026-07-31, basic RM3,900 — but the system holds only June and July lines. His
+  Mar–May pay lived in the deleted opening balance and the BrioHR Jan/Feb
+  exports do not cover it. Checked every one of the 29 people on the July run
+  against their join date: everyone else's monthly lines start at or before
+  their first eligible month. **Tax impact is nil** — with June alone his
+  projection is 31,260, chargeable 17,936.60, and the s.6A(2) RM400 rebate wipes
+  the RM129 of tax out, so July PCB is correctly 0.00; restoring Mar–May moves
+  it to at most RM0.65. **The reason to fix it anyway is the EA form** — he is a
+  2026 leaver and his EA must state real annual earnings, which are understated
+  by roughly RM11,200. Needs the Mar/Apr/May BrioHR exports.
+- 2026-08-03 — **The BrioHR import dropped people silently, and the delete
+  endpoint let it happen twice.** The original Jan/Feb import covered 19 of 20
+  and 21 of 23; nothing flagged the gap because run headers were written from
+  the import, not derived from the lines, so header and detail agreed while both
+  were wrong. Separately, `DELETE /api/hr/payroll` blocks only `paid` — a
+  `confirmed` run (and the `opening_balance`, which sat at `draft` and was never
+  protected at all) can still be deleted, which is how the YTD was lost. Both
+  worth fixing: derive headers from lines on import, and widen the delete guard.
 - 2026-08-03 — **PART-TIMERS ARE NOT IN THE MONTHLY RUN, AND THAT IS EXPECTED —
   DO NOT RE-RAISE IT.** Every payroll run that exists is `monthly` (8) or
   `opening_balance` (1); **zero weekly runs, ever**, despite
@@ -1179,6 +1417,114 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-08-03 (late) — **HR module-level QA review DONE (3-agent sweep, findings
+  reported to owner, no fixes applied yet).** Top confirmed findings, ranked:
+  (1) **Confirmed monthly payroll cannot be corrected from the UI** — the
+  Delete button still renders on confirmed runs and always 409s; the `revert`
+  action shipped today has NO button; `allow_early_confirm` has no caller; the
+  Confirm button swallows every error response (`payroll/page.tsx:103-132`).
+  (2) **Weekly PT payroll route lacks every guard the monthly route got**:
+  bare `.eq("id")` confirm can downgrade a `paid` run, `mark_paid` unguarded,
+  zero ActivityLog (`payroll/weekly/route.ts:128-158`). Same hole class that
+  ate July. (3) **Approved leave never reaches roster-attendance** — rostered
+  staffer on approved leave renders "Absent"; route never queries
+  `hr_leave_requests`. (4) **Two swap-approval APIs diverge**:
+  `/api/hr/shift-swaps` has NO outlet scoping (any manager approves any
+  outlet) and doesn't clear `is_ai_assigned`; schedules-page swap panel shows
+  raw UUIDs from the unenriched `/api/hr/swap`. (5) **Per-staff allowance
+  screen is a decoy**: `performance_allowance_amount` has 5 writers/0 readers;
+  the live `fixed_performance_allowance` column has no UI (DBA-only).
+  (6) `api/hr/analytics` still counts probation by the REJECTED time-based
+  rule, and its swap pill counts statuses that don't exist. (7) PT Hours and
+  Attendance Review both write `final_status='approved'` — acknowledging in
+  one silently satisfies the other's payment gate. (8) No probation
+  confirmation worklist anywhere (banner is per-profile only) — under the
+  confirmed_at gate an unnoticed probation withholds allowance forever.
+  (9) Nav: 5 hand-maintained lists drifted; orphans `/hr/employees/import`
+  (403-line LoE bulk wizard, zero links), `/hr/performance-review` (dead
+  redirect), `/hr/settings/payroll-items` (only payroll-items CRUD, zero
+  links); `access-presets`/`pt-hours`/`roster-attendance` missing from
+  NAV_SECTIONS entirely = bypass the client route gate; `pt-rates` in no tab
+  group. (10) Dead config: `hr_leave_policies` closed loop (screen writes,
+  nothing enforces), availability `notes`+`max_shifts_per_week` write-only,
+  `working-time` blind-PATCHes the whole settings row (no server allowlist —
+  clobber risk vs the allowances screen), rest-day shifts identified 3
+  different ways (needs one `isRestDayShift()` helper), monthly payroll list
+  API lacks `cycle_type` filter so weekly runs render as blank months, HR
+  dashboard outlet-scopes only 1 of 4 tiles. Full details in the session
+  transcript / report to owner.
+  **Slice 1 FIXED same session (owner said "continue"):** (1) monthly payroll
+  UI — Revert button on confirmed runs, Delete hidden where the server refuses
+  it, Confirm surfaces errors + offers `allow_early_confirm` on the
+  cycle-not-ended 409; (2) weekly route — atomic `.in(status)` confirm (no
+  paid→confirmed downgrade), `mark_paid` only from confirmed + appends to
+  ai_notes instead of overwriting, both log ActivityLog; (3) monthly list API
+  now filters `cycle_type='monthly'` (weekly runs rendered as blank months).
+  Guards pinned in payroll-run-guards.test.ts (canConfirm/canMarkPaid ladder).
+  **Slice 2 FIXED same session:** (1) `/api/hr/allowance-overrides` +
+  `/hr/settings/staff-allowances` repointed from the dead
+  `performance_allowance_amount` column (5 writers / 0 readers) to the LIVE
+  `fixed_performance_allowance` — screen relabeled "Flat Allowances", honest
+  copy (flat = no levers, no deductions), scored/flat mode badge, eligibility
+  no longer excludes unrostered staff (they are exactly whom flat is for);
+  (2) probation worklist — "On Probation" dashboard tile (API counts FT ACTIVE
+  with confirmed_at NULL — verified 9 against prod) deep-linking to a new
+  Probation tab on /hr/employees (`?filter=probation`). Still to do from D1:
+  the four OTHER writers of the dead column (create modal, [id] Compensation
+  tab, loe-import commit, agent write-ops) still write it — removing them +
+  dropping the column is a follow-up cleanup + owner-approved migration.
+  **Slice 3 FIXED same session:** (1) roster-attendance now checks approved
+  `hr_leave_requests` — new `on_leave` cell status (violet) outranks the
+  roster, so approved-after-publish leave no longer renders "Absent"; a real
+  clock-in still wins; (2) swap approval consolidated onto
+  `/api/hr/shift-swaps` — MANAGER outlet scoping (both shifts, approve AND
+  reject) and the `is_ai_assigned: false` reset ported from the deleted
+  backoffice `/api/hr/swap` route (apps/staff keeps its own same-named route,
+  untouched); the schedules-page raw-UUID swap panel is now a count badge
+  linking to /hr/shift-swaps; (3) analytics — swap pill counts the real
+  statuses (`pending_consent`/`pending_approval`; the old
+  "pending"/"consented" never existed, pill sat at 0 forever), probation
+  cohort now `full_time && !confirmed_at` matching the payroll gate. Noted:
+  `isShiftOutsideAvailability` in schedules/page.tsx was ALREADY dead at HEAD
+  (defined, never called) — availability windows gate nothing in the grid;
+  strengthens finding #13.
+  **Slice 4 (nav/orphans) FIXED same session:** roster-attendance + pt-hours +
+  access-presets added to NAV_SECTIONS as hidden entries (restores the client
+  route gate + ⌘K); PT Rates joined the People tab group (was in NO group —
+  rendered with no lateral nav); SettingsNav got a Pay group with Payroll
+  Items (the only item-catalog CRUD screen had zero inbound links) and lost
+  its dead void-icon imports; /hr/performance-review (dead redirect, zero
+  links) deleted; "Import LoEs" button added next to New Employee (the
+  403-line bulk wizard had zero inbound links); /hr/allowances "Configure →"
+  repointed from working-time (no allowance fields) to /hr/settings/allowances;
+  #tab= deep links on the employee profile now work (certifications rows used
+  to land on Profile regardless).
+  Remaining findings still awaiting owner's pick: monthly mark-paid step,
+  pre-approval OT prefill from the roster grid, PT-hours flagged-link →
+  /hr/attendance deep link, availability/coverage edit-in-place,
+  hr_leave_policies wiring (or deletion), working-time blind-PATCH allowlist,
+  dashboard outlet scoping for the other 3 tiles, dead-column drop
+  (performance_allowance_amount + its 4 remaining writers), single
+  isRestDayShift() helper, apps/staff allowances fork, quarter-hour rounding,
+  Group A repayment, Adam Kelvin exports, /hr/allowances↔performance merge
+  (move AllowanceTabs first — W3 ordering).
+- 2026-08-03 (late) — **End-to-end payroll QA pass landed on
+  `claude/farah-staff-onboarding-99yg3j` (feeds PR #1110); stamp-repair
+  migration APPLIED to prod and verified 0/0/0/0.** The sequence the owner
+  still drives: **merge #1110 → Vercel deploy → compute July** (the run is
+  currently DELETED; a plain compute rebuilds it — expect serving-time movement
+  for everyone from the paging fix, Iffa −120 / Razley −150 probation
+  claw-back, and OT rate corrections from the request-budget split) → read-back
+  → then merge #1113 (staff payslips, split out on `claude/staff-payslips-open`).
+  NEXT TASK, not yet started: owner asked for a module-level QA review of the
+  whole HR area — Dashboard, Employees, Attendance, Leave, Schedules, Payroll,
+  PT Rates, Allowances, Performance — "functions, redundancies, management
+  workflow… currently it is a bit messy." Deliverable is a findings report,
+  not fixes. Parked decisions: quarter-hour Math.floor rounding; the
+  apps/staff allowances fork; Group A ~50h repayment; Adam Kelvin Mar–May
+  BrioHR exports (EA understates ~RM11,200); hr_probation_reviews flow never
+  used end-to-end. Do NOT re-raise: Group B auto-clockouts, rest-day premium
+  (1× within threshold is policy), PT absence from the monthly run.
 - 2026-08-03 — **HR/payroll session. Three things are with the owner, and July
   must NOT be confirmed until they land.**
   (a) CLOSED 2026-08-03 — part-timers absent from the monthly run is BY DESIGN;

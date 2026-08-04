@@ -2,7 +2,7 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays, Download, FileSpreadsheet, Trash2 } from "lucide-react";
+import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays, Download, FileSpreadsheet, Trash2, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { HrPageHeader } from "@/components/hr/page-header";
 
@@ -100,23 +100,60 @@ export default function PayrollPage() {
     }
   };
 
-  const handleConfirm = async (runId: string) => {
+  const handleConfirm = async (runId: string, allowEarly = false) => {
     setConfirming(runId);
     try {
-      await fetch("/api/hr/payroll", {
+      const res = await fetch("/api/hr/payroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "confirm", run_id: runId }),
+        body: JSON.stringify({ action: "confirm", run_id: runId, ...(allowEarly ? { allow_early_confirm: true } : {}) }),
       });
-      mutate();
+      if (res.ok) {
+        mutate();
+        return;
+      }
+      const body = await res.json().catch(() => null);
+      // The cycle-not-ended guard has a deliberate escape hatch for paying
+      // before month end — offer it instead of silently doing nothing.
+      if (body?.reason === "cycle_not_ended" && !allowEarly) {
+        if (confirm(`${body.error}\n\nConfirm early anyway?`)) {
+          setConfirming(null);
+          await handleConfirm(runId, true);
+        }
+        return;
+      }
+      alert(body?.error || "Confirm failed");
     } finally {
       setConfirming(null);
     }
   };
 
+  // Revert takes a confirmed run back to ai_computed IN PLACE (same run id) so
+  // it can be recomputed. This is the recovery path DELETE points at — deleting
+  // a confirmed run is refused since the July 2026 data loss.
+  const [reverting, setReverting] = useState<string | null>(null);
+  const handleRevert = async (runId: string) => {
+    if (!confirm("Revert this confirmed run to computed? Payslips and bank files already generated from it will no longer match until it is re-confirmed.")) return;
+    setReverting(runId);
+    try {
+      const res = await fetch("/api/hr/payroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "revert", run_id: runId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        alert(body?.error || "Revert failed");
+      }
+      mutate();
+    } finally {
+      setReverting(null);
+    }
+  };
+
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const handleDelete = async (runId: string) => {
-    if (!confirm("Delete this payroll run? Items will be removed. Paid runs cannot be deleted.")) return;
+    if (!confirm("Delete this payroll run? All its lines will be removed.")) return;
     setDeletingId(runId);
     try {
       const res = await fetch(`/api/hr/payroll?run_id=${runId}`, { method: "DELETE" });
@@ -234,12 +271,27 @@ export default function PayrollPage() {
                       Confirm
                     </button>
                   )}
-                  {isConfirmed && <CheckCircle2 className="h-5 w-5 text-green-500" />}
-                  {run.status !== "paid" && (
+                  {isConfirmed && (
+                    <>
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <button
+                        onClick={() => handleRevert(run.id)}
+                        disabled={reverting === run.id}
+                        title="Revert to computed so the run can be recomputed (keeps the run)"
+                        className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                      >
+                        {reverting === run.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />}
+                        Revert
+                      </button>
+                    </>
+                  )}
+                  {/* Confirmed and paid runs are not deletable server-side —
+                      confirmed reverts instead, paid is a dead end. */}
+                  {!isConfirmed && run.status !== "paid" && (
                     <button
                       onClick={() => handleDelete(run.id)}
                       disabled={deletingId === run.id}
-                      title="Delete run (paid runs cannot be deleted)"
+                      title="Delete run"
                       className="flex items-center rounded-lg border border-red-200 px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                     >
                       {deletingId === run.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}

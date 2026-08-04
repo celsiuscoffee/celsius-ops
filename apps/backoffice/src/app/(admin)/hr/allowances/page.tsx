@@ -94,7 +94,9 @@ export default function AllowancesPage() {
         {rules && (
           <span className="ml-auto text-xs text-muted-foreground">
             RM {rules.pool} pool · checklist {rules.leverChecklist} / phone {rules.leverPhone} / serving {rules.leverServing} / audit {rules.leverAudit}
-            <Link href="/hr/settings/working-time" className="ml-2 text-terracotta hover:underline">Configure →</Link>
+            {/* The pool and lever splits live on the allowance-rules page —
+                working-time has no allowance fields at all. */}
+            <Link href="/hr/settings/allowances" className="ml-2 text-terracotta hover:underline">Configure →</Link>
           </span>
         )}
       </div>

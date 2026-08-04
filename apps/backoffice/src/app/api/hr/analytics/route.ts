@@ -25,7 +25,7 @@ export async function GET(_req: NextRequest) {
   ] = await Promise.all([
     hrSupabaseAdmin
       .from("hr_employee_profiles")
-      .select("user_id, employment_type, basic_salary, join_date, end_date, resigned_at, probation_end_date"),
+      .select("user_id, employment_type, basic_salary, join_date, end_date, resigned_at, confirmed_at"),
     hrSupabaseAdmin
       .from("hr_attendance_logs")
       .select("user_id, clock_in, ai_status, final_status, regular_hours, overtime_hours")
@@ -40,10 +40,12 @@ export async function GET(_req: NextRequest) {
       .from("hr_leave_requests")
       .select("id", { count: "exact", head: true })
       .in("status", ["pending"]),
+    // The real workflow vocabulary — "pending"/"consented" never existed, so
+    // this pill sat at zero forever while swaps queued.
     hrSupabaseAdmin
       .from("hr_shift_swap_requests")
       .select("id", { count: "exact", head: true })
-      .in("status", ["pending", "consented"]),
+      .in("status", ["pending_consent", "pending_approval"]),
     hrSupabaseAdmin
       .from("hr_disciplinary_actions")
       .select("id", { count: "exact", head: true })
@@ -81,7 +83,7 @@ export async function GET(_req: NextRequest) {
     join_date: string | null;
     end_date: string | null;
     resigned_at: string | null;
-    probation_end_date: string | null;
+    confirmed_at: string | null;
   };
   const todayStr = today.toISOString().slice(0, 10);
   const active = (profiles as Profile[]).filter((p) => {
@@ -102,13 +104,14 @@ export async function GET(_req: NextRequest) {
     ? Math.round((ytdResigners / (active.length + ytdResigners)) * 1000) / 10
     : 0;
 
-  // In-probation cohort (probation_end_date in future, or join_date within 90 days)
-  const probationCohort = active.filter((p) => {
-    if (p.probation_end_date) return p.probation_end_date >= todayStr;
-    if (!p.join_date) return false;
-    const joinTs = Date.parse(p.join_date);
-    return Date.now() - joinTs < 90 * 86400000;
-  }).length;
+  // In-probation cohort — same rule as the payroll gate: probation ends ONLY
+  // on `confirmed_at` (owner 2026-08-03, "it is not time base"). The old
+  // future-probation_end_date-or-joined-within-90-days count under-reported:
+  // anyone past 90 days who was never confirmed is still on probation, still
+  // unpaid their allowance, and wasn't counted.
+  const probationCohort = active.filter(
+    (p) => p.employment_type === "full_time" && !p.confirmed_at,
+  ).length;
 
   // Attendance signals (last 90 days)
   type Log = {
