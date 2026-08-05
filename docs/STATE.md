@@ -6,6 +6,35 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-05 — **Menu availability report (July 2026) + projected loss delivered
+  to owner as `Menu_Availability_July2026.xlsx`** (owner ask: "menu availability
+  based on last month" + "projected loss amt"). Method + numbers, all from
+  `pos_orders`/`pos_order_items` + `orders`/`order_items` (completed only, MYT
+  July window) joined with `outlet_product_availability` and `products`:
+  - **July item revenue:** Conezion 129,510 / Shah Alam 112,350 / Tamarind
+    82,012 = **RM323,872**.
+  - **41 item×outlet combos currently 86'd** (product globally on) worth
+    **RM30,570 of July revenue ≈ RM986/day** if they stay off. By outlet:
+    SA 15,552 / Tam 8,975 / Con 6,043.
+  - **Est. July in-month stockout loss ≈ RM18,461 (5.7% of item revenue).**
+    Estimator: a "miss day" = the item sold at BOTH other outlets that day but
+    not this one, item ≥10 selling days at the outlet, ≥3 miss days; loss =
+    miss days × revenue per selling day. Tamarind worst (RM7.8k), mostly
+    pasta/noodle/sandwiches with 9–12 miss days.
+  - **Stale 86s (off >3 days) are the actionable leak** — most 86s are same-day
+    sellouts, but Tamarind's cookie shelf has been off for weeks (Mini Choc
+    Chip since Jul 7, NYC Smores Jul 25, NYC Hazelnut Jul 27, NYC Double Choc
+    Jul 29, Mini Hazelnut Jul 26, Mini Double Choc Jul 23), plus Affogato +
+    Matcha Affogato Tam since Jul 22 and Peanut Butter Mocha Con since Jul 30.
+  - **Limit:** `outlet_product_availability` stores only CURRENT state +
+    `updated_at` — no 86 history exists, which is why July's in-month loss must
+    be inferred from sales gaps. An append-only availability-event log would
+    make next month's report exact.
+  - Env note: LibreOffice in the remote container cannot load ANY xlsx
+    ("source file could not be loaded", even trivial files), so the xlsx-skill
+    `recalc.py` always times out — formulas were instead verified with an
+    ad-hoc evaluator (344 formulas, 0 errors, totals reconciled to SQL).
+
 - 2026-08-04 — **JULY "ALREADY PAID" BASELINE recovered from the session
   transcript (owner: "already paid based on the prev compute" / "use the ones
   that we computed before").** The deleted run's per-person NET figures,
