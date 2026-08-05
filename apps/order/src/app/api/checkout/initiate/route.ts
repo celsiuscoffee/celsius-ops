@@ -259,12 +259,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Server-side voucher validation ─────────────────────────────────────
-    if (voucherId) {
+    // ── Server-side voucher validation (LEGACY `vouchers` table only) ──────
+    // A wallet voucher (issued_rewards) is NOT a legacy voucher — it arrives
+    // as rewardId and is resolved by resolveOrderReward below. Older PWA
+    // bundles echoed the SAME wallet id as voucherId too, which sent it into
+    // this gate, missed the `vouchers` lookup, and 400'd every wallet-voucher
+    // order with "Voucher is no longer valid" (POS accepted the identical
+    // voucher because the register never consults this table). Only treat
+    // voucherId as legacy when it isn't the wallet id riding along.
+    const legacyVoucherId: string | null =
+      voucherId && voucherId !== rewardId ? voucherId : null;
+    if (legacyVoucherId) {
       const { data: voucher } = await supabase
         .from("vouchers")
         .select("id, is_active, expires_at, max_uses, used_count")
-        .eq("id", voucherId)
+        .eq("id", legacyVoucherId)
         .single();
 
       if (!voucher || !voucher.is_active) {
@@ -517,8 +526,8 @@ export async function POST(request: NextRequest) {
     const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
     if (itemsError) console.error("Order items error:", itemsError);
 
-    if (voucherId) {
-      await supabase.rpc("increment_voucher_count", { voucher_id: voucherId });
+    if (legacyVoucherId) {
+      await supabase.rpc("increment_voucher_count", { voucher_id: legacyVoucherId });
     }
 
     // Record applied promotions to the loyalty ledger so usage caps and

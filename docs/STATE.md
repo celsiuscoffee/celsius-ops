@@ -6,6 +6,30 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-05 — **Wallet vouchers 400'd at web QR checkout ("Voucher is no
+  longer valid") while POS accepted the same voucher — FIXED.** Customer photo
+  from Shah Alam: quote showed the Free Coffee discount, Place order failed.
+  Cause: `applyWalletVoucherToState` stamps the applied reward with
+  `voucher_id = issued_rewards.id` ("Use Now" path — mission/mystery/welcome/
+  points-issued vouchers), and `_CheckoutView` echoed that id to
+  `/api/checkout/initiate` as `voucherId`. That field means a LEGACY
+  `vouchers`-table row; the gate looked the wallet id up there, found nothing,
+  and 400'd BEFORE `resolveOrderReward` ever ran. The totals still previewed
+  correctly because `/api/checkout/quote` takes `walletVoucherId` (no legacy
+  gate) — discount visible, order blocked. POS (`/api/pos/loyalty/redeem`)
+  resolves via the shared `resolveOrderReward` and never consults the legacy
+  table, hence the web/POS asymmetry. Catalog (points-shop) rewards applied
+  from `_RewardsView` never set `voucher_id`, so those kept working — only
+  wallet vouchers broke. Fix: client no longer sends `voucherId`; both
+  `/api/checkout/initiate` and `/api/orders` treat `voucherId` as legacy only
+  when it differs from `rewardId`/`walletVoucherId` (stale cached PWA bundles
+  keep echoing the wallet id for a while after deploy, so the server guard is
+  the one that matters). Note the shared resolver's doc comment claimed the
+  QR-table client "never sets voucher_id" — it did; trust code over comments
+  here. Legacy `vouchers` monetary impact is nil in these routes
+  (`voucherDiscountSen` is hardcoded 0); the gate only guarded
+  `increment_voucher_count`.
+
 - 2026-08-05 — **Menu availability report (July 2026) + projected loss delivered
   to owner as `Menu_Availability_July2026.xlsx`** (owner ask: "menu availability
   based on last month" + "projected loss amt"). Method + numbers, all from
