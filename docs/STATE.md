@@ -6,6 +6,18 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-05 — **Owner-requested Platinum grant: +60 19-751 7051 created as
+  loyalty member `member-1785906066615-fdb5` (canonical phone `+60197517051`,
+  no prior row under any variant) with `member_brands.current_tier_id =
+  'tier-celsius-elite'` (Platinum), applied directly in prod.** Followed the
+  grant-tier route's semantics for earned tiers: `tier_locked_until =
+  2026-10-01T00:00:00Z` (quarter end), so `evaluate_member_tier` holds the tier
+  through Q3 and re-evaluates from real quarterly spend when the lock expires —
+  if the owner wants it permanent, re-grant next quarter or use an
+  invitation-only tier. Name/email left null (only the phone was supplied).
+  Note the tier id/slug mismatch: **Platinum's id is `tier-celsius-elite`,
+  slug `elite`** — there is no `tier-celsius-platinum`.
+
 - 2026-08-04 — **JULY "ALREADY PAID" BASELINE recovered from the session
   transcript (owner: "already paid based on the prev compute" / "use the ones
   that we computed before").** The deleted run's per-person NET figures,
