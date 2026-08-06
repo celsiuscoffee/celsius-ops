@@ -4,6 +4,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { useState, useEffect } from "react";
 import { ChevronRight, CheckCircle2, AlertCircle, Search, Plus, Loader2, X, Download, Sparkles, FileText, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { EmployeeProfile } from "@/lib/hr/types";
 
 type Employee = {
@@ -21,7 +22,7 @@ type Employee = {
   hrProfile: (EmployeeProfile & { resigned_at?: string | null; end_date?: string | null }) | null;
 };
 
-type EmploymentFilter = "all" | "full_time" | "part_time" | "contract" | "no_profile" | "resigned";
+type EmploymentFilter = "all" | "full_time" | "part_time" | "contract" | "no_profile" | "resigned" | "probation";
 
 type Outlet = { id: string; name: string; code: string };
 
@@ -31,7 +32,14 @@ export default function EmployeesPage() {
   const { data: outlets } = useFetch<Outlet[]>("/api/ops/outlets");
   const scope = data?.scope;
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<EmploymentFilter>("all");
+  // ?filter=probation etc. deep-links a tab (the dashboard's confirmation-due
+  // tile lands here). Read once on mount; the tabs own the state afterwards.
+  const [filter, setFilter] = useState<EmploymentFilter>(() => {
+    if (typeof window === "undefined") return "all";
+    const f = new URLSearchParams(window.location.search).get("filter");
+    const valid: EmploymentFilter[] = ["all", "full_time", "part_time", "contract", "no_profile", "resigned", "probation"];
+    return valid.includes(f as EmploymentFilter) ? (f as EmploymentFilter) : "all";
+  });
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [outletFilter, setOutletFilter] = useState<string>("all");
   const [showCreate, setShowCreate] = useState(false);
@@ -211,6 +219,13 @@ export default function EmployeesPage() {
   const ptCount = activeEmployees.filter((e) => e.hrProfile?.employment_type === "part_time").length;
   const contractCount = activeEmployees.filter((e) => e.hrProfile?.employment_type === "contract").length;
   const noProfileCount = activeEmployees.filter((e) => !e.hrProfile).length;
+  // On probation = full-time with no confirmation stamped. Probation ends only
+  // on `confirmed_at` (never elapsed time), and while it is unset the payroll
+  // gate withholds the performance allowance — so an unnoticed one costs the
+  // staffer money every month. This tab is the worklist that makes it visible.
+  const isOnProbation = (e: Employee) =>
+    e.hrProfile?.employment_type === "full_time" && !e.hrProfile?.confirmed_at;
+  const probationCount = activeEmployees.filter(isOnProbation).length;
   const resignedCount = resignedEmployees.length;
 
   const roleOptions = Array.from(new Set(allEmployees.map((e) => e.role))).sort();
@@ -230,7 +245,8 @@ export default function EmployeesPage() {
       (e.phone ?? "").toLowerCase().includes(q);
     const matchesEmployment =
       filter === "all" || filter === "resigned" ||
-      (filter === "no_profile" ? !e.hrProfile : e.hrProfile?.employment_type === filter);
+      (filter === "probation" ? isOnProbation(e) :
+       filter === "no_profile" ? !e.hrProfile : e.hrProfile?.employment_type === filter);
     const matchesRole = roleFilter === "all" || e.role === roleFilter;
     const matchesOutlet =
       outletFilter === "all" ||
@@ -361,13 +377,24 @@ export default function EmployeesPage() {
           )}
         </div>
         {canCreate && (
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90"
-          >
-            <Plus className="h-4 w-4" />
-            New Employee
-          </button>
+          <div className="flex items-center gap-2">
+            {/* The bulk LoE wizard existed with zero inbound links — reachable
+                only by typing the URL. */}
+            <Link
+              href="/hr/employees/import"
+              className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+            >
+              <FileText className="h-4 w-4" />
+              Import LoEs
+            </Link>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90"
+            >
+              <Plus className="h-4 w-4" />
+              New Employee
+            </button>
+          </div>
         )}
       </div>
 
@@ -387,6 +414,7 @@ export default function EmployeesPage() {
           { key: "all", label: `All (${activeEmployees.length})` },
           { key: "full_time", label: `Full-Time (${ftCount})` },
           { key: "part_time", label: `Part-Time (${ptCount})` },
+          ...(probationCount > 0 ? [{ key: "probation" as const, label: `Probation (${probationCount})` }] : []),
           ...(contractCount > 0 ? [{ key: "contract" as const, label: `Contract (${contractCount})` }] : []),
           ...(noProfileCount > 0 ? [{ key: "no_profile" as const, label: `No Profile (${noProfileCount})` }] : []),
           ...(resignedCount > 0 ? [{ key: "resigned" as const, label: `Resigned (${resignedCount})` }] : []),

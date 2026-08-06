@@ -99,17 +99,6 @@ type LabourGateInfo = {
   }>;
 };
 
-type SwapRequest = {
-  id: string;
-  status: string;
-  reason: string | null;
-  requester_id: string;
-  target_id: string;
-  requester_shift: { shift_date: string; start_time: string; end_time: string } | null;
-  target_shift: { shift_date: string; start_time: string; end_time: string } | null;
-  created_at: string;
-};
-
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const COLOR_MAP: Record<string, string> = {
   amber: "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100",
@@ -205,7 +194,6 @@ export default function SchedulesPage() {
     kitchen_gap?: number; barista_gap?: number;
   }>>>({});
   const [clearing, setClearing] = useState(false);
-  const [swapAction, setSwapAction] = useState<string | null>(null);
   const [slotBusy, setSlotBusy] = useState<string | null>(null);
   const [postSlotForm, setPostSlotForm] = useState<{ date: string; templateId: string; station: "barista" | "kitchen" } | null>(null);
   // Collapsed by default — open-slots-first mode can post 40+ slots and a
@@ -342,8 +330,12 @@ export default function SchedulesPage() {
       cancelled = true;
     };
   }, [selectedOutlet, weekStart, shiftCount]);
-  const { data: swapData, mutate: mutateSwaps } = useFetch<{ swaps: SwapRequest[] }>("/api/hr/swap");
-  const pendingSwaps = swapData?.swaps || [];
+  // Swap APPROVAL lives on /hr/shift-swaps — the one queue with names, both
+  // shifts, reasons and outlet scoping. This page only badges the count; the
+  // old inline panel here approved through a second, unscoped API and showed
+  // raw truncated UUIDs.
+  const { data: swapData } = useFetch<{ requests: { id: string }[] }>("/api/hr/shift-swaps?status=pending_approval");
+  const pendingSwapCount = swapData?.requests?.length ?? 0;
 
   // Index shifts by (user_id, date)
   const shiftsMap = useMemo(() => {
@@ -768,21 +760,6 @@ export default function SchedulesPage() {
       mutate();
     } finally {
       setGenerating(false);
-    }
-  };
-
-  const handleSwap = async (swapId: string, action: "approve" | "reject") => {
-    setSwapAction(swapId);
-    try {
-      await fetch("/api/hr/swap", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ swap_id: swapId, action }),
-      });
-      mutateSwaps();
-      mutate();
-    } finally {
-      setSwapAction(null);
     }
   };
 
@@ -1215,42 +1192,19 @@ export default function SchedulesPage() {
         );
       })()}
 
-      {/* Pending Swap Approvals */}
-      {pendingSwaps.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <h2 className="mb-2 flex items-center gap-2 font-semibold text-amber-800">
+      {/* Pending swap approvals — badge only, the queue itself lives on
+          /hr/shift-swaps (names, both shifts, reasons, outlet scoping). */}
+      {pendingSwapCount > 0 && (
+        <Link
+          href="/hr/shift-swaps"
+          className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-4 transition hover:bg-amber-100"
+        >
+          <span className="flex items-center gap-2 font-semibold text-amber-800">
             <ArrowLeftRight className="h-4 w-4" />
-            {pendingSwaps.length} shift swap{pendingSwaps.length !== 1 ? "s" : ""} waiting for approval
-          </h2>
-          <div className="space-y-2">
-            {pendingSwaps.map((swap) => (
-              <div key={swap.id} className="flex items-center justify-between rounded-lg bg-white p-2 text-sm">
-                <span>
-                  {swap.requester_id.slice(0, 8)}... ↔ {swap.target_id.slice(0, 8)}...{" "}
-                  <span className="text-muted-foreground">
-                    ({swap.requester_shift?.shift_date} ↔ {swap.target_shift?.shift_date})
-                  </span>
-                </span>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => handleSwap(swap.id, "approve")}
-                    disabled={swapAction === swap.id}
-                    className="rounded bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => handleSwap(swap.id, "reject")}
-                    disabled={swapAction === swap.id}
-                    className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700"
-                  >
-                    Reject
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+            {pendingSwapCount} shift swap{pendingSwapCount !== 1 ? "s" : ""} waiting for approval
+          </span>
+          <span className="text-sm font-medium text-amber-700">Review →</span>
+        </Link>
       )}
 
       {/* Grid */}

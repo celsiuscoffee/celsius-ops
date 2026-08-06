@@ -45,10 +45,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ run: runRes.data, items: enriched });
   }
 
-  // List all runs
+  // List all MONTHLY runs. Without the cycle_type filter this list also picked
+  // up weekly and opening_balance runs, whose period_month is NULL — the page
+  // rendered them as blank months. The weekly route filters its side already.
   const { data } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
     .select("*")
+    .eq("cycle_type", "monthly")
     .order("period_year", { ascending: false })
     .order("period_month", { ascending: false })
     .limit(12);
@@ -213,11 +216,75 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ run: data });
   }
 
+  // REVERT — take a confirmed run back to ai_computed so it can be recomputed.
+  //
+  // This exists because DELETE now refuses confirmed runs (see below). Before,
+  // the only way to redo a confirmed month was to delete it outright, which is
+  // how the opening balance and then the whole of July 2026 were destroyed on
+  // 2026-08-03. Reverting keeps the run and its id; recompute replaces the
+  // lines in place.
+  //
+  // `paid` is not revertable here on purpose: bank files have already been
+  // generated from it, so undoing it is a finance decision, not a click.
+  if (action === "revert") {
+    if (!run_id) return NextResponse.json({ error: "run_id required" }, { status: 400 });
+
+    const { data, error } = await hrSupabaseAdmin
+      .from("hr_payroll_runs")
+      .update({
+        status: "ai_computed",
+        confirmed_by: null,
+        confirmed_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", run_id)
+      .eq("status", "confirmed")
+      .select()
+      .maybeSingle();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) {
+      const { data: current } = await hrSupabaseAdmin
+        .from("hr_payroll_runs").select("status").eq("id", run_id).maybeSingle();
+      if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json(
+        {
+          error: current.status === "paid"
+            ? "This run is already PAID. Bank files were generated from it — reverting is a finance decision, not a UI action."
+            : `Only a confirmed run can be reverted (this one is ${current.status}).`,
+          currentStatus: current.status,
+        },
+        { status: 409 },
+      );
+    }
+
+    await logActivity({
+      actorId: session.id,
+      action: "payroll.revert",
+      module: "hr",
+      targetId: run_id,
+      targetName: `${data.cycle_type} ${data.period_month}/${data.period_year}`,
+      details: { from: "confirmed", to: "ai_computed", total_net: data.total_net },
+      request: req,
+    });
+    return NextResponse.json({ run: data });
+  }
+
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }
 
 // DELETE /api/hr/payroll?run_id=X — remove a payroll run + its items.
-// Only allowed for runs in draft/ai_computed status (not yet paid).
+//
+// Only `draft` and `ai_computed` runs can be deleted. A CONFIRMED run is the
+// thing payslips and bank files are generated from, and this endpoint used to
+// wave it through — the guard checked `paid` alone. That cost real data twice
+// on 2026-08-03: the `opening_balance` run (taking BrioHR's Jan–Jun YTD for 34
+// people, which understated Ariff's July PCB by RM446) and then the entire July
+// monthly run, deleted 22 seconds after it was recomputed. Neither delete left
+// a trace, because this route never logged one.
+//
+// To redo a confirmed month, POST action=revert first. That is one deliberate
+// extra step, and it keeps the run id and the audit trail.
 export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
@@ -227,21 +294,46 @@ export async function DELETE(req: NextRequest) {
   const runId = new URL(req.url).searchParams.get("run_id");
   if (!runId) return NextResponse.json({ error: "run_id required" }, { status: 400 });
 
-  // Guard: don't allow deleting paid runs — they're historical.
   const { data: run } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
-    .select("status")
+    .select("status, cycle_type, period_month, period_year, total_net")
     .eq("id", runId)
     .maybeSingle();
   if (!run) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (run.status === "paid") {
-    return NextResponse.json({ error: "Cannot delete a paid payroll run. Revert status first." }, { status: 400 });
+
+  if (run.status === "paid" || run.status === "confirmed") {
+    return NextResponse.json(
+      {
+        error: run.status === "paid"
+          ? "Cannot delete a PAID payroll run — bank files were generated from it."
+          : "Cannot delete a CONFIRMED payroll run. Revert it to ai_computed first (POST action=revert), then recompute — that replaces the lines without destroying the run.",
+        currentStatus: run.status,
+      },
+      { status: 400 },
+    );
   }
+
+  // How many lines are about to go, so the log records the size of the loss and
+  // not merely that something happened.
+  const { count: itemCount } = await hrSupabaseAdmin
+    .from("hr_payroll_items")
+    .select("id", { count: "exact", head: true })
+    .eq("payroll_run_id", runId);
 
   // Items first (no FK cascade on hr_payroll_items)
   await hrSupabaseAdmin.from("hr_payroll_items").delete().eq("payroll_run_id", runId);
   const { error } = await hrSupabaseAdmin.from("hr_payroll_runs").delete().eq("id", runId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true });
+  await logActivity({
+    actorId: session.id,
+    action: "payroll.delete",
+    module: "hr",
+    targetId: runId,
+    targetName: `${run.cycle_type} ${run.period_month}/${run.period_year}`,
+    details: { status: run.status, items_deleted: itemCount ?? null, total_net: run.total_net },
+    request: req,
+  });
+
+  return NextResponse.json({ ok: true, itemsDeleted: itemCount ?? null });
 }

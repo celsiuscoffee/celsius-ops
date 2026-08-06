@@ -326,12 +326,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Server-side voucher validation: check active, not expired, not over max_uses
-    if (voucherId) {
+    // Server-side voucher validation: check active, not expired, not over
+    // max_uses. LEGACY `vouchers` table only — a wallet voucher
+    // (issued_rewards) arrives as walletVoucherId/rewardId and resolves via
+    // resolveOrderReward below. A client that echoes the wallet id here too
+    // must not fail this gate (that echo is what broke web QR checkout with
+    // "Voucher is no longer valid" while POS took the same voucher fine).
+    const legacyVoucherId: string | null =
+      voucherId && voucherId !== rewardIdInput && voucherId !== walletVoucherIdInput
+        ? voucherId
+        : null;
+    if (legacyVoucherId) {
       const { data: voucher } = await supabase
         .from("vouchers")
         .select("id, is_active, expires_at, max_uses, used_count")
-        .eq("id", voucherId)
+        .eq("id", legacyVoucherId)
         .single();
 
       if (!voucher || !voucher.is_active) {
@@ -691,8 +700,8 @@ export async function POST(request: NextRequest) {
     if (itemsError) console.error("Order items error:", itemsError);
 
     // Increment voucher used_count atomically via RPC
-    if (voucherId) {
-      await supabase.rpc("increment_voucher_count", { voucher_id: voucherId });
+    if (legacyVoucherId) {
+      await supabase.rpc("increment_voucher_count", { voucher_id: legacyVoucherId });
     }
 
     // Reward-points deduction has moved to the payment-success

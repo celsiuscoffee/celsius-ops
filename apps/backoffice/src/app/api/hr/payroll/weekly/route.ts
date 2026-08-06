@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { calculateWeeklyPayroll } from "@/lib/hr/agents/payroll-calculator-weekly";
+import { logActivity } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -127,6 +128,9 @@ export async function POST(req: NextRequest) {
   if (action === "confirm") {
     if (!run_id) return NextResponse.json({ error: "run_id required" }, { status: 400 });
 
+    // Same atomic guard as the monthly route: only a not-yet-confirmed run can
+    // be confirmed. A bare update here could take a PAID run — bank file already
+    // sent — back down to "confirmed" and desync it.
     const { data, error } = await hrSupabaseAdmin
       .from("hr_payroll_runs")
       .update({
@@ -135,23 +139,74 @@ export async function POST(req: NextRequest) {
         confirmed_at: new Date().toISOString(),
       })
       .eq("id", run_id)
+      .in("status", ["ai_computed", "draft"])
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) {
+      const { data: cur } = await hrSupabaseAdmin
+        .from("hr_payroll_runs").select("status").eq("id", run_id).maybeSingle();
+      if (!cur) return NextResponse.json({ error: "Payroll run not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: `Payroll run is already ${cur.status}; only a computed or draft run can be confirmed.` },
+        { status: 409 },
+      );
+    }
+
+    await logActivity({
+      actorId: session.id,
+      action: "payroll.confirm",
+      module: "hr",
+      targetId: run_id,
+      targetName: `weekly ${data.period_start}`,
+      details: { total_net: data.total_net, total_gross: data.total_gross },
+      request: req,
+    });
     return NextResponse.json({ run: data });
   }
 
-  // Mark the run as paid (after bank transfer is done)
+  // Mark the run as paid (after bank transfer is done). Only a CONFIRMED run —
+  // the bank file is generated from confirmed, so paying anything else means the
+  // sequence was skipped. Appends to ai_notes instead of overwriting it.
   if (action === "mark_paid") {
     if (!run_id) return NextResponse.json({ error: "run_id required" }, { status: 400 });
+
+    const { data: existing } = await hrSupabaseAdmin
+      .from("hr_payroll_runs").select("status, ai_notes").eq("id", run_id).maybeSingle();
+    if (!existing) return NextResponse.json({ error: "Payroll run not found" }, { status: 404 });
+    if (existing.status !== "confirmed") {
+      return NextResponse.json(
+        { error: `Only a confirmed run can be marked paid (this one is ${existing.status}).` },
+        { status: 409 },
+      );
+    }
+
+    const paidNote = `Paid by ${session.id} at ${new Date().toISOString()}`;
     const { data, error } = await hrSupabaseAdmin
       .from("hr_payroll_runs")
-      .update({ status: "paid", ai_notes: `Paid by ${session.id} at ${new Date().toISOString()}` })
+      .update({
+        status: "paid",
+        ai_notes: existing.ai_notes ? `${existing.ai_notes}\n${paidNote}` : paidNote,
+      })
       .eq("id", run_id)
+      .eq("status", "confirmed")
       .select()
-      .single();
+      .maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) {
+      return NextResponse.json({ error: "Run changed state while marking paid — reload and retry." }, { status: 409 });
+    }
+
+    await logActivity({
+      actorId: session.id,
+      action: "payroll.mark_paid",
+      module: "hr",
+      targetId: run_id,
+      targetName: `weekly ${data.period_start}`,
+      details: { total_net: data.total_net },
+      request: req,
+    });
     return NextResponse.json({ run: data });
   }
 

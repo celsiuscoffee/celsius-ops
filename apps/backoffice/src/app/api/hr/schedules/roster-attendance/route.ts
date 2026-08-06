@@ -27,22 +27,30 @@ type Cell = {
   overtime_hours: number | null;
   late_minutes: number;
   open: boolean;
-  status: "on_time" | "late" | "absent" | "upcoming" | "rest_day" | "no_roster" | "off";
+  status: "on_time" | "late" | "absent" | "upcoming" | "rest_day" | "no_roster" | "on_leave" | "off";
 };
 
 // `shiftEnded` = the rostered shift's scheduled end is already in the past
 // (MYT). A rostered shift with no clock-in is only "absent" once it has
 // ended — before then it's still "upcoming", so future/in-progress days are
 // never pre-marked as no-shows.
+//
+// Approved leave outranks the roster: leave approval does not remove the
+// person's already-rostered shifts, so without this check a staffer whose
+// leave was approved AFTER the week was published rendered as "Absent" and
+// inflated the absent tile. An actual clock-in still wins — they worked.
 function cellStatus(
   hasShift: boolean,
   hasLog: boolean,
   lateMin: number,
   shiftEnded: boolean,
   isRest: boolean,
+  onLeave: boolean,
 ): Cell["status"] {
-  if (hasShift) return hasLog ? (lateMin > GRACE_PERIOD_MINUTES ? "late" : "on_time") : shiftEnded ? "absent" : "upcoming";
+  if (hasLog && hasShift) return lateMin > GRACE_PERIOD_MINUTES ? "late" : "on_time";
   if (hasLog) return "no_roster"; // clocked in without a rostered shift (incl. working a rest day)
+  if (onLeave) return "on_leave"; // approved leave — never "absent"
+  if (hasShift) return shiftEnded ? "absent" : "upcoming";
   if (isRest) return "rest_day"; // explicitly scheduled off
   return "off"; // nothing at all
 }
@@ -108,6 +116,14 @@ export async function GET(req: NextRequest) {
     shifts = data || [];
   }
 
+  // 1b. Approved leave overlapping the window. Keyed per user+day below.
+  const { data: leaveRows } = await hrSupabaseAdmin
+    .from("hr_leave_requests")
+    .select("user_id, start_date, end_date")
+    .eq("status", "approved")
+    .lte("start_date", days[days.length - 1])
+    .gte("end_date", days[0]);
+
   // 2. Attendance logs across the window at this outlet.
   const windowStartMs = Date.parse(`${days[0]}T00:00:00+08:00`);
   const windowStart = new Date(windowStartMs).toISOString();
@@ -149,6 +165,12 @@ export async function GET(req: NextRequest) {
   for (const l of (logs as (LogRow & { user_id: string })[]) || []) {
     const k = key(l.user_id, mytDateString(l.clock_in));
     if (!logByKey.has(k)) logByKey.set(k, l);
+  }
+  const leaveKeys = new Set<string>();
+  for (const lr of (leaveRows || []) as { user_id: string; start_date: string; end_date: string }[]) {
+    for (const d of days) {
+      if (d >= lr.start_date && d <= lr.end_date) leaveKeys.add(key(lr.user_id, d));
+    }
   }
 
   // Selfies live in a PRIVATE bucket as object paths — mint short-lived signed
@@ -201,7 +223,7 @@ export async function GET(req: NextRequest) {
       overtime_hours: log?.overtime_hours ?? null,
       late_minutes: lateMin,
       open: !!log && !log.clock_out,
-      status: cellStatus(!!shift, !!log, lateMin, shiftEnded, restKeys.has(k)),
+      status: cellStatus(!!shift, !!log, lateMin, shiftEnded, restKeys.has(k), leaveKeys.has(k)),
     };
   };
 
@@ -222,6 +244,7 @@ export async function GET(req: NextRequest) {
     absent: cells.filter((c) => c.status === "absent").length,
     upcoming: cells.filter((c) => c.status === "upcoming").length,
     unrostered: cells.filter((c) => c.status === "no_roster").length,
+    on_leave: cells.filter((c) => c.status === "on_leave").length,
   });
 
   // ---- WEEK MODE: staff × day matrix ----
@@ -242,7 +265,7 @@ export async function GET(req: NextRequest) {
       if (a.scheduled_start && b.scheduled_start && a.scheduled_start !== b.scheduled_start) {
         return a.scheduled_start.localeCompare(b.scheduled_start);
       }
-      const rank: Record<Cell["status"], number> = { absent: 0, late: 1, on_time: 2, upcoming: 3, no_roster: 4, rest_day: 5, off: 6 };
+      const rank: Record<Cell["status"], number> = { absent: 0, late: 1, on_time: 2, upcoming: 3, no_roster: 4, on_leave: 5, rest_day: 6, off: 7 };
       return rank[a.status] - rank[b.status];
     });
   return NextResponse.json({ mode: "day", date: d, outlet, rows, summary: countStatuses(rows) });

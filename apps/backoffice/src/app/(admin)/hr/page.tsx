@@ -1,7 +1,7 @@
 "use client";
 
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarOff, CalendarDays, Banknote, Bot, Loader2, BarChart3, Cake, PartyPopper, Users, TrendingUp, Settings } from "lucide-react";
+import { Clock, CalendarOff, CalendarDays, Banknote, Bot, Loader2, BarChart3, Cake, PartyPopper, Users, TrendingUp, Settings, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -117,6 +117,7 @@ type DashboardData = {
     items_flagged: number;
     items_auto_approved: number;
   } | null;
+  onProbation: number;
 };
 
 export default function HRDashboardPage() {
@@ -169,6 +170,17 @@ export default function HRDashboardPage() {
       color: data?.payrollStatus === "confirmed" ? "text-green-600 bg-green-50" : "text-gray-600 bg-gray-50",
       subtitle: data?.payrollStatus === "not_started" ? "Not started" : data?.payrollStatus || "",
     },
+    // Probation ends only on confirmation, and until then payroll withholds the
+    // performance allowance — this tile is the worklist that stops one being
+    // forgotten. Links straight into the Probation tab on Employees.
+    {
+      label: "On Probation",
+      value: data?.onProbation ?? "—",
+      icon: UserCheck,
+      href: "/hr/employees?filter=probation",
+      color: (data?.onProbation ?? 0) > 0 ? "text-amber-600 bg-amber-50" : "text-green-600 bg-green-50",
+      subtitle: (data?.onProbation ?? 0) > 0 ? "Awaiting confirmation" : "All confirmed",
+    },
   ];
 
   return (
@@ -189,7 +201,7 @@ export default function HRDashboardPage() {
       </div>
 
       {/* Status Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
         {cards.filter((card) => canSeePayroll || card.label !== "Payroll").map((card) => {
           const Icon = card.icon;
           return (

@@ -260,6 +260,19 @@ export default function Checkout() {
   }, [promoEvalError]);
 
   const promoDiscount = promoEval?.total_discount ?? 0;
+  // First-order discount preview (native-app-only perk). The server
+  // resolves the real thing independently at order create, so this is
+  // display math only — but without it a new customer stares at full
+  // price on this screen while the payment sheet charges 10% less,
+  // which reads as "I didn't get my discount". Not folded into
+  // promoDiscount: the server order route also keeps FOD separate
+  // from the promo-engine total, and mirroring that split keeps this
+  // preview equal to what /api/orders will charge. No interplay with
+  // the non-stackable-tier logic below — FOD only exists for a
+  // customer's first-ever order, and new members start on the base
+  // (stackable) tier.
+  const fodDiscount = promoEval?.first_order?.discount_amount ?? 0;
+  const fodName = promoEval?.first_order?.name ?? "First order discount";
 
   // Pull live outlet record so the pickup card shows status + ETA.
   // Polled every 30s while the checkout screen is mounted so the
@@ -338,7 +351,7 @@ export default function Checkout() {
     }
   }
 
-  const afterDiscount = Math.max(0, subtotal - rewardDiscount - effectivePromoDiscount);
+  const afterDiscount = Math.max(0, subtotal - rewardDiscount - effectivePromoDiscount - fodDiscount);
   const sst = sstConfig.enabled ? +(afterDiscount * sstConfig.rate).toFixed(2) : 0;
   const grandTotal = +(afterDiscount + sst).toFixed(2);
 
@@ -379,6 +392,7 @@ export default function Checkout() {
     rewardDiscount: number;
     rewardName:     string | null;
     promoDiscounts: NonNullable<typeof promoEval>["discounts"];
+    fodDiscount:    number;
     sst:            number;
     grandTotal:     number;
     afterDiscount:  number;
@@ -786,6 +800,7 @@ export default function Checkout() {
         rewardDiscount,
         rewardName:     appliedReward?.name ?? null,
         promoDiscounts: promoEval?.discounts ?? [],
+        fodDiscount,
         sst,
         grandTotal,
         afterDiscount,
@@ -1415,6 +1430,7 @@ export default function Checkout() {
                   : dropTierPerk
                     ? rawDispPromos.filter((d) => d.reason !== "tier_perk")
                     : rawDispPromos;
+                const dispFod        = frozenSummary?.fodDiscount    ?? fodDiscount;
                 const dispSst        = frozenSummary?.sst            ?? sst;
                 const dispGrand      = frozenSummary?.grandTotal     ?? grandTotal;
                 const dispAfter      = frozenSummary?.afterDiscount  ?? afterDiscount;
@@ -1477,6 +1493,14 @@ export default function Checkout() {
                         </Text>
                       </View>
                     ))}
+                    {dispFod > 0 && (
+                      <View className="flex-row justify-between">
+                        <Text className="text-primary text-[13px]" numberOfLines={1}>
+                          {fodName}
+                        </Text>
+                        <Text className="text-primary">−{formatPrice(dispFod)}</Text>
+                      </View>
+                    )}
                     {sstConfig.enabled && dispSst > 0 && (
                       <View className="flex-row justify-between">
                         <Text className="text-muted-fg text-[13px]">

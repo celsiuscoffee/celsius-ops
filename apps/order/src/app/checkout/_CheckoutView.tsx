@@ -437,11 +437,15 @@ export function CheckoutView() {
           tableNumber:  state.tableNumber ?? null,
           // Forward the applied reward so the server actually discounts
           // the order (otherwise the customer is charged full price).
+          // Wallet vouchers ride in rewardId — resolveOrderReward looks the
+          // id up in issued_rewards. Do NOT also send it as voucherId: that
+          // field means a LEGACY `vouchers`-table row, and a wallet id sent
+          // there fails the legacy gate with "Voucher is no longer valid"
+          // (worked at POS, failed on web — the QR checkout regression).
           rewardId:          reward?.id ?? null,
           rewardName:        reward?.name ?? null,
           rewardPointsCost:  reward?.points_required ?? 0,
           rewardDiscountSen: Math.round(rewardDiscount * 100),
-          voucherId:         reward?.voucher_id ?? null,
         }),
       });
       const data = await res.json();

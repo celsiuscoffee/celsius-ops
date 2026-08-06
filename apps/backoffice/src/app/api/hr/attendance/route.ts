@@ -4,8 +4,8 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds } from "@/lib/hr/scope";
 import { signAttendancePhotos } from "@/lib/hr/photos";
-import { deriveHours, mytDateString, mytDayOfWeek, mytInstant, computeLateMinutes } from "@/lib/hr/hours";
-import { haversineDistance } from "@/lib/hr/constants";
+import { deriveHours, mytDateString, mytInstant, computeLateMinutes } from "@/lib/hr/hours";
+import { haversineDistance, REST_DAY_ROLE_PATTERN } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -230,22 +230,38 @@ export async function PATCH(req: NextRequest) {
     if (co.getTime() - ci.getTime() > 24 * 3600 * 1000) {
       return NextResponse.json({ error: "Shift can't exceed 24 hours — check the times" }, { status: 400 });
     }
-    const { data: prof } = await hrSupabaseAdmin
-      .from("hr_employee_profiles")
-      .select("employment_type, rest_day")
-      .eq("user_id", existingLog.user_id)
-      .maybeSingle();
-    const employmentType = prof?.employment_type || "full_time";
-    const restDay = prof?.rest_day == null ? 0 : Number(prof.rest_day);
     const mytDate = mytDateString(ci);
-    const { data: ph } = await hrSupabaseAdmin
-      .from("hr_public_holidays").select("date").eq("date", mytDate).maybeSingle();
+    // Rest day is ROSTERED, not a weekday on the profile — same source as the
+    // staff clock-out, the AI processor and the auto-close cron. This path was
+    // the last one still reading hr_employee_profiles.rest_day, and it was
+    // wrong every single time: that column is NULL for all 77 profiles, so
+    // `?? 0` resolved to Sunday and stamped every Sunday shift as a rest day.
+    // July 2026: 96 logs carried rest_day_1x/ot_2x, ALL of them Sundays, and
+    // NONE on one of the 161 genuinely rostered rest days.
+    const [profResp, phResp, restResp] = await Promise.all([
+      hrSupabaseAdmin
+        .from("hr_employee_profiles")
+        .select("employment_type")
+        .eq("user_id", existingLog.user_id)
+        .maybeSingle(),
+      hrSupabaseAdmin
+        .from("hr_public_holidays").select("date").eq("date", mytDate).maybeSingle(),
+      hrSupabaseAdmin
+        .from("hr_schedule_shifts")
+        .select("id")
+        .eq("user_id", existingLog.user_id)
+        .eq("shift_date", mytDate)
+        .ilike("role_type", REST_DAY_ROLE_PATTERN)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const employmentType = profResp.data?.employment_type || "full_time";
     const derived = deriveHours({
       clockIn: ci,
       clockOut: co,
       employmentType,
-      isPublicHoliday: !!ph,
-      isRestDay: mytDayOfWeek(ci) === restDay,
+      isPublicHoliday: !!phResp.data,
+      isRestDay: !!restResp.data,
       // Early clock-in pays from the rostered start (stamped at clock-in).
       scheduledStart: mytInstant(existingLog.scheduled_date ?? mytDate, existingLog.scheduled_start),
     });
