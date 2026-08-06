@@ -54,15 +54,28 @@ export function isCleanCount(items: VarianceItem[]): boolean {
 //
 // evaluateCountCoverage compares what was counted against the outlet's expected
 // universe for that frequency (its most recent completed count of the same
-// frequency is the baseline). Per the owner's call (2026-07-15):
-//   - MONTHLY below the floor → BLOCK (hard stop; a deliberate partial needs an
-//     explicit reason at the call site).
-//   - DAILY / WEEKLY below the floor → WARN (allow, but the caller routes it to
-//     manager review instead of auto-approving). Those are intentionally small
-//     and their size varies, so blocking would be noise.
+// frequency is the baseline). Per the owner's calls:
+//   - MONTHLY and WEEKLY below the floor → BLOCK (hard stop; a deliberate
+//     partial needs an explicit reason at the call site). Both are a full
+//     census of every product — as of 2026-08-06 the weekly sheet lists the
+//     whole store, not a subset, so a short weekly is as wrong as a short
+//     monthly. (Before that, weekly listed only DAILY+WEEKLY-tagged items and
+//     was correctly treated as a small, variable-size count.)
+//   - DAILY below the floor → WARN (allow, but the caller routes it to manager
+//     review instead of auto-approving). The daily sheet is a deliberately
+//     short list of fast movers, so blocking would be noise.
 // A first-ever count (no baseline) can't be judged and always passes.
 
 export type CountFrequencyLike = "DAILY" | "WEEKLY" | "MONTHLY";
+
+/**
+ * Does this frequency's sheet list every product? Weekly and monthly do; the
+ * daily sheet is a short list of fast movers. Only a census can be judged
+ * "short", which is what the coverage floor tests.
+ */
+export function isCensusFrequency(f: CountFrequencyLike): boolean {
+  return f === "WEEKLY" || f === "MONTHLY";
+}
 
 /** Default minimum share of the expected universe a count must cover. Monthly
  *  counts are historically very consistent (e.g. 254/254/255), so 0.85 leaves
@@ -125,8 +138,10 @@ export function evaluateCountCoverage(input: CoverageInput): CoverageResult {
     coverage,
     missingProductIds,
     belowFloor,
-    block: belowFloor && input.frequency === "MONTHLY",
-    warn: belowFloor && input.frequency !== "MONTHLY",
+    // A census (weekly or monthly) must cover the store; only the short daily
+    // list is allowed through with a warning.
+    block: belowFloor && isCensusFrequency(input.frequency),
+    warn: belowFloor && !isCensusFrequency(input.frequency),
   };
 }
 

@@ -368,14 +368,22 @@ export default function StockCheckPage() {
     };
   }, [countId, fetchActive]);
 
-  // Group + filter by frequency
+  // Group + filter by frequency.
+  //
+  // Only the DAILY sheet is a subset — the short list of fast movers the team
+  // walks every morning (owner's call 2026-08-06: beans, milk, ice hot, roti,
+  // udang, cooking cream, duck, lamb). WEEKLY and MONTHLY are both a full
+  // census of every product, so `checkFrequency` decides one thing only:
+  // whether an item appears on the daily sheet.
+  //
+  // Weekly used to list only DAILY+WEEKLY items, which meant the weekly count
+  // could never see the bulk of the store and no shrinkage figure could be
+  // derived from it.
   const groupedData: GroupedArea[] = useMemo(() => {
     const freqKey = frequency.toUpperCase();
     const filtered = freqKey === "DAILY"
       ? products.filter((p) => p.checkFrequency === "DAILY")
-      : freqKey === "WEEKLY"
-        ? products.filter((p) => p.checkFrequency === "DAILY" || p.checkFrequency === "WEEKLY")
-        : products;
+      : products;
     const groups: Record<string, Product[]> = {};
     for (const p of filtered) {
       const area = p.storageArea || "UNCATEGORIZED";

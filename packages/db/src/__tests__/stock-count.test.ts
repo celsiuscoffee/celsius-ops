@@ -95,7 +95,9 @@ describe("evaluateCountCoverage", () => {
     expect(r.block).toBe(false);
   });
 
-  it("WARNS but never blocks a short daily/weekly count", () => {
+  it("WARNS but never blocks a short DAILY count", () => {
+    // The daily sheet is a deliberately short list of fast movers, so a small
+    // count is expected, not a defect.
     const daily = evaluateCountCoverage({
       frequency: "DAILY",
       expectedProductIds: universe,
@@ -103,14 +105,18 @@ describe("evaluateCountCoverage", () => {
     });
     expect(daily.block).toBe(false);
     expect(daily.warn).toBe(true);
+  });
 
+  it("BLOCKS a short WEEKLY count — weekly is a full census too", () => {
+    // Since 2026-08-06 the weekly sheet lists every product, so a 5/212 weekly
+    // is as wrong as a short monthly and must not slip through with a warning.
     const weekly = evaluateCountCoverage({
       frequency: "WEEKLY",
       expectedProductIds: universe,
       countedProductIds: universe.slice(0, 5),
     });
-    expect(weekly.block).toBe(false);
-    expect(weekly.warn).toBe(true);
+    expect(weekly.block).toBe(true);
+    expect(weekly.warn).toBe(false);
   });
 
   it("passes when there is no baseline to judge against (first-ever count)", () => {
