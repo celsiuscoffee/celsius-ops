@@ -6,6 +6,33 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-06 — **"Native app first order didn't get the 10%" (customer
+  +60196098892) — the CHARGE was never broken, the PREVIEW was.** The FOD
+  wiring at `/api/orders` is correct and live: gated on source app_ios/
+  app_android + zero prior `orders` rows on the phone, and the Stripe
+  PaymentIntent charges `order.total` which already includes it (47 native
+  orders carried FOD Jul 20–Aug 6). What's missing: the native checkout
+  shows NO discount line and full price — the old client-side FOD display
+  was removed when FOD config moved to the Discount Engine (commit
+  `471cc59`, "server resolves at order create; no client read"), and the
+  `/api/members/order-count` endpoint built for client eligibility was
+  left with zero callers. So a new customer sees full price and reasonably
+  concludes there's no discount. This exact customer never placed an app
+  order at all (member created 10:33Z, no `orders` rows) — they ordered at
+  the Shah Alam POS 10:37Z instead and POS auto-applied its own first-order
+  10% (RM4.86 off CC-SA-7279; POS FOD checks pos_orders+pickup history via
+  `dropFirstOrderIfReturning`). Fix on branch
+  `claude/first-order-native-app-wiring-0aigut`: evaluate endpoint now
+  returns a `first_order` preview for native sources (same gates as
+  /api/orders, display-only, spoofing `source` changes pixels not money);
+  native checkout renders the line and subtracts it before SST. NOTE the
+  two "first order" ledgers still don't see each other: app FOD counts only
+  `orders`, POS FOD counts pos_orders+pickup — so this customer (2 POS
+  orders) is STILL eligible for app FOD on their first app order, i.e. one
+  customer can collect the 10% twice (once POS, once app). Owner call
+  whether that's acceptable acquisition cost or the app gate should also
+  check pos_orders.
+
 - 2026-08-05 — **Wallet vouchers 400'd at web QR checkout ("Voucher is no
   longer valid") while POS accepted the same voucher — FIXED.** Customer photo
   from Shah Alam: quote showed the Free Coffee discount, Place order failed.

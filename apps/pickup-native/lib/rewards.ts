@@ -143,6 +143,15 @@ export type EvaluatedCart = {
   discounts: AppliedDiscount[];
   total_discount: number;
   total: number;
+  /** First-order discount preview (native-app-only perk). Returned by
+   *  the evaluate endpoint when we send loyalty_phone + a native
+   *  source and the phone has no prior orders. Kept OUTSIDE
+   *  `discounts` — it is not a promo-engine line, and total_discount
+   *  deliberately excludes it (the server order route adds its own
+   *  independently-validated FOD on top of the engine total, and the
+   *  checkout screen mirrors that same split). Older server bundles
+   *  omit the field entirely, hence optional. */
+  first_order?: { name: string; discount_amount: number } | null;
 };
 
 export type PromoLine = {
@@ -170,6 +179,11 @@ export async function evaluatePromotions(input: {
   member_id?: string | null;
   outlet_id?: string | null;
   member_tier_id?: string | null;
+  /** Send with `source` to get the first-order-discount preview back.
+   *  The server only reveals FOD eligibility for native sources, and
+   *  the order route re-validates on create — this is display-only. */
+  loyalty_phone?: string | null;
+  source?: "app_ios" | "app_android" | "web";
 }): Promise<EvaluateResult> {
   try {
     // Two gotchas the order app's middleware imposes:
