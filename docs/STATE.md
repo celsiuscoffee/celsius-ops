@@ -6,6 +6,39 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-06 — **"Native app first order didn't get the 10%" (customer
+  +60196098892) — the CHARGE was never broken, the PREVIEW was.** The FOD
+  wiring at `/api/orders` is correct and live: gated on source app_ios/
+  app_android + zero prior `orders` rows on the phone, and the Stripe
+  PaymentIntent charges `order.total` which already includes it (47 native
+  orders carried FOD Jul 20–Aug 6). What's missing: the native checkout
+  shows NO discount line and full price — the old client-side FOD display
+  was removed when FOD config moved to the Discount Engine (commit
+  `471cc59`, "server resolves at order create; no client read"), and the
+  `/api/members/order-count` endpoint built for client eligibility was
+  left with zero callers. So a new customer sees full price and reasonably
+  concludes there's no discount. This exact customer never placed an app
+  order at all (member created 10:33Z, no `orders` rows) — they ordered at
+  the Shah Alam POS 10:37Z instead, where **staff keyed a MANUAL 10%**
+  (RM4.86 off CC-SA-7279: `discount_amount=486`, `promo_discount=0`, no
+  promo_name/discount_reason/discount_by — NOT the promo engine). An
+  earlier note in this session claimed "POS auto-applied its own
+  first-order 10%" — WRONG, withdrawn. Verified the engine cannot do
+  that: `@celsius/shared` promo-engine filters `trigger_type='first_order'`
+  out of the candidate pool, and its non-stackable-tier branch refilters to
+  `tier_perk` only, so first_order never leaks; the POS route's
+  `dropFirstOrderIfReturning` is dead defense (harmless, kept). So
+  "native-app-only" is already fully enforced IN CODE across web/POS/app —
+  the only leak path is staff manual discounts at the register, which is an
+  ops/training matter (5 unattributed manual discounts since Jul 25, 2 of
+  them exactly 10%). Fix shipped (PR #1118, branch
+  `claude/first-order-native-app-wiring-0aigut`): evaluate endpoint returns
+  a `first_order` preview for native sources (same gates as /api/orders,
+  display-only, spoofing `source` changes pixels not money); native
+  checkout renders the line and subtracts it before SST. Merging OTAs
+  pickup-native to customer phones (JS-only change, fingerprint runtime —
+  OTA-safe).
+
 - 2026-08-05 — **Wallet vouchers 400'd at web QR checkout ("Voucher is no
   longer valid") while POS accepted the same voucher — FIXED.** Customer photo
   from Shah Alam: quote showed the Free Coffee discount, Place order failed.

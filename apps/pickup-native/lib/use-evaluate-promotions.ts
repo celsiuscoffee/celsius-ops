@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "./store";
 import { evaluatePromotions, type EvaluatedCart, type PromoLine } from "./rewards";
@@ -36,6 +37,7 @@ export function useEvaluatePromotions(args: {
   const cart = useApp((s) => s.cart);
   const loyaltyId = useApp((s) => s.loyaltyId);
   const outletId = useApp((s) => s.outletId);
+  const phone = useApp((s) => s.phone);
   const memberTierId = args.memberTierId ?? null;
   const enabled = (args.enabled ?? true) && cart.length > 0;
 
@@ -47,7 +49,7 @@ export function useEvaluatePromotions(args: {
     .join(";");
 
   const q = useQuery({
-    queryKey: ["promo-eval", lineHash, loyaltyId ?? "", outletId ?? "", memberTierId ?? ""],
+    queryKey: ["promo-eval", lineHash, loyaltyId ?? "", outletId ?? "", memberTierId ?? "", phone ?? ""],
     queryFn: async () => {
       const lines: PromoLine[] = cart.map((c) => ({
         product_id: c.productId,
@@ -60,6 +62,13 @@ export function useEvaluatePromotions(args: {
         member_id:     loyaltyId,
         outlet_id:     outletId,
         member_tier_id: memberTierId,
+        // First-order-discount preview context: the signed-in phone plus
+        // where we're running. The server only reveals FOD eligibility to
+        // native sources (mirrors /api/orders' gate) — the PWA export
+        // sends "web" and gets first_order: null. Display-only either
+        // way; the order route re-validates at create.
+        loyalty_phone:  phone ?? null,
+        source:         Platform.OS === "ios" ? "app_ios" : Platform.OS === "android" ? "app_android" : "web",
       });
       if (res.kind === "error") throw new Error(res.reason);
       return res.data;

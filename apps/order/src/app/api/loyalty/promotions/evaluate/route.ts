@@ -29,6 +29,18 @@ export async function POST(request: NextRequest) {
       member_id?: string | null;
       outlet_id?: string | null;
       member_tier_id?: string | null;
+      // First-order-discount preview context. FOD is a native-app-only
+      // perk resolved at order create (/api/orders); the promo engine
+      // excludes trigger_type='first_order' so it can't double-apply.
+      // That left the native checkout previewing full price while the
+      // PaymentIntent charged 10% less — reads as "no discount" to a
+      // new customer. When the caller declares a native source + the
+      // customer's phone, mirror the order route's eligibility check
+      // here so the preview can show the same number the order will
+      // charge. Callers that omit these fields (web PWA, older app
+      // bundles) get `first_order: null` and behave as before.
+      loyalty_phone?: string | null;
+      source?: string | null;
     };
 
     const lines = body.lines ?? [];
@@ -60,7 +72,47 @@ export async function POST(request: NextRequest) {
       outlet_id: body.outlet_id ?? null,
       member_tier_id: body.member_tier_id ?? null,
     });
-    return NextResponse.json(result);
+
+    // First-order discount preview — same gates as /api/orders: native
+    // source, a phone with zero prior active/completed orders, and an
+    // active first_order promo row. PREVIEW ONLY: the order route
+    // re-validates independently, so a spoofed `source` here can only
+    // change what the screen shows, never what gets charged.
+    let firstOrder: { name: string; discount_amount: number } | null = null;
+    const fodNativeOk = body.source === "app_ios" || body.source === "app_android";
+    if (fodNativeOk && body.loyalty_phone) {
+      const supabase = getSupabaseAdmin();
+      const [{ data: fodRow }, { count }] = await Promise.all([
+        supabase
+          .from("promotions")
+          .select("name, discount_type, discount_value")
+          .eq("brand_id", "brand-celsius")
+          .eq("trigger_type", "first_order")
+          .eq("is_active", true)
+          .order("priority", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("loyalty_phone", body.loyalty_phone)
+          .in("status", ["completed", "preparing", "ready", "paid"]),
+      ]);
+      if (fodRow && (count ?? 0) === 0) {
+        const value = Number(fodRow.discount_value ?? 0);
+        const amount = (fodRow.discount_type as string) === "percentage_off"
+          ? Math.round(result.subtotal * value) / 100
+          : Math.min(value, result.subtotal);
+        if (amount > 0) {
+          firstOrder = {
+            name: (fodRow.name as string) || "First order discount",
+            discount_amount: amount,
+          };
+        }
+      }
+    }
+
+    return NextResponse.json({ ...result, first_order: firstOrder });
   } catch (err) {
     console.error("promotions/evaluate proxy error:", err);
     return NextResponse.json(
