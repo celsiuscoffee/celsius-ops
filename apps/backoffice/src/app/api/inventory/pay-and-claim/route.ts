@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
-import { adjustStockBalance } from "@/lib/stock";
+import { adjustStockByPackages } from "@/lib/stock";
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -378,11 +378,7 @@ export async function POST(req: NextRequest) {
     // adjustStockBalance uses the global prisma client. If this fails, the
     // financial records still exist and stock can be reconciled separately.
     if (willCreateReceiving) {
-      await Promise.all(
-        items.map((item: { productId: string; productPackageId?: string; quantity: number }) =>
-          adjustStockBalance(outletId, item.productId, item.quantity, item.productPackageId),
-        ),
-      );
+      await adjustStockByPackages(outletId, items);
     }
 
     return NextResponse.json(
@@ -509,11 +505,7 @@ export async function POST(req: NextRequest) {
 
   // Post-commit stock adjustments
   if (willCreateFullReceiving) {
-    await Promise.all(
-      items.map((item: { productId: string; productPackageId?: string; quantity: number }) =>
-        adjustStockBalance(outletId, item.productId, item.quantity, item.productPackageId),
-      ),
-    );
+    await adjustStockByPackages(outletId, items);
   }
 
   return NextResponse.json(

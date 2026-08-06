@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
 import { getUserFromHeaders } from "@/lib/auth";
-import { adjustStockBalance } from "@/lib/stock";
+import { adjustStockByPackages } from "@/lib/stock";
 
 export async function PATCH(
   req: NextRequest,
@@ -160,11 +160,7 @@ export async function PATCH(
         },
       });
 
-      await Promise.all(
-        items.map((item: { productId: string; productPackageId?: string; quantity: number }) =>
-          adjustStockBalance(order.outletId, item.productId, item.quantity, item.productPackageId),
-        ),
-      );
+      await adjustStockByPackages(order.outletId, items);
     }
 
     const paymentType = isRequestFlow ? "SUPPLIER" : "STAFF_CLAIM";

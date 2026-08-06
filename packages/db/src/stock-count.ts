@@ -54,15 +54,28 @@ export function isCleanCount(items: VarianceItem[]): boolean {
 //
 // evaluateCountCoverage compares what was counted against the outlet's expected
 // universe for that frequency (its most recent completed count of the same
-// frequency is the baseline). Per the owner's call (2026-07-15):
-//   - MONTHLY below the floor → BLOCK (hard stop; a deliberate partial needs an
-//     explicit reason at the call site).
-//   - DAILY / WEEKLY below the floor → WARN (allow, but the caller routes it to
-//     manager review instead of auto-approving). Those are intentionally small
-//     and their size varies, so blocking would be noise.
+// frequency is the baseline). Per the owner's calls:
+//   - MONTHLY and WEEKLY below the floor → BLOCK (hard stop; a deliberate
+//     partial needs an explicit reason at the call site). Both are a full
+//     census of every product — as of 2026-08-06 the weekly sheet lists the
+//     whole store, not a subset, so a short weekly is as wrong as a short
+//     monthly. (Before that, weekly listed only DAILY+WEEKLY-tagged items and
+//     was correctly treated as a small, variable-size count.)
+//   - DAILY below the floor → WARN (allow, but the caller routes it to manager
+//     review instead of auto-approving). The daily sheet is a deliberately
+//     short list of fast movers, so blocking would be noise.
 // A first-ever count (no baseline) can't be judged and always passes.
 
 export type CountFrequencyLike = "DAILY" | "WEEKLY" | "MONTHLY";
+
+/**
+ * Does this frequency's sheet list every product? Weekly and monthly do; the
+ * daily sheet is a short list of fast movers. Only a census can be judged
+ * "short", which is what the coverage floor tests.
+ */
+export function isCensusFrequency(f: CountFrequencyLike): boolean {
+  return f === "WEEKLY" || f === "MONTHLY";
+}
 
 /** Default minimum share of the expected universe a count must cover. Monthly
  *  counts are historically very consistent (e.g. 254/254/255), so 0.85 leaves
@@ -125,8 +138,10 @@ export function evaluateCountCoverage(input: CoverageInput): CoverageResult {
     coverage,
     missingProductIds,
     belowFloor,
-    block: belowFloor && input.frequency === "MONTHLY",
-    warn: belowFloor && input.frequency !== "MONTHLY",
+    // A census (weekly or monthly) must cover the store; only the short daily
+    // list is allowed through with a warning.
+    block: belowFloor && isCensusFrequency(input.frequency),
+    warn: belowFloor && !isCensusFrequency(input.frequency),
   };
 }
 
@@ -207,6 +222,165 @@ export function evaluateCountFreshness(input: FreshnessInput): FreshnessResult {
     : null;
 
   return { hoursOpen, daysOpen: days, stale, expired, staleNote };
+}
+
+// ─── Count schedule (guard against counts landing on the wrong day) ──────────
+//
+// Nothing said WHEN a census should happen, so they happened whenever. Three
+// "monthly" counts were filed on 3, 4 and 5 August 2026 — each a different
+// outlet-day, none of them a month boundary, and each one overwrote every
+// balance in the store. A monthly that isn't anchored to the accounting close
+// can't value the month; a weekly that drifts across weekdays can't be compared
+// to the one before it.
+//
+// The windows below come from the outlets' own trading data (Jun–Jul 2026):
+//
+//   WEEKLY → Thursday. Deliveries land 15.1/day Mon, 14.2 Tue, 14.6 Fri, 13.0
+//   Sun — but only 4.1 on Thursday, the quietest day of the week by a factor of
+//   three. Thursday is also joint-lowest for sales (RM9,144/day avg, vs 13,548
+//   Sat and 14,476 Sun). So it is the one weekday where stock is sitting still
+//   AND staff have the time to walk it. Saturday has fewer deliveries still
+//   (3.3) but is the second-busiest trading day — the wrong time to ask anyone
+//   to count the store.
+//
+//   MONTHLY → the last calendar day, with the 1st of the next month as grace.
+//   This anchors the census to the accounting close, so closing stock, COGS and
+//   shrinkage all describe the same period the P&L does.
+//
+//   DAILY → every day, by definition. Never off-schedule.
+//
+// Enforcement is a SOFT block, matching the coverage and expiry guards: an
+// off-window census is refused until the counter gives a reason, and a count
+// submitted with one never auto-approves — a manager sees it. Hard-blocking
+// would mean a code change every time reality intervenes (stocktake before an
+// audit, an outlet closing for renovation, a manager on leave).
+
+/** ISO weekday the weekly census is expected on. 4 = Thursday. */
+export const WEEKLY_COUNT_DOW = 4;
+
+/** Outlets are all Malaysian; countDate is stored UTC, so the day-of-week and
+ *  day-of-month questions must be asked in local time or a 20:00 MYT count
+ *  reads as the previous day. */
+export const COUNT_TIME_ZONE = "Asia/Kuala_Lumpur";
+
+const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+interface LocalDateParts {
+  year: number;
+  month: number; // 1-12
+  day: number;
+  isoDow: number; // 1 = Monday … 7 = Sunday
+  daysInMonth: number;
+}
+
+/** Calendar parts of an instant as seen in `timeZone`. Returns null if the
+ *  input or zone can't be read — callers treat that as "can't judge". */
+function localDateParts(at: Date | string, timeZone: string): LocalDateParts | null {
+  const d = new Date(at);
+  if (!Number.isFinite(d.getTime())) return null;
+  let year: number, month: number, day: number;
+  try {
+    // en-CA formats as YYYY-MM-DD, which parses without locale ambiguity.
+    const [y, m, dd] = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .format(d)
+      .split("-")
+      .map(Number);
+    if (!y || !m || !dd) return null;
+    year = y;
+    month = m;
+    day = dd;
+  } catch {
+    return null; // unknown timezone / no ICU — never block on this
+  }
+  // Weekday and month length from the local calendar date, computed in UTC so
+  // the host's own timezone can't shift the answer.
+  const dow = new Date(Date.UTC(year, month - 1, day)).getUTCDay(); // 0 = Sunday
+  return {
+    year,
+    month,
+    day,
+    isoDow: dow === 0 ? 7 : dow,
+    daysInMonth: new Date(Date.UTC(year, month, 0)).getUTCDate(),
+  };
+}
+
+export interface ScheduleInput {
+  frequency: CountFrequencyLike;
+  /** The date the count will be filed under (countDate, or the closing date
+   *  for a count being re-dated). */
+  date: Date | string;
+  timeZone?: string;
+  /** ISO weekday for the weekly census. Defaults to Thursday. */
+  weeklyDow?: number;
+}
+
+export interface ScheduleResult {
+  /** True when the count falls in its expected window, or can't be judged. */
+  onSchedule: boolean;
+  /** True only for a census landing outside its window — needs a reason. */
+  offSchedule: boolean;
+  /** What the window is, for the message shown to the counter. */
+  expectedLabel: string;
+  /** The day this count actually lands on, e.g. "Monday 3 Aug". */
+  actualLabel: string;
+  /** Note stamped on an off-window count so review sees why it's flagged. */
+  offScheduleNote: string | null;
+}
+
+/**
+ * Is this count landing in its scheduled window? Daily always is. A weekly is
+ * due on `weeklyDow`; a monthly on the last day of the month or the 1st of the
+ * next. An unreadable date passes — a guard that can't read the clock must not
+ * stop someone finishing a count.
+ */
+export function evaluateCountSchedule(input: ScheduleInput): ScheduleResult {
+  const parts = localDateParts(input.date, input.timeZone ?? COUNT_TIME_ZONE);
+  const dow = input.weeklyDow ?? WEEKLY_COUNT_DOW;
+  const weeklyName = WEEKDAY_NAMES[dow - 1] ?? WEEKDAY_NAMES[WEEKLY_COUNT_DOW - 1];
+
+  const expectedLabel =
+    input.frequency === "WEEKLY"
+      ? weeklyName
+      : input.frequency === "MONTHLY"
+        ? "the last day of the month (or the 1st)"
+        : "any day";
+
+  if (!parts || input.frequency === "DAILY") {
+    return {
+      onSchedule: true,
+      offSchedule: false,
+      expectedLabel,
+      actualLabel: parts ? formatDay(parts) : "",
+      offScheduleNote: null,
+    };
+  }
+
+  const onSchedule =
+    input.frequency === "WEEKLY"
+      ? parts.isoDow === dow
+      : parts.day === parts.daysInMonth || parts.day === 1;
+
+  const actualLabel = formatDay(parts);
+  return {
+    onSchedule,
+    offSchedule: !onSchedule,
+    expectedLabel,
+    actualLabel,
+    offScheduleNote: onSchedule
+      ? null
+      : `[off-schedule] ${input.frequency.toLowerCase()} count filed ${actualLabel}; due ${expectedLabel}.`,
+  };
+}
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function formatDay(p: LocalDateParts): string {
+  return `${WEEKDAY_NAMES[p.isoDow - 1]} ${p.day} ${MONTH_NAMES[p.month - 1]}`;
 }
 
 export interface CountedLine {
