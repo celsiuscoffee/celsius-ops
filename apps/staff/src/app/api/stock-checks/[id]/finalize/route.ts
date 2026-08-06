@@ -1,5 +1,10 @@
 import { NextResponse, NextRequest } from "next/server";
-import { isCleanCount, baseQtyByProduct, evaluateCountFreshness } from "@celsius/db";
+import {
+  isCleanCount,
+  baseQtyByProduct,
+  evaluateCountFreshness,
+  evaluateCountSchedule,
+} from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { setStockBalance } from "@/lib/stock";
 import { checkCountCoverage } from "@/lib/stock-coverage";
@@ -35,6 +40,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const staleReason: string | null =
     typeof body?.staleReason === "string" && body.staleReason.trim()
       ? body.staleReason.trim().slice(0, 300)
+      : null;
+
+  // Why a census is being closed outside its scheduled window (weekly off
+  // Thursday, monthly away from the month boundary). Required by the schedule
+  // guard below before an off-window count is accepted.
+  const scheduleReason: string | null =
+    typeof body?.scheduleReason === "string" && body.scheduleReason.trim()
+      ? body.scheduleReason.trim().slice(0, 300)
       : null;
 
   const count = await prisma.stockCount.findUnique({
@@ -137,14 +150,49 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
+  // Schedule guard — a census has a window, and one filed outside it is either
+  // a mistake or a deliberate exception, never routine. Weekly belongs on
+  // Thursday (the outlets' quietest delivery day, 4.1/day vs 15.1 on Monday,
+  // and joint-lowest for sales); monthly belongs on the month boundary so the
+  // census lines up with the accounting close. Three "monthly" counts landed on
+  // 3, 4 and 5 August 2026, each overwriting every balance in the store.
+  //
+  // Judged on the date the count will be FILED under — for an expired count
+  // that is today's date, since it gets re-stamped below. Soft, like the guards
+  // above: a reason gets you through, and the count then goes to review rather
+  // than auto-approving.
+  const effectiveDate = freshness.expired ? now : count.countDate;
+  const schedule = evaluateCountSchedule({
+    frequency: count.frequency,
+    date: effectiveDate,
+  });
+  if (schedule.offSchedule && !scheduleReason) {
+    return NextResponse.json(
+      {
+        error: `A ${count.frequency.toLowerCase()} count is due ${schedule.expectedLabel}, but this one lands on ${schedule.actualLabel}. Count it in the normal window, or say why it's being done now.`,
+        code: "OFF_SCHEDULE",
+        frequency: count.frequency,
+        expectedLabel: schedule.expectedLabel,
+        actualLabel: schedule.actualLabel,
+      },
+      { status: 400 },
+    );
+  }
+
   // A short count (below floor, or a monthly submitted with an explicit partial
   // reason) must never auto-approve — it goes to the manager's review queue with
   // a note, so the gap is seen. Otherwise, zero-variance counts auto-approve.
   // A stale count is held back from auto-approval for the same reason.
+  // An off-schedule census is held back from auto-approval for the same reason:
+  // it is an exception someone chose to make, so a human should see it.
   const isShort = coverage.belowFloor;
-  const autoApprove = !isShort && !freshness.stale && isCleanCount(count.items);
+  const autoApprove =
+    !isShort && !freshness.stale && !schedule.offSchedule && isCleanCount(count.items);
   const noteAddition = [
     isShort ? `${coverage.shortNote}${partialReason ? ` reason: ${partialReason}` : ""}` : null,
+    schedule.offScheduleNote
+      ? `${schedule.offScheduleNote}${scheduleReason ? ` reason: ${scheduleReason}` : ""}`
+      : null,
     freshness.staleNote
       ? `${freshness.staleNote}${staleReason ? ` counted: ${staleReason}` : ""}`
       : null,

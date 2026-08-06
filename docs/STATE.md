@@ -6,6 +6,29 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-06 — **Stock-count schedule guard: weekly is due THURSDAY, monthly on
+  the month boundary.** Windows derived from Jun–Jul 2026 trading data, not
+  preference. Deliveries per weekday: Mon 15.1, Tue 14.2, Wed 6.3, **Thu 4.1**,
+  Fri 14.6, Sat 3.3, Sun 13.0. Avg sales/day: Mon 9,652, Tue 9,142, Wed 9,643,
+  **Thu 9,144**, Fri 10,395, Sat 13,548, Sun 14,476. Thursday is the only day
+  that is both quietest for goods-in (⅓ of Monday) and joint-lowest for sales —
+  stock sits still and staff have the time. Saturday has fewer deliveries (3.3)
+  but is the second-busiest trading day, so it is the wrong day to count.
+  Monthly anchors to the last calendar day (1st = grace) so the census matches
+  the accounting close. Implemented as `evaluateCountSchedule` in
+  `packages/db/src/stock-count.ts` (TZ-aware via `Intl`, Asia/Kuala_Lumpur —
+  a 20:00 MYT count would read as the previous day in UTC). Soft block at
+  finalize (`OFF_SCHEDULE`, needs `scheduleReason`), banner on the staff page
+  before counting starts, and an off-window count never auto-approves.
+- 2026-08-06 — **The 3/4/5 Aug "monthly" counts were daily counts mislabelled,
+  and have been reclassified.** Five counts (CC001 3+4+5 Aug, CC002 3+4 Aug)
+  carried 256 lines each but only 7–8 real values; the other ~248 were
+  never-counted zeros/blanks that overwrote every balance in the store. All
+  five are now `frequency='DAILY'` with only the counted lines retained (1,241
+  never-counted lines deleted), each stamped with a `[reclassified 2026-08-06]`
+  note. **Mismatch found:** both outlets count **Crispy Prawn** daily but it is
+  NOT on the 9-product daily list, while **Smoked Duck** and **Pull Lamb** are
+  on the list and appear in none of the counts. Owner decision still owed.
 - 2026-08-03 — **PART-TIMERS ARE NOT IN THE MONTHLY RUN, AND THAT IS EXPECTED —
   DO NOT RE-RAISE IT.** Every payroll run that exists is `monthly` (8) or
   `opening_balance` (1); **zero weekly runs, ever**, despite

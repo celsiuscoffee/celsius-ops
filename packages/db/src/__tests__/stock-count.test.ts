@@ -5,6 +5,7 @@ import {
   isCleanCount,
   evaluateCountCoverage,
   evaluateCountFreshness,
+  evaluateCountSchedule,
 } from "../stock-count";
 
 describe("evaluateCountFreshness", () => {
@@ -220,5 +221,63 @@ describe("countDiscrepancies / isCleanCount", () => {
 
   it("treats a count with no baselines as clean (auto-approve)", () => {
     expect(isCleanCount([{ expectedQty: null, countedQty: 5 }])).toBe(true);
+  });
+});
+
+describe("evaluateCountSchedule", () => {
+  // 2026-08-06 is a Thursday; 2026-08-31 is the last day of August.
+  const on = (frequency: "DAILY" | "WEEKLY" | "MONTHLY", date: string) =>
+    evaluateCountSchedule({ frequency, date });
+
+  it("never flags a daily count — the daily sheet runs every day", () => {
+    expect(on("DAILY", "2026-08-03T04:00:00Z").offSchedule).toBe(false);
+    expect(on("DAILY", "2026-08-31T04:00:00Z").offSchedule).toBe(false);
+  });
+
+  it("passes a weekly count on Thursday, flags every other weekday", () => {
+    expect(on("WEEKLY", "2026-08-06T04:00:00Z").onSchedule).toBe(true); // Thu
+    expect(on("WEEKLY", "2026-08-03T04:00:00Z").offSchedule).toBe(true); // Mon
+    expect(on("WEEKLY", "2026-08-08T04:00:00Z").offSchedule).toBe(true); // Sat
+  });
+
+  it("passes a monthly count on the last day of the month or the 1st", () => {
+    expect(on("MONTHLY", "2026-08-31T04:00:00Z").onSchedule).toBe(true); // last day
+    expect(on("MONTHLY", "2026-09-01T04:00:00Z").onSchedule).toBe(true); // grace day
+    expect(on("MONTHLY", "2026-02-28T04:00:00Z").onSchedule).toBe(true); // short month
+  });
+
+  it("flags the counts that caused this guard — 3, 4 and 5 August monthlies", () => {
+    for (const d of ["2026-08-03T04:00:00Z", "2026-08-04T03:59:00Z", "2026-08-05T16:00:00Z"]) {
+      const r = on("MONTHLY", d);
+      expect(r.offSchedule).toBe(true);
+      expect(r.offScheduleNote).toContain("off-schedule");
+    }
+  });
+
+  it("asks the weekday question in Malaysian time, not UTC", () => {
+    // 2026-08-06T17:00Z is Fri 01:00 in Kuala Lumpur — a Thursday-evening count
+    // in UTC terms, but the store's Friday. It must read as off-schedule.
+    expect(on("WEEKLY", "2026-08-06T17:00:00Z").offSchedule).toBe(true);
+    // 2026-08-05T20:00Z is Thu 04:00 MYT — the store's Thursday.
+    expect(on("WEEKLY", "2026-08-05T20:00:00Z").onSchedule).toBe(true);
+  });
+
+  it("treats month-end in local time too", () => {
+    // 2026-08-31T18:00Z = 1 Sep 02:00 MYT — still inside the grace day.
+    expect(on("MONTHLY", "2026-08-31T18:00:00Z").onSchedule).toBe(true);
+    // 2026-09-01T18:00Z = 2 Sep MYT — past it.
+    expect(on("MONTHLY", "2026-09-01T18:00:00Z").offSchedule).toBe(true);
+  });
+
+  it("passes rather than blocks when the date can't be read", () => {
+    const r = evaluateCountSchedule({ frequency: "MONTHLY", date: "not-a-date" });
+    expect(r.onSchedule).toBe(true);
+    expect(r.offScheduleNote).toBeNull();
+  });
+
+  it("honours a configured weekly weekday", () => {
+    // Wednesday = 3. 2026-08-05 is a Wednesday.
+    expect(evaluateCountSchedule({ frequency: "WEEKLY", date: "2026-08-05T04:00:00Z", weeklyDow: 3 }).onSchedule).toBe(true);
+    expect(evaluateCountSchedule({ frequency: "WEEKLY", date: "2026-08-05T04:00:00Z" }).offSchedule).toBe(true);
   });
 });
