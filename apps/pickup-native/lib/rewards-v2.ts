@@ -302,6 +302,11 @@ export type ReferralState = {
   pending: number;
   rewarded: number;
   recent: Array<{ status: string; created_at: string; rewarded_at: string | null }>;
+  /** True when the CALLER may still enter someone else's code (zero paid
+   *  orders, never attributed). Absent on older server builds — treat
+   *  undefined as false so the entry field never shows to members the
+   *  server would reject. */
+  can_enter_code?: boolean;
 };
 
 export async function fetchMyReferral(): Promise<ReferralState | null> {
@@ -313,8 +318,20 @@ export async function fetchMyReferral(): Promise<ReferralState | null> {
 }
 
 export async function submitReferralCode(code: string): Promise<{ ok: boolean; error?: string }> {
+  // Direct fetch rather than the generic post() helper: on 400 the
+  // attribute endpoint returns a customer-facing `error` message
+  // ("That referral code doesn't exist.", …) that we want to surface
+  // inline, and post() discards the response body on non-2xx.
   try {
-    await post("/api/loyalty/referral/attribute", { code });
+    const res = await fetch(`${API_BASE}/api/loyalty/referral/attribute`, {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify({ code }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      return { ok: false, error: body?.error ?? "Couldn't apply the code. Try again." };
+    }
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed" };

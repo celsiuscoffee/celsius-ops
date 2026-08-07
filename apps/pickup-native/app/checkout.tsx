@@ -358,6 +358,15 @@ export default function Checkout() {
   const [step, setStep] = useState<Step>(phoneFromStore ? "review" : "phone");
   const [phoneInput, setPhoneInput] = useState(phoneFromStore ?? "");
   const [otp, setOtp] = useState("");
+  const [referralCode, setReferralCode] = useState(""); // optional — only sent post-verify
+  // From /api/otp/send: true → phone has zero paid orders, eligible to
+  // attribute a referral code; false → returning customer (hide the
+  // field — the server would reject with not_new anyway); null → OTP
+  // not requested yet. Checkout sign-in is the path a referred friend
+  // actually takes (their first order IS the qualifying order), and
+  // eligibility ends permanently once that order is paid — so this is
+  // the last moment the code can be entered.
+  const [isNewMember, setIsNewMember] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   // Contextual message shown next to the spinner during checkout. Lets
   // the customer see WHAT is happening at each step instead of a bare
@@ -649,8 +658,11 @@ export default function Checkout() {
     setBusy(true);
     setBusyLabel("Sending code…");
     try {
-      await api.sendOtp(normalized);
+      const res = await api.sendOtp(normalized);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Default true if the flag is absent so legacy server builds still
+      // surface the referral field rather than hiding it for everyone.
+      setIsNewMember(res?.is_new_member ?? true);
       setStep("otp");
     } catch (e) {
       Alert.alert("Couldn't send code", String(e));
@@ -668,6 +680,17 @@ export default function Checkout() {
       await api.verifyOtp(phoneInput.trim(), otp.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       trackEvent("login_success", { surface: "checkout" });
+      // Optional referral attribution — best-effort, never blocks the
+      // order. verifyOtp stored the session JWT, so the attribute
+      // endpoint resolves the new member from the Bearer header. Same
+      // shape as the account sign-in flow (account.tsx).
+      const ref = referralCode.trim().toUpperCase();
+      if (ref && isNewMember !== false) {
+        try {
+          const { submitReferralCode } = await import("../lib/rewards-v2");
+          await submitReferralCode(ref);
+        } catch { /* silent — invalid codes just don't attribute */ }
+      }
       setPhone(phoneInput.trim());
       setStep("review");
     } catch (e) {
@@ -1163,6 +1186,27 @@ export default function Checkout() {
               maxLength={6}
               className="mt-3 bg-background border border-border rounded-2xl px-4 py-3 text-espresso text-2xl tracking-widest text-center"
             />
+
+            {/* Optional referral code — first sign-in only. Attribution
+                must land before the first paid order (this very
+                checkout), so this is the referred friend's one chance
+                to enter it. Hidden for returning members. */}
+            {isNewMember !== false && (
+              <View className="mt-4">
+                <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest mb-1.5">
+                  Have a referral code? (optional)
+                </Text>
+                <TextInput
+                  value={referralCode}
+                  onChangeText={(t) => setReferralCode(t.toUpperCase().replace(/\s/g, "").slice(0, 12))}
+                  placeholder="e.g. CCABCD"
+                  placeholderTextColor="#C5C5C8"
+                  autoCapitalize="characters"
+                  className="bg-background border border-border rounded-2xl px-4 py-3 text-espresso text-base tracking-widest text-center"
+                />
+              </View>
+            )}
+
             <View className="mt-5">
               <PrimaryButton label="Let me in" onPress={onVerifyOtp} loading={busy} loadingLabel={busyLabel} />
             </View>
