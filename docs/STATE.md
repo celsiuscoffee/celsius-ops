@@ -6,6 +6,46 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-07 — **PT weekly pay now rounds each clock time to the LOWEST 30
+  minutes before computing the span.** First instruction said "nearest 30min"
+  with a round-down example (8.35→8.30); implemented as symmetric-nearest and
+  flagged the ambiguity. Owner clarified the same day ("we need to round it
+  at lowest 30min") → each end now rounds toward the inside of the shift:
+  clock-out FLOORS (20:35 and 20:50 both pay to 20:30), clock-in rounds UP
+  (09:58 and 09:40 both pay from 10:00). Paid span never exceeds the clocked
+  span. Checked against the 27 Jul–2 Aug PT week: gross drops RM3,837.63 →
+  RM3,720.00 (−RM117.63 across 17 PTs). Edge case (accepted): rounding can
+  land a span exactly ON 4.00h, dodging the >4h 30-min break — e.g. Absah
+  3.51h raw → 4.00h paid. Implemented as
+  `ptRoundedSpanHours` in `apps/backoffice/src/lib/hr/hours.ts`, applied in
+  BOTH places that price PT hours: `payroll-calculator-weekly.ts` and the
+  PT-hours confirm preview (`api/hr/payroll/weekly/pt-hours`) — the two must
+  stay identical or the manager preview diverges from the run. Both now
+  compute from clock timestamps, NOT `total_hours` (the stored log keeps the
+  real stamps; `total_hours` no longer feeds PT pay). The 30-min unpaid break
+  (>4h) is judged on the ROUNDED span. Pinned in `hours.test.ts`. FT monthly
+  is untouched.
+
+- 2026-08-07 — **Owner-directed attendance corrections applied to prod
+  `hr_attendance_logs` (WhatsApp-style instructions from Ammar, applied via
+  SQL; all originals preserved in each row's `review_notes`):**
+  (1) **Adib PT (Tamarind) 30 Jul** — duplicate 15:06–15:20 stub (log
+  `f68be900`, 0.24h/RM2.16, was Confirmed) DELETED; real shift was closing
+  only — log `94a2208b` clock_in adjusted 15:20→15:30 MYT, total 7.50h.
+  Owner still needs to Confirm it in the PT weekly timesheet UI (row still
+  shows `overtime_detected`).
+  (2) **Emran/Shairuleen Sun 2 Aug (crossed accounts)** — Shairuleen (FT,
+  rostered 10–6) clocked in at 09:58 on EMRAN's account (her selfie on his
+  log); Emran (PT, rostered 12–8) then clocked that session OUT at 11:51
+  (his selfie) and re-clocked-in at 14:26, getting a false `late_arrival`.
+  Fixed: log `31f440e8` reassigned to Shairuleen, kept her real 09:58 in,
+  system-closed at rostered 18:00 (no genuine clock-out existed; Emran's
+  11:51 photo removed), 8.03h/reg 7.00; log `d6afaf10` (Emran) clock_in
+  14:26→12:00 (he was provably on site by 11:51), 8.04h, late flag cleared.
+  Both set approved/approved. Lesson: a selfie that doesn't match the
+  account holder + a same-day zero-log person on the roster = crossed
+  clock-in; check BOTH people's logs before editing.
+
 - 2026-08-07 — **The stock-count "expired count" flow was un-completable in BOTH
   staff clients, which is why a 6-day-old daily count at an outlet could not be
   finalized (owner screenshots, 23:43).** Two distinct dead-ends, one shared

@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds } from "@/lib/hr/scope";
-import { breakHoursFor, mytDateString } from "@/lib/hr/hours";
+import { breakHoursFor, mytDateString, ptRoundedSpanHours } from "@/lib/hr/hours";
 import { ptRateForDate } from "@/lib/hr/pt-rate";
 
 export const dynamic = "force-dynamic";
@@ -119,9 +119,10 @@ export async function GET(req: NextRequest) {
   const byUser = new Map<string, Array<Record<string, unknown>>>();
   for (const l of logs) {
     const prof = profMap.get(l.user_id)!;
-    const totalH = l.total_hours != null
-      ? Number(l.total_hours)
-      : Math.max(0, (new Date(l.clock_out as string).getTime() - new Date(l.clock_in).getTime()) / 3600000);
+    // Paid span = clock times rounded to the lowest 30 min (owner rule
+    // 2026-08-07) — must mirror payroll-calculator-weekly so this preview
+    // equals what the run pays.
+    const totalH = ptRoundedSpanHours(l.clock_in, l.clock_out as string);
     const worked = Math.max(0, Math.round((totalH - breakHoursFor("part_time", totalH)) * 100) / 100);
     const dateStr = mytDateString(l.clock_in);
     const dayKey = `${l.user_id}:${dateStr}`;
