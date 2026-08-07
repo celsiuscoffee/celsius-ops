@@ -6,6 +6,34 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-07 — **Referral codes had (almost) no way IN — the attribution
+  plumbing was fully wired but the UI entry point sat on a path referred
+  friends never take.** Owner: "no place for referral code even though it is
+  wired". Verified: the ONLY entry field estate-wide was pickup-native
+  `account.tsx`'s OTP step; the checkout sign-in flow (`checkout.tsx` has its
+  OWN OTP flow — the path a referred friend actually takes, cart→sign-in→pay)
+  had no field, and eligibility ends PERMANENTLY at the first paid order
+  (`attributeReferralOnSignup` rejects `not_new`), so checkout was the last
+  possible moment and it offered nothing. The Share & Earn screen even
+  instructs "They sign up and enter your code". Web (`apps/order`) has NO
+  entry field at all — /api/loyalty/referral/attribute's only callers are
+  native (left as-is, out of scope). Fixed on branch
+  `claude/referral-code-ui-placement-25q971`: (1) checkout OTP step gets the
+  same optional field as account.tsx (gated on `is_new_member` from
+  /api/otp/send, best-effort submit post-verify); (2) Share & Earn gets a
+  "Got a code from a friend?" card for signed-in still-eligible members,
+  gated server-side via new `can_enter_code` on /api/loyalty/me/referral
+  (zero paid orders + no prior attribution — mirrors the attribute guards;
+  absent field on older servers = hidden). `submitReferralCode` now surfaces
+  the endpoint's customer-facing error instead of discarding the body.
+  **Follow-up in the same PR (owner asked "how to get code to share"): the
+  Share & Earn screen itself was ORPHANED** — the only navigation to
+  `/referral` in the whole app was the push-notification deeplink in
+  `_layout.tsx`; no menu row, no card. Referrers could not find their own
+  code either. Added an Account → "Share & Earn" ActionRow and a signed-in
+  entry card at the foot of the Rewards list.
+  Merge = OTA to customer phones (JS-only, fingerprint runtime — OTA-safe).
+
 - 2026-08-07 — **PT/intern have NO threshold overtime (owner: "PT no overtime.
   they can only be paid extra if the work more than their shift").** The pay
   side already complied (weekly calc: flat rate, cap = roster + approved OT,
