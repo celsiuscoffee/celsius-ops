@@ -160,6 +160,27 @@ export async function processAttendance(): Promise<ProcessResult> {
       overtimeHours = derived.overtimeHours;
       overtimeType = derived.overtimeType;
       flags.push(...derived.dayTypeFlags);
+
+      // PT/intern "overtime" = working past the rostered shift end (owner rule
+      // 2026-08-07: "PT no overtime — they can only be paid extra if they work
+      // more than their shift"). deriveHours no longer threshold-flags them, so
+      // an 8h rostered shift worked in full stays clean; only a clock-out more
+      // than LATE_THRESHOLD_MINUTES past the rostered end raises the flag. The
+      // weekly calculator still caps pay at roster + approved OT either way.
+      if ((employmentType === "part_time" || employmentType === "intern") && log.scheduled_end) {
+        const schedDate = log.scheduled_date ?? clockDate;
+        const startInstant = mytInstant(schedDate, log.scheduled_start);
+        let endInstant = mytInstant(schedDate, log.scheduled_end);
+        if (endInstant && startInstant && endInstant.getTime() <= startInstant.getTime()) {
+          endInstant = new Date(endInstant.getTime() + 24 * 60 * 60 * 1000); // cross-midnight shift
+        }
+        if (
+          endInstant &&
+          new Date(log.clock_out).getTime() - endInstant.getTime() > LATE_THRESHOLD_MINUTES * 60 * 1000
+        ) {
+          flags.push("overtime_detected");
+        }
+      }
     } else if (flags.includes("no_clock_out")) {
       // Still open past the auto-clockout window: flag for a manager but DON'T
       // fabricate payable hours (the old code wrote a flat 12h). The auto-close
