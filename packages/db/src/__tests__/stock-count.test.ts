@@ -5,7 +5,20 @@ import {
   isCleanCount,
   evaluateCountCoverage,
   evaluateCountFreshness,
+  autoRefreshOnExpiry,
 } from "../stock-count";
+
+describe("autoRefreshOnExpiry", () => {
+  it("auto-refreshes only DAILY counts — a daily sheet is a same-day snapshot", () => {
+    expect(autoRefreshOnExpiry("DAILY")).toBe(true);
+  });
+
+  it("keeps the explicit new/continue choice for WEEKLY and MONTHLY", () => {
+    // Long counts hold real keyed work; abandoning them silently loses it.
+    expect(autoRefreshOnExpiry("WEEKLY")).toBe(false);
+    expect(autoRefreshOnExpiry("MONTHLY")).toBe(false);
+  });
+});
 
 describe("evaluateCountFreshness", () => {
   const start = "2026-07-29T10:00:00Z";

@@ -168,6 +168,22 @@ export function evaluateCountCoverage(input: CoverageInput): CoverageResult {
 export const STALE_COUNT_HOURS = 18;
 export const EXPIRE_COUNT_HOURS = 24;
 
+/**
+ * Whether an expired DRAFT of this frequency should be abandoned automatically
+ * in favour of a fresh count, with no prompt.
+ *
+ * A DAILY count is a same-day snapshot by definition — when yesterday's draft
+ * expires there is nothing worth resuming, and prompting staff about it just
+ * produced dead-ends at the till (owner's ask, 2026-08-07: "can we auto
+ * refresh everyday"). WEEKLY/MONTHLY counts legitimately run long and carry
+ * hundreds of keyed lines, so those keep the explicit new/continue choice.
+ * The abandoned draft stays a DRAFT (its lines are evidence of what was
+ * counted); it is simply never picked up or finalized again.
+ */
+export function autoRefreshOnExpiry(frequency: CountFrequencyLike): boolean {
+  return frequency === "DAILY";
+}
+
 export interface FreshnessInput {
   /** When the count was created (first line keyed). */
   createdAt: Date | string;
