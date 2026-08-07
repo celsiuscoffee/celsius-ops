@@ -6,6 +6,37 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-07 — **The stock-count "expired count" flow was un-completable in BOTH
+  staff clients, which is why a 6-day-old daily count at an outlet could not be
+  finalized (owner screenshots, 23:43).** Two distinct dead-ends, one shared
+  server gap, all fixed on branch `claude/item-finalization-auto-refresh-a4cige`:
+  (1) **Staff web PWA:** the stale-reason bottom sheet (page.tsx `stalePrompt`)
+  is `z-50` — the same z as `bottom-nav.tsx`, which renders later in the DOM and
+  so painted OVER the sheet's Cancel/Finalize buttons. Staff could type the
+  reason but the buttons were unreachable ("put reasons, cannot proceed").
+  All four stock-count overlays bumped to `z-[60]` + safe-area padding.
+  (2) **staff-native (Celsius Manager):** the app had NO COUNT_EXPIRED handling
+  at all — `finalizeStockCount` sent no body (no way to pass `staleReason`) and
+  the error dead-ended in an OK-only Alert; it also silently resumed expired
+  drafts (never read `active.expired`) and had no expiredAction on saves. Now
+  has the same expired-choice (new/continue) and stale-reason modals as web.
+  (3) **Server daily auto-refresh (owner ask: "can we auto refresh everyday"):**
+  new `autoRefreshOnExpiry(frequency)` in `packages/db/stock-count.ts` — DAILY
+  only. `active` route hides an expired DAILY draft (fresh sheet on open);
+  `items` route auto-creates a fresh daily count instead of 409-ing. The
+  abandoned draft stays DRAFT as evidence, never finalized — the stuck 6-day
+  count self-resolves this way after deploy (its numbers span 6 days and are
+  worthless for shrinkage per the 2026-07-31 finding). WEEKLY/MONTHLY keep the
+  explicit new/continue + stale-reason flow.
+  **Latent bug fixed on the way:** items/active routes judged expiry from
+  `createdAt`, which a "continue" re-date never changes — so every save after a
+  "continue" re-ran the re-date and appended another `[re-dated]` note (note
+  spam), and re-opening a continued draft re-prompted. Both now judge from
+  `countDate` (moves forward on re-date); **finalize still judges from
+  `createdAt` deliberately** so a continued multi-day count never auto-approves
+  and still records the stale note. staff-native change ⇒ merge to main is an
+  OTA to manager phones (ota-release skill before merging).
+
 - 2026-08-06 — **"Native app first order didn't get the 10%" (customer
   +60196098892) — the CHARGE was never broken, the PREVIEW was.** The FOD
   wiring at `/api/orders` is correct and live: gated on source app_ios/

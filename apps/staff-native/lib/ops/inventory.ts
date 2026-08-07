@@ -32,7 +32,16 @@ export type ServerItem = {
 };
 
 export type ActiveStockCheckResponse = {
-  active: { id: string; items: ServerItem[] } | null;
+  active: {
+    id: string;
+    items: ServerItem[];
+    // Freshness of the resumed draft — a count open past a full day is
+    // expired and must not be counted into (or finalized) silently.
+    expired: boolean;
+    hoursOpen: number;
+    daysOpen: number;
+    countDate: string;
+  } | null;
   submittedToday: {
     id: string;
     submittedAt: string | null;
@@ -63,12 +72,17 @@ export function saveStockCountItem(input: {
   productPackageId: string | null;
   countedQty: number | null;
   expectedPriorCountedById?: string | null;
+  // What to do when the open draft has expired: "new" leaves it and starts a
+  // fresh count, "continue" re-dates it to today. Absent → the server refuses
+  // with COUNT_EXPIRED so the counter chooses.
+  expiredAction?: "new" | "continue";
 }) {
-  const { frequency, expectedPriorCountedById, ...item } = input;
+  const { frequency, expectedPriorCountedById, expiredAction, ...item } = input;
   return api<StockSaveResponse>("/api/stock-checks/items", {
     method: "POST",
     body: JSON.stringify({
       frequency,
+      ...(expiredAction ? { expiredAction } : {}),
       items: [
         {
           ...item,
@@ -81,9 +95,17 @@ export function saveStockCountItem(input: {
   });
 }
 
-export function finalizeStockCount(countId: string) {
+export function finalizeStockCount(
+  countId: string,
+  opts?: {
+    // Required by the server to close an expired count: when the stock was
+    // actually counted, recorded on the count for manager review.
+    staleReason?: string;
+  },
+) {
   return api<{ success: boolean }>(`/api/stock-checks/${countId}/finalize`, {
     method: "POST",
+    body: JSON.stringify(opts?.staleReason ? { staleReason: opts.staleReason } : {}),
   });
 }
 
