@@ -21,8 +21,9 @@ type WeeklyPayrollResult = {
  * Pay basis per PT for the Mon–Sun (MYT) week (owner rules 2026-07-18/19,
  * rounding 2026-08-07):
  *   totalHours(log)  = clock_out − clock_in, with EACH clock time rounded to
- *                      the nearest 30 min first (out 20:35 pays to 20:30,
- *                      20:50 pays to 21:00) — see ptRoundedSpanHours
+ *                      the LOWEST 30 min first (out floors: 20:35 and 20:50
+ *                      both pay to 20:30; in rounds up: 09:58 pays from
+ *                      10:00) — see ptRoundedSpanHours
  *   workedHours(log) = totalHours(log) − break
  *   paidHours(log)   = min(workedHours, SCHEDULED net hours that day + approved OT)
  *                      — clocking in early / out late doesn't pay beyond the
@@ -193,7 +194,7 @@ export async function calculateWeeklyPayroll(
     for (const l of userLogs) {
       const clockIn = new Date(l.clock_in);
       const clockOut = new Date(l.clock_out as string);
-      // Paid span = clock times rounded to the nearest 30 min (owner rule
+      // Paid span = clock times rounded to the lowest 30 min (owner rule
       // 2026-08-07), not the raw stamps stored on the log.
       const totalH = ptRoundedSpanHours(clockIn, clockOut);
       const worked = Math.max(0, Math.round((totalH - breakHoursFor("part_time", totalH)) * 100) / 100);

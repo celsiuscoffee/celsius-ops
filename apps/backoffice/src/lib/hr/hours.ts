@@ -68,17 +68,20 @@ export function breakHoursFor(employmentType: string, totalHours: number): numbe
 }
 
 /**
- * PT weekly payment rounds each clock time to the NEAREST 30 minutes before
- * computing the paid span (owner rule 2026-08-07: "round it on the nearest
- * 30min — if clock out 8.35, calculate 8.30"). So 20:35→20:30, 20:50→21:00,
- * 09:58→10:00. Pay-time only: the stored log keeps the real timestamps.
+ * PT weekly payment rounds each clock time to the LOWEST 30 minutes before
+ * computing the paid span (owner rule 2026-08-07, clarified same day: "round
+ * it at lowest 30min — if clock out 8.35, calculate 8.30"). Each end rounds
+ * toward the inside of the shift so the paid span never exceeds the clocked
+ * one: clock-out floors (20:35→20:30, 20:50→20:30), clock-in rounds up
+ * (09:58→10:00, 09:40→10:00). Pay-time only: the stored log keeps the real
+ * timestamps.
  */
 export const PT_PAY_ROUND_MINUTES = 30;
 
 export function ptRoundedSpanHours(clockIn: string | Date, clockOut: string | Date): number {
   const step = PT_PAY_ROUND_MINUTES * 60 * 1000;
-  const inMs = Math.round((clockIn instanceof Date ? clockIn : new Date(clockIn)).getTime() / step) * step;
-  const outMs = Math.round((clockOut instanceof Date ? clockOut : new Date(clockOut)).getTime() / step) * step;
+  const inMs = Math.ceil((clockIn instanceof Date ? clockIn : new Date(clockIn)).getTime() / step) * step;
+  const outMs = Math.floor((clockOut instanceof Date ? clockOut : new Date(clockOut)).getTime() / step) * step;
   return Math.max(0, (outMs - inMs) / (1000 * 60 * 60));
 }
 

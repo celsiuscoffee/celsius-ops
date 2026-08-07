@@ -6,12 +6,17 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
-- 2026-08-07 — **PT weekly pay now rounds each clock time to the NEAREST 30
-  minutes before computing the span (owner rule: "Round it on the nearest
-  30min. For example if clock out 8.35. So calculate 8.30").** So out 20:35
-  pays to 20:30, out 20:50 pays to 21:00, in 09:58 pays from 10:00 — rounding
-  is symmetric (nearest, not floor), which the owner's example permits but
-  did not force; flag if he ever objects to a round-UP. Implemented as
+- 2026-08-07 — **PT weekly pay now rounds each clock time to the LOWEST 30
+  minutes before computing the span.** First instruction said "nearest 30min"
+  with a round-down example (8.35→8.30); implemented as symmetric-nearest and
+  flagged the ambiguity. Owner clarified the same day ("we need to round it
+  at lowest 30min") → each end now rounds toward the inside of the shift:
+  clock-out FLOORS (20:35 and 20:50 both pay to 20:30), clock-in rounds UP
+  (09:58 and 09:40 both pay from 10:00). Paid span never exceeds the clocked
+  span. Checked against the 27 Jul–2 Aug PT week: gross drops RM3,837.63 →
+  RM3,720.00 (−RM117.63 across 17 PTs). Edge case (accepted): rounding can
+  land a span exactly ON 4.00h, dodging the >4h 30-min break — e.g. Absah
+  3.51h raw → 4.00h paid. Implemented as
   `ptRoundedSpanHours` in `apps/backoffice/src/lib/hr/hours.ts`, applied in
   BOTH places that price PT hours: `payroll-calculator-weekly.ts` and the
   PT-hours confirm preview (`api/hr/payroll/weekly/pt-hours`) — the two must

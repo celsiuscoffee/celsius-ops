@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
   const byUser = new Map<string, Array<Record<string, unknown>>>();
   for (const l of logs) {
     const prof = profMap.get(l.user_id)!;
-    // Paid span = clock times rounded to the nearest 30 min (owner rule
+    // Paid span = clock times rounded to the lowest 30 min (owner rule
     // 2026-08-07) — must mirror payroll-calculator-weekly so this preview
     // equals what the run pays.
     const totalH = ptRoundedSpanHours(l.clock_in, l.clock_out as string);

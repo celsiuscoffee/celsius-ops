@@ -51,26 +51,32 @@ describe("deriveHours", () => {
   });
 });
 
-// Owner rule 2026-08-07: PT payment computes hours from clock times rounded to
-// the nearest 30 minutes ("if clock out 8.35, calculate 8.30").
+// Owner rule 2026-08-07 (clarified same day): PT payment computes hours from
+// clock times rounded to the LOWEST 30 minutes ("if clock out 8.35, calculate
+// 8.30") — each end rounds toward the inside of the shift.
 describe("ptRoundedSpanHours", () => {
-  it("rounds the clock-out down when just past the half-hour (20:35 → 20:30)", () => {
-    // MYT 12:00 in, 20:35 out = 04:00Z–12:35Z → rounds to 8.5h span
+  it("floors the clock-out just past the half-hour (20:35 → 20:30)", () => {
+    // MYT 12:00 in, 20:35 out = 04:00Z–12:35Z → pays to 20:30 → 8.5h span
     expect(ptRoundedSpanHours("2026-08-02T04:00:00Z", "2026-08-02T12:35:00Z")).toBe(8.5);
   });
 
-  it("rounds the clock-out up when nearer the next half-hour (20:50 → 21:00)", () => {
-    expect(ptRoundedSpanHours("2026-08-02T04:00:00Z", "2026-08-02T12:50:00Z")).toBe(9);
+  it("floors the clock-out even when nearer the next half-hour (20:50 → 20:30)", () => {
+    expect(ptRoundedSpanHours("2026-08-02T04:00:00Z", "2026-08-02T12:50:00Z")).toBe(8.5);
   });
 
-  it("rounds the clock-in too (09:58 → 10:00, 15:18 → 15:30)", () => {
+  it("rounds the clock-in UP to the next half-hour (09:58 → 10:00, 15:18 → 15:30)", () => {
     expect(ptRoundedSpanHours("2026-08-02T01:58:31Z", "2026-08-02T10:00:00Z")).toBe(8);
     expect(ptRoundedSpanHours("2026-08-02T07:18:00Z", "2026-08-02T15:10:00Z")).toBe(7.5);
   });
 
-  it("exact half-hour boundaries are unchanged, and a tiny stub can round to zero", () => {
+  it("never pays more than the clocked span (09:40 in pays from 10:00)", () => {
+    // 09:40–14:18 MYT clocked 4.63h → pays 10:00–14:00 = 4h
+    expect(ptRoundedSpanHours("2026-08-02T01:40:00Z", "2026-08-02T06:18:00Z")).toBe(4);
+  });
+
+  it("exact half-hour boundaries are unchanged, and a tiny stub rounds to zero", () => {
     expect(ptRoundedSpanHours("2026-07-30T07:30:00Z", "2026-07-30T15:00:00Z")).toBe(7.5);
-    // 15:20–15:25 both round to 15:30 → 0h, never negative
+    // 15:20–15:25 rounds inward past itself → 0h, never negative
     expect(ptRoundedSpanHours("2026-07-30T07:20:00Z", "2026-07-30T07:25:00Z")).toBe(0);
   });
 });
