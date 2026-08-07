@@ -6,6 +6,26 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-07 — **Owner-directed attendance corrections applied to prod
+  `hr_attendance_logs` (WhatsApp-style instructions from Ammar, applied via
+  SQL; all originals preserved in each row's `review_notes`):**
+  (1) **Adib PT (Tamarind) 30 Jul** — duplicate 15:06–15:20 stub (log
+  `f68be900`, 0.24h/RM2.16, was Confirmed) DELETED; real shift was closing
+  only — log `94a2208b` clock_in adjusted 15:20→15:30 MYT, total 7.50h.
+  Owner still needs to Confirm it in the PT weekly timesheet UI (row still
+  shows `overtime_detected`).
+  (2) **Emran/Shairuleen Sun 2 Aug (crossed accounts)** — Shairuleen (FT,
+  rostered 10–6) clocked in at 09:58 on EMRAN's account (her selfie on his
+  log); Emran (PT, rostered 12–8) then clocked that session OUT at 11:51
+  (his selfie) and re-clocked-in at 14:26, getting a false `late_arrival`.
+  Fixed: log `31f440e8` reassigned to Shairuleen, kept her real 09:58 in,
+  system-closed at rostered 18:00 (no genuine clock-out existed; Emran's
+  11:51 photo removed), 8.03h/reg 7.00; log `d6afaf10` (Emran) clock_in
+  14:26→12:00 (he was provably on site by 11:51), 8.04h, late flag cleared.
+  Both set approved/approved. Lesson: a selfie that doesn't match the
+  account holder + a same-day zero-log person on the roster = crossed
+  clock-in; check BOTH people's logs before editing.
+
 - 2026-08-06 — **"Native app first order didn't get the 10%" (customer
   +60196098892) — the CHARGE was never broken, the PREVIEW was.** The FOD
   wiring at `/api/orders` is correct and live: gated on source app_ios/
