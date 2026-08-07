@@ -72,9 +72,13 @@ export function silenceServingAlarmOrder(id: string | null | undefined): void {
 const servingAlarmedIds = new Set<string>();
 let servingLastAlarmAt = 0;
 
-/** Returns the orders currently past the serving target (for a popup) and
- *  sounds the alarm while any remain. */
-export function useServingAlarm(items: ServingItem[]): ServingItem[] {
+/** Returns the orders currently past the serving target (for a popup), plus a
+ *  `silence()` for the popup's Silence button: acknowledges every currently-
+ *  overdue order WITHOUT actioning it (same per-id mechanism as
+ *  silenceServingAlarmOrder, so they drop from the alarm + popup at once).
+ *  A genuinely new overdue order still rings — ids are unique, so a silenced
+ *  id can never suppress a future order. */
+export function useServingAlarm(items: ServingItem[]): { overdue: ServingItem[]; silence: () => void } {
   // Always read the latest items inside the interval without re-arming it.
   const itemsRef = useRef<ServingItem[]>(items);
   itemsRef.current = items;
@@ -112,5 +116,12 @@ export function useServingAlarm(items: ServingItem[]): ServingItem[] {
   // already-late order arrives → ring + popup now, no wait for the next tick).
   useEffect(() => { evaluate(); }, [items, evaluate]);
 
-  return overdue;
+  // Popup "Silence": mute every currently-overdue order in one tap, then
+  // re-evaluate so the alarm and popup clear immediately.
+  const silence = useCallback(() => {
+    for (const o of pickOverdue(itemsRef.current, Date.now())) silencedIds.add(o.id);
+    evaluate();
+  }, [evaluate]);
+
+  return { overdue, silence };
 }
