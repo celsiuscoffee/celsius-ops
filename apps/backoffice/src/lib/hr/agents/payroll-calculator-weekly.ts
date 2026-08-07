@@ -1,5 +1,5 @@
 import { hrSupabaseAdmin } from "../supabase";
-import { breakHoursFor, mytDateString } from "../hours";
+import { breakHoursFor, mytDateString, ptRoundedSpanHours } from "../hours";
 import { ptRateForDate } from "../pt-rate";
 
 type WeeklyPayrollResult = {
@@ -18,8 +18,12 @@ type WeeklyPayrollResult = {
  * excluded using the same rule the attendance engine applies (part-timer: 30 min
  * if the shift is over 4 hours), so pay reflects worked time, not gross clock time.
  *
- * Pay basis per PT for the Mon–Sun (MYT) week (owner rules 2026-07-18/19):
- *   workedHours(log) = totalHours(log) − break        (totalHours = clock_out − clock_in)
+ * Pay basis per PT for the Mon–Sun (MYT) week (owner rules 2026-07-18/19,
+ * rounding 2026-08-07):
+ *   totalHours(log)  = clock_out − clock_in, with EACH clock time rounded to
+ *                      the nearest 30 min first (out 20:35 pays to 20:30,
+ *                      20:50 pays to 21:00) — see ptRoundedSpanHours
+ *   workedHours(log) = totalHours(log) − break
  *   paidHours(log)   = min(workedHours, SCHEDULED net hours that day + approved OT)
  *                      — clocking in early / out late doesn't pay beyond the
  *                      roster unless an OT request was approved for that date;
@@ -189,9 +193,9 @@ export async function calculateWeeklyPayroll(
     for (const l of userLogs) {
       const clockIn = new Date(l.clock_in);
       const clockOut = new Date(l.clock_out as string);
-      const totalH = l.total_hours != null
-        ? Number(l.total_hours)
-        : Math.max(0, (clockOut.getTime() - clockIn.getTime()) / 3600000);
+      // Paid span = clock times rounded to the nearest 30 min (owner rule
+      // 2026-08-07), not the raw stamps stored on the log.
+      const totalH = ptRoundedSpanHours(clockIn, clockOut);
       const worked = Math.max(0, Math.round((totalH - breakHoursFor("part_time", totalH)) * 100) / 100);
       const dateStr = mytDateString(l.clock_in);
       const dayKey = `${profile.user_id}:${dateStr}`;

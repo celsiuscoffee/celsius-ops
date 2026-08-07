@@ -6,6 +6,21 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-07 — **PT weekly pay now rounds each clock time to the NEAREST 30
+  minutes before computing the span (owner rule: "Round it on the nearest
+  30min. For example if clock out 8.35. So calculate 8.30").** So out 20:35
+  pays to 20:30, out 20:50 pays to 21:00, in 09:58 pays from 10:00 — rounding
+  is symmetric (nearest, not floor), which the owner's example permits but
+  did not force; flag if he ever objects to a round-UP. Implemented as
+  `ptRoundedSpanHours` in `apps/backoffice/src/lib/hr/hours.ts`, applied in
+  BOTH places that price PT hours: `payroll-calculator-weekly.ts` and the
+  PT-hours confirm preview (`api/hr/payroll/weekly/pt-hours`) — the two must
+  stay identical or the manager preview diverges from the run. Both now
+  compute from clock timestamps, NOT `total_hours` (the stored log keeps the
+  real stamps; `total_hours` no longer feeds PT pay). The 30-min unpaid break
+  (>4h) is judged on the ROUNDED span. Pinned in `hours.test.ts`. FT monthly
+  is untouched.
+
 - 2026-08-07 — **Owner-directed attendance corrections applied to prod
   `hr_attendance_logs` (WhatsApp-style instructions from Ammar, applied via
   SQL; all originals preserved in each row's `review_notes`):**

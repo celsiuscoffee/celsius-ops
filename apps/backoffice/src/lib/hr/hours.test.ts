@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveHours } from "./hours";
+import { deriveHours, ptRoundedSpanHours } from "./hours";
 
 const at = (iso: string) => new Date(iso);
 const base = { employmentType: "full_time", isPublicHoliday: false, isRestDay: false };
@@ -48,5 +48,29 @@ describe("deriveHours", () => {
     const withNull = deriveHours({ ...base, clockIn: at("2026-07-20T01:00:00Z"), clockOut: at("2026-07-20T12:00:00Z"), scheduledStart: null });
     const without = deriveHours({ ...base, clockIn: at("2026-07-20T01:00:00Z"), clockOut: at("2026-07-20T12:00:00Z") });
     expect(withNull).toEqual(without);
+  });
+});
+
+// Owner rule 2026-08-07: PT payment computes hours from clock times rounded to
+// the nearest 30 minutes ("if clock out 8.35, calculate 8.30").
+describe("ptRoundedSpanHours", () => {
+  it("rounds the clock-out down when just past the half-hour (20:35 → 20:30)", () => {
+    // MYT 12:00 in, 20:35 out = 04:00Z–12:35Z → rounds to 8.5h span
+    expect(ptRoundedSpanHours("2026-08-02T04:00:00Z", "2026-08-02T12:35:00Z")).toBe(8.5);
+  });
+
+  it("rounds the clock-out up when nearer the next half-hour (20:50 → 21:00)", () => {
+    expect(ptRoundedSpanHours("2026-08-02T04:00:00Z", "2026-08-02T12:50:00Z")).toBe(9);
+  });
+
+  it("rounds the clock-in too (09:58 → 10:00, 15:18 → 15:30)", () => {
+    expect(ptRoundedSpanHours("2026-08-02T01:58:31Z", "2026-08-02T10:00:00Z")).toBe(8);
+    expect(ptRoundedSpanHours("2026-08-02T07:18:00Z", "2026-08-02T15:10:00Z")).toBe(7.5);
+  });
+
+  it("exact half-hour boundaries are unchanged, and a tiny stub can round to zero", () => {
+    expect(ptRoundedSpanHours("2026-07-30T07:30:00Z", "2026-07-30T15:00:00Z")).toBe(7.5);
+    // 15:20–15:25 both round to 15:30 → 0h, never negative
+    expect(ptRoundedSpanHours("2026-07-30T07:20:00Z", "2026-07-30T07:25:00Z")).toBe(0);
   });
 });

@@ -67,6 +67,21 @@ export function breakHoursFor(employmentType: string, totalHours: number): numbe
   return totalHours > 5 ? 1 : 0; // full_time / contract: 1h break if shift > 5h
 }
 
+/**
+ * PT weekly payment rounds each clock time to the NEAREST 30 minutes before
+ * computing the paid span (owner rule 2026-08-07: "round it on the nearest
+ * 30min — if clock out 8.35, calculate 8.30"). So 20:35→20:30, 20:50→21:00,
+ * 09:58→10:00. Pay-time only: the stored log keeps the real timestamps.
+ */
+export const PT_PAY_ROUND_MINUTES = 30;
+
+export function ptRoundedSpanHours(clockIn: string | Date, clockOut: string | Date): number {
+  const step = PT_PAY_ROUND_MINUTES * 60 * 1000;
+  const inMs = Math.round((clockIn instanceof Date ? clockIn : new Date(clockIn)).getTime() / step) * step;
+  const outMs = Math.round((clockOut instanceof Date ? clockOut : new Date(clockOut)).getTime() / step) * step;
+  return Math.max(0, (outMs - inMs) / (1000 * 60 * 60));
+}
+
 export type DerivedHours = {
   totalHours: number;
   regularHours: number;
