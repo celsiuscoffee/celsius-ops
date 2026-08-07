@@ -34,6 +34,23 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   entry card at the foot of the Rewards list.
   Merge = OTA to customer phones (JS-only, fingerprint runtime — OTA-safe).
 
+- 2026-08-07 — **PT/intern have NO threshold overtime (owner: "PT no overtime.
+  they can only be paid extra if the work more than their shift").** The pay
+  side already complied (weekly calc: flat rate, cap = roster + approved OT,
+  "OT is FT-only"), but `deriveHours` still split PT hours at a 5h/day
+  threshold and stamped `overtime_detected` on every normal long shift (why
+  Adib's corrected 7.50h Tamarind row sat flagged). Fixed: PT/intern threshold
+  is now Infinity in BOTH hours.ts copies (backoffice + staff — they must stay
+  in sync); the attendance processor instead flags `overtime_detected` for
+  PT/intern only when clock-out runs >15 min past the ROSTERED shift end
+  (cross-midnight safe; no roster end → no flag). Same-day: weekly payroll
+  runs can now be DELETED while ai_computed/draft (DELETE
+  /api/hr/payroll/weekly?run_id= + UI button) so a week can be recomputed
+  after a rule change — confirmed/paid runs still locked; items cascade. The
+  stored 27 Jul–2 Aug run (RM3,837.63) predates the lowest-30 rounding and
+  needs exactly this delete → recompute (expect ≈RM3,720.00, and Absah +
+  Danish's rows shift as flagged in the rounding entry).
+
 - 2026-08-07 — **PT weekly pay now rounds each clock time to the LOWEST 30
   minutes before computing the span.** First instruction said "nearest 30min"
   with a round-down example (8.35→8.30); implemented as symmetric-nearest and
