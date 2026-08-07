@@ -2,7 +2,7 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays, ArrowLeft, Download, Edit2, Save, X, DollarSign } from "lucide-react";
+import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays, ArrowLeft, Download, Edit2, Save, X, DollarSign, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 type PayrollRun = {
@@ -99,6 +99,28 @@ export default function WeeklyPayrollPage() {
       mutate();
     } finally {
       setConfirming(null);
+    }
+  };
+
+  // Delete a computed/draft run so the week can be recomputed (e.g. after a
+  // pay-rule change). Server refuses confirmed/paid runs.
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const handleDelete = async (run: PayrollRun) => {
+    if (!confirm(`Delete the ${formatWeek(run.period_start, run.period_end)} run so it can be recomputed? Manual item edits on it will be lost.`)) return;
+    setDeleting(run.id);
+    try {
+      const res = await fetch(`/api/hr/payroll/weekly?run_id=${run.id}`, { method: "DELETE" });
+      if (res.ok) {
+        if (viewRunId === run.id) setViewRunId(null);
+        setWeekStart(run.period_start); // line the Compute button up on the same week
+        setResult({ notes: [`Deleted the ${formatWeek(run.period_start, run.period_end)} run — press Compute to recalculate it.`] });
+        mutate();
+      } else {
+        const { error } = await res.json().catch(() => ({ error: "Failed to delete" }));
+        alert(error || "Failed to delete");
+      }
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -278,6 +300,21 @@ export default function WeeklyPayrollPage() {
                     <FileText className="inline h-3 w-3 mr-1" />
                     {isViewing ? "Hide" : "Details"}
                   </button>
+                  {(isComputed || run.status === "draft") && (
+                    <button
+                      onClick={() => handleDelete(run)}
+                      disabled={deleting === run.id}
+                      title="Delete this run so the week can be recomputed"
+                      className="flex items-center gap-1 rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      {deleting === run.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" />
+                      )}
+                      Delete
+                    </button>
+                  )}
                   {isComputed && (
                     <button
                       onClick={() => handleConfirm(run.id)}

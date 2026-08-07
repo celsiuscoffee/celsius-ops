@@ -54,11 +54,16 @@ export function computeLateMinutes(
 
 // OT threshold (paid working hours/day before OT kicks in), per employment type.
 // full_time/contract: 45h week ÷ 6 days = 7.5h/day (break excluded).
+// part_time/intern have NO threshold OT (owner rule 2026-08-07: "PT no
+// overtime — they can only be paid extra if they work more than their shift"):
+// every worked hour is flat-rate regular; beyond-shift work is flagged by the
+// backoffice attendance processor and only pays when the roster or an
+// approved OT request lifts the weekly calculator's daily cap.
 export const OT_THRESHOLD_HOURS: Record<string, number> = {
   full_time: 7.5,
   contract: 7.5,
-  part_time: 5, // 5.5h shift − 30min break
-  intern: 6, // 6.5h shift − 30min break
+  part_time: Number.POSITIVE_INFINITY,
+  intern: Number.POSITIVE_INFINITY,
 };
 
 /** Unpaid break hours to deduct from a shift's gross duration. */

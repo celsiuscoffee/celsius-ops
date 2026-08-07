@@ -44,6 +44,17 @@ describe("deriveHours", () => {
     expect(d.overtimeHours).toBe(0);
   });
 
+  it("PT/intern never get threshold OT — a full 8h shift is all flat regular hours", () => {
+    // Owner rule 2026-08-07: "PT no overtime — they can only be paid extra if
+    // they work more than their shift." 12:00–20:30 MYT clocked (8.5h) − 0.5h
+    // break = 8h worked, all regular; beyond-shift is the processor's flag.
+    const d = deriveHours({ ...base, employmentType: "part_time", clockIn: at("2026-07-20T04:00:00Z"), clockOut: at("2026-07-20T12:30:00Z") });
+    expect(d.regularHours).toBe(8);
+    expect(d.overtimeHours).toBe(0);
+    expect(d.overtimeType).toBeNull();
+    expect(d.dayTypeFlags).toEqual([]);
+  });
+
   it("no roster → behaves exactly as before (pays from clock-in)", () => {
     const withNull = deriveHours({ ...base, clockIn: at("2026-07-20T01:00:00Z"), clockOut: at("2026-07-20T12:00:00Z"), scheduledStart: null });
     const without = deriveHours({ ...base, clockIn: at("2026-07-20T01:00:00Z"), clockOut: at("2026-07-20T12:00:00Z") });
