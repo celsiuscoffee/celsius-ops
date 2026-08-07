@@ -978,8 +978,8 @@ export default function StockCheckPage() {
           is what silently corrupted past shrinkage figures. Two honest ways
           out; no way to carry on pretending it's the same date. */}
       {expiredCount && !expiredAction && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 sm:rounded-2xl">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
                 <AlertTriangle className="h-5 w-5 text-amber-600" />
@@ -1038,8 +1038,8 @@ export default function StockCheckPage() {
           only once someone records when the stock was actually counted. The
           count is then filed under the day it closes, with that answer on it. */}
       {stalePrompt && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 sm:rounded-2xl">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
                 <AlertTriangle className="h-5 w-5 text-amber-600" />
@@ -1080,8 +1080,8 @@ export default function StockCheckPage() {
       {/* ── Conflict modal ── shown when another counter already saved this
           item with a different value. User picks: overwrite or keep theirs. */}
       {conflictPrompt && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 sm:rounded-2xl">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
                 <AlertTriangle className="h-5 w-5 text-amber-600" />
@@ -1136,7 +1136,7 @@ export default function StockCheckPage() {
 
       {/* ── Keypad overlay ── */}
       {keypadItem && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+        <div className="fixed inset-0 z-[60] flex flex-col bg-white">
           {/* Header */}
           <div className="border-b border-gray-200 px-4 py-3">
             <div className="flex items-center justify-between">
