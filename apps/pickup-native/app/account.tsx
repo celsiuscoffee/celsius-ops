@@ -28,6 +28,7 @@ import {
   Trash2,
   Sparkles,
   Gift,
+  Users,
 } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
 import * as Haptics from "@/lib/haptics";
@@ -372,6 +373,14 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
           icon={Sparkles}
           label={`Coffee Wrapped ${new Date().getFullYear()}`}
           onPress={() => router.push("/wrapped" as never)}
+        />
+        {/* Share & Earn was previously reachable ONLY via a push
+            deep link (_layout.tsx) — customers had no way to find
+            their referral code in the app. */}
+        <ActionRow
+          icon={Users}
+          label="Share & Earn"
+          onPress={() => router.push("/referral" as never)}
         />
 
         <SectionLabel>PREFERENCES</SectionLabel>

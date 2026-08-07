@@ -26,6 +26,12 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   (zero paid orders + no prior attribution — mirrors the attribute guards;
   absent field on older servers = hidden). `submitReferralCode` now surfaces
   the endpoint's customer-facing error instead of discarding the body.
+  **Follow-up in the same PR (owner asked "how to get code to share"): the
+  Share & Earn screen itself was ORPHANED** — the only navigation to
+  `/referral` in the whole app was the push-notification deeplink in
+  `_layout.tsx`; no menu row, no card. Referrers could not find their own
+  code either. Added an Account → "Share & Earn" ActionRow and a signed-in
+  entry card at the foot of the Rewards list.
   Merge = OTA to customer phones (JS-only, fingerprint runtime — OTA-safe).
 
 - 2026-08-07 — **PT weekly pay now rounds each clock time to the LOWEST 30
