@@ -31,7 +31,15 @@ import { mytTodayRange } from "@/lib/inventory/myt-today";
 export async function syncInvoiceOverdue(): Promise<{ marked: number; cleared: number }> {
   const { start: todayStart } = mytTodayRange();
 
-  const [marked, cleared] = await Promise.all([
+  // "Not genuinely past due": no due date at all, a due date still ahead of us,
+  // or a placeholder date that pre-dates the invoice itself.
+  const notActuallyOverdue = [
+    { dueDate: null },
+    { dueDate: { gte: todayStart } },
+    { dueDate: { lt: prisma.invoice.fields.issueDate } },
+  ];
+
+  const [marked, cleared, restored] = await Promise.all([
     // Past due and still merely PENDING → OVERDUE. The issueDate guard is the
     // root-cause fix: without it a placeholder date manufactures the flag.
     prisma.invoice.updateMany({
@@ -42,21 +50,34 @@ export async function syncInvoiceOverdue(): Promise<{ marked: number; cleared: n
       },
       data: { status: "OVERDUE" },
     }),
-    // Not actually past due any more → back to PENDING. Covers both the
+    // Not actually past due any more → drop OVERDUE. Covers both the
     // corrected-date case and a placeholder date that never should have
     // counted.
+    //
+    // Restores the status the row would otherwise carry, which is NOT always
+    // PENDING: an invoice whose deposit is already settled belongs in
+    // DEPOSIT_PAID. The back office decides its action buttons from status
+    // alone — `case "PENDING"` renders "Initiate Deposit" without ever checking
+    // depositPaidAt — so sending a deposit-paid row to PENDING puts a live
+    // double-payment prompt in front of AP. IV-02158 hit exactly that.
     prisma.invoice.updateMany({
       where: {
         status: "OVERDUE",
-        OR: [
-          { dueDate: null },
-          { dueDate: { gte: todayStart } },
-          { dueDate: { lt: prisma.invoice.fields.issueDate } },
-        ],
+        depositPaidAt: null,
+        amountPaid: 0,
+        OR: notActuallyOverdue,
       },
       data: { status: "PENDING" },
     }),
+    prisma.invoice.updateMany({
+      where: {
+        status: "OVERDUE",
+        OR: notActuallyOverdue,
+        NOT: { depositPaidAt: null, amountPaid: 0 },
+      },
+      data: { status: "DEPOSIT_PAID" },
+    }),
   ]);
 
-  return { marked: marked.count, cleared: cleared.count };
+  return { marked: marked.count, cleared: cleared.count + restored.count };
 }

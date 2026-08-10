@@ -6,7 +6,7 @@ import { detectCreationFlags } from "@/lib/inventory/flag-detector";
 import { mytTodayRange } from "@/lib/inventory/myt-today";
 import { mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
 import { syncInvoiceOverdue } from "@/lib/inventory/sync-invoice-overdue";
-import { evaluateInvoiceTiming } from "@celsius/db";
+import { evaluateInvoiceTiming, dueDateIsBelievable } from "@celsius/db";
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -431,6 +431,18 @@ export async function POST(req: NextRequest) {
 
     if (!outletId || !supplierId) {
       return NextResponse.json({ error: "outletId and supplierId are required" }, { status: 400 });
+    }
+
+    // Same date-pair guard as the PATCH route — an invoice must never be born
+    // with a balance falling due before it was issued.
+    if (!dueDateIsBelievable(issueDate ? new Date(issueDate) : new Date(), dueDate ? new Date(dueDate) : null)) {
+      return NextResponse.json(
+        {
+          error: "Balance due date is before the issue date. An invoice cannot fall due before it is issued.",
+          code: "DUE_BEFORE_ISSUE",
+        },
+        { status: 400 },
+      );
     }
 
     // Generate invoice number if not provided

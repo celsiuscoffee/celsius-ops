@@ -16,7 +16,12 @@ export type InvoiceFlagCode =
   // The AI-extracted invoice number's shape doesn't match this supplier's usual
   // numbering (e.g. an "IVCT-#" number on a "1-15xxx" supplier) — likely the
   // wrong document was attached. Verify against the photo.
-  | "NUMBER_FORMAT_MISMATCH";
+  | "NUMBER_FORMAT_MISMATCH"
+  // The captured due date pre-dated the invoice's issue date, so it was
+  // rejected rather than written — the model read a delivery date, a statement
+  // date, or the previous invoice in the same document. Someone has to enter
+  // the real balance due date, otherwise the invoice ages with none.
+  | "DUE_DATE_BEFORE_ISSUE";
 
 export type InvoiceFlag = {
   code: InvoiceFlagCode;
@@ -36,6 +41,7 @@ const FLAG_LABEL: Record<InvoiceFlagCode, string> = {
   BANK_MISMATCH: "POP bank differs from supplier bank",
   POP_VERIFIER: "AI: a payment may have been missed — verify",
   NUMBER_FORMAT_MISMATCH: "Invoice number doesn't match this supplier's numbering",
+  DUE_DATE_BEFORE_ISSUE: "Due date read before the issue date — enter the real one",
 };
 
 export function flagLabel(code: InvoiceFlagCode) {

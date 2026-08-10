@@ -7,6 +7,7 @@
 //
 // Fire-and-forget: failures are logged, never blocked.
 
+import { dueDateIsBelievable, DUE_BEFORE_ISSUE_FLAG } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 
 const BACKOFFICE_URL =
@@ -67,10 +68,47 @@ export async function aiPrefillInvoice(invoiceId: string, photoUrls: string[]): 
       filled.push("amount");
     }
 
-    if (filled.length === 0) return;
+    // Cross-check the captured dates before writing either. The model reads
+    // each field in isolation, so it can return a due date that PRE-DATES the
+    // issue date — it has picked up a delivery date, a statement date, or the
+    // previous invoice sharing the photo. A balance cannot fall due before the
+    // invoice that bills it exists, and writing one anyway is what put 30
+    // invoices into a state that later drove a wrong OVERDUE stamp.
+    //
+    // The due date is judged against the issue date being written, falling
+    // back to the one already on the row. Rejecting only the due date keeps
+    // every other extracted field, and the flag puts it in front of a human
+    // instead of silently dropping it — this runs fire-and-forget, so there is
+    // nobody to prompt.
+    const current = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { issueDate: true, flags: true },
+    });
+    const effectiveIssue = (update.issueDate as Date | undefined) ?? current?.issueDate ?? null;
+    if (update.dueDate && !dueDateIsBelievable(effectiveIssue, update.dueDate as Date)) {
+      const rejected = (update.dueDate as Date).toISOString().slice(0, 10);
+      delete update.dueDate;
+      const idx = filled.indexOf("dueDate");
+      if (idx >= 0) filled.splice(idx, 1);
+      const existingFlags = Array.isArray(current?.flags)
+        ? (current!.flags as Array<{ code?: string }>)
+        : [];
+      update.flags = [
+        ...existingFlags.filter((f) => f?.code !== DUE_BEFORE_ISSUE_FLAG),
+        {
+          code: DUE_BEFORE_ISSUE_FLAG,
+          message: `AI read the due date as ${rejected}, before the invoice's issue date — not applied. Enter the balance due date from the document.`,
+          detectedAt: new Date().toISOString(),
+        },
+      ];
+    }
 
-    update.aiPrefilledAt = new Date();
-    update.aiPrefilledFields = JSON.stringify(filled);
+    if (filled.length === 0 && !update.flags) return;
+
+    if (filled.length > 0) {
+      update.aiPrefilledAt = new Date();
+      update.aiPrefilledFields = JSON.stringify(filled);
+    }
 
     // Don't clobber an invoice that's already moved past the placeholder
     // stage — procurement may have edited it, or finance may have already

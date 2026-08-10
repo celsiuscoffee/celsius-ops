@@ -90,6 +90,33 @@ function daysBetween(fromKey: string, toKey: string): number {
   return Math.round((b - a) / 86_400_000);
 }
 
+/** Flag stamped on an invoice whose captured due date had to be rejected. */
+export const DUE_BEFORE_ISSUE_FLAG = "DUE_DATE_BEFORE_ISSUE";
+
+/**
+ * Is this due date believable given the issue date?
+ *
+ * A balance cannot fall due before the invoice that bills it exists, so a
+ * `dueDate` earlier than `issueDate` is always a capture error — the model read
+ * a delivery date, a statement date, or the previous invoice in the same photo.
+ * Nothing validated the pair, so the bad value was written and later drove a
+ * wrong OVERDUE stamp; 30 invoices carry one.
+ *
+ * Deliberately permissive at the boundary: `due == issue` is believable, since
+ * COD invoices are due the day they are issued. Missing or unreadable dates are
+ * believable too — this rejects what is provably impossible, nothing more.
+ */
+export function dueDateIsBelievable(
+  issueDate: Date | string | null | undefined,
+  dueDate: Date | string | null | undefined,
+  timeZone: string = BUSINESS_TIME_ZONE,
+): boolean {
+  const issue = localDayKey(issueDate ?? null, timeZone);
+  const due = localDayKey(dueDate ?? null, timeZone);
+  if (issue === null || due === null) return true;
+  return due >= issue;
+}
+
 export interface InvoiceTimingInput {
   status: InvoiceStatusLike;
   /** Balance due date as printed on the supplier invoice. Null = never chased. */
@@ -100,6 +127,8 @@ export interface InvoiceTimingInput {
   depositAmount?: number | string | null;
   /** When the deposit was actually paid. */
   depositPaidAt?: Date | string | null;
+  /** Money already applied to this invoice — a settled deposit shows up here. */
+  amountPaid?: number | string | null;
   /** Evaluation instant. Defaults to now. */
   now?: Date | string;
   timeZone?: string;
@@ -126,10 +155,15 @@ export interface InvoiceTiming {
   depositDaysPastDue: number;
   /**
    * The stored status this row SHOULD carry, or null to leave it alone.
-   * Only ever "OVERDUE" or "PENDING" — see the module note on why INITIATED
-   * and DEPOSIT_PAID are never overwritten.
+   * Never overwrites INITIATED or DEPOSIT_PAID — see the module note.
+   *
+   * Clearing OVERDUE must restore the status the row would have had, which is
+   * NOT always PENDING: an invoice whose deposit is already settled belongs in
+   * DEPOSIT_PAID. Sending it to PENDING makes the back office offer "Initiate
+   * Deposit" a second time, because that button keys off status alone and never
+   * checks `depositPaidAt` — a live double-payment prompt.
    */
-  storedStatusShouldBe: "PENDING" | "OVERDUE" | null;
+  storedStatusShouldBe: "PENDING" | "OVERDUE" | "DEPOSIT_PAID" | null;
 }
 
 function toNum(v: number | string | null | undefined): number {
@@ -180,9 +214,16 @@ export function evaluateInvoiceTiming(input: InvoiceTimingInput): InvoiceTiming 
   // The reversible stored transition. PENDING is the only status that becomes
   // OVERDUE, and OVERDUE returns to PENDING the moment the row is not actually
   // past due — which is the latch that stranded IV-02158.
-  let storedStatusShouldBe: "PENDING" | "OVERDUE" | null = null;
+  // Clearing OVERDUE restores the status the row would have had. A settled
+  // deposit means DEPOSIT_PAID, not PENDING — dropping that fact re-arms the
+  // "Initiate Deposit" button, which is a double-payment prompt.
+  const depositSettled =
+    localDayKey(input.depositPaidAt ?? null, tz) !== null || toNum(input.amountPaid) > 0;
+  let storedStatusShouldBe: "PENDING" | "OVERDUE" | "DEPOSIT_PAID" | null = null;
   if (input.status === "PENDING" && balanceOverdue) storedStatusShouldBe = "OVERDUE";
-  else if (input.status === "OVERDUE" && !balanceOverdue) storedStatusShouldBe = "PENDING";
+  else if (input.status === "OVERDUE" && !balanceOverdue) {
+    storedStatusShouldBe = depositSettled ? "DEPOSIT_PAID" : "PENDING";
+  }
 
   return {
     dueDateInvalid,

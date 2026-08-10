@@ -4,6 +4,7 @@ import {
   isOpenInvoiceStatus,
   localDayKey,
   OPEN_INVOICE_STATUSES,
+  dueDateIsBelievable,
 } from "../invoice-timing";
 
 // "Now" for the whole suite: 2026-08-10 11:00 UTC = 19:00 MYT, the day the
@@ -35,7 +36,9 @@ describe("isOpenInvoiceStatus", () => {
 describe("evaluateInvoiceTiming — the stuck OVERDUE latch", () => {
   it("clears OVERDUE once the due date is corrected forward (IV-02158)", () => {
     // Pre-created 27 Jul with a placeholder date, stamped OVERDUE, then
-    // corrected to a real 19 Aug balance date. It must not stay overdue.
+    // corrected to a real 19 Aug balance date. It must not stay overdue — and
+    // because its deposit was already paid, it lands in DEPOSIT_PAID rather
+    // than PENDING (see the next test for why that distinction is money).
     const r = evaluateInvoiceTiming({
       status: "OVERDUE",
       issueDate: "2026-08-05",
@@ -45,6 +48,39 @@ describe("evaluateInvoiceTiming — the stuck OVERDUE latch", () => {
       now: NOW,
     });
     expect(r.balanceOverdue).toBe(false);
+    expect(r.storedStatusShouldBe).toBe("DEPOSIT_PAID");
+  });
+
+  it("restores DEPOSIT_PAID, not PENDING, when the deposit is already settled", () => {
+    // The back office picks its action buttons from status alone: `case
+    // "PENDING"` renders "Initiate Deposit" without checking depositPaidAt.
+    // Clearing OVERDUE to PENDING on a deposit-paid invoice therefore offers to
+    // pay the deposit a second time. IV-02158 (RM328 paid 7 Aug) hit this.
+    const r = evaluateInvoiceTiming({
+      status: "OVERDUE",
+      issueDate: "2026-08-05",
+      dueDate: "2026-08-19",
+      depositAmount: 328,
+      depositPaidAt: "2026-08-07",
+      amountPaid: 328,
+      now: NOW,
+    });
+    expect(r.storedStatusShouldBe).toBe("DEPOSIT_PAID");
+  });
+
+  it("restores DEPOSIT_PAID on amountPaid alone, with no deposit timestamp", () => {
+    const r = evaluateInvoiceTiming({
+      status: "OVERDUE", issueDate: "2026-08-05", dueDate: "2026-08-19",
+      depositPaidAt: null, amountPaid: 150, now: NOW,
+    });
+    expect(r.storedStatusShouldBe).toBe("DEPOSIT_PAID");
+  });
+
+  it("restores PENDING when nothing has been paid", () => {
+    const r = evaluateInvoiceTiming({
+      status: "OVERDUE", issueDate: "2026-08-05", dueDate: "2026-08-19",
+      depositAmount: 328, depositPaidAt: null, amountPaid: 0, now: NOW,
+    });
     expect(r.storedStatusShouldBe).toBe("PENDING");
   });
 
@@ -169,5 +205,24 @@ describe("evaluateInvoiceTiming — the deposit clock", () => {
       expect(r.daysPastDue).toBe(5);
       expect(r.storedStatusShouldBe).toBeNull();
     }
+  });
+});
+
+describe("dueDateIsBelievable", () => {
+  it("rejects a due date that pre-dates the invoice", () => {
+    // The capture model reads each field alone, so it can return a delivery
+    // date, a statement date, or the previous invoice in the same photo.
+    expect(dueDateIsBelievable("2026-08-05", "2026-07-27")).toBe(false);
+  });
+
+  it("accepts due == issue (COD) and any later date", () => {
+    expect(dueDateIsBelievable("2026-08-05", "2026-08-05")).toBe(true);
+    expect(dueDateIsBelievable("2026-08-05", "2026-08-19")).toBe(true);
+  });
+
+  it("accepts when either date is missing or unreadable — rejects only the impossible", () => {
+    expect(dueDateIsBelievable(null, "2026-08-19")).toBe(true);
+    expect(dueDateIsBelievable("2026-08-05", null)).toBe(true);
+    expect(dueDateIsBelievable("rubbish", "2026-08-19")).toBe(true);
   });
 });
