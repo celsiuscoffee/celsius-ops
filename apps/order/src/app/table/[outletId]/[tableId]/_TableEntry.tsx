@@ -3,13 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MapPin } from "lucide-react";
+import { MapPin, Smartphone, ChevronRight } from "lucide-react";
 
 /**
- * Writes the dine-in context into the persisted "celsius-pickup" store
- * and redirects to the menu. Sets outletId/outletName so the menu's
- * OutletGate passes without a picker, plus orderType "dine_in" +
- * tableNumber so checkout creates a table order (not a pickup).
+ * Writes the dine-in context into the persisted "celsius-pickup" store,
+ * then shows an app-conversion interstitial instead of bouncing straight
+ * to the menu: customers who reach this page are exactly the ones WITHOUT
+ * the native app installed (installed apps intercept /table/* via
+ * Universal Links / App Links and never load this page), so this is the
+ * one moment to pitch the app before they order on web. "Get the app"
+ * goes through /get-app (platform-sniffing store redirect); "Continue on
+ * web" proceeds to the menu with the dine-in context already written.
  */
 type Persisted = {
   state?: Record<string, unknown>;
@@ -63,8 +67,7 @@ export function TableEntry({
     } catch {
       /* ignore */
     }
-    router.replace("/menu");
-  }, [outletId, outletName, tableId, router]);
+  }, [outletId, outletName, tableId]);
 
   if (!ok) {
     return (
@@ -88,7 +91,7 @@ export function TableEntry({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center px-8 text-center" style={{ minHeight: "70vh" }}>
+    <div className="flex flex-col items-center justify-center px-6 text-center" style={{ minHeight: "80vh" }}>
       <span
         className="flex items-center justify-center"
         style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: "rgba(162,73,44,0.10)" }}
@@ -99,8 +102,81 @@ export function TableEntry({
         Table {tableId}
       </p>
       <p className="text-sm mt-1" style={{ color: "#6B6B6B" }}>
-        {outletName} · opening your menu…
+        {outletName}
       </p>
+
+      {/* App-conversion panel — mirrors the espresso GuestSignInCTA styling */}
+      <div
+        className="w-full max-w-sm mt-8 overflow-hidden text-left"
+        style={{
+          backgroundColor: "#1A0200",
+          borderRadius: 16,
+          boxShadow: "0 6px 14px rgba(22,8,0,0.18)",
+        }}
+      >
+        <div style={{ padding: 20 }}>
+          <div className="flex items-center" style={{ gap: 12 }}>
+            <span
+              className="flex items-center justify-center flex-shrink-0"
+              style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "#A2492C" }}
+            >
+              <Smartphone size={24} color="#FFFFFF" strokeWidth={2} />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span
+                className="block uppercase"
+                style={{ color: "#FBBF24", fontSize: 10, fontWeight: 700, letterSpacing: 2 }}
+              >
+                App exclusive
+              </span>
+              <span
+                className="block font-peachi font-bold"
+                style={{ color: "#FFFFFF", fontSize: 17, marginTop: 2 }}
+              >
+                Get 10% off this order
+              </span>
+              <span
+                className="block"
+                style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 2, fontWeight: 500 }}
+              >
+                Order with the Celsius Coffee app
+              </span>
+            </span>
+          </div>
+          {/* Route handler redirect to the App/Play Store — plain <a>, not
+              <Link>, so Next never prefetches the 302 to an external store. */}
+          <a
+            href="/get-app"
+            className="flex items-center justify-center gap-1 rounded-full active:opacity-80"
+            style={{
+              backgroundColor: "#FFFFFF",
+              marginTop: 16,
+              paddingTop: 12,
+              paddingBottom: 12,
+            }}
+          >
+            <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 14 }}>
+              Get the app · 10% off
+            </span>
+            <ChevronRight size={15} color="#1A0200" />
+          </a>
+          <p
+            className="text-center"
+            style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, marginTop: 10 }}
+          >
+            After installing, re-scan the QR on your table — it opens right in the app.
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => router.replace("/menu")}
+        className="mt-5 text-sm font-semibold underline underline-offset-4 active:opacity-70"
+        style={{ color: "#6B6B6B" }}
+      >
+        Continue on web
+      </button>
     </div>
   );
 }
