@@ -45,6 +45,80 @@ export function isCleanCount(items: VarianceItem[]): boolean {
   return countDiscrepancies(items) === 0;
 }
 
+// ─── Variance tolerance (what counts as a real discrepancy) ─────────────────
+//
+// `countDiscrepancies` above flags ANY difference. That is the right rule when
+// both sides are exact (pieces on a shelf), and the wrong one for ingredients
+// measured in grams and millilitres, where a 2g difference on a 1kg bag is
+// weighing noise, not shrinkage. Flagging those would send every count to a
+// manager and teach them to rubber-stamp — worse than not checking at all.
+//
+// A variance is meaningful when it exceeds BOTH:
+//   - a relative band (default 2% of expected), which scales with pack size, and
+//   - an absolute floor (default 1 base unit), so a product expected at zero, or
+//     at a few grams, doesn't flag on rounding.
+// Either side alone misbehaves: relative-only makes small balances hypersensitive,
+// absolute-only makes large ones insensitive.
+
+/** Fraction of the expected quantity that is treated as noise. */
+export const DEFAULT_VARIANCE_TOLERANCE = 0.02;
+/** Minimum absolute difference (in base UOM) before anything is flagged. */
+export const VARIANCE_ABSOLUTE_FLOOR = 1;
+
+export interface VarianceToleranceOptions {
+  tolerance?: number;
+  absoluteFloor?: number;
+}
+
+/**
+ * Is the gap between expected and counted worth a human's attention?
+ * Both quantities must be in the SAME unit — base UOM, since that is what
+ * StockBalance stores and what a count converts to before it writes balances.
+ */
+export function isMeaningfulVariance(
+  expected: number,
+  counted: number,
+  opts: VarianceToleranceOptions = {},
+): boolean {
+  const tol = opts.tolerance ?? DEFAULT_VARIANCE_TOLERANCE;
+  const floor = opts.absoluteFloor ?? VARIANCE_ABSOLUTE_FLOOR;
+  if (!Number.isFinite(expected) || !Number.isFinite(counted)) return false;
+  const diff = Math.abs(counted - expected);
+  return diff > floor && diff > Math.abs(expected) * tol;
+}
+
+export interface ProductVariance {
+  productId: string;
+  expected: number;
+  counted: number;
+  diff: number;
+}
+
+/**
+ * Compare counted-vs-expected per PRODUCT, both in base UOM, and return only
+ * the meaningful gaps. Per product rather than per line because a product can
+ * be counted in two packages within one count (10 such cases exist): the
+ * balance is a single per-product figure, so only the summed count can be
+ * judged against it.
+ */
+export function findProductVariances(
+  expectedByProduct: Map<string, number>,
+  countedByProduct: Map<string, number>,
+  opts: VarianceToleranceOptions = {},
+): ProductVariance[] {
+  const out: ProductVariance[] = [];
+  for (const [productId, counted] of countedByProduct) {
+    // No baseline for this product — nothing to judge against, same rule as
+    // countDiscrepancies. A first count cannot be a discrepancy.
+    if (!expectedByProduct.has(productId)) continue;
+    const expected = expectedByProduct.get(productId)!;
+    if (isMeaningfulVariance(expected, counted, opts)) {
+      out.push({ productId, expected, counted, diff: counted - expected });
+    }
+  }
+  return out;
+}
+
 // ─── Count coverage (guard against short / partial submissions) ──────────────
 //
 // The submit/finalize endpoints trust the client's item list, and the only

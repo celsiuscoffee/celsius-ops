@@ -6,6 +6,8 @@ import {
   evaluateCountCoverage,
   evaluateCountFreshness,
   evaluateCountSchedule,
+  isMeaningfulVariance,
+  findProductVariances,
 } from "../stock-count";
 
 describe("evaluateCountFreshness", () => {
@@ -279,5 +281,60 @@ describe("evaluateCountSchedule", () => {
     // Wednesday = 3. 2026-08-05 is a Wednesday.
     expect(evaluateCountSchedule({ frequency: "WEEKLY", date: "2026-08-05T04:00:00Z", weeklyDow: 3 }).onSchedule).toBe(true);
     expect(evaluateCountSchedule({ frequency: "WEEKLY", date: "2026-08-05T04:00:00Z" }).offSchedule).toBe(true);
+  });
+});
+
+describe("isMeaningfulVariance", () => {
+  it("ignores weighing noise on a large balance", () => {
+    // 2g out on a 1kg bag is the scale, not shrinkage.
+    expect(isMeaningfulVariance(1000, 998)).toBe(false);
+  });
+
+  it("flags a gap beyond the 2% band", () => {
+    expect(isMeaningfulVariance(1000, 900)).toBe(true);
+    expect(isMeaningfulVariance(1000, 1100)).toBe(true);
+  });
+
+  it("needs BOTH the band and the absolute floor to be exceeded", () => {
+    // 1 unit out of 10 is 10% — over the band, but under the 1-unit floor is
+    // where rounding lives, so a difference of exactly 1 stays quiet.
+    expect(isMeaningfulVariance(10, 9)).toBe(false);
+    expect(isMeaningfulVariance(10, 8)).toBe(true);
+  });
+
+  it("does not flag an exact match", () => {
+    expect(isMeaningfulVariance(500, 500)).toBe(false);
+    expect(isMeaningfulVariance(0, 0)).toBe(false);
+  });
+
+  it("flags stock appearing against a zero balance, once past the floor", () => {
+    expect(isMeaningfulVariance(0, 0.5)).toBe(false);
+    expect(isMeaningfulVariance(0, 5)).toBe(true);
+  });
+
+  it("honours a custom tolerance", () => {
+    expect(isMeaningfulVariance(1000, 950)).toBe(true);
+    expect(isMeaningfulVariance(1000, 950, { tolerance: 0.1 })).toBe(false);
+  });
+});
+
+describe("findProductVariances", () => {
+  const expected = new Map([["a", 1000], ["b", 500], ["c", 20]]);
+
+  it("returns only the products whose gap is meaningful", () => {
+    const counted = new Map([["a", 998], ["b", 400], ["c", 20]]);
+    const v = findProductVariances(expected, counted);
+    expect(v.map((x) => x.productId)).toEqual(["b"]);
+    expect(v[0].diff).toBe(-100);
+  });
+
+  it("skips products with no baseline — a first count is not a discrepancy", () => {
+    const counted = new Map([["a", 1000], ["newProduct", 999]]);
+    expect(findProductVariances(expected, counted)).toHaveLength(0);
+  });
+
+  it("ignores expected products that were not counted at all", () => {
+    // Coverage is the guard for missing products, not variance.
+    expect(findProductVariances(expected, new Map([["a", 1000]]))).toHaveLength(0);
   });
 });

@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import {
-  isCleanCount,
   baseQtyByProduct,
+  findProductVariances,
   evaluateCountFreshness,
   evaluateCountSchedule,
 } from "@celsius/db";
@@ -62,6 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       countDate: true,
       items: {
         select: {
+          id: true,
           productId: true,
           productPackageId: true,
           expectedQty: true,
@@ -179,6 +180,58 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
+  // ── Expected-vs-counted ───────────────────────────────────────────────────
+  //
+  // Until now `expectedQty` was NULL on every stock-count item ever written
+  // (4,217 of them), because nothing populated it. countDiscrepancies therefore
+  // always returned 0, every count auto-approved, and the manager review queue
+  // was empty by construction rather than because the counts agreed.
+  //
+  // The baseline is snapshotted HERE, immediately before the balances are
+  // overwritten below, so "expected" is what the system believed at the moment
+  // the count was applied — not when the sheet was opened, which may be hours
+  // earlier with stock moving in between.
+  //
+  // Units matter: StockBalance is base UOM, countedQty is package units. The
+  // comparison is done in base UOM, the same conversion finalize already uses
+  // to write balances. Summed per product, because a product can appear on two
+  // package lines and the balance is a single per-product figure.
+  const countedBase = baseQtyByProduct(
+    count.items
+      .filter((i) => i.countedQty != null)
+      .map((i) => ({
+        productId: i.productId,
+        countedQty: i.countedQty,
+        conversionFactor: i.productPackage?.conversionFactor ?? 1,
+      })),
+  );
+  const countedProductIds = [...countedBase.keys()];
+  const priorBalances = countedProductIds.length
+    ? await prisma.stockBalance.findMany({
+        where: { outletId: count.outletId, productId: { in: countedProductIds } },
+        select: { productId: true, quantity: true },
+      })
+    : [];
+  const expectedBase = new Map<string, number>();
+  for (const b of priorBalances) {
+    // Sum across rows: a product's on-hand is the total of its canonical row
+    // plus any per-package rows, which is how the inventory reader totals it.
+    expectedBase.set(b.productId, (expectedBase.get(b.productId) ?? 0) + Number(b.quantity));
+  }
+
+  const variances = findProductVariances(expectedBase, countedBase);
+
+  // Stamp the baseline on the lines so the review screen can show it. Only for
+  // products counted on exactly ONE line — with two package lines the balance
+  // cannot be attributed between them, and inventing a split would be a lie.
+  const lineCountByProduct = new Map<string, number>();
+  for (const i of count.items) {
+    lineCountByProduct.set(i.productId, (lineCountByProduct.get(i.productId) ?? 0) + 1);
+  }
+  const expectedWrites = count.items
+    .filter((i) => lineCountByProduct.get(i.productId) === 1 && expectedBase.has(i.productId))
+    .map((i) => ({ id: i.id, expectedQty: expectedBase.get(i.productId)! }));
+
   // A short count (below floor, or a monthly submitted with an explicit partial
   // reason) must never auto-approve — it goes to the manager's review queue with
   // a note, so the gap is seen. Otherwise, zero-variance counts auto-approve.
@@ -187,9 +240,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // it is an exception someone chose to make, so a human should see it.
   const isShort = coverage.belowFloor;
   const autoApprove =
-    !isShort && !freshness.stale && !schedule.offSchedule && isCleanCount(count.items);
+    !isShort && !freshness.stale && !schedule.offSchedule && variances.length === 0;
   const noteAddition = [
     isShort ? `${coverage.shortNote}${partialReason ? ` reason: ${partialReason}` : ""}` : null,
+    variances.length > 0
+      ? `[variance] ${variances.length} product(s) differ from the expected balance beyond tolerance.`
+      : null,
     schedule.offScheduleNote
       ? `${schedule.offScheduleNote}${scheduleReason ? ` reason: ${scheduleReason}` : ""}`
       : null,
@@ -233,20 +289,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Already finalized by someone else" }, { status: 409 });
   }
 
-  // Convert each counted line from package units to the product's base UOM
-  // (StockBalance is tracked in base UOM everywhere else — receiving, wastage,
-  // inventory, par levels). Counting "22 packets" must land as 22 × pack size,
-  // not a raw 22. Lines for the same product are summed into one base total.
-  const baseTotals = baseQtyByProduct(
-    count.items
-      .filter((i) => i.countedQty != null)
-      .map((i) => ({
-        productId: i.productId,
-        countedQty: i.countedQty,
-        conversionFactor: i.productPackage?.conversionFactor ?? 1,
-      })),
-  );
-  const productIds = [...baseTotals.keys()];
+  // Persist the baseline each line was judged against, so the review screen
+  // shows what the system expected rather than a blank column. Written after
+  // the status flip and before the balances move, so a failed write leaves the
+  // count reviewable rather than half-applied.
+  if (expectedWrites.length > 0) {
+    const CHUNK_EXPECTED = 20;
+    for (let i = 0; i < expectedWrites.length; i += CHUNK_EXPECTED) {
+      await Promise.all(
+        expectedWrites.slice(i, i + CHUNK_EXPECTED).map((w) =>
+          prisma.stockCountItem.update({
+            where: { id: w.id },
+            data: { expectedQty: w.expectedQty },
+          }),
+        ),
+      );
+    }
+  }
+
+  // The counted totals in base UOM — already computed above for the variance
+  // check, and the same figures that now become the balances. StockBalance is
+  // base UOM everywhere else (receiving, wastage, inventory, par levels), so
+  // "22 packets" must land as 22 × pack size, not a raw 22.
+  const baseTotals = countedBase;
+  const productIds = countedProductIds;
 
   // A physical count is authoritative for total on-hand, so it writes to the
   // canonical per-product row (productPackageId = null) that receiving and
