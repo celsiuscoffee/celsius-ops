@@ -5,6 +5,8 @@ import { getUserFromHeaders } from "@/lib/auth";
 import { detectCreationFlags } from "@/lib/inventory/flag-detector";
 import { mytTodayRange } from "@/lib/inventory/myt-today";
 import { mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
+import { syncInvoiceOverdue } from "@/lib/inventory/sync-invoice-overdue";
+import { evaluateInvoiceTiming } from "@celsius/db";
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -138,15 +140,10 @@ export async function GET(req: NextRequest) {
     ];
   }
 
-  // Auto-mark overdue: only PENDING invoices past due date become OVERDUE
-  // (INITIATED invoices stay INITIATED — payment is already in progress)
-  await prisma.invoice.updateMany({
-    where: {
-      status: "PENDING",
-      dueDate: { lt: _todayStart },
-    },
-    data: { status: "OVERDUE" },
-  });
+  // Keep OVERDUE honest in both directions. INITIATED/DEPOSIT_PAID keep their
+  // status (payment is already in progress) — their lateness is exposed as the
+  // derived `balanceOverdue` flag below instead of overwriting what they are.
+  await syncInvoiceOverdue();
 
   const invoices = await prisma.invoice.findMany({
     where,
@@ -374,6 +371,28 @@ export async function GET(req: NextRequest) {
     amountPaid: inv.amountPaid ? Number(inv.amountPaid) : 0,
     depositPaidAt: inv.depositPaidAt?.toISOString() ?? null,
     depositRef: inv.depositRef ?? null,
+    // Derived lateness, computed rather than stored. The stored status only
+    // ever moves PENDING ⇄ OVERDUE, so an INITIATED or DEPOSIT_PAID invoice
+    // past its balance date used to be invisible (IV-02135 was 5 days late and
+    // displayed as normal). These flags surface it without destroying what the
+    // status means. `depositOverdue` enforces the rule that the deposit falls
+    // due on the ISSUE date — previously a comment, never a check.
+    ...(() => {
+      const t = evaluateInvoiceTiming({
+        status: inv.status,
+        dueDate: inv.dueDate,
+        issueDate: inv.issueDate,
+        depositAmount: inv.depositAmount ? Number(inv.depositAmount) : null,
+        depositPaidAt: inv.depositPaidAt,
+      });
+      return {
+        balanceOverdue: t.balanceOverdue,
+        daysPastDue: t.daysPastDue,
+        depositOverdue: t.depositOverdue,
+        depositDaysPastDue: t.depositDaysPastDue,
+        dueDateInvalid: t.dueDateInvalid,
+      };
+    })(),
     flags: Array.isArray(inv.flags) ? inv.flags : [],
     // An uploaded POP the matcher couldn't auto-link, for which THIS invoice is a candidate →
     // the row shows a "possible POP" badge + a Confirm action. null when there's none.
