@@ -6,6 +6,84 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-11 — **"Worst cashflow this month" answered: the CASH BALANCE is
+  genuinely the year's low (RM24,151 across the 3 accounts on 10 Aug), but
+  August's trading is fine — the buffer was spent over 8 months and August's
+  fixed costs simply hadn't cleared yet.** Owner asked why; then asked why
+  cashflow is *stuck*. Both answered from `BankStatementLine` (external only,
+  `isInterCo=false`) + `unified_sales`.
+  - **Balance trail (sum of Conezion 2644 + SDN/HQ 4384 + Tamarind 9345):**
+    Jan 76,360 → Mar 59,977 → May 48,450 → Jun 49,469 → Jul 29,263 → **Aug-10
+    24,151**. Monthly net external flow reconciles to the balance move EXACTLY
+    (Jul −20,205; Jun +1,019; Aug-MTD −5,112) — interco nets to 0.00 every
+    month, so the three accounts are the whole picture. HQ 4384 is the tight
+    one: 16,358 → 3,977, and it is the account payroll clears from.
+  - **August MTD looked deceptively calm** (net −5,112 over 10 days, the *best*
+    d1–10 of the year) purely because RENT and STATUTORY had not gone out:
+    rent RM500 vs a ~RM31,900 norm (Apr–Jul it always started clearing on the
+    5th–7th; on the 11th it still had not), statutory RM0 vs ~RM14,200 due on
+    the 15th. RM45.7k of obligation against RM24.2k of cash.
+  - **The single biggest discretionary drain was the Q2 dividend, RM15,414.27
+    on 27 Jul** = 76% of July's entire RM20,205 burn. RM11,666 out of Conezion
+    (balance 17,817 → 5,329) + RM3,748 Tamarind. That is why August opened with
+    no cushion. Q1 equivalent was RM9,173 (28 Apr), Q4-2025 RM5,896 (22 Jan).
+  - **REVENUE IS NOT THE CAUSE — do not chase it.** Days 1–10 vs July, all three
+    core outlets are UP: Putrajaya +3.8%, Shah Alam +2.2%, Tamarind +3.6%.
+  - **WHY IT IS STUCK: total external cash out runs at ~100% of nett sales,
+    every month, and food cost is the driver and is WORSENING.** As % of nett
+    sales: Apr 45.2 / May 42.8 / Jun 45.8 / **Jul 48.9** COGS; labour
+    (salary+PT+statutory) 28.1 → 32.8; rent ~9.8. COGS+labour+rent = 91.5% in
+    July, total cash out 103.2%. A coffee chain should run 25–35% COGS. There
+    is simply no margin being generated to rebuild the buffer.
+  - **Food cost by entity, July** (bank COGS ÷ that entity's outlet sales):
+    **Putrajaya/Conezion 54.2%** (43.5% in Apr — worst and deteriorating
+    fastest, while its sales FELL 132,975 → 124,140), **Shah Alam/HQ 51.3%**
+    (48.6% Apr), **Tamarind 37.2%** (43.4% Apr — the only one IMPROVING).
+  - **Concentrated in a few suppliers** (Apr→Jul): Collective Project
+    22,338 → **34,802** (+56%), Yow Seng 3,226 → **13,689** (+324%), Ariff
+    ad-hoc reimbursements 2,941 → **11,795** across **224 transactions** in July
+    alone (~RM53 avg). Two brand-new suppliers from June add ~RM11k/mo
+    (JG Pacific, Country Bread) — unknown whether additive or replacing.
+    Top-3 movers alone = +RM31,781/mo against sales that fell RM13,060.
+  - **Cannot currently tell over-ordering from shrinkage: `fin_inventory_
+    valuations` is EMPTY (0 rows).** Stock counts exist but only ~10–13 per
+    outlet since May (2–3/month, not daily) and are never turned into a
+    valuation, so purchases can't be reconciled against consumption.
+  - Ruled out: the bank feed is NOT stale (all 3 accounts ingested 2026-08-11
+    06:00–06:03, through 10 Aug); `fin_bank_transactions` is empty and unused.
+  - **Open / needs owner:** Nilai + IOI Mall both stopped reporting sales on
+    **2026-07-19** — they are the only two on the `consignment` source (98 rows
+    since June; `storehub` died 2026-06-17). Nilai staff are STILL on payroll
+    (Nazihah RM1,875 in the Jul run). Either both closed and cost is still being
+    carried, or the consignment feed broke and ~RM16k/mo of revenue is missing.
+    Also `raw_poket_capital` (RM3,486 Jul) looks like financing, not food —
+    likely miscategorised as RAW_MATERIALS.
+
+- 2026-08-11 — **Maybank abbreviated the payroll narration and the classifier
+  went blind to ALL of it (PR #1123, draft).** From the Aug statements:
+  "Salary Jun26" → **"Sal Jul26"**, OT top-ups as "Add OT Jul26"/"OT Jul26",
+  "Mngmt Fee" → "Mgmt Fee 1/2"/"mgmt 1/4". Rules matched `\bSALARY\b` and
+  `\bMNGMT\s*FEE\b`, so the whole Jul-26 payroll fell to `fallback_other`:
+  **RM53,381 of staff pay in OTHER_OUTFLOW, RM8,339 (Ariff Izham's own pay
+  line) grabbed by `raw_ariff_adhoc` into RAW_MATERIALS, RM5,462 of mgmt fee
+  loose, and EMPLOYEE_SALARY reading RM0.00 for August.** Fixed with shared
+  `SALARY_RE`/`OVERTIME_RE`/`MGMT_FEE_RE` (inflow side too, so the outlet legs
+  funding the central run stay inter-co). **"SAL" and "OT" are anchored on the
+  pay period that follows** (month-year `Jul26`, or a split marker `1/2`) —
+  bare `\bSAL\b`/`\bOT\b` would swallow unrelated lines; bare `SALARY` still
+  matches alone because older rows carry "Salary 1/1" with no month.
+  `salary_explicit` MUST stay ahead of `raw_ariff_adhoc` and `vendor_sdn_bhd` —
+  that ordering is what reclaims Ariff's line (now pinned by a test).
+  **Existing rows are NOT fixed by the deploy** — run
+  `POST /api/finance/reclassify {"full":true}` after it lands (`full` is
+  required: Ariff's line sits in RAW_MATERIALS, not the OTHER_* catch-all the
+  default sweep covers; `GET ...?full=1` dry-runs). Note the Jul-26 food-cost
+  figures above were computed BEFORE this reclass, so July is unaffected but
+  **August's 35.1% COGS reading is inflated and will drop once it runs.**
+  Lesson: Maybank narration format is not stable — a rule keyed to one spelling
+  of a recurring monthly payment is a silent, self-concealing failure (the
+  totals still reconcile; only the category is wrong).
+
 - 2026-08-07 — **Referral codes had (almost) no way IN — the attribution
   plumbing was fully wired but the UI entry point sat on a path referred
   friends never take.** Owner: "no place for referral code even though it is
