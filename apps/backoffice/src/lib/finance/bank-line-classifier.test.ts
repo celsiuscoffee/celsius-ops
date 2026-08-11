@@ -60,6 +60,42 @@ describe("bank-line-classifier", () => {
     expect(classifyBankLine({ description: "Celsius Coffee TamarCOLLECTIVE PROJECT *IV-1234", amount: 100, direction: "DR", accountKey: "CELSIUS COFFEE TAMARIND SDN. BHD. (9345)" }).isInterCo).toBe(false);
   });
 
+  it("reads the abbreviated Aug-2026 payroll narration as salary, not OTHER_OUTFLOW", () => {
+    // Maybank switched "Salary Jun26" -> "Sal Jul26" and added "Add OT Jul26".
+    // The old /\bSALARY\b/ rule missed every one of them and the whole Jul-26
+    // payroll landed in fallback_other.
+    expect(dr("Conezion FIRDAUS BIN NAJIB * Sal Jul26").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("CELSIUS COFFEE HQ ADAM KELVIN * SAL JUL26").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("Putrajaya CELSIUS COFFEE SDN.* Sal Jul26 2/2").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("Conejion AHMAD RAZLEY HIDAYA* Add OT Jul26").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("SHAH ALAM SHAIRULEEN BINTI JE* ADD OT JUL26").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("Tamarind CELSIUS COFFEE SDN.* OT Jul26").category).toBe("EMPLOYEE_SALARY");
+    // Ariff's pay line must beat raw_ariff_adhoc, which grabbed it as RAW_MATERIALS
+    expect(dr("Celsius Coffee HQ ARIFF IZHAM BIN ABD* Sal Jul26").category).toBe("EMPLOYEE_SALARY");
+    // the older spellings keep working
+    expect(dr("Celsius Coffee HQ ARIFF IZHAM BIN ABD* Salary Jun26").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("CELSIUS COFFEE SDN.* Salary 1/1").category).toBe("EMPLOYEE_SALARY");
+    // and the CR twin (outlet funding the central run) stays inter-co
+    expect(cr("CELSIUS COFFEE CONE* Sal Jul26 1/2").category).toBe("EMPLOYEE_SALARY");
+    expect(cr("CELSIUS COFFEE CONE* Sal Jul26 1/2").isInterCo).toBe(true);
+  });
+
+  it("reads the abbreviated management-fee narration", () => {
+    // "Mngmt Fee" -> "Mgmt Fee 1/2" / bare "mgmt 1/4"
+    expect(dr("Tamarind CELSIUS COFFEE SDN.* Mgmt Fee 1/2").category).toBe("MANAGEMENT_FEE");
+    expect(dr("Tamarind CELSIUS COFFEE SDN.* Mgmt fee 2/2").category).toBe("MANAGEMENT_FEE");
+    expect(dr("Putrajaya CELSIUS COFFEE SDN.* mgmt 1/4").category).toBe("MANAGEMENT_FEE");
+    expect(dr("TRANSFER FR A/C CELSIUS COFFEE SDN. Mngmt Fee").category).toBe("MANAGEMENT_FEE");
+  });
+
+  it("does not read SAL/OT as payroll without a pay period after them", () => {
+    // the short forms are anchored on "Jul26" / "1/2" so they cannot swallow
+    // unrelated vendor lines or references
+    expect(dr("TRANSFER FR A/C SAL SUPPLIES SDN BHD INV-9").category).not.toBe("EMPLOYEE_SALARY");
+    expect(dr("SHAH ALAM MUHAMAD SYAFIQ AIMA* L0131401202300").category).not.toBe("EMPLOYEE_SALARY");
+    expect(dr("TRANSFER FR A/C PARKING LOT 12/34 rental").category).not.toBe("EMPLOYEE_SALARY");
+  });
+
   it("classifies the reclassified OTHER_OUTFLOW vendors", () => {
     expect(dr("TRANSFER FR A/C COUNTRY BREAD BAKER INV-001").category).toBe("RAW_MATERIALS");
     expect(dr("TRANSFER FR A/C BEARD BROTHERS MEAT INV250").category).toBe("RAW_MATERIALS");
