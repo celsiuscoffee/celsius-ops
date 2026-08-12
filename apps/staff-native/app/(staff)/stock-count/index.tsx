@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -73,6 +73,19 @@ export default function StockCount() {
   } | null>(null);
   const [startNew, setStartNew] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  // Soft block on resuming a count open past a full day: the counter picks
+  // "new" (leave the stale draft, fresh sheet) or "continue" (re-date it to
+  // today). Kept in a ref so the polling fetchActive closure sees the choice.
+  const [expiredPrompt, setExpiredPrompt] = useState<{ daysOpen: number } | null>(
+    null,
+  );
+  const expiredActionRef = useRef<"new" | "continue" | null>(null);
+  // Finalize-time counterpart: an expired count can still be closed, but only
+  // once someone records when the stock was actually counted.
+  const [stalePrompt, setStalePrompt] = useState<{
+    daysOpen: number;
+    reason: string;
+  } | null>(null);
   const [conflict, setConflict] = useState<{
     productId: string;
     packageId: string | null;
@@ -109,6 +122,15 @@ export default function StockCount() {
         frequency.toUpperCase() as "DAILY" | "WEEKLY" | "MONTHLY",
       );
       if (data.active) {
+        // "Start a new count" was chosen but nothing has been keyed yet, so
+        // the expired draft is still the newest one on the server. Ignore it —
+        // otherwise the 4-second poll re-hydrates the very count we abandoned.
+        if (data.active.expired && expiredActionRef.current === "new") {
+          setCountId(null);
+          setServerItems({});
+          setSubmittedToday(null);
+          return;
+        }
         setCountId(data.active.id);
         const map: Record<string, ServerItem> = {};
         const localCounts: Record<string, ItemCount> = {};
@@ -124,6 +146,13 @@ export default function StockCount() {
         setServerItems(map);
         setCounts(localCounts);
         setSubmittedToday(null);
+        // Surface the soft block on open, so nobody keys a quantity into a
+        // day-old count only to have it bounce. Cleared once they choose.
+        setExpiredPrompt(
+          data.active.expired && !expiredActionRef.current
+            ? { daysOpen: data.active.daysOpen ?? 1 }
+            : null,
+        );
       } else {
         setCountId(null);
         setServerItems({});
@@ -137,6 +166,14 @@ export default function StockCount() {
   useEffect(() => {
     fetchActive();
   }, [fetchActive, startNew]);
+
+  // An expired-draft choice belongs to one count — never carry it across a
+  // frequency switch.
+  useEffect(() => {
+    expiredActionRef.current = null;
+    setExpiredPrompt(null);
+    setStalePrompt(null);
+  }, [frequency]);
 
   // Polling for collaboration
   useEffect(() => {
@@ -264,6 +301,9 @@ export default function StockCount() {
           productId,
           productPackageId: packageId,
           countedQty: qty,
+          ...(expiredActionRef.current
+            ? { expiredAction: expiredActionRef.current }
+            : {}),
           ...(force
             ? {}
             : { expectedPriorCountedById: existing?.countedById ?? null }),
@@ -281,8 +321,18 @@ export default function StockCount() {
         // Detect conflict via body
         const err = e as {
           status?: number;
-          body?: { conflicts?: { countedByName?: string; countedQty?: number | null }[] };
+          body?: {
+            code?: string;
+            daysOpen?: number;
+            conflicts?: { countedByName?: string; countedQty?: number | null }[];
+          };
         };
+        // Soft block: the open draft is more than a day old. Prompt for the
+        // new/continue choice; the next save carries it and goes through.
+        if (err.status === 409 && err.body?.code === "COUNT_EXPIRED") {
+          setExpiredPrompt({ daysOpen: err.body.daysOpen ?? 1 });
+          return false;
+        }
         if (err.status === 409 && err.body?.conflicts?.[0]) {
           const c = err.body.conflicts[0];
           setConflict({
@@ -328,7 +378,7 @@ export default function StockCount() {
     if (countId) void saveToServer(productId, packageId, null);
   };
 
-  const handleFinalize = async () => {
+  const handleFinalize = async (staleReason?: string) => {
     if (!countId) return;
     if (countedItems < totalItems) {
       Alert.alert(
@@ -339,16 +389,26 @@ export default function StockCount() {
     }
     setFinalizing(true);
     try {
-      await finalizeStockCount(countId);
+      await finalizeStockCount(countId, staleReason ? { staleReason } : undefined);
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => {});
       Alert.alert("Done", `Stock count finalized, ${countedItems} items.`);
+      setStalePrompt(null);
+      expiredActionRef.current = null;
       setCounts({});
       setCountId(null);
       setServerItems({});
       setStartNew((v) => !v);
     } catch (e) {
+      // Soft block: the count expired before it was finalized. Ask when the
+      // stock was actually counted, then resend — the count is filed under
+      // the day it closes, with the answer recorded on it.
+      const err = e as { body?: { code?: string; daysOpen?: number } };
+      if (err.body?.code === "COUNT_EXPIRED") {
+        setStalePrompt({ daysOpen: err.body.daysOpen ?? 1, reason: "" });
+        return;
+      }
       Alert.alert("Couldn't finalize", e instanceof Error ? e.message : "Try again.");
     } finally {
       setFinalizing(false);
@@ -367,6 +427,9 @@ export default function StockCount() {
     setCounts({});
     setCountId(null);
     setServerItems({});
+    expiredActionRef.current = null;
+    setExpiredPrompt(null);
+    setStalePrompt(null);
   };
 
   // ── Render branches ──
@@ -639,7 +702,7 @@ export default function StockCount() {
         className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
       >
         <Pressable
-          onPress={handleFinalize}
+          onPress={() => void handleFinalize()}
           disabled={countedItems < totalItems || finalizing}
           className={`h-16 items-center justify-center rounded-2xl ${
             countedItems < totalItems || finalizing
@@ -754,6 +817,147 @@ export default function StockCount() {
                   <Text className="text-sm font-body-bold text-white">
                     Overwrite
                   </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
+      {/* Expired-count modal (soft block) — the open count is more than a day
+          old, so it can no longer be a single-date snapshot. Counting on into
+          it would file today's shelves under the day it was opened. Two honest
+          ways out; no way to carry on pretending it's the same date. */}
+      <Modal
+        visible={expiredPrompt !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setExpiredPrompt(null)}
+      >
+        <View className="flex-1 justify-end bg-black/40">
+          {expiredPrompt ? (
+            <View className="rounded-t-3xl bg-background p-5 pb-10">
+              <View className="flex-row items-start gap-3">
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+                  <AlertTriangle color="#F59E0B" size={20} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-display text-espresso">
+                    This count expired
+                  </Text>
+                  <Text className="mt-1 text-sm font-body text-muted-fg">
+                    It was started{" "}
+                    {expiredPrompt.daysOpen === 1
+                      ? "a day"
+                      : `${expiredPrompt.daysOpen} days`}{" "}
+                    ago and stock has moved since. Counting more into it would
+                    record today's stock under that older date.
+                  </Text>
+                </View>
+              </View>
+              <View className="mt-5 gap-2">
+                <Pressable
+                  onPress={() => {
+                    // Leave the old draft alone and count today from scratch.
+                    expiredActionRef.current = "new";
+                    setExpiredPrompt(null);
+                    setCounts({});
+                    setCountId(null);
+                    setServerItems({});
+                  }}
+                  className="h-14 items-center justify-center rounded-2xl bg-primary active:opacity-80"
+                >
+                  <Text className="text-base font-body-bold text-white">
+                    Start a new count for today
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    // Keep the lines already counted; the count is re-dated to
+                    // today server-side on the next save.
+                    expiredActionRef.current = "continue";
+                    setExpiredPrompt(null);
+                  }}
+                  className="h-14 items-center justify-center rounded-2xl border border-border"
+                >
+                  <Text className="text-base font-body-bold text-espresso">
+                    Continue it (re-date to today)
+                  </Text>
+                </Pressable>
+              </View>
+              <Text className="mt-3 text-center text-xs font-body text-muted">
+                Nothing already counted is deleted either way.
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
+      {/* Stale-finalize modal — an expired count can still be closed, but only
+          once someone records when the stock was actually counted. The count
+          is then filed under the day it closes, with that answer on it. */}
+      <Modal
+        visible={stalePrompt !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setStalePrompt(null)}
+      >
+        <View className="flex-1 justify-end bg-black/40">
+          {stalePrompt ? (
+            <View className="rounded-t-3xl bg-background p-5 pb-10">
+              <View className="flex-row items-start gap-3">
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+                  <AlertTriangle color="#F59E0B" size={20} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-display text-espresso">
+                    Open{" "}
+                    {stalePrompt.daysOpen === 1
+                      ? "a day"
+                      : `${stalePrompt.daysOpen} days`}{" "}
+                    — when was this counted?
+                  </Text>
+                  <Text className="mt-1 text-sm font-body text-muted-fg">
+                    A manager will review it. Say which day(s) the stock was
+                    physically counted so the numbers can be read correctly.
+                  </Text>
+                </View>
+              </View>
+              <TextInput
+                autoFocus
+                value={stalePrompt.reason}
+                onChangeText={(t) =>
+                  setStalePrompt((p) => (p ? { ...p, reason: t } : p))
+                }
+                placeholder="e.g. counted Tue morning, finished Wed"
+                placeholderTextColor="#9CA3AF"
+                className="mt-4 h-12 rounded-2xl border border-border bg-surface px-3 text-base font-body text-espresso"
+              />
+              <View className="mt-5 flex-row gap-2">
+                <Pressable
+                  onPress={() => setStalePrompt(null)}
+                  className="h-14 flex-1 items-center justify-center rounded-2xl border border-border"
+                >
+                  <Text className="text-base font-body-bold text-espresso">
+                    Cancel
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={stalePrompt.reason.trim().length < 3 || finalizing}
+                  onPress={() => void handleFinalize(stalePrompt.reason.trim())}
+                  className={`h-14 flex-1 items-center justify-center rounded-2xl ${
+                    stalePrompt.reason.trim().length < 3 || finalizing
+                      ? "bg-primary/40"
+                      : "bg-primary"
+                  }`}
+                >
+                  {finalizing ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text className="text-base font-body-bold text-white">
+                      Finalize
+                    </Text>
+                  )}
                 </Pressable>
               </View>
             </View>

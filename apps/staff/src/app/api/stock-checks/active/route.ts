@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { evaluateCountFreshness, evaluateCountSchedule } from "@celsius/db";
+import { autoRefreshOnExpiry, evaluateCountFreshness, evaluateCountSchedule } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   const dayEnd = new Date(dayStart);
   dayEnd.setDate(dayEnd.getDate() + 1);
 
-  const active = await prisma.stockCount.findFirst({
+  let active = await prisma.stockCount.findFirst({
     where: {
       outletId: session.outletId,
       frequency: frequency as "DAILY" | "WEEKLY" | "MONTHLY",
@@ -67,6 +67,19 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
+  // Daily auto-refresh: an expired DAILY draft is never resumed — the app
+  // opens on a fresh sheet instead of a days-old count nobody can finalize.
+  // The draft itself is left alone (evidence of what was counted); the items
+  // endpoint creates a new one on the first save. Judged from countDate so a
+  // deliberately continued (re-dated) draft stays resumable for its new day.
+  if (
+    active &&
+    autoRefreshOnExpiry(frequency as "DAILY" | "WEEKLY" | "MONTHLY") &&
+    evaluateCountFreshness({ createdAt: active.countDate, now: new Date() }).expired
+  ) {
+    active = null;
+  }
+
   // If no active draft, surface the most recent SUBMITTED count from today
   // so the UI can show "today's count is done" instead of a blank slate.
   const submittedToday = active
@@ -91,9 +104,11 @@ export async function GET(req: NextRequest) {
   // Expiry state for the resumed draft. A count open more than a full day is
   // no longer a single-date snapshot, so the app must prompt before letting
   // anyone count on into it — surfaced here so the prompt appears on open
-  // rather than after the first quantity is keyed and rejected.
+  // rather than after the first quantity is keyed and rejected. Judged from
+  // countDate (same rule as the items endpoint): a draft that was continued
+  // and re-dated today must not prompt again.
   const freshness = active
-    ? evaluateCountFreshness({ createdAt: active.createdAt, now: new Date() })
+    ? evaluateCountFreshness({ createdAt: active.countDate, now: new Date() })
     : null;
 
   // Whether today is this frequency's scheduled day. Returned regardless of

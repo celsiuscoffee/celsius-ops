@@ -54,17 +54,40 @@ export function computeLateMinutes(
 
 // OT threshold (paid working hours/day before OT kicks in), per employment type.
 // full_time/contract: 45h week ÷ 6 days = 7.5h/day (break excluded).
+// part_time/intern have NO threshold OT (owner rule 2026-08-07: "PT no
+// overtime — they can only be paid extra if they work more than their shift"):
+// every worked hour is flat-rate regular; working past the rostered shift end
+// is the attendance processor's beyond-shift flag, and it only PAYS when the
+// roster or an approved OT request lifts the weekly calculator's daily cap.
 export const OT_THRESHOLD_HOURS: Record<string, number> = {
   full_time: 7.5,
   contract: 7.5,
-  part_time: 5, // 5.5h shift − 30min break
-  intern: 6, // 6.5h shift − 30min break
+  part_time: Number.POSITIVE_INFINITY,
+  intern: Number.POSITIVE_INFINITY,
 };
 
 /** Unpaid break hours to deduct from a shift's gross duration. */
 export function breakHoursFor(employmentType: string, totalHours: number): number {
   if (employmentType === "part_time" || employmentType === "intern") return totalHours > 4 ? 0.5 : 0;
   return totalHours > 5 ? 1 : 0; // full_time / contract: 1h break if shift > 5h
+}
+
+/**
+ * PT weekly payment rounds each clock time to the LOWEST 30 minutes before
+ * computing the paid span (owner rule 2026-08-07, clarified same day: "round
+ * it at lowest 30min — if clock out 8.35, calculate 8.30"). Each end rounds
+ * toward the inside of the shift so the paid span never exceeds the clocked
+ * one: clock-out floors (20:35→20:30, 20:50→20:30), clock-in rounds up
+ * (09:58→10:00, 09:40→10:00). Pay-time only: the stored log keeps the real
+ * timestamps.
+ */
+export const PT_PAY_ROUND_MINUTES = 30;
+
+export function ptRoundedSpanHours(clockIn: string | Date, clockOut: string | Date): number {
+  const step = PT_PAY_ROUND_MINUTES * 60 * 1000;
+  const inMs = Math.ceil((clockIn instanceof Date ? clockIn : new Date(clockIn)).getTime() / step) * step;
+  const outMs = Math.floor((clockOut instanceof Date ? clockOut : new Date(clockOut)).getTime() / step) * step;
+  return Math.max(0, (outMs - inMs) / (1000 * 60 * 60));
 }
 
 export type DerivedHours = {

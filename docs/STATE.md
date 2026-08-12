@@ -6,6 +6,149 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-12 — **Finance › Reports now exports PDF, not just CSV — P&L,
+  Balance Sheet, Cash Flow and Trial Balance each get a PDF button beside the
+  CSV one.** Built on branch `claude/pdf-export-tv9r8s`. Renderer is
+  `apps/backoffice/src/lib/finance/statement-pdf.ts` (pdf-lib, already a dep
+  for payslips/PO), driven by a `StatementDoc` model — group/subgroup/line/
+  total rows plus PRE-FORMATTED value strings, so money formatting lives in
+  one place and the PDF can never disagree with the screen. Rendered
+  **client-side on purpose**: the export then carries the user's current view
+  (compare column, by-month columns, expense cost-driver grouping) exactly as
+  the CSV export does; a server-side rebuild would drop them. pdf-lib is
+  behind `await import()` — verified in the production build that the reports
+  page chunk (105KB) contains zero `PDFDocument` references and pdf-lib sits
+  in its own 428KB chunk fetched only on click. A4, auto-landscape past 3
+  value columns, repeating column headers + "(continued)" on page 2+,
+  "Page N of M" footer, and every on-screen caveat (consolidated/outlet scope,
+  imbalance, interco residual, reconciliation gap, COGS methodology gap)
+  travels into the file as a footnote — a PDF gets emailed on without the page
+  around it. Gotchas found the hard way: **standard PDF fonts are WinAnsi**, so
+  `sanitize()` maps the arrows/Δ/em-dashes in our report labels or drawing
+  throws; and the code column must fit `BANK:MARKETPLACE_FEE` (~13pt of width
+  per pt of type size) — the first cut truncated codes to "BANK:MARKETPL...",
+  which is useless since you cannot look one up. Trial Balance deliberately
+  exports ALL rows, ignoring the on-screen filter (a filtered TB does not
+  foot), matching its CSV. Verified visually by rasterising sample PDFs with
+  pdf.js in the pre-installed Chromium — **poppler/pdftoppm is NOT available
+  in the agent container and Chromium's own PDF viewer renders blank
+  headless**; `unpdf/dist/pdfjs.mjs` + `--allow-file-access-from-files` works.
+
+- 2026-08-07 — **Referral codes had (almost) no way IN — the attribution
+  plumbing was fully wired but the UI entry point sat on a path referred
+  friends never take.** Owner: "no place for referral code even though it is
+  wired". Verified: the ONLY entry field estate-wide was pickup-native
+  `account.tsx`'s OTP step; the checkout sign-in flow (`checkout.tsx` has its
+  OWN OTP flow — the path a referred friend actually takes, cart→sign-in→pay)
+  had no field, and eligibility ends PERMANENTLY at the first paid order
+  (`attributeReferralOnSignup` rejects `not_new`), so checkout was the last
+  possible moment and it offered nothing. The Share & Earn screen even
+  instructs "They sign up and enter your code". Web (`apps/order`) has NO
+  entry field at all — /api/loyalty/referral/attribute's only callers are
+  native (left as-is, out of scope). Fixed on branch
+  `claude/referral-code-ui-placement-25q971`: (1) checkout OTP step gets the
+  same optional field as account.tsx (gated on `is_new_member` from
+  /api/otp/send, best-effort submit post-verify); (2) Share & Earn gets a
+  "Got a code from a friend?" card for signed-in still-eligible members,
+  gated server-side via new `can_enter_code` on /api/loyalty/me/referral
+  (zero paid orders + no prior attribution — mirrors the attribute guards;
+  absent field on older servers = hidden). `submitReferralCode` now surfaces
+  the endpoint's customer-facing error instead of discarding the body.
+  **Follow-up in the same PR (owner asked "how to get code to share"): the
+  Share & Earn screen itself was ORPHANED** — the only navigation to
+  `/referral` in the whole app was the push-notification deeplink in
+  `_layout.tsx`; no menu row, no card. Referrers could not find their own
+  code either. Added an Account → "Share & Earn" ActionRow and a signed-in
+  entry card at the foot of the Rewards list.
+  Merge = OTA to customer phones (JS-only, fingerprint runtime — OTA-safe).
+
+- 2026-08-07 — **PT/intern have NO threshold overtime (owner: "PT no overtime.
+  they can only be paid extra if the work more than their shift").** The pay
+  side already complied (weekly calc: flat rate, cap = roster + approved OT,
+  "OT is FT-only"), but `deriveHours` still split PT hours at a 5h/day
+  threshold and stamped `overtime_detected` on every normal long shift (why
+  Adib's corrected 7.50h Tamarind row sat flagged). Fixed: PT/intern threshold
+  is now Infinity in BOTH hours.ts copies (backoffice + staff — they must stay
+  in sync); the attendance processor instead flags `overtime_detected` for
+  PT/intern only when clock-out runs >15 min past the ROSTERED shift end
+  (cross-midnight safe; no roster end → no flag). Same-day: weekly payroll
+  runs can now be DELETED while ai_computed/draft (DELETE
+  /api/hr/payroll/weekly?run_id= + UI button) so a week can be recomputed
+  after a rule change — confirmed/paid runs still locked; items cascade. The
+  stored 27 Jul–2 Aug run (RM3,837.63) predates the lowest-30 rounding and
+  needs exactly this delete → recompute (expect ≈RM3,720.00, and Absah +
+  Danish's rows shift as flagged in the rounding entry).
+
+- 2026-08-07 — **PT weekly pay now rounds each clock time to the LOWEST 30
+  minutes before computing the span.** First instruction said "nearest 30min"
+  with a round-down example (8.35→8.30); implemented as symmetric-nearest and
+  flagged the ambiguity. Owner clarified the same day ("we need to round it
+  at lowest 30min") → each end now rounds toward the inside of the shift:
+  clock-out FLOORS (20:35 and 20:50 both pay to 20:30), clock-in rounds UP
+  (09:58 and 09:40 both pay from 10:00). Paid span never exceeds the clocked
+  span. Checked against the 27 Jul–2 Aug PT week: gross drops RM3,837.63 →
+  RM3,720.00 (−RM117.63 across 17 PTs). Edge case (accepted): rounding can
+  land a span exactly ON 4.00h, dodging the >4h 30-min break — e.g. Absah
+  3.51h raw → 4.00h paid. Implemented as
+  `ptRoundedSpanHours` in `apps/backoffice/src/lib/hr/hours.ts`, applied in
+  BOTH places that price PT hours: `payroll-calculator-weekly.ts` and the
+  PT-hours confirm preview (`api/hr/payroll/weekly/pt-hours`) — the two must
+  stay identical or the manager preview diverges from the run. Both now
+  compute from clock timestamps, NOT `total_hours` (the stored log keeps the
+  real stamps; `total_hours` no longer feeds PT pay). The 30-min unpaid break
+  (>4h) is judged on the ROUNDED span. Pinned in `hours.test.ts`. FT monthly
+  is untouched.
+
+- 2026-08-07 — **Owner-directed attendance corrections applied to prod
+  `hr_attendance_logs` (WhatsApp-style instructions from Ammar, applied via
+  SQL; all originals preserved in each row's `review_notes`):**
+  (1) **Adib PT (Tamarind) 30 Jul** — duplicate 15:06–15:20 stub (log
+  `f68be900`, 0.24h/RM2.16, was Confirmed) DELETED; real shift was closing
+  only — log `94a2208b` clock_in adjusted 15:20→15:30 MYT, total 7.50h.
+  Owner still needs to Confirm it in the PT weekly timesheet UI (row still
+  shows `overtime_detected`).
+  (2) **Emran/Shairuleen Sun 2 Aug (crossed accounts)** — Shairuleen (FT,
+  rostered 10–6) clocked in at 09:58 on EMRAN's account (her selfie on his
+  log); Emran (PT, rostered 12–8) then clocked that session OUT at 11:51
+  (his selfie) and re-clocked-in at 14:26, getting a false `late_arrival`.
+  Fixed: log `31f440e8` reassigned to Shairuleen, kept her real 09:58 in,
+  system-closed at rostered 18:00 (no genuine clock-out existed; Emran's
+  11:51 photo removed), 8.03h/reg 7.00; log `d6afaf10` (Emran) clock_in
+  14:26→12:00 (he was provably on site by 11:51), 8.04h, late flag cleared.
+  Both set approved/approved. Lesson: a selfie that doesn't match the
+  account holder + a same-day zero-log person on the roster = crossed
+  clock-in; check BOTH people's logs before editing.
+
+- 2026-08-07 — **The stock-count "expired count" flow was un-completable in BOTH
+  staff clients, which is why a 6-day-old daily count at an outlet could not be
+  finalized (owner screenshots, 23:43).** Two distinct dead-ends, one shared
+  server gap, all fixed on branch `claude/item-finalization-auto-refresh-a4cige`:
+  (1) **Staff web PWA:** the stale-reason bottom sheet (page.tsx `stalePrompt`)
+  is `z-50` — the same z as `bottom-nav.tsx`, which renders later in the DOM and
+  so painted OVER the sheet's Cancel/Finalize buttons. Staff could type the
+  reason but the buttons were unreachable ("put reasons, cannot proceed").
+  All four stock-count overlays bumped to `z-[60]` + safe-area padding.
+  (2) **staff-native (Celsius Manager):** the app had NO COUNT_EXPIRED handling
+  at all — `finalizeStockCount` sent no body (no way to pass `staleReason`) and
+  the error dead-ended in an OK-only Alert; it also silently resumed expired
+  drafts (never read `active.expired`) and had no expiredAction on saves. Now
+  has the same expired-choice (new/continue) and stale-reason modals as web.
+  (3) **Server daily auto-refresh (owner ask: "can we auto refresh everyday"):**
+  new `autoRefreshOnExpiry(frequency)` in `packages/db/stock-count.ts` — DAILY
+  only. `active` route hides an expired DAILY draft (fresh sheet on open);
+  `items` route auto-creates a fresh daily count instead of 409-ing. The
+  abandoned draft stays DRAFT as evidence, never finalized — the stuck 6-day
+  count self-resolves this way after deploy (its numbers span 6 days and are
+  worthless for shrinkage per the 2026-07-31 finding). WEEKLY/MONTHLY keep the
+  explicit new/continue + stale-reason flow.
+  **Latent bug fixed on the way:** items/active routes judged expiry from
+  `createdAt`, which a "continue" re-date never changes — so every save after a
+  "continue" re-ran the re-date and appended another `[re-dated]` note (note
+  spam), and re-opening a continued draft re-prompted. Both now judge from
+  `countDate` (moves forward on re-date); **finalize still judges from
+  `createdAt` deliberately** so a continued multi-day count never auto-approves
+  and still records the stale note. staff-native change ⇒ merge to main is an
+  OTA to manager phones (ota-release skill before merging).
 - 2026-08-06 — **Stock-count schedule guard: weekly is due THURSDAY, monthly on
   the month boundary.** Windows derived from Jun–Jul 2026 trading data, not
   preference. Deliveries per weekday: Mon 15.1, Tue 14.2, Wed 6.3, **Thu 4.1**,

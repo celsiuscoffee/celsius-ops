@@ -213,6 +213,55 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }
 
+// DELETE: remove a computed/draft weekly run so the week can be recomputed
+// (owner ask 2026-08-07 — the stored run keeps stale numbers when a pay rule
+// changes between compute and confirm). Confirmed/paid runs are locked: a bank
+// file may already exist for them, so those can never be deleted here.
+// hr_payroll_items cascades on the run's FK, so the items go with it.
+export async function DELETE(req: NextRequest) {
+  const session = await getSession();
+  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const runId = new URL(req.url).searchParams.get("run_id");
+  if (!runId) return NextResponse.json({ error: "run_id required" }, { status: 400 });
+
+  // Same atomic pattern as confirm: the guard rides on the delete itself so a
+  // run confirmed between read and delete cannot be lost.
+  const { data, error } = await hrSupabaseAdmin
+    .from("hr_payroll_runs")
+    .delete()
+    .eq("id", runId)
+    .eq("cycle_type", "weekly")
+    .in("status", ["ai_computed", "draft"])
+    .select()
+    .maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) {
+    const { data: cur } = await hrSupabaseAdmin
+      .from("hr_payroll_runs").select("status, cycle_type").eq("id", runId).maybeSingle();
+    if (!cur) return NextResponse.json({ error: "Payroll run not found" }, { status: 404 });
+    if (cur.cycle_type !== "weekly") {
+      return NextResponse.json({ error: "This endpoint only deletes weekly runs." }, { status: 400 });
+    }
+    return NextResponse.json(
+      { error: `Payroll run is already ${cur.status}; only a computed or draft run can be deleted.` },
+      { status: 409 },
+    );
+  }
+
+  await logActivity({
+    actorId: session.id,
+    action: "payroll.delete_run",
+    module: "hr",
+    targetId: runId,
+    targetName: `weekly ${data.period_start}`,
+    details: { total_gross: data.total_gross, status_was: data.status },
+    request: req,
+  });
+  return NextResponse.json({ deleted: true, period_start: data.period_start });
+}
+
 // PATCH: adjust hours/rate/gross on a single payroll item (manual edit).
 // body: { item_id, hours?, hourly_rate?, ot_hours?, notes? }
 export async function PATCH(req: NextRequest) {

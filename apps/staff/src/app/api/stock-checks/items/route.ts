@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { evaluateCountFreshness } from "@celsius/db";
+import { autoRefreshOnExpiry, evaluateCountFreshness } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
@@ -74,8 +74,14 @@ export async function POST(req: NextRequest) {
     select: { id: true, createdAt: true, countDate: true, notes: true },
     take: 10,
   });
-  const isExpired = (d: { createdAt: Date }) =>
-    evaluateCountFreshness({ createdAt: d.createdAt, now }).expired;
+  // Judged from countDate, not createdAt: choosing "continue" re-dates the
+  // draft to today, which is exactly the blessing that should stop the soft
+  // block. On a never-re-dated draft the two are the same instant. (Judging
+  // from createdAt made every save after a "continue" re-run the re-date and
+  // append the [re-dated] note again.) Finalize still judges from createdAt —
+  // a continued count spans days and must never auto-approve.
+  const isExpired = (d: { countDate: Date }) =>
+    evaluateCountFreshness({ createdAt: d.countDate, now }).expired;
 
   let count = openDrafts.find((d) => !isExpired(d)) ?? null;
 
@@ -89,7 +95,9 @@ export async function POST(req: NextRequest) {
   //     Soft, not hard: the draft's existing lines are real work, and nothing
   //     is discarded without the counter saying so.
   const expiredDraft = count ? null : openDrafts.find(isExpired);
-  if (expiredDraft) {
+  // DAILY counts auto-refresh: an expired daily draft is abandoned without a
+  // prompt and a fresh sheet is created below — see autoRefreshOnExpiry.
+  if (expiredDraft && !autoRefreshOnExpiry(frequency)) {
     const freshness = evaluateCountFreshness({ createdAt: expiredDraft.createdAt, now });
     if (!expiredAction) {
       return NextResponse.json(

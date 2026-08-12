@@ -3,7 +3,7 @@ import { View, Text, ScrollView, Pressable, Image, Dimensions, RefreshControl } 
 import { Alert } from "@/lib/alert";
 import { Stack, router } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Gift, ChevronRight, Clock, Lock } from "lucide-react-native";
+import { Gift, ChevronRight, Clock, Lock, Users } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { CelsiusLoader } from "../components/CelsiusLoader";
@@ -473,6 +473,48 @@ export default function RewardsTab() {
                 onUse={() => useCatalog(r)}
               />
             ))}
+
+            {/* Share & Earn entry — the referral screen was previously
+                reachable only via a push deep link. Signed-in only: the
+                referral screen needs a phone to mint/show a code. */}
+            {phone && (
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  router.push("/referral" as never);
+                }}
+                className="bg-surface rounded-2xl border border-border p-4 flex-row items-center active:opacity-70"
+                style={{ gap: 12 }}
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 12,
+                    backgroundColor: "#FBEBE8",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Users size={20} color="#A2492C" strokeWidth={1.8} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    className="text-espresso"
+                    style={{ fontFamily: "Peachi-Bold", fontSize: 15 }}
+                  >
+                    Share & Earn
+                  </Text>
+                  <Text
+                    className="text-muted-fg"
+                    style={{ fontFamily: "SpaceGrotesk_400Regular", fontSize: 12, marginTop: 1 }}
+                  >
+                    Refer a friend — you both get a free drink
+                  </Text>
+                </View>
+                <ChevronRight size={18} color="rgba(26,2,0,0.35)" />
+              </Pressable>
+            )}
           </View>
         )}
       </ScrollView>
