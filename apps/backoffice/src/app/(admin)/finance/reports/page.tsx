@@ -6,8 +6,9 @@
 import { useState, useMemo, Fragment, createContext, useContext, useEffect } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Button } from "@celsius/ui";
-import { Loader2, Download, FileText, AlertTriangle, ChevronRight, ChevronDown, Paperclip, X } from "lucide-react";
+import { Loader2, Download, FileDown, FileText, AlertTriangle, ChevronRight, ChevronDown, Paperclip, X } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
+import type { StatementColumn, StatementDoc, StatementRow } from "@/lib/finance/statement-pdf";
 import { OUTFLOW_CATEGORIES, INFLOW_CATEGORIES, categoryLabel, categoryChipLabel } from "@/lib/finance/cash-categories";
 
 // Accounting format: negatives in parentheses, the convention every
@@ -61,6 +62,77 @@ function ExportCsvButton({ onExport }: { onExport: () => void }) {
   return (
     <Button size="xs" variant="outline" onClick={onExport} title="Download this report as CSV">
       <Download className="h-3.5 w-3.5" /> CSV
+    </Button>
+  );
+}
+
+// ─── PDF export ─────────────────────────────────────────────────
+// Same contract as the CSV export: the PDF is built from exactly what the tab
+// is rendering, so the compare column, by-month columns and expense grouping
+// the user picked all carry into the file. pdf-lib is imported lazily inside
+// the click handler, so none of it ships in the page bundle until someone
+// actually exports.
+
+// Statement bodies drop the "RM " prefix — the header states the currency once,
+// the way every accounting package prints a statement. Negatives in
+// parentheses, matching RM() and the on-screen table.
+const ACC = (n: number | null | undefined): string => {
+  if (n === null || n === undefined) return "";
+  const f = new Intl.NumberFormat("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(n));
+  return n < 0 ? `(${f})` : f;
+};
+
+// Logo is fetched once per page load and shared by every export.
+let logoPromise: Promise<Uint8Array | null> | null = null;
+function loadLogo(): Promise<Uint8Array | null> {
+  logoPromise ??= fetch("/images/celsius-logo-sm.jpg")
+    .then((r) => (r.ok ? r.arrayBuffer() : null))
+    .then((b) => (b ? new Uint8Array(b) : null))
+    .catch(() => null);
+  return logoPromise;
+}
+
+async function exportStatementPdf(doc: StatementDoc) {
+  const [{ buildStatementPdf }, logo] = await Promise.all([
+    import("@/lib/finance/statement-pdf"),
+    loadLogo(),
+  ]);
+  const bytes = await buildStatementPdf(doc, logo);
+  const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = doc.filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// `build` runs at click time so the export always reflects the current view;
+// returning null (report still loading) is a no-op.
+function ExportPdfButton({ build }: { build: () => StatementDoc | null }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  return (
+    <Button
+      size="xs"
+      variant="outline"
+      disabled={busy}
+      title={failed ? "PDF export failed — try again" : "Download this statement as a print-ready PDF"}
+      onClick={async () => {
+        const doc = build();
+        if (!doc) return;
+        setBusy(true);
+        setFailed(false);
+        try {
+          await exportStatementPdf(doc);
+        } catch {
+          setFailed(true);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+      {failed ? "PDF failed" : "PDF"}
     </Button>
   );
 }
@@ -330,12 +402,17 @@ function compactRm(n: number): string {
 
 // Centered statement header the way QuickBooks Modern View frames a report:
 // company, statement title, period, and a muted prepared-on line.
-function StatementHeader({ title, periodLine }: { title: string; periodLine: string }) {
+// The entity a statement is FOR — printed on screen and on the PDF, so both
+// name the same thing. SWR dedupes the fetch across every tab that asks.
+function useStatementCompany(): string {
   const { consolidated } = useControls();
   const { data: co } = useFetch<{ companies: FinCompany[]; activeCompanyId: string }>("/api/finance/companies");
-  const company = consolidated
-    ? "Consolidated, all companies"
-    : co?.companies.find((x) => x.id === co.activeCompanyId)?.name ?? "";
+  if (consolidated) return "Consolidated, all companies";
+  return co?.companies.find((x) => x.id === co.activeCompanyId)?.name ?? "";
+}
+
+function StatementHeader({ title, periodLine }: { title: string; periodLine: string }) {
+  const company = useStatementCompany();
   return (
     <div className="space-y-0.5 pt-1 text-center">
       <div className="text-sm font-medium">{company || " "}</div>
@@ -503,6 +580,9 @@ const PNL_SECTIONS = ["income", "cogs", "expenses"] as const;
 
 function PnlTab() {
   const { start, end, outletId, consolidated } = useControls();
+  const company = useStatementCompany();
+  // Named on the PDF's scope line — the file has to say which outlet it is for.
+  const { data: outlets } = useFetch<{ id: string; name: string }[]>("/api/settings/outlets");
   const [compare, setCompare] = useState<CompareMode>("none");
   const [columns, setColumns] = useState<ColumnsMode>("total");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -707,6 +787,89 @@ function PnlTab() {
     downloadCsv(`pnl_${r.start}_${r.end}.csv`, rows);
   };
 
+  // Mirrors the rendered statement row for row: section bands, the expense
+  // cost-driver sub-groups with their subtotals, and whichever of the month /
+  // compare / % columns are switched on.
+  const buildPdf = (): StatementDoc | null => {
+    if (!report) return null;
+    const r = report;
+    const columns: StatementColumn[] = [
+      ...months.map((m) => ({ label: monthLabel(m.month) })),
+      { label: byMonth ? "Total" : "Amount" },
+      ...(showCompareCols ? [{ label: compare === "year" ? "Prev year" : "Prev period" }, { label: "Change" }] : []),
+      ...(showPct ? [{ label: "% of income" }] : []),
+    ];
+    const vals = (amount: number, cmpAmount?: number | null, monthAmounts?: MonthAmount[]): string[] => [
+      ...(monthAmounts ?? []).map((a) => (a == null ? "" : ACC(a))),
+      ACC(amount),
+      ...(showCompareCols ? [cmpAmount == null ? "" : ACC(cmpAmount), pctChange(amount, cmpAmount)] : []),
+      ...(showPct ? [pctOfIncome(amount, totals.income)] : []),
+    ];
+    const lineRow = (l: PnlLine): StatementRow => ({
+      kind: "line",
+      code: l.code,
+      name: l.name,
+      indent: !!l.parentCode,
+      values: vals(l.amount, cmpByCode.get(l.code) ?? null, rowMonths(l.code)),
+    });
+    const totalRow = (label: string, amount: number, cmpAmount?: number | null, monthAmounts?: MonthAmount[], strong?: boolean): StatementRow => ({
+      kind: "total", label, values: vals(amount, cmpAmount, monthAmounts), strong,
+    });
+
+    const rows: StatementRow[] = [
+      { kind: "group", label: "Income" },
+      ...secLines.income.map(lineRow),
+      totalRow("Total Income", totals.income, cmp?.income.total, totMonths((x) => x.income.total)),
+      { kind: "group", label: "Cost of Sales" },
+      ...secLines.cogs.map(lineRow),
+      totalRow("Total COGS", totals.cogs, cmp?.cogs.total, totMonths((x) => x.cogs.total)),
+      totalRow("Gross Profit", totals.grossProfit, cmp?.grossProfit, totMonths((x) => x.grossProfit), true),
+      { kind: "group", label: "Expenses" },
+    ];
+    for (const g of expenseGroups) {
+      rows.push({ kind: "subgroup", label: g.label });
+      rows.push(...g.lines.map(lineRow));
+      if (g.lines.length > 1) {
+        rows.push({
+          kind: "total",
+          label: `Total ${g.label.toLowerCase()}`,
+          values: vals(g.amount, showCompareCols ? g.cmpAmount : null, g.monthAmounts),
+          muted: true,
+        });
+      }
+    }
+    rows.push(totalRow("Total Expenses", totals.expenses, cmp?.expenses.total, totMonths((x) => x.expenses.total)));
+    rows.push(totalRow("Net Income", totals.netIncome, cmp?.netIncome, totMonths((x) => x.netIncome), true));
+
+    // Every caveat the screen shows travels with the file — a PDF gets emailed
+    // on without the page around it.
+    const notes: string[] = [];
+    if (consolidated) notes.push("Consolidated group P&L: all companies summed with inter-company legs eliminated, so HQ-paid salary, ads and management fees count once as group cost.");
+    if (!consolidated && outletId) notes.push("Per-outlet view: revenue + COGS + outlet-tagged costs only (contribution margin). Shared/HQ opex is paid from the entity account and cannot be split per outlet.");
+    if (showCompareCols && cmpRange) notes.push(`Comparison period: ${cmpRange.s} to ${cmpRange.e}.`);
+    if (byMonth && monthData?.truncated) notes.push("Range exceeds 12 months; the last 12 are shown.");
+    if (byMonth && Math.abs(methodologyGap) > 0.01) notes.push(`Totals sum the month columns. Months with a usable stock count use count-adjusted COGS, so they can differ from the full-period statement (net ${RM(report.netIncome)} for this range in Total columns mode).`);
+    notes.push(...(report.notes ?? []));
+
+    const outletName = outlets?.find((o) => o.id === outletId)?.name;
+    return {
+      company,
+      title: "Profit and Loss",
+      periodLine: `${longDate(start)} to ${longDate(end)}`,
+      preparedOn: longDate(todayMyt()),
+      scopeNote: consolidated ? null : outletName ? `Outlet: ${outletName}` : "All outlets",
+      kpis: [
+        { label: "Income", value: RM(totals.income) },
+        { label: "Expenses", value: RM(totals.cogs + totals.expenses) },
+        { label: "Net Profit", value: RM(totals.netIncome) },
+      ],
+      columns,
+      rows,
+      notes,
+      filename: `pnl_${r.start}_${r.end}${byMonth ? "_by-month" : ""}.pdf`,
+    };
+  };
+
   return (
     <div className="space-y-4">
       <StatementHeader title="Profit and Loss" periodLine={`${longDate(start)} to ${longDate(end)}`} />
@@ -780,6 +943,7 @@ function PnlTab() {
               </button>
             )}
             <ExportCsvButton onExport={exportCsv} />
+            <ExportPdfButton build={buildPdf} />
           </div>
         </div>
         <div className="max-h-[75vh] overflow-auto rounded-lg border bg-card">
@@ -1485,6 +1649,7 @@ function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, sho
 
 function BsTab({ onDrill }: { onDrill: (code: string) => void }) {
   const { start, end: asOf, consolidated } = useControls();
+  const company = useStatementCompany();
   const [compare, setCompare] = useState<CompareMode>("none");
   // Consolidation scope applies to the primary AND the comparison fetch, so a
   // group figure is never compared against a single-entity one.
@@ -1506,6 +1671,56 @@ function BsTab({ onDrill }: { onDrill: (code: string) => void }) {
     return m;
   }, [cmp]);
 
+  // The PDF stacks the three sections the way a printed balance sheet reads
+  // (assets, then liabilities, then equity), not the screen's two columns.
+  const buildPdf = (): StatementDoc | null => {
+    const r = data?.report;
+    if (!r) return null;
+    const columns: StatementColumn[] = [
+      { label: "Amount" },
+      ...(showCompare && cmpAsOf ? [{ label: `As of ${cmpAsOf}` }, { label: "Change" }] : []),
+    ];
+    const vals = (amount: number, prev?: number | null): string[] => [
+      ACC(amount),
+      ...(showCompare ? [prev == null ? "" : ACC(prev), pctChange(amount, prev)] : []),
+    ];
+    const section = (title: string, sec: BsSection, cmpTotal?: number | null): StatementRow[] => [
+      { kind: "group", label: title },
+      ...sec.lines.map((l): StatementRow => ({
+        kind: "line", code: l.code, name: l.name, indent: !!l.parentCode,
+        values: vals(l.amount, cmpByCode.get(l.code) ?? null),
+      })),
+      { kind: "total", label: `Total ${title}`, values: vals(sec.total, cmpTotal) },
+    ];
+
+    const notes: string[] = [];
+    if (consolidated) notes.push("Consolidated group balance sheet: all companies summed, inter-company (3600) balances netted to one line.");
+    if (r.imbalance !== 0) notes.push(`Imbalance of ${RM(r.imbalance)}, likely an unposted period or malformed manual journal.`);
+    if (r.intercoResidual != null && Math.abs(r.intercoResidual) > 0.01) notes.push(`Inter-company balances do not fully offset: ${RM(r.intercoResidual)} net remains.`);
+    notes.push("Ledger-based: unclassified inflows sit in Suspense (1999) until reconciled, and pre-June sales journals are partial.");
+
+    return {
+      company,
+      title: "Balance Sheet",
+      periodLine: `As of ${longDate(asOf)}`,
+      preparedOn: longDate(todayMyt()),
+      columns,
+      rows: [
+        ...section("Assets", r.assets, cmp?.assets.total),
+        { kind: "spacer" },
+        ...section("Liabilities", r.liabilities, cmp?.liabilities.total),
+        { kind: "spacer" },
+        ...section("Equity", r.equity, cmp?.equity.total),
+        {
+          kind: "total", strong: true, label: "Liabilities + Equity",
+          values: vals(r.totalLiabilitiesAndEquity, cmp?.totalLiabilitiesAndEquity),
+        },
+      ],
+      notes,
+      filename: `balance-sheet_${r.asOf}.pdf`,
+    };
+  };
+
   return (
     <div className="space-y-4">
       <StatementHeader title="Balance Sheet" periodLine={`As of ${longDate(asOf)}`} />
@@ -1524,6 +1739,7 @@ function BsTab({ onDrill }: { onDrill: (code: string) => void }) {
           </select>
         </label>
         {showCompare && cmpAsOf && <span className="text-[10px] text-muted-foreground tabular-nums">vs {cmpAsOf}</span>}
+        {data?.report && <ExportPdfButton build={buildPdf} />}
       </div>
       {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
       {error && (
@@ -1657,6 +1873,7 @@ function CfSummaryCard({ label, amount, prev, showCompare, negative }: { label: 
 
 function CfTab() {
   const { start, end, consolidated } = useControls();
+  const company = useStatementCompany();
   const [compare, setCompare] = useState<CompareMode>("none");
   // Consolidation scope applies to the primary AND the comparison fetch.
   const scope = consolidated ? "&companyId=consolidated" : "";
@@ -1675,6 +1892,64 @@ function CfTab() {
   );
   const showCompare = compare !== "none" && !!cmpData;
   const cmp = cmpData?.report;
+
+  const buildPdf = (): StatementDoc | null => {
+    const r = data?.report;
+    if (!r) return null;
+    const columns: StatementColumn[] = [
+      { label: "Amount" },
+      ...(showCompare ? [{ label: compare === "year" ? "Prev year" : "Prev period" }, { label: "Change" }] : []),
+    ];
+    const vals = (amount: number, prev?: number | null): string[] => [
+      ACC(amount),
+      ...(showCompare ? [prev == null ? "" : ACC(prev), pctChange(amount, prev)] : []),
+    ];
+    // Comparison lines match by label, exactly as the on-screen section table
+    // does — a line present in only one of the two periods reads as blank.
+    const section = (s: CfSection, c?: CfSection | null): StatementRow[] => {
+      const byLabel = new Map((c?.lines ?? []).map((l) => [l.label, l.amount] as const));
+      return [
+        { kind: "group", label: s.title },
+        ...s.lines.map((l): StatementRow => ({
+          kind: "line", code: l.code ?? null, name: l.label,
+          values: vals(l.amount, showCompare ? byLabel.get(l.label) ?? null : undefined),
+        })),
+        { kind: "total", label: `Net cash from ${s.title.toLowerCase()}`, values: vals(s.total, c?.total) },
+      ];
+    };
+
+    const notes: string[] = [];
+    if (consolidated) notes.push("Consolidated group cash flow: all companies summed, inter-company transfer legs cancel so only external movements show.");
+    if (Math.abs(r.reconciliationGap) > 0.01) notes.push(`Reconciliation gap of ${RM(r.reconciliationGap)} between operating+investing+financing and the bank-account change.`);
+    if (showCompare && cmpRange) notes.push(`Comparison period: ${cmpRange.s} to ${cmpRange.e}.`);
+    notes.push("Ledger-based: unclassified inflows sit in Suspense (1999) until reconciled, and pre-June sales journals are partial.");
+
+    return {
+      company,
+      title: "Cash Flow Statement",
+      periodLine: `${longDate(start)} to ${longDate(end)}`,
+      preparedOn: longDate(todayMyt()),
+      kpis: [
+        { label: "Cash at start", value: RM(r.cashAtStart) },
+        { label: "Net change", value: RM(r.netChangeInCash) },
+        { label: "Cash at end", value: RM(r.cashAtEnd) },
+      ],
+      columns,
+      rows: [
+        ...section(r.operating, cmp?.operating),
+        { kind: "spacer" },
+        ...section(r.investing, cmp?.investing),
+        { kind: "spacer" },
+        ...section(r.financing, cmp?.financing),
+        { kind: "group", label: "Summary" },
+        { kind: "line", name: "Cash at start of period", values: vals(r.cashAtStart, cmp?.cashAtStart) },
+        { kind: "line", name: "Net change in cash", values: vals(r.netChangeInCash, cmp?.netChangeInCash) },
+        { kind: "total", strong: true, label: "Cash at end of period", values: vals(r.cashAtEnd, cmp?.cashAtEnd) },
+      ],
+      notes,
+      filename: `cash-flow_${r.start}_${r.end}.pdf`,
+    };
+  };
 
   return (
     <div className="space-y-4">
@@ -1702,6 +1977,7 @@ function CfTab() {
               </select>
             </label>
             {showCompare && cmpRange && <span className="text-[10px] text-muted-foreground tabular-nums">vs {cmpRange.s} → {cmpRange.e}</span>}
+            <ExportPdfButton build={buildPdf} />
           </div>
           <CfSectionTable s={data.report.operating} cmp={cmp?.operating} showCompare={showCompare} />
           <CfSectionTable s={data.report.investing} cmp={cmp?.investing} showCompare={showCompare} />
@@ -1802,12 +2078,37 @@ type Tb = { asOf: string; rows: TbRow[]; totalDebit: number; totalCredit: number
 
 function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
   const { end: asOf } = useControls();
+  const company = useStatementCompany();
   const [q, setQ] = useState("");
   const { data, isLoading } = useFetch<{ report: Tb }>(`/api/finance/reports/trial-balance?asOf=${asOf}`);
   const rows = (data?.report?.rows ?? []).filter((r) => {
     const t = q.trim().toLowerCase();
     return !t || r.code.toLowerCase().includes(t) || r.name.toLowerCase().includes(t);
   });
+
+  // Exports the full trial balance, not the on-screen filter — same as the CSV
+  // export. A filtered trial balance would not foot.
+  const buildPdf = (): StatementDoc | null => {
+    const r = data?.report;
+    if (!r) return null;
+    return {
+      company,
+      title: "Trial Balance",
+      periodLine: `As of ${longDate(r.asOf)}`,
+      preparedOn: longDate(todayMyt()),
+      scopeNote: r.balanced ? "Balanced" : "OUT OF BALANCE",
+      columns: [{ label: "Debit" }, { label: "Credit" }],
+      rows: [
+        ...r.rows.map((x): StatementRow => ({
+          kind: "line", code: x.code, name: x.name,
+          values: [x.debit ? ACC(x.debit) : "", x.credit ? ACC(x.credit) : ""],
+        })),
+        { kind: "total", strong: true, label: `Total — ${r.rows.length} accounts`, values: [ACC(r.totalDebit), ACC(r.totalCredit)] },
+      ],
+      notes: r.balanced ? [] : [`Debits and credits differ by ${RM(r.totalDebit - r.totalCredit)}. Investigate before relying on the derived statements.`],
+      filename: `trial-balance_${r.asOf}.pdf`,
+    };
+  };
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -1825,6 +2126,7 @@ function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
               rows.push(["", "Total", "", r.totalDebit, r.totalCredit]);
               downloadCsv(`trial-balance_${r.asOf}.csv`, rows);
             }} />
+            <ExportPdfButton build={buildPdf} />
           </div>
         )}
       </div>

@@ -114,3 +114,21 @@ into the sections above._
   `pay_and_claim` + `paid_by` for the eval loop. Owner-facing: these post a
   "staff pay-and-claim" handoff on the pulse feed, never the "stopped a wrong
   match" correction.
+
+- 2026-08-12 — **Statement exports (CSV and now PDF) are built client-side
+  from the data the tab is already rendering — do NOT add a server route that
+  re-derives a report.** The export must carry the user's view (compare
+  column, by-month columns, expense cost-driver grouping); a server rebuild
+  would silently drop those and the two would drift.
+  `src/lib/finance/statement-pdf.ts` renders any statement from a
+  `StatementDoc` model (group / subgroup / line / total rows + pre-formatted
+  value strings), so a new statement needs a `buildPdf()` returning that model
+  and an `<ExportPdfButton build={buildPdf} />`, not new rendering code.
+  Two constraints worth remembering: (1) **pdf-lib must stay behind
+  `await import(...)`** — it is a 428KB chunk and the Reports page loads on
+  every finance visit; only `import type` at the top of the page file;
+  (2) **run every string through `sanitize()`** — the standard PDF fonts are
+  WinAnsi, so the arrows, Δ and em dashes this app puts in report labels throw
+  at draw time otherwise. Money in the PDF body is printed WITHOUT the "RM "
+  prefix (the header states the currency once, as Xero/Bukku do) but the KPI
+  tiles keep it.
