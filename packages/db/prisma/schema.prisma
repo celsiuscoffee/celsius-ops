@@ -272,6 +272,9 @@ model Product {
   receivingItems    ReceivingItem[]
   parLevels         ParLevel[]
   menuIngredients   MenuIngredient[]
+  // Lines that substitute THIS product for another (e.g. the oat-milk line that
+  // replaces fresh milk when the Oatmilk modifier is chosen).
+  replacedByIngredients MenuIngredient[] @relation("MenuIngredientReplaces")
   transferItems     StockTransferItem[]
   packagingRules    PackagingRule[]
   // Central-prep sub-BOM: as the PREPPED output of a recipe, and as a RAW input line.
@@ -929,6 +932,14 @@ model MenuIngredient {
   // recipe can differ by temperature (e.g. vanilla syrup on Hot, caramel on Iced)
   // without duplicating the whole recipe.
   modifier     String?
+  // Substitution. When set, this line REPLACES the named product's lines rather
+  // than adding to them — the modifier swaps one ingredient for another instead
+  // of layering a second one on top. Oat milk is the case that forced it: a row
+  // scoped to the "Oatmilk" modifier would otherwise pour oat milk in ON TOP of
+  // the menu's fresh milk, billing both. Only meaningful with `modifier` set;
+  // null = ordinary additive line.
+  replacesProductId String?
+  replacesProduct   Product? @relation("MenuIngredientReplaces", fields: [replacesProductId], references: [id])
 
   // Unique per (menu, product, channel, temperature) so the SAME ingredient can
   // appear once per temperature — e.g. milk 120ml Hot and milk 150ml Iced.
