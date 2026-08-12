@@ -35,10 +35,78 @@ export interface RecipeLine {
 export interface SoldLine {
   /** Units sold, already net of refunds. */
   units: number;
-  /** Modifier names on the line, exactly as the POS recorded them. */
-  modifiers?: string[];
+  /**
+   * Modifier names on the line. Pass the raw column and it is normalised —
+   * the two sales channels store the same vocabulary in different shapes.
+   */
+  modifiers?: string[] | unknown;
   /** Fulfilment channel, when known — gates DINE_IN / TAKEAWAY lines. */
   serviceMode?: "DINE_IN" | "TAKEAWAY" | null;
+}
+
+/**
+ * Read modifier names off a sold line, whichever channel wrote it.
+ *
+ * Sales arrive from three channels in two tables, and the same modifier is
+ * stored two different ways:
+ *
+ *   pos_order_items.modifiers  (POS counter + GrabFood)
+ *     [{ "name": "Iced" }, { "name": "Oatmilk" }]
+ *
+ *   order_items.modifiers      (customer app: table-QR dine-in + pickup)
+ *     { "selections": [{ "label": "Iced", "groupName": "Temperature" }],
+ *       "specialInstructions": "less ice" }
+ *
+ * The vocabulary is identical — Iced, Hot, Oatmilk, Extra Shot, Extra Syrup —
+ * but code written against one shape silently reads nothing from the other, and
+ * "nothing" is indistinguishable from "no modifiers chosen". That is not a
+ * small error: table-QR dine-in alone is 12–20% of ingredient demand, and a
+ * temperature-scoped recipe line simply never fires for it, so every iced/hot
+ * dose on those sales goes uncounted.
+ *
+ * `specialInstructions` is deliberately ignored. It is free text — "less
+ * sweet", "no sugar", "takeaway cup" — not a modifier, and guessing intent from
+ * it would put made-up numbers into a costing.
+ */
+export function normaliseModifiers(raw: unknown): string[] {
+  if (raw === null || raw === undefined) return [];
+
+  // Already normalised.
+  if (Array.isArray(raw)) {
+    return raw
+      .map((m) => {
+        if (typeof m === "string") return m;
+        if (m && typeof m === "object") {
+          const o = m as Record<string, unknown>;
+          // POS uses `name`; tolerate `label` in case an array-shaped payload
+          // ever carries the app's key.
+          const v = o.name ?? o.label;
+          return typeof v === "string" ? v : null;
+        }
+        return null;
+      })
+      .filter((s): s is string => !!s);
+  }
+
+  // Customer-app object shape.
+  if (typeof raw === "object") {
+    const sel = (raw as Record<string, unknown>).selections;
+    if (Array.isArray(sel)) {
+      return sel
+        .map((s) => {
+          if (typeof s === "string") return s;
+          if (s && typeof s === "object") {
+            const o = s as Record<string, unknown>;
+            const v = o.label ?? o.name;
+            return typeof v === "string" ? v : null;
+          }
+          return null;
+        })
+        .filter((s): s is string => !!s);
+    }
+  }
+
+  return [];
 }
 
 function toNum(v: number | string | null | undefined): number {
@@ -59,7 +127,7 @@ export function expandSoldLine(
   line: SoldLine,
   recipe: RecipeLine[],
 ): Map<string, number> {
-  const mods = new Set(line.modifiers ?? []);
+  const mods = new Set(normaliseModifiers(line.modifiers));
 
   // 1. Keep only lines whose scope this sale satisfies.
   const inScope = recipe.filter((r) => {

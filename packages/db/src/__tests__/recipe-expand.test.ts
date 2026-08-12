@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { expandSoldLine, expandSoldLines, type RecipeLine } from "../recipe-expand";
+import { expandSoldLine, expandSoldLines, normaliseModifiers, type RecipeLine } from "../recipe-expand";
 
 const BEANS = "prod-beans";
 const MILK = "prod-milk";
@@ -114,5 +114,67 @@ describe("expandSoldLines", () => {
     expect(total.get(SYRUP)).toBe(10 * 17 + 4 * 8 + 2 * 17); // 170 + 32 + 34
     expect(total.get(MILK)).toBe(14 * 150); // the 2 oat drinks excluded
     expect(total.get(OAT)).toBe(2 * 150);
+  });
+});
+
+describe("normaliseModifiers — one reader for both channels", () => {
+  it("reads the POS shape: array of {name}", () => {
+    expect(normaliseModifiers([{ name: "Iced" }, { name: "Oatmilk" }])).toEqual(["Iced", "Oatmilk"]);
+  });
+
+  it("reads the customer-app shape: {selections:[{label}]}", () => {
+    // Table-QR dine-in and pickup. Same vocabulary, different shape.
+    expect(
+      normaliseModifiers({
+        selections: [
+          { label: "Iced", groupName: "Temperature", priceDelta: 1 },
+          { label: "Extra Shot", groupName: "Add Ons" },
+        ],
+        specialInstructions: "less ice",
+      }),
+    ).toEqual(["Iced", "Extra Shot"]);
+  });
+
+  it("ignores specialInstructions — it is free text, not a modifier", () => {
+    // "less sweet" / "takeaway cup" / "no sugar" are notes to the barista.
+    // Guessing ingredients from them would invent numbers.
+    expect(normaliseModifiers({ selections: [], specialInstructions: "Cold" })).toEqual([]);
+  });
+
+  it("returns empty for null, undefined and empty payloads", () => {
+    for (const v of [null, undefined, [], {}, { selections: [] }, "nonsense", 42]) {
+      expect(normaliseModifiers(v)).toEqual([]);
+    }
+  });
+
+  it("tolerates plain strings and the other channel's key", () => {
+    expect(normaliseModifiers(["Iced"])).toEqual(["Iced"]);
+    expect(normaliseModifiers([{ label: "Hot" }])).toEqual(["Hot"]);
+    expect(normaliseModifiers({ selections: [{ name: "Hot" }] })).toEqual(["Hot"]);
+  });
+
+  it("drops entries with no readable name rather than emitting junk", () => {
+    expect(normaliseModifiers([{ price: 1 }, { name: "Hot" }, null])).toEqual(["Hot"]);
+  });
+});
+
+describe("expandSoldLine — accepts raw modifiers from either channel", () => {
+  it("scopes an app-shaped line the same as a POS-shaped one", () => {
+    const pos = expandSoldLine({ units: 1, modifiers: [{ name: "Iced" }] }, CARAMEL_LATTE);
+    const app = expandSoldLine(
+      { units: 1, modifiers: { selections: [{ label: "Iced", groupName: "Temperature" }] } },
+      CARAMEL_LATTE,
+    );
+    expect(app.get(SYRUP)).toBe(17);
+    expect(app.get(SYRUP)).toBe(pos.get(SYRUP));
+  });
+
+  it("substitutes oat milk on an app-shaped line", () => {
+    const r = expandSoldLine(
+      { units: 1, modifiers: { selections: [{ label: "Hot" }, { label: "Oatmilk" }] } },
+      CARAMEL_LATTE,
+    );
+    expect(r.get(OAT)).toBe(150);
+    expect(r.has(MILK)).toBe(false);
   });
 });
