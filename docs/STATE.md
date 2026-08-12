@@ -6,6 +6,34 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-12 — **Finance › Reports now exports PDF, not just CSV — P&L,
+  Balance Sheet, Cash Flow and Trial Balance each get a PDF button beside the
+  CSV one.** Built on branch `claude/pdf-export-tv9r8s`. Renderer is
+  `apps/backoffice/src/lib/finance/statement-pdf.ts` (pdf-lib, already a dep
+  for payslips/PO), driven by a `StatementDoc` model — group/subgroup/line/
+  total rows plus PRE-FORMATTED value strings, so money formatting lives in
+  one place and the PDF can never disagree with the screen. Rendered
+  **client-side on purpose**: the export then carries the user's current view
+  (compare column, by-month columns, expense cost-driver grouping) exactly as
+  the CSV export does; a server-side rebuild would drop them. pdf-lib is
+  behind `await import()` — verified in the production build that the reports
+  page chunk (105KB) contains zero `PDFDocument` references and pdf-lib sits
+  in its own 428KB chunk fetched only on click. A4, auto-landscape past 3
+  value columns, repeating column headers + "(continued)" on page 2+,
+  "Page N of M" footer, and every on-screen caveat (consolidated/outlet scope,
+  imbalance, interco residual, reconciliation gap, COGS methodology gap)
+  travels into the file as a footnote — a PDF gets emailed on without the page
+  around it. Gotchas found the hard way: **standard PDF fonts are WinAnsi**, so
+  `sanitize()` maps the arrows/Δ/em-dashes in our report labels or drawing
+  throws; and the code column must fit `BANK:MARKETPLACE_FEE` (~13pt of width
+  per pt of type size) — the first cut truncated codes to "BANK:MARKETPL...",
+  which is useless since you cannot look one up. Trial Balance deliberately
+  exports ALL rows, ignoring the on-screen filter (a filtered TB does not
+  foot), matching its CSV. Verified visually by rasterising sample PDFs with
+  pdf.js in the pre-installed Chromium — **poppler/pdftoppm is NOT available
+  in the agent container and Chromium's own PDF viewer renders blank
+  headless**; `unpdf/dist/pdfjs.mjs` + `--allow-file-access-from-files` works.
+
 - 2026-08-11 — **"Worst cashflow this month" answered: the CASH BALANCE is
   genuinely the year's low (RM24,151 across the 3 accounts on 10 Aug), but
   August's trading is fine — the buffer was spent over 8 months and August's
