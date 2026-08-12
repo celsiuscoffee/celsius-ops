@@ -122,6 +122,12 @@ export interface PackageLine {
  * A line with no package (or an unknown/invalid factor) is treated as already
  * being in base units — factor 1. Lines for the same product are summed, since
  * they must all land on the single canonical balance row.
+ *
+ * On RECEIPT paths that factor-1 fallback is no longer where an unrecorded
+ * package lands: `guardReceiptPackages` runs upstream and either resolves the
+ * package or rejects the request, so a null here means "this product genuinely
+ * has no packages" rather than "nobody said". Transfers still reach it directly,
+ * which is safe because a transfer debits and credits in the same unit.
  */
 export function baseTotalsFromPackages(
   items: PackageLine[],

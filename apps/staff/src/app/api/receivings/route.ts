@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { baseQtyByProduct } from "@celsius/db";
+import { resolveReceiptPackages } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { adjustStockBalance } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
@@ -142,6 +142,43 @@ export async function POST(req: NextRequest) {
     if (hasShort) receivingStatus = "PARTIAL";
   }
 
+  // Resolve every line to a package BEFORE writing anything. A missing package
+  // used to fall through to factor 1 — "5 cartons" of milk booked as 5 ml — and
+  // that silent guess accounted for 23% of receipts since June. Determined cases
+  // (explicit choice, PO line, sole package, product with no packages at all)
+  // resolve; only a genuinely ambiguous line is refused.
+  const recvLines = (items as Array<{ productId: string; productPackageId?: string }>).map((i) => ({
+    productId: i.productId,
+    productPackageId: i.productPackageId ?? null,
+  }));
+  const pkgOptions = await prisma.productPackage.findMany({
+    where: { productId: { in: [...new Set(recvLines.map((l) => l.productId))] } },
+    select: { id: true, productId: true, packageLabel: true, conversionFactor: true },
+  });
+  const productNames = new Map(
+    (
+      await prisma.product.findMany({
+        where: { id: { in: [...new Set(recvLines.map((l) => l.productId))] } },
+        select: { id: true, name: true },
+      })
+    ).map((p) => [p.id, p.name]),
+  );
+  const resolution = resolveReceiptPackages(recvLines, {
+    packages: pkgOptions.map((p) => ({ ...p, conversionFactor: Number(p.conversionFactor) })),
+    poPackageByProduct: poPkgMap,
+    productNames,
+  });
+  if (!resolution.ok) {
+    return NextResponse.json(
+      {
+        error: "Choose a package for every item before receiving.",
+        details: resolution.errors.map((e) => e.message),
+      },
+      { status: 400 },
+    );
+  }
+  const resolved = resolution.resolved;
+
   const receiving = await prisma.receiving.create({
     data: {
       orderId: orderId || null,
@@ -152,15 +189,14 @@ export async function POST(req: NextRequest) {
       notes: notes || null,
       invoicePhotos: invoicePhotos || [],
       items: {
-        create: items.map((i: { productId: string; productPackageId?: string; orderedQty?: number; receivedQty: number; expiryDate?: string; discrepancyReason?: string }) => ({
+        create: items.map((i: { productId: string; productPackageId?: string; orderedQty?: number; receivedQty: number; expiryDate?: string; discrepancyReason?: string }, idx: number) => ({
           productId: i.productId,
-          // Persist the RESOLVED package: the stock math below already falls
-          // back to the PO line's package (goods arrive in PO package units),
-          // but the row historically stored only the client's explicit value —
-          // which left 71% of ReceivingItems unconvertible for costing
-          // (finance-warehouse check 21). Ad-hoc receivings (no PO) stay null:
-          // their quantities are entered in base units.
-          productPackageId: i.productPackageId ?? poPkgMap.get(i.productId) ?? null,
+          // Persist the RESOLVED package. The row historically stored only the
+          // client's explicit value, which left 71% of ReceivingItems
+          // unconvertible for costing (finance-warehouse check 21) — and left
+          // receiving and counting denominated differently, so no stock
+          // reconciliation could ever tie out.
+          productPackageId: resolved[idx].productPackageId,
           orderedQty: resolveOrderedQty(i),
           receivedQty: i.receivedQty,
           expiryDate: i.expiryDate ? new Date(i.expiryDate) : null,
@@ -170,35 +206,18 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Update stock balances. Goods are received in the PO's package unit
-  // ("12 bottles"), but StockBalance is tracked in base UOM, so multiply each
-  // line by its package conversionFactor before incrementing the canonical
-  // per-product row (productPackageId = null) — same rule as stock counts.
-  const recvPkgIds = [
-    ...new Set(
-      (items as Array<{ productId: string; productPackageId?: string }>)
-        .map((i) => i.productPackageId ?? poPkgMap.get(i.productId) ?? null)
-        .filter((id): id is string => id != null),
-    ),
-  ];
-  const cfMap = new Map<string, number>();
-  if (recvPkgIds.length > 0) {
-    const pkgs = await prisma.productPackage.findMany({
-      where: { id: { in: recvPkgIds } },
-      select: { id: true, conversionFactor: true },
-    });
-    for (const p of pkgs) cfMap.set(p.id, Number(p.conversionFactor));
-  }
-  const baseTotals = baseQtyByProduct(
-    (items as Array<{ productId: string; productPackageId?: string; receivedQty: number }>).map((i) => {
-      const pkgId = i.productPackageId ?? poPkgMap.get(i.productId) ?? null;
-      return {
-        productId: i.productId,
-        countedQty: i.receivedQty,
-        conversionFactor: pkgId ? cfMap.get(pkgId) ?? 1 : 1,
-      };
-    }),
-  );
+  // Update stock balances. Goods are received in a package unit ("12 bottles"),
+  // but StockBalance is tracked in base UOM, so multiply each line by the
+  // factor resolved above before incrementing the canonical per-product row
+  // (productPackageId = null) — same rule as stock counts. Reusing `resolved`
+  // rather than re-deriving keeps the stored row and the balance in step.
+  const baseTotals = new Map<string, number>();
+  (items as Array<{ productId: string; receivedQty: number }>).forEach((i, idx) => {
+    const qty = Number(i.receivedQty);
+    if (!Number.isFinite(qty)) return;
+    const base = qty * resolved[idx].conversionFactor;
+    baseTotals.set(i.productId, (baseTotals.get(i.productId) ?? 0) + base);
+  });
   await Promise.all(
     [...baseTotals].map(([productId, baseQty]) =>
       adjustStockBalance(outletId, productId, baseQty, null),

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
 import { getUserFromHeaders } from "@/lib/auth";
 import { adjustStockByPackages } from "@/lib/stock";
+import { guardReceiptPackages } from "@/lib/inventory/receipt-guard";
 
 export async function PATCH(
   req: NextRequest,
@@ -102,6 +103,13 @@ export async function PATCH(
       return NextResponse.json({ error: "Items are required for ingredient approval" }, { status: 400 });
     }
 
+    // Resolve packages before the order is rewritten below — approving a
+    // claim books stock, and an unresolved package books it at factor 1.
+    const approvalResolved = isIngredient && items?.length
+      ? await guardReceiptPackages(items)
+      : null;
+    if (approvalResolved && !approvalResolved.ok) return approvalResolved.response;
+
     const finalSupplierId = supplierId || order.supplierId;
     const totalAmount = items?.length
       ? items.reduce(
@@ -124,9 +132,12 @@ export async function PATCH(
         ...(items?.length
           ? {
               items: {
-                create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }) => ({
+                create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }, idx: number) => ({
                   productId: i.productId,
-                  productPackageId: i.productPackageId || null,
+                  productPackageId:
+                    (approvalResolved?.ok ? approvalResolved.resolved[idx]?.productPackageId : null) ??
+                    i.productPackageId ??
+                    null,
                   quantity: i.quantity,
                   unitPrice: i.unitPrice,
                   totalPrice: i.quantity * i.unitPrice,
@@ -139,7 +150,8 @@ export async function PATCH(
 
     // Receiving + stock adjustment — INGREDIENT only. Asset/maintenance/other
     // never touch stock.
-    if (isIngredient && items?.length) {
+    if (isIngredient && items?.length && approvalResolved?.ok) {
+      const resolved = approvalResolved.resolved;
       await prisma.receiving.create({
         data: {
           orderId: id,
@@ -150,9 +162,9 @@ export async function PATCH(
           notes: notes ? `Pay & Claim approved: ${notes}` : "Pay & Claim approved",
           invoicePhotos: order.invoices[0]?.photos ?? [],
           items: {
-            create: items.map((i: { productId: string; productPackageId?: string; quantity: number }) => ({
+            create: items.map((i: { productId: string; productPackageId?: string; quantity: number }, idx: number) => ({
               productId: i.productId,
-              productPackageId: i.productPackageId || null,
+              productPackageId: resolved[idx].productPackageId,
               orderedQty: i.quantity,
               receivedQty: i.quantity,
             })),
@@ -160,7 +172,14 @@ export async function PATCH(
         },
       });
 
-      await adjustStockByPackages(order.outletId, items);
+      await adjustStockByPackages(
+        order.outletId,
+        items.map((i: { productId: string; quantity: number }, idx: number) => ({
+          productId: i.productId,
+          productPackageId: resolved[idx].productPackageId,
+          quantity: i.quantity,
+        })),
+      );
     }
 
     const paymentType = isRequestFlow ? "SUPPLIER" : "STAFF_CLAIM";
