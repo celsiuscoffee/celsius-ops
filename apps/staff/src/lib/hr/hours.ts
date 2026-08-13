@@ -78,7 +78,23 @@ export type DerivedHours = {
   overtimeHours: number;
   overtimeType: string | null;
   dayTypeFlags: string[];
+  /** Bracketed time clocked OUTSIDE the rostered window. Pays only if approved. */
+  otEligibleHours: number;
 };
+
+/**
+ * OT accrues in whole 30-minute brackets on either side of the rostered window
+ * (owner rule 2026-08-13 #6). Mirrors apps/backoffice/src/lib/hr/hours.ts — the
+ * staff clock-out writes regular_hours/overtime_hours straight to the log, so
+ * the two copies MUST agree or a tap-out and the backoffice processor disagree
+ * about the same shift.
+ */
+export const OT_BRACKET_MINUTES = 30;
+
+export function otBracketHours(minutes: number): number {
+  if (minutes <= 0) return 0;
+  return (Math.floor(minutes / OT_BRACKET_MINUTES) * OT_BRACKET_MINUTES) / 60;
+}
 
 /**
  * Split a CLOSED shift into paid regular/OT hours with the Malaysian day-type
@@ -87,10 +103,12 @@ export type DerivedHours = {
  * both call it, so an auto-closed log carries the same regular/OT a normal
  * clock-out would (previously the cron wrote total_hours only → 0 paid hours).
  *
- * EARLY CLOCK-IN (owner policy 2026-07-28): when a rostered shift start is known
- * and the staffer clocked in BEFORE it, the pay counter starts at the shift
- * start — waiting around before shift never accrues regular hours or pushes the
- * day over the OT threshold. totalHours still records the actual clocked span.
+ * THE PAID WINDOW (owner rules 2026-08-13): pay runs from the LATER of clock-in
+ * and the rostered start to the EARLIER of clock-out and the rostered end.
+ * Waiting around before shift never accrues hours (the 2026-07-28 early
+ * clock-in policy, now symmetric), and staying past the rostered end no longer
+ * silently becomes payable OT — it is a tail needing approval, counted in
+ * 30-min brackets. totalHours still records the actual clocked span.
  */
 export function deriveHours(opts: {
   clockIn: Date;
@@ -100,8 +118,10 @@ export function deriveHours(opts: {
   isRestDay: boolean;
   /** Rostered shift-start instant (null/undefined = no roster → pay from clock-in). */
   scheduledStart?: Date | null;
+  /** Rostered shift-end instant (null/undefined = no roster → pay to clock-out). */
+  scheduledEnd?: Date | null;
 }): DerivedHours {
-  const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay, scheduledStart } = opts;
+  const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay, scheduledStart, scheduledEnd } = opts;
   const otThreshold = OT_THRESHOLD_HOURS[employmentType] ?? 8;
   const totalHours = Math.round(((clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)) * 100) / 100;
   // Pay-hours start: the later of clock-in and rostered start (never past clock-out).
@@ -109,7 +129,22 @@ export function deriveHours(opts: {
     Math.max(clockIn.getTime(), scheduledStart?.getTime() ?? clockIn.getTime()),
     clockOut.getTime(),
   );
-  const payableHours = Math.round(((clockOut.getTime() - payStartMs) / (1000 * 60 * 60)) * 100) / 100;
+  // Pay-hours end: the earlier of clock-out and rostered end (never before the
+  // pay start — a shift ended early still can't run backwards).
+  let schedEndMs = scheduledEnd?.getTime() ?? clockOut.getTime();
+  if (scheduledStart && scheduledEnd && schedEndMs <= scheduledStart.getTime()) {
+    schedEndMs += 24 * 60 * 60 * 1000; // cross-midnight closing shift
+  }
+  const payEndMs = Math.max(payStartMs, Math.min(clockOut.getTime(), schedEndMs));
+  const payableHours = Math.round(((payEndMs - payStartMs) / (1000 * 60 * 60)) * 100) / 100;
+  // Tails outside the roster, bracketed — reported so the processor can flag
+  // them for approval. Never added to regular or overtime hours here.
+  const otEligibleHours = scheduledStart && scheduledEnd
+    ? Math.round((
+        otBracketHours(Math.max(0, Math.round((scheduledStart.getTime() - clockIn.getTime()) / 60000)))
+        + otBracketHours(Math.max(0, Math.round((clockOut.getTime() - schedEndMs) / 60000)))
+      ) * 100) / 100
+    : 0;
   const workedHours = payableHours - breakHoursFor(employmentType, payableHours);
 
   let regularHours = 0;
@@ -146,5 +181,5 @@ export function deriveHours(opts: {
     regularHours = Math.round(workedHours * 100) / 100;
   }
 
-  return { totalHours, regularHours, overtimeHours, overtimeType, dayTypeFlags };
+  return { totalHours, regularHours, overtimeHours, overtimeType, dayTypeFlags, otEligibleHours };
 }

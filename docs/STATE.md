@@ -6,6 +6,54 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-13 — **PT pay was computed from a daily HOURS CAP, not the rostered
+  window — so it underpaid the punctual and overpaid late arrivals.** Owner
+  restated the basis (rules 1-7): clock in before the shift, clock out after
+  it, only time INSIDE the rostered window is paid, tails outside it are OT
+  needing approval in whole 30-min brackets, and late-in / early-out need
+  sign-off too. Implemented as `paidWindowHours()` in
+  `apps/backoffice/src/lib/hr/hours.ts` (PR #1126, branch
+  `claude/farah-staff-onboarding-99yg3j`), the single basis for BOTH cohorts:
+  `paid = [max(clock_in, sched_start), min(clock_out, sched_end)] - break +
+  approved OT`. Two mechanisms it replaced, both wrong in ways a cap can't
+  see: (1) the 30-min clock rounding from #1119 (`ptRoundedSpanHours`) rounded
+  clock-in UP and clock-out DOWN — but the cap already clipped overstay days,
+  so it ONLY bit staff who clocked closest to their shift. Punctuality cost
+  RM5/shift; overstaying cost nothing. Rounding now survives only on the OT
+  tails (rule 6). (2) **A CAP IS NOT A WINDOW** — it never checked WHEN the
+  hours fell, so a late clock-in was silently offset by an unapproved
+  overstay: Farah 2026-08-05 clocked in 35 min late, left 3h past shift end
+  with no OT request, and was paid the full 7.5h. Two live data bugs fell out
+  of the same query: an UNROSTERED clock-in paid **RM0** (cap = 0 with no
+  shift on the grid — Farah worked 8h on Sun 2026-08-09 for nothing, silently);
+  and Alea's 2026-08-10 log has a **clock-out 4h45m BEFORE its clock-in** and
+  still drew 4.5h from the roster. Both now handled explicitly.
+
+- 2026-08-13 — **FT has no pay grace period; FT are SALARIED, which is a much
+  bigger difference than a grace period.** Checked because the owner believed
+  FT had one. `GRACE_PERIOD_MINUTES = 5` exists in `lib/hr/constants.ts` but is
+  referenced in exactly three places — `roster-attendance/route.ts:50`,
+  `schedules/candidates/route.ts:149`, `pt-performance.ts:77` — all
+  display/statistics. **It is not referenced in either payroll calculator.**
+  The real split is `payroll-calculator.ts:643`: `basePay = isPartTime ?
+  totalRegularHours * hourlyRate : prorateAmount(basicSalary, prorate)`. FT
+  base pay never reads `regular_hours`, so a late FT clock-in docks nothing;
+  proration is calendar/working-days (EA s.60I). FT lateness reaches pay only
+  via the RM200 performance allowance and OT. Consequence: the window rule is
+  SAFE for FT (it only moves regular/overtime hours, i.e. OT eligibility and
+  reporting), but "consistent across FT and PT" cannot mean identical
+  arithmetic — PT are docked minute-by-minute while FT are docked nothing.
+  **Open owner decision: whether PT get a pay-side grace.**
+
+- 2026-08-13 — **`lib/hr/hours.ts` is DUPLICATED between backoffice and staff,
+  and both copies write pay hours.** `apps/staff/.../api/hr/clock/route.ts`
+  writes `regular_hours` / `overtime_hours` straight to `hr_attendance_logs` on
+  tap-out using the STAFF copy of `deriveHours`. Any change to the hours engine
+  must be mirrored or a tap-out and the backoffice processor disagree about the
+  same shift — typecheck will NOT catch it, because the extra option is simply
+  never passed. Four call sites feed `deriveHours`: staff clock route,
+  backoffice attendance route, auto-close cron, attendance-processor.
+
 - 2026-08-12 — **Finance › Reports now exports PDF, not just CSV — P&L,
   Balance Sheet, Cash Flow and Trial Balance each get a PDF button beside the
   CSV one.** Built on branch `claude/pdf-export-tv9r8s`. Renderer is
