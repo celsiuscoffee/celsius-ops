@@ -198,16 +198,41 @@ export default function StockCountPage() {
   // Variance helpers
   function getVariance(item: StockCountItem) {
     if (item.countedQty == null || item.expectedQty == null) return null;
-    return item.countedQty - item.expectedQty;
+    // The two columns are stored in DIFFERENT units: expectedQty is
+    // snapshotted from StockBalance (base UOM), countedQty is what staff keyed
+    // (package units). Subtracting them directly compares grams against packs
+    // — for Fresh Milk that would read 120 − 118,000. Convert the count to base
+    // UOM first, the same way finalize does before writing balances.
+    const cf = item.packageConversion && item.packageConversion > 0 ? item.packageConversion : 1;
+    return item.countedQty * cf - item.expectedQty;
   }
 
-  function formatQty(baseQty: number | null, conversion: number, baseUom: string, pkgLabel: string) {
+  /**
+   * Render a quantity held in BASE UOM (grams, ml, pcs) as packages.
+   * `StockCountItem.expectedQty` is snapshotted from StockBalance, which is
+   * base UOM everywhere, so it needs the divide.
+   */
+  function formatBaseQty(baseQty: number | null, conversion: number, baseUom: string, pkgLabel: string) {
     if (baseQty == null) return "—";
     if (conversion > 0 && conversion !== 1) {
       const pkgQty = Math.round((baseQty / conversion) * 100) / 100;
       return `${pkgQty} ${pkgLabel}`;
     }
     return `${baseQty.toLocaleString()} ${baseUom}`;
+  }
+
+  /**
+   * Render a quantity that is ALREADY in package units — which is what staff
+   * key in and what `StockCountItem.countedQty` stores ("22 packets"). The
+   * finalize step is what multiplies by the conversion factor to reach base
+   * UOM, so dividing here converts a second time: Tamarind's 7 Aug count read
+   * "0.01 Pouch (700g)" for a counted 7 pouches, and 1 pack of Udang showed
+   * as 0. The quantities were always right; only this column was wrong.
+   */
+  function formatPackageQty(pkgQty: number | null, baseUom: string, pkgLabel: string, conversion: number) {
+    if (pkgQty == null) return "—";
+    const rounded = Math.round(pkgQty * 100) / 100;
+    return `${rounded.toLocaleString()} ${conversion > 0 && conversion !== 1 ? pkgLabel : baseUom}`;
   }
 
   if (loading) {
@@ -451,17 +476,17 @@ export default function StockCountPage() {
                               <p className="text-[10px] text-gray-400">{item.sku}</p>
                             </td>
                             <td className="px-3 py-2 text-right font-mono text-gray-500">
-                              {formatQty(item.expectedQty, cf, item.baseUom, uom)}
+                              {formatBaseQty(item.expectedQty, cf, item.baseUom, uom)}
                             </td>
                             <td className="px-3 py-2 text-right font-mono font-medium text-gray-900">
-                              {formatQty(item.countedQty, cf, item.baseUom, uom)}
+                              {formatPackageQty(item.countedQty, item.baseUom, uom, cf)}
                             </td>
                             <td className={`px-3 py-2 text-right font-mono font-bold ${
                               !hasVariance ? "text-green-600" : variance! < 0 ? "text-red-600" : "text-amber-600"
                             }`}>
                               {variance === null ? "—" : variance === 0 ? "✓" : (
                                 <>
-                                  {variance > 0 ? "+" : ""}{formatQty(variance, cf, item.baseUom, uom)}
+                                  {variance > 0 ? "+" : ""}{formatBaseQty(variance, cf, item.baseUom, uom)}
                                 </>
                               )}
                             </td>

@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import type { Prisma } from "@celsius/db";
+import { dueDateIsBelievable } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { detectPaymentFlags, mergeFlags } from "@/lib/inventory/flag-detector";
@@ -57,6 +58,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         return NextResponse.json(
           { error: "Verify the captured invoice amount before recording a payment." },
           { status: 409 },
+        );
+      }
+    }
+
+    // Reject an impossible date pair before anything is written. Either date
+    // can be edited on its own, so correcting an issue date forward can strand
+    // an older due date behind it — a balance falling due before the invoice
+    // exists. Thirty rows are already in that state, and the ageing sweep acts
+    // on it. Checked against whichever side the caller isn't changing.
+    if (issueDate !== undefined || dueDate !== undefined) {
+      const currentDates = await prisma.invoice.findUnique({
+        where: { id },
+        select: { issueDate: true, dueDate: true },
+      });
+      const nextIssue =
+        issueDate !== undefined ? (issueDate ? new Date(issueDate) : new Date()) : currentDates?.issueDate ?? null;
+      const nextDue =
+        dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : currentDates?.dueDate ?? null;
+      if (!dueDateIsBelievable(nextIssue, nextDue)) {
+        return NextResponse.json(
+          {
+            error: `Balance due date (${nextDue?.toISOString().slice(0, 10)}) is before the issue date (${nextIssue
+              ?.toISOString()
+              .slice(0, 10)}). An invoice cannot fall due before it is issued.`,
+            code: "DUE_BEFORE_ISSUE",
+          },
+          { status: 400 },
         );
       }
     }

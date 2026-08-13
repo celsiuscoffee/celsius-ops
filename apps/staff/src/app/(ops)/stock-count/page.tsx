@@ -172,6 +172,25 @@ export default function StockCheckPage() {
   // Finalize-time counterpart: an expired count can still be closed, but only
   // once someone states when the stock was really counted.
   const [stalePrompt, setStalePrompt] = useState<{ daysOpen: number; reason: string } | null>(null);
+
+  // ── Schedule (soft block) ──
+  // Weekly counts belong on Thursday and monthly counts on the month boundary.
+  // `schedule` is read on load so the banner warns before anyone walks the
+  // shelves; `schedulePrompt` is the finalize-time ask for a reason when a
+  // census is being closed outside its window anyway.
+  const [schedule, setSchedule] = useState<{
+    offSchedule: boolean;
+    expectedLabel: string;
+    actualLabel: string;
+  } | null>(null);
+  const [schedulePrompt, setSchedulePrompt] = useState<{
+    expectedLabel: string;
+    actualLabel: string;
+    reason: string;
+  } | null>(null);
+  // Reasons already given for this finalize attempt (stale / off-schedule), so
+  // answering the second prompt doesn't drop the answer to the first.
+  const answeredReasonsRef = useRef<{ staleReason?: string; scheduleReason?: string }>({});
   const expiredActionRef = useRef(expiredAction);
   useEffect(() => { expiredActionRef.current = expiredAction; }, [expiredAction]);
 
@@ -234,7 +253,10 @@ export default function StockCheckPage() {
           daysOpen?: number;
         } | null;
         submittedToday: typeof submittedToday;
+        schedule?: { offSchedule: boolean; expectedLabel: string; actualLabel: string };
       } = await res.json();
+
+      setSchedule(data.schedule ?? null);
 
       // "Start a new count" was chosen but nothing has been keyed yet, so the
       // expired draft is still the newest one on the server. Ignore it —
@@ -368,14 +390,22 @@ export default function StockCheckPage() {
     };
   }, [countId, fetchActive]);
 
-  // Group + filter by frequency
+  // Group + filter by frequency.
+  //
+  // Only the DAILY sheet is a subset — the short list of fast movers the team
+  // walks every morning (owner's call 2026-08-06: beans, milk, ice hot, roti,
+  // udang, cooking cream, duck, lamb). WEEKLY and MONTHLY are both a full
+  // census of every product, so `checkFrequency` decides one thing only:
+  // whether an item appears on the daily sheet.
+  //
+  // Weekly used to list only DAILY+WEEKLY items, which meant the weekly count
+  // could never see the bulk of the store and no shrinkage figure could be
+  // derived from it.
   const groupedData: GroupedArea[] = useMemo(() => {
     const freqKey = frequency.toUpperCase();
     const filtered = freqKey === "DAILY"
       ? products.filter((p) => p.checkFrequency === "DAILY")
-      : freqKey === "WEEKLY"
-        ? products.filter((p) => p.checkFrequency === "DAILY" || p.checkFrequency === "WEEKLY")
-        : products;
+      : products;
     const groups: Record<string, Product[]> = {};
     for (const p of filtered) {
       const area = p.storageArea || "UNCATEGORIZED";
@@ -579,7 +609,7 @@ export default function StockCheckPage() {
   // triggers the stock balance commit. The "Submit" button is named
   // "Finalize" in the UI — anyone at the outlet can tap once 235/235 is
   // reached, even if they didn't start the count.
-  const handleSubmit = async (opts?: { staleReason?: string }) => {
+  const handleSubmit = async (opts?: { staleReason?: string; scheduleReason?: string }) => {
     if (submitting) return;
     if (!user?.outletId) {
       const msg = "No outlet assigned to your account.";
@@ -593,6 +623,13 @@ export default function StockCheckPage() {
       toast.error(msg);
       return;
     }
+    // A count can trip more than one soft block (expired AND off-schedule), and
+    // the prompts are answered one at a time. Accumulate the answers so the
+    // retry carries every reason given so far — sending only the newest would
+    // bounce off the guard already satisfied, and the two prompts would loop.
+    const reasons = { ...answeredReasonsRef.current, ...opts };
+    answeredReasonsRef.current = reasons;
+
     setSubmitting(true);
     setError(null);
     const pendingToastId = toast.loading("Finalizing stock count…");
@@ -600,7 +637,7 @@ export default function StockCheckPage() {
       const res = await fetch(`/api/stock-checks/${countId}/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(opts?.staleReason ? { staleReason: opts.staleReason } : {}),
+        body: JSON.stringify(reasons),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => null);
@@ -612,9 +649,23 @@ export default function StockCheckPage() {
           toast.dismiss(pendingToastId);
           return;
         }
+        // Soft block: a census being closed outside its window. Ask why, then
+        // resend — the count is accepted with the reason recorded, and goes to
+        // a manager rather than auto-approving.
+        if (errBody?.code === "OFF_SCHEDULE") {
+          setSchedulePrompt({
+            expectedLabel: errBody.expectedLabel ?? "its scheduled day",
+            actualLabel: errBody.actualLabel ?? "today",
+            reason: "",
+          });
+          toast.dismiss(pendingToastId);
+          return;
+        }
         throw new Error(errBody?.error || "Finalize failed");
       }
+      answeredReasonsRef.current = {};
       setStalePrompt(null);
+      setSchedulePrompt(null);
       setSubmitted(true);
       setCounts({});
       setCountId(null);
@@ -855,6 +906,22 @@ export default function StockCheckPage() {
         </div>
       )}
 
+      {/* Off-schedule notice — shown before any counting starts, so nobody
+          walks the whole store and only then learns the census wasn't due
+          today. Informational, not a block: the block (with a reason prompt)
+          happens at finalize. */}
+      {schedule?.offSchedule && (
+        <div className="mx-4 mt-3">
+          <div className="mx-auto flex max-w-lg items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              The {frequency} count is due <span className="font-medium">{schedule.expectedLabel}</span>.
+              Today is {schedule.actualLabel} — you can still count, but you&apos;ll be asked why.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Items */}
       <div className="px-4 py-3 pb-28">
         <div className="mx-auto max-w-lg space-y-3">
@@ -1069,6 +1136,49 @@ export default function StockCheckPage() {
                 className="bg-terracotta hover:bg-terracotta-dark"
                 disabled={stalePrompt.reason.trim().length < 3 || submitting}
                 onClick={() => void handleSubmit({ staleReason: stalePrompt.reason.trim() })}
+              >
+                Finalize
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Off-schedule modal ── a census outside its window is allowed, but
+          only on the record. The reason is stamped on the count and a manager
+          reviews it instead of it auto-approving. */}
+      {schedulePrompt && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 sm:rounded-2xl">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-gray-900">
+                  This {frequency} count isn&apos;t due today
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  It&apos;s due {schedulePrompt.expectedLabel}, and today is {schedulePrompt.actualLabel}.
+                  Say why you&apos;re counting now and a manager will review it.
+                </p>
+              </div>
+            </div>
+            <Input
+              className="mt-4"
+              autoFocus
+              placeholder="e.g. audit tomorrow, counting early"
+              value={schedulePrompt.reason}
+              onChange={(e) => setSchedulePrompt({ ...schedulePrompt, reason: e.target.value })}
+            />
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={() => setSchedulePrompt(null)}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-terracotta hover:bg-terracotta-dark"
+                disabled={schedulePrompt.reason.trim().length < 3 || submitting}
+                onClick={() => void handleSubmit({ scheduleReason: schedulePrompt.reason.trim() })}
               >
                 Finalize
               </Button>

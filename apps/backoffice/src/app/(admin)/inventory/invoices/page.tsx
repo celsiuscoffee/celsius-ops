@@ -85,12 +85,18 @@ type Invoice = {
   possiblePop: { id: string; amount: number; referenceNumber: string | null; payeeName: string | null; photoUrl: string | null } | null;
 };
 
+// Must stay in step with InvoiceFlagCode in lib/inventory/flag-detector.ts —
+// a code missing here renders with an undefined title, which is how
+// POP_VERIFIER and NUMBER_FORMAT_MISMATCH have been showing blank.
 type InvoiceFlagCode =
   | "DUPLICATE_PO"
   | "DUPLICATE_PAYMENT_REF"
   | "REF_MATCHES_PAID_INVOICE"
   | "AMOUNT_TOLERANCE_MATCH"
-  | "BANK_MISMATCH";
+  | "BANK_MISMATCH"
+  | "POP_VERIFIER"
+  | "NUMBER_FORMAT_MISMATCH"
+  | "DUE_DATE_BEFORE_ISSUE";
 
 type InvoiceFlag = {
   code: InvoiceFlagCode;
@@ -108,6 +114,9 @@ const FLAG_TITLE: Record<InvoiceFlagCode, string> = {
   REF_MATCHES_PAID_INVOICE: "Reference matches paid invoice",
   AMOUNT_TOLERANCE_MATCH: "Amount matched only within tolerance",
   BANK_MISMATCH: "POP bank ≠ supplier bank",
+  POP_VERIFIER: "AI: payment may have been missed",
+  NUMBER_FORMAT_MISMATCH: "Invoice number ≠ supplier's numbering",
+  DUE_DATE_BEFORE_ISSUE: "Due date read before issue date",
 };
 
 const activeFlags = (inv: Pick<Invoice, "flags">) => (inv.flags ?? []).filter((f) => !f.dismissed);

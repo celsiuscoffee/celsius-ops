@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { autoRefreshOnExpiry, evaluateCountFreshness } from "@celsius/db";
+import { autoRefreshOnExpiry, evaluateCountFreshness, evaluateCountSchedule } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
@@ -111,6 +111,15 @@ export async function GET(req: NextRequest) {
     ? evaluateCountFreshness({ createdAt: active.countDate, now: new Date() })
     : null;
 
+  // Whether today is this frequency's scheduled day. Returned regardless of
+  // whether a count is open so the app can say "the weekly is due Thursday"
+  // BEFORE someone walks 256 shelves — the finalize guard would otherwise be
+  // the first time they hear it.
+  const schedule = evaluateCountSchedule({
+    frequency: frequency as "DAILY" | "WEEKLY" | "MONTHLY",
+    date: new Date(),
+  });
+
   return NextResponse.json({
     active: active
       ? {
@@ -121,5 +130,11 @@ export async function GET(req: NextRequest) {
         }
       : null,
     submittedToday,
+    schedule: {
+      onSchedule: schedule.onSchedule,
+      offSchedule: schedule.offSchedule,
+      expectedLabel: schedule.expectedLabel,
+      actualLabel: schedule.actualLabel,
+    },
   });
 }

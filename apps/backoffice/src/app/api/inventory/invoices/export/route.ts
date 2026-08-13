@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { mytTodayRange } from "@/lib/inventory/myt-today";
+import { syncInvoiceOverdue } from "@/lib/inventory/sync-invoice-overdue";
 
 export const runtime = "nodejs"; // xlsx needs Node
 
@@ -115,10 +116,7 @@ export async function GET(req: NextRequest) {
 
   // Same status rollover the list endpoint runs, so the export reflects
   // the same world view.
-  await prisma.invoice.updateMany({
-    where: { status: "PENDING", dueDate: { lt: todayStart } },
-    data: { status: "OVERDUE" },
-  });
+  await syncInvoiceOverdue();
 
   const invoices = await prisma.invoice.findMany({
     where,
