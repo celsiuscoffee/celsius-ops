@@ -6,6 +6,63 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-13 — **Receiving and stock counting were denominated in DIFFERENT
+  package units, which is why no stock reconciliation ever tied out.** Counts
+  are clean: every product counted since 1 Aug used exactly one package, zero
+  nulls (24 products checked). Receipts are not — **357 of 1,541 ReceivingItems
+  since June (23%) carry no package at all**, and every write path fell through
+  to conversion factor 1, i.e. "assume base UOM". Brioche Sandwich is the clean
+  demonstration: 6 receipts stored as `10pcs Loaf` (=100 pcs) and 6 stored bare
+  (=10 pcs), same supplier, same drop size, ×10 apart. Fresh Milk is worst — 6
+  receiving packages spanning ×1,000 to ×24,000 (CC001 takes 2 L bottles, CC002
+  takes 1 L), 25 bare receipts booked as millilitres, while every count of it
+  used `Bottle (1,000ml)`. 20 products have a receiving package strictly larger
+  than their counting package (ratios 40×, 24×, 20×, 12×, 10×, 6×, 4×, 3×, 2×) —
+  fine *when recorded*, catastrophic when not. Fixed by `resolveReceiptPackage`
+  (`packages/db/src/receipt-package.ts`): receiver's choice → PO line → sole
+  package → base-UOM-only-if-product-has-no-packages → otherwise REJECT. Against
+  those 357 rows: 334 resolve from their own PO line (**the data was already in
+  the database; the backoffice and Pay & Claim routes simply never persisted
+  it**), 13 from a sole package, 10 genuinely ambiguous. Wired into all five
+  ReceivingItem write sites; each stores the resolved package AND derives the
+  balance from the same factor so the two cannot drift. Rejection is per-receipt,
+  not per-line (a receipt is one physical delivery).
+  **Still open:** the 357 historical rows are NOT repaired — that rewrites posted
+  stock and needs owner sign-off. Five open POs will be refused on receipt
+  (CC-CC001-0308 / -0355, CC-CC002-0355 sippy lids; CC-CC001-0338, CC-CC003-0149
+  plastic sampah) because their PO line has no package on a multi-package
+  product, and **`apps/staff-native` receiving sends no `productPackageId` at
+  all** (`CreateReceivingInput` has no such field) — so staff cannot fix it in
+  the app. Set the package on those PO lines, or add a picker to the native
+  screen.
+- 2026-08-13 — **Counting conventions differ by person, and nothing has ever
+  checked them.** `expectedQty` is NULL on all 2,863 StockCountItems since June,
+  so no count was ever compared to anything. Entry style since 1 Aug: Haziq
+  36/38 whole numbers, Firdaus 9/9 whole, Qaisara 6/6 whole, Shairuleen 16/19
+  whole — but **Sherry 8 of 18 items at 2+ decimal places** (56.347 bottles of
+  milk, 0.754 kg of beans; her Home Blend series reads 0.754 → 21.7 → 75.55 kg
+  over three days, which is not a stock curve). CC003's Ameir entered `1.5`
+  packs of Brioche Loaf (=15 pcs) where CC001's Haziq entered `17` (=170 pcs).
+  **Deliveries settle it in Haziq's favour**: CC001 took 7 boxes ×100 = 700 pcs
+  on 10 Aug (counts 390–440 pcs fit); CC003 took 4 boxes = 400 pcs on 29 Jul, so
+  15 pcs does not. Ameir entered pieces-as-packs, under by ~10×.
+  Also found: CC001 7 Aug has BOTH a DAILY count (SUBMITTED, 10 items) and a
+  MONTHLY count (DRAFT, 3 items) carrying identical values — a double-count
+  waiting to post; CC002's 3 Aug WEEKLY count is a DRAFT with items entered from
+  13 July onward (open three weeks); CC001's 7 Aug daily has items stamped 5 Aug.
+- 2026-08-13 — **Migrations `20260810_menu_ingredient_substitution` and
+  `20260810_oatmilk_and_extra_shot_recipes` are APPLIED to production**
+  (owner-approved, applied by hand before merging #1112). `MenuIngredient` gained
+  `replacesProductId` + FK + two CHECK constraints + index; then 32 Oatmilk
+  substitution rows (each mirroring its own menu's fresh-milk dose, verified
+  equal on all 32) and 22 Extra Shot rows at 18 g. Table went 509 → 563 lines.
+  **Ordering lesson — this nearly shipped broken:** the PR could not be merged
+  before the DDL, because `par-calc.ts:173` and `reports/cogs/route.ts:48` call
+  `prisma.menuIngredient.findMany({ include: … })` with no `select`, so Prisma
+  emits every scalar column including `replacesProductId`; against a production
+  table lacking it, par levels and the COGS report 500 on the first request. The
+  other three `menuIngredient` callers use explicit `select` and were immune.
+  **Check for unscoped `include:` queries before merging any additive column.**
 - 2026-08-12 — **Finance › Reports now exports PDF, not just CSV — P&L,
   Balance Sheet, Cash Flow and Trial Balance each get a PDF button beside the
   CSV one.** Built on branch `claude/pdf-export-tv9r8s`. Renderer is
@@ -1710,6 +1767,34 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-08-13 — **PR #1112 merged (`217d365`); both 20260810 migrations applied to
+  prod.** Next session picks up the stock-count/BOM thread here, in order:
+  1. **`ingredient-variance` still reads the DEAD `SalesTransaction` table**
+     (stopped 2026-04-11) — point it at `pos_orders`+`pos_order_items` AND
+     `orders`+`order_items`, expanding through `expandSoldLine` so modifiers,
+     service mode and the new oat substitution are honoured. Until then the
+     variance report is measuring nothing. The customer app is 12–20% of
+     ingredient demand, so any BOM check that omits it is wrong.
+  2. **313 kg of Collective Project bean POs (RM29,440, RM23,802 already paid)
+     sit at AWAITING_DELIVERY with ZERO receiving records**, 16 Jun → 12 Aug.
+     Until this is resolved the bean variance is arithmetically meaningless —
+     7 of 14 outlet/product rows in the last comparison were impossible for
+     exactly this reason.
+  3. Owner decisions owed: repair the 357 package-less historical receipts
+     (334 recoverable from their PO line); the five open POs that will now be
+     refused on receipt; whether native receiving gets a package picker.
+  4. Recipe rows still missing: `Extra Syrup`, `Celsius Secret Sauce`,
+     `Extra Sambal`; confirm whether `Packaging` is covered by the 60
+     TAKEAWAY-scoped lines. 59 products received since June have no BOM at all
+     (Oatmilk 115 L — now partly addressed, Rice 175 kg, Chicken Chop 108 kg…).
+     Missing menu record for "Biscoff Batik Indulgence" (179 units sold).
+  5. Still-unclosed AP items: 29 invoices with due date ≤ issue date; the two
+     Jijus POPs (IV5285/IV5286 vs IV5327/IV5373 — genuinely ambiguous, reference
+     text and payment date disagree; left untouched deliberately).
+  Also unresolved from the 6 Aug daily-list work: both outlets count **Crispy
+  Prawn** daily but it is not on the 9-product daily list, while **Smoked Duck**
+  and **Pull Lamb** are on the list and appear in no count.
 
 - 2026-08-03 (late) — **HR module-level QA review DONE (3-agent sweep, findings
   reported to owner, no fixes applied yet).** Top confirmed findings, ranked:
