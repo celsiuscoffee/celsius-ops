@@ -4,6 +4,7 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds } from "@/lib/hr/scope";
 import { breakHoursFor, mytDateString, ptRoundedSpanHours } from "@/lib/hr/hours";
+import { ptLogState } from "@/lib/hr/pt-log-state";
 import { ptRateForDate } from "@/lib/hr/pt-rate";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ type LogRow = {
   id: string; user_id: string; outlet_id: string | null;
   clock_in: string; clock_out: string | null; total_hours: number | string | null;
   ai_status: string | null; ai_flags: string[] | null; final_status: string | null;
+  reviewed_by: string | null;
 };
 
 export async function GET(req: NextRequest) {
@@ -60,7 +62,7 @@ export async function GET(req: NextRequest) {
 
   let logQuery = hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("id, user_id, outlet_id, clock_in, clock_out, total_hours, ai_status, ai_flags, final_status")
+    .select("id, user_id, outlet_id, clock_in, clock_out, total_hours, ai_status, ai_flags, final_status, reviewed_by")
     .in("user_id", ptIds)
     .gte("clock_in", `${weekStart}T00:00:00+08:00`)
     .lte("clock_in", `${weekEndStr}T23:59:59+08:00`)
@@ -130,10 +132,10 @@ export async function GET(req: NextRequest) {
     const paid = Math.round(Math.min(worked, capLeft.get(dayKey)!) * 100) / 100;
     capLeft.set(dayKey, Math.max(0, capLeft.get(dayKey)! - paid));
     const rate = ptRateForDate(prof, dateStr, holidaySet.has(dateStr));
-    const confirmed = l.final_status === "approved" || l.final_status === "adjusted";
-    const state = l.final_status === "rejected" ? "rejected"
-      : confirmed ? "confirmed"
-      : (l.ai_status === "flagged" ? "flagged" : "pending");
+    // "Confirmed" means a HUMAN signed off — see lib/hr/pt-log-state.ts. Reading
+    // final_status alone showed AI- and cron-approved logs as confirmed on the
+    // manager's own sign-off screen.
+    const state = ptLogState(l);
     (byUser.get(l.user_id) ?? byUser.set(l.user_id, []).get(l.user_id)!).push({
       id: l.id, date: dateStr,
       clock_in: l.clock_in, clock_out: l.clock_out,
@@ -157,7 +159,10 @@ export async function GET(req: NextRequest) {
       total_pay: Math.round(payable.reduce((s, r) => s + (r.pay as number), 0) * 100) / 100,
       pending: rows.filter((r) => r.state === "pending" || r.state === "flagged").length,
     };
-  }).sort((a, b) => b.pending - a.pending || a.name.localeCompare(b.name));
+    // Sort by name ONLY. Sorting by outstanding count moved a part-timer down the
+    // page the instant their last shift was confirmed, so the list reshuffled
+    // under the manager on every click ("nama lari atas bawah, jenuh scroll").
+  }).sort((a, b) => a.name.localeCompare(b.name));
 
   return NextResponse.json({ pts, week_start: weekStart, week_end: weekEndStr });
 }
