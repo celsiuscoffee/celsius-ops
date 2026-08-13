@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds } from "@/lib/hr/scope";
-import { breakHoursFor, mytDateString, ptRoundedSpanHours } from "@/lib/hr/hours";
+import { mytDateString, mytInstant, paidWindowHours, pickShiftWindow, type ShiftWindow } from "@/lib/hr/hours";
 import { ptLogState } from "@/lib/hr/pt-log-state";
 import { ptRateForDate } from "@/lib/hr/pt-rate";
 
@@ -77,23 +77,23 @@ export async function GET(req: NextRequest) {
     .from("hr_public_holidays").select("date").gte("date", weekStart).lte("date", weekEndStr);
   const holidaySet = new Set(((hols ?? []) as Array<{ date: string }>).map((h) => h.date));
 
-  // Pay cap inputs — same rule the weekly payroll calculator applies:
-  // paid = min(clocked, rostered net hours that day + approved OT).
+  // Pay basis inputs — same rule the weekly payroll calculator applies:
+  // paid = the clocked span's overlap with the rostered window, + approved OT.
   const { data: rosterRows } = await hrSupabaseAdmin
     .from("hr_schedule_shifts")
     .select("user_id, shift_date, start_time, end_time, break_minutes, notes")
     .in("user_id", ptIds)
     .gte("shift_date", weekStart)
     .lte("shift_date", weekEndStr);
-  const schedByUserDay = new Map<string, number>();
+  const schedByUserDay = new Map<string, ShiftWindow[]>();
   for (const s of (rosterRows ?? []) as Array<{ user_id: string; shift_date: string; start_time: string; end_time: string; break_minutes: number | null; notes: string | null }>) {
     if (s.start_time?.slice(0, 5) === "00:00") continue;
     if (s.notes === "pt_suggestion") continue;
-    const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-    let mins = toMin(s.end_time) - toMin(s.start_time);
-    if (mins < 0) mins += 24 * 60;
+    const start = mytInstant(s.shift_date, s.start_time);
+    const end = mytInstant(s.shift_date, s.end_time);
+    if (!start || !end) continue;
     const key = `${s.user_id}:${s.shift_date}`;
-    schedByUserDay.set(key, (schedByUserDay.get(key) ?? 0) + Math.max(0, mins / 60 - (s.break_minutes ?? 0) / 60));
+    schedByUserDay.set(key, [...(schedByUserDay.get(key) ?? []), { start, end }]);
   }
   const { data: otRows } = await hrSupabaseAdmin
     .from("hr_overtime_requests")
@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
     const key = `${o.user_id}:${o.date}`;
     otByUserDay.set(key, (otByUserDay.get(key) ?? 0) + (Number(o.hours_approved) || 0));
   }
-  const capLeft = new Map<string, number>();
+  const otLeft = new Map<string, number>();
 
   const userIds = [...new Set(logs.map((l) => l.user_id))];
   const outletIds = [...new Set(logs.map((l) => l.outlet_id).filter(Boolean))] as string[];
@@ -121,16 +121,25 @@ export async function GET(req: NextRequest) {
   const byUser = new Map<string, Array<Record<string, unknown>>>();
   for (const l of logs) {
     const prof = profMap.get(l.user_id)!;
-    // Paid span = clock times rounded to the lowest 30 min (owner rule
-    // 2026-08-07) — must mirror payroll-calculator-weekly so this preview
+    // Paid span = the clocked span's overlap with the rostered window (owner
+    // rule 2026-08-13) — must mirror payroll-calculator-weekly so this preview
     // equals what the run pays.
-    const totalH = ptRoundedSpanHours(l.clock_in, l.clock_out as string);
-    const worked = Math.max(0, Math.round((totalH - breakHoursFor("part_time", totalH)) * 100) / 100);
     const dateStr = mytDateString(l.clock_in);
     const dayKey = `${l.user_id}:${dateStr}`;
-    if (!capLeft.has(dayKey)) capLeft.set(dayKey, (schedByUserDay.get(dayKey) ?? 0) + (otByUserDay.get(dayKey) ?? 0));
-    const paid = Math.round(Math.min(worked, capLeft.get(dayKey)!) * 100) / 100;
-    capLeft.set(dayKey, Math.max(0, capLeft.get(dayKey)! - paid));
+    const window = pickShiftWindow(schedByUserDay.get(dayKey) ?? [], l.clock_in, l.clock_out as string);
+    const w = paidWindowHours({
+      clockIn: l.clock_in, clockOut: l.clock_out as string,
+      scheduledStart: window?.start ?? null,
+      scheduledEnd: window?.end ?? null,
+      employmentType: "part_time",
+    });
+    if (!otLeft.has(dayKey)) otLeft.set(dayKey, otByUserDay.get(dayKey) ?? 0);
+    const otPaid = Math.round(Math.min(w.otEligibleHours, otLeft.get(dayKey)!) * 100) / 100;
+    otLeft.set(dayKey, Math.max(0, otLeft.get(dayKey)! - otPaid));
+    const worked = Math.round(
+      (((new Date(l.clock_out as string).getTime() - new Date(l.clock_in).getTime()) / (1000 * 60 * 60)) - w.breakHours) * 100,
+    ) / 100;
+    const paid = Math.round((w.paidHours + otPaid) * 100) / 100;
     const rate = ptRateForDate(prof, dateStr, holidaySet.has(dateStr));
     // "Confirmed" means a HUMAN signed off — see lib/hr/pt-log-state.ts. Reading
     // final_status alone showed AI- and cron-approved logs as confirmed on the
@@ -140,6 +149,12 @@ export async function GET(req: NextRequest) {
       id: l.id, date: dateStr,
       clock_in: l.clock_in, clock_out: l.clock_out,
       worked_hours: worked, paid_hours: paid, capped: paid < worked,
+      // Why the paid figure differs from the clocked one — the manager needs to
+      // see this to confirm honestly, and it's what an unapproved OT tail looks
+      // like on the screen.
+      late_minutes: w.lateMinutes, early_leave_minutes: w.earlyLeaveMinutes,
+      ot_eligible_hours: w.otEligibleHours, ot_paid_hours: otPaid,
+      unrostered: w.unrostered, needs_signoff: w.needsSignOff || w.unrostered,
       rate, pay: Math.round(paid * rate * 100) / 100,
       is_weekend_rate: rate !== (Number(prof.hourly_rate) || 0) && !holidaySet.has(dateStr),
       is_holiday: holidaySet.has(dateStr),

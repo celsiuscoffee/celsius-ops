@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveHours, ptRoundedSpanHours } from "./hours";
+import { deriveHours, otBracketHours, paidWindowHours, pickShiftWindow } from "./hours";
 
 const at = (iso: string) => new Date(iso);
 const base = { employmentType: "full_time", isPublicHoliday: false, isRestDay: false };
@@ -62,32 +62,132 @@ describe("deriveHours", () => {
   });
 });
 
-// Owner rule 2026-08-07 (clarified same day): PT payment computes hours from
-// clock times rounded to the LOWEST 30 minutes ("if clock out 8.35, calculate
-// 8.30") — each end rounds toward the inside of the shift.
-describe("ptRoundedSpanHours", () => {
-  it("floors the clock-out just past the half-hour (20:35 → 20:30)", () => {
-    // MYT 12:00 in, 20:35 out = 04:00Z–12:35Z → pays to 20:30 → 8.5h span
-    expect(ptRoundedSpanHours("2026-08-02T04:00:00Z", "2026-08-02T12:35:00Z")).toBe(8.5);
+// Owner rules 2026-08-13 — the PAID WINDOW. Pay is the overlap of the clocked
+// span with the rostered shift; the tails outside it are OT that needs approval
+// and only counts in 30-min brackets. MYT is UTC+8 throughout.
+describe("paidWindowHours", () => {
+  const pt = { employmentType: "part_time" as const };
+  const myt = (iso: string) => new Date(iso);
+
+  it("pays to the exact minute inside the window — punctuality is no longer penalised", () => {
+    // Rostered 15:30–23:30, clocked exactly. Old rule paid 7.0 here; the shift
+    // is 8h gross, 7.5h net of the break.
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-04T07:30:00Z"), clockOut: myt("2026-08-04T15:30:00Z"),
+      scheduledStart: myt("2026-08-04T07:30:00Z"), scheduledEnd: myt("2026-08-04T15:30:00Z"),
+    });
+    expect(w.paidHours).toBe(7.5);
+    expect(w.needsSignOff).toBe(false);
   });
 
-  it("floors the clock-out even when nearer the next half-hour (20:50 → 20:30)", () => {
-    expect(ptRoundedSpanHours("2026-08-02T04:00:00Z", "2026-08-02T12:50:00Z")).toBe(8.5);
+  it("Nurfarah 2026-08-04: 12 min early in, 12 min early out → 7.3h, not 7.0h", () => {
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-04T07:18:00Z"), clockOut: myt("2026-08-04T15:18:00Z"),
+      scheduledStart: myt("2026-08-04T07:30:00Z"), scheduledEnd: myt("2026-08-04T15:30:00Z"),
+    });
+    expect(w.paidHours).toBe(7.3);      // 15:30–23:18 = 7.8h, less the 0.5h break
+    expect(w.earlyInMinutes).toBe(12);
+    expect(w.earlyLeaveMinutes).toBe(12);
+    expect(w.otEligibleHours).toBe(0);  // 12 min doesn't fill a 30-min bracket
+    expect(w.needsSignOff).toBe(true);  // left early — a manager adjudicates
   });
 
-  it("rounds the clock-in UP to the next half-hour (09:58 → 10:00, 15:18 → 15:30)", () => {
-    expect(ptRoundedSpanHours("2026-08-02T01:58:31Z", "2026-08-02T10:00:00Z")).toBe(8);
-    expect(ptRoundedSpanHours("2026-08-02T07:18:00Z", "2026-08-02T15:10:00Z")).toBe(7.5);
+  it("late clock-in is NOT offset by staying late (Farah 2026-08-13)", () => {
+    // Rostered 07:30–15:30, clocked 07:55–16:42. The old daily cap paid this
+    // 7.5h in full; the window pays 07:55→15:30 only.
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-12T23:55:00Z"), clockOut: myt("2026-08-13T08:42:00Z"),
+      scheduledStart: myt("2026-08-12T23:30:00Z"), scheduledEnd: myt("2026-08-13T07:30:00Z"),
+    });
+    expect(w.paidHours).toBe(7.08);
+    expect(w.lateMinutes).toBe(25);
+    expect(w.overstayMinutes).toBe(72);
+    expect(w.otEligibleHours).toBe(1);  // 72 min → two whole brackets
+    expect(w.needsSignOff).toBe(true);
   });
 
-  it("never pays more than the clocked span (09:40 in pays from 10:00)", () => {
-    // 09:40–14:18 MYT clocked 4.63h → pays 10:00–14:00 = 4h
-    expect(ptRoundedSpanHours("2026-08-02T01:40:00Z", "2026-08-02T06:18:00Z")).toBe(4);
+  it("counts an early-in OT tail the same as a late-out one (rule 5)", () => {
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-04T06:35:00Z"), clockOut: myt("2026-08-04T15:30:00Z"),
+      scheduledStart: myt("2026-08-04T07:30:00Z"), scheduledEnd: myt("2026-08-04T15:30:00Z"),
+    });
+    expect(w.earlyInMinutes).toBe(55);
+    expect(w.otEligibleHours).toBe(0.5); // 55 min → one bracket, not 55 min
+    expect(w.paidHours).toBe(7.5);       // the tail itself is never in base pay
   });
 
-  it("exact half-hour boundaries are unchanged, and a tiny stub rounds to zero", () => {
-    expect(ptRoundedSpanHours("2026-07-30T07:30:00Z", "2026-07-30T15:00:00Z")).toBe(7.5);
-    // 15:20–15:25 rounds inward past itself → 0h, never negative
-    expect(ptRoundedSpanHours("2026-07-30T07:20:00Z", "2026-07-30T07:25:00Z")).toBe(0);
+  it("an unrostered clock-in is a cover shift — paid, and forced to a manager", () => {
+    // Farah, Sun 2026-08-09, 15:20–23:35 with no shift on the grid. The daily
+    // cap paid RM0 for this; it now pays the clocked span less the break.
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-09T07:20:00Z"), clockOut: myt("2026-08-09T15:35:00Z"),
+      scheduledStart: null, scheduledEnd: null,
+    });
+    expect(w.unrostered).toBe(true);
+    expect(w.paidHours).toBe(7.75);
+    expect(w.needsSignOff).toBe(true);
+  });
+
+  it("pays nothing when the timestamps are impossible (Alea 2026-08-10)", () => {
+    // clock_out 4h45m BEFORE clock_in. The cap paid 4.5h out of the roster.
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-10T15:30:00Z"), clockOut: myt("2026-08-10T10:45:00Z"),
+      scheduledStart: myt("2026-08-10T10:30:00Z"), scheduledEnd: myt("2026-08-10T15:30:00Z"),
+    });
+    expect(w.paidHours).toBe(0);
+    expect(w.needsSignOff).toBe(true);
+  });
+
+  it("handles a cross-midnight shift (22:00–02:00)", () => {
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-04T13:50:00Z"), clockOut: myt("2026-08-04T18:10:00Z"),
+      scheduledStart: myt("2026-08-04T14:00:00Z"),
+      scheduledEnd: myt("2026-08-03T18:00:00Z"), // 02:00 MYT built off the shift's own date
+    });
+    expect(w.paidHours).toBe(4);
+    expect(w.needsSignOff).toBe(false);
+  });
+
+  it("ignores drift inside the 5-minute grace so the queue stays usable", () => {
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-04T07:32:00Z"), clockOut: myt("2026-08-04T15:27:00Z"),
+      scheduledStart: myt("2026-08-04T07:30:00Z"), scheduledEnd: myt("2026-08-04T15:30:00Z"),
+    });
+    expect(w.needsSignOff).toBe(false);
+    expect(w.paidHours).toBe(7.42); // still docked to the minute
+  });
+});
+
+describe("otBracketHours", () => {
+  it("counts only whole 30-minute brackets (rule 6)", () => {
+    expect(otBracketHours(0)).toBe(0);
+    expect(otBracketHours(25)).toBe(0);
+    expect(otBracketHours(30)).toBe(0.5);
+    expect(otBracketHours(59)).toBe(0.5);
+    expect(otBracketHours(65)).toBe(1);
+  });
+});
+
+describe("pickShiftWindow", () => {
+  it("matches an evening log to the evening half of a split shift", () => {
+    const morning = { start: new Date("2026-08-04T23:30:00Z"), end: new Date("2026-08-05T03:30:00Z") };
+    const evening = { start: new Date("2026-08-05T09:00:00Z"), end: new Date("2026-08-05T13:00:00Z") };
+    const picked = pickShiftWindow(
+      [morning, evening],
+      new Date("2026-08-05T08:55:00Z"), new Date("2026-08-05T13:05:00Z"),
+    );
+    expect(picked).toBe(evening);
+  });
+
+  it("returns null when the day has no roster", () => {
+    expect(pickShiftWindow([], new Date(), new Date())).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { hrSupabaseAdmin } from "../supabase";
-import { breakHoursFor, mytDateString, ptRoundedSpanHours } from "../hours";
+import { mytDateString, mytInstant, paidWindowHours, pickShiftWindow, type ShiftWindow } from "../hours";
 import { ptRateForDate } from "../pt-rate";
 
 type WeeklyPayrollResult = {
@@ -19,20 +19,24 @@ type WeeklyPayrollResult = {
  * if the shift is over 4 hours), so pay reflects worked time, not gross clock time.
  *
  * Pay basis per PT for the Mon–Sun (MYT) week (owner rules 2026-07-18/19,
- * rounding 2026-08-07):
- *   totalHours(log)  = clock_out − clock_in, with EACH clock time rounded to
- *                      the LOWEST 30 min first (out floors: 20:35 and 20:50
- *                      both pay to 20:30; in rounds up: 09:58 pays from
- *                      10:00) — see ptRoundedSpanHours
- *   workedHours(log) = totalHours(log) − break
- *   paidHours(log)   = min(workedHours, SCHEDULED net hours that day + approved OT)
- *                      — clocking in early / out late doesn't pay beyond the
- *                      roster unless an OT request was approved for that date;
- *                      a day with NO rostered shift and no OT pays 0 (add the
- *                      shift to the grid or approve OT to pay a cover).
+ * PAID WINDOW 2026-08-13):
+ *   window(log)      = [ max(clock_in, rostered start) , min(clock_out, rostered end) ]
+ *                      — only time INSIDE the rostered shift counts. Arriving
+ *                      late or leaving early trims the window from that side;
+ *                      clocking in early or staying late adds nothing by itself.
+ *   paidHours(log)   = window − break + approved OT
+ *   OT               = the tails OUTSIDE the window (early in / late out), each
+ *                      floored to whole 30-min brackets, and paid only against
+ *                      an approved hr_overtime_requests row for that date.
+ *   no roster        = COVER shift: pay the clocked span − break, flagged for a
+ *                      manager to confirm (it used to pay 0 and say nothing).
  *   rate(log)        = weekday base Mon–Fri · hourly_rate_weekend Sat/Sun ·
  *                      2× the day's rate on a gazetted public holiday
  *   gross            = Σ paidHours(log) × rate(log)
+ *
+ * The 30-min clock rounding this replaced (2026-08-07) is gone from the base
+ * span: with the roster bounding the window, rounding only deducted twice, and
+ * only from whoever clocked closest to their shift.
  * Only CLOSED logs count (need a clock-out to have hours); REJECTED logs are
  * excluded (a manager marked them bogus). Open/still-clocked-in logs are skipped.
  *
@@ -78,24 +82,26 @@ export async function calculateWeeklyPayroll(
   }
   const ptIds = profiles.map((p: { user_id: string }) => p.user_id);
 
-  // Rostered net hours per (user, day) — the pay cap. Rest-day markers and
-  // unconfirmed AI suggestions don't count as scheduled.
+  // Rostered WINDOWS per (user, day) — the pay basis (owner rule 2026-08-13:
+  // only time inside the rostered window is paid). Rest-day markers and
+  // unconfirmed AI suggestions aren't shifts. The roster table is the authority
+  // rather than the log's clock-in stamp, so a manager who adds a missing shift
+  // after the fact fixes that day's pay.
   const { data: rosterRows } = await hrSupabaseAdmin
     .from("hr_schedule_shifts")
     .select("user_id, shift_date, start_time, end_time, break_minutes, notes")
     .in("user_id", ptIds)
     .gte("shift_date", periodStartStr)
     .lte("shift_date", periodEndStr);
-  const schedByUserDay = new Map<string, number>();
+  const schedByUserDay = new Map<string, ShiftWindow[]>();
   for (const s of (rosterRows ?? []) as Array<{ user_id: string; shift_date: string; start_time: string; end_time: string; break_minutes: number | null; notes: string | null }>) {
     if (s.start_time?.slice(0, 5) === "00:00") continue;
     if (s.notes === "pt_suggestion") continue;
-    const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-    let mins = toMin(s.end_time) - toMin(s.start_time);
-    if (mins < 0) mins += 24 * 60; // overnight closing
-    const net = Math.max(0, mins / 60 - (s.break_minutes ?? 0) / 60);
+    const start = mytInstant(s.shift_date, s.start_time);
+    const end = mytInstant(s.shift_date, s.end_time);
+    if (!start || !end) continue;
     const key = `${s.user_id}:${s.shift_date}`;
-    schedByUserDay.set(key, (schedByUserDay.get(key) ?? 0) + net);
+    schedByUserDay.set(key, [...(schedByUserDay.get(key) ?? []), { start, end }]);
   }
 
   // Approved OT per (user, day) — the only way past the schedule cap
@@ -182,44 +188,57 @@ export async function calculateWeeklyPayroll(
     }
 
     // Day-aware pay: each log is priced at ITS date's rate (weekday base /
-    // weekend rate / 2× on a public holiday) and CAPPED at that day's
-    // rostered net hours + approved OT — clock drift doesn't inflate pay.
+    // weekend rate / 2× on a public holiday) over the PAID WINDOW — the overlap
+    // of the clocked span with the rostered shift (owner rule 2026-08-13).
+    // Overstay past the rostered end pays only against an approved OT request.
     let workedHours = 0;
     let paidHours = 0;
-    let cappedHours = 0;
+    let unpaidHours = 0;
     let gross = 0;
     const logDetails: Array<{ date: string; hours: number; paid_hours: number; capped: boolean; rate: number; start: string; end: string }> = [];
-    // A day's cap is consumed across multiple logs on the same day (split shifts).
-    const capLeft = new Map<string, number>();
+    // A day's approved-OT budget is shared across that day's logs (split shifts).
+    const otLeft = new Map<string, number>();
     for (const l of userLogs) {
       const clockIn = new Date(l.clock_in);
       const clockOut = new Date(l.clock_out as string);
-      // Paid span = clock times rounded to the lowest 30 min (owner rule
-      // 2026-08-07), not the raw stamps stored on the log.
-      const totalH = ptRoundedSpanHours(clockIn, clockOut);
-      const worked = Math.max(0, Math.round((totalH - breakHoursFor("part_time", totalH)) * 100) / 100);
       const dateStr = mytDateString(l.clock_in);
       const dayKey = `${profile.user_id}:${dateStr}`;
-      if (!capLeft.has(dayKey)) {
-        capLeft.set(dayKey, (schedByUserDay.get(dayKey) ?? 0) + (otByUserDay.get(dayKey) ?? 0));
-      }
-      const paid = Math.round(Math.min(worked, capLeft.get(dayKey)!) * 100) / 100;
-      capLeft.set(dayKey, Math.max(0, capLeft.get(dayKey)! - paid));
+      const window = pickShiftWindow(schedByUserDay.get(dayKey) ?? [], clockIn, clockOut);
+      const w = paidWindowHours({
+        clockIn, clockOut,
+        scheduledStart: window?.start ?? null,
+        scheduledEnd: window?.end ?? null,
+        employmentType: "part_time",
+      });
+
+      // Time outside the window — early in (rule 5) or late out (rule 4) — is
+      // unpaid unless an approved OT request covers it, and only counts in whole
+      // 30-min brackets (rule 6).
+      if (!otLeft.has(dayKey)) otLeft.set(dayKey, otByUserDay.get(dayKey) ?? 0);
+      const otPaid = Math.round(Math.min(w.otEligibleHours, otLeft.get(dayKey)!) * 100) / 100;
+      otLeft.set(dayKey, Math.max(0, otLeft.get(dayKey)! - otPaid));
+
+      const paid = Math.round((w.paidHours + otPaid) * 100) / 100;
+      // What they were on the clock for, minus the break — the yardstick the
+      // "unpaid" note compares against.
+      const worked = Math.round(
+        ((clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)) * 100,
+      ) / 100;
       const rate = ptRateForDate(profile, dateStr, holidaySet.has(dateStr));
       workedHours += worked;
       paidHours += paid;
-      cappedHours += worked - paid;
+      unpaidHours += Math.max(0, worked - w.breakHours - paid);
       gross += paid * rate;
-      logDetails.push({ date: dateStr, hours: worked, paid_hours: paid, capped: paid < worked, rate, start: clockIn.toISOString(), end: clockOut.toISOString() });
+      logDetails.push({ date: dateStr, hours: worked, paid_hours: paid, capped: paid < worked - w.breakHours, rate, start: clockIn.toISOString(), end: clockOut.toISOString() });
     }
     workedHours = Math.round(workedHours * 100) / 100;
     paidHours = Math.round(paidHours * 100) / 100;
-    cappedHours = Math.round(cappedHours * 100) / 100;
+    unpaidHours = Math.round(unpaidHours * 100) / 100;
     gross = Math.round(gross * 100) / 100;
     totalGross += gross;
-    if (cappedHours > 0.01) {
+    if (unpaidHours > 0.01) {
       notes.push(
-        `Capped ${cappedHours}h for ${profile.user_id.slice(0, 8)} (clocked ${workedHours}h vs schedule+OT ${paidHours}h) — add the shift to the roster to pay the difference (OT is FT-only; legacy approved PT OT still lifts the cap).`,
+        `${profile.user_id.slice(0, 8)}: ${unpaidHours}h clocked outside the rostered window (clocked ${workedHours}h, paid ${paidHours}h) — early/late clock drift is unpaid; approve an OT request or fix the roster to pay it.`,
       );
     }
 
@@ -250,10 +269,10 @@ export async function calculateWeeklyPayroll(
         hourly_rate_weekend: profile.hourly_rate_weekend != null ? Number(profile.hourly_rate_weekend) : null,
         employment_type: "part_time",
         cycle: "weekly",
-        basis: "clocked, day-aware rate (weekday/weekend/PH 2x), capped at schedule + approved OT",
+        basis: "paid window (clocked ∩ rostered shift), day-aware rate (weekday/weekend/PH 2x), + approved OT in 30-min brackets",
         worked_hours: workedHours,
         paid_hours: paidHours,
-        capped_hours: cappedHours,
+        unpaid_outside_window_hours: unpaidHours,
         attendance_records: logDetails.length,
         shifts: logDetails,
       },
