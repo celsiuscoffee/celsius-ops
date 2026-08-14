@@ -6,6 +6,54 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-14 — **A "Rest Day" roster row is `start_time == end_time == 00:00`,
+  and it is NOT a shift window.** 431 such rows exist, 390 on published
+  rosters. Both window builders treated `end <= start` as cross-midnight and
+  added 24h, so a rest day became a 00:00–24:00 window: `paidWindowHours` paid
+  the whole clocked span, took the row's `break_minutes` of 0 instead of the
+  cohort's 30, and returned `needsSignOff: false` — working an unrostered rest
+  day paid MORE than a rostered shift and never reached the confirm queue.
+  `deriveHours` had the mirror bug (clamps pay at 00:00 for a rest-day shift
+  worked past midnight). Guarded in both files; zero-length is the
+  discriminator, NOT `end <= start` (a genuine 22:00→02:00 closing shift also
+  has end < start). Both payroll callers already skipped these by
+  string-matching `start_time` `"00:00"`, so no computed figure moved — the
+  guard is there so a new caller can't miss it. Two live logs land on rest-day
+  rows: Akmal 2026-07-31, Farhan 2026-08-04.
+
+- 2026-08-14 — **Putrajaya's 2026-08-03 roster published retroactively**
+  (schedule `62428d65-db1f-4a62-85d1-5b4139a245c1`, 75 shifts) on owner
+  instruction; reason appended to its `ai_notes`. It had `published_by` set to
+  Ariff but `published_at` NULL and status `draft` — a half-finished publish.
+  Effect on that week's PT pay: only two people move, both DOWN, because their
+  shifts stop pricing as unbounded cover shifts — Nurfarah −RM25.00 (6 cover →
+  0), Farhan −RM4.50 (1 cover → 0). Week now **428.00 h / RM3,940.00 across 63
+  shifts, zero cover shifts**. NOTE: this supersedes the 437.50 h / RM3,995.50
+  figure quoted earlier the same day — that ad-hoc SQL had not yet excluded
+  rest-day rows, so it inflated logs that matched one.
+
+- 2026-08-14 — **Rostered windows in the data are not all sane, and the window
+  basis makes that visible.** 3–9 Aug throws 30 shifts to the confirm queue,
+  and the worst entries are roster errors rather than staff behaviour: Absah
+  Natasha 5 Aug rostered **06:00–22:00** (16h) → 717 min "late"; Absah 9 Aug
+  rostered 11:00–21:00 → 141 min "early out"; Naufal 6 Aug rostered
+  12:00–23:30 (11.5h) → 210 min "early out". Fix the roster rows before
+  adjudicating these as staff shortfalls.
+
+- 2026-08-14 — **Alea's 2026-08-10 log (`7e09988c-…`) is a mis-tap, not an
+  overstay.** She tapped **IN** at 23:30:40 MYT — 40 seconds AFTER her
+  18:30–23:30 shift ended — and the log stayed open until her next clock-in on
+  12 Aug 18:45:59 auto-closed it 43.25 h later (9 seconds apart). Under the
+  window basis it pays **0** (the window opens after it closes) and forces
+  sign-off, so there is no payroll leak; but her real 10 Aug shift is unpaid
+  until corrected. Correction path is `PATCH /api/hr/attendance` with
+  `action: "set_times"` from `/hr/attendance` — it recomputes through
+  `deriveHours`, stamps `reviewed_by` (genuine manager sign-off) and
+  `final_status: "adjusted"`. Note the route rejects a span > 24 h, so the
+  clock-IN must move (18:30), not just the clock-out — you cannot fix this by
+  editing one end. Owner: needs approval + manual change, NOT an automated
+  backfill.
+
 - 2026-08-14 — **PT pay basis changed; the already-PAID week is deliberately
   NOT restated (owner: "forward only, don't restate the paid week").** The new
   paid-window rules apply from the 2026-08-03 week onward — neither 08-03 nor
