@@ -428,6 +428,28 @@ describe("pause probe", () => {
     expect(d.reason).toMatch(/no detectable till effect/);
   });
 
+  it("holds — never floors — when the probe index could not be measured", () => {
+    // A forecast failure at verdict time is a measurement outage, not evidence.
+    // The old behaviour fell through to the floor verdict on index null, i.e. a
+    // transient query error would have slashed the budget "on no detectable
+    // effect" it never measured. Both the missing-object and null-index shapes
+    // must hold and let tomorrow's run re-measure.
+    for (const pauseProbe of [undefined, { index: null, adjIndex: null }]) {
+      const d = decideCampaign(
+        campaign({
+          dailyBudgetMyr: 85,
+          isPaused: true,
+          lastApplied: { decidedAt: daysAgo(PAUSE_PROBE_DAYS + 1), prevDailyMyr: 85, newDailyMyr: 85, reason: "autopilot pause: probe start" },
+          pauseProbe,
+        }),
+        healthy,
+        NOW,
+      );
+      expect(d.action).toBe("hold");
+      expect(d.reason).toMatch(/could not be measured/);
+    }
+  });
+
   it("leaves a human-paused campaign alone", () => {
     const d = decideCampaign(campaign({ isPaused: true, lastApplied: null }), healthy, NOW);
     expect(d.action).toBe("hold");
