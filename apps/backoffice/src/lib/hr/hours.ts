@@ -5,7 +5,7 @@
 // DAY or WALL-CLOCK time in the server's timezone (UTC on Vercel) instead of MYT,
 // which mislabels pre-08:00-MYT shifts a day early and computes lateness / OT /
 // outlet-close against the wrong instant. Do the day/time math HERE, not inline.
-import { CLOCK_IN_GRACE_MINUTES, GRACE_PERIOD_MINUTES, MYT_OFFSET_HOURS } from "./constants";
+import { CLOCK_GRACE_MINUTES, MYT_OFFSET_HOURS } from "./constants";
 
 const MYT_MS = MYT_OFFSET_HOURS * 60 * 60 * 1000;
 
@@ -87,10 +87,10 @@ export function breakHoursFor(employmentType: string, totalHours: number): numbe
  * window from that side, so the deduction falls out of the arithmetic instead
  * of needing its own rule.
  *
- * CLOCK-IN GRACE (owner rule 2026-08-14): a tap up to CLOCK_IN_GRACE_MINUTES
- * after the rostered start pays from the rostered start anyway, so the left
- * edge is really `clockIn <= schedStart + grace ? schedStart : max(...)`.
- * One-sided on purpose — it forgives arriving late, not leaving early.
+ * CLOCK GRACE (owner rule 2026-08-14): a near-miss at EITHER edge is forgiven —
+ * in up to CLOCK_GRACE_MINUTES late, or out up to CLOCK_GRACE_MINUTES early,
+ * still pays the full rostered window. Past the grace the FULL deviation is
+ * docked, not just the excess.
  *
  * This REPLACES two mechanisms that only approximated it:
  *   · the 30-min clock rounding (`ptRoundedSpanHours`, owner 2026-08-07) — with
@@ -148,20 +148,17 @@ export function otBracketHours(minutes: number): number {
   return (Math.floor(minutes / OT_BRACKET_MINUTES) * OT_BRACKET_MINUTES) / 60;
 }
 
-/**
- * Clocking in late or leaving early also needs a manager's sign-off (owner rule
- * 2026-08-13 #7) — the window arithmetic already docks the pay, and this puts
- * the shortfall in front of a human who can excuse it (adjust the log) or let it
- * stand.
- *
- * Gated at the existing 5-minute grace, NOT at zero: every log in the sample
- * carried a minute or two of drift, and sign-off-on-everything is what buried
- * the confirm queue in the first place. Pay does not depend on this threshold —
- * the window is exact to the minute either way. Only queue volume does.
- */
-export const SHORTFALL_SIGNOFF_MINUTES = GRACE_PERIOD_MINUTES;
-
-export type ShiftWindow = { start: Date; end: Date };
+export type ShiftWindow = {
+  start: Date;
+  end: Date;
+  /**
+   * The roster's OWN unpaid break for this shift (hr_schedule_shifts.break_minutes).
+   * Authoritative when present — the grid is where a manager expresses "this
+   * shift has no break" or "this one has an hour". Falls back to the cohort
+   * policy only for cover shifts, which have no roster row to read.
+   */
+  breakMinutes?: number | null;
+};
 
 /**
  * Pick which rostered shift a clock log belongs to: the one its clocked span
@@ -200,6 +197,13 @@ export function paidWindowHours(opts: {
   /** Rostered end instant. Null/undefined = unrostered cover shift. */
   scheduledEnd?: Date | null;
   employmentType: string;
+  /**
+   * The rostered shift's own unpaid break, in minutes. Null/undefined = no
+   * roster row (cover shift) → fall back to the cohort policy. Removing the
+   * daily cap took away the only consumer of this field; without it a shift
+   * rostered with a 0-min or 60-min break was silently paid as if it were 30.
+   */
+  breakMinutes?: number | null;
 }): PaidWindow {
   const toMs = (v: string | Date) => (v instanceof Date ? v : new Date(v)).getTime();
   const inMs = toMs(opts.clockIn);
@@ -238,21 +242,23 @@ export function paidWindowHours(opts: {
   let endMs = scheduledEnd.getTime();
   if (endMs <= startMs) endMs += 24 * 60 * 60 * 1000;
 
-  // Clock-in grace (owner rule 2026-08-14): a tap up to CLOCK_IN_GRACE_MINUTES
-  // after the rostered start still pays from the rostered start. Without it the
-  // window docks to the second, and a staffer who taps in 51 seconds late loses
-  // 51 seconds of pay — the same near-miss cruelty the old 30-min rounding had,
-  // just smaller. Beyond the grace the full lateness is docked, from clock-in.
+  // Clock grace (owner rule 2026-08-14), applied at BOTH edges: a tap-in up to
+  // CLOCK_GRACE_MINUTES late, or a tap-out up to CLOCK_GRACE_MINUTES early,
+  // still pays the full rostered window. Without it the window docks to the
+  // second — a staffer 51 seconds late loses 51 seconds of pay, the same
+  // near-miss cruelty the old 30-min rounding had, just smaller.
   //
-  // Deliberately one-sided: this forgives arriving late, NOT leaving early.
-  // Rule 2 is "clock out after the rostered end", so an early tap-out is a real
-  // shortfall and still trims the window to the minute.
+  // Past the grace the FULL deviation is docked (a threshold, not an allowance
+  // to subtract): 11 min late pays from 07:41, not 07:40.
+  const graceMs = CLOCK_GRACE_MINUTES * 60000;
   const lateMs = inMs - startMs;
-  const withinGrace = lateMs > 0 && lateMs <= CLOCK_IN_GRACE_MINUTES * 60000;
-  const payStart = withinGrace ? startMs : Math.max(inMs, startMs);
-  const payEnd = Math.min(outMs, endMs);
+  const earlyOutMs = endMs - outMs;
+  const payStart = lateMs > 0 && lateMs <= graceMs ? startMs : Math.max(inMs, startMs);
+  const payEnd = earlyOutMs > 0 && earlyOutMs <= graceMs ? endMs : Math.min(outMs, endMs);
   const windowHours = span(Math.max(0, payEnd - payStart));
-  const breakHours = breakHoursFor(employmentType, windowHours);
+  const breakHours = opts.breakMinutes == null
+    ? breakHoursFor(employmentType, windowHours)
+    : Math.max(0, Math.min(opts.breakMinutes / 60, windowHours));
   const earlyInMinutes = mins(startMs - inMs);
   const overstayMinutes = mins(outMs - endMs);
   // Each tail brackets on its own — 20 min early plus 20 min late is two
@@ -274,13 +280,13 @@ export function paidWindowHours(opts: {
     unrostered: false,
     // Any deviation from the rostered window goes to a manager: an OT tail to
     // approve (rules 4/5), or a shortfall to excuse or let stand (rule 7).
-    // Lateness is gated at the PAY grace, not the shortfall threshold — a
-    // staffer the grace already paid in full has nothing for a manager to
-    // adjudicate, and queueing them anyway is what buried the confirm screen.
+    // Both edges gate on the PAY grace — a staffer the grace already paid in
+    // full has nothing for a manager to adjudicate, and queueing them anyway is
+    // what buried the confirm screen.
     needsSignOff:
       otEligibleHours > 0 ||
-      lateMinutes > CLOCK_IN_GRACE_MINUTES ||
-      earlyLeaveMinutes > SHORTFALL_SIGNOFF_MINUTES,
+      lateMinutes > CLOCK_GRACE_MINUTES ||
+      earlyLeaveMinutes > CLOCK_GRACE_MINUTES,
   };
 }
 
@@ -328,7 +334,7 @@ export function deriveHours(opts: {
   // clock-out) — except inside the clock-in grace, where a late tap still pays
   // from the rostered start (owner rule 2026-08-14). Same rule as
   // paidWindowHours, so both cohorts forgive a near-miss identically.
-  const graceMs = CLOCK_IN_GRACE_MINUTES * 60000;
+  const graceMs = CLOCK_GRACE_MINUTES * 60000;
   const schedStartMs = scheduledStart?.getTime() ?? clockIn.getTime();
   const lateBy = clockIn.getTime() - schedStartMs;
   const gracedStart = scheduledStart && lateBy > 0 && lateBy <= graceMs
@@ -341,7 +347,11 @@ export function deriveHours(opts: {
   if (scheduledStart && scheduledEnd && schedEndMs <= scheduledStart.getTime()) {
     schedEndMs += 24 * 60 * 60 * 1000; // cross-midnight closing shift
   }
-  const payEndMs = Math.max(payStartMs, Math.min(clockOut.getTime(), schedEndMs));
+  const earlyOutBy = schedEndMs - clockOut.getTime();
+  const gracedEnd = scheduledEnd && earlyOutBy > 0 && earlyOutBy <= graceMs
+    ? schedEndMs
+    : Math.min(clockOut.getTime(), schedEndMs);
+  const payEndMs = Math.max(payStartMs, gracedEnd);
   const payableHours = Math.round(((payEndMs - payStartMs) / (1000 * 60 * 60)) * 100) / 100;
   // Tails outside the roster, bracketed — reported so the processor can flag
   // them for approval. Never added to regular or overtime hours here.

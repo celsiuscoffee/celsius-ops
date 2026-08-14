@@ -79,12 +79,24 @@ export async function GET(req: NextRequest) {
 
   // Pay basis inputs — same rule the weekly payroll calculator applies:
   // paid = the clocked span's overlap with the rostered window, + approved OT.
-  const { data: rosterRows } = await hrSupabaseAdmin
-    .from("hr_schedule_shifts")
-    .select("user_id, shift_date, start_time, end_time, break_minutes, notes")
-    .in("user_id", ptIds)
-    .gte("shift_date", weekStart)
-    .lte("shift_date", weekEndStr);
+  // PUBLISHED rosters only — must mirror payroll-calculator-weekly, or this
+  // preview prices a draft the run will ignore.
+  const { data: publishedScheds } = await hrSupabaseAdmin
+    .from("hr_schedules")
+    .select("id")
+    .eq("status", "published")
+    .lte("week_start", weekEndStr)
+    .gte("week_end", weekStart);
+  const publishedIds = ((publishedScheds ?? []) as Array<{ id: string }>).map((r) => r.id);
+  const { data: rosterRows } = publishedIds.length
+    ? await hrSupabaseAdmin
+        .from("hr_schedule_shifts")
+        .select("user_id, shift_date, start_time, end_time, break_minutes, notes")
+        .in("user_id", ptIds)
+        .in("schedule_id", publishedIds)
+        .gte("shift_date", weekStart)
+        .lte("shift_date", weekEndStr)
+    : { data: [] as Array<Record<string, unknown>> };
   const schedByUserDay = new Map<string, ShiftWindow[]>();
   for (const s of (rosterRows ?? []) as Array<{ user_id: string; shift_date: string; start_time: string; end_time: string; break_minutes: number | null; notes: string | null }>) {
     if (s.start_time?.slice(0, 5) === "00:00") continue;
@@ -93,7 +105,7 @@ export async function GET(req: NextRequest) {
     const end = mytInstant(s.shift_date, s.end_time);
     if (!start || !end) continue;
     const key = `${s.user_id}:${s.shift_date}`;
-    schedByUserDay.set(key, [...(schedByUserDay.get(key) ?? []), { start, end }]);
+    schedByUserDay.set(key, [...(schedByUserDay.get(key) ?? []), { start, end, breakMinutes: s.break_minutes }]);
   }
   const { data: otRows } = await hrSupabaseAdmin
     .from("hr_overtime_requests")
@@ -131,6 +143,7 @@ export async function GET(req: NextRequest) {
       clockIn: l.clock_in, clockOut: l.clock_out as string,
       scheduledStart: window?.start ?? null,
       scheduledEnd: window?.end ?? null,
+      breakMinutes: window?.breakMinutes ?? null,
       employmentType: "part_time",
     });
     if (!otLeft.has(dayKey)) otLeft.set(dayKey, otByUserDay.get(dayKey) ?? 0);

@@ -155,17 +155,16 @@ describe("paidWindowHours", () => {
     expect(w.needsSignOff).toBe(false);
   });
 
-  it("keeps small drift out of the confirm queue", () => {
-    // 2 min late, 3 min early out. The lateness is inside the clock-in grace so
-    // it pays from 07:30; the early leave is NOT graced and is docked to the
-    // minute — 07:30→15:27 = 7.95h, less the 0.5h break.
+  it("keeps small drift at BOTH edges out of the confirm queue", () => {
+    // 2 min late in, 3 min early out — both inside the grace, so the full
+    // rostered 8h window pays, less the 0.5h break.
     const w = paidWindowHours({
       ...pt,
       clockIn: myt("2026-08-04T07:32:00Z"), clockOut: myt("2026-08-04T15:27:00Z"),
       scheduledStart: myt("2026-08-04T07:30:00Z"), scheduledEnd: myt("2026-08-04T15:30:00Z"),
     });
     expect(w.needsSignOff).toBe(false);
-    expect(w.paidHours).toBe(7.45);
+    expect(w.paidHours).toBe(7.5);
   });
 });
 
@@ -238,14 +237,36 @@ describe("paidWindowHours — clock-in grace", () => {
     expect(w.needsSignOff).toBe(true);
   });
 
-  it("does not forgive leaving early — the grace is one-sided", () => {
+  it("forgives leaving early inside the grace too (owner 2026-08-14)", () => {
     const w = paidWindowHours({
       ...pt,
       clockIn: myt("2026-08-02T23:30:00Z"), clockOut: myt("2026-08-03T07:22:00Z"),
       scheduledStart: NAUFAL_START, scheduledEnd: NAUFAL_END,
     });
-    expect(w.paidHours).toBe(7.37);   // docked the 8 minutes he left early
-    expect(w.earlyLeaveMinutes).toBe(8);
+    expect(w.paidHours).toBe(7.5);      // the 8 min early is forgiven
+    expect(w.earlyLeaveMinutes).toBe(8); // still REPORTED — grace pays, it doesn't relabel
+    expect(w.needsSignOff).toBe(false);
+  });
+
+  it("docks the FULL early leave once past the grace", () => {
+    // 12 min early → pay stops at 15:18, not 15:20.
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-02T23:30:00Z"), clockOut: myt("2026-08-03T07:18:00Z"),
+      scheduledStart: NAUFAL_START, scheduledEnd: NAUFAL_END,
+    });
+    expect(w.paidHours).toBe(7.3);   // 7h48m less the 0.5h break
+    expect(w.needsSignOff).toBe(true);
+  });
+
+  it("forgives a near-miss at BOTH edges at once", () => {
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-02T23:39:00Z"), clockOut: myt("2026-08-03T07:21:00Z"),
+      scheduledStart: NAUFAL_START, scheduledEnd: NAUFAL_END,
+    });
+    expect(w.paidHours).toBe(7.5);
+    expect(w.needsSignOff).toBe(false);
   });
 
   it("never pays an early clock-in from before the rostered start", () => {
@@ -273,5 +294,50 @@ describe("deriveHours — clock-in grace applies to full-timers too", () => {
       scheduledStart: at("2026-08-02T23:30:00Z"), scheduledEnd: at("2026-08-03T07:30:00Z"),
     });
     expect(graced.regularHours).toBe(onTime.regularHours);
+  });
+});
+
+// The roster's own break_minutes is authoritative. Removing the daily cap took
+// away this field's only consumer, so a shift rostered with a 0- or 60-minute
+// break was silently paid as if it were the 30-minute policy default.
+describe("paidWindowHours — roster break_minutes", () => {
+  const pt = { employmentType: "part_time" as const };
+  const myt = (iso: string) => new Date(iso);
+  const START = myt("2026-08-04T07:30:00Z"); // 15:30 MYT
+  const END = myt("2026-08-04T15:30:00Z");   // 23:30 MYT
+
+  it("honours a rostered 0-minute break instead of deducting the policy 30", () => {
+    const w = paidWindowHours({
+      ...pt, clockIn: START, clockOut: END,
+      scheduledStart: START, scheduledEnd: END, breakMinutes: 0,
+    });
+    expect(w.breakHours).toBe(0);
+    expect(w.paidHours).toBe(8);
+  });
+
+  it("honours a rostered 60-minute break", () => {
+    const w = paidWindowHours({
+      ...pt, clockIn: START, clockOut: END,
+      scheduledStart: START, scheduledEnd: END, breakMinutes: 60,
+    });
+    expect(w.breakHours).toBe(1);
+    expect(w.paidHours).toBe(7);
+  });
+
+  it("falls back to the cohort policy for a cover shift (no roster row)", () => {
+    const w = paidWindowHours({
+      ...pt, clockIn: START, clockOut: END,
+      scheduledStart: null, scheduledEnd: null, breakMinutes: null,
+    });
+    expect(w.breakHours).toBe(0.5);
+  });
+
+  it("never lets the break exceed the window and drive pay negative", () => {
+    // A 60-min rostered break on a shift the staffer only worked 20 min of.
+    const w = paidWindowHours({
+      ...pt, clockIn: START, clockOut: myt("2026-08-04T07:50:00Z"),
+      scheduledStart: START, scheduledEnd: END, breakMinutes: 60,
+    });
+    expect(w.paidHours).toBe(0);
   });
 });
