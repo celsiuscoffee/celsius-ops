@@ -4,6 +4,7 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { buildPaymentCsv, paymentReference, type PaymentLine } from "@/lib/hr/payment-file";
+import { isManagerConfirmed } from "@/lib/hr/pt-log-state";
 
 export const dynamic = "force-dynamic";
 
@@ -61,17 +62,25 @@ export async function GET(req: NextRequest) {
   const userMap = new Map(users.map((u) => [u.id, u]));
 
   // ── Gate: manager confirmation of every paid hour ────────────────────
+  // "Confirmed" means a HUMAN signed off (isManagerConfirmed: reviewed_by is
+  // stamped only by human actions). Gating on final_status alone was vacuous:
+  // the AI processor auto-writes final_status='approved' on every clean log
+  // and the auto-close cron does the same, so the "manager gate" passed whole
+  // weeks no manager had ever looked at.
+  // Upper bound exclusive: `lte …23:59:59` missed Sunday's final second.
+  const periodEndDate = new Date(`${run.period_end}T00:00:00Z`);
+  periodEndDate.setUTCDate(periodEndDate.getUTCDate() + 1);
   const { data: logs } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("user_id, final_status")
+    .select("user_id, final_status, ai_status, reviewed_by")
     .in("user_id", userIds)
     .gte("clock_in", `${run.period_start}T00:00:00+08:00`)
-    .lte("clock_in", `${run.period_end}T23:59:59+08:00`)
+    .lt("clock_in", `${periodEndDate.toISOString().slice(0, 10)}T00:00:00+08:00`)
     .not("clock_out", "is", null);
   const unconfirmed = new Map<string, number>();
-  for (const l of (logs ?? []) as Array<{ user_id: string; final_status: string | null }>) {
+  for (const l of (logs ?? []) as Array<{ user_id: string; final_status: string | null; ai_status: string | null; reviewed_by: string | null }>) {
     if (l.final_status === "rejected") continue; // excluded from pay — no confirmation needed
-    if (l.final_status === "approved" || l.final_status === "adjusted") continue;
+    if (isManagerConfirmed(l)) continue;
     unconfirmed.set(l.user_id, (unconfirmed.get(l.user_id) ?? 0) + 1);
   }
   if (unconfirmed.size > 0) {
