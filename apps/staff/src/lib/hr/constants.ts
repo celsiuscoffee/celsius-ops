@@ -6,6 +6,20 @@ export const GEOFENCE_RADIUS_METERS = 100;
 // Attendance rules
 export const LATE_THRESHOLD_MINUTES = 15;
 export const GRACE_PERIOD_MINUTES = 5;
+
+/**
+ * PAID clock-in grace (owner rule 2026-08-14): clocking in up to this many
+ * minutes AFTER the rostered start is forgiven — pay still runs from the
+ * rostered start, so a late tap inside the grace costs nothing.
+ *
+ * Distinct from GRACE_PERIOD_MINUTES above, which is display-only (the
+ * on-time/late chip and the on-time % stats) and has never touched pay.
+ *
+ * This exists because the old 30-min pay rounding punished near-misses
+ * absurdly: Naufal clocked in at 07:30:51 on 2026-08-03 — 51 seconds late —
+ * and the rounding pushed his paid start to 08:00, costing him RM4.50.
+ */
+export const CLOCK_IN_GRACE_MINUTES = 10;
 export const MAX_SHIFT_HOURS = 12;
 export const AUTO_CLOCKOUT_AFTER_HOURS = 12;
 export const NORMAL_WORK_HOURS = 7.5; // 45h/week ÷ 6 days = 7.5h/day

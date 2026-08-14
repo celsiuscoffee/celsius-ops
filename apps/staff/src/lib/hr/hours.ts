@@ -5,7 +5,7 @@
 // DAY or WALL-CLOCK time in the server's timezone (UTC on Vercel) instead of MYT,
 // which mislabels pre-08:00-MYT shifts a day early and computes lateness / OT /
 // outlet-close against the wrong instant. Do the day/time math HERE, not inline.
-import { MYT_OFFSET_HOURS } from "./constants";
+import { CLOCK_IN_GRACE_MINUTES, MYT_OFFSET_HOURS } from "./constants";
 
 const MYT_MS = MYT_OFFSET_HOURS * 60 * 60 * 1000;
 
@@ -124,11 +124,17 @@ export function deriveHours(opts: {
   const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay, scheduledStart, scheduledEnd } = opts;
   const otThreshold = OT_THRESHOLD_HOURS[employmentType] ?? 8;
   const totalHours = Math.round(((clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)) * 100) / 100;
-  // Pay-hours start: the later of clock-in and rostered start (never past clock-out).
-  const payStartMs = Math.min(
-    Math.max(clockIn.getTime(), scheduledStart?.getTime() ?? clockIn.getTime()),
-    clockOut.getTime(),
-  );
+  // Pay-hours start: the later of clock-in and rostered start (never past
+  // clock-out) — except inside the clock-in grace, where a late tap still pays
+  // from the rostered start (owner rule 2026-08-14). Same rule as
+  // paidWindowHours, so both cohorts forgive a near-miss identically.
+  const graceMs = CLOCK_IN_GRACE_MINUTES * 60000;
+  const schedStartMs = scheduledStart?.getTime() ?? clockIn.getTime();
+  const lateBy = clockIn.getTime() - schedStartMs;
+  const gracedStart = scheduledStart && lateBy > 0 && lateBy <= graceMs
+    ? schedStartMs
+    : Math.max(clockIn.getTime(), schedStartMs);
+  const payStartMs = Math.min(gracedStart, clockOut.getTime());
   // Pay-hours end: the earlier of clock-out and rostered end (never before the
   // pay start — a shift ended early still can't run backwards).
   let schedEndMs = scheduledEnd?.getTime() ?? clockOut.getTime();
