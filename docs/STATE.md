@@ -6,6 +6,33 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-14 — **PT pay basis changed; the already-PAID week is deliberately
+  NOT restated (owner: "forward only, don't restate the paid week").** The new
+  paid-window rules apply from the 2026-08-03 week onward — neither 08-03 nor
+  08-10 had a run yet, so nothing needed undoing. Recomputing the paid
+  2026-07-27 week (RM3,720.00, status `paid`, the ONLY weekly run that exists)
+  under the new logic gives RM3,721.08 — net +RM1.08, but ~RM127 moving in each
+  direction: Farhan +65.70, Nurfarah +20.00, Aimi +18.00 against Hadif −56.45,
+  Naufal −53.74. The losers are staff who clocked in late and stayed late — the
+  old daily CAP paid them regardless of WHEN they worked, the window doesn't.
+  Restating would mean recovering wages already paid, which Employment Act s.24
+  constrains, so it was ruled out rather than deferred. That week also holds
+  ~45h worked OUTSIDE rostered windows with no approved OT request (Farah 13.5h,
+  Naufal 8.5h, Hadif 8h, Fatin 4.5h, Emran 4h) — previously absorbed silently by
+  the cap, now a manager decision.
+
+- 2026-08-14 — **`calculateWeeklyPayroll` now REFUSES a week that already has a
+  confirmed/paid run.** There is NO unique constraint on
+  `hr_payroll_runs(cycle_type, period_start)` — only on
+  `(period_month, period_year)`, which covers monthly only. The run-wipe deletes
+  just `draft`/`ai_computed`, so a paid run survived it but the INSERT that
+  followed added a SECOND run for the same period, silently: one week, two runs
+  disagreeing about what it owes, with reporting or the bank file free to pick
+  either. Nothing in the API guarded it — `POST {action:"compute"}` accepted any
+  `week_start`. The guard throws and the route returns 409 (not 500) so the UI
+  shows the reason. If a week ever genuinely needs restating, the settled run
+  must be reopened or voided first — deliberately a manual act.
+
 - 2026-08-13 — **PT pay was computed from a daily HOURS CAP, not the rostered
   window — so it underpaid the punctual and overpaid late arrivals.** Owner
   restated the basis (rules 1-7): clock in before the shift, clock out after
