@@ -377,21 +377,33 @@ export function decideCampaign(c: CampaignState, guard: GuardSignal, now: Date):
       return { ...base, action: "hold", reason: `pause probe running (${Math.round(daysSince)}d/${PAUSE_PROBE_DAYS}d, pause-window till index ${c.pauseProbe?.index ?? "n/a"})` };
     }
     const p = c.pauseProbe;
+    // A missing index is a MEASUREMENT failure (forecast query threw, series
+    // empty), not evidence of anything. Deciding on it used to fall through to
+    // the floor verdict — i.e. a Supabase hiccup at 19:01 would read as "ads
+    // are worthless" and slash the budget. Hold instead; tomorrow's run
+    // re-measures the full window and the verdict loses nothing by waiting.
+    if (p?.index == null) {
+      return {
+        ...base,
+        action: "hold",
+        reason: `pause probe window complete but tonight's till index could not be measured — holding for retry, a verdict needs evidence`,
+      };
+    }
     const dropDetected =
-      p?.index != null && (p.index < GUARD_RAW_MIN || (p.adjIndex != null && p.adjIndex < GUARD_ADJ_MIN));
+      p.index < GUARD_RAW_MIN || (p.adjIndex != null && p.adjIndex < GUARD_ADJ_MIN);
     if (dropDetected) {
       return {
         ...base,
         action: "restore",
         newDailyMyr: round2(c.dailyBudgetMyr),
-        reason: `autopilot restore: pause probe VERDICT — ads generate cash (pause-window till index ${p!.index}${p!.adjIndex != null ? `, fleet-adj ${p!.adjIndex}` : ""}); resuming at RM${round2(c.dailyBudgetMyr)}/day, gradual descent will find the floor`,
+        reason: `autopilot restore: pause probe VERDICT — ads generate cash (pause-window till index ${p.index}${p.adjIndex != null ? `, fleet-adj ${p.adjIndex}` : ""}); resuming at RM${round2(c.dailyBudgetMyr)}/day, gradual descent will find the floor`,
       };
     }
     return {
       ...base,
       action: "restore",
       newDailyMyr: FLOOR_DAILY_MYR,
-      reason: `autopilot restore: pause probe VERDICT — no detectable till effect (pause-window index ${p?.index ?? "n/a"}${p?.adjIndex != null ? `, fleet-adj ${p.adjIndex}` : ""}); campaign is below break-even wholesale — restoring at the floor RM${FLOOR_DAILY_MYR}/day (~RM${monthly(c.dailyBudgetMyr - FLOOR_DAILY_MYR)}/mo freed)`,
+      reason: `autopilot restore: pause probe VERDICT — no detectable till effect (pause-window index ${p.index}${p.adjIndex != null ? `, fleet-adj ${p.adjIndex}` : ""}); campaign is below break-even wholesale — restoring at the floor RM${FLOOR_DAILY_MYR}/day (~RM${monthly(c.dailyBudgetMyr - FLOOR_DAILY_MYR)}/mo freed)`,
     };
   }
 

@@ -6,6 +6,46 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-14 — **Ads agent-loop audit (full pass, probe day 11/14): loop is
+  healthy, verdict is predictable, and the probe REVERSED the early read —
+  Tamarind's ads were earning their keep.** Replicated the probe's exact math
+  (organic series, per-weekday 4-wk recency-weighted forecast): pause-window
+  index Aug 4–13 **Tamarind 0.885** vs controls SA 0.995 / Con 1.010 →
+  fleet-adj ≈ 0.88; both thresholds breach. Robust to baseline choice (0.901
+  on a Jul 21–Aug 3-only baseline vs controls ~1.03), to the Grab bug (0.92
+  ex-Grab), and to mid-window control cuts (which bias the other way).
+  Channel split: walk-in (ad-plausible, 71% of series) **0.881**, QR **1.110**,
+  Grab **0.774** — Grab falling too means a non-ad factor is also biting
+  Tamarind, so the effect size is uncertain but the direction is not.
+  **Expected verdict at the ~Aug 17/18 19:01 run: restore at full RM46.32/day
+  ("ads generate cash").** Day-5 share analysis said flat — five more days
+  flipped it; consistent with the July regression (Tamarind the only outlet
+  above break-even, 2.13 rev/ad-RM). Episode cost ≈ RM950 net.
+  Audit facts: mode armed; 7/7 nightly syncs OK all kinds; **creative sync
+  works** (48 rows — the "never produced a row" entry is obsolete); rollback
+  path proven live (SA cut Aug 7 12% → guard breach → auto-rollback Aug 12;
+  Putrajaya cut 12% Aug 12); **the "guard excludes the `orders` table" bug is
+  STALE — `PICKUP_STORE_BY_LOYALTY` maps all three outlets and the slugs
+  match** (726 Tamarind rows since Jul 7 flow in). Still real: the guard's
+  pos branch has **no `source<>'grabfood'` filter** (~0.02 on the index).
+  **Nilai stopped polluting the fleet median the ugly way: its
+  `consignment_sales` feed is DEAD since Jul 19**, index reads 0 and the
+  `x>0` filter drops it — but Nilai/IOI revenue is now invisible to
+  everything downstream, including finance. Floor correction: restore-floor
+  is **RM20/day** (`ADS_AUTOPILOT_FLOOR_MYR` default), not RM10 as earlier
+  notes said. **Consequence armed and accepted by owner 2026-08-14: once
+  Tamarind restores, `selectPauseProbe` will auto-pause PUTRAJAYA ~the next
+  night** (cost/conv ~1.5× fleet-best, never probed, pauses are
+  spacing-exempt) — second causal experiment, verdict ~Sep 1, predicted "no
+  effect → floor" freeing ~RM545/mo.
+
+- 2026-08-14 — **SMS/loyalty loop has been DORMANT since Jun 21** —
+  `sms_logs` last row 2026-06-21, zero sends in 7+ weeks (4,162 all-time).
+  The "ungated loop will cancel the ad saving" worry is not currently live;
+  voucher redemptions still occur from previously-issued stock but the
+  discount growth stalled in the Jul 29–Aug 4 week. Gate it before it wakes,
+  not because it's spending now.
+
 - 2026-08-14 — **A "Rest Day" roster row is `start_time == end_time == 00:00`,
   and it is NOT a shift window.** 431 such rows exist, 390 on published
   rosters. Both window builders treated `end <= start` as cross-midnight and
@@ -1833,6 +1873,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-08-14 — **Ads: watch the probe verdict land, then the Putrajaya probe
+  starts itself.** The ~Aug 17/18 19:01 UTC run should RESTORE Tamarind at
+  RM46.32/day ("ads generate cash" — see Verified facts; note `daysSince`
+  vs the 19:01:30 pause timestamp can slip the verdict one night). A session
+  check-in is scheduled for Aug 17 19:25 UTC to verify the ledger row and
+  campaign status 3→2. The night after the restore, expect an
+  `autopilot pause: probe start` row for PUTRAJAYA (owner-accepted).
+  Queued cleanup PR (NOT yet written, do after the verdict):
+  (1) delete the stale `hardCutDirective` (autopilot.ts:556) — it chops any
+  budget >RM55 and will sabotage Shah Alam's probe-up when its rollback hold
+  ends ~Oct 7; (2) probe verdicts should require adj-confirmation, not
+  raw-OR-adj (autopilot.ts:381) — the payday/mom safeguards don't apply in
+  the probe path; (3) add `source<>'grabfood'` to organic-revenue.ts's pos
+  branch, with tests. Separately: **chase the dead Nilai consignment feed**
+  (last row Jul 19) — data-estate, not ads. The null-index → floor-verdict
+  hazard is FIXED in this PR (hold + retry instead).
 
 - 2026-08-03 (late) — **HR module-level QA review DONE (3-agent sweep, findings
   reported to owner, no fixes applied yet).** Top confirmed findings, ranked:
