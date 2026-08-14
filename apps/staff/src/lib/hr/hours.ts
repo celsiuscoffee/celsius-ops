@@ -5,7 +5,7 @@
 // DAY or WALL-CLOCK time in the server's timezone (UTC on Vercel) instead of MYT,
 // which mislabels pre-08:00-MYT shifts a day early and computes lateness / OT /
 // outlet-close against the wrong instant. Do the day/time math HERE, not inline.
-import { CLOCK_IN_GRACE_MINUTES, MYT_OFFSET_HOURS } from "./constants";
+import { CLOCK_GRACE_MINUTES, MYT_OFFSET_HOURS } from "./constants";
 
 const MYT_MS = MYT_OFFSET_HOURS * 60 * 60 * 1000;
 
@@ -128,7 +128,7 @@ export function deriveHours(opts: {
   // clock-out) — except inside the clock-in grace, where a late tap still pays
   // from the rostered start (owner rule 2026-08-14). Same rule as
   // paidWindowHours, so both cohorts forgive a near-miss identically.
-  const graceMs = CLOCK_IN_GRACE_MINUTES * 60000;
+  const graceMs = CLOCK_GRACE_MINUTES * 60000;
   const schedStartMs = scheduledStart?.getTime() ?? clockIn.getTime();
   const lateBy = clockIn.getTime() - schedStartMs;
   const gracedStart = scheduledStart && lateBy > 0 && lateBy <= graceMs
@@ -141,7 +141,11 @@ export function deriveHours(opts: {
   if (scheduledStart && scheduledEnd && schedEndMs <= scheduledStart.getTime()) {
     schedEndMs += 24 * 60 * 60 * 1000; // cross-midnight closing shift
   }
-  const payEndMs = Math.max(payStartMs, Math.min(clockOut.getTime(), schedEndMs));
+  const earlyOutBy = schedEndMs - clockOut.getTime();
+  const gracedEnd = scheduledEnd && earlyOutBy > 0 && earlyOutBy <= graceMs
+    ? schedEndMs
+    : Math.min(clockOut.getTime(), schedEndMs);
+  const payEndMs = Math.max(payStartMs, gracedEnd);
   const payableHours = Math.round(((payEndMs - payStartMs) / (1000 * 60 * 60)) * 100) / 100;
   // Tails outside the roster, bracketed — reported so the processor can flag
   // them for approval. Never added to regular or overtime hours here.

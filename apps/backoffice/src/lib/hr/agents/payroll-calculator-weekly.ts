@@ -87,12 +87,27 @@ export async function calculateWeeklyPayroll(
   // unconfirmed AI suggestions aren't shifts. The roster table is the authority
   // rather than the log's clock-in stamp, so a manager who adds a missing shift
   // after the fact fixes that day's pay.
-  const { data: rosterRows } = await hrSupabaseAdmin
-    .from("hr_schedule_shifts")
-    .select("user_id, shift_date, start_time, end_time, break_minutes, notes")
-    .in("user_id", ptIds)
-    .gte("shift_date", periodStartStr)
-    .lte("shift_date", periodEndStr);
+  // PUBLISHED rosters only (owner 2026-08-14). The roster no longer just CAPS
+  // pay, it DEFINES it — so an unpublished draft must not set anyone's wages.
+  // The POS open-store gate has always required `published`; this brings payroll
+  // into line. A day whose only shift is a draft now reads as unrostered, i.e. a
+  // cover shift a manager confirms, rather than silently pricing off a sketch.
+  const { data: publishedScheds } = await hrSupabaseAdmin
+    .from("hr_schedules")
+    .select("id")
+    .eq("status", "published")
+    .lte("week_start", periodEndStr)
+    .gte("week_end", periodStartStr);
+  const publishedIds = ((publishedScheds ?? []) as Array<{ id: string }>).map((r) => r.id);
+  const { data: rosterRows } = publishedIds.length
+    ? await hrSupabaseAdmin
+        .from("hr_schedule_shifts")
+        .select("user_id, shift_date, start_time, end_time, break_minutes, notes")
+        .in("user_id", ptIds)
+        .in("schedule_id", publishedIds)
+        .gte("shift_date", periodStartStr)
+        .lte("shift_date", periodEndStr)
+    : { data: [] as Array<Record<string, unknown>> };
   const schedByUserDay = new Map<string, ShiftWindow[]>();
   for (const s of (rosterRows ?? []) as Array<{ user_id: string; shift_date: string; start_time: string; end_time: string; break_minutes: number | null; notes: string | null }>) {
     if (s.start_time?.slice(0, 5) === "00:00") continue;
@@ -101,7 +116,7 @@ export async function calculateWeeklyPayroll(
     const end = mytInstant(s.shift_date, s.end_time);
     if (!start || !end) continue;
     const key = `${s.user_id}:${s.shift_date}`;
-    schedByUserDay.set(key, [...(schedByUserDay.get(key) ?? []), { start, end }]);
+    schedByUserDay.set(key, [...(schedByUserDay.get(key) ?? []), { start, end, breakMinutes: s.break_minutes }]);
   }
 
   // Approved OT per (user, day) — the only way past the schedule cap
@@ -208,6 +223,7 @@ export async function calculateWeeklyPayroll(
         clockIn, clockOut,
         scheduledStart: window?.start ?? null,
         scheduledEnd: window?.end ?? null,
+        breakMinutes: window?.breakMinutes ?? null,
         employmentType: "part_time",
       });
 
