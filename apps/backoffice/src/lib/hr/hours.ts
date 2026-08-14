@@ -107,7 +107,11 @@ export function breakHoursFor(employmentType: string, totalHours: number): numbe
  * cover worked in full went unpaid and silently.
  */
 export type PaidWindow = {
-  /** Hours inside the rostered window, break already deducted. Payable. */
+  /**
+   * Payable hours: the inside-window span less the break, floored to whole
+   * 30-min brackets (owner 2026-08-14). `windowHours` below keeps the exact
+   * span if you need the unrounded figure.
+   */
   paidHours: number;
   /** Raw inside-window span before the break deduction. */
   windowHours: number;
@@ -229,7 +233,7 @@ export function paidWindowHours(opts: {
     const windowHours = span(outMs - inMs);
     const breakHours = breakHoursFor(employmentType, windowHours);
     return {
-      paidHours: Math.round((windowHours - breakHours) * 100) / 100,
+      paidHours: otBracketHours(Math.round(Math.max(0, windowHours - breakHours) * 60)),
       windowHours, breakHours,
       lateMinutes: 0, earlyLeaveMinutes: 0, earlyInMinutes: 0, overstayMinutes: 0,
       otEligibleHours: 0,
@@ -269,7 +273,12 @@ export function paidWindowHours(opts: {
   const earlyLeaveMinutes = mins(endMs - outMs);
 
   return {
-    paidHours: Math.max(0, Math.round((windowHours - breakHours) * 100) / 100),
+    // Paid hours settle in whole 30-min brackets (owner 2026-08-14). Safe
+    // against the near-miss trap the old clock rounding had: 413 of 414
+    // rostered PT shifts have net hours that are already an exact half-hour, so
+    // this never docks someone who works their shift in full — it only rounds
+    // genuine shortfalls and cover shifts down to the bracket below.
+    paidHours: otBracketHours(Math.round(Math.max(0, windowHours - breakHours) * 60)),
     windowHours,
     breakHours,
     lateMinutes,

@@ -81,13 +81,16 @@ describe("paidWindowHours", () => {
     expect(w.needsSignOff).toBe(false);
   });
 
-  it("Nurfarah 2026-08-04: 12 min early in, 12 min early out → 7.3h, not 7.0h", () => {
+  it("Nurfarah 2026-08-04: 12 min early in, 12 min early out", () => {
     const w = paidWindowHours({
       ...pt,
       clockIn: myt("2026-08-04T07:18:00Z"), clockOut: myt("2026-08-04T15:18:00Z"),
       scheduledStart: myt("2026-08-04T07:30:00Z"), scheduledEnd: myt("2026-08-04T15:30:00Z"),
     });
-    expect(w.paidHours).toBe(7.3);      // 15:30–23:18 = 7.8h, less the 0.5h break
+    // Window 15:30–23:18 = 7.8h, less the 0.5h break = 7.3h, floored to the
+    // 30-min bracket below. She left 12 min early, past the grace.
+    expect(w.paidHours).toBe(7);
+    expect(w.windowHours).toBe(7.8);    // exact span still available
     expect(w.earlyInMinutes).toBe(12);
     expect(w.earlyLeaveMinutes).toBe(12);
     expect(w.otEligibleHours).toBe(0);  // 12 min doesn't fill a 30-min bracket
@@ -102,7 +105,7 @@ describe("paidWindowHours", () => {
       clockIn: myt("2026-08-12T23:55:00Z"), clockOut: myt("2026-08-13T08:42:00Z"),
       scheduledStart: myt("2026-08-12T23:30:00Z"), scheduledEnd: myt("2026-08-13T07:30:00Z"),
     });
-    expect(w.paidHours).toBe(7.08);
+    expect(w.paidHours).toBe(7); // 07:55→15:30 = 7.58h less break, bracketed down
     expect(w.lateMinutes).toBe(25);
     expect(w.overstayMinutes).toBe(72);
     expect(w.otEligibleHours).toBe(1);  // 72 min → two whole brackets
@@ -129,7 +132,7 @@ describe("paidWindowHours", () => {
       scheduledStart: null, scheduledEnd: null,
     });
     expect(w.unrostered).toBe(true);
-    expect(w.paidHours).toBe(7.75);
+    expect(w.paidHours).toBe(7.5); // 8.25h clocked less the 0.5h break, bracketed
     expect(w.needsSignOff).toBe(true);
   });
 
@@ -233,7 +236,7 @@ describe("paidWindowHours — clock-in grace", () => {
       clockIn: myt("2026-08-02T23:41:00Z"), clockOut: myt("2026-08-03T07:30:00Z"),
       scheduledStart: NAUFAL_START, scheduledEnd: NAUFAL_END,
     });
-    expect(w.paidHours).toBe(7.32);  // 7h49m less the 0.5h break
+    expect(w.paidHours).toBe(7);     // 7h49m less the 0.5h break, bracketed down
     expect(w.needsSignOff).toBe(true);
   });
 
@@ -255,7 +258,7 @@ describe("paidWindowHours — clock-in grace", () => {
       clockIn: myt("2026-08-02T23:30:00Z"), clockOut: myt("2026-08-03T07:18:00Z"),
       scheduledStart: NAUFAL_START, scheduledEnd: NAUFAL_END,
     });
-    expect(w.paidHours).toBe(7.3);   // 7h48m less the 0.5h break
+    expect(w.paidHours).toBe(7);     // 7h48m less the 0.5h break, bracketed down
     expect(w.needsSignOff).toBe(true);
   });
 
@@ -339,5 +342,55 @@ describe("paidWindowHours — roster break_minutes", () => {
       scheduledStart: START, scheduledEnd: END, breakMinutes: 60,
     });
     expect(w.paidHours).toBe(0);
+  });
+});
+
+// Owner 2026-08-14: paid hours settle in whole 30-minute brackets. This is NOT
+// the old clock rounding — that mangled the clock times themselves at both ends
+// and double-deducted. This floors the FINAL figure once, and because 413 of
+// 414 rostered PT shifts already have exact half-hour net hours, a staffer who
+// works their shift in full is never touched by it.
+describe("paidWindowHours — 30-min brackets on paid hours", () => {
+  const pt = { employmentType: "part_time" as const };
+  const myt = (iso: string) => new Date(iso);
+  const START = myt("2026-08-04T07:30:00Z");
+  const END = myt("2026-08-04T15:30:00Z");
+
+  it("leaves a full rostered shift untouched", () => {
+    const w = paidWindowHours({
+      ...pt, clockIn: START, clockOut: END,
+      scheduledStart: START, scheduledEnd: END, breakMinutes: 30,
+    });
+    expect(w.paidHours).toBe(7.5);
+  });
+
+  it("floors a shortfall down to the bracket below", () => {
+    // Left 40 min early (past the grace): window 7.33h, less 0.5h break = 6.83h.
+    const w = paidWindowHours({
+      ...pt, clockIn: START, clockOut: myt("2026-08-04T14:50:00Z"),
+      scheduledStart: START, scheduledEnd: END, breakMinutes: 30,
+    });
+    expect(w.paidHours).toBe(6.5);
+    expect(w.windowHours).toBe(7.33); // exact span preserved for the audit trail
+  });
+
+  it("never rounds up — one minute short of a bracket takes the one below", () => {
+    // 07:30–15:29 = 7h59m, less the 0.5h break = 449 min: a single minute short
+    // of 7.5h, and it pays 7.0. This is the sharp edge of bracketing — worth
+    // knowing it exists, and why the 10-min grace sits in front of it.
+    const w = paidWindowHours({
+      ...pt, clockIn: START, clockOut: myt("2026-08-04T15:29:00Z"),
+      scheduledStart: START, scheduledEnd: myt("2026-08-04T16:00:00Z"), breakMinutes: 30,
+    });
+    expect(w.paidHours).toBe(7);
+    expect(w.windowHours).toBe(7.98);
+  });
+
+  it("brackets a cover shift too", () => {
+    const w = paidWindowHours({
+      ...pt, clockIn: START, clockOut: myt("2026-08-04T15:10:00Z"),
+      scheduledStart: null, scheduledEnd: null,
+    });
+    expect(w.paidHours).toBe(7); // 7.67h clocked less the 0.5h policy break
   });
 });
