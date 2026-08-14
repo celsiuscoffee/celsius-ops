@@ -136,14 +136,31 @@ describe("paidWindowHours", () => {
     expect(w.needsSignOff).toBe(true);
   });
 
-  it("pays nothing when the timestamps are impossible (Alea 2026-08-10)", () => {
-    // clock_out 4h45m BEFORE clock_in. The cap paid 4.5h out of the roster.
+  it("pays nothing when the timestamps are impossible (Alea 2026-07-17)", () => {
+    // A zero-length log: clock_out stamped equal to clock_in. 17 of these exist,
+    // all pre-2026-07-27. The cap paid them out of the roster instead of 0.
     const w = paidWindowHours({
       ...pt,
-      clockIn: myt("2026-08-10T15:30:00Z"), clockOut: myt("2026-08-10T10:45:00Z"),
+      clockIn: myt("2026-07-17T15:35:04Z"), clockOut: myt("2026-07-17T15:35:04Z"),
+      scheduledStart: myt("2026-07-17T10:30:00Z"), scheduledEnd: myt("2026-07-17T15:30:00Z"),
+    });
+    expect(w.paidHours).toBe(0);
+    expect(w.needsSignOff).toBe(true);
+  });
+
+  it("pays nothing for a run-on log that swallowed a rest day (Alea 2026-08-10)", () => {
+    // The real record: tapped IN at 23:30:40 — 40 seconds after her 18:30–23:30
+    // shift ended — and the log stayed open until her next clock-in 2026-08-12
+    // 18:45 auto-closed it, 43.25h later. The window pays 0 because it opens
+    // after it closes, and the manager gets it. The daily cap would have paid
+    // the rostered 4.5h for a shift she has no clock-in for.
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-10T15:30:40Z"), clockOut: myt("2026-08-12T10:45:50Z"),
       scheduledStart: myt("2026-08-10T10:30:00Z"), scheduledEnd: myt("2026-08-10T15:30:00Z"),
     });
     expect(w.paidHours).toBe(0);
+    expect(w.lateMinutes).toBe(301);   // 5h00m40s past the rostered start
     expect(w.needsSignOff).toBe(true);
   });
 
@@ -194,6 +211,57 @@ describe("pickShiftWindow", () => {
 
   it("returns null when the day has no roster", () => {
     expect(pickShiftWindow([], new Date(), new Date())).toBeNull();
+  });
+
+  // The grid stores "no shift today" as start == end == 00:00 (role_type
+  // "Rest Day") — 431 such rows exist, 390 on published rosters. Treated as a
+  // window it expands to a full 24 hours via the cross-midnight branch.
+  it("ignores a rest-day row rather than expanding it to 24 hours", () => {
+    const restDay = { start: new Date("2026-08-03T16:00:00Z"), end: new Date("2026-08-03T16:00:00Z") };
+    expect(pickShiftWindow([restDay], new Date("2026-08-04T08:21:52Z"), new Date("2026-08-04T15:21:59Z"))).toBeNull();
+  });
+
+  it("picks the real shift when a day carries both a rest-day row and a shift", () => {
+    const restDay = { start: new Date("2026-08-03T16:00:00Z"), end: new Date("2026-08-03T16:00:00Z") };
+    const real = { start: new Date("2026-08-04T07:30:00Z"), end: new Date("2026-08-04T15:30:00Z") };
+    expect(pickShiftWindow([restDay, real], new Date("2026-08-04T07:31:00Z"), new Date("2026-08-04T15:29:00Z"))).toBe(real);
+  });
+
+  it("keeps a genuine cross-midnight shift, which also has end < start", () => {
+    const closing = { start: new Date("2026-08-04T14:00:00Z"), end: new Date("2026-08-04T13:00:00Z") };
+    expect(pickShiftWindow([closing], new Date("2026-08-04T14:00:00Z"), new Date("2026-08-04T13:05:00Z"))).toBe(closing);
+  });
+});
+
+// A rest-day roster row must never price a shift. Farhan, Putrajaya
+// 2026-08-04: rostered "Rest Day" (00:00–00:00, break 0), clocked
+// 16:21:52–23:21:59 MYT. As a 24-hour window that pays the full 7.00h span with
+// NO break and needsSignOff false — more than a rostered shift, and invisible
+// to the confirm queue. As a cover shift it pays 6.50h and goes to a manager.
+describe("paidWindowHours — rest-day rows are not windows", () => {
+  const REST_MIDNIGHT = new Date("2026-08-03T16:00:00Z"); // 2026-08-04 00:00 MYT
+
+  it("Farhan 2026-08-04: rest-day row pays as a cover shift, not a 24h window", () => {
+    const w = paidWindowHours({
+      employmentType: "part_time",
+      clockIn: new Date("2026-08-04T08:21:52Z"), clockOut: new Date("2026-08-04T15:21:59Z"),
+      scheduledStart: REST_MIDNIGHT, scheduledEnd: REST_MIDNIGHT, breakMinutes: 0,
+    });
+    expect(w.unrostered).toBe(true);
+    expect(w.needsSignOff).toBe(true);
+    expect(w.breakHours).toBe(0.5);  // cohort policy, NOT the row's 0 minutes
+    expect(w.paidHours).toBe(6.5);
+  });
+
+  it("does not treat a rest-day row as an overstay", () => {
+    const w = paidWindowHours({
+      employmentType: "part_time",
+      clockIn: new Date("2026-08-04T08:21:52Z"), clockOut: new Date("2026-08-04T15:21:59Z"),
+      scheduledStart: REST_MIDNIGHT, scheduledEnd: REST_MIDNIGHT, breakMinutes: 0,
+    });
+    expect(w.otEligibleHours).toBe(0);
+    expect(w.overstayMinutes).toBe(0);
+    expect(w.lateMinutes).toBe(0);
   });
 });
 
@@ -392,5 +460,39 @@ describe("paidWindowHours — 30-min brackets on paid hours", () => {
       scheduledStart: null, scheduledEnd: null,
     });
     expect(w.paidHours).toBe(7); // 7.67h clocked less the 0.5h policy break
+  });
+});
+
+// deriveHours (FT + the auto-close cron) reads the same rest-day rows. There
+// the 24-hour expansion CLAMPS instead of inflating: a rest-day shift worked
+// past midnight gets its pay cut at 00:00 because that is where the phantom
+// window ends.
+describe("deriveHours — rest-day rows are not windows", () => {
+  const REST_MIDNIGHT = at("2026-08-03T16:00:00Z"); // 2026-08-04 00:00 MYT
+
+  it("pays a rest-day shift that runs past midnight in full", () => {
+    const d = deriveHours({
+      ...base,
+      isRestDay: true,
+      clockIn: at("2026-08-04T12:00:00Z"),  // 20:00 MYT
+      clockOut: at("2026-08-04T18:00:00Z"), // 02:00 MYT next day
+      scheduledStart: REST_MIDNIGHT,
+      scheduledEnd: REST_MIDNIGHT,
+    });
+    // 6h clocked less the 1h FT break. Clamped at 00:00 MYT it would pay 3h.
+    expect(d.totalHours).toBe(6);
+    expect(d.regularHours).toBe(5);
+  });
+
+  it("reports no OT tail against a rest-day row", () => {
+    const d = deriveHours({
+      ...base,
+      isRestDay: true,
+      clockIn: at("2026-08-04T12:00:00Z"),
+      clockOut: at("2026-08-04T18:00:00Z"),
+      scheduledStart: REST_MIDNIGHT,
+      scheduledEnd: REST_MIDNIGHT,
+    });
+    expect(d.otEligibleHours).toBe(0);
   });
 });

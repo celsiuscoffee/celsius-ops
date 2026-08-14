@@ -165,23 +165,43 @@ export type ShiftWindow = {
 };
 
 /**
+ * A REST DAY is not a window. The roster grid stores "no shift today" as a row
+ * with start_time == end_time == 00:00 (role_type "Rest Day") — 431 such rows
+ * exist, 390 of them on published rosters. Left alone they hit the
+ * midnight-crossing branch below (`end <= start` ⇒ add 24h) and silently become
+ * a 00:00–24:00 window that swallows the whole day: the log is paid its full
+ * clocked span, the roster's break_minutes of 0 removes the break deduction,
+ * and needsSignOff comes back FALSE because nothing fell outside the "window".
+ * Working an unrostered rest day would pay MORE than a rostered shift and skip
+ * the manager queue.
+ *
+ * Zero-length is the discriminator, not `end <= start` — a genuine overnight
+ * shift (22:00 → 02:00) also has end < start and must keep crossing midnight.
+ */
+function isRestDayWindow(w: { start: Date; end: Date }): boolean {
+  return w.end.getTime() === w.start.getTime();
+}
+
+/**
  * Pick which rostered shift a clock log belongs to: the one its clocked span
  * OVERLAPS most. A day can hold split shifts (07:30–11:30 and 17:00–21:00), and
  * matching by day alone would price an evening log against the morning window.
- * Returns null when the day has no roster (→ cover shift).
+ * Returns null when the day has no roster, or holds only rest days (→ cover
+ * shift, paid and flagged for a manager).
  */
 export function pickShiftWindow(
   windows: ShiftWindow[],
   clockIn: string | Date,
   clockOut: string | Date,
 ): ShiftWindow | null {
-  if (windows.length === 0) return null;
-  if (windows.length === 1) return windows[0];
+  const real = windows.filter((w) => !isRestDayWindow(w));
+  if (real.length === 0) return null;
+  if (real.length === 1) return real[0];
   const inMs = (clockIn instanceof Date ? clockIn : new Date(clockIn)).getTime();
   const outMs = (clockOut instanceof Date ? clockOut : new Date(clockOut)).getTime();
   let best: ShiftWindow | null = null;
   let bestOverlap = -1;
-  for (const w of windows) {
+  for (const w of real) {
     let endMs = w.end.getTime();
     if (endMs <= w.start.getTime()) endMs += 24 * 60 * 60 * 1000;
     const overlap = Math.min(outMs, endMs) - Math.max(inMs, w.start.getTime());
@@ -213,6 +233,10 @@ export function paidWindowHours(opts: {
   const inMs = toMs(opts.clockIn);
   const outMs = toMs(opts.clockOut);
   const { scheduledStart, scheduledEnd, employmentType } = opts;
+  // A rest-day row (start == end) is NOT a roster — see isRestDay. Callers that
+  // build windows from the grid already skip these, but the guard belongs here
+  // too: getting it wrong pays MORE and hides the log from the confirm queue.
+  const rostered = !!scheduledStart && !!scheduledEnd && !isRestDayWindow({ start: scheduledStart, end: scheduledEnd });
 
   const span = (ms: number) => Math.round((ms / (1000 * 60 * 60)) * 100) / 100;
   const mins = (ms: number) => Math.max(0, Math.round(ms / 60000));
@@ -225,11 +249,11 @@ export function paidWindowHours(opts: {
       paidHours: 0, windowHours: 0, breakHours: 0,
       lateMinutes: 0, earlyLeaveMinutes: 0, earlyInMinutes: 0, overstayMinutes: 0,
       otEligibleHours: 0,
-      unrostered: !scheduledStart || !scheduledEnd, needsSignOff: true,
+      unrostered: !rostered, needsSignOff: true,
     };
   }
 
-  if (!scheduledStart || !scheduledEnd) {
+  if (!scheduledStart || !scheduledEnd || !rostered) {
     const windowHours = span(outMs - inMs);
     const breakHours = breakHoursFor(employmentType, windowHours);
     return {
@@ -336,7 +360,16 @@ export function deriveHours(opts: {
   /** Rostered shift-end instant (null/undefined = no roster → pay to clock-out). */
   scheduledEnd?: Date | null;
 }): DerivedHours {
-  const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay, scheduledStart, scheduledEnd } = opts;
+  const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay } = opts;
+  // A rest-day roster row is 00:00→00:00; left as a window it hits the
+  // cross-midnight branch below and becomes a 24-hour window that pays the whole
+  // clocked span with no OT tail. Drop it to null — working a rest day is
+  // unrostered by definition, and the isRestDay flag above is what prices it.
+  const restDayRow =
+    !!opts.scheduledStart && !!opts.scheduledEnd
+    && opts.scheduledEnd.getTime() === opts.scheduledStart.getTime();
+  const scheduledStart = restDayRow ? null : opts.scheduledStart;
+  const scheduledEnd = restDayRow ? null : opts.scheduledEnd;
   const otThreshold = OT_THRESHOLD_HOURS[employmentType] ?? 8;
   const totalHours = Math.round(((clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)) * 100) / 100;
   // Pay-hours start: the later of clock-in and rostered start (never past

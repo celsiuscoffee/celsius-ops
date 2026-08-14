@@ -121,7 +121,17 @@ export function deriveHours(opts: {
   /** Rostered shift-end instant (null/undefined = no roster → pay to clock-out). */
   scheduledEnd?: Date | null;
 }): DerivedHours {
-  const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay, scheduledStart, scheduledEnd } = opts;
+  const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay } = opts;
+  // A rest-day roster row is 00:00→00:00; left as a window it hits the
+  // cross-midnight branch below and becomes a 24-hour window that pays the whole
+  // clocked span with no OT tail. Drop it to null — working a rest day is
+  // unrostered by definition, and the isRestDay flag above is what prices it.
+  // Mirrors apps/backoffice/src/lib/hr/hours.ts — keep the two in step.
+  const restDayRow =
+    !!opts.scheduledStart && !!opts.scheduledEnd
+    && opts.scheduledEnd.getTime() === opts.scheduledStart.getTime();
+  const scheduledStart = restDayRow ? null : opts.scheduledStart;
+  const scheduledEnd = restDayRow ? null : opts.scheduledEnd;
   const otThreshold = OT_THRESHOLD_HOURS[employmentType] ?? 8;
   const totalHours = Math.round(((clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)) * 100) / 100;
   // Pay-hours start: the later of clock-in and rostered start (never past
