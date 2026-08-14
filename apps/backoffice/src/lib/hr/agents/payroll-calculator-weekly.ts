@@ -156,7 +156,36 @@ export async function calculateWeeklyPayroll(
     paidLogCount++;
   }
 
-  // 3. Wipe existing draft/computed weekly run for this period.
+  // 3. A SETTLED week is never recomputed (owner 2026-08-14: "forward only,
+  //    don't restate the paid week").
+  //
+  //    The wipe below only removes draft/ai_computed runs, so a confirmed or
+  //    paid run survives it — but the INSERT that follows would then add a
+  //    SECOND run for the same period, silently, with no unique constraint on
+  //    (cycle_type, period_start) to stop it. The week would end up with two
+  //    runs disagreeing about what it owes, and reporting or the bank file
+  //    could pick up either.
+  //
+  //    That matters now the pay basis has changed: recomputing the paid
+  //    2026-07-27 week under the paid-window rules moves individuals by up to
+  //    RM66 in both directions. Restating it would mean recovering wages
+  //    already paid, which Employment Act s.24 constrains — so refuse outright
+  //    rather than leave it to whoever clicks Compute.
+  const { data: settled } = await hrSupabaseAdmin
+    .from("hr_payroll_runs")
+    .select("id, status")
+    .eq("cycle_type", "weekly")
+    .eq("period_start", periodStartStr)
+    .in("status", ["confirmed", "paid"])
+    .maybeSingle();
+  if (settled) {
+    throw new Error(
+      `Week ${periodStartStr} already has a ${settled.status} payroll run (${settled.id}) — refusing to recompute. ` +
+        `Reopen or void that run first if it genuinely needs restating.`,
+    );
+  }
+
+  // Wipe any existing draft/computed weekly run for this period.
   await hrSupabaseAdmin
     .from("hr_payroll_runs")
     .delete()
