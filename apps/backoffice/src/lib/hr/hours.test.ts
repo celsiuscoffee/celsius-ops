@@ -155,14 +155,17 @@ describe("paidWindowHours", () => {
     expect(w.needsSignOff).toBe(false);
   });
 
-  it("ignores drift inside the 5-minute grace so the queue stays usable", () => {
+  it("keeps small drift out of the confirm queue", () => {
+    // 2 min late, 3 min early out. The lateness is inside the clock-in grace so
+    // it pays from 07:30; the early leave is NOT graced and is docked to the
+    // minute — 07:30→15:27 = 7.95h, less the 0.5h break.
     const w = paidWindowHours({
       ...pt,
       clockIn: myt("2026-08-04T07:32:00Z"), clockOut: myt("2026-08-04T15:27:00Z"),
       scheduledStart: myt("2026-08-04T07:30:00Z"), scheduledEnd: myt("2026-08-04T15:30:00Z"),
     });
     expect(w.needsSignOff).toBe(false);
-    expect(w.paidHours).toBe(7.42); // still docked to the minute
+    expect(w.paidHours).toBe(7.45);
   });
 });
 
@@ -189,5 +192,86 @@ describe("pickShiftWindow", () => {
 
   it("returns null when the day has no roster", () => {
     expect(pickShiftWindow([], new Date(), new Date())).toBeNull();
+  });
+});
+
+// Owner rule 2026-08-14: a clock-in up to 10 minutes late is forgiven — pay
+// still runs from the rostered start.
+describe("paidWindowHours — clock-in grace", () => {
+  const pt = { employmentType: "part_time" as const };
+  const myt = (iso: string) => new Date(iso);
+  // Naufal, 2026-08-03 Shah Alam: rostered 07:30–15:30, clocked 07:30:51–15:49:56.
+  const NAUFAL_START = myt("2026-08-02T23:30:00Z");
+  const NAUFAL_END = myt("2026-08-03T07:30:00Z");
+
+  it("Naufal 2026-08-03: 51 seconds late costs nothing (was RM63, now RM67.50)", () => {
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-02T23:30:51Z"), clockOut: myt("2026-08-03T07:49:56Z"),
+      scheduledStart: NAUFAL_START, scheduledEnd: NAUFAL_END,
+    });
+    expect(w.paidHours).toBe(7.5);        // full rostered 8h less the 0.5h break
+    expect(w.needsSignOff).toBe(false);   // nothing for a manager to adjudicate
+    // The 19m56s overstay is under a 30-min bracket, so it earns no OT either.
+    expect(w.otEligibleHours).toBe(0);
+  });
+
+  it("forgives right up to the 10-minute edge", () => {
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-02T23:40:00Z"), clockOut: myt("2026-08-03T07:30:00Z"),
+      scheduledStart: NAUFAL_START, scheduledEnd: NAUFAL_END,
+    });
+    expect(w.paidHours).toBe(7.5);
+    expect(w.lateMinutes).toBe(10); // still REPORTED late — grace pays, it doesn't relabel
+  });
+
+  it("docks the FULL lateness once past the grace, not just the excess", () => {
+    // 11 min late → pay starts at 07:41, not 07:40. The grace is a threshold,
+    // not an allowance to subtract.
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-02T23:41:00Z"), clockOut: myt("2026-08-03T07:30:00Z"),
+      scheduledStart: NAUFAL_START, scheduledEnd: NAUFAL_END,
+    });
+    expect(w.paidHours).toBe(7.32);  // 7h49m less the 0.5h break
+    expect(w.needsSignOff).toBe(true);
+  });
+
+  it("does not forgive leaving early — the grace is one-sided", () => {
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-02T23:30:00Z"), clockOut: myt("2026-08-03T07:22:00Z"),
+      scheduledStart: NAUFAL_START, scheduledEnd: NAUFAL_END,
+    });
+    expect(w.paidHours).toBe(7.37);   // docked the 8 minutes he left early
+    expect(w.earlyLeaveMinutes).toBe(8);
+  });
+
+  it("never pays an early clock-in from before the rostered start", () => {
+    const w = paidWindowHours({
+      ...pt,
+      clockIn: myt("2026-08-02T23:20:00Z"), clockOut: myt("2026-08-03T07:30:00Z"),
+      scheduledStart: NAUFAL_START, scheduledEnd: NAUFAL_END,
+    });
+    expect(w.paidHours).toBe(7.5);
+    expect(w.earlyInMinutes).toBe(10);
+  });
+});
+
+describe("deriveHours — clock-in grace applies to full-timers too", () => {
+  const ft = { employmentType: "full_time", isPublicHoliday: false, isRestDay: false };
+  it("pays a graced FT clock-in from the rostered start", () => {
+    const graced = deriveHours({
+      ...ft,
+      clockIn: at("2026-08-02T23:36:00Z"), clockOut: at("2026-08-03T07:30:00Z"),
+      scheduledStart: at("2026-08-02T23:30:00Z"), scheduledEnd: at("2026-08-03T07:30:00Z"),
+    });
+    const onTime = deriveHours({
+      ...ft,
+      clockIn: at("2026-08-02T23:30:00Z"), clockOut: at("2026-08-03T07:30:00Z"),
+      scheduledStart: at("2026-08-02T23:30:00Z"), scheduledEnd: at("2026-08-03T07:30:00Z"),
+    });
+    expect(graced.regularHours).toBe(onTime.regularHours);
   });
 });

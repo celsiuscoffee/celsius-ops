@@ -5,7 +5,7 @@
 // DAY or WALL-CLOCK time in the server's timezone (UTC on Vercel) instead of MYT,
 // which mislabels pre-08:00-MYT shifts a day early and computes lateness / OT /
 // outlet-close against the wrong instant. Do the day/time math HERE, not inline.
-import { GRACE_PERIOD_MINUTES, MYT_OFFSET_HOURS } from "./constants";
+import { CLOCK_IN_GRACE_MINUTES, GRACE_PERIOD_MINUTES, MYT_OFFSET_HOURS } from "./constants";
 
 const MYT_MS = MYT_OFFSET_HOURS * 60 * 60 * 1000;
 
@@ -86,6 +86,11 @@ export function breakHoursFor(employmentType: string, totalHours: number): numbe
  * never adds paid time on its own; arriving late or leaving early trims the
  * window from that side, so the deduction falls out of the arithmetic instead
  * of needing its own rule.
+ *
+ * CLOCK-IN GRACE (owner rule 2026-08-14): a tap up to CLOCK_IN_GRACE_MINUTES
+ * after the rostered start pays from the rostered start anyway, so the left
+ * edge is really `clockIn <= schedStart + grace ? schedStart : max(...)`.
+ * One-sided on purpose — it forgives arriving late, not leaving early.
  *
  * This REPLACES two mechanisms that only approximated it:
  *   · the 30-min clock rounding (`ptRoundedSpanHours`, owner 2026-08-07) — with
@@ -233,7 +238,18 @@ export function paidWindowHours(opts: {
   let endMs = scheduledEnd.getTime();
   if (endMs <= startMs) endMs += 24 * 60 * 60 * 1000;
 
-  const payStart = Math.max(inMs, startMs);
+  // Clock-in grace (owner rule 2026-08-14): a tap up to CLOCK_IN_GRACE_MINUTES
+  // after the rostered start still pays from the rostered start. Without it the
+  // window docks to the second, and a staffer who taps in 51 seconds late loses
+  // 51 seconds of pay — the same near-miss cruelty the old 30-min rounding had,
+  // just smaller. Beyond the grace the full lateness is docked, from clock-in.
+  //
+  // Deliberately one-sided: this forgives arriving late, NOT leaving early.
+  // Rule 2 is "clock out after the rostered end", so an early tap-out is a real
+  // shortfall and still trims the window to the minute.
+  const lateMs = inMs - startMs;
+  const withinGrace = lateMs > 0 && lateMs <= CLOCK_IN_GRACE_MINUTES * 60000;
+  const payStart = withinGrace ? startMs : Math.max(inMs, startMs);
   const payEnd = Math.min(outMs, endMs);
   const windowHours = span(Math.max(0, payEnd - payStart));
   const breakHours = breakHoursFor(employmentType, windowHours);
@@ -258,9 +274,12 @@ export function paidWindowHours(opts: {
     unrostered: false,
     // Any deviation from the rostered window goes to a manager: an OT tail to
     // approve (rules 4/5), or a shortfall to excuse or let stand (rule 7).
+    // Lateness is gated at the PAY grace, not the shortfall threshold — a
+    // staffer the grace already paid in full has nothing for a manager to
+    // adjudicate, and queueing them anyway is what buried the confirm screen.
     needsSignOff:
       otEligibleHours > 0 ||
-      lateMinutes > SHORTFALL_SIGNOFF_MINUTES ||
+      lateMinutes > CLOCK_IN_GRACE_MINUTES ||
       earlyLeaveMinutes > SHORTFALL_SIGNOFF_MINUTES,
   };
 }
@@ -305,11 +324,17 @@ export function deriveHours(opts: {
   const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay, scheduledStart, scheduledEnd } = opts;
   const otThreshold = OT_THRESHOLD_HOURS[employmentType] ?? 8;
   const totalHours = Math.round(((clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)) * 100) / 100;
-  // Pay-hours start: the later of clock-in and rostered start (never past clock-out).
-  const payStartMs = Math.min(
-    Math.max(clockIn.getTime(), scheduledStart?.getTime() ?? clockIn.getTime()),
-    clockOut.getTime(),
-  );
+  // Pay-hours start: the later of clock-in and rostered start (never past
+  // clock-out) — except inside the clock-in grace, where a late tap still pays
+  // from the rostered start (owner rule 2026-08-14). Same rule as
+  // paidWindowHours, so both cohorts forgive a near-miss identically.
+  const graceMs = CLOCK_IN_GRACE_MINUTES * 60000;
+  const schedStartMs = scheduledStart?.getTime() ?? clockIn.getTime();
+  const lateBy = clockIn.getTime() - schedStartMs;
+  const gracedStart = scheduledStart && lateBy > 0 && lateBy <= graceMs
+    ? schedStartMs
+    : Math.max(clockIn.getTime(), schedStartMs);
+  const payStartMs = Math.min(gracedStart, clockOut.getTime());
   // Pay-hours end: the earlier of clock-out and rostered end (never before the
   // pay start — a shift ended early still can't run backwards).
   let schedEndMs = scheduledEnd?.getTime() ?? clockOut.getTime();
