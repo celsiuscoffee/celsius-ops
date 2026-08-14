@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { createToken, verifyPin, hashPin, COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/pos-auth";
+import { createToken, verifyPin, hashPin, sessionOutletId, COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/pos-auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 
 const INV_SUPABASE_URL = process.env.LEGACY_INVENTORY_SUPABASE_URL || "";
@@ -120,6 +120,18 @@ async function resolveOutletUuid(prisma: PrismaClient, outletId: string | null |
   }
 }
 
+/** Outlet display name — the till's outlet isn't always the user's home one. */
+async function outletNameFor(outletId: string | null): Promise<string | null> {
+  if (!outletId) return null;
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    const o = await prisma.outlet.findUnique({ where: { id: outletId }, select: { name: true } });
+    return o?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function resolveManagerOverride(
   overridePin: string,
   outletId: string | null,
@@ -153,11 +165,14 @@ async function findActiveUsersWithPin(outletId?: string) {
   if (!INV_SUPABASE_URL || !INV_ANON_KEY) {
     throw new Error("LEGACY_INVENTORY_SUPABASE_URL + LEGACY_INVENTORY_SUPABASE_ANON_KEY env vars required");
   }
-  let url = `${INV_SUPABASE_URL}/rest/v1/User?status=eq.ACTIVE&pin=not.is.null&select=id,name,role,pin,outletId`;
+  let url = `${INV_SUPABASE_URL}/rest/v1/User?status=eq.ACTIVE&pin=not.is.null&select=id,name,role,pin,outletId,outletIds`;
   if (outletId) {
-    // Match this outlet OR users with no outlet binding (owners/managers).
-    // PostgREST OR syntax: or=(outletId.is.null,outletId.eq.<id>)
-    url += `&or=(outletId.is.null,outletId.eq.${outletId})`;
+    // Match this outlet, users who ROTATE to it (outletIds contains), or users
+    // with no outlet binding (owners/managers). Keep this in step with the
+    // Prisma branch above — a fallback that quietly drops rotation would bring
+    // the "Invalid PIN" lockout back whenever Prisma is unavailable.
+    // PostgREST: or=(outletId.is.null,outletId.eq.<id>,outletIds.cs.{<id>})
+    url += `&or=(outletId.is.null,outletId.eq.${outletId},outletIds.cs.{${outletId}})`;
   }
   const res = await fetch(url, {
     headers: {
@@ -185,6 +200,7 @@ export async function POST(req: NextRequest) {
     // Scope to outlet if provided — prevents cross-outlet PIN collisions
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     let candidates: any[] = [];
+    let outletUuid: string | null = null;
     try {
       const { prisma } = await import("@/lib/prisma");
       // The POS sends a STRING outlet id ("outlet-sa"); staff are bound to the
@@ -193,11 +209,21 @@ export async function POST(req: NextRequest) {
       // null-outlet owners/managers matched — baristas couldn't sign in).
       // Cross-outlet roles (outletId IS NULL) always match; the duplicate-PIN
       // guard below still catches collisions across the merged set.
-      const outletUuid = await resolveOutletUuid(prisma, outletId);
+      outletUuid = await resolveOutletUuid(prisma, outletId);
       const where: Prisma.UserWhereInput = { pin: { not: null }, status: "ACTIVE" };
       if (outletId) {
-        const or: Prisma.UserWhereInput[] = [{ outletId: null }, { outletId }];
-        if (outletUuid) or.push({ outletId: outletUuid });
+        // Home outlet (outletId) OR rotation (outletIds — the "Also works at"
+        // ticks). Matching the home outlet alone locked ROTATING staff out of
+        // every till but their own, and the failure was silent and misleading:
+        // they never entered the candidate set, so no PIN could match and the
+        // till said "Invalid PIN". The rest of HR already scopes staff this way
+        // (schedules/grid, schedules/candidates, hr/performance).
+        const or: Prisma.UserWhereInput[] = [
+          { outletId: null },
+          { outletId },
+          { outletIds: { has: outletId } },
+        ];
+        if (outletUuid) or.push({ outletId: outletUuid }, { outletIds: { has: outletUuid } });
         where.OR = or;
       }
       candidates = await prisma.user.findMany({
@@ -243,8 +269,19 @@ export async function POST(req: NextRequest) {
       } catch { /* ignore rehash errors */ }
     }
 
-    const outletName = user.outlet?.name ?? null;
-    const resolvedOutletId = user.outletId ?? user.outlet?.id ?? null;
+    // Bind the session to the TILL's outlet when this staffer works there
+    // (home or rotation) — not to their home outlet. The schedule gate below
+    // and store-menu-status both read this, and for a rotating staffer the home
+    // outlet is the wrong answer to "where am I signing in?".
+    const homeOutletId = user.outletId ?? user.outlet?.id ?? null;
+    const resolvedOutletId = sessionOutletId({
+      tillOutletId: outletUuid ?? outletId ?? null,
+      homeOutletId,
+      rotation: user.outletIds ?? [],
+    });
+    const outletName = resolvedOutletId === homeOutletId
+      ? user.outlet?.name ?? null
+      : await outletNameFor(resolvedOutletId);
 
     // ─── Open-Store schedule gate ────────────────────────────
     // Rostered staff can only sign in during their scheduled shift. When
