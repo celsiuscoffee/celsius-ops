@@ -373,8 +373,10 @@ export async function POST(req: NextRequest) {
       employmentType: profileResp.data?.employment_type || "full_time",
       isPublicHoliday: !!holidayResp.data,
       isRestDay: !!restResp.data,
-      // Early clock-in pays from the rostered start (stamped at clock-in).
+      // The paid window: only time inside the rostered shift counts. Must match
+      // the backoffice processor — this tap-out writes regular_hours directly.
       scheduledStart: mytInstant(activeLog.scheduled_date ?? clockInDate, activeLog.scheduled_start),
+      scheduledEnd: mytInstant(activeLog.scheduled_date ?? clockInDate, activeLog.scheduled_end),
     });
     const totalHours = derived.totalHours;
 

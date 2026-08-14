@@ -6,6 +6,129 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-14 — **A "Rest Day" roster row is `start_time == end_time == 00:00`,
+  and it is NOT a shift window.** 431 such rows exist, 390 on published
+  rosters. Both window builders treated `end <= start` as cross-midnight and
+  added 24h, so a rest day became a 00:00–24:00 window: `paidWindowHours` paid
+  the whole clocked span, took the row's `break_minutes` of 0 instead of the
+  cohort's 30, and returned `needsSignOff: false` — working an unrostered rest
+  day paid MORE than a rostered shift and never reached the confirm queue.
+  `deriveHours` had the mirror bug (clamps pay at 00:00 for a rest-day shift
+  worked past midnight). Guarded in both files; zero-length is the
+  discriminator, NOT `end <= start` (a genuine 22:00→02:00 closing shift also
+  has end < start). Both payroll callers already skipped these by
+  string-matching `start_time` `"00:00"`, so no computed figure moved — the
+  guard is there so a new caller can't miss it. Two live logs land on rest-day
+  rows: Akmal 2026-07-31, Farhan 2026-08-04.
+
+- 2026-08-14 — **Putrajaya's 2026-08-03 roster published retroactively**
+  (schedule `62428d65-db1f-4a62-85d1-5b4139a245c1`, 75 shifts) on owner
+  instruction; reason appended to its `ai_notes`. It had `published_by` set to
+  Ariff but `published_at` NULL and status `draft` — a half-finished publish.
+  Effect on that week's PT pay: only two people move, both DOWN, because their
+  shifts stop pricing as unbounded cover shifts — Nurfarah −RM25.00 (6 cover →
+  0), Farhan −RM4.50 (1 cover → 0). Week now **428.00 h / RM3,940.00 across 63
+  shifts, zero cover shifts**. NOTE: this supersedes the 437.50 h / RM3,995.50
+  figure quoted earlier the same day — that ad-hoc SQL had not yet excluded
+  rest-day rows, so it inflated logs that matched one.
+
+- 2026-08-14 — **Rostered windows in the data are not all sane, and the window
+  basis makes that visible.** 3–9 Aug throws 30 shifts to the confirm queue,
+  and the worst entries are roster errors rather than staff behaviour: Absah
+  Natasha 5 Aug rostered **06:00–22:00** (16h) → 717 min "late"; Absah 9 Aug
+  rostered 11:00–21:00 → 141 min "early out"; Naufal 6 Aug rostered
+  12:00–23:30 (11.5h) → 210 min "early out". Fix the roster rows before
+  adjudicating these as staff shortfalls.
+
+- 2026-08-14 — **Alea's 2026-08-10 log (`7e09988c-…`) is a mis-tap, not an
+  overstay.** She tapped **IN** at 23:30:40 MYT — 40 seconds AFTER her
+  18:30–23:30 shift ended — and the log stayed open until her next clock-in on
+  12 Aug 18:45:59 auto-closed it 43.25 h later (9 seconds apart). Under the
+  window basis it pays **0** (the window opens after it closes) and forces
+  sign-off, so there is no payroll leak; but her real 10 Aug shift is unpaid
+  until corrected. Correction path is `PATCH /api/hr/attendance` with
+  `action: "set_times"` from `/hr/attendance` — it recomputes through
+  `deriveHours`, stamps `reviewed_by` (genuine manager sign-off) and
+  `final_status: "adjusted"`. Note the route rejects a span > 24 h, so the
+  clock-IN must move (18:30), not just the clock-out — you cannot fix this by
+  editing one end. Owner: needs approval + manual change, NOT an automated
+  backfill.
+
+- 2026-08-14 — **PT pay basis changed; the already-PAID week is deliberately
+  NOT restated (owner: "forward only, don't restate the paid week").** The new
+  paid-window rules apply from the 2026-08-03 week onward — neither 08-03 nor
+  08-10 had a run yet, so nothing needed undoing. Recomputing the paid
+  2026-07-27 week (RM3,720.00, status `paid`, the ONLY weekly run that exists)
+  under the new logic gives RM3,721.08 — net +RM1.08, but ~RM127 moving in each
+  direction: Farhan +65.70, Nurfarah +20.00, Aimi +18.00 against Hadif −56.45,
+  Naufal −53.74. The losers are staff who clocked in late and stayed late — the
+  old daily CAP paid them regardless of WHEN they worked, the window doesn't.
+  Restating would mean recovering wages already paid, which Employment Act s.24
+  constrains, so it was ruled out rather than deferred. That week also holds
+  ~45h worked OUTSIDE rostered windows with no approved OT request (Farah 13.5h,
+  Naufal 8.5h, Hadif 8h, Fatin 4.5h, Emran 4h) — previously absorbed silently by
+  the cap, now a manager decision.
+
+- 2026-08-14 — **`calculateWeeklyPayroll` now REFUSES a week that already has a
+  confirmed/paid run.** There is NO unique constraint on
+  `hr_payroll_runs(cycle_type, period_start)` — only on
+  `(period_month, period_year)`, which covers monthly only. The run-wipe deletes
+  just `draft`/`ai_computed`, so a paid run survived it but the INSERT that
+  followed added a SECOND run for the same period, silently: one week, two runs
+  disagreeing about what it owes, with reporting or the bank file free to pick
+  either. Nothing in the API guarded it — `POST {action:"compute"}` accepted any
+  `week_start`. The guard throws and the route returns 409 (not 500) so the UI
+  shows the reason. If a week ever genuinely needs restating, the settled run
+  must be reopened or voided first — deliberately a manual act.
+
+- 2026-08-13 — **PT pay was computed from a daily HOURS CAP, not the rostered
+  window — so it underpaid the punctual and overpaid late arrivals.** Owner
+  restated the basis (rules 1-7): clock in before the shift, clock out after
+  it, only time INSIDE the rostered window is paid, tails outside it are OT
+  needing approval in whole 30-min brackets, and late-in / early-out need
+  sign-off too. Implemented as `paidWindowHours()` in
+  `apps/backoffice/src/lib/hr/hours.ts` (PR #1126, branch
+  `claude/farah-staff-onboarding-99yg3j`), the single basis for BOTH cohorts:
+  `paid = [max(clock_in, sched_start), min(clock_out, sched_end)] - break +
+  approved OT`. Two mechanisms it replaced, both wrong in ways a cap can't
+  see: (1) the 30-min clock rounding from #1119 (`ptRoundedSpanHours`) rounded
+  clock-in UP and clock-out DOWN — but the cap already clipped overstay days,
+  so it ONLY bit staff who clocked closest to their shift. Punctuality cost
+  RM5/shift; overstaying cost nothing. Rounding now survives only on the OT
+  tails (rule 6). (2) **A CAP IS NOT A WINDOW** — it never checked WHEN the
+  hours fell, so a late clock-in was silently offset by an unapproved
+  overstay: Farah 2026-08-05 clocked in 35 min late, left 3h past shift end
+  with no OT request, and was paid the full 7.5h. Two live data bugs fell out
+  of the same query: an UNROSTERED clock-in paid **RM0** (cap = 0 with no
+  shift on the grid — Farah worked 8h on Sun 2026-08-09 for nothing, silently);
+  and Alea's 2026-08-10 log has a **clock-out 4h45m BEFORE its clock-in** and
+  still drew 4.5h from the roster. Both now handled explicitly.
+
+- 2026-08-13 — **FT has no pay grace period; FT are SALARIED, which is a much
+  bigger difference than a grace period.** Checked because the owner believed
+  FT had one. `GRACE_PERIOD_MINUTES = 5` exists in `lib/hr/constants.ts` but is
+  referenced in exactly three places — `roster-attendance/route.ts:50`,
+  `schedules/candidates/route.ts:149`, `pt-performance.ts:77` — all
+  display/statistics. **It is not referenced in either payroll calculator.**
+  The real split is `payroll-calculator.ts:643`: `basePay = isPartTime ?
+  totalRegularHours * hourlyRate : prorateAmount(basicSalary, prorate)`. FT
+  base pay never reads `regular_hours`, so a late FT clock-in docks nothing;
+  proration is calendar/working-days (EA s.60I). FT lateness reaches pay only
+  via the RM200 performance allowance and OT. Consequence: the window rule is
+  SAFE for FT (it only moves regular/overtime hours, i.e. OT eligibility and
+  reporting), but "consistent across FT and PT" cannot mean identical
+  arithmetic — PT are docked minute-by-minute while FT are docked nothing.
+  **Open owner decision: whether PT get a pay-side grace.**
+
+- 2026-08-13 — **`lib/hr/hours.ts` is DUPLICATED between backoffice and staff,
+  and both copies write pay hours.** `apps/staff/.../api/hr/clock/route.ts`
+  writes `regular_hours` / `overtime_hours` straight to `hr_attendance_logs` on
+  tap-out using the STAFF copy of `deriveHours`. Any change to the hours engine
+  must be mirrored or a tap-out and the backoffice processor disagree about the
+  same shift — typecheck will NOT catch it, because the extra option is simply
+  never passed. Four call sites feed `deriveHours`: staff clock route,
+  backoffice attendance route, auto-close cron, attendance-processor.
+
 - 2026-08-12 — **Finance › Reports now exports PDF, not just CSV — P&L,
   Balance Sheet, Cash Flow and Trial Balance each get a PDF button beside the
   CSV one.** Built on branch `claude/pdf-export-tv9r8s`. Renderer is

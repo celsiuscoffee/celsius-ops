@@ -5,7 +5,7 @@
 // DAY or WALL-CLOCK time in the server's timezone (UTC on Vercel) instead of MYT,
 // which mislabels pre-08:00-MYT shifts a day early and computes lateness / OT /
 // outlet-close against the wrong instant. Do the day/time math HERE, not inline.
-import { MYT_OFFSET_HOURS } from "./constants";
+import { CLOCK_GRACE_MINUTES, MYT_OFFSET_HOURS } from "./constants";
 
 const MYT_MS = MYT_OFFSET_HOURS * 60 * 60 * 1000;
 
@@ -73,21 +73,254 @@ export function breakHoursFor(employmentType: string, totalHours: number): numbe
 }
 
 /**
- * PT weekly payment rounds each clock time to the LOWEST 30 minutes before
- * computing the paid span (owner rule 2026-08-07, clarified same day: "round
- * it at lowest 30min — if clock out 8.35, calculate 8.30"). Each end rounds
- * toward the inside of the shift so the paid span never exceeds the clocked
- * one: clock-out floors (20:35→20:30, 20:50→20:30), clock-in rounds up
- * (09:58→10:00, 09:40→10:00). Pay-time only: the stored log keeps the real
- * timestamps.
+ * THE PAID WINDOW — one hours basis for BOTH cohorts (owner rule 2026-08-13):
+ *
+ *   1. clock in BEFORE the rostered start
+ *   2. clock out AFTER the rostered end
+ *   3. only time INSIDE the rostered window is paid
+ *   4. time past the rostered end pays only against an approved OT request
+ *
+ *   paid window = [ max(clockIn, schedStart) , min(clockOut, schedEnd) ]
+ *
+ * The roster pays, bounded by the clock. Clocking in early or staying late
+ * never adds paid time on its own; arriving late or leaving early trims the
+ * window from that side, so the deduction falls out of the arithmetic instead
+ * of needing its own rule.
+ *
+ * CLOCK GRACE (owner rule 2026-08-14): a near-miss at EITHER edge is forgiven —
+ * in up to CLOCK_GRACE_MINUTES late, or out up to CLOCK_GRACE_MINUTES early,
+ * still pays the full rostered window. Past the grace the FULL deviation is
+ * docked, not just the excess.
+ *
+ * This REPLACES two mechanisms that only approximated it:
+ *   · the 30-min clock rounding (`ptRoundedSpanHours`, owner 2026-08-07) — with
+ *     the roster bounding the span, rounding only ever deducted a SECOND time,
+ *     and only from the staff who clocked closest to their shift. Punctuality
+ *     cost RM5 a shift; overstaying cost nothing.
+ *   · the daily "rostered net hours" CAP in the weekly calculator — a cap is not
+ *     a window. It never checked WHEN the hours fell, so a late clock-in was
+ *     silently offset by an unapproved overstay and paid in full.
+ *
+ * NO ROSTER (owner 2026-08-13): an unrostered clock-in is a COVER shift — pay
+ * the clocked span minus break and set `needsSignOff` so a manager confirms it.
+ * Under the old cap these paid ZERO (cap = 0 with no shift on the grid), so a
+ * cover worked in full went unpaid and silently.
  */
-export const PT_PAY_ROUND_MINUTES = 30;
+export type PaidWindow = {
+  /**
+   * Payable hours: the inside-window span less the break, floored to whole
+   * 30-min brackets (owner 2026-08-14). `windowHours` below keeps the exact
+   * span if you need the unrounded figure.
+   */
+  paidHours: number;
+  /** Raw inside-window span before the break deduction. */
+  windowHours: number;
+  breakHours: number;
+  /** Clocked in after the rostered start (0 when on time or early). */
+  lateMinutes: number;
+  /** Clocked out before the rostered end (0 when on time or later). */
+  earlyLeaveMinutes: number;
+  /** Clocked in BEFORE the rostered start. OT candidate — needs approval (rule 5). */
+  earlyInMinutes: number;
+  /** Clocked out AFTER the rostered end. OT candidate — needs approval (rule 4). */
+  overstayMinutes: number;
+  /**
+   * OT-eligible hours: the early-in and overstay tails, each floored to whole
+   * 30-min brackets (rule 6). Still pays NOTHING without an approved request —
+   * this is the ceiling an approval can draw against, not an entitlement.
+   */
+  otEligibleHours: number;
+  /** No roster stamped on the log — paid as a cover shift. */
+  unrostered: boolean;
+  /** A manager MUST confirm this log (cover shift, OT tail, or bad timestamps). */
+  needsSignOff: boolean;
+};
 
-export function ptRoundedSpanHours(clockIn: string | Date, clockOut: string | Date): number {
-  const step = PT_PAY_ROUND_MINUTES * 60 * 1000;
-  const inMs = Math.ceil((clockIn instanceof Date ? clockIn : new Date(clockIn)).getTime() / step) * step;
-  const outMs = Math.floor((clockOut instanceof Date ? clockOut : new Date(clockOut)).getTime() / step) * step;
-  return Math.max(0, (outMs - inMs) / (1000 * 60 * 60));
+/**
+ * OT accrues in whole 30-minute brackets on either side of the rostered window
+ * (owner rule 2026-08-13 #6: "OT only counts in 30min bracket before or after
+ * schedule time"). 25 min early → 0; 35 min → 0.5h; 65 min → 1.0h.
+ *
+ * Note this rounding lives ONLY on the OT tails. The base window is paid to the
+ * exact minute — rounding the whole span is what made punctuality cost RM5 a
+ * shift under the old rule.
+ */
+export const OT_BRACKET_MINUTES = 30;
+
+export function otBracketHours(minutes: number): number {
+  if (minutes <= 0) return 0;
+  return (Math.floor(minutes / OT_BRACKET_MINUTES) * OT_BRACKET_MINUTES) / 60;
+}
+
+export type ShiftWindow = {
+  start: Date;
+  end: Date;
+  /**
+   * The roster's OWN unpaid break for this shift (hr_schedule_shifts.break_minutes).
+   * Authoritative when present — the grid is where a manager expresses "this
+   * shift has no break" or "this one has an hour". Falls back to the cohort
+   * policy only for cover shifts, which have no roster row to read.
+   */
+  breakMinutes?: number | null;
+};
+
+/**
+ * A REST DAY is not a window. The roster grid stores "no shift today" as a row
+ * with start_time == end_time == 00:00 (role_type "Rest Day") — 431 such rows
+ * exist, 390 of them on published rosters. Left alone they hit the
+ * midnight-crossing branch below (`end <= start` ⇒ add 24h) and silently become
+ * a 00:00–24:00 window that swallows the whole day: the log is paid its full
+ * clocked span, the roster's break_minutes of 0 removes the break deduction,
+ * and needsSignOff comes back FALSE because nothing fell outside the "window".
+ * Working an unrostered rest day would pay MORE than a rostered shift and skip
+ * the manager queue.
+ *
+ * Zero-length is the discriminator, not `end <= start` — a genuine overnight
+ * shift (22:00 → 02:00) also has end < start and must keep crossing midnight.
+ */
+function isRestDayWindow(w: { start: Date; end: Date }): boolean {
+  return w.end.getTime() === w.start.getTime();
+}
+
+/**
+ * Pick which rostered shift a clock log belongs to: the one its clocked span
+ * OVERLAPS most. A day can hold split shifts (07:30–11:30 and 17:00–21:00), and
+ * matching by day alone would price an evening log against the morning window.
+ * Returns null when the day has no roster, or holds only rest days (→ cover
+ * shift, paid and flagged for a manager).
+ */
+export function pickShiftWindow(
+  windows: ShiftWindow[],
+  clockIn: string | Date,
+  clockOut: string | Date,
+): ShiftWindow | null {
+  const real = windows.filter((w) => !isRestDayWindow(w));
+  if (real.length === 0) return null;
+  if (real.length === 1) return real[0];
+  const inMs = (clockIn instanceof Date ? clockIn : new Date(clockIn)).getTime();
+  const outMs = (clockOut instanceof Date ? clockOut : new Date(clockOut)).getTime();
+  let best: ShiftWindow | null = null;
+  let bestOverlap = -1;
+  for (const w of real) {
+    let endMs = w.end.getTime();
+    if (endMs <= w.start.getTime()) endMs += 24 * 60 * 60 * 1000;
+    const overlap = Math.min(outMs, endMs) - Math.max(inMs, w.start.getTime());
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap;
+      best = w;
+    }
+  }
+  return best;
+}
+
+export function paidWindowHours(opts: {
+  clockIn: string | Date;
+  clockOut: string | Date;
+  /** Rostered start instant. Null/undefined = unrostered cover shift. */
+  scheduledStart?: Date | null;
+  /** Rostered end instant. Null/undefined = unrostered cover shift. */
+  scheduledEnd?: Date | null;
+  employmentType: string;
+  /**
+   * The rostered shift's own unpaid break, in minutes. Null/undefined = no
+   * roster row (cover shift) → fall back to the cohort policy. Removing the
+   * daily cap took away the only consumer of this field; without it a shift
+   * rostered with a 0-min or 60-min break was silently paid as if it were 30.
+   */
+  breakMinutes?: number | null;
+}): PaidWindow {
+  const toMs = (v: string | Date) => (v instanceof Date ? v : new Date(v)).getTime();
+  const inMs = toMs(opts.clockIn);
+  const outMs = toMs(opts.clockOut);
+  const { scheduledStart, scheduledEnd, employmentType } = opts;
+  // A rest-day row (start == end) is NOT a roster — see isRestDay. Callers that
+  // build windows from the grid already skip these, but the guard belongs here
+  // too: getting it wrong pays MORE and hides the log from the confirm queue.
+  const rostered = !!scheduledStart && !!scheduledEnd && !isRestDayWindow({ start: scheduledStart, end: scheduledEnd });
+
+  const span = (ms: number) => Math.round((ms / (1000 * 60 * 60)) * 100) / 100;
+  const mins = (ms: number) => Math.max(0, Math.round(ms / 60000));
+
+  // Corrupt timestamps (clock-out at or before clock-in) pay nothing and go to a
+  // manager. The cap used to pay these out of the roster — Alea 2026-08-10 has a
+  // clock-out 4h45m BEFORE its clock-in and drew 4.5h.
+  if (!(outMs > inMs)) {
+    return {
+      paidHours: 0, windowHours: 0, breakHours: 0,
+      lateMinutes: 0, earlyLeaveMinutes: 0, earlyInMinutes: 0, overstayMinutes: 0,
+      otEligibleHours: 0,
+      unrostered: !rostered, needsSignOff: true,
+    };
+  }
+
+  if (!scheduledStart || !scheduledEnd || !rostered) {
+    const windowHours = span(outMs - inMs);
+    const breakHours = breakHoursFor(employmentType, windowHours);
+    return {
+      paidHours: otBracketHours(Math.round(Math.max(0, windowHours - breakHours) * 60)),
+      windowHours, breakHours,
+      lateMinutes: 0, earlyLeaveMinutes: 0, earlyInMinutes: 0, overstayMinutes: 0,
+      otEligibleHours: 0,
+      unrostered: true, needsSignOff: true,
+    };
+  }
+
+  const startMs = scheduledStart.getTime();
+  // A shift whose end is at or before its start crosses midnight (22:00→02:00).
+  let endMs = scheduledEnd.getTime();
+  if (endMs <= startMs) endMs += 24 * 60 * 60 * 1000;
+
+  // Clock grace (owner rule 2026-08-14), applied at BOTH edges: a tap-in up to
+  // CLOCK_GRACE_MINUTES late, or a tap-out up to CLOCK_GRACE_MINUTES early,
+  // still pays the full rostered window. Without it the window docks to the
+  // second — a staffer 51 seconds late loses 51 seconds of pay, the same
+  // near-miss cruelty the old 30-min rounding had, just smaller.
+  //
+  // Past the grace the FULL deviation is docked (a threshold, not an allowance
+  // to subtract): 11 min late pays from 07:41, not 07:40.
+  const graceMs = CLOCK_GRACE_MINUTES * 60000;
+  const lateMs = inMs - startMs;
+  const earlyOutMs = endMs - outMs;
+  const payStart = lateMs > 0 && lateMs <= graceMs ? startMs : Math.max(inMs, startMs);
+  const payEnd = earlyOutMs > 0 && earlyOutMs <= graceMs ? endMs : Math.min(outMs, endMs);
+  const windowHours = span(Math.max(0, payEnd - payStart));
+  const breakHours = opts.breakMinutes == null
+    ? breakHoursFor(employmentType, windowHours)
+    : Math.max(0, Math.min(opts.breakMinutes / 60, windowHours));
+  const earlyInMinutes = mins(startMs - inMs);
+  const overstayMinutes = mins(outMs - endMs);
+  // Each tail brackets on its own — 20 min early plus 20 min late is two
+  // part-brackets, not one 40-min bracket.
+  const otEligibleHours =
+    Math.round((otBracketHours(earlyInMinutes) + otBracketHours(overstayMinutes)) * 100) / 100;
+  const lateMinutes = mins(inMs - startMs);
+  const earlyLeaveMinutes = mins(endMs - outMs);
+
+  return {
+    // Paid hours settle in whole 30-min brackets (owner 2026-08-14). Safe
+    // against the near-miss trap the old clock rounding had: 413 of 414
+    // rostered PT shifts have net hours that are already an exact half-hour, so
+    // this never docks someone who works their shift in full — it only rounds
+    // genuine shortfalls and cover shifts down to the bracket below.
+    paidHours: otBracketHours(Math.round(Math.max(0, windowHours - breakHours) * 60)),
+    windowHours,
+    breakHours,
+    lateMinutes,
+    earlyLeaveMinutes,
+    earlyInMinutes,
+    overstayMinutes,
+    otEligibleHours,
+    unrostered: false,
+    // Any deviation from the rostered window goes to a manager: an OT tail to
+    // approve (rules 4/5), or a shortfall to excuse or let stand (rule 7).
+    // Both edges gate on the PAY grace — a staffer the grace already paid in
+    // full has nothing for a manager to adjudicate, and queueing them anyway is
+    // what buried the confirm screen.
+    needsSignOff:
+      otEligibleHours > 0 ||
+      lateMinutes > CLOCK_GRACE_MINUTES ||
+      earlyLeaveMinutes > CLOCK_GRACE_MINUTES,
+  };
 }
 
 export type DerivedHours = {
@@ -96,6 +329,8 @@ export type DerivedHours = {
   overtimeHours: number;
   overtimeType: string | null;
   dayTypeFlags: string[];
+  /** Bracketed time clocked OUTSIDE the rostered window. Pays only if approved. */
+  otEligibleHours: number;
 };
 
 /**
@@ -105,10 +340,14 @@ export type DerivedHours = {
  * both call it, so an auto-closed log carries the same regular/OT a normal
  * clock-out would (previously the cron wrote total_hours only → 0 paid hours).
  *
- * EARLY CLOCK-IN (owner policy 2026-07-28): when a rostered shift start is known
- * and the staffer clocked in BEFORE it, the pay counter starts at the shift
- * start — waiting around before shift never accrues regular hours or pushes the
- * day over the OT threshold. totalHours still records the actual clocked span.
+ * THE PAID WINDOW (owner rules 2026-08-13) applies to FT exactly as it does to
+ * PT — same basis, both cohorts. Pay runs from the LATER of clock-in and the
+ * rostered start to the EARLIER of clock-out and the rostered end. Waiting
+ * around before shift never accrues hours (this was the 2026-07-28 early
+ * clock-in policy, now symmetric), and staying past the rostered end no longer
+ * silently becomes payable OT — it is an OT tail that needs approval (rule 4),
+ * counted in 30-min brackets (rule 6). totalHours still records the actual
+ * clocked span, and hours INSIDE the window still split at the OT threshold.
  */
 export function deriveHours(opts: {
   clockIn: Date;
@@ -118,16 +357,52 @@ export function deriveHours(opts: {
   isRestDay: boolean;
   /** Rostered shift-start instant (null/undefined = no roster → pay from clock-in). */
   scheduledStart?: Date | null;
+  /** Rostered shift-end instant (null/undefined = no roster → pay to clock-out). */
+  scheduledEnd?: Date | null;
 }): DerivedHours {
-  const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay, scheduledStart } = opts;
+  const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay } = opts;
+  // A rest-day roster row is 00:00→00:00; left as a window it hits the
+  // cross-midnight branch below and becomes a 24-hour window that pays the whole
+  // clocked span with no OT tail. Drop it to null — working a rest day is
+  // unrostered by definition, and the isRestDay flag above is what prices it.
+  const restDayRow =
+    !!opts.scheduledStart && !!opts.scheduledEnd
+    && opts.scheduledEnd.getTime() === opts.scheduledStart.getTime();
+  const scheduledStart = restDayRow ? null : opts.scheduledStart;
+  const scheduledEnd = restDayRow ? null : opts.scheduledEnd;
   const otThreshold = OT_THRESHOLD_HOURS[employmentType] ?? 8;
   const totalHours = Math.round(((clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)) * 100) / 100;
-  // Pay-hours start: the later of clock-in and rostered start (never past clock-out).
-  const payStartMs = Math.min(
-    Math.max(clockIn.getTime(), scheduledStart?.getTime() ?? clockIn.getTime()),
-    clockOut.getTime(),
-  );
-  const payableHours = Math.round(((clockOut.getTime() - payStartMs) / (1000 * 60 * 60)) * 100) / 100;
+  // Pay-hours start: the later of clock-in and rostered start (never past
+  // clock-out) — except inside the clock-in grace, where a late tap still pays
+  // from the rostered start (owner rule 2026-08-14). Same rule as
+  // paidWindowHours, so both cohorts forgive a near-miss identically.
+  const graceMs = CLOCK_GRACE_MINUTES * 60000;
+  const schedStartMs = scheduledStart?.getTime() ?? clockIn.getTime();
+  const lateBy = clockIn.getTime() - schedStartMs;
+  const gracedStart = scheduledStart && lateBy > 0 && lateBy <= graceMs
+    ? schedStartMs
+    : Math.max(clockIn.getTime(), schedStartMs);
+  const payStartMs = Math.min(gracedStart, clockOut.getTime());
+  // Pay-hours end: the earlier of clock-out and rostered end (never before the
+  // pay start — a shift ended early still can't run backwards).
+  let schedEndMs = scheduledEnd?.getTime() ?? clockOut.getTime();
+  if (scheduledStart && scheduledEnd && schedEndMs <= scheduledStart.getTime()) {
+    schedEndMs += 24 * 60 * 60 * 1000; // cross-midnight closing shift
+  }
+  const earlyOutBy = schedEndMs - clockOut.getTime();
+  const gracedEnd = scheduledEnd && earlyOutBy > 0 && earlyOutBy <= graceMs
+    ? schedEndMs
+    : Math.min(clockOut.getTime(), schedEndMs);
+  const payEndMs = Math.max(payStartMs, gracedEnd);
+  const payableHours = Math.round(((payEndMs - payStartMs) / (1000 * 60 * 60)) * 100) / 100;
+  // Tails outside the roster, bracketed — reported so the processor can flag
+  // them for approval. Never added to regular or overtime hours here.
+  const otEligibleHours = scheduledStart && scheduledEnd
+    ? Math.round((
+        otBracketHours(Math.max(0, Math.round((scheduledStart.getTime() - clockIn.getTime()) / 60000)))
+        + otBracketHours(Math.max(0, Math.round((clockOut.getTime() - schedEndMs) / 60000)))
+      ) * 100) / 100
+    : 0;
   const workedHours = payableHours - breakHoursFor(employmentType, payableHours);
 
   let regularHours = 0;
@@ -164,5 +439,5 @@ export function deriveHours(opts: {
     regularHours = Math.round(workedHours * 100) / 100;
   }
 
-  return { totalHours, regularHours, overtimeHours, overtimeType, dayTypeFlags };
+  return { totalHours, regularHours, overtimeHours, overtimeType, dayTypeFlags, otEligibleHours };
 }

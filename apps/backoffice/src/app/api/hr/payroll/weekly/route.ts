@@ -121,7 +121,11 @@ export async function POST(req: NextRequest) {
           .update({ status: "failed", error_message: message, completed_at: new Date().toISOString() })
           .eq("id", agentRun.id);
       }
-      return NextResponse.json({ error: message }, { status: 500 });
+      // Refusing to restate a settled week is a precondition failure, not a
+      // server fault — surface it as 409 so the UI shows the reason instead of
+      // a generic "something went wrong".
+      const settledRefusal = message.includes("refusing to recompute");
+      return NextResponse.json({ error: message }, { status: settledRefusal ? 409 : 500 });
     }
   }
 
