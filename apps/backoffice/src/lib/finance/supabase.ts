@@ -1,31 +1,31 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-let cachedClient: SupabaseClient | null = null;
+// One cached client per actor: the actor rides on every PostgREST request as
+// the `x-fin-actor` header, which fin_audit() reads inside the same
+// transaction as the write (migration 095). This replaces the old
+// fin_set_actor() rpc dance, which set a transaction-local GUC in its OWN
+// request and therefore never survived to the write — every audit row said
+// 'system'. Keyed cache so hot paths don't rebuild clients per call.
+const clientsByActor = new Map<string, SupabaseClient>();
 
 // Service-role Supabase client for the finance module. Bypasses RLS — only
-// use server-side. All fin_* table writes go through this client so the
-// audit trigger captures the actor we set.
-export function getFinanceClient(): SupabaseClient {
-  if (cachedClient) return cachedClient;
+// use server-side. Pass the acting agent or user so every fin_* write is
+// attributed in fin_audit_log:
+//   - agents:      name + version, e.g. getFinanceClient("categorizer-v1")
+//   - human edits: the User.id from requireAuth
+// Omitting the actor is allowed for READ paths; writes through an actorless
+// client audit as 'system', which the warehouse check suite flags.
+export function getFinanceClient(actor?: string): SupabaseClient {
+  const cacheKey = actor ?? "";
+  const cached = clientsByActor.get(cacheKey);
+  if (cached) return cached;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_LOYALTY_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.LOYALTY_SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Supabase env vars missing for finance module");
-  cachedClient = createClient(url, key, { auth: { persistSession: false } });
-  return cachedClient;
-}
-
-// Sets the audit actor for the current Postgres session. Every fin_* write
-// must run after this so fin_audit_log.actor is populated correctly.
-//
-// For agents: pass the agent name + version, e.g. "matcher-v1".
-// For human edits via the inbox: pass the User.id.
-export async function setActor(client: SupabaseClient, actor: string): Promise<void> {
-  // Supabase JS doesn't expose set_config directly; use rpc with a helper or
-  // raw SQL via PostgREST. We expose a tiny SQL function for this in the
-  // migration; until that's added, callers should use a transaction wrapper.
-  const { error } = await client.rpc("fin_set_actor", { p_actor: actor });
-  if (error && error.code !== "42883") {
-    // 42883 = function does not exist; first deploy may not have it yet.
-    throw error;
-  }
+  const client = createClient(url, key, {
+    auth: { persistSession: false },
+    ...(actor ? { global: { headers: { "x-fin-actor": actor } } } : {}),
+  });
+  clientsByActor.set(cacheKey, client);
+  return client;
 }

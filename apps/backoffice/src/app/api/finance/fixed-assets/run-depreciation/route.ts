@@ -12,7 +12,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { getFinanceClient } from "@/lib/finance/supabase";
 import { runDepreciation } from "@/lib/finance/fixed-assets";
 
 export const dynamic = "force-dynamic";
@@ -45,10 +44,6 @@ export async function POST(req: NextRequest) {
   let body: { yearMonth?: string; preview?: boolean } = {};
   try { body = (await req.json()) ?? {}; } catch { /* validated below */ }
   try {
-    if (!body.preview) {
-      const client = getFinanceClient();
-      await client.rpc("fin_set_actor", { p_actor: g.user.id }).then(() => undefined, () => undefined);
-    }
     const result = await runDepreciation({ yearMonth: body.yearMonth ?? "", commit: !body.preview });
     return NextResponse.json(result);
   } catch (err) {

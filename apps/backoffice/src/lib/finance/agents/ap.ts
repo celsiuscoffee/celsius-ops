@@ -45,7 +45,7 @@ export type ApIngestResult =
 const AUTO_POST_THRESHOLD = 0.85;
 
 export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestResult> {
-  const client = getFinanceClient();
+  const client = getFinanceClient(AP_AGENT_VERSION);
 
   // Resolve company from explicit hint > outlet mapping > default. Bills
   // sometimes arrive without an outlet (HQ-level: insurance, audit fees) —
@@ -292,7 +292,7 @@ async function raiseException(args: {
   priority: "low" | "normal" | "high" | "urgent";
   type?: "categorization" | "match" | "missing_doc" | "anomaly" | "duplicate" | "out_of_balance";
 }): Promise<{ kind: "exception"; exceptionId: string; reason: string; parsed: ParsedBill }> {
-  const client = getFinanceClient();
+  const client = getFinanceClient(AP_AGENT_VERSION);
   const id = randomUUID();
   await client.from("fin_exceptions").insert({
     id,

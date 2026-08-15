@@ -129,8 +129,7 @@ export async function persistDraft(
   calc: SstCalc & { companyId: string },
   actor: string
 ): Promise<{ id: string }> {
-  const client = getFinanceClient();
-  await client.rpc("fin_set_actor", { p_actor: actor });
+  const client = getFinanceClient(actor);
 
   const { data: existing } = await client
     .from("fin_sst_filings")
@@ -179,8 +178,7 @@ export async function markFiled(
   paymentRef: string,
   userId: string
 ): Promise<void> {
-  const client = getFinanceClient();
-  await client.rpc("fin_set_actor", { p_actor: userId });
+  const client = getFinanceClient(userId);
   await client
     .from("fin_sst_filings")
     .update({

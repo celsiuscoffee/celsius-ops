@@ -197,7 +197,7 @@ export async function postBankLinesToGl(
 
   // Outlet to legal-entity map, needed to spot Grab settlements that landed in
   // another company's bank account (fetched once; small table).
-  const fin = getFinanceClient();
+  const fin = getFinanceClient("bank-gl-v1");
   const { data: outletCompanies, error: ocErr } = await fin
     .from("fin_outlet_companies")
     .select("outlet_id, company_id");
@@ -421,7 +421,7 @@ async function upsertMirrorJournal(
 // whose primary is GONE entirely is not identified (nothing derives its key)
 // and falls through to plain zero-ref deletion, which is the correct outcome.
 async function gcOrphanBankJournals(sinceDate: string): Promise<number> {
-  const fin = getFinanceClient();
+  const fin = getFinanceClient("bank-gl-v1");
   const { data: txns, error } = await fin
     .from("fin_transactions")
     .select("id, posting_key")

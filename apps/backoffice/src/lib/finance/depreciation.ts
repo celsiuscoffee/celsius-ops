@@ -44,7 +44,7 @@ function md5Uuid(s: string): string {
 export type RegisterResult = { created: number; skipped: number; assets: { company: string; account: string; cost: number; acquired: string }[] };
 
 export async function registerPpeFromGl(opts: { dryRun?: boolean } = {}): Promise<RegisterResult> {
-  const client = getFinanceClient();
+  const client = getFinanceClient(DEPRECIATION_VERSION);
   const { data: lines } = await client.from("fin_journal_lines").select("account_code,debit,credit,transaction_id").like("account_code", "1500-%");
   const txids = [...new Set((lines ?? []).map((l) => l.transaction_id))];
   type TxnRow = { id: string; company_id: string; txn_date: string; description: string | null };
@@ -100,7 +100,7 @@ function monthsHeldInYear(acquiredDate: string, year: number): number {
 // no-op, so a re-close never double-charges.
 export async function postAnnualDepreciation(companyId: string, year: number, opts: { dryRun?: boolean } = {}): Promise<{ posted: number; transactionId: string | null; skipped: string | null }> {
   const txnDate = `${year}-12-31`;
-  const client = getFinanceClient();
+  const client = getFinanceClient(DEPRECIATION_VERSION);
 
   const { data: existing } = await client.from("fin_transactions").select("id").eq("company_id", companyId).eq("txn_type", "depreciation").eq("txn_date", txnDate).limit(1);
   if (existing && existing.length) return { posted: 0, transactionId: existing[0].id as string, skipped: "already posted" };

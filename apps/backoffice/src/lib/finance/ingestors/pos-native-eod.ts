@@ -178,7 +178,7 @@ async function persistDoc(
   date: string,
   orders: OrderRow[],
 ): Promise<string> {
-  const client = getFinanceClient();
+  const client = getFinanceClient("eod-sales-v1");
   const sourceRef = `pos-native-eod-${outletId}-${date}`;
 
   const { data: existing } = await client

@@ -23,11 +23,11 @@ const ALLOWED = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as 
 
 async function guard(req: NextRequest) {
   const auth = await requireAuth(req);
-  if (auth.error) return auth.error;
+  if (auth.error) return { error: auth.error };
   if (!["OWNER", "ADMIN"].includes(auth.user.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
-  return null;
+  return { user: auth.user };
 }
 
 // Company for a bank line, from its statement account-name suffix (same mapping
@@ -44,8 +44,8 @@ async function companyForBankLine(bankLineId: string): Promise<{ companyId: stri
 }
 
 export async function POST(req: NextRequest) {
-  const err = await guard(req);
-  if (err) return err;
+  const g = await guard(req);
+  if (g.error) return g.error;
 
   const form = await req.formData();
   const file = form.get("file");
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   const co = await companyForBankLine(bankLineId);
   if (!co) return NextResponse.json({ error: "Bank line not found" }, { status: 404 });
 
-  const client = getFinanceClient();
+  const client = getFinanceClient(g.user.id);
   const ext = mime === "application/pdf" ? "pdf" : mime.split("/")[1];
   const path = `bank-line/${bankLineId}/${randomUUID()}.${ext}`;
   const bytes = Buffer.from(await file.arrayBuffer());
@@ -86,8 +86,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const err = await guard(req);
-  if (err) return err;
+  const g = await guard(req);
+  if (g.error) return g.error;
   const bankLineId = new URL(req.url).searchParams.get("bankLineId");
   if (!bankLineId) return NextResponse.json({ error: "bankLineId required" }, { status: 400 });
 
@@ -110,13 +110,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const err = await guard(req);
-  if (err) return err;
+  const g = await guard(req);
+  if (g.error) return g.error;
   let body: { documentId?: string } = {};
   try { body = await req.json(); } catch { /* handled below */ }
   if (!body.documentId) return NextResponse.json({ error: "documentId required" }, { status: 400 });
 
-  const client = getFinanceClient();
+  const client = getFinanceClient(g.user.id);
   const { data: doc } = await client.from("fin_documents").select("raw_url").eq("id", body.documentId).eq("doc_type", DOC_TYPE).maybeSingle();
   if (doc?.raw_url) await client.storage.from(BUCKET).remove([doc.raw_url as string]);
   const { error } = await client.from("fin_documents").delete().eq("id", body.documentId).eq("doc_type", DOC_TYPE);

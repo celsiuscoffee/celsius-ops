@@ -216,7 +216,7 @@ async function raiseClassificationException(
   summary: EodSummary,
   transactionId: string
 ): Promise<void> {
-  const client = getFinanceClient();
+  const client = getFinanceClient(AR_AGENT_VERSION);
   const otherAmount = round2(summary.channels.other);
 
   const { data: existing } = await client

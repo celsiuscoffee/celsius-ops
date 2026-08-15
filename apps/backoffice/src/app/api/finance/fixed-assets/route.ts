@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
   } = {};
   try { body = (await req.json()) ?? {}; } catch { /* fall through to validation */ }
 
-  const client = getFinanceClient();
+  const client = getFinanceClient(g.user.id);
 
   // Capitalize from a classified bank line: the line supplies cost, date,
   // company (from the owning bank account) and outlet.
@@ -129,7 +129,6 @@ export async function POST(req: NextRequest) {
   const { data: acct } = await client.from("fin_accounts").select("code").eq("code", accountCode).maybeSingle();
   if (!acct) return NextResponse.json({ error: `Unknown account ${accountCode}` }, { status: 400 });
 
-  await client.rpc("fin_set_actor", { p_actor: g.user.id }).then(() => undefined, () => undefined);
   const id = randomUUID();
   const { error } = await client.from("fin_fixed_assets").insert({
     id,
