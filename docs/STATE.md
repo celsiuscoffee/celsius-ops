@@ -79,11 +79,24 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   not `sent_at`; 14 scheduled rounds carry up to **8.03h** of gap over 796
   assignments. **Checked: zero mis-attributed conversions exist** (lapsed
   segments rarely order in that window), so latent only.
-  **P8** — the three queued ads defects are all still live and confirmed in
-  code: stale `hardCutDirective` (autopilot.ts:571, wired :1171 — **will chop
-  Shah Alam's probe-up when its hold ends ~Oct 7, the one with a deadline**);
-  probe verdict fires on raw-OR-adj (autopilot.ts:393); `organic-revenue.ts` pos
-  branch still has no `source <> 'grabfood'`.
+  **P8.1 — `hardCutDirective` DELETED** (was autopilot.ts:571, wired :1171).
+  **It never self-expired the way its comment claimed:** the guard was
+  `dailyBudgetMyr <= HARD_CUT_TARGET_MYR → null`, which holds only while the
+  budget STAYS under RM55 and **re-arms on any future raise** — so it was not a
+  spent one-time directive, it was a trap primed for the next raise, i.e. Shah
+  Alam's probe-up ~Oct 7. Safe to remove now because all three are already below
+  RM55 (SA 53.98 / PJ 38.16 / Tam 46.32 paused) → dormant, deletion is a no-op
+  today. Nothing replaces it; guarded descent + rollback + pause-probe already
+  own budget movement and read the till, not a fixed number. **Lesson: a
+  "self-expiring" directive keyed on a CURRENT value is not self-expiring — it's
+  dormant until the value comes back.** 3 old tests → 2 new ones pinning that an
+  above-RM55 campaign isn't chopped to 55 and that a raised campaign is judged
+  the same whether or not its name was on the old list.
+  **P8.2/P8.3 — STILL OPEN, deliberately deferred:** probe verdict fires on
+  raw-OR-adj (autopilot.ts:393) and `organic-revenue.ts` pos branch still has no
+  `source <> 'grabfood'`. Both move the index the **Tamarind probe is currently
+  being judged on** (verdict ~Aug 17) — changing the verdict rule or the index
+  mid-experiment makes the result uninterpretable. Do them AFTER the verdict.
   **P9** — `OpsReminder` has 0 rows ever; the hourly `ops-reminders` sweep is a
   correct no-op consumer of a feature nobody uses (housekeeping-audit candidate).
   **Gotcha that cost time: `ads_sync_log.status` is `OK`, not `success`** —
@@ -1957,14 +1970,16 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
-- 2026-08-15 — **Loop QA sweep DONE; P1 + P4 FIXED on PR #1130. Remaining work,
-  in order** (full detail in `docs/design/loop-qa-2026-08-15.md`):
-  (1) **P8.1 `hardCutDirective`** — delete before ~Oct 7 or it corrupts Shah
-  Alam's probe-up. The only item with a hard date.
-  (2) **Apply `packages/db/prisma/migrations/20260815_pos_pairing_tuner_heartbeat/`**
+- 2026-08-15 — **Loop QA sweep DONE; P1 + P4 + P8.1 FIXED on PR #1130. The
+  deadline item (`hardCutDirective`) is cleared. Remaining work, in order**
+  (full detail in `docs/design/loop-qa-2026-08-15.md`):
+  (1) **Apply `packages/db/prisma/migrations/20260815_pos_pairing_tuner_heartbeat/`**
   — written + syntax-checked, needs a human against prod.
-  (3) **Diagnose Shah Alam's geogrid 100%-failure** — one manual scan. The P1
+  (2) **Diagnose Shah Alam's geogrid 100%-failure** — one manual scan. The P1
   fix stops it starving the other outlets; it does NOT make Shah Alam scan.
+  (3) **P8.2/P8.3 AFTER the ~Aug 17 Tamarind probe verdict** — probe verdict
+  raw-OR-adj, and the missing grabfood filter. Both move the index the probe is
+  being judged on, so they wait.
   (4) **P2/P3/P6** — need owner intent: arm the reviews drafter or staff the
   review step? Is the Bukku bank feed meant to be connected? Re-arm the
   finance_warehouse routine?
