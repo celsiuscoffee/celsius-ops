@@ -12,7 +12,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { runReadOnlySql, safeJson } from "@/lib/agents/data-analyst";
-import { getAgentModeOrDefault, logAgentAction } from "@celsius/agents/src/substrate";
+import { getAgentModeOrDefault, logAgentAction, touchAgentRun } from "@celsius/agents/src/substrate";
 import { sendPulse } from "@celsius/agents/src/pulse";
 import { logAgentMessage } from "@celsius/agents/src/messages";
 
@@ -142,6 +142,9 @@ Give me this week's ops read.`,
 
 export async function runOpsIntelligence(): Promise<{ sent: boolean; skipped?: string }> {
   if ((await getAgentModeOrDefault("ops_intelligence", "armed")) === "off") return { sent: false, skipped: "agent off" };
+  // Heartbeat before the quiet-exit paths below — a clean week with no alerts
+  // is the agent working, not the agent stopped.
+  await touchAgentRun("ops_intelligence");
   if (!process.env.ANTHROPIC_API_KEY) return { sent: false, skipped: "no api key" };
 
   const inputs = await gatherOpsInputs();

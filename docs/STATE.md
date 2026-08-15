@@ -20,7 +20,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   OK 10/10; Tamarind probe in flight (status=3, RM46.32). Finance EOD→GL fresh.
   Backoffice is at **38/40 Vercel cron slots**; of 20 cron routes absent from
   `vercel.json`, all 20 are reachable via a dispatcher/lib/UI — no orphans.
-  **P1 — GBP geogrid burns half its monthly budget on failures.** A `failed`
+  **P1 — GBP geogrid burns half its monthly budget on failures. FIXED.** A `failed`
   scan (all 81 grid points error) still writes a `GeoGridScan` row, and the gate
   counts rows not successes (`scansThisMonth = count(*)`), so failures eat the
   `GEOGRID_MONTHLY_SCAN_CAP=40` and can't be retried till next month. Aug 3 and
@@ -31,6 +31,14 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   budget is spent on the first Monday (Aug 10, Jul 13/20/27 all returned
   `capped`). 100%-failure on one outlet smells like a bad placeId/coords or a
   keyed API restriction — confirm with one manual scan before spending more.
+  **Fix shipped:** cap now counts only `status <> 'failed'` (read AND
+  decrement); new `MAX_ATTEMPTS_PER_RUN` (60, above the 40 cap) bounds attempts
+  so "failures are free" can't become unbounded Places spend on a wholly-broken
+  outlet; `interleaveByOutlet` round-robins the due queue so the neediest outlet
+  leads but can't consume the run. Response now reports attempts/failed/errored
+  separately. Pinned by `lib/geogrid/scan-runner.test.ts`. **The fix stops the
+  collateral starvation but will NOT make Shah Alam scan** — that still needs a
+  manual diagnostic scan.
   **P2** — reviews recovery never closes: 31 drafts ever, **28 still `pending`**
   (oldest June), 1 resolved / 2 rejected. `reviews_negative_drafts` is `shadow`,
   so it drafts forever and nothing consumes it.
@@ -39,11 +47,25 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `finance_ap_match_apply`, `finance_gl_post` are all `armed` and
   `bukku-feed-sync` runs 4×/day. EOD→GL half is fine. Likely the Bukku feed was
   never connected — owner to confirm intent.
-  **P4** — 10 armed agents never call `touchAgentRun` (`last_run_at` NULL while
-  logging actions), so `/agents` can't tell quiet from stopped: ap_match_apply,
-  ap_agent, gl_post, agent_comms_digest, pos_pairing_tuner, data_analyst,
-  marketing_strategist, ops_intelligence, procurement_advisor, hr_ops_agent.
-  This is why P3 and P6 went unnoticed.
+  **P4 — FIXED (9 of 10 in code).** 10 armed agents had `last_run_at` NULL while
+  logging actions, so `/agents` couldn't tell quiet from stopped. **The mechanism
+  is NOT simply "nobody called touchAgentRun" — for the finance agents the call
+  exists on the WRONG route.** `/api/cron/ap-match-apply` and `/api/cron/gl-post`
+  both heartbeat correctly but **neither is scheduled**; the scheduled
+  `bukku-feed-sync` imports `applyApMatches`/`postBankLinesToGl` directly and
+  never touched the registry. Same for `agent_comms_digest` (only real caller is
+  the 13:00-UTC fold in `celsius-overview`). **Lesson: heartbeat the path that
+  actually runs, not the route that shares the agent's name** — check
+  `vercel.json` before assuming a cron route is the live path. Fixed in
+  `bukku-feed-sync` (3 finance agents), `celsius-overview` (digest), and each
+  agent's own run function for marketing_strategist / ops_intelligence /
+  procurement_advisor / data_analyst / hr_ops_agent — always BEFORE the
+  quiet-exit paths, since a quiet run is the thing that must stay
+  distinguishable from a stopped one. **10th (`pos_pairing_tuner`) has no TS
+  path** — pg_cron calls `public.refresh_pos_pairing_signals()` directly; its
+  heartbeat ships as `20260815_pos_pairing_tuner_heartbeat`, syntax-checked
+  against prod under a throwaway function name (created + dropped, verified no
+  leftover) but **NOT APPLIED — needs a human** (hard rule 6).
   **P5 (latent)** — `autoPauseUnderperformers` (loop-engine.ts:1482) and
   `getEvaluation` (:1704) do unbounded selects over all measured rounds: the
   known PostgREST 1000-row class. 344 rows, +7/day → **crosses the cap ~Nov
@@ -1935,18 +1957,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
-- 2026-08-15 — **Loop QA sweep is DONE and reported; no fixes were applied
-  (audit was the ask).** Owner decisions/fixes queued, in the recommended order
-  from `docs/design/loop-qa-2026-08-15.md`: (1) **P1 geogrid** — stop counting
-  `status='failed'` rows toward the monthly cap, and reserve budget per outlet
-  so one outlet's failures can't starve the rest; separately diagnose the
-  100%-failure signature on Shah Alam (one manual scan first). (2) **P8.1
-  `hardCutDirective`** — delete before ~Oct 7 or it corrupts Shah Alam's
-  probe-up. (3) **P4 heartbeats** — add `touchAgentRun` to the 10 listed agents.
-  (4) **P3/P6** — need owner intent (is the Bukku bank feed meant to be
-  connected? re-arm the finance_warehouse routine?). (5) **P5/P7** — latent,
-  fix on the next loop-engine touch. Nothing here is blocking; P8.1 is the only
-  item with a hard date.
+- 2026-08-15 — **Loop QA sweep DONE; P1 + P4 FIXED on PR #1130. Remaining work,
+  in order** (full detail in `docs/design/loop-qa-2026-08-15.md`):
+  (1) **P8.1 `hardCutDirective`** — delete before ~Oct 7 or it corrupts Shah
+  Alam's probe-up. The only item with a hard date.
+  (2) **Apply `packages/db/prisma/migrations/20260815_pos_pairing_tuner_heartbeat/`**
+  — written + syntax-checked, needs a human against prod.
+  (3) **Diagnose Shah Alam's geogrid 100%-failure** — one manual scan. The P1
+  fix stops it starving the other outlets; it does NOT make Shah Alam scan.
+  (4) **P2/P3/P6** — need owner intent: arm the reviews drafter or staff the
+  review step? Is the Bukku bank feed meant to be connected? Re-arm the
+  finance_warehouse routine?
+  (5) **P5/P7** — latent, fix on the next loop-engine touch.
+  Nothing here is blocking.
 
 - 2026-08-14 — **Ads: watch the probe verdict land, then the Putrajaya probe
   starts itself.** The ~Aug 17/18 19:01 UTC run should RESTORE Tamarind at

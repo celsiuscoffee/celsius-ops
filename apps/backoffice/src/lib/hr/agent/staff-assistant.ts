@@ -28,7 +28,7 @@ import { recordOutboundMessage } from "@/lib/whatsapp-store";
 import { sendOpsDigest } from "@/lib/ops-pulse/sender";
 import { resolveOwner } from "@/lib/ops-pulse/router";
 import { samePhone } from "@/lib/ops-pulse/inbound";
-import { getAgentMode, logAgentAction, type AgentMode } from "@celsius/agents/src/substrate";
+import { getAgentMode, logAgentAction, touchAgentRun, type AgentMode } from "@celsius/agents/src/substrate";
 import { staffSubmitLeave, staffUpdateOwnContact } from "./write-ops";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -233,6 +233,10 @@ export async function handleStaffInbound(input: StaffInboundInput): Promise<Staf
       console.log(`[hr-agent:staff] consumed (mode=off) from=${sender.name}`);
       return { handled: true, replied: false };
     }
+    // Webhook-driven, so "ran" means a staff message arrived and was handled —
+    // not every inbound produces a logged action, and without this the agent
+    // reads as never-run on /agents. Never throws.
+    await touchAgentRun(HR_AGENT_KEY);
 
     // Media (MC photos, receipts): no document intake in v1 — acknowledge and
     // redirect so the photo isn't silently swallowed.

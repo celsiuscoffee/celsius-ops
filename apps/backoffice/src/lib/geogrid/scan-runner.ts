@@ -82,6 +82,41 @@ export async function runScan(opts: {
   return { scan, failures };
 }
 
+// ── Scan outcomes ───────────────────────────────────────────────────────────
+// A scan writes a row whatever happens, but a "failed" one (every grid point
+// errored) carries no rank at all. Only scans that produced data are charged
+// to the monthly budget — otherwise a persistently-failing outlet silently
+// spends the whole cap on nothing and blocks every other outlet until the
+// month rolls over. Attempts are bounded separately (see MAX_ATTEMPTS_PER_RUN
+// in the cron route) so "failures are free" can't become unbounded API spend.
+export const SCAN_STATUS_FAILED = "failed";
+
+export function producedData(status: string): boolean {
+  return status !== SCAN_STATUS_FAILED;
+}
+
+/**
+ * Round-robin a due-list across outlets, preserving each outlet's own
+ * warmest-first order. The queue is otherwise globally sorted by need, so one
+ * outlet holding the worst ranks (or failing every scan) takes the whole run
+ * and the others are never reached — which is how IOI Mall went unscanned
+ * while Shah Alam burned 8 attempts a month.
+ */
+export function interleaveByOutlet<T extends { outletId: string }>(items: T[]): T[] {
+  const byOutlet = new Map<string, T[]>();
+  for (const item of items) {
+    const list = byOutlet.get(item.outletId) ?? [];
+    list.push(item);
+    byOutlet.set(item.outletId, list);
+  }
+  const queues = [...byOutlet.values()];
+  const out: T[] = [];
+  for (let i = 0; out.length < items.length; i++) {
+    for (const q of queues) if (i < q.length) out.push(q[i]);
+  }
+  return out;
+}
+
 // ── Adaptive cadence ────────────────────────────────────────────────────────
 // A combo at goal is checked monthly; one still being worked, weekly. This is
 // what concentrates the scan budget on outlets/keywords that need improvement.
