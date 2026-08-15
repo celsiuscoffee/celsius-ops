@@ -48,6 +48,53 @@ export async function resolveException(
     return { kind: "dismissed" };
   }
 
+  // AR low-confidence EOD days: the agent posted the journal as a DRAFT and
+  // raised this exception as its only human surface. Approve = post the
+  // draft as-is (the DB triggers re-validate balance + period on the flip).
+  // A correct/reclass flow needs a tender-split editor — not built; say so.
+  if (exc.agent === "ar" && exc.type === "categorization") {
+    if (action.kind !== "approve") {
+      return { kind: "noop", reason: "AR exceptions support approve or dismiss only (tender reclass not built)" };
+    }
+    if (exc.related_type !== "transaction" || !exc.related_id) {
+      return { kind: "noop", reason: "AR exception missing related transaction" };
+    }
+    const { data: draft } = await client
+      .from("fin_transactions")
+      .select("id, status, amount")
+      .eq("id", exc.related_id as string)
+      .maybeSingle();
+    if (!draft) return { kind: "noop", reason: "Draft transaction not found" };
+    if (draft.status !== "draft") {
+      // Already posted/reversed elsewhere — just close the exception.
+      await client
+        .from("fin_exceptions")
+        .update({
+          status: "resolved",
+          resolved_by: userId,
+          resolved_at: new Date().toISOString(),
+          resolution: { action: "approve", note: `transaction already ${draft.status}` },
+        })
+        .eq("id", exceptionId);
+      return { kind: "posted", transactionId: draft.id as string, amount: Number(draft.amount) };
+    }
+    const { error: postErr } = await client
+      .from("fin_transactions")
+      .update({ status: "posted" })
+      .eq("id", draft.id as string);
+    if (postErr) throw postErr; // trigger rejection (unbalanced/closed period) surfaces raw
+    await client
+      .from("fin_exceptions")
+      .update({
+        status: "resolved",
+        resolved_by: userId,
+        resolved_at: new Date().toISOString(),
+        resolution: { action: "approve" },
+      })
+      .eq("id", exceptionId);
+    return { kind: "posted", transactionId: draft.id as string, amount: Number(draft.amount) };
+  }
+
   // Approve / correct → post the bill journal.
   // Only AP-categorization exceptions are auto-postable from the inbox in
   // Phase 3. Other exception types (match, anomaly) get their own resolvers
