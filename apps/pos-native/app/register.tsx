@@ -161,7 +161,10 @@ export default function Register() {
   // Card terminal state. With the ECR link configured (Settings → Maybank
   // Terminal) this drives the REAL X990 over the LAN; unconfigured tills get
   // the rehearsal stub, whose approvals are labelled SIMULATION on screen.
-  const [cardStage, setCardStage] = useState<"idle" | "prompting" | "approved" | "declined">("idle");
+  // "unknown" is deliberately distinct from "declined": when the terminal link
+  // fails we do NOT know whether the customer was charged, and telling staff
+  // "declined" invites a re-charge. See lib/maybank-ecr.ts EcrOutcome.
+  const [cardStage, setCardStage] = useState<"idle" | "prompting" | "approved" | "declined" | "unknown">("idle");
   // The terminal's approval payload — held so the cashier-verification
   // screen can show the approval code + masked PAN before we record the
   // sale. Card payments now require a manual confirm (mirrors QR), so the
@@ -2438,10 +2441,11 @@ export default function Register() {
                         setCardError(result.reason || null);
                         setCardStage("declined");
                       } else if (result.status === "error") {
-                        // Terminal unreachable / not configured / no result —
-                        // show the reason so staff know it's the LINK, not the card.
+                        // Link/terminal problem → the payment outcome is UNKNOWN,
+                        // not failed. Distinct screen so nobody re-charges a
+                        // customer who may already have paid on the terminal.
                         setCardError(result.message);
-                        setCardStage("declined");
+                        setCardStage("unknown");
                       } else {
                         // Cancelled → return to method picker.
                         setCardStage("idle");
@@ -2528,6 +2532,11 @@ export default function Register() {
                           <Text className="text-cream/55 text-xs" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
                             Approval {cardResult.approvalCode} · {cardResult.txnRef}
                           </Text>
+                          {cardResult.signatureVerified === false && (
+                            <Text className="text-xs mt-1" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: "#FBBF24" }}>
+                              ⚠ Reply signature unverified — confirm the approval on the terminal itself
+                            </Text>
+                          )}
                         </View>
                       )}
                     </View>
@@ -2543,6 +2552,38 @@ export default function Register() {
                     </Pressable>
                     <Pressable
                       onPress={() => { setCardStage("idle"); setCardResult(null); setPayMethod(null); }}
+                      className="h-11 rounded-xl items-center justify-center active:opacity-60"
+                    >
+                      <Text className="text-cream/55 text-xs tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>‹ Back to methods</Text>
+                    </Pressable>
+                  </View>
+                )}
+                {cardStage === "unknown" && (
+                  <View className="gap-3">
+                    {/* Outcome UNKNOWN — the customer may or may not have been
+                        charged. Staff must read the terminal before acting. */}
+                    <View className="rounded-2xl px-5 py-4" style={{ backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.55)" }}>
+                      <View className="flex-row items-center gap-2 mb-2">
+                        <AlertTriangle size={20} color="#FBBF24" />
+                        <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: "#FBBF24" }}>Check the terminal</Text>
+                      </View>
+                      <Text className="text-cream/75 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                        {cardError || "No result received from the terminal."}
+                      </Text>
+                      <Text className="text-cream/55 text-xs mt-2" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                        If the terminal shows APPROVED, record the sale below — do NOT charge again.
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => pay("card")}
+                      className="h-14 rounded-2xl items-center justify-center flex-row gap-3 active:opacity-80"
+                      style={{ backgroundColor: "#FBBF24" }}
+                    >
+                      <CheckCircle2 size={22} color="#160800" />
+                      <Text className="text-base" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#160800" }}>TERMINAL SHOWS APPROVED — RECORD SALE</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => { setCardStage("idle"); setCardError(null); setPayMethod(null); }}
                       className="h-11 rounded-xl items-center justify-center active:opacity-60"
                     >
                       <Text className="text-cream/55 text-xs tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>‹ Back to methods</Text>
