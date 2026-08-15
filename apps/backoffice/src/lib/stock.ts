@@ -87,3 +87,81 @@ export async function setStockBalance(
     });
   }
 }
+
+/**
+ * Credit received goods to stock, converting package units to base UOM.
+ *
+ * Goods are received in whatever package was purchased ("2 packs of butter"),
+ * but StockBalance is tracked in the product's base UOM everywhere else —
+ * receiving, wastage, stock counts, par levels. Two rules therefore apply to
+ * every receipt, and Pay & Claim was honouring neither:
+ *
+ *   1. multiply by the package's conversionFactor (2 packs x 250g = 500g), and
+ *   2. write the CANONICAL per-product row (productPackageId = null).
+ *
+ * Writing a per-package row instead is doubly wrong: the inventory reader sums
+ * across rows, so the same goods are counted twice, and the canonical row never
+ * receives the stock at all — so a Pay & Claim purchase was effectively
+ * invisible to par levels and reorder. (Observed 2026-08-02: 13 Pay & Claim
+ * receipts created 33 orphan package rows; e.g. 17 packs of shimeji = 2,125g
+ * sat on a package row while the real balance read zero.)
+ *
+ * Mirrors the conversion the main receivings route already does.
+ */
+export interface PackageLine {
+  productId: string;
+  productPackageId?: string | null;
+  /** Quantity in PACKAGE units. Negative for a debit (transfer out, cancel). */
+  quantity: number;
+}
+
+/**
+ * Pure part of the conversion: package-unit lines + factors → base-UOM totals
+ * per product. Split out so the arithmetic is testable without a database.
+ *
+ * A line with no package (or an unknown/invalid factor) is treated as already
+ * being in base units — factor 1. Lines for the same product are summed, since
+ * they must all land on the single canonical balance row.
+ *
+ * On RECEIPT paths that factor-1 fallback is no longer where an unrecorded
+ * package lands: `guardReceiptPackages` runs upstream and either resolves the
+ * package or rejects the request, so a null here means "this product genuinely
+ * has no packages" rather than "nobody said". Transfers still reach it directly,
+ * which is safe because a transfer debits and credits in the same unit.
+ */
+export function baseTotalsFromPackages(
+  items: PackageLine[],
+  cfMap: Map<string, number>,
+): Map<string, number> {
+  const baseTotals = new Map<string, number>();
+  for (const it of items) {
+    const raw = it.productPackageId ? cfMap.get(it.productPackageId) : undefined;
+    const cf = raw !== undefined && Number.isFinite(raw) && raw > 0 ? raw : 1;
+    const qty = Number(it.quantity);
+    if (!Number.isFinite(qty)) continue;
+    baseTotals.set(it.productId, (baseTotals.get(it.productId) ?? 0) + qty * cf);
+  }
+  return baseTotals;
+}
+
+export async function adjustStockByPackages(outletId: string, items: PackageLine[]) {
+  const pkgIds = [
+    ...new Set(items.map((i) => i.productPackageId ?? null).filter((id): id is string => id != null)),
+  ];
+  const cfMap = new Map<string, number>();
+  if (pkgIds.length > 0) {
+    const pkgs = await prisma.productPackage.findMany({
+      where: { id: { in: pkgIds } },
+      select: { id: true, conversionFactor: true },
+    });
+    for (const p of pkgs) cfMap.set(p.id, Number(p.conversionFactor));
+  }
+
+  const baseTotals = baseTotalsFromPackages(items, cfMap);
+
+  await Promise.all(
+    [...baseTotals].map(([productId, baseQty]) =>
+      adjustStockBalance(outletId, productId, baseQty, null),
+    ),
+  );
+}

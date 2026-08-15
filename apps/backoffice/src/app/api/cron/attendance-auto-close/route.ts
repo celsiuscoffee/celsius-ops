@@ -189,8 +189,11 @@ export async function GET(req: NextRequest) {
       employmentType,
       isPublicHoliday: publicHolidaySet.has(clockInDate),
       isRestDay: rosteredRestDays.has(`${log.user_id}|${clockInDate}`),
-      // Early clock-in pays from the rostered start (stamped at clock-in).
+      // The paid window: only time inside the rostered shift counts. An
+      // auto-close already caps the clock-out at the roster/outlet close, so the
+      // end bound mostly just makes the two paths agree.
       scheduledStart: mytInstant(log.scheduled_date ?? mytDateString(clockIn), log.scheduled_start),
+      scheduledEnd: mytInstant(log.scheduled_date ?? mytDateString(clockIn), log.scheduled_end),
     });
 
     flags.push(`auto_closed_${reason}`, ...derived.dayTypeFlags);

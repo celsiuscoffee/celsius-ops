@@ -15,7 +15,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { runReadOnlySql, safeJson } from "@/lib/agents/data-analyst";
-import { getAgentModeOrDefault, logAgentAction } from "@celsius/agents/src/substrate";
+import { getAgentModeOrDefault, logAgentAction, touchAgentRun } from "@celsius/agents/src/substrate";
 import { sendPulse } from "@celsius/agents/src/pulse";
 import { logAgentMessage } from "@celsius/agents/src/messages";
 
@@ -117,6 +117,9 @@ Give me this week's marketing call.`,
 
 export async function runMarketingStrategist(): Promise<{ sent: boolean; skipped?: string }> {
   if ((await getAgentModeOrDefault("marketing_strategist", "armed")) === "off") return { sent: false, skipped: "agent off" };
+  // Heartbeat before the quiet-exit paths below, so a week with no campaign
+  // outcomes still reads as "ran, nothing to say" rather than "never ran".
+  await touchAgentRun("marketing_strategist");
   if (!process.env.ANTHROPIC_API_KEY) return { sent: false, skipped: "no api key" };
 
   const inputs = await gatherMarketingInputs();

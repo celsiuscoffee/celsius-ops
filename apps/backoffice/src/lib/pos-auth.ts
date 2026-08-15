@@ -23,6 +23,32 @@ export type SessionUser = {
   outletName?: string | null;
 };
 
+/**
+ * Which outlet a POS session binds to.
+ *
+ * A staffer signs in AT A TILL, so the session takes THAT till's outlet —
+ * provided they actually work there: their home outlet (`User.outletId`) or a
+ * rotation outlet (`User.outletIds`, the "Also works at" ticks on the employee
+ * screen). Anything else falls back to their home outlet.
+ *
+ * Before this, the session always carried the HOME outlet, which pointed the
+ * open-store schedule gate at the wrong outlet's roster and scoped
+ * store-menu-status to an outlet the staffer wasn't standing in.
+ */
+export function sessionOutletId(opts: {
+  /** The till's outlet, resolved to a UUID where possible. */
+  tillOutletId: string | null;
+  /** User.outletId. */
+  homeOutletId: string | null;
+  /** User.outletIds — the rotation list. */
+  rotation?: string[] | null;
+}): string | null {
+  const { tillOutletId, homeOutletId } = opts;
+  if (!tillOutletId) return homeOutletId;
+  if (tillOutletId === homeOutletId) return tillOutletId;
+  return (opts.rotation ?? []).includes(tillOutletId) ? tillOutletId : homeOutletId;
+}
+
 export class AuthError extends Error {
   status: number;
   constructor(message: string, status: number) {

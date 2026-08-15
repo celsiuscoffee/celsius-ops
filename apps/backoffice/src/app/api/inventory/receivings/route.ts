@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { baseQtyByProduct } from "@celsius/db";
+import { resolveReceiptPackages } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { adjustStockBalance } from "@/lib/stock";
 import { getUserFromHeaders } from "@/lib/auth";
@@ -187,6 +187,39 @@ export async function POST(req: NextRequest) {
     if (hasShort) receivingStatus = "PARTIAL";
   }
 
+  // Resolve every line to a package before writing. This route stored only the
+  // client's explicit `productPackageId`, so a line that omitted it was booked
+  // at factor 1 — cartons recorded as grams. 334 of the 357 package-less rows
+  // since June could have been resolved from their own PO line, which this now
+  // does; a genuinely ambiguous line is refused instead of guessed.
+  const recvLines = (items as Array<{ productId: string; productPackageId?: string }>).map((i) => ({
+    productId: i.productId,
+    productPackageId: i.productPackageId ?? null,
+  }));
+  const recvProductIds = [...new Set(recvLines.map((l) => l.productId))];
+  const [pkgOptions, recvProducts] = await Promise.all([
+    prisma.productPackage.findMany({
+      where: { productId: { in: recvProductIds } },
+      select: { id: true, productId: true, packageLabel: true, conversionFactor: true },
+    }),
+    prisma.product.findMany({ where: { id: { in: recvProductIds } }, select: { id: true, name: true } }),
+  ]);
+  const resolution = resolveReceiptPackages(recvLines, {
+    packages: pkgOptions.map((p) => ({ ...p, conversionFactor: Number(p.conversionFactor) })),
+    poPackageByProduct: poPkgMap,
+    productNames: new Map(recvProducts.map((p) => [p.id, p.name])),
+  });
+  if (!resolution.ok) {
+    return NextResponse.json(
+      {
+        error: "Choose a package for every item before receiving.",
+        details: resolution.errors.map((e) => e.message),
+      },
+      { status: 400 },
+    );
+  }
+  const resolved = resolution.resolved;
+
   const receiving = await prisma.receiving.create({
     data: {
       orderId: orderId || null,
@@ -198,9 +231,9 @@ export async function POST(req: NextRequest) {
       notes: notes || null,
       invoicePhotos: invoicePhotos || [],
       items: {
-        create: items.map((i: { productId: string; productPackageId?: string; orderedQty?: number; receivedQty: number; expiryDate?: string; discrepancyReason?: string }) => ({
+        create: items.map((i: { productId: string; productPackageId?: string; orderedQty?: number; receivedQty: number; expiryDate?: string; discrepancyReason?: string }, idx: number) => ({
           productId: i.productId,
-          productPackageId: i.productPackageId || null,
+          productPackageId: resolved[idx].productPackageId,
           orderedQty: resolveOrderedQty(i),
           receivedQty: i.receivedQty,
           expiryDate: i.expiryDate ? new Date(i.expiryDate) : null,
@@ -211,37 +244,17 @@ export async function POST(req: NextRequest) {
   });
 
   // Update stock balances. Goods are received in a package unit ("12 bottles"),
-  // but StockBalance is tracked in base UOM — multiply each line by its package
-  // conversionFactor and increment the canonical per-product row
-  // (productPackageId = null), matching stock counts and the staff app.
-  const recvPkgIds = [
-    ...new Set(
-      (items as Array<{ productId: string; productPackageId?: string }>)
-        .map((i) => i.productPackageId ?? poPkgMap.get(i.productId) ?? null)
-        .filter((id): id is string => id != null),
-    ),
-  ];
-  const cfMap = new Map<string, number>();
-  if (recvPkgIds.length > 0) {
-    const pkgs = await prisma.productPackage.findMany({
-      where: { id: { in: recvPkgIds } },
-      select: { id: true, conversionFactor: true },
-    });
-    for (const p of pkgs) cfMap.set(p.id, Number(p.conversionFactor));
-  }
-  const baseTotals = baseQtyByProduct(
-    (items as Array<{ productId: string; productPackageId?: string; receivedQty: number }>).map((i) => {
-      // Fall back to the PO line's package: goods are counted in package units
-      // even when the client omits the package id (staff-route parity — factor
-      // 1 here used to book "3 cartons" as 3 base units).
-      const pkgId = i.productPackageId ?? poPkgMap.get(i.productId) ?? null;
-      return {
-        productId: i.productId,
-        countedQty: i.receivedQty,
-        conversionFactor: pkgId ? cfMap.get(pkgId) ?? 1 : 1,
-      };
-    }),
-  );
+  // but StockBalance is tracked in base UOM — multiply each line by the factor
+  // resolved above and increment the canonical per-product row
+  // (productPackageId = null), matching stock counts and the staff app. Reusing
+  // `resolved` keeps the stored row and the balance denominated identically.
+  const baseTotals = new Map<string, number>();
+  (items as Array<{ productId: string; receivedQty: number }>).forEach((i, idx) => {
+    const qty = Number(i.receivedQty);
+    if (!Number.isFinite(qty)) return;
+    const base = qty * resolved[idx].conversionFactor;
+    baseTotals.set(i.productId, (baseTotals.get(i.productId) ?? 0) + base);
+  });
   await Promise.all(
     [...baseTotals].map(([productId, baseQty]) =>
       adjustStockBalance(outletId, productId, baseQty, null),

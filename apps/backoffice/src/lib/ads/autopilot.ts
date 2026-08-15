@@ -377,21 +377,33 @@ export function decideCampaign(c: CampaignState, guard: GuardSignal, now: Date):
       return { ...base, action: "hold", reason: `pause probe running (${Math.round(daysSince)}d/${PAUSE_PROBE_DAYS}d, pause-window till index ${c.pauseProbe?.index ?? "n/a"})` };
     }
     const p = c.pauseProbe;
+    // A missing index is a MEASUREMENT failure (forecast query threw, series
+    // empty), not evidence of anything. Deciding on it used to fall through to
+    // the floor verdict — i.e. a Supabase hiccup at 19:01 would read as "ads
+    // are worthless" and slash the budget. Hold instead; tomorrow's run
+    // re-measures the full window and the verdict loses nothing by waiting.
+    if (p?.index == null) {
+      return {
+        ...base,
+        action: "hold",
+        reason: `pause probe window complete but tonight's till index could not be measured — holding for retry, a verdict needs evidence`,
+      };
+    }
     const dropDetected =
-      p?.index != null && (p.index < GUARD_RAW_MIN || (p.adjIndex != null && p.adjIndex < GUARD_ADJ_MIN));
+      p.index < GUARD_RAW_MIN || (p.adjIndex != null && p.adjIndex < GUARD_ADJ_MIN);
     if (dropDetected) {
       return {
         ...base,
         action: "restore",
         newDailyMyr: round2(c.dailyBudgetMyr),
-        reason: `autopilot restore: pause probe VERDICT — ads generate cash (pause-window till index ${p!.index}${p!.adjIndex != null ? `, fleet-adj ${p!.adjIndex}` : ""}); resuming at RM${round2(c.dailyBudgetMyr)}/day, gradual descent will find the floor`,
+        reason: `autopilot restore: pause probe VERDICT — ads generate cash (pause-window till index ${p.index}${p.adjIndex != null ? `, fleet-adj ${p.adjIndex}` : ""}); resuming at RM${round2(c.dailyBudgetMyr)}/day, gradual descent will find the floor`,
       };
     }
     return {
       ...base,
       action: "restore",
       newDailyMyr: FLOOR_DAILY_MYR,
-      reason: `autopilot restore: pause probe VERDICT — no detectable till effect (pause-window index ${p?.index ?? "n/a"}${p?.adjIndex != null ? `, fleet-adj ${p.adjIndex}` : ""}); campaign is below break-even wholesale — restoring at the floor RM${FLOOR_DAILY_MYR}/day (~RM${monthly(c.dailyBudgetMyr - FLOOR_DAILY_MYR)}/mo freed)`,
+      reason: `autopilot restore: pause probe VERDICT — no detectable till effect (pause-window index ${p.index}${p.adjIndex != null ? `, fleet-adj ${p.adjIndex}` : ""}); campaign is below break-even wholesale — restoring at the floor RM${FLOOR_DAILY_MYR}/day (~RM${monthly(c.dailyBudgetMyr - FLOOR_DAILY_MYR)}/mo freed)`,
     };
   }
 
@@ -546,32 +558,23 @@ export function ownerDirective(c: CampaignState): AutopilotDecision | null {
   return null;
 }
 
-// One-time owner directive 2026-07-19 ("what do you suggest" → "ok do this"):
-// a single decisive cut of the three ad campaigns to RM55/day, banking
-// ~RM4,050/mo of the RM5k target now instead of over ~2 months; the normal
-// guarded descent + rollback continue from there. Fires ONLY on a healthy
-// measured till (never cut into weakness), only while the campaign is still
-// above target, and self-expires per campaign once it lands at RM55. Remove
-// this block in a follow-up once all three are confirmed applied.
-export const HARD_CUT_TARGET_MYR = Number(process.env.ADS_HARD_CUT_TARGET_MYR || 55);
-const HARD_CUT_CAMPAIGNS = ["Putrajaya", "Shah Alam", "Tamarind"];
-
-export function hardCutDirective(c: CampaignState, guard: GuardSignal): AutopilotDecision | null {
-  if (c.isPaused) return null;
-  if (!HARD_CUT_CAMPAIGNS.some((n) => c.campaignName.includes(n))) return null;
-  if (c.dailyBudgetMyr <= HARD_CUT_TARGET_MYR) return null; // already at/below target → expired
-  // Need a healthy measured till: no guard signal, or a breaching one, waits a night.
-  if (guard.rawIndex == null || guard.rawIndex < GUARD_RAW_MIN) return null;
-  return {
-    campaignId: c.campaignId,
-    campaignName: c.campaignName,
-    action: "cut",
-    newDailyMyr: HARD_CUT_TARGET_MYR,
-    reason:
-      `autopilot step-down (owner directive 2026-07-19 hard-cut): decisive cut RM${round2(c.dailyBudgetMyr)}→RM${HARD_CUT_TARGET_MYR}/day ` +
-      `(banks ~RM${round2((c.dailyBudgetMyr - HARD_CUT_TARGET_MYR) * 30)}/mo) — till healthy (index ${guard.rawIndex}); guarded descent + rollback continue from here`,
-  };
-}
+// REMOVED 2026-08-15: hardCutDirective, the one-time owner directive of
+// 2026-07-19 that cut Putrajaya / Shah Alam / Tamarind to RM55/day. It did its
+// job — all three landed on 2026-07-20 — and it was written to be deleted once
+// they had ("remove this block in a follow-up once all three are confirmed
+// applied").
+//
+// It was never self-expiring the way it read, though. The guard was
+// `dailyBudgetMyr <= 55 → null`, which expires per campaign only while the
+// budget STAYS under RM55 — it re-arms the moment one rises back above. So it
+// was not a spent directive sitting harmlessly, it was a trap primed to fire
+// again on any future raise: the next one due is Shah Alam's probe-up when its
+// rollback hold ends ~Oct 7, which it would have chopped straight back to RM55
+// and corrupted the experiment.
+//
+// Nothing replaces it. The guarded descent, rollback and pause-probe already
+// own budget movement, and they read the till rather than a fixed number.
+// (Loop QA sweep — docs/design/loop-qa-2026-08-15.md, P8.1.)
 
 /** Stagger the descent: keep at most `max` BLIND cuts, least-efficient campaigns first. */
 export function capCuts(decisions: AutopilotDecision[], states: CampaignState[], max = MAX_CUTS_PER_RUN): AutopilotDecision[] {
@@ -1156,7 +1159,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
 
   const baseDecisions = states.map((s) => {
     const guard = s.outletId ? guards[s.outletId] ?? noGuard : noGuard;
-    const directive = hardCutDirective(s, guard) ?? ownerDirective(s);
+    const directive = ownerDirective(s);
     return directive ?? decideCampaign(s, guard, now);
   });
   const withProbe = PAUSE_PROBE_ENABLED ? selectPauseProbe(capCuts(baseDecisions, states), states, guards) : capCuts(baseDecisions, states);

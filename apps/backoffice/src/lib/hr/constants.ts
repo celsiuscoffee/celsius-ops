@@ -6,6 +6,24 @@ export const GEOFENCE_RADIUS_METERS = 100;
 // Attendance rules
 export const LATE_THRESHOLD_MINUTES = 15;
 export const GRACE_PERIOD_MINUTES = 5;
+
+/**
+ * PAID clock grace (owner rule 2026-08-14, extended same day to both ends):
+ * clocking in up to this many minutes AFTER the rostered start, or out up to
+ * this many minutes BEFORE the rostered end, is forgiven — pay still runs the
+ * full rostered window, so a near-miss at either edge costs nothing.
+ *
+ * Past the grace the FULL deviation is docked, not just the excess: it is a
+ * threshold, not an allowance to subtract.
+ *
+ * Distinct from GRACE_PERIOD_MINUTES above, which is display-only (the
+ * on-time/late chip and the on-time % stats) and has never touched pay.
+ *
+ * This exists because the old 30-min pay rounding punished near-misses
+ * absurdly: Naufal clocked in at 07:30:51 on 2026-08-03 — 51 seconds late —
+ * and the rounding pushed his paid start to 08:00, costing him RM4.50.
+ */
+export const CLOCK_GRACE_MINUTES = 10;
 export const MAX_SHIFT_HOURS = 12;
 export const AUTO_CLOCKOUT_AFTER_HOURS = 12;
 export const NORMAL_WORK_HOURS = 7.5; // 45h/week ÷ 6 days = 7.5h/day

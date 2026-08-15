@@ -1,7 +1,9 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
-import { adjustStockBalance } from "@/lib/stock";
+import { adjustStockByPackages } from "@/lib/stock";
+import { guardReceiptPackages } from "@/lib/inventory/receipt-guard";
+import type { ResolvedReceiptPackage } from "@celsius/db";
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -268,6 +270,17 @@ export async function POST(req: NextRequest) {
 
     const willCreateReceiving = !!(isQuickUpload && !isDraft && items?.length && supplierId);
 
+    // Guard before the transaction: a Pay & Claim receipt books stock, and an
+    // unresolved package books it at factor 1. Pay & Claim has no PO to fall
+    // back on, so the receiver's choice (or a product with a single package)
+    // is the only evidence there is.
+    let pcResolved: ResolvedReceiptPackage[] = [];
+    if (willCreateReceiving) {
+      const guard = await guardReceiptPackages(items);
+      if (!guard.ok) return guard.response;
+      pcResolved = guard.resolved;
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       // 1. Order — retry on orderNumber collision
       let order;
@@ -290,9 +303,11 @@ export async function POST(req: NextRequest) {
               ...(items?.length
                 ? {
                     items: {
-                      create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }) => ({
+                      create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }, idx: number) => ({
                         productId: i.productId,
-                        productPackageId: i.productPackageId || null,
+                        // Carry the resolved package onto the order line too —
+                        // it is what later receipts fall back to.
+                        productPackageId: pcResolved[idx]?.productPackageId ?? i.productPackageId ?? null,
                         quantity: i.quantity,
                         unitPrice: i.unitPrice,
                         totalPrice: i.quantity * i.unitPrice,
@@ -359,9 +374,9 @@ export async function POST(req: NextRequest) {
             notes: notes ? `Pay & Claim: ${notes}` : "Pay & Claim",
             invoicePhotos: photos || [],
             items: {
-              create: items.map((i: { productId: string; productPackageId?: string; quantity: number }) => ({
+              create: items.map((i: { productId: string; productPackageId?: string; quantity: number }, idx: number) => ({
                 productId: i.productId,
-                productPackageId: i.productPackageId || null,
+                productPackageId: pcResolved[idx].productPackageId,
                 orderedQty: i.quantity,
                 receivedQty: i.quantity,
               })),
@@ -378,10 +393,13 @@ export async function POST(req: NextRequest) {
     // adjustStockBalance uses the global prisma client. If this fails, the
     // financial records still exist and stock can be reconciled separately.
     if (willCreateReceiving) {
-      await Promise.all(
-        items.map((item: { productId: string; productPackageId?: string; quantity: number }) =>
-          adjustStockBalance(outletId, item.productId, item.quantity, item.productPackageId),
-        ),
+      await adjustStockByPackages(
+        outletId,
+        items.map((i: { productId: string; quantity: number }, idx: number) => ({
+          productId: i.productId,
+          productPackageId: pcResolved[idx].productPackageId,
+          quantity: i.quantity,
+        })),
       );
     }
 
@@ -405,6 +423,14 @@ export async function POST(req: NextRequest) {
     ? `${category.toLowerCase()} payment request`
     : `${category.toLowerCase()} claim`;
 
+  // Same guard as the quick-upload path above, before anything commits.
+  let fullResolved: ResolvedReceiptPackage[] = [];
+  if (willCreateFullReceiving) {
+    const guard = await guardReceiptPackages(items);
+    if (!guard.ok) return guard.response;
+    fullResolved = guard.resolved;
+  }
+
   const result = await prisma.$transaction(async (tx) => {
     // 1. Order
     let order;
@@ -427,9 +453,9 @@ export async function POST(req: NextRequest) {
             ...(items?.length
               ? {
                   items: {
-                    create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }) => ({
+                    create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }, idx: number) => ({
                       productId: i.productId,
-                      productPackageId: i.productPackageId || null,
+                      productPackageId: fullResolved[idx]?.productPackageId ?? i.productPackageId ?? null,
                       quantity: i.quantity,
                       unitPrice: i.unitPrice,
                       totalPrice: i.quantity * i.unitPrice,
@@ -459,9 +485,9 @@ export async function POST(req: NextRequest) {
           notes: notes ? `Pay & Claim: ${notes}` : "Pay & Claim",
           invoicePhotos: photos || [],
           items: {
-            create: items.map((i: { productId: string; productPackageId?: string; quantity: number }) => ({
+            create: items.map((i: { productId: string; productPackageId?: string; quantity: number }, idx: number) => ({
               productId: i.productId,
-              productPackageId: i.productPackageId || null,
+              productPackageId: fullResolved[idx].productPackageId,
               orderedQty: i.quantity,
               receivedQty: i.quantity,
             })),
@@ -509,10 +535,13 @@ export async function POST(req: NextRequest) {
 
   // Post-commit stock adjustments
   if (willCreateFullReceiving) {
-    await Promise.all(
-      items.map((item: { productId: string; productPackageId?: string; quantity: number }) =>
-        adjustStockBalance(outletId, item.productId, item.quantity, item.productPackageId),
-      ),
+    await adjustStockByPackages(
+      outletId,
+      items.map((i: { productId: string; quantity: number }, idx: number) => ({
+        productId: i.productId,
+        productPackageId: fullResolved[idx].productPackageId,
+        quantity: i.quantity,
+      })),
     );
   }
 

@@ -24,6 +24,7 @@
  */
 import type { OrderStatus } from "@celsius/db";
 import type { Prisma } from "@celsius/db";
+import { dueDateIsBelievable, DUE_BEFORE_ISSUE_FLAG } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { fetchWhatsAppMedia } from "@/lib/whatsapp";
 import { storeWhatsAppMedia } from "@/lib/whatsapp-media";
@@ -94,6 +95,9 @@ export async function captureInvoice(
   let numberFormatSuspicious = false;
   let billDate: Date | null = null;
   let dueDate: Date | null = null;
+  // Set when a captured due date was rejected for pre-dating the issue date —
+  // flagged on the invoice so a human enters the real one.
+  let dueDateRejected: string | null = null;
   let outletHint: string | null = null;
   let docType: string = "invoice";
   const prefilled: string[] = [];
@@ -143,8 +147,21 @@ export async function captureInvoice(
           prefilled.push("issueDate");
         }
         if (parsed.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(parsed.dueDate)) {
-          dueDate = new Date(parsed.dueDate);
-          prefilled.push("dueDate");
+          const candidate = new Date(parsed.dueDate);
+          // Each field is read in isolation, so the due date can come back
+          // earlier than the issue date — the model picked up a delivery date,
+          // a statement date, or the previous invoice in the same document. A
+          // balance cannot be due before the invoice exists, so drop it rather
+          // than create a row that ageing will later act on.
+          if (dueDateIsBelievable(billDate, candidate)) {
+            dueDate = candidate;
+            prefilled.push("dueDate");
+          } else {
+            dueDateRejected = parsed.dueDate;
+            console.warn(
+              `[invoice-capture] due date ${parsed.dueDate} pre-dates issue date ${parsed.billDate} — not applied`,
+            );
+          }
         }
       }
     } catch (e) {
@@ -340,6 +357,16 @@ export async function captureInvoice(
       amount,
       issueDate: billDate,
     });
+    if (dueDateRejected) {
+      // The capture read a due date earlier than the issue date, so it was not
+      // applied. Say so on the invoice — silently dropping it would leave the
+      // row with no due date and no explanation.
+      flags.push({
+        code: DUE_BEFORE_ISSUE_FLAG,
+        message: `Due date read as ${dueDateRejected}, before this invoice's issue date — not applied. Enter the balance due date from the document.`,
+        detectedAt: new Date().toISOString(),
+      });
+    }
     if (numberFormatSuspicious) {
       flags.push({
         code: "NUMBER_FORMAT_MISMATCH",

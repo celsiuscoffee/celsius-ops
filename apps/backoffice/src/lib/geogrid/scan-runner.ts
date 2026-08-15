@@ -25,7 +25,7 @@ export async function runScan(opts: {
   rangeMiles: number;
   apiKey: string;
   createdBy?: string;
-}): Promise<{ scan: GeoGridScan; failures: number }> {
+}): Promise<{ scan: GeoGridScan; failures: number; sampleError: string | null; retries: number }> {
   const { outletId, keyword, gridSize, rangeMiles, apiKey, createdBy } = opts;
 
   const outlet = await prisma.outlet.findUnique({
@@ -56,7 +56,7 @@ export async function runScan(opts: {
 
   const points = buildGrid(centerLat, centerLng, gridSize, rangeMiles);
   const radiusM = Math.min(Math.max(rangeMiles * METERS_PER_MILE, 500), 5000);
-  const { points: scanned, failures, competitors } = await scanGrid(apiKey, keyword, points, radiusM, geo.placeId, targetTitle);
+  const { points: scanned, failures, competitors, sampleError, retries } = await scanGrid(apiKey, keyword, points, radiusM, geo.placeId, targetTitle);
   const metrics = computeMetrics(scanned, centerLat, centerLng);
 
   const scan = await prisma.geoGridScan.create({
@@ -79,7 +79,42 @@ export async function runScan(opts: {
       createdBy: createdBy ?? null,
     },
   });
-  return { scan, failures };
+  return { scan, failures, sampleError, retries };
+}
+
+// ── Scan outcomes ───────────────────────────────────────────────────────────
+// A scan writes a row whatever happens, but a "failed" one (every grid point
+// errored) carries no rank at all. Only scans that produced data are charged
+// to the monthly budget — otherwise a persistently-failing outlet silently
+// spends the whole cap on nothing and blocks every other outlet until the
+// month rolls over. Attempts are bounded separately (see MAX_ATTEMPTS_PER_RUN
+// in the cron route) so "failures are free" can't become unbounded API spend.
+export const SCAN_STATUS_FAILED = "failed";
+
+export function producedData(status: string): boolean {
+  return status !== SCAN_STATUS_FAILED;
+}
+
+/**
+ * Round-robin a due-list across outlets, preserving each outlet's own
+ * warmest-first order. The queue is otherwise globally sorted by need, so one
+ * outlet holding the worst ranks (or failing every scan) takes the whole run
+ * and the others are never reached — which is how IOI Mall went unscanned
+ * while Shah Alam burned 8 attempts a month.
+ */
+export function interleaveByOutlet<T extends { outletId: string }>(items: T[]): T[] {
+  const byOutlet = new Map<string, T[]>();
+  for (const item of items) {
+    const list = byOutlet.get(item.outletId) ?? [];
+    list.push(item);
+    byOutlet.set(item.outletId, list);
+  }
+  const queues = [...byOutlet.values()];
+  const out: T[] = [];
+  for (let i = 0; out.length < items.length; i++) {
+    for (const q of queues) if (i < q.length) out.push(q[i]);
+  }
+  return out;
 }
 
 // ── Adaptive cadence ────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ import { createWagePaymentSlips } from "@/lib/finance/payment-slips";
 import { postBankLinesToGl } from "@/lib/finance/gl-posting";
 import { accrueSalaryControls } from "@/lib/finance/salary-accrual";
 import { checkCronAuth } from "@celsius/shared";
+import { touchAgentRun } from "@celsius/agents/src/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -35,6 +36,18 @@ export async function GET(req: NextRequest) {
     try { out[name] = await fn(); }
     catch (err) { out[name] = { error: err instanceof Error ? err.message : String(err) }; console.error(`[finance-loop:${name}]`, err); }
   };
+
+  // Fleet visibility: this cron — NOT the same-named /api/cron/ap-match-apply
+  // and /api/cron/gl-post routes, which are unscheduled — is what actually
+  // drives these agents on a schedule. Those routes heartbeat and this one did
+  // not, so /agents showed all three as "never ran" while they worked 4×/day,
+  // which is why the starved AP/bank feed went unnoticed. Touch every run, even
+  // a quiet one; each step still logs its own actions. Never throws.
+  await Promise.all([
+    touchAgentRun("finance_ap_agent"),
+    touchAgentRun("finance_ap_match_apply"),
+    touchAgentRun("finance_gl_post"),
+  ]);
 
   // 1. ingest the bank feed (must run first — the rest acts on its output)
   await step("feed", async () => {
