@@ -1049,17 +1049,17 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // Deep win-back: the 60-180d lapsed band winback (30-60d) never touches —
   // ~1.9k members nobody messages today. Colder base → richer offer arms +
   // 14d window; dailyLimit 80 drips the backlog (~RM8/day) instead of blasting.
-  lapsed_deep: { key: "lapsed_deep", label: "Deep win-back", objective: "Revive long-lapsed customers (60-180d)", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct20_min40", "flat15_min50", "b1f1_drinks", "flat10_min30"], messageTemplate: "Long time no see! We miss you at Celsius - come back and enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 120, segmentOpts: { minDaysLapsed: 60, maxDaysLapsed: 180 }, dailyLimit: 80 }, segment: lapsedDeepSegment },
+  lapsed_deep: { key: "lapsed_deep", label: "Deep win-back", objective: "Revive long-lapsed customers (60-180d)", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct20_min40", "flat15_min50", "b1f1_drinks", "flat10_min30"], messageTemplate: "Long time no see! We miss you at Celsius - come back and enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 120, segmentOpts: { minDaysLapsed: 60, maxDaysLapsed: 180 }, dailyLimit: 80 }, segment: lapsedDeepSegment },
   // Habit builder: welcome (the engine's best loop, +5pp) converts visit 1→2;
   // the habit locks in around visit 3. Same mechanic, one rung up: members at
   // 2-3 visits gone quiet 5-14d. Welcome's champion offer leads the arms.
-  habit: { key: "habit", label: "Habit builder", objective: "Turn the 2nd visit into a routine (3rd+)", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks"], messageTemplate: "You're becoming a regular at Celsius, {name}! Enjoy {offer} on your next visit - show your number at any outlet.", trigger: { holdoutPct: 10, cooldownDays: 45, segmentOpts: { minVisits: 2, maxVisits: 3, idleMinDays: 5, idleMaxDays: 14 }, dailyLimit: 80 }, segment: habitSegment },
+  habit: { key: "habit", label: "Habit builder", objective: "Turn the 2nd visit into a routine (3rd+)", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks"], messageTemplate: "You're becoming a regular at Celsius, {name}! Enjoy {offer} on your next visit - show your number at any outlet.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { minVisits: 2, maxVisits: 3, idleMinDays: 5, idleMaxDays: 14 }, dailyLimit: 80 }, segment: habitSegment },
   // ── Hypothesis wave 3 (2026-07-19).
   // Fresh lapse: the uncovered 14-30d band — a drifting regular is cheaper to
   // catch at 2-4 weeks than at 30-60d (winback) or 60-180d (deep). Light
   // offers only; the escalation ladder (fresh → winback → deep) upgrades the
   // lure as the lapse deepens. Reuses lapsedDeepSegment (real visitors only).
-  fresh_lapse: { key: "fresh_lapse", label: "Fresh lapse", objective: "Catch drifting regulars at 2-4 weeks", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks"], messageTemplate: "It's been a couple of weeks! We miss you at Celsius - enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 45, segmentOpts: { minDaysLapsed: 14, maxDaysLapsed: 30 }, dailyLimit: 80 }, segment: lapsedDeepSegment },
+  fresh_lapse: { key: "fresh_lapse", label: "Fresh lapse", objective: "Catch drifting regulars at 2-4 weeks", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks"], messageTemplate: "It's been a couple of weeks! We miss you at Celsius - enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { minDaysLapsed: 14, maxDaysLapsed: 30 }, dailyLimit: 80 }, segment: lapsedDeepSegment },
   // Basket builder: habitual small-ticket regulars (avg ~RM17 vs RM40 target).
   // Success = revenue/recipient vs holdout (margin), NOT conversion lift —
   // they'd visit anyway; the offer's job is to stretch the basket.
@@ -1068,7 +1068,7 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // (RM10 off RM30 = 33% give for zero stretch). Every arm here bars at
   // RM40+, i.e. at/above the AOV target. Same principle as round-gap's
   // ~20%-above-round-AOV anchoring.
-  aov_push: { key: "aov_push", label: "Basket builder", objective: "Grow small baskets toward RM40", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct15_min40", "pct20_min40", "flat15_min50"], messageTemplate: "Hi {name}! Treat yourself a little extra at Celsius - {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 60, segmentOpts: { activeWithinDays: 30, minVisits: 4, maxAvgTicket: 25 }, dailyLimit: 80 }, segment: aovPushSegment },
+  aov_push: { key: "aov_push", label: "Basket builder", objective: "Grow small baskets toward RM40", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct15_min40", "pct20_min40", "flat15_min50"], messageTemplate: "Hi {name}! Treat yourself a little extra at Celsius - {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 60, segmentOpts: { activeWithinDays: 30, minVisits: 4, maxAvgTicket: 25 }, dailyLimit: 80 }, segment: aovPushSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
@@ -1473,6 +1473,14 @@ const AUTO_PAUSE_MIN_TREATED = 300;   // pooled sends before a verdict counts
 const AUTO_PAUSE_MIN_HOLDOUT = 30;    // pooled control behind the lift read
 const AUTO_PAUSE_LIFT_FLOOR_PP = 0.5; // lift at/below this after the floors = not working
 const AUTO_PAUSE_ARM_CONV_FLOOR = 1;  // round-gap arm % conversion floor (arms share one holdout)
+// BLEED ESCAPE HATCH. The 30-holdout floor exists so we never kill a loop on a
+// noisy control — but it also made a clearly-losing loop UNKILLABLE: `habit`
+// ran to -8.7pp / -RM837 because its holdout only ever reached 16 (small pool
+// x 10% x daily cap), so the rule above skipped it every day. A loop haemorrhaging
+// this hard doesn't need a precise control to be actionable: the effect dwarfs
+// the error bar. Lower holdout floor, much harsher margin bar.
+const AUTO_PAUSE_BLEED_HOLDOUT = 10;      // minimum control to call an obvious bleed
+const AUTO_PAUSE_BLEED_MARGIN_RM = -0.50; // <= this per recipient = losing 5x the SMS cost
 
 export async function autoPauseUnderperformers(): Promise<Array<{ key: string; reason: string }>> {
   const paused = await getPausedLoops();
@@ -1501,15 +1509,19 @@ export async function autoPauseUnderperformers(): Promise<Array<{ key: string; r
       revenue += s.revenue_rm ?? (s.revenue_per_recipient_rm ?? 0) * s.n;
       rewardCogs += s.reward_cogs_rm ?? 0;
     }
-    if (n < AUTO_PAUSE_MIN_TREATED || base.n < AUTO_PAUSE_MIN_HOLDOUT) continue;
+    if (n < AUTO_PAUSE_MIN_TREATED) continue;
     const liftPp = (n ? (converted / n) * 100 : 0) - base.convRate;
     // Margin-aware kill: some loops (aov_push) succeed with ZERO conversion
     // lift — members were coming anyway, the offer grows the basket. So a loop
     // dies only when BOTH reads are dead: no lift AND true margin per
     // recipient that doesn't even cover its own SMS.
     const marginPerRecipient = ((n ? revenue / n : 0) - base.revPerRecipient) * GP - (n ? rewardCogs / n : 0);
-    if (liftPp <= AUTO_PAUSE_LIFT_FLOOR_PP && marginPerRecipient <= SMS_COST_RM) {
-      const reason = `auto: ${liftPp >= 0 ? "+" : ""}${liftPp.toFixed(1)}pp lift, RM${marginPerRecipient.toFixed(2)}/recipient margin after ${n} sends (holdout ${base.n}) - can't cover its own SMS`;
+    const deadOnBothReads = base.n >= AUTO_PAUSE_MIN_HOLDOUT
+      && liftPp <= AUTO_PAUSE_LIFT_FLOOR_PP && marginPerRecipient <= SMS_COST_RM;
+    const clearlyBleeding = base.n >= AUTO_PAUSE_BLEED_HOLDOUT
+      && marginPerRecipient <= AUTO_PAUSE_BLEED_MARGIN_RM;
+    if (deadOnBothReads || clearlyBleeding) {
+      const reason = `auto: ${liftPp >= 0 ? "+" : ""}${liftPp.toFixed(1)}pp lift, RM${marginPerRecipient.toFixed(2)}/recipient margin after ${n} sends (holdout ${base.n}) - ${clearlyBleeding && !deadOnBothReads ? "clearly losing money" : "can't cover its own SMS"}`;
       await pauseLoop(def.key, reason, true);
       killed.push({ key: def.key, reason });
     }
