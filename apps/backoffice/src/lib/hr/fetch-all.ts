@@ -20,11 +20,22 @@
 const PAGE = 1000;
 
 export async function fetchAllRows<T>(
-  build: () => { range: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }> },
+  build: () => {
+    order: (
+      column: string,
+      opts?: { ascending?: boolean },
+    ) => { range: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }> };
+  },
 ): Promise<T[]> {
   const out: T[] = [];
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await build().range(from, from + PAGE - 1);
+    // Postgres gives NO stable row order without ORDER BY, so separate .range()
+    // pages could overlap or skip rows at the boundaries — reintroducing the
+    // exact silent-truncation class this helper kills, as silent duplication or
+    // omission past 1000 rows. `id` is unique on every hr_* table, so ordering
+    // by it (as a tiebreak after any ordering the builder already applied)
+    // makes pagination deterministic.
+    const { data, error } = await build().order("id", { ascending: true }).range(from, from + PAGE - 1);
     if (error || !data) break;
     out.push(...data);
     if (data.length < PAGE) break;

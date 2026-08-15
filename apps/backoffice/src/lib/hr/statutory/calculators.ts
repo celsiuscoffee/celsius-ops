@@ -42,7 +42,15 @@ export async function calcEPF(
     .limit(1)
     .maybeSingle();
 
-  if (!rate) return { employee: 0, employer: 0, bracket: 0 };
+  // A missing schedule row is a SEED GAP, not a zero contribution. Returning
+  // zeros here made every employee compute RM0 EPF with no note and nothing
+  // blocking confirm — the first payroll of a new year would under-deduct
+  // everyone silently. Fail the run loudly instead.
+  if (!rate) {
+    throw new Error(
+      `No EPF rate row in hr_stat_epf_rates for category ${inputs.epfCategory} effective ${effectiveDate.toISOString().slice(0, 10)} — seed the schedule before computing payroll.`,
+    );
+  }
 
   // Band width is RM20 up to RM5,000 and RM100 above it (KWSP Third Schedule).
   // Pure math lives in ./formulas so it can be unit-tested against the schedule.
@@ -75,7 +83,12 @@ export async function calcSOCSO(
     .order("effective_from", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!cfg) return { employee: 0, employer: 0, tier: 0 };
+  // Missing schedule = seed gap, not zero contribution (see calcEPF).
+  if (!cfg) {
+    throw new Error(
+      `No SOCSO config row in hr_stat_socso_config effective ${effectiveDate.toISOString().slice(0, 10)} — seed the schedule before computing payroll.`,
+    );
+  }
 
   // Contribution is charged on the band's assumed wage (midpoint), not the
   // ceiling — see ./formulas. `tier` now carries that assumed wage.
@@ -107,7 +120,12 @@ export async function calcEIS(
     .order("effective_from", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!cfg) return { employee: 0, employer: 0, tier: 0 };
+  // Missing schedule = seed gap, not zero contribution (see calcEPF).
+  if (!cfg) {
+    throw new Error(
+      `No EIS config row in hr_stat_eis_config effective ${effectiveDate.toISOString().slice(0, 10)} — seed the schedule before computing payroll.`,
+    );
+  }
 
   // Charged on the band's assumed wage (midpoint), not the ceiling — see
   // ./formulas. `tier` now carries that assumed wage.
@@ -136,7 +154,13 @@ export async function calcHRDF(
     .order("effective_from", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!cfg) return { employer: 0 };
+  // Missing schedule = seed gap, not zero levy (see calcEPF). Only reached
+  // when HRDF is applicable, so a throw never fires for exempt employers.
+  if (!cfg) {
+    throw new Error(
+      `No HRDF config row in hr_stat_hrdf_config effective ${effectiveDate.toISOString().slice(0, 10)} — seed the schedule before computing payroll.`,
+    );
+  }
   return { employer: roundToCents(wage * (Number(cfg.employer_rate) / 100)) };
 }
 
@@ -182,6 +206,15 @@ export async function calcPCB(
     hrSupabaseAdmin.from("hr_stat_pcb_reliefs").select("*").eq("effective_year", year),
   ]);
   const brackets = bracketsRes.data || [];
+  // Empty brackets for the year would make annualTax 0 → PCB RM0 for EVERYONE,
+  // with nothing blocking confirm. January of a new year before anyone seeds
+  // the gazette is exactly when this fires — fail loudly instead. (PCB brackets
+  // exist only for 2026 today; this is the 2027 tripwire.)
+  if (brackets.length === 0) {
+    throw new Error(
+      `No PCB brackets in hr_stat_pcb_brackets for effective_year ${year} — seed the LHDN schedule before computing payroll.`,
+    );
+  }
   const reliefCatalog = new Map<string, number>(
     (reliefsRes.data || []).map((r: { relief_code: string; amount: number }) => [r.relief_code, Number(r.amount)]),
   );
