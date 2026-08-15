@@ -6,6 +6,67 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-15 — **Estate-wide loop QA sweep done (every loop, all four arms:
+  trigger→action→measure→feedback). Full report: `docs/design/loop-qa-2026-08-15.md`.**
+  Headline: the fully-automated loops are healthy and were caught changing their
+  own behaviour on evidence; the broken ones all hand their last arm to a human,
+  an external feed, or an external scheduler.
+  **Healthy (verified against prod, not assumed):** marketing engine — 7 live
+  loops, 432 rounds / 344 measured / **0 past their attribution window**, and
+  `fresh_lapse` **auto-killed itself 2026-08-13** ("+0.2pp lift, RM-2.16/recipient
+  after 1296 sends"). What looks like 4 dead loops is 3 recorded pauses
+  (`beans_idle` owner, `fresh_lapse` auto, both `round_gap` arms) — **check
+  `app_settings.loops_paused` before reporting a stopped loop.** Ads sync 5 kinds
+  OK 10/10; Tamarind probe in flight (status=3, RM46.32). Finance EOD→GL fresh.
+  Backoffice is at **38/40 Vercel cron slots**; of 20 cron routes absent from
+  `vercel.json`, all 20 are reachable via a dispatcher/lib/UI — no orphans.
+  **P1 — GBP geogrid burns half its monthly budget on failures.** A `failed`
+  scan (all 81 grid points error) still writes a `GeoGridScan` row, and the gate
+  counts rows not successes (`scansThisMonth = count(*)`), so failures eat the
+  `GEOGRID_MONTHLY_SCAN_CAP=40` and can't be retried till next month. Aug 3 and
+  Jul 6 are identical: 13 complete / 7 partial / **20 failed**. Consequences:
+  **all 8 Shah Alam combos failed → the flagship outlet has no rank data**;
+  **IOI Mall has never been auto-scanned** (16 active keywords); Putrajaya had
+  zero August scans; and the weekly cadence is defeated because the month's
+  budget is spent on the first Monday (Aug 10, Jul 13/20/27 all returned
+  `capped`). 100%-failure on one outlet smells like a bad placeId/coords or a
+  keyed API restriction — confirm with one manual scan before spending more.
+  **P2** — reviews recovery never closes: 31 drafts ever, **28 still `pending`**
+  (oldest June), 1 resolved / 2 rejected. `reviews_negative_drafts` is `shadow`,
+  so it drafts forever and nothing consumes it.
+  **P3** — finance AP/bank arm armed but starved: `fin_bank_transactions`,
+  `fin_bills`, `fin_exceptions` are **0 rows ever** while `finance_ap_agent`,
+  `finance_ap_match_apply`, `finance_gl_post` are all `armed` and
+  `bukku-feed-sync` runs 4×/day. EOD→GL half is fine. Likely the Bukku feed was
+  never connected — owner to confirm intent.
+  **P4** — 10 armed agents never call `touchAgentRun` (`last_run_at` NULL while
+  logging actions), so `/agents` can't tell quiet from stopped: ap_match_apply,
+  ap_agent, gl_post, agent_comms_digest, pos_pairing_tuner, data_analyst,
+  marketing_strategist, ops_intelligence, procurement_advisor, hr_ops_agent.
+  This is why P3 and P6 went unnoticed.
+  **P5 (latent)** — `autoPauseUnderperformers` (loop-engine.ts:1482) and
+  `getEvaluation` (:1704) do unbounded selects over all measured rounds: the
+  known PostgREST 1000-row class. 344 rows, +7/day → **crosses the cap ~Nov
+  2026**, after which the kill rule silently judges on a subset. Use
+  `fetchAllRows`.
+  **P6** — `finance_warehouse` stopped since 2026-07-24 (~512h, 3 missed weekly
+  runs). It's an agent *routine*, not a Vercel cron, so nothing in-repo restarts
+  it — this is also why the dead Nilai `consignment_sales` feed went another 3
+  weeks unflagged.
+  **P7 (latent)** — `measureRound` opens each window at `assigned_at` (prepare),
+  not `sent_at`; 14 scheduled rounds carry up to **8.03h** of gap over 796
+  assignments. **Checked: zero mis-attributed conversions exist** (lapsed
+  segments rarely order in that window), so latent only.
+  **P8** — the three queued ads defects are all still live and confirmed in
+  code: stale `hardCutDirective` (autopilot.ts:571, wired :1171 — **will chop
+  Shah Alam's probe-up when its hold ends ~Oct 7, the one with a deadline**);
+  probe verdict fires on raw-OR-adj (autopilot.ts:393); `organic-revenue.ts` pos
+  branch still has no `source <> 'grabfood'`.
+  **P9** — `OpsReminder` has 0 rows ever; the hourly `ops-reminders` sweep is a
+  correct no-op consumer of a feature nobody uses (housekeeping-audit candidate).
+  **Gotcha that cost time: `ads_sync_log.status` is `OK`, not `success`** —
+  filtering on the wrong literal makes 7 healthy nightly syncs read as 7 fails.
+
 - 2026-08-14 — **Ads agent-loop audit (full pass, probe day 11/14): loop is
   healthy, verdict is predictable, and the probe REVERSED the early read —
   Tamarind's ads were earning their keep.** Replicated the probe's exact math
@@ -1873,6 +1934,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-08-15 — **Loop QA sweep is DONE and reported; no fixes were applied
+  (audit was the ask).** Owner decisions/fixes queued, in the recommended order
+  from `docs/design/loop-qa-2026-08-15.md`: (1) **P1 geogrid** — stop counting
+  `status='failed'` rows toward the monthly cap, and reserve budget per outlet
+  so one outlet's failures can't starve the rest; separately diagnose the
+  100%-failure signature on Shah Alam (one manual scan first). (2) **P8.1
+  `hardCutDirective`** — delete before ~Oct 7 or it corrupts Shah Alam's
+  probe-up. (3) **P4 heartbeats** — add `touchAgentRun` to the 10 listed agents.
+  (4) **P3/P6** — need owner intent (is the Bukku bank feed meant to be
+  connected? re-arm the finance_warehouse routine?). (5) **P5/P7** — latent,
+  fix on the next loop-engine touch. Nothing here is blocking; P8.1 is the only
+  item with a hard date.
 
 - 2026-08-14 — **Ads: watch the probe verdict land, then the Putrajaya probe
   starts itself.** The ~Aug 17/18 19:01 UTC run should RESTORE Tamarind at
