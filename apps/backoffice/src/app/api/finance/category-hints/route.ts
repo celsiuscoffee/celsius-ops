@@ -10,16 +10,16 @@ export const dynamic = "force-dynamic";
 
 async function guard(req: NextRequest) {
   const auth = await requireAuth(req);
-  if (auth.error) return auth.error;
+  if (auth.error) return { error: auth.error };
   if (!["OWNER", "ADMIN"].includes(auth.user.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
-  return null;
+  return { user: auth.user };
 }
 
 export async function GET(req: NextRequest) {
-  const err = await guard(req);
-  if (err) return err;
+  const g = await guard(req);
+  if (g.error) return g.error;
   const client = getFinanceClient();
   const { data, error } = await client
     .from("fin_category_hints")
@@ -30,12 +30,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const err = await guard(req);
-  if (err) return err;
+  const g = await guard(req);
+  if (g.error) return g.error;
   let body: { phrase?: string } = {};
   try { body = await req.json(); } catch { /* handled below */ }
   if (!body.phrase) return NextResponse.json({ error: "phrase required" }, { status: 400 });
-  const client = getFinanceClient();
+  const client = getFinanceClient(g.user.id);
   const { error } = await client.from("fin_category_hints").delete().eq("phrase", body.phrase);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

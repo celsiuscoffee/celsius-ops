@@ -129,7 +129,7 @@ export async function verifyApMatch(m: ApMatch, staffNames: string[]): Promise<A
 // the ground truth for the wrong-invoice-match problem (~113 historical).
 // Same table + shape convention as the categorizer's logDecision.
 async function logVerdict(m: ApMatch, v: ApVerdict): Promise<string | null> {
-  const client = getFinanceClient();
+  const client = getFinanceClient(AP_VERIFIER_VERSION);
   const id = randomUUID();
   const { error } = await client.from("fin_agent_decisions").insert({
     id,

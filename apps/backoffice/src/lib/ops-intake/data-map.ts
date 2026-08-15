@@ -51,7 +51,7 @@ export const DATA_MAP = `# Celsius data map (authoritative sources + traps)
 ## Procurement & spend
 - "Order" with orderType='PURCHASE_ORDER': statuses DRAFT→PENDING_APPROVAL→APPROVED→SENT→CONFIRMED→AWAITING_DELIVERY→PARTIALLY_RECEIVED→COMPLETED (or CANCELLED). Open/committed spend = statuses before COMPLETED.
 - "Invoice" (PascalCase) = the LIVE supplier-invoice table; unpaid = status IN ('PENDING','INITIATED','OVERDUE','PARTIALLY_PAID','DEPOSIT_PAID'). amount is the FULL invoice amount even when PARTIALLY_PAID — remaining balance is not a column.
-- TRAPS: fin_invoices and fin_bills are EMPTY (built, never populated) — like fin_bank_transactions, never use them.
+- TRAPS: fin_invoices and fin_bills were DROPPED (migration 097 — never populated; readers re-pointed to Invoice/unified_sales/ar_invoice journals). fin_bank_transactions and fin_matches remain as 0-row dead tables — never use them.
 - "Supplier".automationMode (OFF|ASSIST|AUTO) = per-supplier agent dial.
 - "StockAdjustment" adjustmentType IN ('WASTAGE','BREAKAGE','EXPIRED','SPILLAGE') = wastage; costAmount is estimated cost.
 

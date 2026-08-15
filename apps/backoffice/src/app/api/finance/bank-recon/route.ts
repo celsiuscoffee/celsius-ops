@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const client = getFinanceClient();
+  const client = getFinanceClient(user.id);
   const { error: dbError } = await client.from("fin_bank_recons").upsert(
     {
       account: body.account,
@@ -231,7 +231,7 @@ export async function DELETE(req: NextRequest) {
   if (!body.account || !month) {
     return NextResponse.json({ error: "account and month required" }, { status: 400 });
   }
-  const client = getFinanceClient();
+  const client = getFinanceClient(user.id);
   const { error: dbError } = await client
     .from("fin_bank_recons")
     .delete()

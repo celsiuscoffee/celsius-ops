@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "disposedOn must be YYYY-MM-DD" }, { status: 400 });
   }
 
-  const client = getFinanceClient();
+  const client = getFinanceClient(auth.user.id);
   const { data: row } = await client
     .from("fin_fixed_assets").select("id, status, acquired_date").eq("id", body.id).maybeSingle();
   if (!row) return NextResponse.json({ error: "Asset not found" }, { status: 404 });
@@ -33,7 +33,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "disposedOn cannot be before the acquisition date" }, { status: 400 });
   }
 
-  await client.rpc("fin_set_actor", { p_actor: auth.user.id }).then(() => undefined, () => undefined);
   const { error } = await client
     .from("fin_fixed_assets")
     .update({ status: "disposed", disposed_date: body.disposedOn, updated_at: new Date().toISOString() })

@@ -78,7 +78,7 @@ export function findingsFromRecon(rows: CashInChannel[]): CashInFinding[] {
 
 async function logFindings(from: string, to: string, findings: CashInFinding[]): Promise<number> {
   if (!findings.length) return 0;
-  const client = getFinanceClient();
+  const client = getFinanceClient(CASH_IN_AGENT_VERSION);
   const rows = findings.map((f) => ({
     id: randomUUID(),
     agent: "cash-in-recon",

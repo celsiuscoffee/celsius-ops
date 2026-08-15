@@ -6,7 +6,8 @@
 // through the shared ledger engine with agent 'manual'. The acting user's name
 // is stored in agent_version (fin_transactions has no created_by or metadata
 // column; agent_version is the provenance field the list and detail views
-// already surface, and fin_set_actor stamps "manual-{name}" into the audit log).
+// already surface, and the ledger's actor-scoped client stamps "manual-{name}"
+// into the audit log via the x-fin-actor header).
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";

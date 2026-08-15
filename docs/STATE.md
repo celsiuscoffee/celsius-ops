@@ -2132,22 +2132,31 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   the dead `fin_bank_transactions` / `fin_matches` tables** — zero code refs
   anywhere; housekeeping proposal + owner-approved migration (P3).
 
-- 2026-08-14 — **Ads: watch the probe verdict land, then the Putrajaya probe
-  starts itself.** The ~Aug 17/18 19:01 UTC run should RESTORE Tamarind at
-  RM46.32/day ("ads generate cash" — see Verified facts; note `daysSince`
-  vs the 19:01:30 pause timestamp can slip the verdict one night). A session
-  check-in is scheduled for Aug 17 19:25 UTC to verify the ledger row and
-  campaign status 3→2. The night after the restore, expect an
-  `autopilot pause: probe start` row for PUTRAJAYA (owner-accepted).
-  Queued cleanup PR (NOT yet written, do after the verdict):
-  (1) delete the stale `hardCutDirective` (autopilot.ts:556) — it chops any
-  budget >RM55 and will sabotage Shah Alam's probe-up when its rollback hold
-  ends ~Oct 7; (2) probe verdicts should require adj-confirmation, not
-  raw-OR-adj (autopilot.ts:381) — the payday/mom safeguards don't apply in
-  the probe path; (3) add `source<>'grabfood'` to organic-revenue.ts's pos
-  branch, with tests. Separately: **chase the dead Nilai consignment feed**
-  (last row Jul 19) — data-estate, not ads. The null-index → floor-verdict
-  hazard is FIXED in this PR (hold + retry instead).
+- 2026-08-15 — **Ads: Tamarind restore pulled forward to TONIGHT (owner:
+  "recover tamarind"), and the control-integrity fix landed before the
+  Putrajaya probe goes dark (owner: "put in control before dark").**
+  `PAUSE_PROBE_DAYS` 14 → 11.5: by day 12 the verdict was mathematically
+  locked (index 0.875 through Aug 14; +22%/day needed to flip) and each extra
+  dark day cost ~RM70–117 net margin. 11.5 not 12 so tonight's Aug 15 19:01
+  run clears the daysSince race vs the 19:01:30 pause row. Expected tonight:
+  RESTORE at RM46.32/day, "ads generate cash", window Aug 4–15. Session
+  check-in armed 2026-08-15 19:25 UTC. Then the night after (~Aug 16/17
+  19:01): `autopilot pause: probe start` for PUTRAJAYA, ~12-day probe,
+  verdict ~Aug 28. Also shipped: paused-campaign outlets are now EXCLUDED
+  from every fleet median (nightly guard `others` + probe-verdict controls) —
+  a probed outlet's manipulated till no longer pollutes siblings' adjIndex
+  (observed 2026-08-12: paused Tamarind pulled SA's control median to 0.9795
+  vs 1.019 clean). Tamarind recovery check (reversal test, A=ads vs B=local
+  factor) armed 2026-08-25 09:00 UTC — restore date is now Aug 15/16, so it
+  gets ~9 post-restore days.
+  Remaining cleanup (after the Putrajaya verdict, NOT before — do not change
+  the instrument mid-measurement): (1) probe verdicts should require
+  adj-confirmation, not raw-OR-adj — the payday/mom safeguards don't apply in
+  the probe path; (2) add `source<>'grabfood'` to organic-revenue.ts's pos
+  branch, with tests; (3) consider restoring PAUSE_PROBE_DAYS to 14 for any
+  later probes. `hardCutDirective` was already removed 2026-08-15 by another
+  session. Separately: **chase the dead Nilai consignment feed** (last row
+  Jul 19) — data-estate, not ads.
 
 - 2026-08-03 (late) — **HR module-level QA review DONE (3-agent sweep, findings
   reported to owner, no fixes applied yet).** Top confirmed findings, ranked:
