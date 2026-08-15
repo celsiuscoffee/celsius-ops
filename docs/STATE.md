@@ -2051,9 +2051,11 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   The `pos_pairing_tuner` heartbeat migration is **APPLIED** (see P4 above), so
   all 10 heartbeats are live. No OTA: the diff touched no `*-native` app.
   **WATCH NEXT — three things land on their own, verify each:**
-  (a) **Tonight 16:20 UTC** — first `refresh_pos_pairing_signals()` run with the
-  heartbeat. Confirm `agent_registry.last_run_at` for `pos_pairing_tuner` stops
-  being NULL. (b) **Tomorrow 02:00 UTC (10:00 MYT)** — first review-backlog
+  (a) **VERIFIED 2026-08-15 16:35 UTC** — the first `refresh_pos_pairing_signals()`
+  run with the heartbeat stamped `agent_registry.last_run_at` for
+  `pos_pairing_tuner` at exactly `16:20:00 UTC`. **P4 is fully closed: all 10
+  heartbeats are proven live**, and this was the only one whose verification had
+  to wait for a scheduled fire. (b) **Tomorrow 02:00 UTC (10:00 MYT)** — first review-backlog
   digest fires; it will list ~28 stale drafts (oldest ~52d) in one manager
   WhatsApp. Expected, but chunky — `REVIEW_DRAFT_STALE_DAYS` tunes it.
   (c) **Mon 2026-08-17 05:00 UTC** — first geogrid run with retry + round-robin;
