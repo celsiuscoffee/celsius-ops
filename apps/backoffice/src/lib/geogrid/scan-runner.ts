@@ -25,7 +25,7 @@ export async function runScan(opts: {
   rangeMiles: number;
   apiKey: string;
   createdBy?: string;
-}): Promise<{ scan: GeoGridScan; failures: number }> {
+}): Promise<{ scan: GeoGridScan; failures: number; sampleError: string | null; retries: number }> {
   const { outletId, keyword, gridSize, rangeMiles, apiKey, createdBy } = opts;
 
   const outlet = await prisma.outlet.findUnique({
@@ -56,7 +56,7 @@ export async function runScan(opts: {
 
   const points = buildGrid(centerLat, centerLng, gridSize, rangeMiles);
   const radiusM = Math.min(Math.max(rangeMiles * METERS_PER_MILE, 500), 5000);
-  const { points: scanned, failures, competitors } = await scanGrid(apiKey, keyword, points, radiusM, geo.placeId, targetTitle);
+  const { points: scanned, failures, competitors, sampleError, retries } = await scanGrid(apiKey, keyword, points, radiusM, geo.placeId, targetTitle);
   const metrics = computeMetrics(scanned, centerLat, centerLng);
 
   const scan = await prisma.geoGridScan.create({
@@ -79,7 +79,7 @@ export async function runScan(opts: {
       createdBy: createdBy ?? null,
     },
   });
-  return { scan, failures };
+  return { scan, failures, sampleError, retries };
 }
 
 // ── Scan outcomes ───────────────────────────────────────────────────────────

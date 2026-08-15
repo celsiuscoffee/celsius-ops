@@ -15,6 +15,10 @@ const MONTHLY_CAP = Number(process.env.GEOGRID_MONTHLY_SCAN_CAP || 40);
 // from retrying forever inside one run. Sized above MONTHLY_CAP so a healthy
 // run is never clipped by it.
 const MAX_ATTEMPTS_PER_RUN = Number(process.env.GEOGRID_MAX_ATTEMPTS_PER_RUN || 60);
+// Stop starting new scans this far into the run. maxDuration is 300s and a
+// rate-limited scan now backs off rather than failing fast, so leave room to
+// finish the one in flight instead of being killed mid-scan.
+const RUN_DEADLINE_MS = Number(process.env.GEOGRID_RUN_DEADLINE_MS || 240_000);
 const GRID_SIZE = Number(process.env.GEOGRID_GRID_SIZE || 9);
 // 2.5km point spacing on a 9×9 grid = a ±10km catchment — the agreed target
 // radius, and the same setting as the owner's manual baseline scans (1.553mi),
@@ -43,14 +47,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ capped: true, monthlyCap: MONTHLY_CAP, scansThisMonth });
   }
 
+  // An outlet with no GBP location connected can never scan — runScan throws on
+  // it every time. Filtering here rather than letting it throw means it doesn't
+  // burn an attempt per keyword per run, and the reason is reported once instead
+  // of as N identical errors. (This is why IOI Mall, 16 active keywords, had
+  // never produced a single scan.)
   const keywords = await prisma.geoGridKeyword.findMany({
     where: { active: true, outlet: { status: "ACTIVE" } },
-    include: { outlet: { select: { name: true } } },
+    include: { outlet: { select: { name: true, reviewSettings: { select: { gbpLocationName: true } } } } },
   });
+  const unconnected = [
+    ...new Set(keywords.filter((k) => !k.outlet.reviewSettings?.gbpLocationName).map((k) => k.outlet.name)),
+  ];
+  const scannable = keywords.filter((k) => k.outlet.reviewSettings?.gbpLocationName);
 
   // Which combos are due, and how badly they need it (warmest-first).
   const due: { outletId: string; outletName: string; keyword: string; score: number }[] = [];
-  for (const k of keywords) {
+  for (const k of scannable) {
     const last = await prisma.geoGridScan.findFirst({
       where: { outletId: k.outletId, keyword: k.keyword },
       orderBy: { createdAt: "desc" },
@@ -65,13 +78,19 @@ export async function GET(req: NextRequest) {
   // never consumes the whole run before the others are reached.
   const queue = interleaveByOutlet(due);
 
-  const results: { outlet: string; keyword: string; avgRank?: number | null; pctTop3?: number | null; status?: string; error?: string }[] = [];
+  const results: { outlet: string; keyword: string; avgRank?: number | null; pctTop3?: number | null; status?: string; error?: string; why?: string }[] = [];
   let attempts = 0;
+  let retries = 0;
+  let deadlineHit = false;
   for (const c of queue) {
     if (budget <= 0 || attempts >= MAX_ATTEMPTS_PER_RUN) break;
+    // Retries make a rate-limited run longer than an unimpeded one, so stop
+    // issuing new scans before the function's own ceiling cuts one off midway
+    // and loses the work already paid for.
+    if (Date.now() - now.getTime() > RUN_DEADLINE_MS) { deadlineHit = true; break; }
     attempts++;
     try {
-      const { scan } = await runScan({
+      const { scan, sampleError, retries: scanRetries } = await runScan({
         outletId: c.outletId,
         keyword: c.keyword,
         gridSize: GRID_SIZE,
@@ -79,7 +98,14 @@ export async function GET(req: NextRequest) {
         apiKey,
         createdBy: "auto-loop",
       });
-      results.push({ outlet: c.outletName, keyword: c.keyword, avgRank: scan.avgRank, pctTop3: scan.pctTop3, status: scan.status });
+      retries += scanRetries;
+      results.push({
+        outlet: c.outletName, keyword: c.keyword, avgRank: scan.avgRank, pctTop3: scan.pctTop3, status: scan.status,
+        // Why a scan came back empty — without this a rate-limit is
+        // indistinguishable from a broken outlet, which is exactly how this
+        // went undiagnosed for two months.
+        ...(sampleError ? { why: sampleError.slice(0, 200) } : {}),
+      });
       // Only a scan that returned data is charged to the budget.
       if (producedData(scan.status)) budget--;
     } catch (err) {
@@ -100,7 +126,11 @@ export async function GET(req: NextRequest) {
     scanned: results.filter((r) => !r.error && producedData(r.status ?? "")).length,
     failed,
     errored,
+    retries,
     attemptCeilingHit: attempts >= MAX_ATTEMPTS_PER_RUN,
+    deadlineHit,
+    // Outlets that can never scan until someone connects their Google profile.
+    ...(unconnected.length ? { skippedNoGbpLocation: unconnected } : {}),
     remainingBudget: Math.max(0, budget),
     results,
   });

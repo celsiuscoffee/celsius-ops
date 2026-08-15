@@ -30,15 +30,37 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   zero August scans; and the weekly cadence is defeated because the month's
   budget is spent on the first Monday (Aug 10, Jul 13/20/27 all returned
   `capped`). 100%-failure on one outlet smells like a bad placeId/coords or a
-  keyed API restriction — confirm with one manual scan before spending more.
+  keyed API restriction — **THAT GUESS IS WITHDRAWN, see root cause below.**
   **Fix shipped:** cap now counts only `status <> 'failed'` (read AND
   decrement); new `MAX_ATTEMPTS_PER_RUN` (60, above the 40 cap) bounds attempts
   so "failures are free" can't become unbounded Places spend on a wholly-broken
   outlet; `interleaveByOutlet` round-robins the due queue so the neediest outlet
   leads but can't consume the run. Response now reports attempts/failed/errored
-  separately. Pinned by `lib/geogrid/scan-runner.test.ts`. **The fix stops the
-  collateral starvation but will NOT make Shah Alam scan** — that still needs a
-  manual diagnostic scan.
+  separately. Pinned by `lib/geogrid/scan-runner.test.ts`.
+  **ROOT CAUSE (2026-08-15, second pass) — IT IS PLACES RATE-LIMITING, NOT A
+  PER-OUTLET FAULT.** Shah Alam's placeId (`ChIJFcHSHJlNzDERtGh5CheG0XE`) and
+  coords (3.0733, 101.5185) are fine, and Tamarind (7) and Nilai (4) failed on
+  Aug 3 too. **Ordering the run by `createdAt` is what cracks it:** seq 1-7
+  complete (~4-5s each) → 10-14 failed (~1-2s, too fast to have called
+  anything) → **21-26 complete again** → 32-40 (all Shah Alam) failed.
+  **A run that RECOVERS mid-way is a rate limit; no per-outlet fault does that.**
+  `scanGrid` fired 8 concurrent Places calls/batch with no throttle/retry/backoff,
+  and the cron chains ~40 scans = ~3,240 calls flat out. Shah Alam reads 100%
+  broken only because it sits LAST in the queue. Fixed: retry w/ exponential
+  backoff + jitter on retryable statuses (429/5xx/no-status), fail fast on
+  400/401/403/404; new `PlacesApiError` carries the HTTP status; first failure
+  reason surfaced per scan as `why`; `RUN_DEADLINE_MS` 240s guard so retries
+  can't get the function killed mid-scan.
+  **IOI Mall is a DIFFERENT cause, also now handled:** its
+  `reviewSettings.gbpLocationName` is NULL so `runScan` THREW every time — it was
+  never budget starvation. Outlets with no GBP location are filtered before the
+  queue and reported as `skippedNoGbpLocation`. **Owner action: connect IOI
+  Mall's Google profile** (16 active keywords waiting).
+  **LESSON: "which outlet fails" is a distribution, not a diagnosis — sort by
+  time before believing an entity-specific story. And a failure that records no
+  reason WILL be misdiagnosed:** the loop stored `status='failed'` and nothing
+  else, so two months of daily evidence couldn't tell a throttled API from a
+  broken profile.
   **P2** — reviews recovery never closes: 31 drafts ever, **28 still `pending`**
   (oldest June), 1 resolved / 2 rejected. `reviews_negative_drafts` is `shadow`,
   so it drafts forever and nothing consumes it.
@@ -71,10 +93,25 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   known PostgREST 1000-row class. 344 rows, +7/day → **crosses the cap ~Nov
   2026**, after which the kill rule silently judges on a subset. Use
   `fetchAllRows`.
-  **P6** — `finance_warehouse` stopped since 2026-07-24 (~512h, 3 missed weekly
-  runs). It's an agent *routine*, not a Vercel cron, so nothing in-repo restarts
-  it — this is also why the dead Nilai `consignment_sales` feed went another 3
-  weeks unflagged.
+  **P6 — `finance_warehouse` stopped since 2026-07-24 (~512h, 3 missed weekly
+  runs). RE-ARMED, one owner step left.** Cause: **the routine no longer existed
+  at all** — listing every trigger on the account returns only one-shot
+  `send_later` entries, zero recurring ones, and at least one carries
+  `ended_reason: auto_disabled_session_gone`. It was bound to a session that went
+  away and died with it. Re-created as `Finance warehouse — weekly custodian run`
+  (`trig_01BCKPmWgpi1KUq7pk5BrK2n`), `13 14 * * 0` UTC = Sun 22:13 MYT, first
+  fire 2026-08-16, **with `create_new_session_on_fire` precisely so
+  session-binding can't kill it again.** Prompt carries the backlog + the Nilai
+  feed and empty `fin_bank_*` items.
+  **BLOCKER, owner-only: the fired session has NO Supabase MCP.** The skill's
+  check suite is read-only Supabase (`SKILL.md:147`), but this org rejects the
+  `connectors` param on create_trigger, and the environment holds no Supabase
+  token of its own (repo `.mcp.json` configures ONLY sentry; `env | grep -i
+  supabase` is empty — my DB access this session comes from an account-level
+  connector that can't be passed through). **Attach the Supabase connector to the
+  routine in the claude.ai routines UI.** Until then the prompt makes it fail
+  loudly — it stops and reports `finance-warehouse run blocked: Supabase MCP not
+  attached to this routine` rather than guessing from stale/repo-only data.
   **P7 (latent)** — `measureRound` opens each window at `assigned_at` (prepare),
   not `sent_at`; 14 scheduled rounds carry up to **8.03h** of gap over 796
   assignments. **Checked: zero mis-attributed conversions exist** (lapsed
@@ -1970,21 +2007,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
-- 2026-08-15 — **Loop QA sweep DONE; P1 + P4 + P8.1 FIXED on PR #1130. The
-  deadline item (`hardCutDirective`) is cleared. Remaining work, in order**
-  (full detail in `docs/design/loop-qa-2026-08-15.md`):
-  (1) **Apply `packages/db/prisma/migrations/20260815_pos_pairing_tuner_heartbeat/`**
-  — written + syntax-checked, needs a human against prod.
-  (2) **Diagnose Shah Alam's geogrid 100%-failure** — one manual scan. The P1
-  fix stops it starving the other outlets; it does NOT make Shah Alam scan.
-  (3) **P8.2/P8.3 AFTER the ~Aug 17 Tamarind probe verdict** — probe verdict
-  raw-OR-adj, and the missing grabfood filter. Both move the index the probe is
-  being judged on, so they wait.
-  (4) **P2/P3/P6** — need owner intent: arm the reviews drafter or staff the
-  review step? Is the Bukku bank feed meant to be connected? Re-arm the
-  finance_warehouse routine?
-  (5) **P5/P7** — latent, fix on the next loop-engine touch.
-  Nothing here is blocking.
+- 2026-08-15 — **Loop QA sweep DONE. P1 (incl. root cause), P4, P6 and P8.1 all
+  FIXED on PR #1130.** Full detail in `docs/design/loop-qa-2026-08-15.md`.
+  **THREE OWNER STEPS — none of these can be done from an agent session:**
+  (1) **Attach the Supabase connector** to the re-armed `Finance warehouse —
+  weekly custodian run` routine in the claude.ai routines UI. It fires Sun
+  2026-08-16 22:13 MYT and will report BLOCKED until this is done (P6).
+  (2) **Apply `packages/db/prisma/migrations/20260815_pos_pairing_tuner_heartbeat/`**
+  — written + syntax-checked against prod, needs a human to run it (P4).
+  (3) **Connect IOI Mall's Google Business Profile** — `gbpLocationName` is NULL,
+  so its 16 active keywords have never been scannable (P1).
+  **THEN:** (4) **P8.2/P8.3 AFTER the ~Aug 17 Tamarind probe verdict** — probe
+  verdict raw-OR-adj, and the missing grabfood filter; both move the index the
+  probe is being judged on, so they wait. (5) **P2/P3** — need owner intent: arm
+  the reviews drafter or staff the review step? Is the Bukku bank feed meant to
+  be connected? (6) **P5/P7** — latent, fix on the next loop-engine touch.
 
 - 2026-08-14 — **Ads: watch the probe verdict land, then the Putrajaya probe
   starts itself.** The ~Aug 17/18 19:01 UTC run should RESTORE Tamarind at

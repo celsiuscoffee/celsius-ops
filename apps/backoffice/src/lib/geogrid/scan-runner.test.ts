@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { producedData, interleaveByOutlet, isDue, atGoal, SCAN_STATUS_FAILED } from "./scan-runner";
+import { PlacesApiError, isRetryablePlacesError } from "./places";
 
 // Regression cover for the 2026-08-15 loop QA finding: the monthly scan cap was
 // charged for scans that returned nothing, so half the GBP budget bought no rank
@@ -56,6 +57,33 @@ describe("interleaveByOutlet", () => {
 
   it("handles an empty queue", () => {
     expect(interleaveByOutlet([])).toEqual([]);
+  });
+});
+
+// The Aug 3 and Jul 6 runs failed 20 scans each because the cron fires thousands
+// of Places calls back to back, trips the rate limit, and nothing retried. The
+// tell was that scans recovered mid-run and then failed again — a broken outlet
+// would never recover.
+describe("isRetryablePlacesError", () => {
+  it("retries a rate-limit", () => {
+    expect(isRetryablePlacesError(new PlacesApiError("429 rate limited", 429))).toBe(true);
+  });
+
+  it("retries Google's own 5xx", () => {
+    expect(isRetryablePlacesError(new PlacesApiError("boom", 500))).toBe(true);
+    expect(isRetryablePlacesError(new PlacesApiError("boom", 503))).toBe(true);
+  });
+
+  it("retries a network error that never got a status", () => {
+    expect(isRetryablePlacesError(new TypeError("fetch failed"))).toBe(true);
+    expect(isRetryablePlacesError(new PlacesApiError("no status", null))).toBe(true);
+  });
+
+  it("does NOT retry a bad key, a denial or a bad request", () => {
+    expect(isRetryablePlacesError(new PlacesApiError("bad request", 400))).toBe(false);
+    expect(isRetryablePlacesError(new PlacesApiError("bad key", 401))).toBe(false);
+    expect(isRetryablePlacesError(new PlacesApiError("denied", 403))).toBe(false);
+    expect(isRetryablePlacesError(new PlacesApiError("not found", 404))).toBe(false);
   });
 });
 
