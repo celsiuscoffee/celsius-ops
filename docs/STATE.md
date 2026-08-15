@@ -111,9 +111,21 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   quiet-exit paths, since a quiet run is the thing that must stay
   distinguishable from a stopped one. **10th (`pos_pairing_tuner`) has no TS
   path** — pg_cron calls `public.refresh_pos_pairing_signals()` directly; its
-  heartbeat ships as `20260815_pos_pairing_tuner_heartbeat`, syntax-checked
-  against prod under a throwaway function name (created + dropped, verified no
-  leftover) but **NOT APPLIED — needs a human** (hard rule 6).
+  heartbeat shipped as `20260815_pos_pairing_tuner_heartbeat` and was **APPLIED
+  to prod 2026-08-15 on owner instruction** (hard rule 6 satisfied), via the
+  Supabase MCP `apply_migration` path; applied-history copy is
+  `supabase/migrations/105_pos_pairing_tuner_heartbeat.sql`. **All 10 heartbeats
+  are now live.** Before applying, the proposed body was diffed line-for-line
+  against the live `pg_get_functiondef` output to prove the ONLY change was the
+  heartbeat block (pre-change md5 `ebd1e0cc2cbfd62ba66011e2f320b579` — keep it,
+  it is the rollback anchor). Verified after: heartbeat present, SECURITY
+  DEFINER retained, `search_path` still `(public, pg_temp)`, pg_cron job
+  `refresh-pos-pairing-signals` still active.
+  **Deliberately did NOT invoke the function to test it** — it decays
+  `product_co_purchase_seed`/`product_round_seed` by 5% and refreshes the
+  matview, so a manual verification run would have charged the seeds an extra
+  night of decay. `last_run_at` stays NULL until the next scheduled fire
+  (`20 16 * * *` UTC); **check it after that to confirm the stamp lands.**
   **P5 (latent)** — `autoPauseUnderperformers` (loop-engine.ts:1482) and
   `getEvaluation` (:1704) do unbounded selects over all measured rounds: the
   known PostgREST 1000-row class. 344 rows, +7/day → **crosses the cap ~Nov
@@ -2033,20 +2045,30 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
-- 2026-08-15 — **Loop QA sweep DONE. P1 (incl. root cause), P2 (ageing arm), P4,
-  P6 and P8.1 all FIXED on PR #1130; P3 WITHDRAWN as a bad finding.** Full detail
-  in `docs/design/loop-qa-2026-08-15.md`.
-  **THREE OWNER STEPS — none of these can be done from an agent session:**
+- 2026-08-15 — **Loop QA sweep DONE and MERGED to main as `9b6a3e7` (PR #1130).**
+  P1 (incl. root cause), P2 (ageing arm), P4, P6 and P8.1 all fixed; P3
+  WITHDRAWN as a bad finding. Full detail in `docs/design/loop-qa-2026-08-15.md`.
+  The `pos_pairing_tuner` heartbeat migration is **APPLIED** (see P4 above), so
+  all 10 heartbeats are live. No OTA: the diff touched no `*-native` app.
+  **WATCH NEXT — three things land on their own, verify each:**
+  (a) **Tonight 16:20 UTC** — first `refresh_pos_pairing_signals()` run with the
+  heartbeat. Confirm `agent_registry.last_run_at` for `pos_pairing_tuner` stops
+  being NULL. (b) **Tomorrow 02:00 UTC (10:00 MYT)** — first review-backlog
+  digest fires; it will list ~28 stale drafts (oldest ~52d) in one manager
+  WhatsApp. Expected, but chunky — `REVIEW_DRAFT_STALE_DAYS` tunes it.
+  (c) **Mon 2026-08-17 05:00 UTC** — first geogrid run with retry + round-robin;
+  expect far fewer `failed`, a non-zero `retries`, and `skippedNoGbpLocation`
+  listing IOI Mall.
+  **TWO OWNER STEPS LEFT — cannot be done from an agent session:**
   (1) **Attach the Supabase connector** to the re-armed `Finance warehouse —
-  weekly custodian run` routine in the claude.ai routines UI. It fires Sun
-  2026-08-16 22:13 MYT and will report BLOCKED until this is done (P6).
-  (2) **Apply `packages/db/prisma/migrations/20260815_pos_pairing_tuner_heartbeat/`**
-  — written + syntax-checked against prod, needs a human to run it (P4).
-  (3) **Connect IOI Mall's Google Business Profile** — `gbpLocationName` is NULL,
+  weekly custodian run` routine (`trig_01BCKPmWgpi1KUq7pk5BrK2n`) in the
+  claude.ai routines UI. It fires Sun 2026-08-16 22:13 MYT and will report
+  BLOCKED until this is done (P6).
+  (2) **Connect IOI Mall's Google Business Profile** — `gbpLocationName` is NULL,
   so its 16 active keywords have never been scannable (P1).
-  **THEN:** (4) **P8.2/P8.3 AFTER the ~Aug 17 Tamarind probe verdict** — probe
+  **THEN:** (3) **P8.2/P8.3 AFTER the ~Aug 17 Tamarind probe verdict** — probe
   verdict raw-OR-adj, and the missing grabfood filter; both move the index the
-  probe is being judged on, so they wait. (5) **P5/P7** — latent, fix on the next
+  probe is being judged on, so they wait. (4) **P5/P7** — latent, fix on the next
   loop-engine touch.
   **TWO OWNER DECISIONS, neither urgent:** (a) **negative-review auto-reply** —
   arm it, or keep the human-approval path and staff the queue that the new daily

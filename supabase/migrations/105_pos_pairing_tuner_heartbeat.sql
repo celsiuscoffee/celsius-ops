@@ -1,9 +1,23 @@
 -- Fleet heartbeat for pos_pairing_tuner — the one agent that cannot be reached
 -- from TypeScript.
 --
--- APPLIED to prod 2026-08-15 on owner instruction (hard rule 6 satisfied).
--- The applied-history copy is supabase/migrations/105_pos_pairing_tuner_heartbeat.sql;
--- this one is the never-executed audit trail CI's migration-guard checks.
+-- APPLIED to prod 2026-08-15 on owner instruction (hard rule 6 satisfied), via
+-- the Supabase MCP apply_migration path per the db-migration skill. This copy
+-- lives in supabase/migrations/ because that is the APPLIED-history trail; the
+-- identical file under packages/db/prisma/migrations/ is the never-executed
+-- audit trail that CI's migration-guard checks.
+--
+-- Verified immediately after applying: heartbeat statement present, SECURITY
+-- DEFINER retained, search_path still (public, pg_temp), pg_cron job
+-- "refresh-pos-pairing-signals" still active. `last_run_at` stays NULL until
+-- the next scheduled fire (20 16 * * * UTC) — the function was deliberately NOT
+-- invoked by hand to verify, because running it decays product_co_purchase_seed
+-- and product_round_seed by 5% and refreshes the matview; a test run would have
+-- charged the seeds an extra night of decay.
+--
+-- Rollback: re-apply the pre-change definition, which is this file minus the
+-- "3) Fleet heartbeat" block (md5 of the pre-change pg_get_functiondef output
+-- was ebd1e0cc2cbfd62ba66011e2f320b579).
 --
 -- CONTEXT (loop QA sweep, 2026-08-15 — docs/design/loop-qa-2026-08-15.md).
 -- Ten `armed` agents were logging work but never stamping
