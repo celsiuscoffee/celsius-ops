@@ -140,7 +140,14 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     .gte("end_date", cycleStartStr)
     .lte("end_date", cycleEndStr);
   const ftStints = new Map<string, { amount: number; endDate: string }>();
+  // Closed monthly segments' end dates, per user — used below to tell a
+  // mid-month RAISE (supersede: old row ends the day before the new one
+  // starts) from a genuine PT→FT conversion (no adjacent monthly row).
+  const monthlyEndDates = new Map<string, Set<string>>();
   for (const row of (stintRows || []) as { user_id: string; amount: unknown; end_date: string }[]) {
+    const ends = monthlyEndDates.get(row.user_id) ?? new Set<string>();
+    ends.add(row.end_date);
+    monthlyEndDates.set(row.user_id, ends);
     const amount = Number(row.amount);
     // A zero or unreadable amount is a data gap, not a free month. Leaving them
     // out keeps them visible as "missing from payroll" instead of silently
@@ -148,6 +155,32 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     // recovered from his Apr/May/Jun payslips.)
     if (!Number.isFinite(amount) || amount <= 0) continue;
     ftStints.set(row.user_id, { amount, endDate: row.end_date });
+  }
+
+  // PT→FT CONVERTERS — the mirror of the stint recovery above. After a
+  // conversion the run sees employment_type 'full_time' and would prorate from
+  // join_date, the original HIRE date — the whole month at salary — while the
+  // weekly run already paid the early-month days as clocked hours. The open
+  // monthly history segment records when the salary actually started; when its
+  // effective_date falls inside this cycle, that date is the FT "join" for
+  // proration. A mid-month RAISE also opens a segment in-cycle, but a raise's
+  // predecessor row ends the day before — those are skipped, so long-tenured
+  // FTs are never prorated as joiners by a pay change.
+  const { data: ftStartRows } = await hrSupabaseAdmin
+    .from("hr_salary_history")
+    .select("user_id, effective_date")
+    .eq("salary_type", "monthly")
+    .eq("status", "approved")
+    .is("end_date", null)
+    .gte("effective_date", cycleStartStr)
+    .lte("effective_date", cycleEndStr);
+  const ftStartInCycle = new Map<string, string>();
+  for (const row of (ftStartRows || []) as { user_id: string; effective_date: string }[]) {
+    const dayBefore = new Date(Date.parse(`${row.effective_date}T00:00:00Z`) - 86_400_000)
+      .toISOString().slice(0, 10);
+    if (monthlyEndDates.get(row.user_id)?.has(dayBefore)) continue; // supersede, not a conversion
+    const cur = ftStartInCycle.get(row.user_id);
+    if (!cur || row.effective_date > cur) ftStartInCycle.set(row.user_id, row.effective_date);
   }
 
   for (const p of profiles) {
@@ -624,12 +657,26 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     const resignDateStr = profile.end_date || profile.resigned_at || null;
     const isFinalCycle = Boolean(resignDateStr) && String(resignDateStr) <= cycleEnd;
 
+    // PT→FT converts: the FT stint starts at the monthly segment's effective
+    // date, not the original hire date — the weekly run already paid the
+    // early-month days as hours (see ftStartInCycle above).
+    const ftStartDate = ftStartInCycle.get(profile.user_id) || null;
+    const effectiveJoinDate =
+      ftStartDate && (!profile.join_date || ftStartDate > profile.join_date)
+        ? ftStartDate
+        : profile.join_date || null;
+    if (!isPartTime && ftStartDate && ftStartDate !== profile.join_date) {
+      notes.push(
+        `${profile.user_id.slice(0, 8)}: salaried from ${ftStartDate} (monthly segment opened in-cycle) — prorated from that date, earlier days belong to the weekly run.`,
+      );
+    }
+
     const prorate = isPartTime
       ? ({ reason: null, daysWorked: 0, daysTotal: 0, factor: 1, explanation: null, basis: "calendar" as const } as ReturnType<typeof computeProrate>)
       : computeProrate({
           cycleStart,
           cycleEnd,
-          joinDate: profile.join_date || null,
+          joinDate: effectiveJoinDate,
           resignDate: profile.end_date || profile.resigned_at || null,
           unpaidLeaveDays: unpaidDays,
           fullSalary: basicSalary,
