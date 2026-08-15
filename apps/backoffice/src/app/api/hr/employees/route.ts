@@ -4,6 +4,7 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
 import { signAttendancePhotos } from "@/lib/hr/photos";
+import { logActivity } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
 
@@ -158,6 +159,20 @@ export async function GET() {
   return NextResponse.json({ employees, scope: session.role === "MANAGER" ? "direct-reports" : "all" });
 }
 
+// Lifecycle fields owned by dedicated flows — never writable through the
+// generic profile upsert. resign/undo-resign owns resigned_at + end_date, the
+// probation-review approval owns confirmed_at. Letting the blind upsert write
+// them meant every invariant those flows enforce (guards, audit, history
+// closure) had an unaudited side door.
+const FLOW_OWNED_FIELDS = ["confirmed_at", "resigned_at", "end_date", "id", "created_at", "updated_at"] as const;
+
+// profile column ↔ salary_history.salary_type, for the supersede writes below.
+const PAY_COLUMNS: Array<{ column: "basic_salary" | "hourly_rate" | "hourly_rate_weekend"; salaryType: string }> = [
+  { column: "basic_salary", salaryType: "monthly" },
+  { column: "hourly_rate", salaryType: "hourly" },
+  { column: "hourly_rate_weekend", salaryType: "hourly_weekend" },
+];
+
 // POST: create or update an HR profile for an employee
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -172,14 +187,118 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "user_id required" }, { status: 400 });
   }
 
-  // Upsert: check if profile exists
+  const ignoredFields: string[] = [];
+  for (const f of FLOW_OWNED_FIELDS) {
+    if (f in profileData) {
+      delete profileData[f];
+      ignoredFields.push(f);
+    }
+  }
+
+  // Upsert: check if profile exists. The pay/type columns are read too so pay
+  // edits and employment-type flips through this form keep hr_salary_history
+  // in step — this route used to write them blind, which (a) left history
+  // disagreeing with what payroll actually pays, and (b) on an FT→PT flip
+  // never closed the open monthly row, so the FT-stint recovery (the
+  // Zarif/Danish fix) had nothing to find and the salaried part of the month
+  // silently unpaid.
   const { data: existing } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("id")
+    .select("id, employment_type, basic_salary, hourly_rate, hourly_rate_weekend")
     .eq("user_id", user_id)
     .maybeSingle();
 
+  const todayMyt = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
+  const historyNotes: string[] = [];
+
   if (existing) {
+    const oldType = existing.employment_type as string | null;
+    const newType = (profileData.employment_type as string | undefined) ?? undefined;
+    const typeChanged = newType !== undefined && newType !== oldType;
+
+    if (typeChanged) {
+      // Mirror the HR agent's conversion transaction shape (write-ops
+      // execConvertEmployment): close the outgoing type's open history
+      // segment at yesterday, open the incoming type's segment today. The
+      // form has no effective-date field, so a form-driven conversion is
+      // "effective today" by definition — anything backdated should go
+      // through the agent, which takes an explicit date.
+      const wasMonthly = oldType === "full_time";
+      const isMonthly = newType === "full_time";
+      await prisma.$transaction(async (tx) => {
+        if (wasMonthly && !isMonthly) {
+          await tx.$executeRaw`
+            UPDATE hr_salary_history SET end_date = ${todayMyt}::date - 1
+            WHERE user_id = ${user_id} AND salary_type = 'monthly' AND end_date IS NULL
+          `;
+          const hourly = Number(profileData.hourly_rate ?? existing.hourly_rate ?? 0);
+          if (hourly > 0) {
+            await tx.$executeRaw`
+              INSERT INTO hr_salary_history (user_id, effective_date, salary_type, amount, comment, created_at)
+              VALUES (${user_id}, ${todayMyt}::date, 'hourly', ${hourly},
+                      ${"Employment converted to " + newType + " via employee profile form"}, now())
+            `;
+          }
+          historyNotes.push(`closed monthly salary segment (FT stint ends ${todayMyt})`);
+        } else if (!wasMonthly && isMonthly) {
+          await tx.$executeRaw`
+            UPDATE hr_salary_history SET end_date = ${todayMyt}::date - 1
+            WHERE user_id = ${user_id} AND salary_type IN ('hourly', 'hourly_weekend') AND end_date IS NULL
+          `;
+          const monthly = Number(profileData.basic_salary ?? existing.basic_salary ?? 0);
+          if (monthly > 0) {
+            await tx.$executeRaw`
+              INSERT INTO hr_salary_history (user_id, effective_date, salary_type, amount, comment, created_at)
+              VALUES (${user_id}, ${todayMyt}::date, 'monthly', ${monthly},
+                      'Employment converted to full_time via employee profile form', now())
+            `;
+          }
+          historyNotes.push("closed hourly salary segments, opened monthly");
+        }
+        // Conversions between non-FT types (part_time ↔ contract/intern) keep
+        // hourly rows open — same rate basis, nothing to close.
+      });
+    }
+
+    // Pay edits WITHOUT a type change: supersede the matching history segment
+    // so "current rate" in salary history always equals what payroll pays.
+    if (!typeChanged) {
+      for (const { column, salaryType } of PAY_COLUMNS) {
+        if (!(column in profileData)) continue;
+        const next = profileData[column] == null ? null : Number(profileData[column]);
+        const cur = existing[column] == null ? null : Number(existing[column]);
+        if (next == null || !Number.isFinite(next) || next <= 0 || next === cur) continue;
+        await prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`
+            UPDATE hr_salary_history SET end_date = ${todayMyt}::date - 1
+            WHERE user_id = ${user_id} AND salary_type = ${salaryType} AND end_date IS NULL
+          `;
+          await tx.$executeRaw`
+            INSERT INTO hr_salary_history (user_id, effective_date, salary_type, amount, comment, created_at)
+            VALUES (${user_id}, ${todayMyt}::date, ${salaryType}, ${next},
+                    'Edited via employee profile form', now())
+          `;
+        });
+        historyNotes.push(`${salaryType} rate superseded: RM${cur ?? "unset"} → RM${next}`);
+      }
+    }
+
+    if (typeChanged || historyNotes.length > 0) {
+      await logActivity({
+        actorId: session.id,
+        action: typeChanged ? "employee.convert_employment" : "employee.pay_change",
+        module: "hr",
+        targetId: user_id,
+        targetName: null,
+        details: {
+          ...(typeChanged ? { from: oldType, to: newType } : {}),
+          history: historyNotes,
+          source: "profile_form",
+        },
+        request: req,
+      });
+    }
+
     const { data, error } = await hrSupabaseAdmin
       .from("hr_employee_profiles")
       .update({ ...profileData, updated_at: new Date().toISOString() })
@@ -187,7 +306,7 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ profile: data });
+    return NextResponse.json({ profile: data, ignored_fields: ignoredFields, history_notes: historyNotes });
   } else {
     const { data, error } = await hrSupabaseAdmin
       .from("hr_employee_profiles")
@@ -195,6 +314,6 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ profile: data });
+    return NextResponse.json({ profile: data, ignored_fields: ignoredFields });
   }
 }
