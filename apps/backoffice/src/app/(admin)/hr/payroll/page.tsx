@@ -75,8 +75,41 @@ export default function PayrollPage() {
 
   const runs = data?.runs || [];
 
-  const downloadFile = (url: string) => {
-    window.location.href = url;
+  // Fetch-based download (not window.location) so the route can refuse with a
+  // JSON 409 we can actually SHOW — the bank file omits staff with no bank
+  // account / non-positive net, and that omission used to travel only in a
+  // response header nobody read. On a skipped-staff 409 the operator sees who
+  // will be left out and explicitly acknowledges before the file is produced.
+  const downloadFile = async (url: string) => {
+    const res = await fetch(url);
+    if (res.status === 409) {
+      const body = await res.json().catch(() => null);
+      if (body?.reason === "skipped_staff") {
+        const names = (body.skipped as { name: string; why: string }[])
+          .map((s) => `• ${s.name} — ${s.why}`)
+          .join("\n");
+        const ok = window.confirm(
+          `This payment file will OMIT ${body.skipped.length} staff:\n\n${names}\n\nThey will NOT be paid by this upload. Generate the file anyway?`,
+        );
+        if (!ok) return;
+        return downloadFile(`${url}&ack_skips=1`);
+      }
+      alert(body?.error || "Could not generate the file.");
+      return;
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      alert(body?.error || `Download failed (${res.status})`);
+      return;
+    }
+    const blob = await res.blob();
+    const dispo = res.headers.get("Content-Disposition") || "";
+    const filename = /filename="([^"]+)"/.exec(dispo)?.[1] || "download";
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   const handleCompute = async () => {
