@@ -133,25 +133,33 @@ export default function PayrollPage() {
     }
   };
 
-  const handleConfirm = async (runId: string, allowEarly = false) => {
+  const handleConfirm = async (runId: string, overrides: Record<string, boolean> = {}) => {
     setConfirming(runId);
     try {
       const res = await fetch("/api/hr/payroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "confirm", run_id: runId, ...(allowEarly ? { allow_early_confirm: true } : {}) }),
+        body: JSON.stringify({ action: "confirm", run_id: runId, ...overrides }),
       });
       if (res.ok) {
         mutate();
         return;
       }
       const body = await res.json().catch(() => null);
-      // The cycle-not-ended guard has a deliberate escape hatch for paying
-      // before month end — offer it instead of silently doing nothing.
-      if (body?.reason === "cycle_not_ended" && !allowEarly) {
-        if (confirm(`${body.error}\n\nConfirm early anyway?`)) {
+      // Guards with a deliberate escape hatch offer their override inline —
+      // each one requires its own explicit yes, and every override is
+      // audit-logged server-side. Negative net and empty runs have no
+      // override on purpose.
+      const OVERRIDABLE: Record<string, string> = {
+        cycle_not_ended: "allow_early_confirm",
+        missing_bank: "allow_missing_bank",
+        resignation_not_prorated: "allow_unprorated_resignation",
+      };
+      const flag = body?.reason ? OVERRIDABLE[body.reason] : undefined;
+      if (flag && !overrides[flag]) {
+        if (confirm(`${body.error}\n\nConfirm anyway?`)) {
           setConfirming(null);
-          await handleConfirm(runId, true);
+          await handleConfirm(runId, { ...overrides, [flag]: true });
         }
         return;
       }
