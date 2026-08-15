@@ -30,7 +30,7 @@
     },
     {
       "path": "/api/cron/ads-daily",
-      "schedule": "45 14 * * *"
+      "schedule": "0 19 * * *"
     },
     {
       "path": "/api/cron/ads-monthly",
