@@ -14,6 +14,7 @@
 // proper ZIP packaging is a follow-up using a streaming archiver.
 
 import { getFinanceClient } from "../supabase";
+import { prisma } from "@/lib/prisma";
 import { accumulatedDepreciation, listFixedAssets, netBookValue } from "../fixed-assets";
 import { buildPnl } from "./pnl";
 import { buildBalanceSheet } from "./balance-sheet";
@@ -152,29 +153,29 @@ async function arListingCsv(
   start: string,
   end: string
 ): Promise<AuditorPackFile> {
+  // Live AR source: the EOD sales agent's posted ar_invoice journals
+  // (fin_invoices was never populated and is tombstoned — migration 097).
   const client = getFinanceClient();
   const { data } = await client
-    .from("fin_invoices")
-    .select("id, invoice_number, customer_id, outlet_id, channel, invoice_date, due_date, subtotal, sst_amount, total, payment_status, paid_amount")
+    .from("fin_transactions")
+    .select("id, txn_date, description, outlet_id, amount, posted_by_agent, status")
     .eq("company_id", companyId)
-    .gte("invoice_date", start)
-    .lte("invoice_date", end)
-    .order("invoice_date");
-  const rows = ["invoice_number,customer_id,outlet_id,channel,invoice_date,due_date,subtotal,sst,total,status,paid"];
+    .eq("txn_type", "ar_invoice")
+    .eq("status", "posted")
+    .gte("txn_date", start)
+    .lte("txn_date", end)
+    .order("txn_date");
+  const rows = ["txn_id,txn_date,description,outlet_id,amount,posted_by,status"];
   for (const r of data ?? []) {
     rows.push(
       [
-        r.invoice_number,
-        r.customer_id ?? "",
+        r.id,
+        r.txn_date,
+        JSON.stringify(r.description ?? ""),
         r.outlet_id ?? "",
-        r.channel,
-        r.invoice_date,
-        r.due_date ?? "",
-        Number(r.subtotal).toFixed(2),
-        Number(r.sst_amount).toFixed(2),
-        Number(r.total).toFixed(2),
-        r.payment_status,
-        Number(r.paid_amount).toFixed(2),
+        Number(r.amount).toFixed(2),
+        r.posted_by_agent ?? "",
+        r.status,
       ].join(",")
     );
   }
@@ -186,30 +187,44 @@ async function apListingCsv(
   start: string,
   end: string
 ): Promise<AuditorPackFile> {
+  // Live AP source: the procurement Invoice table (fin_bills was never
+  // populated and is tombstoned — migration 097). Amounts are FULL invoice
+  // totals even when PARTIALLY_PAID (warehouse contract). Company scoping
+  // goes through the outlet→company mapping.
   const client = getFinanceClient();
-  const { data } = await client
-    .from("fin_bills")
-    .select("id, supplier_id, bill_number, bill_date, due_date, outlet_id, subtotal, sst_amount, total, payment_status, paid_amount, scheduled_pay_date")
-    .eq("company_id", companyId)
-    .gte("bill_date", start)
-    .lte("bill_date", end)
-    .order("bill_date");
-  const rows = ["bill_id,supplier_id,bill_number,bill_date,due_date,outlet_id,subtotal,sst,total,status,paid,scheduled_pay_date"];
-  for (const r of data ?? []) {
+  const { data: mappings } = await client
+    .from("fin_outlet_companies")
+    .select("outlet_id")
+    .eq("company_id", companyId);
+  const outletIds = (mappings ?? []).map((m) => m.outlet_id as string);
+  const invoices = outletIds.length
+    ? await prisma.invoice.findMany({
+        where: {
+          outletId: { in: outletIds },
+          issueDate: { gte: new Date(start), lte: new Date(`${end}T23:59:59.999Z`) },
+        },
+        orderBy: { issueDate: "asc" },
+        select: {
+          id: true, supplierId: true, invoiceNumber: true, issueDate: true,
+          dueDate: true, outletId: true, amount: true, status: true,
+          paymentType: true, expenseCategory: true,
+        },
+      })
+    : [];
+  const rows = ["invoice_id,supplier_id,invoice_number,issue_date,due_date,outlet_id,amount,status,payment_type,expense_category"];
+  for (const r of invoices) {
     rows.push(
       [
         r.id,
-        r.supplier_id ?? "",
-        r.bill_number ?? "",
-        r.bill_date,
-        r.due_date ?? "",
-        r.outlet_id ?? "",
-        Number(r.subtotal).toFixed(2),
-        Number(r.sst_amount).toFixed(2),
-        Number(r.total).toFixed(2),
-        r.payment_status,
-        Number(r.paid_amount).toFixed(2),
-        r.scheduled_pay_date ?? "",
+        r.supplierId ?? "",
+        r.invoiceNumber,
+        r.issueDate.toISOString().slice(0, 10),
+        r.dueDate ? r.dueDate.toISOString().slice(0, 10) : "",
+        r.outletId,
+        Number(r.amount).toFixed(2),
+        r.status,
+        r.paymentType ?? "",
+        r.expenseCategory,
       ].join(",")
     );
   }
