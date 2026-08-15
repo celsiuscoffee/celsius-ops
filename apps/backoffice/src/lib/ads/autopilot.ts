@@ -225,7 +225,16 @@ export const PAUSE_PROBE_ENABLED = process.env.ADS_AUTOPILOT_PAUSE_PROBE !== "of
 // adjIndex (fleet-adjusted) as well as the raw index, and the two control
 // outlets ride the same cycle, so the payday swing largely divides out. Read
 // the raw index alone at this length and it will mislead.
-export const PAUSE_PROBE_DAYS = 14;
+// 14 → 11.5 (owner 2026-08-15: "recover tamarind"): by probe day 12 the
+// Tamarind verdict was mathematically locked (index 0.875, would have needed
+// +22% vs forecast for every remaining day to flip) and each extra dark day
+// cost ~RM70–117 of net margin, so waiting out the full window bought nothing.
+// 11.5 rather than 12 so the verdict clears tonight's run despite the
+// daysSince race against the pause row's 19:01:30 timestamp (cron fires
+// ~19:01:0x; a 12.0 threshold would hold until tomorrow). The NEXT probe
+// (Putrajaya) inherits ~12 observed days — still weekday-balanced at the
+// nightly grain and its window straddles the Aug-25 payday either way.
+export const PAUSE_PROBE_DAYS = 11.5;
 // FLEET_SPACING_DAYS (the nightly-cron stagger for NEW disturbances; safety
 // actions rollback/revert/restore are never spaced) is defined in the policy
 // knobs block above — env-tunable, default 3d since 2026-07-19.
@@ -868,10 +877,20 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     }
   }
 
+  // An outlet whose campaign is PAUSED is not a valid control: its revenue is
+  // either experimentally manipulated (a running pause probe) or long-dark
+  // with a stale feed (Nilai). Letting its depressed index into the fleet
+  // median made every other outlet's adjIndex more lenient — observed live on
+  // 2026-08-12, when paused Tamarind's 0.94 pulled SA's control median to
+  // 0.9795 (vs 1.019 clean). Landed before the Putrajaya probe starts so the
+  // second experiment reads against clean controls from day one.
+  const pausedOutletIds = new Set(
+    campaigns.filter((c) => !ENABLED_STATUSES.includes(c.status) && c.outletId).map((c) => c.outletId as string),
+  );
   const guards: Record<string, GuardSignal> = {};
   for (const [oid, raw] of rawIndexByOutlet) {
     const others = [...rawIndexByOutlet.entries()]
-      .filter(([k, v]) => k !== oid && v != null)
+      .filter(([k, v]) => k !== oid && v != null && !pausedOutletIds.has(k))
       .map(([, v]) => v as number);
     guards[oid] = guardFromIndexes(
       raw,
@@ -1150,6 +1169,10 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     const others: number[] = [];
     for (const o of outlets) {
       if (o.id === s.outletId) continue;
+      // Same rule as the nightly guard: a paused-campaign outlet is not a
+      // control (its till is manipulated or its feed is dead) — its index must
+      // not enter the probe verdict's median.
+      if (pausedOutletIds.has(o.id)) continue;
       const ow = await windowActualForecast(o, pStart, yesterday).catch(() => null);
       if (ow && ow.forecast > 0) others.push(ow.actual / ow.forecast);
     }
