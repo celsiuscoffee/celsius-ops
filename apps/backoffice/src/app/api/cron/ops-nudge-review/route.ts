@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
-import { runReviewNudges } from "@/lib/ops-nudges";
+import { runReviewNudges, runReviewBacklogNudge } from "@/lib/ops-nudges";
 import { syncNegativeReviewDrafts } from "@/lib/reviews/sync-negatives";
 
 export const dynamic = "force-dynamic";
@@ -34,10 +34,22 @@ export async function GET(req: NextRequest) {
     }
     // 2) Nudge on-shift teams + managers for the (now-ingested) new negatives.
     const result = await runReviewNudges();
+    // 3) Once a day, chase the drafts nobody actioned. Step 2 dedupes per review,
+    //    so a draft that survives its first nudge is otherwise never mentioned
+    //    again — which is how 28 pending drafts accumulated since June. This
+    //    route runs every 5 min via the ops-nudges dispatcher, so gating on a
+    //    single 5-minute window gives exactly one digest per day. Posts nothing
+    //    publicly; negative replies stay human-approved by design.
+    const d = new Date();
+    const backlogDue = d.getUTCHours() === 2 && d.getUTCMinutes() < 5; // 10am MYT
+    const backlog = backlogDue ? await runReviewBacklogNudge().catch((e) => {
+      console.error("[cron/ops-nudge-review] backlog sweep failed:", e);
+      return null;
+    }) : null;
     console.log(
-      `[cron/ops-nudge-review] ingested=${ingest.created} resolved=${ingest.resolved} mode=${result.mode} items=${result.items} staff=${result.staffSent} mgr=${result.managerSent}`,
+      `[cron/ops-nudge-review] ingested=${ingest.created} resolved=${ingest.resolved} mode=${result.mode} items=${result.items} staff=${result.staffSent} mgr=${result.managerSent}${backlog ? ` backlog=${backlog.items}` : ""}`,
     );
-    return NextResponse.json({ ok: true, ingest, ...result });
+    return NextResponse.json({ ok: true, ingest, ...result, ...(backlog ? { backlog } : {}) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "ops-nudge-review failed";
     console.error("[cron/ops-nudge-review]", msg);

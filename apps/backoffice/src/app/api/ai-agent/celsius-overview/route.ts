@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { getSession } from "@/lib/auth";
 import { runCelsiusOverviewAgent } from "@/lib/ai-agent/celsius-overview";
 import { runCommsDigest } from "@celsius/agents/src/digest";
+import { touchAgentRun } from "@celsius/agents/src/substrate";
 import { runIntelligenceBriefing } from "@/lib/agents/intelligence-briefing";
 import { runOpsIntelligence } from "@/lib/ops/ops-intelligence";
 
@@ -50,6 +51,9 @@ async function runHandler(req: NextRequest) {
     // overview run.
     if (isCron && new Date().getUTCHours() === 13) {
       try {
+        // Heartbeat here, not in the unscheduled /api/cron/agent-comms-digest
+        // route — this fold is the only path that actually runs the digest.
+        await touchAgentRun("agent_comms_digest");
         await runCommsDigest();
       } catch (digestErr) {
         console.error("[ai-agent] folded comms-digest failed:", digestErr);

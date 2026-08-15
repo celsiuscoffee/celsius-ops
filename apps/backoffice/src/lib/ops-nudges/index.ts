@@ -316,6 +316,56 @@ export async function runReviewNudges(now = new Date()): Promise<NudgeRunResult>
   return { mode, ranAt, items: managerLines.length, staffSent, managerSent };
 }
 
+// ── 4b. Negative-review drafts going stale → daily manager digest ────────────
+// The per-review nudge above fires ONCE per review (recordBreach dedupes), which
+// is right for "a bad review just landed, go recover the guest" — but it means a
+// draft nobody actions is never mentioned again. That is how the queue reached
+// 28 pending drafts, oldest from June, with one resolved and two rejected in two
+// months: the loop nudged on ARRIVAL and never on AGEING.
+//
+// This sweep is the ageing half. It posts NOTHING publicly — replying to a
+// negative review stays on the human-approval path by design (see
+// reviews-auto-reply: 1-3* are never generated or posted until the
+// risk-classifier work lands). It only makes the backlog visible to the people
+// who can clear it. Fires once a day from the review nudge route, so it is a
+// digest and not noise.
+const REVIEW_DRAFT_STALE_DAYS = Number(process.env.REVIEW_DRAFT_STALE_DAYS || 3);
+
+export async function runReviewBacklogNudge(now = new Date()): Promise<NudgeRunResult> {
+  const mode = nudgesMode();
+  const ranAt = now.toISOString();
+  if (mode === "off") return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  const cutoff = new Date(now.getTime() - REVIEW_DRAFT_STALE_DAYS * 86_400_000);
+  const stale = await prisma.reviewReplyDraft.findMany({
+    where: { status: "pending", createdAt: { lt: cutoff } },
+    select: { id: true, rating: true, reviewerName: true, createdAt: true, outletId: true },
+    orderBy: { createdAt: "asc" },
+    take: 50,
+  });
+  if (stale.length === 0) return { mode, ranAt, items: 0, staffSent: 0, managerSent: 0 };
+
+  const outlets = await prisma.outlet.findMany({
+    where: { id: { in: [...new Set(stale.map((d) => d.outletId))] } },
+    select: { id: true, name: true },
+  });
+  const outletName = new Map(outlets.map((o) => [o.id, o.name]));
+
+  const ageDays = (d: Date) => Math.floor((now.getTime() - new Date(d).getTime()) / 86_400_000);
+  const oldest = ageDays(stale[0].createdAt);
+  // Lead with the oldest, because "28 waiting" reads as backlog while "oldest is
+  // 52 days old" reads as a guest nobody answered.
+  const lines = stale.slice(0, 10).map(
+    (d) =>
+      `${outletName.get(d.outletId) ?? "Unknown outlet"} · ${d.rating}★ ${d.reviewerName || "Anonymous"} · waiting ${ageDays(d.createdAt)}d`,
+  );
+  if (stale.length > lines.length) lines.push(`…and ${stale.length - lines.length} more`);
+
+  const headline = `${stale.length} guest review${stale.length === 1 ? "" : "s"} still awaiting a reply — oldest ${oldest} days`;
+  const managerSent = await sendManagerDigestToOps(headline, lines, mode);
+  return { mode, ranAt, items: stale.length, staffSent: 0, managerSent };
+}
+
 // ── 5. Checklist not done → DM the fairly-assigned owner (STATION + balance) ──
 // FAIR model (owner choice 2026-06-29): EVERY checklist gets exactly ONE fair owner.
 // Eligibility = people whose SHIFT covers the task's slot (roster start/end + clock-
