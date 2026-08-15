@@ -2,7 +2,6 @@
 // finance ledger. Each resolution updates fin_exceptions + writes back to
 // fin_agent_decisions so the categorizer learns from the correction.
 
-import { randomUUID } from "crypto";
 import { getFinanceClient } from "./supabase";
 import { postJournal } from "./ledger";
 import type { JournalLineInput } from "./types";
@@ -144,26 +143,8 @@ export async function resolveException(
     lines,
   });
 
-  // Persist the bill record.
-  const billId = randomUUID();
-  await client.from("fin_bills").insert({
-    id: billId,
-    company_id: companyId,
-    supplier_id: proposal.supplierId,
-    bill_number: proposal.bill.billNumber ?? null,
-    bill_date: proposal.bill.billDate ?? new Date().toISOString().slice(0, 10),
-    due_date: proposal.bill.dueDate ?? null,
-    outlet_id: outletId ?? null,
-    subtotal: round2(subtotal),
-    sst_amount: round2(sst),
-    total: round2(total),
-    payment_status: "unpaid",
-    paid_amount: 0,
-    transaction_id: result.transactionId,
-    source_doc_id: exc.related_id as string,
-    notes: proposal.bill.notes ?? null,
-    scheduled_pay_date: proposal.bill.dueDate ?? null,
-  });
+  // (fin_bills is dead/tombstoned — the ap_bill journal is the record;
+  // the parsed bill payload stays on the fin_documents row.)
 
   // Mark exception resolved.
   await client

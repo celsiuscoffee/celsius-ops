@@ -194,6 +194,19 @@ export async function submitConsolidatedMonth(
   yearMonth: string,
   actor: string
 ): Promise<SubmitConsolidatedResult> {
+  // PHASE-2 REBUILD PENDING — docs/design/einvoice-live-sources.md.
+  // The legacy source table fin_invoices is dead (tombstoned in migration
+  // 097): this flow silently iterated zero rows since launch. Refuse loudly
+  // until the unified_sales-based builder replaces it, so nobody mistakes a
+  // no-op for a filing. The body below is kept as the reference
+  // implementation for the rebuild; flip the flag only with phase 2.
+  const EINVOICE_SOURCE_REBUILT = false;
+  if (!EINVOICE_SOURCE_REBUILT) {
+    throw new Error(
+      "e-invoice submission is disabled: its source (fin_invoices) was never populated and has been removed. " +
+      "Rebuild on unified_sales is scoped in docs/design/einvoice-live-sources.md (phase 2)."
+    );
+  }
   if (!myinvoisEnabled()) {
     throw new Error("MyInvois is not configured. Set MYINVOIS_* env vars first.");
   }

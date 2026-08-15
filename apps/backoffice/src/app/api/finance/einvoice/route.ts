@@ -19,21 +19,14 @@ export async function GET(req: NextRequest) {
   const companyId = url.searchParams.get("companyId") ?? (await getActiveCompanyId());
 
   const client = getFinanceClient();
-  // Filter via the join: fin_einvoice_submissions.invoice_id → fin_invoices.company_id.
-  // Two-step query keeps it simple without depending on Supabase view.
-  const { data: invoices } = await client
-    .from("fin_invoices")
-    .select("id")
-    .eq("company_id", companyId)
-    .limit(2000);
-  const invoiceIds = (invoices ?? []).map((i) => i.id as string);
-  if (invoiceIds.length === 0) {
-    return NextResponse.json({ submissions: [], enabled: myinvoisEnabled() });
-  }
+  // fin_invoices is dead/tombstoned; list submissions directly. Company
+  // scoping returns with the (company, outlet, period) re-key in phase 2
+  // (docs/design/einvoice-live-sources.md) — the table is empty until then,
+  // so an unscoped list is exact today.
+  void companyId;
   const { data, error } = await client
     .from("fin_einvoice_submissions")
     .select("id, invoice_id, myinvois_uuid, submission_id, status, submitted_at, validated_at, validation_results, qr_url, created_at")
-    .in("invoice_id", invoiceIds)
     .order("created_at", { ascending: false })
     .limit(100);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -12,11 +12,17 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { getFinanceClient } from "../supabase";
+import { prisma } from "@/lib/prisma";
+import { resolveContra } from "../gl-posting-map";
 import { randomUUID } from "crypto";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export const CATEGORIZER_VERSION = "categorizer-v1";
+// v2: supplierHistory re-pointed from the dead fin_bills table to the live
+// Invoice + ap-matched bank-line GL landing (2026-08 trap-table kill). The
+// input distribution changed, so the version is bumped to keep eval cohorts
+// comparable (finance-module skill rule).
+export const CATEGORIZER_VERSION = "categorizer-v2";
 
 export type CategorizationInput = {
   supplierName: string;
@@ -56,43 +62,68 @@ async function loadCoa(): Promise<Array<{ code: string; name: string; type: stri
   }));
 }
 
-// Pulls the last 5 categorizations for this supplier — strongest signal.
+// Pulls the last 5 known account landings for this supplier — strongest
+// signal. Live sources (fin_bills is dead/tombstoned):
+//   1. The supplier's ap-matched bank payments and the account their GL
+//      journal actually landed in (category → contra via resolveContra —
+//      the same mapping the poster used).
+//   2. Fallback: this agent's own recent decisions for the supplier, using
+//      the human-corrected code when present.
 async function supplierHistory(
   supplierId: string | null | undefined
 ): Promise<Array<{ accountCode: string; total: number; date: string }>> {
   if (!supplierId) return [];
-  const client = getFinanceClient();
-  const { data } = await client
-    .from("fin_bills")
-    .select("transaction_id, total, bill_date")
-    .eq("supplier_id", supplierId)
-    .not("transaction_id", "is", null)
-    .order("bill_date", { ascending: false })
-    .limit(5);
-  if (!data || data.length === 0) return [];
 
-  const txnIds = data.map((b) => b.transaction_id).filter(Boolean) as string[];
-  const { data: lines } = await client
-    .from("fin_journal_lines")
-    .select("transaction_id, account_code, debit")
-    .in("transaction_id", txnIds)
-    .gt("debit", 0);
-
-  // For each bill, the debit line that's NOT 3001 (AP) is the expense code.
-  const txnToCode = new Map<string, string>();
-  for (const l of lines ?? []) {
-    if (l.account_code === "3001") continue;
-    if (!txnToCode.has(l.transaction_id as string)) {
-      txnToCode.set(l.transaction_id as string, l.account_code as string);
-    }
+  const invoices = await prisma.invoice.findMany({
+    where: { supplierId },
+    orderBy: { issueDate: "desc" },
+    take: 50,
+    select: { id: true },
+  });
+  if (invoices.length > 0) {
+    const matched = await prisma.bankStatementLine.findMany({
+      where: {
+        apInvoiceId: { in: invoices.map((i) => i.id) },
+        glTransactionId: { not: null },
+      },
+      orderBy: { txnDate: "desc" },
+      take: 5,
+      select: { category: true, description: true, amount: true, txnDate: true },
+    });
+    const hist = matched
+      .map((l) => {
+        const contra = resolveContra(l.category ?? "", l.description ?? "");
+        return {
+          accountCode: contra.suspense ? "" : contra.code,
+          total: Number(l.amount),
+          date: l.txnDate.toISOString().slice(0, 10),
+        };
+      })
+      .filter((h) => h.accountCode);
+    if (hist.length > 0) return hist;
   }
 
-  return data
-    .map((b) => ({
-      accountCode: txnToCode.get(b.transaction_id as string) ?? "",
-      total: Number(b.total),
-      date: b.bill_date as string,
-    }))
+  // Fallback: prior decisions (covers suppliers billed but not yet
+  // bank-matched). Corrected codes are ground truth; prefer them.
+  const client = getFinanceClient();
+  const { data } = await client
+    .from("fin_agent_decisions")
+    .select("input, output, corrected_to, created_at")
+    .eq("agent", "categorizer")
+    .eq("input->>supplier_id", supplierId)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  return (data ?? [])
+    .map((d) => {
+      const corrected = d.corrected_to as { accountCode?: string } | null;
+      const output = d.output as { account_code?: string } | null;
+      const input = d.input as { total?: number } | null;
+      return {
+        accountCode: corrected?.accountCode ?? output?.account_code ?? "",
+        total: Number(input?.total ?? 0),
+        date: String(d.created_at).slice(0, 10),
+      };
+    })
     .filter((h) => h.accountCode);
 }
 
