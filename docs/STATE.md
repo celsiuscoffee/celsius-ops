@@ -6,6 +6,165 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-15 — **Estate-wide loop QA sweep done (every loop, all four arms:
+  trigger→action→measure→feedback). Full report: `docs/design/loop-qa-2026-08-15.md`.**
+  Headline: the fully-automated loops are healthy and were caught changing their
+  own behaviour on evidence; the broken ones all hand their last arm to a human,
+  an external feed, or an external scheduler.
+  **Healthy (verified against prod, not assumed):** marketing engine — 7 live
+  loops, 432 rounds / 344 measured / **0 past their attribution window**, and
+  `fresh_lapse` **auto-killed itself 2026-08-13** ("+0.2pp lift, RM-2.16/recipient
+  after 1296 sends"). What looks like 4 dead loops is 3 recorded pauses
+  (`beans_idle` owner, `fresh_lapse` auto, both `round_gap` arms) — **check
+  `app_settings.loops_paused` before reporting a stopped loop.** Ads sync 5 kinds
+  OK 10/10; Tamarind probe in flight (status=3, RM46.32). Finance EOD→GL fresh.
+  Backoffice is at **38/40 Vercel cron slots**; of 20 cron routes absent from
+  `vercel.json`, all 20 are reachable via a dispatcher/lib/UI — no orphans.
+  **P1 — GBP geogrid burns half its monthly budget on failures. FIXED.** A `failed`
+  scan (all 81 grid points error) still writes a `GeoGridScan` row, and the gate
+  counts rows not successes (`scansThisMonth = count(*)`), so failures eat the
+  `GEOGRID_MONTHLY_SCAN_CAP=40` and can't be retried till next month. Aug 3 and
+  Jul 6 are identical: 13 complete / 7 partial / **20 failed**. Consequences:
+  **all 8 Shah Alam combos failed → the flagship outlet has no rank data**;
+  **IOI Mall has never been auto-scanned** (16 active keywords); Putrajaya had
+  zero August scans; and the weekly cadence is defeated because the month's
+  budget is spent on the first Monday (Aug 10, Jul 13/20/27 all returned
+  `capped`). 100%-failure on one outlet smells like a bad placeId/coords or a
+  keyed API restriction — **THAT GUESS IS WITHDRAWN, see root cause below.**
+  **Fix shipped:** cap now counts only `status <> 'failed'` (read AND
+  decrement); new `MAX_ATTEMPTS_PER_RUN` (60, above the 40 cap) bounds attempts
+  so "failures are free" can't become unbounded Places spend on a wholly-broken
+  outlet; `interleaveByOutlet` round-robins the due queue so the neediest outlet
+  leads but can't consume the run. Response now reports attempts/failed/errored
+  separately. Pinned by `lib/geogrid/scan-runner.test.ts`.
+  **ROOT CAUSE (2026-08-15, second pass) — IT IS PLACES RATE-LIMITING, NOT A
+  PER-OUTLET FAULT.** Shah Alam's placeId (`ChIJFcHSHJlNzDERtGh5CheG0XE`) and
+  coords (3.0733, 101.5185) are fine, and Tamarind (7) and Nilai (4) failed on
+  Aug 3 too. **Ordering the run by `createdAt` is what cracks it:** seq 1-7
+  complete (~4-5s each) → 10-14 failed (~1-2s, too fast to have called
+  anything) → **21-26 complete again** → 32-40 (all Shah Alam) failed.
+  **A run that RECOVERS mid-way is a rate limit; no per-outlet fault does that.**
+  `scanGrid` fired 8 concurrent Places calls/batch with no throttle/retry/backoff,
+  and the cron chains ~40 scans = ~3,240 calls flat out. Shah Alam reads 100%
+  broken only because it sits LAST in the queue. Fixed: retry w/ exponential
+  backoff + jitter on retryable statuses (429/5xx/no-status), fail fast on
+  400/401/403/404; new `PlacesApiError` carries the HTTP status; first failure
+  reason surfaced per scan as `why`; `RUN_DEADLINE_MS` 240s guard so retries
+  can't get the function killed mid-scan.
+  **IOI Mall is a DIFFERENT cause, also now handled:** its
+  `reviewSettings.gbpLocationName` is NULL so `runScan` THREW every time — it was
+  never budget starvation. Outlets with no GBP location are filtered before the
+  queue and reported as `skippedNoGbpLocation`. **Owner action: connect IOI
+  Mall's Google profile** (16 active keywords waiting).
+  **LESSON: "which outlet fails" is a distribution, not a diagnosis — sort by
+  time before believing an entity-specific story. And a failure that records no
+  reason WILL be misdiagnosed:** the loop stored `status='failed'` and nothing
+  else, so two months of daily evidence couldn't tell a throttled API from a
+  broken profile.
+  **P2 — reviews loop nudges on ARRIVAL but never on AGEING. Half fixed.**
+  31 drafts ever, **28 still `pending`** (oldest 2026-06-24, newest 2026-08-09),
+  1 resolved / 2 rejected, and **zero recovery codes ever issued or claimed** —
+  the recovery arm has never fired. Mechanism is a cadence gap, NOT a missing
+  nudge: `ops-nudge-review` runs every 5 min and DMs on-shift staff + managers,
+  but `recordBreach` dedupes per review **by design**, so each is nudged exactly
+  once on arrival and a draft nobody actions is never mentioned again. Added
+  `runReviewBacklogNudge()` (lib/ops-nudges) — pending drafts older than
+  `REVIEW_DRAFT_STALE_DAYS` (3) go out as a manager digest led by the OLDEST,
+  fired once daily by gating the existing 5-min route to one window (10:00 MYT),
+  so **no new Vercel cron slot** (we're at 38/40).
+  **NOT done, deliberately: arming negative-review auto-reply.** 1-3★ replies are
+  **already an explicit documented decision** — reviews-auto-reply/route.ts says
+  negatives "are never generated or posted… human-approval path until the
+  risk-classifier work lands. This is the zero-risk wedge." Arming it posts brand
+  replies to unhappy customers on a public Google profile: outward-facing, hard
+  to retract, contrary to a written stance. **Owner's call; wants the
+  risk-classifier first.**
+  **P3 — WITHDRAWN, the finding was WRONG.** I judged "starved" from table row
+  counts without checking which tables the code writes. **The AP/bank loop is
+  healthy:** `applyApMatches` reads `prisma.invoice` (3,027) +
+  `prisma.bankStatementLine` (**59,356**), and `fin_ap_match_rejections` has 4
+  rows = proof it ran and decided. `fin_documents` 37,628 (37,332 bank-feed
+  slips, fresh to Aug 14). **`fin_bank_transactions` and `fin_matches` have ZERO
+  code references anywhere** — dead schema from an old design, housekeeping
+  candidates (owner-approved migration to drop). **`fin_bills`/`fin_invoices`/
+  `fin_exceptions`** are written only by `lib/finance/agents/ap.ts`, whose sole
+  caller is the MANUAL upload screen `api/finance/bills/upload` — empty because
+  nobody has ever uploaded a supplier bill, i.e. an unused feature not a broken
+  loop. Of the 3 agents I called no-ops, 2 genuinely run every 6h. **No Bukku
+  feed is missing.**
+  **LESSON: row counts are not a pipeline — before calling a loop starved, find
+  the writer.** An empty table proves nothing about the loop meant to fill it.
+  **And check whether "broken" is a documented decision** (see P2).
+  **P4 — FIXED (9 of 10 in code).** 10 armed agents had `last_run_at` NULL while
+  logging actions, so `/agents` couldn't tell quiet from stopped. **The mechanism
+  is NOT simply "nobody called touchAgentRun" — for the finance agents the call
+  exists on the WRONG route.** `/api/cron/ap-match-apply` and `/api/cron/gl-post`
+  both heartbeat correctly but **neither is scheduled**; the scheduled
+  `bukku-feed-sync` imports `applyApMatches`/`postBankLinesToGl` directly and
+  never touched the registry. Same for `agent_comms_digest` (only real caller is
+  the 13:00-UTC fold in `celsius-overview`). **Lesson: heartbeat the path that
+  actually runs, not the route that shares the agent's name** — check
+  `vercel.json` before assuming a cron route is the live path. Fixed in
+  `bukku-feed-sync` (3 finance agents), `celsius-overview` (digest), and each
+  agent's own run function for marketing_strategist / ops_intelligence /
+  procurement_advisor / data_analyst / hr_ops_agent — always BEFORE the
+  quiet-exit paths, since a quiet run is the thing that must stay
+  distinguishable from a stopped one. **10th (`pos_pairing_tuner`) has no TS
+  path** — pg_cron calls `public.refresh_pos_pairing_signals()` directly; its
+  heartbeat ships as `20260815_pos_pairing_tuner_heartbeat`, syntax-checked
+  against prod under a throwaway function name (created + dropped, verified no
+  leftover) but **NOT APPLIED — needs a human** (hard rule 6).
+  **P5 (latent)** — `autoPauseUnderperformers` (loop-engine.ts:1482) and
+  `getEvaluation` (:1704) do unbounded selects over all measured rounds: the
+  known PostgREST 1000-row class. 344 rows, +7/day → **crosses the cap ~Nov
+  2026**, after which the kill rule silently judges on a subset. Use
+  `fetchAllRows`.
+  **P6 — `finance_warehouse` stopped since 2026-07-24 (~512h, 3 missed weekly
+  runs). RE-ARMED, one owner step left.** Cause: **the routine no longer existed
+  at all** — listing every trigger on the account returns only one-shot
+  `send_later` entries, zero recurring ones, and at least one carries
+  `ended_reason: auto_disabled_session_gone`. It was bound to a session that went
+  away and died with it. Re-created as `Finance warehouse — weekly custodian run`
+  (`trig_01BCKPmWgpi1KUq7pk5BrK2n`), `13 14 * * 0` UTC = Sun 22:13 MYT, first
+  fire 2026-08-16, **with `create_new_session_on_fire` precisely so
+  session-binding can't kill it again.** Prompt carries the backlog + the Nilai
+  feed and empty `fin_bank_*` items.
+  **BLOCKER, owner-only: the fired session has NO Supabase MCP.** The skill's
+  check suite is read-only Supabase (`SKILL.md:147`), but this org rejects the
+  `connectors` param on create_trigger, and the environment holds no Supabase
+  token of its own (repo `.mcp.json` configures ONLY sentry; `env | grep -i
+  supabase` is empty — my DB access this session comes from an account-level
+  connector that can't be passed through). **Attach the Supabase connector to the
+  routine in the claude.ai routines UI.** Until then the prompt makes it fail
+  loudly — it stops and reports `finance-warehouse run blocked: Supabase MCP not
+  attached to this routine` rather than guessing from stale/repo-only data.
+  **P7 (latent)** — `measureRound` opens each window at `assigned_at` (prepare),
+  not `sent_at`; 14 scheduled rounds carry up to **8.03h** of gap over 796
+  assignments. **Checked: zero mis-attributed conversions exist** (lapsed
+  segments rarely order in that window), so latent only.
+  **P8.1 — `hardCutDirective` DELETED** (was autopilot.ts:571, wired :1171).
+  **It never self-expired the way its comment claimed:** the guard was
+  `dailyBudgetMyr <= HARD_CUT_TARGET_MYR → null`, which holds only while the
+  budget STAYS under RM55 and **re-arms on any future raise** — so it was not a
+  spent one-time directive, it was a trap primed for the next raise, i.e. Shah
+  Alam's probe-up ~Oct 7. Safe to remove now because all three are already below
+  RM55 (SA 53.98 / PJ 38.16 / Tam 46.32 paused) → dormant, deletion is a no-op
+  today. Nothing replaces it; guarded descent + rollback + pause-probe already
+  own budget movement and read the till, not a fixed number. **Lesson: a
+  "self-expiring" directive keyed on a CURRENT value is not self-expiring — it's
+  dormant until the value comes back.** 3 old tests → 2 new ones pinning that an
+  above-RM55 campaign isn't chopped to 55 and that a raised campaign is judged
+  the same whether or not its name was on the old list.
+  **P8.2/P8.3 — STILL OPEN, deliberately deferred:** probe verdict fires on
+  raw-OR-adj (autopilot.ts:393) and `organic-revenue.ts` pos branch still has no
+  `source <> 'grabfood'`. Both move the index the **Tamarind probe is currently
+  being judged on** (verdict ~Aug 17) — changing the verdict rule or the index
+  mid-experiment makes the result uninterpretable. Do them AFTER the verdict.
+  **P9** — `OpsReminder` has 0 rows ever; the hourly `ops-reminders` sweep is a
+  correct no-op consumer of a feature nobody uses (housekeeping-audit candidate).
+  **Gotcha that cost time: `ads_sync_log.status` is `OK`, not `success`** —
+  filtering on the wrong literal makes 7 healthy nightly syncs read as 7 fails.
+
 - 2026-08-14 — **Ads agent-loop audit (full pass, probe day 11/14): loop is
   healthy, verdict is predictable, and the probe REVERSED the early read —
   Tamarind's ads were earning their keep.** Replicated the probe's exact math
@@ -1873,6 +2032,27 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-08-15 — **Loop QA sweep DONE. P1 (incl. root cause), P2 (ageing arm), P4,
+  P6 and P8.1 all FIXED on PR #1130; P3 WITHDRAWN as a bad finding.** Full detail
+  in `docs/design/loop-qa-2026-08-15.md`.
+  **THREE OWNER STEPS — none of these can be done from an agent session:**
+  (1) **Attach the Supabase connector** to the re-armed `Finance warehouse —
+  weekly custodian run` routine in the claude.ai routines UI. It fires Sun
+  2026-08-16 22:13 MYT and will report BLOCKED until this is done (P6).
+  (2) **Apply `packages/db/prisma/migrations/20260815_pos_pairing_tuner_heartbeat/`**
+  — written + syntax-checked against prod, needs a human to run it (P4).
+  (3) **Connect IOI Mall's Google Business Profile** — `gbpLocationName` is NULL,
+  so its 16 active keywords have never been scannable (P1).
+  **THEN:** (4) **P8.2/P8.3 AFTER the ~Aug 17 Tamarind probe verdict** — probe
+  verdict raw-OR-adj, and the missing grabfood filter; both move the index the
+  probe is being judged on, so they wait. (5) **P5/P7** — latent, fix on the next
+  loop-engine touch.
+  **TWO OWNER DECISIONS, neither urgent:** (a) **negative-review auto-reply** —
+  arm it, or keep the human-approval path and staff the queue that the new daily
+  backlog digest now surfaces? Wants the risk-classifier first (P2). (b) **drop
+  the dead `fin_bank_transactions` / `fin_matches` tables** — zero code refs
+  anywhere; housekeeping proposal + owner-approved migration (P3).
 
 - 2026-08-14 — **Ads: watch the probe verdict land, then the Putrajaya probe
   starts itself.** The ~Aug 17/18 19:01 UTC run should RESTORE Tamarind at

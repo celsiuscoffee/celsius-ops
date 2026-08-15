@@ -59,6 +59,25 @@ export function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: n
 
 export type Competitor = { name: string; top3Points: number; avgRank: number };
 
+/** A Places HTTP failure that kept its status code, so callers can tell a
+ *  rate-limit (retry) from a bad key or bad request (don't). */
+export class PlacesApiError extends Error {
+  status: number | null;
+  constructor(message: string, status: number | null) {
+    super(message);
+    this.name = "PlacesApiError";
+    this.status = status;
+  }
+}
+
+/** 429 = rate-limited, 5xx = Google's side, no status = network/DNS. All worth
+ *  another go. 4xx other than 429 (bad key, bad request, denied) never will be. */
+export function isRetryablePlacesError(err: unknown): boolean {
+  const status = err instanceof PlacesApiError ? err.status : null;
+  if (status == null) return true;
+  return status === 429 || status >= 500;
+}
+
 /** Our rank + the ranked businesses (for the competitor reference) at one point. */
 export async function rankAtPoint(
   apiKey: string,
@@ -84,7 +103,7 @@ export async function rankAtPoint(
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Places searchText error ${res.status}: ${body.slice(0, 300)}`);
+    throw new PlacesApiError(`Places searchText error ${res.status}: ${body.slice(0, 300)}`, res.status);
   }
   const data = await res.json();
   const places: { id?: string; displayName?: { text?: string } }[] = data.places ?? [];
@@ -275,6 +294,17 @@ export function computeMetrics(points: GridPoint[], centerLat: number, centerLng
   };
 }
 
+// A scan fires 81 points at `concurrency` at a time, and the cron runs dozens of
+// scans back to back — thousands of Places calls as fast as the network allows.
+// That trips Google's rate limit mid-run, and with no retry the points simply
+// errored: whole scans came back empty, then recovered a minute later, then
+// failed again. Retrying the retryable statuses turns a rate-limit into a pause
+// instead of a lost scan, and the backoff is what actually paces the burst.
+const POINT_RETRIES = 3;
+const RETRY_BASE_MS = 400;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 /** Run all grid points with limited concurrency, also tallying who out-ranks us. */
 export async function scanGrid(
   apiKey: string,
@@ -284,31 +314,48 @@ export async function scanGrid(
   targetPlaceId: string | null,
   targetTitle: string | null,
   concurrency = 8,
-): Promise<{ points: GridPoint[]; failures: number; competitors: Competitor[] }> {
+): Promise<{ points: GridPoint[]; failures: number; competitors: Competitor[]; sampleError: string | null; retries: number }> {
   let failures = 0;
+  let retries = 0;
+  let sampleError: string | null = null;
   const tally = new Map<string, { name: string; top3: number; rankSum: number; count: number }>();
 
   for (let i = 0; i < points.length; i += concurrency) {
     const batch = points.slice(i, i + concurrency);
     await Promise.all(
       batch.map(async (p) => {
-        try {
-          const { rank, results } = await rankAtPoint(apiKey, keyword, p.lat, p.lng, radiusM, targetPlaceId, targetTitle);
-          p.rank = rank;
-          p.results = results;
-          results.forEach((r, i2) => {
-            if (r.isUs || !r.name) return;
-            const key = r.placeId || r.name.toLowerCase();
-            const t = tally.get(key) ?? { name: r.name, top3: 0, rankSum: 0, count: 0 };
-            t.count++;
-            t.rankSum += i2 + 1;
-            if (i2 < 3) t.top3++;
-            tally.set(key, t);
-          });
-        } catch (err) {
-          failures++;
-          console.error(`[geogrid] point ${p.row},${p.col} failed:`, (err as Error).message);
-          p.rank = null;
+        for (let attempt = 0; ; attempt++) {
+          try {
+            const { rank, results } = await rankAtPoint(apiKey, keyword, p.lat, p.lng, radiusM, targetPlaceId, targetTitle);
+            p.rank = rank;
+            p.results = results;
+            results.forEach((r, i2) => {
+              if (r.isUs || !r.name) return;
+              const key = r.placeId || r.name.toLowerCase();
+              const t = tally.get(key) ?? { name: r.name, top3: 0, rankSum: 0, count: 0 };
+              t.count++;
+              t.rankSum += i2 + 1;
+              if (i2 < 3) t.top3++;
+              tally.set(key, t);
+            });
+            return;
+          } catch (err) {
+            const msg = (err as Error).message;
+            if (attempt < POINT_RETRIES && isRetryablePlacesError(err)) {
+              retries++;
+              // Exponential, with jitter so the 8 in-flight points don't all
+              // come back and re-trip the limit in lockstep.
+              await sleep(RETRY_BASE_MS * 2 ** attempt + Math.floor(Math.random() * 250));
+              continue;
+            }
+            failures++;
+            // Keep the first reason. A failed scan used to record nothing about
+            // WHY, which is what made a rate-limit look like a broken outlet.
+            sampleError ??= msg;
+            console.error(`[geogrid] point ${p.row},${p.col} failed:`, msg);
+            p.rank = null;
+            return;
+          }
         }
       }),
     );
@@ -319,5 +366,5 @@ export async function scanGrid(
     .sort((a, b) => b.top3Points - a.top3Points || a.avgRank - b.avgRank)
     .slice(0, 6);
 
-  return { points, failures, competitors };
+  return { points, failures, competitors, sampleError, retries };
 }

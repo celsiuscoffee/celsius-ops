@@ -10,7 +10,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { computeReorderSuggestions, type ReorderGroup } from "@/lib/inventory/reorder-suggestions";
-import { getAgentModeOrDefault, logAgentAction } from "@celsius/agents/src/substrate";
+import { getAgentModeOrDefault, logAgentAction, touchAgentRun } from "@celsius/agents/src/substrate";
 import { sendPulse } from "@celsius/agents/src/pulse";
 import { logAgentMessage } from "@celsius/agents/src/messages";
 
@@ -59,6 +59,10 @@ export async function draftProcurementRecommendation(groups: ReorderGroup[]): Pr
 
 export async function runProcurementAdvisor(): Promise<{ sent: boolean; skipped?: string }> {
   if ((await getAgentModeOrDefault("procurement_advisor", "armed")) === "off") return { sent: false, skipped: "agent off" };
+  // Heartbeat before the quiet-exit paths below, not after: most runs have
+  // nothing at reorder point and send nothing, and without this /agents reads
+  // an always-quiet agent as one that has never run.
+  await touchAgentRun("procurement_advisor");
   if (!process.env.ANTHROPIC_API_KEY) return { sent: false, skipped: "no api key" };
 
   const groups = await computeReorderSuggestions();
