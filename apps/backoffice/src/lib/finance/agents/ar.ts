@@ -8,7 +8,7 @@
 // returns transaction id. Does not fetch from StoreHub directly — that's the
 // ingestor's job.
 
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { postJournal } from "../ledger";
 import { getFinanceClient } from "../supabase";
 import type { JournalLineInput, PostJournalResult } from "../types";
@@ -104,6 +104,18 @@ export type ArAgentResult = {
   date: string;
 };
 
+// Deterministic identity for a day's EOD AR journal — md5 formatted as a
+// UUID (matches postgres md5(text)::uuid, same convention as the bank
+// poster's keys). Backed by the unique partial index from migration 066:
+// two concurrent ingest runs can both pass the select guard, but only one
+// insert wins; the loser errors instead of double-posting the day.
+// reverseTransaction() clears the key on reversal so the legitimate
+// reverse-and-repost backfill flow keeps working.
+function eodPostingKey(companyId: string, outletId: string, date: string): string {
+  const h = createHash("md5").update(`eod-ar|${companyId}|${outletId}|${date}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 export async function postDailyAr(summary: EodSummary): Promise<ArAgentResult> {
   const channels = summary.channels;
   const lines: JournalLineInput[] = [];
@@ -190,6 +202,7 @@ export async function postDailyAr(summary: EodSummary): Promise<ArAgentResult> {
     agent: "ar",
     agentVersion: AR_AGENT_VERSION,
     confidence,
+    postingKey: eodPostingKey(summary.companyId, summary.outletId, summary.date),
     lines,
     draft: lowConfidence,  // low-confidence days held for human review
   });
