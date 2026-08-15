@@ -7,7 +7,7 @@
 // period to status='closed' which the DB trigger uses to block further posts.
 //
 // Reopens require fin_periods.status = 'open' + a reason; the API route
-// handles that and feeds back into the audit log via fin_set_actor.
+// handles that and feeds back into the audit log via the actor-scoped client.
 
 import { getFinanceClient } from "../supabase";
 import { postJournal } from "../ledger";
@@ -317,8 +317,7 @@ export async function runClose(input: RunCloseInput): Promise<RunCloseResult> {
   if (!/^\d{4}-\d{2}$/.test(input.period)) {
     throw new Error(`Invalid period format: ${input.period}`);
   }
-  const client = getFinanceClient();
-  await client.rpc("fin_set_actor", { p_actor: input.actor });
+  const client = getFinanceClient(input.actor);
 
   // Refuse to close if already closed (caller can reopen first).
   const { data: existing } = await client
@@ -394,8 +393,7 @@ export async function reopenPeriod(
   userId: string,
   reason: string
 ): Promise<void> {
-  const client = getFinanceClient();
-  await client.rpc("fin_set_actor", { p_actor: userId });
+  const client = getFinanceClient(userId);
   await client
     .from("fin_periods")
     .update({

@@ -88,7 +88,7 @@ export async function learnHintsFromLines(
   lines: Array<{ description: string | null; direction: string }>,
   category: CashCategory,
 ): Promise<number> {
-  const client = getFinanceClient();
+  const client = getFinanceClient("category-hints-v1");
   const seen = new Map<string, { phrase: string; direction: string }>();
   for (const l of lines) {
     const phrase = deriveHintPhrase(l.description ?? "");

@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   });
 
   // Human verdict is final — the matcher must not redo this pair.
-  const client = getFinanceClient();
+  const client = getFinanceClient(auth.user.id);
   await client.from("fin_ap_match_rejections").upsert(
     { bank_line_id: line.id, invoice_id: invoiceId, reason: "unmatched" },
     { onConflict: "bank_line_id,invoice_id" },

@@ -201,8 +201,7 @@ export async function submitConsolidatedMonth(
     throw new Error(`Invalid yearMonth: ${yearMonth}`);
   }
 
-  const client = getFinanceClient();
-  await client.rpc("fin_set_actor", { p_actor: actor });
+  const client = getFinanceClient(actor);
 
   // Only loop outlets belonging to this company.
   const { data: mappings } = await client

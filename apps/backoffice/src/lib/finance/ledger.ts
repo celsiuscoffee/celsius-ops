@@ -44,11 +44,11 @@ function validateLines(lines: JournalLineInput[]): { totalDebit: number; totalCr
 
 export async function postJournal(input: PostJournalInput): Promise<PostJournalResult> {
   const { totalDebit } = validateLines(input.lines);
-  const client = getFinanceClient();
+  // Actor rides on every request as the x-fin-actor header (migration 095);
+  // the old fin_set_actor rpc was transaction-local and never survived to the
+  // write requests below.
   const actor = `${input.agent}-${input.agentVersion}`;
-
-  const { error: actorError } = await client.rpc("fin_set_actor", { p_actor: actor });
-  if (actorError && actorError.code !== "42883") throw actorError;
+  const client = getFinanceClient(actor);
 
   const txnId = randomUUID();
   const status = input.draft ? "draft" : "posted";
@@ -124,7 +124,7 @@ export async function reverseTransaction(
     date?: string;
   }
 ): Promise<PostJournalResult> {
-  const client = getFinanceClient();
+  const client = getFinanceClient(`${opts.agent}-${opts.agentVersion}`);
 
   const { data: original, error } = await client
     .from("fin_transactions")

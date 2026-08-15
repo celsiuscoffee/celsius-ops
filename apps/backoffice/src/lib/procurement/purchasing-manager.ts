@@ -269,7 +269,7 @@ const rmRound = (n: number) => Math.round(n * 100) / 100;
 // applied=false, confidence 1.0 — deterministic detectors).
 async function logFindings(findings: Finding[]): Promise<number> {
   if (!findings.length) return 0;
-  const client = getFinanceClient();
+  const client = getFinanceClient(PURCHASING_MANAGER_VERSION);
   const rows = findings.map((f) => ({
     id: randomUUID(),
     agent: "purchasing-manager",

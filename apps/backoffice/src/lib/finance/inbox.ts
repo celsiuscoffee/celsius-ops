@@ -23,7 +23,8 @@ export async function resolveException(
   userId: string,
   action: InboxAction
 ): Promise<InboxResolveResult> {
-  const client = getFinanceClient();
+  // Actor = the resolving user; rides as the x-fin-actor header (migration 095).
+  const client = getFinanceClient(userId);
 
   const { data: exc, error } = await client
     .from("fin_exceptions")
@@ -34,9 +35,6 @@ export async function resolveException(
   if (exc.status !== "open") {
     return { kind: "noop", reason: `Exception already ${exc.status}` };
   }
-
-  // Tell Postgres the actor for the audit trigger.
-  await client.rpc("fin_set_actor", { p_actor: userId });
 
   if (action.kind === "dismiss") {
     await client
@@ -219,7 +217,7 @@ async function recordCorrection(args: {
   correctedTo: { accountCode: string; outletId: string | null; reasoning: string };
   correctedBy: string;
 }): Promise<void> {
-  const client = getFinanceClient();
+  const client = getFinanceClient(args.correctedBy);
 
   // Resolve the decision this correction belongs to, most exact first:
   // 1. The decision id carried in the exception's proposal (new rows).

@@ -20,7 +20,7 @@ export async function logBankLineEvents(
 ): Promise<void> {
   if (!events.length) return;
   try {
-    const client = getFinanceClient();
+    const client = getFinanceClient(actor || "bank-line-events-v1");
     const rows = events.map((e) => ({
       line_id: e.lineId,
       event: e.event,

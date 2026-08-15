@@ -44,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!Object.keys(patch).length) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   patch.updated_at = new Date().toISOString();
 
-  const client = getFinanceClient();
+  const client = getFinanceClient(auth.user.id);
   // residual cannot exceed cost, check against the stored cost.
   if (patch.residual != null) {
     const { data: row } = await client.from("fin_fixed_assets").select("cost").eq("id", id).maybeSingle();
@@ -53,7 +53,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "residual must be below cost" }, { status: 400 });
     }
   }
-  await client.rpc("fin_set_actor", { p_actor: auth.user.id }).then(() => undefined, () => undefined);
   const { error } = await client.from("fin_fixed_assets").update(patch).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

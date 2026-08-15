@@ -233,7 +233,7 @@ async function logDecision(
   input: CategorizationInput,
   result: CategorizationResult
 ): Promise<string | null> {
-  const client = getFinanceClient();
+  const client = getFinanceClient(CATEGORIZER_VERSION);
   const id = randomUUID();
   // supabase-js does not throw — a swallowed error here silently starves the
   // eval dataset (fin_agent_decisions is the retraining ground truth).
@@ -269,7 +269,7 @@ async function logDecision(
 // agent's auto-post path or an inbox "approve". Corrections don't set
 // applied; corrected=true covers them (see recordCorrection in inbox.ts).
 export async function markDecisionApplied(decisionId: string): Promise<void> {
-  const client = getFinanceClient();
+  const client = getFinanceClient(CATEGORIZER_VERSION);
   const { error } = await client
     .from("fin_agent_decisions")
     .update({ applied: true })
