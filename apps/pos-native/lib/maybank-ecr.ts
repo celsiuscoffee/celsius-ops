@@ -151,6 +151,10 @@ export type EcrOutcome =
       cardholder: string | null;
       host: string | null;   // MBB / DUITNOWQR / …
       wallet: string | null;
+      /** false = the terminal's reply signature did not match either documented
+       *  checksum layout. Not fatal (the cashier confirms the physical terminal),
+       *  but the UI must warn — it means a wrong salt, spec drift, or a spoof. */
+      signatureVerified: boolean;
       raw: Record<string, any>;
     }
   | { status: "declined"; reason: string; code: string }
@@ -159,7 +163,10 @@ export type EcrOutcome =
   | {
       status: "error";
       /** ECR_NATIVE_MISSING | ECR_TIMEOUT | ECR_UNREACHABLE | ECR_LINE_ENCRYPTION |
-       *  ECR_BUSY | ECR_REJECTED | ECR_BAD_REPLY */
+       *  ECR_BUSY | ECR_REJECTED | ECR_BAD_REPLY | ECR_CHKSUM_MISMATCH |
+       *  ECR_TXN_UNKNOWN
+       *  NOTE: "error" NEVER means "not paid" — it means the outcome is UNKNOWN.
+       *  Callers must tell staff to check the terminal, never to auto-retry. */
       code: string;
       message: string;
     };
@@ -211,6 +218,20 @@ export async function ecrTransaction(args: {
     return mapTransportError(e);
   }
   const ackBody = ack?.txnresponse ?? {};
+  // Verify the ACK signature (manual p9: salt,result,description,id,txn,input,ip).
+  // A mismatch here only blocks the transaction from STARTING, so it is safe to
+  // fail closed — no money can have moved yet.
+  if (ackBody.chksum) {
+    const expectAck = await sha256Upper(
+      [cfg.salt, String(ackBody.result ?? ""), String(ackBody.description ?? ""), String(ackBody.id ?? id),
+       String(ackBody.txn ?? txn), String(ackBody.input ?? input), String(ackBody.ip ?? "")].join(","),
+    );
+    if (expectAck !== String(ackBody.chksum).toUpperCase()) {
+      // Warn only. The ACK merely starts the transaction; the query loop's
+      // signature check and the cashier's terminal check are the real gates.
+      console.warn("[ecr] request ACK checksum mismatch — check the ECR salt", { id });
+    }
+  }
   if (ackBody.result !== "SUCCESS") {
     const desc: string = ackBody.description ?? "REJECTED";
     if (desc === "LE_ERROR") {
@@ -226,6 +247,15 @@ export async function ecrTransaction(args: {
   const qryChksum = await sha256Upper([cfg.salt, id, CLIENT_IP].join(","));
   const query = { txnqueryrequest: { id, ip: CLIENT_IP, s: cfg.salt, chksum: qryChksum } };
   const deadline = Date.now() + overallTimeout;
+  // TXNID_NOT_FOUND is reported as result=FAIL, but it does NOT mean declined —
+  // it means the terminal has no record of this id, which is expected for the
+  // first poll(s) before the payment app registers the transaction. Treating it
+  // as a decline would tell the cashier "not completed" while the customer is
+  // still paying — the paid-but-unrecorded failure mode. So we ride it out for
+  // a grace window, and even after that report UNKNOWN (never "declined").
+  const NOT_FOUND_GRACE_MS = 15_000;
+  const startedAt = Date.now();
+  let sawProcessing = false;
 
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, POLL_MS));
@@ -237,8 +267,31 @@ export async function ecrTransaction(args: {
     }
     const body = res?.txnqueryresponse ?? {};
     const result: string = body.result ?? "";
+    const description: string = String(body.description ?? "");
+
+    // Integrity: the terminal signs every response. The manual CONTRADICTS
+    // itself on the query-response field list — the table (p11) omits `txn`
+    // while its own SALE examples (p17) include it, and the SETTLE example
+    // (p18) omits it again. So accept EITHER documented ordering; a single
+    // fixed order would reject valid approvals and break every card payment.
+    // Mismatch is surfaced (signatureVerified=false → warning on the approval
+    // card), not blocking: the cashier must read the physical terminal before
+    // recording the sale anyway, so a spoof can't book an unpaid sale on its
+    // own — while blocking would take the till down on a spec disagreement.
+    let signatureVerified = true;
+    if (body.chksum) {
+      const got = String(body.chksum).toUpperCase();
+      const base = [cfg.salt, result, description, String(body.id ?? id)];
+      const tail = [String(body.version ?? ""), String(body.ip ?? "")];
+      const withoutTxn = await sha256Upper([...base, ...tail].join(","));
+      const withTxn = await sha256Upper([...base, String(body.txn ?? txn), ...tail].join(","));
+      signatureVerified = got === withoutTxn || got === withTxn;
+      if (!signatureVerified) console.warn("[ecr] query response checksum mismatch", { id, result });
+    }
+
     if (result === "PROCESSING") {
-      if (body.description && onStatus) onStatus(String(body.description));
+      sawProcessing = true;
+      if (description && onStatus) onStatus(description);
       continue;
     }
     if (result === "OK" || result === "COMPLETE") {
@@ -252,12 +305,22 @@ export async function ecrTransaction(args: {
         cardholder: body.cardholder ? String(body.cardholder) : null,
         host: body.host ? String(body.host) : null,
         wallet: body.wallet ? String(body.wallet) : null,
+        signatureVerified,
         raw: body,
       };
     }
     if (result === "CANCEL") return { status: "cancelled" };
+    if (result === "FAIL" && description === "TXNID_NOT_FOUND") {
+      // Not a verdict. Keep polling while the terminal may still be catching up.
+      if (!sawProcessing && Date.now() - startedAt < NOT_FOUND_GRACE_MS) continue;
+      return {
+        status: "error",
+        code: "ECR_TXN_UNKNOWN",
+        message: "Terminal has no record of this payment — check the terminal screen before charging again",
+      };
+    }
     if (result === "DECLINE" || result === "HOST_DECLINE" || result === "CARD_DECLINE" || result === "FAIL") {
-      return { status: "declined", reason: String(body.description ?? result), code: result };
+      return { status: "declined", reason: description || result, code: result };
     }
     // Unknown result value → keep polling until deadline rather than guess.
   }

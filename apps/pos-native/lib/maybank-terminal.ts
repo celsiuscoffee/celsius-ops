@@ -21,6 +21,8 @@ export type MaybankTerminalResult =
       simulated?: boolean;
       /** DUITNOWQR when the customer paid by QR at the terminal. */
       entry?: string;
+      /** false = terminal reply signature unverified — UI warns the cashier. */
+      signatureVerified?: boolean;
     }
   | { status: "declined"; reason: string }
   | { status: "cancelled" }
@@ -36,6 +38,7 @@ function fromEcr(o: EcrOutcome): MaybankTerminalResult {
         maskedPan: o.maskedPan ?? (o.entry === "DUITNOWQR" ? "DuitNow QR" : ""),
         txnRef: o.rrn,
         entry: o.entry,
+        signatureVerified: o.signatureVerified,
       };
     case "declined":
       return { status: "declined", reason: o.reason };
