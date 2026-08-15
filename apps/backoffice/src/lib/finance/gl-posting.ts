@@ -293,17 +293,11 @@ export async function postBankLinesToGl(
         txnId = existing.id as string;
         const linked = await prisma.bankStatementLine.count({ where: { glTransactionId: txnId } });
         const newTotal = round2((linked > 0 ? Number(existing.amount) : 0) + g.amount);
-        const { data: jls, error: jlErr } = await fin
-          .from("fin_journal_lines").select("id, debit, credit").eq("transaction_id", txnId);
-        if (jlErr) throw new Error(jlErr.message);
-        if (!jls || jls.length !== 2) throw new Error(`journal ${txnId} has ${jls?.length ?? 0} lines; expected 2`);
-        for (const jl of jls) {
-          const upd = Number(jl.debit) > 0 ? { debit: newTotal } : { credit: newTotal };
-          const { error } = await fin.from("fin_journal_lines").update(upd).eq("id", jl.id);
-          if (error) throw new Error(error.message);
-        }
-        const { error: tErr } = await fin.from("fin_transactions").update({ amount: newTotal }).eq("id", txnId);
-        if (tErr) throw new Error(tErr.message);
+        // Atomic in SQL (migration 096): the two line updates + the header
+        // update happen in ONE transaction, period-checked, so the journal is
+        // never observably unbalanced and closed periods refuse the fold.
+        const { error: foldErr } = await fin.rpc("fin_fold_bank_journal", { p_txn_id: txnId, p_new_total: newTotal });
+        if (foldErr) throw new Error(foldErr.message);
         finalTotal = newTotal;
         reusedJournals++;
       }
@@ -393,18 +387,9 @@ async function upsertMirrorJournal(
     return;
   }
 
-  const txnId = existing.id as string;
-  const { data: jls, error: jlErr } = await fin
-    .from("fin_journal_lines").select("id, debit, credit").eq("transaction_id", txnId);
-  if (jlErr) throw new Error(jlErr.message);
-  if (!jls || jls.length !== 2) throw new Error(`mirror journal ${txnId} has ${jls?.length ?? 0} lines; expected 2`);
-  for (const jl of jls) {
-    const upd = Number(jl.debit) > 0 ? { debit: total } : { credit: total };
-    const { error } = await fin.from("fin_journal_lines").update(upd).eq("id", jl.id);
-    if (error) throw new Error(error.message);
-  }
-  const { error: tErr } = await fin.from("fin_transactions").update({ amount: total }).eq("id", txnId);
-  if (tErr) throw new Error(tErr.message);
+  // Atomic in SQL (migration 096) — same guarantees as the primary fold-in.
+  const { error: foldErr } = await fin.rpc("fin_fold_bank_journal", { p_txn_id: existing.id as string, p_new_total: total });
+  if (foldErr) throw new Error(`mirror fold: ${foldErr.message}`);
 }
 
 // Delete posted bank-agent journals that no bank line references. These are
@@ -461,12 +446,16 @@ async function gcOrphanBankJournals(sinceDate: string): Promise<number> {
     orphans.push(r.id);
   }
 
+  // Delete via fin_gc_bank_journals (migration 096): one transaction per
+  // chunk, orphan-ness re-verified in SQL, closed periods refused, lines
+  // removed by the FK cascade. Returns the count actually deleted so skips
+  // (e.g. a journal in a closed period) surface in the run summary.
+  let deleted = 0;
   for (let i = 0; i < orphans.length; i += 200) {
     const chunk = orphans.slice(i, i + 200);
-    const { error: le } = await fin.from("fin_journal_lines").delete().in("transaction_id", chunk);
-    if (le) throw new Error(le.message);
-    const { error: te } = await fin.from("fin_transactions").delete().in("id", chunk);
-    if (te) throw new Error(te.message);
+    const { data: n, error: gcErr } = await fin.rpc("fin_gc_bank_journals", { p_ids: chunk });
+    if (gcErr) throw new Error(gcErr.message);
+    deleted += typeof n === "number" ? n : 0;
   }
-  return orphans.length;
+  return deleted;
 }
