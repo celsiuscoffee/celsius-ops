@@ -61,14 +61,40 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   reason WILL be misdiagnosed:** the loop stored `status='failed'` and nothing
   else, so two months of daily evidence couldn't tell a throttled API from a
   broken profile.
-  **P2** — reviews recovery never closes: 31 drafts ever, **28 still `pending`**
-  (oldest June), 1 resolved / 2 rejected. `reviews_negative_drafts` is `shadow`,
-  so it drafts forever and nothing consumes it.
-  **P3** — finance AP/bank arm armed but starved: `fin_bank_transactions`,
-  `fin_bills`, `fin_exceptions` are **0 rows ever** while `finance_ap_agent`,
-  `finance_ap_match_apply`, `finance_gl_post` are all `armed` and
-  `bukku-feed-sync` runs 4×/day. EOD→GL half is fine. Likely the Bukku feed was
-  never connected — owner to confirm intent.
+  **P2 — reviews loop nudges on ARRIVAL but never on AGEING. Half fixed.**
+  31 drafts ever, **28 still `pending`** (oldest 2026-06-24, newest 2026-08-09),
+  1 resolved / 2 rejected, and **zero recovery codes ever issued or claimed** —
+  the recovery arm has never fired. Mechanism is a cadence gap, NOT a missing
+  nudge: `ops-nudge-review` runs every 5 min and DMs on-shift staff + managers,
+  but `recordBreach` dedupes per review **by design**, so each is nudged exactly
+  once on arrival and a draft nobody actions is never mentioned again. Added
+  `runReviewBacklogNudge()` (lib/ops-nudges) — pending drafts older than
+  `REVIEW_DRAFT_STALE_DAYS` (3) go out as a manager digest led by the OLDEST,
+  fired once daily by gating the existing 5-min route to one window (10:00 MYT),
+  so **no new Vercel cron slot** (we're at 38/40).
+  **NOT done, deliberately: arming negative-review auto-reply.** 1-3★ replies are
+  **already an explicit documented decision** — reviews-auto-reply/route.ts says
+  negatives "are never generated or posted… human-approval path until the
+  risk-classifier work lands. This is the zero-risk wedge." Arming it posts brand
+  replies to unhappy customers on a public Google profile: outward-facing, hard
+  to retract, contrary to a written stance. **Owner's call; wants the
+  risk-classifier first.**
+  **P3 — WITHDRAWN, the finding was WRONG.** I judged "starved" from table row
+  counts without checking which tables the code writes. **The AP/bank loop is
+  healthy:** `applyApMatches` reads `prisma.invoice` (3,027) +
+  `prisma.bankStatementLine` (**59,356**), and `fin_ap_match_rejections` has 4
+  rows = proof it ran and decided. `fin_documents` 37,628 (37,332 bank-feed
+  slips, fresh to Aug 14). **`fin_bank_transactions` and `fin_matches` have ZERO
+  code references anywhere** — dead schema from an old design, housekeeping
+  candidates (owner-approved migration to drop). **`fin_bills`/`fin_invoices`/
+  `fin_exceptions`** are written only by `lib/finance/agents/ap.ts`, whose sole
+  caller is the MANUAL upload screen `api/finance/bills/upload` — empty because
+  nobody has ever uploaded a supplier bill, i.e. an unused feature not a broken
+  loop. Of the 3 agents I called no-ops, 2 genuinely run every 6h. **No Bukku
+  feed is missing.**
+  **LESSON: row counts are not a pipeline — before calling a loop starved, find
+  the writer.** An empty table proves nothing about the loop meant to fill it.
+  **And check whether "broken" is a documented decision** (see P2).
   **P4 — FIXED (9 of 10 in code).** 10 armed agents had `last_run_at` NULL while
   logging actions, so `/agents` couldn't tell quiet from stopped. **The mechanism
   is NOT simply "nobody called touchAgentRun" — for the finance agents the call
@@ -2007,8 +2033,9 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
-- 2026-08-15 — **Loop QA sweep DONE. P1 (incl. root cause), P4, P6 and P8.1 all
-  FIXED on PR #1130.** Full detail in `docs/design/loop-qa-2026-08-15.md`.
+- 2026-08-15 — **Loop QA sweep DONE. P1 (incl. root cause), P2 (ageing arm), P4,
+  P6 and P8.1 all FIXED on PR #1130; P3 WITHDRAWN as a bad finding.** Full detail
+  in `docs/design/loop-qa-2026-08-15.md`.
   **THREE OWNER STEPS — none of these can be done from an agent session:**
   (1) **Attach the Supabase connector** to the re-armed `Finance warehouse —
   weekly custodian run` routine in the claude.ai routines UI. It fires Sun
@@ -2019,9 +2046,13 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   so its 16 active keywords have never been scannable (P1).
   **THEN:** (4) **P8.2/P8.3 AFTER the ~Aug 17 Tamarind probe verdict** — probe
   verdict raw-OR-adj, and the missing grabfood filter; both move the index the
-  probe is being judged on, so they wait. (5) **P2/P3** — need owner intent: arm
-  the reviews drafter or staff the review step? Is the Bukku bank feed meant to
-  be connected? (6) **P5/P7** — latent, fix on the next loop-engine touch.
+  probe is being judged on, so they wait. (5) **P5/P7** — latent, fix on the next
+  loop-engine touch.
+  **TWO OWNER DECISIONS, neither urgent:** (a) **negative-review auto-reply** —
+  arm it, or keep the human-approval path and staff the queue that the new daily
+  backlog digest now surfaces? Wants the risk-classifier first (P2). (b) **drop
+  the dead `fin_bank_transactions` / `fin_matches` tables** — zero code refs
+  anywhere; housekeeping proposal + owner-approved migration (P3).
 
 - 2026-08-14 — **Ads: watch the probe verdict land, then the Putrajaya probe
   starts itself.** The ~Aug 17/18 19:01 UTC run should RESTORE Tamarind at
