@@ -2084,6 +2084,25 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   vs 1.019 clean). Tamarind recovery check (reversal test, A=ads vs B=local
   factor) armed 2026-08-25 09:00 UTC — restore landed Aug 15 14:46, so it
   gets ~10 post-restore days.
+- 2026-08-16 — **Conezion (Putrajaya outlet) slid ~21% WoW (Aug 10–16 vs
+  Aug 3–9); owner directive shipped to undo the Aug 12 Putrajaya ad cut.**
+  Decomposition: footfall −14% (orders 967→830/wk), AOV −8% (RM30.75→28.26),
+  stockouts ~RM650–900/wk (Pomegranate/Citrus teas + Truffle Fries sold zero
+  all week; Chocolate Cake Bars, Burnt Cheesecake, NYC Smores, Biscoff Batik
+  went dark Aug 14–16 — restock list sent to owner). NOT the payday cycle:
+  same-cycle week mid-July was RM28.4k vs this RM23.5k (−17% MoM) while Shah
+  Alam rose +7% MoM; July's own mid-month dip was only −6%. NOT ads by
+  timing: slide began Aug 10, two days before the Aug 12 cut, walk-in and
+  dine-in QR fell proportionally, index read healthy through the descent.
+  Google rating ticked 4.8→4.7 ~Aug 11 (couple of low reviews — worth
+  reading, too small to cause this). Prime suspect: IOI Conezion mall
+  footfall (owner asking the manager). Owner: "undo the cut" → ownerDirective
+  raises Putrajaya RM38.16→43.36/day at the Aug 16 19:01 run; reason starts
+  "owner directive" so lastKind reads "other" (never auto-reverted — an
+  "autopilot raise" row would be reverted by the very breach that motivated
+  it); self-expires once applied and hard-expires 2026-08-23. Spent Jul-19
+  Tamarind directive removed (re-armable trap class). Tamarind post-restore:
+  first Sunday +24% vs pause-Sunday — recovery tracking; A/B/A read Aug 25.
   Remaining cleanup (no probe is now running, so the do-not-change-the-
   instrument freeze is LIFTED until a new probe starts): (1) probe verdicts
   should require
