@@ -3,6 +3,7 @@ import { WORKING_DAYS_PER_MONTH, NORMAL_WORKING_HOURS_PER_DAY, OT_RATES } from "
 import { computeAllowancesForUser, loadAllowanceRules } from "../allowances";
 import { calcAllStatutory } from "../statutory/calculators";
 import { computeProrate, prorateAmount } from "../payroll/prorate";
+import { clipLeaveDaysToCycle } from "../payroll/leave-overlap";
 import { mytDateString } from "../hours";
 import { fetchAllRows } from "../fetch-all";
 import { splitOtHours, effectiveOtType } from "../ot-policy";
@@ -411,18 +412,25 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     }
   }
 
-  // 3. Get approved leave for unpaid leave deductions
+  // 3. Get approved leave for unpaid leave deductions.
+  // OVERLAP, not containment: the old .gte(start)+.lt(end) required the leave
+  // to sit entirely inside the cycle, so an unpaid leave bridging month-end
+  // (e.g. 28 Jul – 3 Aug) matched NEITHER month and was never deducted — full
+  // salary paid both months. Overlap selects it in both months; the per-month
+  // day count is then clipped to the days that actually fall inside this cycle.
   const { data: leaves } = await hrSupabaseAdmin
     .from("hr_leave_requests")
-    .select("user_id, leave_type, total_days")
+    .select("user_id, leave_type, total_days, start_date, end_date")
     .in("status", ["approved", "ai_approved"])
-    .gte("start_date", startDate)
-    .lt("end_date", endDate)
+    .lt("start_date", endDate)
+    .gte("end_date", startDate)
     .eq("leave_type", "unpaid");
 
   const unpaidLeaveByUser = new Map<string, number>();
-  (leaves || []).forEach((l: { user_id: string; total_days: number }) => {
-    unpaidLeaveByUser.set(l.user_id, (unpaidLeaveByUser.get(l.user_id) || 0) + Number(l.total_days));
+  (leaves || []).forEach((l: { user_id: string; total_days: number; start_date: string; end_date: string }) => {
+    const days = clipLeaveDaysToCycle(l, startDate, endDate);
+    if (days <= 0) return;
+    unpaidLeaveByUser.set(l.user_id, (unpaidLeaveByUser.get(l.user_id) || 0) + days);
   });
 
   // 3b. Recurring per-employee items (allowances + deductions) active in this cycle.

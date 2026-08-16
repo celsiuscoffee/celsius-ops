@@ -422,9 +422,13 @@ export async function computeAllowancesForUser(
     .from("hr_schedule_shifts").select("shift_date, start_time, notes, hr_schedules!inner(status)").eq("user_id", userId)
     .eq("hr_schedules.status", "published")
     .gte("shift_date", monthStart).lte("shift_date", monthEnd);
+  // OVERLAP, not containment: requiring start AND end inside the month made a
+  // leave bridging month-end invisible here, so each rostered day inside it
+  // was deducted as "No-show" at RM20. The day-set below naturally clips to
+  // this month — out-of-month dates in the set never match a shift_date.
   const { data: leaves } = await hrSupabaseAdmin
     .from("hr_leave_requests").select("start_date, end_date").eq("user_id", userId)
-    .in("status", ["approved", "ai_approved"]).gte("start_date", monthStart).lte("end_date", monthEnd);
+    .in("status", ["approved", "ai_approved"]).lte("start_date", monthEnd).gte("end_date", monthStart);
   const leaveDays = new Set<string>();
   (leaves || []).forEach((l: { start_date: string; end_date: string }) => {
     const s = new Date(l.start_date + "T00:00:00Z");
