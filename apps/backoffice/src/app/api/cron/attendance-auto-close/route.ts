@@ -290,6 +290,23 @@ export async function GET(req: NextRequest) {
     };
   }
 
+  // Errors used to be visible ONLY when processed > 0 and the route returned
+  // 200 regardless — a permanently failing processor (schema drift on its
+  // select, a thrown fetch) left logs 'pending' forever with a green heartbeat,
+  // the exact failure mode that once sat on 527 pending logs carrying 265
+  // unpaid OT hours. Failures now land in the agent action log every run they
+  // occur, whether or not anything processed.
+  if (processorResult.errors.length > 0) {
+    await logAgentAction({
+      agentKey: "hr_attendance_auto_close",
+      kind: "attendance_processor_errors",
+      summary:
+        `Attendance processor hit ${processorResult.errors.length} error${processorResult.errors.length === 1 ? "" : "s"} ` +
+        `(${processorResult.processed} processed) — pending logs may be stuck`,
+      meta: processorResult,
+    });
+  }
+
   return NextResponse.json({
     processed: activeLogs.length,
     closed,
