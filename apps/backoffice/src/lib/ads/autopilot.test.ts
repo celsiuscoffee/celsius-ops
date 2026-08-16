@@ -506,37 +506,57 @@ describe("cashScoreboard (RM7k/mo target)", () => {
   });
 });
 
-describe("ownerDirective (Tamarind resumes descent at RM84.96)", () => {
-  const tamarind = (over: Partial<CampaignState> = {}) =>
+describe("ownerDirective (Putrajaya: undo the Aug 12 cut)", () => {
+  const putrajaya = (over: Partial<CampaignState> = {}) =>
     campaign({
-      campaignId: "tam",
-      campaignName: "Celsius Coffee Tamarind Square",
-      dailyBudgetMyr: 100.2,
-      baselineDailyMyr: 100.2,
-      lastApplied: { decidedAt: daysAgo(2), prevDailyMyr: 84.96, newDailyMyr: 100.2, reason: "autopilot rollback: guard breach" },
+      campaignId: "pj",
+      campaignName: "Celsius Putrajaya",
+      dailyBudgetMyr: 38.16,
+      baselineDailyMyr: 100,
+      lastApplied: {
+        decidedAt: daysAgo(4),
+        prevDailyMyr: 43.36,
+        newDailyMyr: 38.16,
+        reason: "autopilot step-down 12% (RM43.36→RM38.16/day, banks ~RM156/mo): till-revenue index 1.02",
+      },
       ...over,
     });
+  const AUG16 = new Date("2026-08-16T19:01:00Z");
 
-  it("fires once while the false-positive rollback is still the last change", () => {
-    const d = ownerDirective(tamarind());
-    expect(d?.action).toBe("cut");
-    expect(d?.newDailyMyr).toBe(84.96);
-    expect(d?.reason).toMatch(/owner directive/);
+  it("fires once while the Aug 12 step-down is still the last change", () => {
+    const d = ownerDirective(putrajaya(), AUG16);
+    expect(d?.action).toBe("raise");
+    expect(d?.newDailyMyr).toBe(43.36);
+    // lastKind must read "other", not "raise" — the raise-evaluation branch
+    // would revert an "autopilot raise" on the very breach that motivated it.
+    expect(d?.reason).toMatch(/^owner directive/);
   });
 
-  it("never fires again after the step-down lands, and never for other campaigns", () => {
+  it("never fires again after the raise lands, for other campaigns, paused, or past expiry", () => {
     expect(
       ownerDirective(
-        tamarind({ dailyBudgetMyr: 84.96, lastApplied: { decidedAt: daysAgo(1), prevDailyMyr: 100.2, newDailyMyr: 84.96, reason: "autopilot step-down (owner directive 2026-07-19)" } }),
+        putrajaya({ dailyBudgetMyr: 43.36, lastApplied: { decidedAt: daysAgo(1), prevDailyMyr: 38.16, newDailyMyr: 43.36, reason: "owner directive 2026-08-16 (undo the Aug 12 cut)" } }),
+        AUG16,
       ),
     ).toBeNull();
-    expect(ownerDirective(campaign({ campaignName: "Celsius Putrajaya" }))).toBeNull();
-    expect(ownerDirective(tamarind({ isPaused: true }))).toBeNull();
+    expect(ownerDirective(campaign({ campaignName: "Celsius Coffee Shah Alam" }), AUG16)).toBeNull();
+    expect(ownerDirective(putrajaya({ isPaused: true }), AUG16)).toBeNull();
+    expect(ownerDirective(putrajaya(), new Date("2026-08-23T00:00:01Z"))).toBeNull();
   });
 
-  it("owner-directive cuts are exempt from fleet spacing like waste-matched ones", () => {
-    const d = [{ campaignId: "tam", campaignName: "Tam", action: "cut" as const, newDailyMyr: 84.96, reason: "autopilot step-down (owner directive 2026-07-19): resume descent" }];
-    expect(spaceDisturbances(d, daysAgo(1), NOW)[0].action).toBe("cut");
+  it("a later guard breach does NOT auto-revert the directive raise (lastKind 'other' observes, never reverts)", () => {
+    const afterRaise = putrajaya({
+      dailyBudgetMyr: 43.36,
+      lastApplied: { decidedAt: daysAgo(2), prevDailyMyr: 38.16, newDailyMyr: 43.36, reason: "owner directive 2026-08-16 (undo the Aug 12 cut)" },
+    });
+    const d = decideCampaign(afterRaise, breached, NOW);
+    expect(d.action).toBe("hold");
+    expect(d.reason).toMatch(/no recent cut to blame/);
+  });
+
+  it("owner-directive raises are exempt from fleet spacing like owner-directive cuts", () => {
+    const d = [{ campaignId: "pj", campaignName: "PJ", action: "raise" as const, newDailyMyr: 43.36, reason: "owner directive 2026-08-16 (undo the Aug 12 cut)" }];
+    expect(spaceDisturbances(d, daysAgo(1), NOW)[0].action).toBe("raise");
   });
 });
 
