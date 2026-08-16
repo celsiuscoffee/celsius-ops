@@ -4,6 +4,8 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { getTemplate, REST_DAY_ID } from "@/lib/hr/shift-templates";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { findCrossOutletOverlap } from "@/lib/hr/cross-outlet";
+import { classifyRosterEdit, retroEditRefusal } from "@/lib/hr/roster-guard";
+import { logActivity } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
 
@@ -24,13 +26,16 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { outlet_id, week_start, user_id, shift_date, template_id, custom } = body as {
+  const { outlet_id, week_start, user_id, shift_date, template_id, custom, retro_reason, override_block } = body as {
     outlet_id: string;
     week_start: string;
     user_id: string;
     shift_date: string;
     template_id: string | null;
     custom?: { start_time: string; end_time: string; break_minutes?: number; label?: string };
+    retro_reason?: string | null;
+    /** Explicit yes to roster a shift on a date the staffer blocked. */
+    override_block?: boolean;
   };
 
   if (!outlet_id || !week_start || !user_id || !shift_date) {
@@ -67,6 +72,30 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Availability block: placing a REAL shift on a date the staffer declared
+  // unavailable needs an explicit yes. Nothing checked this before, which is
+  // one half of how a shift ends up hidden UNDER a blocked cell (the other
+  // half: staff blocking a date that already had a shift). Clearing the cell
+  // or setting a rest day is always allowed — both agree with the block.
+  if (template_id && template_id !== REST_DAY_ID && !override_block) {
+    const { data: block } = await hrSupabaseAdmin
+      .from("hr_staff_availability")
+      .select("reason")
+      .eq("user_id", user_id)
+      .eq("date", shift_date)
+      .eq("availability", "unavailable")
+      .maybeSingle();
+    if (block) {
+      return NextResponse.json(
+        {
+          error: `They marked ${shift_date} as unavailable${block.reason ? ` (${block.reason})` : ""}. Pass override_block to roster them anyway.`,
+          reason: "blocked_date",
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   // Ensure schedule row exists (upsert)
   let { data: schedule } = await hrSupabaseAdmin
     .from("hr_schedules")
@@ -89,6 +118,37 @@ export async function POST(req: NextRequest) {
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     schedule = newSched;
+  }
+
+  // Published-roster guard. The roster is the PAY BASIS (weekly PT windows,
+  // monthly rest days), and this route previously checked neither schedule
+  // status nor date — a retroactive cell edit (or clear) on a published week
+  // silently rewrote pay for hours already worked, the 2026-08-03 incident
+  // class. Past dates on published weeks now require an OWNER/ADMIN with an
+  // explicit retro_reason, and every published-week edit is activity-logged.
+  const editClass = classifyRosterEdit(schedule.status, shift_date);
+  if (editClass === "published_past") {
+    const verdict = retroEditRefusal(session.role, retro_reason);
+    if (!verdict.allowed) {
+      return NextResponse.json({ error: verdict.error }, { status: verdict.status });
+    }
+  }
+  if (editClass !== "draft") {
+    await logActivity({
+      actorId: session.id,
+      action: editClass === "published_past" ? "roster.retro_edit" : "roster.published_edit",
+      module: "hr",
+      targetId: schedule.id,
+      targetName: `${shift_date} · ${user_id.slice(0, 8)}`,
+      details: {
+        outlet_id,
+        shift_date,
+        user_id,
+        template_id,
+        ...(editClass === "published_past" ? { retro_reason } : {}),
+      },
+      request: req,
+    });
   }
 
   // Clear = an intentional removal of this cell.

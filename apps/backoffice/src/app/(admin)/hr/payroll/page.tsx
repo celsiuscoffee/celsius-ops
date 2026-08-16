@@ -75,8 +75,41 @@ export default function PayrollPage() {
 
   const runs = data?.runs || [];
 
-  const downloadFile = (url: string) => {
-    window.location.href = url;
+  // Fetch-based download (not window.location) so the route can refuse with a
+  // JSON 409 we can actually SHOW — the bank file omits staff with no bank
+  // account / non-positive net, and that omission used to travel only in a
+  // response header nobody read. On a skipped-staff 409 the operator sees who
+  // will be left out and explicitly acknowledges before the file is produced.
+  const downloadFile = async (url: string) => {
+    const res = await fetch(url);
+    if (res.status === 409) {
+      const body = await res.json().catch(() => null);
+      if (body?.reason === "skipped_staff") {
+        const names = (body.skipped as { name: string; why: string }[])
+          .map((s) => `• ${s.name} — ${s.why}`)
+          .join("\n");
+        const ok = window.confirm(
+          `This payment file will OMIT ${body.skipped.length} staff:\n\n${names}\n\nThey will NOT be paid by this upload. Generate the file anyway?`,
+        );
+        if (!ok) return;
+        return downloadFile(`${url}&ack_skips=1`);
+      }
+      alert(body?.error || "Could not generate the file.");
+      return;
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      alert(body?.error || `Download failed (${res.status})`);
+      return;
+    }
+    const blob = await res.blob();
+    const dispo = res.headers.get("Content-Disposition") || "";
+    const filename = /filename="([^"]+)"/.exec(dispo)?.[1] || "download";
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   const handleCompute = async () => {
@@ -100,25 +133,33 @@ export default function PayrollPage() {
     }
   };
 
-  const handleConfirm = async (runId: string, allowEarly = false) => {
+  const handleConfirm = async (runId: string, overrides: Record<string, boolean> = {}) => {
     setConfirming(runId);
     try {
       const res = await fetch("/api/hr/payroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "confirm", run_id: runId, ...(allowEarly ? { allow_early_confirm: true } : {}) }),
+        body: JSON.stringify({ action: "confirm", run_id: runId, ...overrides }),
       });
       if (res.ok) {
         mutate();
         return;
       }
       const body = await res.json().catch(() => null);
-      // The cycle-not-ended guard has a deliberate escape hatch for paying
-      // before month end — offer it instead of silently doing nothing.
-      if (body?.reason === "cycle_not_ended" && !allowEarly) {
-        if (confirm(`${body.error}\n\nConfirm early anyway?`)) {
+      // Guards with a deliberate escape hatch offer their override inline —
+      // each one requires its own explicit yes, and every override is
+      // audit-logged server-side. Negative net and empty runs have no
+      // override on purpose.
+      const OVERRIDABLE: Record<string, string> = {
+        cycle_not_ended: "allow_early_confirm",
+        missing_bank: "allow_missing_bank",
+        resignation_not_prorated: "allow_unprorated_resignation",
+      };
+      const flag = body?.reason ? OVERRIDABLE[body.reason] : undefined;
+      if (flag && !overrides[flag]) {
+        if (confirm(`${body.error}\n\nConfirm anyway?`)) {
           setConfirming(null);
-          await handleConfirm(runId, true);
+          await handleConfirm(runId, { ...overrides, [flag]: true });
         }
         return;
       }

@@ -14,13 +14,18 @@ export async function GET() {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // Get published schedule shifts for this user from today onwards
+  // Get published schedule shifts for this user from today onwards.
+  // AI pt_suggestion rows are excluded: they are UNCONFIRMED proposals a
+  // manager hasn't accepted — payroll and the no-show check both skip them,
+  // but My Shifts was presenting them to the staffer as real shifts (even on
+  // dates they had blocked). NULL-safe filter: a bare .neq drops NULL notes.
   const { data: shifts, error } = await supabase
     .from("hr_schedule_shifts")
     .select("*, hr_schedules!inner(status, outlet_id, week_start)")
     .eq("user_id", session.id)
     .eq("hr_schedules.status", "published")
     .gte("shift_date", today)
+    .or("notes.is.null,notes.neq.pt_suggestion")
     .order("shift_date", { ascending: true })
     .limit(14);
 

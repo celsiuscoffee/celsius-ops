@@ -1,6 +1,7 @@
 import { hrSupabaseAdmin } from "../supabase";
 import { mytDateString, mytInstant, paidWindowHours, pickShiftWindow, type ShiftWindow } from "../hours";
 import { ptRateForDate } from "../pt-rate";
+import { applyDueSalaryMirrors } from "../salary-mirror";
 
 type WeeklyPayrollResult = {
   payrollRunId: string;
@@ -48,6 +49,11 @@ export async function calculateWeeklyPayroll(
   weekStart: string, // ISO date (YYYY-MM-DD), must be a Monday
 ): Promise<WeeklyPayrollResult> {
   const notes: string[] = [];
+
+  // Land any approved salary changes whose effective date has arrived since
+  // the last compute — future-dated rate changes had no other way to reach the
+  // live profile columns this calculator prices from (see lib/hr/salary-mirror).
+  notes.push(...(await applyDueSalaryMirrors()));
 
   const start = new Date(`${weekStart}T00:00:00.000Z`);
   if (start.getUTCDay() !== 1) {

@@ -4,6 +4,8 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { findCrossOutletOverlap } from "@/lib/hr/cross-outlet";
 import { sendOpsPush } from "@/lib/ops-push";
+import { classifyRosterEdit, retroEditRefusal } from "@/lib/hr/roster-guard";
+import { logActivity } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +50,7 @@ export async function POST(req: NextRequest) {
     top_candidate_fit_score,
     override_reason,
     candidate_snapshot,
+    retro_reason,
   } = body as {
     outlet_id: string;
     shift_date: string;
@@ -60,8 +63,11 @@ export async function POST(req: NextRequest) {
     assigned_fit_score?: number | null;
     top_candidate_user_id?: string | null;
     top_candidate_fit_score?: number | null;
+    /** Fit-model override justification (training log) — NOT the retro guard. */
     override_reason?: string | null;
     candidate_snapshot?: unknown;
+    /** Required to edit a past date on a published week (see roster-guard). */
+    retro_reason?: string | null;
   };
 
   if (!outlet_id || !shift_date || !user_id || !start_time || !end_time) {
@@ -110,6 +116,31 @@ export async function POST(req: NextRequest) {
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     schedule = newSched;
+  }
+
+  // Published-roster guard (mirrors the cell route): the roster is the pay
+  // basis, so past dates on a published week need an OWNER/ADMIN with an
+  // explicit retro_reason, and every published-week edit is activity-logged.
+  const editClass = classifyRosterEdit(schedule.status, shift_date);
+  if (editClass === "published_past") {
+    const verdict = retroEditRefusal(session.role, retro_reason);
+    if (!verdict.allowed) {
+      return NextResponse.json({ error: verdict.error }, { status: verdict.status });
+    }
+  }
+  if (editClass !== "draft") {
+    await logActivity({
+      actorId: session.id,
+      action: editClass === "published_past" ? "roster.retro_edit" : "roster.published_edit",
+      module: "hr",
+      targetId: schedule.id,
+      targetName: `${shift_date} · ${user_id.slice(0, 8)}`,
+      details: {
+        outlet_id, shift_date, user_id, source: "assist",
+        ...(editClass === "published_past" ? { retro_reason } : {}),
+      },
+      request: req,
+    });
   }
 
   // Replace any existing cell for this (user, date), then insert the shift.

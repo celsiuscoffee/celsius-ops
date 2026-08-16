@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
+import { fetchAllRows } from "@/lib/hr/fetch-all";
 import {
   generateEAFormCSV,
   generateFormE_CP8D,
@@ -36,13 +37,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: `No confirmed payroll runs found for ${year}` }, { status: 404 });
   }
 
-  // Sum payroll items by user_id across all runs
-  let itemsQ = hrSupabaseAdmin
-    .from("hr_payroll_items")
-    .select("*")
-    .in("payroll_run_id", runIds);
-  if (userIdFilter) itemsQ = itemsQ.eq("user_id", userIdFilter);
-  const { data: items } = await itemsQ;
+  // Sum payroll items by user_id across all runs. PAGED: a full year of
+  // monthly + weekly items passes PostgREST's silent 1000-row cap well before
+  // December, and a truncated EA under-reports whoever sorts last with no
+  // error anywhere — the same bug class fixed repo-wide on 2026-08-03, which
+  // this year-end path missed.
+  const items = await fetchAllRows<Record<string, unknown> & { user_id: string }>(() => {
+    let q = hrSupabaseAdmin
+      .from("hr_payroll_items")
+      .select("*")
+      .in("payroll_run_id", runIds);
+    if (userIdFilter) q = q.eq("user_id", userIdFilter);
+    return q;
+  });
 
   const byUser = new Map<string, EARecord>();
   for (const item of items || []) {
@@ -56,8 +63,19 @@ export async function GET(req: NextRequest) {
       + Number(item.ot_1x_amount || 0) + Number(item.ot_1_5x_amount || 0)
       + Number(item.ot_2x_amount || 0) + Number(item.ot_3x_amount || 0);
 
-    const allowanceTotal = Object.values(alloc || {})
-      .reduce((s, v) => s + Number(v?.amount || 0), 0);
+    // EA B.1(c) is TAXABLE allowances/perquisites. Summing the raw allowances
+    // jsonb counted pcb_taxable=false reimbursements (mileage etc.) as income
+    // and let negative pre-tax entries shrink the figure. The calculator
+    // already computes the taxable gross as computation_details.pcb_gross
+    // (basic + OT + taxable allowances — PR #1102's basis, the same field the
+    // PCB YTD aggregation trusts), so derive taxable allowances from it when
+    // present. Fallback to the raw sum for lines that predate pcb_gross.
+    const pcbGross = Number(
+      (item.computation_details as Record<string, unknown> | null)?.pcb_gross ?? NaN,
+    );
+    const allowanceTotal = Number.isFinite(pcbGross)
+      ? Math.max(0, pcbGross - grossBasic)
+      : Object.values(alloc || {}).reduce((s, v) => s + Number(v?.amount || 0), 0);
 
     if (existing) {
       existing.grossRemuneration += grossBasic;
@@ -102,7 +120,7 @@ export async function GET(req: NextRequest) {
     }),
     hrSupabaseAdmin
       .from("hr_employee_profiles")
-      .select("user_id, ic_number, epf_number, socso_number, tax_number, join_date, cp8d_employment_status")
+      .select("user_id, ic_number, epf_number, socso_number, tax_number, join_date, cp8d_employment_status, end_date, resigned_at")
       .in("user_id", userIds),
   ]);
   const userMap = new Map(users.map((u) => [u.id, u]));
@@ -111,7 +129,7 @@ export async function GET(req: NextRequest) {
   for (const rec of byUser.values()) {
     const u = userMap.get(rec.userId);
     const p = profMap.get(rec.userId) as
-      | { ic_number?: string; epf_number?: string; socso_number?: string; tax_number?: string; join_date?: string; cp8d_employment_status?: string }
+      | { ic_number?: string; epf_number?: string; socso_number?: string; tax_number?: string; join_date?: string; cp8d_employment_status?: string; end_date?: string | null; resigned_at?: string | null }
       | undefined;
     rec.name = u?.name || "";
     rec.fullName = u?.fullName || null;
@@ -120,6 +138,11 @@ export async function GET(req: NextRequest) {
     rec.socsoNumber = p?.socso_number || null;
     rec.taxNumber = p?.tax_number || null;
     rec.commencementDate = p?.join_date || null;
+    // CP8D "DateLeft" / Form E's ceased-employees count were ALWAYS blank —
+    // ceasedDate was initialised null and never set, so a year with several
+    // leavers declared zero. Only a departure inside the form's year counts.
+    const left = p?.end_date || p?.resigned_at || null;
+    rec.ceasedDate = left && left.slice(0, 4) === String(year) ? left : null;
     rec.cp8dStatus = p?.cp8d_employment_status || "Permanent";
   }
 

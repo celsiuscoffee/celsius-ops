@@ -41,7 +41,12 @@ export async function GET(req: NextRequest) {
     .eq("hr_schedules.status", "published")
     .eq("shift_date", date)
     // "00:00" start rows are unscheduled placeholders, not real shifts.
-    .neq("start_time", "00:00");
+    .neq("start_time", "00:00")
+    // AI pt_suggestion rows are UNCONFIRMED proposals a manager hasn't
+    // accepted — payroll and the no-show check both skip them, but this
+    // screen was showing them as real shifts (a staffer who had BLOCKED the
+    // date appeared as working it). NULL-safe: a bare .neq drops NULL notes.
+    .or("notes.is.null,notes.neq.pt_suggestion");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const rows = (shifts || []) as Array<{

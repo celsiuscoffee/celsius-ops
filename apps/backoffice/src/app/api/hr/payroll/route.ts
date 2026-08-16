@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { action, month, year, run_id, allow_early_confirm } = body;
+  const { action, month, year, run_id, allow_early_confirm, allow_missing_bank, allow_unprorated_resignation } = body;
 
   if (action === "compute") {
     if (!month || !year) {
@@ -166,6 +166,99 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // CONTENT gates, enforced SERVER-side. The spec's "block approve" anomalies
+    // (negative net, missing bank, resignation-not-prorated) only ever lived as
+    // a disabled button in the run wizard — the dashboard's Confirm button and
+    // any direct API call skipped them entirely, and nothing checked for an
+    // EMPTY run (the weekly route got that guard on 2026-08-14; this is the
+    // monthly parity). Negative net is a hard block — such a line is always
+    // wrong. Missing bank and unprorated resignation are 409s with explicit,
+    // audit-logged overrides, because a cash-paid staffer or a manually-settled
+    // resignation can be legitimate.
+    if (cycle?.cycle_type !== "opening_balance") {
+      const { data: gateItems } = await hrSupabaseAdmin
+        .from("hr_payroll_items")
+        .select("user_id, net_pay, prorate_reason")
+        .eq("payroll_run_id", run_id);
+
+      if (!gateItems || gateItems.length === 0) {
+        return NextResponse.json(
+          {
+            error: "This run has no payroll items — confirming would settle the period at RM0 and the settled-guard would then defend it. Recompute first.",
+            reason: "empty_run",
+          },
+          { status: 409 },
+        );
+      }
+
+      const nameOf = async (ids: string[]) => {
+        const users = await prisma.user.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, name: true, fullName: true },
+        });
+        const m = new Map(users.map((u) => [u.id, u.fullName || u.name]));
+        return ids.map((id) => m.get(id) || id.slice(0, 8));
+      };
+
+      const negativeIds = gateItems.filter((i) => Number(i.net_pay) < 0).map((i) => i.user_id);
+      if (negativeIds.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Negative net pay for: ${(await nameOf(negativeIds)).join(", ")}. A deduction exceeds gross — fix the line(s) before confirming.`,
+            reason: "negative_net",
+          },
+          { status: 409 },
+        );
+      }
+
+      const itemUserIds = Array.from(new Set(gateItems.map((i) => i.user_id)));
+      if (!allow_missing_bank) {
+        const bankRows = await prisma.user.findMany({
+          where: { id: { in: itemUserIds } },
+          select: { id: true, bankAccountNumber: true },
+        });
+        const missingBankIds = bankRows.filter((u) => !u.bankAccountNumber).map((u) => u.id);
+        if (missingBankIds.length > 0) {
+          return NextResponse.json(
+            {
+              error: `No bank account on file for: ${(await nameOf(missingBankIds)).join(", ")}. The payment file will silently omit them. Add bank details, or pass allow_missing_bank to confirm anyway (audit-logged).`,
+              reason: "missing_bank",
+            },
+            { status: 409 },
+          );
+        }
+      }
+
+      // Resignation inside the cycle whose line was never prorated → the
+      // person is paid a full month on their way out. Monthly cycles only —
+      // weekly runs price hours, proration doesn't apply.
+      if (!allow_unprorated_resignation && cycle?.period_year && cycle?.period_month) {
+        const mm = String(cycle.period_month).padStart(2, "0");
+        const cycleStart = `${cycle.period_year}-${mm}-01`;
+        const lastDay = new Date(cycle.period_year, cycle.period_month, 0).getDate();
+        const cycleEnd = `${cycle.period_year}-${mm}-${String(lastDay).padStart(2, "0")}`;
+        const { data: leavers } = await hrSupabaseAdmin
+          .from("hr_employee_profiles")
+          .select("user_id, end_date")
+          .in("user_id", itemUserIds)
+          .gte("end_date", cycleStart)
+          .lte("end_date", cycleEnd);
+        const unprorated = (leavers || []).filter((l) => {
+          const item = gateItems.find((i) => i.user_id === l.user_id);
+          return item && !item.prorate_reason;
+        });
+        if (unprorated.length > 0) {
+          return NextResponse.json(
+            {
+              error: `Resigned inside this cycle but not prorated: ${(await nameOf(unprorated.map((l) => l.user_id))).join(", ")}. Recompute so the final month prorates, or pass allow_unprorated_resignation to confirm anyway (audit-logged).`,
+              reason: "resignation_not_prorated",
+            },
+            { status: 409 },
+          );
+        }
+      }
+    }
+
     // Only a not-yet-confirmed run can be confirmed. The status filter makes
     // this atomic: a concurrent double-confirm — or confirming an already-paid
     // run, which would otherwise silently DOWNGRADE it back to "confirmed" and
@@ -210,6 +303,8 @@ export async function POST(req: NextRequest) {
         // Recorded so an early confirm is auditable after the fact, not just
         // refused up front.
         ...(allow_early_confirm ? { early_confirm: true } : {}),
+        ...(allow_missing_bank ? { missing_bank_override: true } : {}),
+        ...(allow_unprorated_resignation ? { unprorated_resignation_override: true } : {}),
       },
       request: req,
     });

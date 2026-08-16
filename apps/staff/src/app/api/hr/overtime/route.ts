@@ -39,6 +39,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "hours_requested must be between 0.25 and 24" }, { status: 400 });
   }
 
+  // OT is FT-only (owner policy 2026-07-28: "PT no overtime. Intern no
+  // overtime."). The backoffice create route enforces this; this front door
+  // didn't, so a part-timer could file a request that a one-click approval
+  // would then pay at premium.
+  const { data: profile } = await supabase
+    .from("hr_employee_profiles")
+    .select("employment_type")
+    .eq("user_id", session.id)
+    .maybeSingle();
+  if (profile && profile.employment_type !== "full_time") {
+    return NextResponse.json(
+      { error: "OT requests are for full-time staff only — extra part-time hours go through the roster, not OT" },
+      { status: 400 },
+    );
+  }
+
   const { data, error } = await supabase
     .from("hr_overtime_requests")
     .insert({

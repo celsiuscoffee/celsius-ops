@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
+import { logActivity } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,9 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { id, action, reason } = body as { id: string; action: "approve" | "reject"; reason?: string };
+  const { id, action, reason, allow_negative_balance } = body as {
+    id: string; action: "approve" | "reject"; reason?: string; allow_negative_balance?: boolean;
+  };
 
   if (action === "approve") {
     // Get the request to update balance + verify it's still actionable.
@@ -87,6 +90,60 @@ export async function PATCH(req: NextRequest) {
       const visibleIds = await resolveVisibleUserIds(session);
       if (!visibleIds || !visibleIds.includes(request.user_id)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+
+    // Balance guard — this PATCH is the ONLY approval gate while the AI
+    // leave-manager escalates, and it historically validated nothing: any
+    // approval went through even past the entitlement. Overdraw (or a missing
+    // balance row, which would silently skip the balance move below and burn no
+    // days at all) now requires an explicit allow_negative_balance from the
+    // operator, and that override is activity-logged. "unpaid" leave is exempt —
+    // it has no meaningful entitlement to overdraw.
+    if (request.leave_type !== "unpaid") {
+      const guardYear = new Date(request.start_date).getFullYear();
+      const { data: guardBalance } = await hrSupabaseAdmin
+        .from("hr_leave_balances")
+        .select("entitled_days, carried_forward, used_days")
+        .eq("user_id", request.user_id)
+        .eq("year", guardYear)
+        .eq("leave_type", request.leave_type)
+        .maybeSingle();
+
+      if (!guardBalance && !allow_negative_balance) {
+        return NextResponse.json(
+          {
+            error: `No ${request.leave_type} balance row exists for ${guardYear} — approving would burn no days. Initialize leave balances first, or pass allow_negative_balance to approve anyway.`,
+            reason: "no_balance_row",
+          },
+          { status: 409 },
+        );
+      }
+      if (guardBalance) {
+        const remainingAfter =
+          Number(guardBalance.entitled_days) + Number(guardBalance.carried_forward) -
+          Number(guardBalance.used_days) - Number(request.total_days);
+        if (remainingAfter < 0 && !allow_negative_balance) {
+          return NextResponse.json(
+            {
+              error: `Approving ${request.total_days} day(s) overdraws the ${request.leave_type} balance by ${Math.abs(remainingAfter)} day(s). Pass allow_negative_balance to approve anyway.`,
+              reason: "insufficient_balance",
+              overdraw_days: Math.abs(remainingAfter),
+            },
+            { status: 409 },
+          );
+        }
+      }
+      if (allow_negative_balance) {
+        await logActivity({
+          actorId: session.id,
+          action: "leave.approve_negative_balance",
+          module: "hr",
+          targetId: id,
+          targetName: `${request.leave_type} ${request.start_date} (${request.total_days}d)`,
+          details: { user_id: request.user_id, had_balance_row: !!guardBalance },
+          request: req,
+        });
       }
     }
 

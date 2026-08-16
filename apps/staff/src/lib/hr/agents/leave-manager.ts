@@ -1,8 +1,14 @@
-import { supabase } from "@/lib/supabase";
+// Service-role client: hr_* tables are RLS-enabled with no policies, so the anon
+// client reads ZERO rows. This module ran on the anon client from 2026-07-09
+// (commit 67ddf6b4 switched the routes but not this agent) until now — its first
+// .single() errored, every request escalated as "Leave request not found", and
+// no balance/coverage/MC check ran anywhere in the approval chain. Callers pass
+// only a request id and we re-read the row ourselves, so the security boundary
+// is the submitting route's session scoping, same as the other staff HR routes.
+import { supabaseAdmin } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
 
-// Staff app uses regular supabase client (same project, anon key with RLS open)
-const hrSupabaseAdmin = supabase;
+const hrSupabaseAdmin = supabaseAdmin;
 
 type LeaveDecision = {
   decision: "approve" | "escalate";
@@ -42,13 +48,16 @@ export async function processLeaveRequest(requestId: string): Promise<LeaveDecis
     return { decision: "escalate", reason: "Sick leave has no MC attached — needs a manager to review." };
   }
 
-  // 2. Balance check
-  const currentYear = new Date().getFullYear();
+  // 2. Balance check — keyed to the leave's START year, not "today". The
+  // approve/reject paths bank used_days against start_date's year, so holding
+  // pending_days against the submission year would strand the hold on the old
+  // year's row for a December-submitted January leave.
+  const balanceYear = new Date(start_date).getFullYear();
   const { data: balance } = await hrSupabaseAdmin
     .from("hr_leave_balances")
     .select("*")
     .eq("user_id", user_id)
-    .eq("year", currentYear)
+    .eq("year", balanceYear)
     .eq("leave_type", leave_type)
     .maybeSingle();
 
@@ -56,7 +65,13 @@ export async function processLeaveRequest(requestId: string): Promise<LeaveDecis
     return { decision: "escalate", reason: `No ${leave_type} leave balance found for this year. Set up leave balances first.` };
   }
 
-  const available = Number(balance.entitled_days) + Number(balance.carried_forward) - Number(balance.used_days) - Number(balance.pending_days);
+  // The submit route holds pending_days BEFORE calling us, so this request's
+  // own reservation is already inside pending_days — add total_days back to get
+  // availability as it stood before this request, otherwise every request
+  // double-counts itself and self-blocks.
+  const available =
+    Number(balance.entitled_days) + Number(balance.carried_forward) -
+    Number(balance.used_days) - Number(balance.pending_days) + Number(total_days);
   if (total_days > available) {
     return {
       decision: "escalate",
@@ -109,7 +124,9 @@ export async function processLeaveRequest(requestId: string): Promise<LeaveDecis
   }
 
   // 4. All checks passed — auto-approve
-  // Update the request
+  // Update the request. NOTE: no pending_days write here — the submit route
+  // already holds the reservation before calling us; holding again would
+  // double-count this request against the balance.
   await hrSupabaseAdmin
     .from("hr_leave_requests")
     .update({
@@ -119,14 +136,6 @@ export async function processLeaveRequest(requestId: string): Promise<LeaveDecis
       ai_processed_at: new Date().toISOString(),
     })
     .eq("id", requestId);
-
-  // Update pending_days on balance
-  await hrSupabaseAdmin
-    .from("hr_leave_balances")
-    .update({
-      pending_days: Number(balance.pending_days) + total_days,
-    })
-    .eq("id", balance.id);
 
   return {
     decision: "approve",

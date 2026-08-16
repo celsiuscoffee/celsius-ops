@@ -171,6 +171,17 @@ export async function processAttendance(): Promise<ProcessResult> {
       // either end never raises it.
       if (derived.otEligibleHours > 0) flags.push("overtime_detected");
 
+      // System-closed logs (auto-close cron): a missed tap-out is NOT proven
+      // overtime — the cron zeroed OT when it closed, and this evaluation must
+      // not resurrect it from the synthetic span. The close lands at the
+      // rostered end so the tails are ~0 anyway; this pins the owner rule
+      // rather than relying on that arithmetic.
+      if (log.clock_out_method === "system") {
+        overtimeHours = 0;
+        const otIdx = flags.indexOf("overtime_detected");
+        if (otIdx >= 0) flags.splice(otIdx, 1);
+      }
+
       // Clocking in late or leaving early also needs sign-off (rule 7). The
       // window already docked the pay; this puts the shortfall in front of
       // someone who can excuse it or let it stand.
@@ -207,6 +218,12 @@ export async function processAttendance(): Promise<ProcessResult> {
     const actionableFlags = flags.filter((f) => !INFORMATIONAL_FLAGS.has(f));
     const aiStatus = actionableFlags.length === 0 ? "approved" : "flagged";
 
+    // The ai_status guard makes this a compare-and-set: a manager PATCH
+    // (set_times / adjust) landing between our fetch and this write moves the
+    // log out of 'pending', so we match zero rows instead of clobbering the
+    // human's correction with hours recomputed from the STALE clock times —
+    // which would also have flipped final_status 'adjusted' → 'approved' while
+    // reviewed_by still claimed manager confirmation.
     const { error: updateError } = await hrSupabaseAdmin
       .from("hr_attendance_logs")
       .update({
@@ -219,7 +236,8 @@ export async function processAttendance(): Promise<ProcessResult> {
         overtime_type: overtimeType,
         ...(aiStatus === "approved" ? { final_status: "approved" } : {}),
       })
-      .eq("id", log.id);
+      .eq("id", log.id)
+      .eq("ai_status", "pending");
 
     if (updateError) {
       result.errors.push(`Failed to update log ${log.id}: ${updateError.message}`);

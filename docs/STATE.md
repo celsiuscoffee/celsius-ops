@@ -111,9 +111,21 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   quiet-exit paths, since a quiet run is the thing that must stay
   distinguishable from a stopped one. **10th (`pos_pairing_tuner`) has no TS
   path** — pg_cron calls `public.refresh_pos_pairing_signals()` directly; its
-  heartbeat ships as `20260815_pos_pairing_tuner_heartbeat`, syntax-checked
-  against prod under a throwaway function name (created + dropped, verified no
-  leftover) but **NOT APPLIED — needs a human** (hard rule 6).
+  heartbeat shipped as `20260815_pos_pairing_tuner_heartbeat` and was **APPLIED
+  to prod 2026-08-15 on owner instruction** (hard rule 6 satisfied), via the
+  Supabase MCP `apply_migration` path; applied-history copy is
+  `supabase/migrations/105_pos_pairing_tuner_heartbeat.sql`. **All 10 heartbeats
+  are now live.** Before applying, the proposed body was diffed line-for-line
+  against the live `pg_get_functiondef` output to prove the ONLY change was the
+  heartbeat block (pre-change md5 `ebd1e0cc2cbfd62ba66011e2f320b579` — keep it,
+  it is the rollback anchor). Verified after: heartbeat present, SECURITY
+  DEFINER retained, `search_path` still `(public, pg_temp)`, pg_cron job
+  `refresh-pos-pairing-signals` still active.
+  **Deliberately did NOT invoke the function to test it** — it decays
+  `product_co_purchase_seed`/`product_round_seed` by 5% and refreshes the
+  matview, so a manual verification run would have charged the seeds an extra
+  night of decay. `last_run_at` stays NULL until the next scheduled fire
+  (`20 16 * * *` UTC); **check it after that to confirm the stamp lands.**
   **P5 (latent)** — `autoPauseUnderperformers` (loop-engine.ts:1482) and
   `getEvaluation` (:1704) do unbounded selects over all measured rounds: the
   known PostgREST 1000-row class. 344 rows, +7/day → **crosses the cap ~Nov
@@ -2111,20 +2123,32 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
-- 2026-08-15 — **Loop QA sweep DONE. P1 (incl. root cause), P2 (ageing arm), P4,
-  P6 and P8.1 all FIXED on PR #1130; P3 WITHDRAWN as a bad finding.** Full detail
-  in `docs/design/loop-qa-2026-08-15.md`.
-  **THREE OWNER STEPS — none of these can be done from an agent session:**
+- 2026-08-15 — **Loop QA sweep DONE and MERGED to main as `9b6a3e7` (PR #1130).**
+  P1 (incl. root cause), P2 (ageing arm), P4, P6 and P8.1 all fixed; P3
+  WITHDRAWN as a bad finding. Full detail in `docs/design/loop-qa-2026-08-15.md`.
+  The `pos_pairing_tuner` heartbeat migration is **APPLIED** (see P4 above), so
+  all 10 heartbeats are live. No OTA: the diff touched no `*-native` app.
+  **WATCH NEXT — three things land on their own, verify each:**
+  (a) **VERIFIED 2026-08-15 16:35 UTC** — the first `refresh_pos_pairing_signals()`
+  run with the heartbeat stamped `agent_registry.last_run_at` for
+  `pos_pairing_tuner` at exactly `16:20:00 UTC`. **P4 is fully closed: all 10
+  heartbeats are proven live**, and this was the only one whose verification had
+  to wait for a scheduled fire. (b) **Tomorrow 02:00 UTC (10:00 MYT)** — first review-backlog
+  digest fires; it will list ~28 stale drafts (oldest ~52d) in one manager
+  WhatsApp. Expected, but chunky — `REVIEW_DRAFT_STALE_DAYS` tunes it.
+  (c) **Mon 2026-08-17 05:00 UTC** — first geogrid run with retry + round-robin;
+  expect far fewer `failed`, a non-zero `retries`, and `skippedNoGbpLocation`
+  listing IOI Mall.
+  **TWO OWNER STEPS LEFT — cannot be done from an agent session:**
   (1) **Attach the Supabase connector** to the re-armed `Finance warehouse —
-  weekly custodian run` routine in the claude.ai routines UI. It fires Sun
-  2026-08-16 22:13 MYT and will report BLOCKED until this is done (P6).
-  (2) **Apply `packages/db/prisma/migrations/20260815_pos_pairing_tuner_heartbeat/`**
-  — written + syntax-checked against prod, needs a human to run it (P4).
-  (3) **Connect IOI Mall's Google Business Profile** — `gbpLocationName` is NULL,
+  weekly custodian run` routine (`trig_01BCKPmWgpi1KUq7pk5BrK2n`) in the
+  claude.ai routines UI. It fires Sun 2026-08-16 22:13 MYT and will report
+  BLOCKED until this is done (P6).
+  (2) **Connect IOI Mall's Google Business Profile** — `gbpLocationName` is NULL,
   so its 16 active keywords have never been scannable (P1).
-  **THEN:** (4) **P8.2/P8.3 AFTER the ~Aug 17 Tamarind probe verdict** — probe
+  **THEN:** (3) **P8.2/P8.3 AFTER the ~Aug 17 Tamarind probe verdict** — probe
   verdict raw-OR-adj, and the missing grabfood filter; both move the index the
-  probe is being judged on, so they wait. (5) **P5/P7** — latent, fix on the next
+  probe is being judged on, so they wait. (4) **P5/P7** — latent, fix on the next
   loop-engine touch.
   **TWO OWNER DECISIONS, neither urgent:** (a) **negative-review auto-reply** —
   arm it, or keep the human-approval path and staff the queue that the new daily
@@ -2138,19 +2162,52 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   `PAUSE_PROBE_DAYS` 14 → 11.5: by day 12 the verdict was mathematically
   locked (index 0.875 through Aug 14; +22%/day needed to flip) and each extra
   dark day cost ~RM70–117 net margin. 11.5 not 12 so tonight's Aug 15 19:01
-  run clears the daysSince race vs the 19:01:30 pause row. Expected tonight:
-  RESTORE at RM46.32/day, "ads generate cash", window Aug 4–15. Session
-  check-in armed 2026-08-15 19:25 UTC. Then the night after (~Aug 16/17
-  19:01): `autopilot pause: probe start` for PUTRAJAYA, ~12-day probe,
-  verdict ~Aug 28. Also shipped: paused-campaign outlets are now EXCLUDED
+  run clears the daysSince race vs the 19:01:30 pause row. **OUTCOME (verified):
+  the owner then said "can we restore now" — a one-time cron nudge (#1139,
+  ads-daily → 14:45 UTC, reverted same day in #1143) fired the run early and
+  the RESTORE applied at 14:46:20 UTC**: ledger `applied`, "autopilot restore:
+  pause probe VERDICT — ads generate cash (pause-window till index 0.88,
+  fleet-adj 0.87)", RM46.32/day, campaign ENABLED. The normal 19:01 run then
+  fired on the restored `0 19 * * *` schedule (all 5 sync steps OK) with zero
+  budget changes.
+  **The predicted PUTRAJAYA pause probe did NOT start and will not under
+  current metrics**: `selectPauseProbe` requires efficiencyRatio > 1.3×
+  fleet-best, and the 30-day benchmark has SHIFTED — Putrajaya is now the
+  fleet-BEST at RM7.26/conv (Shah Alam 7.56 → 1.04×; Tamarind 15.58 → 2.15×
+  but excluded, already probed once by design). Tamarind's paused days
+  polluted its 30-day window and moved the benchmark to Putrajaya, whose
+  ratio is 1.0 — the probe fires only if Putrajaya's relative efficiency
+  degrades past 1.3× later. The "~Aug 28 Putrajaya verdict" timeline is VOID;
+  probing the fleet's most efficient campaign would be wrong and the gate is
+  working as designed. Also shipped: paused-campaign outlets are now EXCLUDED
   from every fleet median (nightly guard `others` + probe-verdict controls) —
   a probed outlet's manipulated till no longer pollutes siblings' adjIndex
   (observed 2026-08-12: paused Tamarind pulled SA's control median to 0.9795
   vs 1.019 clean). Tamarind recovery check (reversal test, A=ads vs B=local
-  factor) armed 2026-08-25 09:00 UTC — restore date is now Aug 15/16, so it
-  gets ~9 post-restore days.
-  Remaining cleanup (after the Putrajaya verdict, NOT before — do not change
-  the instrument mid-measurement): (1) probe verdicts should require
+  factor) armed 2026-08-25 09:00 UTC — restore landed Aug 15 14:46, so it
+  gets ~10 post-restore days.
+- 2026-08-16 — **Conezion (Putrajaya outlet) slid ~21% WoW (Aug 10–16 vs
+  Aug 3–9); owner directive shipped to undo the Aug 12 Putrajaya ad cut.**
+  Decomposition: footfall −14% (orders 967→830/wk), AOV −8% (RM30.75→28.26),
+  stockouts ~RM650–900/wk (Pomegranate/Citrus teas + Truffle Fries sold zero
+  all week; Chocolate Cake Bars, Burnt Cheesecake, NYC Smores, Biscoff Batik
+  went dark Aug 14–16 — restock list sent to owner). NOT the payday cycle:
+  same-cycle week mid-July was RM28.4k vs this RM23.5k (−17% MoM) while Shah
+  Alam rose +7% MoM; July's own mid-month dip was only −6%. NOT ads by
+  timing: slide began Aug 10, two days before the Aug 12 cut, walk-in and
+  dine-in QR fell proportionally, index read healthy through the descent.
+  Google rating ticked 4.8→4.7 ~Aug 11 (couple of low reviews — worth
+  reading, too small to cause this). Prime suspect: IOI Conezion mall
+  footfall (owner asking the manager). Owner: "undo the cut" → ownerDirective
+  raises Putrajaya RM38.16→43.36/day at the Aug 16 19:01 run; reason starts
+  "owner directive" so lastKind reads "other" (never auto-reverted — an
+  "autopilot raise" row would be reverted by the very breach that motivated
+  it); self-expires once applied and hard-expires 2026-08-23. Spent Jul-19
+  Tamarind directive removed (re-armable trap class). Tamarind post-restore:
+  first Sunday +24% vs pause-Sunday — recovery tracking; A/B/A read Aug 25.
+  Remaining cleanup (no probe is now running, so the do-not-change-the-
+  instrument freeze is LIFTED until a new probe starts): (1) probe verdicts
+  should require
   adj-confirmation, not raw-OR-adj — the payday/mom safeguards don't apply in
   the probe path; (2) add `source<>'grabfood'` to organic-revenue.ts's pos
   branch, with tests; (3) consider restoring PAUSE_PROBE_DAYS to 14 for any
