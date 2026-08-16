@@ -80,16 +80,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Upsert all rows
+    // Insert ONLY missing rows. ignoreDuplicates:true = ON CONFLICT DO NOTHING —
+    // with false, this upsert OVERWROTE every existing row (used/pending zeroed,
+    // hand-set entitlements flattened to defaults) while the settings-page copy
+    // promised "existing balances are preserved". One click mid-year would have
+    // destroyed the year's leave accounting with no backup.
+    const { count: existingCount } = await hrSupabaseAdmin
+      .from("hr_leave_balances")
+      .select("id", { count: "exact", head: true })
+      .eq("year", targetYear);
+
     const { error } = await hrSupabaseAdmin
       .from("hr_leave_balances")
-      .upsert(rows, { onConflict: "user_id,year,leave_type", ignoreDuplicates: false });
+      .upsert(rows, { onConflict: "user_id,year,leave_type", ignoreDuplicates: true });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     return NextResponse.json({
       success: true,
-      initialized: rows.length,
+      initialized: Math.max(0, rows.length - (existingCount ?? 0)),
+      preserved: existingCount ?? 0,
       employees: profiles.length,
       year: targetYear,
     });

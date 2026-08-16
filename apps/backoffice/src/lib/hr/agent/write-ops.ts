@@ -623,15 +623,23 @@ export async function staffSubmitLeave(
   if (!ISO_DATE.test(p.startDate) || !ISO_DATE.test(p.endDate)) throw new Error("dates must be YYYY-MM-DD");
   if (p.endDate < p.startDate) throw new Error("end date before start date");
   const type = ["annual", "sick", "emergency", "unpaid"].includes(p.leaveType) ? p.leaveType : "annual";
+  // Sick leave needs an MC attached and WhatsApp text can't carry one — the
+  // staff app enforces the MC at submit and the review card is where it gets
+  // read. Letting this path insert sick leave bypassed that rule entirely.
+  if (type === "sick") {
+    throw new Error("sick leave needs a medical certificate — submit it in the staff app so the MC photo can be attached");
+  }
   const totalDays =
     Math.floor((Date.parse(`${p.endDate}T00:00:00Z`) - Date.parse(`${p.startDate}T00:00:00Z`)) / 86_400_000) + 1;
   if (totalDays < 1 || totalDays > 60) throw new Error("invalid range");
 
-  const bal = await prisma.$queryRaw<Array<{ remaining: number }>>`
-    SELECT (entitled_days + carried_forward - used_days - pending_days)::float AS remaining
+  // Balance is keyed to the leave's START year — the approve path banks
+  // used_days against that year, so the hold must land on the same row.
+  const balanceYear = Number(p.startDate.slice(0, 4));
+  const bal = await prisma.$queryRaw<Array<{ id: string; remaining: number }>>`
+    SELECT id, (entitled_days + carried_forward - used_days - pending_days)::float AS remaining
     FROM hr_leave_balances
-    WHERE user_id = ${userId} AND leave_type = ${type}
-      AND year = EXTRACT(YEAR FROM (now() AT TIME ZONE 'Asia/Kuala_Lumpur'))::int
+    WHERE user_id = ${userId} AND leave_type = ${type} AND year = ${balanceYear}
   `;
   const remaining = bal[0]?.remaining;
 
@@ -639,6 +647,17 @@ export async function staffSubmitLeave(
     INSERT INTO hr_leave_requests (user_id, leave_type, start_date, end_date, total_days, reason, status)
     VALUES (${userId}, ${type}, ${p.startDate}::date, ${p.endDate}::date, ${totalDays}, ${p.reason ?? null}, 'pending')
   `;
+  // Reserve the days. Every other submit path (staff app, AI leave-manager)
+  // holds pending_days on insert, and the approve/reject paths RELEASE that
+  // hold unconditionally (clamped at 0) — so an unreserved request ate the
+  // reservation of whichever OTHER pending request the person had. Three such
+  // drift rows existed in prod when this was found.
+  if (bal[0]?.id) {
+    await prisma.$executeRaw`
+      UPDATE hr_leave_balances SET pending_days = pending_days + ${totalDays}
+      WHERE id = ${bal[0].id}::uuid
+    `;
+  }
   const balNote =
     remaining === undefined ? "" : remaining < totalDays ? ` NOTE: only ${remaining} day(s) remaining — manager may reject.` : ` (${remaining} day(s) remaining before this)`;
   return `submitted ${totalDays}-day ${type} leave ${p.startDate}→${p.endDate}, pending manager approval.${balNote}`;
