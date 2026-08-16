@@ -7,6 +7,7 @@ import { clipLeaveDaysToCycle } from "../payroll/leave-overlap";
 import { mytDateString } from "../hours";
 import { fetchAllRows } from "../fetch-all";
 import { splitOtHours, effectiveOtType } from "../ot-policy";
+import { applyDueSalaryMirrors } from "../salary-mirror";
 import { REST_DAY_ROLE_PATTERN } from "../constants";
 
 type PayrollResult = {
@@ -31,6 +32,11 @@ type PayrollResult = {
  */
 export async function calculatePayroll(month: number, year: number): Promise<PayrollResult> {
   const notes: string[] = [];
+
+  // Land any approved salary changes whose effective date has arrived since
+  // the last compute — future-dated raises had no other way to reach the live
+  // profile columns this calculator reads (see lib/hr/salary-mirror).
+  notes.push(...(await applyDueSalaryMirrors()));
 
   // 0. Refuse to recompute a confirmed/paid period. Operators can still
   // recompute "draft" or "ai_computed" runs; those are overwritten below.
