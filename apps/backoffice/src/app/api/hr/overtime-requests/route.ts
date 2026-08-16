@@ -205,6 +205,33 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // OT is FT-only (owner policy 2026-07-28), but only the backoffice CREATE
+  // path enforced it — the staff app could still file one and nothing between
+  // request and pay re-checked, so a single approval click paid a part-timer
+  // premium OT. Approve/partial now re-checks the target's employment type;
+  // reject/cancel stay open so existing PT requests (the 190 stale ones) can
+  // still be cleaned up.
+  if (status === "approved" || status === "partial") {
+    const { data: reqRow } = await hrSupabaseAdmin
+      .from("hr_overtime_requests")
+      .select("user_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (reqRow) {
+      const { data: targetProfile } = await hrSupabaseAdmin
+        .from("hr_employee_profiles")
+        .select("employment_type")
+        .eq("user_id", reqRow.user_id)
+        .maybeSingle();
+      if (targetProfile && targetProfile.employment_type !== "full_time") {
+        return NextResponse.json(
+          { error: "OT is for full-time staff only — part-timers are paid hourly via the roster. Reject this request instead." },
+          { status: 400 },
+        );
+      }
+    }
+  }
+
   const updates: Record<string, unknown> = {
     status,
     reviewed_by: session.id,
@@ -245,6 +272,7 @@ export async function PATCH(req: NextRequest) {
   // effort — a sync failure must not fail the approval, but we surface it so the
   // UI can warn that payroll didn't pick it up. See lib/hr/ot-payroll-sync.
   let payrollSynced: boolean | null = null;
+  let syncAction: string | null = null;
   try {
     const r = data as {
       id: string;
@@ -256,8 +284,11 @@ export async function PATCH(req: NextRequest) {
       attendance_log_id?: string | null;
     };
     if (status === "approved" || status === "partial") {
-      await applyApprovedOt(r);
-      payrollSynced = true;
+      syncAction = await applyApprovedOt(r);
+      // A rejected attendance log blocks the sync: the OT was approved on the
+      // request but will NOT pay until the log's rejection is cleared. False
+      // here is what makes the UI warn instead of looking settled.
+      payrollSynced = syncAction !== "skipped_rejected_log";
     } else if (status === "rejected" || status === "cancelled") {
       await reverseApprovedOt(r);
       payrollSynced = true;
@@ -267,7 +298,7 @@ export async function PATCH(req: NextRequest) {
     payrollSynced = false;
   }
 
-  return NextResponse.json({ request: data, payrollSynced });
+  return NextResponse.json({ request: data, payrollSynced, syncAction });
 }
 
 async function getHoursRequested(id: string) {
