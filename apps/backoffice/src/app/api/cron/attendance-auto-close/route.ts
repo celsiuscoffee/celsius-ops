@@ -201,8 +201,20 @@ export async function GET(req: NextRequest) {
     // NO OT on an auto-close: a missed tap-out isn't proven overtime (OT is only
     // paid via an approved overtime request). Keep regular hours (deriveHours
     // already floors them at the daily threshold) and the day-type classification,
-    // but zero the OT hours. Every auto-close AUTO-RESOLVES (approved + excused)
-    // so a forgotten tap-out never lands in the manager review queue.
+    // but zero the OT hours.
+    //
+    // The close does NOT decide the verdict anymore. Stamping
+    // ai_status/final_status 'approved' here meant every auto-close
+    // AUTO-RESOLVED — including logs whose capture was anomalous (offsite/no-GPS
+    // clock-in, a processor 'flagged' verdict from while it sat open) — so the
+    // review queue never saw exactly the logs most worth reviewing. The
+    // processor runs immediately below in this same route: a 'pending' log gets
+    // its real geofence/late evaluation against the now-closed span (clean →
+    // auto-approved seconds later, anomalous → flagged into the queue), and an
+    // already-'flagged' log keeps its flags and stays in the queue instead of
+    // being overwritten to approved. `excused` still set: the missed tap-out
+    // itself is not a punishable offence (no allowance lateness double-hit),
+    // the capture anomalies are what need eyes.
     const update: Record<string, unknown> = {
       clock_out: closeAt.toISOString(),
       clock_out_method: "system",
@@ -211,11 +223,8 @@ export async function GET(req: NextRequest) {
       overtime_hours: 0,
       overtime_type: derived.overtimeType,
       ai_flags: flags,
-      ai_status: "approved",
-      final_status: "approved",
       excused: true,
       excused_reason: "Auto-closed — no clock-out (paid to rostered shift end, no OT)",
-      reviewed_at: now.toISOString(),
       review_notes: `System auto-close (${reason}); paid to shift end, OT excluded`,
     };
 
