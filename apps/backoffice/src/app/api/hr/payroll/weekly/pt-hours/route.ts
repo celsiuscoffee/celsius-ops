@@ -6,6 +6,7 @@ import { getAccessibleOutletIds } from "@/lib/hr/scope";
 import { mytDateString, mytInstant, paidWindowHours, pickShiftWindow, type ShiftWindow } from "@/lib/hr/hours";
 import { ptLogState } from "@/lib/hr/pt-log-state";
 import { ptRateForDate } from "@/lib/hr/pt-rate";
+import { clipOverlappingLogs } from "@/lib/hr/log-overlap";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ type LogRow = {
   clock_in: string; clock_out: string | null; total_hours: number | string | null;
   ai_status: string | null; ai_flags: string[] | null; final_status: string | null;
   reviewed_by: string | null;
+  regular_hours: number | string | null; overtime_hours: number | string | null;
 };
 
 export async function GET(req: NextRequest) {
@@ -60,12 +62,16 @@ export async function GET(req: NextRequest) {
   const ptIds = [...profMap.keys()];
   if (ptIds.length === 0) return NextResponse.json({ pts: [] });
 
+  // Exclusive upper bound — `lte …23:59:59` dropped a clock-in in Sunday's
+  // final second into neither week. Must mirror payroll-calculator-weekly.
+  const nextMonday = new Date(`${weekStart}T00:00:00Z`);
+  nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
   let logQuery = hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("id, user_id, outlet_id, clock_in, clock_out, total_hours, ai_status, ai_flags, final_status, reviewed_by")
+    .select("id, user_id, outlet_id, clock_in, clock_out, total_hours, ai_status, ai_flags, final_status, reviewed_by, regular_hours, overtime_hours")
     .in("user_id", ptIds)
     .gte("clock_in", `${weekStart}T00:00:00+08:00`)
-    .lte("clock_in", `${weekEndStr}T23:59:59+08:00`)
+    .lt("clock_in", `${nextMonday.toISOString().slice(0, 10)}T00:00:00+08:00`)
     .not("clock_out", "is", null)
     .order("clock_in");
   if (outletFilter !== null) logQuery = logQuery.in("outlet_id", outletFilter);
@@ -99,7 +105,9 @@ export async function GET(req: NextRequest) {
     : { data: [] as Array<Record<string, unknown>> };
   const schedByUserDay = new Map<string, ShiftWindow[]>();
   for (const s of (rosterRows ?? []) as Array<{ user_id: string; shift_date: string; start_time: string; end_time: string; break_minutes: number | null; notes: string | null }>) {
-    if (s.start_time?.slice(0, 5) === "00:00") continue;
+    // Rest-day row = zero-length (start == end), not "starts at midnight" —
+    // must mirror payroll-calculator-weekly.
+    if (s.start_time === s.end_time) continue;
     if (s.notes === "pt_suggestion") continue;
     const start = mytInstant(s.shift_date, s.start_time);
     const end = mytInstant(s.shift_date, s.end_time);
@@ -130,50 +138,82 @@ export async function GET(req: NextRequest) {
   const userMap = new Map(users.map((u) => [u.id, u]));
   const outletMap = new Map(outlets.map((o) => [o.id, o.name]));
 
-  const byUser = new Map<string, Array<Record<string, unknown>>>();
+  // Group per user first: overlap clipping is a per-user pass (must mirror
+  // payroll-calculator-weekly, or this preview shows a duplicate paying).
+  const logsByUser = new Map<string, LogRow[]>();
   for (const l of logs) {
-    const prof = profMap.get(l.user_id)!;
-    // Paid span = the clocked span's overlap with the rostered window (owner
-    // rule 2026-08-13) — must mirror payroll-calculator-weekly so this preview
-    // equals what the run pays.
-    const dateStr = mytDateString(l.clock_in);
-    const dayKey = `${l.user_id}:${dateStr}`;
-    const window = pickShiftWindow(schedByUserDay.get(dayKey) ?? [], l.clock_in, l.clock_out as string);
-    const w = paidWindowHours({
-      clockIn: l.clock_in, clockOut: l.clock_out as string,
-      scheduledStart: window?.start ?? null,
-      scheduledEnd: window?.end ?? null,
-      breakMinutes: window?.breakMinutes ?? null,
-      employmentType: "part_time",
-    });
-    if (!otLeft.has(dayKey)) otLeft.set(dayKey, otByUserDay.get(dayKey) ?? 0);
-    const otPaid = Math.round(Math.min(w.otEligibleHours, otLeft.get(dayKey)!) * 100) / 100;
-    otLeft.set(dayKey, Math.max(0, otLeft.get(dayKey)! - otPaid));
-    const worked = Math.round(
-      (((new Date(l.clock_out as string).getTime() - new Date(l.clock_in).getTime()) / (1000 * 60 * 60)) - w.breakHours) * 100,
-    ) / 100;
-    const paid = Math.round((w.paidHours + otPaid) * 100) / 100;
-    const rate = ptRateForDate(prof, dateStr, holidaySet.has(dateStr));
-    // "Confirmed" means a HUMAN signed off — see lib/hr/pt-log-state.ts. Reading
-    // final_status alone showed AI- and cron-approved logs as confirmed on the
-    // manager's own sign-off screen.
-    const state = ptLogState(l);
-    (byUser.get(l.user_id) ?? byUser.set(l.user_id, []).get(l.user_id)!).push({
-      id: l.id, date: dateStr,
-      clock_in: l.clock_in, clock_out: l.clock_out,
-      worked_hours: worked, paid_hours: paid, capped: paid < worked,
-      // Why the paid figure differs from the clocked one — the manager needs to
-      // see this to confirm honestly, and it's what an unapproved OT tail looks
-      // like on the screen.
-      late_minutes: w.lateMinutes, early_leave_minutes: w.earlyLeaveMinutes,
-      ot_eligible_hours: w.otEligibleHours, ot_paid_hours: otPaid,
-      unrostered: w.unrostered, needs_signoff: w.needsSignOff || w.unrostered,
-      rate, pay: Math.round(paid * rate * 100) / 100,
-      is_weekend_rate: rate !== (Number(prof.hourly_rate) || 0) && !holidaySet.has(dateStr),
-      is_holiday: holidaySet.has(dateStr),
-      state, ai_flags: l.ai_flags ?? [],
-      outlet_name: l.outlet_id ? outletMap.get(l.outlet_id) ?? null : null,
-    });
+    (logsByUser.get(l.user_id) ?? logsByUser.set(l.user_id, []).get(l.user_id)!).push(l);
+  }
+
+  const byUser = new Map<string, Array<Record<string, unknown>>>();
+  for (const [uid, userLogs] of logsByUser) {
+    const prof = profMap.get(uid)!;
+    for (const { log: l, clockIn, clockOut, trimmedMinutes } of clipOverlappingLogs(userLogs)) {
+      // Paid span = the clocked span's overlap with the rostered window (owner
+      // rule 2026-08-13) — must mirror payroll-calculator-weekly so this preview
+      // equals what the run pays.
+      const dateStr = mytDateString(l.clock_in);
+      const dayKey = `${uid}:${dateStr}`;
+      const rate = ptRateForDate(prof, dateStr, holidaySet.has(dateStr));
+      // "Confirmed" means a HUMAN signed off — see lib/hr/pt-log-state.ts. Reading
+      // final_status alone showed AI- and cron-approved logs as confirmed on the
+      // manager's own sign-off screen.
+      const state = ptLogState(l);
+      const rawWorked = Math.round(
+        ((new Date(l.clock_out as string).getTime() - new Date(l.clock_in).getTime()) / (1000 * 60 * 60)) * 100,
+      ) / 100;
+
+      const base = {
+        id: l.id, date: dateStr,
+        clock_in: l.clock_in, clock_out: l.clock_out,
+        rate,
+        is_weekend_rate: rate !== (Number(prof.hourly_rate) || 0) && !holidaySet.has(dateStr),
+        is_holiday: holidaySet.has(dateStr),
+        state, ai_flags: l.ai_flags ?? [],
+        outlet_name: l.outlet_id ? outletMap.get(l.outlet_id) ?? null : null,
+        ...(trimmedMinutes > 0 ? { overlap_trimmed_minutes: trimmedMinutes } : {}),
+      };
+
+      // Manager-ADJUSTED = a human stated this shift's hours (set_times or the
+      // attendance queue's adjust). Pay as stated — mirror the calculator.
+      if (l.final_status === "adjusted") {
+        const stated = Math.round(((Number(l.regular_hours) || 0) + (Number(l.overtime_hours) || 0)) * 100) / 100;
+        (byUser.get(uid) ?? byUser.set(uid, []).get(uid)!).push({
+          ...base,
+          worked_hours: rawWorked, paid_hours: stated, capped: false,
+          late_minutes: 0, early_leave_minutes: 0,
+          ot_eligible_hours: 0, ot_paid_hours: 0,
+          unrostered: false, needs_signoff: false, manager_adjusted: true,
+          pay: Math.round(stated * rate * 100) / 100,
+        });
+        continue;
+      }
+
+      const window = pickShiftWindow(schedByUserDay.get(dayKey) ?? [], clockIn, clockOut);
+      const w = paidWindowHours({
+        clockIn, clockOut,
+        scheduledStart: window?.start ?? null,
+        scheduledEnd: window?.end ?? null,
+        breakMinutes: window?.breakMinutes ?? null,
+        employmentType: "part_time",
+      });
+      if (!otLeft.has(dayKey)) otLeft.set(dayKey, otByUserDay.get(dayKey) ?? 0);
+      const otPaid = Math.round(Math.min(w.otEligibleHours, otLeft.get(dayKey)!) * 100) / 100;
+      otLeft.set(dayKey, Math.max(0, otLeft.get(dayKey)! - otPaid));
+      const worked = Math.round((rawWorked - w.breakHours) * 100) / 100;
+      const paid = Math.round((w.paidHours + otPaid) * 100) / 100;
+      (byUser.get(uid) ?? byUser.set(uid, []).get(uid)!).push({
+        ...base,
+        worked_hours: worked, paid_hours: paid, capped: paid < worked,
+        // Why the paid figure differs from the clocked one — the manager needs to
+        // see this to confirm honestly, and it's what an unapproved OT tail looks
+        // like on the screen.
+        late_minutes: w.lateMinutes, early_leave_minutes: w.earlyLeaveMinutes,
+        ot_eligible_hours: w.otEligibleHours, ot_paid_hours: otPaid,
+        unrostered: w.unrostered, needs_signoff: w.needsSignOff || w.unrostered || trimmedMinutes > 0,
+        pay: Math.round(paid * rate * 100) / 100,
+      });
+    }
   }
 
   const pts = [...byUser.entries()].map(([uid, rows]) => {
@@ -210,12 +250,13 @@ export async function POST(req: NextRequest) {
 
   const { data: logsRaw } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("id, outlet_id, final_status")
+    .select("id, outlet_id, final_status, clock_out")
     .in("id", log_ids);
-  const logs = (logsRaw ?? []) as Array<{ id: string; outlet_id: string | null; final_status: string | null }>;
+  const logs = (logsRaw ?? []) as Array<{ id: string; outlet_id: string | null; final_status: string | null; clock_out: string | null }>;
 
   const allowed = await getAccessibleOutletIds(session);
   const confirmable = logs.filter((l) => {
+    if (!l.clock_out) return false; // an OPEN shift has no hours to confirm yet
     if (l.final_status === "rejected" || l.final_status === "adjusted") return false; // keep stronger verdicts
     if (allowed !== null && (!l.outlet_id || !allowed.includes(l.outlet_id))) return false; // manager scope
     return true;

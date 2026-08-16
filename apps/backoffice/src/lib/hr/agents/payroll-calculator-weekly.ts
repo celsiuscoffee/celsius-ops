@@ -1,6 +1,7 @@
 import { hrSupabaseAdmin } from "../supabase";
 import { mytDateString, mytInstant, paidWindowHours, pickShiftWindow, type ShiftWindow } from "../hours";
 import { ptRateForDate } from "../pt-rate";
+import { clipOverlappingLogs } from "../log-overlap";
 
 type WeeklyPayrollResult = {
   payrollRunId: string;
@@ -57,16 +58,23 @@ export async function calculateWeeklyPayroll(
   periodEnd.setUTCDate(periodEnd.getUTCDate() + 6);
   const periodStartStr = weekStart;
   const periodEndStr = periodEnd.toISOString().slice(0, 10);
-  // MYT week window: Monday 00:00 to Sunday 23:59:59 Malaysia time (not UTC), so a
-  // late-evening or pre-8am clock-in lands in the right week.
+  // MYT week window: Monday 00:00 (inclusive) to NEXT Monday 00:00 (exclusive),
+  // Malaysia time — not UTC, so a late-evening or pre-8am clock-in lands in the
+  // right week. Exclusive upper bound: `lte …23:59:59` dropped a clock-in in
+  // Sunday's final second into NEITHER week.
+  const nextMonday = new Date(start);
+  nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
   const weekStartIso = `${periodStartStr}T00:00:00+08:00`;
-  const weekEndIso = `${periodEndStr}T23:59:59+08:00`;
+  const weekEndExclusiveIso = `${nextMonday.toISOString().slice(0, 10)}T00:00:00+08:00`;
 
-  // 1. Part-timer profiles.
+  // 1. Hourly-paid profiles: part-timers and interns. Interns share the PT pay
+  // semantics everywhere else (OT_THRESHOLD_HOURS, breakHoursFor, the PT Hours
+  // confirm screen lists them) — excluding them here made an intern
+  // confirmable-but-unpaid, silently.
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, hourly_rate, hourly_rate_weekend, end_date, resigned_at")
-    .eq("employment_type", "part_time");
+    .select("user_id, employment_type, hourly_rate, hourly_rate_weekend, end_date, resigned_at")
+    .in("employment_type", ["part_time", "intern"]);
 
   // Public holidays inside the week — those days pay 2× (owner rule; the wage
   // sheet's RM18/RM20 entries).
@@ -110,7 +118,10 @@ export async function calculateWeeklyPayroll(
     : { data: [] as Array<Record<string, unknown>> };
   const schedByUserDay = new Map<string, ShiftWindow[]>();
   for (const s of (rosterRows ?? []) as Array<{ user_id: string; shift_date: string; start_time: string; end_time: string; break_minutes: number | null; notes: string | null }>) {
-    if (s.start_time?.slice(0, 5) === "00:00") continue;
+    // A rest-day row is start == end (00:00–00:00) — zero-length, not a shift.
+    // Matching on start_time "00:00" alone would also drop a genuine
+    // midnight-start shift; pickShiftWindow's own rest-day guard backstops this.
+    if (s.start_time === s.end_time) continue;
     if (s.notes === "pt_suggestion") continue;
     const start = mytInstant(s.shift_date, s.start_time);
     const end = mytInstant(s.shift_date, s.end_time);
@@ -135,25 +146,26 @@ export async function calculateWeeklyPayroll(
   }
 
   // 2. Clocked attendance for those PTs in the MYT week. Closed logs only.
-  type Log = { user_id: string; clock_in: string; clock_out: string | null; total_hours: number | string | null; final_status: string | null };
+  // Ordered by clock_in so the per-day approved-OT budget splits across a
+  // day's logs deterministically (the pt-hours preview orders the same way).
+  type Log = { user_id: string; clock_in: string; clock_out: string | null; total_hours: number | string | null; final_status: string | null; regular_hours: number | string | null; overtime_hours: number | string | null };
   const { data: logsRaw } = ptIds.length
     ? await hrSupabaseAdmin
         .from("hr_attendance_logs")
-        .select("user_id, clock_in, clock_out, total_hours, final_status")
+        .select("user_id, clock_in, clock_out, total_hours, final_status, regular_hours, overtime_hours")
         .in("user_id", ptIds)
         .gte("clock_in", weekStartIso)
-        .lte("clock_in", weekEndIso)
+        .lt("clock_in", weekEndExclusiveIso)
         .not("clock_out", "is", null)
+        .order("clock_in")
     : { data: [] as Log[] };
 
   const logsByUser = new Map<string, Log[]>();
-  let paidLogCount = 0;
   for (const l of (logsRaw || []) as Log[]) {
     if (l.final_status === "rejected") continue; // bogus entry — don't pay
     const list = logsByUser.get(l.user_id) || [];
     list.push(l);
     logsByUser.set(l.user_id, list);
-    paidLogCount++;
   }
 
   // 3. A SETTLED week is never recomputed (owner 2026-08-14: "forward only,
@@ -211,6 +223,7 @@ export async function calculateWeeklyPayroll(
   let totalGross = 0;
   const payrollItems: Record<string, unknown>[] = [];
   let staffWithNoClockins = 0;
+  let paidLogCount = 0;
 
   for (const profile of profiles) {
     // Resigned before this cycle → don't include. Use end_date (last working day).
@@ -239,21 +252,44 @@ export async function calculateWeeklyPayroll(
     let paidHours = 0;
     let unpaidHours = 0;
     let gross = 0;
-    const logDetails: Array<{ date: string; hours: number; paid_hours: number; capped: boolean; rate: number; start: string; end: string }> = [];
+    let overlapTrimmedMin = 0;
+    const logDetails: Array<{ date: string; hours: number; paid_hours: number; capped: boolean; rate: number; start: string; end: string; manager_adjusted?: boolean; overlap_trimmed_minutes?: number }> = [];
     // A day's approved-OT budget is shared across that day's logs (split shifts).
     const otLeft = new Map<string, number>();
-    for (const l of userLogs) {
-      const clockIn = new Date(l.clock_in);
-      const clockOut = new Date(l.clock_out as string);
+    // Overlapping logs must not pay the same minutes twice — clip each log to
+    // the span nobody else has claimed (manager-adjusted logs claim first).
+    const clipped = clipOverlappingLogs(userLogs);
+    for (const { log: l, clockIn, clockOut, trimmedMinutes } of clipped) {
       const dateStr = mytDateString(l.clock_in);
       const dayKey = `${profile.user_id}:${dateStr}`;
+      const rate = ptRateForDate(profile, dateStr, holidaySet.has(dateStr));
+      // What they were on the clock for (raw span) — the yardstick the
+      // "unpaid" note compares against.
+      const worked = Math.round(
+        ((new Date(l.clock_out as string).getTime() - new Date(l.clock_in).getTime()) / (1000 * 60 * 60)) * 100,
+      ) / 100;
+
+      // A manager-ADJUSTED log is a human verdict on this shift's hours
+      // (set_times or the attendance queue's adjust — nothing automated writes
+      // "adjusted"). Pay it as stated: window math would silently override the
+      // manager, while the bank-file gate treats the log as confirmed.
+      if (l.final_status === "adjusted") {
+        const stated = Math.round(((Number(l.regular_hours) || 0) + (Number(l.overtime_hours) || 0)) * 100) / 100;
+        workedHours += worked;
+        paidHours += stated;
+        gross += stated * rate;
+        paidLogCount++;
+        logDetails.push({ date: dateStr, hours: worked, paid_hours: stated, capped: false, rate, start: l.clock_in, end: l.clock_out as string, manager_adjusted: true });
+        continue;
+      }
+
       const window = pickShiftWindow(schedByUserDay.get(dayKey) ?? [], clockIn, clockOut);
       const w = paidWindowHours({
         clockIn, clockOut,
         scheduledStart: window?.start ?? null,
         scheduledEnd: window?.end ?? null,
         breakMinutes: window?.breakMinutes ?? null,
-        employmentType: "part_time",
+        employmentType: profile.employment_type || "part_time",
       });
 
       // Time outside the window — early in (rule 5) or late out (rule 4) — is
@@ -264,17 +300,24 @@ export async function calculateWeeklyPayroll(
       otLeft.set(dayKey, Math.max(0, otLeft.get(dayKey)! - otPaid));
 
       const paid = Math.round((w.paidHours + otPaid) * 100) / 100;
-      // What they were on the clock for, minus the break — the yardstick the
-      // "unpaid" note compares against.
-      const worked = Math.round(
-        ((clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)) * 100,
-      ) / 100;
-      const rate = ptRateForDate(profile, dateStr, holidaySet.has(dateStr));
       workedHours += worked;
       paidHours += paid;
-      unpaidHours += Math.max(0, worked - w.breakHours - paid);
+      // Overlap-trimmed minutes are duplicated time, not window drift — keep
+      // them out of the "clocked outside the rostered window" figure.
+      unpaidHours += Math.max(0, worked - trimmedMinutes / 60 - w.breakHours - paid);
       gross += paid * rate;
-      logDetails.push({ date: dateStr, hours: worked, paid_hours: paid, capped: paid < worked - w.breakHours, rate, start: clockIn.toISOString(), end: clockOut.toISOString() });
+      overlapTrimmedMin += trimmedMinutes;
+      paidLogCount++;
+      logDetails.push({
+        date: dateStr, hours: worked, paid_hours: paid, capped: paid < worked - w.breakHours, rate,
+        start: l.clock_in, end: l.clock_out as string,
+        ...(trimmedMinutes > 0 ? { overlap_trimmed_minutes: trimmedMinutes } : {}),
+      });
+    }
+    if (overlapTrimmedMin > 0) {
+      notes.push(
+        `${profile.user_id.slice(0, 8)}: ${overlapTrimmedMin}min of OVERLAPPING logs excluded from pay — the same span was clocked twice; review and reject the duplicate log.`,
+      );
     }
     workedHours = Math.round(workedHours * 100) / 100;
     paidHours = Math.round(paidHours * 100) / 100;
@@ -312,7 +355,7 @@ export async function calculateWeeklyPayroll(
       computation_details: {
         hourly_rate: hourlyRate,
         hourly_rate_weekend: profile.hourly_rate_weekend != null ? Number(profile.hourly_rate_weekend) : null,
-        employment_type: "part_time",
+        employment_type: profile.employment_type || "part_time",
         cycle: "weekly",
         basis: "paid window (clocked ∩ rostered shift), day-aware rate (weekday/weekend/PH 2x), + approved OT in 30-min brackets",
         worked_hours: workedHours,
@@ -328,7 +371,12 @@ export async function calculateWeeklyPayroll(
     const { error: itemsError } = await hrSupabaseAdmin
       .from("hr_payroll_items")
       .insert(payrollItems);
-    if (itemsError) throw new Error(`Failed to save payroll items: ${itemsError.message}`);
+    if (itemsError) {
+      // Don't strand an EMPTY ai_computed run: confirmed as-is it would settle
+      // the week at RM0 and the settled-guard would then defend it forever.
+      await hrSupabaseAdmin.from("hr_payroll_runs").delete().eq("id", run.id);
+      throw new Error(`Failed to save payroll items: ${itemsError.message}`);
+    }
   }
 
   totalGross = Math.round(totalGross * 100) / 100;

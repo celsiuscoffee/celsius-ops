@@ -132,6 +132,21 @@ export async function POST(req: NextRequest) {
   if (action === "confirm") {
     if (!run_id) return NextResponse.json({ error: "run_id required" }, { status: 400 });
 
+    // An EMPTY run (compute failed mid-way, or nobody clocked) must not become
+    // settled: once confirmed, the calculator's settled-guard defends it and
+    // DELETE refuses it — the week would be locked at RM0 two clicks from a
+    // transient failure.
+    const { count: itemCount } = await hrSupabaseAdmin
+      .from("hr_payroll_items")
+      .select("id", { count: "exact", head: true })
+      .eq("payroll_run_id", run_id);
+    if (!itemCount) {
+      return NextResponse.json(
+        { error: "This run has no payroll items — recompute the week before confirming." },
+        { status: 409 },
+      );
+    }
+
     // Same atomic guard as the monthly route: only a not-yet-confirmed run can
     // be confirmed. A bare update here could take a PAID run — bank file already
     // sent — back down to "confirmed" and desync it.
@@ -191,6 +206,7 @@ export async function POST(req: NextRequest) {
       .from("hr_payroll_runs")
       .update({
         status: "paid",
+        paid_at: new Date().toISOString(),
         ai_notes: existing.ai_notes ? `${existing.ai_notes}\n${paidNote}` : paidNote,
       })
       .eq("id", run_id)
@@ -335,6 +351,7 @@ export async function PATCH(req: NextRequest) {
     .update({
       total_regular_hours: newHours,
       total_ot_hours: newOtHours,
+      basic_salary: newGross, // compute writes basic_salary = gross; keep them in step
       total_gross: newGross,
       net_pay: newGross, // PT has no statutory deductions
       computation_details: compDetails,
@@ -344,6 +361,16 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logActivity({
+    actorId: session.id,
+    action: "payroll.item_adjust",
+    module: "hr",
+    targetId: item_id,
+    targetName: `weekly item ${existing.user_id.slice(0, 8)}`,
+    details: { hours: newHours, ot_hours: newOtHours, rate: newRate, gross: newGross, notes: notes ?? null },
+    request: req,
+  });
 
   // Recompute run totals
   const { data: allItems } = await hrSupabaseAdmin

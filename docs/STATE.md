@@ -177,6 +177,38 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   **Gotcha that cost time: `ads_sync_log.status` is `OK`, not `success`** —
   filtering on the wrong literal makes 7 healthy nightly syncs read as 7 fails.
 
+- 2026-08-14 — **Weekly payroll flow audited end-to-end; fixes shipped on
+  `claude/farah-staff-onboarding-99yg3j` (2nd PR from this branch).** Found:
+  (1) bank-file "manager gate" was vacuous — AI processor + auto-close cron
+  both write `final_status='approved'`, so it now gates on `isManagerConfirmed`
+  (reviewed_by); (2) overlapping/duplicate logs paid twice — 3 real full-shift
+  pairs in July (manual round-time log beside the tap log) — new
+  `lib/hr/log-overlap.ts` clips each log to the unclaimed span,
+  manager-adjusted logs claim first; (3) manager hours-adjustments were
+  silently ignored by the weekly calculator (it recomputes from clock times) —
+  `final_status='adjusted'` logs now pay their stated regular+OT hours (only
+  humans write 'adjusted'). NOTE: set_times also writes 'adjusted' and derives
+  hours via the POLICY break (log stores no break_minutes), so one live shift
+  (Absah 7 Aug, roster break 0) pays 4.00h stated vs 4.50h window math.
+  Also: partial unique index `hr_payroll_runs_weekly_period_key` APPLIED TO
+  PROD (blocks duplicate weekly runs; migration file in repo); confirm refuses
+  an empty run (was lockable at RM0); mark_paid now writes `paid_at` (27 Jul
+  run backfilled from its ai_notes timestamp); week upper bound now exclusive
+  (Sunday's last second fell in neither week); rest-day skip is zero-length
+  not "00:00" string; calculator orders logs (deterministic OT split);
+  interns included in weekly pay (0 exist; were confirmable-but-unpaid);
+  pt-hours confirm refuses open logs; item PATCH keeps basic_salary in step +
+  logs activity. OWNER QUESTION still open: 27/30 PTs have
+  hourly_rate_weekend == weekday rate — if the RM9/RM10 sheet standard is
+  general, weekends underpay RM1/h by data, not code.
+
+- 2026-08-14 — **3–9 Aug weekly run exists** (`c290c9ea`, ai_computed,
+  RM3,958.50) — computed 08:15:34Z by a human click, 91 seconds BEFORE the
+  #1126 deploy went READY, so it used the OLD logic. Safe to recompute (not
+  confirmed; the settled-guard only defends confirmed/paid). Under deployed
+  logic ≈ RM3,940.00; with the audit fixes Absah moves −0.50h further
+  (adjusted-hours honored). Recompute before confirming.
+
 - 2026-08-14 — **Ads agent-loop audit (full pass, probe day 11/14): loop is
   healthy, verdict is predictable, and the probe REVERSED the early read —
   Tamarind's ads were earning their keep.** Replicated the probe's exact math
