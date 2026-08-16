@@ -55,7 +55,13 @@ export async function GET(req: NextRequest) {
     module: "hr",
     targetId: runId,
     targetName: `${type} · ${run.period_month}/${run.period_year}`,
-    details: { run_id: runId, file_type: type },
+    details: {
+      run_id: runId,
+      file_type: type,
+      // An acknowledged-omissions download is a deliberate decision — keep it
+      // visible in the audit trail (see the skipped-staff 409 below).
+      ...(searchParams.get("ack_skips") === "1" ? { ack_skips: true } : {}),
+    },
     request: req,
   });
 
@@ -138,6 +144,35 @@ export async function GET(req: NextRequest) {
     period_year: run.period_year,
     payment_date: fallbackPaymentDate,
   };
+
+  // The bank file SILENTLY OMITS anyone with no bank account or net ≤ 0 — and
+  // the only signal used to be a count in the X-Summary header, which the UI's
+  // navigation-download never read. Finance would upload the file and one
+  // staffer just wouldn't get paid, with no visible trace. Now the omission
+  // list comes back as a 409 the caller must acknowledge (ack_skips=1) before
+  // the file is produced; the acknowledgement lands in the download audit log.
+  const ackSkips = searchParams.get("ack_skips") === "1";
+  if (type === "maybank" && !ackSkips) {
+    const omitted = employees
+      .filter((e) => !e.bankAccountNumber || e.netPay <= 0)
+      .map((e) => ({
+        name: e.fullName || e.name,
+        why: !e.bankAccountNumber ? "no bank account on file" : "net pay is zero or negative",
+      }));
+    if (omitted.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            `This payment file will OMIT ${omitted.length} staff: ` +
+            omitted.map((o) => `${o.name} (${o.why})`).join("; ") +
+            `. They will not be paid by this upload. Re-request with ack_skips=1 to generate anyway.`,
+          reason: "skipped_staff",
+          skipped: omitted,
+        },
+        { status: 409 },
+      );
+    }
+  }
 
   let result;
   switch (type) {
