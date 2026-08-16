@@ -539,33 +539,60 @@ function probeUp(c: CampaignState, guard: GuardSignal, why: string): AutopilotDe
 // the cut cap and the fleet stagger, and they don't reset the spacing clock.
 // Blind steps ("autopilot step-down 8% …") carry no parenthesis.
 const isWasteMatched = (d: AutopilotDecision) => d.reason.startsWith("autopilot step-down (");
+// Owner-directive raises are explicit human calls, not experiments — exempt
+// from fleet spacing the same way owner-directive step-downs are.
+const isOwnerDirective = (d: AutopilotDecision) => d.reason.startsWith("owner directive");
 
 /**
- * One-time owner directives. 2026-07-19: "let tamarind follow the others.
- * start with the prev cut (rm80+)" — the Jul 17 rollback was a proven false
- * positive, so Tamarind resumes the fleet's gradual descent at its
- * pre-rollback level. Self-expiring: fires only while the campaign's last
- * applied change is still that rollback; once this step-down lands it can
- * never fire again.
+ * One-time owner directives. Each must be genuinely self-expiring — spent
+ * state, not just a threshold that can re-arm (see the hardCutDirective
+ * post-mortem below) — and is deleted once confirmed applied.
+ *
+ * 2026-08-16: "undo the cut" — Putrajaya's Aug 12 step-down (RM43.36→38.16)
+ * landed in the same week Conezion's till slid ~21% WoW. The timing evidence
+ * points at the mall, not the cut (the slide began Aug 10, two days BEFORE
+ * the cut, and the index read 1.02/1.08 through six weeks of descent) — but
+ * this campaign is the fleet's best cost/conv and Tamarind's pause probe
+ * proved cuts on a cash-generating campaign bite on a lag, so the owner is
+ * buying the cut back (+RM5.20/day) as bounded insurance while the dip is
+ * diagnosed.
+ *
+ * The reason string deliberately does NOT start with "autopilot raise":
+ * lastKind must read "other" (a human call — observed like a step, never
+ * auto-reverted). The raise-evaluation branch reverts a raise on guard
+ * breach, and Conezion's till is soft for reasons that predate the cut — an
+ * "autopilot raise" row would be undone by the very dip that motivated it.
+ *
+ * Self-expiring on BOTH axes: fires only while the campaign's last applied
+ * change is still the Aug 12 step-down to RM38.16 (the raise itself replaces
+ * that, so it can never re-fire), and never after 2026-08-23 regardless of
+ * state.
  */
-export function ownerDirective(c: CampaignState): AutopilotDecision | null {
+export function ownerDirective(c: CampaignState, now: Date = new Date()): AutopilotDecision | null {
   if (
-    c.campaignName.includes("Tamarind") &&
+    c.campaignName === "Celsius Putrajaya" &&
     !c.isPaused &&
-    lastKind(c.lastApplied) === "rollback" &&
-    c.dailyBudgetMyr > 85
+    now.getTime() < Date.parse("2026-08-23T00:00:00Z") &&
+    lastKind(c.lastApplied) === "step-down" &&
+    round2(c.lastApplied?.newDailyMyr ?? 0) === 38.16 &&
+    round2(c.dailyBudgetMyr) === 38.16
   ) {
     return {
       campaignId: c.campaignId,
       campaignName: c.campaignName,
-      action: "cut",
-      newDailyMyr: 84.96,
+      action: "raise",
+      newDailyMyr: 43.36,
       reason:
-        "autopilot step-down (owner directive 2026-07-19): the Jul 17 rollback was a false positive (till flat in absolute RM) — resume the gradual descent at the prior cut level RM84.96/day",
+        "owner directive 2026-08-16 (undo the Aug 12 cut): Conezion till −21% WoW while the descent read healthy — RM38.16→RM43.36/day (+RM156/mo) as bounded insurance while the dip is diagnosed; a human call, not a probe — do not auto-revert",
     };
   }
   return null;
 }
+
+// REMOVED 2026-08-16: the 2026-07-19 Tamarind resume-descent directive. It did
+// its job on 2026-07-20, but its guard (lastKind "rollback" && budget > RM85)
+// was the re-armable-trap class the hardCutDirective post-mortem warns about:
+// any future rollback restoring Tamarind above RM85 would have re-fired it.
 
 // REMOVED 2026-08-15: hardCutDirective, the one-time owner directive of
 // 2026-07-19 that cut Putrajaya / Shah Alam / Tamarind to RM55/day. It did its
@@ -618,7 +645,7 @@ export function spaceDisturbances(
   // pre-pause forecast, the controls' small cuts move their tills <1%, and
   // the owner ordered the baseline — only blind cuts and raises stagger.
   return decisions.map((d) =>
-    (d.action === "cut" && !isWasteMatched(d)) || d.action === "raise"
+    (d.action === "cut" && !isWasteMatched(d)) || (d.action === "raise" && !isOwnerDirective(d))
       ? {
           campaignId: d.campaignId,
           campaignName: d.campaignName,
@@ -1182,7 +1209,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
 
   const baseDecisions = states.map((s) => {
     const guard = s.outletId ? guards[s.outletId] ?? noGuard : noGuard;
-    const directive = ownerDirective(s);
+    const directive = ownerDirective(s, now);
     return directive ?? decideCampaign(s, guard, now);
   });
   const withProbe = PAUSE_PROBE_ENABLED ? selectPauseProbe(capCuts(baseDecisions, states), states, guards) : capCuts(baseDecisions, states);

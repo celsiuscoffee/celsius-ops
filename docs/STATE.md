@@ -2084,19 +2084,52 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   `PAUSE_PROBE_DAYS` 14 → 11.5: by day 12 the verdict was mathematically
   locked (index 0.875 through Aug 14; +22%/day needed to flip) and each extra
   dark day cost ~RM70–117 net margin. 11.5 not 12 so tonight's Aug 15 19:01
-  run clears the daysSince race vs the 19:01:30 pause row. Expected tonight:
-  RESTORE at RM46.32/day, "ads generate cash", window Aug 4–15. Session
-  check-in armed 2026-08-15 19:25 UTC. Then the night after (~Aug 16/17
-  19:01): `autopilot pause: probe start` for PUTRAJAYA, ~12-day probe,
-  verdict ~Aug 28. Also shipped: paused-campaign outlets are now EXCLUDED
+  run clears the daysSince race vs the 19:01:30 pause row. **OUTCOME (verified):
+  the owner then said "can we restore now" — a one-time cron nudge (#1139,
+  ads-daily → 14:45 UTC, reverted same day in #1143) fired the run early and
+  the RESTORE applied at 14:46:20 UTC**: ledger `applied`, "autopilot restore:
+  pause probe VERDICT — ads generate cash (pause-window till index 0.88,
+  fleet-adj 0.87)", RM46.32/day, campaign ENABLED. The normal 19:01 run then
+  fired on the restored `0 19 * * *` schedule (all 5 sync steps OK) with zero
+  budget changes.
+  **The predicted PUTRAJAYA pause probe did NOT start and will not under
+  current metrics**: `selectPauseProbe` requires efficiencyRatio > 1.3×
+  fleet-best, and the 30-day benchmark has SHIFTED — Putrajaya is now the
+  fleet-BEST at RM7.26/conv (Shah Alam 7.56 → 1.04×; Tamarind 15.58 → 2.15×
+  but excluded, already probed once by design). Tamarind's paused days
+  polluted its 30-day window and moved the benchmark to Putrajaya, whose
+  ratio is 1.0 — the probe fires only if Putrajaya's relative efficiency
+  degrades past 1.3× later. The "~Aug 28 Putrajaya verdict" timeline is VOID;
+  probing the fleet's most efficient campaign would be wrong and the gate is
+  working as designed. Also shipped: paused-campaign outlets are now EXCLUDED
   from every fleet median (nightly guard `others` + probe-verdict controls) —
   a probed outlet's manipulated till no longer pollutes siblings' adjIndex
   (observed 2026-08-12: paused Tamarind pulled SA's control median to 0.9795
   vs 1.019 clean). Tamarind recovery check (reversal test, A=ads vs B=local
-  factor) armed 2026-08-25 09:00 UTC — restore date is now Aug 15/16, so it
-  gets ~9 post-restore days.
-  Remaining cleanup (after the Putrajaya verdict, NOT before — do not change
-  the instrument mid-measurement): (1) probe verdicts should require
+  factor) armed 2026-08-25 09:00 UTC — restore landed Aug 15 14:46, so it
+  gets ~10 post-restore days.
+- 2026-08-16 — **Conezion (Putrajaya outlet) slid ~21% WoW (Aug 10–16 vs
+  Aug 3–9); owner directive shipped to undo the Aug 12 Putrajaya ad cut.**
+  Decomposition: footfall −14% (orders 967→830/wk), AOV −8% (RM30.75→28.26),
+  stockouts ~RM650–900/wk (Pomegranate/Citrus teas + Truffle Fries sold zero
+  all week; Chocolate Cake Bars, Burnt Cheesecake, NYC Smores, Biscoff Batik
+  went dark Aug 14–16 — restock list sent to owner). NOT the payday cycle:
+  same-cycle week mid-July was RM28.4k vs this RM23.5k (−17% MoM) while Shah
+  Alam rose +7% MoM; July's own mid-month dip was only −6%. NOT ads by
+  timing: slide began Aug 10, two days before the Aug 12 cut, walk-in and
+  dine-in QR fell proportionally, index read healthy through the descent.
+  Google rating ticked 4.8→4.7 ~Aug 11 (couple of low reviews — worth
+  reading, too small to cause this). Prime suspect: IOI Conezion mall
+  footfall (owner asking the manager). Owner: "undo the cut" → ownerDirective
+  raises Putrajaya RM38.16→43.36/day at the Aug 16 19:01 run; reason starts
+  "owner directive" so lastKind reads "other" (never auto-reverted — an
+  "autopilot raise" row would be reverted by the very breach that motivated
+  it); self-expires once applied and hard-expires 2026-08-23. Spent Jul-19
+  Tamarind directive removed (re-armable trap class). Tamarind post-restore:
+  first Sunday +24% vs pause-Sunday — recovery tracking; A/B/A read Aug 25.
+  Remaining cleanup (no probe is now running, so the do-not-change-the-
+  instrument freeze is LIFTED until a new probe starts): (1) probe verdicts
+  should require
   adj-confirmation, not raw-OR-adj — the payday/mom safeguards don't apply in
   the probe path; (2) add `source<>'grabfood'` to organic-revenue.ts's pos
   branch, with tests; (3) consider restoring PAUSE_PROBE_DAYS to 14 for any
