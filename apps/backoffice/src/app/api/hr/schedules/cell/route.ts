@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { outlet_id, week_start, user_id, shift_date, template_id, custom, retro_reason } = body as {
+  const { outlet_id, week_start, user_id, shift_date, template_id, custom, retro_reason, override_block } = body as {
     outlet_id: string;
     week_start: string;
     user_id: string;
@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
     template_id: string | null;
     custom?: { start_time: string; end_time: string; break_minutes?: number; label?: string };
     retro_reason?: string | null;
+    /** Explicit yes to roster a shift on a date the staffer blocked. */
+    override_block?: boolean;
   };
 
   if (!outlet_id || !week_start || !user_id || !shift_date) {
@@ -67,6 +69,30 @@ export async function POST(req: NextRequest) {
     }
     if (prof?.join_date && shift_date < prof.join_date) {
       return NextResponse.json({ error: `They start on ${prof.join_date} — can't schedule before it` }, { status: 400 });
+    }
+  }
+
+  // Availability block: placing a REAL shift on a date the staffer declared
+  // unavailable needs an explicit yes. Nothing checked this before, which is
+  // one half of how a shift ends up hidden UNDER a blocked cell (the other
+  // half: staff blocking a date that already had a shift). Clearing the cell
+  // or setting a rest day is always allowed — both agree with the block.
+  if (template_id && template_id !== REST_DAY_ID && !override_block) {
+    const { data: block } = await hrSupabaseAdmin
+      .from("hr_staff_availability")
+      .select("reason")
+      .eq("user_id", user_id)
+      .eq("date", shift_date)
+      .eq("availability", "unavailable")
+      .maybeSingle();
+    if (block) {
+      return NextResponse.json(
+        {
+          error: `They marked ${shift_date} as unavailable${block.reason ? ` (${block.reason})` : ""}. Pass override_block to roster them anyway.`,
+          reason: "blocked_date",
+        },
+        { status: 409 },
+      );
     }
   }
 
