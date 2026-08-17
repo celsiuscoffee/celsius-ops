@@ -3,7 +3,7 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, MapPin, MapPinOff, Clock, Timer, Loader2, ImageOff, PencilLine, Smartphone, Hand, WifiOff } from "lucide-react";
-import { usePrompt } from "@celsius/ui";
+import { usePrompt, toast } from "@celsius/ui";
 import { HrPageHeader } from "@/components/hr/page-header";
 import type { AttendanceLog } from "@/lib/hr/types";
 
@@ -118,38 +118,53 @@ export default function AttendanceReviewPage() {
     setEditCO(toMytInput(log.clock_out));
   };
 
-  const handleSetTimes = async (id: string) => {
-    const clockInIso = fromMytInput(editCI);
-    const clockOutIso = fromMytInput(editCO);
-    if (!clockOutIso) return; // a clock-out time is required
+  // Every review action must SAY whether it worked. These buttons used to fire
+  // the PATCH and silently refresh — a failed request (flaky phone connection,
+  // permission refusal) looked identical to success, so managers pressed
+  // Reject repeatedly convinced the button was broken (Putrajaya, 2026-08-17).
+  const patchAttendance = async (id: string, body: Record<string, unknown>, okMessage: string): Promise<boolean> => {
     setReviewingId(id);
     try {
       const res = await fetch("/api/hr/attendance", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action: "set_times", clockIn: clockInIso, clockOut: clockOutIso }),
+        body: JSON.stringify({ id, ...body }),
       });
-      if (res.ok) {
-        setEditingId(null);
-        mutate();
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        toast.error(j?.error ?? `Failed (${res.status}) — nothing was changed. Try again.`);
+        return false;
       }
+      toast.success(okMessage);
+      mutate();
+      return true;
+    } catch {
+      toast.error("Network error — nothing was changed. Check your connection and try again.");
+      return false;
     } finally {
       setReviewingId(null);
     }
   };
 
-  const handleReview = async (id: string, action: "acknowledge" | "excuse" | "reject", excuseReason?: string) => {
-    setReviewingId(id);
-    try {
-      await fetch("/api/hr/attendance", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action, excuseReason }),
-      });
-      mutate();
-    } finally {
-      setReviewingId(null);
+  const handleSetTimes = async (id: string) => {
+    const clockInIso = fromMytInput(editCI);
+    const clockOutIso = fromMytInput(editCO);
+    // Same silent-failure family as the review buttons: an empty clock-out
+    // made Save a no-op with no explanation.
+    if (!clockOutIso) {
+      toast.error("A clock-out time is required — set it before saving.");
+      return;
     }
+    const ok = await patchAttendance(id, { action: "set_times", clockIn: clockInIso, clockOut: clockOutIso }, "Times updated");
+    if (ok) setEditingId(null);
+  };
+
+  const handleReview = async (id: string, action: "acknowledge" | "excuse" | "reject", excuseReason?: string) => {
+    const okMessage =
+      action === "reject" ? "Rejected — this log will not be paid"
+      : action === "excuse" ? "Excused"
+      : "Acknowledged";
+    await patchAttendance(id, { action, excuseReason }, okMessage);
   };
 
   const handleExcuse = async (id: string) => {

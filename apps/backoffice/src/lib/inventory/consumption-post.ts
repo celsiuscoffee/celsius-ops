@@ -1,14 +1,25 @@
 import { prisma } from "@/lib/prisma";
 import { adjustStockBalance } from "@/lib/stock";
-import { aggregateConsumption, reasonMarker, type ConsumptionResult, type RecipeLine } from "@/lib/inventory/consumption";
+import { reasonMarker, type ConsumptionResult } from "@/lib/inventory/consumption";
+import { expandSoldLines, type RecipeLine as ExpandRecipeLine } from "@celsius/db";
 
-// DB orchestration for the consumption engine (pure core in consumption.ts).
+// DB orchestration for the consumption engine (pure expansion in
+// @celsius/db/recipe-expand, shared with the variance tooling).
 //
 // SAFETY: shadow by default. Live posting writes negative StockAdjustments +
-// decrements StockBalance, but StockBalance is currently fragmented by package
-// (receivings write package-keyed rows, consumption would write the base/null-
-// package row), so the decrement is only correct once stock units are normalised
-// to base UOM. Keep CONSUMPTION_ENGINE_ENABLED off until then.
+// decrements StockBalance. Before arming, note that the POS DB trigger
+// (pos_order_items_stock_ins → pos_apply_item_stock) ALREADY depletes stock at
+// sale time for the POS channel — running both live would double-deduct. The
+// plan of record (2026-08-17) is: validate this engine in shadow against the
+// daily counts, then replace the trigger with it. Keep
+// CONSUMPTION_ENGINE_ENABLED off until the trigger is dropped.
+//
+// Why this exists when the trigger does sale-time depletion: the trigger is
+// POS-only (the customer app's `orders` are never depleted — 12–20% of
+// ingredient demand), modifier-blind until the 2026-08-17 hotfix and modifier-
+// ignoring after it, and writes no audit rows. This engine covers both
+// channels, honours modifier scoping / oat substitution / service mode via
+// expandSoldLine, and leaves a StockAdjustment per product per day.
 
 /**
  * Compute (and, when live, post) one outlet's consumption for a single MYT day.
@@ -19,6 +30,20 @@ import { aggregateConsumption, reasonMarker, type ConsumptionResult, type Recipe
 // PICKUP_PAID_STATUSES in api/sales/_lib/unified-sales.ts): a paid order is
 // prepared, so its ingredients are consumed even if not yet collected.
 const PICKUP_STATUSES = ["paid", "preparing", "ready", "collected", "completed"];
+
+type SoldRow = {
+  menu_id: string | null;
+  qty: number;
+  modifiers: unknown;
+  order_type: string | null;
+};
+
+/** Map a channel's order_type to the recipe serviceMode gate. */
+function toServiceMode(orderType: string | null): "DINE_IN" | "TAKEAWAY" | null {
+  if (orderType === "dine_in") return "DINE_IN";
+  if (orderType === "takeaway" || orderType === "pickup") return "TAKEAWAY";
+  return null; // unknown channel: serviceMode-scoped lines still apply (see expandSoldLine)
+}
 
 export async function postOutletConsumption(opts: {
   outletId: string;
@@ -32,6 +57,7 @@ export async function postOutletConsumption(opts: {
   dayEndUtc: Date;
   live: boolean;
   systemUserId?: string | null; // required to post live (StockAdjustment.adjustedById FK)
+  /** @deprecated unused — both channels now carry a real per-order type. */
   takeawayRatio?: number;
 }): Promise<ConsumptionResult> {
   const { outletId, outletName, date, dayStartUtc, dayEndUtc } = opts;
@@ -39,50 +65,95 @@ export async function postOutletConsumption(opts: {
   // in shadow mode no matter the flag.
   const live = opts.live && !!opts.systemUserId;
 
-  // Live sales for the MYT day: POS-native + pickup app, both mapped to Menu
-  // via Menu.storehubId = item.product_id (same join as the demand model,
-  // lib/hr/demand.ts). menu_id NULL = item sold that maps to no Menu row —
-  // surfaced as itemsUnmapped instead of silently dropped.
-  const sales = await prisma.$queryRaw<{ menu_id: string | null; qty: number }[]>`
-    SELECT u.menu_id, SUM(u.qty)::float AS qty FROM (
-      SELECT m.id AS menu_id, i.quantity::float AS qty
-      FROM pos_order_items i
-      JOIN pos_orders o ON o.id = i.order_id
-      LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
-      WHERE o.outlet_id = ${opts.loyaltyOutletId ?? ""}
-        AND o.status = 'completed' AND o.refund_of_order_id IS NULL
-        AND o.created_at >= ${dayStartUtc} AND o.created_at < ${dayEndUtc}
-      UNION ALL
-      SELECT m.id, i.quantity::float
-      FROM order_items i
-      JOIN orders o ON o.id = i.order_id
-      LEFT JOIN "Menu" m ON m."storehubId" = i.product_id
-      WHERE o.store_id = ${opts.pickupStoreId ?? ""}
-        AND o.status = ANY(${PICKUP_STATUSES})
-        AND o.created_at >= ${dayStartUtc} AND o.created_at < ${dayEndUtc}
-    ) u GROUP BY u.menu_id`;
-  const salesByMenu = new Map<string, number>();
+  // Per-LINE sales for the MYT day — not aggregated by menu, because the
+  // modifiers on each line decide which recipe rows apply (temperature doses,
+  // oat substitution, Extra Shot). Menu resolution prefers the catalog link
+  // (Menu.storehubId = product_id) and falls back to the name join the
+  // variance tooling validated at 99.3% unit coverage; LATERAL + LIMIT 1 so a
+  // line can never fan out across two menus. POS quantities are net of
+  // refunds; the app table has no partial refunds.
+  const sales = await prisma.$queryRaw<SoldRow[]>`
+    SELECT m.id AS menu_id,
+           (i.quantity - COALESCE(i.refunded_quantity, 0))::float AS qty,
+           i.modifiers,
+           o.order_type
+    FROM pos_order_items i
+    JOIN pos_orders o ON o.id = i.order_id
+    LEFT JOIN LATERAL (
+      SELECT mm.id FROM "Menu" mm
+      WHERE mm."storehubId" = i.product_id
+         OR lower(btrim(mm.name)) = lower(btrim(i.product_name))
+      ORDER BY (mm."storehubId" = i.product_id) DESC, mm."isActive" DESC, mm."updatedAt" DESC
+      LIMIT 1
+    ) m ON true
+    WHERE o.outlet_id = ${opts.loyaltyOutletId ?? ""}
+      AND o.status = 'completed' AND o.refund_of_order_id IS NULL
+      AND o.created_at >= ${dayStartUtc} AND o.created_at < ${dayEndUtc}
+    UNION ALL
+    SELECT m.id,
+           i.quantity::float,
+           i.modifiers,
+           o.order_type
+    FROM order_items i
+    JOIN orders o ON o.id = i.order_id
+    LEFT JOIN LATERAL (
+      SELECT mm.id FROM "Menu" mm
+      WHERE mm."storehubId" = i.product_id
+         OR lower(btrim(mm.name)) = lower(btrim(i.product_name))
+      ORDER BY (mm."storehubId" = i.product_id) DESC, mm."isActive" DESC, mm."updatedAt" DESC
+      LIMIT 1
+    ) m ON true
+    WHERE o.store_id = ${opts.pickupStoreId ?? ""}
+      AND o.status = ANY(${PICKUP_STATUSES})
+      AND o.created_at >= ${dayStartUtc} AND o.created_at < ${dayEndUtc}`;
+
+  const soldMenuIds = new Set<string>();
   let itemsUnmapped = 0;
   for (const s of sales) {
-    if (s.menu_id) salesByMenu.set(s.menu_id, (salesByMenu.get(s.menu_id) ?? 0) + Number(s.qty));
+    if (s.menu_id) soldMenuIds.add(s.menu_id);
     else itemsUnmapped += Number(s.qty);
   }
 
-  const recipes = salesByMenu.size
+  // Full recipe rows for the sold menus — modifier and replacesProductId
+  // included, because dropping them is exactly the bug that made the POS
+  // trigger charge every coffee both milks and a double bean dose.
+  const recipes = soldMenuIds.size
     ? await prisma.menuIngredient.findMany({
-        where: { menuId: { in: [...salesByMenu.keys()] } },
-        select: { menuId: true, productId: true, quantityUsed: true, serviceMode: true },
+        where: { menuId: { in: [...soldMenuIds] } },
+        select: {
+          menuId: true,
+          productId: true,
+          quantityUsed: true,
+          serviceMode: true,
+          modifier: true,
+          replacesProductId: true,
+        },
       })
     : [];
-  const recipeMap = new Map<string, RecipeLine[]>();
+  const recipeMap = new Map<string, ExpandRecipeLine[]>();
   for (const r of recipes) {
     const arr = recipeMap.get(r.menuId) ?? [];
-    arr.push({ productId: r.productId, quantityUsed: Number(r.quantityUsed), serviceMode: r.serviceMode });
+    arr.push({
+      productId: r.productId,
+      quantityUsed: Number(r.quantityUsed),
+      serviceMode: r.serviceMode,
+      modifier: r.modifier,
+      replacesProductId: r.replacesProductId,
+    });
     recipeMap.set(r.menuId, arr);
   }
-  const menusWithoutRecipe = [...salesByMenu.keys()].filter((m) => !recipeMap.has(m)).length;
+  const menusWithoutRecipe = [...soldMenuIds].filter((m) => !recipeMap.has(m)).length;
 
-  const consumed = aggregateConsumption(salesByMenu, recipeMap, opts.takeawayRatio);
+  const consumed = expandSoldLines(
+    sales
+      .filter((s) => s.menu_id && recipeMap.has(s.menu_id) && Number(s.qty) > 0)
+      .map((s) => ({
+        units: Number(s.qty),
+        modifiers: s.modifiers,
+        serviceMode: toServiceMode(s.order_type),
+        recipe: recipeMap.get(s.menu_id!)!,
+      })),
+  );
 
   // Idempotency: did we already post this outlet+date?
   const already = await prisma.stockAdjustment.findFirst({
@@ -130,7 +201,7 @@ export async function postOutletConsumption(opts: {
     date,
     posted: live && !alreadyPosted && lines.length > 0,
     alreadyPosted,
-    menusSold: salesByMenu.size,
+    menusSold: soldMenuIds.size,
     menusWithoutRecipe,
     itemsUnmapped,
     productsConsumed: lines.length,
