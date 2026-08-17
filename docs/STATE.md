@@ -6,6 +6,23 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-17 — **"Downloaded but didn't get 10% first order" (customer
+  019-2448782 / +60192448782) — the discount WAS applied and charged.**
+  Member created 08:09Z, order `C-5473` 08:17Z (`app_ios`, dine-in, Shah
+  Alam): subtotal RM54.60, `first_order_discount_amount=546` (exactly 10%),
+  FPX charged the discounted total **RM49.14** (provider ref
+  `260817081703300416985246`, status preparing). No money owed. Likely
+  perception gap: PR #1118 (checkout-preview FOD line, merged 2026-08-06)
+  ships via OTA, but a **fresh install runs the store-embedded bundle on
+  first launch** — if that binary predates #1118, checkout showed no
+  discount line while the charge included it. The order-detail screen
+  (`pickup-native/app/order/[id].tsx`) does render "First order discount
+  −RM5.46", so the customer can verify in-app under Orders → C-5473.
+  Support reply: point them at the receipt line + RM49.14 bank charge vs
+  RM54.60 subtotal. Follow-up worth considering: cut a new store binary so
+  the embedded bundle includes #1118 (second complaint of this shape after
+  +60196098892 on 2026-08-06).
+
 - 2026-08-15 — **Estate-wide loop QA sweep done (every loop, all four arms:
   trigger→action→measure→feedback). Full report: `docs/design/loop-qa-2026-08-15.md`.**
   Headline: the fully-automated loops are healthy and were caught changing their
