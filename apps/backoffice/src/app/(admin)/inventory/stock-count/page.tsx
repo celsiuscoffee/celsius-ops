@@ -293,14 +293,25 @@ export default function StockCountPage() {
               <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400">No stock counts found</td></tr>
             )}
             {filtered.map((sc) => {
-              const discrepancies = sc.items.filter((i) => {
-                if (i.countedQty == null || i.expectedQty == null) return false;
-                return i.countedQty !== i.expectedQty;
-              }).length;
-              const unresolvedDiscrepancies = sc.items.filter((i) => {
-                if (i.countedQty == null || i.expectedQty == null) return false;
-                return i.countedQty !== i.expectedQty && !i.varianceReason;
-              }).length;
+              // Same base-UOM conversion the dialog's getVariance does. These
+              // two filters used to subtract package units from base units
+              // directly — harmless only while expectedQty was null estate-wide,
+              // but the moment finalize starts snapshotting it, "120 bottles"
+              // vs "118,000 ml" would flag every line as a discrepancy.
+              const countedInBase = (i: StockCountItem) =>
+                i.countedQty! * (i.packageConversion > 0 ? i.packageConversion : 1);
+              const comparable = sc.items.filter(
+                (i) => i.countedQty != null && i.expectedQty != null,
+              );
+              const countedItems = sc.items.filter((i) => i.countedQty != null).length;
+              const discrepancies = comparable.filter(
+                (i) => countedInBase(i) !== i.expectedQty,
+              ).length;
+              const unresolvedDiscrepancies = comparable.filter(
+                (i) => countedInBase(i) !== i.expectedQty && !i.varianceReason,
+              ).length;
+              // Counted but never compared — distinct from "compared and clean".
+              const uncheckedItems = countedItems - comparable.length;
               const StatusIcon = STATUS_ICON[sc.status] ?? Clock;
               return (
                 <tr key={sc.id} className="border-b border-gray-50 hover:bg-gray-50/50">
@@ -327,6 +338,14 @@ export default function StockCountPage() {
                           </Badge>
                         )}
                       </div>
+                    ) : comparable.length === 0 && countedItems > 0 ? (
+                      <span className="text-amber-700 text-xs" title="No expected stock was recorded, so nothing was compared">
+                        Not checked
+                      </span>
+                    ) : uncheckedItems > 0 ? (
+                      <span className="text-amber-700 text-xs" title={`${comparable.length} compared, ${uncheckedItems} had no expected stock`}>
+                        {uncheckedItems} unchecked
+                      </span>
                     ) : (
                       <span className="text-green-600 text-xs">All OK</span>
                     )}
@@ -382,9 +401,22 @@ export default function StockCountPage() {
               const v = getVariance(i);
               return v !== null && v !== 0;
             });
+            // A count with no expectedQty was never compared to anything.
+            // getVariance returns null there, so it lands in the same bucket as
+            // "checked and equal" — which is how a count where NOTHING was
+            // checked used to render a green "No discrepancies". Observed
+            // 2026-08-12 at Tamarind: 9 items, all expectedQty null, the review
+            // screen reported "None" while the shelf was 32kg short of the
+            // system on ICEHOT Foam. Silence about a missing check has to look
+            // different from a clean check.
+            const checkedCount = itemsWithVariance.filter((i) => getVariance(i) !== null).length;
+            const uncheckedCount = itemsWithVariance.length - checkedCount;
+            const nothingChecked = checkedCount === 0 && itemsWithVariance.length > 0;
             // Exception-only: show just the discrepancy rows unless the manager
-            // expands to the full list.
-            const visibleItems = showAllItems ? itemsWithVariance : discrepancyItems;
+            // expands to the full list. When nothing was checked there are no
+            // exception rows to show, so fall back to the full list rather than
+            // rendering an empty table under a "not checked" banner.
+            const visibleItems = showAllItems || nothingChecked ? itemsWithVariance : discrepancyItems;
 
             return (
               <>
@@ -413,10 +445,24 @@ export default function StockCountPage() {
                     <p className="text-[10px] text-gray-500 uppercase">Items</p>
                     <p className="text-sm font-semibold">{itemsWithVariance.length}</p>
                   </div>
-                  <div className={`rounded-lg border p-2.5 ${discrepancyCount > 0 ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}`}>
+                  <div className={`rounded-lg border p-2.5 ${
+                    discrepancyCount > 0 ? "border-red-200 bg-red-50"
+                      : uncheckedCount > 0 ? "border-amber-200 bg-amber-50"
+                      : "border-green-200 bg-green-50"
+                  }`}>
                     <p className="text-[10px] text-gray-500 uppercase">Discrepancies</p>
-                    <p className={`text-sm font-semibold ${discrepancyCount > 0 ? "text-red-600" : "text-green-600"}`}>
-                      {discrepancyCount > 0 ? `${discrepancyCount} found` : "None"}
+                    <p className={`text-sm font-semibold ${
+                      discrepancyCount > 0 ? "text-red-600"
+                        : uncheckedCount > 0 ? "text-amber-700"
+                        : "text-green-600"
+                    }`}>
+                      {discrepancyCount > 0
+                        ? `${discrepancyCount} found`
+                        : nothingChecked
+                          ? "Not checked"
+                          : uncheckedCount > 0
+                            ? `${uncheckedCount} unchecked`
+                            : "None"}
                     </p>
                   </div>
                 </div>
@@ -424,11 +470,15 @@ export default function StockCountPage() {
                 {/* Exception-only review: discrepancies first, expandable to all */}
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <p className="text-xs text-gray-500">
-                    {discrepancyCount === 0
-                      ? "No discrepancies — nothing to review"
-                      : showAllItems
+                    {discrepancyCount > 0
+                      ? showAllItems
                         ? `Showing all ${itemsWithVariance.length} items`
-                        : `Showing ${discrepancyCount} discrepanc${discrepancyCount === 1 ? "y" : "ies"} only`}
+                        : `Showing ${discrepancyCount} discrepanc${discrepancyCount === 1 ? "y" : "ies"} only`
+                      : nothingChecked
+                        ? "Not checked — no expected stock was recorded for this count"
+                        : uncheckedCount > 0
+                          ? `${checkedCount} checked and clean · ${uncheckedCount} had no expected stock to compare`
+                          : "No discrepancies — nothing to review"}
                   </p>
                   {itemsWithVariance.length > discrepancyItems.length && (
                     <button
@@ -442,12 +492,30 @@ export default function StockCountPage() {
                   )}
                 </div>
 
-                {discrepancyCount === 0 && !showAllItems ? (
+                {/* Never claim a clean bill of health for a count that was never
+                    compared. This is a banner rather than a replacement for the
+                    table: when nothing was checked, the counted figures are
+                    exactly what the manager needs to see. */}
+                {nothingChecked && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex gap-2.5">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">Not checked</p>
+                      <p className="text-xs text-amber-700/90">
+                        No expected stock was recorded for any of these {itemsWithVariance.length} items,
+                        so nothing was compared. The figures below are what was counted, not a verified result.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {discrepancyCount === 0 && !nothingChecked && !showAllItems ? (
                   <div className="mt-2 rounded-lg border border-green-200 bg-green-50 px-4 py-4 text-center">
                     <CheckCircle2 className="h-5 w-5 text-green-600 mx-auto" />
                     <p className="mt-1.5 text-sm font-medium text-green-700">No discrepancies found</p>
                     <p className="text-xs text-green-600/80">
-                      All {itemsWithVariance.length} counted items are in line — nothing to action.
+                      All {checkedCount} checked items are in line — nothing to action.
+                      {uncheckedCount > 0 && ` ${uncheckedCount} had no expected stock to compare against.`}
                     </p>
                   </div>
                 ) : (

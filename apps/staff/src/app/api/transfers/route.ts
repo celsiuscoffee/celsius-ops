@@ -93,10 +93,18 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Subtract from source outlet immediately when transfer is created (parallel)
+  // Subtract from source outlet immediately when transfer is created.
+  // Transfer lines are keyed in PACKAGE units ("5 packs") but StockBalance is
+  // base UOM — convert through the line's package factor, same rule as
+  // receiving and stock counts. This used to deduct the raw figure, so
+  // "5 packs (1000g)" left the sender as 5 grams.
   await Promise.all(
-    items.map((item: { productId: string; quantity: number }) =>
-      adjustStockBalance(fromOutletId, item.productId, -item.quantity),
+    transfer.items.map((item) =>
+      adjustStockBalance(
+        fromOutletId,
+        item.productId,
+        -Number(item.quantity) * Number(item.productPackage?.conversionFactor ?? 1),
+      ),
     ),
   );
 
