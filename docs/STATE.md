@@ -6,6 +6,46 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-17 — **A DATABASE TRIGGER depletes stock on every POS sale — found
+  after four sessions of hunting phantom balance movement.** `pos_order_items`
+  carries `pos_order_items_stock_ins` → `pos_apply_item_stock()` (SECURITY
+  DEFINER, plus a cancel-restore twin on `pos_orders`). It resolves the menu BY
+  NAME, sums MenuIngredient rows, and decrements `StockBalance` directly — no
+  StockAdjustment, no app-code trace, invisible to every `adjustStockBalance`
+  grep. Three facts about it: (1) POS-only — customer-app `orders` (12–20% of
+  demand) are never depleted; (2) it floors at zero (`greatest(0, …)`), silently
+  swallowing depletion when a balance is low; (3) it had NO modifier logic, so
+  when the 20260810 BOM migrations landed (32 Oatmilk substitution rows, 22
+  Extra Shot rows) it began charging every POS coffee 36 g of beans and BOTH
+  milks. Measured over-depletion 13→17 Aug: ~7.2 kg beans + ~50 L oat per
+  outlet. **Hotfixed** (owner-approved, `supabase/migrations/105_…`): the
+  trigger now reads `modifier IS NULL` rows only — which also ends its old
+  Iced+Hot double-syrup charge. Tamarind's nightly counts had been resetting
+  its drift; Putrajaya/Shah Alam (no count since 9/7 Aug) carry it until their
+  next count overwrites balances — no data repair needed beyond counting.
+  **Lesson: the app code is not the whole system. Check pg_trigger /
+  pg_get_functiondef before declaring "nothing writes X".**
+- 2026-08-17 — **Consumption engine rewired through `expandSoldLine`**
+  (`consumption-post.ts`): per-line modifiers + real order_type from BOTH
+  channels, storehubId-first menu join with the name fallback (LATERAL LIMIT 1,
+  no fan-out), refund-netted POS quantities, full recipe rows incl. `modifier`
+  + `replacesProductId`. The old engine aggregated by menu (losing modifiers),
+  dropped Affogato (null storehubId), and would have posted the same
+  double-milk bug as the trigger. Shadow telemetry has run nightly since
+  16 Jul into `consumption_shadow_runs` (19:00 UTC; scheduler is OUTSIDE
+  vercel.json — locate before assuming it can be changed there);
+  `menus_without_recipe` is now 0. **Plan of record: validate shadow vs daily
+  counts (assume unreceived movements: PO-due deliveries + pending transfers),
+  then REPLACE the trigger with the engine — never run both live
+  (double-deduction).** "Biscoff Batik Indulgence" = renamed "Matcha Batik
+  Indulgence" (POS product_id → that menu's storehubId); needs its own menu
+  row + recipe rather than inheriting matcha's.
+- 2026-08-17 — **Staff transfer routes moved RAW package units into the
+  base-UOM ledger** — "5 packs (1000g)" debited the sender 5 g on creation and
+  credited the receiver 5 g on completion. Fixed both sides to convert through
+  the line's package factor. Related leak: transfers stuck at PENDING debit
+  the sender and never credit the receiver (all three bean transfers into
+  Tamarind sit PENDING).
 - 2026-08-13 — **Receiving and stock counting were denominated in DIFFERENT
   package units, which is why no stock reconciliation ever tied out.** Counts
   are clean: every product counted since 1 Aug used exactly one package, zero

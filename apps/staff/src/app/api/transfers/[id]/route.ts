@@ -38,13 +38,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const transfer = await prisma.stockTransfer.update({
     where: { id },
     data,
-    include: { items: true },
+    include: { items: { include: { productPackage: true } } },
   });
 
-  // When transfer is completed, add stock to destination outlet
+  // When transfer is completed, add stock to destination outlet — in base UOM,
+  // converting the package-unit line quantity through its factor (mirrors the
+  // deduction on creation; both used to move the raw figure).
   if (status === "COMPLETED") {
     for (const item of transfer.items) {
-      await adjustStockBalance(transfer.toOutletId, item.productId, Number(item.quantity));
+      await adjustStockBalance(
+        transfer.toOutletId,
+        item.productId,
+        Number(item.quantity) * Number(item.productPackage?.conversionFactor ?? 1),
+      );
     }
   }
 
