@@ -149,7 +149,12 @@ export default function AttendanceReviewPage() {
   const handleSetTimes = async (id: string) => {
     const clockInIso = fromMytInput(editCI);
     const clockOutIso = fromMytInput(editCO);
-    if (!clockOutIso) return; // a clock-out time is required
+    // Same silent-failure family as the review buttons: an empty clock-out
+    // made Save a no-op with no explanation.
+    if (!clockOutIso) {
+      toast.error("A clock-out time is required — set it before saving.");
+      return;
+    }
     const ok = await patchAttendance(id, { action: "set_times", clockIn: clockInIso, clockOut: clockOutIso }, "Times updated");
     if (ok) setEditingId(null);
   };
