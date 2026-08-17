@@ -16,23 +16,33 @@ import { fetchAllRows } from "./fetch-all";
 // Tests the REAL implementation — an earlier revision tested a local copy,
 // which is exactly how the probation gate stayed "green" while dead.
 
-/** A fake table of `total` rows that honours .range() the way PostgREST does. */
+/**
+ * A fake table of `total` rows that honours .order().range() the way PostgREST
+ * does. The helper now forces an id-tiebreak ORDER BY before every range read
+ * (unordered pages can overlap/skip at boundaries), so the mock exposes the
+ * same chain and records that ordering was requested.
+ */
 const table = (total: number, opts: { errorAt?: number } = {}) => {
   let calls = 0;
+  let ordered = 0;
+  const rangeImpl = (from: number, to: number) => {
+    calls++;
+    if (opts.errorAt && calls === opts.errorAt) {
+      return Promise.resolve({ data: null, error: new Error("boom") });
+    }
+    const slice = Array.from(
+      { length: Math.max(0, Math.min(to, total - 1) - from + 1) },
+      (_, i) => ({ id: from + i }),
+    );
+    return Promise.resolve({ data: slice, error: null });
+  };
   const builder = {
-    range: (from: number, to: number) => {
-      calls++;
-      if (opts.errorAt && calls === opts.errorAt) {
-        return Promise.resolve({ data: null, error: new Error("boom") });
-      }
-      const slice = Array.from(
-        { length: Math.max(0, Math.min(to, total - 1) - from + 1) },
-        (_, i) => ({ id: from + i }),
-      );
-      return Promise.resolve({ data: slice, error: null });
+    order: (_column: string, _opts?: { ascending?: boolean }) => {
+      ordered++;
+      return { range: rangeImpl };
     },
   };
-  return { build: () => builder, calls: () => calls };
+  return { build: () => builder, calls: () => calls, ordered: () => ordered };
 };
 
 describe("fetchAllRows", () => {
@@ -82,13 +92,19 @@ describe("fetchAllRows", () => {
     const rows = await fetchAllRows(t.build);
     expect(rows.length).toBe(100_000);
   });
+
+  it("requests a stable ORDER BY on every page — unordered pages can overlap or skip", async () => {
+    const t = table(2500);
+    await fetchAllRows(t.build);
+    expect(t.ordered()).toBe(t.calls()); // one order() per range()
+  });
 });
 
 describe("what truncation did to the numbers", () => {
   it("the old behaviour was a silent first-page read", async () => {
     // No error, no signal — just 1000 of 7,626, which is why nothing caught it.
     const t = table(7626);
-    const { data } = await t.build().range(0, 999);
+    const { data } = await t.build().order("id").range(0, 999);
     expect(data!.length).toBe(1000);
     expect(1000 / 7626).toBeLessThan(0.14); // ~13% of the month
   });

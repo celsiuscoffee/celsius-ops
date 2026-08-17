@@ -49,7 +49,11 @@ async function handle(req: NextRequest) {
       module: "hr",
       targetId: targetUserId ?? runId,
       targetName: targetUserId ? null : "all-employee bundle",
-      details: { run_id: runId, user_id: targetUserId ?? "ALL" },
+      details: {
+        run_id: runId,
+        user_id: targetUserId ?? "ALL",
+        ...(searchParams.get("allow_provisional") === "1" ? { allow_provisional: true } : {}),
+      },
       request: req,
     });
   }
@@ -60,6 +64,23 @@ async function handle(req: NextRequest) {
     .eq("id", runId)
     .single();
   if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 });
+
+  // Status gate — this route had NONE while the submission-files route 409s on
+  // anything unconfirmed. A mid-month preview run (ai_computed, 0 OT, wrong
+  // PCB) could be rendered and distributed as a payslip with nothing on the
+  // PDF marking it provisional; recomputing later left issued PDFs matching
+  // nothing. Staff can never pull an unconfirmed slip; OWNER/ADMIN can pass
+  // allow_provisional=1 deliberately (it lands in the download audit entry).
+  const allowProvisional = canViewAll && searchParams.get("allow_provisional") === "1";
+  if (!["confirmed", "paid"].includes(run.status) && !allowProvisional) {
+    return NextResponse.json(
+      {
+        error: `Run is ${run.status} — payslips come from confirmed runs. ${canViewAll ? "Pass allow_provisional=1 to preview anyway (audit-logged)." : "Ask HR once payroll is confirmed."}`,
+        reason: "run_not_confirmed",
+      },
+      { status: 409 },
+    );
+  }
 
   const itemsQuery = hrSupabaseAdmin.from("hr_payroll_items").select("*").eq("payroll_run_id", runId);
   if (targetUserId) itemsQuery.eq("user_id", targetUserId);

@@ -57,7 +57,7 @@ export async function createWagePaymentSlips(
     orderBy: { txnDate: "desc" },
   });
 
-  const client = getFinanceClient();
+  const client = getFinanceClient("payment-slips-v1");
 
   // Which of these already have a slip? (source_ref = bank line id)
   const existing = new Set<string>();

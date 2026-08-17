@@ -193,7 +193,7 @@ export async function PATCH(req: NextRequest) {
   // 'adjust' can preserve the original overtime_type (PH/rest-day/weekday).
   const { data: existingLog } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("user_id, outlet_id, clock_in, clock_out, overtime_type, scheduled_start, scheduled_date")
+    .select("user_id, outlet_id, clock_in, clock_out, overtime_type, scheduled_start, scheduled_end, scheduled_date")
     .eq("id", id)
     .maybeSingle();
   if (!existingLog) {
@@ -262,8 +262,9 @@ export async function PATCH(req: NextRequest) {
       employmentType,
       isPublicHoliday: !!phResp.data,
       isRestDay: !!restResp.data,
-      // Early clock-in pays from the rostered start (stamped at clock-in).
+      // The paid window: only time inside the rostered shift counts.
       scheduledStart: mytInstant(existingLog.scheduled_date ?? mytDate, existingLog.scheduled_start),
+      scheduledEnd: mytInstant(existingLog.scheduled_date ?? mytDate, existingLog.scheduled_end),
     });
     const wasOpen = !existingLog.clock_out;
     const { data: updated, error: setErr } = await hrSupabaseAdmin

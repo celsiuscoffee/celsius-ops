@@ -18,7 +18,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
-import { logAgentAction } from "@celsius/agents/src/substrate";
+import { logAgentAction, touchAgentRun } from "@celsius/agents/src/substrate";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -191,6 +191,9 @@ export interface DataAnswer {
 }
 
 export async function answerDataQuestion(question: string, opts?: { askedBy?: string }): Promise<DataAnswer> {
+  // On-demand agent: a question arriving IS the run, so heartbeat before the
+  // early-exit below — otherwise a misconfigured key reads as "never ran".
+  await touchAgentRun("data_analyst");
   if (!process.env.ANTHROPIC_API_KEY) return { answer: "", error: "ANTHROPIC_API_KEY not set" };
   const catalog = await buildCatalog();
 

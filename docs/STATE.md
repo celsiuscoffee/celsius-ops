@@ -103,6 +103,340 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   table lacking it, par levels and the COGS report 500 on the first request. The
   other three `menuIngredient` callers use explicit `select` and were immune.
   **Check for unscoped `include:` queries before merging any additive column.**
+- 2026-08-15 — **Estate-wide loop QA sweep done (every loop, all four arms:
+  trigger→action→measure→feedback). Full report: `docs/design/loop-qa-2026-08-15.md`.**
+  Headline: the fully-automated loops are healthy and were caught changing their
+  own behaviour on evidence; the broken ones all hand their last arm to a human,
+  an external feed, or an external scheduler.
+  **Healthy (verified against prod, not assumed):** marketing engine — 7 live
+  loops, 432 rounds / 344 measured / **0 past their attribution window**, and
+  `fresh_lapse` **auto-killed itself 2026-08-13** ("+0.2pp lift, RM-2.16/recipient
+  after 1296 sends"). What looks like 4 dead loops is 3 recorded pauses
+  (`beans_idle` owner, `fresh_lapse` auto, both `round_gap` arms) — **check
+  `app_settings.loops_paused` before reporting a stopped loop.** Ads sync 5 kinds
+  OK 10/10; Tamarind probe in flight (status=3, RM46.32). Finance EOD→GL fresh.
+  Backoffice is at **38/40 Vercel cron slots**; of 20 cron routes absent from
+  `vercel.json`, all 20 are reachable via a dispatcher/lib/UI — no orphans.
+  **P1 — GBP geogrid burns half its monthly budget on failures. FIXED.** A `failed`
+  scan (all 81 grid points error) still writes a `GeoGridScan` row, and the gate
+  counts rows not successes (`scansThisMonth = count(*)`), so failures eat the
+  `GEOGRID_MONTHLY_SCAN_CAP=40` and can't be retried till next month. Aug 3 and
+  Jul 6 are identical: 13 complete / 7 partial / **20 failed**. Consequences:
+  **all 8 Shah Alam combos failed → the flagship outlet has no rank data**;
+  **IOI Mall has never been auto-scanned** (16 active keywords); Putrajaya had
+  zero August scans; and the weekly cadence is defeated because the month's
+  budget is spent on the first Monday (Aug 10, Jul 13/20/27 all returned
+  `capped`). 100%-failure on one outlet smells like a bad placeId/coords or a
+  keyed API restriction — **THAT GUESS IS WITHDRAWN, see root cause below.**
+  **Fix shipped:** cap now counts only `status <> 'failed'` (read AND
+  decrement); new `MAX_ATTEMPTS_PER_RUN` (60, above the 40 cap) bounds attempts
+  so "failures are free" can't become unbounded Places spend on a wholly-broken
+  outlet; `interleaveByOutlet` round-robins the due queue so the neediest outlet
+  leads but can't consume the run. Response now reports attempts/failed/errored
+  separately. Pinned by `lib/geogrid/scan-runner.test.ts`.
+  **ROOT CAUSE (2026-08-15, second pass) — IT IS PLACES RATE-LIMITING, NOT A
+  PER-OUTLET FAULT.** Shah Alam's placeId (`ChIJFcHSHJlNzDERtGh5CheG0XE`) and
+  coords (3.0733, 101.5185) are fine, and Tamarind (7) and Nilai (4) failed on
+  Aug 3 too. **Ordering the run by `createdAt` is what cracks it:** seq 1-7
+  complete (~4-5s each) → 10-14 failed (~1-2s, too fast to have called
+  anything) → **21-26 complete again** → 32-40 (all Shah Alam) failed.
+  **A run that RECOVERS mid-way is a rate limit; no per-outlet fault does that.**
+  `scanGrid` fired 8 concurrent Places calls/batch with no throttle/retry/backoff,
+  and the cron chains ~40 scans = ~3,240 calls flat out. Shah Alam reads 100%
+  broken only because it sits LAST in the queue. Fixed: retry w/ exponential
+  backoff + jitter on retryable statuses (429/5xx/no-status), fail fast on
+  400/401/403/404; new `PlacesApiError` carries the HTTP status; first failure
+  reason surfaced per scan as `why`; `RUN_DEADLINE_MS` 240s guard so retries
+  can't get the function killed mid-scan.
+  **IOI Mall is a DIFFERENT cause, also now handled:** its
+  `reviewSettings.gbpLocationName` is NULL so `runScan` THREW every time — it was
+  never budget starvation. Outlets with no GBP location are filtered before the
+  queue and reported as `skippedNoGbpLocation`. **Owner action: connect IOI
+  Mall's Google profile** (16 active keywords waiting).
+  **LESSON: "which outlet fails" is a distribution, not a diagnosis — sort by
+  time before believing an entity-specific story. And a failure that records no
+  reason WILL be misdiagnosed:** the loop stored `status='failed'` and nothing
+  else, so two months of daily evidence couldn't tell a throttled API from a
+  broken profile.
+  **P2 — reviews loop nudges on ARRIVAL but never on AGEING. Half fixed.**
+  31 drafts ever, **28 still `pending`** (oldest 2026-06-24, newest 2026-08-09),
+  1 resolved / 2 rejected, and **zero recovery codes ever issued or claimed** —
+  the recovery arm has never fired. Mechanism is a cadence gap, NOT a missing
+  nudge: `ops-nudge-review` runs every 5 min and DMs on-shift staff + managers,
+  but `recordBreach` dedupes per review **by design**, so each is nudged exactly
+  once on arrival and a draft nobody actions is never mentioned again. Added
+  `runReviewBacklogNudge()` (lib/ops-nudges) — pending drafts older than
+  `REVIEW_DRAFT_STALE_DAYS` (3) go out as a manager digest led by the OLDEST,
+  fired once daily by gating the existing 5-min route to one window (10:00 MYT),
+  so **no new Vercel cron slot** (we're at 38/40).
+  **NOT done, deliberately: arming negative-review auto-reply.** 1-3★ replies are
+  **already an explicit documented decision** — reviews-auto-reply/route.ts says
+  negatives "are never generated or posted… human-approval path until the
+  risk-classifier work lands. This is the zero-risk wedge." Arming it posts brand
+  replies to unhappy customers on a public Google profile: outward-facing, hard
+  to retract, contrary to a written stance. **Owner's call; wants the
+  risk-classifier first.**
+  **P3 — WITHDRAWN, the finding was WRONG.** I judged "starved" from table row
+  counts without checking which tables the code writes. **The AP/bank loop is
+  healthy:** `applyApMatches` reads `prisma.invoice` (3,027) +
+  `prisma.bankStatementLine` (**59,356**), and `fin_ap_match_rejections` has 4
+  rows = proof it ran and decided. `fin_documents` 37,628 (37,332 bank-feed
+  slips, fresh to Aug 14). **`fin_bank_transactions` and `fin_matches` have ZERO
+  code references anywhere** — dead schema from an old design, housekeeping
+  candidates (owner-approved migration to drop). **`fin_bills`/`fin_invoices`/
+  `fin_exceptions`** are written only by `lib/finance/agents/ap.ts`, whose sole
+  caller is the MANUAL upload screen `api/finance/bills/upload` — empty because
+  nobody has ever uploaded a supplier bill, i.e. an unused feature not a broken
+  loop. Of the 3 agents I called no-ops, 2 genuinely run every 6h. **No Bukku
+  feed is missing.**
+  **LESSON: row counts are not a pipeline — before calling a loop starved, find
+  the writer.** An empty table proves nothing about the loop meant to fill it.
+  **And check whether "broken" is a documented decision** (see P2).
+  **P4 — FIXED (9 of 10 in code).** 10 armed agents had `last_run_at` NULL while
+  logging actions, so `/agents` couldn't tell quiet from stopped. **The mechanism
+  is NOT simply "nobody called touchAgentRun" — for the finance agents the call
+  exists on the WRONG route.** `/api/cron/ap-match-apply` and `/api/cron/gl-post`
+  both heartbeat correctly but **neither is scheduled**; the scheduled
+  `bukku-feed-sync` imports `applyApMatches`/`postBankLinesToGl` directly and
+  never touched the registry. Same for `agent_comms_digest` (only real caller is
+  the 13:00-UTC fold in `celsius-overview`). **Lesson: heartbeat the path that
+  actually runs, not the route that shares the agent's name** — check
+  `vercel.json` before assuming a cron route is the live path. Fixed in
+  `bukku-feed-sync` (3 finance agents), `celsius-overview` (digest), and each
+  agent's own run function for marketing_strategist / ops_intelligence /
+  procurement_advisor / data_analyst / hr_ops_agent — always BEFORE the
+  quiet-exit paths, since a quiet run is the thing that must stay
+  distinguishable from a stopped one. **10th (`pos_pairing_tuner`) has no TS
+  path** — pg_cron calls `public.refresh_pos_pairing_signals()` directly; its
+  heartbeat shipped as `20260815_pos_pairing_tuner_heartbeat` and was **APPLIED
+  to prod 2026-08-15 on owner instruction** (hard rule 6 satisfied), via the
+  Supabase MCP `apply_migration` path; applied-history copy is
+  `supabase/migrations/105_pos_pairing_tuner_heartbeat.sql`. **All 10 heartbeats
+  are now live.** Before applying, the proposed body was diffed line-for-line
+  against the live `pg_get_functiondef` output to prove the ONLY change was the
+  heartbeat block (pre-change md5 `ebd1e0cc2cbfd62ba66011e2f320b579` — keep it,
+  it is the rollback anchor). Verified after: heartbeat present, SECURITY
+  DEFINER retained, `search_path` still `(public, pg_temp)`, pg_cron job
+  `refresh-pos-pairing-signals` still active.
+  **Deliberately did NOT invoke the function to test it** — it decays
+  `product_co_purchase_seed`/`product_round_seed` by 5% and refreshes the
+  matview, so a manual verification run would have charged the seeds an extra
+  night of decay. `last_run_at` stays NULL until the next scheduled fire
+  (`20 16 * * *` UTC); **check it after that to confirm the stamp lands.**
+  **P5 (latent)** — `autoPauseUnderperformers` (loop-engine.ts:1482) and
+  `getEvaluation` (:1704) do unbounded selects over all measured rounds: the
+  known PostgREST 1000-row class. 344 rows, +7/day → **crosses the cap ~Nov
+  2026**, after which the kill rule silently judges on a subset. Use
+  `fetchAllRows`.
+  **P6 — `finance_warehouse` stopped since 2026-07-24 (~512h, 3 missed weekly
+  runs). RE-ARMED, one owner step left.** Cause: **the routine no longer existed
+  at all** — listing every trigger on the account returns only one-shot
+  `send_later` entries, zero recurring ones, and at least one carries
+  `ended_reason: auto_disabled_session_gone`. It was bound to a session that went
+  away and died with it. Re-created as `Finance warehouse — weekly custodian run`
+  (`trig_01BCKPmWgpi1KUq7pk5BrK2n`), `13 14 * * 0` UTC = Sun 22:13 MYT, first
+  fire 2026-08-16, **with `create_new_session_on_fire` precisely so
+  session-binding can't kill it again.** Prompt carries the backlog + the Nilai
+  feed and empty `fin_bank_*` items.
+  **BLOCKER, owner-only: the fired session has NO Supabase MCP.** The skill's
+  check suite is read-only Supabase (`SKILL.md:147`), but this org rejects the
+  `connectors` param on create_trigger, and the environment holds no Supabase
+  token of its own (repo `.mcp.json` configures ONLY sentry; `env | grep -i
+  supabase` is empty — my DB access this session comes from an account-level
+  connector that can't be passed through). **Attach the Supabase connector to the
+  routine in the claude.ai routines UI.** Until then the prompt makes it fail
+  loudly — it stops and reports `finance-warehouse run blocked: Supabase MCP not
+  attached to this routine` rather than guessing from stale/repo-only data.
+  **P7 (latent)** — `measureRound` opens each window at `assigned_at` (prepare),
+  not `sent_at`; 14 scheduled rounds carry up to **8.03h** of gap over 796
+  assignments. **Checked: zero mis-attributed conversions exist** (lapsed
+  segments rarely order in that window), so latent only.
+  **P8.1 — `hardCutDirective` DELETED** (was autopilot.ts:571, wired :1171).
+  **It never self-expired the way its comment claimed:** the guard was
+  `dailyBudgetMyr <= HARD_CUT_TARGET_MYR → null`, which holds only while the
+  budget STAYS under RM55 and **re-arms on any future raise** — so it was not a
+  spent one-time directive, it was a trap primed for the next raise, i.e. Shah
+  Alam's probe-up ~Oct 7. Safe to remove now because all three are already below
+  RM55 (SA 53.98 / PJ 38.16 / Tam 46.32 paused) → dormant, deletion is a no-op
+  today. Nothing replaces it; guarded descent + rollback + pause-probe already
+  own budget movement and read the till, not a fixed number. **Lesson: a
+  "self-expiring" directive keyed on a CURRENT value is not self-expiring — it's
+  dormant until the value comes back.** 3 old tests → 2 new ones pinning that an
+  above-RM55 campaign isn't chopped to 55 and that a raised campaign is judged
+  the same whether or not its name was on the old list.
+  **P8.2/P8.3 — STILL OPEN, deliberately deferred:** probe verdict fires on
+  raw-OR-adj (autopilot.ts:393) and `organic-revenue.ts` pos branch still has no
+  `source <> 'grabfood'`. Both move the index the **Tamarind probe is currently
+  being judged on** (verdict ~Aug 17) — changing the verdict rule or the index
+  mid-experiment makes the result uninterpretable. Do them AFTER the verdict.
+  **P9** — `OpsReminder` has 0 rows ever; the hourly `ops-reminders` sweep is a
+  correct no-op consumer of a feature nobody uses (housekeeping-audit candidate).
+  **Gotcha that cost time: `ads_sync_log.status` is `OK`, not `success`** —
+  filtering on the wrong literal makes 7 healthy nightly syncs read as 7 fails.
+
+- 2026-08-14 — **Ads agent-loop audit (full pass, probe day 11/14): loop is
+  healthy, verdict is predictable, and the probe REVERSED the early read —
+  Tamarind's ads were earning their keep.** Replicated the probe's exact math
+  (organic series, per-weekday 4-wk recency-weighted forecast): pause-window
+  index Aug 4–13 **Tamarind 0.885** vs controls SA 0.995 / Con 1.010 →
+  fleet-adj ≈ 0.88; both thresholds breach. Robust to baseline choice (0.901
+  on a Jul 21–Aug 3-only baseline vs controls ~1.03), to the Grab bug (0.92
+  ex-Grab), and to mid-window control cuts (which bias the other way).
+  Channel split: walk-in (ad-plausible, 71% of series) **0.881**, QR **1.110**,
+  Grab **0.774** — Grab falling too means a non-ad factor is also biting
+  Tamarind, so the effect size is uncertain but the direction is not.
+  **Expected verdict at the ~Aug 17/18 19:01 run: restore at full RM46.32/day
+  ("ads generate cash").** Day-5 share analysis said flat — five more days
+  flipped it; consistent with the July regression (Tamarind the only outlet
+  above break-even, 2.13 rev/ad-RM). Episode cost ≈ RM950 net.
+  Audit facts: mode armed; 7/7 nightly syncs OK all kinds; **creative sync
+  works** (48 rows — the "never produced a row" entry is obsolete); rollback
+  path proven live (SA cut Aug 7 12% → guard breach → auto-rollback Aug 12;
+  Putrajaya cut 12% Aug 12); **the "guard excludes the `orders` table" bug is
+  STALE — `PICKUP_STORE_BY_LOYALTY` maps all three outlets and the slugs
+  match** (726 Tamarind rows since Jul 7 flow in). Still real: the guard's
+  pos branch has **no `source<>'grabfood'` filter** (~0.02 on the index).
+  **Nilai stopped polluting the fleet median the ugly way: its
+  `consignment_sales` feed is DEAD since Jul 19**, index reads 0 and the
+  `x>0` filter drops it — but Nilai/IOI revenue is now invisible to
+  everything downstream, including finance. Floor correction: restore-floor
+  is **RM20/day** (`ADS_AUTOPILOT_FLOOR_MYR` default), not RM10 as earlier
+  notes said. **Consequence armed and accepted by owner 2026-08-14: once
+  Tamarind restores, `selectPauseProbe` will auto-pause PUTRAJAYA ~the next
+  night** (cost/conv ~1.5× fleet-best, never probed, pauses are
+  spacing-exempt) — second causal experiment, verdict ~Sep 1, predicted "no
+  effect → floor" freeing ~RM545/mo.
+
+- 2026-08-14 — **SMS/loyalty loop has been DORMANT since Jun 21** —
+  `sms_logs` last row 2026-06-21, zero sends in 7+ weeks (4,162 all-time).
+  The "ungated loop will cancel the ad saving" worry is not currently live;
+  voucher redemptions still occur from previously-issued stock but the
+  discount growth stalled in the Jul 29–Aug 4 week. Gate it before it wakes,
+  not because it's spending now.
+
+- 2026-08-14 — **A "Rest Day" roster row is `start_time == end_time == 00:00`,
+  and it is NOT a shift window.** 431 such rows exist, 390 on published
+  rosters. Both window builders treated `end <= start` as cross-midnight and
+  added 24h, so a rest day became a 00:00–24:00 window: `paidWindowHours` paid
+  the whole clocked span, took the row's `break_minutes` of 0 instead of the
+  cohort's 30, and returned `needsSignOff: false` — working an unrostered rest
+  day paid MORE than a rostered shift and never reached the confirm queue.
+  `deriveHours` had the mirror bug (clamps pay at 00:00 for a rest-day shift
+  worked past midnight). Guarded in both files; zero-length is the
+  discriminator, NOT `end <= start` (a genuine 22:00→02:00 closing shift also
+  has end < start). Both payroll callers already skipped these by
+  string-matching `start_time` `"00:00"`, so no computed figure moved — the
+  guard is there so a new caller can't miss it. Two live logs land on rest-day
+  rows: Akmal 2026-07-31, Farhan 2026-08-04.
+
+- 2026-08-14 — **Putrajaya's 2026-08-03 roster published retroactively**
+  (schedule `62428d65-db1f-4a62-85d1-5b4139a245c1`, 75 shifts) on owner
+  instruction; reason appended to its `ai_notes`. It had `published_by` set to
+  Ariff but `published_at` NULL and status `draft` — a half-finished publish.
+  Effect on that week's PT pay: only two people move, both DOWN, because their
+  shifts stop pricing as unbounded cover shifts — Nurfarah −RM25.00 (6 cover →
+  0), Farhan −RM4.50 (1 cover → 0). Week now **428.00 h / RM3,940.00 across 63
+  shifts, zero cover shifts**. NOTE: this supersedes the 437.50 h / RM3,995.50
+  figure quoted earlier the same day — that ad-hoc SQL had not yet excluded
+  rest-day rows, so it inflated logs that matched one.
+
+- 2026-08-14 — **Rostered windows in the data are not all sane, and the window
+  basis makes that visible.** 3–9 Aug throws 30 shifts to the confirm queue,
+  and the worst entries are roster errors rather than staff behaviour: Absah
+  Natasha 5 Aug rostered **06:00–22:00** (16h) → 717 min "late"; Absah 9 Aug
+  rostered 11:00–21:00 → 141 min "early out"; Naufal 6 Aug rostered
+  12:00–23:30 (11.5h) → 210 min "early out". Fix the roster rows before
+  adjudicating these as staff shortfalls.
+
+- 2026-08-14 — **Alea's 2026-08-10 log (`7e09988c-…`) is a mis-tap, not an
+  overstay.** She tapped **IN** at 23:30:40 MYT — 40 seconds AFTER her
+  18:30–23:30 shift ended — and the log stayed open until her next clock-in on
+  12 Aug 18:45:59 auto-closed it 43.25 h later (9 seconds apart). Under the
+  window basis it pays **0** (the window opens after it closes) and forces
+  sign-off, so there is no payroll leak; but her real 10 Aug shift is unpaid
+  until corrected. Correction path is `PATCH /api/hr/attendance` with
+  `action: "set_times"` from `/hr/attendance` — it recomputes through
+  `deriveHours`, stamps `reviewed_by` (genuine manager sign-off) and
+  `final_status: "adjusted"`. Note the route rejects a span > 24 h, so the
+  clock-IN must move (18:30), not just the clock-out — you cannot fix this by
+  editing one end. Owner: needs approval + manual change, NOT an automated
+  backfill.
+
+- 2026-08-14 — **PT pay basis changed; the already-PAID week is deliberately
+  NOT restated (owner: "forward only, don't restate the paid week").** The new
+  paid-window rules apply from the 2026-08-03 week onward — neither 08-03 nor
+  08-10 had a run yet, so nothing needed undoing. Recomputing the paid
+  2026-07-27 week (RM3,720.00, status `paid`, the ONLY weekly run that exists)
+  under the new logic gives RM3,721.08 — net +RM1.08, but ~RM127 moving in each
+  direction: Farhan +65.70, Nurfarah +20.00, Aimi +18.00 against Hadif −56.45,
+  Naufal −53.74. The losers are staff who clocked in late and stayed late — the
+  old daily CAP paid them regardless of WHEN they worked, the window doesn't.
+  Restating would mean recovering wages already paid, which Employment Act s.24
+  constrains, so it was ruled out rather than deferred. That week also holds
+  ~45h worked OUTSIDE rostered windows with no approved OT request (Farah 13.5h,
+  Naufal 8.5h, Hadif 8h, Fatin 4.5h, Emran 4h) — previously absorbed silently by
+  the cap, now a manager decision.
+
+- 2026-08-14 — **`calculateWeeklyPayroll` now REFUSES a week that already has a
+  confirmed/paid run.** There is NO unique constraint on
+  `hr_payroll_runs(cycle_type, period_start)` — only on
+  `(period_month, period_year)`, which covers monthly only. The run-wipe deletes
+  just `draft`/`ai_computed`, so a paid run survived it but the INSERT that
+  followed added a SECOND run for the same period, silently: one week, two runs
+  disagreeing about what it owes, with reporting or the bank file free to pick
+  either. Nothing in the API guarded it — `POST {action:"compute"}` accepted any
+  `week_start`. The guard throws and the route returns 409 (not 500) so the UI
+  shows the reason. If a week ever genuinely needs restating, the settled run
+  must be reopened or voided first — deliberately a manual act.
+
+- 2026-08-13 — **PT pay was computed from a daily HOURS CAP, not the rostered
+  window — so it underpaid the punctual and overpaid late arrivals.** Owner
+  restated the basis (rules 1-7): clock in before the shift, clock out after
+  it, only time INSIDE the rostered window is paid, tails outside it are OT
+  needing approval in whole 30-min brackets, and late-in / early-out need
+  sign-off too. Implemented as `paidWindowHours()` in
+  `apps/backoffice/src/lib/hr/hours.ts` (PR #1126, branch
+  `claude/farah-staff-onboarding-99yg3j`), the single basis for BOTH cohorts:
+  `paid = [max(clock_in, sched_start), min(clock_out, sched_end)] - break +
+  approved OT`. Two mechanisms it replaced, both wrong in ways a cap can't
+  see: (1) the 30-min clock rounding from #1119 (`ptRoundedSpanHours`) rounded
+  clock-in UP and clock-out DOWN — but the cap already clipped overstay days,
+  so it ONLY bit staff who clocked closest to their shift. Punctuality cost
+  RM5/shift; overstaying cost nothing. Rounding now survives only on the OT
+  tails (rule 6). (2) **A CAP IS NOT A WINDOW** — it never checked WHEN the
+  hours fell, so a late clock-in was silently offset by an unapproved
+  overstay: Farah 2026-08-05 clocked in 35 min late, left 3h past shift end
+  with no OT request, and was paid the full 7.5h. Two live data bugs fell out
+  of the same query: an UNROSTERED clock-in paid **RM0** (cap = 0 with no
+  shift on the grid — Farah worked 8h on Sun 2026-08-09 for nothing, silently);
+  and Alea's 2026-08-10 log has a **clock-out 4h45m BEFORE its clock-in** and
+  still drew 4.5h from the roster. Both now handled explicitly.
+
+- 2026-08-13 — **FT has no pay grace period; FT are SALARIED, which is a much
+  bigger difference than a grace period.** Checked because the owner believed
+  FT had one. `GRACE_PERIOD_MINUTES = 5` exists in `lib/hr/constants.ts` but is
+  referenced in exactly three places — `roster-attendance/route.ts:50`,
+  `schedules/candidates/route.ts:149`, `pt-performance.ts:77` — all
+  display/statistics. **It is not referenced in either payroll calculator.**
+  The real split is `payroll-calculator.ts:643`: `basePay = isPartTime ?
+  totalRegularHours * hourlyRate : prorateAmount(basicSalary, prorate)`. FT
+  base pay never reads `regular_hours`, so a late FT clock-in docks nothing;
+  proration is calendar/working-days (EA s.60I). FT lateness reaches pay only
+  via the RM200 performance allowance and OT. Consequence: the window rule is
+  SAFE for FT (it only moves regular/overtime hours, i.e. OT eligibility and
+  reporting), but "consistent across FT and PT" cannot mean identical
+  arithmetic — PT are docked minute-by-minute while FT are docked nothing.
+  **Open owner decision: whether PT get a pay-side grace.**
+
+- 2026-08-13 — **`lib/hr/hours.ts` is DUPLICATED between backoffice and staff,
+  and both copies write pay hours.** `apps/staff/.../api/hr/clock/route.ts`
+  writes `regular_hours` / `overtime_hours` straight to `hr_attendance_logs` on
+  tap-out using the STAFF copy of `deriveHours`. Any change to the hours engine
+  must be mirrored or a tap-out and the backoffice processor disagree about the
+  same shift — typecheck will NOT catch it, because the extra option is simply
+  never passed. Four call sites feed `deriveHours`: staff clock route,
+  backoffice attendance route, auto-close cron, attendance-processor.
+
 - 2026-08-12 — **Finance › Reports now exports PDF, not just CSV — P&L,
   Balance Sheet, Cash Flow and Trial Balance each get a PDF button beside the
   CSV one.** Built on branch `claude/pdf-export-tv9r8s`. Renderer is
@@ -325,6 +659,29 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   here. Legacy `vouchers` monetary impact is nil in these routes
   (`voucherDiscountSen` is hardcoded 0); the gate only guarded
   `increment_voucher_count`.
+- 2026-08-03 — **Payslips are now open to staff in the PWA; the manager app never
+  needed a change.** Owner: "can you open payslip in pwa staff app and native
+  staff app." **`apps/staff-native` was already fully wired** — tile at
+  `(staff)/hr/index.tsx`, screen at `(staff)/hr/payslips.tsx`, `fetchPayslips()`
+  → `/api/hr/payslips`, no feature flag — so NOTHING was changed there, which
+  also means this carries no OTA risk to manager phones (hard rule 5).
+  `apps/staff` had **three** gates stacked, and all three had to go:
+  1. `PAYROLL_UI_ENABLED = false` in `lib/hr/constants.ts` — showed a
+     "coming soon" notice and skipped the fetch entirely.
+  2. `hr/payslips/layout.tsx` redirected anyone not OWNER/ADMIN back to `/hr`.
+  3. **Nothing anywhere in the app linked to `/hr/payslips`** — even an OWNER had
+     to type the URL. A tile now sits on the HR hub next to My Skills.
+  The stale bit worth knowing: that flag's comment called itself a "mirror of the
+  backoffice PAYROLL_UI_ENABLED". **No such constant exists in the backoffice** —
+  it was removed at some point and the reference rotted.
+  **`/api/hr/payslips` is the real security boundary and it is sound**:
+  service-role client (hr_* is RLS deny-all) scoped to `session.id`, `status in
+  (confirmed, paid)`, and `cycle_type != 'opening_balance'` so the Jan–Jun BrioHR
+  YTD aggregate can't reappear mislabelled as one month's pay.
+  **Split onto its own branch on the owner's instruction (2026-08-03)** so the
+  July payroll corrections could merge first: deploying this publishes July
+  payslips, and July still carried Nur Iffa Sofea's RM120 probation allowance and
+  the Group A roster-error shifts at the time.
 
 - 2026-08-04 — **JULY "ALREADY PAID" BASELINE recovered from the session
   transcript (owner: "already paid based on the prev compute" / "use the ones
@@ -1808,6 +2165,97 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-08-15 — **Loop QA sweep DONE and MERGED to main as `9b6a3e7` (PR #1130).**
+  P1 (incl. root cause), P2 (ageing arm), P4, P6 and P8.1 all fixed; P3
+  WITHDRAWN as a bad finding. Full detail in `docs/design/loop-qa-2026-08-15.md`.
+  The `pos_pairing_tuner` heartbeat migration is **APPLIED** (see P4 above), so
+  all 10 heartbeats are live. No OTA: the diff touched no `*-native` app.
+  **WATCH NEXT — three things land on their own, verify each:**
+  (a) **VERIFIED 2026-08-15 16:35 UTC** — the first `refresh_pos_pairing_signals()`
+  run with the heartbeat stamped `agent_registry.last_run_at` for
+  `pos_pairing_tuner` at exactly `16:20:00 UTC`. **P4 is fully closed: all 10
+  heartbeats are proven live**, and this was the only one whose verification had
+  to wait for a scheduled fire. (b) **Tomorrow 02:00 UTC (10:00 MYT)** — first review-backlog
+  digest fires; it will list ~28 stale drafts (oldest ~52d) in one manager
+  WhatsApp. Expected, but chunky — `REVIEW_DRAFT_STALE_DAYS` tunes it.
+  (c) **Mon 2026-08-17 05:00 UTC** — first geogrid run with retry + round-robin;
+  expect far fewer `failed`, a non-zero `retries`, and `skippedNoGbpLocation`
+  listing IOI Mall.
+  **TWO OWNER STEPS LEFT — cannot be done from an agent session:**
+  (1) **Attach the Supabase connector** to the re-armed `Finance warehouse —
+  weekly custodian run` routine (`trig_01BCKPmWgpi1KUq7pk5BrK2n`) in the
+  claude.ai routines UI. It fires Sun 2026-08-16 22:13 MYT and will report
+  BLOCKED until this is done (P6).
+  (2) **Connect IOI Mall's Google Business Profile** — `gbpLocationName` is NULL,
+  so its 16 active keywords have never been scannable (P1).
+  **THEN:** (3) **P8.2/P8.3 AFTER the ~Aug 17 Tamarind probe verdict** — probe
+  verdict raw-OR-adj, and the missing grabfood filter; both move the index the
+  probe is being judged on, so they wait. (4) **P5/P7** — latent, fix on the next
+  loop-engine touch.
+  **TWO OWNER DECISIONS, neither urgent:** (a) **negative-review auto-reply** —
+  arm it, or keep the human-approval path and staff the queue that the new daily
+  backlog digest now surfaces? Wants the risk-classifier first (P2). (b) **drop
+  the dead `fin_bank_transactions` / `fin_matches` tables** — zero code refs
+  anywhere; housekeeping proposal + owner-approved migration (P3).
+
+- 2026-08-15 — **Ads: Tamarind restore pulled forward to TONIGHT (owner:
+  "recover tamarind"), and the control-integrity fix landed before the
+  Putrajaya probe goes dark (owner: "put in control before dark").**
+  `PAUSE_PROBE_DAYS` 14 → 11.5: by day 12 the verdict was mathematically
+  locked (index 0.875 through Aug 14; +22%/day needed to flip) and each extra
+  dark day cost ~RM70–117 net margin. 11.5 not 12 so tonight's Aug 15 19:01
+  run clears the daysSince race vs the 19:01:30 pause row. **OUTCOME (verified):
+  the owner then said "can we restore now" — a one-time cron nudge (#1139,
+  ads-daily → 14:45 UTC, reverted same day in #1143) fired the run early and
+  the RESTORE applied at 14:46:20 UTC**: ledger `applied`, "autopilot restore:
+  pause probe VERDICT — ads generate cash (pause-window till index 0.88,
+  fleet-adj 0.87)", RM46.32/day, campaign ENABLED. The normal 19:01 run then
+  fired on the restored `0 19 * * *` schedule (all 5 sync steps OK) with zero
+  budget changes.
+  **The predicted PUTRAJAYA pause probe did NOT start and will not under
+  current metrics**: `selectPauseProbe` requires efficiencyRatio > 1.3×
+  fleet-best, and the 30-day benchmark has SHIFTED — Putrajaya is now the
+  fleet-BEST at RM7.26/conv (Shah Alam 7.56 → 1.04×; Tamarind 15.58 → 2.15×
+  but excluded, already probed once by design). Tamarind's paused days
+  polluted its 30-day window and moved the benchmark to Putrajaya, whose
+  ratio is 1.0 — the probe fires only if Putrajaya's relative efficiency
+  degrades past 1.3× later. The "~Aug 28 Putrajaya verdict" timeline is VOID;
+  probing the fleet's most efficient campaign would be wrong and the gate is
+  working as designed. Also shipped: paused-campaign outlets are now EXCLUDED
+  from every fleet median (nightly guard `others` + probe-verdict controls) —
+  a probed outlet's manipulated till no longer pollutes siblings' adjIndex
+  (observed 2026-08-12: paused Tamarind pulled SA's control median to 0.9795
+  vs 1.019 clean). Tamarind recovery check (reversal test, A=ads vs B=local
+  factor) armed 2026-08-25 09:00 UTC — restore landed Aug 15 14:46, so it
+  gets ~10 post-restore days.
+- 2026-08-16 — **Conezion (Putrajaya outlet) slid ~21% WoW (Aug 10–16 vs
+  Aug 3–9); owner directive shipped to undo the Aug 12 Putrajaya ad cut.**
+  Decomposition: footfall −14% (orders 967→830/wk), AOV −8% (RM30.75→28.26),
+  stockouts ~RM650–900/wk (Pomegranate/Citrus teas + Truffle Fries sold zero
+  all week; Chocolate Cake Bars, Burnt Cheesecake, NYC Smores, Biscoff Batik
+  went dark Aug 14–16 — restock list sent to owner). NOT the payday cycle:
+  same-cycle week mid-July was RM28.4k vs this RM23.5k (−17% MoM) while Shah
+  Alam rose +7% MoM; July's own mid-month dip was only −6%. NOT ads by
+  timing: slide began Aug 10, two days before the Aug 12 cut, walk-in and
+  dine-in QR fell proportionally, index read healthy through the descent.
+  Google rating ticked 4.8→4.7 ~Aug 11 (couple of low reviews — worth
+  reading, too small to cause this). Prime suspect: IOI Conezion mall
+  footfall (owner asking the manager). Owner: "undo the cut" → ownerDirective
+  raises Putrajaya RM38.16→43.36/day at the Aug 16 19:01 run; reason starts
+  "owner directive" so lastKind reads "other" (never auto-reverted — an
+  "autopilot raise" row would be reverted by the very breach that motivated
+  it); self-expires once applied and hard-expires 2026-08-23. Spent Jul-19
+  Tamarind directive removed (re-armable trap class). Tamarind post-restore:
+  first Sunday +24% vs pause-Sunday — recovery tracking; A/B/A read Aug 25.
+  Remaining cleanup (no probe is now running, so the do-not-change-the-
+  instrument freeze is LIFTED until a new probe starts): (1) probe verdicts
+  should require
+  adj-confirmation, not raw-OR-adj — the payday/mom safeguards don't apply in
+  the probe path; (2) add `source<>'grabfood'` to organic-revenue.ts's pos
+  branch, with tests; (3) consider restoring PAUSE_PROBE_DAYS to 14 for any
+  later probes. `hardCutDirective` was already removed 2026-08-15 by another
+  session. Separately: **chase the dead Nilai consignment feed** (last row
+  Jul 19) — data-estate, not ads.
 - 2026-08-13 — **PR #1112 merged (`217d365`); both 20260810 migrations applied to
   prod.** Next session picks up the stock-count/BOM thread here, in order:
   1. **`ingredient-variance` still reads the DEAD `SalesTransaction` table**

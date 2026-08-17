@@ -78,6 +78,35 @@ export default function HRSettingsPage() {
     }
   };
 
+  const [rollingOver, setRollingOver] = useState(false);
+  const handleRollover = async () => {
+    if (
+      !confirm(
+        `Roll ${year} leave balances into ${year + 1}?\n\nEach person keeps their current entitlements; used/pending reset to 0. Unused annual leave does NOT carry over (carry-forward is 0 until a policy is set). Existing ${year + 1} rows are never overwritten — re-running is safe.`,
+      )
+    )
+      return;
+    setRollingOver(true);
+    setBalanceResult(null);
+    try {
+      const res = await fetch("/api/hr/leave-balances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rollover", year }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBalanceResult(
+          `Rolled ${data.rolled} balance rows into ${data.to_year} (${data.preserved} already existed and were left untouched).`,
+        );
+      } else {
+        setBalanceResult(`Error: ${data.error}`);
+      }
+    } finally {
+      setRollingOver(false);
+    }
+  };
+
   // Group holidays by month
   const byMonth = new Map<number, Holiday[]>();
   holidays.forEach((h) => {
@@ -121,6 +150,15 @@ export default function HRSettingsPage() {
           >
             {initingBalances ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             Initialize for {year}
+          </button>
+          <button
+            onClick={handleRollover}
+            disabled={rollingOver}
+            title={`Create ${year + 1} rows from ${year}: entitlements carried as-is (hand-set values survive, unlike Initialize), used/pending reset. Run this before 1 Jan or the staff app shows zero balances for everyone.`}
+            className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
+          >
+            {rollingOver ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
+            Roll over {year} → {year + 1}
           </button>
         </div>
         {balanceResult && (

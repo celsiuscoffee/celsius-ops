@@ -13,6 +13,14 @@
 // (regular_hours 0, clock_in_method 'ot_approval', marked approved). De-duped
 // per (user, date) so re-approval updates rather than double-pays, and we never
 // stack a synthetic OT log on top of a real clock-in log for the same day.
+//
+// OT approval NEVER overrides attendance review on a real log. final_status is
+// the calculator's payability gate for the WHOLE day, so blindly stamping
+// 'approved' here used to (a) resurrect full-day pay on a log attendance
+// review had REJECTED, and (b) clobber 'adjusted' — erasing the manager's
+// stated hours as the weekly pay basis. Both now preserve the review verdict:
+// rejected logs are skipped (surfaced to the route), adjusted logs take the OT
+// hours but keep their status.
 
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 
@@ -51,7 +59,35 @@ export interface ApprovedOtRequest {
   attendance_log_id?: string | null;
 }
 
-export type OtSyncAction = "updated_log" | "updated_ot_log" | "created_ot_log" | "skipped_zero";
+export type OtSyncAction =
+  | "updated_log"
+  | "updated_ot_log"
+  | "created_ot_log"
+  | "skipped_zero"
+  | "skipped_rejected_log";
+
+/**
+ * What an OT approval may write onto a REAL attendance log, given the log's
+ * current review verdict. Pure — pinned by ot-payroll-sync.test.ts.
+ *
+ * - rejected  → nothing. Attendance review killed the day; approving OT on top
+ *               would resurrect the ENTIRE day's pay (regular hours included).
+ *               The manager must clear the rejection first.
+ * - adjusted  → OT fields only, status preserved. 'adjusted' means a human
+ *               stated the hours and the weekly calculator pays those stated
+ *               hours verbatim; overwriting to 'approved' would silently revert
+ *               to window math.
+ * - anything else (null / pending / approved) → OT fields + final_status
+ *               'approved', the original behavior: the OT approval is a human
+ *               sign-off that the day should pay.
+ */
+export function decideRealLogPatch(
+  currentFinalStatus: string | null | undefined,
+): { apply: false } | { apply: true; setFinalStatus: string | null } {
+  if (currentFinalStatus === "rejected") return { apply: false };
+  if (currentFinalStatus === "adjusted") return { apply: true, setFinalStatus: null };
+  return { apply: true, setFinalStatus: "approved" };
+}
 
 // Push an approved/partial OT request onto an attendance log payroll will pay.
 // Idempotent per (user, date). Returns the action taken. Never throws to the
@@ -84,10 +120,25 @@ export async function applyApprovedOt(req: ApprovedOtRequest): Promise<OtSyncAct
   }
 
   if (targetId) {
-    // Honour the manager's approved hours on the existing log + ensure it pays.
+    // Honour the manager's approved hours on the existing log — but only as far
+    // as the log's own review verdict allows (see decideRealLogPatch).
+    const { data: log } = await hrSupabaseAdmin
+      .from("hr_attendance_logs")
+      .select("final_status")
+      .eq("id", targetId)
+      .maybeSingle();
+    const verdict = decideRealLogPatch(log?.final_status as string | null | undefined);
+    if (!verdict.apply) return "skipped_rejected_log";
     await hrSupabaseAdmin
       .from("hr_attendance_logs")
-      .update({ overtime_hours: hours, overtime_type: otType, final_status: "approved" })
+      .update({
+        overtime_hours: hours,
+        overtime_type: otType,
+        // Stamped so a later rejection/cancellation of THIS request can retract
+        // exactly the OT it pushed (see reverseApprovedOt).
+        ot_approval_id: req.id,
+        ...(verdict.setFinalStatus ? { final_status: verdict.setFinalStatus } : {}),
+      })
       .eq("id", targetId);
     return "updated_log";
   }
@@ -105,7 +156,7 @@ export async function applyApprovedOt(req: ApprovedOtRequest): Promise<OtSyncAct
   if (existing?.id) {
     await hrSupabaseAdmin
       .from("hr_attendance_logs")
-      .update({ overtime_hours: hours, overtime_type: otType, final_status: "approved" })
+      .update({ overtime_hours: hours, overtime_type: otType, ot_approval_id: req.id, final_status: "approved" })
       .eq("id", existing.id as string);
     return "updated_ot_log";
   }
@@ -127,13 +178,21 @@ export async function applyApprovedOt(req: ApprovedOtRequest): Promise<OtSyncAct
     final_status: "approved",
     clock_in_method: "ot_approval",
     clock_out_method: "ot_approval",
+    ot_approval_id: req.id,
   });
   return "created_ot_log";
 }
 
-// Retract OT we previously pushed, when an approval is reversed (rejected/cancelled).
-// Only touches the SYNTHETIC OT-only log — a real clock-in log's OT is governed by
-// attendance review, so we never silently zero a genuine log here.
+// Retract OT we previously pushed, when an approval is reversed
+// (rejected/cancelled).
+//
+// Synthetic OT-only logs are killed outright (the whole log exists only
+// because of the request). A REAL clock-in log gets its OT fields zeroed —
+// matched via the ot_approval_id stamp so we only ever retract OT this
+// specific request pushed — but its final_status is left alone: the day's
+// payability belongs to attendance review, we only take back the premium.
+// (Real logs synced before the ot_approval_id stamp existed carry no marker
+// and can't be safely retracted — surfaced by the route as before.)
 export async function reverseApprovedOt(req: ApprovedOtRequest): Promise<void> {
   const clockIn = syntheticClockIn(req.date);
   await hrSupabaseAdmin
@@ -142,4 +201,10 @@ export async function reverseApprovedOt(req: ApprovedOtRequest): Promise<void> {
     .eq("user_id", req.user_id)
     .eq("clock_in_method", "ot_approval")
     .eq("clock_in", clockIn);
+  await hrSupabaseAdmin
+    .from("hr_attendance_logs")
+    .update({ overtime_hours: 0, overtime_type: null, ot_approval_id: null })
+    .eq("user_id", req.user_id)
+    .eq("ot_approval_id", req.id)
+    .neq("clock_in_method", "ot_approval");
 }

@@ -225,7 +225,16 @@ export const PAUSE_PROBE_ENABLED = process.env.ADS_AUTOPILOT_PAUSE_PROBE !== "of
 // adjIndex (fleet-adjusted) as well as the raw index, and the two control
 // outlets ride the same cycle, so the payday swing largely divides out. Read
 // the raw index alone at this length and it will mislead.
-export const PAUSE_PROBE_DAYS = 14;
+// 14 → 11.5 (owner 2026-08-15: "recover tamarind"): by probe day 12 the
+// Tamarind verdict was mathematically locked (index 0.875, would have needed
+// +22% vs forecast for every remaining day to flip) and each extra dark day
+// cost ~RM70–117 of net margin, so waiting out the full window bought nothing.
+// 11.5 rather than 12 so the verdict clears tonight's run despite the
+// daysSince race against the pause row's 19:01:30 timestamp (cron fires
+// ~19:01:0x; a 12.0 threshold would hold until tomorrow). The NEXT probe
+// (Putrajaya) inherits ~12 observed days — still weekday-balanced at the
+// nightly grain and its window straddles the Aug-25 payday either way.
+export const PAUSE_PROBE_DAYS = 11.5;
 // FLEET_SPACING_DAYS (the nightly-cron stagger for NEW disturbances; safety
 // actions rollback/revert/restore are never spaced) is defined in the policy
 // knobs block above — env-tunable, default 3d since 2026-07-19.
@@ -377,21 +386,33 @@ export function decideCampaign(c: CampaignState, guard: GuardSignal, now: Date):
       return { ...base, action: "hold", reason: `pause probe running (${Math.round(daysSince)}d/${PAUSE_PROBE_DAYS}d, pause-window till index ${c.pauseProbe?.index ?? "n/a"})` };
     }
     const p = c.pauseProbe;
+    // A missing index is a MEASUREMENT failure (forecast query threw, series
+    // empty), not evidence of anything. Deciding on it used to fall through to
+    // the floor verdict — i.e. a Supabase hiccup at 19:01 would read as "ads
+    // are worthless" and slash the budget. Hold instead; tomorrow's run
+    // re-measures the full window and the verdict loses nothing by waiting.
+    if (p?.index == null) {
+      return {
+        ...base,
+        action: "hold",
+        reason: `pause probe window complete but tonight's till index could not be measured — holding for retry, a verdict needs evidence`,
+      };
+    }
     const dropDetected =
-      p?.index != null && (p.index < GUARD_RAW_MIN || (p.adjIndex != null && p.adjIndex < GUARD_ADJ_MIN));
+      p.index < GUARD_RAW_MIN || (p.adjIndex != null && p.adjIndex < GUARD_ADJ_MIN);
     if (dropDetected) {
       return {
         ...base,
         action: "restore",
         newDailyMyr: round2(c.dailyBudgetMyr),
-        reason: `autopilot restore: pause probe VERDICT — ads generate cash (pause-window till index ${p!.index}${p!.adjIndex != null ? `, fleet-adj ${p!.adjIndex}` : ""}); resuming at RM${round2(c.dailyBudgetMyr)}/day, gradual descent will find the floor`,
+        reason: `autopilot restore: pause probe VERDICT — ads generate cash (pause-window till index ${p.index}${p.adjIndex != null ? `, fleet-adj ${p.adjIndex}` : ""}); resuming at RM${round2(c.dailyBudgetMyr)}/day, gradual descent will find the floor`,
       };
     }
     return {
       ...base,
       action: "restore",
       newDailyMyr: FLOOR_DAILY_MYR,
-      reason: `autopilot restore: pause probe VERDICT — no detectable till effect (pause-window index ${p?.index ?? "n/a"}${p?.adjIndex != null ? `, fleet-adj ${p.adjIndex}` : ""}); campaign is below break-even wholesale — restoring at the floor RM${FLOOR_DAILY_MYR}/day (~RM${monthly(c.dailyBudgetMyr - FLOOR_DAILY_MYR)}/mo freed)`,
+      reason: `autopilot restore: pause probe VERDICT — no detectable till effect (pause-window index ${p.index}${p.adjIndex != null ? `, fleet-adj ${p.adjIndex}` : ""}); campaign is below break-even wholesale — restoring at the floor RM${FLOOR_DAILY_MYR}/day (~RM${monthly(c.dailyBudgetMyr - FLOOR_DAILY_MYR)}/mo freed)`,
     };
   }
 
@@ -518,60 +539,78 @@ function probeUp(c: CampaignState, guard: GuardSignal, why: string): AutopilotDe
 // the cut cap and the fleet stagger, and they don't reset the spacing clock.
 // Blind steps ("autopilot step-down 8% …") carry no parenthesis.
 const isWasteMatched = (d: AutopilotDecision) => d.reason.startsWith("autopilot step-down (");
+// Owner-directive raises are explicit human calls, not experiments — exempt
+// from fleet spacing the same way owner-directive step-downs are.
+const isOwnerDirective = (d: AutopilotDecision) => d.reason.startsWith("owner directive");
 
 /**
- * One-time owner directives. 2026-07-19: "let tamarind follow the others.
- * start with the prev cut (rm80+)" — the Jul 17 rollback was a proven false
- * positive, so Tamarind resumes the fleet's gradual descent at its
- * pre-rollback level. Self-expiring: fires only while the campaign's last
- * applied change is still that rollback; once this step-down lands it can
- * never fire again.
+ * One-time owner directives. Each must be genuinely self-expiring — spent
+ * state, not just a threshold that can re-arm (see the hardCutDirective
+ * post-mortem below) — and is deleted once confirmed applied.
+ *
+ * 2026-08-16: "undo the cut" — Putrajaya's Aug 12 step-down (RM43.36→38.16)
+ * landed in the same week Conezion's till slid ~21% WoW. The timing evidence
+ * points at the mall, not the cut (the slide began Aug 10, two days BEFORE
+ * the cut, and the index read 1.02/1.08 through six weeks of descent) — but
+ * this campaign is the fleet's best cost/conv and Tamarind's pause probe
+ * proved cuts on a cash-generating campaign bite on a lag, so the owner is
+ * buying the cut back (+RM5.20/day) as bounded insurance while the dip is
+ * diagnosed.
+ *
+ * The reason string deliberately does NOT start with "autopilot raise":
+ * lastKind must read "other" (a human call — observed like a step, never
+ * auto-reverted). The raise-evaluation branch reverts a raise on guard
+ * breach, and Conezion's till is soft for reasons that predate the cut — an
+ * "autopilot raise" row would be undone by the very dip that motivated it.
+ *
+ * Self-expiring on BOTH axes: fires only while the campaign's last applied
+ * change is still the Aug 12 step-down to RM38.16 (the raise itself replaces
+ * that, so it can never re-fire), and never after 2026-08-23 regardless of
+ * state.
  */
-export function ownerDirective(c: CampaignState): AutopilotDecision | null {
+export function ownerDirective(c: CampaignState, now: Date = new Date()): AutopilotDecision | null {
   if (
-    c.campaignName.includes("Tamarind") &&
+    c.campaignName === "Celsius Putrajaya" &&
     !c.isPaused &&
-    lastKind(c.lastApplied) === "rollback" &&
-    c.dailyBudgetMyr > 85
+    now.getTime() < Date.parse("2026-08-23T00:00:00Z") &&
+    lastKind(c.lastApplied) === "step-down" &&
+    round2(c.lastApplied?.newDailyMyr ?? 0) === 38.16 &&
+    round2(c.dailyBudgetMyr) === 38.16
   ) {
     return {
       campaignId: c.campaignId,
       campaignName: c.campaignName,
-      action: "cut",
-      newDailyMyr: 84.96,
+      action: "raise",
+      newDailyMyr: 43.36,
       reason:
-        "autopilot step-down (owner directive 2026-07-19): the Jul 17 rollback was a false positive (till flat in absolute RM) — resume the gradual descent at the prior cut level RM84.96/day",
+        "owner directive 2026-08-16 (undo the Aug 12 cut): Conezion till −21% WoW while the descent read healthy — RM38.16→RM43.36/day (+RM156/mo) as bounded insurance while the dip is diagnosed; a human call, not a probe — do not auto-revert",
     };
   }
   return null;
 }
 
-// One-time owner directive 2026-07-19 ("what do you suggest" → "ok do this"):
-// a single decisive cut of the three ad campaigns to RM55/day, banking
-// ~RM4,050/mo of the RM5k target now instead of over ~2 months; the normal
-// guarded descent + rollback continue from there. Fires ONLY on a healthy
-// measured till (never cut into weakness), only while the campaign is still
-// above target, and self-expires per campaign once it lands at RM55. Remove
-// this block in a follow-up once all three are confirmed applied.
-export const HARD_CUT_TARGET_MYR = Number(process.env.ADS_HARD_CUT_TARGET_MYR || 55);
-const HARD_CUT_CAMPAIGNS = ["Putrajaya", "Shah Alam", "Tamarind"];
+// REMOVED 2026-08-16: the 2026-07-19 Tamarind resume-descent directive. It did
+// its job on 2026-07-20, but its guard (lastKind "rollback" && budget > RM85)
+// was the re-armable-trap class the hardCutDirective post-mortem warns about:
+// any future rollback restoring Tamarind above RM85 would have re-fired it.
 
-export function hardCutDirective(c: CampaignState, guard: GuardSignal): AutopilotDecision | null {
-  if (c.isPaused) return null;
-  if (!HARD_CUT_CAMPAIGNS.some((n) => c.campaignName.includes(n))) return null;
-  if (c.dailyBudgetMyr <= HARD_CUT_TARGET_MYR) return null; // already at/below target → expired
-  // Need a healthy measured till: no guard signal, or a breaching one, waits a night.
-  if (guard.rawIndex == null || guard.rawIndex < GUARD_RAW_MIN) return null;
-  return {
-    campaignId: c.campaignId,
-    campaignName: c.campaignName,
-    action: "cut",
-    newDailyMyr: HARD_CUT_TARGET_MYR,
-    reason:
-      `autopilot step-down (owner directive 2026-07-19 hard-cut): decisive cut RM${round2(c.dailyBudgetMyr)}→RM${HARD_CUT_TARGET_MYR}/day ` +
-      `(banks ~RM${round2((c.dailyBudgetMyr - HARD_CUT_TARGET_MYR) * 30)}/mo) — till healthy (index ${guard.rawIndex}); guarded descent + rollback continue from here`,
-  };
-}
+// REMOVED 2026-08-15: hardCutDirective, the one-time owner directive of
+// 2026-07-19 that cut Putrajaya / Shah Alam / Tamarind to RM55/day. It did its
+// job — all three landed on 2026-07-20 — and it was written to be deleted once
+// they had ("remove this block in a follow-up once all three are confirmed
+// applied").
+//
+// It was never self-expiring the way it read, though. The guard was
+// `dailyBudgetMyr <= 55 → null`, which expires per campaign only while the
+// budget STAYS under RM55 — it re-arms the moment one rises back above. So it
+// was not a spent directive sitting harmlessly, it was a trap primed to fire
+// again on any future raise: the next one due is Shah Alam's probe-up when its
+// rollback hold ends ~Oct 7, which it would have chopped straight back to RM55
+// and corrupted the experiment.
+//
+// Nothing replaces it. The guarded descent, rollback and pause-probe already
+// own budget movement, and they read the till rather than a fixed number.
+// (Loop QA sweep — docs/design/loop-qa-2026-08-15.md, P8.1.)
 
 /** Stagger the descent: keep at most `max` BLIND cuts, least-efficient campaigns first. */
 export function capCuts(decisions: AutopilotDecision[], states: CampaignState[], max = MAX_CUTS_PER_RUN): AutopilotDecision[] {
@@ -606,7 +645,7 @@ export function spaceDisturbances(
   // pre-pause forecast, the controls' small cuts move their tills <1%, and
   // the owner ordered the baseline — only blind cuts and raises stagger.
   return decisions.map((d) =>
-    (d.action === "cut" && !isWasteMatched(d)) || d.action === "raise"
+    (d.action === "cut" && !isWasteMatched(d)) || (d.action === "raise" && !isOwnerDirective(d))
       ? {
           campaignId: d.campaignId,
           campaignName: d.campaignName,
@@ -865,10 +904,20 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     }
   }
 
+  // An outlet whose campaign is PAUSED is not a valid control: its revenue is
+  // either experimentally manipulated (a running pause probe) or long-dark
+  // with a stale feed (Nilai). Letting its depressed index into the fleet
+  // median made every other outlet's adjIndex more lenient — observed live on
+  // 2026-08-12, when paused Tamarind's 0.94 pulled SA's control median to
+  // 0.9795 (vs 1.019 clean). Landed before the Putrajaya probe starts so the
+  // second experiment reads against clean controls from day one.
+  const pausedOutletIds = new Set(
+    campaigns.filter((c) => !ENABLED_STATUSES.includes(c.status) && c.outletId).map((c) => c.outletId as string),
+  );
   const guards: Record<string, GuardSignal> = {};
   for (const [oid, raw] of rawIndexByOutlet) {
     const others = [...rawIndexByOutlet.entries()]
-      .filter(([k, v]) => k !== oid && v != null)
+      .filter(([k, v]) => k !== oid && v != null && !pausedOutletIds.has(k))
       .map(([, v]) => v as number);
     guards[oid] = guardFromIndexes(
       raw,
@@ -1147,6 +1196,10 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     const others: number[] = [];
     for (const o of outlets) {
       if (o.id === s.outletId) continue;
+      // Same rule as the nightly guard: a paused-campaign outlet is not a
+      // control (its till is manipulated or its feed is dead) — its index must
+      // not enter the probe verdict's median.
+      if (pausedOutletIds.has(o.id)) continue;
       const ow = await windowActualForecast(o, pStart, yesterday).catch(() => null);
       if (ow && ow.forecast > 0) others.push(ow.actual / ow.forecast);
     }
@@ -1156,7 +1209,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
 
   const baseDecisions = states.map((s) => {
     const guard = s.outletId ? guards[s.outletId] ?? noGuard : noGuard;
-    const directive = hardCutDirective(s, guard) ?? ownerDirective(s);
+    const directive = ownerDirective(s, now);
     return directive ?? decideCampaign(s, guard, now);
   });
   const withProbe = PAUSE_PROBE_ENABLED ? selectPauseProbe(capCuts(baseDecisions, states), states, guards) : capCuts(baseDecisions, states);

@@ -2,10 +2,10 @@
 //
 // 1. Parse the document (Claude vision) → structured bill
 // 2. Resolve supplier (existing Supplier or queue for human creation)
-// 3. Duplicate check (same supplier + bill_number already in fin_bills)
+// 3. Duplicate check (same supplier + invoice number already in Invoice)
 // 4. Categorize (Claude → account code with confidence)
 // 5. If parse + categorize confidence >= 0.85 AND total resolved AND no
-//    duplicate AND no warnings: post journal + create fin_bills
+//    duplicate AND no warnings: post the ap_bill journal
 //    Otherwise: create fin_exceptions for human resolution
 //
 // Auto-posted journal shape (single-outlet bill):
@@ -45,7 +45,7 @@ export type ApIngestResult =
 const AUTO_POST_THRESHOLD = 0.85;
 
 export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestResult> {
-  const client = getFinanceClient();
+  const client = getFinanceClient(AP_AGENT_VERSION);
 
   // Resolve company from explicit hint > outlet mapping > default. Bills
   // sometimes arrive without an outlet (HQ-level: insurance, audit fees) —
@@ -131,20 +131,19 @@ export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestR
   // 5. Duplicate check (per-company — same supplier+bill# can occur across
   // different Sdn Bhds).
   if (parsed.billNumber) {
-    const { data: dup } = await client
-      .from("fin_bills")
-      .select("id, total")
-      .eq("company_id", companyId)
-      .eq("supplier_id", supplier.id)
-      .eq("bill_number", parsed.billNumber)
-      .maybeSingle();
+    // Live AP source: Invoice (fin_bills is dead/tombstoned). Invoice numbers
+    // are unique per supplier (schema @@unique), which matches this check.
+    const dup = await prisma.invoice.findFirst({
+      where: { supplierId: supplier.id, invoiceNumber: parsed.billNumber },
+      select: { id: true },
+    });
     if (dup) {
       return await raiseException({
         companyId,
         docId,
         reason: `Duplicate of existing bill (supplier=${supplier.name}, bill_number=${parsed.billNumber})`,
         parsed,
-        proposed: { duplicateOfBillId: dup.id },
+        proposed: { duplicateOfInvoiceId: dup.id },
         relatedType: "document",
         priority: "normal",
         type: "duplicate",
@@ -218,7 +217,8 @@ export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestR
     return ex;
   }
 
-  // 9. Auto-post: create fin_bills + journal in lockstep.
+  // 9. Auto-post the journal. Bill metadata lives on the fin_documents row
+  // (parsed payload) — fin_bills is dead/tombstoned.
   const subtotal = parsed.subtotal ?? Math.max(parsed.total - (parsed.sst ?? 0), 0);
   const sst = parsed.sst ?? 0;
   const lines: JournalLineInput[] = [
@@ -257,25 +257,8 @@ export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestR
     lines,
   });
 
-  const billId = randomUUID();
-  await client.from("fin_bills").insert({
-    id: billId,
-    company_id: companyId,
-    supplier_id: supplier.id,
-    bill_number: parsed.billNumber ?? null,
-    bill_date: parsed.billDate ?? new Date().toISOString().slice(0, 10),
-    due_date: parsed.dueDate ?? null,
-    outlet_id: outletId ?? null,
-    subtotal: round2(subtotal),
-    sst_amount: round2(sst),
-    total: round2(parsed.total),
-    payment_status: "unpaid",
-    paid_amount: 0,
-    transaction_id: journal.transactionId,
-    source_doc_id: docId,
-    notes: parsed.notes ?? null,
-    scheduled_pay_date: parsed.dueDate ?? null,
-  });
+  // The ap_bill journal IS the bill record now; keep the result shape.
+  const billId = journal.transactionId;
 
   await client.from("fin_documents").update({ status: "processed", ingested_at: new Date().toISOString() }).eq("id", docId);
 
@@ -292,7 +275,7 @@ async function raiseException(args: {
   priority: "low" | "normal" | "high" | "urgent";
   type?: "categorization" | "match" | "missing_doc" | "anomaly" | "duplicate" | "out_of_balance";
 }): Promise<{ kind: "exception"; exceptionId: string; reason: string; parsed: ParsedBill }> {
-  const client = getFinanceClient();
+  const client = getFinanceClient(AP_AGENT_VERSION);
   const id = randomUUID();
   await client.from("fin_exceptions").insert({
     id,

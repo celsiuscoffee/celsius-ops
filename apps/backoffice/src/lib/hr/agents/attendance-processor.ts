@@ -152,8 +152,10 @@ export async function processAttendance(): Promise<ProcessResult> {
         employmentType,
         isPublicHoliday: isPH,
         isRestDay,
-        // Early clock-in pays from the rostered start (stamped at clock-in).
+        // The paid window: rostered start and end (stamped at clock-in). Time
+        // outside it is an OT tail needing approval, not automatic pay.
         scheduledStart: mytInstant(log.scheduled_date ?? clockDate, log.scheduled_start),
+        scheduledEnd: mytInstant(log.scheduled_date ?? clockDate, log.scheduled_end),
       });
       totalHours = derived.totalHours;
       regularHours = derived.regularHours;
@@ -161,26 +163,40 @@ export async function processAttendance(): Promise<ProcessResult> {
       overtimeType = derived.overtimeType;
       flags.push(...derived.dayTypeFlags);
 
-      // PT/intern "overtime" = working past the rostered shift end (owner rule
-      // 2026-08-07: "PT no overtime — they can only be paid extra if they work
-      // more than their shift"). deriveHours no longer threshold-flags them, so
-      // an 8h rostered shift worked in full stays clean; only a clock-out more
-      // than LATE_THRESHOLD_MINUTES past the rostered end raises the flag. The
-      // weekly calculator still caps pay at roster + approved OT either way.
-      if ((employmentType === "part_time" || employmentType === "intern") && log.scheduled_end) {
-        const schedDate = log.scheduled_date ?? clockDate;
-        const startInstant = mytInstant(schedDate, log.scheduled_start);
-        let endInstant = mytInstant(schedDate, log.scheduled_end);
-        if (endInstant && startInstant && endInstant.getTime() <= startInstant.getTime()) {
-          endInstant = new Date(endInstant.getTime() + 24 * 60 * 60 * 1000); // cross-midnight shift
-        }
-        if (
-          endInstant &&
-          new Date(log.clock_out).getTime() - endInstant.getTime() > LATE_THRESHOLD_MINUTES * 60 * 1000
-        ) {
-          flags.push("overtime_detected");
-        }
+      // Time clocked OUTSIDE the rostered window — early in (rule 5) or late out
+      // (rule 4) — pays nothing without an approved OT request, so it has to
+      // reach a manager. Applies to BOTH cohorts now: the old version flagged
+      // PT only, which let a full-timer's unapproved overstay pay itself.
+      // deriveHours brackets the tails to 30 min (rule 6), so a few minutes at
+      // either end never raises it.
+      if (derived.otEligibleHours > 0) flags.push("overtime_detected");
+
+      // System-closed logs (auto-close cron): a missed tap-out is NOT proven
+      // overtime — the cron zeroed OT when it closed, and this evaluation must
+      // not resurrect it from the synthetic span. The close lands at the
+      // rostered end so the tails are ~0 anyway; this pins the owner rule
+      // rather than relying on that arithmetic.
+      if (log.clock_out_method === "system") {
+        overtimeHours = 0;
+        const otIdx = flags.indexOf("overtime_detected");
+        if (otIdx >= 0) flags.splice(otIdx, 1);
       }
+
+      // Clocking in late or leaving early also needs sign-off (rule 7). The
+      // window already docked the pay; this puts the shortfall in front of
+      // someone who can excuse it or let it stand.
+      const schedDate = log.scheduled_date ?? clockDate;
+      const startInstant = mytInstant(schedDate, log.scheduled_start);
+      let endInstant = mytInstant(schedDate, log.scheduled_end);
+      if (endInstant && startInstant && endInstant.getTime() <= startInstant.getTime()) {
+        endInstant = new Date(endInstant.getTime() + 24 * 60 * 60 * 1000); // cross-midnight shift
+      }
+      const lateBy = startInstant
+        ? (new Date(log.clock_in).getTime() - startInstant.getTime()) / 60000 : 0;
+      const leftEarlyBy = endInstant
+        ? (endInstant.getTime() - new Date(log.clock_out).getTime()) / 60000 : 0;
+      if (lateBy > LATE_THRESHOLD_MINUTES) flags.push("late_clock_in");
+      if (leftEarlyBy > LATE_THRESHOLD_MINUTES) flags.push("early_clock_out");
     } else if (flags.includes("no_clock_out")) {
       // Still open past the auto-clockout window: flag for a manager but DON'T
       // fabricate payable hours (the old code wrote a flat 12h). The auto-close
@@ -202,6 +218,12 @@ export async function processAttendance(): Promise<ProcessResult> {
     const actionableFlags = flags.filter((f) => !INFORMATIONAL_FLAGS.has(f));
     const aiStatus = actionableFlags.length === 0 ? "approved" : "flagged";
 
+    // The ai_status guard makes this a compare-and-set: a manager PATCH
+    // (set_times / adjust) landing between our fetch and this write moves the
+    // log out of 'pending', so we match zero rows instead of clobbering the
+    // human's correction with hours recomputed from the STALE clock times —
+    // which would also have flipped final_status 'adjusted' → 'approved' while
+    // reviewed_by still claimed manager confirmation.
     const { error: updateError } = await hrSupabaseAdmin
       .from("hr_attendance_logs")
       .update({
@@ -214,7 +236,8 @@ export async function processAttendance(): Promise<ProcessResult> {
         overtime_type: overtimeType,
         ...(aiStatus === "approved" ? { final_status: "approved" } : {}),
       })
-      .eq("id", log.id);
+      .eq("id", log.id)
+      .eq("ai_status", "pending");
 
     if (updateError) {
       result.errors.push(`Failed to update log ${log.id}: ${updateError.message}`);

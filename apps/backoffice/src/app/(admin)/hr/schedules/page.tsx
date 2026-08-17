@@ -613,17 +613,32 @@ export default function SchedulesPage() {
 
     setSaving(true);
     try {
-      const res = await fetch("/api/hr/schedules/cell", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          outlet_id: selectedOutlet,
-          week_start: weekStart,
-          user_id: userId,
-          shift_date: date,
-          template_id: templateId,
-        }),
-      });
+      const postCell = (overrideBlock: boolean) =>
+        fetch("/api/hr/schedules/cell", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            outlet_id: selectedOutlet,
+            week_start: weekStart,
+            user_id: userId,
+            shift_date: date,
+            template_id: templateId,
+            ...(overrideBlock ? { override_block: true } : {}),
+          }),
+        });
+      let res = await postCell(false);
+      // Staff-blocked date: the server refuses a real shift unless the manager
+      // explicitly says yes — offer that yes inline (rest day / clear never hit
+      // this guard, they agree with the block).
+      if (res.status === 409) {
+        const err = await res.json().catch(() => ({}));
+        if (err.reason !== "blocked_date") {
+          alert(`Couldn't save this shift: ${err.error || res.status}. Nothing was changed — please try again.`);
+          return;
+        }
+        if (!confirm(`${err.error}\n\nRoster them anyway?`)) return;
+        res = await postCell(true);
+      }
       // Never silently swallow a failed save — that let managers believe a
       // roster was saved when it wasn't. Surface it and keep the picker open.
       if (!res.ok) {
@@ -645,23 +660,35 @@ export default function SchedulesPage() {
     if (!selectedOutlet) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/hr/schedules/cell", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          outlet_id: selectedOutlet,
-          week_start: weekStart,
-          user_id: userId,
-          shift_date: date,
-          template_id: "custom",
-          custom: {
-            start_time: startTime + ":00",
-            end_time: endTime + ":00",
-            break_minutes: breakMinutes,
-            label,
-          },
-        }),
-      });
+      const postCell = (overrideBlock: boolean) =>
+        fetch("/api/hr/schedules/cell", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            outlet_id: selectedOutlet,
+            week_start: weekStart,
+            user_id: userId,
+            shift_date: date,
+            template_id: "custom",
+            custom: {
+              start_time: startTime + ":00",
+              end_time: endTime + ":00",
+              break_minutes: breakMinutes,
+              label,
+            },
+            ...(overrideBlock ? { override_block: true } : {}),
+          }),
+        });
+      let res = await postCell(false);
+      if (res.status === 409) {
+        const err = await res.json().catch(() => ({}));
+        if (err.reason !== "blocked_date") {
+          alert(`Couldn't save this shift: ${err.error || res.status}. Nothing was changed — please try again.`);
+          return;
+        }
+        if (!confirm(`${err.error}\n\nRoster them anyway?`)) return;
+        res = await postCell(true);
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         alert(`Couldn't save this shift: ${err.error || res.status}. Nothing was changed — please try again.`);
@@ -1427,10 +1454,37 @@ export default function SchedulesPage() {
                               <div className="text-[10px] text-purple-600">{leave.leave_type}</div>
                             </div>
                           ) : blockout ? (
-                            <div className="rounded-lg bg-red-50 border border-red-300 p-2 text-center">
+                            // Blocked is NOT a dead cell. It used to be a static
+                            // div that also took render precedence over `shift`,
+                            // so a shift already on the roster (or an AI
+                            // pt_suggestion) sat INVISIBLE and unreachable under
+                            // the overlay — still published, still shown in
+                            // Who's Working, and the manager had nothing to
+                            // click. Now the hidden shift is surfaced and the
+                            // cell opens the picker so a manager can clear it or
+                            // set a rest day (the two actions that agree with
+                            // the block; placing a real shift asks for an
+                            // explicit override server-side).
+                            <button
+                              onClick={(e) => openPicker(u.id, d, e)}
+                              className="w-full rounded-lg bg-red-50 border border-red-300 p-2 text-center hover:bg-red-100 disabled:cursor-default"
+                              disabled={isPublished}
+                              title={isPublished
+                                ? "Unpublish the week first to change this cell"
+                                : "Staff blocked this date — click to set a rest day, clear the hidden shift, or roster anyway"}
+                            >
                               <div className="text-[10px] font-bold uppercase text-red-700">Blocked</div>
                               {blockout.reason && <div className="text-[9px] text-red-600 truncate" title={blockout.reason}>{blockout.reason}</div>}
-                            </div>
+                              {shift && (
+                                <div className="mt-1 rounded border border-amber-400 bg-amber-50 px-1 py-0.5">
+                                  <div className="text-[9px] font-semibold text-amber-800 truncate">
+                                    ⚠ {shift.notes === "rest_day"
+                                      ? "Rest Day row"
+                                      : `${shift.notes === "pt_suggestion" ? "PT? " : ""}${shift.start_time.slice(0, 5)}-${shift.end_time.slice(0, 5)}`} underneath
+                                  </div>
+                                </div>
+                              )}
+                            </button>
                           ) : shift && shift.notes === "rest_day" ? (
                             <button
                               onClick={(e) => openPicker(u.id, d, e)}

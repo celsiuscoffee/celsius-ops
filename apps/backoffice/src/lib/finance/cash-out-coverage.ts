@@ -211,7 +211,7 @@ export async function runCashOutCoverageWatch(from: string, to: string, opts: { 
 
   // Log the coverage snapshot + each material unsupported payee to the shared
   // agent ledger, so the capture gap is measurable and trainable.
-  const client = getFinanceClient();
+  const client = getFinanceClient(CASH_OUT_COVERAGE_VERSION);
   const rows = unsupported
     .filter((u) => u.amount >= 500)
     .map((u) => ({

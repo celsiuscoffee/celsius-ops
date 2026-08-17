@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Type must be one of ${ACCOUNT_TYPES.join(", ")}` }, { status: 400 });
   }
 
-  const client = getFinanceClient();
+  const client = getFinanceClient(g.user.id);
   const { data: existing } = await client.from("fin_accounts").select("code").eq("code", code).maybeSingle();
   if (existing) return NextResponse.json({ error: `Account ${code} already exists` }, { status: 409 });
   if (body.parentCode) {
@@ -85,7 +85,7 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.isActive === "boolean") patch.is_active = body.isActive;
   if (!Object.keys(patch).length) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 
-  const client = getFinanceClient();
+  const client = getFinanceClient(g.user.id);
   const { error } = await client.from("fin_accounts").update(patch).eq("code", body.code);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

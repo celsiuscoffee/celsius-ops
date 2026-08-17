@@ -89,7 +89,15 @@ export async function POST(req: NextRequest) {
   if (inclusiveDays < 1 || inclusiveDays > 365) {
     return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
   }
-  const safeTotalDays = Math.min(Number(total_days) || inclusiveDays, inclusiveDays);
+  // Clamp BOTH bounds. The old code capped only the top, so a crafted negative
+  // total_days (-5) was stored verbatim and CREDITED the balance on approval
+  // (used_days + (-5)), and a 0.01 burned nothing while blocking the range.
+  // Valid values: half-day steps from 0.5 up to the inclusive calendar span.
+  const requestedDays = Number(total_days);
+  if (!Number.isFinite(requestedDays) || requestedDays <= 0) {
+    return NextResponse.json({ error: "total_days must be a positive number of days" }, { status: 400 });
+  }
+  const safeTotalDays = Math.min(Math.max(Math.round(requestedDays * 2) / 2, 0.5), inclusiveDays);
 
   // Store the MC in the same private bucket the attendance photos use, and keep
   // the object PATH rather than a URL — the bucket is private and the backoffice
@@ -140,6 +148,27 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Reserve the days at SUBMIT time, on the leave's start-year row (the approve
+  // path banks used_days against that year). Every submit path must hold
+  // pending_days because approve/reject RELEASE it unconditionally (clamped at
+  // 0) — a request that never held eats the reservation of any other pending
+  // request the person has. The AI leave-manager no longer holds on
+  // auto-approve; this is now the single place the hold happens.
+  const balanceYear = Number(String(start_date).slice(0, 4));
+  const { data: holdBalance } = await supabase
+    .from("hr_leave_balances")
+    .select("id, pending_days")
+    .eq("user_id", session.id)
+    .eq("year", balanceYear)
+    .eq("leave_type", leave_type)
+    .maybeSingle();
+  if (holdBalance) {
+    await supabase
+      .from("hr_leave_balances")
+      .update({ pending_days: Number(holdBalance.pending_days) + safeTotalDays })
+      .eq("id", holdBalance.id);
+  }
 
   // Trigger AI Leave Manager via backoffice API
   // For now, we call it directly since the logic is in the same Supabase

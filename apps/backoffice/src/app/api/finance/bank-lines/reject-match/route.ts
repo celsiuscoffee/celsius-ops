@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   if (!body.bankLineId || !body.invoiceId) {
     return NextResponse.json({ error: "bankLineId and invoiceId required" }, { status: 400 });
   }
-  const client = getFinanceClient();
+  const client = getFinanceClient(auth.user.id);
   const { error } = await client.from("fin_ap_match_rejections").upsert(
     { bank_line_id: body.bankLineId, invoice_id: body.invoiceId, reason: "rejected" },
     { onConflict: "bank_line_id,invoice_id" },

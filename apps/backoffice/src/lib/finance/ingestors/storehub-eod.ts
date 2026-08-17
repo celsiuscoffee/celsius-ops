@@ -180,7 +180,7 @@ async function persistDoc(
   date: string,
   transactions: StoreHubTransaction[]
 ): Promise<string> {
-  const client = getFinanceClient();
+  const client = getFinanceClient("eod-sales-v1");
   const sourceRef = `storehub-eod-${outletId}-${date}`;
 
   const { data: existing } = await client

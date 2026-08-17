@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { generateSchedule, STAFFING_MODES, type StaffingMode } from "@/lib/hr/agents/schedule-generator";
-import { linkChecklistsToSchedule } from "@/lib/hr/agents/checklist-linker";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds, canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { sortOutlets } from "@/lib/outlet-order";
@@ -75,7 +74,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { action, outlet_id, week_start, schedule_id } = body;
+  const { action, outlet_id, week_start } = body;
   // Staffing mode for AI Fill (tight | mid | safe); default tight if absent/invalid.
   const mode: StaffingMode = STAFFING_MODES.includes(body.mode) ? body.mode : "tight";
   // PT stage: "open_slots" (default) posts demand gaps as bookable slots for
@@ -139,51 +138,16 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "publish") {
-    if (!schedule_id) {
-      return NextResponse.json({ error: "schedule_id required" }, { status: 400 });
-    }
-
-    // Resolve schedule → outlet, then re-run the outlet access check.
-    // The body-level outlet_id check above is skipped for publish since the
-    // client only sends schedule_id. Without this look-up a MANAGER could
-    // publish any outlet's draft by guessing the id.
-    const { data: scheduleRow } = await hrSupabaseAdmin
-      .from("hr_schedules")
-      .select("outlet_id")
-      .eq("id", schedule_id)
-      .maybeSingle();
-    if (!scheduleRow) {
-      return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
-    }
-    if (session.role === "MANAGER") {
-      const allowed = await canAccessOutlet(session, scheduleRow.outlet_id);
-      if (!allowed) {
-        return NextResponse.json({ error: "Forbidden — managers can only publish their assigned outlets" }, { status: 403 });
-      }
-    }
-
-    const { data, error } = await hrSupabaseAdmin
-      .from("hr_schedules")
-      .update({
-        status: "published",
-        published_by: session.id,
-        published_at: new Date().toISOString(),
-      })
-      .eq("id", schedule_id)
-      .select()
-      .single();
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    // Auto-link checklists to the published schedule shifts
-    let checklistResult = null;
-    try {
-      checklistResult = await linkChecklistsToSchedule(schedule_id);
-    } catch (err) {
-      console.error("Checklist linking failed:", err);
-    }
-
-    return NextResponse.json({ schedule: data, checklists: checklistResult });
+    // RETIRED. This legacy path published with no labour gate: no blocker
+    // check (uncostable shifts sailed through), no amber/red reason, no cost
+    // stamp for the variance digest, no staff push. The UI moved to
+    // /api/hr/schedules/publish (which does all of that) and nothing in the
+    // repo calls this action anymore — keeping it alive meant gate discipline
+    // was one curl away from optional.
+    return NextResponse.json(
+      { error: "This publish path is retired — use POST /api/hr/schedules/publish, which runs the labour gate." },
+      { status: 410 },
+    );
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
