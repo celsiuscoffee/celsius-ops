@@ -193,9 +193,19 @@ export default function ClockScreen() {
           ),
         )
       : null;
+  // A bad GPS fix must not read as "far away": if the accuracy circle overlaps
+  // the zone, treat the staffer as possibly inside (Nilai field report
+  // 2026-08-16: a ±1420m fix showed "675m away" to someone at the counter).
+  const accuracy = gps.kind === "ok" ? gps.accuracy ?? 0 : 0;
   const inZone =
-    zone && distance != null ? distance <= (zone.radius_meters ?? 100) : false;
-  const canClockIn = !clockedIn && (!zone || inZone);
+    zone && distance != null
+      ? distance <= (zone.radius_meters ?? 100) + accuracy
+      : false;
+  // SOFT CONTROL — policy mirror of the staff web clock page: clock-in is
+  // NEVER hard-blocked (a barista must never be locked out of starting their
+  // shift by GPS). Off-zone and no-GPS clock-ins go through and the SERVER
+  // flags them for manager review; the warning below the button says so.
+  const canClockIn = !clockedIn;
 
   return (
     <Screen edges={["top", "left", "right"]}>
@@ -294,23 +304,36 @@ export default function ClockScreen() {
             )}
           </Pressable>
         ) : (
-          <Pressable
-            onPress={() => startClockAction("clock_in")}
-            disabled={busy || !canClockIn || gps.kind !== "ok"}
-            className={`h-16 items-center justify-center rounded-2xl ${
-              busy || !canClockIn || gps.kind !== "ok"
-                ? "bg-primary/40"
-                : "bg-primary"
-            }`}
-          >
-            {busy ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text className="text-lg font-body-bold text-white">
-                {!canClockIn && zone ? "Get closer to clock in" : "Clock in"}
+          <>
+            <Pressable
+              onPress={() => startClockAction("clock_in")}
+              disabled={busy || !canClockIn || gps.kind === "loading"}
+              className={`h-16 items-center justify-center rounded-2xl ${
+                busy || !canClockIn || gps.kind === "loading"
+                  ? "bg-primary/40"
+                  : "bg-primary"
+              }`}
+            >
+              {busy ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text className="text-lg font-body-bold text-white">
+                  Clock in
+                </Text>
+              )}
+            </Pressable>
+            {zone && gps.kind === "ok" && !inZone ? (
+              <Text className="mt-2 text-center text-xs text-muted">
+                You read {distance}m from {zone.name} — you can still clock
+                in, but it will be flagged for your manager to review.
               </Text>
-            )}
-          </Pressable>
+            ) : gps.kind !== "ok" && gps.kind !== "loading" ? (
+              <Text className="mt-2 text-center text-xs text-muted">
+                No location — you can still clock in, but it will be flagged
+                for your manager to review.
+              </Text>
+            ) : null}
+          </>
         )}
         <Text className="mt-3 text-center text-xs text-muted">
           Auto clock-in is {permsReady ? "on" : "off"}. We'll notify you at the
