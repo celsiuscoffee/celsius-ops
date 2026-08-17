@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarDays, CalendarOff, CalendarClock, ChevronRight, CheckCircle2, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star, Target, Users } from "lucide-react";
+import { Clock, CalendarDays, CalendarOff, CalendarClock, ChevronRight, CheckCircle2, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star, Target, Users, Receipt } from "lucide-react";
 import { useLocationPing } from "@/lib/hr/use-location-ping";
 
 type HRStatus = {
@@ -134,6 +134,17 @@ export default function HRHomePage() {
       subtitle: "Skill audit scores & progress over time",
       color: "text-terracotta",
       bgColor: "bg-terracotta/10",
+    },
+    // The page existed and was reachable only by typing the URL — nothing in
+    // this app linked to it. The manager app has had the equivalent tile all
+    // along ((staff)/hr/index.tsx).
+    {
+      href: "/hr/payslips",
+      icon: Receipt,
+      label: "Payslips",
+      subtitle: "Monthly & weekly pay history",
+      color: "text-emerald-600",
+      bgColor: "bg-emerald-50",
     },
   ];
 
