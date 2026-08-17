@@ -61,6 +61,7 @@ export type SegmentOpts = {
   minBeans?: number; idleMinDays?: number; idleMaxDays?: number; // beans_idle / habit
   minVisits?: number; maxVisits?: number;           // habit / aov_push
   maxAvgTicket?: number;                            // aov_push
+  maxWeekdayNightVisits?: number;                   // night_revival
 };
 
 type MemberRow = { id: string; phone: string | null; name: string | null; sms_opt_out: boolean | null; birthday: string | null; preferred_outlet_id: string | null };
@@ -250,6 +251,33 @@ async function aovPushSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; lab
   }
   const small = raw.filter((r) => (r.total_spent ?? 0) / Math.max(1, r.total_visits ?? 0) < maxTicket);
   return { rows: reachable(small), label: `Regulars ≥${minVisits} visits · avg ticket <RM${maxTicket}` };
+}
+
+// ── NIGHT REVIVAL: the improved successor to the discontinued round-gap loop.
+// Round-gap targeted regulars who DON'T use a day-part — a preference AGAINST
+// that time — and asked them to reorganise their day for a free coffee. It ran
+// 2,862 sends at -0.3pp. This inverts the bet: every member here has ALREADY
+// chosen to come at night at least once, so we reinforce a revealed preference
+// instead of fighting one. Weekday nights are the actual hole (15/day vs 25/day
+// at weekends, same outlets, same hours), so existing weekday-night regulars
+// are excluded — they need no nudge. Server-side RPC because the signal lives
+// in pos_orders (hour-of-day), not member_brands.
+async function nightRevivalSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
+  const activeDays = o.activeWithinDays ?? 60;
+  const maxWkdayNight = o.maxWeekdayNightVisits ?? 2;
+  const { data, error } = await supabaseAdmin.rpc("loyalty_night_revival_segment", {
+    p_active_days: activeDays, p_max_wkday_night: maxWkdayNight, p_lookback_days: 90,
+  });
+  if (error) throw new Error(`night_revival segment: ${error.message}`);
+  const seen = new Set<string>();
+  const rows: SegmentRow[] = [];
+  for (const r of (data ?? []) as Array<{ member_id: string; phone: string; member_name: string | null }>) {
+    const phone = (r.phone ?? "").trim();
+    if (!phone || seen.has(phone)) continue; // opt-outs, ghosts + non-stackable tiers already excluded in the RPC
+    seen.add(phone);
+    rows.push({ member_id: r.member_id, phone, name: r.member_name ?? null });
+  }
+  return { rows, label: `Night-goers · active ≤${activeDays}d, ≤${maxWkdayNight} weekday nights` };
 }
 
 // ── Habit builder: the coffee habit forms around visit 3 — members at 2-3
@@ -981,12 +1009,15 @@ export const OFFER_CANDIDATES: OfferCandidate[] = [
   // drink, RM0 basket). This variant makes "free" always ride an RM25+ basket —
   // the only form Welcome is allowed to test (birthday keeps the ungated gift).
   { key: "free_drink_min25", label: "Free Drink (RM25+)", logic: "free item", voucher_template_id: "a0000025-0000-4000-8000-000000000025", offer: "a free drink when you spend RM25+" },
+  // Night-occasion offer: the weak day-parts already sell 62.6% coffee and only
+  // 4.5% tea/dessert, so the missing reason at 9pm is one that ISN'T coffee.
+  { key: "free_dessert_min30", label: "Free Dessert (RM30+)", logic: "free item", voucher_template_id: "a0000030-0000-4000-8000-000000000030", offer: "a free dessert when you spend RM30+" },
 ];
 
 // ── Loop registry: each campaign objective is a loop. Same machinery
 // (holdout → optimise offers → auto-issue voucher → measure lift), different
 // audience + candidate subset. Add a loop here and it inherits the whole engine.
-export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap" | "reward_expiring" | "beans_idle" | "celebration" | "lapsed_deep" | "habit" | "fresh_lapse" | "aov_push";
+export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap" | "reward_expiring" | "beans_idle" | "celebration" | "lapsed_deep" | "habit" | "fresh_lapse" | "aov_push" | "night_revival";
 export type LoopDef = {
   key: LoopKey;
   label: string;
@@ -1069,6 +1100,21 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // RM40+, i.e. at/above the AOV target. Same principle as round-gap's
   // ~20%-above-round-AOV anchoring.
   aov_push: { key: "aov_push", label: "Basket builder", objective: "Grow small baskets toward RM40", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct15_min40", "pct20_min40", "flat15_min50"], messageTemplate: "Hi {name}! Treat yourself a little extra at Celsius - {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 60, segmentOpts: { activeWithinDays: 30, minVisits: 4, maxAvgTicket: 25 }, dailyLimit: 80 }, segment: aovPushSegment },
+  // ── Round-gap, take two (2026-08-16). Budget-capped restart of the one
+  // objective that still has real money in it: weekday nights run 15 orders/day
+  // vs 25 at weekends across all three outlets — closing that gap is worth
+  // ~RM17k/month in revenue. Three deliberate changes from the loop that failed:
+  //   1. AUDIENCE — proven night-goers (revealed preference FOR the day-part),
+  //      not regulars who skip it. Pool 1,207.
+  //   2. OFFER — a free DESSERT, not another free coffee. Nights already sell
+  //      62.6% coffee and 4.5% dessert; the missing thing is a non-coffee
+  //      reason. RM30 bar = at night AOV (RM29.84): a margin guard on a visit
+  //      that wouldn't have happened, NOT an AOV stretch (that rule is for
+  //      basket loops like aov_push).
+  //   3. BUDGET — 30/day drip (~22 sent after the 25% holdout ≈ RM2.20/day,
+  //      ~RM66/month). SCALE GATE: raise dailyLimit to 80 only once lift is
+  //      >= 2pp on a pooled holdout of >= 30. The bleed rule kills it otherwise.
+  night_revival: { key: "night_revival", label: "Night revival", objective: "Fill weekday evenings (7-11pm)", defaultHoldoutPct: 25, defaultWindowDays: 14, candidateKeys: ["free_dessert_min30", "flat10_min30", "b1f1_drinks"], messageTemplate: "Evenings at Celsius, {name}? We're open till 11pm - enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { activeWithinDays: 60, maxWeekdayNightVisits: 2 }, dailyLimit: 30 }, segment: nightRevivalSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
