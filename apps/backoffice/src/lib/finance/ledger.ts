@@ -163,7 +163,10 @@ export async function reverseTransaction(
 
   await client
     .from("fin_transactions")
-    .update({ status: "reversed", reversed_by_id: result.transactionId })
+    // posting_key freed: the reversed row is no longer the live instance of
+    // its identity, and the unique index (066) must let a corrected re-post
+    // claim the same key (EOD reverse-and-repost backfill flow).
+    .update({ status: "reversed", reversed_by_id: result.transactionId, posting_key: null })
     .eq("id", originalId);
 
   return result;
