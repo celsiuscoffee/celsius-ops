@@ -129,6 +129,18 @@ export default function LeaveScreen() {
       );
       return;
     }
+    // Tripwire: the API body dies at the platform layer past ~4.5MB with an
+    // opaque non-JSON error. The capped capture keeps photos far below this;
+    // if a device ignored the cap, say so clearly instead of failing weird.
+    const attachment = mc?.base64 ? `data:image/jpeg;base64,${mc.base64}` : null;
+    if (attachment && attachment.length > 3_800_000) {
+      Alert.alert(
+        "MC photo too large",
+        "This photo is too large to upload. Retake it — the retake will be captured at a smaller size.",
+      );
+      setMc(null);
+      return;
+    }
     setSubmitting(true);
     try {
       await submitLeave({
@@ -137,7 +149,7 @@ export default function LeaveScreen() {
         end_date: endISO,
         total_days: totalDays,
         reason,
-        attachment: mc?.base64 ? `data:image/jpeg;base64,${mc.base64}` : null,
+        attachment,
       });
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
@@ -426,13 +438,16 @@ export default function LeaveScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MC camera — same component the claims receipts use. */}
+      {/* MC camera — same component the claims receipts use, but capped:
+          the MC goes into a JSON body that the platform rejects past
+          ~4.5MB, so full-sensor shots must never leave the camera. */}
       <Modal
         visible={mcCaptureOpen}
         animationType="slide"
         onRequestClose={() => setMcCaptureOpen(false)}
       >
         <ReceiptCapture
+          maxEdgePx={1600}
           onCapture={(photo) => {
             setMc(photo);
             setMcCaptureOpen(false);

@@ -25,19 +25,58 @@ export default function LeavePage() {
   const [mcError, setMcError] = useState<string | null>(null);
   const needsMc = form.leave_type === "sick";
 
-  const MC_MAX_BYTES = 15 * 1024 * 1024;
+  // Vercel rejects request bodies over ~4.5MB at the platform layer — the
+  // route never runs and the response isn't JSON. A fresh camera photo is
+  // 4-8MB (a third bigger again as base64), so WITHOUT compression "take a
+  // photo of your MC" failed on basically every modern phone while small
+  // gallery images sailed through — which is exactly why QA kept passing
+  // (field report 2026-08-17). Images are downscaled client-side to well
+  // under the limit; PDFs can't be compressed here so they get a hard cap.
+  const PDF_MAX_BYTES = 3 * 1024 * 1024;
+  const MC_MAX_EDGE_PX = 1600;
+  const MC_JPEG_QUALITY = 0.8;
 
-  const onPickMc = (file: File | undefined) => {
+  const compressImage = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, MC_MAX_EDGE_PX / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("no-canvas")); return; }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", MC_JPEG_QUALITY));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("bad-image")); };
+      img.src = url;
+    });
+
+  const onPickMc = async (file: File | undefined) => {
     setMcError(null);
     if (!file) { setMc(null); return; }
-    if (file.size > MC_MAX_BYTES) {
-      setMcError("That file is over 15MB. Try a photo instead of a scan.");
+    if (file.type === "application/pdf") {
+      if (file.size > PDF_MAX_BYTES) {
+        setMcError("That PDF is too large to upload. Take a photo of the MC instead.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => setMc({ dataUrl: String(reader.result), name: file.name });
+      reader.onerror = () => setMcError("Couldn't read that file. Try again.");
+      reader.readAsDataURL(file);
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => setMc({ dataUrl: String(reader.result), name: file.name });
-    reader.onerror = () => setMcError("Couldn't read that file. Try again.");
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await compressImage(file);
+      setMc({ dataUrl, name: file.name });
+    } catch {
+      setMcError("Couldn't read that photo. Try again, or pick a different one.");
+    }
   };
 
   const balances = data?.balances || [];
@@ -62,8 +101,11 @@ export default function LeavePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, total_days: totalDays, attachment: mc?.dataUrl ?? null }),
       });
-      const data = await res.json();
-      if (res.ok) {
+      // Platform-level rejections (413 body-too-large and friends) return
+      // HTML, not JSON — parse defensively so the user always gets a message
+      // instead of a silent unhandled throw.
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) {
         const decision = data.request?.decision || data.request?.ai_decision;
         setResult({
           success: true,
@@ -77,8 +119,17 @@ export default function LeavePage() {
         setMcError(null);
         mutate();
       } else {
-        setResult({ success: false, message: data.error || "Failed" });
+        setResult({
+          success: false,
+          message:
+            data?.error ??
+            (res.status === 413
+              ? "The attachment is too large to upload. Retake the MC photo and try again."
+              : `Something went wrong (${res.status}). Try again.`),
+        });
       }
+    } catch {
+      setResult({ success: false, message: "Network error — the request was not submitted. Try again." });
     } finally {
       setSubmitting(false);
     }
@@ -164,10 +215,13 @@ export default function LeavePage() {
                 <span className="mb-1 block text-xs font-medium text-gray-500">
                   MC <span className="text-terracotta">*</span>
                 </span>
+                {/* No `capture` attribute: it forced straight-to-camera on
+                    phones, hiding the gallery/files option for an MC photo
+                    the staffer already took. The chooser still offers the
+                    camera. */}
                 <input
                   type="file"
                   accept="image/*,application/pdf"
-                  capture="environment"
                   onChange={(e) => onPickMc(e.target.files?.[0])}
                   className="w-full rounded-lg border px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-1 file:text-xs"
                 />
