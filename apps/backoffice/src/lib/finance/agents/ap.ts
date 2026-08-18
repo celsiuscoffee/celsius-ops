@@ -21,7 +21,7 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getFinanceClient } from "../supabase";
 import { postJournal } from "../ledger";
-import { categorize } from "./categorizer";
+import { categorize, markDecisionApplied } from "./categorizer";
 import { parseSupplierDoc, type ParsedBill } from "../parsers/supplier-doc";
 import { resolveCompanyFromOutlet, getDefaultCompanyId } from "../companies";
 import type { JournalLineInput } from "../types";
@@ -168,6 +168,9 @@ export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestR
       ? await resolveOutletNameById(outletId)
       : null,
     contextNotes: parsed.notes ?? undefined,
+    // Attribute the decision to THIS document so inbox corrections update
+    // the right fin_agent_decisions row (the eval loop's ground truth).
+    related: { type: "document", id: docId },
   });
 
   // 8. Decision: auto-post or exception
@@ -256,6 +259,9 @@ export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestR
     confidence: Math.min(parsed.parseConfidence, cat.confidence),
     lines,
   });
+
+  // The proposal was used unchanged — feed the eval loop.
+  if (cat.decisionId) await markDecisionApplied(cat.decisionId);
 
   // The ap_bill journal IS the bill record now; keep the result shape.
   const billId = journal.transactionId;
