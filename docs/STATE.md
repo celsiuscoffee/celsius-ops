@@ -6,6 +6,23 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-18 — **Welcome-voucher cutover EXECUTED (owner-approved, ~15:45Z)
+  — the 10% welcome voucher is LIVE and the auto-FOD is retired.** PR #1155
+  merged to main (`b3c4205`, squash); apps/order production deploy READY on
+  order.celsiuscoffee.com before the SQL ran; pickup-native OTA workflow
+  (run 32156055677) completed success — customer phones pull the new
+  wallet lists on next launch. Cutover SQL applied to prod in order:
+  (1) voucher_templates row `b6865e22-9bc3-42f0-9eba-d4e20bdcd84c`
+  ("10% Welcome Discount", percent 10, validity 30d, new_member +
+  auto_issue, active); (2) `promo-first-order-celsius` → is_active=false.
+  Verified end state: 1 active new_member auto_issue template, 0 active
+  first_order promos. From now: first app sign-in → voucher in wallet +
+  push; redemption only via app orders (web initiate/quote and POS redeem
+  refuse `source_type='welcome'`). Rollback = re-activate the promotions
+  row + deactivate the template (both single UPDATEs). Deploy-gap check
+  (a voucher issued before the new code went live would carry ungated
+  source_type='manual'): zero issued_rewards after 15:30Z — clean.
+
 - 2026-08-18 — **FOD redesign (owner-directed): replace the invisible auto
   first-order discount with a VISIBLE 10% welcome voucher issued on first
   app sign-in, redeemable ONLY on app orders.** Driven by three
