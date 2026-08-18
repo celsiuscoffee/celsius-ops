@@ -56,6 +56,7 @@ const WALLET_SOURCES: ReadonlyArray<Voucher["source_type"]> = [
   "manual",
   "birthday",
   "campaign",
+  "welcome",
 ];
 
 function mapDiscountTypeForApply(

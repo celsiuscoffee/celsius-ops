@@ -305,6 +305,8 @@ export async function POST(request: NextRequest) {
         rewardId,
         items,
         subtotalSen: serverSubtotalSen,
+        // QR-table PWA — welcome vouchers (app sign-in perk) are refused here.
+        channel: "web",
       });
       if (!resolved.ok) {
         return NextResponse.json({ error: resolved.error }, { status: 400 });

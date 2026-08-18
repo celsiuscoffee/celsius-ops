@@ -6,6 +6,39 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-18 — **FOD redesign (owner-directed): replace the invisible auto
+  first-order discount with a VISIBLE 10% welcome voucher issued on first
+  app sign-in, redeemable ONLY on app orders.** Driven by three
+  "downloaded but no 10%" complaints; root causes were visibility (auto-FOD
+  showed nothing at checkout on old bundles) and channel confusion (POS /
+  web-QR never qualify; web_qr = 2,052 orders since Jul 22, 0 FOD, vs 342
+  app orders — owner confirmed keep app-only, rejected extending to web,
+  ~RM500/mo). Code shipped on `claude/missing-first-order-discount-bhe4uw`
+  (PR #1155): `resolveOrderReward` gains `channel: "app"|"web"` and refuses
+  `source_type='welcome'` vouchers from web (initiate + quote pass "web";
+  /api/orders passes app only when source is app_ios/app_android); POS
+  redeem route refuses welcome vouchers at the till; `welcome.ts` now
+  issues with `source_type='welcome'` (was 'manual'); "welcome" added to
+  all 7 wallet-source lockstep lists (native home rail/wallet/count,
+  shared rewards-count, web rail/wallet). Issuance itself is the EXISTING
+  `ensureNewMemberRewards` pipeline (otp/verify → auto_issue new_member
+  templates, idempotent, push-notifies) — no new_member template currently
+  exists, so nothing issues until the cutover. **Cutover (owner approval
+  needed, run AFTER merge+deploy, in order):**
+  (1) `insert into voucher_templates (id, brand_id, title, description,
+  icon, category, discount_type, discount_value, validity_days, is_active,
+  auto_issue, reward_type, stacks_with_beans) values (gen_random_uuid(),
+  'brand-celsius', '10% Welcome Discount', 'Thanks for joining — 10% off
+  your first order placed in the app', 'discount', 'discount', 'percent',
+  10, 30, true, true, 'new_member', true);`
+  (2) `update promotions set is_active=false where
+  id='promo-first-order-celsius';` — retires the auto-FOD (charge + native
+  preview both read this row) so voucher + auto never stack. Between (1)
+  and (2) both exist briefly; run back-to-back. Merging OTAs pickup-native
+  (JS-only lockstep-list change — OTA-safe). Note: existing members who
+  never signed into the app also get the voucher on their first app login
+  (owner's wording: "every time we detect first login in apps").
+
 - 2026-08-18 — **"Downloaded but didn't get 10%" (customer 018-2247861 /
   +60182247861) — ordered at the POS, not in the app; FOD correctly did not
   apply.** Member created 08:59Z, then order `CC-CON-6559` at the Conezion
