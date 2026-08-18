@@ -10,8 +10,12 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
-  const outletId = url.searchParams.get("outletId") || session.outletId;
-  const where = outletId ? { outletId } : {};
+  // Only managers may read another outlet's counts via ?outletId.
+  const isManager = ["OWNER", "ADMIN", "MANAGER"].includes(session.role);
+  const outletId = isManager
+    ? url.searchParams.get("outletId") || session.outletId
+    : session.outletId;
+  const where = outletId ? { outletId } : isManager ? {} : { outletId: "__none__" };
 
   const stockCounts = await prisma.stockCount.findMany({
     where,
