@@ -109,6 +109,9 @@ export async function POST(request: NextRequest) {
         walletVoucherId,
         items: enrichedItems,
         subtotalSen,
+        // Web preview — mirror initiate's gate so a welcome voucher never
+        // previews a discount the web order would then refuse.
+        channel: "web",
       });
       if (resolved.ok) resolvedRewardDiscountSen = resolved.discountSen;
     }

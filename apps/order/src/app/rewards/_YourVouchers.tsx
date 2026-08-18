@@ -24,7 +24,7 @@ import { applyWalletVoucherToState } from "@/lib/loyalty/apply-wallet-voucher";
 // Canonical wallet allowlist — same set as the native wallet
 // (WALLET_SOURCES) and the home rail. Bean-shop redemptions, referrals
 // and welcome gifts are deliberately excluded (they live elsewhere).
-const WALLET_SOURCES = ["mystery", "manual", "birthday", "campaign"];
+const WALLET_SOURCES = ["mystery", "manual", "birthday", "campaign", "welcome"];
 
 type Voucher = {
   id: string;

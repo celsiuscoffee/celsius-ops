@@ -6,6 +6,71 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-18 — **FOD redesign (owner-directed): replace the invisible auto
+  first-order discount with a VISIBLE 10% welcome voucher issued on first
+  app sign-in, redeemable ONLY on app orders.** Driven by three
+  "downloaded but no 10%" complaints; root causes were visibility (auto-FOD
+  showed nothing at checkout on old bundles) and channel confusion (POS /
+  web-QR never qualify; web_qr = 2,052 orders since Jul 22, 0 FOD, vs 342
+  app orders — owner confirmed keep app-only, rejected extending to web,
+  ~RM500/mo). Code shipped on `claude/missing-first-order-discount-bhe4uw`
+  (PR #1155): `resolveOrderReward` gains `channel: "app"|"web"` and refuses
+  `source_type='welcome'` vouchers from web (initiate + quote pass "web";
+  /api/orders passes app only when source is app_ios/app_android); POS
+  redeem route refuses welcome vouchers at the till; `welcome.ts` now
+  issues with `source_type='welcome'` (was 'manual'); "welcome" added to
+  all 7 wallet-source lockstep lists (native home rail/wallet/count,
+  shared rewards-count, web rail/wallet). Issuance itself is the EXISTING
+  `ensureNewMemberRewards` pipeline (otp/verify → auto_issue new_member
+  templates, idempotent, push-notifies) — no new_member template currently
+  exists, so nothing issues until the cutover. **Cutover (owner approval
+  needed, run AFTER merge+deploy, in order):**
+  (1) `insert into voucher_templates (id, brand_id, title, description,
+  icon, category, discount_type, discount_value, validity_days, is_active,
+  auto_issue, reward_type, stacks_with_beans) values (gen_random_uuid(),
+  'brand-celsius', '10% Welcome Discount', 'Thanks for joining — 10% off
+  your first order placed in the app', 'discount', 'discount', 'percent',
+  10, 30, true, true, 'new_member', true);`
+  (2) `update promotions set is_active=false where
+  id='promo-first-order-celsius';` — retires the auto-FOD (charge + native
+  preview both read this row) so voucher + auto never stack. Between (1)
+  and (2) both exist briefly; run back-to-back. Merging OTAs pickup-native
+  (JS-only lockstep-list change — OTA-safe). Note: existing members who
+  never signed into the app also get the voucher on their first app login
+  (owner's wording: "every time we detect first login in apps").
+
+- 2026-08-18 — **"Downloaded but didn't get 10%" (customer 018-2247861 /
+  +60182247861) — ordered at the POS, not in the app; FOD correctly did not
+  apply.** Member created 08:59Z, then order `CC-CON-6559` at the Conezion
+  POS 09:08Z (RM49.70, zero discounts, no manual discount keyed); zero
+  `orders` rows on the phone. Same shape as +60196098892 (2026-08-06) —
+  now the THIRD complaint of the "downloaded but no 10%" family. FOD is
+  native-app-orders-only by owner design (2026-07-22, drives app ordering);
+  the gap is customer expectation: "install = 10% off anywhere". Support
+  reply: the 10% applies when the order is placed IN the app; invite them
+  to place their next order via the app (their first-order credit is still
+  unused — no `orders` rows means the FOD will fire on their first app
+  order). Owner decision worth raising: counter script ("order in the app
+  for your 10%") and/or in-app copy clarifying the discount applies to app
+  orders, not counter sales.
+
+- 2026-08-17 — **"Downloaded but didn't get 10% first order" (customer
+  019-2448782 / +60192448782) — the discount WAS applied and charged.**
+  Member created 08:09Z, order `C-5473` 08:17Z (`app_ios`, dine-in, Shah
+  Alam): subtotal RM54.60, `first_order_discount_amount=546` (exactly 10%),
+  FPX charged the discounted total **RM49.14** (provider ref
+  `260817081703300416985246`, status preparing). No money owed. Likely
+  perception gap: PR #1118 (checkout-preview FOD line, merged 2026-08-06)
+  ships via OTA, but a **fresh install runs the store-embedded bundle on
+  first launch** — if that binary predates #1118, checkout showed no
+  discount line while the charge included it. The order-detail screen
+  (`pickup-native/app/order/[id].tsx`) does render "First order discount
+  −RM5.46", so the customer can verify in-app under Orders → C-5473.
+  Support reply: point them at the receipt line + RM49.14 bank charge vs
+  RM54.60 subtotal. Follow-up worth considering: cut a new store binary so
+  the embedded bundle includes #1118 (second complaint of this shape after
+  +60196098892 on 2026-08-06).
+
 - 2026-08-17 — **A DATABASE TRIGGER depletes stock on every POS sale — found
   after four sessions of hunting phantom balance movement.** `pos_order_items`
   carries `pos_order_items_stock_ins` → `pos_apply_item_stock()` (SECURITY

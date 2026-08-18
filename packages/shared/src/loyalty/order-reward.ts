@@ -163,6 +163,11 @@ export async function resolveOrderReward(args: {
   items: unknown;
   subtotalSen: number;
   brandId?: string;
+  /** Where the redemption is coming from. Welcome vouchers (issued on
+   *  first native-app sign-in) are an app perk: redeemable from "app"
+   *  but refused from "web" (QR-table PWA). Omitting the field skips
+   *  the gate — POS has its own redeem route with its own check. */
+  channel?: "app" | "web";
 }): Promise<ResolvedOrderReward> {
   const { supabase, memberId, items, subtotalSen } = args;
   const brandId = args.brandId ?? DEFAULT_BRAND_ID;
@@ -210,6 +215,12 @@ export async function resolveOrderReward(args: {
         // welcome / points rewards are unaffected. The voucher being applied
         // isn't marked 'used' until post-payment, so this counts only EARLIER
         // redemptions today and never blocks itself.
+        // Welcome vouchers reward installing + signing into the native
+        // app; letting the QR-table web flow burn them would undercut
+        // the app-ordering incentive they exist to create.
+        if (voucher.source_type === "welcome" && args.channel === "web") {
+          return { ok: false, error: "This welcome voucher can only be used on orders placed in the Celsius Coffee app" };
+        }
         if (voucher.source_type === "mission" && voucher.discount_type === "free_item") {
           const dayStr = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10); // MYT day
           const { count } = await supabase

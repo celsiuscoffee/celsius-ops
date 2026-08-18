@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     if (issued_reward_id) {
       const { data: ir, error: irLookupErr } = await supabase
         .from("issued_rewards")
-        .select("id, member_id, title, description, voucher_template_id, discount_type, discount_value, min_order_value, applicable_products, applicable_categories, free_product_name, status")
+        .select("id, member_id, title, description, voucher_template_id, discount_type, discount_value, min_order_value, applicable_products, applicable_categories, free_product_name, status, source_type")
         .eq("id", issued_reward_id)
         .eq("member_id", member_id)
         .maybeSingle();
@@ -90,6 +90,15 @@ export async function POST(req: NextRequest) {
       }
       if (ir.status !== "active") {
         return NextResponse.json({ error: "Reward already used or expired" }, { status: 400 });
+      }
+      // Welcome vouchers (first app sign-in perk) spend only on orders
+      // placed in the app — mirrors resolveOrderReward's web gate so the
+      // till can't become the leak that undoes the app-ordering incentive.
+      if (ir.source_type === "welcome") {
+        return NextResponse.json(
+          { error: "This welcome voucher can only be used on orders placed in the Celsius app" },
+          { status: 400 },
+        );
       }
       // points_required 0 (issued vouchers cost no points); stock null (no cap).
       reward = { ...ir, name: ir.title, points_required: 0, stock: null };

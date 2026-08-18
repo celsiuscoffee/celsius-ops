@@ -89,7 +89,7 @@ export function VoucherRail() {
           list.filter(
             (v) =>
               (v.status === "active" || !v.status) &&
-              ["mystery", "manual", "birthday", "campaign"].includes(v.source_type ?? ""),
+              ["mystery", "manual", "birthday", "campaign", "welcome"].includes(v.source_type ?? ""),
           ),
         );
       })

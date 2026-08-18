@@ -90,7 +90,11 @@ export async function ensureNewMemberRewards(
         // wallet renders a generic "Voucher" tile and the cart engine
         // returns 0 discount, producing the ghost vouchers customers
         // kept seeing in their wallet right after signup.
-        source_type:           "manual",
+        // "welcome" (not "manual") — the redemption gates key on it:
+        // resolveOrderReward refuses welcome vouchers from the QR-table
+        // web flow, and the POS redeem route refuses them at the till,
+        // so the app sign-in perk can only be spent on app orders.
+        source_type:           "welcome",
         title:                 tmpl.title,
         description:           tmpl.description,
         icon:                  rewardCategory,
