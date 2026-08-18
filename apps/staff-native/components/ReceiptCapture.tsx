@@ -10,13 +10,44 @@ export type CapturedPhoto = {
 export function ReceiptCapture({
   onCapture,
   onCancel,
+  maxEdgePx,
 }: {
   onCapture: (p: CapturedPhoto) => void;
   onCancel: () => void;
+  /**
+   * Cap the capture resolution (longest edge). Full-sensor shots at
+   * quality 0.7 run 2-6MB — base64'd into a JSON body that Vercel
+   * rejects at ~4.5MB before the route even runs (the sick-leave MC
+   * failure, 2026-08-17). Callers that POST the base64 through an API
+   * body should set this; callers that upload the file multipart
+   * (claims receipts) can leave it unset and keep full OCR detail.
+   */
+  maxEdgePx?: number;
 }) {
   const [perm, requestPerm] = useCameraPermissions();
   const [busy, setBusy] = useState(false);
+  const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
   const cameraRef = useRef<CameraView | null>(null);
+
+  // Pick the largest device-supported capture size within maxEdgePx.
+  // Best-effort: any failure keeps the device default.
+  async function onCameraReady() {
+    if (!maxEdgePx || !cameraRef.current) return;
+    try {
+      const sizes = await cameraRef.current.getAvailablePictureSizesAsync();
+      const fit = sizes
+        .map((s) => {
+          const m = /^(\d+)x(\d+)$/.exec(s);
+          return m ? { s, edge: Math.max(Number(m[1]), Number(m[2])) } : null;
+        })
+        .filter((p): p is { s: string; edge: number } => p !== null)
+        .filter((p) => p.edge <= maxEdgePx)
+        .sort((a, b) => b.edge - a.edge)[0];
+      if (fit) setPictureSize(fit.s);
+    } catch {
+      // keep default
+    }
+  }
 
   if (!perm) return null;
   if (!perm.granted) {
@@ -62,6 +93,8 @@ export function ReceiptCapture({
         style={{ flex: 1 }}
         facing="back"
         ratio="4:3"
+        pictureSize={pictureSize}
+        onCameraReady={onCameraReady}
       />
       <View className="absolute inset-x-0 bottom-0 flex-row items-center justify-between p-6">
         <Pressable onPress={onCancel} className="px-4 py-3">
