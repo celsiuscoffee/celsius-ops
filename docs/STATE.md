@@ -6,6 +6,21 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-18 — **"Downloaded but didn't get 10%" (customer 018-2247861 /
+  +60182247861) — ordered at the POS, not in the app; FOD correctly did not
+  apply.** Member created 08:59Z, then order `CC-CON-6559` at the Conezion
+  POS 09:08Z (RM49.70, zero discounts, no manual discount keyed); zero
+  `orders` rows on the phone. Same shape as +60196098892 (2026-08-06) —
+  now the THIRD complaint of the "downloaded but no 10%" family. FOD is
+  native-app-orders-only by owner design (2026-07-22, drives app ordering);
+  the gap is customer expectation: "install = 10% off anywhere". Support
+  reply: the 10% applies when the order is placed IN the app; invite them
+  to place their next order via the app (their first-order credit is still
+  unused — no `orders` rows means the FOD will fire on their first app
+  order). Owner decision worth raising: counter script ("order in the app
+  for your 10%") and/or in-app copy clarifying the discount applies to app
+  orders, not counter sales.
+
 - 2026-08-17 — **"Downloaded but didn't get 10% first order" (customer
   019-2448782 / +60192448782) — the discount WAS applied and charged.**
   Member created 08:09Z, order `C-5473` 08:17Z (`app_ios`, dine-in, Shah
