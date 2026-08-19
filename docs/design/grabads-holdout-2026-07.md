@@ -257,6 +257,22 @@ recovered and Putrajaya's Grab held. Verdict confirmed end-to-end: first-princip
 math → verified settlement take → marginal cash-ROAS → 2-week live holdout, all agree the
 sub-2× ads were cash-negative. **Holdout closed.**
 
+### 2026-08-19 — 1-month confirmation (33–35 clean days, incl. full clean August)
+
+| Outlet | Clean days | Grab/day | Baseline | Drop/day | **Net cash/mo** |
+|---|---|---|---|---|---|
+| Tamarind | 35 | RM270 | RM281 | −RM11 (flat) | **+RM1,098** |
+| Putrajaya | 33 | RM284 | RM347 | −RM63 | **+RM1,734** |
+| Shah Alam | 35 | RM401 | RM448 | −RM47 | **+RM266** |
+| **Total** | | | | | **+RM3,098/mo (~RM37k/yr)** |
+
+The number **converged and held**: the 2-week read gave +RM3,077, this 5-week read gives
++RM3,098 — same answer, now spanning a full clean ads-off month (August). Shah Alam stably
+positive (drop −47/day ≈ 1.5×, below the 2.22× break-even). **Confirmed and sustained past
+the first full month: keeping all three GrabAds paused banks ~RM3,100/month.** Grab sales
+flat Jun→Jul→Aug on a per-day basis → the gain is pure cost reduction, not a sales change,
+exactly as designed.
+
 ## How to read it (per outlet)
 1. `decrement/day = baseline(weekday) − actual Grab gross`.
 2. `incremental ROAS = (monthly decrement) ÷ (monthly GrabAds spend)`.
