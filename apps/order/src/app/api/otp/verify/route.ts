@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { verifyOTP } from '@/lib/otp';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { signCustomerSession } from '@/lib/customer-jwt';
@@ -27,12 +28,19 @@ async function ensureMemberRow(phone: string): Promise<MemberSnapshot | null> {
   try {
     const member = await findOrCreateMember(phone);
     if (!member?.id) return null;
-    // Welcome BOGO + any other new_member auto_issue rewards.
+    // Welcome voucher + any other new_member auto_issue rewards.
     // Idempotent — checks issued_rewards first, so signing in
     // repeatedly doesn't re-grant. Best-effort; failure here
-    // shouldn't block sign-in.
-    ensureNewMemberRewards(member.id).catch((e) => {
-      console.warn('[otp/verify] ensureNewMemberRewards failed:', e);
+    // shouldn't block sign-in. MUST ride after(): as a bare floating
+    // promise it froze with the lambda when the response returned —
+    // verified live 2026-08-18: 22 logins after the welcome-template
+    // cutover, 0 vouchers issued. after()/waitUntil keeps the function
+    // alive until issuance lands (same reason welcome.ts wraps its
+    // push notification).
+    after(async () => {
+      await ensureNewMemberRewards(member.id).catch((e) => {
+        console.warn('[otp/verify] ensureNewMemberRewards failed:', e);
+      });
     });
     return {
       id: member.id,
