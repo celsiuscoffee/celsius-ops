@@ -460,8 +460,12 @@ export default function LeaveScreen() {
 }
 
 function RequestCard({ request }: { request: LeaveRequest }) {
+  // ai_approved is the MOST COMMON approval path (the AI leave manager writes
+  // it), but the card treated only "approved" as approved — so auto-approved
+  // leave showed a grey pending clock, and staff chased managers to confirm.
+  const isApproved = request.status === "approved" || request.status === "ai_approved";
   const icon =
-    request.status === "approved" ? (
+    isApproved ? (
       <CheckCircle2 color="#15803D" size={16} />
     ) : request.status === "rejected" ? (
       <XCircle color="#B91C1C" size={16} />
@@ -471,7 +475,7 @@ function RequestCard({ request }: { request: LeaveRequest }) {
       <Clock color="#9CA3AF" size={16} />
     );
   const labelColor =
-    request.status === "approved"
+    isApproved
       ? "text-success"
       : request.status === "rejected"
         ? "text-danger"

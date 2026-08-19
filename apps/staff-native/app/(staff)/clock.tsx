@@ -53,15 +53,18 @@ export default function ClockScreen() {
     "clock_in" | "clock_out" | null
   >(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      const s = await getClockStatus();
-      setStatus(s);
-      setStatusError(null);
-    } catch (e) {
-      setStatusError(e instanceof ApiError ? e.message : "Couldn't load status");
-    }
-  }, []);
+  const refresh = useCallback(
+    async (coords?: { latitude: number; longitude: number } | null) => {
+      try {
+        const s = await getClockStatus(coords);
+        setStatus(s);
+        setStatusError(null);
+      } catch (e) {
+        setStatusError(e instanceof ApiError ? e.message : "Couldn't load status");
+      }
+    },
+    [],
+  );
 
   const refreshGps = useCallback(async () => {
     const p = await getLocationStatus();
@@ -90,6 +93,13 @@ export default function ClockScreen() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Once we have a GPS fix, re-fetch status WITH coords so a multi-outlet
+  // staffer sees the geofence for the outlet they're actually at (not the
+  // session-outlet fallback the coord-less first fetch returned).
+  useEffect(() => {
+    if (gps.kind === "ok") refresh(gps.coords);
+  }, [gps, refresh]);
 
   useEffect(() => {
     (async () => {
