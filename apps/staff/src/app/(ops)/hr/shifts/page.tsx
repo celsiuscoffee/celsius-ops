@@ -120,7 +120,9 @@ export default function MyShiftsPage() {
   const shifts = data?.shifts || [];
   const pendingConsent = swapData?.pendingConsent || [];
   const sentSwaps = swapData?.sent || [];
-  const today = new Date().toISOString().slice(0, 10);
+  // MYT "today" — a plain toISOString() is UTC, which is yesterday before
+  // 08:00 MYT and badges the wrong day.
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
 
   const handleSwapResponse = async (swapId: string, action: "consent" | "decline") => {
     setSwapAction(swapId);
@@ -206,11 +208,16 @@ export default function MyShiftsPage() {
           list.push(s);
           shiftsByDate.set(s.shift_date, list);
         }
+        // Build the window by UTC arithmetic on the MYT date string. Parsing
+        // `today + "T00:00:00"` as LOCAL time and re-serialising to UTC was the
+        // off-by-one that put a phantom "yesterday" card at the top and dropped
+        // the 14th day. Anchoring at ...Z and stepping in UTC keeps each label
+        // equal to the MYT calendar date regardless of the device timezone.
         const days: string[] = [];
-        const baseDate = new Date(today + "T00:00:00");
+        const baseDate = new Date(today + "T00:00:00Z");
         for (let i = 0; i < 14; i++) {
           const d = new Date(baseDate);
-          d.setDate(baseDate.getDate() + i);
+          d.setUTCDate(baseDate.getUTCDate() + i);
           days.push(d.toISOString().slice(0, 10));
         }
         const hasAnyShift = shifts.some((s) => s.shift_date >= today);

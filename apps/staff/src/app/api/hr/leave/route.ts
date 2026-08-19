@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 // anon client reads zero rows (screen shows empty). Access stays scoped by the
 // getSession gate + the per-user filters below.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
-import { leaveDays } from "@/lib/hr/constants";
+import { leaveDays, getMYTToday } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,9 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const year = new Date().getFullYear();
+  // Balance year from MYT — on Jan 1 before 08:00 MYT a UTC year is still last
+  // year, so the app would show last year's balances for those hours.
+  const year = Number(getMYTToday().slice(0, 4));
 
   const [balancesRes, requestsRes] = await Promise.all([
     supabase

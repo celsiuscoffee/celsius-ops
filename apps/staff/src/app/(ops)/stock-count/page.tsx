@@ -105,7 +105,7 @@ function loadDraft(freq: string): Record<string, ItemCount> {
     if (!raw) return {};
     const data = JSON.parse(raw);
     if (data.frequency !== freq) return {};
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
     if (data.date !== today) { localStorage.removeItem(STORAGE_KEY); return {}; }
     return data.items || {};
   } catch { return {}; }
@@ -113,7 +113,7 @@ function loadDraft(freq: string): Record<string, ItemCount> {
 
 function saveDraft(freq: string, items: Record<string, ItemCount>) {
   try {
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ frequency: freq, date: today, items }));
   } catch { /* ignore */ }
 }

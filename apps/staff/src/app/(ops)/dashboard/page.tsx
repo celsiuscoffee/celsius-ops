@@ -31,7 +31,9 @@ export default function DashboardPage() {
   const { data: sops, isLoading: sopsLoading } = useFetch<Sop[]>("/api/sops");
   const { data: categories, isLoading: catsLoading } = useFetch<Category[]>("/api/sop-categories");
 
-  const today = new Date().toISOString().split("T")[0];
+  // MYT date, not UTC — before 08:00 MYT a UTC date is still yesterday, so the
+  // "today's checklists" fetch pulled the wrong day (matches the checklists page).
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
   const { data: todayChecklists, isLoading: clLoading } = useFetch<ChecklistSummary[]>(
     `/api/checklists?date=${today}`
   );
