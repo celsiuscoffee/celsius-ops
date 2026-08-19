@@ -1114,7 +1114,7 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   //   3. BUDGET — 30/day drip (~22 sent after the 25% holdout ≈ RM2.20/day,
   //      ~RM66/month). SCALE GATE: raise dailyLimit to 80 only once lift is
   //      >= 2pp on a pooled holdout of >= 30. The bleed rule kills it otherwise.
-  night_revival: { key: "night_revival", label: "Night revival", objective: "Fill weekday evenings (7-11pm)", defaultHoldoutPct: 25, defaultWindowDays: 14, candidateKeys: ["free_dessert_min30", "flat10_min30", "b1f1_drinks"], messageTemplate: "Evenings at Celsius, {name}? We're open till 11pm - enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { activeWithinDays: 60, maxWeekdayNightVisits: 2 }, dailyLimit: 30 }, segment: nightRevivalSegment },
+  night_revival: { key: "night_revival", label: "Night revival", objective: "Fill weekday evenings (7-11pm)", defaultHoldoutPct: 25, defaultWindowDays: 14, candidateKeys: ["free_dessert_min30", "flat10_min30", "b1f1_drinks"], messageTemplate: "Hi {name}! Celsius is open till 11pm - enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { activeWithinDays: 60, maxWeekdayNightVisits: 2 }, dailyLimit: 30 }, segment: nightRevivalSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
