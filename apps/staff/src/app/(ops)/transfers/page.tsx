@@ -54,6 +54,7 @@ export default function TransferPage() {
   const [productSearch, setProductSearch] = useState("");
   const [transferItems, setTransferItems] = useState<TransferItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
@@ -145,6 +146,7 @@ export default function TransferPage() {
     if (!toOutletId || transferItems.length === 0 || !user) return;
 
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const res = await fetch("/api/transfers", {
         method: "POST",
@@ -165,7 +167,17 @@ export default function TransferPage() {
         setDialogOpen(false);
         resetForm();
         await fetchTransfers(user.outletId);
+      } else {
+        const body = await res.json().catch(() => null);
+        setSubmitError(
+          body?.error ??
+            (body?.details?.length
+              ? body.details.join(" ")
+              : `Couldn't create this transfer (${res.status}). Nothing was moved — try again.`),
+        );
       }
+    } catch {
+      setSubmitError("Network error — nothing was moved. Try again.");
     } finally {
       setSubmitting(false);
     }
@@ -337,6 +349,11 @@ export default function TransferPage() {
               />
             </div>
 
+            {submitError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {submitError}
+              </div>
+            )}
             <Button
               className="w-full bg-terracotta hover:bg-terracotta-dark"
               disabled={!toOutletId || transferItems.length === 0 || submitting}

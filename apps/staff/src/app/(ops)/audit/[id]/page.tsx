@@ -50,6 +50,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
   const [noteText, setNoteText] = useState("");
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
+  const [completeError, setCompleteError] = useState<string | null>(null);
   const [overallNotes, setOverallNotes] = useState("");
   const [showComplete, setShowComplete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -171,14 +172,25 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
 
   const handleComplete = async () => {
     setCompleting(true);
+    setCompleteError(null);
     try {
-      await fetch(`/api/audits/${id}`, {
+      const res = await fetch(`/api/audits/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ complete: true, overallNotes }),
       });
+      // Was: fire-and-close. On a 4xx/5xx the dialog closed exactly as if it
+      // worked, leaving the audit IN_PROGRESS with no signal. Only close on a
+      // confirmed success; otherwise say so and keep the dialog open.
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setCompleteError(body?.error ?? `Couldn't complete the audit (${res.status}). Try again.`);
+        return;
+      }
       mutate();
       setShowComplete(false);
+    } catch {
+      setCompleteError("Network error — the audit was not completed. Try again.");
     } finally {
       setCompleting(false);
     }
@@ -503,6 +515,11 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                 rows={3}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
               />
+              {completeError && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {completeError}
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setShowComplete(false)} className="flex-1">
                   Cancel
