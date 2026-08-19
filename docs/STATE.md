@@ -6,6 +6,28 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-19 — **Welcome-voucher E2E round 2: `after()` fix live, but the
+  INSERT is refused by a DB constraint — issuance still zero.** PR #1161
+  merged (`d87e622`), production deploy READY on order.celsiuscoffee.com
+  ~14:36Z. Live synthetic sign-in (test phone 60100000001, planted OTP,
+  POSTed from inside prod via pg_net — note: /api/otp/verify sits behind a
+  CSRF middleware requiring an Origin header, and pg_net's 5s client
+  timeout fires before the route answers, but the request completes
+  server-side). Result: OTP verified, member created — and Vercel runtime
+  logs show `[welcome] failed to issue … violates check constraint
+  "issued_rewards_source_type_check"`. The live constraint enumerates
+  mission/mystery/birthday/referral/milestone/manual/points_redemption/
+  campaign — **'welcome' was never in it** (issued_rewards is a
+  SQL-managed loyalty table, not in Prisma, so nothing in the repo caught
+  it). Fix = widen the CHECK to include 'welcome':
+  `supabase/migrations/107_issued_rewards_allow_welcome_source.sql`
+  (proposed, owner approval required before applying to prod per hard
+  rule 6). After applying: re-run the synthetic sign-in, confirm the
+  voucher row (source_type='welcome', template b6865e22, 30d expiry),
+  then delete ALL test rows for phone 60100000001 (otp_codes, members,
+  member_brands, issued_rewards). The 20+ real missed members still
+  self-heal on next sign-in once the constraint is widened.
+
 - 2026-08-18 — **Welcome-voucher cutover EXECUTED (owner-approved, ~15:45Z)
   — the 10% welcome voucher is LIVE and the auto-FOD is retired.** PR #1155
   merged to main (`b3c4205`, squash); apps/order production deploy READY on
