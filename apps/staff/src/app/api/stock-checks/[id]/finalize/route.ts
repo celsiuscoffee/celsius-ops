@@ -15,8 +15,10 @@ import { logAgentMessage } from "@celsius/agents/src/messages";
 /**
  * POST /api/stock-checks/[id]/finalize
  *
- * Flips a DRAFT count → SUBMITTED, runs stock balance updates, and stamps
- * the finalizer. Anyone at the outlet (or admin) can finalize.
+ * Flips a DRAFT count → REVIEWED (auto-approve; discrepancies are flagged for
+ * the manager to reason-code in the backoffice) or → SUBMITTED when the count
+ * is short/stale/off-schedule, runs stock balance updates, and stamps the
+ * finalizer. Anyone at the outlet (or admin) can finalize.
  *
  * Refuses if any item has a null countedQty — the UI guards this too, but
  * we re-check on the server to avoid race-induced partial finalization.
@@ -234,13 +236,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // A short count (below floor, or a monthly submitted with an explicit partial
   // reason) must never auto-approve — it goes to the manager's review queue with
-  // a note, so the gap is seen. Otherwise, zero-variance counts auto-approve.
-  // A stale count is held back from auto-approval for the same reason.
-  // An off-schedule census is held back from auto-approval for the same reason:
-  // it is an exception someone chose to make, so a human should see it.
+  // a note, so the gap is seen. A stale or off-schedule count is held back for
+  // the same reason: it is an exception someone chose to make, so a human should
+  // see it. Variances do NOT hold a count back: the balances are applied below
+  // regardless of approval, so parking the count in the queue only delayed the
+  // paperwork while the numbers were already live. Discrepancies stay flagged
+  // on the count (note below + unresolved rows in the backoffice) for the
+  // manager to reason-code after the fact.
   const isShort = coverage.belowFloor;
-  const autoApprove =
-    !isShort && !freshness.stale && !schedule.offSchedule && variances.length === 0;
+  const autoApprove = !isShort && !freshness.stale && !schedule.offSchedule;
   const noteAddition = [
     isShort ? `${coverage.shortNote}${partialReason ? ` reason: ${partialReason}` : ""}` : null,
     variances.length > 0
@@ -349,7 +353,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       fromAgent: "stock_count_auto_approve",
       toAgent: "owner",
       kind: "report",
-      summary: `Auto-approved a zero-variance stock count (${productIds.length} products), no manager review needed.`,
+      summary:
+        variances.length > 0
+          ? `Auto-approved a stock count (${productIds.length} products) with ${variances.length} discrepanc${variances.length === 1 ? "y" : "ies"} flagged for reason-coding in the backoffice.`
+          : `Auto-approved a zero-variance stock count (${productIds.length} products), no manager review needed.`,
       refTable: "stock_counts",
       refId: id,
       outletId: count.outletId,
