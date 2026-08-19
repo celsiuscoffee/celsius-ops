@@ -29,14 +29,21 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { date, hours_requested, ot_type, reason, shift_start_time, shift_end_time } = body;
+  // ot_type is intentionally NOT read from the body — the rate is derived from
+  // the calendar below, never chosen by the requester.
+  const { date, hours_requested, reason, shift_start_time, shift_end_time } = body;
 
   if (!date || !hours_requested || !reason) {
     return NextResponse.json({ error: "date, hours_requested, reason required" }, { status: 400 });
   }
   const hoursNum = Number(hours_requested);
-  if (!Number.isFinite(hoursNum) || hoursNum <= 0 || hoursNum > 24) {
+  if (!Number.isFinite(hoursNum) || hoursNum < 0.25 || hoursNum > 24) {
     return NextResponse.json({ error: "hours_requested must be between 0.25 and 24" }, { status: 400 });
+  }
+  // The date must be a real YYYY-MM-DD (MYT wall date) — the rate derivation
+  // and the payroll join both key on it.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+    return NextResponse.json({ error: "date must be YYYY-MM-DD" }, { status: 400 });
   }
 
   // OT is FT-only (owner policy 2026-07-28: "PT no overtime. Intern no
@@ -55,6 +62,26 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // The OT rate is NOT the staffer's to choose (owner ruling 2026-08-18: "based
+  // it in calendar. the ones that calendar declare as ph will be counted as
+  // ph"). The dropdown let anyone file a weekday shift at "3x (public holiday)"
+  // and a one-tap approval paid the premium. Derive it from the same calendar
+  // the clock-out uses: a date the public-holiday calendar declares → 3x; a
+  // rostered rest day for this person → 2x; otherwise weekday OT → 1.5x. The
+  // client-supplied ot_type is ignored.
+  const [holidayResp, restResp] = await Promise.all([
+    supabase.from("hr_public_holidays").select("date").eq("date", date).maybeSingle(),
+    supabase
+      .from("hr_schedule_shifts")
+      .select("id")
+      .eq("user_id", session.id)
+      .eq("shift_date", date)
+      .ilike("role_type", "rest%")
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const derivedOtType = holidayResp.data ? "3x" : restResp.data ? "2x" : "1.5x";
+
   const { data, error } = await supabase
     .from("hr_overtime_requests")
     .insert({
@@ -63,7 +90,7 @@ export async function POST(req: NextRequest) {
       date,
       request_type: "pre_approval",
       hours_requested: hoursNum,
-      ot_type: ot_type || "1.5x",
+      ot_type: derivedOtType,
       reason,
       shift_start_time: shift_start_time || null,
       shift_end_time: shift_end_time || null,
