@@ -328,7 +328,13 @@ export function fetchDateAvailability() {
 }
 
 export function setDateUnavailable(date: string, reason?: string) {
-  return api<{ availability: DateAvailability }>("/api/hr/availability", {
+  // The server ACCEPTS a block on an already-rostered date but returns a
+  // rostered_conflict telling the staffer the shift still stands until a
+  // manager changes it — the screen surfaces that message.
+  return api<{
+    availability: DateAvailability;
+    rostered_conflict?: { message: string; shifts: Array<{ shift_date: string; start_time: string; end_time: string }> } | null;
+  }>("/api/hr/availability", {
     method: "POST",
     body: JSON.stringify({ date, availability: "unavailable", reason: reason || null }),
   });

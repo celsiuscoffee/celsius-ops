@@ -43,7 +43,14 @@ type DayMode = "off" | "any" | "custom";
 type DayState = { mode: DayMode; from: string; until: string };
 
 function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // LOCAL calendar date — the strip is built and labelled from local dates, so
+  // ymd must match. toISOString() is UTC, which on a Malaysia phone before 8am
+  // is the previous day, so a tap on "Tue 18" posted 2026-08-17 (the block
+  // landed a day early). Device local time == MYT for the crew.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export default function AvailabilityScreen() {
@@ -157,11 +164,19 @@ export default function AvailabilityScreen() {
   const toggleDate = async (date: string, blocked: boolean) => {
     setTogglingDate(date);
     try {
-      if (blocked) await clearDateAvailability(date);
-      else await setDateUnavailable(date);
+      let conflict: string | null = null;
+      if (blocked) {
+        await clearDateAvailability(date);
+      } else {
+        const res = await setDateUnavailable(date);
+        conflict = res.rostered_conflict?.message ?? null;
+      }
       Haptics.selectionAsync();
       const dates = await fetchDateAvailability();
       setBlockouts(dates.availability.filter((a) => a.availability === "unavailable"));
+      // The block IS saved; this just tells the staffer a published shift still
+      // stands on that date until a manager changes the roster.
+      if (conflict) Alert.alert("Blocked — but you're rostered", conflict);
     } catch (e) {
       Alert.alert("Couldn't update", e instanceof Error ? e.message : "Please try again.");
     } finally {
