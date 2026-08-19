@@ -176,21 +176,18 @@ export default function StaffOTPage() {
                 <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-base" />
               </label>
 
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-gray-700">Hours</span>
-                  <input type="number" step="0.25" inputMode="decimal" value={form.hours} onChange={e => setForm({ ...form, hours: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-base" placeholder="2" />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-gray-700">Rate</span>
-                  <select value={form.ot_type} onChange={e => setForm({ ...form, ot_type: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-base">
-                    <option value="1x">1x</option>
-                    <option value="1.5x">1.5x (normal OT)</option>
-                    <option value="2x">2x (rest day)</option>
-                    <option value="3x">3x (public holiday)</option>
-                  </select>
-                </label>
-              </div>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-gray-700">Hours</span>
+                <input type="number" step="0.25" inputMode="decimal" value={form.hours} onChange={e => setForm({ ...form, hours: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-base" placeholder="2" />
+              </label>
+
+              {/* Rate is set automatically from the public-holiday / rest-day
+                  calendar for the chosen date — not picked here. */}
+              <p className="rounded-lg bg-gray-50 p-2 text-xs text-gray-600">
+                The OT rate is set automatically: <strong>1.5×</strong> on a normal
+                day, <strong>2×</strong> on your rest day, <strong>3×</strong> on a
+                public holiday.
+              </p>
 
               <div className="grid grid-cols-2 gap-2">
                 <label className="block">
