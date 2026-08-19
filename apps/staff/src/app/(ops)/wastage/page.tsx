@@ -47,6 +47,7 @@ export default function WastagePage() {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [wastage, setWastage] = useState<WastageEntry[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -111,6 +112,7 @@ export default function WastagePage() {
     if (!selectedProductId || !quantity || !reason || !user) return;
 
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const res = await fetch("/api/wastage", {
         method: "POST",
@@ -131,7 +133,12 @@ export default function WastagePage() {
         setDialogOpen(false);
         resetForm();
         await fetchWastage(user.outletId);
+      } else {
+        const body = await res.json().catch(() => null);
+        setSubmitError(body?.error ?? `Couldn't record this (${res.status}). Nothing was saved — try again.`);
       }
+    } catch {
+      setSubmitError("Network error — nothing was saved. Try again.");
     } finally {
       setSubmitting(false);
     }
@@ -276,6 +283,11 @@ export default function WastagePage() {
                 onChange={(e) => setNotes(e.target.value)}
               />
             </div>
+            {submitError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {submitError}
+              </div>
+            )}
             <Button
               className="w-full bg-terracotta hover:bg-terracotta-dark"
               disabled={!selectedProductId || !quantity || !reason || submitting}

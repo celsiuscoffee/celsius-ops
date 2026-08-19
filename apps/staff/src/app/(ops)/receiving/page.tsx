@@ -146,6 +146,7 @@ export default function ReceivePage() {
   const [discrepancyReasons, setDiscrepancyReasons] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
 
   /* ---- Fetch data ------------------------------------------------ */
@@ -253,6 +254,7 @@ export default function ReceivePage() {
   const submitReceiving = async () => {
     if (!selectedPO || !user) return;
     setSubmitting(true);
+    setSubmitError(null);
 
     const payload = {
       orderId: selectedPO.id,
@@ -267,8 +269,12 @@ export default function ReceivePage() {
           orderedQty: item.orderedOriginalQty ?? item.quantity,
           receivedQty,
           expiryDate: expiryDates[item.id] || undefined,
+          // Discrepancy is vs what's still EXPECTED on this receiving
+          // (expectedNow), not the cumulative `item.quantity` — on a partially
+          // received PO the latter is the running total, so a correct balance
+          // delivery was being stamped "Quantity mismatch".
           discrepancyReason:
-            receivedQty !== item.quantity
+            receivedQty !== expectedNow(item)
               ? discrepancyReasons[item.id] || "Quantity mismatch"
               : undefined,
         };
@@ -297,10 +303,21 @@ export default function ReceivePage() {
           fetchData(); // Refresh lists
         }, 1200);
       } else {
-        console.error("Failed to submit receiving:", await res.text());
+        // Surface the failure — this used to only console.error, so a rejected
+        // delivery (bad PO status, ambiguous package, expired session, or a 413
+        // when many invoice photos push the body over the platform limit) left
+        // the form sitting there and staff believed stock was recorded when it
+        // wasn't.
+        const body = await res.json().catch(() => null);
+        setSubmitError(
+          body?.error ??
+            (res.status === 413
+              ? "The photos made this too large to upload. Remove a photo or two and try again."
+              : `Couldn't record this delivery (${res.status}). Nothing was saved — try again.`),
+        );
       }
-    } catch (err) {
-      console.error("Failed to submit receiving:", err);
+    } catch {
+      setSubmitError("Network error — the delivery was not recorded. Try again.");
     } finally {
       setSubmitting(false);
     }
@@ -402,25 +419,12 @@ export default function ReceivePage() {
               )}
             </div>
 
-            {/* Quick capture -- no PO linked */}
-            <Card className="border-dashed border-gray-300">
-              <button
-                onClick={() => setCameraOpen(true)}
-                className="flex w-full items-center gap-3 px-3 py-3"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
-                  <Camera className="h-5 w-5 text-gray-500" />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-medium text-gray-900">
-                    Quick Invoice Capture
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Snap an invoice without linking to a PO
-                  </p>
-                </div>
-              </button>
-            </Card>
+            {/* Removed the "Quick Invoice Capture (no PO)" card: it opened the
+                camera and stored the photo in state that only the PO-detail
+                view ever submits, so in list view the photo was silently
+                discarded and reset on the next PO open. There is no PO-less
+                upload endpoint to wire it to — a misleading dead end is worse
+                than its absence. Capture stays available inside a PO. */}
 
             {/* Recent */}
             <div>
@@ -684,6 +688,11 @@ export default function ReceivePage() {
                     Some quantities don&apos;t match. Discrepancies will be
                     flagged for follow-up.
                   </span>
+                </div>
+              )}
+              {submitError && (
+                <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {submitError}
                 </div>
               )}
               <Button
