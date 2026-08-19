@@ -17,8 +17,10 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
+  // MYT day start, not the server's UTC one (Vercel runs UTC → server midnight
+  // is 08:00 MYT). "Stock count done today?" was wrong for the opening crew.
+  const mytToday = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
+  const todayStart = new Date(`${mytToday}T00:00:00+08:00`);
 
   const [
     recentOrders,

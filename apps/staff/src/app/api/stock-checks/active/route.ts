@@ -30,14 +30,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No outlet on session" }, { status: 400 });
   }
 
-  // "Today" in server time. Good enough for Malaysia (UTC+8) where one
-  // outlet's day boundary doesn't realistically straddle UTC midnight
-  // during work hours. If we ever serve outlets across multiple TZs we
-  // can stamp countDate using outlet timezone.
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart);
-  dayEnd.setDate(dayEnd.getDate() + 1);
+  // "Today" is the MALAYSIA day, not the server's UTC one. Vercel runs UTC, so
+  // server-local midnight is 08:00 MYT — squarely inside opening hours — which
+  // made a count finalized at 7am stop being "today's" at 8:01am, and yesterday's
+  // show as today's between midnight and 8am. Anchor the window to MYT (+08:00).
+  const mytToday = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
+  const dayStart = new Date(`${mytToday}T00:00:00+08:00`);
+  const dayEnd = new Date(dayStart.getTime() + 86_400_000);
 
   let active = await prisma.stockCount.findFirst({
     where: {

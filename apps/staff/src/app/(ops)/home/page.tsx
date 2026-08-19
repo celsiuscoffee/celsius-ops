@@ -54,8 +54,12 @@ export default async function HomePage() {
   const outletId = session.outletId ?? undefined;
   const outletFilter = outletId ? { outletId } : undefined;
 
-  const myt = new Date(Date.now() + 8 * 60 * 60 * 1000);
-  const todayStart = new Date(Date.UTC(myt.getUTCFullYear(), myt.getUTCMonth(), myt.getUTCDate()));
+  // Start of the MYT day as a real instant (00:00 +08:00). The old
+  // Date.UTC(mytY,mytM,mytD) produced 00:00 UTC = 08:00 MYT, so this SSR page
+  // and /api/dashboard disagreed about whether the stock count was done before
+  // 8am. Both now anchor to 00:00 MYT.
+  const mytToday = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
+  const todayStart = new Date(`${mytToday}T00:00:00+08:00`);
 
   // Fetch checklists + dashboard in parallel — only fetch what user has access to
   const [checklists, lastCheck, sentOrders, teamChecklists, recentAudits, myAuditsToday] = await Promise.all([
