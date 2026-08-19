@@ -101,8 +101,8 @@ export default function ProfilePage() {
 
   const handleChangePin = async () => {
     setPinError(null);
-    if (!/^\d{4,6}$/.test(newPin)) {
-      setPinError("New PIN must be 4-6 digits");
+    if (!/^\d{6}$/.test(newPin)) {
+      setPinError("New PIN must be exactly 6 digits");
       return;
     }
     if (newPin !== confirmPin) {
@@ -293,12 +293,12 @@ export default function ProfilePage() {
                         value={currentPin}
                         onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-lg tracking-widest"
-                        placeholder="••••"
+                        placeholder="••••••"
                         autoComplete="current-password"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-600">New PIN (4-6 digits)</label>
+                      <label className="mb-1 block text-xs font-medium text-gray-600">New PIN (6 digits)</label>
                       <input
                         type="password"
                         inputMode="numeric"
@@ -307,7 +307,7 @@ export default function ProfilePage() {
                         value={newPin}
                         onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-lg tracking-widest"
-                        placeholder="••••"
+                        placeholder="••••••"
                         autoComplete="new-password"
                       />
                     </div>
@@ -321,7 +321,7 @@ export default function ProfilePage() {
                         value={confirmPin}
                         onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-lg tracking-widest"
-                        placeholder="••••"
+                        placeholder="••••••"
                         autoComplete="new-password"
                       />
                     </div>

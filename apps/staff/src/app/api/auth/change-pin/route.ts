@@ -8,7 +8,9 @@ export const dynamic = "force-dynamic";
 // POST /api/auth/change-pin
 // Body: { current_pin: string, new_pin: string }
 // Validates current PIN, then updates to hashed new PIN.
-// PIN must be 4-6 digits.
+// PIN must be exactly 6 digits — the login surfaces (web login boxes and
+// /api/auth/pin-native) only accept 6, so a shorter PIN would lock the user
+// out of every sign-in path (owner ruling 2026-08-19: 6 digits only).
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -17,8 +19,8 @@ export async function POST(req: NextRequest) {
   const currentPin = (body.current_pin || "").trim();
   const newPin = (body.new_pin || "").trim();
 
-  if (!/^\d{4,6}$/.test(newPin)) {
-    return NextResponse.json({ error: "New PIN must be 4-6 digits" }, { status: 400 });
+  if (!/^\d{6}$/.test(newPin)) {
+    return NextResponse.json({ error: "New PIN must be exactly 6 digits" }, { status: 400 });
   }
   if (currentPin === newPin) {
     return NextResponse.json({ error: "New PIN must differ from current PIN" }, { status: 400 });

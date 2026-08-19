@@ -16,8 +16,11 @@ export async function POST(req: NextRequest) {
 
   const { pin, outletId } = await req.json();
 
-  if (!pin || pin.length < 4) {
-    return NextResponse.json({ error: "PIN required (minimum 4 digits)" }, { status: 400 });
+  // PINs are exactly 6 digits (owner ruling 2026-08-19). pin-native already
+  // enforced 6; this web-login route only required ≥4, so it stayed
+  // inconsistent with what change-pin now writes.
+  if (!/^\d{6}$/.test(pin || "")) {
+    return NextResponse.json({ error: "PIN must be 6 digits" }, { status: 400 });
   }
 
   // Find users with PINs — OWNER/ADMIN can log in to any outlet,
