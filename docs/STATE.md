@@ -22,6 +22,18 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   row + deactivate the template (both single UPDATEs). Deploy-gap check
   (a voucher issued before the new code went live would carry ungated
   source_type='manual'): zero issued_rewards after 15:30Z — clean.
+  **E2E check (owner-requested, 2026-08-19) found issuance DEAD ON
+  ARRIVAL: 22 verified logins (20 phones) in the first hour after
+  cutover, 0 welcome vouchers issued.** Root cause: the native app signs
+  in via `/api/otp/verify`, whose `ensureNewMemberRewards` call was a
+  bare floating promise — Vercel freezes the lambda at response return,
+  so issuance never ran (the sibling `/api/loyalty/otp/verify` awaits it;
+  welcome.ts's own push already needed `after()` for the same reason).
+  Fix: wrap issuance in `after()` in otp/verify (this branch). No
+  backfill needed — issuance is idempotent per member+template, so the
+  missed 20 phones receive the voucher on their next sign-in.
+  **Lesson: on Vercel routes, fire-and-forget = fire-and-lose; anything
+  that must complete after the response needs `after()`.**
 
 - 2026-08-18 — **FOD redesign (owner-directed): replace the invisible auto
   first-order discount with a VISIBLE 10% welcome voucher issued on first
