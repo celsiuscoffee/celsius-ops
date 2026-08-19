@@ -72,20 +72,40 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
 }
 
-// A count was auto-approved (no discrepancies) when it went straight to
-// REVIEWED at submit time — reviewedAt within a few seconds of submittedAt.
-// A manual review happens minutes/hours later, so the gap reliably tells
-// them apart without needing a dedicated DB column.
+// A count was auto-approved when it went straight to REVIEWED at submit time —
+// reviewedAt within a few seconds of submittedAt. A manual review happens
+// minutes/hours later, so the gap reliably tells them apart without needing a
+// dedicated DB column. Auto-approved counts can still carry discrepancies;
+// those stay flagged until every one has a variance reason.
 function isAutoApproved(sc: { status: string; submittedAt: string | null; reviewedAt: string | null }) {
   if (sc.status !== "REVIEWED" || !sc.submittedAt || !sc.reviewedAt) return false;
   return Math.abs(new Date(sc.reviewedAt).getTime() - new Date(sc.submittedAt).getTime()) < 3000;
+}
+
+// Counted vs expected live in different units (package vs base UOM) — convert
+// before comparing, same as finalize does before writing balances.
+function countedInBase(i: StockCountItem) {
+  return i.countedQty! * (i.packageConversion > 0 ? i.packageConversion : 1);
+}
+
+// Discrepancies still waiting for a manager's reason code. Counts auto-approve
+// at finalize, so this — not the SUBMITTED status — is what "needs attention"
+// means on this screen.
+function unresolvedIn(sc: StockCount) {
+  return sc.items.filter(
+    (i) =>
+      i.countedQty != null &&
+      i.expectedQty != null &&
+      countedInBase(i) !== i.expectedQty &&
+      !i.varianceReason,
+  ).length;
 }
 
 export default function StockCountPage() {
   const [data, setData] = useState<StockCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "SUBMITTED" | "REVIEWED">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "flagged" | "SUBMITTED" | "REVIEWED">("all");
   const [selected, setSelected] = useState<StockCount | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -118,7 +138,11 @@ export default function StockCountPage() {
 
   const filtered = useMemo(() => {
     return data.filter((sc) => {
-      if (statusFilter !== "all" && sc.status !== statusFilter) return false;
+      if (statusFilter === "flagged") {
+        if (unresolvedIn(sc) === 0) return false;
+      } else if (statusFilter !== "all" && sc.status !== statusFilter) {
+        return false;
+      }
       if (search) {
         const q = search.toLowerCase();
         return sc.outlet.toLowerCase().includes(q) || sc.countedBy.toLowerCase().includes(q) || sc.frequency.toLowerCase().includes(q);
@@ -129,6 +153,7 @@ export default function StockCountPage() {
 
   const stats = useMemo(() => ({
     total: data.length,
+    flagged: data.filter((s) => unresolvedIn(s) > 0).length,
     submitted: data.filter((s) => s.status === "SUBMITTED").length,
     reviewed: data.filter((s) => s.status === "REVIEWED").length,
   }), [data]);
@@ -249,7 +274,7 @@ export default function StockCountPage() {
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Stock Count</h2>
           <p className="mt-0.5 text-sm text-gray-500">
-            {stats.total} counts — {stats.submitted} pending review, {stats.reviewed} reviewed
+            {stats.total} counts — {stats.flagged} with unresolved discrepancies, {stats.reviewed} reviewed
           </p>
         </div>
       </div>
@@ -261,9 +286,12 @@ export default function StockCountPage() {
           <Input placeholder="Search outlet or staff..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex gap-1.5">
-          {(["all", "SUBMITTED", "REVIEWED"] as const).map((t) => (
+          {(["all", "flagged", "SUBMITTED", "REVIEWED"] as const).map((t) => (
             <button key={t} onClick={() => setStatusFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${statusFilter === t ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>
-              {t === "all" ? `All (${stats.total})` : t === "SUBMITTED" ? `Pending (${stats.submitted})` : `Reviewed (${stats.reviewed})`}
+              {t === "all" ? `All (${stats.total})`
+                : t === "flagged" ? `Flagged (${stats.flagged})`
+                : t === "SUBMITTED" ? `Pending (${stats.submitted})`
+                : `Reviewed (${stats.reviewed})`}
             </button>
           ))}
         </div>
@@ -293,13 +321,6 @@ export default function StockCountPage() {
               <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400">No stock counts found</td></tr>
             )}
             {filtered.map((sc) => {
-              // Same base-UOM conversion the dialog's getVariance does. These
-              // two filters used to subtract package units from base units
-              // directly — harmless only while expectedQty was null estate-wide,
-              // but the moment finalize starts snapshotting it, "120 bottles"
-              // vs "118,000 ml" would flag every line as a discrepancy.
-              const countedInBase = (i: StockCountItem) =>
-                i.countedQty! * (i.packageConversion > 0 ? i.packageConversion : 1);
               const comparable = sc.items.filter(
                 (i) => i.countedQty != null && i.expectedQty != null,
               );
@@ -357,7 +378,7 @@ export default function StockCountPage() {
                         {sc.status === "SUBMITTED" ? "Pending" : sc.status.toLowerCase()}
                       </Badge>
                       {isAutoApproved(sc) && (
-                        <span className="text-[9px] uppercase tracking-wide text-gray-400" title="Auto-approved — no discrepancies">
+                        <span className="text-[9px] uppercase tracking-wide text-gray-400" title="Auto-approved at finalize">
                           auto
                         </span>
                       )}
@@ -365,7 +386,8 @@ export default function StockCountPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSelected(sc)}>
-                      <Eye className="h-3 w-3 mr-1" />{sc.status === "SUBMITTED" ? "Review" : "View"}
+                      <Eye className="h-3 w-3 mr-1" />
+                      {sc.status === "SUBMITTED" ? "Review" : unresolvedDiscrepancies > 0 ? "Manage" : "View"}
                     </Button>
                   </td>
                 </tr>
@@ -560,7 +582,10 @@ export default function StockCountPage() {
                             </td>
                             <td className="px-3 py-2">
                               {hasVariance ? (
-                                selected.status === "SUBMITTED" ? (
+                                // Reasons stay editable after auto-approval —
+                                // approval applies the balances; the reason
+                                // coding is the manager's follow-up work.
+                                selected.status === "SUBMITTED" || selected.status === "REVIEWED" ? (
                                   <select
                                     className="h-7 w-full rounded border border-gray-200 px-2 text-xs"
                                     value={editReasons[item.id] || item.varianceReason || ""}
@@ -615,6 +640,26 @@ export default function StockCountPage() {
                         Approve &amp; Close
                       </Button>
                     </div>
+                  </div>
+                )}
+
+                {selected.status === "REVIEWED" && discrepancyCount > 0 && (
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-xs text-gray-500">
+                      {unresolvedCount > 0
+                        ? <span className="text-red-500 font-medium">{unresolvedCount} discrepanc{unresolvedCount === 1 ? "y" : "ies"} still need{unresolvedCount === 1 ? "s" : ""} a reason</span>
+                        : <span className="text-green-600">All discrepancies resolved ✓</span>
+                      }
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => saveReasons(selected.id)}
+                      disabled={saving}
+                    >
+                      {saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                      Save reasons
+                    </Button>
                   </div>
                 )}
 
