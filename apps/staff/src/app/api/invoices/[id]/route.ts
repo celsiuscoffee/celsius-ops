@@ -1,6 +1,23 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { checkModuleAccess } from "@/lib/check-module-access";
+import { checkModuleAccess, isManagerRole } from "@/lib/check-module-access";
+import type { SessionUser } from "@celsius/auth";
+
+// A non-manager may only touch invoices for their own outlet (the outlet is on
+// the linked order; ad-hoc / staff-claim invoices have no order and stay
+// visible to everyone, mirroring the list route). Managers/owner/admin are
+// unrestricted. Without this, any holder of `inventory:invoices` could read —
+// or rewrite the payable `amount` of — any outlet's invoice by id.
+async function canAccessInvoice(session: SessionUser, invoiceId: string): Promise<boolean> {
+  if (isManagerRole(session.role)) return true;
+  const inv = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { order: { select: { outletId: true } } },
+  });
+  if (!inv) return true; // let the handler return its own 404
+  if (!inv.order) return true; // ad-hoc / staff-claim invoice, no outlet to scope by
+  return inv.order.outletId === session.outletId;
+}
 
 // Single invoice detail + attach-invoice action from native staff.
 // Both reads and the attach flow require `inventory:invoices`.
@@ -17,6 +34,9 @@ export async function GET(
   const guard = await checkModuleAccess(req, "inventory:invoices");
   if (!guard.ok) return guard.response;
   const { id } = await params;
+  if (!(await canAccessInvoice(guard.session, id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const invoice = await prisma.invoice.findUnique({
     where: { id },
     include: {
@@ -58,6 +78,9 @@ export async function PATCH(
   const guard = await checkModuleAccess(req, "inventory:invoices");
   if (!guard.ok) return guard.response;
   const { id } = await params;
+  if (!(await canAccessInvoice(guard.session, id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const body = await req.json();
   const { invoiceNumber, dueDate, photos, amount, notes } = body;
 

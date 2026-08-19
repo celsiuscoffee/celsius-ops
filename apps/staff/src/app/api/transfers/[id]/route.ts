@@ -14,9 +14,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // of (source or destination outlet). Without this, any staffer could
   // complete any transfer by id and inject stock into an arbitrary outlet
   // (adjustStockBalance(toOutletId, …) below).
+  // Only known statuses. An arbitrary string was accepted straight into the
+  // column before.
+  const ALLOWED_STATUS = ["PENDING", "COMPLETED", "CANCELLED"];
+  if (!ALLOWED_STATUS.includes(status)) {
+    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+  }
+
   const existing = await prisma.stockTransfer.findUnique({
     where: { id },
-    select: { fromOutletId: true, toOutletId: true },
+    select: { fromOutletId: true, toOutletId: true, status: true },
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -27,6 +34,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     session.outletId !== existing.toOutletId
   ) {
     return NextResponse.json({ error: "Transfer not in your outlet" }, { status: 403 });
+  }
+
+  // Idempotency: completing adds stock to the destination. Without this guard
+  // a repeated PATCH{status:"COMPLETED"} re-ran adjustStockBalance every call,
+  // inflating destination stock arbitrarily. A transfer already in its target
+  // status is a no-op, not a re-run.
+  if (existing.status === status) {
+    return NextResponse.json({ error: `Transfer is already ${status}` }, { status: 409 });
+  }
+  if (existing.status === "COMPLETED") {
+    return NextResponse.json(
+      { error: "This transfer is already completed and can't be changed" },
+      { status: 409 },
+    );
   }
 
   const data: Record<string, unknown> = { status };

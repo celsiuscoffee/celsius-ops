@@ -7,9 +7,15 @@ export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { searchParams } = new URL(req.url);
-  const outletId = searchParams.get("outletId") || session.outletId;
+  // Non-managers stay pinned to their own outlet; only managers may target
+  // another outlet via ?outletId (else any staffer could read every outlet's
+  // wastage + cost figures by passing the param).
+  const isManager = ["OWNER", "ADMIN", "MANAGER"].includes(session.role);
+  const outletId = isManager
+    ? searchParams.get("outletId") || session.outletId
+    : session.outletId;
 
-  const where = outletId ? { outletId } : {};
+  const where = outletId ? { outletId } : isManager ? {} : { outletId: "__none__" };
 
   const adjustments = await prisma.stockAdjustment.findMany({
     where,
