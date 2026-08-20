@@ -6,11 +6,25 @@
  * lives in exactly one place and can't drift between the two paths.
  */
 import Anthropic from "@anthropic-ai/sdk";
+import { OUTLET_GEO_KEYWORDS } from "@/lib/geogrid/target-keywords";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // 4-5 = positive (safe to auto-post). 1-3 = negative (human-approval path).
 export const POSITIVE_THRESHOLD = 4;
+
+/**
+ * The outlet's locality, for an OPTIONAL single geo mention in positive replies
+ * — a mild local-relevance nudge (Google indexes owner responses). This is a
+ * third-order lever: categories + review velocity move rank, this just tidies
+ * the free surface. Never forced, never in an apology. Returns null when we
+ * have no clean area name. Parenthetical is stripped so "Cyberjaya (Tamarind)"
+ * reads as "Cyberjaya".
+ */
+export function localeForOutlet(outletName: string): string | null {
+  const area = OUTLET_GEO_KEYWORDS.find((g) => g.match.test(outletName))?.area;
+  return area ? area.replace(/\s*\([^)]*\)\s*$/, "").trim() || null : null;
+}
 
 export type ReviewForReply = {
   rating: number;
@@ -43,8 +57,16 @@ export async function generateReplyWithUsage(review: ReviewForReply): Promise<Re
     ? `\nWhat actually happened (context from our team, use it to respond honestly and specifically; name the cause and any fix that's coming, but never make excuses):\n${review.context.trim()}\n`
     : "";
 
+  // Positive replies only: offer the outlet's locality so the model CAN drop a
+  // single natural geo mention. Guarded hard against stuffing — one mention,
+  // only if it reads human. Negative/apology replies never get this.
+  const area = isPositive ? localeForOutlet(review.outletName) : null;
+  const localLine = area
+    ? ` If — and only if — it flows naturally like a real person wrote it, you may work in a single mention of our neighbourhood (${area}) and that we're a specialty coffee café. At most ONCE, and skip it entirely rather than force it or sound like an advert.`
+    : "";
+
   const prompt = isPositive
-    ? `You are the owner of Celsius Coffee (${review.outletName}), a specialty coffee café in Malaysia, replying to a happy Google review. Write a friendly yet professional reply that sounds like a real person, not a brand. Open with "Hi ${review.reviewer}," sincerely thank them, mention something specific they enjoyed, and warmly invite them back. Keep it 2-3 short sentences, polished and warm. At most one emoji, usually none. Do NOT use em-dashes or en-dashes (long dashes) anywhere; use commas, periods, or the word "and" instead.
+    ? `You are the owner of Celsius Coffee (${review.outletName}), a specialty coffee café in Malaysia, replying to a happy Google review. Write a friendly yet professional reply that sounds like a real person, not a brand. Open with "Hi ${review.reviewer}," sincerely thank them, mention something specific they enjoyed, and warmly invite them back. Keep it 2-3 short sentences, polished and warm.${localLine} At most one emoji, usually none. Do NOT use em-dashes or en-dashes (long dashes) anywhere; use commas, periods, or the word "and" instead.
 
 Reviewer: ${review.reviewer}
 Rating: ${review.rating}/5

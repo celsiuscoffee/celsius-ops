@@ -48,7 +48,11 @@ export async function refreshKeywords(
   for (const d of discovery) {
     await prisma.geoGridKeyword.upsert({
       where: { outletId_keyword: { outletId, keyword: d.keyword } },
-      update: { active: true, impressions: d.impressions, source: "auto" },
+      // Deliberately does NOT touch `active` on update: a term retired on the
+      // Keyword Strategy board stays retired — resurrecting it here silently
+      // undid every prune and re-bloated the scan budget. New terms start
+      // active; reactivation is the board's explicit call.
+      update: { impressions: d.impressions, source: "auto" },
       create: { outletId, keyword: d.keyword, impressions: d.impressions, source: "auto", active: true },
     });
   }
@@ -63,16 +67,19 @@ export async function refreshKeywords(
 
 /**
  * Seed the curated, demand-ranked keyword set (from the Google Ads search-terms
- * report) for one outlet. Idempotent: marks each term active with source "ads"
- * so it persists — the GBP auto-refresh only retires its own "auto" terms, never
- * these. Works for every active outlet, GBP-connected or not.
+ * report) for one outlet. Idempotent: creates missing terms as active "ads"
+ * rows and refreshes demand on existing ones — but NEVER flips a retired term
+ * back to active. A retire on the Keyword Strategy board is a human decision
+ * about scan budget; the monthly re-seed used to silently overturn it, which
+ * re-bloated the set to 90+ combos and starved the loop of repeat scans.
+ * Works for every active outlet, GBP-connected or not.
  */
 export async function seedTargetKeywords(outletId: string, outletName: string): Promise<string[]> {
   const targets = targetKeywordsForOutlet(outletName);
   for (const t of targets) {
     await prisma.geoGridKeyword.upsert({
       where: { outletId_keyword: { outletId, keyword: t.keyword } },
-      update: { active: true, impressions: t.clicks || null },
+      update: { impressions: t.clicks || null },
       create: { outletId, keyword: t.keyword, impressions: t.clicks || null, source: "ads", active: true },
     });
   }

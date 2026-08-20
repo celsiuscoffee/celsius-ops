@@ -9,7 +9,14 @@ export const maxDuration = 300;
 // Weekly adaptive scan. Each active keyword×outlet is scanned only when "due"
 // (working combos ~weekly, at-goal combos ~monthly), worst-ranking first, and
 // only up to the monthly budget cap — so spend lands where rank needs improving.
-const MONTHLY_CAP = Number(process.env.GEOGRID_MONTHLY_SCAN_CAP || 40);
+//
+// Cap sizing: the tracked set is pruned to ~40 combos (Keyword Strategy board,
+// 2026-08-19). Weekly cadence on a working set that size needs ~160 data-bearing
+// scans/month; the old default of 40 meant one run exhausted the month and no
+// combo was ever re-measured — the loop produced breadth, never trends. Each
+// run is still bounded by RUN_DEADLINE_MS (~40 scans), so the cap spreads
+// across the weekly firings rather than being spent in one.
+const MONTHLY_CAP = Number(process.env.GEOGRID_MONTHLY_SCAN_CAP || 160);
 // Attempts, unlike budget, DO count failures — the cap above only charges for
 // scans that returned rank data, so this is what stops a wholly-broken outlet
 // from retrying forever inside one run. Sized above MONTHLY_CAP so a healthy
@@ -62,7 +69,7 @@ export async function GET(req: NextRequest) {
   const scannable = keywords.filter((k) => k.outlet.reviewSettings?.gbpLocationName);
 
   // Which combos are due, and how badly they need it (warmest-first).
-  const due: { outletId: string; outletName: string; keyword: string; score: number }[] = [];
+  const due: { outletId: string; outletName: string; keyword: string; score: number; hasPrior: boolean }[] = [];
   for (const k of scannable) {
     const last = await prisma.geoGridScan.findFirst({
       where: { outletId: k.outletId, keyword: k.keyword },
@@ -70,13 +77,29 @@ export async function GET(req: NextRequest) {
       select: { createdAt: true, pctTop3: true, avgRank: true },
     });
     if (isDue(last, now)) {
-      due.push({ outletId: k.outletId, outletName: k.outlet.name, keyword: k.keyword, score: needScore(last) });
+      due.push({
+        outletId: k.outletId,
+        outletName: k.outlet.name,
+        keyword: k.keyword,
+        score: needScore(last),
+        hasPrior: last != null,
+      });
     }
   }
   due.sort((a, b) => b.score - a.score);
-  // Then take one combo per outlet in turn, so the neediest outlet leads but
-  // never consumes the whole run before the others are reached.
-  const queue = interleaveByOutlet(due);
+  // Re-scan reservation: never-scanned combos carry the max needScore, so a
+  // burst of new keywords used to eat the whole deadline-bounded run and no
+  // combo ever got a SECOND measurement — the loop had breadth but no trends.
+  // Alternate re-scans with first-scans (re-scan first: a trend point beats a
+  // new baseline when the question is "is rank improving?"), each stream
+  // outlet-interleaved so the neediest outlet leads without monopolising.
+  const repeats = interleaveByOutlet(due.filter((c) => c.hasPrior));
+  const virgins = interleaveByOutlet(due.filter((c) => !c.hasPrior));
+  const queue: typeof due = [];
+  for (let i = 0; i < Math.max(repeats.length, virgins.length); i++) {
+    if (i < repeats.length) queue.push(repeats[i]);
+    if (i < virgins.length) queue.push(virgins[i]);
+  }
 
   const results: { outlet: string; keyword: string; avgRank?: number | null; pctTop3?: number | null; status?: string; error?: string; why?: string }[] = [];
   let attempts = 0;
@@ -122,6 +145,8 @@ export async function GET(req: NextRequest) {
     ran_at: now.toISOString(),
     monthlyCap: MONTHLY_CAP,
     dueCombos: due.length,
+    rescansDue: repeats.length,
+    firstScansDue: virgins.length,
     attempts,
     scanned: results.filter((r) => !r.error && producedData(r.status ?? "")).length,
     failed,
