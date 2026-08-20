@@ -129,27 +129,19 @@ export default function LeaveScreen() {
       );
       return;
     }
-    // Tripwire: the API body dies at the platform layer past ~4.5MB with an
-    // opaque non-JSON error. The capped capture keeps photos far below this;
-    // if a device ignored the cap, say so clearly instead of failing weird.
-    const attachment = mc?.base64 ? `data:image/jpeg;base64,${mc.base64}` : null;
-    if (attachment && attachment.length > 3_800_000) {
-      Alert.alert(
-        "MC photo too large",
-        "This photo is too large to upload. Retake it — the retake will be captured at a smaller size.",
-      );
-      setMc(null);
-      return;
-    }
     setSubmitting(true);
     try {
+      // The MC goes up as a raw multipart file (mc.uri), not base64-in-JSON —
+      // see submitLeave. This is what fixes the old "retake, it's too large"
+      // dead-end: a full-res iOS photo now uploads without the base64 33%
+      // inflation that used to breach the platform body limit.
       await submitLeave({
         leave_type: type,
         start_date: startISO,
         end_date: endISO,
         total_days: totalDays,
         reason,
-        attachment,
+        mc: mc ? { uri: mc.uri, type: "image/jpeg" } : null,
       });
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
@@ -438,9 +430,11 @@ export default function LeaveScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MC camera — same component the claims receipts use, but capped:
-          the MC goes into a JSON body that the platform rejects past
-          ~4.5MB, so full-sensor shots must never leave the camera. */}
+      {/* MC camera — same component the claims receipts use. The MC now
+          uploads as a raw multipart file (no base64 inflation), so the old
+          ~4.5MB JSON-body ceiling no longer applies. We still cap edge size
+          and drop the JPEG quality a notch to keep the upload quick on outlet
+          Wi-Fi; the MC only needs to be legible, not archival. */}
       <Modal
         visible={mcCaptureOpen}
         animationType="slide"
@@ -448,6 +442,7 @@ export default function LeaveScreen() {
       >
         <ReceiptCapture
           maxEdgePx={1600}
+          quality={0.5}
           onCapture={(photo) => {
             setMc(photo);
             setMcCaptureOpen(false);
