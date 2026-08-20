@@ -2084,6 +2084,30 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Open failures
 
+- 2026-08-20 — **RM settlement lag incident (~12:30–15:30 MYT): Revenue
+  Monster's Query Payment Checkout kept answering PENDING for ~2h on
+  FPX payments whose money had already left the customer's bank — paid
+  dine-in orders sat invisible to the kitchen.** Owner-reported from an RM
+  merchant-app photo: C-8ZXV75 (Shah Alam table 15, RM26.80 FPX, tx
+  …0537163104164) created 05:37Z, money deducted, but webhook (05:38Z),
+  poll, reconcile-pending (every 1 min, 45s–55min window) and
+  expire-orders (every 15 min) all got PENDING from RM until the 07:30:16Z
+  expire-orders sweep finally saw SUCCESS → order flipped preparing and
+  the kitchen docket printed 07:30:19Z (1h53m late). Same sweep settled
+  C-F30773 (Conezion table 11, RM9.90 FPX, created 05:41Z) — multi-outlet,
+  so RM-side, consistent with the 2026-07-27 hosted-page verdict that RM's
+  infra is flaky. Our pipeline behaved correctly at every step (nothing
+  bulk-failed a paid order; expire-orders' ask-RM-first design recovered
+  both) — the gap is DETECTION: nothing alerts a human while an order with
+  a checkout_id sits pending >30 min, so the customer complains before we
+  know. **Still unresolved as of 07:40Z:** C-1WA685 (Tamarind table 7,
+  RM53.60 card, 04:35Z) and C-NVK227 (Conezion table 16, RM27.90 FPX,
+  04:52Z) remain pending with RM still answering PENDING — check the RM
+  merchant portal whether these customers were charged; crons keep
+  re-sweeping them every 15 min and will settle+print automatically if RM
+  flips. Candidate follow-ups (owner call): a pending->30min alert (ops
+  pulse/Sentry), and raising the incident with RM support with the tx ids.
+
 - 2026-07-27 — **QR-order payment failures are chronic (~16%/day) and CARD is
   the outlier: 36% of card attempts fail (89/247 over 14d) vs ~11% FPX/TNG,
   at ALL three stores (SA 43.5% / Con 38.6% / Tam 21.3%) — so it's the card
