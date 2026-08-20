@@ -2259,6 +2259,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-08-19 — **Local-rank QA: loop runs, but measurement was starved.** Since
+  the Jul 5 radius fix: 69 combos scanned, only 3 twice — 93 active combos vs a
+  40/mo cap and virgin combos (needScore 1000) eating each run, so "is rank
+  improving?" was unanswerable for most terms. Fixed: (1) pruned tracked set
+  93→41 in prod via the board's active flag (retired all 16 IOI Mall combos —
+  no GBP connection — and the zero-demand unranked tail; reactivated the four
+  "coffee <place>" June winners); (2) seeding (`seedTargetKeywords` +
+  `refreshKeywords`) no longer resurrects retired terms on the monthly re-seed;
+  (3) scan cron alternates re-scans with first-scans (rescansDue/firstScansDue
+  in response) and default cap 40→160 (env `GEOGRID_MONTHLY_SCAN_CAP` still
+  wins). **Outcomes so far:** Tamarind genuinely improving (+70 reviews since
+  Jul 6, 37/30d, `cafe(s) near me` #3.4/#3.5 at 10km); Putrajaya steady (25/30d);
+  Shah Alam rank-dominant (`cafes near me` #2.3) but reviews collapsed to 7/30d;
+  Nilai flat at 1/30d yet only **2 reviews behind** its top competitor (HONGEH
+  114 vs 112). Still undone (human): GBP category adds — `restaurants near me`
+  unranked at 3 outlets in Jul AND Aug scans; review-ask push at SA + Nilai.
+
 - 2026-08-15 — **Loop QA sweep DONE and MERGED to main as `9b6a3e7` (PR #1130).**
   P1 (incl. root cause), P2 (ageing arm), P4, P6 and P8.1 all fixed; P3
   WITHDRAWN as a bad finding. Full detail in `docs/design/loop-qa-2026-08-15.md`.
