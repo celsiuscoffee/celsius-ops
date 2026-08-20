@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
-import { buildPaymentCsv, paymentReference, type PaymentLine } from "@/lib/hr/payment-file";
+import { allocateByOutlet, buildPaymentCsv, paymentReference, type PaymentLine, type ShiftDetail } from "@/lib/hr/payment-file";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 
   const { data: items } = await hrSupabaseAdmin
     .from("hr_payroll_items")
-    .select("user_id, net_pay")
+    .select("user_id, net_pay, computation_details")
     .eq("payroll_run_id", runId);
   if (!items || items.length === 0) {
     return NextResponse.json({ error: "Run has no payroll items" }, { status: 409 });
@@ -56,20 +56,29 @@ export async function GET(req: NextRequest) {
 
   const users = await prisma.user.findMany({
     where: { id: { in: userIds } },
-    select: { id: true, name: true, fullName: true, bankName: true, bankAccountNumber: true, bankAccountName: true },
+    select: { id: true, name: true, fullName: true, outletId: true, bankName: true, bankAccountNumber: true, bankAccountName: true },
   });
   const userMap = new Map(users.map((u) => [u.id, u]));
 
   // ── Gate: manager confirmation of every paid hour ────────────────────
+  // Also carries outlet_id + clock_in: the split-by-outlet step (below) maps
+  // each stored shift back to the outlet it was clocked at, keyed on the
+  // clock-in instant.
   const { data: logs } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("user_id, final_status")
+    .select("user_id, final_status, clock_in, outlet_id")
     .in("user_id", userIds)
     .gte("clock_in", `${run.period_start}T00:00:00+08:00`)
     .lte("clock_in", `${run.period_end}T23:59:59+08:00`)
     .not("clock_out", "is", null);
   const unconfirmed = new Map<string, number>();
-  for (const l of (logs ?? []) as Array<{ user_id: string; final_status: string | null }>) {
+  // outlet of each shift, keyed by `${user_id}|${ISO clock_in}` — the shift
+  // details store `start` as the same ISO instant.
+  const outletByUserClockIn = new Map<string, string | null>();
+  for (const l of (logs ?? []) as Array<{ user_id: string; final_status: string | null; clock_in: string; outlet_id: string | null }>) {
+    if (l.clock_in) {
+      outletByUserClockIn.set(`${l.user_id}|${new Date(l.clock_in).toISOString()}`, l.outlet_id ?? null);
+    }
     if (l.final_status === "rejected") continue; // excluded from pay — no confirmation needed
     if (l.final_status === "approved" || l.final_status === "adjusted") continue;
     unconfirmed.set(l.user_id, (unconfirmed.get(l.user_id) ?? 0) + 1);
@@ -89,10 +98,31 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Resolve outlet id → { code, name } for both the outlets shifts were
+  // clocked at and each PT's home outlet (the fallback when a shift has no
+  // outlet on it). Names live in the Prisma-cased "Outlet" table.
+  const outletIds = Array.from(
+    new Set(
+      [
+        ...outletByUserClockIn.values(),
+        ...users.map((u) => u.outletId),
+      ].filter((id): id is string => Boolean(id)),
+    ),
+  );
+  const outlets = outletIds.length
+    ? await prisma.outlet.findMany({ where: { id: { in: outletIds } }, select: { id: true, code: true, name: true } })
+    : [];
+  const outletById = new Map(outlets.map((o) => [o.id, o]));
+
   // ── Gate: bank details — a missing account BLOCKS the file ───────────
+  // Then split each PT's confirmed net_pay across the outlets they worked,
+  // one bank line per outlet (owner 2026-08-20). The split is exact and
+  // reconciles back to net_pay to the sen (see allocateByOutlet); a PT who
+  // only worked one outlet still gets a single line, unchanged bar the new
+  // Outlet column.
   const missingBank: string[] = [];
   const lines: PaymentLine[] = [];
-  for (const item of items as Array<{ user_id: string; net_pay: number }>) {
+  for (const item of items as Array<{ user_id: string; net_pay: number; computation_details: { shifts?: ShiftDetail[] } | null }>) {
     const u = userMap.get(item.user_id);
     const display = u?.fullName || u?.name || item.user_id.slice(0, 8);
     const amount = Number(item.net_pay) || 0;
@@ -101,13 +131,53 @@ export async function GET(req: NextRequest) {
       missingBank.push(display);
       continue;
     }
-    lines.push({
+
+    const homeOutlet = u.outletId ? outletById.get(u.outletId) : undefined;
+    const shifts = Array.isArray(item.computation_details?.shifts) ? item.computation_details!.shifts! : [];
+    // Key each shift by the outlet it was clocked at; the sentinel "" collects
+    // shifts whose outlet couldn't be resolved.
+    const alloc = allocateByOutlet(
+      shifts,
+      (s) => (s.start ? outletByUserClockIn.get(`${item.user_id}|${new Date(s.start).toISOString()}`) ?? "" : ""),
+      amount,
+    );
+
+    const base = {
       name: u.bankAccountName || display,
       bankName: u.bankName,
       accountNumber: u.bankAccountNumber,
-      amount,
-      reference: paymentReference(run.period_start, u.name || display),
-    });
+    };
+
+    // No usable shift breakdown (e.g. a hand-adjusted item): fall back to the
+    // pre-split behaviour — one line for the whole net_pay against the home
+    // outlet, reference without an outlet tag.
+    if (alloc.length === 0) {
+      lines.push({
+        ...base,
+        amount,
+        reference: paymentReference(run.period_start, u.name || display),
+        outlet: homeOutlet?.name ?? "",
+      });
+      continue;
+    }
+
+    const split = alloc.length > 1;
+    // Stable order: biggest outlet first, so the file reads top-down by cost.
+    alloc.sort((a, b) => b.amount - a.amount);
+    for (const bucket of alloc) {
+      if (bucket.amount <= 0) continue;
+      const outlet = bucket.outletKey ? outletById.get(bucket.outletKey) : undefined;
+      const outletName = outlet?.name ?? homeOutlet?.name ?? "";
+      lines.push({
+        ...base,
+        amount: bucket.amount,
+        // Only tag the reference with the outlet code when the person is
+        // actually split — a single-outlet PT keeps the exact reference the
+        // finance warehouse already reconciles against.
+        reference: paymentReference(run.period_start, u.name || display, split ? outlet?.code : undefined),
+        outlet: outletName,
+      });
+    }
   }
   if (missingBank.length > 0) {
     return NextResponse.json(
@@ -117,13 +187,15 @@ export async function GET(req: NextRequest) {
   }
 
   const total = lines.reduce((s, l) => s + l.amount, 0);
+  const payees = new Set(lines.map((l) => l.accountNumber)).size;
   await logActivity({
     actorId: session.id,
     action: "payroll.bank-file.download",
     module: "hr",
     targetId: runId,
     targetName: `weekly ${run.period_start}`,
-    details: { run_id: runId, payees: lines.length, total_rm: Math.round(total * 100) / 100 },
+    // lines ≥ payees now that a multi-outlet PT is paid on one line per outlet.
+    details: { run_id: runId, payees, lines: lines.length, total_rm: Math.round(total * 100) / 100 },
     request: req,
   });
 
