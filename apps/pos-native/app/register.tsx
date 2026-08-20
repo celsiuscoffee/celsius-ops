@@ -159,14 +159,22 @@ export default function Register() {
   // modal. `null` = method picker; "qr" = show Maybank QR awaiting
   // payment; "card" = drive the Maybank terminal flow.
   const [payMethod, setPayMethod] = useState<null | "qr" | "card">(null);
-  // Card terminal state — purely a UI proxy until the real Maybank
-  // terminal SDK is wired (see lib/maybank-terminal.ts).
-  const [cardStage, setCardStage] = useState<"idle" | "prompting" | "approved" | "declined">("idle");
+  // Card terminal state. With the ECR link configured (Settings → Maybank
+  // Terminal) this drives the REAL X990 over the LAN; unconfigured tills get
+  // the rehearsal stub, whose approvals are labelled SIMULATION on screen.
+  // "unknown" is deliberately distinct from "declined": when the terminal link
+  // fails we do NOT know whether the customer was charged, and telling staff
+  // "declined" invites a re-charge. See lib/maybank-ecr.ts EcrOutcome.
+  const [cardStage, setCardStage] = useState<"idle" | "prompting" | "approved" | "declined" | "unknown">("idle");
   // The terminal's approval payload — held so the cashier-verification
   // screen can show the approval code + masked PAN before we record the
   // sale. Card payments now require a manual confirm (mirrors QR), so the
   // terminal "approved" result no longer auto-commits.
   const [cardResult, setCardResult] = useState<Extract<MaybankTerminalResult, { status: "approved" }> | null>(null);
+  // Decline/error detail for the failure card, + the terminal's live state
+  // ("CARD_INSERTION", …) streamed into the prompting screen.
+  const [cardError, setCardError] = useState<string | null>(null);
+  const [cardLive, setCardLive] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   // Bumped after each paid sale / pair add so the cashier's self-scorecard chip
   // refetches its today numbers (collection rate + pair adds).
@@ -316,13 +324,17 @@ export default function Register() {
     return [...pickup, ...grab, ...counter, ...tables];
   }, [kdsOrders, tableSlots]);
   // Orders past the 15-min serving target → drives the alarm sound + the popup.
-  const overdueOrders = useServingAlarm(servingAlarmItems);
+  const { overdue: overdueOrders, silence: silenceAlarm } = useServingAlarm(servingAlarmItems);
   const [overdueAck, setOverdueAck] = useState(false);
-  const prevOverdueCount = useRef(0);
+  // Track overdue IDS (not count) — if one order is served while another goes
+  // overdue in the same tick the count is unchanged, but the new order must
+  // still re-pop the popup (it also re-rings the alarm — keep them in step).
+  const prevOverdueIds = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (overdueOrders.length > prevOverdueCount.current) setOverdueAck(false); // a new order went overdue → re-pop
-    if (overdueOrders.length === 0) setOverdueAck(false);                      // all cleared → reset
-    prevOverdueCount.current = overdueOrders.length;
+    const hasNew = overdueOrders.some((o) => !prevOverdueIds.current.has(o.id));
+    if (hasNew) setOverdueAck(false);                     // a new order went overdue → re-pop
+    if (overdueOrders.length === 0) setOverdueAck(false); // all cleared → reset
+    prevOverdueIds.current = new Set(overdueOrders.map((o) => o.id));
   }, [overdueOrders]);
   // Only over the main register (not while the orders panel is already open).
   const showOverduePopup = overdueOrders.length > 0 && !overdueAck && hub === null;
@@ -2229,7 +2241,7 @@ export default function Register() {
           target (pickup not Ready / table not Done), paired with the alarm
           sound. Auto-clears as orders are actioned; "Open Live Orders" jumps
           to the panel to act on them. */}
-      <Modal visible={showOverduePopup} transparent animationType="fade" onRequestClose={() => setOverdueAck(true)}>
+      <Modal visible={showOverduePopup} transparent animationType="fade" onRequestClose={() => { setOverdueAck(true); silenceAlarm(); }}>
         <View style={{ flex: 1, backgroundColor: "rgba(22,8,0,0.92)" }} className="items-center justify-center px-12">
           <View className="w-full max-w-3xl rounded-3xl p-8" style={{ backgroundColor: "#2A1206", borderWidth: 2, borderColor: "#C2452D" }}>
             <View className="flex-row items-center gap-3 mb-1">
@@ -2268,8 +2280,8 @@ export default function Register() {
               })}
             </ScrollView>
             <View className="flex-row gap-3">
-              <Pressable onPress={() => { Haptics.selectionAsync(); setOverdueAck(true); }} className="flex-1 items-center justify-center rounded-2xl py-4 border border-cream/15 active:opacity-60">
-                <Text className="text-cream/70 text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Dismiss</Text>
+              <Pressable onPress={() => { Haptics.selectionAsync(); setOverdueAck(true); silenceAlarm(); }} className="flex-1 items-center justify-center rounded-2xl py-4 border border-cream/15 active:opacity-60">
+                <Text className="text-cream/70 text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Silence</Text>
               </Pressable>
               <Pressable onPress={() => { Haptics.selectionAsync(); openOverdueHub(); }} className="flex-1 items-center justify-center rounded-2xl py-4 active:opacity-80" style={{ backgroundColor: "#C2452D" }}>
                 <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Open Live Orders</Text>
@@ -2485,8 +2497,10 @@ export default function Register() {
                     setPayMethod("card");
                     setCardStage("prompting");
                     setCardResult(null);
+                    setCardError(null);
+                    setCardLive(null);
                     try {
-                      const result = await chargeMaybankCard(total);
+                      const result = await chargeMaybankCard(total, (s) => setCardLive(s));
                       if (result.status === "approved") {
                         // Don't auto-commit. Park on a verify screen so the
                         // cashier confirms the approval on the physical
@@ -2494,7 +2508,14 @@ export default function Register() {
                         setCardResult(result);
                         setCardStage("approved");
                       } else if (result.status === "declined") {
+                        setCardError(result.reason || null);
                         setCardStage("declined");
+                      } else if (result.status === "error") {
+                        // Link/terminal problem → the payment outcome is UNKNOWN,
+                        // not failed. Distinct screen so nobody re-charges a
+                        // customer who may already have paid on the terminal.
+                        setCardError(result.message);
+                        setCardStage("unknown");
                       } else {
                         // Cancelled → return to method picker.
                         setCardStage("idle");
@@ -2502,6 +2523,7 @@ export default function Register() {
                       }
                     } catch (e) {
                       console.error("[card]", e);
+                      setCardError(String((e as Error)?.message ?? e));
                       setCardStage("declined");
                     }
                   }}
@@ -2549,10 +2571,15 @@ export default function Register() {
                 {cardStage === "prompting" && (
                   <View className="h-44 items-center justify-center gap-3">
                     <ActivityIndicator color="#3B82F6" size="large" />
-                    <Text className="text-cream text-base" style={{ fontFamily: "Peachi-Bold" }}>Tap or insert card</Text>
+                    <Text className="text-cream text-base" style={{ fontFamily: "Peachi-Bold" }}>Card or DuitNow QR on terminal</Text>
                     <Text className="text-cream/55 text-xs text-center" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
                       Hand the terminal to your customer. Verify the approval before recording.
                     </Text>
+                    {!!cardLive && (
+                      <Text className="text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#3B82F6", letterSpacing: 1 }}>
+                        {cardLive.replace(/_/g, " ")}
+                      </Text>
+                    )}
                   </View>
                 )}
                 {cardStage === "approved" && (
@@ -2563,7 +2590,9 @@ export default function Register() {
                     <View className="rounded-2xl px-5 py-4" style={{ backgroundColor: "rgba(34,197,94,0.10)", borderWidth: 1, borderColor: "rgba(34,197,94,0.45)" }}>
                       <View className="flex-row items-center gap-2 mb-2">
                         <CheckCircle2 size={20} color="#22C55E" />
-                        <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: "#22C55E" }}>Terminal Approved</Text>
+                        <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: "#22C55E" }}>
+                          {cardResult?.simulated ? "SIMULATION — no real charge" : "Terminal Approved"}
+                        </Text>
                       </View>
                       {!!cardResult && (
                         <View className="gap-0.5">
@@ -2573,6 +2602,11 @@ export default function Register() {
                           <Text className="text-cream/55 text-xs" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
                             Approval {cardResult.approvalCode} · {cardResult.txnRef}
                           </Text>
+                          {cardResult.signatureVerified === false && (
+                            <Text className="text-xs mt-1" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: "#FBBF24" }}>
+                              ⚠ Reply signature unverified — confirm the approval on the terminal itself
+                            </Text>
+                          )}
                         </View>
                       )}
                     </View>
@@ -2594,11 +2628,45 @@ export default function Register() {
                     </Pressable>
                   </View>
                 )}
+                {cardStage === "unknown" && (
+                  <View className="gap-3">
+                    {/* Outcome UNKNOWN — the customer may or may not have been
+                        charged. Staff must read the terminal before acting. */}
+                    <View className="rounded-2xl px-5 py-4" style={{ backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.55)" }}>
+                      <View className="flex-row items-center gap-2 mb-2">
+                        <AlertTriangle size={20} color="#FBBF24" />
+                        <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: "#FBBF24" }}>Check the terminal</Text>
+                      </View>
+                      <Text className="text-cream/75 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                        {cardError || "No result received from the terminal."}
+                      </Text>
+                      <Text className="text-cream/55 text-xs mt-2" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                        If the terminal shows APPROVED, record the sale below — do NOT charge again.
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => pay("card")}
+                      className="h-14 rounded-2xl items-center justify-center flex-row gap-3 active:opacity-80"
+                      style={{ backgroundColor: "#FBBF24" }}
+                    >
+                      <CheckCircle2 size={22} color="#160800" />
+                      <Text className="text-base" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#160800" }}>TERMINAL SHOWS APPROVED — RECORD SALE</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => { setCardStage("idle"); setCardError(null); setPayMethod(null); }}
+                      className="h-11 rounded-xl items-center justify-center active:opacity-60"
+                    >
+                      <Text className="text-cream/55 text-xs tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>‹ Back to methods</Text>
+                    </Pressable>
+                  </View>
+                )}
                 {cardStage === "declined" && (
                   <View className="gap-3">
                     <View className="rounded-2xl px-5 py-4 items-center" style={{ backgroundColor: DANGER + "14", borderWidth: 1, borderColor: DANGER + "55" }}>
-                      <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: DANGER }}>Card Declined</Text>
-                      <Text className="text-cream/60 text-xs mt-1 text-center" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Ask customer to try another card or switch to QR.</Text>
+                      <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: DANGER }}>Payment Not Completed</Text>
+                      <Text className="text-cream/60 text-xs mt-1 text-center" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                        {cardError || "Ask customer to try another card or switch to QR."}
+                      </Text>
                     </View>
                     <Pressable
                       onPress={() => { setCardStage("idle"); setPayMethod(null); }}
