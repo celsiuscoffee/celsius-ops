@@ -2107,6 +2107,17 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   re-sweeping them every 15 min and will settle+print automatically if RM
   flips. Candidate follow-ups (owner call): a pending->30min alert (ops
   pulse/Sentry), and raising the incident with RM support with the tx ids.
+  **UPDATE 08:01Z:** C-1WA685 and C-NVK227 were flipped to failed by a
+  single manual statement (identical updated_at, NULL failure_reason —
+  no cron path does that); if either customer was actually charged, only
+  the `reconcile-failed?days=N` operator dry-run will surface it now.
+  **Detection fix SHIPPED on this branch (PR #1173):** expire-orders now
+  raises a per-order-fingerprinted Sentry error (`[stuck-pending]`) for
+  any checkout-bearing order still deferred past 30 min — staff get
+  alerted at ~30-45 min instead of hearing it from the customer at 2h.
+  Settlement behavior untouched. Remaining owner actions: raise the tx
+  ids with RM support; confirm in the RM portal that C-1WA685/C-NVK227
+  weren't charged (or run reconcile-failed dry-run).
 
 - 2026-07-27 — **QR-order payment failures are chronic (~16%/day) and CARD is
   the outlier: 36% of card attempts fail (89/247 over 14d) vs ~11% FPX/TNG,
