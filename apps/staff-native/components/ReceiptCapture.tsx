@@ -11,18 +11,23 @@ export function ReceiptCapture({
   onCapture,
   onCancel,
   maxEdgePx,
+  quality = 0.7,
 }: {
   onCapture: (p: CapturedPhoto) => void;
   onCancel: () => void;
   /**
-   * Cap the capture resolution (longest edge). Full-sensor shots at
-   * quality 0.7 run 2-6MB — base64'd into a JSON body that Vercel
-   * rejects at ~4.5MB before the route even runs (the sick-leave MC
-   * failure, 2026-08-17). Callers that POST the base64 through an API
-   * body should set this; callers that upload the file multipart
-   * (claims receipts) can leave it unset and keep full OCR detail.
+   * Cap the capture resolution (longest edge) where the device honours it.
+   * Best-effort only: on iOS getAvailablePictureSizesAsync returns preset
+   * strings ("photo"/"high"/"hd1920x1080"), not WxH, so the cap silently
+   * no-ops there. Not a substitute for uploading the file multipart.
    */
   maxEdgePx?: number;
+  /**
+   * JPEG compression quality, 0–1 (default 0.7). Lower it for captures that
+   * only need to be legible (e.g. an MC photo) to shrink the upload; leave it
+   * at the default for OCR'd receipts that need detail.
+   */
+  quality?: number;
 }) {
   const [perm, requestPerm] = useCameraPermissions();
   const [busy, setBusy] = useState(false);
@@ -76,7 +81,7 @@ export function ReceiptCapture({
     setBusy(true);
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.7,
+        quality,
         base64: true,
         exif: false,
       });
