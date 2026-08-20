@@ -6,6 +6,39 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-20 — **Choc Blanc Merdeka campaign (31 Aug – 30 Sept 2026) — BACKEND
+  STAGED, NOTHING PUBLIC.** Plan + go-live runbook in
+  `docs/design/choc-blanc-merdeka-campaign.md`. Staged in prod, all gated off
+  and verified 0-leak against the reader queries: product `choc-blanc`
+  (RM14.90, category `classic`, Bar, Mont Blanc's modifiers cloned,
+  `is_available=false` + `visible_channels={none}`); voucher template
+  `8b19f425-4a6b-42f8-883a-3be43ccc377e` "RM3 off Choc Blanc" (flat 300 sen,
+  `applicable_products={choc-blanc}`, 7-day validity so `reward_expiring`
+  picks it up, `is_active=false`); 3 `splash_posters` rows — pos-display
+  `740fc57d…`, home `a0d810a8…`, splash `400f637d…` — all `active=false`
+  with `starts_at` 2026-08-30T16:00Z / `ends_at` 2026-09-30T15:59Z (splash
+  ends 2 Sept). **`image_url` is still `''` on all three** — no Cloudinary
+  creds in the session; upload-ready crops were rendered at each surface's
+  true ratio but must be attached before go-live or the slots render blank
+  (the runbook's step 1 is a pre-flight that catches this).
+  **Lessons worth keeping:** (1) `active=false` is NOT a safe staging guard —
+  `pos-poster-autopilot` is ENABLED and flips `active`/`sort_order` daily at
+  07:00 MYT on home + pos-display; a future `starts_at` is the real guard
+  since every reader filters the schedule window. (2) A pos-display poster
+  with `round=NULL` is invisible to the autopilot (`poster-autopilot.ts:151`
+  filters to non-null rounds) — that is how you pin a launch poster.
+  (3) A new poster scores ~0 in the autopilot (no measured AOV, `cost` NULL →
+  no margin) so it gets benched fast; set `products.cost` or disable the flag.
+  **Open decisions for the owner:** replace-vs-alongside Mont Blanc (410 units
+  / RM6,108 per 30d), confirm RM14.90, and cost per cup.
+  **Channel reality found while planning:** push is dead as a channel — 123
+  members hold a push token out of 25,992 (80 of the 5,928 actives ≤60d), so
+  the campaign is ~99% paid SMS at RM0.10 (full actives blast ≈ RM593).
+  Measured `loop_rounds` say `reward_expiring` is the only reliable loop
+  (+10.3–19.0pp lift, RM5.44–8.64/recipient) while winback/fresh_lapse swing
+  −33 to +9.5pp at n=18–30/arm — statistically unreadable. No Instagram
+  integration exists in the repo at all; IG is manual and unattributable.
+
 - 2026-08-18 — **Welcome-voucher cutover EXECUTED (owner-approved, ~15:45Z)
   — the 10% welcome voucher is LIVE and the auto-FOD is retired.** PR #1155
   merged to main (`b3c4205`, squash); apps/order production deploy READY on
