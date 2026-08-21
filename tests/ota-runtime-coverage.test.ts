@@ -126,3 +126,42 @@ describe("manifest reader", () => {
     expect(() => readExtraRuntimes(path.join(repoRoot, "apps", "order"))).toThrow(/is missing/);
   });
 });
+
+// ── Workflow coverage ────────────────────────────────────────────────
+//
+// The manifests above are inert unless the OTA workflows actually publish to
+// them. Deleting the verify step from a workflow would silently restore the
+// exact 2026-08-21 failure — a green run that reaches nobody — so every
+// workflow that publishes an EAS update must also run the extra-runtime
+// publisher. This is discovered from disk, so a NEW native app or workflow is
+// covered the moment it lands.
+describe("every EAS-publishing workflow republishes to the in-field runtimes", () => {
+  const workflowDir = path.join(repoRoot, ".github", "workflows");
+  const publishing = fs
+    .readdirSync(workflowDir)
+    .filter((f) => f.endsWith(".yml"))
+    .map((f) => ({ file: f, body: fs.readFileSync(path.join(workflowDir, f), "utf8") }))
+    .filter(({ body }) => /eas-cli(@latest)?\s+update/.test(body));
+
+  it("finds the OTA workflows (guards against this test silently matching nothing)", () => {
+    expect(publishing.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it.each(publishing.map((w) => w.file))("%s runs ota-publish-extra-runtimes.mjs", (file) => {
+    const body = publishing.find((w) => w.file === file)!.body;
+    expect(
+      body,
+      `${file} publishes an EAS update but never republishes to the runtimes installed devices report. ` +
+        `Add the "Publish to in-field legacy runtimes (and verify)" step.`,
+    ).toContain("scripts/ota-publish-extra-runtimes.mjs");
+  });
+
+  it.each(publishing.map((w) => w.file))("%s targets an app that has a manifest", (file) => {
+    const body = publishing.find((w) => w.file === file)!.body;
+    const apps = [...body.matchAll(/--app-dir\s+apps\/([\w-]+)/g)].map((m) => m[1]);
+    expect(apps.length, `${file} must pass --app-dir`).toBeGreaterThan(0);
+    for (const app of new Set(apps)) {
+      expect(fs.existsSync(manifestPath(app)), `apps/${app}/ota-runtimes.json must exist`).toBe(true);
+    }
+  });
+});
