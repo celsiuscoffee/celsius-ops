@@ -80,6 +80,25 @@ type Rule = {
   isInterCo?: boolean;
 };
 
+// Payroll / management-fee narration, both spellings.
+//
+// Maybank abbreviated the payroll suffix from Aug-2026: "Salary Jun26" became
+// "Sal Jul26", overtime top-ups arrive as "Add OT Jul26" / "OT Jul26", and
+// "Mngmt Fee" became "Mgmt Fee" / "mgmt 1/4". The old /\bSALARY\b/ and
+// /\bMNGMT\s*FEE\b/ rules matched none of it, so the entire Jul-26 payroll fell
+// through to fallback_other — RM53k of staff pay booked as OTHER_OUTFLOW and
+// Ariff Izham's line grabbed by raw_ariff_adhoc as RAW_MATERIALS.
+//
+// "SAL" and "OT" are short enough to collide with unrelated tokens, so both are
+// anchored on what always follows them in a payroll narration: the pay period,
+// written either as a month-year ("Jul26") or as a split marker ("1/2"). "SALARY"
+// stays matchable on its own — it is unambiguous, and older lines carry
+// "Salary 1/1" with no month.
+const PAY_PERIOD = String.raw`(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s*\d{2}\b|\d+\s*/\s*\d+`;
+const SALARY_RE = new RegExp(String.raw`\bSALARY\b|\bSAL\.?\s+(?:${PAY_PERIOD})`, "i");
+const OVERTIME_RE = new RegExp(String.raw`\b(?:ADD\s+)?OT\s+(?:${PAY_PERIOD})`, "i");
+const MGMT_FEE_RE = /\b(?:MANAGEMENT|MNGMT|MGMT)\s*FEE\b|\bMGMT\b/i;
+
 // Inflow rules
 //
 // InterCo policy: a transfer whose COUNTERPARTY is another Celsius entity is
@@ -109,8 +128,9 @@ const INFLOW_RULES: Rule[] = [
   // Like the outflow side, the prefix is just routing; the suffix tells
   // us why money came in.
   { name: "in_loan_repayment",     match: /\bLOAN\b/i,                               direction: "CR", category: "LOAN" as CashCategory },
-  { name: "in_management_fee",     match: /\bMANAGEMENT\s*FEE|\bMNGMT\s*FEE\b/i,     direction: "CR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
-  { name: "in_salary_return",      match: /\bSALARY\b/i,                             direction: "CR", category: "EMPLOYEE_SALARY" as CashCategory, isInterCo: true },
+  { name: "in_management_fee",     match: MGMT_FEE_RE,                               direction: "CR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
+  { name: "in_salary_return",      match: SALARY_RE,                                 direction: "CR", category: "EMPLOYEE_SALARY" as CashCategory, isInterCo: true },
+  { name: "in_overtime_return",    match: OVERTIME_RE,                               direction: "CR", category: "EMPLOYEE_SALARY" as CashCategory, isInterCo: true },
   { name: "in_stat_pay_return",    match: /\b(STAT\s*PAY|STATUTORY)\b/i,             direction: "CR", category: "STATUTORY_PAYMENT" as CashCategory, isInterCo: true },
   { name: "in_inventory_return",   match: /\bINVENTORY\b/i,                          direction: "CR", category: "RAW_MATERIALS" as CashCategory, isInterCo: true },
   { name: "in_capital_injection",  match: /\bCAPITAL\s*(INJECTION|TRANSFER)\b/i,     direction: "CR", category: "CAPITAL" as CashCategory },
@@ -151,7 +171,7 @@ const OUTFLOW_RULES: Rule[] = [
   // True InterCo — management fees, asset transfers, capital injections
   // between Celsius entities. These genuinely net to zero across
   // consolidation. Match by purpose verb, not entity name.
-  { name: "interco_management_fee", match: /\bMANAGEMENT\s*FEE\b|\bMNGMT\s*FEE\b/i, direction: "DR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
+  { name: "interco_management_fee", match: MGMT_FEE_RE, direction: "DR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
   { name: "interco_asset_transfer", match: /\bASSET\s*TRANSFER\b/i, direction: "DR", category: "INTERCO_INVESTMENTS" as CashCategory, isInterCo: true },
   { name: "interco_capital",        match: /\bCAPITAL\s*(INJECTION|TRANSFER)\b/i, direction: "DR", category: "CAPITAL" as CashCategory, isInterCo: true },
   { name: "interco_return_mngmt",   match: /\bRETURN\s*MNGMT\b|\bRETURN\s*MANAGEMENT\b/i, direction: "DR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
@@ -256,8 +276,11 @@ const OUTFLOW_RULES: Rule[] = [
   // Partimer payouts — descriptions usually contain "PT Week" or "Partimer"
   { name: "partimer",       match: /\bPT\s*WEEK\b|\bPARTIMER\b/i, direction: "DR", category: "PARTIMER" as CashCategory },
 
-  // Employee Salary — descriptions like "Salary Nov", "SCC_11/25", direct salary transfers
-  { name: "salary_explicit",match: /\bSALARY\b/i,                  direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
+  // Employee Salary — descriptions like "Salary Nov", "Sal Jul26", "SCC_11/25",
+  // direct salary transfers. MUST stay ahead of raw_ariff_adhoc (Ariff Izham
+  // fronts ad-hoc buys, but his own pay line is salary) and vendor_sdn_bhd.
+  { name: "salary_explicit",match: SALARY_RE,                      direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
+  { name: "salary_overtime",match: OVERTIME_RE,                    direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
   { name: "salary_scc",     match: /\bSCC[_ ]\d+\/\d+\b/i,         direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
 
   // Director account — ONLY a genuine drawing / amount-due-to-director is a
