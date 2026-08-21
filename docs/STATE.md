@@ -42,6 +42,21 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   branch, published THAT branch's JS straight to customers). Merging this
   PR is itself the remediation: the workflow republishes current JS to
   runtime 1.0.3 and the fleet catches up on next launch.
+  **MERGED + DELIVERY VERIFIED 2026-08-21** (owner said "merge it"): PR
+  #1177 squashed to main as `9f96be7`; CI 15/15 green. The OTA workflow
+  run 32478218572 then published TWICE — the usual fingerprint group, and
+  the new verified step to the fleet: `Runtime version 1.0.3`,
+  `Platform android, ios`, update group
+  `cdfd5a85-b6a4-4da7-b836-e0b5f5a5565b`, log line
+  `[ota] ✔ runtime 1.0.3 (channel production) confirmed.` **That is the
+  first OTA since 25 Jul to land on a runtime real phones report**, and it
+  carries the never-delivered #1112 + #1155 JS with it; customers pick it
+  up on next launch. A follow-up commit added
+  `tests/ota-runtime-coverage.test.ts` workflow-coverage assertions —
+  every workflow running `eas-cli update` must also run the extra-runtime
+  publisher (discovered from disk, so new native apps are covered
+  automatically); verified non-vacuous by deleting the step and watching
+  it fail.
   **STILL OWED (owner action, cannot be done from CI): cut a new store
   build.** Until a fingerprint-policy binary ships, every fresh install
   still boots a months-old embedded bundle on first launch, and the
@@ -50,6 +65,14 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `1.0.3` from the manifest only once that build has replaced the fleet.
   **Lesson: a green OTA run is not evidence of delivery — read the runtime
   in the publish log and compare it to what installed binaries report.**
+  The 18 Aug STATE line asserting "customer phones pull the new wallet
+  lists on next launch" was written from a green workflow and was false
+  for four weeks; the publish log's runtime is now the only acceptable
+  proof, and the workflow fails rather than let that claim be made again.
+  Also still open (flagged to owner, NOT changed — hard rule 6):
+  `pos-native-ota-deploy.yml` is pinned to the stale branch
+  `claude/awesome-davinci-CvikE` and a marker bump there publishes THAT
+  branch's JS to every till.
 
 - 2026-08-18 — **Welcome-voucher cutover EXECUTED (owner-approved, ~15:45Z)
   — the 10% welcome voucher is LIVE and the auto-FOD is retired.** PR #1155
