@@ -80,12 +80,16 @@ export function ReceiptCapture({
     if (!cameraRef.current || busy) return;
     setBusy(true);
     try {
+      // No base64: every consumer (claims, receiving, audit, invoices,
+      // checklists, leave MC) uploads the file by URI and never reads it, and
+      // base64-encoding a full-resolution photo in memory is a known cause of
+      // takePictureAsync hanging / OOM-ing on iOS — which looked like "the
+      // capture button does nothing".
       const photo = await cameraRef.current.takePictureAsync({
         quality,
-        base64: true,
         exif: false,
       });
-      if (photo) onCapture({ uri: photo.uri, base64: photo.base64 });
+      if (photo) onCapture({ uri: photo.uri });
     } finally {
       setBusy(false);
     }
