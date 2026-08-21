@@ -6,6 +6,51 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-21 — **THE CUSTOMER APP HAS BEEN STRANDED ON 25-JUL JS SINCE THE
+  FINGERPRINT SWITCH — every pickup-native OTA since then reached ZERO
+  phones while the workflow went green.** Owner reported the Orders tab
+  flipping back to the pre-tabs empty state again ("we fixed this many
+  times"). Root cause is the *mirror image* of the July bug: `eas update`
+  publishes to the runtime **app.json resolves to**, but an installed app
+  only accepts updates matching the runtime **it was built with**. Since
+  2026-07-25 app.json has used `policy: "fingerprint"`, while every binary
+  on the App Store / Play was built earlier under `appVersion` and reports
+  runtime `1.0.3` (app.json is still version 1.0.3 / buildNumber 12 /
+  versionCode 10 — **no fingerprint store build has ever been cut**, so
+  nothing in the field can match a fingerprint publish). Proof: run
+  32156055677 (18 Aug, the welcome-voucher ship) succeeded publishing to
+  `e4e2beee7ab3004bdb18f146549a88d895e65cf2` (iOS) /
+  `dbe20143f9bfb4c9c827261a61150a391014bec2` (android). The newest bundle
+  any real phone can see is the one-off 25-Jul catch-up (group
+  `2ad415b6-9974-41a1-abae-23477603fe17`, runtime `1.0.3`, both platforms).
+  So **#1112 (stock-count/receipt integrity) and #1155 (welcome voucher)
+  never reached a customer** — the STATE line claiming "customer phones
+  pull the new wallet lists on next launch" was wrong. The reinstall
+  half: a fresh install boots the store binary's EMBEDDED bundle, older
+  than the catch-up, which is the pre-tabs screenshot. **Fix (this
+  branch):** `apps/<app>/ota-runtimes.json` declares the in-field runtimes
+  the normal publish misses (pickup-native: `["1.0.3"]`; pos/staff-native
+  empty — they are still on `appVersion` at 1.0.0, which their publish
+  already targets); every OTA workflow now runs
+  `scripts/ota-publish-extra-runtimes.mjs`, which pins a literal
+  `expo.runtimeVersion` per entry, republishes the same bundle, and FAILS
+  the job unless eas confirms that runtime. `scripts/check-native-runtimes.sh`
+  (CI `native-runtime-guard`) fails any PR bumping `expo.version` under
+  `appVersion` without declaring the outgoing runtime. Removed
+  `pickup-native-ota-catchup.yml` (manual, never re-run — the process hole)
+  and `pickup-native-ota-deploy.yml` (marker-triggered on a stale `claude/*`
+  branch, published THAT branch's JS straight to customers). Merging this
+  PR is itself the remediation: the workflow republishes current JS to
+  runtime 1.0.3 and the fleet catches up on next launch.
+  **STILL OWED (owner action, cannot be done from CI): cut a new store
+  build.** Until a fingerprint-policy binary ships, every fresh install
+  still boots a months-old embedded bundle on first launch, and the
+  fingerprint publishes keep reaching nobody. Bump version/buildNumber/
+  versionCode, `eas build --profile production`, submit, then retire
+  `1.0.3` from the manifest only once that build has replaced the fleet.
+  **Lesson: a green OTA run is not evidence of delivery — read the runtime
+  in the publish log and compare it to what installed binaries report.**
+
 - 2026-08-18 — **Welcome-voucher cutover EXECUTED (owner-approved, ~15:45Z)
   — the 10% welcome voucher is LIVE and the auto-FOD is retired.** PR #1155
   merged to main (`b3c4205`, squash); apps/order production deploy READY on
