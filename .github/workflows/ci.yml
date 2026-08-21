@@ -107,6 +107,28 @@ jobs:
           fi
           echo "Migration guard passed."
 
+  # In-field runtime guard. An `eas update` publish targets the runtimeVersion
+  # app.json resolves to; an INSTALLED app only accepts updates matching the
+  # runtimeVersion it was BUILT with. When those diverge the publish still
+  # succeeds — into a runtime no device has — the OTA workflow goes green, and
+  # customers sit on an old bundle. That is what stranded the whole pickup-native
+  # fleet from 2026-07-25 to 2026-08-21 (two merged fixes reached nobody).
+  #
+  # Each native app declares the in-field runtimes its normal publish misses in
+  # apps/<app>/ota-runtimes.json, and the OTA workflows republish to them. Under
+  # the `appVersion` policy, bumping expo.version mints a NEW runtime, so every
+  # device still on the old binary is stranded unless the OLD version is added to
+  # that list. This job fails the PR that forgets.
+  native-runtime-guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require stranded runtimes to be declared
+        run: scripts/check-native-runtimes.sh "origin/${{ github.base_ref }}"
+
   # Lint — BLOCKING for the web apps (each at 0 errors).
   # Errors block; warnings don't (set-state-in-effect / purity are
   # deliberately warn-level — see the per-app eslint.config.mjs).

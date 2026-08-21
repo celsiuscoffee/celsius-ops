@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 // getSession gate + the per-user filters below.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
+import { getMYTToday } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const from = searchParams.get("from") || new Date().toISOString().slice(0, 10);
+  const from = searchParams.get("from") || getMYTToday();
   const toDate = new Date(from);
   toDate.setMonth(toDate.getMonth() + 3);
   const to = searchParams.get("to") || toDate.toISOString().slice(0, 10);
@@ -47,8 +48,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "date and availability required" }, { status: 400 });
   }
 
-  // Don't allow setting blockout dates in the past
-  const today = new Date().toISOString().slice(0, 10);
+  // Don't allow setting blockout dates in the past — MYT, so a valid "today"
+  // block isn't rejected as past between MYT midnight and 08:00.
+  const today = getMYTToday();
   if (date < today) {
     return NextResponse.json({ error: "Cannot set availability for past dates" }, { status: 400 });
   }

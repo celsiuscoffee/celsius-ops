@@ -424,6 +424,10 @@ export async function POST(request: NextRequest) {
         walletVoucherId,
         items,
         subtotalSen,
+        // Welcome vouchers spend only from the native app — reuse the
+        // FOD's source gate rather than trusting the route (the retired
+        // PWA export hits this same endpoint with source "web").
+        channel: fodNativeOk ? "app" : "web",
       });
       if (!resolved.ok) {
         return NextResponse.json({ error: resolved.error }, { status: 400 });

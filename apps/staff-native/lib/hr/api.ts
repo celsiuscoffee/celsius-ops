@@ -1,4 +1,6 @@
-import { api } from "../api";
+import { ApiError, api, fetchWithTimeout } from "../api";
+import { API_BASE_URL } from "../env";
+import { loadSession } from "../session";
 
 export type Shift = {
   id: string;
@@ -125,22 +127,97 @@ export function fetchLeave() {
   );
 }
 
-export function submitLeave(req: {
+export async function submitLeave(req: {
   leave_type: string;
   start_date: string;
   end_date: string;
   total_days: number;
   reason: string;
   /**
-   * MC photo as a data URL. REQUIRED for sick leave — /api/hr/leave rejects a
-   * sick request without one, and the AI approver refuses to auto-approve it.
+   * MC photo/PDF for sick leave. REQUIRED for sick leave — /api/hr/leave
+   * rejects a sick request without one, and the AI approver refuses to
+   * auto-approve it. Sent as a RAW multipart file, NOT base64-in-JSON: a
+   * full-resolution phone photo base64'd into a JSON body blew past the
+   * ~4.5MB platform body limit (base64 inflates ~33%, and the iOS capture-
+   * size cap silently no-ops because getAvailablePictureSizesAsync returns
+   * presets, not WxH). Multipart streams the file with no inflation, so the
+   * server (apps/staff/src/app/api/hr/leave/route.ts) converts it on its side.
    */
-  attachment?: string | null;
-}) {
-  return api<{ success: boolean }>("/api/hr/leave", {
-    method: "POST",
-    body: JSON.stringify(req),
-  });
+  mc?: { uri: string; type?: string } | null;
+}): Promise<{ success: boolean }> {
+  // No MC (annual/emergency/unpaid): plain JSON, same as before.
+  if (!req.mc) {
+    return api<{ success: boolean }>("/api/hr/leave", {
+      method: "POST",
+      body: JSON.stringify({
+        leave_type: req.leave_type,
+        start_date: req.start_date,
+        end_date: req.end_date,
+        total_days: req.total_days,
+        reason: req.reason,
+      }),
+    });
+  }
+
+  // MC present: multipart/form-data with the raw file.
+  const session = await loadSession();
+  const form = new FormData();
+  form.append("leave_type", req.leave_type);
+  form.append("start_date", req.start_date);
+  form.append("end_date", req.end_date);
+  form.append("total_days", String(req.total_days));
+  form.append("reason", req.reason ?? "");
+  const type = req.mc.type || "image/jpeg";
+  const ext =
+    type === "application/pdf" ? "pdf" : type === "image/png" ? "png" : "jpg";
+  form.append("attachment", {
+    uri: req.mc.uri,
+    name: `mc-${Date.now()}.${ext}`,
+    type,
+  } as unknown as Blob);
+
+  // Do NOT set Content-Type — React Native fills in the multipart boundary
+  // itself. Uploads run longer than a JSON call, so give it a bigger timeout
+  // than the 15s default.
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(
+      `${API_BASE_URL}/api/hr/leave`,
+      {
+        method: "POST",
+        body: form,
+        headers: session?.token
+          ? { Authorization: `Bearer ${session.token}` }
+          : undefined,
+      },
+      30_000,
+    );
+  } catch (e) {
+    const aborted = e instanceof Error && e.name === "AbortError";
+    throw new ApiError(
+      0,
+      aborted
+        ? "Upload timed out. Check your connection and try again."
+        : "Network error. Check your internet and try again.",
+      null,
+    );
+  }
+
+  const text = await res.text();
+  let body: unknown = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
+  if (!res.ok) {
+    const msg =
+      body && typeof body === "object" && "error" in body
+        ? String((body as { error: unknown }).error)
+        : `Request failed: ${res.status}`;
+    throw new ApiError(res.status, msg, body);
+  }
+  return body as { success: boolean };
 }
 
 export function fetchPayslips() {
@@ -328,7 +405,13 @@ export function fetchDateAvailability() {
 }
 
 export function setDateUnavailable(date: string, reason?: string) {
-  return api<{ availability: DateAvailability }>("/api/hr/availability", {
+  // The server ACCEPTS a block on an already-rostered date but returns a
+  // rostered_conflict telling the staffer the shift still stands until a
+  // manager changes it — the screen surfaces that message.
+  return api<{
+    availability: DateAvailability;
+    rostered_conflict?: { message: string; shifts: Array<{ shift_date: string; start_time: string; end_time: string }> } | null;
+  }>("/api/hr/availability", {
     method: "POST",
     body: JSON.stringify({ date, availability: "unavailable", reason: reason || null }),
   });

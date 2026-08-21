@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 // anon client reads zero rows (screen shows empty). Access stays scoped by the
 // getSession gate + the per-user filters below.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
+import { getMYTToday } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,9 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const today = new Date().toISOString().slice(0, 10);
+  // MYT "today", not UTC — before 08:00 MYT a UTC date is still yesterday, so
+  // the list would include yesterday's shift and badge the wrong day.
+  const today = getMYTToday();
 
   // Get published schedule shifts for this user from today onwards.
   // AI pt_suggestion rows are excluded: they are UNCONFIRMED proposals a

@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 // anon client reads zero rows (screen shows empty). Access stays scoped by the
 // getSession gate + the per-user filters below.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
-import { leaveDays } from "@/lib/hr/constants";
+import { leaveDays, getMYTToday } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,9 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const year = new Date().getFullYear();
+  // Balance year from MYT — on Jan 1 before 08:00 MYT a UTC year is still last
+  // year, so the app would show last year's balances for those hours.
+  const year = Number(getMYTToday().slice(0, 4));
 
   const [balancesRes, requestsRes] = await Promise.all([
     supabase
@@ -57,18 +59,48 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json();
-  const { leave_type, start_date, end_date, total_days, reason, attachment } = body;
+  // Accept EITHER multipart/form-data — the native app sends the MC as a RAW
+  // FILE (no base64 33% inflation), so a full-resolution iOS photo clears the
+  // platform body limit that base64-in-JSON kept breaching — OR the legacy JSON
+  // body with a base64 data URL (the web app, which compresses client-side).
+  // Both converge on the same fields below.
+  const contentType = req.headers.get("content-type") || "";
+  let leave_type: string, start_date: string, end_date: string;
+  let reason: string | null = null;
+  let total_days: unknown;
+  let attachment: string | null = null; // base64 data URL (JSON path)
+  let mcFile: { buffer: Buffer; mime: string } | null = null; // raw file (multipart)
+  if (contentType.includes("multipart/form-data")) {
+    const form = await req.formData();
+    leave_type = String(form.get("leave_type") || "");
+    start_date = String(form.get("start_date") || "");
+    end_date = String(form.get("end_date") || "");
+    total_days = form.get("total_days");
+    const r = form.get("reason");
+    reason = typeof r === "string" && r.trim() ? r : null;
+    const f = form.get("attachment");
+    if (f && typeof f !== "string") {
+      mcFile = { buffer: Buffer.from(await f.arrayBuffer()), mime: f.type || "image/jpeg" };
+    }
+  } else {
+    const body = await req.json();
+    leave_type = body.leave_type;
+    start_date = body.start_date;
+    end_date = body.end_date;
+    total_days = body.total_days;
+    reason = body.reason ?? null;
+    attachment = body.attachment ?? null;
+  }
 
   if (!leave_type || !start_date || !end_date || !total_days) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  // Sick leave must carry an MC. The column existed but nothing ever wrote it —
-  // this route didn't even read an attachment off the body — so every sick leave
-  // on record has attachment_url NULL and several were auto-approved on the
-  // strength of a free-text reason alone.
-  if (leave_type === "sick" && !attachment) {
+  // Sick leave must carry an MC — either an uploaded file (multipart) or a
+  // base64 data URL (JSON). Without one, several sick requests were
+  // auto-approved on a free-text reason alone.
+  const hasMc = !!attachment || !!mcFile;
+  if (leave_type === "sick" && !hasMc) {
     return NextResponse.json(
       { error: "Sick leave needs an MC. Attach a photo or PDF of the medical certificate.", reason: "mc_required" },
       { status: 400 },
@@ -103,23 +135,33 @@ export async function POST(req: NextRequest) {
   // the object PATH rather than a URL — the bucket is private and the backoffice
   // mints a short-lived signed URL at read time (see the clock route's uploader).
   let attachmentPath: string | null = null;
-  if (attachment) {
-    const mime = /^data:([^;,]+)/.exec(attachment)?.[1] ?? "image/jpeg";
-    const ALLOWED: Record<string, string> = {
-      "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
-      "image/heic": "heic", "image/webp": "webp", "application/pdf": "pdf",
-    };
-    const ext = ALLOWED[mime];
+  const ALLOWED: Record<string, string> = {
+    "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
+    "image/heic": "heic", "image/webp": "webp", "application/pdf": "pdf",
+  };
+  // Normalise both inputs to a single (buffer, mime) pair.
+  let uploadBuffer: Buffer | null = null;
+  let uploadMime = "image/jpeg";
+  if (mcFile) {
+    uploadBuffer = mcFile.buffer;
+    uploadMime = mcFile.mime;
+  } else if (attachment) {
+    uploadMime = /^data:([^;,]+)/.exec(attachment)?.[1] ?? "image/jpeg";
+    const base64 = attachment.includes(",") ? attachment.split(",")[1] : attachment;
+    uploadBuffer = Buffer.from(base64, "base64");
+  }
+  if (uploadBuffer) {
+    const ext = ALLOWED[uploadMime];
     if (!ext) {
       return NextResponse.json({ error: "MC must be a photo (JPG/PNG/HEIC/WebP) or a PDF" }, { status: 400 });
     }
-    const base64 = attachment.includes(",") ? attachment.split(",")[1] : attachment;
-    const buffer = Buffer.from(base64, "base64");
     // A phone photo is ~1-5MB; anything past 15MB is a mistake, and the request
     // body would be rejected upstream anyway.
-    if (buffer.byteLength > 15 * 1024 * 1024) {
+    if (uploadBuffer.byteLength > 15 * 1024 * 1024) {
       return NextResponse.json({ error: "MC file is too large (max 15MB)" }, { status: 400 });
     }
+    const mime = uploadMime;
+    const buffer = uploadBuffer;
     const path = `leave-mc/${session.id}/${Date.now()}.${ext}`;
     const { error: uploadErr } = await supabase.storage
       .from("hr-photos")

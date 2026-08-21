@@ -1,0 +1,35 @@
+{
+  "_why": [
+    "Runtimes that real, installed copies of this app report, but that the normal",
+    "`eas update` publish does NOT target. .github/workflows/pickup-native-ota.yml",
+    "republishes every merge to each entry here, so a live fleet can never be",
+    "silently stranded on an old bundle again.",
+    "",
+    "app.json uses runtimeVersion.policy 'fingerprint' (since 2026-07-25), so the",
+    "normal publish targets a fingerprint hash. Every binary currently on the App",
+    "Store / Play was built BEFORE that switch, under policy 'appVersion', so those",
+    "phones report the marketing version '1.0.3' as their runtime and match nothing",
+    "the fingerprint publish produces.",
+    "",
+    "REMOVE '1.0.3' only once a store build cut under the fingerprint policy has",
+    "fully replaced the 1.0.3 fleet \u2014 dropping it early stops those phones from",
+    "receiving any further update, which is the exact bug this file prevents.",
+    "Add an entry whenever a store build ships whose runtime the normal publish",
+    "will not match.",
+    "",
+    "PENDING (2026-08-21): app.json is bumped to 1.0.4 / build 13 / versionCode 11",
+    "for the store build that fixes the stale embedded bundle. MEASURED: the",
+    "version identity is part of the fingerprint, so this bump moves the runtime",
+    "ios e4e2beee -> c24dc6b2 and android dbe20143 -> 0c74b3fd. Nothing is",
+    "stranded by it TODAY because no fingerprint build has ever shipped \u2014 no",
+    "device reports either hash.",
+    "",
+    "AFTER the 1.0.4 build is submitted, add ITS runtime here (read the real",
+    "value from the EAS build page rather than trusting the hashes above, which",
+    "were computed from a pre-build tree). From then on the 1.0.4 fleet keeps",
+    "receiving OTAs even after a later bump moves the fingerprint again."
+  ],
+  "extraRuntimes": [
+    "1.0.3"
+  ]
+}

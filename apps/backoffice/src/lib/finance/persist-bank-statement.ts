@@ -112,6 +112,41 @@ export async function persistMaybankStatement(
 
   let statementId: string;
   let created: boolean;
+  // Carried state for a re-upload rebuild: GL stamps, AP-match links,
+  // expense-month overrides and human classifications must survive the
+  // delete+recreate, or (a) the GL poster re-posts already-posted lines —
+  // additively double-counting a partially rebuilt day — and (b) user state
+  // silently reverts. Same occurrence-queue mechanism as bukku-feed-sync's
+  // rebuild (keyed by date|direction|amount|description; duplicates restore
+  // in creation order).
+  type CarriedLine = {
+    txnDate: Date; direction: string; amount: unknown; description: string;
+    category: string | null; classifiedBy: string | null; ruleName: string | null;
+    isInterCo: boolean; outletId: string | null;
+    glTransactionId: string | null; glPostedAt: Date | null;
+    apInvoiceId: string | null; apMatchedAt: Date | null;
+    expenseMonth: string | null;
+  };
+  const lineKey = (l: { txnDate: Date; direction: string; amount: unknown; description: string }) =>
+    `${l.txnDate.toISOString().slice(0, 10)}|${l.direction}|${Number(l.amount).toFixed(2)}|${l.description}`;
+  const carry = new Map<string, CarriedLine[]>();
+  if (existing) {
+    const oldLines = (await prisma.bankStatementLine.findMany({
+      where: { statementId: existing.id },
+      select: {
+        txnDate: true, amount: true, direction: true, description: true,
+        category: true, classifiedBy: true, ruleName: true, isInterCo: true, outletId: true,
+        glTransactionId: true, glPostedAt: true, apInvoiceId: true, apMatchedAt: true,
+        expenseMonth: true,
+      },
+      orderBy: [{ txnDate: "asc" }, { id: "asc" }],
+    })) as CarriedLine[];
+    for (const l of oldLines) {
+      const k = lineKey(l);
+      const q = carry.get(k);
+      if (q) q.push(l); else carry.set(k, [l]);
+    }
+  }
   if (existing) {
     await prisma.bankStatementLine.deleteMany({ where: { statementId: existing.id } });
     await prisma.bankStatement.update({ where: { id: existing.id }, data: header });
@@ -131,6 +166,37 @@ export async function persistMaybankStatement(
   for (let i = 0; i < rows.length; i += 1000) {
     const r = await prisma.bankStatementLine.createMany({ data: rows.slice(i, i + 1000), skipDuplicates: true });
     linesCreated += r.count;
+  }
+
+  // Restore carried state onto the recreated lines (batched by identical
+  // payload — most stamped lines share a glTransactionId).
+  if (carry.size) {
+    const fresh = await prisma.bankStatementLine.findMany({
+      where: { statementId },
+      select: { id: true, txnDate: true, amount: true, direction: true, description: true },
+      orderBy: [{ txnDate: "asc" }, { id: "asc" }],
+    });
+    type CarryData = Record<string, unknown>;
+    const batches = new Map<string, { data: CarryData; ids: string[] }>();
+    for (const nl of fresh) {
+      const old = carry.get(lineKey(nl))?.shift();
+      if (!old) continue;
+      const data: CarryData = {};
+      if (old.glTransactionId) { data.glTransactionId = old.glTransactionId; data.glPostedAt = old.glPostedAt; }
+      if (old.apInvoiceId) { data.apInvoiceId = old.apInvoiceId; data.apMatchedAt = old.apMatchedAt; }
+      if (old.expenseMonth) { data.expenseMonth = old.expenseMonth; }
+      if (old.classifiedBy && old.classifiedBy !== "rule") {
+        data.category = old.category; data.classifiedBy = old.classifiedBy; data.ruleName = old.ruleName;
+        data.isInterCo = old.isInterCo; data.outletId = old.outletId;
+      }
+      if (!Object.keys(data).length) continue;
+      const bk = JSON.stringify(data);
+      const b = batches.get(bk);
+      if (b) b.ids.push(nl.id); else batches.set(bk, { data, ids: [nl.id] });
+    }
+    for (const b of batches.values()) {
+      await prisma.bankStatementLine.updateMany({ where: { id: { in: b.ids } }, data: b.data });
+    }
   }
 
   return {

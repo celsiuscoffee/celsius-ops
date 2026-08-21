@@ -31,8 +31,14 @@ export type ClockStatus = {
 
 export type ClockAction = "clock_in" | "clock_out";
 
-export function getClockStatus() {
-  return api<ClockStatus>("/api/hr/clock");
+export function getClockStatus(coords?: { latitude: number; longitude: number } | null) {
+  // Pass GPS so a multi-outlet staffer sees the geofence for the outlet they're
+  // ACTUALLY at (the route picks the nearest assigned outlet by coords). The
+  // web clock page already does this; native didn't, so someone at Tamarind
+  // with primary Shah Alam saw "21 km away" and auto clock-in armed the wrong
+  // fence. Without coords the server falls back to the session outlet as before.
+  const qs = coords ? `?lat=${coords.latitude}&lng=${coords.longitude}` : "";
+  return api<ClockStatus>(`/api/hr/clock${qs}`);
 }
 
 export function postClockAction(

@@ -1,0 +1,16 @@
+{
+  "_why": [
+    "Runtimes that installed manager phones report but that the normal `eas update`",
+    "publish does NOT target. .github/workflows/staff-native-ota.yml republishes",
+    "every merge to each entry here (both the production and preview channels).",
+    "",
+    "app.json uses runtimeVersion.policy 'appVersion' with version '1.0.0', so the",
+    "normal publish already targets '1.0.0' — the runtime the installed build",
+    "reports. The list is therefore empty and must stay empty while those agree.",
+    "",
+    "THE MOMENT expo.version CHANGES, add the PREVIOUS version here: under the",
+    "appVersion policy a bump mints a new runtime, and every phone still running the",
+    "old binary stops receiving updates. CI's native-runtime-guard job enforces this."
+  ],
+  "extraRuntimes": []
+}

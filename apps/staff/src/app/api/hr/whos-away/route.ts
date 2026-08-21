@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 // getSession gate + the per-user filters below.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
+import { getMYTToday } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,13 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayIso = today.toISOString().slice(0, 10);
-  const tomorrow = new Date(today.getTime() + 86_400_000).toISOString().slice(0, 10);
+  // MYT day boundary, not the server's UTC one — Vercel runs UTC, so
+  // `new Date()` before 08:00 MYT is still "yesterday" and the today/tomorrow
+  // buckets shift a day early for the whole opening shift.
+  const todayIso = getMYTToday();
+  const tomorrow = new Date(new Date(`${todayIso}T00:00:00Z`).getTime() + 86_400_000)
+    .toISOString()
+    .slice(0, 10);
 
   // Pull approved/AI-approved leave requests overlapping today or tomorrow.
   const { data: leaves, error } = await supabase
@@ -45,9 +49,14 @@ export async function GET() {
   const users = await prisma.user.findMany({
     where: {
       id: { in: userIds },
+      // A user's outlet lives in EITHER the scalar `outletId` or the
+      // `outletIds` array — the rest of the app matches on both (availability,
+      // open-shifts). Checking only `outletIds` hid on-leave teammates from
+      // regular staff, because 36 of 38 active users carry `outletId` with an
+      // empty `outletIds`. Match both, like everywhere else.
       ...(isManager
         ? {}
-        : { outletIds: { has: session.outletId! } }),
+        : { OR: [{ outletId: session.outletId! }, { outletIds: { has: session.outletId! } }] }),
     },
     select: { id: true, name: true, fullName: true, outlet: { select: { name: true } } },
   });

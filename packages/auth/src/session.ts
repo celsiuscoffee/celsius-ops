@@ -48,5 +48,23 @@ export async function getSession(): Promise<SessionUser | null> {
 
 export async function clearSession(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.delete(COOKIE_NAME);
+  // The cookie is SET with `domain: .celsiuscoffee.com` in production
+  // (getCookieDomain), and a cookie is keyed on (name, domain, path). A bare
+  // delete(name) only expires a HOST-ONLY cookie, leaving the real
+  // domain-scoped session cookie alive — so "Log Out" on a shared outlet
+  // tablet left the next person signed in as the previous user. Clear it with
+  // the SAME domain + path it was written with (and also the host-only form,
+  // to sweep any legacy cookie set before a domain was configured).
+  const domain = getCookieDomain();
+  const expire = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 0,
+  };
+  if (domain) {
+    cookieStore.set(COOKIE_NAME, "", { ...expire, domain });
+  }
+  cookieStore.set(COOKIE_NAME, "", expire);
 }

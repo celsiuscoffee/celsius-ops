@@ -67,6 +67,24 @@ export type SegmentOpts = {
 type MemberRow = { id: string; phone: string | null; name: string | null; sms_opt_out: boolean | null; birthday: string | null; preferred_outlet_id: string | null };
 const MEMBER_SELECT = "member_id, members!inner(id, phone, name, sms_opt_out, birthday, preferred_outlet_id)";
 
+// Call a set-returning RPC and page past PostgREST's 1000-row default cap.
+// Every segment RPC MUST have a total ORDER BY or paging can skip/repeat rows
+// (loyalty_capped_phones + loyalty_birthday_members were ordered for exactly
+// this in migration 107). This cap has bitten the loop engine repeatedly: it
+// truncated the cooldown suppress list into a 7-SMS spam incident (#533), and
+// silently hid 214 of night-revival's 1,214 members from the segment.
+async function rpcAll<T>(fn: string, args: Record<string, unknown>, label: string): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabaseAdmin.rpc(fn, args).range(from, from + 999);
+    if (error) throw new Error(`${label}: ${error.message}`);
+    const batch = (data ?? []) as T[];
+    out.push(...batch);
+    if (batch.length < 1000) break;
+  }
+  return out;
+}
+
 // Dedupe by phone, drop unreachable + PDPA opt-outs, apply an optional predicate.
 // A phone we must never target. "+600…" is the signature of a legacy-import
 // bug (2026-03-29 batch): +60 prepended to a local number WITHOUT stripping the
@@ -265,10 +283,11 @@ async function aovPushSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; lab
 async function nightRevivalSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
   const activeDays = o.activeWithinDays ?? 60;
   const maxWkdayNight = o.maxWeekdayNightVisits ?? 2;
-  const { data, error } = await supabaseAdmin.rpc("loyalty_night_revival_segment", {
-    p_active_days: activeDays, p_max_wkday_night: maxWkdayNight, p_lookback_days: 90,
-  });
-  if (error) throw new Error(`night_revival segment: ${error.message}`);
+  const data = await rpcAll<{ member_id: string; phone: string; member_name: string | null }>(
+    "loyalty_night_revival_segment",
+    { p_active_days: activeDays, p_max_wkday_night: maxWkdayNight, p_lookback_days: 90 },
+    "night_revival segment",
+  );
   const seen = new Set<string>();
   const rows: SegmentRow[] = [];
   for (const r of (data ?? []) as Array<{ member_id: string; phone: string; member_name: string | null }>) {
@@ -308,8 +327,9 @@ async function habitSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label
 // default cap and missed qualifiers. The RPC matches by MM-DD in MYT.
 async function birthdaySegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
   const k = o.birthdayWithinDays ?? 0;
-  const { data, error } = await supabaseAdmin.rpc("loyalty_birthday_members", { p_brand: BRAND, p_within_days: k });
-  if (error) throw new Error(`birthday segment: ${error.message}`);
+  const data = await rpcAll<{ member_id: string; phone: string; member_name: string | null }>(
+    "loyalty_birthday_members", { p_brand: BRAND, p_within_days: k }, "birthday segment",
+  );
   const seen = new Set<string>();
   const rows: SegmentRow[] = [];
   for (const r of (data ?? []) as Array<{ member_id: string; phone: string; member_name: string | null }>) {
@@ -749,8 +769,9 @@ export async function sendRound(roundId: string) {
       const n = parseInt(String(s?.value ?? "").replace(/[^0-9]/g, ""), 10);
       if (Number.isFinite(n) && n > 0) cap = n;
     } catch { /* default 2 */ }
-    const { data: cp } = await supabaseAdmin.rpc("loyalty_capped_phones", { p_cap: cap, p_days: 7 });
-    for (const r of (cp ?? []) as Array<{ phone: string }>) if (r.phone) cappedPhones.add(r.phone.trim());
+    // Paginated: a truncated suppress list = members sent past the weekly cap.
+    const cp = await rpcAll<{ phone: string }>("loyalty_capped_phones", { p_cap: cap, p_days: 7 }, "capped phones");
+    for (const r of cp) if (r.phone) cappedPhones.add(r.phone.trim());
   }
 
   let sentPush = 0;
@@ -1114,7 +1135,7 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   //   3. BUDGET — 30/day drip (~22 sent after the 25% holdout ≈ RM2.20/day,
   //      ~RM66/month). SCALE GATE: raise dailyLimit to 80 only once lift is
   //      >= 2pp on a pooled holdout of >= 30. The bleed rule kills it otherwise.
-  night_revival: { key: "night_revival", label: "Night revival", objective: "Fill weekday evenings (7-11pm)", defaultHoldoutPct: 25, defaultWindowDays: 14, candidateKeys: ["free_dessert_min30", "flat10_min30", "b1f1_drinks"], messageTemplate: "Evenings at Celsius, {name}? We're open till 11pm - enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { activeWithinDays: 60, maxWeekdayNightVisits: 2 }, dailyLimit: 30 }, segment: nightRevivalSegment },
+  night_revival: { key: "night_revival", label: "Night revival", objective: "Fill weekday evenings (7-11pm)", defaultHoldoutPct: 25, defaultWindowDays: 14, candidateKeys: ["free_dessert_min30", "flat10_min30", "b1f1_drinks"], messageTemplate: "Hi {name}! Celsius is open till 11pm - enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { activeWithinDays: 60, maxWeekdayNightVisits: 2 }, dailyLimit: 30 }, segment: nightRevivalSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's

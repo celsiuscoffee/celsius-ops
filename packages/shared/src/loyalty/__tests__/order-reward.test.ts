@@ -111,6 +111,55 @@ describe("resolveOrderReward — wallet vouchers", () => {
     expect(r).toMatchObject({ ok: true, kind: "wallet", walletVoucherId: "v1", discountSen: 500 });
   });
 
+  it("welcome voucher refused from the web channel", async () => {
+    const db = fakeDb({
+      issued_rewards: () => walletRow({ source_type: "welcome" }),
+      voucher_templates: () => flatTemplate,
+    });
+    const r = await resolveOrderReward({
+      supabase: db,
+      memberId: "m1",
+      walletVoucherId: "v1",
+      items,
+      subtotalSen: SUBTOTAL,
+      channel: "web",
+    });
+    expect(r).toMatchObject({ ok: false });
+    if (!r.ok) expect(r.error).toMatch(/app/i);
+  });
+
+  it("welcome voucher resolves normally from the app channel", async () => {
+    const db = fakeDb({
+      issued_rewards: () => walletRow({ source_type: "welcome" }),
+      voucher_templates: () => flatTemplate,
+    });
+    const r = await resolveOrderReward({
+      supabase: db,
+      memberId: "m1",
+      walletVoucherId: "v1",
+      items,
+      subtotalSen: SUBTOTAL,
+      channel: "app",
+    });
+    expect(r).toMatchObject({ ok: true, kind: "wallet", walletVoucherId: "v1", discountSen: 500 });
+  });
+
+  it("non-welcome vouchers unaffected by the web channel gate", async () => {
+    const db = fakeDb({
+      issued_rewards: () => walletRow({ source_type: "campaign" }),
+      voucher_templates: () => flatTemplate,
+    });
+    const r = await resolveOrderReward({
+      supabase: db,
+      memberId: "m1",
+      walletVoucherId: "v1",
+      items,
+      subtotalSen: SUBTOTAL,
+      channel: "web",
+    });
+    expect(r).toMatchObject({ ok: true, kind: "wallet", discountSen: 500 });
+  });
+
   it("QR-table convention: rewardId carrying a voucher id resolves as wallet too", async () => {
     const db = fakeDb({
       issued_rewards: () => walletRow(),

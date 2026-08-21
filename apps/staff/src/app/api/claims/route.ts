@@ -116,12 +116,9 @@ export async function POST(req: NextRequest) {
     // open to all staff with `inventory:pay-and-claim`; vendor payment
     // requests commit finance to pay a third-party, so trust bar is
     // higher. Owner/admin/manager can submit REQUEST flow.
-    if (
-      requestFlow === "REQUEST" &&
-      session.role !== "OWNER" &&
-      session.role !== "ADMIN" &&
-      session.role !== "MANAGER"
-    ) {
+    const isManager =
+      session.role === "OWNER" || session.role === "ADMIN" || session.role === "MANAGER";
+    if (requestFlow === "REQUEST" && !isManager) {
       return NextResponse.json(
         {
           error:
@@ -131,9 +128,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Amount must be a positive number — a negative or non-numeric amount
+    // was accepted before (the `!amount` check only caught 0/empty), and it
+    // flows into the reimbursement/payable figures downstream.
+    const claimAmount = Number(amount);
+    if (!Number.isFinite(claimAmount) || claimAmount <= 0) {
+      return NextResponse.json(
+        { error: "amount must be a positive number" },
+        { status: 400 },
+      );
+    }
+
+    // A non-manager can only file a reimbursement for THEMSELVES at THEIR OWN
+    // outlet — the client-supplied claimedById/outletId are otherwise trusted,
+    // so a staffer could attribute a reimbursement to anyone at any outlet.
+    // Managers may submit on behalf of their team, so their values stand.
+    const effectiveClaimedById = isManager ? claimedById : session.id;
+    const effectiveOutletId = isManager ? outletId : session.outletId || outletId;
+
     // Get outlet for code
     const outlet = await prisma.outlet.findUnique({
-      where: { id: outletId },
+      where: { id: effectiveOutletId },
       select: { code: true },
     });
 
@@ -178,7 +193,7 @@ export async function POST(req: NextRequest) {
     const orderCount = await prisma.order.count({
       where: {
         orderType: { in: ["PAY_AND_CLAIM", "PAYMENT_REQUEST"] },
-        outletId,
+        outletId: effectiveOutletId,
       },
     });
     const orderNumber = `PC-${outlet.code}-${String(orderCount + 1).padStart(4, "0")}`;
@@ -200,14 +215,14 @@ export async function POST(req: NextRequest) {
         data: {
           orderNumber,
           orderType,
-          outletId,
+          outletId: effectiveOutletId,
           supplierId: resolvedSupplierId!,
           status: "DRAFT",
-          totalAmount: amount,
+          totalAmount: claimAmount,
           notes: fullNotes,
           // REQUEST flow doesn't have a claimant (no one to reimburse) —
           // null is fine here.
-          claimedById: requestFlow === "CLAIM" ? claimedById : null,
+          claimedById: requestFlow === "CLAIM" ? effectiveClaimedById : null,
           createdById: session.id,
           ...(items?.length
             ? {
@@ -229,12 +244,12 @@ export async function POST(req: NextRequest) {
         data: {
           invoiceNumber,
           orderId: order.id,
-          outletId,
+          outletId: effectiveOutletId,
           supplierId: resolvedSupplierId!,
-          amount,
+          amount: claimAmount,
           status: "DRAFT",
           paymentType: invoicePaymentType,
-          claimedById: requestFlow === "CLAIM" ? claimedById : null,
+          claimedById: requestFlow === "CLAIM" ? effectiveClaimedById : null,
           issueDate: new Date(purchaseDate),
           photos,
           notes: fullNotes,

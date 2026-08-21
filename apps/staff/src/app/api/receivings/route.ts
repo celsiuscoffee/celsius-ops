@@ -9,12 +9,30 @@ import { aiPrefillInvoice } from "@/lib/ai-prefill";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
+  // This route sits behind no middleware auth gate (middleware exempts
+  // /api/*), so the session check IS the boundary. Without it, an
+  // unauthenticated GET fell through to `where = {}` and returned every
+  // outlet's receiving history (suppliers, quantities, receiver names).
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = new URL(req.url);
   const limit = Math.min(Number(searchParams.get("limit")) || 50, 200);
   const offset = Number(searchParams.get("offset")) || 0;
-  const outletId = searchParams.get("outletId") || session?.outletId || null;
 
-  const where = outletId ? { outletId } : {};
+  // Managers/owner/admin may target any outlet via ?outletId; everyone else
+  // is pinned to their own assigned outlet regardless of the query param.
+  const isManager = ["OWNER", "ADMIN", "MANAGER"].includes(session.role);
+  const requestedOutletId = searchParams.get("outletId");
+  const outletId = isManager
+    ? requestedOutletId || session.outletId || null
+    : session.outletId || null;
+
+  // A non-manager with no assigned outlet sees nothing (never all outlets).
+  const where = outletId
+    ? { outletId }
+    : isManager
+      ? {}
+      : { outletId: "__none__" };
 
   const [receivings, total] = await Promise.all([
     prisma.receiving.findMany({

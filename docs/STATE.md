@@ -6,6 +6,189 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-21 — **THE CUSTOMER APP HAS BEEN STRANDED ON 25-JUL JS SINCE THE
+  FINGERPRINT SWITCH — every pickup-native OTA since then reached ZERO
+  phones while the workflow went green.** Owner reported the Orders tab
+  flipping back to the pre-tabs empty state again ("we fixed this many
+  times"). Root cause is the *mirror image* of the July bug: `eas update`
+  publishes to the runtime **app.json resolves to**, but an installed app
+  only accepts updates matching the runtime **it was built with**. Since
+  2026-07-25 app.json has used `policy: "fingerprint"`, while every binary
+  on the App Store / Play was built earlier under `appVersion` and reports
+  runtime `1.0.3` (app.json is still version 1.0.3 / buildNumber 12 /
+  versionCode 10 — **no fingerprint store build has ever been cut**, so
+  nothing in the field can match a fingerprint publish). Proof: run
+  32156055677 (18 Aug, the welcome-voucher ship) succeeded publishing to
+  `e4e2beee7ab3004bdb18f146549a88d895e65cf2` (iOS) /
+  `dbe20143f9bfb4c9c827261a61150a391014bec2` (android). The newest bundle
+  any real phone can see is the one-off 25-Jul catch-up (group
+  `2ad415b6-9974-41a1-abae-23477603fe17`, runtime `1.0.3`, both platforms).
+  So **#1112 (stock-count/receipt integrity) and #1155 (welcome voucher)
+  never reached a customer** — the STATE line claiming "customer phones
+  pull the new wallet lists on next launch" was wrong. The reinstall
+  half: a fresh install boots the store binary's EMBEDDED bundle, older
+  than the catch-up, which is the pre-tabs screenshot. **Fix (this
+  branch):** `apps/<app>/ota-runtimes.json` declares the in-field runtimes
+  the normal publish misses (pickup-native: `["1.0.3"]`; pos/staff-native
+  empty — they are still on `appVersion` at 1.0.0, which their publish
+  already targets); every OTA workflow now runs
+  `scripts/ota-publish-extra-runtimes.mjs`, which pins a literal
+  `expo.runtimeVersion` per entry, republishes the same bundle, and FAILS
+  the job unless eas confirms that runtime. `scripts/check-native-runtimes.sh`
+  (CI `native-runtime-guard`) fails any PR bumping `expo.version` under
+  `appVersion` without declaring the outgoing runtime. Removed
+  `pickup-native-ota-catchup.yml` (manual, never re-run — the process hole)
+  and `pickup-native-ota-deploy.yml` (marker-triggered on a stale `claude/*`
+  branch, published THAT branch's JS straight to customers). Merging this
+  PR is itself the remediation: the workflow republishes current JS to
+  runtime 1.0.3 and the fleet catches up on next launch.
+  **MERGED + DELIVERY VERIFIED 2026-08-21** (owner said "merge it"): PR
+  #1177 squashed to main as `9f96be7`; CI 15/15 green. The OTA workflow
+  run 32478218572 then published TWICE — the usual fingerprint group, and
+  the new verified step to the fleet: `Runtime version 1.0.3`,
+  `Platform android, ios`, update group
+  `cdfd5a85-b6a4-4da7-b836-e0b5f5a5565b`, log line
+  `[ota] ✔ runtime 1.0.3 (channel production) confirmed.` **That is the
+  first OTA since 25 Jul to land on a runtime real phones report**, and it
+  carries the never-delivered #1112 + #1155 JS with it; customers pick it
+  up on next launch. A follow-up commit added
+  `tests/ota-runtime-coverage.test.ts` workflow-coverage assertions —
+  every workflow running `eas-cli update` must also run the extra-runtime
+  publisher (discovered from disk, so new native apps are covered
+  automatically); verified non-vacuous by deleting the step and watching
+  it fail.
+  **THE FINGERPRINT INCLUDES THE VERSION IDENTITY — measured 2026-08-21,
+  and the ota-release skill had asserted the opposite.** `npx expo-updates
+  fingerprint:generate` on pickup-native: at 1.0.3/12/10 the hashes are
+  ios `e4e2beee7ab3004bdb18f146549a88d895e65cf2` / android
+  `dbe20143f9bfb4c9c827261a61150a391014bec2` — *exactly what the stranded
+  18 Aug OTA published to*, confirming those publishes targeted the current
+  source and not anything installed. Bumping to 1.0.4/13/11 moves them to
+  ios `c24dc6b2…` / android `0c74b3fd…`. So a version bump mints a new
+  runtime under BOTH policies; the skill's "version bumps are now JS-safe"
+  line was false and would have stranded the 1.0.4 fleet on its next bump —
+  the same bug a third time. `scripts/check-native-runtimes.sh` no longer
+  skips fingerprint apps: it fails a version-identity change (version OR
+  buildNumber OR versionCode) unless that app's `ota-runtimes.json` is
+  touched in the same PR. Verified across four scenarios.
+  **STILL OWED (owner action, cannot be done from CI): cut a new store
+  build.** Until a fingerprint-policy binary ships, every fresh install
+  still boots a months-old embedded bundle on first launch, and the
+  fingerprint publishes keep reaching nobody. Bump version/buildNumber/
+  versionCode, `eas build --profile production`, submit, then retire
+  `1.0.3` from the manifest only once that build has replaced the fleet.
+  **Lesson: a green OTA run is not evidence of delivery — read the runtime
+  in the publish log and compare it to what installed binaries report.**
+  The 18 Aug STATE line asserting "customer phones pull the new wallet
+  lists on next launch" was written from a green workflow and was false
+  for four weeks; the publish log's runtime is now the only acceptable
+  proof, and the workflow fails rather than let that claim be made again.
+  `pos-native-ota-deploy.yml` (pinned to the stale branch
+  `claude/awesome-davinci-CvikE`, publishing THAT branch's JS to every
+  till) was REMOVED on owner instruction, along with its marker file;
+  `apps/pos-native/DEPLOY-LOCAL.md` now points at `workflow_dispatch` on
+  `pos-native-ota.yml`, which can only publish from `main`. Both
+  marker-deploy workflows are now gone.
+  pickup-native app.json is bumped to **1.0.4 / build 13 / versionCode 11**
+  ready for that build; after submitting, read the build's REAL runtime off
+  the EAS build page and add it to `apps/pickup-native/ota-runtimes.json`
+  (do not trust a local fingerprint:generate — the tree differs at build
+  time). Keep `1.0.3` listed until the new build has replaced that fleet.
+
+- 2026-08-18 — **Welcome-voucher cutover EXECUTED (owner-approved, ~15:45Z)
+  — the 10% welcome voucher is LIVE and the auto-FOD is retired.** PR #1155
+  merged to main (`b3c4205`, squash); apps/order production deploy READY on
+  order.celsiuscoffee.com before the SQL ran; pickup-native OTA workflow
+  (run 32156055677) completed success — customer phones pull the new
+  wallet lists on next launch. Cutover SQL applied to prod in order:
+  (1) voucher_templates row `b6865e22-9bc3-42f0-9eba-d4e20bdcd84c`
+  ("10% Welcome Discount", percent 10, validity 30d, new_member +
+  auto_issue, active); (2) `promo-first-order-celsius` → is_active=false.
+  Verified end state: 1 active new_member auto_issue template, 0 active
+  first_order promos. From now: first app sign-in → voucher in wallet +
+  push; redemption only via app orders (web initiate/quote and POS redeem
+  refuse `source_type='welcome'`). Rollback = re-activate the promotions
+  row + deactivate the template (both single UPDATEs). Deploy-gap check
+  (a voucher issued before the new code went live would carry ungated
+  source_type='manual'): zero issued_rewards after 15:30Z — clean.
+  **E2E check (owner-requested, 2026-08-19) found issuance DEAD ON
+  ARRIVAL: 22 verified logins (20 phones) in the first hour after
+  cutover, 0 welcome vouchers issued.** Root cause: the native app signs
+  in via `/api/otp/verify`, whose `ensureNewMemberRewards` call was a
+  bare floating promise — Vercel freezes the lambda at response return,
+  so issuance never ran (the sibling `/api/loyalty/otp/verify` awaits it;
+  welcome.ts's own push already needed `after()` for the same reason).
+  Fix: wrap issuance in `after()` in otp/verify (this branch). No
+  backfill needed — issuance is idempotent per member+template, so the
+  missed 20 phones receive the voucher on their next sign-in.
+  **Lesson: on Vercel routes, fire-and-forget = fire-and-lose; anything
+  that must complete after the response needs `after()`.**
+
+- 2026-08-18 — **FOD redesign (owner-directed): replace the invisible auto
+  first-order discount with a VISIBLE 10% welcome voucher issued on first
+  app sign-in, redeemable ONLY on app orders.** Driven by three
+  "downloaded but no 10%" complaints; root causes were visibility (auto-FOD
+  showed nothing at checkout on old bundles) and channel confusion (POS /
+  web-QR never qualify; web_qr = 2,052 orders since Jul 22, 0 FOD, vs 342
+  app orders — owner confirmed keep app-only, rejected extending to web,
+  ~RM500/mo). Code shipped on `claude/missing-first-order-discount-bhe4uw`
+  (PR #1155): `resolveOrderReward` gains `channel: "app"|"web"` and refuses
+  `source_type='welcome'` vouchers from web (initiate + quote pass "web";
+  /api/orders passes app only when source is app_ios/app_android); POS
+  redeem route refuses welcome vouchers at the till; `welcome.ts` now
+  issues with `source_type='welcome'` (was 'manual'); "welcome" added to
+  all 7 wallet-source lockstep lists (native home rail/wallet/count,
+  shared rewards-count, web rail/wallet). Issuance itself is the EXISTING
+  `ensureNewMemberRewards` pipeline (otp/verify → auto_issue new_member
+  templates, idempotent, push-notifies) — no new_member template currently
+  exists, so nothing issues until the cutover. **Cutover (owner approval
+  needed, run AFTER merge+deploy, in order):**
+  (1) `insert into voucher_templates (id, brand_id, title, description,
+  icon, category, discount_type, discount_value, validity_days, is_active,
+  auto_issue, reward_type, stacks_with_beans) values (gen_random_uuid(),
+  'brand-celsius', '10% Welcome Discount', 'Thanks for joining — 10% off
+  your first order placed in the app', 'discount', 'discount', 'percent',
+  10, 30, true, true, 'new_member', true);`
+  (2) `update promotions set is_active=false where
+  id='promo-first-order-celsius';` — retires the auto-FOD (charge + native
+  preview both read this row) so voucher + auto never stack. Between (1)
+  and (2) both exist briefly; run back-to-back. Merging OTAs pickup-native
+  (JS-only lockstep-list change — OTA-safe). Note: existing members who
+  never signed into the app also get the voucher on their first app login
+  (owner's wording: "every time we detect first login in apps").
+
+- 2026-08-18 — **"Downloaded but didn't get 10%" (customer 018-2247861 /
+  +60182247861) — ordered at the POS, not in the app; FOD correctly did not
+  apply.** Member created 08:59Z, then order `CC-CON-6559` at the Conezion
+  POS 09:08Z (RM49.70, zero discounts, no manual discount keyed); zero
+  `orders` rows on the phone. Same shape as +60196098892 (2026-08-06) —
+  now the THIRD complaint of the "downloaded but no 10%" family. FOD is
+  native-app-orders-only by owner design (2026-07-22, drives app ordering);
+  the gap is customer expectation: "install = 10% off anywhere". Support
+  reply: the 10% applies when the order is placed IN the app; invite them
+  to place their next order via the app (their first-order credit is still
+  unused — no `orders` rows means the FOD will fire on their first app
+  order). Owner decision worth raising: counter script ("order in the app
+  for your 10%") and/or in-app copy clarifying the discount applies to app
+  orders, not counter sales.
+
+- 2026-08-17 — **"Downloaded but didn't get 10% first order" (customer
+  019-2448782 / +60192448782) — the discount WAS applied and charged.**
+  Member created 08:09Z, order `C-5473` 08:17Z (`app_ios`, dine-in, Shah
+  Alam): subtotal RM54.60, `first_order_discount_amount=546` (exactly 10%),
+  FPX charged the discounted total **RM49.14** (provider ref
+  `260817081703300416985246`, status preparing). No money owed. Likely
+  perception gap: PR #1118 (checkout-preview FOD line, merged 2026-08-06)
+  ships via OTA, but a **fresh install runs the store-embedded bundle on
+  first launch** — if that binary predates #1118, checkout showed no
+  discount line while the charge included it. The order-detail screen
+  (`pickup-native/app/order/[id].tsx`) does render "First order discount
+  −RM5.46", so the customer can verify in-app under Orders → C-5473.
+  Support reply: point them at the receipt line + RM49.14 bank charge vs
+  RM54.60 subtotal. Follow-up worth considering: cut a new store binary so
+  the embedded bundle includes #1118 (second complaint of this shape after
+  +60196098892 on 2026-08-06).
+
 - 2026-08-17 — **A DATABASE TRIGGER depletes stock on every POS sale — found
   after four sessions of hunting phantom balance movement.** `pos_order_items`
   carries `pos_order_items_stock_ins` → `pos_apply_item_stock()` (SECURITY
@@ -2068,6 +2251,41 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Open failures
 
+- 2026-08-20 — **RM settlement lag incident (~12:30–15:30 MYT): Revenue
+  Monster's Query Payment Checkout kept answering PENDING for ~2h on
+  FPX payments whose money had already left the customer's bank — paid
+  dine-in orders sat invisible to the kitchen.** Owner-reported from an RM
+  merchant-app photo: C-8ZXV75 (Shah Alam table 15, RM26.80 FPX, tx
+  …0537163104164) created 05:37Z, money deducted, but webhook (05:38Z),
+  poll, reconcile-pending (every 1 min, 45s–55min window) and
+  expire-orders (every 15 min) all got PENDING from RM until the 07:30:16Z
+  expire-orders sweep finally saw SUCCESS → order flipped preparing and
+  the kitchen docket printed 07:30:19Z (1h53m late). Same sweep settled
+  C-F30773 (Conezion table 11, RM9.90 FPX, created 05:41Z) — multi-outlet,
+  so RM-side, consistent with the 2026-07-27 hosted-page verdict that RM's
+  infra is flaky. Our pipeline behaved correctly at every step (nothing
+  bulk-failed a paid order; expire-orders' ask-RM-first design recovered
+  both) — the gap is DETECTION: nothing alerts a human while an order with
+  a checkout_id sits pending >30 min, so the customer complains before we
+  know. **Still unresolved as of 07:40Z:** C-1WA685 (Tamarind table 7,
+  RM53.60 card, 04:35Z) and C-NVK227 (Conezion table 16, RM27.90 FPX,
+  04:52Z) remain pending with RM still answering PENDING — check the RM
+  merchant portal whether these customers were charged; crons keep
+  re-sweeping them every 15 min and will settle+print automatically if RM
+  flips. Candidate follow-ups (owner call): a pending->30min alert (ops
+  pulse/Sentry), and raising the incident with RM support with the tx ids.
+  **UPDATE 08:01Z:** C-1WA685 and C-NVK227 were flipped to failed by a
+  single manual statement (identical updated_at, NULL failure_reason —
+  no cron path does that); if either customer was actually charged, only
+  the `reconcile-failed?days=N` operator dry-run will surface it now.
+  **Detection fix SHIPPED on this branch (PR #1173):** expire-orders now
+  raises a per-order-fingerprinted Sentry error (`[stuck-pending]`) for
+  any checkout-bearing order still deferred past 30 min — staff get
+  alerted at ~30-45 min instead of hearing it from the customer at 2h.
+  Settlement behavior untouched. Remaining owner actions: raise the tx
+  ids with RM support; confirm in the RM portal that C-1WA685/C-NVK227
+  weren't charged (or run reconcile-failed dry-run).
+
 - 2026-07-27 — **QR-order payment failures are chronic (~16%/day) and CARD is
   the outlier: 36% of card attempts fail (89/247 over 14d) vs ~11% FPX/TNG,
   at ALL three stores (SA 43.5% / Con 38.6% / Tam 21.3%) — so it's the card
@@ -2242,6 +2460,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-08-19 — **Local-rank QA: loop runs, but measurement was starved.** Since
+  the Jul 5 radius fix: 69 combos scanned, only 3 twice — 93 active combos vs a
+  40/mo cap and virgin combos (needScore 1000) eating each run, so "is rank
+  improving?" was unanswerable for most terms. Fixed: (1) pruned tracked set
+  93→41 in prod via the board's active flag (retired all 16 IOI Mall combos —
+  no GBP connection — and the zero-demand unranked tail; reactivated the four
+  "coffee <place>" June winners); (2) seeding (`seedTargetKeywords` +
+  `refreshKeywords`) no longer resurrects retired terms on the monthly re-seed;
+  (3) scan cron alternates re-scans with first-scans (rescansDue/firstScansDue
+  in response) and default cap 40→160 (env `GEOGRID_MONTHLY_SCAN_CAP` still
+  wins). **Outcomes so far:** Tamarind genuinely improving (+70 reviews since
+  Jul 6, 37/30d, `cafe(s) near me` #3.4/#3.5 at 10km); Putrajaya steady (25/30d);
+  Shah Alam rank-dominant (`cafes near me` #2.3) but reviews collapsed to 7/30d;
+  Nilai flat at 1/30d yet only **2 reviews behind** its top competitor (HONGEH
+  114 vs 112). Still undone (human): GBP category adds — `restaurants near me`
+  unranked at 3 outlets in Jul AND Aug scans; review-ask push at SA + Nilai.
 
 - 2026-08-15 — **Loop QA sweep DONE and MERGED to main as `9b6a3e7` (PR #1130).**
   P1 (incl. root cause), P2 (ageing arm), P4, P6 and P8.1 all fixed; P3

@@ -279,19 +279,29 @@ export default function AvailabilityPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [showReason, setShowReason] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  // Blockout feedback: a failure (red) or the server's rostered_conflict
+  // message (amber) — the latter tells a staffer their block landed on a date
+  // they're already published on, which nothing surfaced before.
+  const [blockNotice, setBlockNotice] = useState<{ kind: "error" | "info"; text: string } | null>(null);
 
   const availability = data?.availability || [];
   const availMap = new Map(availability.map((a) => [a.date, a]));
-  const today = new Date().toISOString().slice(0, 10);
+  // MYT "today" — a UTC date highlights yesterday's cell as today before 8am.
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
 
   const handleToggle = async (date: string) => {
     const existing = availMap.get(date);
     setSaving(date);
 
+    setBlockNotice(null);
     try {
       if (existing && existing.availability === "unavailable") {
         // Remove blockout
-        await fetch(`/api/hr/availability?date=${date}`, { method: "DELETE" });
+        const res = await fetch(`/api/hr/availability?date=${date}`, { method: "DELETE" });
+        if (!res.ok) {
+          setBlockNotice({ kind: "error", text: "Couldn't remove that blockout. Try again." });
+          return;
+        }
       } else {
         // Show reason prompt for new blockout
         setShowReason(date);
@@ -299,6 +309,8 @@ export default function AvailabilityPage() {
         return;
       }
       mutate();
+    } catch {
+      setBlockNotice({ kind: "error", text: "Network error — nothing changed. Try again." });
     } finally {
       setSaving(null);
     }
@@ -307,8 +319,9 @@ export default function AvailabilityPage() {
   const handleConfirmBlockout = async () => {
     if (!showReason) return;
     setSaving(showReason);
+    setBlockNotice(null);
     try {
-      await fetch("/api/hr/availability", {
+      const res = await fetch("/api/hr/availability", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -317,9 +330,22 @@ export default function AvailabilityPage() {
           reason: reason.trim() || null,
         }),
       });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setBlockNotice({ kind: "error", text: body?.error ?? "Couldn't save that blockout. Try again." });
+        return;
+      }
       setShowReason(null);
       setReason("");
+      // The server ACCEPTS a block on an already-rostered date but returns a
+      // conflict message — surface it so the staffer knows the shift still
+      // stands until a manager changes the roster (field report 2026-08-15).
+      if (body?.rostered_conflict?.message) {
+        setBlockNotice({ kind: "info", text: body.rostered_conflict.message });
+      }
       mutate();
+    } catch {
+      setBlockNotice({ kind: "error", text: "Network error — the blockout was not saved. Try again." });
     } finally {
       setSaving(null);
     }
@@ -362,6 +388,18 @@ export default function AvailabilityPage() {
       <p className="mb-5 text-sm text-gray-500">
         Set your weekly pattern, then tap dates below to mark one-off <strong>blockouts</strong>. The AI scheduler won&apos;t assign shifts outside these.
       </p>
+
+      {blockNotice && (
+        <div
+          className={`mb-4 rounded-xl px-4 py-3 text-sm ${
+            blockNotice.kind === "error"
+              ? "border border-red-200 bg-red-50 text-red-700"
+              : "border border-amber-200 bg-amber-50 text-amber-800"
+          }`}
+        >
+          {blockNotice.text}
+        </div>
+      )}
 
       {/* Weekly recurring pattern */}
       <WeeklyPattern />
