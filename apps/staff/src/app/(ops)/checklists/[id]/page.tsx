@@ -11,6 +11,7 @@ import {
   Camera, X, Image as ImageIcon, RotateCcw,
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
+import { sessionExpiryHandled } from "@/lib/session-expiry";
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -83,12 +84,13 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isCompleted: newCompleted }),
     }).then((res) => {
-      if (!res.ok) {
-        // Revert on error
-        mutate();
-      } else {
-        // Soft revalidate to sync status
-        mutate();
+      // Either way we re-read the server, which reverts an optimistic tick the
+      // server rejected. Only the failure needs saying out loud — a silently
+      // un-ticking step reads as a UI glitch, and the staffer walks away
+      // believing the step is done.
+      mutate();
+      if (!res.ok && !sessionExpiryHandled()) {
+        alert("Couldn't save that tick. Check your connection and try again.");
       }
     });
   };
@@ -101,12 +103,15 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
       if (!prev) return prev;
       return { ...prev, items: prev.items.map((i) => i.id === itemId ? { ...i, notes: noteText } : i) };
     }, false);
-    await fetch(`/api/checklists/${id}/items/${itemId}`, {
+    const res = await fetch(`/api/checklists/${id}/items/${itemId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ notes: noteText }),
     });
     mutate();
+    if (!res.ok && !sessionExpiryHandled()) {
+      alert("Note not saved. Check your connection and try again.");
+    }
   };
 
   const handlePhotoClick = (itemId: string) => {
@@ -118,12 +123,15 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
     if (!window.confirm("Remove this photo? The item will be un-checked if it was auto-ticked.")) return;
     setUploadingItem(itemId);
     try {
-      await fetch(`/api/checklists/${id}/items/${itemId}`, {
+      const res = await fetch(`/api/checklists/${id}/items/${itemId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ photoUrl: null }),
       });
       mutate();
+      if (!res.ok && !sessionExpiryHandled()) {
+        alert("Couldn't remove that photo. Check your connection and try again.");
+      }
     } finally {
       setUploadingItem(null);
     }
@@ -141,16 +149,28 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
       formData.append("file", file);
 
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
-      const uploadData = await uploadRes.json();
-      if (!uploadRes.ok) { alert(uploadData.error || "Upload failed"); return; }
+      // A 401 here means the shift session expired while the app sat open. The
+      // watchdog in lib/session-expiry is already bouncing to /login — an alert
+      // reading "Unauthorized" was the dead end this whole path is fixing.
+      if (sessionExpiryHandled()) return;
+      const uploadData = await uploadRes.json().catch(() => ({}));
+      // Throw rather than alert(): CameraCaptureModal keeps the shot on screen
+      // with the error, so the staffer retries with the tick instead of
+      // walking back to reshoot it.
+      if (!uploadRes.ok) throw new Error(uploadData.error || "Upload failed.");
 
       // Save photo URL to checklist item
-      await fetch(`/api/checklists/${id}/items/${itemId}`, {
+      const attachRes = await fetch(`/api/checklists/${id}/items/${itemId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ photoUrl: uploadData.url }),
       });
       mutate();
+      // Uploaded to storage but not recorded on the step: the thumbnail never
+      // appears and the step stays un-tickable, so this must not pass quietly.
+      if (!attachRes.ok && !sessionExpiryHandled()) {
+        throw new Error("Photo saved but not attached to the step.");
+      }
     } finally {
       setUploadingItem(null);
     }
