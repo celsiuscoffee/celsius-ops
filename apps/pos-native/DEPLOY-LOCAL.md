@@ -61,8 +61,13 @@ eas update --channel production --platform android --message "what changed"
 The register pulls it on the next app launch (close + reopen twice on Wi-Fi).
 **Reversible:** `eas update:rollback` (or just re-publish the previous version).
 
-> In the cloud session this is the marker workflow: bump
-> `apps/pos-native/.ota-deploy-trigger`, commit, push — it runs `eas update` for you.
+> In a cloud session, run the **pos-native OTA** workflow from the GitHub Actions
+> tab (`workflow_dispatch`) — it publishes the same update from `main`.
+>
+> The old marker workflow (`pos-native-ota-deploy.yml`) was removed 2026-08-21: it
+> fired on a push to a stale `claude/*` branch and published THAT BRANCH's JS to
+> every till, so a stray commit there could ship untested code to production
+> registers. Dispatching from `main` cannot do that.
 
 ## Rare: a native change → APK
 

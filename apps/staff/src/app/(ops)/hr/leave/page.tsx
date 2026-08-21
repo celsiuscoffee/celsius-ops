@@ -106,12 +106,10 @@ export default function LeavePage() {
       // instead of a silent unhandled throw.
       const data = await res.json().catch(() => null);
       if (res.ok && data) {
-        const decision = data.request?.decision || data.request?.ai_decision;
+        // Leave no longer auto-approves — every request waits for a manager.
         setResult({
           success: true,
-          message: decision === "approve"
-            ? "Leave auto-approved by AI!"
-            : "Leave submitted for review.",
+          message: "Leave submitted — pending manager approval.",
         });
         setShowForm(false);
         setForm({ leave_type: "annual", start_date: "", end_date: "", reason: "" });

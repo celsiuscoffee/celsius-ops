@@ -42,6 +42,35 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   branch, published THAT branch's JS straight to customers). Merging this
   PR is itself the remediation: the workflow republishes current JS to
   runtime 1.0.3 and the fleet catches up on next launch.
+  **MERGED + DELIVERY VERIFIED 2026-08-21** (owner said "merge it"): PR
+  #1177 squashed to main as `9f96be7`; CI 15/15 green. The OTA workflow
+  run 32478218572 then published TWICE — the usual fingerprint group, and
+  the new verified step to the fleet: `Runtime version 1.0.3`,
+  `Platform android, ios`, update group
+  `cdfd5a85-b6a4-4da7-b836-e0b5f5a5565b`, log line
+  `[ota] ✔ runtime 1.0.3 (channel production) confirmed.` **That is the
+  first OTA since 25 Jul to land on a runtime real phones report**, and it
+  carries the never-delivered #1112 + #1155 JS with it; customers pick it
+  up on next launch. A follow-up commit added
+  `tests/ota-runtime-coverage.test.ts` workflow-coverage assertions —
+  every workflow running `eas-cli update` must also run the extra-runtime
+  publisher (discovered from disk, so new native apps are covered
+  automatically); verified non-vacuous by deleting the step and watching
+  it fail.
+  **THE FINGERPRINT INCLUDES THE VERSION IDENTITY — measured 2026-08-21,
+  and the ota-release skill had asserted the opposite.** `npx expo-updates
+  fingerprint:generate` on pickup-native: at 1.0.3/12/10 the hashes are
+  ios `e4e2beee7ab3004bdb18f146549a88d895e65cf2` / android
+  `dbe20143f9bfb4c9c827261a61150a391014bec2` — *exactly what the stranded
+  18 Aug OTA published to*, confirming those publishes targeted the current
+  source and not anything installed. Bumping to 1.0.4/13/11 moves them to
+  ios `c24dc6b2…` / android `0c74b3fd…`. So a version bump mints a new
+  runtime under BOTH policies; the skill's "version bumps are now JS-safe"
+  line was false and would have stranded the 1.0.4 fleet on its next bump —
+  the same bug a third time. `scripts/check-native-runtimes.sh` no longer
+  skips fingerprint apps: it fails a version-identity change (version OR
+  buildNumber OR versionCode) unless that app's `ota-runtimes.json` is
+  touched in the same PR. Verified across four scenarios.
   **STILL OWED (owner action, cannot be done from CI): cut a new store
   build.** Until a fingerprint-policy binary ships, every fresh install
   still boots a months-old embedded bundle on first launch, and the
@@ -50,6 +79,22 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `1.0.3` from the manifest only once that build has replaced the fleet.
   **Lesson: a green OTA run is not evidence of delivery — read the runtime
   in the publish log and compare it to what installed binaries report.**
+  The 18 Aug STATE line asserting "customer phones pull the new wallet
+  lists on next launch" was written from a green workflow and was false
+  for four weeks; the publish log's runtime is now the only acceptable
+  proof, and the workflow fails rather than let that claim be made again.
+  `pos-native-ota-deploy.yml` (pinned to the stale branch
+  `claude/awesome-davinci-CvikE`, publishing THAT branch's JS to every
+  till) was REMOVED on owner instruction, along with its marker file;
+  `apps/pos-native/DEPLOY-LOCAL.md` now points at `workflow_dispatch` on
+  `pos-native-ota.yml`, which can only publish from `main`. Both
+  marker-deploy workflows are now gone.
+  pickup-native app.json is bumped to **1.0.4 / build 13 / versionCode 11**
+  ready for that build; after submitting, read the build's REAL runtime off
+  the EAS build page and add it to `apps/pickup-native/ota-runtimes.json`
+  (do not trust a local fingerprint:generate — the tree differs at build
+  time). Keep `1.0.3` listed until the new build has replaced that fleet.
+
 - 2026-08-20 — **Choc Blanc Merdeka campaign (31 Aug – 30 Sept 2026) — BACKEND
   STAGED, NOTHING PUBLIC.** Plan + go-live runbook in
   `docs/design/choc-blanc-merdeka-campaign.md`. Staged in prod, all gated off
