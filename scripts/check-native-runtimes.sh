@@ -45,16 +45,39 @@ for APP in "${APPS[@]}"; do
   NEW_VER=$(jq -r '.expo.version' "$APP_JSON")
   OLD_POLICY=$(git show "$BASE:$APP_JSON" | jq -r '.expo.runtimeVersion.policy // .expo.runtimeVersion // ""')
 
-  [ "$OLD_VER" = "$NEW_VER" ] && continue
-  # Under fingerprint the runtime is the native fingerprint — a marketing
-  # version bump does not move it, so nothing is stranded.
-  [ "$OLD_POLICY" != "appVersion" ] && continue
+  OLD_BUILD=$(git show "$BASE:$APP_JSON" | jq -r '[.expo.ios.buildNumber, (.expo.android.versionCode|tostring)] | join("/")')
+  NEW_BUILD=$(jq -r '[.expo.ios.buildNumber, (.expo.android.versionCode|tostring)] | join("/")' "$APP_JSON")
+  [ "$OLD_VER" = "$NEW_VER" ] && [ "$OLD_BUILD" = "$NEW_BUILD" ] && continue
 
-  if ! jq -e --arg v "$OLD_VER" '.extraRuntimes | index($v)' "$MANIFEST" > /dev/null; then
-    err "$APP_JSON bumps expo.version $OLD_VER -> $NEW_VER under the appVersion runtime policy."
-    err "Devices running the $OLD_VER binary keep runtime \"$OLD_VER\" and will receive NO further OTA."
-    err "Add \"$OLD_VER\" to $MANIFEST (extraRuntimes) so the OTA workflow republishes to them."
-    FAILED=1
+  if [ "$OLD_POLICY" = "appVersion" ]; then
+    # The runtime IS the marketing version, so we know exactly what the
+    # stranded devices report and can require it by name.
+    [ "$OLD_VER" = "$NEW_VER" ] && continue
+    if ! jq -e --arg v "$OLD_VER" '.extraRuntimes | index($v)' "$MANIFEST" > /dev/null; then
+      err "$APP_JSON bumps expo.version $OLD_VER -> $NEW_VER under the appVersion runtime policy."
+      err "Devices running the $OLD_VER binary keep runtime \"$OLD_VER\" and will receive NO further OTA."
+      err "Add \"$OLD_VER\" to $MANIFEST (extraRuntimes) so the OTA workflow republishes to them."
+      FAILED=1
+    fi
+  else
+    # Fingerprint policy. MEASURED 2026-08-21: the version identity IS part of
+    # the fingerprint — bumping pickup-native 1.0.3/12/10 -> 1.0.4/13/11 moved
+    # ios e4e2beee -> c24dc6b2 and android dbe20143 -> 0c74b3fd. So a version
+    # bump DOES mint a new runtime here (the ota-release skill used to claim the
+    # opposite). Any fleet already running a build with the OLD fingerprint stops
+    # receiving OTAs unless that fingerprint is republished to.
+    #
+    # We cannot name the old fingerprint cheaply (it needs a full install at the
+    # base ref), so require a deliberate decision instead: the manifest must be
+    # touched in the same PR — either adding the outgoing fingerprint, or
+    # recording that no fleet is on it yet.
+    if git diff --quiet "$BASE"...HEAD -- "$MANIFEST"; then
+      err "$APP_JSON changes the version identity ($OLD_VER/$OLD_BUILD -> $NEW_VER/$NEW_BUILD) under the fingerprint runtime policy."
+      err "The version identity is part of the fingerprint, so this MINTS A NEW RUNTIME."
+      err "Any devices already running a build with the outgoing fingerprint will receive NO further OTA."
+      err "Update $MANIFEST in this PR: add that fingerprint to extraRuntimes, or note there that no fleet is on it yet."
+      FAILED=1
+    fi
   fi
 done
 

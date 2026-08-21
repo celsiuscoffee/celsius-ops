@@ -57,6 +57,20 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   publisher (discovered from disk, so new native apps are covered
   automatically); verified non-vacuous by deleting the step and watching
   it fail.
+  **THE FINGERPRINT INCLUDES THE VERSION IDENTITY — measured 2026-08-21,
+  and the ota-release skill had asserted the opposite.** `npx expo-updates
+  fingerprint:generate` on pickup-native: at 1.0.3/12/10 the hashes are
+  ios `e4e2beee7ab3004bdb18f146549a88d895e65cf2` / android
+  `dbe20143f9bfb4c9c827261a61150a391014bec2` — *exactly what the stranded
+  18 Aug OTA published to*, confirming those publishes targeted the current
+  source and not anything installed. Bumping to 1.0.4/13/11 moves them to
+  ios `c24dc6b2…` / android `0c74b3fd…`. So a version bump mints a new
+  runtime under BOTH policies; the skill's "version bumps are now JS-safe"
+  line was false and would have stranded the 1.0.4 fleet on its next bump —
+  the same bug a third time. `scripts/check-native-runtimes.sh` no longer
+  skips fingerprint apps: it fails a version-identity change (version OR
+  buildNumber OR versionCode) unless that app's `ota-runtimes.json` is
+  touched in the same PR. Verified across four scenarios.
   **STILL OWED (owner action, cannot be done from CI): cut a new store
   build.** Until a fingerprint-policy binary ships, every fresh install
   still boots a months-old embedded bundle on first launch, and the
@@ -69,10 +83,17 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   lists on next launch" was written from a green workflow and was false
   for four weeks; the publish log's runtime is now the only acceptable
   proof, and the workflow fails rather than let that claim be made again.
-  Also still open (flagged to owner, NOT changed — hard rule 6):
-  `pos-native-ota-deploy.yml` is pinned to the stale branch
-  `claude/awesome-davinci-CvikE` and a marker bump there publishes THAT
-  branch's JS to every till.
+  `pos-native-ota-deploy.yml` (pinned to the stale branch
+  `claude/awesome-davinci-CvikE`, publishing THAT branch's JS to every
+  till) was REMOVED on owner instruction, along with its marker file;
+  `apps/pos-native/DEPLOY-LOCAL.md` now points at `workflow_dispatch` on
+  `pos-native-ota.yml`, which can only publish from `main`. Both
+  marker-deploy workflows are now gone.
+  pickup-native app.json is bumped to **1.0.4 / build 13 / versionCode 11**
+  ready for that build; after submitting, read the build's REAL runtime off
+  the EAS build page and add it to `apps/pickup-native/ota-runtimes.json`
+  (do not trust a local fingerprint:generate — the tree differs at build
+  time). Keep `1.0.3` listed until the new build has replaced that fleet.
 
 - 2026-08-18 — **Welcome-voucher cutover EXECUTED (owner-approved, ~15:45Z)
   — the 10% welcome voucher is LIVE and the auto-FOD is retired.** PR #1155

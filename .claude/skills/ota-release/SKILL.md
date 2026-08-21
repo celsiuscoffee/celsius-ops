@@ -28,9 +28,24 @@ build** if it touches any of:
   android config); plain JS dep bumps are fine
 - `app.json` / `eas.json` runtime or build config, permissions, plugins
 
-Note: bumping the marketing `version` string is now **JS-safe** — it no longer
-changes the runtimeVersion (that was the old `appVersion`-policy footgun), so a
-version bump alone can ride OTA.
+**A version bump is NOT runtime-safe, on either policy.** An earlier version of
+this skill claimed the fingerprint policy made `version` bumps harmless. That is
+false, and it was measured on 2026-08-21: bumping pickup-native
+`1.0.3`/build 12/versionCode 10 → `1.0.4`/13/11 moved the fingerprint from
+`e4e2beee…` → `c24dc6b2…` (ios) and `dbe20143…` → `0c74b3fd…` (android). The
+version identity is one of the fingerprint's inputs. Reproduce with:
+
+```bash
+cd apps/<app> && npx expo-updates fingerprint:generate --platform ios
+```
+
+So on BOTH policies, changing the version identity mints a new runtime and cuts
+off every device still running the old binary — unless that old runtime is
+listed in the app's `ota-runtimes.json`. CI's `native-runtime-guard`
+(`scripts/check-native-runtimes.sh`) enforces this: it names the stranded
+runtime outright under `appVersion`, and under `fingerprint` requires the
+manifest to be touched in the same PR (the old fingerprint can't be derived
+without a full install at the base ref).
 
 APK builds: `pos-native-build-apk.yml` and `build-kds-apk.yml`
 (workflow_dispatch or push). OTA-only changes shipped on top of an outdated
@@ -79,6 +94,25 @@ like a successful deploy. `scripts/check-native-runtimes.sh` (CI job
 
 Retire `1.0.3` from pickup-native's manifest only once a fingerprint store build
 has fully replaced the 1.0.3 fleet — dropping it early re-creates the bug.
+
+### Cutting a store build (the step that closes the fresh-install half)
+
+A fresh install boots the bundle COMPILED INTO the binary, before any OTA can
+arrive. So an old store build means new customers see old UI on first launch no
+matter how current the update channel is. Only a new binary fixes that.
+
+1. Bump `version` / `ios.buildNumber` / `android.versionCode` in the app's
+   `app.json` (`eas.json` uses `appVersionSource: "local"`, so these are the
+   source of truth).
+2. Build from `main` so the embedded bundle is current:
+   `cd apps/<app> && npm ci && npx eas build --platform all --profile production`
+3. Submit: `npx eas submit --platform android|ios --profile production`.
+4. **Read the new build's runtimeVersion off the EAS build page and add it to
+   that app's `ota-runtimes.json`.** Do not guess it from a local
+   `fingerprint:generate` — the build's own value is authoritative. Skipping
+   this is how the next fingerprint move strands the fleet you just shipped.
+5. Retire older runtimes from the manifest only once the new build has actually
+   replaced them in the field (weeks, not days).
 
 ## Pre-merge checklist (pos-native especially — this is the till)
 
@@ -141,3 +175,13 @@ the sections above._
   boots the store binary's **embedded** bundle first, so an app whose store
   build is months old shows old UI on first launch no matter how current the OTA
   channel is — only a new store build fixes that half.
+
+- 2026-08-21 (b) — **The fingerprint includes the version identity — measured,
+  not assumed.** This skill previously asserted the opposite and that assertion
+  was load-bearing: it would have let a post-1.0.4 version bump strand the
+  fingerprint fleet exactly the way the appVersion bumps stranded the 1.0.x one.
+  Verify runtime claims with `npx expo-updates fingerprint:generate` before
+  writing them down. Corollary: the `pickup-native` OTA that stranded the fleet
+  published to `e4e2beee…`/`dbe20143…`, which is precisely the fingerprint of the
+  1.0.3 tree — confirming the publish targeted the CURRENT source rather than
+  anything installed.
