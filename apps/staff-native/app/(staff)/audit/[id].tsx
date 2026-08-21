@@ -137,7 +137,11 @@ export default function AuditDetail() {
       await updateAuditItem(audit.id, item.id, {
         notes: trimmed || null,
       });
-    } catch {
+    } catch (e) {
+      // Don't let the note silently vanish: the optimistic update + load()
+      // reverts it on failure, so without this the staffer thinks it saved
+      // (mirrors the rating handler above, which already alerts).
+      Alert.alert("Couldn't save note", e instanceof Error ? e.message : "Try again.");
       load();
     }
   }, [audit, item, noteDraft, load]);

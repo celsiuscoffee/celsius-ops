@@ -6,6 +6,50 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-21 — **THE CUSTOMER APP HAS BEEN STRANDED ON 25-JUL JS SINCE THE
+  FINGERPRINT SWITCH — every pickup-native OTA since then reached ZERO
+  phones while the workflow went green.** Owner reported the Orders tab
+  flipping back to the pre-tabs empty state again ("we fixed this many
+  times"). Root cause is the *mirror image* of the July bug: `eas update`
+  publishes to the runtime **app.json resolves to**, but an installed app
+  only accepts updates matching the runtime **it was built with**. Since
+  2026-07-25 app.json has used `policy: "fingerprint"`, while every binary
+  on the App Store / Play was built earlier under `appVersion` and reports
+  runtime `1.0.3` (app.json is still version 1.0.3 / buildNumber 12 /
+  versionCode 10 — **no fingerprint store build has ever been cut**, so
+  nothing in the field can match a fingerprint publish). Proof: run
+  32156055677 (18 Aug, the welcome-voucher ship) succeeded publishing to
+  `e4e2beee7ab3004bdb18f146549a88d895e65cf2` (iOS) /
+  `dbe20143f9bfb4c9c827261a61150a391014bec2` (android). The newest bundle
+  any real phone can see is the one-off 25-Jul catch-up (group
+  `2ad415b6-9974-41a1-abae-23477603fe17`, runtime `1.0.3`, both platforms).
+  So **#1112 (stock-count/receipt integrity) and #1155 (welcome voucher)
+  never reached a customer** — the STATE line claiming "customer phones
+  pull the new wallet lists on next launch" was wrong. The reinstall
+  half: a fresh install boots the store binary's EMBEDDED bundle, older
+  than the catch-up, which is the pre-tabs screenshot. **Fix (this
+  branch):** `apps/<app>/ota-runtimes.json` declares the in-field runtimes
+  the normal publish misses (pickup-native: `["1.0.3"]`; pos/staff-native
+  empty — they are still on `appVersion` at 1.0.0, which their publish
+  already targets); every OTA workflow now runs
+  `scripts/ota-publish-extra-runtimes.mjs`, which pins a literal
+  `expo.runtimeVersion` per entry, republishes the same bundle, and FAILS
+  the job unless eas confirms that runtime. `scripts/check-native-runtimes.sh`
+  (CI `native-runtime-guard`) fails any PR bumping `expo.version` under
+  `appVersion` without declaring the outgoing runtime. Removed
+  `pickup-native-ota-catchup.yml` (manual, never re-run — the process hole)
+  and `pickup-native-ota-deploy.yml` (marker-triggered on a stale `claude/*`
+  branch, published THAT branch's JS straight to customers). Merging this
+  PR is itself the remediation: the workflow republishes current JS to
+  runtime 1.0.3 and the fleet catches up on next launch.
+  **STILL OWED (owner action, cannot be done from CI): cut a new store
+  build.** Until a fingerprint-policy binary ships, every fresh install
+  still boots a months-old embedded bundle on first launch, and the
+  fingerprint publishes keep reaching nobody. Bump version/buildNumber/
+  versionCode, `eas build --profile production`, submit, then retire
+  `1.0.3` from the manifest only once that build has replaced the fleet.
+  **Lesson: a green OTA run is not evidence of delivery — read the runtime
+  in the publish log and compare it to what installed binaries report.**
 - 2026-08-20 — **Choc Blanc Merdeka campaign (31 Aug – 30 Sept 2026) — BACKEND
   STAGED, NOTHING PUBLIC.** Plan + go-live runbook in
   `docs/design/choc-blanc-merdeka-campaign.md`. Staged in prod, all gated off
@@ -2116,6 +2160,41 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   skill — not just in the chat.
 
 ## Open failures
+
+- 2026-08-20 — **RM settlement lag incident (~12:30–15:30 MYT): Revenue
+  Monster's Query Payment Checkout kept answering PENDING for ~2h on
+  FPX payments whose money had already left the customer's bank — paid
+  dine-in orders sat invisible to the kitchen.** Owner-reported from an RM
+  merchant-app photo: C-8ZXV75 (Shah Alam table 15, RM26.80 FPX, tx
+  …0537163104164) created 05:37Z, money deducted, but webhook (05:38Z),
+  poll, reconcile-pending (every 1 min, 45s–55min window) and
+  expire-orders (every 15 min) all got PENDING from RM until the 07:30:16Z
+  expire-orders sweep finally saw SUCCESS → order flipped preparing and
+  the kitchen docket printed 07:30:19Z (1h53m late). Same sweep settled
+  C-F30773 (Conezion table 11, RM9.90 FPX, created 05:41Z) — multi-outlet,
+  so RM-side, consistent with the 2026-07-27 hosted-page verdict that RM's
+  infra is flaky. Our pipeline behaved correctly at every step (nothing
+  bulk-failed a paid order; expire-orders' ask-RM-first design recovered
+  both) — the gap is DETECTION: nothing alerts a human while an order with
+  a checkout_id sits pending >30 min, so the customer complains before we
+  know. **Still unresolved as of 07:40Z:** C-1WA685 (Tamarind table 7,
+  RM53.60 card, 04:35Z) and C-NVK227 (Conezion table 16, RM27.90 FPX,
+  04:52Z) remain pending with RM still answering PENDING — check the RM
+  merchant portal whether these customers were charged; crons keep
+  re-sweeping them every 15 min and will settle+print automatically if RM
+  flips. Candidate follow-ups (owner call): a pending->30min alert (ops
+  pulse/Sentry), and raising the incident with RM support with the tx ids.
+  **UPDATE 08:01Z:** C-1WA685 and C-NVK227 were flipped to failed by a
+  single manual statement (identical updated_at, NULL failure_reason —
+  no cron path does that); if either customer was actually charged, only
+  the `reconcile-failed?days=N` operator dry-run will surface it now.
+  **Detection fix SHIPPED on this branch (PR #1173):** expire-orders now
+  raises a per-order-fingerprinted Sentry error (`[stuck-pending]`) for
+  any checkout-bearing order still deferred past 30 min — staff get
+  alerted at ~30-45 min instead of hearing it from the customer at 2h.
+  Settlement behavior untouched. Remaining owner actions: raise the tx
+  ids with RM support; confirm in the RM portal that C-1WA685/C-NVK227
+  weren't charged (or run reconcile-failed dry-run).
 
 - 2026-07-27 — **QR-order payment failures are chronic (~16%/day) and CARD is
   the outlier: 36% of card attempts fail (89/247 over 14d) vs ~11% FPX/TNG,

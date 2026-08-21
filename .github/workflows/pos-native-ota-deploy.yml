@@ -53,3 +53,20 @@ jobs:
               --message "OTA: smaller scorecard chip font" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done
+      # Same invariant as the push-to-main OTA workflow: a publish only reaches
+      # devices whose runtimeVersion it matches. No-op while
+      # apps/pos-native/ota-runtimes.json is empty; load-bearing the moment
+      # expo.version is bumped, when tills on the old APK keep the old runtime.
+      - name: Publish to in-field legacy runtimes (and verify)
+        working-directory: .
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: "1"
+        run: |
+          for ch in production preview development; do
+            node scripts/ota-publish-extra-runtimes.mjs \
+              --app-dir apps/pos-native \
+              --message "OTA: smaller scorecard chip font" \
+              --channel "$ch" \
+              --platform android
+          done

@@ -151,7 +151,11 @@ export default function ChecklistDetail() {
         await updateChecklistItem(detail.id, itemId, {
           notes: trimmed || null,
         });
-      } catch {
+      } catch (e) {
+        // Surface the failure: the optimistic note + load(true) reverts it, so
+        // without an alert the staffer believes it saved (mirrors the toggle
+        // handler above, which already alerts on failure).
+        Alert.alert("Couldn't save note", e instanceof Error ? e.message : "Try again.");
         load(true);
       }
     },

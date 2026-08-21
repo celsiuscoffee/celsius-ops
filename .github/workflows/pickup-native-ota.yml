@@ -3,12 +3,20 @@ name: pickup-native OTA
 # Ships JS-only changes in apps/pickup-native to customers' installed apps via
 # EAS Update (the `production` channel the App Store / Play builds subscribe to).
 # No new binary needed — expo-updates pulls the bundle on next app launch, as
-# long as the change is JS/asset-only and the runtimeVersion (fingerprint policy)
-# is unchanged. The fingerprint only changes when the NATIVE layer changes, so a
-# marketing-version bump (e.g. 1.0.2 -> 1.0.3) no longer severs the OTA lineage —
-# that appVersion-policy footgun was the cause of the "old bundle reappears"
-# regression. A native/dependency change alters the fingerprint and still needs a
-# fresh `eas build` + store submission before OTA resumes for those devices.
+# long as the change is JS/asset-only and the runtimeVersion is one the device
+# actually reports. A native/dependency change alters the fingerprint and still
+# needs a fresh `eas build` + store submission before OTA resumes for those
+# devices.
+#
+# TWO PUBLISHES, ALWAYS. `eas update` derives the runtimeVersion from app.json,
+# which uses `policy: "fingerprint"` — but every binary in the field was built
+# BEFORE that switch, under `appVersion`, so those phones report "1.0.3". The
+# first step below publishes to the fingerprint runtime (future store builds);
+# the second republishes the same bundle to every runtime listed in
+# apps/pickup-native/ota-runtimes.json (today: 1.0.3) and FAILS the job if eas
+# did not confirm it. Without that second step a publish succeeds into a runtime
+# no device has, the job goes green, and customers keep seeing an old build —
+# which is precisely what happened between 2026-07-25 and 2026-08-21.
 #
 # Triggers on a push to main that touches apps/pickup-native, plus manual
 # dispatch so a release can be re-pushed on demand.
@@ -68,3 +76,20 @@ jobs:
             --environment production \
             --message "$MSG" \
             --non-interactive
+      # The fingerprint publish above reaches only binaries built under the
+      # fingerprint policy. This reaches the phones that are actually installed
+      # today, and fails the job if any declared runtime did not get the bundle.
+      - name: Publish to in-field legacy runtimes (and verify)
+        working-directory: .
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: "1"
+          COMMIT_MSG: ${{ github.event.head_commit.message || github.sha }}
+        run: |
+          MSG="$(printf '%s' "$COMMIT_MSG" | head -n 1)"
+          node scripts/ota-publish-extra-runtimes.mjs \
+            --app-dir apps/pickup-native \
+            --message "$MSG" \
+            --channel production \
+            --platform all \
+            --environment production
