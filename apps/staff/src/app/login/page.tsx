@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, ArrowLeft } from "lucide-react";
+import { DEFAULT_AFTER_LOGIN, safeNextPath } from "@/lib/session-expiry";
 
 type LoginMode = "choose" | "username" | "pin";
 type OutletOption = { id: string; name: string };
@@ -21,6 +22,17 @@ export default function LoginPage() {
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
   const [outletId, setOutletId] = useState("");
+  // Where to go after signing in, and whether we got here because a session
+  // died mid-shift. Read off window rather than useSearchParams so this page
+  // still prerenders without a Suspense boundary.
+  const [next, setNext] = useState(DEFAULT_AFTER_LOGIN);
+  const [expired, setExpired] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setNext(safeNextPath(params.get("next")));
+    setExpired(params.get("reason") === "expired");
+  }, []);
 
   // Fetch outlets on mount
   useEffect(() => {
@@ -56,7 +68,7 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Login failed"); return; }
-      window.location.href = "/checklists";
+      window.location.href = next;
     } catch { setError("Connection error. Please try again."); }
     finally { setLoading(false); }
   };
@@ -106,7 +118,7 @@ export default function LoginPage() {
         return;
       }
       localStorage.setItem("staff_outlet_id", outletId);
-      window.location.href = "/checklists";
+      window.location.href = next;
     } catch { setError("Connection error. Please try again."); }
     finally { setLoading(false); }
   };
@@ -133,6 +145,13 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-white/50">Outlet Operations</p>
           <p className="mt-1 text-xs text-white/30">{subtitle}</p>
         </div>
+
+        {expired && (
+          <p className="mb-4 rounded-lg bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-300">
+            Your shift session timed out — sign in again to carry on. Anything
+            you were part-way through saving needs doing again.
+          </p>
+        )}
 
         {mode === "choose" && (
           <div className="space-y-3">

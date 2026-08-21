@@ -132,6 +132,7 @@ export function CameraCaptureModal({
 
   const accept = async () => {
     if (!previewUrl || !canvasRef.current) return;
+    setError(null);
     setSubmitting(true);
     await new Promise<void>((resolve) => {
       canvasRef.current!.toBlob(
@@ -169,7 +170,7 @@ export function CameraCaptureModal({
 
       {/* Live preview / captured preview / error */}
       <div className="relative flex flex-1 items-center justify-center overflow-hidden">
-        {error ? (
+        {error && !previewUrl ? (
           <div className="flex max-w-sm flex-col items-center gap-3 px-6 text-center text-white">
             <AlertTriangle className="h-10 w-10 text-amber-400" />
             <p className="text-sm">{error}</p>
@@ -181,8 +182,24 @@ export function CameraCaptureModal({
             </button>
           </div>
         ) : previewUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={previewUrl} alt="Captured" className="max-h-full max-w-full object-contain" />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={previewUrl} alt="Captured" className="max-h-full max-w-full object-contain" />
+            {/* A save that failed must not cost the staffer the shot: the photo
+                stays on screen with Retake / ✓ live, so tapping ✓ retries the
+                upload instead of sending them back to the counter to shoot it
+                again. */}
+            {error && (
+              <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-amber-500/90 px-4 py-3 text-sm text-black">
+                <AlertTriangle className="h-5 w-5 shrink-0" />
+                <span>
+                  <span className="font-medium">{error}</span>
+                  <br />
+                  Tap the tick to try again.
+                </span>
+              </div>
+            )}
+          </>
         ) : (
           <video
             ref={videoRef}
@@ -197,7 +214,7 @@ export function CameraCaptureModal({
 
       {/* Footer controls */}
       <div className="flex items-center justify-around bg-black/80 px-6 py-5">
-        {error ? null : previewUrl ? (
+        {error && !previewUrl ? null : previewUrl ? (
           <>
             <button
               onClick={retake}

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { CameraCaptureModal } from "@/components/camera-capture-modal";
 import { compressImage } from "@/lib/compress-image";
+import { sessionExpiryHandled } from "@/lib/session-expiry";
 import {
   Camera,
   Upload,
@@ -157,7 +158,12 @@ export default function ClaimsPage() {
       setPhotos(allPhotos);
       triggerExtraction(allPhotos);
     } catch (err) {
+      // Expired session: lib/session-expiry is already bouncing to /login.
+      if (sessionExpiryHandled()) return;
       setError(err instanceof Error ? err.message : "Upload failed");
+      // Rethrow so CameraCaptureModal keeps the receipt on screen for a retry
+      // instead of closing over a failed upload.
+      throw err;
     } finally {
       setUploading(false);
     }
@@ -300,6 +306,7 @@ export default function ClaimsPage() {
       });
       setSubmitted(true);
     } catch (err) {
+      if (sessionExpiryHandled()) return;
       setError(err instanceof Error ? err.message : "Submit failed");
     } finally {
       setSubmitting(false);
