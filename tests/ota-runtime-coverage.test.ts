@@ -144,7 +144,10 @@ describe("every EAS-publishing workflow republishes to the in-field runtimes", (
     .filter(({ body }) => /eas-cli(@latest)?\s+update/.test(body));
 
   it("finds the OTA workflows (guards against this test silently matching nothing)", () => {
-    expect(publishing.length).toBeGreaterThanOrEqual(4);
+    // One per native app: pickup-native, pos-native, staff-native. The two
+    // marker-triggered deploy workflows were removed (2026-08-21) — both fired
+    // on stale claude/* branches and published that branch's JS to production.
+    expect(publishing.length).toBeGreaterThanOrEqual(3);
   });
 
   it.each(publishing.map((w) => w.file))("%s runs ota-publish-extra-runtimes.mjs", (file) => {
