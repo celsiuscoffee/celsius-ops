@@ -2,16 +2,21 @@ import { hrSupabaseAdmin } from "../supabase";
 import { prisma } from "@/lib/prisma";
 
 type LeaveDecision = {
-  decision: "approve" | "escalate";
+  // "review" = checks passed, recommend approval; "escalate" = a check failed.
+  // Neither auto-approves — every leave request now waits for a manager.
+  decision: "review" | "escalate";
   reason: string;
 };
 
 const MIN_STAFF_PER_DAY = 2;
 
 /**
- * AI Leave Manager
+ * AI Leave Manager — ADVISORY ONLY (and currently unused; the live submit path
+ * is apps/staff's leave-manager).
  *
- * Processes a leave request and decides: auto-approve or escalate.
+ * Owner rule 2026-08-21: leave NO LONGER auto-approves — every request must be
+ * approved by a manager. This kept in sync with the staff copy so it can never
+ * become a back-door auto-approve if wired up later.
  * Rules:
  * 1. Balance check — does employee have enough days?
  * 2. Coverage check — will outlet still have minimum staff?
@@ -97,28 +102,20 @@ export async function processLeaveRequest(requestId: string): Promise<LeaveDecis
     }
   }
 
-  // 4. All checks passed — auto-approve
-  // Update the request
+  // 4. All checks passed — RECOMMEND approval only. Never flip status to
+  // "ai_approved" and never touch pending_days: the request stays "pending"
+  // for a manager to approve (owner 2026-08-21).
   await hrSupabaseAdmin
     .from("hr_leave_requests")
     .update({
-      status: "ai_approved",
-      ai_decision: "approve",
-      ai_reason: `Balance OK (${available - total_days} days remaining). Coverage OK.`,
+      ai_decision: "recommend_approve",
+      ai_reason: `Recommend approve — balance OK (${available - total_days} days would remain), coverage OK. Awaiting manager approval.`,
       ai_processed_at: new Date().toISOString(),
     })
     .eq("id", requestId);
 
-  // Update pending_days on balance
-  await hrSupabaseAdmin
-    .from("hr_leave_balances")
-    .update({
-      pending_days: Number(balance.pending_days) + total_days,
-    })
-    .eq("id", balance.id);
-
   return {
-    decision: "approve",
-    reason: `Auto-approved. Balance OK (${available - total_days} days remaining). Coverage OK.`,
+    decision: "review",
+    reason: `Recommend approve — balance OK (${available - total_days} days remaining), coverage OK. Pending manager approval.`,
   };
 }

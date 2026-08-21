@@ -11,16 +11,22 @@ import { prisma } from "@/lib/prisma";
 const hrSupabaseAdmin = supabaseAdmin;
 
 type LeaveDecision = {
-  decision: "approve" | "escalate";
+  // "review" = checks passed, recommend approval; "escalate" = a check failed.
+  // Neither auto-approves — every leave request now waits for a manager.
+  decision: "review" | "escalate";
   reason: string;
 };
 
 const MIN_STAFF_PER_DAY = 2;
 
 /**
- * AI Leave Manager
+ * AI Leave Manager — ADVISORY ONLY.
  *
- * Processes a leave request and decides: auto-approve or escalate.
+ * Owner rule 2026-08-21: leave NO LONGER auto-approves. Every request must be
+ * approved by a manager in the backoffice. This agent still runs its checks
+ * and records a recommendation (ai_decision / ai_reason) so the manager has the
+ * balance + coverage context, but it NEVER sets status to "ai_approved" — the
+ * request stays "pending" either way.
  * Rules:
  * 1. Balance check — does employee have enough days?
  * 2. Coverage check — will outlet still have minimum staff?
@@ -123,22 +129,22 @@ export async function processLeaveRequest(requestId: string): Promise<LeaveDecis
     }
   }
 
-  // 4. All checks passed — auto-approve
-  // Update the request. NOTE: no pending_days write here — the submit route
-  // already holds the reservation before calling us; holding again would
-  // double-count this request against the balance.
+  // 4. All checks passed — RECOMMEND approval, but do NOT approve. The status
+  // stays "pending" so a manager makes the call (owner 2026-08-21). We only
+  // record the advisory note; no status flip and no pending_days write (the
+  // submit route already holds the reservation, and the manager-approve path
+  // converts pending → used).
   await hrSupabaseAdmin
     .from("hr_leave_requests")
     .update({
-      status: "ai_approved",
-      ai_decision: "approve",
-      ai_reason: `Balance OK (${available - total_days} days remaining). Coverage OK.`,
+      ai_decision: "recommend_approve",
+      ai_reason: `Recommend approve — balance OK (${available - total_days} days would remain), coverage OK. Awaiting manager approval.`,
       ai_processed_at: new Date().toISOString(),
     })
     .eq("id", requestId);
 
   return {
-    decision: "approve",
-    reason: `Auto-approved. Balance OK (${available - total_days} days remaining). Coverage OK.`,
+    decision: "review",
+    reason: `Recommend approve — balance OK (${available - total_days} days remaining), coverage OK. Pending manager approval.`,
   };
 }
