@@ -1,0 +1,16 @@
+{
+  "_why": [
+    "Runtimes that installed SUNMI tills report but that the normal `eas update`",
+    "publish does NOT target. .github/workflows/pos-native-ota.yml republishes",
+    "every merge to each entry here.",
+    "",
+    "app.json uses runtimeVersion.policy 'appVersion' with version '1.0.0', so the",
+    "normal publish already targets '1.0.0' — the runtime the installed APK reports.",
+    "The list is therefore empty and must stay empty while those two agree.",
+    "",
+    "THE MOMENT expo.version CHANGES, add the PREVIOUS version here: under the",
+    "appVersion policy a bump mints a new runtime, and every till still running the",
+    "old APK stops receiving updates. CI's native-runtime-guard job enforces this."
+  ],
+  "extraRuntimes": []
+}

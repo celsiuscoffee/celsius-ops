@@ -1,0 +1,21 @@
+{
+  "_why": [
+    "Runtimes that real, installed copies of this app report, but that the normal",
+    "`eas update` publish does NOT target. .github/workflows/pickup-native-ota.yml",
+    "republishes every merge to each entry here, so a live fleet can never be",
+    "silently stranded on an old bundle again.",
+    "",
+    "app.json uses runtimeVersion.policy 'fingerprint' (since 2026-07-25), so the",
+    "normal publish targets a fingerprint hash. Every binary currently on the App",
+    "Store / Play was built BEFORE that switch, under policy 'appVersion', so those",
+    "phones report the marketing version '1.0.3' as their runtime and match nothing",
+    "the fingerprint publish produces.",
+    "",
+    "REMOVE '1.0.3' only once a store build cut under the fingerprint policy has",
+    "fully replaced the 1.0.3 fleet — dropping it early stops those phones from",
+    "receiving any further update, which is the exact bug this file prevents.",
+    "Add an entry whenever a store build ships whose runtime the normal publish",
+    "will not match."
+  ],
+  "extraRuntimes": ["1.0.3"]
+}

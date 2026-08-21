@@ -73,3 +73,23 @@ jobs:
               --message "$MSG" \
               --non-interactive
           done
+      # No-op while apps/staff-native/ota-runtimes.json is empty (the appVersion
+      # runtime 1.0.0 the publish above targets is what installed builds report).
+      # It becomes load-bearing the moment expo.version is bumped: phones still
+      # on the old binary keep the OLD runtime, so that version has to be listed
+      # there or they silently stop receiving updates.
+      - name: Publish to in-field legacy runtimes (and verify)
+        working-directory: .
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: "1"
+          COMMIT_MSG: ${{ github.event.head_commit.message || github.sha }}
+        run: |
+          MSG="$(printf '%s' "$COMMIT_MSG" | head -n 1)"
+          node scripts/ota-publish-extra-runtimes.mjs \
+            --app-dir apps/staff-native \
+            --message "$MSG" \
+            --channel production \
+            --channel preview \
+            --platform all \
+            --environment production

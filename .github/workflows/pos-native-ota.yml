@@ -63,3 +63,21 @@ jobs:
             --platform android \
             --message "$MSG" \
             --non-interactive
+      # No-op while apps/pos-native/ota-runtimes.json is empty (the appVersion
+      # runtime 1.0.0 the publish above targets is what the installed APK
+      # reports). It becomes load-bearing the moment expo.version is bumped:
+      # tills still on the old APK keep the OLD runtime, so that version has to
+      # be listed there or they silently stop receiving updates.
+      - name: Publish to in-field legacy runtimes (and verify)
+        working-directory: .
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: "1"
+          COMMIT_MSG: ${{ github.event.head_commit.message || github.sha }}
+        run: |
+          MSG="$(printf '%s' "$COMMIT_MSG" | head -n 1)"
+          node scripts/ota-publish-extra-runtimes.mjs \
+            --app-dir apps/pos-native \
+            --message "$MSG" \
+            --channel production \
+            --platform android
