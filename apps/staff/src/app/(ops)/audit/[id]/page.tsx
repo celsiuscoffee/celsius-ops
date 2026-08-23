@@ -12,6 +12,7 @@ import {
   Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Minus, Building2, Trash2,
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
+import { sessionExpiryHandled } from "@/lib/session-expiry";
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -128,8 +129,12 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
       const formData = new FormData();
       formData.append("file", file);
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
-      const uploadData = await uploadRes.json();
-      if (!uploadRes.ok) { alert(uploadData.error || "Upload failed"); return; }
+      // Session died while the app sat open: lib/session-expiry is already
+      // bouncing to /login, so don't shout "Unauthorized" on the way out.
+      if (sessionExpiryHandled()) return;
+      const uploadData = await uploadRes.json().catch(() => ({}));
+      // Throwing keeps the shot in CameraCaptureModal so the tick retries it.
+      if (!uploadRes.ok) throw new Error(uploadData.error || "Upload failed.");
 
       // If replacingPhotoRef is set, replace that specific photo instead of appending
       const replacing = replacingPhotoRef.current;
@@ -138,12 +143,15 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
         ? { photos: ((audit?.items?.find((i) => i.id === itemId)?.photos) || []).map((p: string) => p === replacing ? uploadData.url : p) }
         : { addPhoto: uploadData.url };
 
-      await fetch(`/api/audits/${id}/items/${itemId}`, {
+      const attachRes = await fetch(`/api/audits/${id}/items/${itemId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       mutate();
+      if (!attachRes.ok && !sessionExpiryHandled()) {
+        throw new Error("Photo saved but not attached to the item.");
+      }
     } finally {
       setUploadingItem(null);
     }

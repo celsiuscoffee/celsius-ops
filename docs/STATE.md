@@ -6,6 +6,43 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-21 — **"Unauthorized" on checklist Photo Proof = the 12-hour staff
+  session dying under an app that never noticed.** Owner screenshot:
+  `staff.celsiuscoffee.com says: Unauthorized` over the Photo Proof camera.
+  That string is `apps/staff/src/app/api/upload/route.ts` returning 401 from
+  `getSession()` — a real expired session, not an upload/storage fault.
+  `SESSION_MAX_AGE` is 12h with **no renewal**, and the staff PWA stays mounted
+  for a whole shift, so when the token dies the page keeps rendering its last
+  SWR data while everything behind it 401s. Middleware only checked that the
+  cookie EXISTED, so even a page load re-rendered the signed-in shell.
+  Prod logs (Vercel project `staff`, 24h to 2026-08-21T15:00Z) show it is
+  routine, not a one-off: 401s grouped by path — /api/hr/clock 62,
+  /api/checklists 62, /api/auth/me 60, /api/upload 3 — arriving as repeating
+  bursts from devices sitting dead for hours (22:38, 22:47, 23:18, 23:45,
+  00:15, 00:23, 01:36, 03:13, 03:21, 04:18, 05:05, 05:26, 06:14Z). The
+  staffer's first and only signal was the dead-end alert at the moment of
+  work, with the photo discarded. Fix (this branch): middleware VERIFIES the
+  JWT (jose, edge-safe; fails open if JWT_SECRET is unset) and redirects to
+  `/login?next=…&reason=expired`; `apps/staff/src/lib/session-expiry.ts`
+  installs a one-time window.fetch interceptor so any 401 from our own /api/*
+  bounces to the same place (login endpoints exempt — **/api/auth/change-pin
+  401s on a mistyped current PIN**, so a fat-fingered pin change must not eject
+  the staffer), plus a foreground check that catches expiry when the phone is
+  picked back up rather than at the next save; login honours `next` and shows
+  a "session timed out" banner. CameraCaptureModal now keeps the shot on
+  screen with an error banner when a save fails (Retake/✓ still live, ✓
+  retries) instead of closing over a lost photo — the checklist/audit/claims
+  capture handlers throw instead of alert()ing. Same pass fixed the WEB twin
+  of #1179: checklist note-save, tick and photo-delete ignored their response,
+  so a failed PATCH silently reverted.
+  **NOT done — owner decision:** no sliding session renewal. Renewing on
+  activity would keep a counter device signed in as whoever last used it,
+  against the shared-tablet logout fix already in `clearSession`. So an
+  expired session still means "re-enter PIN", just with a signpost instead of
+  a dead end. If staff hit this daily, the lever is `SESSION_MAX_AGE`
+  (packages/auth/src/constants.ts, 12h) — a shift-length decision, not a
+  code one.
+
 - 2026-08-21 — **THE CUSTOMER APP HAS BEEN STRANDED ON 25-JUL JS SINCE THE
   FINGERPRINT SWITCH — every pickup-native OTA since then reached ZERO
   phones while the workflow went green.** Owner reported the Orders tab
