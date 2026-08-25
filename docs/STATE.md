@@ -2695,6 +2695,37 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   vs 1.019 clean). Tamarind recovery check (reversal test, A=ads vs B=local
   factor) armed 2026-08-25 09:00 UTC — restore landed Aug 15 14:46, so it
   gets ~10 post-restore days.
+- 2026-08-25 — **Tamarind A/B/A REVERSAL VERDICT: NO RECOVERY — the
+  late-July decline is NOT ad-driven, and the Aug 15 "ads generate cash"
+  probe verdict OVER-ATTRIBUTED.** Walk-in organic (POS ex-grabfood, organic
+  filters), 9 restored days Aug 16–24 vs the windows: baseline Jul 1–27
+  RM1,728/day (73.3 orders); decline wk Jul 28–Aug 3 RM1,605; PAUSED Aug
+  4–14 RM1,382 (58.7); RESTORED Aug 16–24 RM1,443 (61.2) — weekday averages
+  IDENTICAL paused-vs-restored (RM1,239 vs RM1,241), weekend restored LOWER
+  (1,846 vs 2,029). Payday-cycle control: same days-of-month Jul 16–24 (ads
+  on, same wallet position) was RM1,711/73.1 → restored Aug is −16% MoM, so
+  the trough doesn't explain it. Nine full-budget ad-days produced no
+  bounce toward baseline ⇒ the ~RM285/day shortfall vs baseline has a
+  NON-AD Tamarind-local cause active since ~Jul 26–28 (still unidentified;
+  ops/staffing/reviews/basket/regional ruled out 2026-08-14). The pause
+  window's 0.88 index was substantially this pre-existing decline, not the
+  ads going dark. Consequences: (1) the RM46.32/day restore is NOT proven
+  cash-generating — descent should resume cutting Tamarind; the guard
+  currently blocks cuts (raw 0.91, breach) but the recency-weighted
+  forecast (½-life 2w) adapts to the new level within ~2wk and descent
+  resumes automatically — owner may direct an earlier step-down; (2) probe
+  verdicts need a pre-existing-trend control before believing dropDetected
+  — fold into the deferred cleanup (adj-confirmation) which is UNBLOCKED
+  (no probe running). Fleet ledger: ZERO budget changes since the Aug 16
+  owner raise — the autopilot never touched it (lastKind "other" held, as
+  designed). Conezion: recovering — Sun Aug 24 wk: Thu 3,347/Fri 3,487/Sat
+  4,218/Sun 3,977 (+29% WoW)/Mon 3,388, Tue Aug 25 beat the prior Tuesday
+  by 5pm (payday bounce landing); ~85–90% of pre-dip; guard raw 0.90 (adj
+  0.94) still breached on the trailing window, trend up. Weekend Aug 21–23
+  was fleet-wide soft (deepest pre-payday weekend + one-off Shah Alam Sat
+  miss RM3,975 vs RM5.2–6k, cause unverified). Nilai guard forecast has
+  decayed to RM64/day on the dead feed — chase remains with the data-estate
+  owner.
 - 2026-08-16 — **Conezion (Putrajaya outlet) slid ~21% WoW (Aug 10–16 vs
   Aug 3–9); owner directive shipped to undo the Aug 12 Putrajaya ad cut.**
   Decomposition: footfall −14% (orders 967→830/wk), AOV −8% (RM30.75→28.26),
