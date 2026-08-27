@@ -98,6 +98,7 @@ const PAY_PERIOD = String.raw`(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC
 const SALARY_RE = new RegExp(String.raw`\bSALARY\b|\bSAL\.?\s+(?:${PAY_PERIOD})`, "i");
 const OVERTIME_RE = new RegExp(String.raw`\b(?:ADD\s+)?OT\s+(?:${PAY_PERIOD})`, "i");
 const MGMT_FEE_RE = /\b(?:MANAGEMENT|MNGMT|MGMT)\s*FEE\b|\bMGMT\b/i;
+const PARTIMER_RE = /\bPARTIMER\b|\bPT\s*WEEK\b|\bPT\s*W\s*\d{1,2}\b/i;
 
 // Inflow rules
 //
@@ -273,8 +274,9 @@ const OUTFLOW_RULES: Rule[] = [
   // Marketplace fees — GrabFood / FP commissions
   { name: "marketplace_grab_fee",        match: /\bGRABFOOD\s*COMMISSION\b/i, direction: "DR", category: "MARKETPLACE_FEE" as CashCategory },
 
-  // Partimer payouts — descriptions usually contain "PT Week" or "Partimer"
-  { name: "partimer",       match: /\bPT\s*WEEK\b|\bPARTIMER\b/i, direction: "DR", category: "PARTIMER" as CashCategory },
+  // Partimer payouts — narrations vary: "Partimer", "PT Week 33/26", and the
+  // abbreviated "PT W33/26" / "Pt w33 26" that started appearing 2026-08-21.
+  { name: "partimer",       match: PARTIMER_RE,                      direction: "DR", category: "PARTIMER" as CashCategory },
 
   // Employee Salary — descriptions like "Salary Nov", "Sal Jul26", "SCC_11/25",
   // direct salary transfers. MUST stay ahead of raw_ariff_adhoc (Ariff Izham

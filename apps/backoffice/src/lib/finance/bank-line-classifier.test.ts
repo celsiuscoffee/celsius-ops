@@ -122,6 +122,20 @@ describe("bank-line-classifier", () => {
     expect(dr("Conezion Putrajaya NURHAN DANIAL BIN S* PT Week 23/26").outletCode).toBe("CC001");
   });
 
+  it("catches the abbreviated PT week narration that started 2026-08-21", () => {
+    // Maybank dropped "Week" mid-August; these four lines (RM882) fell into
+    // OTHER_OUTFLOW and understated August part-timer wages.
+    expect(dr("Shah Alam FARAH NABILAH BINTI* Pt W33 26").category).toBe("PARTIMER");
+    expect(dr("Shah Alam MOHAMED DANISH HYQA* Pt w33 26").category).toBe("PARTIMER");
+    expect(dr("Tamarind MUHAMAD FARHAN IKHM* PT W33/26").category).toBe("PARTIMER");
+    expect(dr("Conezion MUHAMAD FARHAN IKHM* PT W33/26").outletCode).toBe("CC001");
+    // Older spellings keep working
+    expect(dr("Tamarind Square MUHAMMAD ADIB BIN Z* PT Week 33/26").category).toBe("PARTIMER");
+    expect(dr("SHAH ALAM AIMI NADHIRA BINTI* PARTIMER JUL").category).toBe("PARTIMER");
+    // A bare "PT" with no week number must not swallow unrelated lines
+    expect(dr("Shah Alam PT SUMBER REZEKI* INV-88213").category).not.toBe("PARTIMER");
+  });
+
   it("maps statutory + known opex vendors", () => {
     expect(dr("M2UBEPF KWSP PAYMENT").category).toBe("STATUTORY_PAYMENT");
     expect(dr("PAYMENT TO TNB TENAGA NASIONAL").category).toBe("UTILITIES");
