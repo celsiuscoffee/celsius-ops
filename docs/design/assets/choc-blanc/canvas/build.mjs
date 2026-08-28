@@ -53,7 +53,7 @@ for (const name of ARTBOARDS) {
   }
   writeFileSync(join(build, name), src);
 }
-for (const asset of ["hero.jpg", "canvas.json"]) {
+for (const asset of ["hero-home.jpg", "hero-splash.jpg", "hero-pos.jpg", "canvas.json"]) {
   copyFileSync(join(here, asset), join(build, asset));
 }
 
@@ -65,7 +65,9 @@ const args = [
   "--out", out,
   "--title", "Choc Blanc Merdeka Posters",
   ...ARTBOARDS.flatMap((a) => ["--artboard", a]),
-  "--image", "hero.jpg",
+  "--image", "hero-home.jpg",
+  "--image", "hero-splash.jpg",
+  "--image", "hero-pos.jpg",
   "--canvas", "canvas.json",
 ];
 execFileSync(process.execPath, args, { cwd: build, stdio: "inherit" });

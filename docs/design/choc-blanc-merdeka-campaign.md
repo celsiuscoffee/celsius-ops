@@ -65,25 +65,28 @@ the only real artwork gap.
 
 ---
 
-## 2. Decisions only you can make
+## 2. Decisions — settled 28 Aug
 
-1. **Is Choc Blanc replacing Mont Blanc, or selling alongside it?** The poster
-   says "NEW ON THE MENU" but also "*Now* capped with dark chocolate cream",
-   which reads like a rework. I staged it as a **new SKU** because that is
-   reversible either way. Mont Blanc does **410 units / RM6,108 a month** — if
-   Choc Blanc is its replacement, most of that migrates and the campaign should
-   be measured as *mix and price*, not incremental units. If they coexist, expect
-   cannibalisation and measure *net* units across both.
-   Replace path is one line on launch day (§3, step 6).
-2. **Price.** Staged at **RM14.90** (Mont Blanc parity; the artisan-choc premiums
-   are also RM14.90). Confirm or change.
-3. **Cost per cup.** `products.cost` is NULL for every drink in the catalogue, so
-   **margin cannot be computed and no channel can be judged on profit** — only on
-   revenue. It also matters mechanically: the home-poster autopilot scores partly
-   on product margin, so a NULL-cost, zero-history poster ranks near the bottom
-   and may get benched from the carousel (§6).
+1. **Choc Blanc does NOT replace Mont Blanc.** Both stay on the menu. Step 6 of
+   the runbook (retiring Mont Blanc) is therefore **dead — do not run it**.
+   Because they coexist at the same RM14.90, expect cannibalisation: measure
+   **net units across both SKUs**, not Choc Blanc in isolation. Mont Blanc's
+   410 units / RM6,108 per 30d is the combined baseline to beat.
+2. **Price confirmed: RM14.90**, Mont Blanc parity.
+3. **Cost per cup: RM3.4471** — Mont Blanc's recipe plus 10g chocolate powder.
+   A `Menu` row (`storehubId = 'choc-blanc'`) now carries a 9-line BOM cloned
+   from Mont Blanc's 8 lines plus `Chocolate Powder` 10g @ RM0.089/g = RM0.89.
+   `products.cost` is set, which unblocks margin **and** the home-poster
+   autopilot ranking (§6). Margin at RM14.90 is **76.9%**.
 
----
+   Two caveats worth knowing:
+   - `menu_margins.recipe_cost` reads **RM5.3448**, not RM3.4471, because that
+     view sums *every* BOM line including both modifier variants — it bills an
+     extra shot *and* an oat-milk swap into the base cup. Mont Blanc has the
+     same distortion (RM4.4548 vs a true RM2.5571). The view overstates cost on
+     any recipe with modifier lines; treat its margin_pct as a floor.
+   - `Dried Orange Peel` is still uncosted (`uncosted_ingredients = 1`), carried
+     over from Mont Blanc. Real cost per cup is RM3.4471 *plus* that peel.
 
 ## 3. Go-live runbook (31 Aug, ~07:00 MYT)
 
@@ -111,9 +114,7 @@ update splash_posters set active = true, updated_at = now()
 update voucher_templates set is_active = true, updated_at = now()
  where id = '8b19f425-4a6b-42f8-883a-3be43ccc377e';
 
--- 6. ONLY IF Choc Blanc REPLACES Mont Blanc:
--- update products set is_available = false, visible_channels = '{none}', updated_at = now()
---  where id = '696a614eb3191b0007f8cc82';
+-- 6. DEAD STEP — Choc Blanc sells ALONGSIDE Mont Blanc (§2). Do not run.
 ```
 
 **Rollback** — the reverse of steps 3–5, all single UPDATEs:
@@ -347,9 +348,10 @@ Margin on any of it requires `products.cost` (§2).
 
 ## Open questions
 
-1. Choc Blanc replaces Mont Blanc, or sells alongside it?
-2. Confirm RM14.90.
-3. Cost per cup (unblocks margin **and** the home-poster autopilot ranking).
+1. ~~Replaces Mont Blanc?~~ **Settled: sells alongside** (§2).
+2. ~~Confirm RM14.90.~~ **Settled: confirmed** (§2).
+3. ~~Cost per cup.~~ **Settled: RM3.4471** (§2).
 4. Run the SMS voucher arm at all, or announce-only? (Arm 1 vs Arm 2 is the test.)
 5. Prune the 23 POS posters for the campaign — yes/no?
-6. Who produces a proper 1.07:1 home-carousel crop, or do we ship my recompose?
+6. ~~Who produces a proper 1.07:1 home-carousel crop?~~ **Done** — all three
+   surfaces are cut from an extended plate so the glass is never clipped (§1).

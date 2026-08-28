@@ -116,6 +116,45 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   since every reader filters the schedule window. (2) A pos-display poster
   with `round=NULL` is invisible to the autopilot (`poster-autopilot.ts:151`
   filters to non-null rounds) — that is how you pin a launch poster.
+
+- 2026-08-28 — **Choc Blanc: the three owner decisions are SETTLED, and the
+  poster artwork exists.** (1) Choc Blanc **sells alongside Mont Blanc**, it
+  does not replace it — the runbook's step 6 (retire Mont Blanc) is now a dead
+  step, and the campaign must be measured as **net units across both SKUs**
+  since they share the RM14.90 shelf price. (2) **RM14.90 confirmed.**
+  (3) **Cost per cup RM3.4471** — a new `Menu` row (`storehubId='choc-blanc'`)
+  clones Mont Blanc's 8 BOM lines and adds `Chocolate Powder` 10g @ RM0.089/g
+  (= RM0.89); `products.cost` is set, which unblocks margin and the home-poster
+  autopilot's margin term. Margin 76.9%.
+  **Verified facts worth keeping:** (a) `products.id` is the join key to
+  `Menu."storehubId"` — that is how the customer catalogue and the costing side
+  are linked, and there is no FK enforcing it. (b) Ingredient cost does NOT
+  live on `"Product"` (no `cost` column); it is the SQL-managed `product_costs`
+  view, keyed `product_id`, field `cost_per_base`. (c) **`menu_margins`
+  overstates cost on any recipe carrying modifier lines** — it sums *every*
+  BOM row, so Mont Blanc reads RM4.4548 against a true base cup of RM2.5571
+  (it bills an Extra Shot *and* an Oatmilk swap into the same cup); Choc Blanc
+  reads RM5.3448 vs RM3.4471. Treat `menu_margins.margin_pct` as a floor.
+  (d) `Menu`/`MenuIngredient` are staff/backoffice-only — `apps/order` never
+  reads them, so creating a recipe leaks nothing to customers.
+  **Artwork DONE** — `docs/design/assets/choc-blanc/canvas/` holds three
+  `.dc.html` artboards (home 1200×1121, splash 1080×2340, POS 920×1200) built
+  by `build.mjs`, which injects the repo's Peachi face as base64 into a
+  gitignored `.build/`. That font inlining is load-bearing: **a Google-hosted
+  webfont silently falls back during PNG export**, and the export is what gets
+  uploaded. Canvas:
+  https://claude.ai/code/artifact/8a858143-05d9-4365-96ea-ddb9e0108e1e
+  **Lesson — the A4 master cannot be cropped to a landscape band.** The glass
+  is 1030×1520 with its top at y=415 and the baked header rule directly above,
+  so *no* crop of the 2483-wide A4 at 1.65:1 contains the whole drink. Fix, in
+  `canvas/make-heroes.py`: stretch+blur the source to an oversized plate, feather
+  the real photo back on top (the table is bokeh, so the extension is
+  invisible), then cut one window per surface at exactly that artboard's
+  photo-box aspect — `object-fit: cover` then crops nothing. Every hero now
+  clears the glass by ≥87px on all four sides.
+  **Still blocking go-live: `image_url` is STILL `''` on all three
+  `splash_posters` rows.** The owner must export the PNGs from the canvas and
+  upload via Backoffice → Pickup → Splash Posters.
   (3) A new poster scores ~0 in the autopilot (no measured AOV, `cost` NULL →
   no margin) so it gets benched fast; set `products.cost` or disable the flag.
   **Open decisions for the owner:** replace-vs-alongside Mont Blanc (410 units
@@ -2415,6 +2454,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-08-28 — **Choc Blanc Merdeka: artwork done, decisions settled, ONE
+  blocker left.** All three `splash_posters` rows still have `image_url = ''`;
+  they cannot render until someone exports the three PNGs from the canvas
+  (link above) and uploads them via Backoffice → Pickup → Splash Posters. That
+  is a human step — no Cloudinary creds in-session. Everything else for 31 Aug
+  is staged and gated by a future `starts_at`; note the home poster has already
+  been flipped `active=true` by `pos-poster-autopilot`, so the schedule window
+  is now the ONLY thing keeping it invisible. Next session: confirm the uploads
+  landed, then walk the go-live runbook in
+  `docs/design/choc-blanc-merdeka-campaign.md` — skipping its step 6, which is
+  now dead. Open questions 4 and 5 (run the SMS voucher arm or announce-only;
+  prune the 23 POS posters) are still unanswered.
 
 - 2026-08-19 — **Local-rank QA: loop runs, but measurement was starved.** Since
   the Jul 5 radius fix: 69 combos scanned, only 3 twice — 93 active combos vs a
