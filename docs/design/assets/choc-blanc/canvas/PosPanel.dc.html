@@ -15,45 +15,38 @@
   </style>
 </helmet>
 
-<!-- SUNMI customer display side panel: 460x600 CSS px, drawn here at 2x (920x1200)
-     so the exported PNG has real pixels to work with. The app paints it with
-     resizeMode="cover" and overlays page dots ~30px from the bottom (60px at 2x),
-     so the lower 130px is kept clear. Read at roughly an arm's length across a
-     counter — type is sized up accordingly. -->
-<div style="width: 920px; height: 1200px; position: relative; overflow: hidden; background: #160800; display: flex; flex-direction: column;">
+<!-- SUNMI customer display side panel: 460x600 CSS px, drawn at 2x (920x1200)
+     so the exported PNG has real pixels. Full-bleed photograph; the app paints
+     it with resizeMode="cover" and overlays page dots ~30px from the bottom
+     (60px at 2x), so the lower 130px is kept clear. Read at arm's length
+     across a counter, so the type is sized up. Glass sits at y 180..788. -->
+<div style="width: 920px; height: 1200px; position: relative; overflow: hidden; background: #160800;">
 
-  <!-- PHOTO -->
-  <div style="position: relative; height: 640px; overflow: hidden;">
-    <img src="hero-pos.jpg" alt="Choc Blanc iced espresso with whipped dark chocolate cream" style="width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; display: block;">
+  <img src="hero-pos.jpg" alt="Choc Blanc iced espresso with whipped dark chocolate cream" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;">
 
-    <div style="position: absolute; inset: 0 0 auto 0; height: 140px; background: linear-gradient(180deg, rgba(22,8,0,0.80) 0%, rgba(22,8,0,0.26) 60%, rgba(22,8,0,0) 100%);"></div>
+  <div style="position: absolute; inset: 0 0 auto 0; height: 200px; background: linear-gradient(180deg, rgba(22,8,0,0.76) 0%, rgba(22,8,0,0.24) 58%, rgba(22,8,0,0) 100%);"></div>
+  <div style="position: absolute; inset: auto 0 0 0; height: 620px; background: linear-gradient(180deg, rgba(22,8,0,0) 0%, rgba(22,8,0,0.40) 30%, rgba(22,8,0,0.82) 64%, rgba(22,8,0,0.94) 100%);"></div>
 
-    <div style="position: absolute; top: 40px; left: 44px; right: 44px; display: flex; justify-content: space-between; align-items: flex-start; gap: 18px;">
-      <div style="font-weight: 700; font-size: 40px; line-height: 1; color: #F5F3F0; letter-spacing: -0.01em;">°C</div>
+  <div style="position: absolute; inset: 0; padding: 40px 44px 130px 44px; display: flex; flex-direction: column; justify-content: space-between;">
+
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 18px;">
+      <div style="font-weight: 700; font-size: 40px; line-height: 1; color: #F5F3F0; letter-spacing: -0.01em;">&deg;C</div>
       <div style="font-weight: 700; font-size: 15px; letter-spacing: 0.26em; color: #FBBF24; text-transform: uppercase; text-align: right; line-height: 1.6;">Merdeka Menu</div>
     </div>
 
-    <div style="position: absolute; inset: auto 0 0 0; height: 150px; background: linear-gradient(180deg, rgba(22,8,0,0) 0%, rgba(22,8,0,0.56) 64%, #160800 100%);"></div>
-  </div>
-
-  <!-- COPY BAND -->
-  <div style="flex-grow: 1; padding: 0 44px 130px 44px; display: flex; flex-direction: column; justify-content: center; gap: 20px;">
-
-    <div>
-      <span style="display: inline-block; background: #A64B2C; color: #F5F3F0; font-weight: 700; font-size: 16px; letter-spacing: 0.24em; text-transform: uppercase; padding: 11px 20px; border-radius: 4px;">New on the menu</span>
-    </div>
-
-    <h1 style="margin: 0; font-weight: 700; font-size: 104px; line-height: 0.9; letter-spacing: -0.028em; color: #F5F3F0;">Choc Blanc</h1>
-
-    <p style="margin: 0; font-weight: 500; font-size: 28px; line-height: 1.24; color: #C97A4E; text-wrap: pretty;">Now capped with dark chocolate cream.</p>
-
-    <div style="display: flex; align-items: baseline; gap: 14px; margin-top: 6px;">
-      <span style="font-weight: 700; font-size: 60px; line-height: 1; color: #FBBF24; letter-spacing: -0.01em;">RM14.90</span>
-      <span style="font-weight: 500; font-size: 19px; letter-spacing: 0.14em; color: rgba(245,243,240,0.5); text-transform: uppercase;">Ask our barista</span>
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div>
+        <span style="display: inline-block; background: #A64B2C; color: #F5F3F0; font-weight: 700; font-size: 16px; letter-spacing: 0.24em; text-transform: uppercase; padding: 11px 20px; border-radius: 4px;">New on the menu</span>
+      </div>
+      <h1 style="margin: 0; font-weight: 700; font-size: 96px; line-height: 0.9; letter-spacing: -0.028em; color: #F5F3F0;">Choc Blanc</h1>
+      <p style="margin: 0; font-weight: 500; font-size: 28px; line-height: 1.24; color: #E0A47C; text-wrap: pretty;">Now capped with dark chocolate cream.</p>
+      <div style="display: flex; align-items: baseline; gap: 14px; margin-top: 4px;">
+        <span style="font-weight: 700; font-size: 54px; line-height: 1; color: #FBBF24; letter-spacing: -0.01em;">RM14.90</span>
+        <span style="font-weight: 500; font-size: 19px; letter-spacing: 0.14em; color: rgba(245,243,240,0.55); text-transform: uppercase;">Ask our barista</span>
+      </div>
     </div>
 
   </div>
-
 </div>
 </x-dc>
 </body>
