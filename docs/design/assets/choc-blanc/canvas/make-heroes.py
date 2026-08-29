@@ -17,8 +17,9 @@ import os
 from PIL import Image, ImageFilter
 
 SRC   = "choc_blanc_a4_300dpi.png"
-CLEAN = (0, 400, 2483, 2100)      # A4 photo area, below the baked header rule
-GLASS = (690, 415, 1720, 1935)    # glass bbox within the A4
+CLEAN = (0, 387, 2483, 2100)      # A4 photo area, first row under the baked rule
+GLASS = (690, 388, 1720, 1935)    # glass bbox: the cream cap starts at the crop top
+TOP_BG = (0, 336, 2483, 378)      # clean backdrop ABOVE the rule -- drink-free, text-free
 PW, PH = 3600, 4400               # plate: room for a full-bleed window at any aspect
 GLASS_TOP = 900                   # where the glass top lands in the plate
 
@@ -29,11 +30,58 @@ OX = (PW - src.width) // 2
 OY = GLASS_TOP - (GLASS[1] - CLEAN[1])
 
 plate = src.resize((PW, PH), Image.LANCZOS).filter(ImageFilter.GaussianBlur(120))
+
+
+BAND = 24
+
+
+def _grow(im, pad, top=None, bot_band=BAND):
+    """Add pad rows above and below im, stretching a source band into each.
+
+    `top` is the band to stretch upward; without one, im's own top BAND rows.
+    """
+    w, h = im.size
+    top = top or im.crop((0, 0, w, BAND))
+    bot = im.crop((0, h - bot_band, w, h))
+    # a band stretched ~8x turns its own grain into streaks; blur it back out
+    grain = ImageFilter.GaussianBlur(12)
+    o = Image.new("RGB", (w, h + 2 * pad))
+    o.paste(top.resize((w, pad), Image.LANCZOS).filter(grain), (0, 0))
+    o.paste(im, (0, pad))
+    o.paste(bot.resize((w, pad), Image.LANCZOS).filter(grain), (0, pad + h))
+    return o
+
+
+def smear(im, pad, top):
+    """Grow im by pad on all four sides so the feather never touches the drink.
+
+    The cream cap starts on the crop's FIRST ROW, so a feather inset into the
+    photo lands ON THE DRINK -- it was blending the cap 96% into the blurred
+    plate. Feathering a smeared margin instead keeps the ramp off the photo.
+
+    Nothing inside the crop is drink-free above the glass, so the top margin
+    comes from `top` -- the backdrop above the A4's baked rule. Stretching the
+    photo's own top rows there would smear the cap upward into vertical streaks.
+    """
+    v = _grow(im, pad, top).transpose(Image.ROTATE_90)
+    return _grow(v, pad).transpose(Image.ROTATE_270)
+
+
+PAD = 320                          # must exceed F so the ramp stays off the glass
 F = 130
-mask = Image.new("L", src.size, 0)
-mask.paste(255, (F, F, src.width - F, src.height - F))
+ext = smear(src, PAD, a4.crop(TOP_BG))
+mask = Image.new("L", ext.size, 0)
+mask.paste(255, (F, F, ext.width - F, ext.height - F))
 mask = mask.filter(ImageFilter.GaussianBlur(F / 2))
-plate.paste(src, (OX, OY), mask)
+# guard: the real photo must be FULLY opaque across the whole drink, margin
+# included -- a partly-transparent glass is a glass blended into the blur.
+_gx0, _gy0 = GLASS[0] - CLEAN[0] + PAD, GLASS[1] - CLEAN[1] + PAD
+_gx1, _gy1 = GLASS[2] - CLEAN[0] + PAD, GLASS[3] - CLEAN[1] + PAD
+_m = mask.crop((_gx0 - 24, _gy0 - 24, _gx1 + 24, _gy1 + 24)).getextrema()[0]
+assert _m == 255, f"feather reaches the drink (min alpha {_m}/255)"
+assert TOP_BG[3] <= CLEAN[1], "top backdrop band overlaps the photo crop"
+
+plate.paste(ext, (OX - PAD, OY - PAD), mask)
 
 g = (GLASS[0] - CLEAN[0] + OX, GLASS[1] - CLEAN[1] + OY,
      GLASS[2] - CLEAN[0] + OX, GLASS[3] - CLEAN[1] + OY)
