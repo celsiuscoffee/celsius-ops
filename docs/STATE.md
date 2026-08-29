@@ -152,9 +152,24 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   invisible), then cut one window per surface at exactly that artboard's
   photo-box aspect — `object-fit: cover` then crops nothing. Every hero now
   clears the glass by ≥87px on all four sides.
+  **Posters are RENDERED** — `canvas/render-posters.mjs` drives headless
+  Chromium over the `.build/` artboards (the ones with Peachi inlined) and
+  emits PNG + JPEG into `.build/out/`. No canvas export step needed any more.
+  **Lesson — `--window-size` counts browser chrome**, so the layout viewport
+  came out ~87px shorter than asked; the artboard laid out short and the
+  remainder was painted with the page background. The poster looked fine
+  except the last line of copy was missing. Render with headroom and crop to
+  the declared box; `crop-posters.py` now fails the build if page background
+  appears on the bottom/right edge (verified: it rejects a deliberately short
+  render). Same class of trap as the webfont one — both produce a
+  plausible-looking but wrong poster rather than an error.
   **Still blocking go-live: `image_url` is STILL `''` on all three
-  `splash_posters` rows.** The owner must export the PNGs from the canvas and
-  upload via Backoffice → Pickup → Splash Posters.
+  `splash_posters` rows** (re-verified 2026-08-29, `url_len = 0`). This
+  session has NO Cloudinary or Supabase-storage credentials — `.env.example`
+  only — so the upload is a human step. Existing posters are hosted two ways:
+  home/splash on Cloudinary (`res.cloudinary.com/dxxzt7k6i/.../posters/`),
+  pos-display on the public Supabase `posters` bucket
+  (`.../storage/v1/object/public/posters/promo/`).
   (3) A new poster scores ~0 in the autopilot (no measured AOV, `cost` NULL →
   no margin) so it gets benched fast; set `products.cost` or disable the flag.
   **Open decisions for the owner:** replace-vs-alongside Mont Blanc (410 units
