@@ -41,9 +41,14 @@ gcx = (g[0] + g[2]) // 2
 
 OUT = os.path.dirname(os.path.abspath(__file__))
 # name -> (artboard size, window height, headroom above the glass in window px)
+# The home carousel follows the house poster layout: copy sits mid-left over the
+# photo, so the glass has to sit RIGHT of centre rather than dead centre. A
+# shorter window leaves horizontal slack in the plate to push it across; x_bias
+# 0.0 means "window hard against the left of the plate", which puts the glass as
+# far right as the plate allows (~61% across).
 SURFACES = {
     # in-app surfaces
-    "hero-home.jpg":   ((1200, 1121), 2900, 430),
+    "hero-home.jpg":   ((1200, 1121), 2700, 430, 0.0),
     "hero-splash.jpg": ((1080, 2340), 3300, 500),
     "hero-pos.jpg":    ((920, 1200),  3000, 450),
     # social
@@ -52,9 +57,12 @@ SURFACES = {
     "hero-ig-square.jpg": ((1080, 1080), 2600, 450),
 }
 
-for name, (out, H, head) in SURFACES.items():
+for name, spec in SURFACES.items():
+    out, H, head = spec[0], spec[1], spec[2]
+    x_bias = spec[3] if len(spec) > 3 else None   # None = centre the glass
     W  = round(H * out[0] / out[1])
-    x0, y0 = gcx - W // 2, g[1] - head
+    x0 = gcx - W // 2 if x_bias is None else round(x_bias * (PW - W))
+    y0 = g[1] - head
     assert 0 <= x0 and x0 + W <= PW, (name, "x", x0, W)
     assert 0 <= y0 and y0 + H <= PH, (name, "y", y0, H)
     assert x0 < g[0] and g[2] < x0 + W, (name, "glass clipped horizontally")
