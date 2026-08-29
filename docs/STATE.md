@@ -164,12 +164,15 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   render). Same class of trap as the webfont one — both produce a
   plausible-looking but wrong poster rather than an error.
   **UPLOADED 2026-08-29 — the last go-live blocker is CLEARED.** All three
-  `splash_posters` rows and `products.choc-blanc` now carry real `image_url`s,
-  byte-for-byte identical to the renders (147537 / 292374 / 143865 / 107530).
-  They live in the public Supabase buckets:
-  `posters/promo/choc-blanc-{home,splash,pos}.jpg` and
-  `product-images/choc-blanc.jpg`. Still invisible: `starts_at` is future on
-  all three posters and `products.is_available = false`.
+  `splash_posters` rows and `products.choc-blanc` carry real `image_url`s,
+  byte-for-byte identical to the renders. Current live keys after the art
+  revisions: `posters/promo/choc-blanc-home-v5.jpg` (157632),
+  `-splash-v3.jpg` (284249), `-pos-v3.jpg` (137206) and
+  `-product-v2.jpg` (118721). Still invisible: `starts_at` is future on all
+  three posters and `products.is_available = false`.
+  **Every re-upload needs a NEW KEY** — objects are written
+  `Cache-Control: public, max-age=31536000, immutable`, so overwriting a key
+  leaves stale bytes in front of every viewer; hence the -v suffixes.
   **Lesson — a remote session CANNOT reach object storage, but that does not
   mean it cannot upload.** The agent proxy answers 403 to CONNECT for
   `*.supabase.co` and `*.cloudinary.com` (curl HTTP 000), while the Supabase
@@ -187,7 +190,11 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   the edge runtime injects. No image bytes pass through the agent at all — it
   is a server-to-server copy between two systems the owner already controls.
   Guardrails used: hard-coded asset allowlist, two-bucket allowlist, shared
-  secret, and a minimum-size check on the fetch. **Repo visibility is worth
+  secret, and a minimum-size check on the fetch. **This project's keys are the
+  new `sb_` format, not JWTs** — `SUPABASE_SERVICE_ROLE_KEY` in the edge
+  runtime is 41 chars starting `sb_`, and Storage rejects it as
+  `Invalid Compact JWS` when sent only as `Authorization: Bearer`. It needs
+  the `apikey` header as well (`apikey` + `Bearer` together works). **Repo visibility is worth
   checking FIRST next time** — the whole detour existed because it was assumed
   private.
   **Cleanup still owed to a human:** this MCP server can deploy Edge Functions
@@ -195,6 +202,20 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   an inert 410 stub (`verify_jwt` on, no secret, no service-role use) — delete
   it in the dashboard. Also delete `posters/_probe/delete-me.png`, a 70-byte
   test object; `storage.protect_delete()` blocks removing objects via SQL.
+  **Lesson — a feather inset into the photo lands ON the subject.** The plate
+  technique feathered the real photo into the blurred backdrop with a 130px
+  inset on all four sides. The cream cap sits on the crop's FIRST ROW, so that
+  ramp blended the top of the drink 96% into the blur (alpha 10/255 at the cap,
+  177/255 at the base) — it reads as a soft-focus drink, not as a compositing
+  bug, which is why it survived several rounds of review. Fix: grow a smeared
+  margin around the photo and feather THAT, so the ramp never touches the
+  image. The top margin cannot come from the photo's own top rows (nothing
+  inside the crop is drink-free — that smears the cap upward into vertical
+  streaks); it comes from the A4's backdrop ABOVE the baked rule, rows 336–378.
+  The crop line also moved 400 → 387, the first row under the rule: 400 was
+  shaving the cream. `make-heroes.py` now asserts the mask is fully opaque
+  across the whole drink. Edge detail across the cap up ~25%; glass geometry
+  on every surface unchanged.
   **Social set added** — Instagram/Facebook feed 4:5 (1080x1350), story 9:16
   (1080x1920, 250px top / 330px bottom kept clear for Instagram chrome and the
   link sticker) and square 1080x1080. These deliberately carry NO price: a
