@@ -157,6 +157,14 @@ four words.
 | 3 | **HARI MALAYSIA** | 16 – 22 Sept | **B1F1 — fresh pool** (Round C) | Extend trial to people the launch never reached | Same voucher rules as Phase 1 |
 | 4 | **LAST CALL** | 23 – 30 Sept | none — deadline only | Convert the undecided | "Last week for it" |
 
+**The phase dates are SEND windows, not voucher lifetimes.** The drip runs five
+days and each voucher lives 7 days from issue, so Phase 1 vouchers stay
+redeemable into Phase 2 (last ones expire ~10 Sept) and Phase 3's into Phase 4
+(~27 Sept). Staff honour any voucher that is in the account and unexpired,
+whatever phase the calendar says — the briefing leads with that rule, because
+the obvious reading ("Phase 2: no offer") would have them refusing live
+vouchers in week two.
+
 **Phase 2 is not a gap, it is the measurement.** It is the only window where you
 learn whether people buy Choc Blanc at RM14.90 without being paid to. Discount
 the whole month and all you learn is that customers like free coffee.
