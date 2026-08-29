@@ -19,7 +19,7 @@ from PIL import Image, ImageFilter
 SRC   = "choc_blanc_a4_300dpi.png"
 CLEAN = (0, 400, 2483, 2100)      # A4 photo area, below the baked header rule
 GLASS = (690, 415, 1720, 1935)    # glass bbox within the A4
-PW, PH = 3600, 3700               # plate: room for a full-bleed window at any aspect
+PW, PH = 3600, 4400               # plate: room for a full-bleed window at any aspect
 GLASS_TOP = 900                   # where the glass top lands in the plate
 
 a4  = Image.open(SRC).convert("RGB")
@@ -49,7 +49,7 @@ OUT = os.path.dirname(os.path.abspath(__file__))
 SURFACES = {
     # in-app surfaces
     "hero-home.jpg":   ((1200, 1121), 2500, 490, 0.0),
-    "hero-splash.jpg": ((1080, 2340), 3300, 500),
+    "hero-splash.jpg": ((1080, 2340), 4200, 900),
     "hero-pos.jpg":    ((920, 1200),  3000, 450),
     # social
     "hero-ig-feed.jpg":   ((1080, 1350), 2900, 430),
