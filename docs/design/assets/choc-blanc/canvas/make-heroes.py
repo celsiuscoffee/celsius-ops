@@ -48,7 +48,7 @@ OUT = os.path.dirname(os.path.abspath(__file__))
 # far right as the plate allows (~61% across).
 SURFACES = {
     # in-app surfaces
-    "hero-home.jpg":   ((1200, 1121), 2700, 430, 0.0),
+    "hero-home.jpg":   ((1200, 1121), 2500, 490, 0.0),
     "hero-splash.jpg": ((1080, 2340), 3300, 500),
     "hero-pos.jpg":    ((920, 1200),  3000, 450),
     # social
