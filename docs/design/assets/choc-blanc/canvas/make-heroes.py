@@ -69,3 +69,29 @@ for name, (out, H, head) in SURFACES.items():
     print(f"{name:16} {out[0]}x{out[1]}  q{q} {os.path.getsize(path)//1024}KB  "
           f"glass y {round((g[1]-y0)*s)}..{round((g[3]-y0)*s)} of {out[1]}  "
           f"clear below glass: {round((y0+H-g[3])*s)}px")
+
+
+# ── Catalogue product photo ────────────────────────────────────────────────
+# products.image_url, NOT a poster: no text, drink centred. The apps crop this
+# square in several places (88px menu rows, 140px pairing tiles) while the grid
+# card is 4:5, so the square crop of the middle must still hold the whole
+# glass -- that is what decides the framing here, not the 4:5 itself.
+PROD_H, PROD_OUT = 2150, (1000, 1250)      # 4:5
+PW_, PH_ = round(PROD_H * PROD_OUT[0] / PROD_OUT[1]), PROD_H
+gcy = (g[1] + g[3]) // 2
+x0, y0 = gcx - PW_ // 2, gcy - PH_ // 2
+assert 0 <= x0 and x0 + PW_ <= PW and 0 <= y0 and y0 + PH_ <= PH, ("product window", x0, y0)
+# the centred square crop the apps will take must still contain the glass
+sq_top, sq_bot = y0 + (PH_ - PW_) // 2, y0 + (PH_ - PW_) // 2 + PW_
+assert sq_top < g[1] and g[3] < sq_bot, "square crop would cut the glass"
+
+im = plate.crop((x0, y0, x0 + PW_, y0 + PH_)).resize(PROD_OUT, Image.LANCZOS)
+path = os.path.join(OUT, "product-choc-blanc.jpg")
+for q in (86, 80, 74, 68):
+    im.save(path, quality=q, optimize=True, progressive=True)
+    if os.path.getsize(path) <= 130000:
+        break
+sc = PROD_OUT[1] / PH_
+print(f"product-choc-blanc.jpg {PROD_OUT[0]}x{PROD_OUT[1]}  q{q} {os.path.getsize(path)//1024}KB  "
+      f"glass y {round((g[1]-y0)*sc)}..{round((g[3]-y0)*sc)}  "
+      f"square-crop margin {round((g[1]-sq_top)*sc)}px top / {round((sq_bot-g[3])*sc)}px bottom")
