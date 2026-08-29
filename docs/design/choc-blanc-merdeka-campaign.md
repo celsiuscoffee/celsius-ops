@@ -154,26 +154,25 @@ four words.
 | --- | --- | --- | --- | --- | --- |
 | 1 | **LAUNCH WEEK** | 31 Aug – 6 Sept | **B1F1** (SMS holders only) | Get it into hands, and a 2nd person tasting | Explain the drink, handle vouchers |
 | 2 | **FULL PRICE** | 7 – 15 Sept | none | Find out if it sells at RM14.90 unaided | Upsell from Mont Blanc |
-| 3 | **HARI MALAYSIA** | 16 – 22 Sept | decided 12 Sept (below) | Reach people who haven't tried it | Per 2nd briefing |
+| 3 | **HARI MALAYSIA** | 16 – 22 Sept | **B1F1 — fresh pool** (Round C) | Extend trial to people the launch never reached | Same voucher rules as Phase 1 |
 | 4 | **LAST CALL** | 23 – 30 Sept | none — deadline only | Convert the undecided | "Last week for it" |
 
 **Phase 2 is not a gap, it is the measurement.** It is the only window where you
 learn whether people buy Choc Blanc at RM14.90 without being paid to. Discount
 the whole month and all you learn is that customers like free coffee.
 
-**Phase 3 is not a second B1F1 by default.** Repeating the giveaway a fortnight
-later teaches the base to wait for the free one, and costs another RM3.45 of
-COGS per redemption. Decide on **~12 Sept** from what Phase 1 measured — in
-Round B, where announce-only vs B1F1 was randomised:
+**Phase 3 repeats B1F1 to a DIFFERENT pool (owner decision, 29 Aug).** The risk
+with a second giveaway is teaching the base to wait for the free one — but that
+only applies if the *same people* get it twice. Round C therefore excludes
+everyone the launch touched, so nobody is offered B1F1 more than once and the
+offer stays a first-taste mechanic rather than a recurring discount.
 
-- **B1F1 clearly won** → repeat B1F1, again only to people who have not bought
-  Choc Blanc.
-- **The arms came out level** → announce-only. You have learned the drink sells
-  itself, which is worth more than this campaign. Stop paying for it.
-- **Too close to call** → announce-only, and put the money into Phase 4.
+Round C also re-runs the announce-vs-B1F1 randomisation on fresh people, which
+roughly doubles the sample behind the "does a new product need discounting"
+question instead of leaving it on one week's data.
 
-The 14-day `celebration` cooldown from 30 Aug clears on 13 Sept, so a 16 Sept
-send is not blocked either way.
+The 14-day `celebration` cooldown from 30 Aug is not a factor: Round C's pool is
+people who were never contacted on 30 Aug.
 
 **Supporting beats:** the `reward_expiring` loop fires around 6 Sept to
 unredeemed B1F1 holders (automatic, highest-yield send in the plan). Posters run
@@ -332,7 +331,7 @@ POST /api/loyalty/loops/prepare
     { "key": "announce", "label": "Announce only", "voucher_template_id": null,
       "message": "Selamat Hari Merdeka! NEW at Celsius from tomorrow: Choc Blanc - double espresso capped with dark chocolate cream. RM14.90. Shah Alam, Conezion, Tamarind." },
     { "key": "b1f1", "label": "Buy 1 Free 1", "voucher_template_id": "a0e3661c-5cba-454f-a50a-1cebd597225f",
-      "message": "Selamat Hari Merdeka! NEW Choc Blanc at Celsius from tomorrow. Your {reward} expires {expiry} - show your number at any outlet." }
+      "message": "Selamat Hari Merdeka! NEW Choc Blanc at Celsius from tomorrow. Your {reward} expires {expiry} - just give your phone no. at any outlet." }
   ]
 }
 ```
@@ -344,6 +343,93 @@ Both messages fit one GSM-7 segment: 154 chars, and 143 once `{reward}` /
 Then `POST /api/loyalty/loops/schedule` with `scheduled_send_at` = 30 Aug
 evening MYT for each round. The cron sends prepared+scheduled rounds; nothing
 leaves until then, and `/api/loyalty/loops/cancel` unwinds a prepared round.
+
+### Sends go out DAILY, not in one blast
+
+Owner decision 29 Aug. A single B1F1 blast to ~1,200 people lands its
+redemptions in the first two days, on three outlets, on a public holiday. Drip
+it instead: **~300 recipients per day**, so the extra cups arrive at a rate the
+bar can actually make.
+
+| Round | Days | Per day | Total |
+| --- | --- | --- | --- |
+| A — Mont Blanc buyers, announce | 30 Aug (one go) | 538 | 538 |
+| B — cold pool, announce vs B1F1 | 30 Aug – 3 Sept | ~300 | 1,500 |
+| C — fresh pool, announce vs B1F1 | 16 – 20 Sept | ~300 | 1,500 |
+
+Round A can go in one day: an announcement with no voucher doesn't create a
+redemption spike.
+
+**Prepare each day's round ON that day — never all five up front.**
+`issueReward` stamps `expires_at = now() + validity_days` at *prepare* time
+(`loop-engine.ts:514`), so five rounds prepared on day 0 would hand the day-5
+recipients a "7-day" voucher with two days left on it. One prepare per day keeps
+every recipient's week honest.
+
+Each day suppresses everyone already assigned in this campaign:
+
+```sql
+-- suppressPhones for the next daily round
+select distinct phone from loop_assignments
+ where round_id in (select id from loop_rounds
+                     where loop_key = 'celebration'
+                       and created_at >= '2026-08-30'); -- this campaign's rounds
+```
+
+Pooling for the readout is normal — the engine already measures multi-round
+loops that way. Each daily round carries its own 20% holdout and its own arm
+split; you sum them at the end.
+
+### Round C — Hari Malaysia, fresh pool (16 – 20 Sept)
+
+Same two arms, same B1F1 template, a pool that has never been contacted for this
+campaign. Reachable actives ≤60d are **6,413**, of which Rounds A+B consume
+~2,038 — leaving ~4,300 before excluding anyone who has bought Choc Blanc by
+then, so 1,500 is comfortable.
+
+```jsonc
+POST /api/loyalty/loops/prepare        // once per day, 16–20 Sept
+{
+  "loopKey": "celebration",
+  "suppressPhones": ["<all phones assigned in Rounds A, B and earlier C days>",
+                     "<plus anyone who has already bought Choc Blanc>"],
+  "maxRecipients": 300,
+  "holdoutPct": 20,
+  "arms": [
+    { "key": "announce", "label": "Announce only", "voucher_template_id": null,
+      "message": "Happy Malaysia Day! Try Choc Blanc at Celsius - double espresso capped with dark chocolate cream. RM14.90, on until 30 Sept. Shah Alam, Conezion, Tamarind." },
+    { "key": "b1f1", "label": "Buy 1 Free 1", "voucher_template_id": "a0e3661c-5cba-454f-a50a-1cebd597225f",
+      "message": "Happy Malaysia Day! Choc Blanc at Celsius - double espresso, dark chocolate cream. Your {reward} expires {expiry} - just give your phone no." }
+  ]
+}
+```
+
+Add the Choc Blanc buyers to the suppression — they've already tried it, so B1F1
+to them is margin given away:
+
+```sql
+select distinct o.customer_phone from pos_orders o
+  join pos_order_items i on i.order_id = o.id
+ where o.customer_phone is not null and i.product_name ilike '%choc blanc%'
+union
+select distinct o.customer_phone from orders o
+  join order_items i on i.order_id = o.id
+ where o.customer_phone is not null and i.product_name ilike '%choc blanc%';
+```
+
+Both messages fit one GSM-7 segment (155 and 156 resolved). The
+`reward_expiring` loop then picks up unredeemed Round C vouchers around
+23–27 Sept on its own, which lands neatly in Phase 4.
+
+### How redemption actually works
+
+**Nothing to show, nothing to scan.** The voucher is issued to the member's
+account at prepare time and sits in their wallet. At the till staff key the
+customer's phone number into the POS
+(`GET /api/pos/loyalty/lookup?phone=…` → `/rewards?member_id=…` → `/redeem`),
+the voucher appears, and they apply it. The customer just says their number —
+no code, no screenshot, no app needed. The SMS copy says "just give your phone
+no." for that reason.
 
 **Offer economics** (cost per redemption, against RM11.45 at full price):
 

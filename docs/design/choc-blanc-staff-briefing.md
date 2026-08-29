@@ -4,8 +4,8 @@ Send to all three outlet groups on **30 Aug 2026**, before the SMS goes out.
 Built on the four campaign phases in `choc-blanc-merdeka-campaign.md` — same
 four names, so the till and the plan use one vocabulary.
 
-A **second short brief is owed around 15 Sept**, once the Hari Malaysia offer is
-decided. Don't promise staff a Phase 3 offer before then.
+Phase 3 now has a confirmed offer (B1F1 to a fresh pool), so this one brief
+covers the whole month. A short reminder before 16 Sept is still worth sending.
 
 ---
 
@@ -34,7 +34,9 @@ PHASE 2 — FULL PRICE: 7 to 15 Sept
    Your job: upsell it to Mont Blanc customers
 
 PHASE 3 — HARI MALAYSIA: 16 to 22 Sept
-   Offer: to be confirmed — short brief will follow
+   Offer: Buy 1 Free 1 again — but a DIFFERENT group of
+   customers. Nobody gets it twice.
+   Your job: same voucher rules as Phase 1
 
 PHASE 4 — LAST CALL: 23 to 30 Sept
    Offer: none. Say "last week for it."
@@ -45,8 +47,18 @@ THE B1F1 VOUCHER (Phase 1 only)
 -------------------------
 - SMS customers ONLY. Not everyone. Not on request.
 - CHOC BLANC ONLY — not any drink. Don't allow it on a latte.
-- Valid 7 days. Show phone number at the till.
+- Valid 7 days.
+- TO REDEEM: just key their phone number into the POS. The voucher
+  appears by itself. They don't need to show you anything — no code,
+  no screenshot, no app.
 - It's 2 cups — check they want both made now.
+
+WHY SOME GET IT AND OTHERS DON'T:
+The SMS goes out to a few hundred people a day, not everyone at once.
+So a customer may hear about it from a friend before their turn.
+Say: "It goes out in batches. Nothing to do — if you get it, it's
+already in your account."
+Never promise them a date.
 
 NO SMS = NO VOUCHER:
 "That one went to a selected group. Choc Blanc is RM14.90, on until
@@ -98,7 +110,9 @@ FASA 2 — HARGA PENUH: 7 hingga 15 Sept
    Tugas anda: upsell kepada customer Mont Blanc
 
 FASA 3 — HARI MALAYSIA: 16 hingga 22 Sept
-   Offer: belum ditetapkan — brief pendek akan menyusul
+   Offer: Buy 1 Free 1 lagi — tapi kumpulan customer yang
+   BERBEZA. Tiada sesiapa dapat dua kali.
+   Tugas anda: peraturan voucher sama macam Fasa 1
 
 FASA 4 — MINGGU TERAKHIR: 23 hingga 30 Sept
    Offer: tiada. Cakap "minggu terakhir."
@@ -109,8 +123,18 @@ VOUCHER B1F1 (Fasa 1 sahaja)
 -------------------------
 - Customer SMS SAHAJA. Bukan semua. Bukan bila diminta.
 - CHOC BLANC SAHAJA — bukan semua minuman. Jangan bagi guna untuk latte.
-- Sah 7 hari. Tunjuk nombor telefon di kaunter.
+- Sah 7 hari.
+- CARA TEBUS: taip je nombor telefon dia dalam POS. Voucher akan
+  keluar sendiri. Dia tak perlu tunjuk apa-apa — tiada kod, tiada
+  screenshot, tiada app.
 - Ini 2 cawan — pastikan dia nak dua-dua sekali.
+
+KENAPA ADA YANG DAPAT, ADA YANG TAK:
+SMS dihantar beberapa ratus orang sehari, bukan semua serentak.
+Jadi customer mungkin dengar dari kawan sebelum giliran dia.
+Cakap: "Ia dihantar berperingkat. Tak perlu buat apa-apa — kalau
+dapat, ia terus masuk dalam akaun."
+Jangan sekali-kali janji tarikh.
 
 TIADA SMS = TIADA VOUCHER:
 "Yang tu untuk kumpulan terpilih. Choc Blanc RM14.90, ada sampai
@@ -146,5 +170,6 @@ Soalan kepada supervisor sebelum shift.
 - If the voucher arm is dropped, delete the whole B1F1 block and change
   Phase 1's offer line to "none" — never leave staff expecting vouchers that
   were not issued.
-- **Phase 3 needs its own brief around 15 Sept.** This one deliberately says
-  "to be confirmed" because the offer depends on what Phase 1 measured.
+- **The drip is the part staff will get asked about.** Sends go out a few
+  hundred a day, so customers compare notes and someone always feels skipped.
+  The "goes out in batches" line exists for exactly that.
