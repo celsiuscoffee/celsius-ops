@@ -182,10 +182,30 @@ Two lessons, and they shape the whole SMS plan:
 
 ### The design — three sends
 
-Merdeka (31 Aug) and Malaysia Day (16 Sept) are **already in the engine's
-`CELEBRATIONS` table**, so the `celebration` loop (segment: actives ≤60d, 14-day
-cooldown, 400/day limit) fires in the eve/day window without new code. The
-cooldown clears exactly in time for 16 Sept.
+Merdeka (31 Aug) and Malaysia Day (16 Sept) are already in the engine's
+`CELEBRATIONS` table, and the `celebration` loop (actives ≤60d, 14-day cooldown,
+400/day) does fire in the eve/day window. **But it cannot carry this campaign —
+an earlier draft of this section claimed it could, and that was wrong**
+(`loop-engine.ts:1100`):
+
+- its template is fixed and **requires an `{offer}`**, so the announce-only arm
+  cannot run through it at all;
+- its offer comes from `candidateKeys: [b1f1_drinks, flat10_min30,
+  pct15_min40]` — **the Choc Blanc voucher is not among them**, so it would send
+  "buy 1 free 1 on any drink" and never mention Choc Blanc;
+- it uses `holdoutPct: 10`, not the 20 assumed below.
+
+The manual path (`POST /api/loyalty/sms/blast`) takes a raw `phones[]` and one
+`message`: no segmentation, no holdout, no arm split, no voucher issuance. So
+**Send A is a build, not a config change** — roughly half a day:
+
+1. Build the actives-≤60d segment in SQL and randomise into arm1 / arm2 /
+   holdout, persisting the assignment (Send B and the measurement both need it).
+2. Issue the Choc Blanc voucher to arm2 only.
+3. Call the blast twice, once per arm's copy.
+
+Send C has the same constraint. Send B does not — `reward_expiring` is
+`noIssue` and picks up the unredeemed vouchers on its own.
 
 **Send A — 31 Aug, Merdeka launch.** Segment: actives ≤60d. This is the real
 question worth spending money on: *does a new product need a discount at all?*
