@@ -61,7 +61,10 @@ and the artwork is 0.71:1 portrait — a `cover` fit would slice off the headlin
 My `APP-home` file is a *recompose* (glass band + NEW/title/subtitle band, body
 copy dropped) and there is a faint seam where the bands meet. It is good enough
 to ship; a purpose-made 1.07:1 crop from the designer would be better. This is
-the only real artwork gap.
+the only real artwork gap. **RESOLVED 2026-08-29** — all three posters
+and the catalogue photo are rendered and uploaded; `image_url` is set on every
+row. See the 2026-08-29 entry in `docs/STATE.md` for how, and for the two
+dashboard cleanups still owed.
 
 ---
 
