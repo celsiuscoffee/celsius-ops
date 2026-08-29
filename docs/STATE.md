@@ -197,6 +197,25 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   the `apikey` header as well (`apikey` + `Bearer` together works). **Repo visibility is worth
   checking FIRST next time** — the whole detour existed because it was assumed
   private.
+  **Launch day is NOT automatic (verified 2026-08-29).** `home` is
+  `active=true` and opens at 31 Aug 00:00 MYT on its own, but `splash` and
+  `pos-display` are `active=false` and `products.choc-blanc` is
+  `is_available=false` with `visible_channels={none}` — every reader needs
+  `active` AND the window, so someone must run runbook steps 3–5 on the day.
+  Runbook step 2 used to tell them to `update image_url = '<POS 0.818 url>'`;
+  that would have overwritten the real URLs with literal placeholders and put
+  blank posters on the screens — the exact failure step 1 exists to catch. It
+  is now a verify-only select.
+  **The autopilot ignores the schedule window** (`poster-autopilot.ts:145-151`)
+  — it selects every poster for the placement regardless of
+  `starts_at`/`ends_at` and flips `active`/`sort_order` at 07:00 MYT daily. The
+  `round IS NOT NULL` filter applies to `pos-display` ONLY, so a round-less
+  *home* poster is still in the pool. First ranking Choc Blanc faces is 07:00
+  on 31 Aug, seven hours after its window opens; `products.cost` is set, which
+  restores the margin term, but a zero-AOV poster can still be benched. To
+  guarantee the slot, disable `app_settings.pos_poster_autopilot_enabled` for
+  the fortnight. Readers DO filter the window, which is why an early
+  autopilot activation cannot leak.
   **Cleanup still owed to a human:** this MCP server can deploy Edge Functions
   but has no delete, so the slug `choc-blanc-asset-upload` survives, emptied to
   an inert 410 stub (`verify_jwt` on, no secret, no service-role use) — delete
