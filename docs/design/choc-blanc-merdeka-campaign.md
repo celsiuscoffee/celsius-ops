@@ -100,16 +100,21 @@ Run top to bottom. Steps 1–2 are the ones that can embarrass us.
 select id, placement, title from splash_posters
  where title like '%Choc Blanc%' and coalesce(image_url,'') = '';
 
--- 2. Attach artwork (upload via Backoffice → Pickup → Splash Posters, then):
-update splash_posters set image_url = '<POS 0.818 url>',   updated_at = now() where id = '740fc57d-d2d8-49e0-959a-f004cb7355fe';
-update splash_posters set image_url = '<HOME 1.07 url>',   updated_at = now() where id = 'a0d810a8-0597-4a4d-9162-e2e6b5b74ea3';
-update splash_posters set image_url = '<SPLASH 9:16 url>', updated_at = now() where id = '400f637d-4aad-4684-9c26-5fb7964ba874';
+-- 2. DONE 2026-08-29 — artwork is already attached; do NOT re-run an update
+--    here, it would replace working URLs. Verify instead (expect 3 rows, all
+--    -v-suffixed keys under posters/promo/):
+select placement, split_part(image_url, '/posters/', 2) as key
+  from splash_posters where title like '%Choc Blanc%' order by placement;
+--    Re-uploading later needs a NEW key: objects are written
+--    Cache-Control: immutable, so overwriting a key serves stale bytes.
 
 -- 3. Put the drink on sale (all channels).
 update products set is_available = true, visible_channels = '{}', updated_at = now()
  where id = 'choc-blanc';
 
--- 4. Turn the posters on.
+-- 4. Turn the posters on. REQUIRED — home is already active=true but splash
+--    and pos-display are active=false, and every reader needs active AND the
+--    schedule window. Nothing switches itself on.
 update splash_posters set active = true, updated_at = now()
  where title like '%Choc Blanc%';
 
@@ -277,11 +282,18 @@ Three placements exist; this campaign uses all three.
    reserved for a drink. Adding a poster is not the same as it being seen.
 2. **The autopilot will re-rank it.** It scores home posters on measured
    deeplink-attributed AOV blended with a product margin/price/units heuristic. A
-   brand-new poster has no measured AOV and, with `cost` NULL, no margin — so it
-   scores near zero and is a strong candidate to be **benched within a day**.
-   Mitigations, pick one: set `products.cost` for Choc Blanc (needed anyway), or
-   set `app_settings.pos_poster_autopilot_enabled = false` for the launch
-   fortnight and re-enable after.
+   brand-new poster has no measured AOV, so the margin term is what keeps it in
+   contention. `products.cost` is now set (RM3.4471), which restores that term —
+   but a zero-AOV poster is still a candidate to be **benched within a day**.
+   Remaining mitigation if you want the slot guaranteed: set
+   `app_settings.pos_poster_autopilot_enabled = false` for the launch fortnight
+   and re-enable after.
+   Note the autopilot does **not** filter on the schedule window — it selects
+   every home poster for the placement regardless of `starts_at`/`ends_at`
+   (`poster-autopilot.ts:145-151`) and flips `active`/`sort_order` daily at
+   07:00 MYT. So the first ranking Choc Blanc faces is 07:00 on 31 Aug, seven
+   hours after its window opens. (Readers *do* filter the window, which is why
+   an early activation cannot leak.)
 
 **Honest reach caveat:** the app is small — 123 push tokens is the best proxy we
 have for installed-and-registered users. The app posters are a *conversion and
