@@ -43,7 +43,7 @@ PHASE 4 — LAST CALL: 23 to 30 Sept
    30 Sept is the final day.
 
 -------------------------
-THE B1F1 VOUCHER (Phase 1 only)
+THE B1F1 VOUCHER (Phases 1 and 3)
 -------------------------
 - SMS customers ONLY. Not everyone. Not on request.
 - CHOC BLANC ONLY — not any drink. Don't allow it on a latte.
@@ -119,7 +119,7 @@ FASA 4 — MINGGU TERAKHIR: 23 hingga 30 Sept
    30 Sept hari terakhir.
 
 -------------------------
-VOUCHER B1F1 (Fasa 1 sahaja)
+VOUCHER B1F1 (Fasa 1 dan 3)
 -------------------------
 - Customer SMS SAHAJA. Bukan semua. Bukan bila diminta.
 - CHOC BLANC SAHAJA — bukan semua minuman. Jangan bagi guna untuk latte.
