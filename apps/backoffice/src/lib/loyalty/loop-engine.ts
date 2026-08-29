@@ -26,7 +26,11 @@ const FREE_ITEM_COGS_RM = 3;
 export type ArmDef = {
   key: string; // e.g. 'free_tea'
   label: string; // e.g. 'Free Tea'
-  voucher_template_id: string; // voucher_templates.id to issue
+  /** voucher_templates.id to issue, or null for an ANNOUNCE-ONLY arm that
+   *  mints nothing. An announce-only arm is how you test whether an offer is
+   *  needed at all: same segment, same holdout, message without the discount.
+   *  Its copy must not use {reward}/{expiry} — there is no voucher to name. */
+  voucher_template_id: string | null;
   message: string; // SMS body (may contain {name})
 };
 
@@ -548,6 +552,11 @@ export async function prepareRound(loopKey: LoopKey, opts: {
   attributionWindowDays?: number;
   createdBy?: string;
   suppressPhones?: string[]; // PDPA opt-outs / recent contacts
+  /** Allowlist: keep ONLY these phones from the segment. For splitting one
+   *  audience into behaviour-defined groups that each get their own round
+   *  (e.g. past buyers of a product vs everyone else) without expressing the
+   *  complement as a huge suppressPhones list. Applied after suppressPhones. */
+  onlyPhones?: string[];
   maxRecipients?: number; // cap total segment size to fit an SMS budget (start small, scale later)
   segment?: SegmentOpts; // loop-specific audience controls
 }) {
@@ -559,8 +568,11 @@ export async function prepareRound(loopKey: LoopKey, opts: {
   if (!arms.length) throw new Error("at least one arm required");
 
   const suppress = new Set((opts.suppressPhones ?? []).map((p) => p.trim()));
+  const only = opts.onlyPhones?.length
+    ? new Set(opts.onlyPhones.map((p) => p.trim()))
+    : null;
   const seg = await def.segment(opts.segment ?? {});
-  let segment = seg.rows.filter((m) => !suppress.has(m.phone));
+  let segment = seg.rows.filter((m) => !suppress.has(m.phone) && (!only || only.has(m.phone)));
   segment = shuffle(segment);
   // Budget cap — take the first N of the shuffled (random) segment so the
   // SMS spend stays within the chosen budget. Scaling later = raise the cap.
@@ -639,6 +651,8 @@ export async function prepareRound(loopKey: LoopKey, opts: {
     let issuedRewardId: string | null;
     if (def.noIssue) {
       issuedRewardId = m.existing_reward_id ?? null;
+    } else if (!arm.voucher_template_id) {
+      issuedRewardId = null; // announce-only arm: no voucher, no COGS
     } else {
       const issued = await issueReward(m.member_id, arm.voucher_template_id, roundId, sourceType);
       if (issued) rewardCogs += issued.cogsRm;

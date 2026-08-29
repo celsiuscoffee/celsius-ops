@@ -196,43 +196,135 @@ an earlier draft of this section claimed it could, and that was wrong**
 - it uses `holdoutPct: 10`, not the 20 assumed below.
 
 The manual path (`POST /api/loyalty/sms/blast`) takes a raw `phones[]` and one
-`message`: no segmentation, no holdout, no arm split, no voucher issuance. So
-**Send A is a build, not a config change** — roughly half a day:
+`message`: no segmentation, no holdout, no arm split, no voucher issuance.
 
-1. Build the actives-≤60d segment in SQL and randomise into arm1 / arm2 /
-   holdout, persisting the assignment (Send B and the measurement both need it).
-2. Issue the Choc Blanc voucher to arm2 only.
-3. Call the blast twice, once per arm's copy.
+**Resolved 29 Aug** by two small additions to `loop-engine.ts`, so Send A now
+runs through the normal `prepareRound` → `scheduleRound` → `sendRound`
+lifecycle with its measurement intact:
 
-Send C has the same constraint. Send B does not — `reward_expiring` is
-`noIssue` and picks up the unredeemed vouchers on its own.
+- `ArmDef.voucher_template_id` is now `string | null`. A null arm is
+  **announce-only**: it mints nothing and costs no COGS. This is what lets a
+  round test whether an offer is needed at all.
+- `prepareRound` gained `onlyPhones` — an allowlist applied after
+  `suppressPhones`, so one audience can be split into behaviour-defined groups
+  without expressing the complement as a huge suppression list.
 
-**Send A — 31 Aug, Merdeka launch.** Segment: actives ≤60d. This is the real
-question worth spending money on: *does a new product need a discount at all?*
+Send C uses the same announce-only arm. Send B needs neither —
+`reward_expiring` is `noIssue` and picks up unredeemed vouchers on its own.
 
-- **Arm 1 — announce, no voucher** (RM0.10/head, zero COGS):
-  > `Selamat Hari Merdeka! NEW at Celsius: Choc Blanc - double espresso, dark chocolate cream, candied orange. Shah Alam, Conezion, Tamarind.` — 135 chars
-- **Arm 2 — announce + RM3-off voucher** (RM0.10 + reward COGS):
-  > `Selamat Hari Merdeka! NEW Choc Blanc - espresso + dark chocolate cream. Your {reward} expires {expiry}. Show your number at any Celsius outlet.` — 152 chars resolved (`{reward}`→"RM3 off Choc Blanc", `{expiry}`→"in 7 days")
-- **Holdout 20%.**
+**Send A — 30 Aug, Merdeka eve.** Owner decision 29 Aug: **don't discount the
+people already sold.** Split by past behaviour, not at random:
 
-Both fit one GSM-7 segment (160). Arm 2 is close to the limit — preview it in the
-dashboard before sending.
+- **Round A — the 538 identifiable Mont Blanc buyers: announce only.** They
+  already buy the base drink at RM14.90; paying them to switch is pure margin
+  given away.
+- **Round B — everyone else in actives ≤60d: announce vs Buy 1 Free 1,
+  randomised**, capped at 1,500 → ~600/arm after a 20% holdout, ~RM150. The
+  randomisation sits *inside* the cold segment, which is where "is the offer
+  worth it" actually lives. Enough to read a 3–5pp difference, unlike every
+  win-back round to date.
 
-**Size it to be readable.** Cap at ~1,500 recipients → ~600/arm after the 20%
-holdout, ~RM150. That is finally enough to read a 3–5pp difference — unlike every
-win-back round to date. If Arm 1 matches Arm 2, you have learned something worth
-far more than this campaign: *stop discounting new products.*
+**Why the split cannot be the experiment.** Comparing Round A to Round B tells
+you nothing about the offer — the groups differ in the very thing that predicts
+buying. Round B's internal randomisation is what carries the learning.
+
+**And a data limit worth stating plainly.** "Hasn't bought Mont Blanc" really
+means "we have no record of it". Purchases link to a person only via
+`customer_phone` on our own POS and app — 55% of `pos_orders` tickets, 28% of
+`orders`, and **nothing at all before Apr/Jun 2026**. Of 167,012 transactions
+since 2022, ~13,700 (8%) are attributable to anyone. Mont Blanc sells 410 units
+a month against 575 identifiable all-time buyers, so most of its drinkers are
+invisible to us and will land in Round B. Round A is a clean list; Round B is
+"everyone we can't rule out". Exact recipe below.
 
 **Send B — ~6 Sept, expiry reminder.** No new build: the voucher's 7-day validity
 means the existing `reward_expiring` loop picks up unredeemed Choc Blanc vouchers
 automatically. This is the highest-yield send in the plan, per the table above.
-Only applies to Arm 2 recipients.
+Only applies to the B1F1 arm.
 
-**Send C — 16 Sept, Malaysia Day.** Celebration loop again, ideally suppressing
+**Send C — 16 Sept, Malaysia Day.** Announce-only arm again, ideally suppressing
 anyone who already bought Choc Blanc. Half-time nudge plus the "on until 30 Sept"
 deadline.
 > `Happy Malaysia Day! Choc Blanc is on until 30 Sept - double espresso capped with dark chocolate cream. Shah Alam, Conezion, Tamarind.` — 132 chars
+
+### Send A — the exact recipe (30 Aug, Merdeka eve)
+
+Two rounds, because the split is by past behaviour and must NOT be random.
+Both go out on **30 Aug**, so the first vouchers can be redeemed the moment
+the outlets open on the 31st. Copy says "from tomorrow" for that reason.
+
+**The buyer list** (538 people as of 29 Aug) — `onlyPhones` for Round A,
+`suppressPhones` for Round B:
+
+```sql
+select distinct o.customer_phone as phone
+  from pos_orders o join pos_order_items i on i.order_id = o.id
+ where o.customer_phone is not null and i.product_name ilike '%mont blanc%'
+union
+select distinct o.customer_phone
+  from orders o join order_items i on i.order_id = o.id
+ where o.customer_phone is not null and i.product_name ilike '%mont blanc%';
+```
+
+**Round A — known Mont Blanc buyers. Announce only, no offer.**
+
+```jsonc
+POST /api/loyalty/loops/prepare
+{
+  "loopKey": "celebration",
+  "onlyPhones": ["<the 538 above>"],
+  "holdoutPct": 20,
+  "arms": [{
+    "key": "announce",
+    "label": "Announce only",
+    "voucher_template_id": null,
+    "message": "Selamat Hari Merdeka! NEW at Celsius from tomorrow: Choc Blanc - double espresso capped with dark chocolate cream. RM14.90. Shah Alam, Conezion, Tamarind."
+  }]
+}
+```
+~430 sent, ~RM43, zero COGS.
+
+**Round B — everyone else in actives ≤60d. Announce vs B1F1, randomised.**
+
+```jsonc
+POST /api/loyalty/loops/prepare
+{
+  "loopKey": "celebration",
+  "suppressPhones": ["<the same 538>"],
+  "maxRecipients": 1500,
+  "holdoutPct": 20,
+  "arms": [
+    { "key": "announce", "label": "Announce only", "voucher_template_id": null,
+      "message": "Selamat Hari Merdeka! NEW at Celsius from tomorrow: Choc Blanc - double espresso capped with dark chocolate cream. RM14.90. Shah Alam, Conezion, Tamarind." },
+    { "key": "b1f1", "label": "Buy 1 Free 1", "voucher_template_id": "a0e3661c-5cba-454f-a50a-1cebd597225f",
+      "message": "Selamat Hari Merdeka! NEW Choc Blanc at Celsius from tomorrow. Your {reward} expires {expiry} - show your number at any outlet." }
+  ]
+}
+```
+~1,200 sent (~600/arm), ~RM120 SMS. B1F1 COGS only on redemption.
+
+Both messages fit one GSM-7 segment: 154 chars, and 143 once `{reward}` /
+`{expiry}` resolve. Verify in the dashboard preview before scheduling.
+
+Then `POST /api/loyalty/loops/schedule` with `scheduled_send_at` = 30 Aug
+evening MYT for each round. The cron sends prepared+scheduled rounds; nothing
+leaves until then, and `/api/loyalty/loops/cancel` unwinds a prepared round.
+
+**Offer economics** (cost per redemption, against RM11.45 at full price):
+
+| | Revenue | COGS | Margin |
+| --- | --- | --- | --- |
+| Full price | RM14.90 | RM3.45 | **RM11.45** |
+| RM3 off | RM11.90 | RM3.45 | RM8.45 |
+| B1F1 | RM14.90 | RM6.89 | **RM8.01** |
+
+B1F1 costs 44 sen more per redemption than RM3-off for ~5× the perceived
+value (RM14.90 vs RM3.00), and the free cup puts the drink in a second
+person's hand. That is why the launch offer is B1F1 and the RM3-off template
+(`8b19f425-…`) stays inactive.
+
+**Reading the result:** B1F1 books 2 units per redemption. Count *paid* cups,
+not total cups, or units will look better than the cash does.
 
 ### Guardrails
 

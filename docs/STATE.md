@@ -216,6 +216,30 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   guarantee the slot, disable `app_settings.pos_poster_autopilot_enabled` for
   the fortnight. Readers DO filter the window, which is why an early
   autopilot activation cannot leak.
+  **SMS design settled 29 Aug — B1F1, split by past behaviour.** Offer is
+  **Buy 1 Free 1 Choc Blanc**, new template `a0e3661c-5cba-454f-a50a-1cebd597225f`
+  (staged `is_active=false`, scoped `applicable_products={choc-blanc}`, bogo 1/1,
+  7-day). The pre-existing `ed33eb26-…` "Buy 1 Free 1 Drink" is NOT usable here —
+  it is live and scoped to 8 whole categories, so it would be redeemed on a latte.
+  Economics per redemption: full price RM11.45 margin, RM3-off RM8.45, B1F1
+  RM8.01 — B1F1 costs 44 sen more than RM3-off for ~5x the perceived value and
+  puts a cup in a second person's hand. RM3-off template stays inactive.
+  **Two loop-engine changes made this runnable** (`loop-engine.ts`):
+  `ArmDef.voucher_template_id` is now `string | null` (a null arm is
+  announce-only — mints nothing, no COGS), and `prepareRound` gained
+  `onlyPhones`, an allowlist applied after `suppressPhones`. Before this the
+  engine could not express an announce-only arm at all: every arm had to issue a
+  voucher, and the `celebration` template hard-requires an `{offer}`.
+  **Lesson — purchase history barely links to people.** Only `customer_phone` on
+  `pos_orders` (55% of tickets, from 2026-06-08) and `orders` (28%, from
+  2026-04-11) attributes a sale to a member; `unified_sales` has no customer
+  column and the whole StoreHub era (2022 → mid-2026) has none. ~13,700 of
+  167,012 transactions (8%) are attributable. So "never bought X" means "no
+  record", not "didn't". 538 identifiable Mont Blanc buyers among actives ≤60d
+  vs 410 units/month sold — most drinkers are invisible. Any behaviour-defined
+  segment built on this is a clean list on the positive side and a
+  can't-rule-out bucket on the negative side; never treat the complement as
+  proven non-buyers, and never compare the two as if randomised.
   **Cleanup still owed to a human:** this MCP server can deploy Edge Functions
   but has no delete, so the slug `choc-blanc-asset-upload` survives, emptied to
   an inert 410 stub (`verify_jwt` on, no secret, no service-role use) — delete
