@@ -1,63 +1,73 @@
 # Choc Blanc — Staff Briefing (WhatsApp)
 
-Send to all three outlet groups on **30 Aug 2026**, before the 31 Aug launch.
-English version first, Malay version below — send whichever fits the group, or
-both. Keep it as one message; don't split it, or half the team reads half of it.
+Send to all three outlet groups on **30 Aug 2026**, before the SMS goes out.
+Built on the four campaign phases in `choc-blanc-merdeka-campaign.md` — same
+four names, so the till and the plan use one vocabulary.
+
+A **second short brief is owed around 15 Sept**, once the Hari Malaysia offer is
+decided. Don't promise staff a Phase 3 offer before then.
 
 ---
 
 ## English
 
 ```
-📚 TRAINING NOTE — Choc Blanc (Merdeka Menu)
-🏪 Celsius Coffee | 📅 30 Aug 2026 | Shah Alam · Conezion · Tamarind
+📢 CHOC BLANC — MERDEKA CAMPAIGN
+🏪 Celsius Coffee | 31 Aug – 30 Sept
 
-Hi team! From TOMORROW (31 Aug) we launch:
 *Choc Blanc — RM14.90*
-Running until 30 Sept.
+Double espresso, dark chocolate cream, candied orange.
 
-WHAT IT IS:
-• Double espresso, capped with dark chocolate cream
-• Finished with candied orange
-• Station: Bar. Same size and cup as Mont Blanc.
+⚠️ Mont Blanc STAYS. Both on the menu, both RM14.90.
+Never tell a customer Mont Blanc is gone.
 
-IF A CUSTOMER ASKS "WHAT'S NEW?":
-"It's our Mont Blanc base — same double espresso — but capped with dark
-chocolate cream instead of the usual. New for Merdeka."
+━━━━━━━━━━━━━━━━━━
+📅 THE MONTH — 4 PHASES
+━━━━━━━━━━━━━━━━━━
 
-⚠️ MONT BLANC IS STAYING.
-Choc Blanc does NOT replace it. Both are on the menu, both RM14.90.
-Do not tell customers Mont Blanc is gone.
+1️⃣ LAUNCH WEEK — 31 Aug to 6 Sept
+   Offer: Buy 1 Free 1 (SMS customers only)
+   Your job: explain the drink, handle vouchers
 
-💬 UPSELL LINE (for anyone ordering Mont Blanc):
-"Want to try the Merdeka one instead? Same base, dark chocolate cream on
-top — same price."
-Offer it once. If they say no, take the Mont Blanc order and move on.
+2️⃣ FULL PRICE — 7 to 15 Sept
+   Offer: NONE. Vouchers finished.
+   Your job: upsell it to Mont Blanc customers
 
-🎟️ THE BUY 1 FREE 1 VOUCHER — READ THIS PROPERLY:
-Some customers got an SMS tonight with a Buy 1 Free 1 Choc Blanc voucher.
+3️⃣ HARI MALAYSIA — 16 to 22 Sept
+   Offer: to be confirmed — we'll send a short brief before
 
-• ONLY SOME customers have it. Not everyone. Not on request.
-• It is CHOC BLANC ONLY — buy 1 Choc Blanc, get 1 Choc Blanc free.
-  It is NOT buy-1-free-1 on any drink. Don't let it be used on a latte.
-• Valid 7 days from the SMS.
-• They redeem by showing their phone number at the till — same as any
-  other voucher.
-• It's 2 cups. Confirm they want both made now (most are bringing a friend).
+4️⃣ LAST CALL — 23 to 30 Sept
+   Offer: none. Say "last week for it."
+   30 Sept is the final day.
 
-❌ IF THEY DIDN'T GET THE SMS:
-Do not promise them one. Do not create one. Say:
-"This one went out to a selected group. Choc Blanc is RM14.90 and it's on
-until 30 September."
-Then move on. Don't argue and don't apologise for it.
+━━━━━━━━━━━━━━━━━━
+🎟️ THE B1F1 VOUCHER (Phase 1 only)
+━━━━━━━━━━━━━━━━━━
+• SMS customers ONLY. Not everyone. Not on request.
+• CHOC BLANC ONLY — not any drink. Don't allow it on a latte.
+• Valid 7 days. Show phone number at the till.
+• It's 2 cups — check they want both made now.
 
-📱 ALSO FROM TOMORROW:
-• Choc Blanc poster appears in the customer app
-• Poster goes up on the POS customer screen
-If a screen still shows the old poster after opening, tell your manager —
-don't try to fix the screen yourself.
+❌ No SMS = no voucher:
+"That one went to a selected group. Choc Blanc is RM14.90, on until
+30 September."
+Then move on. Don't argue, don't over-apologise.
 
-Any questions, ask your supervisor before the shift starts. 💪
+━━━━━━━━━━━━━━━━━━
+💬 LINES TO USE
+━━━━━━━━━━━━━━━━━━
+"What's new?"
+→ "Same base as Mont Blanc, but capped with dark chocolate cream. New for
+   Merdeka."
+
+Someone orders Mont Blanc:
+→ "Want to try the Merdeka one? Same base, dark chocolate cream on top —
+   same price." Offer once, then take their order.
+
+📱 From 31 Aug the poster appears in the app and on the POS screen. If a
+screen still shows the old one after opening, tell your manager.
+
+Questions → supervisor before shift. 💪
 — Management
 ```
 
@@ -66,54 +76,62 @@ Any questions, ask your supervisor before the shift starts. 💪
 ## Bahasa Melayu
 
 ```
-📚 NOTA LATIHAN — Choc Blanc (Menu Merdeka)
-🏪 Celsius Coffee | 📅 30 Ogos 2026 | Shah Alam · Conezion · Tamarind
+📢 CHOC BLANC — KEMPEN MERDEKA
+🏪 Celsius Coffee | 31 Ogos – 30 September
 
-Hi team! Mulai ESOK (31 Ogos) kita launch:
 *Choc Blanc — RM14.90*
-Sampai 30 September.
+Double espresso, dark chocolate cream, candied orange.
 
-APA DIA:
-• Double espresso, ditutup dengan dark chocolate cream
-• Hiasan candied orange
-• Station: Bar. Saiz dan cawan sama macam Mont Blanc.
+⚠️ Mont Blanc MASIH ADA. Dua-dua ada, dua-dua RM14.90.
+Jangan sekali-kali cakap Mont Blanc dah takde.
 
-KALAU CUSTOMER TANYA "APA BARU?":
-"Base dia sama macam Mont Blanc — double espresso — tapi atas dia dark
-chocolate cream, bukan yang biasa. Baru untuk Merdeka."
+━━━━━━━━━━━━━━━━━━
+📅 SEBULAN INI — 4 FASA
+━━━━━━━━━━━━━━━━━━
 
-⚠️ MONT BLANC MASIH ADA.
-Choc Blanc BUKAN ganti Mont Blanc. Dua-dua ada, dua-dua RM14.90.
-Jangan cakap Mont Blanc dah takde.
+1️⃣ MINGGU LAUNCH — 31 Ogos hingga 6 Sept
+   Offer: Buy 1 Free 1 (customer SMS sahaja)
+   Tugas anda: terangkan minuman, uruskan voucher
 
-💬 AYAT UPSELL (untuk sesiapa order Mont Blanc):
-"Nak cuba yang Merdeka punya? Base sama, atas dia dark chocolate cream —
-harga pun sama."
-Tawar sekali sahaja. Kalau dia tak nak, ambil order Mont Blanc, teruskan.
+2️⃣ HARGA PENUH — 7 hingga 15 Sept
+   Offer: TIADA. Voucher dah habis.
+   Tugas anda: upsell kepada customer Mont Blanc
 
-🎟️ VOUCHER BUY 1 FREE 1 — BACA BETUL-BETUL:
-Sebahagian customer dapat SMS malam ni dengan voucher Buy 1 Free 1 Choc Blanc.
+3️⃣ HARI MALAYSIA — 16 hingga 22 Sept
+   Offer: belum ditetapkan — brief pendek akan menyusul
 
-• SEBAHAGIAN sahaja yang ada. Bukan semua. Bukan bila diminta.
-• CHOC BLANC SAHAJA — beli 1 Choc Blanc, dapat 1 Choc Blanc percuma.
-  BUKAN buy-1-free-1 untuk semua minuman. Jangan bagi guna untuk latte.
-• Sah 7 hari dari tarikh SMS.
-• Tebus dengan tunjuk nombor telefon di kaunter — sama macam voucher lain.
-• Ini 2 cawan. Pastikan dia nak dua-dua sekali (selalunya bawa kawan).
+4️⃣ MINGGU TERAKHIR — 23 hingga 30 Sept
+   Offer: tiada. Cakap "minggu terakhir."
+   30 Sept hari terakhir.
 
-❌ KALAU DIA TAK DAPAT SMS:
-Jangan janji. Jangan buatkan voucher. Cakap:
-"Yang ni untuk kumpulan terpilih. Choc Blanc RM14.90, ada sampai
+━━━━━━━━━━━━━━━━━━
+🎟️ VOUCHER B1F1 (Fasa 1 sahaja)
+━━━━━━━━━━━━━━━━━━
+• Customer SMS SAHAJA. Bukan semua. Bukan bila diminta.
+• CHOC BLANC SAHAJA — bukan semua minuman. Jangan bagi guna untuk latte.
+• Sah 7 hari. Tunjuk nombor telefon di kaunter.
+• Ini 2 cawan — pastikan dia nak dua-dua sekali.
+
+❌ Tiada SMS = tiada voucher:
+"Yang tu untuk kumpulan terpilih. Choc Blanc RM14.90, ada sampai
 30 September."
-Lepas tu teruskan kerja. Jangan bertekak, jangan minta maaf berlebihan.
+Lepas tu teruskan. Jangan bertekak, jangan minta maaf berlebihan.
 
-📱 MULAI ESOK JUGA:
-• Poster Choc Blanc keluar dalam app customer
-• Poster naik pada skrin customer POS
-Kalau skrin masih tunjuk poster lama selepas buka kedai, bagitahu manager —
-jangan cuba betulkan skrin sendiri.
+━━━━━━━━━━━━━━━━━━
+💬 AYAT UNTUK DIGUNA
+━━━━━━━━━━━━━━━━━━
+"Apa baru?"
+→ "Base sama macam Mont Blanc, tapi atas dia dark chocolate cream. Baru
+   untuk Merdeka."
 
-Apa-apa soalan, tanya supervisor sebelum shift start. 💪
+Customer order Mont Blanc:
+→ "Nak cuba yang Merdeka punya? Base sama, atas dark chocolate cream —
+   harga sama." Tawar sekali, lepas tu ambil order.
+
+📱 Mulai 31 Ogos poster keluar dalam app dan skrin POS. Kalau skrin masih
+tunjuk poster lama selepas buka, bagitahu manager.
+
+Soalan → supervisor sebelum shift. 💪
 — Management
 ```
 
@@ -121,11 +139,12 @@ Apa-apa soalan, tanya supervisor sebelum shift start. 💪
 
 ## Notes for whoever sends this
 
-- **Send it on 30 Aug, not the 31st.** The SMS goes out on Merdeka eve, so the
-  first B1F1 customers can walk in the moment the outlets open on the 31st. A
-  briefing that lands after the first voucher does is too late.
-- The B1F1 section is the part that causes arguments at the till. If you trim
-  anything, don't trim that.
-- If the SMS send is deferred or the voucher arm is dropped, delete the whole
-  🎟️ / ❌ block before sending — do not leave staff expecting vouchers that
-  were never issued.
+- **Send on 30 Aug, not the 31st** — the SMS goes out on Merdeka eve, so the
+  first B1F1 customer can walk in the moment doors open.
+- The B1F1 block is what causes arguments at the till. If you trim anything,
+  don't trim that.
+- If the voucher arm is dropped, delete the whole 🎟️/❌ block and change
+  Phase 1's offer line to "none" — never leave staff expecting vouchers that
+  were not issued.
+- **Phase 3 needs its own brief around 15 Sept.** This one deliberately says
+  "to be confirmed" because the offer depends on what Phase 1 measured.

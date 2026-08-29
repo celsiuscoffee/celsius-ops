@@ -144,6 +144,41 @@ stays on the menu or gets hidden.
 
 ---
 
+## Campaign structure (31 Aug – 30 Sept)
+
+Four phases. Each has **one goal, one offer, one thing staff do** — that is the
+whole point of naming them: everyone from the till to the P&L uses the same
+four words.
+
+| | Phase | Dates | Offer | Goal | Staff job |
+| --- | --- | --- | --- | --- | --- |
+| 1 | **LAUNCH WEEK** | 31 Aug – 6 Sept | **B1F1** (SMS holders only) | Get it into hands, and a 2nd person tasting | Explain the drink, handle vouchers |
+| 2 | **FULL PRICE** | 7 – 15 Sept | none | Find out if it sells at RM14.90 unaided | Upsell from Mont Blanc |
+| 3 | **HARI MALAYSIA** | 16 – 22 Sept | decided 12 Sept (below) | Reach people who haven't tried it | Per 2nd briefing |
+| 4 | **LAST CALL** | 23 – 30 Sept | none — deadline only | Convert the undecided | "Last week for it" |
+
+**Phase 2 is not a gap, it is the measurement.** It is the only window where you
+learn whether people buy Choc Blanc at RM14.90 without being paid to. Discount
+the whole month and all you learn is that customers like free coffee.
+
+**Phase 3 is not a second B1F1 by default.** Repeating the giveaway a fortnight
+later teaches the base to wait for the free one, and costs another RM3.45 of
+COGS per redemption. Decide on **~12 Sept** from what Phase 1 measured — in
+Round B, where announce-only vs B1F1 was randomised:
+
+- **B1F1 clearly won** → repeat B1F1, again only to people who have not bought
+  Choc Blanc.
+- **The arms came out level** → announce-only. You have learned the drink sells
+  itself, which is worth more than this campaign. Stop paying for it.
+- **Too close to call** → announce-only, and put the money into Phase 4.
+
+The 14-day `celebration` cooldown from 30 Aug clears on 13 Sept, so a 16 Sept
+send is not blocked either way.
+
+**Supporting beats:** the `reward_expiring` loop fires around 6 Sept to
+unredeemed B1F1 holders (automatic, highest-yield send in the plan). Posters run
+the full month on all three surfaces and expire on `ends_at` 30 Sept.
+
 ## 4. Channel 1 — SMS
 
 ### The reach reality
