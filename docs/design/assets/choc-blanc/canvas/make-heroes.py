@@ -42,9 +42,14 @@ gcx = (g[0] + g[2]) // 2
 OUT = os.path.dirname(os.path.abspath(__file__))
 # name -> (artboard size, window height, headroom above the glass in window px)
 SURFACES = {
+    # in-app surfaces
     "hero-home.jpg":   ((1200, 1121), 2900, 430),
     "hero-splash.jpg": ((1080, 2340), 3300, 500),
     "hero-pos.jpg":    ((920, 1200),  3000, 450),
+    # social
+    "hero-ig-feed.jpg":   ((1080, 1350), 2900, 430),
+    "hero-ig-story.jpg":  ((1080, 1920), 3100, 450),
+    "hero-ig-square.jpg": ((1080, 1080), 2600, 450),
 }
 
 for name, (out, H, head) in SURFACES.items():

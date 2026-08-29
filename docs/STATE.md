@@ -170,6 +170,22 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   home/splash on Cloudinary (`res.cloudinary.com/dxxzt7k6i/.../posters/`),
   pos-display on the public Supabase `posters` bucket
   (`.../storage/v1/object/public/posters/promo/`).
+  **Lesson — uploading is not possible from a remote session at all**, and it
+  is not a credentials problem: the agent proxy answers 403 to CONNECT for
+  `*.supabase.co` AND `*.cloudinary.com` (verified 2026-08-29, curl HTTP 000
+  on all three hosts). The Supabase MCP tools still work because they go via
+  the MCP proxy, not direct egress — so SQL is reachable while object storage
+  is not. Two dead ends checked and rejected: `storage.objects` has NO INSERT
+  policy for the `posters` bucket, and adding one would make a publicly
+  READABLE bucket world-writable (defacement risk on customer-facing screens),
+  so it must not be done for convenience; `pg_net` 0.20.0 IS installed, but it
+  only takes a jsonb body, so it cannot POST binary to the storage API.
+  **Social set added** — Instagram/Facebook feed 4:5 (1080x1350), story 9:16
+  (1080x1920, 250px top / 330px bottom kept clear for Instagram chrome and the
+  link sticker) and square 1080x1080. These deliberately carry NO price: a
+  price baked into an image dates the post and drags comparison into the
+  comments, so RM14.90 goes in the caption where it can change without a
+  re-export.
   (3) A new poster scores ~0 in the autopilot (no measured AOV, `cost` NULL →
   no margin) so it gets benched fast; set `products.cost` or disable the flag.
   **Open decisions for the owner:** replace-vs-alongside Mont Blanc (410 units

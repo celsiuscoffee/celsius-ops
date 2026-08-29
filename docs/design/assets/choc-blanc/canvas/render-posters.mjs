@@ -33,6 +33,9 @@ const ARTBOARDS = [
   { file: "Main.dc.html", w: 1200, h: 1121, name: "choc-blanc-home" },
   { file: "Splash.dc.html", w: 1080, h: 2340, name: "choc-blanc-splash" },
   { file: "PosPanel.dc.html", w: 920, h: 1200, name: "choc-blanc-pos" },
+  { file: "IgFeed.dc.html", w: 1080, h: 1350, name: "choc-blanc-ig-feed" },
+  { file: "IgStory.dc.html", w: 1080, h: 1920, name: "choc-blanc-ig-story" },
+  { file: "IgSquare.dc.html", w: 1080, h: 1080, name: "choc-blanc-ig-square" },
 ];
 
 const CHROME =

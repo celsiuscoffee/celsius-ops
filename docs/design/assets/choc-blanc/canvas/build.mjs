@@ -32,7 +32,10 @@ if (!skillDir) {
   process.exit(1);
 }
 
-const ARTBOARDS = ["Main.dc.html", "PosPanel.dc.html", "Splash.dc.html"];
+const ARTBOARDS = [
+  "Main.dc.html", "PosPanel.dc.html", "Splash.dc.html",
+  "IgFeed.dc.html", "IgStory.dc.html", "IgSquare.dc.html",
+];
 const FONTS = {
   __PEACHI_BOLD__: join(repoRoot, "apps/order/src/fonts/Peachi-Bold.otf"),
   __PEACHI_MED__: join(repoRoot, "apps/order/src/fonts/Peachi-Medium.otf"),
@@ -53,7 +56,11 @@ for (const name of ARTBOARDS) {
   }
   writeFileSync(join(build, name), src);
 }
-for (const asset of ["hero-home.jpg", "hero-splash.jpg", "hero-pos.jpg", "canvas.json"]) {
+for (const asset of [
+  "hero-home.jpg", "hero-splash.jpg", "hero-pos.jpg",
+  "hero-ig-feed.jpg", "hero-ig-story.jpg", "hero-ig-square.jpg",
+  "canvas.json",
+]) {
   copyFileSync(join(here, asset), join(build, asset));
 }
 
@@ -68,6 +75,9 @@ const args = [
   "--image", "hero-home.jpg",
   "--image", "hero-splash.jpg",
   "--image", "hero-pos.jpg",
+  "--image", "hero-ig-feed.jpg",
+  "--image", "hero-ig-story.jpg",
+  "--image", "hero-ig-square.jpg",
   "--canvas", "canvas.json",
 ];
 execFileSync(process.execPath, args, { cwd: build, stdio: "inherit" });
