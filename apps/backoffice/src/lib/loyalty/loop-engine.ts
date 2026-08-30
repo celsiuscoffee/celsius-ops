@@ -180,9 +180,14 @@ async function welcomeSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; lab
 // win-back loops own those). greeting must read as a complete wish — it is
 // substituted for {occasion} verbatim. Dates are static; extend as the year
 // rolls. ⚠️ Aidilfitri is moon-dependent — confirm nearer the date.
-export const CELEBRATIONS: Array<{ date: string; name: string; greeting: string }> = [
-  { date: "2026-08-31", name: "Merdeka Day",              greeting: "Selamat Hari Merdeka" },
-  { date: "2026-09-16", name: "Malaysia Day",             greeting: "Happy Malaysia Day" },
+// `offers` pins an occasion to specific OFFER_CANDIDATES instead of letting the
+// optimiser rotate its usual three. The national days are a brand GREETING, not
+// an offer test: one coherent promo (buy 1 free 1 on any drink) reads like a
+// celebration, whereas rotating three discounts reads like a sale. Occasions
+// without `offers` keep the normal champion/challenger rotation.
+export const CELEBRATIONS: Array<{ date: string; name: string; greeting: string; offers?: string[] }> = [
+  { date: "2026-08-31", name: "Merdeka Day",              greeting: "Selamat Hari Merdeka", offers: ["b1f1_drinks"] },
+  { date: "2026-09-16", name: "Malaysia Day",             greeting: "Happy Malaysia Day", offers: ["b1f1_drinks"] },
   { date: "2026-10-01", name: "International Coffee Day", greeting: "Happy International Coffee Day" },
   { date: "2026-11-08", name: "Deepavali",                greeting: "Happy Deepavali" },
   { date: "2026-12-25", name: "Christmas",                greeting: "Merry Christmas" },
@@ -195,7 +200,7 @@ export const CELEBRATIONS: Array<{ date: string; name: string; greeting: string 
 ];
 
 // The celebration whose [eve, day] window contains today (MYT), if any.
-export function activeCelebration(now = new Date()): { date: string; name: string; greeting: string } | null {
+export function activeCelebration(now = new Date()): { date: string; name: string; greeting: string; offers?: string[] } | null {
   const myt = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
   for (const c of CELEBRATIONS) {
     const eve = new Date(new Date(c.date + "T00:00:00Z").getTime() - 86400000).toISOString().slice(0, 10);
@@ -1088,10 +1093,10 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // Triggered (auto): reactivation fires when a member crosses ~30d inactive;
   // welcome ~1 day after the 1st visit; birthday on the day. round_gap stays
   // batch/manual (an operator-driven, budget-capped weekly push).
-  winback:   { key: "winback",   label: "Reactivation",      objective: "Win back lapsed customers",        defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct10_min25", "pct15_min40", "pct20_min40", "flat5_min25", "flat10_min30", "flat15_min50", "b1f1_drinks"], messageTemplate: "We miss you at Celsius! Come back and enjoy {offer} - just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minDaysLapsed: 30, maxDaysLapsed: 60 }, exploreSendWindows: true }, segment: winbackSegment },
-  welcome:   { key: "welcome",   label: "Welcome",           objective: "Turn the 1st visit into a 2nd",    defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks", "free_drink_min25"], messageTemplate: "Welcome to Celsius! Enjoy {offer} on your next visit - just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 365, segmentOpts: { joinedWithinDays: 10 } }, segment: welcomeSegment },
-  birthday:  { key: "birthday",  label: "Birthday",          objective: "Bring members in on their birthday", defaultHoldoutPct: 0,  defaultWindowDays: 14, candidateKeys: ["free_coffee", "free_drink"], messageTemplate: "Happy birthday from Celsius! Enjoy {offer} - just show your number at any outlet to redeem.", trigger: { holdoutPct: 0, cooldownDays: 300, segmentOpts: { birthdayWithinDays: 0 } }, segment: birthdaySegment },
-  round_gap: { key: "round_gap", label: "Weekly round-gap",  objective: "Fill an underperforming day-part",  defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct15_min40", "flat10_min30", "b1f1_drinks"], messageTemplate: "Celsius misses you! Enjoy {offer} this week - just show your number at any outlet to redeem.", segment: roundGapSegment },
+  winback:   { key: "winback",   label: "Reactivation",      objective: "Win back lapsed customers",        defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct10_min25", "pct15_min40", "pct20_min40", "flat5_min25", "flat10_min30", "flat15_min50", "b1f1_drinks"], messageTemplate: "We miss you at Celsius! Come back and enjoy {offer}. Just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minDaysLapsed: 30, maxDaysLapsed: 60 }, exploreSendWindows: true }, segment: winbackSegment },
+  welcome:   { key: "welcome",   label: "Welcome",           objective: "Turn the 1st visit into a 2nd",    defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks", "free_drink_min25"], messageTemplate: "Welcome to Celsius! Enjoy {offer} on your next visit. Just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 365, segmentOpts: { joinedWithinDays: 10 } }, segment: welcomeSegment },
+  birthday:  { key: "birthday",  label: "Birthday",          objective: "Bring members in on their birthday", defaultHoldoutPct: 0,  defaultWindowDays: 14, candidateKeys: ["free_coffee", "free_drink"], messageTemplate: "Happy birthday from Celsius! Enjoy {offer}. Just show your number at any outlet to redeem.", trigger: { holdoutPct: 0, cooldownDays: 300, segmentOpts: { birthdayWithinDays: 0 } }, segment: birthdaySegment },
+  round_gap: { key: "round_gap", label: "Weekly round-gap",  objective: "Fill an underperforming day-part",  defaultHoldoutPct: 20, defaultWindowDays: 7,  candidateKeys: ["pct15_min40", "flat10_min30", "b1f1_drinks"], messageTemplate: "Celsius misses you! Enjoy {offer} this week. Just show your number at any outlet to redeem.", segment: roundGapSegment },
   // Reminder loop (manual/operator-gated — no trigger): pull members back to
   // redeem a voucher they ALREADY won before it expires. noIssue → attributes
   // the existing voucher; {reward}/{expiry} filled per-recipient in sendRound.
@@ -1104,28 +1109,28 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // Reminder loop (noIssue, auto-triggered daily): nudge members sitting on
   // idle Points the moment they go quiet (~5d). Mints nothing — the value
   // already exists. Push-first (free) + SMS fallback, 10% holdout measures lift.
-  beans_idle: { key: "beans_idle", label: "Points sitting unused", objective: "Bring back members with idle Points", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Hi {name}! You have {beans} points at Celsius - enough for {redeem}. Redeem this week before they slip away. Show your number.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minBeans: 100, idleMinDays: 5, idleMaxDays: 9 } }, segment: beansIdleSegment },
+  beans_idle: { key: "beans_idle", label: "Points sitting unused", objective: "Bring back members with idle Points", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: [], noIssue: true, messageTemplate: "Hi {name}! You have {beans} points at Celsius, enough for {redeem}. Redeem this week before they slip away. Show your number.", trigger: { holdoutPct: 10, cooldownDays: 30, segmentOpts: { minBeans: 100, idleMinDays: 5, idleMaxDays: 9 } }, segment: beansIdleSegment },
   // ── Hypothesis wave 2 (2026-07-18): engine-generated logics beyond the
   // founder set. Each runs auto-triggered with a holdout; the auto-pause kill
   // rule caps any loser at ~300 sends, so testing is bounded-cost by design.
   // Celebration: festive days are a natural visit reason (Merdeka, Deepavali,
   // Father's Day...). Fires eve+day per CELEBRATIONS, actives only, b1f1-first
   // (celebrations are social — "bring someone" fits and is margin-safe).
-  celebration: { key: "celebration", label: "Celebrations", objective: "Bring members in on festive days", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["b1f1_drinks", "flat10_min30", "pct15_min40"], messageTemplate: "{occasion} from Celsius! Celebrate with {offer} - just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 14, segmentOpts: { activeWithinDays: 60 }, dailyLimit: 400 }, segment: celebrationSegment },
+  celebration: { key: "celebration", label: "Celebrations", objective: "Bring members in on festive days", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["b1f1_drinks", "flat10_min30", "pct15_min40"], messageTemplate: "{occasion} from Celsius! Celebrate with {offer}. Just show your number at any outlet to redeem.", trigger: { holdoutPct: 10, cooldownDays: 20, segmentOpts: { activeWithinDays: 60 }, dailyLimit: 2900 }, segment: celebrationSegment },
   // Deep win-back: the 60-180d lapsed band winback (30-60d) never touches —
   // ~1.9k members nobody messages today. Colder base → richer offer arms +
   // 14d window; dailyLimit 80 drips the backlog (~RM8/day) instead of blasting.
-  lapsed_deep: { key: "lapsed_deep", label: "Deep win-back", objective: "Revive long-lapsed customers (60-180d)", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct20_min40", "flat15_min50", "b1f1_drinks", "flat10_min30"], messageTemplate: "Long time no see! We miss you at Celsius - come back and enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 120, segmentOpts: { minDaysLapsed: 60, maxDaysLapsed: 180 }, dailyLimit: 80 }, segment: lapsedDeepSegment },
+  lapsed_deep: { key: "lapsed_deep", label: "Deep win-back", objective: "Revive long-lapsed customers (60-180d)", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct20_min40", "flat15_min50", "b1f1_drinks", "flat10_min30"], messageTemplate: "Long time no see! We miss you at Celsius. Come back and enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 120, segmentOpts: { minDaysLapsed: 60, maxDaysLapsed: 180 }, dailyLimit: 80 }, segment: lapsedDeepSegment },
   // Habit builder: welcome (the engine's best loop, +5pp) converts visit 1→2;
   // the habit locks in around visit 3. Same mechanic, one rung up: members at
   // 2-3 visits gone quiet 5-14d. Welcome's champion offer leads the arms.
-  habit: { key: "habit", label: "Habit builder", objective: "Turn the 2nd visit into a routine (3rd+)", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks"], messageTemplate: "You're becoming a regular at Celsius, {name}! Enjoy {offer} on your next visit - show your number at any outlet.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { minVisits: 2, maxVisits: 3, idleMinDays: 5, idleMaxDays: 14 }, dailyLimit: 80 }, segment: habitSegment },
+  habit: { key: "habit", label: "Habit builder", objective: "Turn the 2nd visit into a routine (3rd+)", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks"], messageTemplate: "You're becoming a regular at Celsius, {name}! Enjoy {offer} on your next visit. Show your number at any outlet.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { minVisits: 2, maxVisits: 3, idleMinDays: 5, idleMaxDays: 14 }, dailyLimit: 80 }, segment: habitSegment },
   // ── Hypothesis wave 3 (2026-07-19).
   // Fresh lapse: the uncovered 14-30d band — a drifting regular is cheaper to
   // catch at 2-4 weeks than at 30-60d (winback) or 60-180d (deep). Light
   // offers only; the escalation ladder (fresh → winback → deep) upgrades the
   // lure as the lapse deepens. Reuses lapsedDeepSegment (real visitors only).
-  fresh_lapse: { key: "fresh_lapse", label: "Fresh lapse", objective: "Catch drifting regulars at 2-4 weeks", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks"], messageTemplate: "It's been a couple of weeks! We miss you at Celsius - enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { minDaysLapsed: 14, maxDaysLapsed: 30 }, dailyLimit: 80 }, segment: lapsedDeepSegment },
+  fresh_lapse: { key: "fresh_lapse", label: "Fresh lapse", objective: "Catch drifting regulars at 2-4 weeks", defaultHoldoutPct: 20, defaultWindowDays: 7, candidateKeys: ["pct10_min25", "flat5_min25", "b1f1_drinks"], messageTemplate: "It's been a couple of weeks! We miss you at Celsius. Enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { minDaysLapsed: 14, maxDaysLapsed: 30 }, dailyLimit: 80 }, segment: lapsedDeepSegment },
   // Basket builder: habitual small-ticket regulars (avg ~RM17 vs RM40 target).
   // Success = revenue/recipient vs holdout (margin), NOT conversion lift —
   // they'd visit anyway; the offer's job is to stretch the basket.
@@ -1134,7 +1139,7 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   // (RM10 off RM30 = 33% give for zero stretch). Every arm here bars at
   // RM40+, i.e. at/above the AOV target. Same principle as round-gap's
   // ~20%-above-round-AOV anchoring.
-  aov_push: { key: "aov_push", label: "Basket builder", objective: "Grow small baskets toward RM40", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct15_min40", "pct20_min40", "flat15_min50"], messageTemplate: "Hi {name}! Treat yourself a little extra at Celsius - {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 60, segmentOpts: { activeWithinDays: 30, minVisits: 4, maxAvgTicket: 25 }, dailyLimit: 80 }, segment: aovPushSegment },
+  aov_push: { key: "aov_push", label: "Basket builder", objective: "Grow small baskets toward RM40", defaultHoldoutPct: 20, defaultWindowDays: 14, candidateKeys: ["pct15_min40", "pct20_min40", "flat15_min50"], messageTemplate: "Hi {name}! Treat yourself a little extra at Celsius. Enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 60, segmentOpts: { activeWithinDays: 30, minVisits: 4, maxAvgTicket: 25 }, dailyLimit: 80 }, segment: aovPushSegment },
   // ── Round-gap, take two (2026-08-16). Budget-capped restart of the one
   // objective that still has real money in it: weekday nights run 15 orders/day
   // vs 25 at weekends across all three outlets — closing that gap is worth
@@ -1149,7 +1154,7 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   //   3. BUDGET — 30/day drip (~22 sent after the 25% holdout ≈ RM2.20/day,
   //      ~RM66/month). SCALE GATE: raise dailyLimit to 80 only once lift is
   //      >= 2pp on a pooled holdout of >= 30. The bleed rule kills it otherwise.
-  night_revival: { key: "night_revival", label: "Night revival", objective: "Fill weekday evenings (7-11pm)", defaultHoldoutPct: 25, defaultWindowDays: 14, candidateKeys: ["free_dessert_min30", "flat10_min30", "b1f1_drinks"], messageTemplate: "Hi {name}! Celsius is open till 11pm - enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { activeWithinDays: 60, maxWeekdayNightVisits: 2 }, dailyLimit: 30 }, segment: nightRevivalSegment },
+  night_revival: { key: "night_revival", label: "Night revival", objective: "Fill weekday evenings (7-11pm)", defaultHoldoutPct: 25, defaultWindowDays: 14, candidateKeys: ["free_dessert_min30", "flat10_min30", "b1f1_drinks"], messageTemplate: "Hi {name}! Celsius is open till 11pm. Enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { activeWithinDays: 60, maxWeekdayNightVisits: 2 }, dailyLimit: 30 }, segment: nightRevivalSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
@@ -1486,6 +1491,12 @@ async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: Lo
   if (def.key === "celebration") {
     const c = activeCelebration();
     if (!c) return { loop: def.key, qualified: 0, skipped: true }; // segment would be empty anyway
+    // A national day is a GREETING with one coherent promo, not an offer test:
+    // pin the arms to the occasion's own offers when it declares them.
+    if (c.offers?.length) {
+      const pinned = OFFER_CANDIDATES.filter((oc) => c.offers!.includes(oc.key));
+      if (pinned.length) arms = pinned.map((oc) => toArmDef(oc, composeMessage("celebration", oc)));
+    }
     arms = arms.map((a) => ({ ...a, message: a.message.split("{occasion}").join(c.greeting) }));
   }
   const suppressPhones = await recentlyTargetedPhones(def.key, trig.cooldownDays);
