@@ -186,8 +186,14 @@ async function welcomeSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; lab
 // an offer test: one coherent promo (buy 1 free 1 on any drink) reads like a
 // celebration, whereas rotating three discounts reads like a sale. Occasions
 // without `offers` keep the normal champion/challenger rotation.
-export const CELEBRATIONS: Array<{ date: string; name: string; greeting: string; offers?: string[]; note?: string }> = [
-  { date: "2026-08-31", name: "Merdeka Day",              greeting: "Selamat Hari Merdeka", offers: ["b1f1_drinks"], note: "Try our new Choc Blanc." },
+// wishWindow: which of the two days the wish may go out on. Default "both"
+// (eve and the day itself, one wish per member thanks to the cooldown).
+// "eve" pins it to the night before, which is what you want when the greeting
+// is deliberately timed for the evening people go out, and it stops a second
+// batch firing the next morning to the half of the base being saved for the
+// next occasion.
+export const CELEBRATIONS: Array<{ date: string; name: string; greeting: string; offers?: string[]; note?: string; wishWindow?: "eve" | "day" | "both" }> = [
+  { date: "2026-08-31", name: "Merdeka Day",              greeting: "Selamat Hari Merdeka", offers: ["b1f1_drinks"], note: "Try our new Choc Blanc.", wishWindow: "eve" },
   { date: "2026-09-16", name: "Malaysia Day",             greeting: "Happy Malaysia Day", offers: ["b1f1_drinks"], note: "Try our new Choc Blanc." },
   { date: "2026-10-01", name: "International Coffee Day", greeting: "Happy International Coffee Day" },
   { date: "2026-11-08", name: "Deepavali",                greeting: "Happy Deepavali" },
@@ -201,11 +207,14 @@ export const CELEBRATIONS: Array<{ date: string; name: string; greeting: string;
 ];
 
 // The celebration whose [eve, day] window contains today (MYT), if any.
-export function activeCelebration(now = new Date()): { date: string; name: string; greeting: string; offers?: string[]; note?: string } | null {
+export function activeCelebration(now = new Date()): { date: string; name: string; greeting: string; offers?: string[]; note?: string; wishWindow?: "eve" | "day" | "both" } | null {
   const myt = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
   for (const c of CELEBRATIONS) {
     const eve = new Date(new Date(c.date + "T00:00:00Z").getTime() - 86400000).toISOString().slice(0, 10);
-    if (myt === c.date || myt === eve) return c;
+    const w = c.wishWindow ?? "both";
+    const onEve = myt === eve && (w === "eve" || w === "both");
+    const onDay = myt === c.date && (w === "day" || w === "both");
+    if (onEve || onDay) return c;
   }
   return null;
 }
