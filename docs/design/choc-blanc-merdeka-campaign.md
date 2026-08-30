@@ -257,7 +257,7 @@ Send C uses the same announce-only arm. Send B needs neither —
 **Send A — 30 Aug, Merdeka eve.** Owner decision 29 Aug: **don't discount the
 people already sold.** Split by past behaviour, not at random:
 
-- **Round A — the 538 identifiable Mont Blanc buyers: announce only.** They
+- **Round A — the identifiable Mont Blanc buyers: announce only.** They
   already buy the base drink at RM14.90; paying them to switch is pure margin
   given away.
 - **Round B — everyone else in actives ≤60d: announce vs Buy 1 Free 1,
@@ -295,7 +295,7 @@ Two rounds, because the split is by past behaviour and must NOT be random.
 Both go out on **30 Aug**, so the first vouchers can be redeemed the moment
 the outlets open on the 31st. Copy says "from tomorrow" for that reason.
 
-**The buyer list** (538 people as of 29 Aug) — `onlyPhones` for Round A,
+**The buyer list** — `onlyPhones` for Round A,
 `suppressPhones` for Round B:
 
 ```sql
@@ -308,13 +308,22 @@ select distinct o.customer_phone
  where o.customer_phone is not null and i.product_name ilike '%mont blanc%';
 ```
 
+**Two ways this payload fails silently — both cost a wrong blast, not an error.**
+The body key is `loop_key`, not `loopKey`: the route reads `body.loop_key ??
+"winback"`, so a camelCase key doesn't 400, it prepares a *win-back* round with
+win-back copy against the lapsed segment. And `onlyPhones` only works because
+the route forwards it (fixed 30 Aug — the field existed on `prepareRound` but
+the HTTP route dropped it); an unforwarded allowlist is ignored, and Round A
+goes to all ~6,400 actives instead of ~526 buyers. **Always check the returned
+preview's reachable count against the number you expected before scheduling.**
+
 **Round A — known Mont Blanc buyers. Announce only, no offer.**
 
 ```jsonc
 POST /api/loyalty/loops/prepare
 {
-  "loopKey": "celebration",
-  "onlyPhones": ["<the 538 above>"],
+  "loop_key": "celebration",
+  "onlyPhones": ["<the buyer list above>"],
   "holdoutPct": 20,
   "arms": [{
     "key": "announce",
@@ -324,15 +333,18 @@ POST /api/loyalty/loops/prepare
   }]
 }
 ```
-~430 sent, ~RM43, zero COGS.
+Re-counted 30 Aug: **581** attributable buyers all-time, **526** of them inside
+the celebration segment (actives ≤60d, reachable, stackable tiers). After the
+20% holdout and the 9 currently over the weekly cap, **~412 sent, ~RM41, zero
+COGS**. Re-run the query on the day rather than reusing these figures.
 
 **Round B — everyone else in actives ≤60d. Announce vs B1F1, randomised.**
 
 ```jsonc
 POST /api/loyalty/loops/prepare
 {
-  "loopKey": "celebration",
-  "suppressPhones": ["<the same 538>"],
+  "loop_key": "celebration",
+  "suppressPhones": ["<the same buyer list>"],
   "maxRecipients": 1500,
   "holdoutPct": 20,
   "arms": [
@@ -361,7 +373,7 @@ bar can actually make.
 
 | Round | Days | Per day | Total |
 | --- | --- | --- | --- |
-| A — Mont Blanc buyers, announce | 30 Aug (one go) | 538 | 538 |
+| A — Mont Blanc buyers, announce | 30 Aug (one go) | 526 | 526 |
 | B — cold pool, announce vs B1F1 | 30 Aug – 3 Sept | ~300 | 1,500 |
 | C — fresh pool, announce vs B1F1 | 16 – 20 Sept | ~300 | 1,500 |
 
@@ -398,7 +410,7 @@ then, so 1,500 is comfortable.
 ```jsonc
 POST /api/loyalty/loops/prepare        // once per day, 16–20 Sept
 {
-  "loopKey": "celebration",
+  "loop_key": "celebration",
   "suppressPhones": ["<all phones assigned in Rounds A, B and earlier C days>",
                      "<plus anyone who has already bought Choc Blanc>"],
   "maxRecipients": 300,
