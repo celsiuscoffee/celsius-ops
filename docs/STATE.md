@@ -6,6 +6,48 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-30 — **August cashflow: the bleed stopped.** Bank feed reconciles
+  exactly to stated closing balances at 29 Aug (13,895.30 HQ + 5,967.14
+  Tamarind + 2,450.53 Conezion = **22,312.97**; 31 Jul close was 29,263.11).
+  Like-for-like d1–29 net: Jun −10,301 / Jul −22,795 / **Aug −6,950** — the
+  best of the three and +15,845 better than July. Driver is the cost side:
+  external cash OUT 334,661 / 322,837 / **286,842** (−11.1% Jul→Aug) falling
+  faster than external cash IN 324,359 / 300,043 / **279,892** (−6.7%).
+  InterCo nets to zero on both sides (~87k/month moved), so it does not
+  distort the net. Aug close projects **RM27k–36k** on a day-type basis
+  (30 Aug Sun ≈ +4,089 avg; 31 Aug PH Mon +1,773..+13,142, excl. the 3 Aug
+  payroll Monday at −28,297).
+- 2026-08-30 — **September is the squeeze, not August.** The Aug monthly
+  payroll run **does not exist yet** (only July's `c64f6cd2-…`, confirmed
+  7 Aug, gross 62,726.18 / net 54,788.83, `paid_at` still NULL) and payday
+  is 3 Sep. Stack: 3 Sep FT net ~47k → 7–11 Sep rent ~28k (Mayang 11,486.80
+  + Tujuan Gemilang 10,293.66 + Azhar 5,700 + Pilihan Megah 500, always the
+  7th–13th) → ~15 Sep statutory ~7–8k. Open supplier invoices are light:
+  overdue 1,262.40 / due 30–31 Aug 1,537.31 / 1–7 Sep 4,156.95 / rest of
+  Sep 6,860.00. Google Ads accrued-unpaid ~10,865 still sits outside this.
+- 2026-08-30 — **PT wage cut is real but eroding, and the roster no longer
+  predicts it.** Bank by work-week (week no. parsed from narration; week N
+  pays on its own Friday): pre-cut W21–W28 avg **6,238.88/wk**; cut lands
+  W29 (24 Jul); W29–W34 = 4,764.50 / 4,039.50 / 3,769.50 / 3,958.50 /
+  4,771.00 / 4,623.00. Trough-to-date W31; last two weeks average 4,697 —
+  **+833/wk off the trough**. Reduction vs pre-cut is now ~1,958/wk
+  (~RM8.5k/month), down from ~2,375/wk at the trough. Mechanism is hours
+  per head, not headcount: pay per head 322 → 218 with headcount flat at
+  ~19–20. **RM-per-scheduled-hour stepped up in W33–W34 (10.00 / 10.33)
+  vs W31–W32 (7.66 / 8.11)** — actual hours are running above roster, so
+  scheduled hours are no longer a usable forecast input. W35 roster is
+  only `ai_generated` for CC001/CC002 (CC003 + Nilai absent) and 31 Aug is
+  Hari Kebangsaan (PH multiplier).
+- 2026-08-30 — **Second Maybank narration break, same class as the salary
+  one.** From 2026-08-21 part-timer transfers read `PT W33/26` / `Pt w33 26`
+  instead of `PT Week 33/26`; the `partimer` rule only matched
+  `/\bPT\s*WEEK\b|\bPARTIMER\b/i`, so RM882 (W33) and the **entire
+  RM4,623 W34 run** fell to OTHER_OUTFLOW. Fixed on
+  `claude/monthly-cashflow-decline-4u7a1j` via `PARTIMER_RE` (still requires
+  a week number so a bare `PT` cannot swallow vendor lines). Lesson: treat
+  every narration regex as a ratchet — assume Maybank abbreviates, and
+  always verify a category's *latest* line, not just its total.
+
 - 2026-08-21 — **THE CUSTOMER APP HAS BEEN STRANDED ON 25-JUL JS SINCE THE
   FINGERPRINT SWITCH — every pickup-native OTA since then reached ZERO
   phones while the workflow went green.** Owner reported the Orders tab
