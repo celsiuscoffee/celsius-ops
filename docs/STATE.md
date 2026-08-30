@@ -2602,6 +2602,52 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-08-30 — **Choc Blanc Merdeka: backend fully deployed, Round A ready to
+  fire from a browser console; campaign structure REVISED BY OWNER and the
+  revision is NOT yet reflected in docs/sends.** Handoff for the session that
+  picks this up (the owner moved to another window with more marketing context):
+
+  **Done and live:**
+  - PR #1175 merged (campaign plan + `loop-engine.ts`: announce-only arms via
+    `voucher_template_id: null`, `onlyPhones` allowlist).
+  - PR #1184 merged (the prepare HTTP route was dropping `onlyPhones` — 526
+    intended recipients would have silently become ~6,400; also the doc said
+    `loopKey` where the route wants `loop_key`, which silently prepares a
+    WIN-BACK round). Deployed to production 08:56 UTC, verified READY.
+  - PR #1185 OPEN (draft): staff brief rewritten sharp/straightforward. NOTE:
+    it still says "Buy 1 Free 1 Choc Blanc only" — already stale against the
+    owner's revision below. Do not send or merge without updating.
+  - Round A prepare snippet delivered to the owner (scratchpad
+    `round-a-prepare.js`): 526 Mont Blanc-buyer phones embedded, announce-only
+    arm, 20% holdout, expects `reachable: 526`, cancel + schedule one-liners
+    included. Runs in the backoffice browser console (agent has no JWT_SECRET,
+    so `requireAuth` routes are owner-only). Snippet is STILL VALID under the
+    revised structure — Round A is unchanged.
+
+  **Owner's revised campaign structure (30 Aug, verbatim intent):**
+  1. Choc Blanc is the new Merdeka menu item, 31 Aug – 30 Sept (Mont Blanc stays).
+  2. SMS 1: tell known Mont Blanc buyers about the new menu (announce, no offer).
+  3. SMS 2: **B1F1 on ALL drinks — NOT tied to Choc Blanc** — a pure
+     Merdeka/Hari Malaysia promo to the customer pool, same drip/segmentation
+     logic (~300/day, fresh pool for Hari Malaysia, nobody twice).
+  4. POS: a script for staff to offer the new product on every order.
+
+  This KILLS the announce-vs-B1F1 A/B arms inside Rounds B/C — the promo is a
+  traffic driver, not a Choc Blanc pricing test. The all-drinks template
+  already exists and is LIVE: `ed33eb26-4ead-414d-b1ee-179999a33940`
+  "Buy 1 Free 1 Drink" (8 drink categories, bogo 1+1, **validity 30 days**).
+  The Choc Blanc-scoped `a0e3661c` (7d, inactive) is now likely dead.
+
+  **Open decision when this resumes:** 30-day validity as-is, or clone a
+  "Merdeka B1F1" at 7 days so the promo dies with the campaign (was
+  recommended, not decided). Then: rewrite SMS 2 copy as promo copy, update
+  the staff brief (any-drink voucher + POS script), update
+  `docs/design/choc-blanc-merdeka-campaign.md`, hand over the Round B snippet.
+  Merdeka send window: `activeCelebration()` covers eve+day, so celebration-
+  segment sends work today (30 Aug) and 31 Aug only, then not until 15–16 Sept.
+  Round A numbers as of 30 Aug: 581 buyers all-time, 526 in segment, ~412 sent
+  after holdout + 9 weekly-capped, ~RM41.
+
 - 2026-08-28 — **Choc Blanc Merdeka: artwork done, decisions settled, ONE
   blocker left.** All three `splash_posters` rows still have `image_url = ''`;
   they cannot render until someone exports the three PNGs from the canvas
