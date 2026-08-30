@@ -4301,3 +4301,31 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   PITR decision (§4). SMS attribution holdout (loop #1) still needs the
   two owner decisions: exact reward + success bar
   (`docs/design/sms-loop-engineering.md`).
+
+- 2026-08-29 — **Repeat-customer ratio: first read** (`docs/design/repeat-customer-health-2026-08.md`).
+  Verdict: **ratio not healthy, loyal core healthy.** 81% of identified August
+  customers visited once; repeat customers = 19.0% of customers but 38.7% of
+  revenue (RM 58,329 / 150,571) vs the >60% a settled café runs. Yet a fixed
+  cohort holds — June cohort (1,246) was 31.1% active in Jul, 28.3% in Aug at
+  3.4 visits/month, curve flattening. So it is a **first-repeat-visit** problem,
+  not a loyalty problem; the ratio is decided in the ~14 days after visit one.
+  **Measurement trap (verified):** till identification ran 31.4% → 55.0% → 71.1%
+  Jun/Jul/Aug, which biases every naive repeat metric *both* ways — rising
+  coverage progressively captures lower-frequency customers (length-bias), so
+  cohort return rates fall with nothing real changing, while "share of visits
+  from returning" rises mechanically (34.8 → 46.4 → 48.8%). Never report either
+  trend without the outlet control: Shah Alam's coverage moved only 60→76% yet
+  its 14-day return still halved (22.9 → 12.2%), so a **real** decline exists
+  underneath the artefact (fleet weekly 14d return 31.8% → 13.4%).
+  **Leaky bucket:** Jul/Aug each acquired ~2,800–3,100 new identified customers
+  while daily volume stayed flat (273.4 → 268.0 orders/day, RM7,767 → RM7,437) —
+  acquisition is replacing churn, not adding. Only 7,201 of 26,800 members
+  (26.9%) have ever transacted.
+  **Owner decisions still owed** (same two as the SMS loop): exact reward +
+  success bar for the next-visit holdout — that holdout is now the top-priority
+  experiment, since the second visit is where the whole ratio is decided.
+  Next session: (1) get Tamarind's till identification past ~70% (63% today) so
+  cross-outlet cohorts are comparable, (2) switch the reported north-star to
+  repeat *share of revenue* (38.7%) which is far less coverage-sensitive,
+  (3) build the 2–3-visit-band segment (554 customers, 21.8% of revenue) as the
+  first reactivation target.
