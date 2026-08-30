@@ -66,6 +66,7 @@ export type SegmentOpts = {
   minVisits?: number; maxVisits?: number;           // habit / aov_push
   maxAvgTicket?: number;                            // aov_push
   maxWeekdayNightVisits?: number;                   // night_revival
+  anchorProductId?: string; newProductId?: string;  // product_launch
 };
 
 type MemberRow = { id: string; phone: string | null; name: string | null; sms_opt_out: boolean | null; birthday: string | null; preferred_outlet_id: string | null };
@@ -306,6 +307,56 @@ async function nightRevivalSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]
     rows.push({ member_id: r.member_id, phone, name: r.member_name ?? null });
   }
   return { rows, label: `Night-goers · active ≤${activeDays}d, ≤${maxWkdayNight} weekday nights` };
+}
+
+// ── PRODUCT LAUNCH: announce a new SKU to the buyers of its closest existing
+// neighbour. A brand-new item has no sales history to segment on, so we borrow
+// the palate of the nearest proven product: for the Merdeka Choc Blanc launch
+// the anchor is Mont Blanc (1,015 orders, same category and price point).
+// Anyone who has already bought the new item is excluded — the announcement is
+// wasted on them, and it means anyone who tries it via the Merdeka B1F1 drops
+// out of the follow-up automatically.
+//
+// The offer is the SAME buy-1-free-1 as the national-day wish (Choc Blanc is a
+// drink, so it is already covered) — what differs is the AUDIENCE and the
+// MESSAGE. Keeping it a separate loop with its own holdout is what lets us
+// measure whether targeting the right palate beats the generic greeting.
+//
+// Outside the launch window the segment is empty, so the loop retires itself
+// when the promo ends instead of relying on anyone to switch it off.
+export const PRODUCT_LAUNCH = {
+  anchorProductId: "696a614eb3191b0007f8cc82", // Mont Blanc — the proven neighbour
+  newProductId: "choc-blanc",                  // Choc Blanc — the Merdeka launch
+  from: "2026-08-31",
+  to: "2026-09-30",
+};
+
+function launchWindowOpen(now = new Date()): boolean {
+  const myt = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
+  return myt >= PRODUCT_LAUNCH.from && myt <= PRODUCT_LAUNCH.to;
+}
+
+async function productLaunchSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; label: string }> {
+  if (!launchWindowOpen()) return { rows: [], label: "Launch window closed" };
+  const data = await rpcAll<{ member_id: string; phone: string; member_name: string | null }>(
+    "loyalty_product_launch_segment",
+    {
+      p_anchor_product: o.anchorProductId ?? PRODUCT_LAUNCH.anchorProductId,
+      p_new_product: o.newProductId ?? PRODUCT_LAUNCH.newProductId,
+      p_active_days: o.activeWithinDays ?? 60,
+      p_lookback_days: 180,
+    },
+    "product_launch segment",
+  );
+  const seen = new Set<string>();
+  const rows: SegmentRow[] = [];
+  for (const r of data) {
+    const phone = (r.phone ?? "").trim();
+    if (!phone || seen.has(phone)) continue; // opt-outs, ghosts, non-stackable tiers excluded in the RPC
+    seen.add(phone);
+    rows.push({ member_id: r.member_id, phone, name: r.member_name ?? null });
+  }
+  return { rows, label: "New-menu launch · anchor-product buyers" };
 }
 
 // ── Habit builder: the coffee habit forms around visit 3 — members at 2-3
@@ -1123,7 +1174,7 @@ export const OFFER_CANDIDATES: OfferCandidate[] = [
 // ── Loop registry: each campaign objective is a loop. Same machinery
 // (holdout → optimise offers → auto-issue voucher → measure lift), different
 // audience + candidate subset. Add a loop here and it inherits the whole engine.
-export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap" | "reward_expiring" | "beans_idle" | "celebration" | "lapsed_deep" | "habit" | "fresh_lapse" | "aov_push" | "night_revival";
+export type LoopKey = "winback" | "welcome" | "birthday" | "round_gap" | "reward_expiring" | "beans_idle" | "celebration" | "lapsed_deep" | "habit" | "fresh_lapse" | "aov_push" | "night_revival" | "product_launch";
 export type LoopDef = {
   key: LoopKey;
   label: string;
@@ -1221,6 +1272,11 @@ export const LOOPS: Record<LoopKey, LoopDef> = {
   //      ~RM66/month). SCALE GATE: raise dailyLimit to 80 only once lift is
   //      >= 2pp on a pooled holdout of >= 30. The bleed rule kills it otherwise.
   night_revival: { key: "night_revival", label: "Night revival", objective: "Fill weekday evenings (7-11pm)", defaultHoldoutPct: 25, defaultWindowDays: 14, candidateKeys: ["free_dessert_min30", "flat10_min30", "b1f1_drinks"], messageTemplate: "Hi {name}! Celsius is open till 11pm. Enjoy {offer}. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 45, segmentOpts: { activeWithinDays: 60, maxWeekdayNightVisits: 2 }, dailyLimit: 30 }, segment: nightRevivalSegment },
+  // Choc Blanc launch (Merdeka). Same B1F1 offer as the national-day wish, but
+  // a different audience and message, kept as its own loop so its lift is
+  // measurable against the generic greeting. 25% holdout because the audience
+  // is small (495) — the habit/aov_push lesson. One-shot per member.
+  product_launch: { key: "product_launch", label: "New menu launch", objective: "Get the right palate to try a new item", defaultHoldoutPct: 25, defaultWindowDays: 14, candidateKeys: ["b1f1_drinks"], messageTemplate: "Hi {name}! Our new Choc Blanc is here. Enjoy {offer} at Celsius. Show your number at any outlet to redeem.", trigger: { holdoutPct: 25, cooldownDays: 365, segmentOpts: { activeWithinDays: 60 }, dailyLimit: 600 }, segment: productLaunchSegment },
 };
 
 // Curated SMS per (loop × offer): slot the offer phrase into the loop's
@@ -1501,6 +1557,11 @@ export async function proposeSendWindow(loopKey: LoopKey = "winback"): Promise<{
 // holds out a slice so we keep learning which offer/copy wins.
 // ============================================================================
 
+// Rounds bigger than this are handed to the loops-send cron instead of being
+// sent inline, so a single large round can't consume the shared 300s request
+// budget. ~500 x 0.164s leaves comfortable headroom for the loops that follow.
+const ASYNC_SEND_THRESHOLD = 500;
+
 // Phones already targeted by this loop within the cooldown — so a member isn't
 // re-birthday'd / re-welcomed / re-reactivated for the same lifecycle event.
 async function recentlyTargetedPhones(loopKey: LoopKey, cooldownDays: number): Promise<string[]> {
@@ -1525,6 +1586,28 @@ async function recentlyTargetedPhones(loopKey: LoopKey, cooldownDays: number): P
   return Array.from(phones);
 }
 
+// Phones already texted TODAY by any loop. Used to keep two campaigns that
+// overlap in audience from landing on the same person the same morning: the
+// weekly cap allows 2, so nothing else would stop it. Same-day double-sends are
+// both a poor experience and unattributable — if someone gets the national-day
+// wish AND the launch message, neither campaign can claim their visit.
+async function phonesSentToday(): Promise<string[]> {
+  const MYT = 8 * 3600000;
+  const since = new Date(Math.floor((Date.now() + MYT) / 86400000) * 86400000 - MYT).toISOString();
+  const { data: rounds } = await supabaseAdmin.from("loop_rounds").select("id").gte("sent_at", since);
+  const ids = ((rounds ?? []) as Array<{ id: string }>).map((r) => r.id);
+  if (!ids.length) return [];
+  const phones = new Set<string>();
+  for (let from = 0; ; from += 1000) {
+    const { data } = await supabaseAdmin.from("loop_assignments").select("phone")
+      .in("round_id", ids).eq("sms_status", "sent").order("id", { ascending: true }).range(from, from + 999);
+    const batch = (data ?? []) as Array<{ phone: string }>;
+    for (const r of batch) if (r.phone) phones.add(r.phone.trim());
+    if (batch.length < 1000) break;
+  }
+  return [...phones];
+}
+
 // Has this loop already produced a round today (MYT)? Keeps the cadence at one
 // round per loop per day and makes "Run all triggered loops now" idempotent —
 // repeat clicks only fire loops that haven't run yet today (no round-stacking),
@@ -1539,7 +1622,7 @@ async function ranToday(loopKey: LoopKey): Promise<boolean> {
 
 // Run one triggered loop: auto-prepare a round over today's new qualifiers,
 // then auto-send. Returns a small summary.
-async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: LoopKey; qualified: number; sent?: number; failed?: number; round_id?: string; error?: string; skipped?: boolean }> {
+async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: LoopKey; qualified: number; sent?: number; failed?: number; round_id?: string; error?: string; skipped?: boolean; scheduled?: boolean }> {
   const trig = def.trigger!;
   // Once-a-day guard — unless the operator forces a run (e.g. after widening a
   // segment and wanting it out now). Cooldown still protects already-messaged
@@ -1575,6 +1658,12 @@ async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: Lo
     }
   }
   const suppressPhones = await recentlyTargetedPhones(def.key, trig.cooldownDays);
+  // The launch audience overlaps the national-day pool (~a quarter of them).
+  // Anyone already wished today has ALREADY been told about the new menu (the
+  // occasion note carries it), so drop them here: one message per person per
+  // day, and the launch loop measures the targeted message on people who did
+  // NOT get the generic one.
+  if (def.key === "product_launch") suppressPhones.push(...(await phonesSentToday()));
   const preview = await prepareRound(def.key, {
     arms,
     holdoutPct: trig.holdoutPct,
@@ -1604,6 +1693,16 @@ async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: Lo
   // request is interrupted mid-way (large batches can exceed the function limit).
   // sendRound is idempotent, so the cron only sends what didn't go out here.
   await supabaseAdmin.from("loop_rounds").update({ scheduled_send_at: new Date().toISOString() }).eq("id", preview.round_id);
+  // BIG ROUNDS SEND ASYNCHRONOUSLY. runTriggeredLoops runs every loop inside a
+  // single 300s request, so one large round sending inline (~0.16s per SMS)
+  // eats the whole budget and STARVES every loop declared after it — a 2,900
+  // member national-day wish would have blocked lapsed_deep, aov_push,
+  // night_revival and product_launch from running at all that day. Above the
+  // threshold we prepare + schedule only; the every-15-min loops-send cron
+  // does the sending and resumes itself until the round is drained.
+  if (preview.total > ASYNC_SEND_THRESHOLD) {
+    return { loop: def.key, qualified: preview.total, sent: 0, round_id: preview.round_id, scheduled: true };
+  }
   const res = await sendRound(preview.round_id);
   return { loop: def.key, qualified: preview.total, sent: res.sent, failed: res.failed, round_id: preview.round_id, error: res.error };
 }
@@ -1716,8 +1815,8 @@ export async function autoPauseUnderperformers(): Promise<Array<{ key: string; r
   return killed;
 }
 
-export async function runTriggeredLoops(opts?: { force?: boolean }): Promise<Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string; skipped?: boolean }>> {
-  const out: Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string; skipped?: boolean }> = [];
+export async function runTriggeredLoops(opts?: { force?: boolean }): Promise<Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string; skipped?: boolean; scheduled?: boolean }>> {
+  const out: Array<{ loop: string; qualified: number; sent?: number; failed?: number; error?: string; skipped?: boolean; scheduled?: boolean }> = [];
   const paused = await getPausedLoops();
   for (const def of Object.values(LOOPS)) {
     if (!def.trigger) continue;
