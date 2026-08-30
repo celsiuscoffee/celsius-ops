@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @font-face { font-family: "Peachi"; font-weight: 700; font-style: normal; src: url(data:font/otf;base64,__PEACHI_BOLD__) format("opentype"); }
+    @font-face { font-family: "Peachi"; font-weight: 500; font-style: normal; src: url(data:font/otf;base64,__PEACHI_MED__) format("opentype"); }
+    body { margin: 0; background: #0F0500; font-family: "Peachi", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+    a { color: #FBBF24; } a:hover { color: #C97A4E; }
+  </style>
+</helmet>
+
+<!-- SUNMI customer display side panel: 460x600 CSS px, drawn at 2x (920x1200)
+     so the exported PNG has real pixels. Full-bleed photograph; the app paints
+     it with resizeMode="cover" and overlays page dots ~30px from the bottom
+     (60px at 2x), so the lower 130px is kept clear. Read at arm's length
+     across a counter, so the type is sized up. Glass sits at y 180..788. -->
+<div style="width: 920px; height: 1200px; position: relative; overflow: hidden; background: #160800;">
+
+  <img src="hero-pos.jpg" alt="Choc Blanc iced espresso with whipped dark chocolate cream" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;">
+
+  <div style="position: absolute; inset: 0 0 auto 0; height: 200px; background: linear-gradient(180deg, rgba(22,8,0,0.76) 0%, rgba(22,8,0,0.24) 58%, rgba(22,8,0,0) 100%);"></div>
+  <div style="position: absolute; inset: auto 0 0 0; height: 620px; background: linear-gradient(180deg, rgba(22,8,0,0) 0%, rgba(22,8,0,0.40) 30%, rgba(22,8,0,0.82) 64%, rgba(22,8,0,0.94) 100%);"></div>
+
+  <div style="position: absolute; inset: 0; padding: 40px 44px 130px 44px; display: flex; flex-direction: column; justify-content: space-between;">
+
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 18px;">
+      <div style="font-weight: 700; font-size: 40px; line-height: 1; color: #F5F3F0; letter-spacing: -0.01em;">&deg;C</div>
+      <div style="font-weight: 700; font-size: 15px; letter-spacing: 0.26em; color: #FBBF24; text-transform: uppercase; text-align: right; line-height: 1.6;">Merdeka Menu</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div>
+        <span style="display: inline-block; background: #A64B2C; color: #F5F3F0; font-weight: 700; font-size: 16px; letter-spacing: 0.24em; text-transform: uppercase; padding: 11px 20px; border-radius: 4px;">New on the menu</span>
+      </div>
+      <h1 style="margin: 0; font-weight: 700; font-size: 96px; line-height: 0.9; letter-spacing: -0.028em; color: #F5F3F0;">Choc Blanc</h1>
+      <p style="margin: 0; font-weight: 500; font-size: 28px; line-height: 1.24; color: #E0A47C; text-wrap: pretty;">Now capped with dark chocolate cream.</p>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
