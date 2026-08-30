@@ -185,9 +185,9 @@ async function welcomeSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; lab
 // an offer test: one coherent promo (buy 1 free 1 on any drink) reads like a
 // celebration, whereas rotating three discounts reads like a sale. Occasions
 // without `offers` keep the normal champion/challenger rotation.
-export const CELEBRATIONS: Array<{ date: string; name: string; greeting: string; offers?: string[] }> = [
-  { date: "2026-08-31", name: "Merdeka Day",              greeting: "Selamat Hari Merdeka", offers: ["b1f1_drinks"] },
-  { date: "2026-09-16", name: "Malaysia Day",             greeting: "Happy Malaysia Day", offers: ["b1f1_drinks"] },
+export const CELEBRATIONS: Array<{ date: string; name: string; greeting: string; offers?: string[]; note?: string }> = [
+  { date: "2026-08-31", name: "Merdeka Day",              greeting: "Selamat Hari Merdeka", offers: ["b1f1_drinks"], note: "Try our new Choc Blanc." },
+  { date: "2026-09-16", name: "Malaysia Day",             greeting: "Happy Malaysia Day", offers: ["b1f1_drinks"], note: "Try our new Choc Blanc." },
   { date: "2026-10-01", name: "International Coffee Day", greeting: "Happy International Coffee Day" },
   { date: "2026-11-08", name: "Deepavali",                greeting: "Happy Deepavali" },
   { date: "2026-12-25", name: "Christmas",                greeting: "Merry Christmas" },
@@ -200,7 +200,7 @@ export const CELEBRATIONS: Array<{ date: string; name: string; greeting: string;
 ];
 
 // The celebration whose [eve, day] window contains today (MYT), if any.
-export function activeCelebration(now = new Date()): { date: string; name: string; greeting: string; offers?: string[] } | null {
+export function activeCelebration(now = new Date()): { date: string; name: string; greeting: string; offers?: string[]; note?: string } | null {
   const myt = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
   for (const c of CELEBRATIONS) {
     const eve = new Date(new Date(c.date + "T00:00:00Z").getTime() - 86400000).toISOString().slice(0, 10);
@@ -499,6 +499,14 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+type VoucherTemplateRow = {
+  id: string; title: string | null; description: string | null; icon: string | null;
+  category: string | null; validity_days: number | null; discount_type: string | null;
+  discount_value: number | null; min_order_value: number | null;
+  applicable_categories: string[] | null; applicable_products: string[] | null;
+  free_product_name: string | null; stacks_with_beans: boolean | null;
+};
+
 // sourceType tags the voucher's origin on issued_rewards. Most loops use
 // "campaign" (the generic win-back/round-gap bucket), but lifecycle loops pass
 // their own (e.g. Birthday → "birthday") so the native wallet shows the right
@@ -650,20 +658,66 @@ export async function prepareRound(loopKey: LoopKey, opts: {
 
   // treatment: round-robin. Standard loops MINT the arm's voucher; reminder
   // loops (noIssue) attribute the member's existing voucher and mint nothing.
+  //
+  // BULK. This used to do three round-trips PER MEMBER (template SELECT +
+  // voucher INSERT + assignment INSERT) at ~0.29s each. Fine at 400/round,
+  // fatal at scale: the 2,900-member Merdeka wish would have needed ~20 min
+  // against a 300s cron limit, dying mid-issuance BEFORE scheduled_send_at was
+  // set — i.e. no SMS and no recovery path. Templates are fetched once, then
+  // vouchers and assignments go out in chunks, turning ~7,800 round-trips into
+  // roughly a dozen.
+  const tplById = new Map<string, VoucherTemplateRow>();
+  if (!def.noIssue) {
+    const tplIds = [...new Set(arms.map((a) => a.voucher_template_id).filter(Boolean))] as string[];
+    if (tplIds.length) {
+      const { data: tpls } = await supabaseAdmin
+        .from("voucher_templates")
+        .select(`id, title, description, icon, category, validity_days, discount_type, discount_value, min_order_value, applicable_categories, applicable_products, free_product_name, stacks_with_beans`)
+        .in("id", tplIds).eq("brand_id", BRAND).eq("is_active", true);
+      for (const t of (tpls ?? []) as VoucherTemplateRow[]) tplById.set(t.id, t);
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  const voucherRows: Record<string, unknown>[] = [];
+  const assignRows: Record<string, unknown>[] = [];
   for (let i = 0; i < treatment.length; i++) {
     const m = treatment[i];
     const arm = arms[i % arms.length];
-    let issuedRewardId: string | null;
+    let issuedRewardId: string | null = null;
     if (def.noIssue) {
       issuedRewardId = m.existing_reward_id ?? null;
-    } else if (!arm.voucher_template_id) {
-      issuedRewardId = null; // announce-only arm: no voucher, no COGS
-    } else {
-      const issued = await issueReward(m.member_id, arm.voucher_template_id, roundId, sourceType);
-      if (issued) rewardCogs += issued.cogsRm;
-      issuedRewardId = issued?.id ?? null;
+    } else if (arm.voucher_template_id) {
+      const tpl = tplById.get(arm.voucher_template_id);
+      if (tpl) {
+        issuedRewardId = rid("ir");
+        voucherRows.push({
+          id: issuedRewardId,
+          brand_id: BRAND,
+          member_id: m.member_id,
+          voucher_template_id: tpl.id,
+          source_type: sourceType,
+          source_ref_id: roundId, // ties the reward to this round for attribution
+          title: tpl.title,
+          description: tpl.description,
+          icon: tpl.icon,
+          category: tpl.category,
+          discount_type: tpl.discount_type,
+          discount_value: tpl.discount_value,
+          min_order_value: tpl.min_order_value,
+          applicable_categories: tpl.applicable_categories,
+          applicable_products: tpl.applicable_products,
+          free_product_name: tpl.free_product_name,
+          stacks_with_beans: tpl.stacks_with_beans ?? true,
+          status: "active",
+          issued_at: nowIso,
+          expires_at: tpl.validity_days ? new Date(Date.now() + tpl.validity_days * 86400000).toISOString() : null,
+        });
+        // free_item COGS is a rough estimate; refine per-product later.
+        if (tpl.discount_type === "free_item") rewardCogs += 1.5;
+      }
     }
-    await supabaseAdmin.from("loop_assignments").insert({
+    assignRows.push({
       id: rid("la"),
       round_id: roundId,
       member_id: m.member_id,
@@ -672,6 +726,18 @@ export async function prepareRound(loopKey: LoopKey, opts: {
       issued_reward_id: issuedRewardId,
     });
     armCounts[arm.key] = (armCounts[arm.key] ?? 0) + 1;
+  }
+
+  // Vouchers BEFORE assignments: an assignment pointing at a voucher that was
+  // never minted would break redemption attribution. If a voucher chunk fails,
+  // stop rather than write assignments that reference nothing.
+  for (let i = 0; i < voucherRows.length; i += 500) {
+    const { error } = await supabaseAdmin.from("issued_rewards").insert(voucherRows.slice(i, i + 500));
+    if (error) throw new Error(`issue vouchers: ${error.message}`);
+  }
+  for (let i = 0; i < assignRows.length; i += 500) {
+    const { error } = await supabaseAdmin.from("loop_assignments").insert(assignRows.slice(i, i + 500));
+    if (error) throw new Error(`write assignments: ${error.message}`);
   }
 
   const treatmentN = treatment.length;
@@ -1498,6 +1564,15 @@ async function runTriggeredLoop(def: LoopDef, force = false): Promise<{ loop: Lo
       if (pinned.length) arms = pinned.map((oc) => toArmDef(oc, composeMessage("celebration", oc)));
     }
     arms = arms.map((a) => ({ ...a, message: a.message.split("{occasion}").join(c.greeting) }));
+    // Occasion note (e.g. a new menu item): spliced in BEFORE the closing
+    // call-to-action so the message still ends with how to redeem. Kept short
+    // so the whole SMS stays inside one GSM-7 segment.
+    if (c.note) {
+      arms = arms.map((a) => ({
+        ...a,
+        message: a.message.replace("Just show your number at any outlet to redeem.", `${c.note} Show your number at any outlet.`),
+      }));
+    }
   }
   const suppressPhones = await recentlyTargetedPhones(def.key, trig.cooldownDays);
   const preview = await prepareRound(def.key, {
