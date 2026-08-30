@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ import {
 
 export type OrderItem = {
   id: string;
+  productId?: string;
   product: string;
   sku: string;
   uom: string;
@@ -84,9 +85,44 @@ export type Order = {
   supplierDepositTermsDays: number | null;
 };
 
-export type EditItem = OrderItem & { removed?: boolean; qtyStr: string; priceStr: string };
+export type EditItem = OrderItem & {
+  removed?: boolean;
+  qtyStr: string;
+  priceStr: string;
+  // Set on rows added in this session (manual Add Item / AI invoice auto-add).
+  // Saved via the PATCH `add` path instead of the per-id update path.
+  isNew?: boolean;
+  productPackageId?: string | null;
+};
 
 export type InvoiceFile = { url: string; type: "image" | "pdf"; name: string };
+
+// Shape returned by GET /api/inventory/products — used for the Add Item
+// picker and for resolving AI-extracted invoice lines to real products.
+type CatalogProduct = {
+  id: string;
+  name: string;
+  sku: string;
+  baseUom: string;
+  isActive: boolean;
+  packages: { id: string; label: string; uom: string; conversion: number; isDefault: boolean }[];
+  suppliers: { supplierId?: string; name: string; price: number; uom: string; productPackageId: string | null }[];
+};
+
+// An invoice line the AI read that exists neither on the order nor in the
+// product catalog — surfaced for one-click "create product + add to order".
+type AiNewItem = { name: string; quantity: number; unitPrice: number; uom: string | null };
+
+// Word-overlap fuzzy match shared by the order-line matcher and the catalog
+// resolver (same heuristic the modal has always used for order lines).
+function nameMatches(a: string, b: string): boolean {
+  const an = a.toLowerCase().trim();
+  const bn = b.toLowerCase().trim();
+  if (!an || !bn) return false;
+  if (an.includes(bn) || bn.includes(an)) return true;
+  const words = an.split(/\s+/);
+  return words.filter((w) => bn.includes(w)).length >= Math.ceil(words.length * 0.5);
+}
 
 // ── Invoice preview pane ──────────────────────────────────────────────────
 // Image-or-PDF aware preview with onError fallback to iframe. Bigger now so
@@ -177,8 +213,198 @@ export function EditOrderModal({
   const [aiExtracted, setAiExtracted] = useState<Record<string, boolean>>({});
   const [confirmOnSave, setConfirmOnSave] = useState(false);
   const [detectedSupplier, setDetectedSupplier] = useState<string | null>(null);
-  const [aiUnmatched, setAiUnmatched] = useState<string[]>([]);
+  // Invoice lines with no catalog match at all — new items awaiting a
+  // one-click "create product + add to order".
+  const [aiNewItems, setAiNewItems] = useState<AiNewItem[]>([]);
   const [aiDeliveryCharge, setAiDeliveryCharge] = useState<number | null>(null);
+  // ── Add Item picker + quick product creation ──
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
+  const catalogPromise = useRef<Promise<CatalogProduct[]> | null>(null);
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const groupsLoaded = useRef(false);
+  const [quickCreate, setQuickCreate] = useState<null | {
+    name: string;
+    sku: string;
+    groupId: string;
+    baseUom: string;
+    priceStr: string;
+    qtyStr: string;
+    fromAiName: string | null; // aiNewItems entry name when opened from the AI panel
+  }>(null);
+  const [creatingProduct, setCreatingProduct] = useState(false);
+  const newRowSeq = useRef(0);
+
+  // Catalog is order-independent — fetch once per modal lifetime, shared by
+  // the AI extraction and the manual Add Item picker.
+  const loadCatalog = useCallback((): Promise<CatalogProduct[]> => {
+    if (!catalogPromise.current) {
+      catalogPromise.current = fetch("/api/inventory/products")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((list: CatalogProduct[]) => {
+          setCatalog(list);
+          return list;
+        })
+        .catch(() => {
+          catalogPromise.current = null;
+          return [];
+        });
+    }
+    return catalogPromise.current;
+  }, []);
+
+  const loadGroups = useCallback(async () => {
+    if (groupsLoaded.current) return;
+    groupsLoaded.current = true;
+    try {
+      const r = await fetch("/api/inventory/groups");
+      if (r.ok) setGroups(await r.json());
+    } catch {
+      groupsLoaded.current = false;
+    }
+  }, []);
+
+  // Pick the package + supplier price to use when adding a catalog product to
+  // this order: this supplier's listed package/price first, else the default
+  // package, else the first one, else base UOM.
+  const pickPackageAndPrice = useCallback(
+    (prod: CatalogProduct) => {
+      const supplierEntry = prod.suppliers?.find((s) => s.supplierId && s.supplierId === order?.supplierId);
+      const pkg =
+        (supplierEntry?.productPackageId
+          ? prod.packages?.find((p) => p.id === supplierEntry.productPackageId)
+          : null) ??
+        prod.packages?.find((p) => p.isDefault) ??
+        prod.packages?.[0] ??
+        null;
+      return { pkg, price: supplierEntry?.price ?? 0 };
+    },
+    [order?.supplierId],
+  );
+
+  // Build an EditItem row for a catalog product (manual pick or AI auto-add).
+  const buildNewRow = useCallback(
+    (
+      prod: CatalogProduct,
+      opts: { quantity?: number; unitPrice?: number; notes?: string | null } = {},
+    ): EditItem => {
+      const { pkg, price } = pickPackageAndPrice(prod);
+      const qty = opts.quantity && opts.quantity > 0 ? opts.quantity : 1;
+      const unitPrice = opts.unitPrice && opts.unitPrice > 0 ? opts.unitPrice : price;
+      newRowSeq.current += 1;
+      return {
+        id: `new-${newRowSeq.current}`,
+        productId: prod.id,
+        productPackageId: pkg?.id ?? null,
+        product: prod.name,
+        sku: prod.sku,
+        uom: pkg?.uom || pkg?.label || prod.baseUom,
+        package: pkg?.label ?? "",
+        quantity: qty,
+        unitPrice,
+        totalPrice: qty * unitPrice,
+        notes: opts.notes ?? null,
+        isNew: true,
+        removed: false,
+        qtyStr: String(qty),
+        priceStr: unitPrice.toFixed(2),
+      };
+    },
+    [pickPackageAndPrice],
+  );
+
+  // Manual add from the catalog picker.
+  const addCatalogItem = (prod: CatalogProduct) => {
+    setEditItems((prev) => [...prev, buildNewRow(prod)]);
+    setShowAddItem(false);
+    setAddSearch("");
+  };
+
+  // Open the quick product-creation form (from the picker's "Create new
+  // product" or from an AI-detected new invoice item).
+  const openQuickCreate = (opts: {
+    name?: string;
+    uom?: string | null;
+    price?: number;
+    qty?: number;
+    fromAiName?: string | null;
+  }) => {
+    void loadGroups();
+    const name = (opts.name ?? "").trim();
+    const letters = name.replace(/[^a-zA-Z]/g, "").toUpperCase();
+    const sku = letters ? `${letters.slice(0, 3)}-${String(Math.floor(Math.random() * 900) + 100)}` : "";
+    setQuickCreate({
+      name,
+      sku,
+      groupId: "",
+      baseUom: (opts.uom ?? "").trim() || "pcs",
+      priceStr: opts.price && opts.price > 0 ? opts.price.toFixed(2) : "",
+      qtyStr: String(opts.qty && opts.qty > 0 ? opts.qty : 1),
+      fromAiName: opts.fromAiName ?? null,
+    });
+    setShowAddItem(true);
+  };
+
+  // Create the product in the catalog (linked to this order's supplier with
+  // the invoice price) and add it to the order in one go.
+  const createProductAndAdd = async () => {
+    if (!order || !quickCreate) return;
+    const { name, sku, groupId, baseUom, fromAiName } = quickCreate;
+    if (!name.trim() || !sku.trim() || !groupId || !baseUom.trim()) return;
+    setCreatingProduct(true);
+    try {
+      const price = parseFloat(quickCreate.priceStr) || 0;
+      const res = await fetch("/api/inventory/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          sku: sku.trim(),
+          groupId,
+          baseUom: baseUom.trim(),
+          suppliers: order.supplierId ? [{ supplierId: order.supplierId, price }] : [],
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err?.error || `Product create failed (${res.status}) — check the SKU isn't already taken`);
+        return;
+      }
+      const created = await res.json();
+      const prod: CatalogProduct = {
+        id: created.id,
+        name: created.name,
+        sku: created.sku,
+        baseUom: created.baseUom,
+        isActive: true,
+        packages: [],
+        suppliers: order.supplierId
+          ? [{ supplierId: order.supplierId, name: order.supplier, price, uom: created.baseUom, productPackageId: null }]
+          : [],
+      };
+      setCatalog((prev) => [...prev, prod]);
+      // Invalidate the shared fetch cache so a later re-extract sees the new product.
+      catalogPromise.current = null;
+      setEditItems((prev) => [
+        ...prev,
+        buildNewRow(prod, {
+          quantity: parseFloat(quickCreate.qtyStr) || 1,
+          unitPrice: price,
+          notes: fromAiName ? "Added from invoice" : null,
+        }),
+      ]);
+      if (fromAiName) setAiNewItems((prev) => prev.filter((x) => x.name !== fromAiName));
+      setQuickCreate(null);
+      setShowAddItem(false);
+      setAddSearch("");
+      toast.success(`${created.name} added to catalog & order`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Product create failed");
+    } finally {
+      setCreatingProduct(false);
+    }
+  };
   // Status-action row (Approve / Send / Cancel) — ports the lightweight PO
   // panel actions into this modal so a PO can be progressed without leaving
   // the edit view. Independent of the Save/Upload flow above.
@@ -238,7 +464,10 @@ export function EditOrderModal({
     if (!order) return;
     setConfirmOnSave(confirmMode);
     setDetectedSupplier(null);
-    setAiUnmatched([]);
+    setAiNewItems([]);
+    setShowAddItem(false);
+    setAddSearch("");
+    setQuickCreate(null);
     // Pre-fill from saved value so re-opening the modal preserves the
     // delivery charge instead of forcing a re-extract.
     setAiDeliveryCharge(order.deliveryCharge > 0 ? order.deliveryCharge : null);
@@ -269,11 +498,10 @@ export function EditOrderModal({
     setExtracting(true);
     try {
       // Fetch full product catalog and supplier list for AI matching
-      const [productsRes, suppliersRes] = await Promise.all([
-        fetch("/api/inventory/products"),
+      const [allProducts, suppliersRes] = await Promise.all([
+        loadCatalog(),
         fetch("/api/inventory/suppliers"),
       ]);
-      const allProducts: { name: string; sku: string; packages: { label: string; conversion: number }[]; suppliers: { name: string; price: number; uom: string }[] }[] = productsRes.ok ? await productsRes.json() : [];
       const allSuppliers: { name: string }[] = suppliersRes.ok ? await suppliersRes.json() : [];
 
       // Build rich product names including packaging and supplier pricing context
@@ -352,36 +580,56 @@ export function EditOrderModal({
         filled.deliveryDate = true;
       }
 
-      // Match extracted items to existing order items only — don't add new items
+      // Apply extracted items: update matching order lines, AUTO-ADD catalog
+      // products that weren't on the order, and surface genuinely-new items
+      // (no catalog match) for one-click product creation.
       if (data.items?.length > 0) {
-        const unmatchedItems: string[] = [];
+        const newFromInvoice: AiNewItem[] = [];
         setEditItems((prevItems) => {
           const updated = [...prevItems];
           let changed = false;
           for (const aiItem of data.items) {
-            const aiName = (aiItem.name || "").toLowerCase();
+            const aiName = (aiItem.name || "").trim();
+            if (!aiName) continue;
             // Find best match in existing order items
-            const idx = updated.findIndex((oi) => {
-              const orderName = oi.product.toLowerCase();
-              return orderName.includes(aiName) || aiName.includes(orderName) ||
-                // Fuzzy: check if most words match
-                aiName.split(/\s+/).filter((w: string) => orderName.includes(w)).length >= Math.ceil(aiName.split(/\s+/).length * 0.5);
-            });
+            const idx = updated.findIndex((oi) => nameMatches(aiName, oi.product));
             if (idx >= 0) {
               // Update existing item
               if (aiItem.quantity > 0) updated[idx].qtyStr = String(aiItem.quantity);
               if (aiItem.unitPrice > 0) updated[idx].priceStr = String(aiItem.unitPrice);
               changed = true;
+              continue;
+            }
+            // Not on the order — resolve against the product catalog
+            // (extractor's explicit match first, then fuzzy name match).
+            const catProd =
+              (aiItem.catalogMatch &&
+                allProducts.find((p) => p.name.toLowerCase() === aiItem.catalogMatch!.toLowerCase())) ||
+              allProducts.find((p) => nameMatches(aiName, p.name));
+            if (catProd) {
+              updated.push(
+                buildNewRow(catProd, {
+                  quantity: aiItem.quantity,
+                  unitPrice: aiItem.unitPrice,
+                  notes: "Added from invoice",
+                }),
+              );
+              changed = true;
             } else {
-              // Track unmatched items to show warning
-              if (aiItem.name) unmatchedItems.push(`${aiItem.name} (${aiItem.quantity} × RM${aiItem.unitPrice})`);
+              // Brand-new item — needs a catalog product before it can be added
+              newFromInvoice.push({
+                name: aiName,
+                quantity: aiItem.quantity > 0 ? aiItem.quantity : 1,
+                unitPrice: aiItem.unitPrice > 0 ? aiItem.unitPrice : 0,
+                uom: aiItem.uom || null,
+              });
             }
           }
           if (changed) filled.items = true;
           return updated;
         });
-        if (unmatchedItems.length > 0) {
-          setAiUnmatched(unmatchedItems);
+        if (newFromInvoice.length > 0) {
+          setAiNewItems(newFromInvoice);
         }
       }
 
@@ -397,7 +645,7 @@ export function EditOrderModal({
     } finally {
       setExtracting(false);
     }
-  }, [editItems]);
+  }, [editItems, loadCatalog, buildNewRow]);
 
   const uploadFile = useCallback(async (file: File) => {
     setUploading(true);
@@ -452,17 +700,29 @@ export function EditOrderModal({
     if (!order) return false;
     setEditSaving(true);
     try {
-      // Build item changes
+      // Build item changes — updates/removals of existing lines plus adds of
+      // rows introduced this session (manual Add Item / AI invoice auto-add).
       const itemChanges = editItems
+        .filter((i) => !(i.isNew && i.removed)) // cancelled new row → nothing to persist
         .filter((i) => {
+          if (i.isNew) return true;
           if (i.removed) return true;
           const origItem = order.items.find((o) => o.id === i.id);
           if (!origItem) return false;
           return parseFloat(i.qtyStr) !== origItem.quantity || parseFloat(i.priceStr) !== origItem.unitPrice;
         })
-        .map((i) => i.removed
-          ? { id: i.id, remove: true }
-          : { id: i.id, quantity: parseFloat(i.qtyStr) || 0, unitPrice: parseFloat(i.priceStr) || 0 }
+        .map((i) => i.isNew
+          ? {
+              add: true,
+              productId: i.productId,
+              productPackageId: i.productPackageId ?? null,
+              quantity: parseFloat(i.qtyStr) || 0,
+              unitPrice: parseFloat(i.priceStr) || 0,
+              notes: i.notes,
+            }
+          : i.removed
+            ? { id: i.id, remove: true }
+            : { id: i.id, quantity: parseFloat(i.qtyStr) || 0, unitPrice: parseFloat(i.priceStr) || 0 }
         );
 
       // Update order (items + delivery date + delivery charge). Sending
@@ -674,7 +934,7 @@ export function EditOrderModal({
                 <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
                   <Upload className="h-3.5 w-3.5" /> Upload Invoice / Receipt
                 </label>
-                <p className="mb-2 text-[10px] text-gray-400">Upload first — AI will auto-extract invoice details &amp; update order items below</p>
+                <p className="mb-2 text-[10px] text-gray-400">Upload first — AI will auto-extract invoice details, update order items below &amp; auto-add invoice items missing from the order</p>
                 <div
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                   onDragLeave={() => setDragOver(false)}
@@ -902,6 +1162,7 @@ export function EditOrderModal({
                             <p className="text-[10px] text-gray-400">
                               {item.sku}
                               {item.notes === "Added from invoice" && <span className="ml-1 rounded bg-purple-100 px-1 py-0.5 text-[9px] font-medium text-purple-600">AI added</span>}
+                              {item.isNew && item.notes !== "Added from invoice" && <span className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-[9px] font-medium text-blue-600">new</span>}
                             </p>
                           </td>
                           <td className="px-3 py-2 text-gray-500">{item.uom || item.package}</td>
@@ -953,16 +1214,207 @@ export function EditOrderModal({
                 </table>
               </div>
 
-              {/* Unmatched items warning */}
-              {aiUnmatched.length > 0 && (
+              {/* Add item — pick from the catalog, or quick-create a brand-new product */}
+              <div className="mt-2">
+                {!showAddItem ? (
+                  <button
+                    onClick={() => { setShowAddItem(true); void loadCatalog(); }}
+                    className="flex items-center gap-1 text-xs font-medium text-terracotta hover:text-terracotta-dark"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Item
+                  </button>
+                ) : quickCreate ? (
+                  <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+                    <p className="text-xs font-semibold text-gray-700">Create new product — added to the catalog and this order</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="col-span-2">
+                        <label className="mb-0.5 block text-[10px] font-medium text-gray-500">Product name</label>
+                        <Input
+                          autoFocus
+                          placeholder="e.g. Kacang Tanah / Groundnut"
+                          value={quickCreate.name}
+                          onChange={(e) => setQuickCreate((p) => p && { ...p, name: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-0.5 block text-[10px] font-medium text-gray-500">SKU</label>
+                        <Input
+                          placeholder="SKU"
+                          value={quickCreate.sku}
+                          onChange={(e) => setQuickCreate((p) => p && { ...p, sku: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-0.5 block text-[10px] font-medium text-gray-500">Group</label>
+                        <select
+                          value={quickCreate.groupId}
+                          onChange={(e) => setQuickCreate((p) => p && { ...p, groupId: e.target.value })}
+                          className="h-8 w-full rounded-md border border-gray-200 bg-white px-2 text-xs focus:border-terracotta focus:outline-none"
+                        >
+                          <option value="">Select group…</option>
+                          {groups.map((g) => (
+                            <option key={g.id} value={g.id}>{g.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-0.5 block text-[10px] font-medium text-gray-500">Base unit</label>
+                        <Input
+                          placeholder="e.g. kg, pcs, pack"
+                          value={quickCreate.baseUom}
+                          onChange={(e) => setQuickCreate((p) => p && { ...p, baseUom: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="mb-0.5 block text-[10px] font-medium text-gray-500">Unit price (RM)</label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={quickCreate.priceStr}
+                            onChange={(e) => setQuickCreate((p) => p && { ...p, priceStr: e.target.value })}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-0.5 block text-[10px] font-medium text-gray-500">Qty</label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={quickCreate.qtyStr}
+                            onChange={(e) => setQuickCreate((p) => p && { ...p, qtyStr: e.target.value })}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setQuickCreate(null)} disabled={creatingProduct}>
+                        Back
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={createProductAndAdd}
+                        disabled={creatingProduct || !quickCreate.name.trim() || !quickCreate.sku.trim() || !quickCreate.groupId || !quickCreate.baseUom.trim()}
+                        className="bg-terracotta hover:bg-terracotta-dark"
+                      >
+                        {creatingProduct ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1 h-3.5 w-3.5" />}
+                        Create &amp; Add
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-gray-200 p-2">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        autoFocus
+                        placeholder="Search catalog by name or SKU…"
+                        value={addSearch}
+                        onChange={(e) => setAddSearch(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                      <button onClick={() => { setShowAddItem(false); setAddSearch(""); }} className="text-gray-400 hover:text-gray-600" title="Close">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="mt-1 max-h-48 overflow-y-auto">
+                      {(() => {
+                        const q = addSearch.toLowerCase().trim();
+                        const onOrder = new Set(
+                          editItems.filter((i) => !i.removed && i.productId).map((i) => i.productId),
+                        );
+                        const matches = catalog
+                          .filter(
+                            (p) =>
+                              p.isActive !== false &&
+                              !onOrder.has(p.id) &&
+                              (!q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)),
+                          )
+                          .slice(0, 8);
+                        if (catalog.length === 0) {
+                          return <p className="px-2 py-1.5 text-xs text-gray-400">Loading catalog…</p>;
+                        }
+                        if (matches.length === 0) {
+                          return <p className="px-2 py-1.5 text-xs text-gray-400">No catalog match.</p>;
+                        }
+                        return matches.map((p) => {
+                          const { pkg, price } = pickPackageAndPrice(p);
+                          return (
+                            <button
+                              key={p.id}
+                              onClick={() => addCatalogItem(p)}
+                              className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-gray-50"
+                            >
+                              <span>
+                                <span className="font-medium text-gray-900">{p.name}</span>
+                                <span className="ml-1 text-[10px] text-gray-400">{p.sku}</span>
+                              </span>
+                              <span className="shrink-0 text-[10px] text-gray-400">
+                                {pkg?.label || p.baseUom}
+                                {price > 0 && ` · RM${price.toFixed(2)}`}
+                              </span>
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                    <button
+                      onClick={() => openQuickCreate({ name: addSearch })}
+                      className="mt-1 flex w-full items-center gap-1 rounded border-t border-gray-100 px-2 py-1.5 text-xs font-medium text-terracotta hover:bg-terracotta/5"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Create {addSearch.trim() ? `"${addSearch.trim()}"` : "new product"} in catalog…
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* New items the AI found on the invoice with no catalog match */}
+              {aiNewItems.length > 0 && (
                 <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                  <p className="text-xs font-medium text-amber-700">Items on invoice not matched to order:</p>
-                  <ul className="mt-1 space-y-0.5">
-                    {aiUnmatched.map((item, i) => (
-                      <li key={i} className="text-xs text-amber-600">• {item}</li>
+                  <p className="flex items-center gap-1 text-xs font-medium text-amber-700">
+                    <Sparkles className="h-3.5 w-3.5" /> New items on invoice — not in product catalog:
+                  </p>
+                  <ul className="mt-1 space-y-1">
+                    {aiNewItems.map((item, i) => (
+                      <li key={i} className="flex items-center justify-between gap-2 text-xs text-amber-700">
+                        <span>
+                          • {item.name} ({item.quantity}{item.uom ? ` ${item.uom}` : ""} × RM{item.unitPrice.toFixed(2)})
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            onClick={() =>
+                              openQuickCreate({
+                                name: item.name,
+                                uom: item.uom,
+                                price: item.unitPrice,
+                                qty: item.quantity,
+                                fromAiName: item.name,
+                              })
+                            }
+                            className="rounded bg-amber-600 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-amber-700"
+                          >
+                            Add to catalog &amp; order
+                          </button>
+                          <button
+                            onClick={() => setAiNewItems((prev) => prev.filter((_, j) => j !== i))}
+                            className="text-amber-400 hover:text-amber-600"
+                            title="Dismiss"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      </li>
                     ))}
                   </ul>
-                  <p className="mt-1.5 text-[10px] text-amber-500">Add these items manually if needed, or update product catalog.</p>
+                  <p className="mt-1.5 text-[10px] text-amber-500">
+                    Invoice items already in the catalog were auto-added above. These need a new catalog product — one click creates it and adds the line.
+                  </p>
                 </div>
               )}
 
