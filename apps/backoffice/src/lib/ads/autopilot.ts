@@ -548,46 +548,58 @@ const isOwnerDirective = (d: AutopilotDecision) => d.reason.startsWith("owner di
  * state, not just a threshold that can re-arm (see the hardCutDirective
  * post-mortem below) — and is deleted once confirmed applied.
  *
- * 2026-08-16: "undo the cut" — Putrajaya's Aug 12 step-down (RM43.36→38.16)
- * landed in the same week Conezion's till slid ~21% WoW. The timing evidence
- * points at the mall, not the cut (the slide began Aug 10, two days BEFORE
- * the cut, and the index read 1.02/1.08 through six weeks of descent) — but
- * this campaign is the fleet's best cost/conv and Tamarind's pause probe
- * proved cuts on a cash-generating campaign bite on a lag, so the owner is
- * buying the cut back (+RM5.20/day) as bounded insurance while the dip is
- * diagnosed.
+ * 2026-08-25: "raise ads for conezion and shah alam. make sure the ads work"
+ * — grow where the till can prove it. Both legs go through probeUp(), so the
+ * reason starts "autopilot raise" ON PURPOSE: unlike the Aug-16 undo-cut,
+ * these ARE experiments — the raise-evaluation branch keeps them only on
+ * measured lift (adj ≥ RAISE_KEEP_ADJ_MIN, raw ≥ RAISE_KEEP_RAW_MIN after
+ * PROBE_OBSERVE_DAYS) and reverts on any guard breach. That evaluation is
+ * the owner's "make sure it works".
  *
- * The reason string deliberately does NOT start with "autopilot raise":
- * lastKind must read "other" (a human call — observed like a step, never
- * auto-reverted). The raise-evaluation branch reverts a raise on guard
- * breach, and Conezion's till is soft for reasons that predate the cut — an
- * "autopilot raise" row would be undone by the very dip that motivated it.
+ * - Shah Alam sits in its post-rollback hold (~Oct); the owner is starting
+ *   the upward search ~6 weeks early. Fires only from lastKind "rollback",
+ *   which the raise itself replaces.
+ * - Putrajaya (Conezion outlet) fires only once its guard reads CLEAN: a
+ *   raise started into the still-breached trailing window from the Aug 10-16
+ *   mall dip would be auto-reverted the next night by the very breach it is
+ *   supposed to outgrow. The directive re-arms nightly until the window
+ *   washes clean, then fires once (lastKind "other" → "raise" spends it).
  *
- * Self-expiring on BOTH axes: fires only while the campaign's last applied
- * change is still the Aug 12 step-down to RM38.16 (the raise itself replaces
- * that, so it can never re-fire), and never after 2026-08-23 regardless of
- * state.
+ * Hard expiry 2026-09-15 on both legs regardless of state — the lastKind
+ * guards alone are the re-armable-trap class the post-mortems warn about.
  */
-export function ownerDirective(c: CampaignState, now: Date = new Date()): AutopilotDecision | null {
+export function ownerDirective(
+  c: CampaignState,
+  guard: GuardSignal,
+  now: Date = new Date(),
+): AutopilotDecision | null {
+  if (now.getTime() >= Date.parse("2026-09-15T00:00:00Z")) return null;
+  const why = "owner directive 2026-08-25: grow where the till proved response";
+  if (
+    c.campaignName === "Celsius Coffee Shah Alam" &&
+    !c.isPaused &&
+    lastKind(c.lastApplied) === "rollback" &&
+    guard.rawIndex != null &&
+    !guard.breach
+  ) {
+    return probeUp(c, guard, why);
+  }
   if (
     c.campaignName === "Celsius Putrajaya" &&
     !c.isPaused &&
-    now.getTime() < Date.parse("2026-08-23T00:00:00Z") &&
-    lastKind(c.lastApplied) === "step-down" &&
-    round2(c.lastApplied?.newDailyMyr ?? 0) === 38.16 &&
-    round2(c.dailyBudgetMyr) === 38.16
+    lastKind(c.lastApplied) === "other" &&
+    round2(c.dailyBudgetMyr) === 43.36 &&
+    guard.rawIndex != null &&
+    !guard.breach
   ) {
-    return {
-      campaignId: c.campaignId,
-      campaignName: c.campaignName,
-      action: "raise",
-      newDailyMyr: 43.36,
-      reason:
-        "owner directive 2026-08-16 (undo the Aug 12 cut): Conezion till −21% WoW while the descent read healthy — RM38.16→RM43.36/day (+RM156/mo) as bounded insurance while the dip is diagnosed; a human call, not a probe — do not auto-revert",
-    };
+    return probeUp(c, guard, why);
   }
   return null;
 }
+
+// REMOVED 2026-08-25: the 2026-08-16 Putrajaya undo-cut directive — fired
+// 2026-08-16 19:01 and spent (its lastApplied guard can never match again;
+// hard expiry passed 2026-08-23).
 
 // REMOVED 2026-08-16: the 2026-07-19 Tamarind resume-descent directive. It did
 // its job on 2026-07-20, but its guard (lastKind "rollback" && budget > RM85)
@@ -1209,7 +1221,7 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
 
   const baseDecisions = states.map((s) => {
     const guard = s.outletId ? guards[s.outletId] ?? noGuard : noGuard;
-    const directive = ownerDirective(s, now);
+    const directive = ownerDirective(s, guard, now);
     return directive ?? decideCampaign(s, guard, now);
   });
   const withProbe = PAUSE_PROBE_ENABLED ? selectPauseProbe(capCuts(baseDecisions, states), states, guards) : capCuts(baseDecisions, states);

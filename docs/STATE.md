@@ -2721,7 +2721,15 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   designed). Conezion: recovering — Sun Aug 24 wk: Thu 3,347/Fri 3,487/Sat
   4,218/Sun 3,977 (+29% WoW)/Mon 3,388, Tue Aug 25 beat the prior Tuesday
   by 5pm (payday bounce landing); ~85–90% of pre-dip; guard raw 0.90 (adj
-  0.94) still breached on the trailing window, trend up. Weekend Aug 21–23
+  0.94) still breached on the trailing window, trend up. Owner (same day):
+  "raise ads for conezion and shah alam. make sure the ads work" →
+  ownerDirective rewritten as TWO evaluated probe-ups (reasons start
+  "autopilot raise" ON PURPOSE — kept only on measured lift, reverted on
+  breach/no-lift after 28d): Shah Alam RM53.98→62.08 fires the first clean
+  night (starts the post-rollback upward search ~6wk early); Putrajaya
+  RM43.36→49.86 ARMS but fires only once Conezion's guard un-breaches
+  (raising into the trailing breach would insta-revert). Hard expiry
+  2026-09-15; spent Aug-16 undo-cut directive removed. Weekend Aug 21–23
   was fleet-wide soft (deepest pre-payday weekend + one-off Shah Alam Sat
   miss RM3,975 vs RM5.2–6k, cause unverified). Nilai guard forecast has
   decayed to RM64/day on the dead feed — chase remains with the data-estate
