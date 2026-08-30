@@ -193,7 +193,7 @@ async function welcomeSegment(o: SegmentOpts): Promise<{ rows: SegmentRow[]; lab
 // batch firing the next morning to the half of the base being saved for the
 // next occasion.
 export const CELEBRATIONS: Array<{ date: string; name: string; greeting: string; offers?: string[]; note?: string; wishWindow?: "eve" | "day" | "both" }> = [
-  { date: "2026-08-31", name: "Merdeka Day",              greeting: "Selamat Hari Merdeka", offers: ["b1f1_drinks"], note: "Try our new Choc Blanc.", wishWindow: "eve" },
+  { date: "2026-08-31", name: "Merdeka Day",              greeting: "Selamat Hari Merdeka", offers: ["b1f1_drinks"], note: "Try our new Choc Blanc.", wishWindow: "day" },
   { date: "2026-09-16", name: "Malaysia Day",             greeting: "Happy Malaysia Day", offers: ["b1f1_drinks"], note: "Try our new Choc Blanc." },
   { date: "2026-10-01", name: "International Coffee Day", greeting: "Happy International Coffee Day" },
   { date: "2026-11-08", name: "Deepavali",                greeting: "Happy Deepavali" },
