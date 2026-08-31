@@ -207,7 +207,8 @@ const OUTFLOW_RULES: Rule[] = [
   // is Google only, and indeed_ads_invoice / indeed_ads_metric_daily are both
   // EMPTY. The bank line is the only record Indeed spend has, so booking it as
   // DIGITAL_ADS would erase the cost from the P&L entirely. RM4,166 in Aug-2026,
-  // RM11,923 since Jan-2025, always claimed back through the director.
+  // RM13,922 across 11 claims since Jan-2025, always claimed back through the
+  // director.
   // OTHER_MARKETING is the closest category that stays in opex; a dedicated
   // RECRUITMENT category would be better if this volume keeps growing.
   // MUST precede marketing_ammar_claim, which would otherwise take it.
