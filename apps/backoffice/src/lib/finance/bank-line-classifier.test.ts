@@ -7,12 +7,21 @@ const dr = (description: string, amount = 100) =>
   classifyBankLine({ description, amount, direction: "DR" });
 
 describe("bank-line-classifier", () => {
+  it("keeps Indeed recruitment spend OUT of DIGITAL_ADS", () => {
+    // DIGITAL_ADS is deduped out of bank opex against the ads module, which is
+    // Google-only — the Indeed tables are empty, so booking Indeed there would
+    // erase the cost from the P&L. It must stay in a category that survives.
+    expect(dr("Shah Alam AMMAR BIN SHAHRIN * indeed 15/8/26").category).toBe("OTHER_MARKETING");
+    expect(dr("Shah Alam AMMAR BIN SHAHRIN * indeed 2/7/26").category).toBe("OTHER_MARKETING");
+    expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN Indeed Hiring").category).toBe("OTHER_MARKETING");
+    expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN Claim Indeed").category).toBe("OTHER_MARKETING");
+  });
+
   it("books the director's ad reimbursements as DIGITAL_ADS whatever the spelling", () => {
     // Real Jul/Aug-2026 narrations. None contain "ads claim", so the older rule
     // dropped them into OTHER_OUTFLOW — RM18,575 in August alone.
     expect(dr("Shah Alam AMMAR BIN SHAHRIN * Marketing 0726").category).toBe("DIGITAL_ADS");
     expect(dr("Tamarind AMMAR BIN SHAHRIN * Marketing 0626").category).toBe("DIGITAL_ADS");
-    expect(dr("Shah Alam AMMAR BIN SHAHRIN * indeed 15/8/26").category).toBe("DIGITAL_ADS");
     expect(dr("Putrajaya AMMAR BIN SHAHRIN * Ads Clam Jun26").category).toBe("DIGITAL_ADS");
     // Older spellings keep working
     expect(dr("Celsius Coffee PutraAMMAR BIN SHAHRIN * Ads claim May").category).toBe("DIGITAL_ADS");

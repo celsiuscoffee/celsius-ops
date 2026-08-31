@@ -99,7 +99,8 @@ const SALARY_RE = new RegExp(String.raw`\bSALARY\b|\bSAL\.?\s+(?:${PAY_PERIOD})`
 const OVERTIME_RE = new RegExp(String.raw`\b(?:ADD\s+)?OT\s+(?:${PAY_PERIOD})`, "i");
 const MGMT_FEE_RE = /\b(?:MANAGEMENT|MNGMT|MGMT)\s*FEE\b|\bMGMT\b/i;
 const PARTIMER_RE = /\bPARTIMER\b|\bPT\s*WEEK\b|\bPT\s*W\s*\d{1,2}\b/i;
-const AMMAR_ADS_CLAIM_RE = /AMMAR\s+BIN\s+SHAHRIN[\s\S]*\b(?:ADS?|MARKETING|INDEED)\b/i;
+const AMMAR_ADS_CLAIM_RE = /AMMAR\s+BIN\s+SHAHRIN[\s\S]*\b(?:ADS?|MARKETING)\b/i;
+const INDEED_CLAIM_RE = /\bINDEED\b/i;
 
 // Inflow rules
 //
@@ -194,11 +195,23 @@ const OUTFLOW_RULES: Rule[] = [
   // director's ad claims read "Ads Clam Jun26" (typo), then "Marketing 0726"
   // and "indeed 15/8/26" — none of which marketing_ads_claim catches, so
   // RM6,567 (Jul) and the whole RM18,575 August run fell to OTHER_OUTFLOW and
-  // understated ads while overstating opex.
+  // understated ads while overstating opex. (Indeed is split off above — it is
+  // recruitment, not customer marketing, and has no dedupe source.)
   // Scoped to the director's name ON PURPOSE: the note below rules out a
   // generic /MARKETING/ sweep because "BEST Marketing & Distribution" and
   // friends are goods suppliers. Requiring both the payee AND the purpose
   // token keeps those out while catching every spelling of his claim.
+  // Indeed is RECRUITMENT advertising and must NOT land in DIGITAL_ADS. That
+  // category is deduped out of bank opex (pnl-sourced.ts BANK_DIGITAL_ADS) on
+  // the assumption the ads module already booked the spend — but the ads module
+  // is Google only, and indeed_ads_invoice / indeed_ads_metric_daily are both
+  // EMPTY. The bank line is the only record Indeed spend has, so booking it as
+  // DIGITAL_ADS would erase the cost from the P&L entirely. RM4,166 in Aug-2026,
+  // RM11,923 since Jan-2025, always claimed back through the director.
+  // OTHER_MARKETING is the closest category that stays in opex; a dedicated
+  // RECRUITMENT category would be better if this volume keeps growing.
+  // MUST precede marketing_ammar_claim, which would otherwise take it.
+  { name: "recruitment_indeed",       match: INDEED_CLAIM_RE,                         direction: "DR", category: "OTHER_MARKETING" as CashCategory },
   { name: "marketing_ammar_claim",    match: AMMAR_ADS_CLAIM_RE,                      direction: "DR", category: "DIGITAL_ADS" as CashCategory },
   { name: "purpose_stat_pay",         match: /\b(STAT\s*PAY|STATUTORY)\b/i,           direction: "DR", category: "STATUTORY_PAYMENT" as CashCategory },
   { name: "purpose_inventory",        match: /\bINVENTORY\b/i,                        direction: "DR", category: "RAW_MATERIALS" as CashCategory },
