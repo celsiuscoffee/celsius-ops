@@ -6,6 +6,20 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-31 — **`docs/admin/` created as the business-administration hub**
+  (owner request: a dedicated home for "admin stuff"). Skeleton only:
+  `README.md` (conventions — no secrets/scans in repo, Drive links only,
+  every dated obligation mirrored into the tracker), `renewals.md` (master
+  deadline tracker — the one file that must stay complete), plus per-domain
+  files `company.md` (SSM/cosec/banking), `licenses.md` (per-outlet permits:
+  Shah Alam/MBSA, Conezion/PPj, Tamarind), `outlets.md` (tenancy +
+  utilities), `insurance.md`, `contracts.md`, `compliance.md` (LHDN/SST/
+  EPF/SOCSO registrations; payroll execution stays with the HR module).
+  All sections are `PENDING — owner to share`; next session on this topic
+  should fill tables from whatever the owner has shared and keep
+  `renewals.md` as the source of truth for dates. Branch
+  `claude/admin-stuff-structure-sv9ufm`.
+
 - 2026-08-21 — **"Unauthorized" on checklist Photo Proof = the 12-hour staff
   session dying under an app that never noticed.** Owner screenshot:
   `staff.celsiuscoffee.com says: Unauthorized` over the Photo Proof camera.
