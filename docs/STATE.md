@@ -6,6 +6,31 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-31 — **Director ad claims lag 1–4 months, so cash-basis ads is
+  meaningless.** Of August's RM18,575.28 of claims, only **RM2,262.26 (12%)**
+  is August spend — `indeed 15/8/26`. The rest is June (`Marketing 0626`,
+  6,331.98) and July (`Marketing 0726` ×3 + `indeed 2/7/26`, 9,981.04). July's
+  RM9,857.44 was April + June spend. Use `ads_metric_daily` for the true
+  Google run rate (May 9,126.24 / Jun 9,128.49 / Jul 14,045.13 / Aug 7,076.96),
+  never the bank month.
+- 2026-08-31 — **New `RECRUITMENT` CashCategory + COA 6502-05.** Indeed is
+  hiring spend, not advertising: DIGITAL_ADS is deduped out of bank opex
+  against the Google-only ads module and `indeed_ads_invoice` /
+  `indeed_ads_metric_daily` are **both EMPTY**, so routing Indeed there erases
+  the cost from the P&L entirely; OTHER_MARKETING keeps it but reports hiring
+  inside the marketing line. RM13,922.43 across 11 claims since Jan-2025;
+  RM4,165.92 in Aug-2026, the largest month on record. Wired through
+  classifier (`recruitment_indeed`, ahead of the ads-claim rule),
+  `gl-posting-map` (6502-05 — unmapped categories fall to Suspense),
+  `cash-tracking`, and `cashflow` `costs.payroll` (unhandled categories are
+  silently dropped from the cost total). **NEITHER migration applied** —
+  `packages/db/prisma/migrations/20260831_cashcategory_recruitment` and
+  `apps/backoffice/supabase/migrations/020_coa_recruitment.sql` await owner
+  approval; then `POST /api/finance/reclassify {"full": true}`.
+  Note: `prisma migrate diff` cannot run here — `packages/db/prisma/migrations`
+  has no `migration_lock.toml` (it is an audit trail, not a Prisma history), so
+  enum SQL is hand-written following `20260629_cashcategory_revenue_monster_dividend`.
+
 - 2026-08-31 — **A coverage link is not a match — one open invoice was
   stranded, silently.** `linkCashOutByInvoiceNumber`
   (`lib/finance/cash-out-coverage.ts`) stamps `BankStatementLine.apInvoiceId`
