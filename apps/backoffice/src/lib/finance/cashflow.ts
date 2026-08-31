@@ -1716,7 +1716,11 @@ async function loadOperatingCashFlow(): Promise<CashflowResult["operatingCashFlo
         case "PARTIMER":
         case "STATUTORY_PAYMENT":
         case "STAFF_CLAIM":
-        case "PETTY_CASH":     row.costs.payroll       += amt; break;
+        case "PETTY_CASH":
+        // Job-board spend is a cost of hiring people, so it belongs with people
+        // cost rather than marketing — putting it in `marketing` was what made
+        // Aug-2026 ad spend look 29% higher than it was.
+        case "RECRUITMENT":    row.costs.payroll       += amt; break;
         case "RAW_MATERIALS":
         case "DELIVERY":       row.costs.cogs          += amt; break;
         case "RENT":           row.costs.rent          += amt; break;

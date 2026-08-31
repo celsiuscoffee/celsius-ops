@@ -201,18 +201,15 @@ const OUTFLOW_RULES: Rule[] = [
   // generic /MARKETING/ sweep because "BEST Marketing & Distribution" and
   // friends are goods suppliers. Requiring both the payee AND the purpose
   // token keeps those out while catching every spelling of his claim.
-  // Indeed is RECRUITMENT advertising and must NOT land in DIGITAL_ADS. That
-  // category is deduped out of bank opex (pnl-sourced.ts BANK_DIGITAL_ADS) on
-  // the assumption the ads module already booked the spend — but the ads module
-  // is Google only, and indeed_ads_invoice / indeed_ads_metric_daily are both
-  // EMPTY. The bank line is the only record Indeed spend has, so booking it as
-  // DIGITAL_ADS would erase the cost from the P&L entirely. RM4,166 in Aug-2026,
-  // RM13,922 across 11 claims since Jan-2025, always claimed back through the
-  // director.
-  // OTHER_MARKETING is the closest category that stays in opex; a dedicated
-  // RECRUITMENT category would be better if this volume keeps growing.
+  // Job-board spend (Indeed) is hiring cost, not advertising. It must NOT land
+  // in DIGITAL_ADS — that category is deduped out of bank opex (pnl-sourced.ts
+  // BANK_DIGITAL_ADS) on the assumption the ads module already booked the
+  // spend, but that module is Google-only and indeed_ads_invoice /
+  // indeed_ads_metric_daily are both EMPTY, so the bank line is the only record
+  // this cost has. RM13,922.43 across 11 claims since Jan-2025, always claimed
+  // back through the director; RM4,165.92 in Aug-2026, the largest month.
   // MUST precede marketing_ammar_claim, which would otherwise take it.
-  { name: "recruitment_indeed",       match: INDEED_CLAIM_RE,                         direction: "DR", category: "OTHER_MARKETING" as CashCategory },
+  { name: "recruitment_indeed",       match: INDEED_CLAIM_RE,                         direction: "DR", category: "RECRUITMENT" as CashCategory },
   { name: "marketing_ammar_claim",    match: AMMAR_ADS_CLAIM_RE,                      direction: "DR", category: "DIGITAL_ADS" as CashCategory },
   { name: "purpose_stat_pay",         match: /\b(STAT\s*PAY|STATUTORY)\b/i,           direction: "DR", category: "STATUTORY_PAYMENT" as CashCategory },
   { name: "purpose_inventory",        match: /\bINVENTORY\b/i,                        direction: "DR", category: "RAW_MATERIALS" as CashCategory },
