@@ -2337,6 +2337,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   roll-over due ~2026-10-01 for September. Same branch/PR as the
   `docs/admin/` skeleton (#1194).
 
+- 2026-08-31 — **GBP category adds now one click away** (`/api/reviews/gbp-categories`,
+  dry-run default, `?apply=1` appends): derives wanted categories from each
+  outlet's ACTIVE tracked keywords via `categoryForKeyword`, resolves stable
+  category ids at runtime (regionCode MY), append-only — primary + hand-set
+  categories always preserved, 9-additional cap respected. Context: after 8
+  weeks `restaurants near me` was still unranked at every outlet because the
+  category adds were never made by hand. Marketing state 2026-08-31: ads spend
+  cut 58% (RM8.7k->RM3.7k/mo, 24 budget cuts + 75 exclusions applied); rank
+  trends now measurable (24 combos with pairs) — SA dominant, Tamarind ~#3-4
+  holding, Putrajaya drifting ~-1, Nilai weak; reviews PJ 33/30d, Tam 28/30d,
+  SA 5/30d, Nilai 3/30d (114, tied its top competitor). Owner still owes the
+  review-ask push at SA + Nilai and the two clicks on gbp-categories.
+
 - 2026-08-31 — **Stock investigation: measurement layer is now trustworthy;
   next is validation + physical checks.** Shipped this session: PR #1164
   (auto-approve + Flagged queue), PR #1195 (loose-pieces count units), staff
@@ -2361,11 +2374,29 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   is a SEPARATE entity (own staff/infra — `gosame-ops` Supabase project
   exists, ap-southeast-1, since 2026-07-10); surfaces stay backoffice=admin /
   staff-app=read+ack; priority is docs → sign-off → execution links.
-  **Next session:** owner reviews/merges the PR (merge = publish GOV-001 per
-  its own §5.3 — bump to 1.0 + set effective_date first), then write the
-  phase-0.5 documents: CC-FIN-001 cash handling, CC-HR-001 onboarding,
-  CC-OPS-001 incident handling. Open questions in the design doc: Gosame
-  domain map, shared functions (GRP- docs), BM/EN policy.
+  **DONE same day:** phase 0 MERGED (#1193, squash `26d09b6`), CC-GOV-001
+  published v1.0 effective 2026-08-31. Phase 0.5 drafted on the same branch
+  (new PR): CC-FIN-001 **Payments & Refunds** (owner correction: BOTH
+  companies are CASHLESS — never write cash-drawer/float SOPs; the POS is
+  QR/card-only per `apps/pos-native/lib/shift.ts`, "reconciliation" =
+  weekly bank-settlement watchdog with fee bands, advisory), CC-HR-001
+  New Hire Onboarding (grounded in hr_onboarding_templates flow, HR
+  authority matrix `OP_RULES` in `write-ops.ts` — two-person rule on
+  salary/bank changes; PIN must be 6 digits for native logins), CC-OPS-001
+  Incident & Complaint Handling (grounded in the reviews-recovery loop,
+  ops-nudges, RM10 review penalties; NO generic incident log exists —
+  SOP defines a written interim record). Registry updated; FIN-002 renamed
+  "Daily Sales & Settlement Reconciliation" (still PLANNED).
+  **Facts for future SOP writing:** typhoid NOT tracked (roadmap; certs
+  table has food_handler etc.); refunds have NO POS flow (finance-side
+  CUSTOMER_REFUND only); `ApprovalRule` table exists but NOTHING enforces
+  it — don't cite it as operative; roles are OWNER/ADMIN/MANAGER/STAFF
+  (no shift-lead enum; HOO is informal via position ILIKE 'head of').
+  **Next session:** owner reviews/merges the phase-0.5 PR (bump the 3 docs
+  to 1.0 + effective_date on approval, like GOV-001); then next docs
+  (CC-GOV-002 authority matrix, CC-FIN-002) or start phase 1 (schema +
+  sop-sync CI). Open questions unchanged: Gosame domain map, shared
+  functions (GRP- docs), BM/EN policy.
 
 - 2026-08-28 — **Choc Blanc Merdeka: artwork done, decisions settled, ONE
   blocker left.** All three `splash_posters` rows still have `image_url = ''`;
