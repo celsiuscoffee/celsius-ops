@@ -225,6 +225,23 @@ export async function POST(req: NextRequest) {
 
   async function upsertOne(it: typeof incoming[number]) {
     const pkgId = it.productPackageId ?? null;
+
+    // One unit line per product per count. The UI keys counts by product and
+    // sends whichever unit (package or loose base) the counter last chose —
+    // so a row left behind under a previously-chosen unit is a stale
+    // duplicate, and finalize SUMS lines per product: "7 loaves" re-counted
+    // as "70 pcs" would otherwise apply as 140. Clear the other-unit rows
+    // before upserting this one.
+    await prisma.stockCountItem.deleteMany({
+      where: {
+        stockCountId: countId,
+        productId: it.productId,
+        ...(pkgId !== null
+          ? { NOT: { productPackageId: pkgId } }
+          : { productPackageId: { not: null } }),
+      },
+    });
+
     const createData = {
       stockCountId: countId,
       productId: it.productId,
