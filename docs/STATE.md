@@ -2642,6 +2642,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-08-31 — **GBP category adds now one click away** (`/api/reviews/gbp-categories`,
+  dry-run default, `?apply=1` appends): derives wanted categories from each
+  outlet's ACTIVE tracked keywords via `categoryForKeyword`, resolves stable
+  category ids at runtime (regionCode MY), append-only — primary + hand-set
+  categories always preserved, 9-additional cap respected. Context: after 8
+  weeks `restaurants near me` was still unranked at every outlet because the
+  category adds were never made by hand. Marketing state 2026-08-31: ads spend
+  cut 58% (RM8.7k->RM3.7k/mo, 24 budget cuts + 75 exclusions applied); rank
+  trends now measurable (24 combos with pairs) — SA dominant, Tamarind ~#3-4
+  holding, Putrajaya drifting ~-1, Nilai weak; reviews PJ 33/30d, Tam 28/30d,
+  SA 5/30d, Nilai 3/30d (114, tied its top competitor). Owner still owes the
+  review-ask push at SA + Nilai and the two clicks on gbp-categories.
+
 - 2026-08-31 — **Stock investigation: measurement layer is now trustworthy;
   next is validation + physical checks.** Shipped this session: PR #1164
   (auto-approve + Flagged queue), PR #1195 (loose-pieces count units), staff
