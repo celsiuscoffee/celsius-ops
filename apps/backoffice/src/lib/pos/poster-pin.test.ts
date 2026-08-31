@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { pinStateOf, type PinnablePoster } from "./poster-pin";
+import { displayRoundsOf, ROUNDS } from "./poster-autopilot";
 
 const NOW = Date.parse("2026-09-05T04:00:00Z"); // 12:00 MYT, mid-campaign
 
@@ -56,5 +57,33 @@ describe("pinStateOf", () => {
     const ends = "2026-09-30T15:59:59Z";
     expect(pinStateOf(poster({ ends_at: ends }), Date.parse(ends))).toBe("pinned-live");
     expect(pinStateOf(poster({ ends_at: ends }), Date.parse(ends) + 1)).toBe("managed");
+  });
+});
+
+describe("displayRoundsOf", () => {
+  it("shows a round-less POS poster all day, mirroring the POS reader", () => {
+    expect(displayRoundsOf({ round: null, rounds: null }, "pos-display")).toEqual(ROUNDS);
+  });
+
+  it("ignores rounds[] on POS, because the POS reader only reads the round column", () => {
+    const po = { round: null, rounds: ["breakfast"] };
+    expect(displayRoundsOf(po, "pos-display")).toEqual(ROUNDS);
+  });
+
+  it("limits a round-tagged POS poster to that round", () => {
+    expect(displayRoundsOf({ round: "lunch", rounds: null }, "pos-display")).toEqual(["lunch"]);
+  });
+
+  it("uses the rounds[] window on home, where the reader honours it", () => {
+    const po = { round: null, rounds: ["lunch", "dinner"] };
+    expect(displayRoundsOf(po, "home")).toEqual(["lunch", "dinner"]);
+  });
+
+  it("treats a windowless home poster as always on", () => {
+    expect(displayRoundsOf({ round: null, rounds: null }, "home")).toEqual(ROUNDS);
+  });
+
+  it("drops an unrecognised round rather than guessing", () => {
+    expect(displayRoundsOf({ round: "brekkie", rounds: null }, "pos-display")).toEqual([]);
   });
 });

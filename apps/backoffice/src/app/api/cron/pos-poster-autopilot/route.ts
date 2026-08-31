@@ -18,9 +18,10 @@ import { planPosterRotation } from "@/lib/pos/poster-autopilot";
  * move AOV at all). If it doesn't, we'll see it and back off.
  *
  * Campaign pins win: a poster scheduled with an end date is never rewritten
- * here, and while one is live the rest of that surface is switched off. So a
- * launch can be curated in the CMS without switching this cron off, and the
- * surface returns to the rotation by itself once the pin expires.
+ * here, and once live pins cover the whole day the rest of that surface is
+ * switched off. So a launch can be curated in the CMS without switching this
+ * cron off, and the surface returns to the rotation by itself once the pin
+ * expires.
  */
 
 export const dynamic = "force-dynamic";

@@ -20,7 +20,9 @@
 /**
  *   managed     → autopilot owns active + sort_order, exactly as before
  *   pinned      → scheduled, not showing yet; autopilot must not write to it
- *   pinned-live → showing now; also benches every unpinned poster on the surface
+ *   pinned-live → showing now; benches the unpinned posters too, but only once
+ *                  the live pins cover every round (see displayRoundsOf), so a
+ *                  part-day pin cannot leave the screen blank the rest of the day
  */
 export type PinState = "managed" | "pinned" | "pinned-live";
 

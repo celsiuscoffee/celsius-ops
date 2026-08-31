@@ -132,6 +132,23 @@ function windowOf(po: { round: string | null; rounds: string[] | null }): Round[
 }
 
 /**
+ * Which rounds a poster actually DISPLAYS in on a given surface. This has to
+ * mirror each reader or a pin could black the surface out during rounds it
+ * never appears in:
+ *   • pos-display (/api/pos/posters) keys off the single `round` column and
+ *     ignores rounds[], so a round-less POS poster shows all day
+ *   • home + splash readers use the rounds[] window (see windowOf)
+ */
+export function displayRoundsOf(
+  po: { round: string | null; rounds: string[] | null },
+  placement: Placement,
+): Round[] {
+  if (placement !== "pos-display") return windowOf(po);
+  if (!po.round) return ROUNDS;
+  return (ROUNDS as string[]).includes(po.round) ? [po.round as Round] : [];
+}
+
+/**
  * Build the active/sort_order plan for one placement. Pure read — returns
  * decisions; the caller applies them.
  *
@@ -142,8 +159,8 @@ function windowOf(po: { round: string | null; rounds: string[] | null }): Round[
  * blend weight ramps with attributed orders (cold-start heuristic → measured).
  *
  * Campaign pins (see ./poster-pin) sit above all of that: a pinned poster gets
- * no decision at all, and while one is live every other poster on the surface
- * is switched off so the campaign owns the screen.
+ * no decision at all, and once live pins cover every round the rest of the
+ * surface is switched off so the campaign owns the screen.
  */
 export async function planPosterRotation(
   opts: {
@@ -217,16 +234,22 @@ export async function planPosterRotation(
   const nowMs = opts.now ?? Date.now();
   const pinned: PosterPin[] = [];
   const unpinned: Row[] = [];
-  let hasLivePin = false;
+  const livePinRounds = new Set<Round>();
   for (const po of allRows) {
     const state = pinStateOf(po, nowMs);
     if (state === "managed") {
       unpinned.push(po);
       continue;
     }
-    if (state === "pinned-live") hasLivePin = true;
+    if (state === "pinned-live") for (const r of displayRoundsOf(po, placement)) livePinRounds.add(r);
     pinned.push({ posterId: po.id, title: po.title, live: state === "pinned-live" });
   }
+
+  // A campaign takes the WHOLE surface only when its live pins cover every
+  // round between them. A part-day pin is still protected from the autopilot,
+  // but it must not switch the rotation off in the rounds where it does not
+  // show — that would leave the customer display blank for most of the day.
+  const campaignOwnsSurface = ROUNDS.every((r) => livePinRounds.has(r));
 
   // POS posters are always round-tagged; app posters may be round-less. Untagged
   // POS posters stay out of the scoring pool, as they always have, but they are
@@ -324,10 +347,10 @@ export async function planPosterRotation(
     posterId: po.id,
     title: po.title,
     productId: po.product_id,
-    active: hasLivePin ? false : activeIds.has(po.id),
+    active: campaignOwnsSurface ? false : activeIds.has(po.id),
     sortOrder: (i + 1) * 10,
     score: Math.round((bestScore.get(po.id) ?? 0) * 1000) / 1000,
-    reason: hasLivePin
+    reason: campaignOwnsSurface
       ? "benched for a live campaign pin"
       : activeIds.has(po.id)
         ? "top-K in an eligible round"
@@ -336,7 +359,7 @@ export async function planPosterRotation(
 
   // Posters the scoring pool skips still have to go dark for a campaign,
   // otherwise an always-on untagged poster would keep sharing the screen.
-  if (hasLivePin) {
+  if (campaignOwnsSurface) {
     for (const po of benchOnly) {
       decisions.push({
         round: po.round ? (po.round as Round) : null,
