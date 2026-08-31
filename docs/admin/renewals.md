@@ -7,7 +7,11 @@ Status legend: 🟢 active / 🟡 due within 60 days / 🔴 overdue or lapsed / 
 
 | Due date | Item | Outlet / entity | Domain file | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| _PENDING — owner to share_ | | | | ⚪ | |
+| ⚠️ overdue? | E-invoice filing since Jan 2026 (grace ended ~Jun) | all 3 entities | compliance.md | 🔴 | UNCONFIRMED whether accountant files via portal — answer the open question in compliance.md first |
+| _unknown_ | Annual return + AGM | Celsius Coffee Sdn. Bhd. | company.md | ⚪ | cosec to confirm date |
+| _unknown_ | Annual return + AGM | Conezion Sdn. Bhd. (inc. 2025) | company.md | ⚪ | cosec to confirm |
+| _unknown_ | Annual return + AGM | Tamarind Sdn. Bhd. (inc. 2025) | company.md | ⚪ | cosec to confirm |
+| _PENDING — owner to share_ | licences, leases, insurance | | | ⚪ | |
 
 <!-- Row template:
 | 2026-12-31 | Premise licence renewal | Shah Alam | licenses.md | 🟢 | Renew at MBSA counter, ~RM xxx |
@@ -17,4 +21,5 @@ Status legend: 🟢 active / 🟡 due within 60 days / 🔴 overdue or lapsed / 
 
 | Frequency | Item | Owner | Notes |
 | --- | --- | --- | --- |
+| Monthly, day 7 | Consolidated e-invoice per entity (prior month) | ⚪ unconfirmed | see compliance.md open question |
 | _PENDING — owner to share_ | | | |
