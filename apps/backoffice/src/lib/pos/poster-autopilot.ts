@@ -17,6 +17,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
+import { pinStateOf } from "./poster-pin";
 
 export type Round = "breakfast" | "brunch" | "lunch" | "midday" | "evening" | "dinner" | "supper";
 export const ROUNDS: Round[] = ["breakfast", "brunch", "lunch", "midday", "evening", "dinner", "supper"];
@@ -35,10 +36,17 @@ export type PosterDecision = {
   title: string | null;
   productId: string | null;
   active: boolean;
-  sortOrder: number;
+  // null = leave sort_order alone (a poster outside the scoring pool that is
+  // only being switched off for a campaign).
+  sortOrder: number | null;
   score: number;
   reason: string;
 };
+
+/** A poster the autopilot deliberately did not touch. Reported for the cron log. */
+export type PosterPin = { posterId: string; title: string | null; live: boolean };
+
+export type PosterPlan = { decisions: PosterDecision[]; pinned: PosterPin[] };
 
 /**
  * Cheapest-supplier ingredient cost (RM) per lower(menu.name), from the BOM.
@@ -124,6 +132,23 @@ function windowOf(po: { round: string | null; rounds: string[] | null }): Round[
 }
 
 /**
+ * Which rounds a poster actually DISPLAYS in on a given surface. This has to
+ * mirror each reader or a pin could black the surface out during rounds it
+ * never appears in:
+ *   • pos-display (/api/pos/posters) keys off the single `round` column and
+ *     ignores rounds[], so a round-less POS poster shows all day
+ *   • home + splash readers use the rounds[] window (see windowOf)
+ */
+export function displayRoundsOf(
+  po: { round: string | null; rounds: string[] | null },
+  placement: Placement,
+): Round[] {
+  if (placement !== "pos-display") return windowOf(po);
+  if (!po.round) return ROUNDS;
+  return (ROUNDS as string[]).includes(po.round) ? [po.round as Round] : [];
+}
+
+/**
  * Build the active/sort_order plan for one placement. Pure read — returns
  * decisions; the caller applies them.
  *
@@ -132,23 +157,34 @@ function windowOf(po: { round: string | null; rounds: string[] | null }): Round[
  * deeplinks, so once orders are attributed (poster_events → pos_poster_app_perf)
  * the engine blends each poster's MEASURED order AOV over the heuristic — the
  * blend weight ramps with attributed orders (cold-start heuristic → measured).
+ *
+ * Campaign pins (see ./poster-pin) sit above all of that: a pinned poster gets
+ * no decision at all, and once live pins cover every round the rest of the
+ * surface is switched off so the campaign owns the screen.
  */
 export async function planPosterRotation(
-  opts: { mode: "autopilot" | "control"; placement?: Placement; topK?: number; days?: number },
-): Promise<PosterDecision[]> {
+  opts: {
+    mode: "autopilot" | "control"; placement?: Placement; topK?: number; days?: number;
+    /** Overridable for tests. */
+    now?: number;
+  },
+): Promise<PosterPlan> {
   const placement: Placement = opts.placement ?? "pos-display";
   const topK = opts.topK ?? DEFAULT_TOPK[placement];
   const days = opts.days ?? 21;
   const isApp = placement !== "pos-display";
   const supabase = getSupabaseAdmin();
 
-  let postersQuery = supabase
+  // Every poster on the surface, tagged or not. The pin check has to see the
+  // ones the scoring pool skips (a round-less POS poster) or a campaign running
+  // on one of them would go undetected — which is exactly how the Merdeka pin
+  // survived only by accident. The pos-display round filter moves to the
+  // scoring pool below.
+  const postersQuery = supabase
     .from("splash_posters")
-    .select("id,title,round,rounds,product_id")
+    .select("id,title,round,rounds,product_id,active,starts_at,ends_at")
     .eq("brand_id", "brand-celsius")
     .eq("placement", placement);
-  // POS posters are always round-tagged; app posters may be round-less.
-  if (placement === "pos-display") postersQuery = postersQuery.not("round", "is", null);
 
   const [sigRes, postersRes, productsRes, costByName, perfRes] = await Promise.all([
     supabase.rpc("pos_poster_signals", { p_days: days }),
@@ -177,15 +213,50 @@ export async function planPosterRotation(
   }
 
   // Normalise rows once, keeping each poster's eligibility window.
-  type Row = { id: string; title: string | null; product_id: string | null; round: string | null; rounds: string[] | null };
+  type Row = {
+    id: string; title: string | null; product_id: string | null;
+    round: string | null; rounds: string[] | null;
+    active: boolean; starts_at: string | null; ends_at: string | null;
+  };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
-  const rows: Row[] = ((postersRes.data ?? []) as any[]).map((po) => ({
+  const allRows: Row[] = ((postersRes.data ?? []) as any[]).map((po) => ({
     id: po.id,
     title: po.title ?? null,
     product_id: po.product_id ?? null,
     round: po.round ?? null,
     rounds: (po.rounds ?? null) as string[] | null,
+    active: po.active === true,
+    starts_at: po.starts_at ?? null,
+    ends_at: po.ends_at ?? null,
   }));
+
+  // Split the surface into what the autopilot may write and what it must not.
+  const nowMs = opts.now ?? Date.now();
+  const pinned: PosterPin[] = [];
+  const unpinned: Row[] = [];
+  const livePinRounds = new Set<Round>();
+  for (const po of allRows) {
+    const state = pinStateOf(po, nowMs);
+    if (state === "managed") {
+      unpinned.push(po);
+      continue;
+    }
+    if (state === "pinned-live") for (const r of displayRoundsOf(po, placement)) livePinRounds.add(r);
+    pinned.push({ posterId: po.id, title: po.title, live: state === "pinned-live" });
+  }
+
+  // A campaign takes the WHOLE surface only when its live pins cover every
+  // round between them. A part-day pin is still protected from the autopilot,
+  // but it must not switch the rotation off in the rounds where it does not
+  // show — that would leave the customer display blank for most of the day.
+  const campaignOwnsSurface = ROUNDS.every((r) => livePinRounds.has(r));
+
+  // POS posters are always round-tagged; app posters may be round-less. Untagged
+  // POS posters stay out of the scoring pool, as they always have, but they are
+  // still switched off when a campaign is live.
+  const rows = placement === "pos-display" ? unpinned.filter((po) => po.round != null) : unpinned;
+  const scoredIds = new Set(rows.map((po) => po.id));
+  const benchOnly = unpinned.filter((po) => !scoredIds.has(po.id));
 
   // Bucket posters by the rounds they're eligible to appear in (a poster with a
   // multi-round window lands in several buckets; an always-on poster in all).
@@ -266,16 +337,42 @@ export async function planPosterRotation(
   // One decision per poster: active if it won a slot in any eligible round;
   // sort_order by overall best score (the reader caps + orders the per-round
   // eligible subset by this, so the strongest posters surface first).
+  //
+  // A live campaign pin overrides `active` only. The ranking keeps being learned
+  // and written, so sort_order is already correct for the morning the campaign
+  // ends and the surface comes back on its own.
   const ranked = rows.slice().sort((a, b) => (bestScore.get(b.id) ?? 0) - (bestScore.get(a.id) ?? 0));
   const decisions: PosterDecision[] = ranked.map((po, i) => ({
     round: po.round ? (po.round as Round) : null,
     posterId: po.id,
     title: po.title,
     productId: po.product_id,
-    active: activeIds.has(po.id),
+    active: campaignOwnsSurface ? false : activeIds.has(po.id),
     sortOrder: (i + 1) * 10,
     score: Math.round((bestScore.get(po.id) ?? 0) * 1000) / 1000,
-    reason: activeIds.has(po.id) ? "top-K in an eligible round" : "benched",
+    reason: campaignOwnsSurface
+      ? "benched for a live campaign pin"
+      : activeIds.has(po.id)
+        ? "top-K in an eligible round"
+        : "benched",
   }));
-  return decisions;
+
+  // Posters the scoring pool skips still have to go dark for a campaign,
+  // otherwise an always-on untagged poster would keep sharing the screen.
+  if (campaignOwnsSurface) {
+    for (const po of benchOnly) {
+      decisions.push({
+        round: po.round ? (po.round as Round) : null,
+        posterId: po.id,
+        title: po.title,
+        productId: po.product_id,
+        active: false,
+        sortOrder: null,
+        score: 0,
+        reason: "benched for a live campaign pin",
+      });
+    }
+  }
+
+  return { decisions, pinned };
 }
