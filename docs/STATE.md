@@ -2519,6 +2519,27 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   factor) armed 2026-08-25 09:00 UTC — restore landed Aug 15 14:46, so it
   gets ~10 post-restore days.
 
+- 2026-08-31 — **Owner: "lets try to increase back the gads spending and
+  see" → "let us do all rm70/day", Tamarind included.** ownerDirective
+  rewritten (supersedes the Aug-25 two-leg probe-up; Putrajaya's leg had
+  fired Aug 30 at RM49.86, Shah Alam's never fired — guard stayed breached
+  through Merdeka weekend): ALL THREE campaigns rise to RM70/day as
+  EVALUATED raises — SA 53.98→70 (needs ≥RM801/mo lift), PJ 49.86→70
+  (≥RM1,007/mo), Tamarind 41.71→70 (≥RM1,414/mo; owner chose to re-test
+  despite the A/B/A verdict) — each leg fires on its outlet's first clean
+  guard night, kept only on measured lift after 28d, reverted on breach; a
+  machine revert is FINAL (leg won't re-fire); hard expiry 2026-09-30.
+  Total +RM1,933/mo spend at full deployment. Recorded caveat: if all three
+  lift together the fleet-adjusted keep-test partially cancels (median moves
+  too) — read the Sep verdicts against anchor/mom + the cash scoreboard.
+  Holdout read on SMS loops (same day): treated beats holdout in 8/9
+  measurable loops (aov_push +RM29.80/head, reward_expiring +5.09, habit
+  +3.53, welcome +1.54, winback +0.56; fresh_lapse NEGATIVE −1.06;
+  celebration/product_launch/night_revival 0-conv both arms — measurement
+  pending or broken, check). Tamarind decline fingerprint sharpened: loss is
+  WEEKDAY-walk-in-concentrated (wkday −23% vs wkend −7%) → office-crowd
+  hypothesis (Cyberjaya tenant move-out / RTO change / office-cafe) — ground
+  check still owed.
 - 2026-08-25 — **Tamarind A/B/A REVERSAL VERDICT: NO RECOVERY — the
   late-July decline is NOT ad-driven, and the Aug 15 "ads generate cash"
   probe verdict OVER-ATTRIBUTED.** Walk-in organic (POS ex-grabfood, organic
