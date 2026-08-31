@@ -5,9 +5,9 @@ company: celsius
 domain: FIN
 tier: policy
 owner: Managing Director
-status: draft
-version: 0.1
-effective_date:
+status: published
+version: 1.0
+effective_date: 2026-08-31
 review_months: 6
 ack_required: true
 ack_stations: [foh, lead]
@@ -133,3 +133,4 @@ processes, separate documents); payroll.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-08-31 | Drafted in agent session for MD review | First draft |
+| 1.0 | 2026-08-31 | Managing Director | Approved and published |

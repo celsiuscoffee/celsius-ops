@@ -19,7 +19,7 @@ is reserved so wrapping is stable).
 
 | ID | Title | Tier | Owner | Status | Version | Next review |
 |---|---|---|---|---|---|---|
-| CC-OPS-001 | [Incident & Complaint Handling](celsius/OPS/CC-OPS-001-incident-complaint-handling.md) | Procedure | Area Manager | DRAFT | 0.1 | — |
+| CC-OPS-001 | [Incident & Complaint Handling](celsius/OPS/CC-OPS-001-incident-complaint-handling.md) | Procedure | Area Manager | PUBLISHED | 1.0 | 2027-08-31 |
 | CC-OPS-002 | Opening Checklist | Work instruction | Outlet Manager | SYSTEM | — | — |
 | CC-OPS-003 | Closing | Work instruction | Outlet Manager | SYSTEM | — | — |
 | CC-OPS-004 | Fridge & Storage | Work instruction | Outlet Manager | SYSTEM | — | — |
@@ -40,13 +40,13 @@ is reserved so wrapping is stable).
 
 | ID | Title | Tier | Owner | Status | Version | Next review |
 |---|---|---|---|---|---|---|
-| CC-HR-001 | [New Hire Onboarding](celsius/HR/CC-HR-001-new-hire-onboarding.md) | Procedure | Head of Operations | DRAFT | 0.1 | — |
+| CC-HR-001 | [New Hire Onboarding](celsius/HR/CC-HR-001-new-hire-onboarding.md) | Procedure | Head of Operations | PUBLISHED | 1.0 | 2027-08-31 |
 
 ### FIN — Finance
 
 | ID | Title | Tier | Owner | Status | Version | Next review |
 |---|---|---|---|---|---|---|
-| CC-FIN-001 | [Payments & Refunds](celsius/FIN/CC-FIN-001-payments-and-refunds.md) | Policy | Managing Director | DRAFT | 0.1 | — |
+| CC-FIN-001 | [Payments & Refunds](celsius/FIN/CC-FIN-001-payments-and-refunds.md) | Policy | Managing Director | PUBLISHED | 1.0 | 2027-02-28 |
 | CC-FIN-002 | Daily Sales & Settlement Reconciliation | Procedure | Managing Director | PLANNED | — | — |
 
 *Note: the business is cashless — the originally planned "Cash Handling" and
