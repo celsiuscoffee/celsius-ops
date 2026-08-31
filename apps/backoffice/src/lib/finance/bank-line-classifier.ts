@@ -99,6 +99,7 @@ const SALARY_RE = new RegExp(String.raw`\bSALARY\b|\bSAL\.?\s+(?:${PAY_PERIOD})`
 const OVERTIME_RE = new RegExp(String.raw`\b(?:ADD\s+)?OT\s+(?:${PAY_PERIOD})`, "i");
 const MGMT_FEE_RE = /\b(?:MANAGEMENT|MNGMT|MGMT)\s*FEE\b|\bMGMT\b/i;
 const PARTIMER_RE = /\bPARTIMER\b|\bPT\s*WEEK\b|\bPT\s*W\s*\d{1,2}\b/i;
+const AMMAR_ADS_CLAIM_RE = /AMMAR\s+BIN\s+SHAHRIN[\s\S]*\b(?:ADS?|MARKETING|INDEED)\b/i;
 
 // Inflow rules
 //
@@ -189,6 +190,16 @@ const OUTFLOW_RULES: Rule[] = [
   // come before purpose_staff_claim (/CLAIM/), software_saas (/GOOGLE/) and
   // directors_ammar (/AMMAR BIN SHAHRIN/), which would otherwise grab them.
   { name: "marketing_ads_claim",      match: /\bGOOGLE\s*ADS\b|\bADS?\s*CLAIMS?\b|\bCLAIMS?\s*ADS?\b/i, direction: "DR", category: "DIGITAL_ADS" as CashCategory },
+  // Same reimbursement, narrated without the word "ads". From 2026-07 the
+  // director's ad claims read "Ads Clam Jun26" (typo), then "Marketing 0726"
+  // and "indeed 15/8/26" — none of which marketing_ads_claim catches, so
+  // RM6,567 (Jul) and the whole RM18,575 August run fell to OTHER_OUTFLOW and
+  // understated ads while overstating opex.
+  // Scoped to the director's name ON PURPOSE: the note below rules out a
+  // generic /MARKETING/ sweep because "BEST Marketing & Distribution" and
+  // friends are goods suppliers. Requiring both the payee AND the purpose
+  // token keeps those out while catching every spelling of his claim.
+  { name: "marketing_ammar_claim",    match: AMMAR_ADS_CLAIM_RE,                      direction: "DR", category: "DIGITAL_ADS" as CashCategory },
   { name: "purpose_stat_pay",         match: /\b(STAT\s*PAY|STATUTORY)\b/i,           direction: "DR", category: "STATUTORY_PAYMENT" as CashCategory },
   { name: "purpose_inventory",        match: /\bINVENTORY\b/i,                        direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "purpose_digital_ads",      match: /\bDIGITAL\s*ADS?\b/i,                   direction: "DR", category: "DIGITAL_ADS" as CashCategory },

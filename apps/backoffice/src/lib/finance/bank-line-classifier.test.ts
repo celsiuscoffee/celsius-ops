@@ -7,6 +7,23 @@ const dr = (description: string, amount = 100) =>
   classifyBankLine({ description, amount, direction: "DR" });
 
 describe("bank-line-classifier", () => {
+  it("books the director's ad reimbursements as DIGITAL_ADS whatever the spelling", () => {
+    // Real Jul/Aug-2026 narrations. None contain "ads claim", so the older rule
+    // dropped them into OTHER_OUTFLOW — RM18,575 in August alone.
+    expect(dr("Shah Alam AMMAR BIN SHAHRIN * Marketing 0726").category).toBe("DIGITAL_ADS");
+    expect(dr("Tamarind AMMAR BIN SHAHRIN * Marketing 0626").category).toBe("DIGITAL_ADS");
+    expect(dr("Shah Alam AMMAR BIN SHAHRIN * indeed 15/8/26").category).toBe("DIGITAL_ADS");
+    expect(dr("Putrajaya AMMAR BIN SHAHRIN * Ads Clam Jun26").category).toBe("DIGITAL_ADS");
+    // Older spellings keep working
+    expect(dr("Celsius Coffee PutraAMMAR BIN SHAHRIN * Ads claim May").category).toBe("DIGITAL_ADS");
+    // A genuine director drawing is NOT an ad claim
+    expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN ADTD").category).toBe("DIRECTORS_ALLOWANCE");
+    // Suppliers with "Marketing" in their NAME must stay out of DIGITAL_ADS —
+    // this is why the rule is scoped to the director instead of sweeping the word.
+    expect(dr("PUTRAJAYA BEST MARKETING & DI* IY-741245").category).not.toBe("DIGITAL_ADS");
+    expect(dr("Shah Alam PXL MARKETING SDN BHD* INV-2231").category).not.toBe("DIGITAL_ADS");
+  });
+
   it("maps sales inflows to their channel", () => {
     expect(cr("TRANSFER TO A/C JOHN DOE DUITNOW QR-").category).toBe("QR");
     expect(cr("DR/CARD SALES M/N 2612988 D 5").category).toBe("CARD");
