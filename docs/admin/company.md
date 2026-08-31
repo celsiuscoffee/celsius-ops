@@ -37,8 +37,10 @@ Ammar Bin Shahrin ──┬── Celsius group: 3 sister companies (#1–#3)
 
 Shared facts:
 - All three Celsius entities: registered address ✅ **K-3-01, Conezion City,
-  Persiaran IRC 3, IOI Resort, 62502 Putrajaya** · tel ✅ 017-209 6058 ·
-  MSIC ⚪ 56101.
+  Persiaran IRC 3, IOI Resort, 62502 Putrajaya** · MSIC ⚪ 56101.
+- Contact number for official/outward use (all entities): ✅
+  **+60 11-5459 5369** (owner 2026-08-31; replaces 017-209 6058, which
+  remains the outlet phone in the `Outlet` table).
 - Both Gosame entities: registered address ✅ **No. 12-1, Jalan PPS 2, Pusat
   Perniagaan Selaseh, 68100 Batu Caves, Selangor** (cosec office) · business
   address ✅ **M-G-06, Conezion City, Persiaran IRC 3, IOI Resort, 62502

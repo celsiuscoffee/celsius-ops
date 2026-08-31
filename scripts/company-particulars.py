@@ -35,7 +35,7 @@ COMPANIES = [
             ("Nature of Business", "Food & beverage — coffee house / café operations (MSIC 56101)"),
             ("Registered Address", "K-3-01, Conezion City, Persiaran IRC 3,<br/>IOI Resort, 62502 Putrajaya, Malaysia"),
             ("Business Address", "58, Jalan Renang 13/26, Tadisma Business Park,<br/>40100 Shah Alam, Selangor, Malaysia"),
-            ("Telephone", "017-209 6058"),
+            ("Telephone", "+60 11-5459 5369"),
         ],
     },
     {
@@ -48,7 +48,7 @@ COMPANIES = [
             ("Nature of Business", "Food & beverage — coffee house / café operations (MSIC 56101)"),
             ("Registered Address", "K-3-01, Conezion City, Persiaran IRC 3,<br/>IOI Resort, 62502 Putrajaya, Malaysia"),
             ("Business Address", "M-G-06, Persiaran IRC 3, IOI City Resort,<br/>62502 Putrajaya, Malaysia"),
-            ("Telephone", "017-209 6058"),
+            ("Telephone", "+60 11-5459 5369"),
         ],
     },
     {
@@ -61,7 +61,7 @@ COMPANIES = [
             ("Nature of Business", "Food & beverage — coffee house / café operations (MSIC 56101)"),
             ("Registered Address", "K-3-01, Conezion City, Persiaran IRC 3,<br/>IOI Resort, 62502 Putrajaya, Malaysia"),
             ("Business Address", "K-05, Level 3m, Tamarind Square, Persiaran Multimedia,<br/>63000 Cyberjaya, Selangor, Malaysia"),
-            ("Telephone", "017-209 6058"),
+            ("Telephone", "+60 11-5459 5369"),
         ],
     },
     {
@@ -76,7 +76,7 @@ COMPANIES = [
             ("Registered Address", "No. 12-1, Jalan PPS 2, Pusat Perniagaan Selaseh,<br/>68100 Batu Caves, Selangor, Malaysia"),
             ("Business Address", "M-G-06, Conezion City, Persiaran IRC 3,<br/>IOI Resort, 62502 Putrajaya, Malaysia"),
             ("Directors", "Ammar Bin Shahrin · Ammar Bin Roslizar"),
-            ("Telephone", "017-209 6058"),
+            ("Telephone", "+60 11-5459 5369"),
         ],
     },
     {
@@ -92,7 +92,7 @@ COMPANIES = [
             ("Business Address", "M-G-06, Conezion City, Persiaran IRC 3,<br/>IOI Resort, 62502 Putrajaya, Malaysia"),
             ("Holding Company", "Gosame International Sdn. Bhd. (100%)"),
             ("Directors", "Ammar Bin Shahrin · Ammar Bin Roslizar"),
-            ("Telephone", "017-209 6058"),
+            ("Telephone", "+60 11-5459 5369"),
         ],
     },
 ]
