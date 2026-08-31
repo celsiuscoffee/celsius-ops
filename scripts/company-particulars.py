@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Company particulars sheet — one page per entity, for sharing with
-suppliers, banks, and applications. Official registration data only."""
+suppliers, banks, and applications. Official registration data only.
+Data verified against SSM incorporation packs + LHDN TIN notices
+(owner-provided 2026-08-31). Keep in sync with docs/admin/company.md."""
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
@@ -24,18 +26,31 @@ st_value = ParagraphStyle("value", fontName="Helvetica", fontSize=10.5,
 st_foot = ParagraphStyle("foot", fontName="Helvetica", fontSize=8,
                          textColor=MUTED)
 
+REG_ADDR = ("No. 12-1, Jalan PPS 2, Pusat Perdagangan Selaseh,"
+            "<br/>68100 Batu Caves, Selangor, Malaysia")
+CORR_ADDR = ("K-3-01, Conezion City, Persiaran IRC 3,"
+             "<br/>IOI Resort, 62502 Putrajaya, Malaysia")
+PHONE = "+60 11-5459 5369"
+CELSIUS_NATURE = ("Restaurants, food & beverage, coffee shops and coffee "
+                  "roastery (MSIC 56302, 56107, 56101a)")
+GOSAME_NATURE = ("Food & beverage — restaurants specialising in Korean "
+                 "cuisine (MSIC 56101a)")
+DIRECTORS_2 = "Ammar Bin Shahrin · Ammar Bin Roslizar"
+
 COMPANIES = [
     {
         "group": "CELSIUS COFFEE GROUP",
         "name": "CELSIUS COFFEE SDN. BHD.",
         "rows": [
             ("Company Registration No. (SSM)", "202101024485 (1424785-A)"),
+            ("Date of Incorporation", "19 July 2021"),
             ("Tax Identification No. (TIN)", "C26773249100"),
             ("SST Registration", "Not registered (N/A)"),
-            ("Nature of Business", "Food & beverage — coffee house / café operations (MSIC 56101)"),
-            ("Registered Address", "K-3-01, Conezion City, Persiaran IRC 3,<br/>IOI Resort, 62502 Putrajaya, Malaysia"),
+            ("Nature of Business", CELSIUS_NATURE),
+            ("Registered Address", REG_ADDR),
+            ("Correspondence Address", CORR_ADDR),
             ("Business Address", "58, Jalan Renang 13/26, Tadisma Business Park,<br/>40100 Shah Alam, Selangor, Malaysia"),
-            ("Telephone", "+60 11-5459 5369"),
+            ("Telephone", PHONE),
         ],
     },
     {
@@ -43,12 +58,15 @@ COMPANIES = [
         "name": "CELSIUS COFFEE CONEZION SDN. BHD.",
         "rows": [
             ("Company Registration No. (SSM)", "202501044958 (1646366-U)"),
+            ("Date of Incorporation", "25 September 2025"),
             ("Tax Identification No. (TIN)", "C60421230050"),
             ("SST Registration", "Not registered (N/A)"),
-            ("Nature of Business", "Food & beverage — coffee house / café operations (MSIC 56101)"),
-            ("Registered Address", "K-3-01, Conezion City, Persiaran IRC 3,<br/>IOI Resort, 62502 Putrajaya, Malaysia"),
+            ("Nature of Business", CELSIUS_NATURE),
+            ("Registered Address", REG_ADDR),
+            ("Correspondence Address", CORR_ADDR),
             ("Business Address", "M-G-06, Persiaran IRC 3, IOI City Resort,<br/>62502 Putrajaya, Malaysia"),
-            ("Telephone", "+60 11-5459 5369"),
+            ("Directors", DIRECTORS_2),
+            ("Telephone", PHONE),
         ],
     },
     {
@@ -56,12 +74,15 @@ COMPANIES = [
         "name": "CELSIUS COFFEE TAMARIND SDN. BHD.",
         "rows": [
             ("Company Registration No. (SSM)", "202501036872 (1638282-K)"),
+            ("Date of Incorporation", "7 August 2025"),
             ("Tax Identification No. (TIN)", "C60337963100"),
             ("SST Registration", "Not registered (N/A)"),
-            ("Nature of Business", "Food & beverage — coffee house / café operations (MSIC 56101)"),
-            ("Registered Address", "K-3-01, Conezion City, Persiaran IRC 3,<br/>IOI Resort, 62502 Putrajaya, Malaysia"),
-            ("Business Address", "K-05, Level 3m, Tamarind Square, Persiaran Multimedia,<br/>63000 Cyberjaya, Selangor, Malaysia"),
-            ("Telephone", "+60 11-5459 5369"),
+            ("Nature of Business", CELSIUS_NATURE),
+            ("Registered Address", REG_ADDR),
+            ("Correspondence Address", CORR_ADDR),
+            ("Business Address", "K-05, Level 3, Tamarind Square, Persiaran Multimedia,<br/>63000 Cyberjaya, Selangor, Malaysia"),
+            ("Directors", DIRECTORS_2),
+            ("Telephone", PHONE),
         ],
     },
     {
@@ -72,11 +93,11 @@ COMPANIES = [
             ("Date of Incorporation", "11 February 2026"),
             ("Tax Identification No. (TIN)", "C60579873070"),
             ("Employer TIN", "E9628007204"),
-            ("Nature of Business", "Food & beverage — restaurants specialising in Korean cuisine (MSIC 56101a)"),
+            ("Nature of Business", GOSAME_NATURE),
             ("Registered Address", "No. 12-1, Jalan PPS 2, Pusat Perniagaan Selaseh,<br/>68100 Batu Caves, Selangor, Malaysia"),
             ("Business Address", "M-G-06, Conezion City, Persiaran IRC 3,<br/>IOI Resort, 62502 Putrajaya, Malaysia"),
-            ("Directors", "Ammar Bin Shahrin · Ammar Bin Roslizar"),
-            ("Telephone", "+60 11-5459 5369"),
+            ("Directors", DIRECTORS_2),
+            ("Telephone", PHONE),
         ],
     },
     {
@@ -87,19 +108,19 @@ COMPANIES = [
             ("Date of Incorporation", "13 February 2026"),
             ("Tax Identification No. (TIN)", "C60583422090"),
             ("Employer TIN", "E9628082601"),
-            ("Nature of Business", "Food & beverage — restaurants specialising in Korean cuisine (MSIC 56101a)"),
+            ("Nature of Business", GOSAME_NATURE),
             ("Registered Address", "No. 12-1, Jalan PPS 2, Pusat Perniagaan Selaseh,<br/>68100 Batu Caves, Selangor, Malaysia"),
             ("Business Address", "M-G-06, Conezion City, Persiaran IRC 3,<br/>IOI Resort, 62502 Putrajaya, Malaysia"),
             ("Holding Company", "Gosame International Sdn. Bhd. (100%)"),
-            ("Directors", "Ammar Bin Shahrin · Ammar Bin Roslizar"),
-            ("Telephone", "+60 11-5459 5369"),
+            ("Directors", DIRECTORS_2),
+            ("Telephone", PHONE),
         ],
     },
 ]
 
 out = "company-particulars.pdf"
-doc = SimpleDocTemplate(out, pagesize=A4, topMargin=28 * mm,
-                        bottomMargin=22 * mm, leftMargin=22 * mm,
+doc = SimpleDocTemplate(out, pagesize=A4, topMargin=26 * mm,
+                        bottomMargin=20 * mm, leftMargin=22 * mm,
                         rightMargin=22 * mm, title="Company Particulars",
                         author="Celsius Coffee / Gosame")
 story = []
@@ -113,13 +134,13 @@ for i, co in enumerate(COMPANIES):
     t = Table(data, colWidths=[58 * mm, 108 * mm])
     t.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("LINEBELOW", (0, 0), (-1, -2), 0.4, LINE),
     ]))
     story.append(t)
-    story.append(Spacer(1, 16))
+    story.append(Spacer(1, 14))
     story.append(Paragraph(
         "Company particulars for official use — vendor registration, "
         "applications and correspondence. Issued August 2026.", st_foot))
