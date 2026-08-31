@@ -95,7 +95,7 @@ async function rpcAll<T>(fn: string, args: Record<string, unknown>, label: strin
 // bug (2026-03-29 batch): +60 prepended to a local number WITHOUT stripping the
 // leading 0, producing a GHOST member that duplicates a real account. The SMS
 // still reaches the handset, but any voucher we mint lands on the ghost — so
-// the customer is told about an offer that isn't in their wallet at the till
+// the customer is told about an offer that isn't in their wallet at the POS
 // (reported 2026-08-03). Skip them: the real twin gets targeted on its own row.
 function isMalformedPhone(phone: string): boolean {
   return /^\+600\d/.test(phone);
@@ -817,6 +817,42 @@ export async function prepareRound(loopKey: LoopKey, opts: {
 // ── SEND ─────────────────────────────────────────────────────────────────────
 // Fire the SMS for every treatment assignment (holdout gets nothing). Idempotent
 // per assignment (skips ones already sent). Call only after owner approval.
+type SendRow = {
+  id: string; phone: string; arm: string; sms_status: string | null;
+  member_id: string | null; issued_reward_id: string | null;
+};
+
+/**
+ * Every treated assignment on the round, paged.
+ *
+ * PostgREST caps an unpaginated select at 1,000 rows and reports no error, so a
+ * big round silently lost its tail: the 2,900-member Merdeka blast on
+ * 2026-08-31 only ever loaded the first 1,000 and 1,500 members were never
+ * attempted at all. Same cap, same shape as the bug rpcAll() exists to avoid.
+ */
+async function assignmentsForSend(roundId: string): Promise<SendRow[]> {
+  const out: SendRow[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabaseAdmin
+      .from("loop_assignments")
+      .select("id, phone, arm, sms_status, member_id, issued_reward_id")
+      .eq("round_id", roundId)
+      .neq("arm", "holdout")
+      // Total ORDER BY: without it paging may repeat or skip rows between ranges.
+      .order("id", { ascending: true })
+      .range(from, from + 999);
+    if (error) throw new Error(`assignmentsForSend: ${error.message}`);
+    const batch = (data ?? []) as SendRow[];
+    out.push(...batch);
+    if (batch.length < 1000) break;
+  }
+  return out;
+}
+
+// Stop sending with headroom under the cron's 300s ceiling so a large round
+// exits cleanly and resumes next run, instead of being killed mid-flight.
+const SEND_BUDGET_MS = 210_000;
+
 export async function sendRound(roundId: string) {
   const { data: round } = await supabaseAdmin.from("loop_rounds").select("*").eq("id", roundId).single();
   if (!round) throw new Error("round not found");
@@ -829,11 +865,7 @@ export async function sendRound(roundId: string) {
   const armMsg: Record<string, string> = {};
   for (const a of (round.arms as ArmDef[])) armMsg[a.key] = a.message;
 
-  const { data: rows } = await supabaseAdmin
-    .from("loop_assignments")
-    .select("id, phone, arm, sms_status, member_id, issued_reward_id")
-    .eq("round_id", roundId)
-    .neq("arm", "holdout");
+  const rows = await assignmentsForSend(roundId);
 
   // Per-recipient {name} personalisation: substitute the member's FIRST name
   // (short, to stay within one GSM-7 segment). Only fetch names if any arm copy
@@ -841,7 +873,7 @@ export async function sendRound(roundId: string) {
   const needsName = Object.values(armMsg).some((m) => m.includes("{name}"));
   const firstNameById = new Map<string, string>();
   if (needsName) {
-    const ids = [...new Set(((rows ?? []) as Array<{ member_id: string | null }>).map((r) => r.member_id).filter(Boolean))] as string[];
+    const ids = [...new Set(rows.map((r) => r.member_id).filter(Boolean))] as string[];
     for (let i = 0; i < ids.length; i += 1000) {
       const { data: ms } = await supabaseAdmin.from("members").select("id, name").in("id", ids.slice(i, i + 1000));
       for (const m of (ms ?? []) as Array<{ id: string; name: string | null }>) {
@@ -857,7 +889,7 @@ export async function sendRound(roundId: string) {
   const needsReward = Object.values(armMsg).some((m) => m.includes("{reward}") || m.includes("{expiry}"));
   const rewardByIrId = new Map<string, { title: string | null; expires_at: string | null }>();
   if (needsReward) {
-    const irIds = [...new Set(((rows ?? []) as Array<{ issued_reward_id: string | null }>).map((r) => r.issued_reward_id).filter(Boolean))] as string[];
+    const irIds = [...new Set(rows.map((r) => r.issued_reward_id).filter(Boolean))] as string[];
     for (let i = 0; i < irIds.length; i += 1000) {
       const { data: irs } = await supabaseAdmin.from("issued_rewards").select("id, title, expires_at").in("id", irIds.slice(i, i + 1000));
       for (const ir of (irs ?? []) as Array<{ id: string; title: string | null; expires_at: string | null }>) {
@@ -873,7 +905,7 @@ export async function sendRound(roundId: string) {
   const needsRedeem = Object.values(armMsg).some((m) => m.includes("{redeem}"));
   const beansById = new Map<string, number>();
   if (needsBeans || needsRedeem) {
-    const ids = [...new Set(((rows ?? []) as Array<{ member_id: string | null }>).map((r) => r.member_id).filter(Boolean))] as string[];
+    const ids = [...new Set(rows.map((r) => r.member_id).filter(Boolean))] as string[];
     for (let i = 0; i < ids.length; i += 1000) {
       const { data: bs } = await supabaseAdmin.from("member_brands").select("member_id, points_balance").eq("brand_id", BRAND).in("member_id", ids.slice(i, i + 1000));
       for (const b of (bs ?? []) as Array<{ member_id: string; points_balance: number | null }>) {
@@ -898,7 +930,7 @@ export async function sendRound(roundId: string) {
   // everyone else falls back to (paid) SMS. Same holdout + attribution either
   // way — only the channel differs. Resolve all treatment members' tokens up
   // front in one query.
-  const treatmentMemberIds = ((rows ?? []) as Array<{ member_id: string | null }>)
+  const treatmentMemberIds = rows
     .map((r) => r.member_id).filter((x): x is string => !!x);
   const tokensByMember = await pushTokensByMember(treatmentMemberIds);
 
@@ -924,14 +956,27 @@ export async function sendRound(roundId: string) {
   let failed = 0;
   let capped = 0;
   let firstError: string | undefined;
-  for (const r of (rows ?? []) as Array<{ id: string; phone: string; arm: string; sms_status: string | null; member_id: string | null; issued_reward_id: string | null }>) {
+  let outOfTime = false;
+  const startedAt = Date.now();
+  for (const r of rows) {
+    // Out of budget: leave the rest untouched and let the next cron run resume.
+    if (Date.now() - startedAt > SEND_BUDGET_MS) { outOfTime = true; break; }
     if (r.sms_status === "sent") continue; // idempotent (covers push + SMS)
     if (cappedPhones.has(r.phone)) { // global weekly cap hit on another loop
       await supabaseAdmin.from("loop_assignments").update({ sms_status: "capped", sms_message_id: "weekly_cap" }).eq("id", r.id);
       capped++; continue;
     }
     let message = armMsg[r.arm] ?? "";
-    if (!message) { failed++; continue; }
+    if (!message) {
+      // Record it. Left NULL, this row would keep the round permanently
+      // unfinished and the resume loop would retry it forever.
+      await supabaseAdmin.from("loop_assignments")
+        .update({ sms_status: "failed", sms_message_id: `no_copy_for_arm:${r.arm}`.slice(0, 200) })
+        .eq("id", r.id);
+      failed++;
+      if (!firstError) firstError = `no copy for arm "${r.arm}"`;
+      continue;
+    }
     if (needsName) {
       const first = (r.member_id && firstNameById.get(r.member_id)) || "there";
       message = message.replace(/\{name\}/g, first);
@@ -964,6 +1009,33 @@ export async function sendRound(roundId: string) {
     }
   }
 
+  // Only call the round done once every treated assignment has actually been
+  // attempted. Stamping "sent" unconditionally is what stranded 1,500
+  // un-messaged members on 2026-08-31: the round read as complete, so the drain
+  // cron never came back for them. A partial run stays "prepared" with a due
+  // scheduled_send_at, and the next run picks up exactly where this one stopped.
+  const { count } = await supabaseAdmin
+    .from("loop_assignments")
+    .select("id", { count: "exact", head: true })
+    .eq("round_id", roundId)
+    .neq("arm", "holdout")
+    .is("sms_status", null);
+  const remaining = count ?? 0;
+
+  if (remaining > 0) {
+    // A round sent immediately has no schedule, so give it one or nothing will
+    // ever come back for the remainder.
+    if (!round.scheduled_send_at) {
+      await supabaseAdmin.from("loop_rounds")
+        .update({ scheduled_send_at: new Date().toISOString() })
+        .eq("id", roundId);
+    }
+    return {
+      round_id: roundId, sent: sentPush + sentSms, sent_push: sentPush, sent_sms: sentSms,
+      capped, failed, remaining, partial: true, out_of_time: outOfTime, error: firstError,
+    };
+  }
+
   const sentAt = new Date();
   await supabaseAdmin
     .from("loop_rounds")
@@ -972,7 +1044,10 @@ export async function sendRound(roundId: string) {
     .update({ status: "sent", sent_at: sentAt.toISOString(), send_window: round.send_window ?? deriveWindow(sentAt) })
     .eq("id", roundId);
 
-  return { round_id: roundId, sent: sentPush + sentSms, sent_push: sentPush, sent_sms: sentSms, capped, failed, error: firstError };
+  return {
+    round_id: roundId, sent: sentPush + sentSms, sent_push: sentPush, sent_sms: sentSms,
+    capped, failed, remaining: 0, partial: false, error: firstError,
+  };
 }
 
 // ── MEASURE ───────────────────────────────────────────────────────────────────
