@@ -11,6 +11,8 @@ Status legend: 🟢 active / 🟡 due within 60 days / 🔴 overdue or lapsed / 
 | _unknown_ | Annual return + AGM | Celsius Coffee Sdn. Bhd. | company.md | ⚪ | cosec to confirm date |
 | _unknown_ | Annual return + AGM | Conezion Sdn. Bhd. (inc. 2025) | company.md | ⚪ | cosec to confirm |
 | _unknown_ | Annual return + AGM | Tamarind Sdn. Bhd. (inc. 2025) | company.md | ⚪ | cosec to confirm |
+| ~2027-02-11 | First annual return | Gosame International (inc. 2026-02-11) | company.md | ⚪ | due within 30 days of incorporation anniversary — cosec to confirm |
+| ~2027-02-13 | First annual return | Gosame Bukit Tunku (inc. 2026-02-13) | company.md | ⚪ | cosec to confirm |
 | _PENDING — owner to share_ | licences, leases, insurance | | | ⚪ | |
 
 <!-- Row template:

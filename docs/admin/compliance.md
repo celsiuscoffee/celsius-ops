@@ -21,6 +21,15 @@ responsible, and calendar obligations; dates go in `renewals.md`.
 | SST | ✅ N/A (not registered) | ✅ N/A | ✅ N/A | owner-provided 2026-08-31 |
 | HRD Corp | | | | |
 
+## Registrations — Gosame group (see `company.md`)
+
+| Registration | Gosame International | Gosame Bukit Tunku | Notes |
+| --- | --- | --- | --- |
+| TIN (MyInvois) | ✅ C60579873070 | ✅ C60583422090 | LHDN TIN notices, owner 2026-08-31 |
+| Employer TIN (E) | ✅ E9628007204 | ✅ E9628082601 | files handled by LHDN WP Kuala Lumpur |
+| EPF / SOCSO employer | | | register before first hire |
+| SST | | | new 2026 entities — confirm threshold status |
+
 ## E-invoice (MyInvois) — ⚠️ open compliance question
 
 From `docs/design/einvoice-live-sources.md` (verified 2026-08-15): the

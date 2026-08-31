@@ -70,7 +70,7 @@ sits under.)
 | Financial year end | |
 | Annual return due | → `renewals.md` (cosec to confirm) |
 
-## Directors / shareholding (all entities)
+## Directors / shareholding (Celsius entities)
 
 _PENDING — owner to share (per entity)._
 
@@ -78,14 +78,64 @@ _PENDING — owner to share (per entity)._
 | --- | --- | --- | --- |
 | | | | |
 
-## Company secretary
+---
 
-_PENDING — owner to share. Presumably one firm serves all three entities._
+# Group: GOSAME (Korean-cuisine F&B venture)
+
+✅ From SSM incorporation packs (Section 14/17) + LHDN TIN notices, owner-
+provided 2026-08-31. Both companies: MSIC 56101a (restaurants), business
+description "F&B including restaurants specializing in Korean cuisine".
+Registered address (cosec office): No. 12-1, Jalan PPS 2, Pusat Perniagaan
+Selaseh, 68100 Batu Caves, Selangor. Business address: M-G-06, Conezion
+City, Persiaran IRC 3, IOI Resort, 62502 Putrajaya. Source PDFs contain
+NRIC/DOB/home addresses → repo gets none of that; owner to park the packs
+in Drive and paste links below.
+
+## Entity: Gosame International Sdn. Bhd. (holding + operating)
 
 | Field | Value |
 | --- | --- |
-| Firm / name | |
-| Contact | |
+| SSM registration no. | ✅ 202601006195 (1668293-M), incorporated 2026-02-11 |
+| TIN (MyInvois) | ✅ C60579873070 |
+| Employer TIN (E) | ✅ E9628007204 — LHDN WP Kuala Lumpur |
+| Share capital | ✅ 3,150 ordinary @ RM1 |
+| Financial year end | |
+| Drive link (SSM pack) | |
+
+Shareholding: ✅ Ammar Bin Shahrin 1,260 (40.0%) · Ammar Bin Roslizar
+1,190 (37.8%) · Moon Byongjoon (South Korea) 700 (22.2%).
+Directors: ✅ Ammar Bin Shahrin, Ammar Bin Roslizar.
+
+## Entity: Gosame Bukit Tunku Sdn. Bhd. (subsidiary)
+
+| Field | Value |
+| --- | --- |
+| SSM registration no. | ✅ 202601006713 (1668811-A), incorporated 2026-02-13 |
+| TIN (MyInvois) | ✅ C60583422090 |
+| Employer TIN (E) | ✅ E9628082601 — LHDN WP Kuala Lumpur |
+| Shareholding | ✅ 100% Gosame International Sdn. Bhd. (10,000 ordinary @ RM1) |
+| Directors | ✅ Ammar Bin Shahrin, Ammar Bin Roslizar |
+| Financial year end | |
+| Drive link (SSM pack) | |
+
+Operating location: "Bukit Tunku" implies a restaurant site in Bukit
+Tunku, KL — PENDING owner: premises address, tenancy, licences (these get
+their own sections in `outlets.md`/`licenses.md` once trading).
+
+---
+
+## Company secretary
+
+✅ Lodging secretary for both Gosame incorporations (and the MYDATA user
+that printed the certs): **AAS Premium — Norazah Binti Mohd Kasim**
+(MIA 46630), secretary@aaspremium.com, office 03-6177 0812 /
+014-307 1812, Batu Caves/Rawang. ⚪ Presumably also cosec for the three
+Celsius entities — owner to confirm.
+
+| Field | Value |
+| --- | --- |
+| Firm / name | ✅ AAS Premium — Norazah Binti Mohd Kasim (MIA 46630) |
+| Contact | ✅ secretary@aaspremium.com · 03-6177 0812 · 014-307 1812 |
 | Retainer / fees | |
 
 ## Bank accounts
