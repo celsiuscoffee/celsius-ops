@@ -6,6 +6,46 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-08-31 — **The "Tamarind loses bread at 3–6× recipe" finding was a
+  COUNT-UNIT defect, not loss — retracted.** Bread's only stock-count line is
+  a "10pcs Loaf" package (cf 10, BB003's sole package, BB001 also has a ×100
+  Box); staff key the PIECE number into it, so every bread count was stored
+  10× inflated. Proof (CC002 27→28 Aug): count 9 → booked 100-pc receipt →
+  count 70 — exact in pieces, impossible in packs; also Tamarind entered
+  "20.5" packs (half a sealed 10-pack doesn't exist). Read in pieces, bread
+  reconciles ~1× with BOM. Fixed in PR #1195 (merged 2ee9c3da): count keypad
+  offers "Loose <baseUom>" (packageId null = factor 1) whenever any package
+  multiplies, `pcs`-based products OPEN in loose pieces, preview enlarged;
+  items API now deletes other-unit rows on upsert (finalize SUMS lines per
+  product — "7 loaves" re-counted as "70 pcs" used to apply as 140).
+  Historical bread count rows are still stored ×10 — any analysis comparing
+  pre-31-Aug bread counts must divide by 10 (or treat entries as pieces).
+- 2026-08-31 — **BOM engine audited and verified correct on direct recipes;
+  ONE structural gap: no prep expansion.** Independent SQL recompute of
+  Tamarind 25 Aug matched consumption_shadow_runs exactly (beans +18 g = one
+  Extra Shot, milk −260 ml = one oat substitution). But the engine expands
+  MenuIngredient only — it never walks ProductRecipe, so raw Udang expected
+  misses CP0001/SU0001 prep consumption. Prep-corrected (CP grams 1:1, SU
+  ×80 g): Tamarind udang = 1.04× ✓ (the "6×" was this gap); Putrajaya still
+  1.69×. Remaining REAL anomalies (clean count intervals, all channels):
+  Putrajaya beans 2.01× + udang 1.69× (early Aug; no counts since 9 Aug to
+  confirm), cream ~0.3–0.5× of the 250 ml/carbonara dose (BOM likely
+  overstated — weigh a plate). Bread/milk/foam/udang(Tam) reconcile ~1×.
+  Owner-approved build still pending: engine walks ProductRecipe for
+  never-purchased prep outputs; fix CP0001 yield unit (1000 g → "31 pcs").
+- 2026-08-31 — **Stock counts auto-approve; discrepancies are flagged, not
+  queue-blocking** (PR #1164, merged 741ae87; owner ruling). Finalize
+  auto-approves every complete on-schedule count (balances were applied
+  regardless anyway); short/stale/off-schedule still go to SUBMITTED review.
+  Backoffice gains a Flagged filter (unresolved-discrepancy counts, any
+  status), Manage action, and reason-coding + Save on REVIEWED counts. The
+  3 stuck Tamarind counts (13–15 Aug) and 2 ancient 30-Apr monthlies were
+  flipped to REVIEWED by SQL; SUBMITTED queue is now empty by design.
+  Staff memo issued 31 Aug: hr_memos de648741 (announcement, 61 recipients,
+  ack-tracked; direct SQL insert so no push went out) + Gmail thread
+  1a056d19e819ce5d (owner asked "no email" seconds after send — dup, benign).
+  Memo says: count all 9 nightly, check the unit, no fake zeros, book
+  deliveries on arrival, keep portions to recipe (gaps up to 2× expected).
 - 2026-08-21 — **"Unauthorized" on checklist Photo Proof = the 12-hour staff
   session dying under an app that never noticed.** Owner screenshot:
   `staff.celsiuscoffee.com says: Unauthorized` over the Photo Proof camera.
@@ -2601,6 +2641,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   transaction, and the delete-audit pattern pays for itself.
 
 ## Resume pointer
+
+- 2026-08-31 — **Stock investigation: measurement layer is now trustworthy;
+  next is validation + physical checks.** Shipped this session: PR #1164
+  (auto-approve + Flagged queue), PR #1195 (loose-pieces count units), staff
+  memo (hr_memos de648741). Bread retracted as unit artifact; August summary
+  artifact updated (claude.ai/code/artifact/de9a8a8a…). **Next:** (1) watch
+  the first post-fix bread counts land in pieces (~1× expected); (2) Putrajaya
+  must resume nightly counts — beans 2.01×/udang 1.69× unconfirmed since
+  9 Aug; (3) weigh cream/lamb/duck/prawn portions, then fix BOM doses (cream
+  250 ml and meats 50 g look wrong); (4) build engine prep-expansion
+  (ProductRecipe walk, owner approved in principle); (5) day-7 shadow verdict
+  → arm CONSUMPTION_ENGINE_ENABLED + drop POS trigger (never both live);
+  (6) milk fix is procurement: close open milk POs, book deliveries at door.
 
 - 2026-08-31 — **Company SOP module started (phase 0 shipped as a draft PR
   from `claude/celsius-coffee-sop-module-0md66t`).** This is the COMPANY
