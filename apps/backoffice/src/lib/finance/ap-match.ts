@@ -91,8 +91,8 @@ function nameInDesc(nameTokens: string[], descLower: string): boolean {
   return hits >= 2 || (hits === 1 && nameTokens.some((t) => t.length >= 5 && descLower.includes(t)));
 }
 
-import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc, invoiceSig, descNamesForeignInvoice } from "./ap-match-lib";
-export { digitRuns, invoiceRefInDesc, subsetSumIdx } from "./ap-match-lib";
+import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc, invoiceSig, descNamesForeignInvoice, isReconsiderable as reconsiderable } from "./ap-match-lib";
+export { digitRuns, invoiceRefInDesc, subsetSumIdx, isReconsiderable } from "./ap-match-lib";
 
 export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promise<ApMatchResult> {
   const sinceDays = opts.sinceDays ?? 120;
@@ -138,13 +138,32 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
   // invoices and were the main source of false matches; they're documented by a
   // payment slip instead (see payment-slips.ts), not an AP match. Null/unknown
   // categories stay in the pool — those are exactly the OTHER_OUTFLOW pile to match.
-  const lines = await prisma.bankStatementLine.findMany({
+  //
+  // Gated on apMatchedAt, NOT apInvoiceId. cash-out-coverage's linker stamps
+  // apInvoiceId with no apMatchedAt to source settled cash-out for the P&L; the
+  // old apInvoiceId-null filter therefore hid any line it touched from matching
+  // FOREVER. When it landed on an open invoice the payment left the bank and the
+  // bill stayed unpaid with nothing logged (Rich Products 282411058M, RM1,262.40,
+  // 28 Aug 2026). apMatchedAt is the only true "already matched" marker.
+  // isReconsiderable then drops the link-stamped lines whose invoice is already
+  // PAID — re-offering those to a same-amount sibling would be a double payment.
+  const linesRaw = await prisma.bankStatementLine.findMany({
     where: {
-      direction: "DR", isInterCo: false, txnDate: { gte: since }, apInvoiceId: null,
+      direction: "DR", isInterCo: false, txnDate: { gte: since }, apMatchedAt: null,
       OR: [{ category: null }, { category: { notIn: NON_SUPPLIER_CATEGORIES } }],
     },
-    select: { id: true, description: true, amount: true, txnDate: true, category: true, expenseMonth: true },
+    select: { id: true, description: true, amount: true, txnDate: true, category: true, expenseMonth: true, apInvoiceId: true },
   });
+  const stampedIds = [...new Set(linesRaw.map((l) => l.apInvoiceId).filter((v): v is string => !!v))];
+  const openStamped = new Set(
+    stampedIds.length
+      ? (await prisma.invoice.findMany({
+          where: { id: { in: stampedIds }, status: { not: "PAID" } },
+          select: { id: true },
+        })).map((i) => i.id)
+      : [],
+  );
+  const lines = linesRaw.filter((l) => reconsiderable(l, openStamped));
 
   // Index bank lines by rounded amount for fast candidate lookup.
   const byAmount = new Map<number, typeof lines>();
@@ -380,8 +399,10 @@ export type ApplyResult = {
 // LLM-verified review-tier apply.
 export async function writeApMatch(m: ApMatch): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true, category: true } });
-    if (line?.apInvoiceId) return; // already matched — idempotent
+    const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true, apMatchedAt: true, category: true } });
+    // apMatchedAt, not apInvoiceId: a coverage link is not a match, and gating on
+    // the link is what stranded the line this reclaim path exists to recover.
+    if (line?.apMatchedAt) return; // already matched — idempotent
     const inv = await tx.invoice.findUnique({ where: { id: m.invoiceId }, select: { status: true, amount: true } });
     if (!inv) return;
     // link-only: the invoice was paid via another route (POP / migration) —
@@ -410,8 +431,8 @@ export async function writeApMatch(m: ApMatch): Promise<void> {
 // the bank line id so the trail survives the single-column link.
 export async function writeMultiMatch(m: ApMultiMatch): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true, category: true } });
-    if (line?.apInvoiceId) return; // already matched — idempotent
+    const line = await tx.bankStatementLine.findUnique({ where: { id: m.bankLineId }, select: { apInvoiceId: true, apMatchedAt: true, category: true } });
+    if (line?.apMatchedAt) return; // already matched — idempotent (see writeApMatch)
     const invs = await tx.invoice.findMany({ where: { id: { in: m.invoiceIds } }, select: { id: true, status: true, amount: true } });
     if (invs.length !== m.invoiceIds.length) return;
     await tx.bankStatementLine.update({

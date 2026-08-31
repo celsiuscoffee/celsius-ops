@@ -1,7 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc, invoiceSig, descNamesForeignInvoice } from "./ap-match-lib";
+import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc, invoiceSig, descNamesForeignInvoice, isReconsiderable } from "./ap-match-lib";
 
 describe("ap-match-lib", () => {
+  it("reconsiders coverage-linked lines only while their invoice is open", () => {
+    const open = new Set(["inv-open"]);
+    // No link at all — the normal case.
+    expect(isReconsiderable({ apInvoiceId: null }, open)).toBe(true);
+    // Linked by cash-out-coverage to an invoice that is still open: the payment
+    // left the bank but the bill was never settled. Must be matchable again.
+    expect(isReconsiderable({ apInvoiceId: "inv-open" }, open)).toBe(true);
+    // Linked to an already-PAID invoice: the link is doing its job. Re-offering
+    // this line to a same-amount sibling would be a double payment.
+    expect(isReconsiderable({ apInvoiceId: "inv-paid" }, open)).toBe(false);
+    // Nothing open at all — every linked line stays out of the pool.
+    expect(isReconsiderable({ apInvoiceId: "inv-paid" }, new Set())).toBe(false);
+    expect(isReconsiderable({ apInvoiceId: null }, new Set())).toBe(true);
+  });
+
   it("extracts digit runs from bank descriptions", () => {
     expect(digitRuns("celsius coffee putracountry bread baker* inv-006545, 006577")).toEqual(["6545", "6577"]);
     expect(digitRuns("yow seng sdn bhd*ysiv-0801")).toEqual(["801"]);
