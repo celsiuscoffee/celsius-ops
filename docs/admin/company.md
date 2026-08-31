@@ -18,9 +18,9 @@ data block in sync with this file.
 
 | # | Entity | SSM no. | TIN | Employer TIN (E) | SST | Inc. | Trades as |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Celsius Coffee Sdn. Bhd. | ✅ 202101024485 (1424785-A) | ✅ C26773249100 | | ✅ N/A | 2021 | Celsius: Shah Alam, Nilai (consignment) |
-| 2 | Celsius Coffee Conezion Sdn. Bhd. | ✅ 202501044958 (1646366-U) | ✅ C60421230050 | | ✅ N/A | 2025 | Celsius: Putrajaya/Conezion |
-| 3 | Celsius Coffee Tamarind Sdn. Bhd. | ✅ 202501036872 (1638282-K) | ✅ C60337963100 | | ✅ N/A | 2025 | Celsius: Tamarind, Cyberjaya |
+| 1 | Celsius Coffee Sdn. Bhd. | ✅ 202101024485 (1424785-A) | ✅ C26773249100 | | ✅ N/A | ✅ 2021-07-19 | Celsius: Shah Alam, Nilai (consignment) |
+| 2 | Celsius Coffee Conezion Sdn. Bhd. | ✅ 202501044958 (1646366-U) | ✅ C60421230050 | | ✅ N/A | ✅ 2025-09-25 | Celsius: Putrajaya/Conezion |
+| 3 | Celsius Coffee Tamarind Sdn. Bhd. | ✅ 202501036872 (1638282-K) | ✅ C60337963100 | | ✅ N/A | ✅ 2025-08-07 | Celsius: Tamarind, Cyberjaya |
 | 4 | Gosame International Sdn. Bhd. | ✅ 202601006195 (1668293-M) | ✅ C60579873070 | ✅ E9628007204 | | 2026-02-11 | Gosame (Korean F&B) — holding + operating |
 | 5 | Gosame Bukit Tunku Sdn. Bhd. | ✅ 202601006713 (1668811-A) | ✅ C60583422090 | ✅ E9628082601 | | 2026-02-13 | Gosame — Bukit Tunku site |
 
@@ -35,9 +35,18 @@ Ammar Bin Shahrin ──┬── Celsius group: 3 sister companies (#1–#3)
         Moon Byongjoon (KR) 22.2% ─┘            └── 100% ── Gosame Bukit Tunku (#5)
 ```
 
-Shared facts:
-- All three Celsius entities: registered address ✅ **K-3-01, Conezion City,
-  Persiaran IRC 3, IOI Resort, 62502 Putrajaya** · MSIC ⚪ 56101.
+Shared facts (✅ from SSM packs, owner-provided 2026-08-31):
+- **SSM registered address for ALL FIVE entities** is the cosec office:
+  **No. 12-1, Jalan PPS 2, Pusat Perdagangan/Perniagaan Selaseh, 68100 Batu
+  Caves, Selangor**. The **K-3-01, Conezion City, Persiaran IRC 3, IOI
+  Resort, 62502 Putrajaya** address the owner uses for e-invoice/
+  correspondence is NOT the SSM registered address — ⚠️ owner to decide
+  which one goes on outward sheets (see open questions).
+- All three Celsius entities: MSIC ✅ 56302 (coffee shops) + 56107 + 56101a,
+  description "restaurants, food and beverage, coffee shops, and coffee
+  roastery".
+- Celsius directors at incorporation of each entity: see per-entity tables;
+  Conezion/Tamarind are 53/47 between the two Ammars.
 - Contact number for official/outward use (all entities): ✅
   **+60 11-5459 5369** (owner 2026-08-31; replaces 017-209 6058, which
   remains the outlet phone in the `Outlet` table).
@@ -58,14 +67,16 @@ Shared facts:
 | TIN (MyInvois) | ✅ C26773249100 |
 | Employer TIN (E) | |
 | SST | ✅ not registered |
-| Incorporated | ⚪ 2021 |
-| Business address | ⚪ 58, Jalan Renang 13/26, Tadisma Business Park, 40100 Shah Alam, Selangor |
+| Incorporated | ✅ 2021-07-19 |
+| Registered address (SSM) | ✅ No. 12-1, Jalan PPS 2, Pusat Perdagangan Selaseh, 68100 Batu Caves, Selangor |
+| Business address (SSM, at inc.) | ✅ K301, Conezion, Persiaran IRC3, IOI Resort City, 62502 Putrajaya |
 | Outlets | Shah Alam (CC002), Nilai (consignment) |
-| Directors / shareholding | |
+| Directors (at inc. 2021) | ✅ Amirul Aleem Bin Jamaluddin · Ammar Bin Roslizar · Ammar Bin Shahrin · Mohamad Syahmi Bin Mohamed Kaberi · Muhammad Hussaini Bin Khairudin |
+| Shareholding (at inc. 2021, 10,000 @ RM1) | ✅ Ammar Bin Shahrin 2,400 (24%) · Mohamad Syahmi 2,100 (21%) · Muhammad Hussaini 2,100 (21%) · Ammar Bin Roslizar 1,800 (18%) · Amirul Aleem 1,600 (16%) — ⚠️ AS AT INCORPORATION; confirm current register via latest annual return |
 | Financial year end | |
-| Annual return due | → `renewals.md` (cosec to confirm) |
+| Annual return due | ⚠️ anniversary 19 Jul — 2026 return was due ~mid-Aug 2026; confirm with cosec it was filed → `renewals.md` |
 | Drive link (SSM pack) | |
-| Notes | ⚪ ~RM2.5M revenue 2025; the payroll entity for all staff. `fin_companies.brn` wrongly held `201501026187` until corrected 2026-08-31 — if that number meant something else, record it here. |
+| Notes | ⚪ ~RM2.5M revenue 2025; the payroll entity for all staff. `fin_companies.brn` wrongly held `201501026187` until corrected 2026-08-31 — if that number meant something else, record it here. Predecessor: **CELSIUS BEVERAGE** sole-prop `202103025734 (NS0247629-M)`, registered 2021-01-25, expired 2021-01-24+1y — historical, presumed lapsed. |
 
 ## 2 · Celsius Coffee Conezion Sdn. Bhd.
 
@@ -75,12 +86,14 @@ Shared facts:
 | TIN (MyInvois) | ✅ C60421230050 |
 | Employer TIN (E) | |
 | SST | ✅ not registered |
-| Incorporated | ⚪ 2025 |
-| Business address | ⚪ M-G-06 Persiaran IRC3, IOI City Resort, 62502 Putrajaya |
+| Incorporated | ✅ 2025-09-25 |
+| Registered address (SSM) | ✅ No. 12-1, Jalan PPS 2, Pusat Perdagangan Selaseh, 68100 Batu Caves, Selangor |
+| Business address (SSM, at inc.) | ✅ K-05, Level 3, Tamarind Square, Cyberjaya (as lodged — actual trading site is M-G-06, IOI City Resort, Putrajaya) |
 | Outlets | Putrajaya/Conezion (CC001) |
-| Directors / shareholding | |
+| Directors | ✅ Ammar Bin Shahrin · Ammar Bin Roslizar |
+| Shareholding (50,000 @ RM1) | ✅ Ammar Bin Shahrin 26,500 (53%) · Ammar Bin Roslizar 23,500 (47%) |
 | Financial year end | |
-| Annual return due | → `renewals.md` (cosec to confirm) |
+| First annual return | 🟡 ~2026-10-25 (30 days after first anniversary 2026-09-25) — cosec to confirm → `renewals.md` |
 | Drive link (SSM pack) | |
 
 ## 3 · Celsius Coffee Tamarind Sdn. Bhd.
@@ -91,12 +104,14 @@ Shared facts:
 | TIN (MyInvois) | ✅ C60337963100 |
 | Employer TIN (E) | |
 | SST | ✅ not registered |
-| Incorporated | ⚪ 2025 |
-| Business address | ⚪ K-05, Level 3m, Tamarind Square, Persiaran Multimedia, 63000 Cyberjaya, Selangor |
+| Incorporated | ✅ 2025-08-07 |
+| Registered address (SSM) | ✅ No. 12-1, Jalan PPS 2, Pusat Perdagangan Selaseh, 68100 Batu Caves, Selangor |
+| Business address (SSM) | ✅ K-05, Level 3, Tamarind Square, Persiaran Multimedia, 63000 Cyberjaya, Selangor |
 | Outlets | Tamarind (CC003) |
-| Directors / shareholding | |
+| Directors | ✅ Ammar Bin Shahrin · Ammar Bin Roslizar |
+| Shareholding (50,000 @ RM1) | ✅ Ammar Bin Shahrin 26,500 (53%) · Ammar Bin Roslizar 23,500 (47%) |
 | Financial year end | |
-| Annual return due | → `renewals.md` (cosec to confirm) |
+| First annual return | ⚠️ ~2026-09-06 (30 days after first anniversary 2026-08-07) — DAYS AWAY, cosec to confirm → `renewals.md` |
 | Drive link (SSM pack) | |
 
 ## 4 · Gosame International Sdn. Bhd.
@@ -134,15 +149,19 @@ Shared facts:
 
 ---
 
-## Company secretary
+## Company secretaries
 
-| Field | Value |
-| --- | --- |
-| Firm / name | ✅ AAS Premium — Norazah Binti Mohd Kasim (MIA 46630) |
-| Contact | ✅ secretary@aaspremium.com · 03-6177 0812 · 014-307 1812 |
-| Office | ✅ Batu Caves / Rawang, Selangor |
-| Acts for | ✅ both Gosame entities (lodging secretary) · ⚪ presumably the 3 Celsius entities too — confirm |
-| Retainer / fees | |
+Two secretaries, one shared office (both use registered address No. 12-1,
+Jalan PPS 2, Selaseh, Batu Caves and office no. 03-6177 0812 — likely the
+same firm):
+
+| Field | Celsius entities (×3) | Gosame entities (×2) |
+| --- | --- | --- |
+| Name | ✅ Ahmad Fadhilat Fitri Bin Ismail | ✅ Norazah Binti Mohd Kasim (AAS Premium) |
+| Licence | ✅ Licensed Secretary LS0010335 | ✅ MIA 46630 |
+| Contact | ✅ fadhilatcosec@gmail.com · 017-928 7492 | ✅ secretary@aaspremium.com · 014-307 1812 |
+| Appointed | ✅ parent: 19/07/2021 (first cosec); lodged all 3 incorporations | ✅ lodged both incorporations (Feb 2026) |
+| Retainer / fees | | |
 
 ## Bank accounts
 
@@ -164,12 +183,18 @@ accounts unknown. Owner to confirm mapping + last-4.
    recorded on its Outlet row.)
 2. Is **BERBUKA@CELSIUS** a brand under one of the entities above, or its
    own registration?
-3. Directors/shareholding + financial year ends for the three Celsius
-   entities (send the SSM packs like the Gosame ones and it all gets
-   extracted).
-4. Employer TIN (E) numbers for the Celsius entities.
-5. Does the old `201501026187` number (formerly in `fin_companies.brn`)
+3. Employer TIN (E) numbers for the Celsius entities.
+4. Does the old `201501026187` number (formerly in `fin_companies.brn`)
    belong to anything real?
+5. Is the parent's **current** shareholding still the 5-way 2021 split, or
+   has it changed? (Latest annual return would settle it.)
+6. **Which address should outward particulars sheets carry?** The owner-
+   given e-invoice address (K-3-01, Conezion City) is NOT the SSM
+   registered address (Batu Caves cosec office). Sheets currently show
+   K-3-01 as "Registered Address" — relabel or swap on owner's call.
+7. Financial year ends ×5 (cosec/accountant knows).
+8. Was the parent's 2026 **annual return** (due ~mid-Aug 2026) filed? And
+   are the two 2025 entities' first returns (Sep/Oct 2026) with the cosec?
 
 ## Key documents (Drive links)
 
