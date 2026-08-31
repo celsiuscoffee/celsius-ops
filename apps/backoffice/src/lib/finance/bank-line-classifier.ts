@@ -100,7 +100,11 @@ const OVERTIME_RE = new RegExp(String.raw`\b(?:ADD\s+)?OT\s+(?:${PAY_PERIOD})`, 
 const MGMT_FEE_RE = /\b(?:MANAGEMENT|MNGMT|MGMT)\s*FEE\b|\bMGMT\b/i;
 const PARTIMER_RE = /\bPARTIMER\b|\bPT\s*WEEK\b|\bPT\s*W\s*\d{1,2}\b/i;
 const AMMAR_ADS_CLAIM_RE = /AMMAR\s+BIN\s+SHAHRIN[\s\S]*\b(?:ADS?|MARKETING)\b/i;
-const INDEED_CLAIM_RE = /\bINDEED\b/i;
+// Indeed bills from Singapore; the invoice number is the only marker on some
+// reimbursements (2026-04-22: SGI26-00052664 and SGI26-00081124, RM1,500.87,
+// which landed in OTHER_OUTFLOW and RAW_MATERIALS respectively — the latter
+// inflating food cost). Shape-anchored so it cannot collide with a supplier ref.
+const INDEED_CLAIM_RE = /\bINDEED\b|\bSGI\d{2}-\d{6,}\b/i;
 
 // Inflow rules
 //

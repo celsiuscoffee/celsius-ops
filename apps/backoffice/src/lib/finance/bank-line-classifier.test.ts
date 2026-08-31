@@ -15,6 +15,11 @@ describe("bank-line-classifier", () => {
     expect(dr("Shah Alam AMMAR BIN SHAHRIN * indeed 2/7/26").category).toBe("RECRUITMENT");
     expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN Indeed Hiring").category).toBe("RECRUITMENT");
     expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN Claim Indeed").category).toBe("RECRUITMENT");
+    // Some reimbursements carry only the Indeed invoice number
+    expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN SGI26-00052664 Celsius Coffee Tamar").category).toBe("RECRUITMENT");
+    expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN SGI26-00081124 Celsius Coffee Shah").category).toBe("RECRUITMENT");
+    // A supplier reference of a different shape must not be swept in
+    expect(dr("Putrajaya ARIFF IZHAM BIN ABD* SPWMS202608048").category).not.toBe("RECRUITMENT");
   });
 
   it("books the director's ad reimbursements as DIGITAL_ADS whatever the spelling", () => {
