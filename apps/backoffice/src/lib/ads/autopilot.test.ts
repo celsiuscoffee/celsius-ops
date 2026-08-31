@@ -506,42 +506,60 @@ describe("cashScoreboard (RM7k/mo target)", () => {
   });
 });
 
-describe("ownerDirective (Putrajaya: undo the Aug 12 cut)", () => {
+describe("ownerDirective (2026-08-25: probe-up Shah Alam + Putrajaya, evaluated raises)", () => {
+  const AUG25 = new Date("2026-08-25T19:01:00Z");
+  const shahAlam = (over: Partial<CampaignState> = {}) =>
+    campaign({
+      campaignId: "sa",
+      campaignName: "Celsius Coffee Shah Alam",
+      dailyBudgetMyr: 53.98,
+      baselineDailyMyr: 100.2,
+      lastApplied: { decidedAt: daysAgo(40), prevDailyMyr: 84.96, newDailyMyr: 100.2, reason: "autopilot rollback: guard breach" },
+      ...over,
+    });
   const putrajaya = (over: Partial<CampaignState> = {}) =>
     campaign({
       campaignId: "pj",
       campaignName: "Celsius Putrajaya",
-      dailyBudgetMyr: 38.16,
+      dailyBudgetMyr: 43.36,
       baselineDailyMyr: 100,
-      lastApplied: {
-        decidedAt: daysAgo(4),
-        prevDailyMyr: 43.36,
-        newDailyMyr: 38.16,
-        reason: "autopilot step-down 12% (RM43.36→RM38.16/day, banks ~RM156/mo): till-revenue index 1.02",
-      },
+      lastApplied: { decidedAt: daysAgo(9), prevDailyMyr: 38.16, newDailyMyr: 43.36, reason: "owner directive 2026-08-16 (undo the Aug 12 cut)" },
       ...over,
     });
-  const AUG16 = new Date("2026-08-16T19:01:00Z");
 
-  it("fires once while the Aug 12 step-down is still the last change", () => {
-    const d = ownerDirective(putrajaya(), AUG16);
+  it("Shah Alam: starts the probe-up early out of the rollback hold, as an EVALUATED raise", () => {
+    const d = ownerDirective(shahAlam(), healthy, AUG25);
     expect(d?.action).toBe("raise");
-    expect(d?.newDailyMyr).toBe(43.36);
-    // lastKind must read "other", not "raise" — the raise-evaluation branch
-    // would revert an "autopilot raise" on the very breach that motivated it.
-    expect(d?.reason).toMatch(/^owner directive/);
+    expect(d?.newDailyMyr).toBe(62.08); // 53.98 × 1.15
+    // Deliberately an "autopilot raise" — the evaluation branch is the
+    // owner's "make sure the ads work": revert without measured lift.
+    expect(d?.reason).toMatch(/^autopilot raise: owner directive 2026-08-25/);
   });
 
-  it("never fires again after the raise lands, for other campaigns, paused, or past expiry", () => {
+  it("Putrajaya: fires only once its guard reads clean — never raise into the breach it must outgrow", () => {
+    expect(ownerDirective(putrajaya(), breached, AUG25)).toBeNull();
+    const d = ownerDirective(putrajaya(), healthy, AUG25);
+    expect(d?.action).toBe("raise");
+    expect(d?.newDailyMyr).toBe(49.86); // 43.36 × 1.15
+  });
+
+  it("each leg is spent by its own raise, ignores other campaigns/paused, and hard-expires 2026-09-15", () => {
     expect(
       ownerDirective(
-        putrajaya({ dailyBudgetMyr: 43.36, lastApplied: { decidedAt: daysAgo(1), prevDailyMyr: 38.16, newDailyMyr: 43.36, reason: "owner directive 2026-08-16 (undo the Aug 12 cut)" } }),
-        AUG16,
+        shahAlam({ dailyBudgetMyr: 62.08, lastApplied: { decidedAt: daysAgo(1), prevDailyMyr: 53.98, newDailyMyr: 62.08, reason: "autopilot raise: owner directive 2026-08-25" } }),
+        healthy, AUG25,
       ),
     ).toBeNull();
-    expect(ownerDirective(campaign({ campaignName: "Celsius Coffee Shah Alam" }), AUG16)).toBeNull();
-    expect(ownerDirective(putrajaya({ isPaused: true }), AUG16)).toBeNull();
-    expect(ownerDirective(putrajaya(), new Date("2026-08-23T00:00:01Z"))).toBeNull();
+    expect(
+      ownerDirective(
+        putrajaya({ dailyBudgetMyr: 49.86, lastApplied: { decidedAt: daysAgo(1), prevDailyMyr: 43.36, newDailyMyr: 49.86, reason: "autopilot raise: owner directive 2026-08-25" } }),
+        healthy, AUG25,
+      ),
+    ).toBeNull();
+    expect(ownerDirective(campaign({ campaignName: "Celsius Coffee Tamarind Square" }), healthy, AUG25)).toBeNull();
+    expect(ownerDirective(shahAlam({ isPaused: true }), healthy, AUG25)).toBeNull();
+    expect(ownerDirective(shahAlam(), healthy, new Date("2026-09-15T00:00:01Z"))).toBeNull();
+    expect(ownerDirective(putrajaya(), healthy, new Date("2026-09-15T00:00:01Z"))).toBeNull();
   });
 
   it("a later guard breach does NOT auto-revert the directive raise (lastKind 'other' observes, never reverts)", () => {

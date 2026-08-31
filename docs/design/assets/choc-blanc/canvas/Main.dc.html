@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @font-face { font-family: "Peachi"; font-weight: 700; font-style: normal; src: url(data:font/otf;base64,__PEACHI_BOLD__) format("opentype"); }
+    @font-face { font-family: "Peachi"; font-weight: 500; font-style: normal; src: url(data:font/otf;base64,__PEACHI_MED__) format("opentype"); }
+    body { margin: 0; background: #0F0500; font-family: "Peachi", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+    a { color: #FBBF24; } a:hover { color: #C97A4E; }
+  </style>
+</helmet>
+
+<!-- App home carousel, 1.07:1, following the house poster layout rather than
+     the campaign one: the copy sits MID-LEFT and vertically centred over the
+     photograph, with the product to the right - the same arrangement the
+     existing home posters use (Smoked Duck Aglio Olio, Nasi Lemak, etc).
+     hero-home.jpg is cut with the glass biased right (~61% across) to leave
+     that column clear, and the scrim runs left-to-right instead of bottom-up. -->
+<div style="width: 1200px; height: 1121px; position: relative; overflow: hidden; background: #160800;">
+
+  <img src="hero-home.jpg" alt="Choc Blanc iced espresso with whipped dark chocolate cream" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;">
+
+  <!-- left-to-right scrim so the copy reads over the table without hiding it -->
+  <div style="position: absolute; inset: 0; background: linear-gradient(90deg, rgba(22,8,0,0.92) 0%, rgba(22,8,0,0.86) 24%, rgba(22,8,0,0.66) 36%, rgba(22,8,0,0.28) 48%, rgba(22,8,0,0.06) 58%, rgba(22,8,0,0) 66%);"></div>
+  <div style="position: absolute; inset: 0 0 auto 0; height: 150px; background: linear-gradient(180deg, rgba(22,8,0,0.55) 0%, rgba(22,8,0,0) 100%);"></div>
+
+  <div style="position: absolute; inset: 0; padding: 44px 48px; display: flex; flex-direction: column; justify-content: center;">
+    <div style="max-width: 520px; display: flex; flex-direction: column; gap: 20px;">
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="font-weight: 700; font-size: 15px; letter-spacing: 0.30em; color: #FBBF24; text-transform: uppercase;">Merdeka Menu</div>
+        <div style="font-weight: 500; font-size: 13px; letter-spacing: 0.16em; color: rgba(245,243,240,0.72); text-transform: uppercase;">31 Ogos &ndash; 30 Sept 2026</div>
+      </div>
+
+      <h1 style="margin: 0; font-weight: 700; font-size: 104px; line-height: 0.94; letter-spacing: -0.025em; color: #F5F3F0;">Choc<br>Blanc</h1>
+
+      <p style="margin: 0; font-weight: 500; font-size: 29px; line-height: 1.25; color: #E0A47C; text-wrap: pretty;">Now capped with dark chocolate cream.</p>
+
+      <div style="margin-top: 6px; font-weight: 700; font-size: 26px; line-height: 1; color: #F5F3F0; letter-spacing: -0.01em;">&deg;Celsius Coffee</div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

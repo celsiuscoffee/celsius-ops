@@ -22,6 +22,10 @@ export async function POST(request: NextRequest) {
       holdoutPct: body.holdoutPct,
       attributionWindowDays: body.attributionWindowDays,
       suppressPhones: body.suppressPhones,
+      // Allowlist. Must be forwarded: an unforwarded onlyPhones is silently
+      // ignored, and the round goes to the WHOLE segment instead of the
+      // handful of phones the caller meant.
+      onlyPhones: body.onlyPhones,
       maxRecipients: body.maxRecipients,
       segment: body.segment,
       createdBy: auth.user?.id,

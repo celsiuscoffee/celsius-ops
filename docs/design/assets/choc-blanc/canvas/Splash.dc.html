@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @font-face { font-family: "Peachi"; font-weight: 700; font-style: normal; src: url(data:font/otf;base64,__PEACHI_BOLD__) format("opentype"); }
+    @font-face { font-family: "Peachi"; font-weight: 500; font-style: normal; src: url(data:font/otf;base64,__PEACHI_MED__) format("opentype"); }
+    body { margin: 0; background: #0F0500; font-family: "Peachi", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+    a { color: #FBBF24; } a:hover { color: #C97A4E; }
+  </style>
+</helmet>
+
+<!-- 1080x2340 phone splash, full-bleed photograph. The app paints this with
+     resizeMode="cover", draws a close/countdown badge at top-right (~top 130px,
+     70px tall here) and a "TAP TO OPEN" caption ~175px from the bottom, so
+     everything that must be read stays inside 210px top / 300px bottom.
+     hero-splash.jpg is cut at this exact aspect; the glass sits at y 355..1432
+     and the table below it is where the copy goes. -->
+<div style="width: 1080px; height: 2340px; position: relative; overflow: hidden; background: #160800;">
+
+  <img src="hero-splash.jpg" alt="Choc Blanc iced espresso with whipped dark chocolate cream" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;">
+
+  <div style="position: absolute; inset: 0 0 auto 0; height: 420px; background: linear-gradient(180deg, rgba(22,8,0,0.80) 0%, rgba(22,8,0,0.30) 55%, rgba(22,8,0,0) 100%);"></div>
+  <div style="position: absolute; inset: auto 0 0 0; height: 1150px; background: linear-gradient(180deg, rgba(22,8,0,0) 0%, rgba(22,8,0,0.38) 26%, rgba(22,8,0,0.78) 55%, rgba(22,8,0,0.94) 100%);"></div>
+
+  <div style="position: absolute; inset: 0; padding: 210px 72px 300px 72px; display: flex; flex-direction: column;">
+
+    <!-- header, left half only: the app's close badge occupies the top-right -->
+    <div style="display: flex; flex-direction: column; gap: 18px;">
+      <div style="font-weight: 700; font-size: 60px; line-height: 1; color: #F5F3F0; letter-spacing: -0.01em;">&deg;C</div>
+      <div style="display: flex; flex-direction: column; gap: 9px;">
+        <div style="font-weight: 700; font-size: 21px; letter-spacing: 0.32em; color: #FBBF24; text-transform: uppercase;">Merdeka Menu</div>
+        <div style="font-weight: 500; font-size: 18px; letter-spacing: 0.18em; color: rgba(245,243,240,0.70); text-transform: uppercase;">31 Ogos &ndash; 30 Sept 2026</div>
+      </div>
+    </div>
+
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 24px;">
+      <div>
+        <span style="display: inline-block; background: #A64B2C; color: #F5F3F0; font-weight: 700; font-size: 20px; letter-spacing: 0.24em; text-transform: uppercase; padding: 14px 26px; border-radius: 5px;">New on the menu</span>
+      </div>
+      <h1 style="margin: 0; font-weight: 700; font-size: 146px; line-height: 0.9; letter-spacing: -0.028em; color: #F5F3F0;">Choc Blanc</h1>
+      <p style="margin: 0; font-weight: 500; font-size: 40px; line-height: 1.2; color: #E0A47C; text-wrap: pretty;">Now capped with dark chocolate cream.</p>
+      <p style="margin: 0; font-weight: 500; font-size: 26px; line-height: 1.5; color: rgba(245,243,240,0.80); max-width: 820px; text-wrap: pretty;">Double espresso over ice, capped with whipped dark chocolate cream, a dusting of cocoa and candied orange peel.</p>
+
+      <div style="margin-top: 26px; display: flex; flex-direction: column; gap: 18px;">
+        <div style="height: 1px; background: rgba(245,243,240,0.16);"></div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;">
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="font-weight: 500; font-size: 19px; letter-spacing: 0.22em; color: #C4703F; text-transform: uppercase;">Selamat Hari Merdeka ke-69</div>
+            <div style="font-weight: 700; font-size: 40px; line-height: 1; color: #F5F3F0; letter-spacing: -0.01em;">&deg;Celsius Coffee</div>
+          </div>
+          <div style="font-weight: 500; font-size: 17px; letter-spacing: 0.14em; color: rgba(245,243,240,0.55); text-transform: uppercase; text-align: right;">Shah Alam &middot; Conezion<br>Tamarind</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

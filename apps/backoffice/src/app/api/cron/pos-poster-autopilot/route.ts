@@ -16,6 +16,12 @@ import { planPosterRotation } from "@/lib/pos/poster-autopilot";
  * AOV into pos_poster_perf tagged with yesterday's mode — the holdout that
  * proves whether the autopilot actually beats popularity (and whether posters
  * move AOV at all). If it doesn't, we'll see it and back off.
+ *
+ * Campaign pins win: a poster scheduled with an end date is never rewritten
+ * here, and once live pins cover the whole day the rest of that surface is
+ * switched off. So a launch can be curated in the CMS without switching this
+ * cron off, and the surface returns to the rotation by itself once the pin
+ * expires.
  */
 
 export const dynamic = "force-dynamic";
@@ -64,13 +70,17 @@ export async function GET(req: NextRequest) {
   ];
   let applied = 0;
   const activeByPlacement: Record<string, string[]> = {};
+  const pinnedByPlacement: Record<string, string[]> = {};
   for (const cfg of placements) {
-    const decisions = await planPosterRotation({ mode: cfg.mode, placement: cfg.placement });
+    const { decisions, pinned } = await planPosterRotation({ mode: cfg.mode, placement: cfg.placement });
+    for (const pin of pinned) {
+      (pinnedByPlacement[cfg.placement] ??= []).push(`${pin.title ?? pin.posterId}${pin.live ? " (live)" : ""}`);
+    }
     for (const d of decisions) {
-      const { error } = await supabase
-        .from("splash_posters")
-        .update({ active: d.active, sort_order: d.sortOrder } as Record<string, unknown>)
-        .eq("id", d.posterId);
+      // sortOrder null = switch it off but leave the ranking alone.
+      const patch: Record<string, unknown> = { active: d.active };
+      if (d.sortOrder != null) patch.sort_order = d.sortOrder;
+      const { error } = await supabase.from("splash_posters").update(patch).eq("id", d.posterId);
       if (error) console.error("[cron/pos-poster-autopilot] update", d.posterId, error.message);
       else applied++;
       if (d.active) (activeByPlacement[cfg.placement] ??= []).push(d.title ?? d.posterId);
@@ -94,6 +104,7 @@ export async function GET(req: NextRequest) {
     if (!error) logged++;
   }
 
-  console.warn(`[cron/pos-poster-autopilot] mode=${mode} applied=${applied} perf_logged=${logged}`);
-  return NextResponse.json({ ok: true, mode, applied, perfLogged: logged, activeByPlacement });
+  const pinCount = Object.values(pinnedByPlacement).reduce((n, list) => n + list.length, 0);
+  console.warn(`[cron/pos-poster-autopilot] mode=${mode} applied=${applied} pinned=${pinCount} perf_logged=${logged}`);
+  return NextResponse.json({ ok: true, mode, applied, perfLogged: logged, activeByPlacement, pinnedByPlacement });
 }

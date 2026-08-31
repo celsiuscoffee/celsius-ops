@@ -20,17 +20,27 @@ const SICK_DAYS = 14;
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-// Pro-rated annual entitlement for a join date, within the join year.
-// Nearest 0.5; joins before the year started get the full base.
+// Pro-rated annual entitlement for a join date, within the join year —
+// computed the Employment Act 1955 s.60E way (owner 2026-08-21: "follow the
+// act accurately"):
+//   - proportion is by COMPLETED MONTHS OF SERVICE, not calendar days;
+//   - a completed month = a calendar month worked in full, so joining on the
+//     1st counts the join month, joining any later day does not;
+//   - the result is rounded to WHOLE DAYS, a fraction of one-half or more
+//     going UP to a full day (s.60E's rounding rule).
+// This replaced the old calendar-day / nearest-half method, which could land
+// half a day UNDER the statutory minimum (e.g. a 1 Sep join: old 2.5 vs the
+// act's 8×4/12 = 2.67 → 3). Joins before the year started get the full base.
 export function proratedAnnualDays(joinDateISO: string, base: number = ANNUAL_BASE_DAYS): number {
   const join = new Date(`${joinDateISO}T00:00:00Z`);
   if (Number.isNaN(join.getTime())) return base;
-  const year = join.getUTCFullYear();
-  const yearEnd = Date.UTC(year, 11, 31);
-  const daysInYear = (yearEnd - Date.UTC(year, 0, 1)) / 86_400_000 + 1;
-  const remaining = (yearEnd - join.getTime()) / 86_400_000 + 1;
-  const frac = Math.min(1, Math.max(0, remaining / daysInYear));
-  return Math.round(base * frac * 2) / 2;
+  const joinMonth = join.getUTCMonth() + 1; // 1–12
+  const joinDay = join.getUTCDate();
+  // Completed calendar months of service from the join to 31 Dec of the join
+  // year. The join month counts only when worked in full (joined on the 1st).
+  const completedMonths = Math.min(12, Math.max(0, 12 - joinMonth + (joinDay === 1 ? 1 : 0)));
+  // Round half-or-more up to a whole day (Math.round rounds .5 toward +∞).
+  return Math.round((base * completedMonths) / 12);
 }
 
 /**

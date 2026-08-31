@@ -1,0 +1,84 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1200,
+      "h": 1121,
+      "title": "App home carousel \u2014 1.07:1",
+      "print": "fixed"
+    },
+    {
+      "file": "PosPanel.dc.html",
+      "x": 1300,
+      "y": 0,
+      "w": 920,
+      "h": 1200,
+      "title": "POS customer display \u2014 460\u00d7600 @2x",
+      "print": "fixed"
+    },
+    {
+      "file": "Splash.dc.html",
+      "x": 2320,
+      "y": 0,
+      "w": 1080,
+      "h": 2340,
+      "title": "Phone splash \u2014 1080\u00d72340",
+      "print": "fixed"
+    },
+    {
+      "file": "IgFeed.dc.html",
+      "x": 0,
+      "y": 2600,
+      "w": 1080,
+      "h": 1350,
+      "title": "Instagram / Facebook feed \u2014 4:5",
+      "print": "fixed"
+    },
+    {
+      "file": "IgSquare.dc.html",
+      "x": 1300,
+      "y": 2600,
+      "w": 1080,
+      "h": 1080,
+      "title": "Square \u2014 grid, Facebook, WhatsApp",
+      "print": "fixed"
+    },
+    {
+      "file": "IgStory.dc.html",
+      "x": 2600,
+      "y": 2600,
+      "w": 1080,
+      "h": 1920,
+      "title": "Instagram story \u2014 9:16",
+      "print": "fixed"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "safe-areas",
+      "x": 2320,
+      "y": -190,
+      "w": 1080,
+      "text": "Splash safe areas: the app draws its own close/countdown badge top-right and a TAP TO OPEN caption near the bottom. Nothing important sits in the top 210px or bottom 300px."
+    },
+    {
+      "id": "price-check",
+      "x": 0,
+      "y": -190,
+      "w": 1200,
+      "text": "RM14.90 confirmed \u2014 same shelf price as Mont Blanc, which Choc Blanc sells alongside rather than replaces. Base cup costs RM3.45 (Mont Blanc's recipe plus 10g chocolate powder), a 76.9% margin."
+    },
+    {
+      "id": "social-no-price",
+      "x": 0,
+      "y": 2410,
+      "w": 2380,
+      "text": "Social set carries NO price \u2014 deliberate. A price baked into the image dates the post and drags comparison into the comments; put RM14.90 in the caption where it can change without a re-export. Story keeps 250px clear at the top and 330px at the bottom for Instagram's own chrome and the link sticker."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
