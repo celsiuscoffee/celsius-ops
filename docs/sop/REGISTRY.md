@@ -1,0 +1,62 @@
+# SOP Registry — master index
+
+Every controlled document has a row here, updated in the same PR as the
+document change (rule: CC-GOV-001 §5.1). Statuses: `PLANNED` (ID claimed,
+nothing written) · `DRAFT` · `PUBLISHED` · `ARCHIVED` · `SYSTEM` (lives today
+as a staff-app checklist; Tier-2/3 wrapper document not yet written — the ID
+is reserved so wrapping is stable).
+
+## Celsius Coffee (CC)
+
+### GOV — Governance
+
+| ID | Title | Tier | Owner | Status | Version | Next review |
+|---|---|---|---|---|---|---|
+| CC-GOV-001 | [Document Control](celsius/GOV/CC-GOV-001-document-control.md) | Procedure | Managing Director | DRAFT | 0.1 | — |
+| CC-GOV-002 | Roles & Authority Matrix (approval/spend limits) | Policy | Managing Director | PLANNED | — | — |
+
+### OPS — Outlet operations
+
+| ID | Title | Tier | Owner | Status | Version | Next review |
+|---|---|---|---|---|---|---|
+| CC-OPS-001 | Incident & Complaint Handling | Procedure | Managing Director | PLANNED | — | — |
+| CC-OPS-002 | Opening Checklist | Work instruction | Outlet Manager | SYSTEM | — | — |
+| CC-OPS-003 | Closing | Work instruction | Outlet Manager | SYSTEM | — | — |
+| CC-OPS-004 | Fridge & Storage | Work instruction | Outlet Manager | SYSTEM | — | — |
+| CC-OPS-005 | Toilet Cleaning | Work instruction | Outlet Manager | SYSTEM | — | — |
+| CC-OPS-006 | Grease Trap Cleaning | Work instruction | Outlet Manager | SYSTEM | — | — |
+| CC-OPS-007 | Ice Machine Cleaning | Work instruction | Outlet Manager | SYSTEM | — | — |
+| CC-OPS-008 | Pest Control Check | Work instruction | Outlet Manager | SYSTEM | — | — |
+| CC-OPS-009 | Door & Window Cleaning | Work instruction | Outlet Manager | SYSTEM | — | — |
+
+### PRD — Product & kitchen
+
+| ID | Title | Tier | Owner | Status | Version | Next review |
+|---|---|---|---|---|---|---|
+| CC-PRD-001 | Coffee Calibration | Work instruction | Outlet Manager | SYSTEM | — | — |
+| CC-PRD-002 | First Food Out | Work instruction | Outlet Manager | SYSTEM | — | — |
+
+### HR — People
+
+| ID | Title | Tier | Owner | Status | Version | Next review |
+|---|---|---|---|---|---|---|
+| CC-HR-001 | New Hire Onboarding | Procedure | Managing Director | PLANNED | — | — |
+
+### FIN — Finance
+
+| ID | Title | Tier | Owner | Status | Version | Next review |
+|---|---|---|---|---|---|---|
+| CC-FIN-001 | Cash Handling Policy | Policy | Managing Director | PLANNED | — | — |
+| CC-FIN-002 | Daily Cash Reconciliation | Procedure | Managing Director | PLANNED | — | — |
+
+### PROC / MKT / IT / CMP
+
+*No documents registered yet — claim IDs here as the inventory pass fills the backlog.*
+
+## Gosame (GS)
+
+*Manual not started — domain map TBD (see `gosame/README.md`).*
+
+## Group (GRP)
+
+*Reserved for documents shared by both companies. None defined.*
