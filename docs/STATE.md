@@ -2297,6 +2297,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   roll-over due ~2026-10-01 for September. Same branch/PR as the
   `docs/admin/` skeleton (#1194).
 
+- 2026-08-31 — **Company SOP module started (phase 0 shipped as a draft PR
+  from `claude/celsius-coffee-sop-module-0md66t`).** This is the COMPANY
+  operating manual for Celsius + Gosame, not the staff-app checklist feature —
+  full design in `docs/design/sop-module.md` (4-tier framework, git-as-CMS,
+  phase-1 schema sketch: Company/SopDocument/SopDocumentVersion/SopAcknowledgment).
+  Shipped: `docs/sop/` tree, TEMPLATE, REGISTRY seeded with the 10 live
+  staff-app SOPs as reserved Tier-3 IDs (queried from prod 2026-08-31), and
+  `CC-GOV-001 Document Control` at v0.1 DRAFT. **Owner facts learned:** Gosame
+  is a SEPARATE entity (own staff/infra — `gosame-ops` Supabase project
+  exists, ap-southeast-1, since 2026-07-10); surfaces stay backoffice=admin /
+  staff-app=read+ack; priority is docs → sign-off → execution links.
+  **Next session:** owner reviews/merges the PR (merge = publish GOV-001 per
+  its own §5.3 — bump to 1.0 + set effective_date first), then write the
+  phase-0.5 documents: CC-FIN-001 cash handling, CC-HR-001 onboarding,
+  CC-OPS-001 incident handling. Open questions in the design doc: Gosame
+  domain map, shared functions (GRP- docs), BM/EN policy.
+
 - 2026-08-28 — **Choc Blanc Merdeka: artwork done, decisions settled, ONE
   blocker left.** All three `splash_posters` rows still have `image_url = ''`;
   they cannot render until someone exports the three PNGs from the canvas
