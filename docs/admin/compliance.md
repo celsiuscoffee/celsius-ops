@@ -14,11 +14,11 @@ responsible, and calendar obligations; dates go in `renewals.md`.
 | Registration | Celsius Coffee | Conezion | Tamarind | Notes |
 | --- | --- | --- | --- | --- |
 | LHDN tax file (C) | | | | |
-| TIN (MyInvois) | ⚪ not on record | ⚪ not on record | ⚪ not on record | `fin_companies.tin` NULL for all three — needed before any e-invoice filing |
+| TIN (MyInvois) | ✅ C26773249100 | ✅ C60421230050 | ✅ C60337963100 | owner-provided 2026-08-31; written to `fin_companies.tin` same day |
 | Employer no. (E) | | | | |
 | EPF employer | | | | payroll runs under Celsius Coffee only |
 | SOCSO/EIS employer | | | | |
-| SST | ⚪ not on record | ⚪ not on record | ⚪ not on record | confirm registered vs below-threshold per entity |
+| SST | ✅ N/A (not registered) | ✅ N/A | ✅ N/A | owner-provided 2026-08-31 |
 | HRD Corp | | | | |
 
 ## E-invoice (MyInvois) — ⚠️ open compliance question

@@ -5,7 +5,12 @@ Mask account numbers to last 4 digits; link full documents in Drive.
 
 ⚪ = pre-filled 2026-08-31 from the data estate (`Outlet.companyName/regNo`
 receipt-header fields, `fin_companies`, finance docs) — needs owner
-verification. Blank = owner to share.
+verification. ✅ = owner-confirmed 2026-08-31 (e-invoice registration
+details). Blank = owner to share.
+
+All three entities share the same registered/e-invoice address and phone
+(✅ owner): **K-3-01, Conezion City, Persiaran IRC 3, IOI Resort, 62502
+Putrajaya** · Tel 017-209 6058.
 
 **The business is THREE sister companies**, mapped to outlets as follows
 (⚪ from `Outlet` rows):
@@ -23,11 +28,13 @@ sits under.)
 
 | Field | Value |
 | --- | --- |
-| Registered name | ⚪ CELSIUS COFFEE SDN. BHD. |
-| SSM registration no. | ⚠️ **CONFLICT — owner to confirm:** receipt headers (`Outlet.regNo`) say `202101024485 (1424785-A)`; `fin_companies.brn` says `201501026187`. One is wrong; fix the losing system too. |
+| Registered name | ✅ CELSIUS COFFEE SDN. BHD. |
+| SSM registration no. | ✅ 202101024485 (1424785-A) — owner-confirmed 2026-08-31, resolving the earlier conflict; `fin_companies.brn` previously held `201501026187` (wrong — corrected in DB same day; if that number meant something else, note it here) |
+| TIN (MyInvois) | ✅ C26773249100 |
+| SST | ✅ not registered (N/A) |
 | Entity type | ⚪ Sdn. Bhd. |
 | MSIC code | ⚪ 56101 (restaurants/cafés) |
-| Registered address | |
+| Registered address | ✅ K-3-01, Conezion City, Persiaran IRC 3, IOI Resort, 62502 Putrajaya |
 | Business address | ⚪ 58, Jalan Renang 13/26, Tadisma Business Park, 40100 Shah Alam, Selangor |
 | Financial year end | |
 | Annual return due | → also add to `renewals.md` (cosec to confirm date) |
@@ -37,11 +44,13 @@ sits under.)
 
 | Field | Value |
 | --- | --- |
-| Registered name | ⚪ CELSIUS COFFEE CONEZION SDN. BHD. |
-| SSM registration no. | ⚪ 202501044958 (1646366-U) — incorporated 2025 |
+| Registered name | ✅ CELSIUS COFFEE CONEZION SDN. BHD. |
+| SSM registration no. | ✅ 202501044958 (1646366-U) — incorporated 2025 |
+| TIN (MyInvois) | ✅ C60421230050 |
+| SST | ✅ not registered (N/A) |
 | Entity type | ⚪ Sdn. Bhd. |
 | MSIC code | ⚪ 56101 |
-| Registered address | |
+| Registered address | ✅ K-3-01, Conezion City, Persiaran IRC 3, IOI Resort, 62502 Putrajaya |
 | Business address | ⚪ M-G-06 Persiaran IRC3, IOI City Resort, 62502 Putrajaya |
 | Financial year end | |
 | Annual return due | → `renewals.md` (cosec to confirm) |
@@ -50,11 +59,13 @@ sits under.)
 
 | Field | Value |
 | --- | --- |
-| Registered name | ⚪ CELSIUS COFFEE TAMARIND SDN. BHD. |
-| SSM registration no. | ⚪ 202501036872 (1638282-K) — incorporated 2025 |
+| Registered name | ✅ CELSIUS COFFEE TAMARIND SDN. BHD. |
+| SSM registration no. | ✅ 202501036872 (1638282-K) — incorporated 2025 |
+| TIN (MyInvois) | ✅ C60337963100 |
+| SST | ✅ not registered (N/A) |
 | Entity type | ⚪ Sdn. Bhd. |
 | MSIC code | ⚪ 56101 |
-| Registered address | |
+| Registered address | ✅ K-3-01, Conezion City, Persiaran IRC 3, IOI Resort, 62502 Putrajaya |
 | Business address | ⚪ K-05, Level 3m, Tamarind Square, Persiaran Multimedia, 63000 Cyberjaya, Selangor |
 | Financial year end | |
 | Annual return due | → `renewals.md` (cosec to confirm) |
