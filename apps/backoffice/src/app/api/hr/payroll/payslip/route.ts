@@ -186,7 +186,11 @@ async function handle(req: NextRequest) {
       bankAccountNumber: u?.bankAccountNumber || null,
       periodMonth: run.period_month,
       periodYear: run.period_year,
-      paymentDate: run.payment_date || null,
+      // Column is `payday` (the route previously read a non-existent
+      // `payment_date`, so every payslip showed a blank payment date).
+      paymentDate: fmtPayDate(run.payday),
+      periodStart: run.period_start || null,
+      periodEnd: run.period_end || null,
       basicSalary: Number(it.basic_salary || 0),
       regularHours: Number(it.total_regular_hours || 0),
       otHours: Number(it.total_ot_hours || 0),
@@ -216,9 +220,12 @@ async function handle(req: NextRequest) {
       ytdPcb: ytd?.pcb,
       companyName: company?.company_name || "Celsius Coffee Sdn. Bhd.",
       companySSM: company?.ssm_number || null,
+      companyRegNo: company?.registration_number || null,
       companyAddress: [company?.address_line1, company?.address_line2, company?.postcode, company?.city, company?.country]
         .filter(Boolean).join(", ") || null,
       companyLhdnE: company?.lhdn_e_number || null,
+      employerEpfNumber: company?.employer_epf_number || null,
+      employerSocsoNumber: company?.employer_socso_number || null,
       disclaimer: company?.payslip_disclaimer_enabled ? company?.payslip_disclaimer_text : null,
     };
   });
@@ -237,6 +244,17 @@ async function handle(req: NextRequest) {
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
+}
+
+const PAYDATE_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// payday is stored as a date-only / timestamp string. Render "3 Jul 2026"
+// without Date parsing so a date-only value can't drift a day across timezones.
+function fmtPayDate(payday: string | null | undefined): string | null {
+  if (!payday) return null;
+  const [y, m, d] = String(payday).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return `${d} ${PAYDATE_MONTHS[m - 1]} ${y}`;
 }
 
 function prettyAllowance(key: string): string {
