@@ -1,7 +1,14 @@
-// Payslip PDF generator — A4 portrait, one page per employee.
-// Uses pdf-lib (already a dep) for zero-dep rendering.
+// Payslip PDF generator + data assembly — SHARED by the backoffice admin
+// download and the staff self-service download, so both surfaces render a
+// byte-identical, loan-grade payslip. Node-only (fs/pdf-lib): import via the
+// subpath `@celsius/shared/src/hr/payslip` from server routes, never the barrel.
+//
+// Uses pdf-lib (a dependency of this package) for zero-dep rendering, and reads
+// the logo from `<cwd>/public/images/celsius-logo-sm.jpg` — present in every
+// app that ships a payslip, so process.cwd() resolves it in each one.
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -33,6 +40,10 @@ export type PayslipData = {
   periodMonth: number;
   periodYear: number;
   paymentDate: string | null;
+  // Full pay-period range (ISO date strings) — rendered as an explicit
+  // "1 Jun 2026 – 30 Jun 2026" line, which banks/HR expect on a loan payslip.
+  periodStart?: string | null;
+  periodEnd?: string | null;
   // Earnings
   basicSalary: number;
   regularHours?: number;
@@ -63,16 +74,25 @@ export type PayslipData = {
   epfEmployer: number;
   socsoEmployer: number;
   eisEmployer: number;
-  // YTD
+  // YTD (Jan 1 → this period, inclusive of BrioHR-imported months)
   ytdGross?: number;
   ytdEpf?: number;
   ytdSocso?: number;
+  ytdEis?: number;
   ytdPcb?: number;
+  ytdNet?: number;
   // Company
   companyName: string;
   companySSM: string | null;
+  // SSM registration number (the "(1424785-A)" form) — shown alongside the
+  // newer 12-digit SSM number so the payslip carries the full legal identity.
+  companyRegNo?: string | null;
   companyAddress: string | null;
   companyLhdnE: string | null;
+  // Employer statutory account numbers — a loan officer verifies the employer
+  // against these, so they belong on a payslip used for financing.
+  employerEpfNumber?: string | null;
+  employerSocsoNumber?: string | null;
   // Disclaimer
   disclaimer?: string | null;
 };
@@ -137,17 +157,29 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
 
   page.drawText(d.companyName, { x: textX, y, size: 14, font: bold, color: terracotta });
   y -= 13;
-  if (d.companySSM) {
-    page.drawText(`SSM: ${d.companySSM}`, { x: textX, y, size: 8, font, color: gray });
+  if (d.companySSM || d.companyRegNo) {
+    // "SSM: 202101024485 (1424785-A)" — both the 12-digit registration and the
+    // legacy company number, matching how the entity is written on official docs.
+    const ssmLine = d.companySSM
+      ? `SSM: ${d.companySSM}${d.companyRegNo ? ` (${d.companyRegNo})` : ""}`
+      : `SSM: ${d.companyRegNo}`;
+    page.drawText(ssmLine, { x: textX, y, size: 8, font, color: gray });
     y -= 10;
   }
   if (d.companyAddress) {
     page.drawText(d.companyAddress, { x: textX, y, size: 8, font, color: gray });
     y -= 10;
   }
-  if (d.companyLhdnE) {
-    page.drawText(`Employer Tax E: ${d.companyLhdnE}`, { x: textX, y, size: 8, font, color: gray });
-    y -= 10;
+  {
+    // Employer statutory account numbers on one compact line (Tax E · EPF · SOCSO).
+    const idParts: string[] = [];
+    if (d.companyLhdnE) idParts.push(`Tax E: ${d.companyLhdnE}`);
+    if (d.employerEpfNumber) idParts.push(`EPF: ${d.employerEpfNumber}`);
+    if (d.employerSocsoNumber) idParts.push(`SOCSO: ${d.employerSocsoNumber}`);
+    if (idParts.length > 0) {
+      page.drawText(`Employer ${idParts.join("  •  ")}`, { x: textX, y, size: 8, font, color: gray });
+      y -= 10;
+    }
   }
 
   // Align y past the logo if logo is taller than text
@@ -174,7 +206,7 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
     ["Position", d.position || "—", "EPF No.", d.epfNumber || "—"],
     ["Outlet", d.outlet || "—", "SOCSO No.", d.socsoNumber || "—"],
     ["Tax No.", d.taxNumber || "—", "Bank", d.bankName ? `${d.bankName} • ${maskAccount(d.bankAccountNumber)}` : "—"],
-    ["Payment Date", d.paymentDate || "—", "", ""],
+    ["Pay Period", fmtPeriodRange(d), "Payment Date", d.paymentDate || "—"],
   ];
   for (const [l1, v1, l2, v2] of rows) {
     page.drawText(l1, { x: col1X, y, size: 8, font, color: gray });
@@ -205,7 +237,6 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
   y -= 8;
 
   // Earnings / Deductions table (2 columns side-by-side)
-  const tableTop = y;
   const colW = (W - 2 * M - 10) / 2;
   const leftX = M;
   const rightX = M + colW + 10;
@@ -314,9 +345,11 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
     page.drawText(`YEAR-TO-DATE (Jan ${d.periodYear} - ${MONTHS[d.periodMonth - 1]})`, { x: M, y, size: 8, font: bold, color: gray });
     y -= 12;
     const ytdLines: [string, number][] = [
+      ["Net Pay YTD", d.ytdNet ?? 0],
       ["Gross YTD", d.ytdGross ?? 0],
       ["EPF YTD", d.ytdEpf ?? 0],
       ["SOCSO YTD", d.ytdSocso ?? 0],
+      ["EIS YTD", d.ytdEis ?? 0],
       ["PCB YTD", d.ytdPcb ?? 0],
     ];
     for (const [label, amt] of ytdLines) {
@@ -341,9 +374,10 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
   page.drawText("This is a computer-generated payslip and does not require a signature.", {
     x: M, y: footerY + 6, size: 7, font, color: gray,
   });
-  // Payslip reference: PAY-YYYYMM-LASTNAME (no PII beyond what's already on the page)
-  const surname = (d.employeeFullName || d.employeeName || "").split(/\s+/).slice(-1)[0] || "";
-  const ref = `PAY-${d.periodYear}${String(d.periodMonth).padStart(2, "0")}-${surname.toUpperCase().replace(/[^A-Z0-9]/g, "")}`;
+  // Payslip reference: PAY-YYYYMM-FIRSTNAME (Malay names are given-name-first, so
+  // the first token is the person's name; the trailing tokens are the father's).
+  const firstName = (d.employeeName || d.employeeFullName || "").trim().split(/\s+/)[0] || "";
+  const ref = `PAY-${d.periodYear}${String(d.periodMonth).padStart(2, "0")}-${firstName.toUpperCase().replace(/[^A-Z0-9]/g, "")}`;
   const refW = font.widthOfTextAtSize(ref, 7);
   page.drawText(ref, { x: W - M - refW, y: footerY + 6, size: 7, font, color: gray });
 }
@@ -368,6 +402,24 @@ function drawRow(
   page.drawText(txt, { x: x + width - tw, y, size: 9, font: amtFont, color });
 }
 
+// ISO date-only string ("2026-06-01") → "1 Jun 2026". No Date parsing, to avoid
+// timezone drift shifting the day on date-only values.
+function fmtISODate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const [y, m, dd] = iso.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !dd) return "";
+  return `${dd} ${MONTHS[m - 1]} ${y}`;
+}
+
+// "1 Jun 2026 – 30 Jun 2026" from the run's period bounds; falls back to the
+// month/year label when the explicit range isn't available.
+function fmtPeriodRange(d: PayslipData): string {
+  const start = fmtISODate(d.periodStart);
+  const end = fmtISODate(d.periodEnd);
+  if (start && end) return `${start} – ${end}`;
+  return `${MONTHS[d.periodMonth - 1]} ${d.periodYear}`;
+}
+
 function fmtRM(n: number): string {
   return `RM ${Number(n || 0).toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -376,4 +428,199 @@ function maskAccount(acct: string | null): string {
   if (!acct) return "—";
   if (acct.length <= 4) return acct;
   return `••••${acct.slice(-4)}`;
+}
+
+// ─── Data assembly (shared so backoffice + staff build identical records) ───
+
+// payday is stored as a date-only / timestamp string. Render "3 Jul 2026"
+// without Date parsing so a date-only value can't drift a day across timezones.
+function fmtPayDate(payday: string | null | undefined): string | null {
+  if (!payday) return null;
+  const [y, m, d] = String(payday).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+function prettyAllowance(key: string): string {
+  const map: Record<string, string> = {
+    attendance: "Attendance Allowance",
+    performance: "Performance Allowance",
+    unpaid_leave: "Unpaid Leave",
+    zakat: "Zakat",
+    review_penalty: "Review Penalty",
+  };
+  return map[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export type PayslipYtd = { gross: number; epf: number; socso: number; eis: number; pcb: number; net: number };
+
+export type PayslipRunRow = {
+  period_month: number;
+  period_year: number;
+  payday?: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
+};
+
+export type PayslipUserRow = {
+  name?: string | null;
+  fullName?: string | null;
+  bankName?: string | null;
+  bankAccountNumber?: string | null;
+  outletName?: string | null;
+};
+
+export type PayslipProfileRow = {
+  ic_number?: string | null;
+  position?: string | null;
+  epf_number?: string | null;
+  socso_number?: string | null;
+  tax_number?: string | null;
+};
+
+// A hr_payroll_items row (arbitrary shape — numeric columns read via Number()).
+type PayslipItemRow = Record<string, unknown>;
+type PayslipCompanyRow = Record<string, unknown> | null | undefined;
+
+// Map ONE payroll item (+ its run, employee, profile, company, YTD) into the
+// PayslipData the renderer consumes. Pure — no DB access — so both the admin
+// and the staff self-service route produce the exact same payslip.
+export function mapPayslipData(
+  it: PayslipItemRow,
+  ctx: {
+    run: PayslipRunRow;
+    user?: PayslipUserRow;
+    profile?: PayslipProfileRow;
+    company?: PayslipCompanyRow;
+    ytd?: PayslipYtd;
+  },
+): PayslipData {
+  const { run, user: u, profile: p, company, ytd } = ctx;
+  const num = (v: unknown) => Number((v as number) || 0);
+
+  const alloc = (it.allowances as Record<string, { amount: number; base?: number }> | null) || {};
+  const allowanceList = Object.entries(alloc)
+    .map(([k, v]) => ({ label: prettyAllowance(k), amount: Number(v?.amount || 0) }))
+    .filter((a) => a.amount > 0);
+
+  // Catch-all for earnings not itemized into OT or allowances.
+  // BrioHR-imported rows store the gap in computation_details.gross_additions.
+  const compDetails = (it.computation_details as Record<string, unknown> | null) || {};
+  const otherEarnings: { label: string; amount: number }[] = [];
+  const briohrAdditions = Number(compDetails.gross_additions || 0);
+  if (briohrAdditions > 0) {
+    const label = compDetails.source === "briohr_import" ? "Additions (imported)" : "Additions";
+    otherEarnings.push({ label, amount: briohrAdditions });
+  }
+
+  const other = (it.other_deductions as Record<string, unknown>) || {};
+  const unpaidLeave = Number(other.unpaid_leave || 0);
+  const zakat = Number(other.zakat || 0);
+  const reviewPenalty = Number((other.review_penalty as { amount?: number })?.amount || 0);
+  const otherDeductions: { label: string; amount: number }[] = [];
+  for (const [k, v] of Object.entries(other)) {
+    if (["unpaid_leave", "zakat", "review_penalty"].includes(k)) continue;
+    const amt = typeof v === "number" ? v : Number((v as { amount?: number })?.amount || 0);
+    if (amt > 0) otherDeductions.push({ label: prettyAllowance(k), amount: amt });
+  }
+
+  const c = (company || {}) as Record<string, unknown>;
+  const cstr = (k: string) => (c[k] as string | null | undefined) || null;
+
+  return {
+    employeeName: u?.name || "—",
+    employeeFullName: u?.fullName || null,
+    icNumber: p?.ic_number || null,
+    position: p?.position || null,
+    outlet: u?.outletName || null,
+    epfNumber: p?.epf_number || null,
+    socsoNumber: p?.socso_number || null,
+    taxNumber: p?.tax_number || null,
+    bankName: u?.bankName || null,
+    bankAccountNumber: u?.bankAccountNumber || null,
+    periodMonth: run.period_month,
+    periodYear: run.period_year,
+    paymentDate: fmtPayDate(run.payday),
+    periodStart: run.period_start || null,
+    periodEnd: run.period_end || null,
+    basicSalary: num(it.basic_salary),
+    regularHours: num(it.total_regular_hours),
+    otHours: num(it.total_ot_hours),
+    ot1xAmount: num(it.ot_1x_amount),
+    ot1_5xAmount: num(it.ot_1_5x_amount),
+    ot2xAmount: num(it.ot_2x_amount),
+    ot3xAmount: num(it.ot_3x_amount),
+    allowances: allowanceList,
+    otherEarnings,
+    gross: num(it.total_gross),
+    epfEmployee: num(it.epf_employee),
+    socsoEmployee: num(it.socso_employee),
+    eisEmployee: num(it.eis_employee),
+    pcbTax: num(it.pcb_tax),
+    zakat,
+    unpaidLeave,
+    reviewPenalty,
+    otherDeductions,
+    totalDeductions: num(it.total_deductions),
+    netPay: num(it.net_pay),
+    epfEmployer: num(it.epf_employer),
+    socsoEmployer: num(it.socso_employer),
+    eisEmployer: num(it.eis_employer),
+    ytdGross: ytd?.gross,
+    ytdEpf: ytd?.epf,
+    ytdSocso: ytd?.socso,
+    ytdEis: ytd?.eis,
+    ytdPcb: ytd?.pcb,
+    ytdNet: ytd?.net,
+    companyName: cstr("company_name") || "Celsius Coffee Sdn. Bhd.",
+    companySSM: cstr("ssm_number"),
+    companyRegNo: cstr("registration_number"),
+    companyAddress:
+      [c.address_line1, c.address_line2, c.postcode, c.city, c.country].filter(Boolean).join(", ") || null,
+    companyLhdnE: cstr("lhdn_e_number"),
+    employerEpfNumber: cstr("employer_epf_number"),
+    employerSocsoNumber: cstr("employer_socso_number"),
+    disclaimer: c.payslip_disclaimer_enabled ? ((c.payslip_disclaimer_text as string | null) ?? null) : null,
+  };
+}
+
+// Year-to-date per user, accumulated over every prior confirmed/paid run in the
+// same year PLUS the current run's items. The BrioHR-imported months land as
+// `paid` runs, so a mid-/late-year payslip's YTD already spans the BrioHR
+// period. Kept here (not in each route) so both surfaces sum YTD identically.
+export async function computePayslipYtd(
+  client: SupabaseClient,
+  opts: { periodYear: number; periodMonth: number; userIds: string[]; currentItems: PayslipItemRow[] },
+): Promise<Map<string, PayslipYtd>> {
+  const { periodYear, periodMonth, userIds, currentItems } = opts;
+  const ytdByUser = new Map<string, PayslipYtd>();
+  const zero = (): PayslipYtd => ({ gross: 0, epf: 0, socso: 0, eis: 0, pcb: 0, net: 0 });
+  const add = (userId: string, row: Record<string, unknown>) => {
+    const ex = ytdByUser.get(userId) || zero();
+    ex.gross += Number(row.total_gross || 0);
+    ex.epf += Number(row.epf_employee || 0);
+    ex.socso += Number(row.socso_employee || 0);
+    ex.eis += Number(row.eis_employee || 0);
+    ex.pcb += Number(row.pcb_tax || 0);
+    ex.net += Number(row.net_pay || 0);
+    ytdByUser.set(userId, ex);
+  };
+
+  const { data: priorRuns } = await client
+    .from("hr_payroll_runs")
+    .select("id")
+    .eq("period_year", periodYear)
+    .lt("period_month", periodMonth)
+    .in("status", ["confirmed", "paid"]);
+  const priorRunIds = (priorRuns || []).map((r: { id: string }) => r.id);
+  if (priorRunIds.length > 0) {
+    const { data: priorItems } = await client
+      .from("hr_payroll_items")
+      .select("user_id, total_gross, epf_employee, socso_employee, eis_employee, pcb_tax, net_pay")
+      .in("payroll_run_id", priorRunIds)
+      .in("user_id", userIds);
+    for (const p of priorItems || []) add(p.user_id as string, p);
+  }
+  for (const it of currentItems) add(it.user_id as string, it);
+  return ytdByUser;
 }

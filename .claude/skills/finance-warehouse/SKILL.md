@@ -300,3 +300,12 @@ stable ones into the sections above._
   bank-fed income for sales-days covered by a full EOD, ADD income for
   pos-era days EOD missed. This reconstruction is the weekly run's top
   backlog item.
+- 2026-07-30 (promoted from STATE at the July roll-over) —
+  **`pos_orders.discount_amount` is the TOTAL discount**, not a
+  manual-discount column: `pos-native/lib/checkout.ts` sets `discount =
+  rewardDiscount + promoDiscount + manualDiscount`, while `promo_discount`
+  and `reward_discount_amount` are ALSO persisted separately — summing all
+  three double-counts. Manual = `discount_amount − promo_discount −
+  reward_discount_amount` (≈ zero in practice; staff barely use the path).
+  The web `orders.discount_amount` column is always 0 — its real parts are
+  the promo/reward/first_order columns.
