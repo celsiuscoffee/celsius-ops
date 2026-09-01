@@ -11,6 +11,45 @@ current month.
 
 ## Verified facts
 
+- 2026-09-01 — **The cashflow salary projection was a frozen bank average, not a
+  payroll.** `RecurringExpense` "Salary (central, incl. all outlets)" held
+  **RM64,021.00** — exactly the May/Jun/Jul EMPLOYEE_SALARY bank mean
+  (64,294.45 + 63,587.20 + 64,181.90)/3, set 2026-07-23 and never refreshed.
+  Actual salary paid for the July run on 3-4 Aug was **RM53,216.54** (24 lines
+  + 10 OT top-ups), so it already overstated by ~10.8k. Recomputed the August
+  cycle read-only: prorated basic **51,858.06** across 23 paying full-timers of
+  27, OT only ~46 (3 of 21 hours approved; **136 attendance logs unactioned**),
+  allowances ~1,811 → gross **~53,715**, deductions ~7,125 (EPF 5,713 / SOCSO
+  245 / EIS 98 / PCB 1,069), **net ~46,590**, employer statutory ~6,981.
+  Row updated to **47,000** (rounds up to cover the OT backlog). Due day is the
+  3rd — `nextDueDate` stores midnight-MYT as prior-day 16:00 UTC, so a raw
+  `2026-08-02 16:00` IS the 3rd; do not "fix" it.
+  **Do NOT run `scripts/generate-recurring-from-bank-lines.ts` until #1123 is
+  merged and reclassify has run** — August EMPLOYEE_SALARY reads RM0 from the
+  `Sal Jul26` narration break, so a Jun-Aug regeneration would write ~42,590.
+  Still stale, left alone deliberately (erring high is the safe direction for a
+  forecast): "Statutory (EPF/SOCSO) — HQ" at **15,552.20** is an April figure;
+  Jun/Jul/Aug actuals were 16,143 / 14,224 / 14,369 and the computed September
+  remittance is ~14,106.
+  The August payroll run itself **still does not exist** and cannot be created
+  from this environment (`calculatePayroll` needs `hrSupabaseAdmin`;
+  `SUPABASE_SERVICE_ROLE_KEY` is unset and the API route needs an OWNER session).
+- 2026-09-01 — **Settlement is ~93-95% of POS sales, and a PH Monday defers the
+  whole weekend batch.** Measured Monday bank inflow against the preceding
+  Sat+Sun POS sales over 8 Mondays: 81.3 / 96.7 / 105.3 / 108.6 / 79.1 / 92.6 /
+  86.5 / 113.5 % (mean 95.5, August-only 92.9). Public holidays settle at
+  weekend levels (1 May 5,192 / 27 May 3,074 / 1 Jun 4,276 / 17 Jun 6,181) with
+  the batch landing 2-3 days later — after 1 Jun (Mon PH), Wed 3 Jun spiked to
+  24,197 against a 10,932 normal Wednesday. So 29-31 Aug trade (Sat 7,866.99 +
+  Sun 8,254.24 + PH Mon 7,912.07 = **24,033.30**) yields **~RM22,400** of
+  inflow, only ~4,500 of it on the 31st and ~18,000 across 1-2 Sep.
+  Consequence: **use POS sales, never bank settlement, to judge whether trade is
+  falling.** Jul→Aug POS is −3.3% as banked and **−4.9% on a matched day mix**
+  (July 23 weekdays/8 weekend, August 21/10, and weekends trade BETTER —
+  9,169.70 vs 7,244.30 per day in July). Per outlet: Conezion −4.3%, Shah Alam
+  −1.2%, Tamarind −4.5%. PH days trade well (31 Aug 7,912 beat the prior Monday
+  6,819 by 16%) — staff Malaysia Day (Wed 16 Sep) as a strong day.
+
 - 2026-08-31 — **Director ad claims lag 1–4 months, so cash-basis ads is
   meaningless.** Of August's RM18,575.28 of claims, only **RM2,262.26 (12%)**
   is August spend — `indeed 15/8/26`. The rest is June (`Marketing 0626`,
