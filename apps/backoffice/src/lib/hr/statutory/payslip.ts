@@ -67,11 +67,13 @@ export type PayslipData = {
   epfEmployer: number;
   socsoEmployer: number;
   eisEmployer: number;
-  // YTD
+  // YTD (Jan 1 → this period, inclusive of BrioHR-imported months)
   ytdGross?: number;
   ytdEpf?: number;
   ytdSocso?: number;
+  ytdEis?: number;
   ytdPcb?: number;
+  ytdNet?: number;
   // Company
   companyName: string;
   companySSM: string | null;
@@ -337,9 +339,11 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
     page.drawText(`YEAR-TO-DATE (Jan ${d.periodYear} - ${MONTHS[d.periodMonth - 1]})`, { x: M, y, size: 8, font: bold, color: gray });
     y -= 12;
     const ytdLines: [string, number][] = [
+      ["Net Pay YTD", d.ytdNet ?? 0],
       ["Gross YTD", d.ytdGross ?? 0],
       ["EPF YTD", d.ytdEpf ?? 0],
       ["SOCSO YTD", d.ytdSocso ?? 0],
+      ["EIS YTD", d.ytdEis ?? 0],
       ["PCB YTD", d.ytdPcb ?? 0],
     ];
     for (const [label, amt] of ytdLines) {
@@ -364,9 +368,10 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
   page.drawText("This is a computer-generated payslip and does not require a signature.", {
     x: M, y: footerY + 6, size: 7, font, color: gray,
   });
-  // Payslip reference: PAY-YYYYMM-LASTNAME (no PII beyond what's already on the page)
-  const surname = (d.employeeFullName || d.employeeName || "").split(/\s+/).slice(-1)[0] || "";
-  const ref = `PAY-${d.periodYear}${String(d.periodMonth).padStart(2, "0")}-${surname.toUpperCase().replace(/[^A-Z0-9]/g, "")}`;
+  // Payslip reference: PAY-YYYYMM-FIRSTNAME (Malay names are given-name-first, so
+  // the first token is the person's name; the trailing tokens are the father's).
+  const firstName = (d.employeeName || d.employeeFullName || "").trim().split(/\s+/)[0] || "";
+  const ref = `PAY-${d.periodYear}${String(d.periodMonth).padStart(2, "0")}-${firstName.toUpperCase().replace(/[^A-Z0-9]/g, "")}`;
   const refW = font.widthOfTextAtSize(ref, 7);
   page.drawText(ref, { x: W - M - refW, y: footerY + 6, size: 7, font, color: gray });
 }
