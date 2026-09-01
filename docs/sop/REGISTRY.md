@@ -13,7 +13,7 @@ is reserved so wrapping is stable).
 | ID | Title | Tier | Owner | Status | Version | Next review |
 |---|---|---|---|---|---|---|
 | CC-GOV-001 | [Document Control](celsius/GOV/CC-GOV-001-document-control.md) | Procedure | Managing Director | PUBLISHED | 1.0 | 2027-08-31 |
-| CC-GOV-002 | [Roles & Authority Matrix](celsius/GOV/CC-GOV-002-roles-authority-matrix.md) | Policy | Managing Director | DRAFT | 0.1 | — |
+| CC-GOV-002 | [Roles & Authority Matrix](celsius/GOV/CC-GOV-002-roles-authority-matrix.md) | Policy | Managing Director | PUBLISHED | 1.0 | 2027-09-01 |
 
 ### OPS — Outlet operations
 

@@ -5,9 +5,9 @@ company: celsius
 domain: GOV
 tier: policy
 owner: Managing Director
-status: draft
-version: 0.1
-effective_date:
+status: published
+version: 1.0
+effective_date: 2026-09-01
 review_months: 12
 ack_required: true
 ack_stations: [lead]
@@ -139,4 +139,5 @@ managers are accountable for respecting them until enforcement ships.*
 
 | Version | Date | Author | Change |
 |---|---|---|---|
-| 0.1 | 2026-08-31 | Drafted in agent session for MD review — **RM limits in §5.1 are proposals for MD decision** | First draft |
+| 0.1 | 2026-08-31 | Drafted in agent session for MD review | First draft; RM limits proposed |
+| 1.0 | 2026-09-01 | Managing Director | Approved and published — §5.1 RM limits confirmed as proposed |
