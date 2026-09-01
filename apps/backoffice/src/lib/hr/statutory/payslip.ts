@@ -33,6 +33,10 @@ export type PayslipData = {
   periodMonth: number;
   periodYear: number;
   paymentDate: string | null;
+  // Full pay-period range (ISO date strings) — rendered as an explicit
+  // "1 Jun 2026 – 30 Jun 2026" line, which banks/HR expect on a loan payslip.
+  periodStart?: string | null;
+  periodEnd?: string | null;
   // Earnings
   basicSalary: number;
   regularHours?: number;
@@ -63,16 +67,25 @@ export type PayslipData = {
   epfEmployer: number;
   socsoEmployer: number;
   eisEmployer: number;
-  // YTD
+  // YTD (Jan 1 → this period, inclusive of BrioHR-imported months)
   ytdGross?: number;
   ytdEpf?: number;
   ytdSocso?: number;
+  ytdEis?: number;
   ytdPcb?: number;
+  ytdNet?: number;
   // Company
   companyName: string;
   companySSM: string | null;
+  // SSM registration number (the "(1424785-A)" form) — shown alongside the
+  // newer 12-digit SSM number so the payslip carries the full legal identity.
+  companyRegNo?: string | null;
   companyAddress: string | null;
   companyLhdnE: string | null;
+  // Employer statutory account numbers — a loan officer verifies the employer
+  // against these, so they belong on a payslip used for financing.
+  employerEpfNumber?: string | null;
+  employerSocsoNumber?: string | null;
   // Disclaimer
   disclaimer?: string | null;
 };
@@ -137,17 +150,29 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
 
   page.drawText(d.companyName, { x: textX, y, size: 14, font: bold, color: terracotta });
   y -= 13;
-  if (d.companySSM) {
-    page.drawText(`SSM: ${d.companySSM}`, { x: textX, y, size: 8, font, color: gray });
+  if (d.companySSM || d.companyRegNo) {
+    // "SSM: 202101024485 (1424785-A)" — both the 12-digit registration and the
+    // legacy company number, matching how the entity is written on official docs.
+    const ssmLine = d.companySSM
+      ? `SSM: ${d.companySSM}${d.companyRegNo ? ` (${d.companyRegNo})` : ""}`
+      : `SSM: ${d.companyRegNo}`;
+    page.drawText(ssmLine, { x: textX, y, size: 8, font, color: gray });
     y -= 10;
   }
   if (d.companyAddress) {
     page.drawText(d.companyAddress, { x: textX, y, size: 8, font, color: gray });
     y -= 10;
   }
-  if (d.companyLhdnE) {
-    page.drawText(`Employer Tax E: ${d.companyLhdnE}`, { x: textX, y, size: 8, font, color: gray });
-    y -= 10;
+  {
+    // Employer statutory account numbers on one compact line (Tax E · EPF · SOCSO).
+    const idParts: string[] = [];
+    if (d.companyLhdnE) idParts.push(`Tax E: ${d.companyLhdnE}`);
+    if (d.employerEpfNumber) idParts.push(`EPF: ${d.employerEpfNumber}`);
+    if (d.employerSocsoNumber) idParts.push(`SOCSO: ${d.employerSocsoNumber}`);
+    if (idParts.length > 0) {
+      page.drawText(`Employer ${idParts.join("  •  ")}`, { x: textX, y, size: 8, font, color: gray });
+      y -= 10;
+    }
   }
 
   // Align y past the logo if logo is taller than text
@@ -174,7 +199,7 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
     ["Position", d.position || "—", "EPF No.", d.epfNumber || "—"],
     ["Outlet", d.outlet || "—", "SOCSO No.", d.socsoNumber || "—"],
     ["Tax No.", d.taxNumber || "—", "Bank", d.bankName ? `${d.bankName} • ${maskAccount(d.bankAccountNumber)}` : "—"],
-    ["Payment Date", d.paymentDate || "—", "", ""],
+    ["Pay Period", fmtPeriodRange(d), "Payment Date", d.paymentDate || "—"],
   ];
   for (const [l1, v1, l2, v2] of rows) {
     page.drawText(l1, { x: col1X, y, size: 8, font, color: gray });
@@ -314,9 +339,11 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
     page.drawText(`YEAR-TO-DATE (Jan ${d.periodYear} - ${MONTHS[d.periodMonth - 1]})`, { x: M, y, size: 8, font: bold, color: gray });
     y -= 12;
     const ytdLines: [string, number][] = [
+      ["Net Pay YTD", d.ytdNet ?? 0],
       ["Gross YTD", d.ytdGross ?? 0],
       ["EPF YTD", d.ytdEpf ?? 0],
       ["SOCSO YTD", d.ytdSocso ?? 0],
+      ["EIS YTD", d.ytdEis ?? 0],
       ["PCB YTD", d.ytdPcb ?? 0],
     ];
     for (const [label, amt] of ytdLines) {
@@ -341,9 +368,10 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
   page.drawText("This is a computer-generated payslip and does not require a signature.", {
     x: M, y: footerY + 6, size: 7, font, color: gray,
   });
-  // Payslip reference: PAY-YYYYMM-LASTNAME (no PII beyond what's already on the page)
-  const surname = (d.employeeFullName || d.employeeName || "").split(/\s+/).slice(-1)[0] || "";
-  const ref = `PAY-${d.periodYear}${String(d.periodMonth).padStart(2, "0")}-${surname.toUpperCase().replace(/[^A-Z0-9]/g, "")}`;
+  // Payslip reference: PAY-YYYYMM-FIRSTNAME (Malay names are given-name-first, so
+  // the first token is the person's name; the trailing tokens are the father's).
+  const firstName = (d.employeeName || d.employeeFullName || "").trim().split(/\s+/)[0] || "";
+  const ref = `PAY-${d.periodYear}${String(d.periodMonth).padStart(2, "0")}-${firstName.toUpperCase().replace(/[^A-Z0-9]/g, "")}`;
   const refW = font.widthOfTextAtSize(ref, 7);
   page.drawText(ref, { x: W - M - refW, y: footerY + 6, size: 7, font, color: gray });
 }
@@ -366,6 +394,24 @@ function drawRow(
   const txt = fmtRM(amount);
   const tw = amtFont.widthOfTextAtSize(txt, 9);
   page.drawText(txt, { x: x + width - tw, y, size: 9, font: amtFont, color });
+}
+
+// ISO date-only string ("2026-06-01") → "1 Jun 2026". No Date parsing, to avoid
+// timezone drift shifting the day on date-only values.
+function fmtISODate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const [y, m, dd] = iso.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !dd) return "";
+  return `${dd} ${MONTHS[m - 1]} ${y}`;
+}
+
+// "1 Jun 2026 – 30 Jun 2026" from the run's period bounds; falls back to the
+// month/year label when the explicit range isn't available.
+function fmtPeriodRange(d: PayslipData): string {
+  const start = fmtISODate(d.periodStart);
+  const end = fmtISODate(d.periodEnd);
+  if (start && end) return `${start} – ${end}`;
+  return `${MONTHS[d.periodMonth - 1]} ${d.periodYear}`;
 }
 
 function fmtRM(n: number): string {

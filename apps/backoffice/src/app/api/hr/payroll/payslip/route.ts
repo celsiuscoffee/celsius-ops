@@ -98,31 +98,36 @@ async function handle(req: NextRequest) {
     .lt("period_month", run.period_month)
     .in("status", ["confirmed", "paid"]);
   const priorRunIds = (priorRuns || []).map((r: { id: string }) => r.id);
-  const ytdByUser = new Map<string, { gross: number; epf: number; socso: number; pcb: number }>();
+  // YTD accumulates every prior confirmed/paid run in the year — which includes
+  // the BrioHR-imported months (they land as `paid` runs), so a mid-/late-year
+  // payslip's YTD already spans the BrioHR period. Net pay and EIS are tracked
+  // alongside gross/EPF/SOCSO/PCB so the YTD block mirrors the statutory summary.
+  type Ytd = { gross: number; epf: number; socso: number; eis: number; pcb: number; net: number };
+  const zeroYtd = (): Ytd => ({ gross: 0, epf: 0, socso: 0, eis: 0, pcb: 0, net: 0 });
+  const ytdByUser = new Map<string, Ytd>();
+  const addYtd = (
+    userId: string,
+    row: { total_gross?: unknown; epf_employee?: unknown; socso_employee?: unknown; eis_employee?: unknown; pcb_tax?: unknown; net_pay?: unknown },
+  ) => {
+    const ex = ytdByUser.get(userId) || zeroYtd();
+    ex.gross += Number(row.total_gross || 0);
+    ex.epf += Number(row.epf_employee || 0);
+    ex.socso += Number(row.socso_employee || 0);
+    ex.eis += Number(row.eis_employee || 0);
+    ex.pcb += Number(row.pcb_tax || 0);
+    ex.net += Number(row.net_pay || 0);
+    ytdByUser.set(userId, ex);
+  };
   if (priorRunIds.length > 0) {
     const { data: priorItems } = await hrSupabaseAdmin
       .from("hr_payroll_items")
-      .select("user_id, total_gross, epf_employee, socso_employee, pcb_tax")
+      .select("user_id, total_gross, epf_employee, socso_employee, eis_employee, pcb_tax, net_pay")
       .in("payroll_run_id", priorRunIds)
       .in("user_id", userIds);
-    for (const p of priorItems || []) {
-      const ex = ytdByUser.get(p.user_id) || { gross: 0, epf: 0, socso: 0, pcb: 0 };
-      ex.gross += Number(p.total_gross || 0);
-      ex.epf += Number(p.epf_employee || 0);
-      ex.socso += Number(p.socso_employee || 0);
-      ex.pcb += Number(p.pcb_tax || 0);
-      ytdByUser.set(p.user_id, ex);
-    }
+    for (const p of priorItems || []) addYtd(p.user_id, p);
   }
   // Include current run in YTD
-  for (const it of items) {
-    const ex = ytdByUser.get(it.user_id) || { gross: 0, epf: 0, socso: 0, pcb: 0 };
-    ex.gross += Number(it.total_gross || 0);
-    ex.epf += Number(it.epf_employee || 0);
-    ex.socso += Number(it.socso_employee || 0);
-    ex.pcb += Number(it.pcb_tax || 0);
-    ytdByUser.set(it.user_id, ex);
-  }
+  for (const it of items) addYtd(it.user_id, it);
 
   // Enrich with user + profile + company
   const [users, profiles, companyRes] = await Promise.all([
@@ -186,7 +191,11 @@ async function handle(req: NextRequest) {
       bankAccountNumber: u?.bankAccountNumber || null,
       periodMonth: run.period_month,
       periodYear: run.period_year,
-      paymentDate: run.payment_date || null,
+      // Column is `payday` (the route previously read a non-existent
+      // `payment_date`, so every payslip showed a blank payment date).
+      paymentDate: fmtPayDate(run.payday),
+      periodStart: run.period_start || null,
+      periodEnd: run.period_end || null,
       basicSalary: Number(it.basic_salary || 0),
       regularHours: Number(it.total_regular_hours || 0),
       otHours: Number(it.total_ot_hours || 0),
@@ -213,12 +222,17 @@ async function handle(req: NextRequest) {
       ytdGross: ytd?.gross,
       ytdEpf: ytd?.epf,
       ytdSocso: ytd?.socso,
+      ytdEis: ytd?.eis,
       ytdPcb: ytd?.pcb,
+      ytdNet: ytd?.net,
       companyName: company?.company_name || "Celsius Coffee Sdn. Bhd.",
       companySSM: company?.ssm_number || null,
+      companyRegNo: company?.registration_number || null,
       companyAddress: [company?.address_line1, company?.address_line2, company?.postcode, company?.city, company?.country]
         .filter(Boolean).join(", ") || null,
       companyLhdnE: company?.lhdn_e_number || null,
+      employerEpfNumber: company?.employer_epf_number || null,
+      employerSocsoNumber: company?.employer_socso_number || null,
       disclaimer: company?.payslip_disclaimer_enabled ? company?.payslip_disclaimer_text : null,
     };
   });
@@ -237,6 +251,17 @@ async function handle(req: NextRequest) {
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
+}
+
+const PAYDATE_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// payday is stored as a date-only / timestamp string. Render "3 Jul 2026"
+// without Date parsing so a date-only value can't drift a day across timezones.
+function fmtPayDate(payday: string | null | undefined): string | null {
+  if (!payday) return null;
+  const [y, m, d] = String(payday).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return `${d} ${PAYDATE_MONTHS[m - 1]} ${y}`;
 }
 
 function prettyAllowance(key: string): string {
