@@ -12,7 +12,7 @@
 // stays in one place (the page's accounting formatter) and can never drift
 // between the screen, the CSV and the PDF.
 //
-// House style follows the payslip generator (lib/hr/statutory/payslip.ts):
+// House style follows the payslip generator (@celsius/shared/src/hr/payslip):
 // terracotta brand bar, Helvetica, A4.
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
