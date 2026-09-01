@@ -2392,11 +2392,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   CUSTOMER_REFUND only); `ApprovalRule` table exists but NOTHING enforces
   it — don't cite it as operative; roles are OWNER/ADMIN/MANAGER/STAFF
   (no shift-lead enum; HOO is informal via position ILIKE 'head of').
-  **Next session:** owner reviews/merges the phase-0.5 PR (bump the 3 docs
-  to 1.0 + effective_date on approval, like GOV-001); then next docs
-  (CC-GOV-002 authority matrix, CC-FIN-002) or start phase 1 (schema +
-  sop-sync CI). Open questions unchanged: Gosame domain map, shared
-  functions (GRP- docs), BM/EN policy.
+  **2026-08-31/09-01 — all phase-0.5 docs MERGED + published:** #1198
+  (squash `45e2458`) published FIN-001/HR-001/OPS-001 v1.0 effective
+  2026-08-31; #1205 published CC-GOV-002 Roles & Authority Matrix v1.0
+  effective 2026-09-01 — owner confirmed the proposed RM limits AS-IS
+  (PO: OM self ≤RM500, HOO/AM ≤RM2,000, MD above + new suppliers;
+  claims: OM ≤RM200; refunds/petty cash/recurring: MD; salary/payroll:
+  two-person rule). Manual now has 5 published docs. PDFs were generated
+  via weasyprint (scratchpad script) and sent to owner.
+  **Next session:** CC-FIN-002 Daily Sales & Settlement Reconciliation
+  (last PLANNED FIN doc), or start phase 1 (schema + sop-sync CI +
+  staff-app reader/ack per docs/design/sop-module.md); owner owes team
+  briefings + sign-sheets for the published set (GOV-001 §5.5, 7 days).
+  When phase-2 enforcement is built, the settings approval-rules table
+  must be configured to match GOV-002 §5.1. Open questions unchanged:
+  Gosame domain map, shared functions (GRP- docs), BM/EN policy.
 
 - 2026-08-28 — **Choc Blanc Merdeka: artwork done, decisions settled, ONE
   blocker left.** All three `splash_posters` rows still have `image_url = ''`;
