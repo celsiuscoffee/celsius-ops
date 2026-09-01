@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
-import { generatePayslipPDF, generatePayslipBundlePDF, type PayslipData } from "@/lib/hr/statutory/payslip";
+import {
+  generatePayslipPDF,
+  generatePayslipBundlePDF,
+  mapPayslipData,
+  computePayslipYtd,
+  type PayslipData,
+} from "@celsius/shared/src/hr/payslip";
 import { logActivity } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
@@ -89,45 +95,15 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ error: "No payroll items found" }, { status: 404 });
   }
 
-  // YTD per user for the employee(s)
+  // YTD per user (spans every prior confirmed/paid run in the year, incl. the
+  // BrioHR-imported months). Shared with the staff self-service route.
   const userIds = items.map((i: { user_id: string }) => i.user_id);
-  const { data: priorRuns } = await hrSupabaseAdmin
-    .from("hr_payroll_runs")
-    .select("id")
-    .eq("period_year", run.period_year)
-    .lt("period_month", run.period_month)
-    .in("status", ["confirmed", "paid"]);
-  const priorRunIds = (priorRuns || []).map((r: { id: string }) => r.id);
-  // YTD accumulates every prior confirmed/paid run in the year — which includes
-  // the BrioHR-imported months (they land as `paid` runs), so a mid-/late-year
-  // payslip's YTD already spans the BrioHR period. Net pay and EIS are tracked
-  // alongside gross/EPF/SOCSO/PCB so the YTD block mirrors the statutory summary.
-  type Ytd = { gross: number; epf: number; socso: number; eis: number; pcb: number; net: number };
-  const zeroYtd = (): Ytd => ({ gross: 0, epf: 0, socso: 0, eis: 0, pcb: 0, net: 0 });
-  const ytdByUser = new Map<string, Ytd>();
-  const addYtd = (
-    userId: string,
-    row: { total_gross?: unknown; epf_employee?: unknown; socso_employee?: unknown; eis_employee?: unknown; pcb_tax?: unknown; net_pay?: unknown },
-  ) => {
-    const ex = ytdByUser.get(userId) || zeroYtd();
-    ex.gross += Number(row.total_gross || 0);
-    ex.epf += Number(row.epf_employee || 0);
-    ex.socso += Number(row.socso_employee || 0);
-    ex.eis += Number(row.eis_employee || 0);
-    ex.pcb += Number(row.pcb_tax || 0);
-    ex.net += Number(row.net_pay || 0);
-    ytdByUser.set(userId, ex);
-  };
-  if (priorRunIds.length > 0) {
-    const { data: priorItems } = await hrSupabaseAdmin
-      .from("hr_payroll_items")
-      .select("user_id, total_gross, epf_employee, socso_employee, eis_employee, pcb_tax, net_pay")
-      .in("payroll_run_id", priorRunIds)
-      .in("user_id", userIds);
-    for (const p of priorItems || []) addYtd(p.user_id, p);
-  }
-  // Include current run in YTD
-  for (const it of items) addYtd(it.user_id, it);
+  const ytdByUser = await computePayslipYtd(hrSupabaseAdmin, {
+    periodYear: run.period_year,
+    periodMonth: run.period_month,
+    userIds,
+    currentItems: items,
+  });
 
   // Enrich with user + profile + company
   const [users, profiles, companyRes] = await Promise.all([
@@ -142,99 +118,34 @@ async function handle(req: NextRequest) {
     hrSupabaseAdmin.from("hr_company_settings").select("*").limit(1).maybeSingle(),
   ]);
   const userMap = new Map(users.map((u) => [u.id, u]));
-  const profMap = new Map((profiles.data || []).map((p: { user_id: string }) => [p.user_id, p]));
+  type ProfileRow = {
+    user_id: string;
+    ic_number?: string | null;
+    position?: string | null;
+    epf_number?: string | null;
+    socso_number?: string | null;
+    tax_number?: string | null;
+  };
+  const profMap = new Map((profiles.data || []).map((p: ProfileRow) => [p.user_id, p]));
   const company = companyRes.data;
 
   const records: PayslipData[] = items.map((it) => {
     const u = userMap.get(it.user_id);
-    const p = profMap.get(it.user_id) as
-      | { ic_number?: string; position?: string; epf_number?: string; socso_number?: string; tax_number?: string }
-      | undefined;
-    const ytd = ytdByUser.get(it.user_id);
-    const alloc = (it.allowances as Record<string, { amount: number; base?: number }> | null) || {};
-    const allowanceList = Object.entries(alloc)
-      .map(([k, v]) => ({ label: prettyAllowance(k), amount: Number(v?.amount || 0) }))
-      .filter((a) => a.amount > 0);
-
-    // Catch-all for earnings not itemized into OT or allowances.
-    // BrioHR-imported rows store the gap in computation_details.gross_additions.
-    // Also detect residual gap if none of the itemized lines explain total_gross.
-    const compDetails = (it.computation_details as Record<string, unknown> | null) || {};
-    const otherEarnings: { label: string; amount: number }[] = [];
-    const briohrAdditions = Number(compDetails.gross_additions || 0);
-    if (briohrAdditions > 0) {
-      const label = compDetails.source === "briohr_import" ? "Additions (imported)" : "Additions";
-      otherEarnings.push({ label, amount: briohrAdditions });
-    }
-
-    const other = (it.other_deductions as Record<string, unknown>) || {};
-    const unpaidLeave = Number(other.unpaid_leave || 0);
-    const zakat = Number(other.zakat || 0);
-    const reviewPenalty = Number((other.review_penalty as { amount?: number })?.amount || 0);
-    const otherDeductions: { label: string; amount: number }[] = [];
-    for (const [k, v] of Object.entries(other)) {
-      if (["unpaid_leave", "zakat", "review_penalty"].includes(k)) continue;
-      const amt = typeof v === "number" ? v : Number((v as { amount?: number })?.amount || 0);
-      if (amt > 0) otherDeductions.push({ label: prettyAllowance(k), amount: amt });
-    }
-
-    return {
-      employeeName: u?.name || "—",
-      employeeFullName: u?.fullName || null,
-      icNumber: p?.ic_number || null,
-      position: p?.position || null,
-      outlet: u?.outlet?.name || null,
-      epfNumber: p?.epf_number || null,
-      socsoNumber: p?.socso_number || null,
-      taxNumber: p?.tax_number || null,
-      bankName: u?.bankName || null,
-      bankAccountNumber: u?.bankAccountNumber || null,
-      periodMonth: run.period_month,
-      periodYear: run.period_year,
-      // Column is `payday` (the route previously read a non-existent
-      // `payment_date`, so every payslip showed a blank payment date).
-      paymentDate: fmtPayDate(run.payday),
-      periodStart: run.period_start || null,
-      periodEnd: run.period_end || null,
-      basicSalary: Number(it.basic_salary || 0),
-      regularHours: Number(it.total_regular_hours || 0),
-      otHours: Number(it.total_ot_hours || 0),
-      ot1xAmount: Number(it.ot_1x_amount || 0),
-      ot1_5xAmount: Number(it.ot_1_5x_amount || 0),
-      ot2xAmount: Number(it.ot_2x_amount || 0),
-      ot3xAmount: Number(it.ot_3x_amount || 0),
-      allowances: allowanceList,
-      otherEarnings,
-      gross: Number(it.total_gross || 0),
-      epfEmployee: Number(it.epf_employee || 0),
-      socsoEmployee: Number(it.socso_employee || 0),
-      eisEmployee: Number(it.eis_employee || 0),
-      pcbTax: Number(it.pcb_tax || 0),
-      zakat,
-      unpaidLeave,
-      reviewPenalty,
-      otherDeductions,
-      totalDeductions: Number(it.total_deductions || 0),
-      netPay: Number(it.net_pay || 0),
-      epfEmployer: Number(it.epf_employer || 0),
-      socsoEmployer: Number(it.socso_employer || 0),
-      eisEmployer: Number(it.eis_employer || 0),
-      ytdGross: ytd?.gross,
-      ytdEpf: ytd?.epf,
-      ytdSocso: ytd?.socso,
-      ytdEis: ytd?.eis,
-      ytdPcb: ytd?.pcb,
-      ytdNet: ytd?.net,
-      companyName: company?.company_name || "Celsius Coffee Sdn. Bhd.",
-      companySSM: company?.ssm_number || null,
-      companyRegNo: company?.registration_number || null,
-      companyAddress: [company?.address_line1, company?.address_line2, company?.postcode, company?.city, company?.country]
-        .filter(Boolean).join(", ") || null,
-      companyLhdnE: company?.lhdn_e_number || null,
-      employerEpfNumber: company?.employer_epf_number || null,
-      employerSocsoNumber: company?.employer_socso_number || null,
-      disclaimer: company?.payslip_disclaimer_enabled ? company?.payslip_disclaimer_text : null,
-    };
+    return mapPayslipData(it, {
+      run,
+      user: u
+        ? {
+            name: u.name,
+            fullName: u.fullName,
+            bankName: u.bankName,
+            bankAccountNumber: u.bankAccountNumber,
+            outletName: u.outlet?.name ?? null,
+          }
+        : undefined,
+      profile: profMap.get(it.user_id),
+      company,
+      ytd: ytdByUser.get(it.user_id),
+    });
   });
 
   const pdfBytes = records.length === 1
@@ -251,26 +162,4 @@ async function handle(req: NextRequest) {
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
-}
-
-const PAYDATE_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-// payday is stored as a date-only / timestamp string. Render "3 Jul 2026"
-// without Date parsing so a date-only value can't drift a day across timezones.
-function fmtPayDate(payday: string | null | undefined): string | null {
-  if (!payday) return null;
-  const [y, m, d] = String(payday).slice(0, 10).split("-").map(Number);
-  if (!y || !m || !d) return null;
-  return `${d} ${PAYDATE_MONTHS[m - 1]} ${y}`;
-}
-
-function prettyAllowance(key: string): string {
-  const map: Record<string, string> = {
-    attendance: "Attendance Allowance",
-    performance: "Performance Allowance",
-    unpaid_leave: "Unpaid Leave",
-    zakat: "Zakat",
-    review_penalty: "Review Penalty",
-  };
-  return map[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

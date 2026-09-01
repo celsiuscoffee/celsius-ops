@@ -3,7 +3,7 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import Link from "next/link";
-import { Receipt, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
+import { Receipt, ChevronDown, ChevronUp, ArrowLeft, Download } from "lucide-react";
 import { PAYROLL_UI_ENABLED } from "@/lib/hr/constants";
 
 type AllowanceItem = { amount: number; base?: number; score?: number };
@@ -190,6 +190,15 @@ export default function PayslipsPage() {
                     <div className="mt-4 rounded-xl bg-terracotta/10 p-3">
                       <Row label="Net Pay" value={fmt(slip.net_pay)} bold />
                     </div>
+
+                    {/* Download — official PDF (company details, statutory numbers,
+                        YTD) suitable for loan / financing applications. */}
+                    <a
+                      href={`/api/hr/payslips/pdf?item_id=${slip.id}`}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-terracotta py-2.5 font-semibold text-white active:scale-95"
+                    >
+                      <Download className="h-4 w-4" /> Download PDF
+                    </a>
 
                     {/* Hours */}
                     <p className="mt-4 text-xs text-gray-400">
