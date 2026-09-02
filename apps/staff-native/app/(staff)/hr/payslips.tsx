@@ -2,15 +2,17 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   Text,
   View,
 } from "react-native";
-import { ChevronDown, ChevronUp } from "lucide-react-native";
+import * as WebBrowser from "expo-web-browser";
+import { ChevronDown, ChevronUp, Download } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
-import { fetchPayslips, type Payslip } from "../../../lib/hr/api";
+import { fetchPayslips, fetchPayslipDownloadUrl, type Payslip } from "../../../lib/hr/api";
 
 export default function PayslipsScreen() {
   const { data, isLoading, error } = useQuery({
@@ -69,7 +71,28 @@ function fmtDay(d: string | null | undefined): string {
 // scannable, so a specific month is one glance away instead of a long scroll.
 function PayslipCard({ payslip }: { payslip: Payslip }) {
   const [open, setOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const run = payslip.hr_payroll_runs;
+
+  // Fetch a short-lived signed URL over the authenticated API, then open it in
+  // the system browser (which can't carry our Bearer token) to download the
+  // official PDF — the same document HR issues, valid for loan applications.
+  async function downloadPdf() {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const { url } = await fetchPayslipDownloadUrl(payslip.id);
+      await WebBrowser.openBrowserAsync(url);
+    } catch (e) {
+      Alert.alert(
+        "Couldn't open payslip",
+        e instanceof Error ? e.message : "Please try again in a moment.",
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   // hr_payroll_runs is a joined relation; a filtered/absent run leaves it null,
   // and dereferencing period_year/status below would crash the whole list.
   if (!run) return null;
@@ -192,6 +215,23 @@ function PayslipCard({ payslip }: { payslip: Payslip }) {
               </View>
             </View>
           ) : null}
+
+          {/* Official PDF — full company details, statutory numbers and YTD,
+              suitable for loan / financing applications. */}
+          <Pressable
+            onPress={downloadPdf}
+            disabled={downloading}
+            className="mt-4 flex-row items-center justify-center gap-2 rounded-2xl bg-primary py-3 active:opacity-80"
+          >
+            {downloading ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Download color="#FFFFFF" size={18} />
+            )}
+            <Text className="text-sm font-body-semi text-white">
+              {downloading ? "Preparing…" : "Download PDF"}
+            </Text>
+          </Pressable>
         </View>
       ) : null}
     </View>

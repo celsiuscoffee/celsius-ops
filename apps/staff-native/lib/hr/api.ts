@@ -224,6 +224,14 @@ export function fetchPayslips() {
   return api<{ payslips: Payslip[] }>("/api/hr/payslips");
 }
 
+// Mint a short-lived, item-bound URL for the official payslip PDF. The native
+// app can't carry its Bearer token into an external browser, so we fetch the
+// link over the authenticated API and hand the returned (token-signed) URL to
+// the system browser to download.
+export function fetchPayslipDownloadUrl(itemId: string) {
+  return api<{ url: string }>(`/api/hr/payslips/pdf?item_id=${encodeURIComponent(itemId)}&link=1`);
+}
+
 export function fetchMemos() {
   return api<{ memos: Memo[] }>("/api/hr/memos");
 }
