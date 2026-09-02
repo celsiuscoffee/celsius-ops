@@ -11,6 +11,153 @@ current month.
 
 ## Verified facts
 
+- 2026-09-01 — **The cashflow salary projection was a frozen bank average, not a
+  payroll.** `RecurringExpense` "Salary (central, incl. all outlets)" held
+  **RM64,021.00** — exactly the May/Jun/Jul EMPLOYEE_SALARY bank mean
+  (64,294.45 + 63,587.20 + 64,181.90)/3, set 2026-07-23 and never refreshed.
+  Actual salary paid for the July run on 3-4 Aug was **RM53,216.54** (24 lines
+  + 10 OT top-ups), so it already overstated by ~10.8k. Recomputed the August
+  cycle read-only: prorated basic **51,858.06** across 23 paying full-timers of
+  27, OT only ~46 (3 of 21 hours approved; **136 attendance logs unactioned**),
+  allowances ~1,811 → gross **~53,715**, deductions ~7,125 (EPF 5,713 / SOCSO
+  245 / EIS 98 / PCB 1,069), **net ~46,590**, employer statutory ~6,981.
+  Row updated to **47,000** (rounds up to cover the OT backlog). Due day is the
+  3rd — `nextDueDate` stores midnight-MYT as prior-day 16:00 UTC, so a raw
+  `2026-08-02 16:00` IS the 3rd; do not "fix" it.
+  **Do NOT run `scripts/generate-recurring-from-bank-lines.ts` until #1123 is
+  merged and reclassify has run** — August EMPLOYEE_SALARY reads RM0 from the
+  `Sal Jul26` narration break, so a Jun-Aug regeneration would write ~42,590.
+  Still stale, left alone deliberately (erring high is the safe direction for a
+  forecast): "Statutory (EPF/SOCSO) — HQ" at **15,552.20** is an April figure;
+  Jun/Jul/Aug actuals were 16,143 / 14,224 / 14,369 and the computed September
+  remittance is ~14,106.
+  The August payroll run itself **still does not exist** and cannot be created
+  from this environment (`calculatePayroll` needs `hrSupabaseAdmin`;
+  `SUPABASE_SERVICE_ROLE_KEY` is unset and the API route needs an OWNER session).
+- 2026-09-01 — **Settlement is ~93-95% of POS sales, and a PH Monday defers the
+  whole weekend batch.** Measured Monday bank inflow against the preceding
+  Sat+Sun POS sales over 8 Mondays: 81.3 / 96.7 / 105.3 / 108.6 / 79.1 / 92.6 /
+  86.5 / 113.5 % (mean 95.5, August-only 92.9). Public holidays settle at
+  weekend levels (1 May 5,192 / 27 May 3,074 / 1 Jun 4,276 / 17 Jun 6,181) with
+  the batch landing 2-3 days later — after 1 Jun (Mon PH), Wed 3 Jun spiked to
+  24,197 against a 10,932 normal Wednesday. So 29-31 Aug trade (Sat 7,866.99 +
+  Sun 8,254.24 + PH Mon 7,912.07 = **24,033.30**) yields **~RM22,400** of
+  inflow, only ~4,500 of it on the 31st and ~18,000 across 1-2 Sep.
+  Consequence: **use POS sales, never bank settlement, to judge whether trade is
+  falling.** Jul→Aug POS is −3.3% as banked and **−4.9% on a matched day mix**
+  (July 23 weekdays/8 weekend, August 21/10, and weekends trade BETTER —
+  9,169.70 vs 7,244.30 per day in July). Per outlet: Conezion −4.3%, Shah Alam
+  −1.2%, Tamarind −4.5%. PH days trade well (31 Aug 7,912 beat the prior Monday
+  6,819 by 16%) — staff Malaysia Day (Wed 16 Sep) as a strong day.
+
+- 2026-08-31 — **Director ad claims lag 1–4 months, so cash-basis ads is
+  meaningless.** Of August's RM18,575.28 of claims, only **RM2,262.26 (12%)**
+  is August spend — `indeed 15/8/26`. The rest is June (`Marketing 0626`,
+  6,331.98) and July (`Marketing 0726` ×3 + `indeed 2/7/26`, 9,981.04). July's
+  RM9,857.44 was April + June spend. Use `ads_metric_daily` for the true
+  Google run rate (May 9,126.24 / Jun 9,128.49 / Jul 14,045.13 / Aug 7,076.96),
+  never the bank month.
+- 2026-08-31 — **New `RECRUITMENT` CashCategory + COA 6502-05.** Indeed is
+  hiring spend, not advertising: DIGITAL_ADS is deduped out of bank opex
+  against the Google-only ads module and `indeed_ads_invoice` /
+  `indeed_ads_metric_daily` are **both EMPTY**, so routing Indeed there erases
+  the cost from the P&L entirely; OTHER_MARKETING keeps it but reports hiring
+  inside the marketing line. RM13,922.43 across 11 claims since Jan-2025;
+  RM4,165.92 in Aug-2026, the largest month on record. Wired through
+  classifier (`recruitment_indeed`, ahead of the ads-claim rule),
+  `gl-posting-map` (6502-05 — unmapped categories fall to Suspense),
+  `cash-tracking`, and `cashflow` `costs.payroll` (unhandled categories are
+  silently dropped from the cost total). **NEITHER migration applied** —
+  `packages/db/prisma/migrations/20260831_cashcategory_recruitment` and
+  `apps/backoffice/supabase/migrations/020_coa_recruitment.sql` await owner
+  approval; then `POST /api/finance/reclassify {"full": true}`.
+  Note: `prisma migrate diff` cannot run here — `packages/db/prisma/migrations`
+  has no `migration_lock.toml` (it is an audit trail, not a Prisma history), so
+  enum SQL is hand-written following `20260629_cashcategory_revenue_monster_dividend`.
+
+- 2026-08-31 — **A coverage link is not a match — one open invoice was
+  stranded, silently.** `linkCashOutByInvoiceNumber`
+  (`lib/finance/cash-out-coverage.ts`) stamps `BankStatementLine.apInvoiceId`
+  with NO `apMatchedAt` and no invoice update, to source settled cash-out for
+  the P&L. ap-match's candidate filter was `apInvoiceId: null`, so any line the
+  linker touched became invisible to matching **forever**. On an OPEN invoice
+  that means the money left the bank and the bill stayed unpaid — no
+  `fin_bank_line_events`, no `fin_ap_match_rejections`, no `fin_audit_log` row,
+  because the linker writes none. Case: Rich Products `282411058M`, RM1,262.40,
+  paid 2026-08-28 via Ariff (`paymentType=STAFF_CLAIM`), invoice still
+  `INITIATED`. Race: `/api/cron/procurement-exec` runs the linker over
+  `mytDaysAgo(90) → mytDaysAgo(2)`, reaching a line at T+2 days, ahead of
+  ap-match (last pass 29 Aug had only worked forward to 26 Aug lines). Scale is
+  bounded: 907 lines carry a link with no match, **906 point at already-PAID
+  invoices** (the intended use), exactly 1 was stranded. Fixed on
+  `claude/monthly-cashflow-decline-4u7a1j`: the linker now only links `PAID`
+  invoices, and ap-match gates on `apMatchedAt` (the only true match marker)
+  with `isReconsiderable` keeping PAID-linked lines out of the pool. Lesson:
+  when two writers share a column, the one that means "done" must be the one
+  the guard reads.
+- 2026-08-31 — **Open payables are RM68,239, not RM13,817.** Both earlier
+  figures this session bucketed `Invoice` by `dueDate` and silently dropped the
+  **96 open invoices with a NULL `dueDate`** (RM55,685). Verified unpaid three
+  ways: (1) reference-matching open invoices against every bank debit since
+  15 Jul finds 1 of 138 — against invoices marked PAID in August the same match
+  finds 232 of 303, **94.6% by value**, so the method has recall; (2) invoices
+  marked paid in Aug 123,633 vs bank supplier outflow ex-salary 120,320, a
+  ~3,300 gap with no room for another 68k; (3) Yow Seng's August payments all
+  quote `YSIV2607-*` (July) refs. Always check the NULL bucket before quoting
+  an ageing.
+- 2026-08-31 — **Purchases: the cut is real but the bill is deferred.**
+  Invoiced by issue month Jun 132,389 / Jul 166,595 / **Aug 117,417**
+  (−29.5% Jul→Aug) — a genuine buying reduction, larger than the cash view.
+  But only 44.7% of August's invoices are paid; **RM64,960 lands in September**,
+  alongside ~47k payroll (3 Sep) and ~28k rent (7–11 Sep). Bank cash view
+  d1–29: Jun 150,812 / Jul 149,580 / Aug **120,320** — and note Aug is
+  RM8,338.75 lower than the raw category total because Ariff's `Sal Jul26` line
+  sits in RAW_MATERIALS until the reclassify runs. Vendor detail: Collective
+  Project is 61% of the drop (34,802 → 16,934) but **July was a catch-up
+  month** — five large balance batches clearing June-numbered invoices — so
+  against June the real cut is ~10,700, not 17,868.
+
+- 2026-08-30 — **August cashflow: the bleed stopped.** Bank feed reconciles
+  exactly to stated closing balances at 29 Aug (13,895.30 HQ + 5,967.14
+  Tamarind + 2,450.53 Conezion = **22,312.97**; 31 Jul close was 29,263.11).
+  Like-for-like d1–29 net: Jun −10,301 / Jul −22,795 / **Aug −6,950** — the
+  best of the three and +15,845 better than July. Driver is the cost side:
+  external cash OUT 334,661 / 322,837 / **286,842** (−11.1% Jul→Aug) falling
+  faster than external cash IN 324,359 / 300,043 / **279,892** (−6.7%).
+  InterCo nets to zero on both sides (~87k/month moved), so it does not
+  distort the net. Aug close projects **RM27k–36k** on a day-type basis
+  (30 Aug Sun ≈ +4,089 avg; 31 Aug PH Mon +1,773..+13,142, excl. the 3 Aug
+  payroll Monday at −28,297).
+- 2026-08-30 — **September is the squeeze, not August.** The Aug monthly
+  payroll run **does not exist yet** (only July's `c64f6cd2-…`, confirmed
+  7 Aug, gross 62,726.18 / net 54,788.83, `paid_at` still NULL) and payday
+  is 3 Sep. Stack: 3 Sep FT net ~47k → 7–11 Sep rent ~28k (Mayang 11,486.80
+  + Tujuan Gemilang 10,293.66 + Azhar 5,700 + Pilihan Megah 500, always the
+  7th–13th) → ~15 Sep statutory ~7–8k. Open supplier invoices are light:
+  overdue 1,262.40 / due 30–31 Aug 1,537.31 / 1–7 Sep 4,156.95 / rest of
+  Sep 6,860.00. Google Ads accrued-unpaid ~10,865 still sits outside this.
+- 2026-08-30 — **PT wage cut is real but eroding, and the roster no longer
+  predicts it.** Bank by work-week (week no. parsed from narration; week N
+  pays on its own Friday): pre-cut W21–W28 avg **6,238.88/wk**; cut lands
+  W29 (24 Jul); W29–W34 = 4,764.50 / 4,039.50 / 3,769.50 / 3,958.50 /
+  4,771.00 / 4,623.00. Trough-to-date W31; last two weeks average 4,697 —
+  **+833/wk off the trough**. Reduction vs pre-cut is now ~1,958/wk
+  (~RM8.5k/month), down from ~2,375/wk at the trough. Mechanism is hours
+  per head, not headcount: pay per head 322 → 218 with headcount flat at
+  ~19–20. **RM-per-scheduled-hour stepped up in W33–W34 (10.00 / 10.33)
+  vs W31–W32 (7.66 / 8.11)** — actual hours are running above roster, so
+  scheduled hours are no longer a usable forecast input. W35 roster is
+  only `ai_generated` for CC001/CC002 (CC003 + Nilai absent) and 31 Aug is
+  Hari Kebangsaan (PH multiplier).
+- 2026-08-30 — **Second Maybank narration break, same class as the salary
+  one.** From 2026-08-21 part-timer transfers read `PT W33/26` / `Pt w33 26`
+  instead of `PT Week 33/26`; the `partimer` rule only matched
+  `/\bPT\s*WEEK\b|\bPARTIMER\b/i`, so RM882 (W33) and the **entire
+  RM4,623 W34 run** fell to OTHER_OUTFLOW. Fixed on
+  `claude/monthly-cashflow-decline-4u7a1j` via `PARTIMER_RE` (still requires
+  a week number so a bare `PT` cannot swallow vendor lines). Lesson: treat
+  every narration regex as a ratchet — assume Maybank abbreviates, and
+  always verify a category's *latest* line, not just its total.
 - 2026-08-31 — **`docs/admin/` created as the business-administration hub**
   (owner request: a dedicated home for "admin stuff"). Skeleton only:
   `README.md` (conventions — no secrets/scans in repo, Drive links only,
@@ -24,7 +171,6 @@ current month.
   should fill tables from whatever the owner has shared and keep
   `renewals.md` as the source of truth for dates. Branch
   `claude/admin-stuff-structure-sv9ufm`.
-
 - 2026-08-31 — **The "Tamarind loses bread at 3–6× recipe" finding was a
   COUNT-UNIT defect, not loss — retracted.** Bread's only stock-count line is
   a "10pcs Loaf" package (cf 10, BB003's sole package, BB001 also has a ×100
@@ -931,6 +1077,84 @@ current month.
   pdf.js in the pre-installed Chromium — **poppler/pdftoppm is NOT available
   in the agent container and Chromium's own PDF viewer renders blank
   headless**; `unpdf/dist/pdfjs.mjs` + `--allow-file-access-from-files` works.
+
+- 2026-08-11 — **"Worst cashflow this month" answered: the CASH BALANCE is
+  genuinely the year's low (RM24,151 across the 3 accounts on 10 Aug), but
+  August's trading is fine — the buffer was spent over 8 months and August's
+  fixed costs simply hadn't cleared yet.** Owner asked why; then asked why
+  cashflow is *stuck*. Both answered from `BankStatementLine` (external only,
+  `isInterCo=false`) + `unified_sales`.
+  - **Balance trail (sum of Conezion 2644 + SDN/HQ 4384 + Tamarind 9345):**
+    Jan 76,360 → Mar 59,977 → May 48,450 → Jun 49,469 → Jul 29,263 → **Aug-10
+    24,151**. Monthly net external flow reconciles to the balance move EXACTLY
+    (Jul −20,205; Jun +1,019; Aug-MTD −5,112) — interco nets to 0.00 every
+    month, so the three accounts are the whole picture. HQ 4384 is the tight
+    one: 16,358 → 3,977, and it is the account payroll clears from.
+  - **August MTD looked deceptively calm** (net −5,112 over 10 days, the *best*
+    d1–10 of the year) purely because RENT and STATUTORY had not gone out:
+    rent RM500 vs a ~RM31,900 norm (Apr–Jul it always started clearing on the
+    5th–7th; on the 11th it still had not), statutory RM0 vs ~RM14,200 due on
+    the 15th. RM45.7k of obligation against RM24.2k of cash.
+  - **The single biggest discretionary drain was the Q2 dividend, RM15,414.27
+    on 27 Jul** = 76% of July's entire RM20,205 burn. RM11,666 out of Conezion
+    (balance 17,817 → 5,329) + RM3,748 Tamarind. That is why August opened with
+    no cushion. Q1 equivalent was RM9,173 (28 Apr), Q4-2025 RM5,896 (22 Jan).
+  - **REVENUE IS NOT THE CAUSE — do not chase it.** Days 1–10 vs July, all three
+    core outlets are UP: Putrajaya +3.8%, Shah Alam +2.2%, Tamarind +3.6%.
+  - **WHY IT IS STUCK: total external cash out runs at ~100% of nett sales,
+    every month, and food cost is the driver and is WORSENING.** As % of nett
+    sales: Apr 45.2 / May 42.8 / Jun 45.8 / **Jul 48.9** COGS; labour
+    (salary+PT+statutory) 28.1 → 32.8; rent ~9.8. COGS+labour+rent = 91.5% in
+    July, total cash out 103.2%. A coffee chain should run 25–35% COGS. There
+    is simply no margin being generated to rebuild the buffer.
+  - **Food cost by entity, July** (bank COGS ÷ that entity's outlet sales):
+    **Putrajaya/Conezion 54.2%** (43.5% in Apr — worst and deteriorating
+    fastest, while its sales FELL 132,975 → 124,140), **Shah Alam/HQ 51.3%**
+    (48.6% Apr), **Tamarind 37.2%** (43.4% Apr — the only one IMPROVING).
+  - **Concentrated in a few suppliers** (Apr→Jul): Collective Project
+    22,338 → **34,802** (+56%), Yow Seng 3,226 → **13,689** (+324%), Ariff
+    ad-hoc reimbursements 2,941 → **11,795** across **224 transactions** in July
+    alone (~RM53 avg). Two brand-new suppliers from June add ~RM11k/mo
+    (JG Pacific, Country Bread) — unknown whether additive or replacing.
+    Top-3 movers alone = +RM31,781/mo against sales that fell RM13,060.
+  - **Cannot currently tell over-ordering from shrinkage: `fin_inventory_
+    valuations` is EMPTY (0 rows).** Stock counts exist but only ~10–13 per
+    outlet since May (2–3/month, not daily) and are never turned into a
+    valuation, so purchases can't be reconciled against consumption.
+  - Ruled out: the bank feed is NOT stale (all 3 accounts ingested 2026-08-11
+    06:00–06:03, through 10 Aug); `fin_bank_transactions` is empty and unused.
+  - **Open / needs owner:** Nilai + IOI Mall both stopped reporting sales on
+    **2026-07-19** — they are the only two on the `consignment` source (98 rows
+    since June; `storehub` died 2026-06-17). Nilai staff are STILL on payroll
+    (Nazihah RM1,875 in the Jul run). Either both closed and cost is still being
+    carried, or the consignment feed broke and ~RM16k/mo of revenue is missing.
+    Also `raw_poket_capital` (RM3,486 Jul) looks like financing, not food —
+    likely miscategorised as RAW_MATERIALS.
+
+- 2026-08-11 — **Maybank abbreviated the payroll narration and the classifier
+  went blind to ALL of it (PR #1123, draft).** From the Aug statements:
+  "Salary Jun26" → **"Sal Jul26"**, OT top-ups as "Add OT Jul26"/"OT Jul26",
+  "Mngmt Fee" → "Mgmt Fee 1/2"/"mgmt 1/4". Rules matched `\bSALARY\b` and
+  `\bMNGMT\s*FEE\b`, so the whole Jul-26 payroll fell to `fallback_other`:
+  **RM53,381 of staff pay in OTHER_OUTFLOW, RM8,339 (Ariff Izham's own pay
+  line) grabbed by `raw_ariff_adhoc` into RAW_MATERIALS, RM5,462 of mgmt fee
+  loose, and EMPLOYEE_SALARY reading RM0.00 for August.** Fixed with shared
+  `SALARY_RE`/`OVERTIME_RE`/`MGMT_FEE_RE` (inflow side too, so the outlet legs
+  funding the central run stay inter-co). **"SAL" and "OT" are anchored on the
+  pay period that follows** (month-year `Jul26`, or a split marker `1/2`) —
+  bare `\bSAL\b`/`\bOT\b` would swallow unrelated lines; bare `SALARY` still
+  matches alone because older rows carry "Salary 1/1" with no month.
+  `salary_explicit` MUST stay ahead of `raw_ariff_adhoc` and `vendor_sdn_bhd` —
+  that ordering is what reclaims Ariff's line (now pinned by a test).
+  **Existing rows are NOT fixed by the deploy** — run
+  `POST /api/finance/reclassify {"full":true}` after it lands (`full` is
+  required: Ariff's line sits in RAW_MATERIALS, not the OTHER_* catch-all the
+  default sweep covers; `GET ...?full=1` dry-runs). Note the Jul-26 food-cost
+  figures above were computed BEFORE this reclass, so July is unaffected but
+  **August's 35.1% COGS reading is inflated and will drop once it runs.**
+  Lesson: Maybank narration format is not stable — a rule keyed to one spelling
+  of a recurring monthly payment is a silent, self-concealing failure (the
+  totals still reconcile; only the category is wrong).
 
 - 2026-08-07 — **Referral codes had (almost) no way IN — the attribution
   plumbing was fully wired but the UI entry point sat on a path referred

@@ -2297,6 +2297,11 @@ enum CashCategory {
   DIGITAL_ADS
   KOL
   OTHER_MARKETING
+  // Outflow — Hiring. Job-board spend (Indeed) is NOT marketing: DIGITAL_ADS is
+  // deduped out of bank opex against the Google ads module, and OTHER_MARKETING
+  // buries a hiring cost in the marketing line. Own category so it stays in
+  // opex and reports against headcount.
+  RECRUITMENT
   // Outflow — Property / Ops
   RENT
   UTILITIES

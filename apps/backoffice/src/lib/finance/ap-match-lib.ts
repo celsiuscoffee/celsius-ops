@@ -99,3 +99,18 @@ export function subsetSumIdx(cents: number[], target: number, maxSize = 8): numb
   };
   return dfs(0, target);
 }
+
+// A bank line is reconsiderable by the matcher when it has never actually been
+// MATCHED (apMatchedAt null). Most such lines carry no link at all. Some carry
+// an apInvoiceId stamped by cash-out-coverage's linker, which links without
+// matching — those are only reconsiderable when the invoice they point at is
+// still OPEN. A line linked to an already-PAID invoice is doing its job
+// (sourcing settled cash-out for the P&L) and must never be re-offered to a
+// same-amount sibling; that would be a double payment.
+export function isReconsiderable(
+  line: { apInvoiceId: string | null },
+  openStampedInvoiceIds: ReadonlySet<string>,
+): boolean {
+  if (!line.apInvoiceId) return true;
+  return openStampedInvoiceIds.has(line.apInvoiceId);
+}

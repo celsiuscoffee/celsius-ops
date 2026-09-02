@@ -71,6 +71,8 @@ const CATEGORY_ORDER: CashCategory[] = [
   "DIGITAL_ADS" as CashCategory,
   "KOL" as CashCategory,
   "OTHER_MARKETING" as CashCategory,
+  // Outflow — Hiring
+  "RECRUITMENT" as CashCategory,
   // Outflow — Ops
   "RENT" as CashCategory,
   "UTILITIES" as CashCategory,
