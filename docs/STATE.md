@@ -6,6 +6,28 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-09-01 — **Catalog-wide price↔package sweep: the milk defect generalised.**
+  Fresh Milk first: a phantom "Carton (12×2L)" package (cf 24,000) carried 67
+  PO lines priced at the 12×1L carton rate (RM81.78–88.70 vs catalog 2L-carton
+  RM163.58–174.96) — every affected litre doubled since mid-April. Owner
+  ruling: a 2L carton is 6 bottles; package corrected to "Carton (6× 2,000ml
+  Bottle)" cf 12,000, 69 lines reassigned by price band. August monthly-census
+  reconciliation then re-read: PJ milk 810L/486L = 1.67×, Tam 485/358 = 1.36×;
+  phantom never-delivered milk ≈38 cartons ≈ RM3,200 (was "RM5,900"). Sweep
+  found the same signature on ~15 more products; fixed by catalog-anchored
+  price bands (2026-09-01, prod SQL): Monin vanilla ×4, Oatside oat milk ×6,
+  Anchor butter ×40, croissant ×28, sippy lids ×20, dishwash ×12, Samyang ×24,
+  chili flakes, and Brioche BB001 (3 loaf-package lines at box price →
+  understated ×10). Flagged unfixed (need physical/owner info): RMC03 whipping
+  cream RM85 "12L carton" lines, Planta odd tubs, the cf-1 "Carton" packaging
+  family (PBS001/PBC001/PP0004/PP0006/S0001/PAP006 — real cartons booked as 1
+  base unit → understated), PPH001/PS0001/FDS0001, produce per-kg-vs-piece
+  noise. Count-unit QA (all products, reviewed counts since 15 Aug): clean —
+  no unit churn, no impossible stock; bread was the only count-side unit bug.
+  Guard shipped: `po-price-guard.ts` in the backoffice PO create route refuses
+  a line whose price fits a SIBLING package ([0.55,1.8] band, catalog-first
+  reference, 12-month median fallback, ≥3 lines; overridePriceGuard demotes to
+  warning; plain out-of-band prices warn only).
 - 2026-08-31 — **The "Tamarind loses bread at 3–6× recipe" finding was a
   COUNT-UNIT defect, not loss — retracted.** Bread's only stock-count line is
   a "10pcs Loaf" package (cf 10, BB003's sole package, BB001 also has a ×100
