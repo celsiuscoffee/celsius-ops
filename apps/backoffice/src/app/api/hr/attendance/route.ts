@@ -245,7 +245,7 @@ export async function GET(req: NextRequest) {
   });
 }
 
-type ReviewAction = "acknowledge" | "excuse" | "approve" | "reject" | "adjust" | "set_times";
+type ReviewAction = "acknowledge" | "excuse" | "approve" | "reject" | "set_times";
 const BULK_ACTIONS: ReviewAction[] = ["acknowledge", "excuse", "reject"];
 const MAX_BULK = 200;
 
@@ -263,7 +263,6 @@ type ExistingLog = {
 type ReviewInput = {
   id: string;
   action: ReviewAction;
-  adjustedHours?: number;
   notes?: string;
   excuseReason?: string;
   clockIn?: string; // ISO — new clock-in (set_times)
@@ -326,10 +325,9 @@ async function reviewOne(
   session: SessionUser,
   allowedOutletIds: string[] | null,
 ): Promise<ReviewOutcome> {
-  const { id, action, adjustedHours, notes, excuseReason, clockIn, clockOut } = input;
+  const { id, action, notes, excuseReason, clockIn, clockOut } = input;
 
-  // Load the log first so we can gate MANAGER access by its outlet AND so
-  // 'adjust' can preserve the original overtime_type (PH/rest-day/weekday).
+  // Load the log first so we can gate MANAGER access by its outlet.
   const { data: existingLog } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
     .select("user_id, outlet_id, clock_in, clock_out, overtime_type, scheduled_start, scheduled_end, scheduled_date")
@@ -363,30 +361,11 @@ async function reviewOne(
     updateData.excused_reason = excuseReason || notes || null;
   } else if (action === "reject") {
     updateData.final_status = "rejected";
-  } else if (action === "adjust" && adjustedHours != null) {
-    // Bound the manager-entered value — it flows straight into payroll
-    // (total/regular/OT). Without this a typo or malicious value (negative,
-    // 9999) inflates OT pay or writes nonsense hours. (set_times already caps.)
-    if (!Number.isFinite(adjustedHours) || adjustedHours < 0 || adjustedHours > 24) {
-      return { ok: false, status: 400, error: "adjustedHours must be between 0 and 24" };
-    }
-    // Preserve the original overtime classification so a manager-adjusted
-    // rest-day / public-holiday shift doesn't silently become a weekday 1.5x
-    // line in payroll. OT brackets to the half hour, the same floor payroll
-    // pays (owner 2026-09-03: "pay the 0.5h").
-    const NORMAL_SHIFT_HOURS = 8;
-    const regularHours = Math.min(adjustedHours, NORMAL_SHIFT_HOURS);
-    const overtimeHours = Math.floor(Math.max(0, adjustedHours - NORMAL_SHIFT_HOURS) * 2) / 2;
-    updateData.final_status = "adjusted";
-    updateData.total_hours = adjustedHours;
-    updateData.regular_hours = regularHours;
-    updateData.overtime_hours = overtimeHours;
-    // Only set overtime_type if there's OT to classify and the existing log
-    // already has a type; otherwise leave the existing value untouched.
-    if (overtimeHours > 0 && !log.overtime_type) {
-      updateData.overtime_type = "ot_1_5x"; // default weekday OT for un-classified adjusts
-    }
   } else {
+    // "adjust" (a raw hours override) was removed 2026-09-03: no UI or agent
+    // ever sent it, it split hours on an 8h day when payroll uses 7.5h, and it
+    // wrote OT straight onto the row, bypassing the approved-request rule.
+    // Correcting a day is set_times — the shared hours engine recomputes it.
     return { ok: false, status: 400, error: `Unknown action: ${String(action)}` };
   }
 

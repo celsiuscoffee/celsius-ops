@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { checkCronAuth } from "@celsius/shared";
 import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 import { deriveHours, mytDateString, mytInstant } from "@/lib/hr/hours";
-import { REST_DAY_ROLE_PATTERN } from "@/lib/hr/constants";
+import { REST_DAY_ROLE_PATTERN, CLOCKOUT_REMINDER_AFTER_MINUTES, CLOCKOUT_REMINDER_FLAG } from "@/lib/hr/constants";
 import { processAttendance } from "@/lib/hr/agents/attendance-processor";
+import { sendOpsPush } from "@/lib/ops-push";
 
 export const dynamic = "force-dynamic";
 
@@ -100,6 +101,7 @@ export async function GET(req: NextRequest) {
   );
 
   let closed = 0;
+  let reminded = 0;
   const actions: { logId: string; reason: string; closeAt: string }[] = [];
 
   for (const log of activeLogs) {
@@ -110,6 +112,37 @@ export async function GET(req: NextRequest) {
     // Rostered shift-end instant (scheduled_end is a MYT wall time; pair it with
     // the roster date). Used by Rule C and the ping-rule anti-truncation floor.
     const schedEndInstant = mytInstant(log.scheduled_date ?? mytDateString(log.clock_in), log.scheduled_end);
+
+    // Clock-out nudge — ONE push, shortly after the rostered end, while the
+    // shift can still be closed properly. An auto-close pays to the roster and
+    // can never earn OT, so the person loses any overstay they actually worked;
+    // 102 of ~750 August 2026 logs went that way. The flag makes it idempotent
+    // across the 15-minute sweeps; the processor carries the flag over.
+    if (
+      schedEndInstant &&
+      schedEndInstant > clockIn &&
+      now.getTime() - schedEndInstant.getTime() >= CLOCKOUT_REMINDER_AFTER_MINUTES * 60000 &&
+      !flags.includes(CLOCKOUT_REMINDER_FLAG)
+    ) {
+      const endHHMM = String(log.scheduled_end ?? "").slice(0, 5);
+      const { data: stamped } = await hrSupabaseAdmin
+        .from("hr_attendance_logs")
+        .update({ ai_flags: [...flags, CLOCKOUT_REMINDER_FLAG] })
+        .eq("id", log.id)
+        .is("clock_out", null)
+        .select("id");
+      if (stamped && stamped.length > 0) {
+        flags.push(CLOCKOUT_REMINDER_FLAG);
+        reminded++;
+        // Best-effort: a push failure must not stop the close logic below.
+        await sendOpsPush({
+          userId: log.user_id,
+          kind: "clock",
+          title: "Still clocked in?",
+          body: `Your shift ended at ${endHHMM || "the rostered time"}. Tap to clock out — a shift left open is closed at the rostered end and any overtime is not paid.`,
+        }).catch(() => {});
+      }
+    }
 
     // Last ping — used ONLY to detect a never-pinged (abandoned) session for the
     // backstop below. Geofence pings never drive a close (see header).
@@ -310,6 +343,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     processed: activeLogs.length,
     closed,
+    reminded,
     actions,
     thresholds: { staleMin, abandonedMin },
     attendanceProcessor: processorResult,

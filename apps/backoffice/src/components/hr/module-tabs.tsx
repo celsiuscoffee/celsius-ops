@@ -12,7 +12,11 @@ import { useFetch } from "@/lib/use-fetch";
 // full-bleed with their own local navigation.
 //
 // URLs are unchanged from the flat structure — this is presentation only.
-const TAB_GROUPS: { module: string; tabs: { href: string; label: string }[] }[] = [
+//
+// Exported for hr-nav-drift.test.ts: every HR page in lib/nav.tsx must sit in
+// exactly one group here, and every tab must exist in nav.tsx, so the two
+// navigation sources cannot drift apart again (they had, twice).
+export const TAB_GROUPS: { module: string; tabs: { href: string; label: string }[] }[] = [
   {
     module: "People",
     tabs: [

@@ -2434,7 +2434,14 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   Aug); (3) fill missing EPF/SOCSO numbers, confirm 9 probation FTs.
   **Backlog from QA:** clock-out nudge (14% auto-closed), rest-day duplicate
   rows on multi-outlet publish, nav single-source, shared-lib dedupe, route
-  tests.
+  tests. → Follow-up branch `claude/hr-qa-fixes`: auto-close cron now sends
+  ONE push (`kind: "clock"`, flag `clockout_reminder_sent`, processor keeps
+  it) 15 min after the rostered end; `hr-nav-drift.test.ts` pins nav.tsx to
+  module-tabs; dead attendance `adjust` action removed. Rest-day dedupe
+  dropped on purpose: shared staff carry a rest-day row per outlet roster and
+  every consumer skips rest_day rows. Still open: route `kind: "clock"` to the
+  clock screen in staff-native (unknown kinds just open the app), shared-lib
+  dedupe, route tests.
 
 - 2026-09-03 — **August payroll close (URGENT — salary pending).** Merged
   #1209, #1210, #1211 (see Verified facts); #1212 (by-outlet split by shifts)
