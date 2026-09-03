@@ -6,6 +6,7 @@ import { getAccessibleOutletIds } from "@/lib/hr/scope";
 import { signAttendancePhotos } from "@/lib/hr/photos";
 import { deriveHours, mytDateString, mytInstant, computeLateMinutes } from "@/lib/hr/hours";
 import { haversineDistance, REST_DAY_ROLE_PATTERN } from "@/lib/hr/constants";
+import { approveOtForReviewedLog, logOtHours, type TailLog } from "@/lib/hr/ot-request-generator";
 
 export const dynamic = "force-dynamic";
 
@@ -82,16 +83,11 @@ export async function GET(req: NextRequest) {
   const { data: rawData, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Exclude "OT-only" flagged logs from the attendance queue — those route to
-  // the OT approval queue instead. A log stays in attendance if it has any
-  // non-OT flag (late_arrival, early_out, outside_geofence, no_clock_out, etc).
-  const data = status === "flagged"
-    ? (rawData || []).filter((l: { ai_flags: string[] | null }) => {
-        const flags = l.ai_flags || [];
-        if (flags.length === 0) return true;
-        return flags.some((f) => f !== "overtime_detected");
-      })
-    : (rawData || []);
+  // OT-only flagged logs USED to be hidden here ("those route to the OT
+  // queue"). Owner 2026-09-03: the attendance review is the OT approval — a
+  // manager confirming the day is what pays its OT tail — so they must be in
+  // this queue, with the tail shown on the card.
+  const data = rawData || [];
 
   // Enrich with user name + fullName + outlet name
   const userIds = Array.from(new Set((data || []).map((l: { user_id: string }) => l.user_id)));
@@ -116,6 +112,17 @@ export async function GET(req: NextRequest) {
 
   const userMap = new Map(users.map((u) => [u.id, u]));
   const outletMap = new Map(outlets.map((o) => [o.id, o.name]));
+
+  // OT is full-time only; the tail is only meaningful (and only approvable)
+  // for them. PT overstays are a roster matter.
+  const { data: ftRows } = userIds.length > 0
+    ? await hrSupabaseAdmin
+        .from("hr_employee_profiles")
+        .select("user_id")
+        .in("user_id", userIds as string[])
+        .eq("employment_type", "full_time")
+    : { data: [] as { user_id: string }[] };
+  const ftIds = new Set((ftRows || []).map((r) => r.user_id as string));
 
   // Geofence zone per outlet — lets us show the manager how far each clock
   // punch was from the outlet and whether it fell inside the allowed radius.
@@ -145,11 +152,21 @@ export async function GET(req: NextRequest) {
       ? Math.round(haversineDistance(Number(lat), Number(lng), Number(zone.latitude), Number(zone.longitude)))
       : null;
 
-  const enriched = (data || []).map((log: AttendanceLogRow) => {
+  const enriched = (data || []).map((log: AttendanceLogRow & TailLog) => {
     const u = userMap.get(log.user_id);
     const zone = zoneMap.get(log.outlet_id);
+    // Clocked OT the manager's approval will send to payroll: the bracketed
+    // tail outside the rostered window plus any threshold OT on the row.
+    // Null for part-timers, system auto-closes and logs a request already
+    // covers (their OT is decided elsewhere or already landed).
+    let otTailHours: number | null = null;
+    if (ftIds.has(log.user_id) && log.clock_out && log.clock_out_method !== "system" && log.clock_in_method !== "ot_approval" && !log.ot_approval_id) {
+      const { tail, threshold } = logOtHours(log);
+      otTailHours = Math.floor((tail + threshold) * 2) / 2;
+    }
     return {
       ...log,
+      ot_tail_hours: otTailHours,
       clock_in_photo_url: log.clock_in_photo_url ? (photoMap.get(log.clock_in_photo_url) ?? null) : null,
       clock_out_photo_url: log.clock_out_photo_url ? (photoMap.get(log.clock_out_photo_url) ?? null) : null,
       user_name: u?.fullName || u?.name || null,
@@ -287,7 +304,13 @@ export async function PATCH(req: NextRequest) {
       .select()
       .single();
     if (setErr) return NextResponse.json({ error: setErr.message }, { status: 500 });
-    return NextResponse.json({ log: updated });
+    // Corrected times are a manager's statement of what was worked: any tail
+    // past the roster in the NEW times is approved OT (owner 2026-09-03).
+    const otApprovedHours = await approveOtForReviewedLog(
+      { user_id: existingLog.user_id, clock_in: ci.toISOString() },
+      session.id,
+    );
+    return NextResponse.json({ log: updated, otApprovedHours });
   }
 
   const updateData: Record<string, unknown> = {
@@ -340,5 +363,20 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ log: data });
+
+  // Owner 2026-09-03: "only the OT Ariff approves in attendance will be
+  // counted as OT on payroll." Confirming the day (approve / acknowledge /
+  // excuse / adjust) approves its OT tail: an approved hr_overtime_requests
+  // row is written and stamped onto the log, exactly as the OT queue would.
+  // Until now this approval set final_status and paid 0 OT — the tail is not
+  // on the row (paid-window rule), and only a request can put it there.
+  // Reject leaves nothing to approve.
+  let otApprovedHours = 0;
+  if (action !== "reject") {
+    otApprovedHours = await approveOtForReviewedLog(
+      { user_id: existingLog.user_id, clock_in: existingLog.clock_in },
+      session.id,
+    );
+  }
+  return NextResponse.json({ log: data, otApprovedHours });
 }

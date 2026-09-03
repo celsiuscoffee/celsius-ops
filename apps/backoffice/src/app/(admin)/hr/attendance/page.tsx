@@ -11,6 +11,9 @@ type EnrichedLog = AttendanceLog & {
   user_name: string | null;
   user_nickname: string | null;
   outlet_name: string | null;
+  /** Clocked OT (30-min brackets) that approving this log sends to payroll. Null = not applicable (PT / auto-close / already requested). */
+  ot_tail_hours: number | null;
+  ot_approval_id?: string | null;
   late_minutes: number;
   clock_in_distance_m: number | null;
   clock_out_distance_m: number | null;
@@ -135,7 +138,11 @@ export default function AttendanceReviewPage() {
         toast.error(j?.error ?? `Failed (${res.status}) — nothing was changed. Try again.`);
         return false;
       }
-      toast.success(okMessage);
+      // Approving a log with an OT tail approves the OT too (owner 2026-09-03)
+      // — say so, so the manager knows it reached payroll.
+      const j = await res.json().catch(() => null);
+      const otHours = Number(j?.otApprovedHours || 0);
+      toast.success(otHours > 0 ? `${okMessage} · ${otHours}h OT approved for payroll` : okMessage);
       mutate();
       return true;
     } catch {
@@ -163,7 +170,7 @@ export default function AttendanceReviewPage() {
     const okMessage =
       action === "reject" ? "Rejected — this log will not be paid"
       : action === "excuse" ? "Excused"
-      : "Acknowledged";
+      : "Approved";
     await patchAttendance(id, { action, excuseReason }, okMessage);
   };
 
@@ -291,6 +298,17 @@ export default function AttendanceReviewPage() {
                       {log.clock_out && <> &rarr; {timeMyt(log.clock_out)}</>}
                       {log.total_hours != null && <span> &middot; {log.total_hours}h{(log.overtime_hours ?? 0) > 0 ? ` (${log.overtime_hours}h OT)` : ""}</span>}
                     </p>
+                    {/* The OT this approval will send to payroll. Clocked time
+                        past the roster pays NOTHING until a manager approves the
+                        day — this is where that happens (owner 2026-09-03). */}
+                    {(log.ot_tail_hours ?? 0) >= 1 && (
+                      <p className="mt-0.5 text-sm font-medium text-blue-700">
+                        +{log.ot_tail_hours}h OT beyond roster — approving this log pays it
+                      </p>
+                    )}
+                    {(log.overtime_hours ?? 0) > 0 && log.ot_approval_id && (
+                      <p className="mt-0.5 text-xs text-green-700">{log.overtime_hours}h OT approved · in payroll</p>
+                    )}
                     {/* Scheduled vs actual — how late / early vs the roster */}
                     {log.scheduled_start && (
                       <p className="text-sm">
@@ -338,11 +356,13 @@ export default function AttendanceReviewPage() {
                 <button
                   onClick={() => handleReview(log.id, "acknowledge")}
                   disabled={reviewingId === log.id}
-                  title="Penalty applies as calculated"
+                  title={(log.ot_tail_hours ?? 0) >= 1
+                    ? `Approve the day AND its ${log.ot_tail_hours}h OT for payroll. Lateness penalty still applies as calculated.`
+                    : "Approve the day — lateness penalty applies as calculated"}
                   className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
                 >
                   {reviewingId === log.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                  Acknowledge
+                  {(log.ot_tail_hours ?? 0) >= 1 ? `Approve + ${log.ot_tail_hours}h OT` : "Approve"}
                 </button>
                 <button
                   onClick={() => handleExcuse(log.id)}

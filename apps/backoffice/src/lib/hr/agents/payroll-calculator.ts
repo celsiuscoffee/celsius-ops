@@ -317,6 +317,17 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     otBudgetByUserDay.set(key, (otBudgetByUserDay.get(key) ?? 0) + (Number(o.hours_approved) || 0));
   }
 
+  // Gazetted holidays in the period — the authority for the PH premium below.
+  // The log's ph_2x stamp is a snapshot: an OT approval on a holiday re-stamps
+  // the row ot_3x (the tail's class) and would otherwise erase the normal-hours
+  // premium for that day.
+  const { data: phRows } = await hrSupabaseAdmin
+    .from("hr_public_holidays")
+    .select("date")
+    .gte("date", startDate.slice(0, 10))
+    .lt("date", endDate.slice(0, 10));
+  const publicHolidays = new Set((phRows || []).map((r) => String(r.date)));
+
   // Rest days AS THE ROSTER FINALLY STANDS (owner 2026-08-03: "rest-day is
   // only when we schedule. it is not fixed on weekends"). The log's stamped
   // overtime_type is a snapshot from processing time, and rosters get edited
@@ -662,10 +673,15 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       // shift. Hours BEYOND the roster on a holiday keep the 3× path above.
       //
       // Not overtime, so no hr_overtime_requests budget applies — the holiday
-      // table is the authority (the ph_2x class is roster-independent, see
-      // effectiveOtType). The log must still be payable (isOtApproved gate):
-      // a rejected or pending holiday shift pays nothing, like any other day.
-      if (isOtApproved(a) && a.overtime_type === "ph_2x") {
+      // table is the authority; the ph_2x / ot_3x stamps are accepted as a
+      // fallback for a holiday added to the table after processing. The log
+      // must still be payable (isOtApproved gate): a rejected or pending
+      // holiday shift pays nothing, like any other day.
+      const onPublicHoliday =
+        publicHolidays.has(mytDateString(new Date(a.clock_in))) ||
+        a.overtime_type === "ph_2x" ||
+        a.overtime_type === "ot_3x";
+      if (isOtApproved(a) && onPublicHoliday) {
         const phRegular = Number(a.regular_hours) || 0;
         if (phRegular > 0) {
           ot2xAmount += phRegular * hourlyRate * (OT_RATES.public_holiday - 1);
