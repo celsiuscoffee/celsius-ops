@@ -9,6 +9,22 @@ import { getMYTToday } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
 
+// Availability (weekly pattern + blockout dates) is a PART-TIMER tool: they
+// declare when they can work and the AI scheduler fills inside it. Full-timers
+// have manager-set fixed schedules, so submitting availability is closed to
+// them (mirrors the open-shifts gate). Interns self-schedule like part-timers.
+const AVAILABILITY_EMPLOYMENT_TYPES = ["part_time", "intern"];
+async function canSetAvailability(userId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("hr_employee_profiles")
+    .select("employment_type")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return AVAILABILITY_EMPLOYMENT_TYPES.includes((data?.employment_type as string) ?? "");
+}
+const FULL_TIMER_MSG =
+  "Availability is set by part-timers — your shifts are scheduled by your manager.";
+
 // GET: my availability records
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -36,6 +52,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await canSetAvailability(session.id))) {
+    return NextResponse.json({ error: FULL_TIMER_MSG }, { status: 403 });
+  }
 
   const body = await req.json();
   const { date, availability, reason } = body as {
@@ -143,6 +162,9 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await canSetAvailability(session.id))) {
+    return NextResponse.json({ error: FULL_TIMER_MSG }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date");
