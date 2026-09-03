@@ -123,10 +123,11 @@ export function pickTargetLog<T extends CandidateLog>(logs: T[], date: string): 
 // caller's happy path — the OT route wraps this and surfaces payroll_synced.
 export async function applyApprovedOt(req: ApprovedOtRequest): Promise<OtSyncAction> {
   // OT pays to the half-hour as approved (owner 2026-08-04); payroll no longer
-  // floors, so the synced value carries the fraction. Sub-hour approvals are
-  // still skipped — payroll's ≥1h minimum would never pay them.
+  // floors, so the synced value carries the fraction. Below one 30-min bracket
+  // is skipped — payroll's OT_MIN_HOURS (0.5h, owner 2026-09-03) would never
+  // pay it.
   const hours = Math.round((Number(req.hours_approved) || 0) * 100) / 100;
-  if (hours < 1) return "skipped_zero";
+  if (hours < 0.5) return "skipped_zero";
   const otType = mapOtType(req.ot_type);
 
   // 1. Find the attendance log for that day: explicit link, else any log whose

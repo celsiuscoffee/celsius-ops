@@ -11,6 +11,42 @@ current month.
 
 ## Verified facts
 
+- 2026-09-03 — **August 2026 payroll: why approved OT paid nothing, and the
+  fix.** Since the paid-window rule (2026-08-13) `deriveHours` pays only time
+  inside the rostered shift; the clocked overstay is an "OT tail" reported as
+  `otEligibleHours`, flagged `overtime_detected`, and written NOWHERE — the
+  log's `overtime_hours` stays 0. The only pay path is an approved
+  `hr_overtime_requests` row that `applyApprovedOt` stamps onto the log. The
+  auto-request generator (`overtime-requests/sync`) still selected logs by
+  `overtime_hours >= 1`, so it went quiet on 13 Aug (20–44 auto-requests/week
+  in July → 7 for the second half of August). Attendance "approve" set
+  `final_status` and paid 0 OT; `set_times` recomputed through the same window
+  and still paid 0. August: ~88 overstay hours company-wide with no request
+  (Shairuleen 33h, Firdaus 9.5h). **Owner ruling: the attendance review IS the
+  OT approval** ("only the OT Ariff approves in attendance will be counted").
+  Shipped in PR #1210 (`lib/hr/ot-request-generator.ts`, tested):
+  approve/acknowledge/excuse/adjust/set_times on a FT log writes an approved
+  request + stamps the log; OT-only flagged logs are back in the attendance
+  queue with `ot_tail_hours` on the card ("Approve + 2.5h OT"); the cron files
+  PENDING requests from tails (prev month too while ≤10th; `POST {month}`);
+  PH normal-hours premium (EA s.60D, PR #1209) is keyed on `hr_public_holidays`
+  so a holiday OT approval re-stamping `ot_3x` cannot erase it.
+  **Data applied directly (owner instruction, all reversible via the
+  `hr_overtime_requests` rows whose reason starts "Approved per manager" /
+  "Approved via attendance review"):** Shairuleen's full August list (13
+  dates, 19h payable + 0.5h on 8/8 that the 1h minimum will not pay; 16/8 kept
+  at Ariff's OT-queue 4h vs list 3h), Firdaus 16/8 2.5h, Shairuleen 12/8 +
+  18/8 1h each (from Ariff's time corrections). Earlier same day: Adam end
+  31 Jul, Amirul Yazid end 27 Aug, Deverasa/Darshika skipped (joined 1 Sep —
+  calculator now skips post-cycle joiners), Nazihah `lever|checklist`=120
+  override (4 lates → RM80), Ariff `fixed_performance_allowance` 500 → **250**
+  (owner), Zikry 1 Aug 1h stamped. The monthly run id churns on every
+  recompute — always look it up; item edits do not survive recompute.
+  **Still owed:** Firdaus's OT list from Ariff (0 requests exist for him);
+  five FT 31-Aug logs unreviewed (Firdaus, Haziq, Sherry, Syafiq; Shairuleen's
+  now approved) → no PH premium until approved; 24–31 Aug weekly PT run not
+  generated; owner decisions on the 0.5h minimum and 16/8 3h-vs-4h.
+  Payroll QA audit of the calculators was launched (findings pending).
 - 2026-09-01 — **Catalog-wide price↔package sweep: the milk defect generalised.**
   Fresh Milk first: a phantom "Carton (12×2L)" package (cf 24,000) carried 67
   PO lines priced at the 12×1L carton rate (RM81.78–88.70 vs catalog 2L-carton
@@ -2346,6 +2382,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-03 — **August payroll close (URGENT — salary pending).** Merged
+  #1209 (post-cycle joiners, PH premium, OT-sync matching, by-outlet CSV) and
+  opened #1210 (attendance approval = OT approval; see Verified facts). Owner
+  wants: (1) August recomputed with Ariff's approved OT + PH; (2) all payroll
+  logic QA'd before the next computation; (3) UI improved (first slice in
+  #1210). **Next:** confirm #1210 merged + Vercel backoffice deploy → Ariff
+  approves remaining flagged August logs in Attendance Review (each card shows
+  the OT hours) incl. the 31-Aug PH logs → load Firdaus's list when received
+  → owner recomputes August → generate the 24–31 Aug weekly PT run → act on
+  the payroll-QA audit findings (task #2) → decide 0.5h OT minimum. People
+  cost artifact (claude.ai/code/artifact/3257f699…) still shows 27 Jul–23 Aug
+  PT (RM16,146); full-August PT from attendance is RM19,772.
 
 - 2026-08-31 — **First STATE.md roll-over done (owner-approved):** July 2026
   moved to `docs/state-archive/2026-07.md` (20 finished Verified-facts

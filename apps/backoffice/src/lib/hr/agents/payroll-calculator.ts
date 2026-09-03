@@ -317,6 +317,17 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     otBudgetByUserDay.set(key, (otBudgetByUserDay.get(key) ?? 0) + (Number(o.hours_approved) || 0));
   }
 
+  // Gazetted holidays in the period — the authority for the PH premium below.
+  // The log's ph_2x stamp is a snapshot: an OT approval on a holiday re-stamps
+  // the row ot_3x (the tail's class) and would otherwise erase the normal-hours
+  // premium for that day.
+  const { data: phRows } = await hrSupabaseAdmin
+    .from("hr_public_holidays")
+    .select("date")
+    .gte("date", startDate.slice(0, 10))
+    .lt("date", endDate.slice(0, 10));
+  const publicHolidays = new Set((phRows || []).map((r) => String(r.date)));
+
   // Rest days AS THE ROSTER FINALLY STANDS (owner 2026-08-03: "rest-day is
   // only when we schedule. it is not fixed on weekends"). The log's stamped
   // overtime_type is a snapshot from processing time, and rosters get edited
@@ -607,9 +618,11 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     //      request pay the log's premium; hours beyond it pay PLAIN 1.0×
     //      (owner 2026-08-03: worked hours are never zeroed, and an attendance
     //      approval alone never buys the premium).
-    //   3. Must be >= 1 whole hour on that log — shorter overruns are ignored.
+    //   3. Must be >= OT_MIN_HOURS on that log — shorter overruns are ignored.
+    //      Owner 2026-09-03 ("pay the 0.5h"): the floor is one 30-min bracket,
+    //      matching how deriveHours brackets the OT tails. Was 1h.
     // Regular hours still count regardless (the shift happened, pay for it).
-    const OT_MIN_HOURS = 1;
+    const OT_MIN_HOURS = 0.5;
     const isOtApproved = (a: { ai_status: string | null; final_status: string | null }) =>
       a.final_status === "approved" ||
       a.final_status === "adjusted" ||
@@ -617,12 +630,13 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
 
     let plainRateOtHours = 0;
     let phPremiumHours = 0;
+    let phPremiumAmount = 0;
     for (const a of userAttendance) {
       totalRegularHours += Number(a.regular_hours) || 0;
       // OT pays to the half-hour as approved (owner 2026-08-04, "follow exactly
       // the sheet" — the July import carries 1.5h/2.5h approvals). The old
-      // whole-hour Math.floor here silently ate those fractions. The ≥1h
-      // minimum below still filters sub-hour overruns.
+      // whole-hour Math.floor here silently ate those fractions. The
+      // OT_MIN_HOURS floor below still filters sub-bracket overruns.
       const rawOtHours = Math.round((Number(a.overtime_hours) || 0) * 100) / 100;
       const otHours = isOtApproved(a) && rawOtHours >= OT_MIN_HOURS ? rawOtHours : 0;
       totalOtHours += otHours;
@@ -662,14 +676,21 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       // shift. Hours BEYOND the roster on a holiday keep the 3× path above.
       //
       // Not overtime, so no hr_overtime_requests budget applies — the holiday
-      // table is the authority (the ph_2x class is roster-independent, see
-      // effectiveOtType). The log must still be payable (isOtApproved gate):
-      // a rejected or pending holiday shift pays nothing, like any other day.
-      if (isOtApproved(a) && a.overtime_type === "ph_2x") {
+      // table is the authority; the ph_2x / ot_3x stamps are accepted as a
+      // fallback for a holiday added to the table after processing. The log
+      // must still be payable (isOtApproved gate): a rejected or pending
+      // holiday shift pays nothing, like any other day.
+      const onPublicHoliday =
+        publicHolidays.has(mytDateString(new Date(a.clock_in))) ||
+        a.overtime_type === "ph_2x" ||
+        a.overtime_type === "ot_3x";
+      if (isOtApproved(a) && onPublicHoliday) {
         const phRegular = Number(a.regular_hours) || 0;
         if (phRegular > 0) {
-          ot2xAmount += phRegular * hourlyRate * (OT_RATES.public_holiday - 1);
+          const premium = phRegular * hourlyRate * (OT_RATES.public_holiday - 1);
+          ot2xAmount += premium;
           phPremiumHours += phRegular;
+          phPremiumAmount += premium;
         }
       }
 
@@ -1010,6 +1031,11 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         // doesn't re-inflate NEXT month's projected annual income either.
         pcb_gross: pcbGross,
         hourly_rate: Math.round(hourlyRate * 100) / 100,
+        // Public-holiday normal-hours premium (EA s.60D) — paid inside the 2×
+        // line; broken out here so the run page and payslip can label it
+        // "Public holiday" instead of burying it under "OT 2x (Rest)".
+        ph_premium_hours: Math.round(phPremiumHours * 100) / 100,
+        ph_premium_amount: Math.round(phPremiumAmount * 100) / 100,
         employment_type: profile.employment_type,
         unpaid_days: unpaidDays,
         attendance_records: userAttendance.length,

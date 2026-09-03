@@ -253,14 +253,14 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
   const earnings: [string, number][] = [
     ["Basic Salary", d.basicSalary],
   ];
-  if (d.otHours > 0) {
-    // OT hours total is shown in the Hours Worked line above; here we just
-    // surface the per-rate breakdown so the math is auditable.
-    if (d.ot1xAmount > 0) earnings.push(["OT (1.0× rate)", d.ot1xAmount]);
-    if (d.ot1_5xAmount > 0) earnings.push(["OT (1.5× rate)", d.ot1_5xAmount]);
-    if (d.ot2xAmount > 0) earnings.push(["OT (2.0× rest day / public holiday)", d.ot2xAmount]);
-    if (d.ot3xAmount > 0) earnings.push(["OT (3.0× public holiday)", d.ot3xAmount]);
-  }
+  // Keyed on MONEY, not OT hours: the public-holiday second-day wage (EA
+  // s.60D) rides in the 2× line with ZERO OT hours — a full-timer who worked a
+  // normal 31-Aug shift. Gating on hours hid it from the payslip while it sat
+  // in gross (owner 2026-09-03: "the PH OT not in payroll").
+  if (d.ot1xAmount > 0) earnings.push(["OT (1.0× rate)", d.ot1xAmount]);
+  if (d.ot1_5xAmount > 0) earnings.push(["OT (1.5× rate)", d.ot1_5xAmount]);
+  if (d.ot2xAmount > 0) earnings.push([d.otHours > 0 ? "OT 2.0× / public holiday pay" : "Public holiday pay (2.0×)", d.ot2xAmount]);
+  if (d.ot3xAmount > 0) earnings.push(["OT (3.0× public holiday)", d.ot3xAmount]);
   for (const a of d.allowances) {
     if (a.amount > 0) earnings.push([a.label, a.amount]);
   }

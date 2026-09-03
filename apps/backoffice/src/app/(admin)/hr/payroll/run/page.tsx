@@ -63,7 +63,15 @@ type PayrollItem = {
   prorate_reason: string | null;
   prorate_days_worked: number | null;
   prorate_days_total: number | null;
-  computation_details: { employment_type?: string; hourly_rate?: number; unpaid_days?: number; statutory_stale?: boolean } | null;
+  computation_details: {
+    employment_type?: string;
+    hourly_rate?: number;
+    unpaid_days?: number;
+    statutory_stale?: boolean;
+    /** Public-holiday normal-hours premium (EA s.60D), paid inside ot_2x_amount. */
+    ph_premium_hours?: number;
+    ph_premium_amount?: number;
+  } | null;
 };
 
 type CatalogEntry = {
@@ -532,6 +540,14 @@ function EmployeeBreakdown({
 
   const totalOT = (item.ot_1x_amount || 0) + item.ot_1_5x_amount + item.ot_2x_amount + item.ot_3x_amount;
   const statutoryStale = !!item.computation_details?.statutory_stale;
+  // Public-holiday premium (EA s.60D) rides in the 2× line. It is NOT
+  // overtime — a full-timer who worked a normal 31-Aug shift has 0 OT hours
+  // and a real amount here — so the OT block must key on money, not hours,
+  // or the premium is in gross with no line explaining it (owner 2026-09-03:
+  // "the PH OT not in payroll").
+  const phHours = Number(item.computation_details?.ph_premium_hours || 0);
+  const phAmount = Number(item.computation_details?.ph_premium_amount || 0);
+  const restDay2x = Math.max(0, item.ot_2x_amount - phAmount);
 
   return (
     <div className="space-y-4">
@@ -547,7 +563,7 @@ function EmployeeBreakdown({
             editable={editable}
             onItemUpdated={onItemUpdated}
           />
-          {item.total_ot_hours > 0 && (
+          {(item.total_ot_hours > 0 || totalOT > 0) && (
             <>
               {Number(item.ot_1x_amount || 0) > 0 && (
                 <EditableRow label="OT 1x" value={Number(item.ot_1x_amount || 0)} field="ot_1x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
@@ -556,7 +572,19 @@ function EmployeeBreakdown({
                 <EditableRow label="OT 1.5x" value={item.ot_1_5x_amount} field="ot_1_5x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
               )}
               {item.ot_2x_amount > 0 && (
-                <EditableRow label="OT 2x (Rest)" value={item.ot_2x_amount} field="ot_2x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+                <EditableRow
+                  label={phAmount > 0 && restDay2x < 0.01 ? `Public holiday pay (${phHours}h × 2)` : "OT 2x (Rest day / PH)"}
+                  value={item.ot_2x_amount}
+                  field="ot_2x_amount"
+                  item={item}
+                  editable={editable}
+                  onItemUpdated={onItemUpdated}
+                />
+              )}
+              {phAmount > 0 && restDay2x >= 0.01 && (
+                <p className="pl-2 text-[10px] text-gray-500">
+                  incl. public holiday {phHours}h second-day wage RM{phAmount.toFixed(2)} (EA s.60D) · rest-day OT RM{restDay2x.toFixed(2)}
+                </p>
               )}
               {item.ot_3x_amount > 0 && (
                 <EditableRow label="OT 3x (PH)" value={item.ot_3x_amount} field="ot_3x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
