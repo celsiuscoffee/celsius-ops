@@ -68,8 +68,14 @@ describe("otRequestCandidates", () => {
     expect(out[0].reason).toMatch(/2\.5h clocked outside the rostered window/);
   });
 
-  it("a tail under 1h (55 min → 0.5h bracket) is not worth a request — payroll would never pay it", () => {
+  it("a 55-min overstay brackets to 0.5h and IS requested (owner 2026-09-03: pay the half hour)", () => {
     const out = otRequestCandidates([base({ clock_out: "2026-08-16T08:25:00Z" })], opts());
+    expect(out).toHaveLength(1);
+    expect(out[0].hours).toBe(0.5);
+  });
+
+  it("under one 30-min bracket (25 min) is nothing — no request", () => {
+    const out = otRequestCandidates([base({ clock_out: "2026-08-16T07:55:00Z" })], opts());
     expect(out).toHaveLength(0);
   });
 

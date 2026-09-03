@@ -59,10 +59,10 @@ export type OtRequestCandidate = {
 /** Reason prefix — reporting groups auto-created requests on it; keep stable. */
 export const AUTO_REASON_PREFIX = "Auto-created from attendance log (OT detected)";
 
-// The OT queue's minimum: payroll never pays a sub-hour approval
-// (payroll-calculator OT_MIN_HOURS), so a request for less would only add
-// noise to the manager's queue.
-export const MIN_REQUEST_HOURS = 1;
+// The OT queue's minimum: one 30-min bracket, the same floor payroll pays
+// (payroll-calculator OT_MIN_HOURS; owner 2026-09-03 "pay the 0.5h"). A
+// request for less would only add noise to the manager's queue.
+export const MIN_REQUEST_HOURS = 0.5;
 
 /**
  * hr_attendance_logs.overtime_type → hr_overtime_requests.ot_type. The stamp
@@ -227,7 +227,7 @@ export type GenerateResult = {
 
 /**
  * Scan closed full-timer logs in [start, end) and file a request for every
- * (person, day) with ≥1h of clocked OT that has none.
+ * (person, day) with ≥0.5h of clocked OT that has none.
  *
  *  - `pending`  (cron / manual sync): insert pending post_hoc requests for the
  *               manager to decide in the OT queue. Idempotent on (user, date).
@@ -374,7 +374,7 @@ export async function generateOtRequests(opts: {
 
 /**
  * Attendance-review hook: the manager just confirmed one log. Approve its OT
- * tail (if ≥1h and not already decided) and stamp it. Never throws — the
+ * tail (if ≥0.5h and not already decided) and stamp it. Never throws — the
  * review itself must not fail because the OT write did; returns the hours
  * approved so the UI can say so.
  */

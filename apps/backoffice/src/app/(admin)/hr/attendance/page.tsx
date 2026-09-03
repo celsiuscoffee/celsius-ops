@@ -301,7 +301,7 @@ export default function AttendanceReviewPage() {
                     {/* The OT this approval will send to payroll. Clocked time
                         past the roster pays NOTHING until a manager approves the
                         day — this is where that happens (owner 2026-09-03). */}
-                    {(log.ot_tail_hours ?? 0) >= 1 && (
+                    {(log.ot_tail_hours ?? 0) >= 0.5 && (
                       <p className="mt-0.5 text-sm font-medium text-blue-700">
                         +{log.ot_tail_hours}h OT beyond roster — approving this log pays it
                       </p>
@@ -356,13 +356,13 @@ export default function AttendanceReviewPage() {
                 <button
                   onClick={() => handleReview(log.id, "acknowledge")}
                   disabled={reviewingId === log.id}
-                  title={(log.ot_tail_hours ?? 0) >= 1
+                  title={(log.ot_tail_hours ?? 0) >= 0.5
                     ? `Approve the day AND its ${log.ot_tail_hours}h OT for payroll. Lateness penalty still applies as calculated.`
                     : "Approve the day — lateness penalty applies as calculated"}
                   className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
                 >
                   {reviewingId === log.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                  {(log.ot_tail_hours ?? 0) >= 1 ? `Approve + ${log.ot_tail_hours}h OT` : "Approve"}
+                  {(log.ot_tail_hours ?? 0) >= 0.5 ? `Approve + ${log.ot_tail_hours}h OT` : "Approve"}
                 </button>
                 <button
                   onClick={() => handleExcuse(log.id)}

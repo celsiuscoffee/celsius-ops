@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 // Files PENDING post_hoc OT requests for every full-timer (person, day) whose
 // clocked OT — the bracketed tail outside the rostered window, plus any
-// threshold OT on the row — reaches 1h and has no request yet. The manager
+// threshold OT on the row — reaches 0.5h and has no request yet. The manager
 // decides them in the OT queue (or, per owner 2026-09-03, by confirming the
 // log on the attendance screen, which approves the tail directly).
 //

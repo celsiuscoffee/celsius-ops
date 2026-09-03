@@ -618,9 +618,11 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     //      request pay the log's premium; hours beyond it pay PLAIN 1.0×
     //      (owner 2026-08-03: worked hours are never zeroed, and an attendance
     //      approval alone never buys the premium).
-    //   3. Must be >= 1 whole hour on that log — shorter overruns are ignored.
+    //   3. Must be >= OT_MIN_HOURS on that log — shorter overruns are ignored.
+    //      Owner 2026-09-03 ("pay the 0.5h"): the floor is one 30-min bracket,
+    //      matching how deriveHours brackets the OT tails. Was 1h.
     // Regular hours still count regardless (the shift happened, pay for it).
-    const OT_MIN_HOURS = 1;
+    const OT_MIN_HOURS = 0.5;
     const isOtApproved = (a: { ai_status: string | null; final_status: string | null }) =>
       a.final_status === "approved" ||
       a.final_status === "adjusted" ||
@@ -632,8 +634,8 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       totalRegularHours += Number(a.regular_hours) || 0;
       // OT pays to the half-hour as approved (owner 2026-08-04, "follow exactly
       // the sheet" — the July import carries 1.5h/2.5h approvals). The old
-      // whole-hour Math.floor here silently ate those fractions. The ≥1h
-      // minimum below still filters sub-hour overruns.
+      // whole-hour Math.floor here silently ate those fractions. The
+      // OT_MIN_HOURS floor below still filters sub-bracket overruns.
       const rawOtHours = Math.round((Number(a.overtime_hours) || 0) * 100) / 100;
       const otHours = isOtApproved(a) && rawOtHours >= OT_MIN_HOURS ? rawOtHours : 0;
       totalOtHours += otHours;
