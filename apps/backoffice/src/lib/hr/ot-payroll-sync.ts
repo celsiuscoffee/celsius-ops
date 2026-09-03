@@ -89,6 +89,35 @@ export function decideRealLogPatch(
   return { apply: true, setFinalStatus: "approved" };
 }
 
+export type CandidateLog = {
+  id: string;
+  clock_in: string | null;
+  clock_out?: string | null;
+  final_status?: string | null;
+};
+
+/**
+ * Which real log an OT approval should land on, from that person's logs around
+ * the request date. Pure — pinned by ot-payroll-sync.test.ts.
+ *
+ * Only same-MYT-day logs qualify. A REJECTED log is never preferred: Zikry had
+ * a real 10-hour shift AND a rejected 6-minute duplicate stub on 1 Aug 2026,
+ * and "first match wins" could pick the stub, hit the rejected-log guard, and
+ * silently leave the real shift unpaid. Among the usable logs the longest span
+ * wins (the actual shift, not a stray tap). If EVERY log that day is rejected,
+ * a rejected one is returned so the caller's existing skipped_rejected_log
+ * path still surfaces it to the manager instead of inventing a synthetic log.
+ */
+export function pickTargetLog<T extends CandidateLog>(logs: T[], date: string): T | null {
+  const sameDay = logs.filter((l) => l.clock_in && toMytDate(l.clock_in) === date);
+  if (sameDay.length === 0) return null;
+  const usable = sameDay.filter((l) => l.final_status !== "rejected");
+  const pool = usable.length > 0 ? usable : sameDay;
+  const span = (l: CandidateLog) =>
+    l.clock_in && l.clock_out ? Date.parse(l.clock_out) - Date.parse(l.clock_in) : 0;
+  return [...pool].sort((a, b) => span(b) - span(a))[0];
+}
+
 // Push an approved/partial OT request onto an attendance log payroll will pay.
 // Idempotent per (user, date). Returns the action taken. Never throws to the
 // caller's happy path — the OT route wraps this and surfaces payroll_synced.
@@ -111,12 +140,12 @@ export async function applyApprovedOt(req: ApprovedOtRequest): Promise<OtSyncAct
     hi.setUTCDate(hi.getUTCDate() + 2);
     const { data: logs } = await hrSupabaseAdmin
       .from("hr_attendance_logs")
-      .select("id, clock_in")
+      .select("id, clock_in, clock_out, final_status")
       .eq("user_id", req.user_id)
       .gte("clock_in", lo.toISOString())
       .lt("clock_in", hi.toISOString());
-    const match = (logs || []).find((l) => l.clock_in && toMytDate(l.clock_in as string) === req.date);
-    if (match) targetId = match.id as string;
+    const match = pickTargetLog((logs || []) as CandidateLog[], req.date);
+    if (match) targetId = match.id;
   }
 
   if (targetId) {

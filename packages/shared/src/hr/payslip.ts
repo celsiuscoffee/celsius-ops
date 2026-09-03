@@ -258,7 +258,7 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
     // surface the per-rate breakdown so the math is auditable.
     if (d.ot1xAmount > 0) earnings.push(["OT (1.0× rate)", d.ot1xAmount]);
     if (d.ot1_5xAmount > 0) earnings.push(["OT (1.5× rate)", d.ot1_5xAmount]);
-    if (d.ot2xAmount > 0) earnings.push(["OT (2.0× rest day)", d.ot2xAmount]);
+    if (d.ot2xAmount > 0) earnings.push(["OT (2.0× rest day / public holiday)", d.ot2xAmount]);
     if (d.ot3xAmount > 0) earnings.push(["OT (3.0× public holiday)", d.ot3xAmount]);
   }
   for (const a of d.allowances) {

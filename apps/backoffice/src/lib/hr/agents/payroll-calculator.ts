@@ -616,6 +616,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       (a.ai_status === "approved" && !a.final_status);
 
     let plainRateOtHours = 0;
+    let phPremiumHours = 0;
     for (const a of userAttendance) {
       totalRegularHours += Number(a.regular_hours) || 0;
       // OT pays to the half-hour as approved (owner 2026-08-04, "follow exactly
@@ -650,6 +651,28 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         }
       }
 
+      // PUBLIC HOLIDAY — NORMAL hours (EA 1955 s.60D; owner 2026-09-03: "31 aug
+      // is PH, it should be counted as OT — follow the act"). Working a gazetted
+      // holiday earns TWO days' wages for the normal hours. Salary already pays
+      // the first day, so the second is paid here as a day-type premium:
+      //   regular_hours × hourly rate × (OT_RATES.public_holiday − 1) = ×1.0.
+      // Until now this constant existed but nothing read it — a full 31-Aug
+      // shift went to regular_hours (already inside salary → RM0 extra) and the
+      // ph_2x stamp only ever multiplied the OT tail, which is 0h on a normal
+      // shift. Hours BEYOND the roster on a holiday keep the 3× path above.
+      //
+      // Not overtime, so no hr_overtime_requests budget applies — the holiday
+      // table is the authority (the ph_2x class is roster-independent, see
+      // effectiveOtType). The log must still be payable (isOtApproved gate):
+      // a rejected or pending holiday shift pays nothing, like any other day.
+      if (isOtApproved(a) && a.overtime_type === "ph_2x") {
+        const phRegular = Number(a.regular_hours) || 0;
+        if (phRegular > 0) {
+          ot2xAmount += phRegular * hourlyRate * (OT_RATES.public_holiday - 1);
+          phPremiumHours += phRegular;
+        }
+      }
+
       // Roster-mismatch tripwire — real clock-outs only; system auto-closes
       // cap payable time deliberately and their timestamps are synthetic.
       const workedH = Number(a.total_hours) || 0;
@@ -659,6 +682,11 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
           `${profile.user_id.slice(0, 8)} ${mytDateString(new Date(a.clock_in))}: worked ${workedH.toFixed(2)}h, payable ${payableH.toFixed(2)}h`,
         );
       }
+    }
+    if (phPremiumHours > 0) {
+      notes.push(
+        `${profile.user_id.slice(0, 8)}: ${Math.round(phPremiumHours * 100) / 100}h worked on a public holiday — second day's wage paid as PH premium (EA s.60D), in the 2× line.`,
+      );
     }
     if (plainRateOtHours > 0) {
       notes.push(
