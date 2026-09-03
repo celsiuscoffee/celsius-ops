@@ -15,15 +15,15 @@ function emp(over: Partial<EmployeeRow> & { name: string }): EmployeeRow {
 }
 
 const run = { period_month: 8, period_year: 2026 };
-// columns: 0 Outlet, 1 Employee, 2 Share, 3 Basic, 4 Gross, 5 EPF, 6 SOCSO, 7 EIS, 8 Contrib, 9 Cost, 10 Net
+// columns: 0 Outlet, 1 Employee, 2 Share, 3 Basic, 4 Gross, 5 EPF (employee), 6 EPF (employer), 7 SOCSO, 8 EIS, 9 Contrib, 10 Cost, 11 Net
 const col = (line: string, i: number) => line.split(",")[i];
 
 describe("generatePayrollByOutlet", () => {
   it("groups by outlet A→Z with HQ last, and every subtotal + grand total reconciles", () => {
     const employees: EmployeeRow[] = [
-      emp({ name: "Zed", outlet: "Tamarind", wage: 1900, gross: 2000, epfEmployer: 260, socsoEmployer: 30, eisEmployer: 4, netPay: 1750 }),
-      emp({ name: "Amy", outlet: "Putrajaya", wage: 2100, gross: 2436.15, epfEmployer: 273, socsoEmployer: 42.85, eisEmployer: 4.9, netPay: 2169.65 }),
-      emp({ name: "Bob", outlet: "Tamarind", wage: 1800, gross: 1800, epfEmployer: 234, socsoEmployer: 27, eisEmployer: 3.6, netPay: 1600 }),
+      emp({ name: "Zed", outlet: "Tamarind", wage: 1900, gross: 2000, epfEmployee: 220, epfEmployer: 260, socsoEmployer: 30, eisEmployer: 4, netPay: 1750 }),
+      emp({ name: "Amy", outlet: "Putrajaya", wage: 2100, gross: 2436.15, epfEmployee: 231, epfEmployer: 273, socsoEmployer: 42.85, eisEmployer: 4.9, netPay: 2169.65 }),
+      emp({ name: "Bob", outlet: "Tamarind", wage: 1800, gross: 1800, epfEmployee: 198, epfEmployer: 234, socsoEmployer: 27, eisEmployer: 3.6, netPay: 1600 }),
       emp({ name: "Hq Person", outlet: null, wage: 10500, gross: 10600, epfEmployer: 1365, socsoEmployer: 60, eisEmployer: 12, netPay: 8338.8 }),
     ];
     const out = generatePayrollByOutlet(run, employees);
@@ -46,15 +46,16 @@ describe("generatePayrollByOutlet", () => {
     // Tamarind subtotal = Zed + Bob, cost = gross + employer contribs.
     const tam = lines[5];
     expect(col(tam, 4)).toBe((2000 + 1800).toFixed(2));
-    expect(col(tam, 8)).toBe((260 + 30 + 4 + 234 + 27 + 3.6).toFixed(2));
-    expect(col(tam, 9)).toBe((2000 + 1800 + 260 + 30 + 4 + 234 + 27 + 3.6).toFixed(2));
-    expect(col(tam, 10)).toBe((1750 + 1600).toFixed(2));
+    expect(col(tam, 5)).toBe((220 + 198).toFixed(2)); // EPF (employee) subtotal
+    expect(col(tam, 9)).toBe((260 + 30 + 4 + 234 + 27 + 3.6).toFixed(2));
+    expect(col(tam, 10)).toBe((2000 + 1800 + 260 + 30 + 4 + 234 + 27 + 3.6).toFixed(2));
+    expect(col(tam, 11)).toBe((1750 + 1600).toFixed(2));
 
     // Grand total = sum of all four people, and matches the summary.
     const total = lines[lines.length - 1];
     expect(col(total, 1)).toBe("TOTAL (4 staff)");
     const cost = 2000 + 294 + 2436.15 + 320.75 + 1800 + 264.6 + 10600 + 1437;
-    expect(col(total, 9)).toBe(cost.toFixed(2));
+    expect(col(total, 10)).toBe(cost.toFixed(2));
     expect(out.summary.total).toBe(Math.round(cost * 100) / 100);
   });
 
@@ -63,7 +64,7 @@ describe("generatePayrollByOutlet", () => {
     // shifts work in each outlet". Amounts from the August run.
     const syafiq = emp({
       name: "Syafiq Kaberi", outlet: null,
-      wage: 3166.67, gross: 3344.87, epfEmployer: 435, socsoEmployer: 58.55, eisEmployer: 6.7, netPay: 2896.12,
+      wage: 3166.67, gross: 3344.87, epfEmployee: 369, epfEmployer: 435, socsoEmployer: 58.55, eisEmployer: 6.7, netPay: 2896.12,
       outletShares: [
         { outlet: "Shah Alam", shifts: 7 },
         { outlet: "Putrajaya", shifts: 5 },
@@ -80,10 +81,11 @@ describe("generatePayrollByOutlet", () => {
     const sum = (i: number) => Math.round(rows.reduce((s, l) => s + Number(col(l, i)), 0) * 100) / 100;
     expect(sum(3)).toBe(3166.67);
     expect(sum(4)).toBe(3344.87);
-    expect(sum(5)).toBe(435);
-    expect(sum(6)).toBe(58.55);
-    expect(sum(7)).toBe(6.7);
-    expect(sum(10)).toBe(2896.12);
+    expect(sum(5)).toBe(369); // EPF (employee)
+    expect(sum(6)).toBe(435);
+    expect(sum(7)).toBe(58.55);
+    expect(sum(8)).toBe(6.7);
+    expect(sum(11)).toBe(2896.12);
     // Shah Alam carries 7/15 of gross: floors are 1560.93 + 1114.95 + 668.97 = 3344.85,
     // and the 2 leftover cents land on the largest share → 1560.95.
     const sa = rows.find((l) => col(l, 0) === "Shah Alam")!;

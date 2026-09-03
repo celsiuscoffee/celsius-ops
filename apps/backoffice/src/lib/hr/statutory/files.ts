@@ -152,7 +152,7 @@ export function generatePayrollByOutlet(
   // unsplit employee is one portion at 100% on their home outlet.
   type Portion = {
     name: string; share: string;
-    wage: number; gross: number; epfEmployer: number; socsoEmployer: number; eisEmployer: number; netPay: number;
+    wage: number; gross: number; epfEmployee: number; epfEmployer: number; socsoEmployer: number; eisEmployer: number; netPay: number;
   };
   const groups = new Map<string, Portion[]>();
   const push = (outlet: string, p: Portion) => {
@@ -165,7 +165,7 @@ export function generatePayrollByOutlet(
     if (shares.length === 0) {
       push((e.outlet || "").trim() || HQ, {
         name, share: "",
-        wage: e.wage, gross: e.gross, epfEmployer: e.epfEmployer, socsoEmployer: e.socsoEmployer,
+        wage: e.wage, gross: e.gross, epfEmployee: e.epfEmployee, epfEmployer: e.epfEmployer, socsoEmployer: e.socsoEmployer,
         eisEmployer: e.eisEmployer, netPay: e.netPay,
       });
       continue;
@@ -174,6 +174,7 @@ export function generatePayrollByOutlet(
     const weights = shares.map((s) => s.shifts);
     const wage = allocateByShares(e.wage, weights);
     const gross = allocateByShares(e.gross, weights);
+    const epfEe = allocateByShares(e.epfEmployee, weights);
     const epf = allocateByShares(e.epfEmployer, weights);
     const socso = allocateByShares(e.socsoEmployer, weights);
     const eis = allocateByShares(e.eisEmployer, weights);
@@ -181,7 +182,7 @@ export function generatePayrollByOutlet(
     shares.forEach((s, i) => {
       push(s.outlet.trim(), {
         name, share: `${s.shifts}/${totalShifts} shifts`,
-        wage: wage[i], gross: gross[i], epfEmployer: epf[i], socsoEmployer: socso[i], eisEmployer: eis[i], netPay: net[i],
+        wage: wage[i], gross: gross[i], epfEmployee: epfEe[i], epfEmployer: epf[i], socsoEmployer: socso[i], eisEmployer: eis[i], netPay: net[i],
       });
     });
   }
@@ -190,35 +191,35 @@ export function generatePayrollByOutlet(
   );
 
   const rows: string[] = [
-    "Outlet,Employee,Share,Basic,Gross,EPF (employer),SOCSO (employer),EIS (employer),Employer contributions,Total cost,Net pay",
+    "Outlet,Employee,Share,Basic,Gross,EPF (employee),EPF (employer),SOCSO (employer),EIS (employer),Employer contributions,Total cost,Net pay",
   ];
-  let grand = { gross: 0, contrib: 0, cost: 0, net: 0 };
+  let grand = { gross: 0, epfEmployee: 0, contrib: 0, cost: 0, net: 0 };
   for (const outlet of outletNames) {
     const list = groups.get(outlet)!;
     list.sort((a, b) => a.name.localeCompare(b.name));
-    const sub = { gross: 0, contrib: 0, cost: 0, net: 0 };
+    const sub = { gross: 0, epfEmployee: 0, contrib: 0, cost: 0, net: 0 };
     for (const p of list) {
       const contrib = Math.round((p.epfEmployer + p.socsoEmployer + p.eisEmployer) * 100) / 100;
       const cost = Math.round((p.gross + contrib) * 100) / 100;
       rows.push([
         esc(outlet), esc(p.name), esc(p.share), rm(p.wage), rm(p.gross),
-        rm(p.epfEmployer), rm(p.socsoEmployer), rm(p.eisEmployer),
+        rm(p.epfEmployee), rm(p.epfEmployer), rm(p.socsoEmployer), rm(p.eisEmployer),
         rm(contrib), rm(cost), rm(p.netPay),
       ].join(","));
-      sub.gross += p.gross; sub.contrib += contrib; sub.cost += cost; sub.net += p.netPay;
+      sub.gross += p.gross; sub.epfEmployee += p.epfEmployee; sub.contrib += contrib; sub.cost += cost; sub.net += p.netPay;
     }
     rows.push([
       esc(outlet), esc(`SUBTOTAL — ${outlet} (${list.length} line${list.length === 1 ? "" : "s"})`), "", "", rm(sub.gross),
-      "", "", "", rm(sub.contrib), rm(sub.cost), rm(sub.net),
+      rm(sub.epfEmployee), "", "", "", rm(sub.contrib), rm(sub.cost), rm(sub.net),
     ].join(","));
     grand = {
-      gross: grand.gross + sub.gross, contrib: grand.contrib + sub.contrib,
-      cost: grand.cost + sub.cost, net: grand.net + sub.net,
+      gross: grand.gross + sub.gross, epfEmployee: grand.epfEmployee + sub.epfEmployee,
+      contrib: grand.contrib + sub.contrib, cost: grand.cost + sub.cost, net: grand.net + sub.net,
     };
   }
   rows.push([
     "", esc(`TOTAL (${employees.length} staff)`), "", "", rm(grand.gross),
-    "", "", "", rm(grand.contrib), rm(grand.cost), rm(grand.net),
+    rm(grand.epfEmployee), "", "", "", rm(grand.contrib), rm(grand.cost), rm(grand.net),
   ].join(","));
 
   const ym = `${run.period_year}${String(run.period_month).padStart(2, "0")}`;
