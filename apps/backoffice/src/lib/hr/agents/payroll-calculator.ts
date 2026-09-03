@@ -630,6 +630,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
 
     let plainRateOtHours = 0;
     let phPremiumHours = 0;
+    let phPremiumAmount = 0;
     for (const a of userAttendance) {
       totalRegularHours += Number(a.regular_hours) || 0;
       // OT pays to the half-hour as approved (owner 2026-08-04, "follow exactly
@@ -686,8 +687,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       if (isOtApproved(a) && onPublicHoliday) {
         const phRegular = Number(a.regular_hours) || 0;
         if (phRegular > 0) {
-          ot2xAmount += phRegular * hourlyRate * (OT_RATES.public_holiday - 1);
+          const premium = phRegular * hourlyRate * (OT_RATES.public_holiday - 1);
+          ot2xAmount += premium;
           phPremiumHours += phRegular;
+          phPremiumAmount += premium;
         }
       }
 
@@ -1028,6 +1031,11 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         // doesn't re-inflate NEXT month's projected annual income either.
         pcb_gross: pcbGross,
         hourly_rate: Math.round(hourlyRate * 100) / 100,
+        // Public-holiday normal-hours premium (EA s.60D) — paid inside the 2×
+        // line; broken out here so the run page and payslip can label it
+        // "Public holiday" instead of burying it under "OT 2x (Rest)".
+        ph_premium_hours: Math.round(phPremiumHours * 100) / 100,
+        ph_premium_amount: Math.round(phPremiumAmount * 100) / 100,
         employment_type: profile.employment_type,
         unpaid_days: unpaidDays,
         attendance_records: userAttendance.length,
