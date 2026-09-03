@@ -2414,6 +2414,28 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-09-03 (later) — **August run confirmed; HR flow QA + review-queue
+  redesign shipped.** Owner recomputed August three times after #1211/#1212;
+  the confirmed run (11:56Z, gross 54,446.81) has Syafiq at basic 3,096.15
+  (Mon–Sat basis, 23/26), scored allowance RM110 (levers 40/40/40/40 − 3 lates
+  − 30 Aug no-show), gross 3,206.15 — his profile now: `proration_basis =
+  working_6day`, `fixed_performance_allowance = NULL` (was 178.20, owner: July
+  only). Only his line changed between runs. By-outlet CSV splits him
+  5/7/3 shifts with an EPF (employee) column (#1212 merged, deployed).
+  **QA report:** `docs/design/hr-flow-qa-2026-09-03.md` (14 findings). Built
+  on `claude/hr-review-queue`: one attendance+OT review queue with
+  period/outlet/staff/flag filters, exact pending count, bulk approve/excuse/
+  reject (`PATCH {ids[]}`), implausible-tail guard (`MAX_PLAUSIBLE_TAIL_HOURS
+  = 8`), Overtime page → ledger (½-hour steps, no sync), leave "Needs review"
+  default + dashboard count, profile allowance input moved to the live
+  `fixed_performance_allowance` column. **Owner actions:** (1) review August
+  on the new queue — 159 logs / ≈80h OT tail never reviewed, pay as September
+  adjustment; (2) decide 2 pending sick leaves (Ariff 7 Aug, Batrisyia 27
+  Aug); (3) fill missing EPF/SOCSO numbers, confirm 9 probation FTs.
+  **Backlog from QA:** clock-out nudge (14% auto-closed), rest-day duplicate
+  rows on multi-outlet publish, nav single-source, shared-lib dedupe, route
+  tests.
+
 - 2026-09-03 — **August payroll close (URGENT — salary pending).** Merged
   #1209, #1210, #1211 (see Verified facts); #1212 (by-outlet split by shifts)
   open, green, merge blocked only by GitHub API rate limiting at 11:30Z.

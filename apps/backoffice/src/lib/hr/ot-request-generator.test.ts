@@ -40,11 +40,26 @@ const opts = () => ({ ftUserIds: new Set([FT]), existingKeys: new Set<string>() 
 describe("logOtHours", () => {
   it("Firdaus 16 Aug: manager set clock-out to 18:02 against a 15:30 roster → 2.5h tail (30-min brackets)", () => {
     const l = base({ clock_out: "2026-08-16T10:02:00Z" });
-    expect(logOtHours(l)).toEqual({ tail: 2.5, threshold: 0 });
+    expect(logOtHours(l)).toEqual({ tail: 2.5, threshold: 0, implausible: false });
   });
 
   it("on-time shift has no tail", () => {
-    expect(logOtHours(base())).toEqual({ tail: 0, threshold: 0 });
+    expect(logOtHours(base())).toEqual({ tail: 0, threshold: 0, implausible: false });
+  });
+
+  it("Shairuleen 28 Aug: tapped out the NEXT afternoon — a 22h tail is a missed clock-out, not OT", () => {
+    // Rostered 07:30–15:30, in 16:48, out 15:12 the next day. Auto-close never
+    // ran because she tapped out herself, so clock_out_method is "app".
+    const l = base({ clock_in: "2026-08-16T08:48:00Z", clock_out: "2026-08-17T07:12:00Z" });
+    const r = logOtHours(l);
+    expect(r.implausible).toBe(true);
+    expect(r.tail).toBe(0);
+    expect(otRequestCandidates([l], opts())).toEqual([]);
+  });
+
+  it("an 8h tail (a genuine double shift) is still plausible", () => {
+    const l = base({ clock_out: "2026-08-16T15:30:00Z" }); // 15:30 → 23:30 MYT
+    expect(logOtHours(l)).toEqual({ tail: 8, threshold: 0, implausible: false });
   });
 
   it("unrostered cover shift is paid in full already — no tail", () => {
