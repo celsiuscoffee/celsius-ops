@@ -646,6 +646,12 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       (a.ai_status === "approved" && !a.final_status);
 
     let plainRateOtHours = 0;
+    // Hours behind each OT line, so the run page / payslip can print
+    // "OT 1.5× (Weekday) · 2.0h" instead of an unexplained amount.
+    let otHours1x = 0;
+    let otHours15x = 0;
+    let otHours2x = 0;
+    let otHours3x = 0;
     // Day-type work (normal hours on a holiday / rostered rest day), per MYT
     // date — priced after the loop, one premium per day.
     const phHoursByDate = new Map<string, number>();
@@ -672,13 +678,14 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         if (otType !== (a.overtime_type || "ot_1_5x")) staleRestStamps++;
         if (premium > 0) {
           const amount = premium * hourlyRate;
-          if (otType === "rest_day_1x" || otType === "ot_1x") ot1xAmount += amount * 1;
-          else if (otType === "ot_1_5x") ot15xAmount += amount * OT_RATES.normal;
-          else if (otType === "ot_2x") ot2xAmount += amount * OT_RATES.rest_day;
-          else if (otType === "ot_3x" || otType === "ph_2x") ot3xAmount += amount * OT_RATES.public_holiday_ot;
+          if (otType === "rest_day_1x" || otType === "ot_1x") { ot1xAmount += amount * 1; otHours1x += premium; }
+          else if (otType === "ot_1_5x") { ot15xAmount += amount * OT_RATES.normal; otHours15x += premium; }
+          else if (otType === "ot_2x") { ot2xAmount += amount * OT_RATES.rest_day; otHours2x += premium; }
+          else if (otType === "ot_3x" || otType === "ph_2x") { ot3xAmount += amount * OT_RATES.public_holiday_ot; otHours3x += premium; }
         }
         if (plain > 0) {
           ot1xAmount += plain * hourlyRate;
+          otHours1x += plain;
           // Types that already pay 1.0× aren't a downgrade — don't report them.
           if (otType !== "ot_1x" && otType !== "rest_day_1x") plainRateOtHours += plain;
         }
@@ -1079,6 +1086,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         // Public-holiday normal-hours premium (EA s.60D) — paid inside the 2×
         // line; broken out here so the run page and payslip can label it
         // "Public holiday" instead of burying it under "OT 2x (Rest)".
+        ot_hours_1x: Math.round(otHours1x * 100) / 100,
+        ot_hours_1_5x: Math.round(otHours15x * 100) / 100,
+        ot_hours_2x: Math.round(otHours2x * 100) / 100,
+        ot_hours_3x: Math.round(otHours3x * 100) / 100,
         ph_premium_hours: phPremiumHours,
         ph_premium_amount: phPremiumAmount,
         ph_days_worked: dayPay.publicHolidayDays,
