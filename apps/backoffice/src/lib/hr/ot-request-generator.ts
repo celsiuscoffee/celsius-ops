@@ -64,6 +64,14 @@ export const AUTO_REASON_PREFIX = "Auto-created from attendance log (OT detected
 // request for less would only add noise to the manager's queue.
 export const MIN_REQUEST_HOURS = 0.5;
 
+// A tail longer than this is not overtime, it is a forgotten clock-out that
+// the auto-close cron did not catch (the person tapped out the NEXT day, so
+// clock_out_method is "app", not "system"). Shairuleen 28 Aug 2026: rostered
+// 07:30–15:30, clocked in 16:48, tapped out 15:12 the next day — a 22.5h
+// "tail" that would have queued as 22.5h of 1.5× OT. A genuine double shift
+// is 7.5h, so 8h is the ceiling; anything past it needs "Fix times" first.
+export const MAX_PLAUSIBLE_TAIL_HOURS = 8;
+
 /**
  * hr_attendance_logs.overtime_type → hr_overtime_requests.ot_type. The stamp
  * says what kind of day it was; the request carries the rate class the
@@ -95,8 +103,8 @@ const toHalfHour = (h: number) => Math.floor((Math.round(h * 100) / 100) * 2) / 
  * any threshold OT already on the row. 0 for anything that must not become a
  * request — see the skip list in otRequestCandidates.
  */
-export function logOtHours(l: TailLog): { tail: number; threshold: number } {
-  if (!l.clock_out) return { tail: 0, threshold: 0 };
+export function logOtHours(l: TailLog): { tail: number; threshold: number; implausible: boolean } {
+  if (!l.clock_out) return { tail: 0, threshold: 0, implausible: false };
   const date = mytDateString(l.clock_in);
   const schedDate = l.scheduled_date ?? date;
   const pw = paidWindowHours({
@@ -106,9 +114,15 @@ export function logOtHours(l: TailLog): { tail: number; threshold: number } {
     scheduledEnd: mytInstant(schedDate, l.scheduled_end),
     employmentType: "full_time",
   });
+  const rawTail = pw.unrostered ? 0 : pw.otEligibleHours;
+  // Past the ceiling the tail is evidence of a missed tap-out, not of work:
+  // report 0 approvable hours and say why, so the review UI asks for the real
+  // times instead of offering to pay a day of OT.
+  const implausible = rawTail > MAX_PLAUSIBLE_TAIL_HOURS;
   return {
-    tail: pw.unrostered ? 0 : pw.otEligibleHours,
+    tail: implausible ? 0 : rawTail,
     threshold: Math.max(0, Number(l.overtime_hours) || 0),
+    implausible,
   };
 }
 

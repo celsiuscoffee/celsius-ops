@@ -306,8 +306,10 @@ export default function EmployeeDetailPage() {
     overtime_flat_rate: "",
     ssfw_number: "",
     ea_commencement_date: "",
-    // Per-staff allowance override (blank = use global default)
-    performance_allowance_amount: "",
+    // Flat performance allowance (blank = scored RM200 pool). This is the
+    // column payroll reads (lib/hr/allowances.ts parseFixedAllowance); the old
+    // input wrote performance_allowance_amount, which nothing reads.
+    fixed_performance_allowance: "",
   });
 
   // Access / login state
@@ -488,7 +490,7 @@ export default function EmployeeDetailPage() {
         overtime_flat_rate: p.overtime_flat_rate != null ? String(p.overtime_flat_rate) : "",
         ssfw_number: (p.ssfw_number as string) || "",
         ea_commencement_date: p.ea_commencement_date ? String(p.ea_commencement_date).slice(0, 10) : "",
-        performance_allowance_amount: p.performance_allowance_amount != null ? String(p.performance_allowance_amount) : "",
+        fixed_performance_allowance: p.fixed_performance_allowance != null ? String(p.fixed_performance_allowance) : "",
       });
     }
   }, [profile]);
@@ -523,16 +525,17 @@ export default function EmployeeDetailPage() {
         payload.basic_salary = form.basic_salary ? parseFloat(form.basic_salary) : 0;
         payload.hourly_rate = form.hourly_rate ? parseFloat(form.hourly_rate) : null;
         payload.hourly_rate_weekend = form.hourly_rate_weekend ? parseFloat(form.hourly_rate_weekend) : null;
-        // Allowance override: blank input → NULL (use global default)
-        payload.performance_allowance_amount = form.performance_allowance_amount
-          ? parseFloat(form.performance_allowance_amount)
+        // Flat allowance: blank → NULL puts the person back on the scored pool.
+        // "0" is a real value (paid nothing, not scored) — keep it.
+        payload.fixed_performance_allowance = form.fixed_performance_allowance !== ""
+          ? parseFloat(form.fixed_performance_allowance)
           : null;
       } else {
         // Remove stale empties from the spread above so they don't land on the server
         delete payload.basic_salary;
         delete payload.hourly_rate;
         delete payload.hourly_rate_weekend;
-        delete payload.performance_allowance_amount;
+        delete payload.fixed_performance_allowance;
       }
 
       const res = await fetch("/api/hr/employees", {
@@ -825,11 +828,12 @@ export default function EmployeeDetailPage() {
               </Field>
               <div className="mt-2 border-t pt-3">
                 <p className="mb-2 text-xs font-medium text-muted-foreground">
-                  Allowance — leave blank to use the global default from HR Settings → Allowances.
-                  The value is a max; lateness/absence and review penalties reduce the actual payout.
+                  Performance allowance — leave blank for the scored pool (RM200 max across checklist, phone capture,
+                  serving time and audit, less lateness, absence and review penalties). Enter an amount to pay it FLAT
+                  every month with no scoring and no deductions; 0 pays nothing.
                 </p>
-                <Field label="Performance Allowance Max (RM/month)">
-                  <input type="number" min={0} step="0.01" value={form.performance_allowance_amount} onChange={(e) => update("performance_allowance_amount", e.target.value)} className="input" placeholder="Use default" />
+                <Field label="Flat allowance (RM/month)">
+                  <input type="number" min={0} step="0.01" value={form.fixed_performance_allowance} onChange={(e) => update("fixed_performance_allowance", e.target.value)} className="input" placeholder="Scored pool" />
                 </Field>
               </div>
             </div>
