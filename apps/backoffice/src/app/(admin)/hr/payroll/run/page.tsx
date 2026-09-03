@@ -71,6 +71,7 @@ type PayrollItem = {
     /** Public-holiday normal-hours premium (EA s.60D), paid inside ot_2x_amount. */
     ph_premium_hours?: number;
     ph_premium_amount?: number;
+    ph_days_worked?: number;
   } | null;
 };
 
@@ -547,7 +548,13 @@ function EmployeeBreakdown({
   // "the PH OT not in payroll").
   const phHours = Number(item.computation_details?.ph_premium_hours || 0);
   const phAmount = Number(item.computation_details?.ph_premium_amount || 0);
+  const phDays = Number(item.computation_details?.ph_days_worked || 0);
   const restDay2x = Math.max(0, item.ot_2x_amount - phAmount);
+  // EA s.60D(3)(a): two DAYS' wages at ORP regardless of hours — the label
+  // says days, not hours, so RM84.62 does not read as "7h × something".
+  const phLabel = phDays > 0
+    ? `Public holiday pay (${phDays} day${phDays === 1 ? "" : "s"} × 2, EA s.60D)`
+    : `Public holiday pay (${phHours}h × 2)`;
 
   return (
     <div className="space-y-4">
@@ -573,7 +580,7 @@ function EmployeeBreakdown({
               )}
               {item.ot_2x_amount > 0 && (
                 <EditableRow
-                  label={phAmount > 0 && restDay2x < 0.01 ? `Public holiday pay (${phHours}h × 2)` : "OT 2x (Rest day / PH)"}
+                  label={phAmount > 0 && restDay2x < 0.01 ? phLabel : "OT 2x (Rest day / PH)"}
                   value={item.ot_2x_amount}
                   field="ot_2x_amount"
                   item={item}
