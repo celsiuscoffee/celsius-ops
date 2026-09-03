@@ -8,6 +8,7 @@ import {
   generatePerkesoLampiranA,
   generateCP39,
   generateHRDFLevy,
+  generatePayrollByOutlet,
   type EmployeeRow,
   type CompanySettings,
 } from "@/lib/hr/statutory/files";
@@ -17,6 +18,72 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // GET /api/hr/payroll/submission-files?run_id=...&type=maybank|kwsp|perkeso|cp39|hrdf
+/**
+ * Shifts worked per outlet in the run's pay period, for the staff whose cost
+ * the by-outlet export should SPLIT: rotating multi-outlet staff, anyone who
+ * clocked in at more than one outlet, and anyone with no home outlet who
+ * worked somewhere. Owner 2026-09-03 (Syafiq): "divided based on the shifts
+ * work in each outlet." Real, non-rejected logs only; MYT month bounds.
+ */
+async function outletSharesForRun(
+  run: { period_year: number; period_month: number; period_start?: string | null; period_end?: string | null },
+  userIds: string[],
+  homeOutlet: Map<string, string | null>,
+): Promise<Map<string, Array<{ outlet: string; shifts: number }>>> {
+  const out = new Map<string, Array<{ outlet: string; shifts: number }>>();
+  if (userIds.length === 0) return out;
+  const mm = String(run.period_month).padStart(2, "0");
+  const startDate = run.period_start || `${run.period_year}-${mm}-01`;
+  const endDate = run.period_end
+    ? new Date(Date.parse(`${run.period_end}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
+    : run.period_month === 12 ? `${run.period_year + 1}-01-01` : `${run.period_year}-${String(run.period_month + 1).padStart(2, "0")}-01`;
+  const startIso = new Date(`${startDate}T00:00:00+08:00`).toISOString();
+  const endIso = new Date(`${endDate}T00:00:00+08:00`).toISOString();
+
+  const [{ data: logs }, { data: profiles }] = await Promise.all([
+    hrSupabaseAdmin
+      .from("hr_attendance_logs")
+      .select("user_id, outlet_id, final_status, clock_in_method")
+      .in("user_id", userIds)
+      .gte("clock_in", startIso)
+      .lt("clock_in", endIso)
+      .neq("clock_in_method", "ot_approval")
+      .limit(5000),
+    hrSupabaseAdmin
+      .from("hr_employee_profiles")
+      .select("user_id, is_rotating_multi_outlet")
+      .in("user_id", userIds),
+  ]);
+  const rotating = new Set(
+    (profiles || []).filter((p) => p.is_rotating_multi_outlet === true).map((p) => p.user_id as string),
+  );
+
+  const counts = new Map<string, Map<string, number>>();
+  for (const l of (logs || []) as Array<{ user_id: string; outlet_id: string | null; final_status: string | null }>) {
+    if (!l.outlet_id || l.final_status === "rejected") continue;
+    const per = counts.get(l.user_id) || new Map<string, number>();
+    per.set(l.outlet_id, (per.get(l.outlet_id) || 0) + 1);
+    counts.set(l.user_id, per);
+  }
+  const outletIds = Array.from(new Set([...counts.values()].flatMap((m) => [...m.keys()])));
+  const outlets = outletIds.length > 0
+    ? await prisma.outlet.findMany({ where: { id: { in: outletIds } }, select: { id: true, name: true } })
+    : [];
+  const outletName = new Map(outlets.map((o) => [o.id, o.name]));
+
+  for (const [userId, per] of counts) {
+    const split = rotating.has(userId) || per.size > 1 || !homeOutlet.get(userId);
+    if (!split) continue;
+    out.set(
+      userId,
+      [...per.entries()]
+        .map(([id, shifts]) => ({ outlet: outletName.get(id) || id, shifts }))
+        .sort((a, b) => b.shifts - a.shifts),
+    );
+  }
+  return out;
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
@@ -74,7 +141,7 @@ export async function GET(req: NextRequest) {
   const [users, profiles, companyRes] = await Promise.all([
     prisma.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, name: true, fullName: true, bankName: true, bankAccountNumber: true, bankAccountName: true },
+      select: { id: true, name: true, fullName: true, bankName: true, bankAccountNumber: true, bankAccountName: true, outlet: { select: { name: true } } },
     }),
     hrSupabaseAdmin
       .from("hr_employee_profiles")
@@ -128,6 +195,7 @@ export async function GET(req: NextRequest) {
       zakat,
       netPay: Number(item.net_pay || 0),
       gross: Number(item.total_gross || 0),
+      outlet: u?.outlet?.name ?? null,
     };
   });
 
@@ -191,6 +259,24 @@ export async function GET(req: NextRequest) {
     case "hrdf":
       result = generateHRDFLevy(runMeta, employees, company);
       break;
+    // Finance reconciliation — what each outlet owes HQ. Not a bank upload.
+    case "by_outlet": {
+      // Rotating / multi-outlet staff are charged to the outlets they actually
+      // worked in, pro rata by shifts in the pay period (owner 2026-09-03,
+      // Syafiq: "divided based on the shifts work in each outlet"). Everyone
+      // else stays on their home outlet.
+      const shares = await outletSharesForRun(
+        run,
+        userIds,
+        new Map(users.map((u) => [u.id, u.outlet?.name ?? null])),
+      );
+      for (const e of employees) {
+        const s = shares.get(e.userId);
+        if (s && s.length > 0) e.outletShares = s;
+      }
+      result = generatePayrollByOutlet(runMeta, employees);
+      break;
+    }
     default:
       return NextResponse.json({ error: `Unknown type: ${type}` }, { status: 400 });
   }

@@ -31,7 +31,7 @@ current month.
   packs" = 1.45t, SA coleslaw/tomato/pandan, slice-vs-cake cf), Chicken Tomyam
   Carbonara BOM says 80ml olive oil (sibling says 30 — kitchen to confirm);
   uncosted ingredients: Dried Orange Peel, Biscoff, Dried Lemon Slice.
-  `menu_margins` VIEW rewritten to mirror the BOM page (migration 108, applied
+  `menu_margins` VIEW rewritten to mirror the BOM page (migration 109, applied
   to prod, PR #1207; v1 showed Roti Bakar −354% via product_costs cf bugs +
   modifier stacking + no packaging; cashflow bomFoodCostPct drops ~0.49→~0.34).
 - 2026-09-02 — **Bank-feed recon (3 Maybank accounts, BankStatementLine is the
@@ -52,6 +52,73 @@ current month.
   salaries → EMPLOYEE_SALARY (were RAW_MATERIALS/OTHER_OUTFLOW, RM9.9k), 13
   Poket Capital shared-service debits → MANAGEMENT_FEE (RM24.6k out of fake
   raw-materials spend).
+- 2026-09-03 — **August 2026 payroll: why approved OT paid nothing, and the
+  fix.** Since the paid-window rule (2026-08-13) `deriveHours` pays only time
+  inside the rostered shift; the clocked overstay is an "OT tail" reported as
+  `otEligibleHours`, flagged `overtime_detected`, and written NOWHERE — the
+  log's `overtime_hours` stays 0. The only pay path is an approved
+  `hr_overtime_requests` row that `applyApprovedOt` stamps onto the log. The
+  auto-request generator (`overtime-requests/sync`) still selected logs by
+  `overtime_hours >= 1`, so it went quiet on 13 Aug (20–44 auto-requests/week
+  in July → 7 for the second half of August). Attendance "approve" set
+  `final_status` and paid 0 OT; `set_times` recomputed through the same window
+  and still paid 0. August: ~88 overstay hours company-wide with no request
+  (Shairuleen 33h, Firdaus 9.5h). **Owner ruling: the attendance review IS the
+  OT approval** ("only the OT Ariff approves in attendance will be counted").
+  Shipped in PR #1210 (`lib/hr/ot-request-generator.ts`, tested):
+  approve/acknowledge/excuse/adjust/set_times on a FT log writes an approved
+  request + stamps the log; OT-only flagged logs are back in the attendance
+  queue with `ot_tail_hours` on the card ("Approve + 2.5h OT"); the cron files
+  PENDING requests from tails (prev month too while ≤10th; `POST {month}`);
+  PH normal-hours premium (EA s.60D, PR #1209) is keyed on `hr_public_holidays`
+  so a holiday OT approval re-stamping `ot_3x` cannot erase it.
+  **Data applied directly (owner instruction, all reversible via the
+  `hr_overtime_requests` rows whose reason starts "Approved per manager" /
+  "Approved via attendance review"):** Shairuleen's full August list (13
+  dates, 19h payable + 0.5h on 8/8 that the 1h minimum will not pay; 16/8 kept
+  at Ariff's OT-queue 4h vs list 3h), Firdaus 16/8 2.5h, Shairuleen 12/8 +
+  18/8 1h each (from Ariff's time corrections). Earlier same day: Adam end
+  31 Jul, Amirul Yazid end 27 Aug, Deverasa/Darshika skipped (joined 1 Sep —
+  calculator now skips post-cycle joiners), Nazihah `lever|checklist`=120
+  override (4 lates → RM80), Ariff `fixed_performance_allowance` 500 → **250**
+  (owner), Zikry 1 Aug 1h stamped. The monthly run id churns on every
+  recompute — always look it up; item edits do not survive recompute.
+  **Later the same day — all merged to main:** #1210 (attendance approval =
+  OT approval; **OT minimum 0.5h** everywhere, owner "pay the 0.5h"; PH
+  premium visible — run page + PDF had gated OT lines on OT *hours*, so a
+  pure-PH line sat in gross with no row). #1211 = the **payroll statutory QA**
+  (audit of the monthly calculator vs EA/KWSP/PERKESO; arithmetic matched to
+  the cent, the defects were code-vs-statute): (1) employer EPF was 12% for
+  everyone — `hr_employee_profiles.epf_employer_rate` had DEFAULT 12 and the
+  calculator honoured any non-null value as an override; KWSP says 13% ≤
+  RM5,000. `resolveEpfEmployerOverride` ignores the legacy default; **migration
+  108 applied to prod 2026-09-03 11:20Z** (defaults dropped, all 81 rows
+  nulled — NULL = schedule; the employee form sends NULL for blank). **July was
+  filed at 12% → KWSP arrears owed.** (2) performance allowance now IN the
+  EPF/SOCSO/EIS basis (KWSP liable wages include allowances; BrioHR did).
+  (3) unpaid leave counted on the proration basis's own days
+  (`computeProrate.unpaidLeaveRanges`) — Syafiq Fri–Mon was 4 off 21 weekdays,
+  now 2 (+RM333.33). (4) PH premium = one ORP (basic/26) per holiday worked
+  regardless of hours (s.60D(3)(a)); rest-day normal hours pay ½/1 ORP
+  (s.60(3)(b)) in the 1× line — `lib/hr/day-type-pay.ts`. (5) attendance month
+  window is MYT midnight (was UTC → 08:00 MYT). Plus **one label set** for
+  OT/day-type lines across run page, staff payslip page and PDF
+  (`packages/shared/src/hr/pay-lines.ts`, hours per rate written to
+  `computation_details.ot_hours_*`). #1212 (open): by-outlet finance CSV
+  splits rotating staff pro rata by shifts per outlet (Syafiq 7/5/3 in Aug).
+  **Not fixed, owner decisions:** SOCSO 5-sen rounding vs published PERKESO
+  bands (needs seeded table); contract staff with a salary skipped (Hanis,
+  RM2,000 from 15 Aug — is she salaried?); part-timers get no EPF/SOCSO/EIS.
+  More data applied: Atthirah 6 + 10 Aug 0.5h each (Ariff, "cover stock
+  sampai"). **Decisions taken:** pay the 0.5h; 16/8 stays 4h.
+  **Recompute gotcha:** the owner's 11:20Z recompute landed ~3 min before the
+  #1211 deploy went READY, so it is on the OLD code (no `ph_days_worked` in
+  computation_details) — a recompute after ~11:23Z is the final one.
+  **Still owed:** Firdaus's OT list from Ariff (only 16/8 exists for him);
+  four FT 31-Aug logs unreviewed (Firdaus, Haziq, Sherry, Syafiq) → no PH
+  premium until approved; 24–31 Aug weekly PT run not generated; the compute
+  endpoint needs an OWNER/ADMIN browser session — this sandbox has no DB env,
+  so recompute is the owner's click, not ours.
 - 2026-09-01 — **Catalog-wide price↔package sweep: the milk defect generalised.**
   Fresh Milk first: a phantom "Carton (12×2L)" package (cf 24,000) carried 67
   PO lines priced at the 12×1L carton rate (RM81.78–88.70 vs catalog 2L-carton
@@ -2403,6 +2470,52 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   uom strings, cf=1 carton family). September = first clean measured month;
   the consumption engine's variance report automates this comparison once
   armed (day-7 shadow verdict still pending).
+- 2026-09-03 (later) — **August run confirmed; HR flow QA + review-queue
+  redesign shipped.** Owner recomputed August three times after #1211/#1212;
+  the confirmed run (11:56Z, gross 54,446.81) has Syafiq at basic 3,096.15
+  (Mon–Sat basis, 23/26), scored allowance RM110 (levers 40/40/40/40 − 3 lates
+  − 30 Aug no-show), gross 3,206.15 — his profile now: `proration_basis =
+  working_6day`, `fixed_performance_allowance = NULL` (was 178.20, owner: July
+  only). Only his line changed between runs. By-outlet CSV splits him
+  5/7/3 shifts with an EPF (employee) column (#1212 merged, deployed).
+  **QA report:** `docs/design/hr-flow-qa-2026-09-03.md` (14 findings). Built
+  on `claude/hr-review-queue`: one attendance+OT review queue with
+  period/outlet/staff/flag filters, exact pending count, bulk approve/excuse/
+  reject (`PATCH {ids[]}`), implausible-tail guard (`MAX_PLAUSIBLE_TAIL_HOURS
+  = 8`), Overtime page → ledger (½-hour steps, no sync), leave "Needs review"
+  default + dashboard count, profile allowance input moved to the live
+  `fixed_performance_allowance` column. **Owner actions:** (1) review August
+  on the new queue — 159 logs / ≈80h OT tail never reviewed, pay as September
+  adjustment; (2) decide 2 pending sick leaves (Ariff 7 Aug, Batrisyia 27
+  Aug); (3) fill missing EPF/SOCSO numbers, confirm 9 probation FTs.
+  **Backlog from QA:** clock-out nudge (14% auto-closed), rest-day duplicate
+  rows on multi-outlet publish, nav single-source, shared-lib dedupe, route
+  tests. → Follow-up branch `claude/hr-qa-fixes`: auto-close cron now sends
+  ONE push (`kind: "clock"`, flag `clockout_reminder_sent`, processor keeps
+  it) 15 min after the rostered end; `hr-nav-drift.test.ts` pins nav.tsx to
+  module-tabs; dead attendance `adjust` action removed. Rest-day dedupe
+  dropped on purpose: shared staff carry a rest-day row per outlet roster and
+  every consumer skips rest_day rows. Still open: route `kind: "clock"` to the
+  clock screen in staff-native (unknown kinds just open the app), shared-lib
+  dedupe, route tests.
+
+- 2026-09-03 — **August payroll close (URGENT — salary pending).** Merged
+  #1209, #1210, #1211 (see Verified facts); #1212 (by-outlet split by shifts)
+  open, green, merge blocked only by GitHub API rate limiting at 11:30Z.
+  Migration 108 applied. **Next, in order:** (1) owner recomputes August on
+  the new code (the 11:20Z run is pre-#1211) and we verify line by line:
+  Shairuleen PH RM84.62 + 19.5h OT, employer EPF 286 on RM2,200, Syafiq basic
+  3,166.67, Atthirah 1.0h OT, `computation_details.ph_days_worked` present;
+  (2) Ariff approves the four flagged 31-Aug logs (Firdaus, Haziq, Sherry,
+  Syafiq) in Attendance Review → recompute again; (3) Firdaus's OT list; (4)
+  24–31 Aug weekly PT run; (5) owner decisions: SOCSO band table, Hanis
+  (contract), PT statutory; (6) **task #3 — redesign the OT + attendance
+  approval flow and HR module UX** (owner: "currently when review, the ux is
+  so bad and cannot filter etc. also there is a lot of overlapping"; "better
+  ux for hr module as a whole") — propose IA first (one review queue with
+  filters, bulk approve, no double queue), then build. People cost artifact
+  (claude.ai/code/artifact/3257f699…) still shows 27 Jul–23 Aug PT
+  (RM16,146); full-August PT from attendance is RM19,772.
 
 - 2026-08-31 — **First STATE.md roll-over done (owner-approved):** July 2026
   moved to `docs/state-archive/2026-07.md` (20 finished Verified-facts

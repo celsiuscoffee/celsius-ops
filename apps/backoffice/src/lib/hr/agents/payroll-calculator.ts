@@ -7,6 +7,7 @@ import { clipLeaveDaysToCycle } from "../payroll/leave-overlap";
 import { mytDateString } from "../hours";
 import { fetchAllRows } from "../fetch-all";
 import { splitOtHours, effectiveOtType } from "../ot-policy";
+import { dayTypePay } from "../day-type-pay";
 import { applyDueSalaryMirrors } from "../salary-mirror";
 import { REST_DAY_ROLE_PATTERN } from "../constants";
 
@@ -199,6 +200,14 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       skippedUsers.set(p.user_id, `resigned ${resignDate}`);
       continue;
     }
+    // Joined AFTER this cycle ended → not employed during it, so no line at
+    // all. Without this, a 1-Sept hire computed into the August run at a full
+    // month's salary (Deverasa & Darshika, 2026-09-03) — the proration only
+    // clips the START of a partial month, it never zeroes a future joiner.
+    if (p.join_date && p.join_date > cycleEndStr) {
+      skippedUsers.set(p.user_id, `joined ${p.join_date} (after this cycle)`);
+      continue;
+    }
     // Monthly cycle is for FULL-TIMERS only. Part-timers (and anyone else paid
     // by the hour) run through /hr/payroll/weekly. Exclude them silently — no
     // skip note needed since this is by design, not a data issue.
@@ -267,6 +276,15 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
   // 1000-row cap. Unpaged, one busier month drops the last shifts of the month
   // from pay for whoever sorts last — no error, no note, just missing hours.
   // This is the single most load-bearing read in payroll; see fetch-all.ts.
+  // The month is a MALAYSIAN month. clock_in is UTC; a bare "2026-08-01" bound
+  // is 08:00 MYT, so the opening shifts of the 1st (07:22–07:39 MYT on 1 Aug
+  // 2026: 9 logs) fell into JULY's run and the 1st of next month's openers
+  // (7 logs on 1 Sept) into this one. Nil RM in August only because none of
+  // them carried OT; a holiday or OT on a month's first morning would be paid
+  // in the wrong month against no hr_overtime_requests budget (MYT-dated) and
+  // the allowance engine (MYT) would disagree. Same bounds the weekly run uses.
+  const startIso = new Date(`${startDate}T00:00:00+08:00`).toISOString();
+  const endIso = new Date(`${endDate}T00:00:00+08:00`).toISOString();
   const attendance = await fetchAllRows<Record<string, unknown> & {
     user_id: string;
     clock_in: string;
@@ -281,8 +299,8 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     hrSupabaseAdmin
       .from("hr_attendance_logs")
       .select("*")
-      .gte("clock_in", startDate)
-      .lt("clock_in", endDate)
+      .gte("clock_in", startIso)
+      .lt("clock_in", endIso)
       // NULL-safe "not rejected": PostgREST `.neq` compiles to `final_status <>
       // 'rejected'`, which is FALSE for NULL rows and silently drops them — but
       // the AI-auto-approved happy path is exactly `final_status = NULL` (see the
@@ -308,6 +326,17 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     const key = `${o.user_id}:${o.date}`;
     otBudgetByUserDay.set(key, (otBudgetByUserDay.get(key) ?? 0) + (Number(o.hours_approved) || 0));
   }
+
+  // Gazetted holidays in the period — the authority for the PH premium below.
+  // The log's ph_2x stamp is a snapshot: an OT approval on a holiday re-stamps
+  // the row ot_3x (the tail's class) and would otherwise erase the normal-hours
+  // premium for that day.
+  const { data: phRows } = await hrSupabaseAdmin
+    .from("hr_public_holidays")
+    .select("date")
+    .gte("date", startDate.slice(0, 10))
+    .lt("date", endDate.slice(0, 10));
+  const publicHolidays = new Set((phRows || []).map((r) => String(r.date)));
 
   // Rest days AS THE ROSTER FINALLY STANDS (owner 2026-08-03: "rest-day is
   // only when we schedule. it is not fixed on weekends"). The log's stamped
@@ -466,10 +495,17 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     .eq("leave_type", "unpaid");
 
   const unpaidLeaveByUser = new Map<string, number>();
+  // The ranges themselves, so proration can count them on the employee's own
+  // basis (Mon–Fri for HQ) instead of subtracting calendar days from a
+  // weekday denominator — see computeProrate.unpaidLeaveRanges.
+  const unpaidLeaveRangesByUser = new Map<string, Array<{ start: string; end: string }>>();
   (leaves || []).forEach((l: { user_id: string; total_days: number; start_date: string; end_date: string }) => {
     const days = clipLeaveDaysToCycle(l, startDate, endDate);
     if (days <= 0) return;
     unpaidLeaveByUser.set(l.user_id, (unpaidLeaveByUser.get(l.user_id) || 0) + days);
+    const ranges = unpaidLeaveRangesByUser.get(l.user_id) || [];
+    ranges.push({ start: l.start_date, end: l.end_date });
+    unpaidLeaveRangesByUser.set(l.user_id, ranges);
   });
 
   // 3b. Recurring per-employee items (allowances + deductions) active in this cycle.
@@ -599,21 +635,33 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     //      request pay the log's premium; hours beyond it pay PLAIN 1.0×
     //      (owner 2026-08-03: worked hours are never zeroed, and an attendance
     //      approval alone never buys the premium).
-    //   3. Must be >= 1 whole hour on that log — shorter overruns are ignored.
+    //   3. Must be >= OT_MIN_HOURS on that log — shorter overruns are ignored.
+    //      Owner 2026-09-03 ("pay the 0.5h"): the floor is one 30-min bracket,
+    //      matching how deriveHours brackets the OT tails. Was 1h.
     // Regular hours still count regardless (the shift happened, pay for it).
-    const OT_MIN_HOURS = 1;
+    const OT_MIN_HOURS = 0.5;
     const isOtApproved = (a: { ai_status: string | null; final_status: string | null }) =>
       a.final_status === "approved" ||
       a.final_status === "adjusted" ||
       (a.ai_status === "approved" && !a.final_status);
 
     let plainRateOtHours = 0;
+    // Hours behind each OT line, so the run page / payslip can print
+    // "OT 1.5× (Weekday) · 2.0h" instead of an unexplained amount.
+    let otHours1x = 0;
+    let otHours15x = 0;
+    let otHours2x = 0;
+    let otHours3x = 0;
+    // Day-type work (normal hours on a holiday / rostered rest day), per MYT
+    // date — priced after the loop, one premium per day.
+    const phHoursByDate = new Map<string, number>();
+    const restHoursByDate = new Map<string, number>();
     for (const a of userAttendance) {
       totalRegularHours += Number(a.regular_hours) || 0;
       // OT pays to the half-hour as approved (owner 2026-08-04, "follow exactly
       // the sheet" — the July import carries 1.5h/2.5h approvals). The old
-      // whole-hour Math.floor here silently ate those fractions. The ≥1h
-      // minimum below still filters sub-hour overruns.
+      // whole-hour Math.floor here silently ate those fractions. The
+      // OT_MIN_HOURS floor below still filters sub-bracket overruns.
       const rawOtHours = Math.round((Number(a.overtime_hours) || 0) * 100) / 100;
       const otHours = isOtApproved(a) && rawOtHours >= OT_MIN_HOURS ? rawOtHours : 0;
       totalOtHours += otHours;
@@ -630,15 +678,41 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         if (otType !== (a.overtime_type || "ot_1_5x")) staleRestStamps++;
         if (premium > 0) {
           const amount = premium * hourlyRate;
-          if (otType === "rest_day_1x" || otType === "ot_1x") ot1xAmount += amount * 1;
-          else if (otType === "ot_1_5x") ot15xAmount += amount * OT_RATES.normal;
-          else if (otType === "ot_2x") ot2xAmount += amount * OT_RATES.rest_day;
-          else if (otType === "ot_3x" || otType === "ph_2x") ot3xAmount += amount * OT_RATES.public_holiday_ot;
+          if (otType === "rest_day_1x" || otType === "ot_1x") { ot1xAmount += amount * 1; otHours1x += premium; }
+          else if (otType === "ot_1_5x") { ot15xAmount += amount * OT_RATES.normal; otHours15x += premium; }
+          else if (otType === "ot_2x") { ot2xAmount += amount * OT_RATES.rest_day; otHours2x += premium; }
+          else if (otType === "ot_3x" || otType === "ph_2x") { ot3xAmount += amount * OT_RATES.public_holiday_ot; otHours3x += premium; }
         }
         if (plain > 0) {
           ot1xAmount += plain * hourlyRate;
+          otHours1x += plain;
           // Types that already pay 1.0× aren't a downgrade — don't report them.
           if (otType !== "ot_1x" && otType !== "rest_day_1x") plainRateOtHours += plain;
+        }
+      }
+
+      // DAY-TYPE PAY — normal hours worked on a public holiday (EA s.60D;
+      // owner 2026-09-03: "31 aug is PH, it should be counted as OT — follow
+      // the act") or on a ROSTERED rest day (s.60(3)(b)). Collected per MYT
+      // date here and priced after the loop by dayTypePay: a monthly-rated
+      // employee earns a second DAY's wages (ORP = basic/26) per holiday
+      // worked, regardless of hours; a rest day pays half or one ORP by hours.
+      // Hours BEYOND the roster on those days keep the 3×/2× OT path above.
+      //
+      // Not overtime, so no hr_overtime_requests budget applies — the holiday
+      // table is the authority (ph_2x / ot_3x stamps accepted as a fallback for
+      // a holiday added after processing); rest days follow the roster as it
+      // finally stands. The log must still be payable (isOtApproved gate): a
+      // rejected or pending shift pays nothing, like any other day.
+      if (isOtApproved(a) && !isPartTime) {
+        const mytDate = mytDateString(new Date(a.clock_in));
+        const regular = Number(a.regular_hours) || 0;
+        const onPublicHoliday =
+          publicHolidays.has(mytDate) || a.overtime_type === "ph_2x" || a.overtime_type === "ot_3x";
+        if (regular > 0 && onPublicHoliday) {
+          phHoursByDate.set(mytDate, (phHoursByDate.get(mytDate) ?? 0) + regular);
+        } else if (regular > 0 && rosteredRestDays.has(`${profile.user_id}:${mytDate}`)) {
+          restHoursByDate.set(mytDate, (restHoursByDate.get(mytDate) ?? 0) + regular);
         }
       }
 
@@ -651,6 +725,29 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
           `${profile.user_id.slice(0, 8)} ${mytDateString(new Date(a.clock_in))}: worked ${workedH.toFixed(2)}h, payable ${payableH.toFixed(2)}h`,
         );
       }
+    }
+    // Price the day-type work collected above. PH premium rides in the 2×
+    // line (the run page / payslip label it "Public holiday pay"); rest-day
+    // day-pay is at 1× and rides in the 1× line.
+    const dayPay = dayTypePay({
+      orp: basicSalary / WORKING_DAYS_PER_MONTH,
+      normalHoursPerDay: NORMAL_WORKING_HOURS_PER_DAY,
+      publicHolidayHours: phHoursByDate,
+      restDayHours: restHoursByDate,
+    });
+    ot2xAmount += dayPay.publicHolidayAmount;
+    ot1xAmount += dayPay.restDayAmount;
+    const phPremiumHours = dayPay.publicHolidayHours;
+    const phPremiumAmount = dayPay.publicHolidayAmount;
+    if (dayPay.publicHolidayDays > 0) {
+      notes.push(
+        `${profile.user_id.slice(0, 8)}: ${dayPay.publicHolidayDays} public holiday${dayPay.publicHolidayDays === 1 ? "" : "s"} worked (${phPremiumHours}h) — second day's wage RM${phPremiumAmount.toFixed(2)} at ORP (EA s.60D), in the 2× line.`,
+      );
+    }
+    if (dayPay.restDayDays > 0) {
+      notes.push(
+        `${profile.user_id.slice(0, 8)}: ${dayPay.restDayDays} rostered rest day${dayPay.restDayDays === 1 ? "" : "s"} worked (${dayPay.restDayHours}h) — RM${dayPay.restDayAmount.toFixed(2)} day-pay at ORP (EA s.60(3)(b)), in the 1× line.`,
+      );
     }
     if (plainRateOtHours > 0) {
       notes.push(
@@ -693,6 +790,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
           joinDate: effectiveJoinDate,
           resignDate: profile.end_date || profile.resigned_at || null,
           unpaidLeaveDays: unpaidDays,
+          unpaidLeaveRanges: unpaidLeaveRangesByUser.get(profile.user_id),
           fullSalary: basicSalary,
           // Per-employee proration formula: HQ staff use Mon-Fri working
           // days (Section 60I(1C) with contractual denominator), outlet
@@ -840,11 +938,22 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     }
 
     // Statutory deductions via hr_stat_* reference tables.
-    // Malaysian convention (KWSP/PERKESO): EPF + SOCSO + EIS basis = basic +
-    // FIXED recurring allowances only. The performance allowance is VARIABLE
-    // incentive pay and therefore excluded from the statutory basis. PCB still
-    // uses full gross annualized.
-    const statutoryBasis = Math.max(0, basePay - unpaidDeduction + recurringStatBasis - recurringPreTaxDeduct);
+    // EPF / SOCSO / EIS basis = basic + allowances + EPF-contributing recurring
+    // items. KWSP's liable-wages list expressly INCLUDES allowances, incentives
+    // and bonuses (only OT, travelling allowance, gratuity/retrenchment,
+    // director fees and gifts are exempt); PERKESO's wage definition likewise
+    // includes allowances. The performance allowance was excluded here as
+    // "variable incentive pay" until 2026-09-03 — BrioHR had contributed on it
+    // (June 2026: Shairuleen on bracket 2,400 = 2,200 + 200), so the switch
+    // to this module silently dropped ~RM20 employee + RM24 employer a head.
+    // OT stays out of EPF and in SOCSO/EIS (socsoEisWage below). Day-type pay
+    // (PH second day, rest-day day-pay) is wages for work done, not OT, so it
+    // is in all three bases.
+    const statutoryBasis = Math.max(
+      0,
+      basePay - unpaidDeduction + perfAllowance + phPremiumAmount + dayPay.restDayAmount
+        + recurringStatBasis - recurringPreTaxDeduct,
+    );
     const ytd = ytdByUser.get(profile.user_id) || { gross: 0, pcb: 0 };
     const employeeReliefs = reliefsByUser.get(profile.user_id);
     const stat = await calcAllStatutory({
@@ -974,6 +1083,20 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         // doesn't re-inflate NEXT month's projected annual income either.
         pcb_gross: pcbGross,
         hourly_rate: Math.round(hourlyRate * 100) / 100,
+        // Public-holiday normal-hours premium (EA s.60D) — paid inside the 2×
+        // line; broken out here so the run page and payslip can label it
+        // "Public holiday" instead of burying it under "OT 2x (Rest)".
+        ot_hours_1x: Math.round(otHours1x * 100) / 100,
+        ot_hours_1_5x: Math.round(otHours15x * 100) / 100,
+        ot_hours_2x: Math.round(otHours2x * 100) / 100,
+        ot_hours_3x: Math.round(otHours3x * 100) / 100,
+        ph_premium_hours: phPremiumHours,
+        ph_premium_amount: phPremiumAmount,
+        ph_days_worked: dayPay.publicHolidayDays,
+        rest_day_days_worked: dayPay.restDayDays,
+        rest_day_pay_amount: dayPay.restDayAmount,
+        // Pay basis used for EPF/SOCSO/EIS, for audit against the payslip.
+        statutory_basis: statutoryBasis,
         employment_type: profile.employment_type,
         unpaid_days: unpaidDays,
         attendance_records: userAttendance.length,

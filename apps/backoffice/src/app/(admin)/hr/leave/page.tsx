@@ -2,28 +2,38 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { CalendarOff, CheckCircle2, XCircle, Loader2, Bot } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Bot } from "lucide-react";
+import { toast } from "@celsius/ui";
 import { HrPageHeader } from "@/components/hr/page-header";
 import type { LeaveRequest } from "@/lib/hr/types";
 
 type EnrichedLeaveRequest = LeaveRequest & { user_name?: string | null; outlet_name?: string | null };
 
 export default function LeaveReviewPage() {
-  const [filter, setFilter] = useState("all");
-  const { data, mutate } = useFetch<{ requests: EnrichedLeaveRequest[] }>(`/api/hr/leave?status=${filter}`);
+  // Open the page on what needs a decision. "All" buried the two August 2026
+  // sick-leave requests that the AI never processed among a month of history.
+  const [filter, setFilter] = useState("needs_review");
+  const { data, mutate } = useFetch<{ requests: EnrichedLeaveRequest[] }>(`/api/hr/leave?status=${filter === "needs_review" ? "all" : filter}`);
   const [actioning, setActioning] = useState<string | null>(null);
 
-  const requests = data?.requests || [];
+  const requests = (data?.requests || []).filter((r) =>
+    filter === "needs_review" ? r.status === "pending" || r.status === "ai_escalated" : true,
+  );
 
   const handleAction = async (id: string, action: "approve" | "reject") => {
     setActioning(id);
     try {
-      await fetch("/api/hr/leave", {
+      const res = await fetch("/api/hr/leave", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, action }),
       });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) { toast.error(j?.error ?? `Failed (${res.status}) — nothing was changed.`); return; }
+      toast.success(action === "approve" ? "Leave approved" : "Leave rejected");
       mutate();
+    } catch {
+      toast.error("Network error — nothing was changed.");
     } finally {
       setActioning(null);
     }
@@ -40,6 +50,7 @@ export default function LeaveReviewPage() {
             onChange={(e) => setFilter(e.target.value)}
             className="rounded-lg border bg-background px-3 py-2 text-sm"
           >
+            <option value="needs_review">Needs review</option>
             <option value="all">All</option>
             <option value="ai_escalated">Escalated (need review)</option>
             <option value="pending">Pending</option>

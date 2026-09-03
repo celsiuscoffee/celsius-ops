@@ -1,122 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { generateOtRequests, syncWindow } from "@/lib/hr/ot-request-generator";
 
 export const dynamic = "force-dynamic";
 
-// Scans attendance logs for the current month with overtime_hours >= 1 and
-// creates pending post_hoc OT requests for any that don't already have one.
-// Manager then reviews them via the standard OT request flow.
-// FULL-TIMERS ONLY (owner policy 2026-07-28): part-timers are paid flat
-// hourly on the weekly cycle — extra PT hours are handled via the roster,
-// not OT, so generating PT requests just floods the approval queue.
+// Files PENDING post_hoc OT requests for every full-timer (person, day) whose
+// clocked OT — the bracketed tail outside the rostered window, plus any
+// threshold OT on the row — reaches 0.5h and has no request yet. The manager
+// decides them in the OT queue (or, per owner 2026-09-03, by confirming the
+// log on the attendance screen, which approves the tail directly).
+//
+// Until 2026-09-03 this selected logs by `overtime_hours >= 1`. That was the
+// pre-paid-window signal and went ~permanently 0 on 13 Aug, so the queue
+// silently emptied while managers thought attendance approval had paid the
+// OT. See lib/hr/ot-request-generator.ts.
+//
+// FULL-TIMERS ONLY (owner policy 2026-07-28): part-timers are paid flat hourly
+// on the weekly cycle — extra PT hours are handled via the roster.
+//
+// Scans the current month AND the previous one while it is still being paid
+// (≤ 10th). POST accepts { month: "YYYY-MM" } to target one month explicitly.
 //   POST — admin UI trigger (session-authed)
 //   GET  — Vercel Cron trigger (Bearer CRON_SECRET)
-async function runSync(actorUserId: string) {
-  const now = new Date();
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const monthEnd = nextMonth.toISOString().slice(0, 10);
-
-  // All attendance logs in the month with OT >= 1 hour
-  const { data: logs } = await hrSupabaseAdmin
-    .from("hr_attendance_logs")
-    .select("id, user_id, outlet_id, clock_in, overtime_hours, overtime_type")
-    .gte("clock_in", `${monthStart}T00:00:00Z`)
-    .lt("clock_in", `${monthEnd}T00:00:00Z`)
-    .gte("overtime_hours", 1);
-
-  if (!logs || logs.length === 0) {
-    return NextResponse.json({ ok: true, created: 0 });
+async function runSync(actorUserId: string, month?: string | null) {
+  const win = syncWindow(new Date(), month);
+  try {
+    const r = await generateOtRequests({ start: win.start, end: win.end, mode: "pending", actorUserId });
+    return NextResponse.json({ ok: true, created: r.created, hours: r.hours, months: win.months });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
-
-  // OT is FT-only — drop logs belonging to part-time/contract staff.
-  const logUserIds = Array.from(new Set(logs.map((l) => l.user_id)));
-  const { data: ftProfiles } = await hrSupabaseAdmin
-    .from("hr_employee_profiles")
-    .select("user_id")
-    .in("user_id", logUserIds)
-    .eq("employment_type", "full_time");
-  const ftIds = new Set((ftProfiles || []).map((p) => p.user_id));
-  const ftLogs = logs.filter((l) => ftIds.has(l.user_id));
-  if (ftLogs.length === 0) {
-    return NextResponse.json({ ok: true, created: 0 });
-  }
-
-  // Existing OT requests in the month so we don't duplicate.
-  // Keyed by "user_id|date" — one request per staff per day max.
-  const { data: existing } = await hrSupabaseAdmin
-    .from("hr_overtime_requests")
-    .select("user_id, date")
-    .gte("date", monthStart)
-    .lt("date", monthEnd);
-  const existingKeys = new Set((existing || []).map((r) => `${r.user_id}|${r.date}`));
-
-  // MYT date conversion (clock_in is UTC timestamptz)
-  const toMytDate = (iso: string) => new Date(new Date(iso).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
-
-  // Map attendance overtime_type → hr_overtime_requests.ot_type (different enums)
-  const mapOtType = (raw: string | null | undefined): string => {
-    switch (raw) {
-      case "ot_1x":
-      case "rest_day_1x":
-        return "1x";
-      case "ot_2x":
-        return "2x";
-      case "ot_3x":
-      case "ph_2x":
-        return "3x";
-      case "rest_day":
-        return "rest_day";
-      case "public_holiday":
-        return "public_holiday";
-      case "ot_1_5x":
-      default:
-        return "1.5x";
-    }
-  };
-
-  // Aggregate per user per date (sum OT hours)
-  const agg = new Map<string, { user_id: string; outlet_id: string | null; date: string; hours: number; ot_type: string }>();
-  for (const l of ftLogs) {
-    const date = toMytDate(l.clock_in);
-    const key = `${l.user_id}|${date}`;
-    if (existingKeys.has(key)) continue;
-    const row = agg.get(key) || {
-      user_id: l.user_id,
-      outlet_id: l.outlet_id,
-      date,
-      hours: 0,
-      ot_type: mapOtType(l.overtime_type),
-    };
-    row.hours += Number(l.overtime_hours) || 0;
-    agg.set(key, row);
-  }
-
-  if (agg.size === 0) {
-    return NextResponse.json({ ok: true, created: 0 });
-  }
-
-  // Policy: OT hours always floor to the previous whole number (1.9h → 1h).
-  // Skip entries that floor to 0 — no point creating a request for <1h.
-  const inserts = Array.from(agg.values())
-    .map((a) => ({
-      user_id: a.user_id,
-      outlet_id: a.outlet_id,
-      date: a.date,
-      request_type: "post_hoc" as const,
-      hours_requested: Math.floor(a.hours),
-      ot_type: a.ot_type,
-      reason: "Auto-created from attendance log (OT detected)",
-      status: "pending" as const,
-      requested_by: actorUserId,
-    }))
-    .filter((i) => i.hours_requested >= 1);
-
-  const { error } = await hrSupabaseAdmin.from("hr_overtime_requests").insert(inserts);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json({ ok: true, created: inserts.length });
 }
 
 // Vercel Cron — Bearer CRON_SECRET
@@ -129,10 +42,12 @@ export async function GET(req: NextRequest) {
 }
 
 // Manual admin trigger from UI
-export async function POST() {
+export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return runSync(session.id);
+  const body = await req.json().catch(() => ({}));
+  const month = typeof body?.month === "string" ? body.month : null;
+  return runSync(session.id, month);
 }
