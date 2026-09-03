@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generatePayrollByOutlet, type EmployeeRow } from "./files";
+import { generatePayrollByOutlet, allocateByShares, type EmployeeRow } from "./files";
 
 // The by-outlet file is what finance uses to recharge each outlet its labour
 // cost, so the one property that matters is that it reconciles: every subtotal
@@ -15,6 +15,8 @@ function emp(over: Partial<EmployeeRow> & { name: string }): EmployeeRow {
 }
 
 const run = { period_month: 8, period_year: 2026 };
+// columns: 0 Outlet, 1 Employee, 2 Share, 3 Basic, 4 Gross, 5 EPF, 6 SOCSO, 7 EIS, 8 Contrib, 9 Cost, 10 Net
+const col = (line: string, i: number) => line.split(",")[i];
 
 describe("generatePayrollByOutlet", () => {
   it("groups by outlet A→Z with HQ last, and every subtotal + grand total reconciles", () => {
@@ -33,29 +35,64 @@ describe("generatePayrollByOutlet", () => {
     expect(out.summary.count).toBe(4);
 
     // Order: Putrajaya, Tamarind, then HQ last. Each outlet block ends in a SUBTOTAL row.
-    const outletCol = lines.slice(1).map((l) => l.split(",")[0]);
-    expect(outletCol[0]).toBe("Putrajaya");
-    expect(lines[2].split(",")[1]).toContain("SUBTOTAL — Putrajaya");
-    expect(outletCol[3]).toBe("Tamarind"); // Bob (A→Z within the outlet)
-    expect(lines[3].split(",")[1]).toBe("Bob");
-    expect(lines[4].split(",")[1]).toBe("Zed");
-    expect(lines[5].split(",")[1]).toContain("SUBTOTAL — Tamarind (2 staff)");
-    expect(lines[6].split(",")[0]).toBe("HQ / unassigned");
+    expect(col(lines[1], 0)).toBe("Putrajaya");
+    expect(col(lines[2], 1)).toContain("SUBTOTAL — Putrajaya");
+    expect(col(lines[3], 0)).toBe("Tamarind");
+    expect(col(lines[3], 1)).toBe("Bob"); // A→Z within the outlet
+    expect(col(lines[4], 1)).toBe("Zed");
+    expect(col(lines[5], 1)).toContain("SUBTOTAL — Tamarind (2 lines)");
+    expect(col(lines[6], 0)).toBe("HQ / unassigned");
 
     // Tamarind subtotal = Zed + Bob, cost = gross + employer contribs.
-    const tam = lines[5].split(",");
-    // columns: Outlet,Employee,Basic,Gross,EPF,SOCSO,EIS,Contrib,Cost,Net
-    expect(tam[3]).toBe((2000 + 1800).toFixed(2));
-    expect(tam[7]).toBe((260 + 30 + 4 + 234 + 27 + 3.6).toFixed(2));
-    expect(tam[8]).toBe((2000 + 1800 + 260 + 30 + 4 + 234 + 27 + 3.6).toFixed(2));
-    expect(tam[9]).toBe((1750 + 1600).toFixed(2));
+    const tam = lines[5];
+    expect(col(tam, 4)).toBe((2000 + 1800).toFixed(2));
+    expect(col(tam, 8)).toBe((260 + 30 + 4 + 234 + 27 + 3.6).toFixed(2));
+    expect(col(tam, 9)).toBe((2000 + 1800 + 260 + 30 + 4 + 234 + 27 + 3.6).toFixed(2));
+    expect(col(tam, 10)).toBe((1750 + 1600).toFixed(2));
 
     // Grand total = sum of all four people, and matches the summary.
-    const total = lines[lines.length - 1].split(",");
-    expect(total[1]).toBe("TOTAL (4 staff)");
+    const total = lines[lines.length - 1];
+    expect(col(total, 1)).toBe("TOTAL (4 staff)");
     const cost = 2000 + 294 + 2436.15 + 320.75 + 1800 + 264.6 + 10600 + 1437;
-    expect(total[8]).toBe(cost.toFixed(2));
+    expect(col(total, 9)).toBe(cost.toFixed(2));
     expect(out.summary.total).toBe(Math.round(cost * 100) / 100);
+  });
+
+  it("splits a rotating staffer across outlets pro rata by shifts, to the cent (Syafiq, Aug 2026: 7/5/3)", () => {
+    // Owner 2026-09-03: "for syafiq payroll, it should be divided based on the
+    // shifts work in each outlet". Amounts from the August run.
+    const syafiq = emp({
+      name: "Syafiq Kaberi", outlet: null,
+      wage: 3166.67, gross: 3344.87, epfEmployer: 435, socsoEmployer: 58.55, eisEmployer: 6.7, netPay: 2896.12,
+      outletShares: [
+        { outlet: "Shah Alam", shifts: 7 },
+        { outlet: "Putrajaya", shifts: 5 },
+        { outlet: "Tamarind", shifts: 3 },
+      ],
+    });
+    const out = generatePayrollByOutlet(run, [syafiq]);
+    const lines = out.content.trim().split("\n");
+    const rows = lines.filter((l) => col(l, 1) === "Syafiq Kaberi");
+    expect(rows).toHaveLength(3);
+    expect(rows.map((l) => col(l, 2))).toEqual(["5/15 shifts", "7/15 shifts", "3/15 shifts"]); // Putrajaya, Shah Alam, Tamarind (A→Z)
+
+    // The three portions sum EXACTLY to the person's totals.
+    const sum = (i: number) => Math.round(rows.reduce((s, l) => s + Number(col(l, i)), 0) * 100) / 100;
+    expect(sum(3)).toBe(3166.67);
+    expect(sum(4)).toBe(3344.87);
+    expect(sum(5)).toBe(435);
+    expect(sum(6)).toBe(58.55);
+    expect(sum(7)).toBe(6.7);
+    expect(sum(10)).toBe(2896.12);
+    // Shah Alam carries 7/15 of gross: floors are 1560.93 + 1114.95 + 668.97 = 3344.85,
+    // and the 2 leftover cents land on the largest share → 1560.95.
+    const sa = rows.find((l) => col(l, 0) === "Shah Alam")!;
+    expect(Number(col(sa, 4))).toBeCloseTo(1560.95, 2);
+
+    // He is ONE person in the grand total, not three.
+    expect(col(lines[lines.length - 1], 1)).toBe("TOTAL (1 staff)");
+    expect(out.summary.count).toBe(1);
+    expect(out.summary.total).toBe(Math.round((3344.87 + 435 + 58.55 + 6.7) * 100) / 100);
   });
 
   it("escapes commas/quotes in names so the CSV stays rectangular", () => {
@@ -64,5 +101,18 @@ describe("generatePayrollByOutlet", () => {
     ]);
     const row = out.content.split("\n")[1];
     expect(row.startsWith('Shah Alam,"Ali, ""The"" Bin Abu",')).toBe(true);
+  });
+});
+
+describe("allocateByShares", () => {
+  it("parts always sum to the whole; the rounding cent lands on the largest share", () => {
+    const parts = allocateByShares(100, [1, 1, 1]);
+    expect(parts.reduce((s, x) => s + x, 0)).toBeCloseTo(100, 10);
+    expect(parts).toEqual([33.34, 33.33, 33.33]);
+  });
+
+  it("zero / empty shares allocate nothing", () => {
+    expect(allocateByShares(100, [])).toEqual([]);
+    expect(allocateByShares(100, [0, 0])).toEqual([0, 0]);
   });
 });
