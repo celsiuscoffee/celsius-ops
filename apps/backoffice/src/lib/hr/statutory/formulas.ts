@@ -21,6 +21,32 @@ export function epfBracket(wage: number): number {
   return Math.ceil(wage / step) * step;
 }
 
+/**
+ * Whether a per-profile EPF employer rate is a HUMAN override or the column's
+ * legacy default. hr_employee_profiles.epf_employer_rate carried DEFAULT 12,
+ * so every profile ever created read 12.00 — and the calculator treated any
+ * non-null value as an override, which silently paid 12% employer EPF on
+ * wages ≤ RM5,000 where KWSP's Third Schedule says 13% (RM22/month per
+ * RM2,200 staffer; July 2026 was confirmed that way). Until the migration
+ * that drops the default and nulls those rows is applied, a profile rate
+ * equal to the schedule's ABOVE-5,000 rate on a wage that is NOT above 5,000
+ * is treated as the default, not a choice. A genuine override (any other
+ * value, or a rate on a wage the schedule already prices at that rate) is
+ * honoured unchanged.
+ */
+export function resolveEpfEmployerOverride(args: {
+  profileRate: number | null | undefined;
+  wage: number;
+  scheduleBelow5000: number;
+  scheduleAbove5000: number;
+}): number | undefined {
+  const r = args.profileRate;
+  if (r == null || !Number.isFinite(Number(r)) || Number(r) <= 0) return undefined;
+  const rate = Number(r);
+  if (args.wage <= 5000 && rate === args.scheduleAbove5000 && rate < args.scheduleBelow5000) return undefined;
+  return rate;
+}
+
 export function epfContribution(args: {
   wage: number;
   employeeRate: number;            // %

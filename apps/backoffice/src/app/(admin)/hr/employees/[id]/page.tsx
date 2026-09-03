@@ -286,8 +286,8 @@ export default function EmployeeDetailPage() {
     socso_number: "",
     eis_number: "",
     tax_number: "",
-    epf_employee_rate: "11",
-    epf_employer_rate: "12",
+    epf_employee_rate: "",
+    epf_employer_rate: "",
     emergency_contact_name: "",
     emergency_contact_phone: "",
     notes: "",
@@ -469,8 +469,8 @@ export default function EmployeeDetailPage() {
         socso_number: profile.socso_number || "",
         eis_number: profile.eis_number || "",
         tax_number: profile.tax_number || "",
-        epf_employee_rate: profile.epf_employee_rate?.toString() || "11",
-        epf_employer_rate: profile.epf_employer_rate?.toString() || "12",
+        epf_employee_rate: profile.epf_employee_rate?.toString() ?? "",
+        epf_employer_rate: profile.epf_employer_rate?.toString() ?? "",
         emergency_contact_name: profile.emergency_contact_name || "",
         emergency_contact_phone: profile.emergency_contact_phone || "",
         notes: profile.notes || "",
@@ -504,8 +504,11 @@ export default function EmployeeDetailPage() {
         user_id: id,
         ...form,
         manager_user_id: form.manager_user_id || null,
-        epf_employee_rate: parseFloat(form.epf_employee_rate) || 11,
-        epf_employer_rate: parseFloat(form.epf_employer_rate) || 12,
+        // Blank = statutory schedule (NULL). The old fallback wrote 11/12 on
+        // every save, which the calculator honoured as an override — 12%
+        // employer EPF on wages the schedule prices at 13%.
+        epf_employee_rate: form.epf_employee_rate.trim() === "" ? null : parseFloat(form.epf_employee_rate),
+        epf_employer_rate: form.epf_employer_rate.trim() === "" ? null : parseFloat(form.epf_employer_rate),
         join_date: form.join_date || new Date().toISOString().slice(0, 10),
         date_of_birth: form.date_of_birth || null,
         // New statutory overrides
@@ -1069,10 +1072,10 @@ export default function EmployeeDetailPage() {
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="EPF Employee %">
-                <input type="number" value={form.epf_employee_rate} onChange={(e) => update("epf_employee_rate", e.target.value)} className="input" />
+                <input type="number" value={form.epf_employee_rate} onChange={(e) => update("epf_employee_rate", e.target.value)} className="input" placeholder="Statutory (11%)" />
               </Field>
               <Field label="EPF Employer %">
-                <input type="number" value={form.epf_employer_rate} onChange={(e) => update("epf_employer_rate", e.target.value)} className="input" />
+                <input type="number" value={form.epf_employer_rate} onChange={(e) => update("epf_employer_rate", e.target.value)} className="input" placeholder="Statutory (13% ≤ RM5k, 12% above)" />
               </Field>
             </div>
             <Field label="EPF Contribution Type">
