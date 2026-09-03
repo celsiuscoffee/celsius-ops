@@ -381,6 +381,13 @@ export default function PayrollPage() {
                     >
                       <FileSpreadsheet className="h-3 w-3" /> HRDF
                     </button>
+                    <button
+                      onClick={() => downloadFile(`/api/hr/payroll/submission-files?run_id=${run.id}&type=by_outlet`)}
+                      className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                      title="Per-outlet cost (gross + employer contributions) with subtotals — what each outlet owes HQ"
+                    >
+                      <FileSpreadsheet className="h-3 w-3" /> By outlet (CSV)
+                    </button>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">

@@ -159,7 +159,7 @@ export default function PayslipsPage() {
                       <>
                         {Number(slip.ot_1x_amount) > 0 && <Row label="OT 1x" value={fmt(slip.ot_1x_amount)} />}
                         {Number(slip.ot_1_5x_amount) > 0 && <Row label="OT 1.5x" value={fmt(slip.ot_1_5x_amount)} />}
-                        {Number(slip.ot_2x_amount) > 0 && <Row label="OT 2x (Rest Day)" value={fmt(slip.ot_2x_amount)} />}
+                        {Number(slip.ot_2x_amount) > 0 && <Row label="OT 2x (Rest Day / PH)" value={fmt(slip.ot_2x_amount)} />}
                         {Number(slip.ot_3x_amount) > 0 && <Row label="OT 3x (PH)" value={fmt(slip.ot_3x_amount)} />}
                       </>
                     )}

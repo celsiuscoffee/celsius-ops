@@ -24,6 +24,9 @@ export type EmployeeRow = {
   zakat?: number;
   netPay: number;
   gross: number;
+  // Home outlet (display name) — drives the by-outlet finance export. Null for
+  // HQ / unassigned staff.
+  outlet?: string | null;
 };
 
 export type CompanySettings = {
@@ -95,6 +98,76 @@ export function generateMaybankM2uBiz(
     filename: `MAYBANK_PAYROLL_${run.period_year}${String(run.period_month).padStart(2, "0")}.txt`,
     mime: "text/plain",
     summary: { count: records.length, total, skipped },
+  };
+}
+
+// ─── Payroll by outlet (finance reconciliation CSV) ─────────────
+// HQ pays every salary centrally, then recharges each outlet its own labour
+// cost. This file is what finance filters to see what an outlet owes HQ
+// (owner 2026-09-03: "similar with part-timer" — the PT bank file carries an
+// Outlet column for the same reason). It is NOT a bank upload: the Maybank
+// file above is a fixed pipe spec, so the outlet split lives here instead.
+//
+// One row per employee, grouped by home outlet, with a subtotal row per
+// outlet and a grand total. "Total cost" = gross + employer EPF/SOCSO/EIS —
+// the true amount the outlet owes, not just the net that hits the bank.
+export function generatePayrollByOutlet(
+  run: { period_month: number; period_year: number },
+  employees: EmployeeRow[],
+): { content: string; filename: string; mime: string; summary: { outlets: number; count: number; total: number } } {
+  const esc = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+  const rm = (n: number) => n.toFixed(2);
+  const HQ = "HQ / unassigned";
+
+  // Group by outlet, keeping a stable A→Z order with HQ last.
+  const groups = new Map<string, EmployeeRow[]>();
+  for (const e of employees) {
+    const key = (e.outlet || "").trim() || HQ;
+    const list = groups.get(key);
+    if (list) list.push(e); else groups.set(key, [e]);
+  }
+  const outletNames = [...groups.keys()].sort((a, b) =>
+    a === HQ ? 1 : b === HQ ? -1 : a.localeCompare(b),
+  );
+
+  const rows: string[] = [
+    "Outlet,Employee,Basic,Gross,EPF (employer),SOCSO (employer),EIS (employer),Employer contributions,Total cost,Net pay",
+  ];
+  let grand = { gross: 0, contrib: 0, cost: 0, net: 0, count: 0 };
+  for (const outlet of outletNames) {
+    const list = groups.get(outlet)!;
+    list.sort((a, b) => (a.fullName || a.name).localeCompare(b.fullName || b.name));
+    const sub = { gross: 0, contrib: 0, cost: 0, net: 0 };
+    for (const e of list) {
+      const contrib = e.epfEmployer + e.socsoEmployer + e.eisEmployer;
+      const cost = e.gross + contrib;
+      rows.push([
+        esc(outlet), esc(e.fullName || e.name), rm(e.wage), rm(e.gross),
+        rm(e.epfEmployer), rm(e.socsoEmployer), rm(e.eisEmployer),
+        rm(contrib), rm(cost), rm(e.netPay),
+      ].join(","));
+      sub.gross += e.gross; sub.contrib += contrib; sub.cost += cost; sub.net += e.netPay;
+    }
+    rows.push([
+      esc(outlet), esc(`SUBTOTAL — ${outlet} (${list.length} staff)`), "", rm(sub.gross),
+      "", "", "", rm(sub.contrib), rm(sub.cost), rm(sub.net),
+    ].join(","));
+    grand = {
+      gross: grand.gross + sub.gross, contrib: grand.contrib + sub.contrib,
+      cost: grand.cost + sub.cost, net: grand.net + sub.net, count: grand.count + list.length,
+    };
+  }
+  rows.push([
+    "", esc(`TOTAL (${grand.count} staff)`), "", rm(grand.gross),
+    "", "", "", rm(grand.contrib), rm(grand.cost), rm(grand.net),
+  ].join(","));
+
+  const ym = `${run.period_year}${String(run.period_month).padStart(2, "0")}`;
+  return {
+    content: rows.join("\n") + "\n",
+    filename: `PAYROLL_BY_OUTLET_${ym}.csv`,
+    mime: "text/csv",
+    summary: { outlets: outletNames.length, count: grand.count, total: Math.round(grand.cost * 100) / 100 },
   };
 }
 
