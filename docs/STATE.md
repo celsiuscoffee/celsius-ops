@@ -2456,7 +2456,7 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 ## Resume pointer
 
 - 2026-09-02 — **August COGS + bank recon session closed.** PR #1207
-  (menu_margins v2, migration 108 already applied to prod) is green +
+  (menu_margins v2, migration 109 already applied to prod) is green +
   watched — merge when ready. Owner-side follow-ups queued: recover
   RM2,533.50 from Collective Project (IV-01987 double balance), chase
   Unique Paper INU-26-23275 (RM639.28 marked paid, no debit), the Ariff
