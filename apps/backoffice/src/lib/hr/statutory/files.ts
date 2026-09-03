@@ -27,7 +27,29 @@ export type EmployeeRow = {
   // Home outlet (display name) — drives the by-outlet finance export. Null for
   // HQ / unassigned staff.
   outlet?: string | null;
+  // Rotating / multi-outlet staff (owner 2026-09-03, Syafiq: "divided based
+  // on the shifts work in each outlet"): the shifts worked per outlet in the
+  // pay period. When present and non-empty the by-outlet export ALLOCATES the
+  // employee's cost across these outlets pro rata by shifts instead of
+  // charging the home outlet; the home outlet is ignored.
+  outletShares?: Array<{ outlet: string; shifts: number }>;
 };
+
+/**
+ * Split an amount across shares to the cent so the parts sum EXACTLY to the
+ * whole — the rounding remainder lands on the largest share. Pure; pinned by
+ * payroll-by-outlet.test.ts.
+ */
+export function allocateByShares(amount: number, shares: number[]): number[] {
+  const total = shares.reduce((s, x) => s + Math.max(0, x), 0);
+  if (shares.length === 0 || total <= 0) return shares.map(() => 0);
+  const cents = Math.round(amount * 100);
+  const parts = shares.map((s) => Math.floor((cents * Math.max(0, s)) / total));
+  const remainder = cents - parts.reduce((s, x) => s + x, 0);
+  const largest = shares.indexOf(Math.max(...shares));
+  parts[largest] += remainder;
+  return parts.map((c) => c / 100);
+}
 
 export type CompanySettings = {
   companyName: string;
@@ -108,9 +130,15 @@ export function generateMaybankM2uBiz(
 // Outlet column for the same reason). It is NOT a bank upload: the Maybank
 // file above is a fixed pipe spec, so the outlet split lives here instead.
 //
-// One row per employee, grouped by home outlet, with a subtotal row per
+// One row per employee per outlet, grouped by outlet, with a subtotal row per
 // outlet and a grand total. "Total cost" = gross + employer EPF/SOCSO/EIS —
 // the true amount the outlet owes, not just the net that hits the bank.
+//
+// Rotating staff (EmployeeRow.outletShares) are SPLIT across the outlets
+// they worked in, pro rata by shifts, to the cent (allocateByShares): Syafiq
+// in August 2026 worked 7 Shah Alam / 5 Putrajaya / 3 Tamarind shifts, so
+// each outlet is charged 7/15, 5/15, 3/15 of his cost. A "Share" column
+// records the basis; the grand total counts each person once.
 export function generatePayrollByOutlet(
   run: { period_month: number; period_year: number },
   employees: EmployeeRow[],
@@ -119,47 +147,79 @@ export function generatePayrollByOutlet(
   const rm = (n: number) => n.toFixed(2);
   const HQ = "HQ / unassigned";
 
-  // Group by outlet, keeping a stable A→Z order with HQ last.
-  const groups = new Map<string, EmployeeRow[]>();
+  // Explode each employee into (outlet, portion) lines. A portion is the
+  // employee's amounts scaled to that outlet's share of their shifts; an
+  // unsplit employee is one portion at 100% on their home outlet.
+  type Portion = {
+    name: string; share: string;
+    wage: number; gross: number; epfEmployee: number; epfEmployer: number; socsoEmployer: number; eisEmployer: number; netPay: number;
+  };
+  const groups = new Map<string, Portion[]>();
+  const push = (outlet: string, p: Portion) => {
+    const list = groups.get(outlet);
+    if (list) list.push(p); else groups.set(outlet, [p]);
+  };
   for (const e of employees) {
-    const key = (e.outlet || "").trim() || HQ;
-    const list = groups.get(key);
-    if (list) list.push(e); else groups.set(key, [e]);
+    const name = e.fullName || e.name;
+    const shares = (e.outletShares || []).filter((s) => s.shifts > 0 && (s.outlet || "").trim());
+    if (shares.length === 0) {
+      push((e.outlet || "").trim() || HQ, {
+        name, share: "",
+        wage: e.wage, gross: e.gross, epfEmployee: e.epfEmployee, epfEmployer: e.epfEmployer, socsoEmployer: e.socsoEmployer,
+        eisEmployer: e.eisEmployer, netPay: e.netPay,
+      });
+      continue;
+    }
+    const totalShifts = shares.reduce((s, x) => s + x.shifts, 0);
+    const weights = shares.map((s) => s.shifts);
+    const wage = allocateByShares(e.wage, weights);
+    const gross = allocateByShares(e.gross, weights);
+    const epfEe = allocateByShares(e.epfEmployee, weights);
+    const epf = allocateByShares(e.epfEmployer, weights);
+    const socso = allocateByShares(e.socsoEmployer, weights);
+    const eis = allocateByShares(e.eisEmployer, weights);
+    const net = allocateByShares(e.netPay, weights);
+    shares.forEach((s, i) => {
+      push(s.outlet.trim(), {
+        name, share: `${s.shifts}/${totalShifts} shifts`,
+        wage: wage[i], gross: gross[i], epfEmployee: epfEe[i], epfEmployer: epf[i], socsoEmployer: socso[i], eisEmployer: eis[i], netPay: net[i],
+      });
+    });
   }
   const outletNames = [...groups.keys()].sort((a, b) =>
     a === HQ ? 1 : b === HQ ? -1 : a.localeCompare(b),
   );
 
   const rows: string[] = [
-    "Outlet,Employee,Basic,Gross,EPF (employer),SOCSO (employer),EIS (employer),Employer contributions,Total cost,Net pay",
+    "Outlet,Employee,Share,Basic,Gross,EPF (employee),EPF (employer),SOCSO (employer),EIS (employer),Employer contributions,Total cost,Net pay",
   ];
-  let grand = { gross: 0, contrib: 0, cost: 0, net: 0, count: 0 };
+  let grand = { gross: 0, epfEmployee: 0, contrib: 0, cost: 0, net: 0 };
   for (const outlet of outletNames) {
     const list = groups.get(outlet)!;
-    list.sort((a, b) => (a.fullName || a.name).localeCompare(b.fullName || b.name));
-    const sub = { gross: 0, contrib: 0, cost: 0, net: 0 };
-    for (const e of list) {
-      const contrib = e.epfEmployer + e.socsoEmployer + e.eisEmployer;
-      const cost = e.gross + contrib;
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    const sub = { gross: 0, epfEmployee: 0, contrib: 0, cost: 0, net: 0 };
+    for (const p of list) {
+      const contrib = Math.round((p.epfEmployer + p.socsoEmployer + p.eisEmployer) * 100) / 100;
+      const cost = Math.round((p.gross + contrib) * 100) / 100;
       rows.push([
-        esc(outlet), esc(e.fullName || e.name), rm(e.wage), rm(e.gross),
-        rm(e.epfEmployer), rm(e.socsoEmployer), rm(e.eisEmployer),
-        rm(contrib), rm(cost), rm(e.netPay),
+        esc(outlet), esc(p.name), esc(p.share), rm(p.wage), rm(p.gross),
+        rm(p.epfEmployee), rm(p.epfEmployer), rm(p.socsoEmployer), rm(p.eisEmployer),
+        rm(contrib), rm(cost), rm(p.netPay),
       ].join(","));
-      sub.gross += e.gross; sub.contrib += contrib; sub.cost += cost; sub.net += e.netPay;
+      sub.gross += p.gross; sub.epfEmployee += p.epfEmployee; sub.contrib += contrib; sub.cost += cost; sub.net += p.netPay;
     }
     rows.push([
-      esc(outlet), esc(`SUBTOTAL — ${outlet} (${list.length} staff)`), "", rm(sub.gross),
-      "", "", "", rm(sub.contrib), rm(sub.cost), rm(sub.net),
+      esc(outlet), esc(`SUBTOTAL — ${outlet} (${list.length} line${list.length === 1 ? "" : "s"})`), "", "", rm(sub.gross),
+      rm(sub.epfEmployee), "", "", "", rm(sub.contrib), rm(sub.cost), rm(sub.net),
     ].join(","));
     grand = {
-      gross: grand.gross + sub.gross, contrib: grand.contrib + sub.contrib,
-      cost: grand.cost + sub.cost, net: grand.net + sub.net, count: grand.count + list.length,
+      gross: grand.gross + sub.gross, epfEmployee: grand.epfEmployee + sub.epfEmployee,
+      contrib: grand.contrib + sub.contrib, cost: grand.cost + sub.cost, net: grand.net + sub.net,
     };
   }
   rows.push([
-    "", esc(`TOTAL (${grand.count} staff)`), "", rm(grand.gross),
-    "", "", "", rm(grand.contrib), rm(grand.cost), rm(grand.net),
+    "", esc(`TOTAL (${employees.length} staff)`), "", "", rm(grand.gross),
+    rm(grand.epfEmployee), "", "", "", rm(grand.contrib), rm(grand.cost), rm(grand.net),
   ].join(","));
 
   const ym = `${run.period_year}${String(run.period_month).padStart(2, "0")}`;
@@ -167,7 +227,7 @@ export function generatePayrollByOutlet(
     content: rows.join("\n") + "\n",
     filename: `PAYROLL_BY_OUTLET_${ym}.csv`,
     mime: "text/csv",
-    summary: { outlets: outletNames.length, count: grand.count, total: Math.round(grand.cost * 100) / 100 },
+    summary: { outlets: outletNames.length, count: employees.length, total: Math.round(grand.cost * 100) / 100 },
   };
 }
 
