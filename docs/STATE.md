@@ -11,6 +11,24 @@ current month.
 
 ## Verified facts
 
+- 2026-09-03 — **Inventory → Reports rewired to live sales.** COGS Report and
+  Usage Variance read `SalesTransaction` (StoreHub feed, dead since
+  2026-04-11) so they showed zero sales for five months. Both now read the
+  POS-native + customer-app tables per LINE through
+  `lib/inventory/report-sales.ts` (Menu.storehubId → name fallback, the
+  consumption engine's mapping) and expand each line with `expandSoldLine`
+  (Iced/Hot doses, Oatmilk substitution, Extra Shot) plus PackagingRule
+  application by real channel (dine-in / takeaway / Grab, per-item and
+  per-order bags). Cost basis = catalog BOM page (cheapest active non-ADHOC
+  price ÷ cf). The 50% takeaway blend is gone. Response shapes unchanged;
+  COGS summary gained unmappedQty/unmappedRevenue/menusWithoutRecipe/
+  perOrderPackagingCogs. Stock Valuation, Purchase Summary, Wastage read live
+  tables and were fine. Supplier Scorecard is wired but data-starved:
+  `PriceHistory` has 0 rows (write path exists in the two price-edit routes;
+  catalog prices have only ever been changed by SQL) and on-time needs
+  Receiving rows. Deliberately NOT backfilled from PO line prices — dry run
+  gave 431 "changes" averaging a 376% swing, i.e. the package mis-keying, not
+  price moves.
 - 2026-09-02 — **August COGS closed: chain ran ON-RECIPE (~34% of gross incl.
   discounts; expected RM109.8k vs actual ~RM110.3k).** Canonical expected =
   the catalog BOM page engine (`/api/inventory/menus`: cheapest active
