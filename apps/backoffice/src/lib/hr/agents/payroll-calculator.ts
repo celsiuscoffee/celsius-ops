@@ -199,6 +199,14 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       skippedUsers.set(p.user_id, `resigned ${resignDate}`);
       continue;
     }
+    // Joined AFTER this cycle ended → not employed during it, so no line at
+    // all. Without this, a 1-Sept hire computed into the August run at a full
+    // month's salary (Deverasa & Darshika, 2026-09-03) — the proration only
+    // clips the START of a partial month, it never zeroes a future joiner.
+    if (p.join_date && p.join_date > cycleEndStr) {
+      skippedUsers.set(p.user_id, `joined ${p.join_date} (after this cycle)`);
+      continue;
+    }
     // Monthly cycle is for FULL-TIMERS only. Part-timers (and anyone else paid
     // by the hour) run through /hr/payroll/weekly. Exclude them silently — no
     // skip note needed since this is by design, not a data issue.

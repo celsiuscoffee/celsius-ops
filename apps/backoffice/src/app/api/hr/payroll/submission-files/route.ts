@@ -8,6 +8,7 @@ import {
   generatePerkesoLampiranA,
   generateCP39,
   generateHRDFLevy,
+  generatePayrollByOutlet,
   type EmployeeRow,
   type CompanySettings,
 } from "@/lib/hr/statutory/files";
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
   const [users, profiles, companyRes] = await Promise.all([
     prisma.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, name: true, fullName: true, bankName: true, bankAccountNumber: true, bankAccountName: true },
+      select: { id: true, name: true, fullName: true, bankName: true, bankAccountNumber: true, bankAccountName: true, outlet: { select: { name: true } } },
     }),
     hrSupabaseAdmin
       .from("hr_employee_profiles")
@@ -128,6 +129,7 @@ export async function GET(req: NextRequest) {
       zakat,
       netPay: Number(item.net_pay || 0),
       gross: Number(item.total_gross || 0),
+      outlet: u?.outlet?.name ?? null,
     };
   });
 
@@ -190,6 +192,10 @@ export async function GET(req: NextRequest) {
       break;
     case "hrdf":
       result = generateHRDFLevy(runMeta, employees, company);
+      break;
+    // Finance reconciliation — what each outlet owes HQ. Not a bank upload.
+    case "by_outlet":
+      result = generatePayrollByOutlet(runMeta, employees);
       break;
     default:
       return NextResponse.json({ error: `Unknown type: ${type}` }, { status: 400 });
