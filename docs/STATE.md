@@ -11,6 +11,47 @@ current month.
 
 ## Verified facts
 
+- 2026-09-02 — **August COGS closed: chain ran ON-RECIPE (~34% of gross incl.
+  discounts; expected RM109.8k vs actual ~RM110.3k).** Canonical expected =
+  the catalog BOM page engine (`/api/inventory/menus`: cheapest active
+  non-ADHOC catalog price ÷ cf, MenuIngredient + PackagingRule lines, Hot/Iced
+  × dine-in/takeaway matrix) weighted by measured mixes — 64/36 iced/hot (POS
+  modifiers), takeaway PJ 36% / SA 42% / Tam 50% (QR-table webapp orders are
+  DINE-IN: ~90% of "pickup"-channel orders carry a table number). Per-outlet
+  expected: PJ 34.9%, SA 34.0% (36.9% counting consignment it produces), Tam
+  33.4%. Per-outlet booked actuals are ±RM3–5k timing noise (order-date proxy;
+  July's last week held RM48.8k of orders delivered in Aug vs Aug's RM9.2k
+  tail; 55/63 PJ Aug POs have no Receiving; all 15 Aug transfers stuck
+  PENDING) — Tamarind's "24.2%" was this artifact; corrected 32.2%. Bean
+  mass-balance validates the BOM (185kg expected vs ~180kg traced flow).
+  Remaining real leaks: ~RM5k/mo paid above cheapest catalog price, SA ~RM3k
+  production-hub waste, PJ ~RM1k over-dosing, dessert slices structurally
+  50–64% COGS (Mudslide costs RM10.83/slice vs RM16.90 price). Known-bad data
+  fixed en route: 9 poisoned 31-Jul count lines excluded (Tam sambal "290
+  packs" = 1.45t, SA coleslaw/tomato/pandan, slice-vs-cake cf), Chicken Tomyam
+  Carbonara BOM says 80ml olive oil (sibling says 30 — kitchen to confirm);
+  uncosted ingredients: Dried Orange Peel, Biscoff, Dried Lemon Slice.
+  `menu_margins` VIEW rewritten to mirror the BOM page (migration 109, applied
+  to prod, PR #1207; v1 showed Roti Bakar −354% via product_costs cf bugs +
+  modifier stacking + no packaging; cashflow bomFoodCostPct drops ~0.49→~0.34).
+- 2026-09-02 — **Bank-feed recon (3 Maybank accounts, BankStatementLine is the
+  feed; fin_bank_transactions is EMPTY).** Invoices marked paid with no
+  debit: only INU-26-23275 (Unique Paper, RM639.28) — chase supplier. Bank
+  refs almost never carry paymentRef (15/1,580); amount+date+description-
+  digits is the evidence. Collective Project pays 10% deposit + 90% "Bal"
+  legs (invoice no. in description) — 39/44 reconcile to the ringgit;
+  **IV-01987's RM2,533.50 balance was debited TWICE from Conezion (16+20
+  May, no refund) — recover**; register amountPaid fixed for IV-01974/-75/-76,
+  IV-02002, IV01790 (deposit-only or wrong totals; bank-true values applied).
+  Ariff's RM128.30 cream re-claim is bank-confirmed paid twice (19+26 May,
+  same Grab ref). Earlier "duplicate invoiceNumber" pairs (1-15086, INV-2001,
+  KIV…) show ONE debit each — register double-entries, not double payments;
+  NYC Treats 1133 was double-paid but supplier refunded ("Celcius double pay
+  1133"). NYC Treats: only 6 of ~40 recent weekly invoices ever entered the
+  register (bank-only). Category fixes applied: Ariff + Adam Ariff Jul-26
+  salaries → EMPLOYEE_SALARY (were RAW_MATERIALS/OTHER_OUTFLOW, RM9.9k), 13
+  Poket Capital shared-service debits → MANAGEMENT_FEE (RM24.6k out of fake
+  raw-materials spend).
 - 2026-09-03 — **August 2026 payroll: why approved OT paid nothing, and the
   fix.** Since the paid-window rule (2026-08-13) `deriveHours` pays only time
   inside the rostered shift; the clocked overstay is an "OT tail" reported as
@@ -2414,6 +2455,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-09-02 — **August COGS + bank recon session closed.** PR #1207
+  (menu_margins v2, migration 109 already applied to prod) is green +
+  watched — merge when ready. Owner-side follow-ups queued: recover
+  RM2,533.50 from Collective Project (IV-01987 double balance), chase
+  Unique Paper INU-26-23275 (RM639.28 marked paid, no debit), the Ariff
+  conversation now bank-evidenced (2× RM128.30), CATELUX same-day RM181×2,
+  kitchen to confirm Chicken Tomyam Carbonara 80ml-olive-oil BOM line.
+  System follow-ups: (e) split-payment support in `ap-match.ts` (deposit +
+  "Bal" legs keyed by invoice no. in description — approved, not built);
+  receive-on-arrival + transfer-receipt discipline (15/15 Aug transfers
+  PENDING, 55/63 PJ POs unreceived — this is what makes per-outlet COGS
+  precise); catalog hygiene (3 uncosted ingredients, ~100 unit/pkt/slices
+  uom strings, cf=1 carton family). September = first clean measured month;
+  the consumption engine's variance report automates this comparison once
+  armed (day-7 shadow verdict still pending).
 - 2026-09-03 (later) — **August run confirmed; HR flow QA + review-queue
   redesign shipped.** Owner recomputed August three times after #1211/#1212;
   the confirmed run (11:56Z, gross 54,446.81) has Syafiq at basic 3,096.15
