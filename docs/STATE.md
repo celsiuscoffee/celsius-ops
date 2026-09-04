@@ -141,6 +141,34 @@ current month.
   a line whose price fits a SIBLING package ([0.55,1.8] band, catalog-first
   reference, 12-month median fallback, ≥3 lines; overridePriceGuard demotes to
   warning; plain out-of-band prices warn only).
+
+- 2026-08-31 — **Merdeka/Choc Blanc campaign day-1 readout (queried live ~19:30
+  MYT).** Go-live is complete and correct: product on sale all channels, all 3
+  posters active with artwork, RM3-off template still inactive. What actually
+  ran is the PR #1186–#1190 automated design (`cron:loops-trigger`), NOT the
+  campaign doc's manual Send A: celebration r1 30 Aug 358 sent (3 legacy arms),
+  celebration r2 31 Aug 2,408 sent (single-arm generic B1F1-drinks + Choc Blanc
+  mention, 10% holdout; drain finished 17:49 MYT — PR #1190 repinned after the
+  eve send failed), product_launch r1 355 sent to Mont Blanc buyers (25%
+  holdout, same generic B1F1). ~3,121 SMS ≈ RM312. **The doc's predicted
+  failure mode is measurably happening: 36 campaign B1F1 redemptions day 1,
+  only 2 orders contain a Choc Blanc** — the free drink goes to lattes/matchas/
+  Mont Blancs. Choc Blanc sold **3 units** (all paid RM14.90 — B1F1 frees the
+  cheaper drink); Mont Blanc 26 units vs 13.7/day baseline (net 29/day, but
+  several were B1F1-free cups). POS revenue 31 Aug RM6,692 vs prior-4-Monday
+  avg RM6,164 — within noise. Poster taps: 5. The Choc Blanc-scoped B1F1
+  template `a0e3661c` is active but **zero issued** — every loop mints the
+  8-category `ed33eb26` instead, so the launch offer cannot steer trial.
+  Outstanding liability: 3,026 active B1F1 vouchers (7-day validity, tail to
+  ~7 Sept). `loop_assignments.reward_redeemed/converted` are all 0 until the
+  measurement job runs at window end — join `issued_rewards.status='used'` via
+  `pos_orders.reward_id` for a live read. No announce-only arm ran, so the
+  "does a new product need discounting" question is now unanswerable from this
+  round. **Decision for owner:** point `product_launch`/celebration candidates
+  at the scoped template (or add an announce arm) before Hari Malaysia (16
+  Sept), or accept B1F1 as a generic national-day traffic play rather than a
+  Choc Blanc trial mechanic.
+
 - 2026-08-31 — **`docs/admin/` created as the business-administration hub**
   (owner request: a dedicated home for "admin stuff"). Skeleton only:
   `README.md` (conventions — no secrets/scans in repo, Drive links only,
