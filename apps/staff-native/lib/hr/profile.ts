@@ -22,6 +22,8 @@ export type Profile = {
   personal_email: string | null;
   secondary_phone: string | null;
   profile_completed_at?: string | null;
+  // Read-only here — used to gate part-timer-only features (e.g. availability).
+  employment_type?: string | null;
 };
 
 export type ProfileResponse = {

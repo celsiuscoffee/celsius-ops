@@ -49,6 +49,10 @@ export default function HRHomePage() {
   const { data: allowanceData } = useFetch<{ breakdown: AllowanceBreakdown }>("/api/hr/allowances");
   const { data: memosData } = useFetch<{ unacknowledgedCount: number }>("/api/hr/memos");
   const { data: reviewsData } = useFetch<{ count: number }>("/api/hr/my-reviews");
+  const { data: profileData } = useFetch<{ profile: { employment_type?: string | null } }>("/api/hr/profile");
+  // Availability is a part-timer tool (interns too) — full-timers have
+  // manager-set schedules, so hide it for them. The page + API enforce it too.
+  const isPartTimer = ["part_time", "intern"].includes(profileData?.profile?.employment_type ?? "");
   const allowance = allowanceData?.breakdown;
   const unackMemos = memosData?.unacknowledgedCount ?? 0;
   const reviewsCount = reviewsData?.count ?? 0;
@@ -87,14 +91,17 @@ export default function HRHomePage() {
     },
     // Open Slots hidden for now (owner 2026-07-22: slots logic removed). The
     // booking route/page still exist — restore this entry to bring it back.
-    {
-      href: "/hr/availability",
-      icon: CalendarClock,
-      label: "My Availability",
-      subtitle: "Weekly pattern & blockout dates",
-      color: "text-indigo-600",
-      bgColor: "bg-indigo-50",
-    },
+    // Availability shows for part-timers/interns only.
+    ...(isPartTimer
+      ? [{
+          href: "/hr/availability",
+          icon: CalendarClock,
+          label: "My Availability",
+          subtitle: "Weekly pattern & blockout dates",
+          color: "text-indigo-600",
+          bgColor: "bg-indigo-50",
+        }]
+      : []),
     {
       href: "/hr/attendance",
       icon: History,

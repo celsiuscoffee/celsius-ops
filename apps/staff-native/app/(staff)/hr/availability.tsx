@@ -19,6 +19,7 @@ import {
   setDateUnavailable,
   type DateAvailability,
 } from "../../../lib/hr/api";
+import { fetchProfile } from "../../../lib/hr/profile";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -62,13 +63,19 @@ export default function AvailabilityScreen() {
   const [saving, setSaving] = useState(false);
   const [togglingDate, setTogglingDate] = useState<string | null>(null);
   const [openDay, setOpenDay] = useState<number | null>(null); // day whose hour picker is expanded
+  // Availability is a part-timer tool — full-timers have manager-set schedules.
+  const [isPartTimer, setIsPartTimer] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const [wk, dates] = await Promise.all([
+      const [wk, dates, empType] = await Promise.all([
         fetchWeeklyAvailability().catch(() => ({ weekly: [] })),
         fetchDateAvailability().catch(() => ({ availability: [] })),
+        fetchProfile()
+          .then((x) => x.profile?.employment_type ?? null)
+          .catch(() => null),
       ]);
+      setIsPartTimer(["part_time", "intern"].includes(empType ?? ""));
       const next: Record<number, DayState> = {};
       for (const dw of WEEK_ORDER) {
         next[dw] = {
@@ -200,6 +207,16 @@ export default function AvailabilityScreen() {
       {loading || !days ? (
         <View className="items-center py-10">
           <ActivityIndicator color="#A2492C" />
+        </View>
+      ) : !isPartTimer ? (
+        <View className="items-center px-8 py-16">
+          <CalendarX color="#9CA3AF" size={40} />
+          <Text className="mt-4 text-center text-base font-body-semi text-espresso">
+            Availability is for part-timers
+          </Text>
+          <Text className="mt-1.5 text-center text-sm font-body text-muted-fg">
+            Your shifts are set by your manager, so there's nothing to declare here.
+          </Text>
         </View>
       ) : (
         <ScrollView contentContainerClassName="pb-10" showsVerticalScrollIndicator={false}>

@@ -66,7 +66,17 @@ export function computeProrate(params: {
   cycleEnd: string | Date;
   joinDate?: string | null;
   resignDate?: string | null;
-  unpaidLeaveDays?: number;  // total approved unpaid days overlapping this cycle
+  unpaidLeaveDays?: number;  // total approved unpaid days overlapping this cycle (calendar days)
+  /**
+   * The approved unpaid-leave date ranges themselves (inclusive, YYYY-MM-DD).
+   * When given they take precedence over `unpaidLeaveDays`: the days are
+   * counted on the SAME basis as the denominator, so a Fri–Mon leave on a
+   * Mon–Fri (working_5day) basis is 2 days, not 4. Syafiq, August 2026:
+   * 21–24 Aug unpaid → the old count took 4 calendar days off a 21-weekday
+   * denominator (3,500 × 17/21 = 2,833.33) instead of 2 (19/21 = 3,166.67),
+   * RM333.33 short.
+   */
+  unpaidLeaveRanges?: Array<{ start: string | Date; end: string | Date }>;
   fullSalary: number;         // used for explanation text only
   basis?: ProrateBasis;       // defaults to 'calendar' if omitted
 }): ProrateResult {
@@ -137,9 +147,21 @@ export function computeProrate(params: {
     };
   }
 
-  // Priority 3: unpaid leave (always counted in calendar days regardless of
-  // basis — that's how leave policies are recorded).
-  const unpaid = Math.floor(params.unpaidLeaveDays ?? 0);
+  // Priority 3: unpaid leave. Counted on the basis's own days when the ranges
+  // are known (clipped to the cycle), so numerator and denominator agree;
+  // the bare day count is a calendar-day fallback for callers without ranges.
+  let unpaid: number;
+  if (params.unpaidLeaveRanges && params.unpaidLeaveRanges.length > 0) {
+    unpaid = 0;
+    for (const range of params.unpaidLeaveRanges) {
+      const s = dateOnly(range.start) < start ? start : dateOnly(range.start);
+      const e = dateOnly(range.end) > end ? end : dateOnly(range.end);
+      if (e < s) continue;
+      unpaid += countDays(s, e);
+    }
+  } else {
+    unpaid = Math.floor(params.unpaidLeaveDays ?? 0);
+  }
   if (unpaid > 0) {
     const worked = Math.max(0, daysTotal - unpaid);
     return {

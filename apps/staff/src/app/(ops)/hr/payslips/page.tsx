@@ -3,8 +3,9 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import Link from "next/link";
-import { Receipt, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
+import { Receipt, ChevronDown, ChevronUp, ArrowLeft, Download } from "lucide-react";
 import { PAYROLL_UI_ENABLED } from "@/lib/hr/constants";
+import { otLineLabel, otHoursFromDetails, publicHolidayPayLabel, restDayPayLabel } from "@celsius/shared/src/hr/pay-lines";
 
 type AllowanceItem = { amount: number; base?: number; score?: number };
 type OtherDeductions = {
@@ -18,6 +19,15 @@ type ComputationDetails = {
   briohr_internal_id?: string;
   basis?: string;
   hourly_rate?: number;
+  ph_premium_hours?: number;
+  ph_premium_amount?: number;
+  ph_days_worked?: number;
+  rest_day_pay_amount?: number;
+  rest_day_days_worked?: number;
+  ot_hours_1x?: number;
+  ot_hours_1_5x?: number;
+  ot_hours_2x?: number;
+  ot_hours_3x?: number;
 };
 
 type Payslip = {
@@ -155,14 +165,23 @@ export default function PayslipsPage() {
                         : "Basic Salary"}
                       value={fmt(slip.basic_salary)}
                     />
-                    {totalOT > 0 && (
-                      <>
-                        {Number(slip.ot_1x_amount) > 0 && <Row label="OT 1x" value={fmt(slip.ot_1x_amount)} />}
-                        {Number(slip.ot_1_5x_amount) > 0 && <Row label="OT 1.5x" value={fmt(slip.ot_1_5x_amount)} />}
-                        {Number(slip.ot_2x_amount) > 0 && <Row label="OT 2x (Rest Day)" value={fmt(slip.ot_2x_amount)} />}
-                        {Number(slip.ot_3x_amount) > 0 && <Row label="OT 3x (PH)" value={fmt(slip.ot_3x_amount)} />}
-                      </>
-                    )}
+                    {totalOT > 0 && (() => {
+                      // Same label set as the backoffice run page and the PDF.
+                      const det = slip.computation_details || {};
+                      const otH = otHoursFromDetails(det as Record<string, unknown>);
+                      const phAmt = Number(det.ph_premium_amount || 0);
+                      const rdAmt = Number(det.rest_day_pay_amount || 0);
+                      const ot1 = Number(slip.ot_1x_amount || 0);
+                      const ot2 = Number(slip.ot_2x_amount || 0);
+                      return (
+                        <>
+                          {ot1 > 0 && <Row label={rdAmt > 0 && ot1 - rdAmt < 0.01 ? restDayPayLabel(det.rest_day_days_worked) : otLineLabel("1x", otH["1x"])} value={fmt(ot1)} />}
+                          {Number(slip.ot_1_5x_amount) > 0 && <Row label={otLineLabel("1_5x", otH["1_5x"])} value={fmt(slip.ot_1_5x_amount)} />}
+                          {ot2 > 0 && <Row label={phAmt > 0 && ot2 - phAmt < 0.01 ? publicHolidayPayLabel(det.ph_days_worked, det.ph_premium_hours) : otLineLabel("2x", otH["2x"])} value={fmt(ot2)} />}
+                          {Number(slip.ot_3x_amount) > 0 && <Row label={otLineLabel("3x", otH["3x"])} value={fmt(slip.ot_3x_amount)} />}
+                        </>
+                      );
+                    })()}
                     {totalAllowances > 0 && allowanceEntries.map(([key, a]) => (
                       <Row
                         key={key}
@@ -190,6 +209,15 @@ export default function PayslipsPage() {
                     <div className="mt-4 rounded-xl bg-terracotta/10 p-3">
                       <Row label="Net Pay" value={fmt(slip.net_pay)} bold />
                     </div>
+
+                    {/* Download — official PDF (company details, statutory numbers,
+                        YTD) suitable for loan / financing applications. */}
+                    <a
+                      href={`/api/hr/payslips/pdf?item_id=${slip.id}`}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-terracotta py-2.5 font-semibold text-white active:scale-95"
+                    >
+                      <Download className="h-4 w-4" /> Download PDF
+                    </a>
 
                     {/* Hours */}
                     <p className="mt-4 text-xs text-gray-400">

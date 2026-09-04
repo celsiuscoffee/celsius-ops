@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { detectAnomalies, type AnomalyFlag } from "@/lib/hr/payroll/anomalies";
 import { useFetch } from "@/lib/use-fetch";
+import { otLineLabel, otHoursFromDetails, publicHolidayPayLabel, restDayPayLabel } from "@celsius/shared/src/hr/pay-lines";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -63,7 +64,22 @@ type PayrollItem = {
   prorate_reason: string | null;
   prorate_days_worked: number | null;
   prorate_days_total: number | null;
-  computation_details: { employment_type?: string; hourly_rate?: number; unpaid_days?: number; statutory_stale?: boolean } | null;
+  computation_details: {
+    employment_type?: string;
+    hourly_rate?: number;
+    unpaid_days?: number;
+    statutory_stale?: boolean;
+    /** Public-holiday normal-hours premium (EA s.60D), paid inside ot_2x_amount. */
+    ph_premium_hours?: number;
+    ph_premium_amount?: number;
+    ph_days_worked?: number;
+    rest_day_pay_amount?: number;
+    rest_day_days_worked?: number;
+    ot_hours_1x?: number;
+    ot_hours_1_5x?: number;
+    ot_hours_2x?: number;
+    ot_hours_3x?: number;
+  } | null;
 };
 
 type CatalogEntry = {
@@ -532,6 +548,19 @@ function EmployeeBreakdown({
 
   const totalOT = (item.ot_1x_amount || 0) + item.ot_1_5x_amount + item.ot_2x_amount + item.ot_3x_amount;
   const statutoryStale = !!item.computation_details?.statutory_stale;
+  // Public-holiday premium (EA s.60D) rides in the 2× line. It is NOT
+  // overtime — a full-timer who worked a normal 31-Aug shift has 0 OT hours
+  // and a real amount here — so the OT block must key on money, not hours,
+  // or the premium is in gross with no line explaining it (owner 2026-09-03:
+  // "the PH OT not in payroll").
+  const phHours = Number(item.computation_details?.ph_premium_hours || 0);
+  const phAmount = Number(item.computation_details?.ph_premium_amount || 0);
+  const phDays = Number(item.computation_details?.ph_days_worked || 0);
+  const restDay2x = Math.max(0, item.ot_2x_amount - phAmount);
+  const restDayPay = Number(item.computation_details?.rest_day_pay_amount || 0);
+  const restDayDays = Number(item.computation_details?.rest_day_days_worked || 0);
+  // One label set for run page / payslip page / PDF — packages/shared pay-lines.
+  const otH = otHoursFromDetails(item.computation_details as Record<string, unknown> | null);
 
   return (
     <div className="space-y-4">
@@ -547,19 +576,41 @@ function EmployeeBreakdown({
             editable={editable}
             onItemUpdated={onItemUpdated}
           />
-          {item.total_ot_hours > 0 && (
+          {(item.total_ot_hours > 0 || totalOT > 0) && (
             <>
               {Number(item.ot_1x_amount || 0) > 0 && (
-                <EditableRow label="OT 1x" value={Number(item.ot_1x_amount || 0)} field="ot_1x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+                <EditableRow
+                  label={restDayPay > 0 && Number(item.ot_1x_amount || 0) - restDayPay < 0.01 ? restDayPayLabel(restDayDays) : otLineLabel("1x", otH["1x"])}
+                  value={Number(item.ot_1x_amount || 0)}
+                  field="ot_1x_amount"
+                  item={item}
+                  editable={editable}
+                  onItemUpdated={onItemUpdated}
+                />
+              )}
+              {restDayPay > 0 && Number(item.ot_1x_amount || 0) - restDayPay >= 0.01 && (
+                <p className="pl-2 text-[10px] text-gray-500">incl. {restDayPayLabel(restDayDays)} RM{restDayPay.toFixed(2)}</p>
               )}
               {item.ot_1_5x_amount > 0 && (
-                <EditableRow label="OT 1.5x" value={item.ot_1_5x_amount} field="ot_1_5x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+                <EditableRow label={otLineLabel("1_5x", otH["1_5x"])} value={item.ot_1_5x_amount} field="ot_1_5x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
               )}
               {item.ot_2x_amount > 0 && (
-                <EditableRow label="OT 2x (Rest)" value={item.ot_2x_amount} field="ot_2x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+                <EditableRow
+                  label={phAmount > 0 && restDay2x < 0.01 ? publicHolidayPayLabel(phDays, phHours) : otLineLabel("2x", otH["2x"])}
+                  value={item.ot_2x_amount}
+                  field="ot_2x_amount"
+                  item={item}
+                  editable={editable}
+                  onItemUpdated={onItemUpdated}
+                />
+              )}
+              {phAmount > 0 && restDay2x >= 0.01 && (
+                <p className="pl-2 text-[10px] text-gray-500">
+                  incl. {publicHolidayPayLabel(phDays, phHours)} RM{phAmount.toFixed(2)} · {otLineLabel("2x", otH["2x"])} RM{restDay2x.toFixed(2)}
+                </p>
               )}
               {item.ot_3x_amount > 0 && (
-                <EditableRow label="OT 3x (PH)" value={item.ot_3x_amount} field="ot_3x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+                <EditableRow label={otLineLabel("3x", otH["3x"])} value={item.ot_3x_amount} field="ot_3x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
               )}
               {totalOT === 0 && <Row label={`OT (${item.total_ot_hours.toFixed(1)} hrs)`} value={totalOT} />}
             </>
