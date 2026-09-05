@@ -37,7 +37,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
   // Land any approved salary changes whose effective date has arrived since
   // the last compute — future-dated raises had no other way to reach the live
   // profile columns this calculator reads (see lib/hr/salary-mirror).
-  notes.push(...(await applyDueSalaryMirrors()));
+  // Capped at this cycle: a raise effective next month must not price this one.
+  notes.push(...(await applyDueSalaryMirrors({
+    effectiveBefore: month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`,
+  })));
 
   // 0. Refuse to recompute a confirmed/paid period. Operators can still
   // recompute "draft" or "ai_computed" runs; those are overwritten below.
@@ -498,13 +501,14 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
   // The ranges themselves, so proration can count them on the employee's own
   // basis (Mon–Fri for HQ) instead of subtracting calendar days from a
   // weekday denominator — see computeProrate.unpaidLeaveRanges.
-  const unpaidLeaveRangesByUser = new Map<string, Array<{ start: string; end: string }>>();
+  const unpaidLeaveRangesByUser = new Map<string, Array<{ start: string; end: string; totalDays: number }>>();
   (leaves || []).forEach((l: { user_id: string; total_days: number; start_date: string; end_date: string }) => {
     const days = clipLeaveDaysToCycle(l, startDate, endDate);
     if (days <= 0) return;
     unpaidLeaveByUser.set(l.user_id, (unpaidLeaveByUser.get(l.user_id) || 0) + days);
     const ranges = unpaidLeaveRangesByUser.get(l.user_id) || [];
-    ranges.push({ start: l.start_date, end: l.end_date });
+    // total_days caps the deduction: a half-day request must not cost a day.
+    ranges.push({ start: l.start_date, end: l.end_date, totalDays: Number(l.total_days) });
     unpaidLeaveRangesByUser.set(l.user_id, ranges);
   });
 
@@ -566,12 +570,14 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
 
   // 4. Create payroll run
   // Delete existing draft for this period
-  await hrSupabaseAdmin
+  const { error: wipeErr } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
     .delete()
     .eq("period_month", month)
     .eq("period_year", year)
     .in("status", ["draft", "ai_computed"]);
+  // A silent failure here surfaced later as "duplicate key" on the insert.
+  if (wipeErr) throw new Error(`Could not clear the previous draft run: ${wipeErr.message}`);
 
   const { data: run, error: runError } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
@@ -707,8 +713,12 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       if (isOtApproved(a) && !isPartTime) {
         const mytDate = mytDateString(new Date(a.clock_in));
         const regular = Number(a.regular_hours) || 0;
-        const onPublicHoliday =
-          publicHolidays.has(mytDate) || a.overtime_type === "ph_2x" || a.overtime_type === "ot_3x";
+        // The holiday TABLE alone decides the second day's wage. The stamp
+        // fallback let a manager-entered "3x" request on a normal Tuesday
+        // (mapped to ot_3x) pay a public-holiday day on top of the 3× OT; a
+        // holiday added after processing is covered because the table is read
+        // here, at compute time.
+        const onPublicHoliday = publicHolidays.has(mytDate);
         if (regular > 0 && onPublicHoliday) {
           phHoursByDate.set(mytDate, (phHoursByDate.get(mytDate) ?? 0) + regular);
         } else if (regular > 0 && rosteredRestDays.has(`${profile.user_id}:${mytDate}`)) {
@@ -807,9 +817,25 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     }
 
     // Unpaid leave deduction — when prorate.reason='unpaid_leave', the factor
-    // already covers it; don't double-deduct. Otherwise apply as a separate line.
-    const dailyRate = basicSalary / WORKING_DAYS_PER_MONTH;
-    const unpaidDeduction = prorate.reason === "unpaid_leave" ? 0 : unpaidDays * dailyRate;
+    // already covers it; don't double-deduct. Otherwise (a joiner/resigner who
+    // also took unpaid leave) price it on the SAME basis as the proration:
+    // count the leave on the profile's day basis and charge basic/daysTotal per
+    // day. The old basic/26 × calendar days over-deducted a Mon–Fri HQ joiner
+    // by RM205 on a Fri–Mon leave (2026-09-03 QA).
+    let unpaidDeduction = 0;
+    if (prorate.reason !== "unpaid_leave" && unpaidDays > 0 && !isPartTime) {
+      const onBasis = computeProrate({
+        cycleStart,
+        cycleEnd,
+        unpaidLeaveDays: unpaidDays,
+        unpaidLeaveRanges: unpaidLeaveRangesByUser.get(profile.user_id),
+        fullSalary: basicSalary,
+        basis: profile.proration_basis ?? "calendar",
+      });
+      const unpaidOnBasis = onBasis.reason === "unpaid_leave" ? onBasis.daysTotal - onBasis.daysWorked : unpaidDays;
+      const perDay = basicSalary / (onBasis.daysTotal || WORKING_DAYS_PER_MONTH);
+      unpaidDeduction = Math.round(unpaidOnBasis * perDay * 100) / 100;
+    }
 
     // Total OT
     const totalOT = Math.round((ot1xAmount + ot15xAmount + ot2xAmount + ot3xAmount) * 100) / 100;
@@ -892,7 +918,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         }
       } else {
         recurringAdd += amt;
-        if (cat.epf_contributing && cat.item_type === "fixed_remuneration") {
+        // KWSP liable wages include bonuses and commissions (item_type
+        // additional_remuneration), not only fixed items. Only a
+        // not_a_remuneration payment (reimbursement) stays out.
+        if (cat.epf_contributing && cat.item_type !== "not_a_remuneration") {
           recurringStatBasis += amt;
         }
         // Not every payment is taxable income. A mileage reimbursement, a
@@ -960,7 +989,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       wage: statutoryBasis,
       // PERKESO SOCSO/EIS wages include overtime; EPF (statutoryBasis) excludes
       // it. Pass the OT-inclusive figure so SOCSO/EIS aren't under-contributed.
-      socsoEisWage: statutoryBasis + totalOT,
+      // Day-type pay rides inside totalOT (ot1x/ot2x lines) AND is already in
+      // statutoryBasis, so take it out of the OT side once — otherwise a PH
+      // worker's SOCSO/EIS wage climbed a band (2026-09-03 QA).
+      socsoEisWage: statutoryBasis + totalOT - phPremiumAmount - dayPay.restDayAmount,
       // PCB is assessed on TAXABLE income, not on everything paid — see pcbGross.
       monthlyGross: pcbGross,
       currentMonth: month,

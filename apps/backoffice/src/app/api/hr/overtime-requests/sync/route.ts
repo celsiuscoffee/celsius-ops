@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { generateOtRequests, syncWindow } from "@/lib/hr/ot-request-generator";
+import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
 
@@ -34,10 +35,10 @@ async function runSync(actorUserId: string, month?: string | null) {
 
 // Vercel Cron — Bearer CRON_SECRET
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get("authorization");
-  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // Fail closed: the old check let anyone run the sync when CRON_SECRET was
+  // unset. checkCronAuth returns 500 in that case, like the other crons.
+  const cronAuth = checkCronAuth(req.headers);
+  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
   return runSync("system");
 }
 

@@ -25,11 +25,20 @@ const PROFILE_COLUMN: Record<string, string> = {
   hourly_weekend: "hourly_rate_weekend",
 };
 
-export async function applyDueSalaryMirrors(): Promise<string[]> {
+/**
+ * @param opts.effectiveBefore — exclusive YYYY-MM-DD cap on effective_date.
+ *   A payroll run passes the day after its cycle end so a raise dated inside
+ *   the NEXT period is not landed on the profile while THIS period is being
+ *   priced: August is computed on 2 Sep, and a RM2,200 raise effective 1 Sep
+ *   used to be mirrored first and paid for August (2026-09-03 QA).
+ */
+export async function applyDueSalaryMirrors(opts: { effectiveBefore?: string } = {}): Promise<string[]> {
   const today = getMYTToday();
   const windowStart = new Date(Date.parse(`${today}T00:00:00Z`) - MIRROR_WINDOW_DAYS * 86_400_000)
     .toISOString()
     .slice(0, 10);
+  const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  const cutoff = opts.effectiveBefore && opts.effectiveBefore < tomorrow ? opts.effectiveBefore : tomorrow;
 
   const { data: rows } = await hrSupabaseAdmin
     .from("hr_salary_history")
@@ -37,7 +46,7 @@ export async function applyDueSalaryMirrors(): Promise<string[]> {
     .eq("status", "approved")
     .is("end_date", null)
     .gt("amount", 0)
-    .lte("effective_date", today)
+    .lt("effective_date", cutoff)
     .gte("effective_date", windowStart);
   if (!rows || rows.length === 0) return [];
 

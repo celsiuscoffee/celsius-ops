@@ -184,7 +184,15 @@ export async function GET(req: NextRequest) {
       bankName: u?.bankName || null,
       bankAccountNumber: u?.bankAccountNumber || null,
       bankAccountName: u?.bankAccountName || null,
-      wage: Number(item.basic_salary || 0),
+      // The wage column must be what the contributions were computed ON.
+      // KWSP's own check (11% of wage = employee EPF) failed on prorated basic;
+      // PERKESO's wage includes OT. Older items without statutory_basis fall
+      // back to basic.
+      wage: Number(item.computation_details?.statutory_basis ?? item.basic_salary ?? 0),
+      socsoWage:
+        Number(item.computation_details?.statutory_basis ?? item.basic_salary ?? 0) +
+        Number(item.ot_1x_amount || 0) + Number(item.ot_1_5x_amount || 0) + Number(item.ot_2x_amount || 0) + Number(item.ot_3x_amount || 0) -
+        Number(item.computation_details?.ph_premium_amount || 0) - Number(item.computation_details?.rest_day_pay_amount || 0),
       epfEmployee: Number(item.epf_employee || 0),
       epfEmployer: Number(item.epf_employer || 0),
       socsoEmployee: Number(item.socso_employee || 0),

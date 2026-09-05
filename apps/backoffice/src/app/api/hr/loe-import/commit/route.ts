@@ -100,6 +100,13 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Same guard as employees/create: an import must not mint an OWNER (or
+      // an unknown role) from a client-edited record.
+      if (!["STAFF", "MANAGER", "ADMIN", "OWNER"].includes(rec.role) || (rec.role === "OWNER" && session.role !== "OWNER")) {
+        results.push({ fileName, status: "error", error: rec.role === "OWNER" ? "Only an OWNER can create an OWNER account" : `Invalid role: ${String(rec.role)}` });
+        continue;
+      }
+
       // 1. Create the User
       const user = await prisma.user.create({
         data: {

@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   // rostered rest day for this person → 2x; otherwise weekday OT → 1.5x. The
   // client-supplied ot_type is ignored.
   const [holidayResp, restResp] = await Promise.all([
-    supabase.from("hr_public_holidays").select("date").eq("date", date).maybeSingle(),
+    supabase.from("hr_public_holidays").select("date").eq("date", date).limit(1).maybeSingle(),
     supabase
       .from("hr_schedule_shifts")
       .select("id")

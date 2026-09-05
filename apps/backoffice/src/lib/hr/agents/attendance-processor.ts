@@ -97,11 +97,13 @@ export async function processAttendance(): Promise<ProcessResult> {
   const now = new Date();
 
   for (const log of pendingLogs as AttendanceLog[]) {
-    // Fresh verdict each pass — except the clock-out reminder marker, which the
-    // auto-close cron stamps on an open log so the nudge goes out once. Dropping
-    // it here would re-send the push every 15 minutes until the log closed.
+    // Fresh verdict each pass — except two markers the auto-close cron stamps:
+    // the clock-out reminder (dropping it re-sends the push every 15 minutes)
+    // and `auto_closed_<reason>` (the cron closes the log and calls this
+    // processor in the same run, so the marker was lost seconds after it was
+    // written and the review queue's "Auto-closed" filter missed most of them).
     const flags: string[] = (Array.isArray(log.ai_flags) ? log.ai_flags : []).filter(
-      (f: string) => f === CLOCKOUT_REMINDER_FLAG,
+      (f: string) => f === CLOCKOUT_REMINDER_FLAG || f.startsWith("auto_closed_"),
     );
     const employmentType = profileMap.get(log.user_id) || "full_time";
 

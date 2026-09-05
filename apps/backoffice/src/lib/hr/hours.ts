@@ -413,7 +413,7 @@ export function deriveHours(opts: {
   if (isPublicHoliday) {
     if (workedHours > otThreshold) {
       regularHours = otThreshold;
-      overtimeHours = Math.floor(workedHours - otThreshold);
+      overtimeHours = Math.floor((workedHours - otThreshold) * 2) / 2;
       overtimeType = "ot_3x"; // PH overtime = 3x
     } else {
       regularHours = Math.round(workedHours * 100) / 100;
@@ -423,7 +423,7 @@ export function deriveHours(opts: {
   } else if (isRestDay) {
     if (workedHours > otThreshold) {
       regularHours = otThreshold;
-      overtimeHours = Math.floor(workedHours - otThreshold);
+      overtimeHours = Math.floor((workedHours - otThreshold) * 2) / 2;
       overtimeType = "ot_2x"; // rest-day OT = 2x
     } else {
       regularHours = Math.round(workedHours * 100) / 100;
@@ -432,7 +432,7 @@ export function deriveHours(opts: {
     dayTypeFlags.push("rest_day_work");
   } else if (workedHours > otThreshold) {
     regularHours = otThreshold;
-    overtimeHours = Math.floor(workedHours - otThreshold);
+    overtimeHours = Math.floor((workedHours - otThreshold) * 2) / 2;
     overtimeType = "ot_1_5x"; // weekday OT = 1.5x
     dayTypeFlags.push("overtime_detected");
   } else {
