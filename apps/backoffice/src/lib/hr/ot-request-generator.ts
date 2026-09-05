@@ -27,6 +27,7 @@
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { paidWindowHours, mytDateString, mytInstant } from "@/lib/hr/hours";
 import { applyApprovedOt } from "@/lib/hr/ot-payroll-sync";
+import { fetchAllRows } from "@/lib/hr/fetch-all";
 
 export type TailLog = {
   id: string;
@@ -271,22 +272,29 @@ export async function generateOtRequests(opts: {
   const ftUserIds = new Set((ftProfiles || []).map((p) => p.user_id as string));
   if (ftUserIds.size === 0) return empty;
 
-  const { data: logs } = await hrSupabaseAdmin
-    .from("hr_attendance_logs")
-    .select(TAIL_LOG_COLUMNS)
-    .in("user_id", Array.from(ftUserIds))
-    .gte("clock_in", opts.start)
-    .lt("clock_in", opts.end)
-    .not("clock_out", "is", null)
-    .limit(5000);
+  // Paged: `.limit(5000)` is clamped to PostgREST's 1000-row cap, and the
+  // 1st–10th window spans two months (July alone was 761 logs). Past the cap,
+  // tails were silently never filed and existingKeys was incomplete, so the
+  // sync could file a duplicate request for a day that already had one.
+  const logs = await fetchAllRows<TailLog>(() =>
+    hrSupabaseAdmin
+      .from("hr_attendance_logs")
+      .select(TAIL_LOG_COLUMNS)
+      .in("user_id", Array.from(ftUserIds))
+      .gte("clock_in", opts.start)
+      .lt("clock_in", opts.end)
+      .not("clock_out", "is", null),
+  );
   if (!logs || logs.length === 0) return empty;
 
-  const { data: existing } = await hrSupabaseAdmin
-    .from("hr_overtime_requests")
-    .select("id, user_id, date, status")
-    .in("user_id", Array.from(ftUserIds))
-    .gte("date", mytDateString(opts.start))
-    .lte("date", mytDateString(opts.end));
+  const existing = await fetchAllRows<{ id: string; user_id: string; date: string; status: string }>(() =>
+    hrSupabaseAdmin
+      .from("hr_overtime_requests")
+      .select("id, user_id, date, status")
+      .in("user_id", Array.from(ftUserIds))
+      .gte("date", mytDateString(opts.start))
+      .lte("date", mytDateString(opts.end)),
+  );
   const existingKeys = new Set<string>();
   const pendingByKey = new Map<string, string>();
   for (const r of (existing || []) as Array<{ id: string; user_id: string; date: string; status: string }>) {

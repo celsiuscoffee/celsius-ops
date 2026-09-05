@@ -53,8 +53,6 @@ export async function calculateWeeklyPayroll(
   // Land any approved salary changes whose effective date has arrived since
   // the last compute — future-dated rate changes had no other way to reach the
   // live profile columns this calculator prices from (see lib/hr/salary-mirror).
-  notes.push(...(await applyDueSalaryMirrors()));
-
   const start = new Date(`${weekStart}T00:00:00.000Z`);
   if (start.getUTCDay() !== 1) {
     throw new Error("week_start must be a Monday (YYYY-MM-DD)");
@@ -63,6 +61,11 @@ export async function calculateWeeklyPayroll(
   periodEnd.setUTCDate(periodEnd.getUTCDate() + 6);
   const periodStartStr = weekStart;
   const periodEndStr = periodEnd.toISOString().slice(0, 10);
+  // Capped at this week: a rate change effective next Monday must not price
+  // the week being computed.
+  notes.push(...(await applyDueSalaryMirrors({
+    effectiveBefore: new Date(periodEnd.getTime() + 86_400_000).toISOString().slice(0, 10),
+  })));
   // MYT week window: Monday 00:00 to Sunday 23:59:59 Malaysia time (not UTC), so a
   // late-evening or pre-8am clock-in lands in the right week.
   const weekStartIso = `${periodStartStr}T00:00:00+08:00`;
@@ -177,13 +180,16 @@ export async function calculateWeeklyPayroll(
   //    RM66 in both directions. Restating it would mean recovering wages
   //    already paid, which Employment Act s.24 constrains — so refuse outright
   //    rather than leave it to whoever clicks Compute.
-  const { data: settled } = await hrSupabaseAdmin
+  // limit(1) + array: maybeSingle() ERRORS on two settled rows, which made
+  // `settled` null and let a third run through — the opposite of the guard.
+  const { data: settledRows } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
     .select("id, status")
     .eq("cycle_type", "weekly")
     .eq("period_start", periodStartStr)
     .in("status", ["confirmed", "paid"])
-    .maybeSingle();
+    .limit(1);
+  const settled = settledRows?.[0];
   if (settled) {
     throw new Error(
       `Week ${periodStartStr} already has a ${settled.status} payroll run (${settled.id}) — refusing to recompute. ` +
@@ -192,12 +198,13 @@ export async function calculateWeeklyPayroll(
   }
 
   // Wipe any existing draft/computed weekly run for this period.
-  await hrSupabaseAdmin
+  const { error: wipeErr } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
     .delete()
     .eq("cycle_type", "weekly")
     .eq("period_start", periodStartStr)
     .in("status", ["draft", "ai_computed"]);
+  if (wipeErr) throw new Error(`Could not clear the previous draft run: ${wipeErr.message}`);
 
   const { data: run, error: runError } = await hrSupabaseAdmin
     .from("hr_payroll_runs")

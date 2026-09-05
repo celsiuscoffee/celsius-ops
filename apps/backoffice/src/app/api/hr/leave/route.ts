@@ -104,7 +104,7 @@ export async function PATCH(req: NextRequest) {
       const guardYear = new Date(request.start_date).getFullYear();
       const { data: guardBalance } = await hrSupabaseAdmin
         .from("hr_leave_balances")
-        .select("entitled_days, carried_forward, used_days")
+        .select("entitled_days, carried_forward, used_days, pending_days")
         .eq("user_id", request.user_id)
         .eq("year", guardYear)
         .eq("leave_type", request.leave_type)
@@ -120,9 +120,14 @@ export async function PATCH(req: NextRequest) {
         );
       }
       if (guardBalance) {
+        // Other pending requests hold days too (pending_days already includes
+        // THIS request's hold, so subtract the hold as a whole, not this
+        // request twice). Two 5-day requests against 6 remaining days used to
+        // both pass because each only saw used_days.
+        const otherPending = Math.max(0, Number(guardBalance.pending_days ?? 0) - Number(request.total_days));
         const remainingAfter =
           Number(guardBalance.entitled_days) + Number(guardBalance.carried_forward) -
-          Number(guardBalance.used_days) - Number(request.total_days);
+          Number(guardBalance.used_days) - otherPending - Number(request.total_days);
         if (remainingAfter < 0 && !allow_negative_balance) {
           return NextResponse.json(
             {
@@ -147,16 +152,24 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    const { error } = await hrSupabaseAdmin
+    // Compare-and-set on the status: the read above and this write are two
+    // round trips, so a double-click or two managers approving at once both
+    // passed the guard and both banked used_days. Zero rows = someone else won.
+    const { data: approvedRows, error } = await hrSupabaseAdmin
       .from("hr_leave_requests")
       .update({
         status: "approved",
         approved_by: session.id,
         approved_at: new Date().toISOString(),
       })
-      .eq("id", id);
+      .eq("id", id)
+      .in("status", ["pending", "ai_escalated"])
+      .select("id");
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!approvedRows || approvedRows.length === 0) {
+      return NextResponse.json({ error: "This request was already decided" }, { status: 409 });
+    }
 
     // Update balance: move from pending to used. Use the leave's start_date
     // year so cross-year requests (e.g. Dec 28 – Jan 3 approved on Jan 1) hit
@@ -211,7 +224,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    const { error } = await hrSupabaseAdmin
+    const { data: rejectedRows, error } = await hrSupabaseAdmin
       .from("hr_leave_requests")
       .update({
         status: "rejected",
@@ -219,9 +232,14 @@ export async function PATCH(req: NextRequest) {
         approved_at: new Date().toISOString(),
         rejection_reason: reason || null,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .in("status", ["pending", "ai_escalated"])
+      .select("id");
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!rejectedRows || rejectedRows.length === 0) {
+      return NextResponse.json({ error: "This request was already decided" }, { status: 409 });
+    }
 
     // Release pending days — using the leave's start_date year, not "today",
     // so cross-year requests release from the correct annual bucket.

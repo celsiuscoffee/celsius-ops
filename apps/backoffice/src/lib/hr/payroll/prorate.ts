@@ -76,7 +76,17 @@ export function computeProrate(params: {
    * denominator (3,500 × 17/21 = 2,833.33) instead of 2 (19/21 = 3,166.67),
    * RM333.33 short.
    */
-  unpaidLeaveRanges?: Array<{ start: string | Date; end: string | Date }>;
+  unpaidLeaveRanges?: Array<{
+    start: string | Date;
+    end: string | Date;
+    /**
+     * The request's own day count (hr_leave_requests.total_days). Staff can
+     * submit half days and a count below the span; without this cap a 0.5-day
+     * unpaid leave deducted a whole day and a 2-day request over a 7-day span
+     * deducted 7. Scaled when the range is clipped to the cycle.
+     */
+    totalDays?: number;
+  }>;
   fullSalary: number;         // used for explanation text only
   basis?: ProrateBasis;       // defaults to 'calendar' if omitted
 }): ProrateResult {
@@ -115,7 +125,7 @@ export function computeProrate(params: {
       reason: "joiner_and_resigner",
       daysWorked: worked,
       daysTotal,
-      factor: daysTotal === 0 ? 0 : worked / daysTotal,
+      factor: daysTotal === 0 ? 0 : Math.min(1, worked / daysTotal), // fixed_26 numerator is calendar days; never pay >100%
       basis,
       explanation: `Salary prorated: ${formatRM(params.fullSalary)} × ${worked}/${daysTotal} ${basisLabel} (joined ${joiner.toISOString().slice(0, 10)}, resigned ${resigner.toISOString().slice(0, 10)})`,
     };
@@ -128,7 +138,7 @@ export function computeProrate(params: {
       reason: "joiner",
       daysWorked: worked,
       daysTotal,
-      factor: daysTotal === 0 ? 0 : worked / daysTotal,
+      factor: daysTotal === 0 ? 0 : Math.min(1, worked / daysTotal), // fixed_26 numerator is calendar days; never pay >100%
       basis,
       explanation: `Salary prorated: ${formatRM(params.fullSalary)} × ${worked}/${daysTotal} ${basisLabel} based on join date ${joiner.toISOString().slice(0, 10)}`,
     };
@@ -141,7 +151,7 @@ export function computeProrate(params: {
       reason: "resigner",
       daysWorked: worked,
       daysTotal,
-      factor: daysTotal === 0 ? 0 : worked / daysTotal,
+      factor: daysTotal === 0 ? 0 : Math.min(1, worked / daysTotal), // fixed_26 numerator is calendar days; never pay >100%
       basis,
       explanation: `Salary prorated: ${formatRM(params.fullSalary)} × ${worked}/${daysTotal} ${basisLabel} based on resignation date ${resigner.toISOString().slice(0, 10)}`,
     };
@@ -154,10 +164,21 @@ export function computeProrate(params: {
   if (params.unpaidLeaveRanges && params.unpaidLeaveRanges.length > 0) {
     unpaid = 0;
     for (const range of params.unpaidLeaveRanges) {
-      const s = dateOnly(range.start) < start ? start : dateOnly(range.start);
-      const e = dateOnly(range.end) > end ? end : dateOnly(range.end);
+      const rs = dateOnly(range.start);
+      const re = dateOnly(range.end);
+      const s = rs < start ? start : rs;
+      const e = re > end ? end : re;
       if (e < s) continue;
-      unpaid += countDays(s, e);
+      let days = countDays(s, e);
+      // Cap at the requested count. A request that bridges the cycle edge
+      // shares its count across the months in proportion to the days that
+      // fall in each, so the two months together deduct exactly total_days.
+      if (range.totalDays != null && Number.isFinite(range.totalDays) && range.totalDays >= 0) {
+        const fullSpan = countDays(rs, re);
+        const share = fullSpan > 0 ? range.totalDays * (days / fullSpan) : 0;
+        days = Math.min(days, Math.round(share * 2) / 2);
+      }
+      unpaid += days;
     }
   } else {
     unpaid = Math.floor(params.unpaidLeaveDays ?? 0);
@@ -168,7 +189,7 @@ export function computeProrate(params: {
       reason: "unpaid_leave",
       daysWorked: worked,
       daysTotal,
-      factor: daysTotal === 0 ? 0 : worked / daysTotal,
+      factor: daysTotal === 0 ? 0 : Math.min(1, worked / daysTotal), // fixed_26 numerator is calendar days; never pay >100%
       basis,
       explanation: `Salary adjusted: ${unpaid} unpaid leave day${unpaid === 1 ? "" : "s"} deducted from ${daysTotal} ${basisLabel}`,
     };

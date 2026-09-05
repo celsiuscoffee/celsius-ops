@@ -86,10 +86,19 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Weekly (part-timer) runs have no period_month/year — derive them from
+    // the week start so the banner, YTD header and filename are real values
+    // (they printed "undefined null" / PAYSLIP_X_nullnull.pdf).
+    const periodYear: number = run.period_year ?? Number(String(run.period_start ?? "").slice(0, 4));
+    const periodMonth: number = run.period_month ?? Number(String(run.period_start ?? "").slice(5, 7));
+    const periodTag = run.period_month
+      ? `${periodYear}${String(periodMonth).padStart(2, "0")}`
+      : `WEEK_${String(run.period_start ?? "").replace(/-/g, "")}`;
+
     const [ytdByUser, profileRes, companyRes, user] = await Promise.all([
       computePayslipYtd(supabaseAdmin, {
-        periodYear: run.period_year,
-        periodMonth: run.period_month,
+        periodYear,
+        periodMonth,
         userIds: [uid],
         currentItems: [item],
       }),
@@ -122,7 +131,7 @@ export async function GET(req: NextRequest) {
     });
 
     const pdfBytes = await generatePayslipPDF(record);
-    const filename = `PAYSLIP_${record.employeeName.replace(/\s+/g, "_")}_${run.period_year}${String(run.period_month).padStart(2, "0")}.pdf`;
+    const filename = `PAYSLIP_${record.employeeName.replace(/\s+/g, "_")}_${periodTag}.pdf`;
 
     return new NextResponse(Buffer.from(pdfBytes), {
       headers: {

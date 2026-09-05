@@ -26,10 +26,13 @@ export async function GET(req: NextRequest) {
   const userIdFilter = searchParams.get("user_id");
 
   // Pull all completed runs for the year
+  // Weekly (part-timer) runs carry period_start/end and no period_year, so
+  // filtering on period_year alone dropped every PT wage from EA / Form E /
+  // CP8D. Match either the monthly year or a weekly period inside the year.
   const { data: runs } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
     .select("id")
-    .eq("period_year", year)
+    .or(`period_year.eq.${year},and(period_start.gte.${year}-01-01,period_start.lte.${year}-12-31)`)
     .in("status", ["confirmed", "paid"]);
 
   const runIds = (runs || []).map((r: { id: string }) => r.id);

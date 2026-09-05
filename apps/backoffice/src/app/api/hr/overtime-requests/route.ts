@@ -4,6 +4,8 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
 import { applyApprovedOt, reverseApprovedOt } from "@/lib/hr/ot-payroll-sync";
+import { mytDateString } from "@/lib/hr/hours";
+import { REST_DAY_ROLE_PATTERN } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -153,6 +155,50 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+    return NextResponse.json({ error: "date must be YYYY-MM-DD" }, { status: 400 });
+  }
+  // Post-hoc means AFTER the fact. A future-dated entry would be paid at
+  // approval (the sync writes a synthetic log) before any work happened.
+  if (request_type === "post_hoc" && date > mytDateString(new Date())) {
+    return NextResponse.json({ error: "Post-hoc OT is entered after the day — use a pre-approval for planned OT" }, { status: 400 });
+  }
+
+  // The rate is derived from the calendar, never taken from the caller. The
+  // staff route already did this; here a manager could file "3x" on a
+  // Tuesday and approve it in the same session (2026-09-03 QA).
+  const [holidayResp, restResp] = await Promise.all([
+    hrSupabaseAdmin.from("hr_public_holidays").select("date").eq("date", date).limit(1).maybeSingle(),
+    hrSupabaseAdmin
+      .from("hr_schedule_shifts")
+      .select("id")
+      .eq("user_id", targetUserId)
+      .eq("shift_date", date)
+      .ilike("role_type", REST_DAY_ROLE_PATTERN)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const derivedOtType = holidayResp.data ? "3x" : restResp.data ? "2x" : "1.5x";
+  if (ot_type && ot_type !== derivedOtType) {
+    console.warn(`[overtime-requests] ignoring client ot_type ${String(ot_type)} for ${targetUserId} ${date}; calendar says ${derivedOtType}`);
+  }
+
+  // attendance_log_id from the body was stored unchecked and, on approval,
+  // stamped OT hours + final_status onto THAT log. It must be this person's
+  // log on this day, or it is ignored (the sync resolves by (user, date)).
+  let logId: string | null = null;
+  if (attendance_log_id) {
+    const { data: log } = await hrSupabaseAdmin
+      .from("hr_attendance_logs")
+      .select("id, user_id, clock_in")
+      .eq("id", attendance_log_id)
+      .maybeSingle();
+    if (!log || log.user_id !== targetUserId || mytDateString(new Date(log.clock_in)) !== date) {
+      return NextResponse.json({ error: "attendance_log_id does not belong to this person on this date" }, { status: 400 });
+    }
+    logId = log.id;
+  }
+
   const { data, error } = await hrSupabaseAdmin
     .from("hr_overtime_requests")
     .insert({
@@ -160,14 +206,14 @@ export async function POST(req: NextRequest) {
       outlet_id: outlet_id || null,
       date,
       request_type,
-      hours_requested,
-      ot_type: ot_type || "1.5x",
+      hours_requested: Math.floor(hoursNum * 2) / 2 || hoursNum,
+      ot_type: derivedOtType,
       reason,
       shift_start_time: shift_start_time || null,
       shift_end_time: shift_end_time || null,
       status: "pending",
       requested_by: session.id,
-      attendance_log_id: attendance_log_id || null,
+      attendance_log_id: logId,
     })
     .select()
     .single();
@@ -214,9 +260,20 @@ export async function PATCH(req: NextRequest) {
   if (status === "approved" || status === "partial") {
     const { data: reqRow } = await hrSupabaseAdmin
       .from("hr_overtime_requests")
-      .select("user_id")
+      .select("user_id, date")
       .eq("id", id)
       .maybeSingle();
+    // Approving lands the hours on an attendance log for payroll. Before the
+    // day has happened there is no log, so the sync fabricated one and the
+    // hours were paid whether or not the OT was worked. Decide on or after
+    // the day (owner 2026-09-03: OT is what the manager approves on the
+    // attendance of the day).
+    if (reqRow && String(reqRow.date) > mytDateString(new Date())) {
+      return NextResponse.json(
+        { error: `This OT is dated ${reqRow.date}. Approve it on or after that day, from the attendance of the day, so the hours paid are the hours worked.` },
+        { status: 400 },
+      );
+    }
     if (reqRow) {
       const { data: targetProfile } = await hrSupabaseAdmin
         .from("hr_employee_profiles")

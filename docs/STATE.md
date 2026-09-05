@@ -2507,6 +2507,25 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   supplier-page package id + catalog cleanup; (4) POP URL on invoice, GRNI
   checks, transactional receiving, transfer receive+chaser. PR #1216 (reports
   wiring) still open/green.
+- 2026-09-03 (round 2) — **HR module code + flow QA, five parallel reviews.**
+  Report: `docs/design/hr-qa-round2-2026-09-03.md` (11 security, 16 money,
+  17 flow, 9 staff-app findings; ~35 fixed on `claude/hr-qa-round2`).
+  Highest-impact fixes: ADMIN could create an OWNER (new-hire + LOE import);
+  JWT role/status never re-read (now DB-checked, 60 s cache); staff profile
+  `select("*")` leaked HR notes; OT request trusted `attendance_log_id` and
+  client rate; raises effective next month were paid this month (mirror now
+  capped at cycle end); SOCSO/EIS wage double-counted PH/rest-day pay;
+  unpaid leave ignored `total_days`; threshold OT floored to whole hours;
+  shift-swap approval was dead (selected a non-existent column); leave
+  approve/reject race; KWSP/PERKESO files printed prorated basic as wage;
+  weekly runs missing from annual forms; PT payslip PDF "undefined null".
+  **Owner decisions:** contract/intern pay cycle; auto-close on >7.5 h
+  rostered shifts; state-specific PH; staff OT pre-booking page; EPF/SOCSO
+  numbers. **Backlog (native OTA):** route `kind:"clock"` push to the clock
+  screen, rest-day rows on My Shifts, OT ≥0.5 h display, payslip labels,
+  stale GPS on clock-out. **Backlog (web):** unpublish bypass of the
+  retro-edit guard, leave cancel/half-day, swap request UI, useFetch error
+  states, leave-manager duplicate, shared recomputeTotals for line edits.
 
 - 2026-09-02 — **August COGS + bank recon session closed.** PR #1207
   (menu_margins v2, migration 109 already applied to prod) is green +

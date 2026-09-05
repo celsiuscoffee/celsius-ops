@@ -68,6 +68,9 @@ export async function GET() {
     "personal_email", "secondary_phone",
     "spouse_relief", "lifestyle_relief", "life_insurance_relief", "medical_relief", "education_relief",
     "zakat_amount", "zakat_enabled", "prs_rate",
+    // Internal HR notes (resignation reasons, disciplinary context) and the
+    // flat allowance payroll actually pays — neither is a line manager's.
+    "notes", "fixed_performance_allowance", "manager_user_id",
   ];
 
   const sanitizeProfile = (profile: Record<string, unknown> | undefined) => {
@@ -185,6 +188,38 @@ export async function POST(req: NextRequest) {
 
   if (!user_id) {
     return NextResponse.json({ error: "user_id required" }, { status: 400 });
+  }
+
+  // Input validation (2026-09-03 QA): the body was spread straight into the
+  // profile row. A typo'd employment_type ("fulltime") was read as "not
+  // full_time" and CLOSED the person's monthly salary history; a negative or
+  // NaN salary landed on the profile even though the history write skipped it.
+  const EMPLOYMENT_TYPES = ["full_time", "part_time", "contract", "intern"];
+  if (profileData.employment_type != null && !EMPLOYMENT_TYPES.includes(profileData.employment_type)) {
+    return NextResponse.json({ error: `employment_type must be one of ${EMPLOYMENT_TYPES.join(", ")}` }, { status: 400 });
+  }
+  for (const f of ["basic_salary", "hourly_rate", "hourly_rate_weekend", "fixed_performance_allowance", "epf_employee_rate", "epf_employer_rate"]) {
+    const v = profileData[f];
+    if (v === undefined || v === null || v === "") continue;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) {
+      return NextResponse.json({ error: `${f} must be a non-negative number` }, { status: 400 });
+    }
+    profileData[f] = n;
+  }
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  for (const f of ["join_date", "end_date", "probation_end_date", "confirmed_at", "date_of_birth"]) {
+    const v = profileData[f];
+    if (v === undefined || v === null || v === "") continue;
+    if (!ISO_DATE.test(String(v).slice(0, 10))) {
+      return NextResponse.json({ error: `${f} must be YYYY-MM-DD` }, { status: 400 });
+    }
+  }
+  if (profileData.join_date && profileData.end_date && String(profileData.end_date) < String(profileData.join_date)) {
+    return NextResponse.json({ error: "end_date cannot be before join_date" }, { status: 400 });
+  }
+  if (profileData.proration_basis != null && !["calendar", "working_5day", "working_6day", "fixed_26"].includes(profileData.proration_basis)) {
+    return NextResponse.json({ error: "proration_basis must be calendar, working_5day, working_6day or fixed_26" }, { status: 400 });
   }
 
   const ignoredFields: string[] = [];

@@ -6,16 +6,18 @@ const base = { employmentType: "full_time", isPublicHoliday: false, isRestDay: f
 
 // FT: 7.5h/day OT threshold, 1h unpaid break when the shift runs over 5h.
 describe("deriveHours", () => {
-  it("floors OT to whole hours: 30min over → 0, 1h10m over → 1", () => {
-    // 9h30m clocked − 1h break = 8.5h worked → 1h over threshold... construct precisely:
-    // worked 8h (30min over 7.5) → OT 0
+  it("brackets threshold OT to half hours: 30min over → 0.5, 1h10m over → 1 (owner 2026-09-03: pay the 0.5h)", () => {
+    // worked 8h (30min over 7.5) → OT 0.5
     const halfOver = deriveHours({ ...base, clockIn: at("2026-07-20T01:00:00Z"), clockOut: at("2026-07-20T10:00:00Z") });
-    expect(halfOver.overtimeHours).toBe(0);
-    expect(halfOver.regularHours).toBe(7.5); // over threshold: regular caps at 7.5, sub-1h OT floors away
-    // worked 8h40m (1h10m over 7.5) → OT 1
+    expect(halfOver.overtimeHours).toBe(0.5);
+    expect(halfOver.regularHours).toBe(7.5); // over threshold: regular caps at 7.5
+    // worked 8h40m (1h10m over 7.5) → OT 1 (the 10 min below a bracket is dropped)
     const overAnHour = deriveHours({ ...base, clockIn: at("2026-07-20T01:00:00Z"), clockOut: at("2026-07-20T10:40:00Z") });
     expect(overAnHour.overtimeHours).toBe(1);
     expect(overAnHour.regularHours).toBe(7.5);
+    // 25 min over is under one bracket → 0
+    const under = deriveHours({ ...base, clockIn: at("2026-07-20T01:00:00Z"), clockOut: at("2026-07-20T09:55:00Z") });
+    expect(under.overtimeHours).toBe(0);
   });
 
   it("early clock-in pays from the rostered start, not the tap-in", () => {
@@ -29,7 +31,7 @@ describe("deriveHours", () => {
     });
     expect(d.totalHours).toBe(11); // actual clocked span kept on record
     expect(d.regularHours).toBe(7.5);
-    expect(d.overtimeHours).toBe(1);
+    expect(d.overtimeHours).toBe(1.5); // 30-min brackets since 2026-09-03 (was floored to 1)
   });
 
   it("late clock-in is unaffected by the roster start", () => {

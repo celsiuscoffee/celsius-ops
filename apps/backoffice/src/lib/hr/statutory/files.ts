@@ -13,7 +13,8 @@ export type EmployeeRow = {
   bankName: string | null;
   bankAccountNumber: string | null;
   bankAccountName: string | null;
-  wage: number;                 // basis for statutory (basic + contributing allowances)
+  wage: number;                 // EPF/HRDF wage: the statutory basis the contributions were computed on (basic + allowances + PH/rest-day pay), NOT prorated basic
+  socsoWage?: number;           // PERKESO wage = statutory basis + overtime (SOCSO/EIS include OT). Falls back to `wage`.
   epfEmployee: number;
   epfEmployer: number;
   socsoEmployee: number;
@@ -302,7 +303,7 @@ export function generatePerkesoLampiranA(
       `"${(e.icNumber || "").replace(/-/g, "")}"`,
       `"${sanitize(e.fullName || e.name)}"`,
       `"${e.socsoNumber || ""}"`,
-      e.wage.toFixed(2),
+      (e.socsoWage ?? e.wage).toFixed(2),
       e.socsoEmployee.toFixed(2),
       e.socsoEmployer.toFixed(2),
       e.eisEmployee.toFixed(2),
